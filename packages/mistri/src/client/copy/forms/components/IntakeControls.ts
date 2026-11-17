@@ -9,5 +9,4 @@ export const say = defineMessages({
   yesWord: 'Yes',
   noWord: 'No',
   // A month's box, before anything is typed: the order its digits go in.
-  monthPlaceholder: 'MM/YYYY',
 });

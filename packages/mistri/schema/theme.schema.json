@@ -1250,6 +1250,10 @@
           "$ref": "#/$defs/color",
           "description": "Every other row of a banded table (recipes.table). Omitted, raised. Each ink is checked on it as on the page."
         },
+        "ai": {
+          "$ref": "#/$defs/color",
+          "description": "The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the platform's violet (--ai), apart from every look's accent and info. Checked at 3:1 on the page, as a mark is."
+        },
         "chart": {
           "type": "array",
           "maxItems": 8,
@@ -1383,6 +1387,10 @@
           "$ref": "#/$defs/color",
           "description": "Every other row of a banded table (recipes.table). Omitted, raised. Each ink is checked on it as on the page."
         },
+        "ai": {
+          "$ref": "#/$defs/color",
+          "description": "The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the platform's violet (--ai), apart from every look's accent and info. Checked at 3:1 on the page, as a mark is."
+        },
         "chart": {
           "type": "array",
           "maxItems": 8,
@@ -1458,6 +1466,7 @@
         "rules.section",
         "rules.head",
         "band",
+        "ai",
         "chart[0]",
         "chart[1]",
         "chart[2]",

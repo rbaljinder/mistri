@@ -10,10 +10,10 @@ afterEach(cleanup);
 
 /* The words a host lends (the kit lends its catalog's): these are the ones the assertions read. */
 const words: DateFieldWords = {
-  dateTimePattern: 'YYYY-MM-DD HH:MM',
-  enterDateAndTime: 'Enter a date and time as YYYY-MM-DD HH:MM within the allowed range.',
+  timePattern: 'HH:MM',
+  enterDateAndTime: (format) => `Enter a date and time as ${format} within the allowed range.`,
   enterDate: (format) => `Enter a date as ${format} within the allowed range.`,
-  dateAndTimeFormat: 'Date and time format: YYYY-MM-DD HH:MM.',
+  dateAndTimeFormat: (format) => `Date and time format: ${format}.`,
   dateFormat: (format) => `Date format: ${format}.`,
   openWithKeys: 'Alt and Down arrow opens the calendar.',
   chooseDate: (label) => (label ? `Choose date for ${label}` : 'Choose date'),
@@ -94,20 +94,20 @@ test('with a time, the calendar picks the date and keeps the time typed; the who
     open = vi.fn();
   render(<Stamp max="2026-09-20T12:00" onOpen={open} />);
   const input = screen.getByRole('textbox', { name: 'At' });
-  expect(input).toHaveAttribute('placeholder', 'YYYY-MM-DD HH:MM');
+  expect(input).toHaveAttribute('placeholder', 'MM/DD/YYYY HH:MM');
   await user.click(screen.getByRole('button', { name: 'Choose date for At' }));
   expect(open).toHaveBeenLastCalledWith(true, expect.objectContaining({ reason: 'trigger-press', source: 'pointer' }));
   await user.click(await screen.findByRole('gridcell', { name: 'Tuesday, September 15, 2026' }));
-  expect(input).toHaveValue('2026-09-15 09:30');
+  expect(input).toHaveValue('09/15/2026 09:30');
   // A day chosen closes the calendar, and says so.
   expect(open).toHaveBeenLastCalledWith(false, expect.objectContaining({ reason: 'day-press', source: 'pointer' }));
   await waitFor(() => expect(screen.queryByRole('grid')).not.toBeInTheDocument());
   expect(input).toBeValid();
   await user.clear(input);
-  await user.type(input, '2026-09-20 12:01');
+  await user.type(input, '09/20/2026 12:01');
   expect(input).toBeInvalid();
   await user.clear(input);
-  await user.type(input, '2026-09-20 12:00');
+  await user.type(input, '09/20/2026 12:00');
   expect(input).toBeValid();
   await user.clear(input);
   await user.type(input, '2026-09-14T09:30Z');
@@ -332,13 +332,48 @@ test('a date and a time has a clock beside the text where the caller names one: 
   const clock = screen.getByLabelText('Time for At');
   expect(clock).toHaveValue('09:30');
   fireEvent.change(clock, { target: { value: '14:05' } });
-  expect(screen.getByRole('textbox', { name: 'At' })).toHaveValue('2026-09-13 14:05');
+  expect(screen.getByRole('textbox', { name: 'At' })).toHaveValue('09/13/2026 14:05');
   unmount();
   // With no date yet the clock starts on today's; with no word for it, no clock is drawn.
   render(<Clocked start="" />);
   fireEvent.change(screen.getByLabelText('Time for At'), { target: { value: '08:00' } });
-  expect(screen.getByRole('textbox', { name: 'At' })).toHaveValue('2026-09-13 08:00');
+  expect(screen.getByRole('textbox', { name: 'At' })).toHaveValue('09/13/2026 08:00');
   cleanup();
   render(<Stamp />);
   expect(screen.queryByLabelText('Time for At')).toBeNull();
+});
+
+test('a date and a time is shown, hinted and read in the locale the date alone is: one format, MM/DD/YYYY HH:MM in en-US', async () => {
+  const user = userEvent.setup();
+  const seen: string[] = [];
+  function Held() {
+    const [value, setValue] = useState('2026-09-13T09:30');
+    return (
+      <DateField
+        id="at"
+        aria-label="At"
+        value={value}
+        onChange={(next) => {
+          seen.push(next);
+          setValue(next);
+        }}
+        withTime
+        locale="en-US"
+      />
+    );
+  }
+  render(<Held />);
+  const input = screen.getByRole('textbox', { name: 'At' });
+  expect(input).toHaveValue('09/13/2026 09:30');
+  // The hint a reader hears is derived from the same mask as the placeholder.
+  expect(document.getElementById(input.getAttribute('aria-describedby')!.split(' ').pop()!)).toHaveTextContent(
+    'Date and time format: MM/DD/YYYY HH:MM.',
+  );
+  await user.clear(input);
+  await user.type(input, '10/02/2026 8:05');
+  // Said back as the ISO moment the value is; ISO typed is read too.
+  expect(seen.at(-1)).toBe('2026-10-02 08:05');
+  await user.clear(input);
+  await user.type(input, '2026-10-03 14:00');
+  expect(seen.at(-1)).toBe('2026-10-03 14:00');
 });

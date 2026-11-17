@@ -128,6 +128,7 @@ const NOT_FOR_BEARERS = [
   '/api/tenant/invitations',
   '/api/tenant/support',
   '/api/integrations/save',
+  '/api/integrations/check',
   '/api/branding/save',
   '/api/console',
   '/api/connections',

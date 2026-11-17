@@ -10,6 +10,7 @@
  */
 import { FavoriteStar } from './FavoriteStar.js';
 import type { DashboardDef } from './dashboardModel.js';
+import { PageHeading } from './PageHeading.js';
 
 export function DashHead({
   dashboard,
@@ -36,11 +37,11 @@ export function DashHead({
       </div>
     );
   return (
-    <div className="applist-head dash-head">
-      <h1 className={`applist-title${hidden ? ' visually-hidden' : ''}`}>{title}</h1>
-      {favorite}
-      {/* A page that draws its own head says its own intro; `heading: false` hides only the title. */}
-      {dashboard.description && dashboard.head !== 'own' && <p className="note dash-description">{dashboard.description}</p>}
-    </div>
+    <PageHeading
+      title={title}
+      hidden={hidden}
+      favorite={favorite}
+      description={dashboard.description && dashboard.head !== 'own' ? dashboard.description : undefined}
+    />
   );
 }

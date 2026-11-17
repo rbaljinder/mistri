@@ -151,7 +151,7 @@ describe('each field wears its dress', () => {
     expect(screen.getByText('€')).toBeInTheDocument();
     // The figure starts after the sign as drawn: measured (the stand-in ruler says the sign ends 100px in), and a gap.
     expect(screen.getByRole('textbox', { name: 'Budget' }).style.paddingLeft).toBe('104px');
-    expect(screen.getByRole('textbox', { name: 'Starts at' })).toHaveAttribute('placeholder', 'YYYY-MM-DD HH:MM');
+    expect(screen.getByRole('textbox', { name: 'Starts at' })).toHaveAttribute('placeholder', 'MM/DD/YYYY HH:MM');
   });
 
   test('multiline says otherwise where the name would decide', () => {
@@ -272,7 +272,7 @@ describe('defaults that say a word', () => {
     const due = screen.getByRole('textbox', { name: 'Due on' }) as HTMLInputElement;
     expect(due.value).toMatch(/^\d{2}\/\d{2}\/\d{4}$/);
     expect(Math.abs(Date.parse(due.value) - Date.now())).toBeLessThan(2 * 86_400_000);
-    expect((screen.getByRole('textbox', { name: 'Starts at' }) as HTMLInputElement).value).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+    expect((screen.getByRole('textbox', { name: 'Starts at' }) as HTMLInputElement).value).toMatch(/^\d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/);
   });
 
   test('me is asked of the server: a person row for a reference, the email for text', async () => {

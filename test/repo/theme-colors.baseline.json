@@ -1437,6 +1437,13 @@
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
+    "property": "--ai",
+    "value": "#a62a9c",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": ":root",
     "property": "--status-good",
     "value": "#1f7a46",
     "reason": "palette"
@@ -1551,6 +1558,13 @@
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--status-info",
     "value": "#b39ae8",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
+    "property": "--ai",
+    "value": "#e58bdc",
     "reason": "palette"
   },
   {
@@ -1698,6 +1712,13 @@
     "context": ":root[data-theme=\"dark\"]",
     "property": "--status-info",
     "value": "#b39ae8",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": ":root[data-theme=\"dark\"]",
+    "property": "--ai",
+    "value": "#e58bdc",
     "reason": "palette"
   },
   {

@@ -33,8 +33,12 @@ import { defineIntegration, int, refuse, shape, text } from '@mistriwork/mistri/
 export const fakepay = () =>
   defineIntegration({
     name: 'fakepay',
+    label: 'FakePay',
+    description: 'Takes card payments and tells the App when they settle.',
     secrets: ['apiKey', 'webhookSecret'],
     client: ({ secrets }) => new FakePayClient(secrets.apiKey),
+    check: async ({ secrets, signal }) =>
+      (await new FakePayClient(secrets.apiKey).account({ signal })) ? { ok: true } : { ok: false, message: 'FakePay refused the API key.' },
     actions: {
       charge: {
         input: shape({ amount: int({ min: 1 }), customer: text() }),
@@ -152,6 +156,21 @@ editor enters the secrets. It loads on demand and never shows a saved value.
 per integration: `integrationsForm('Payments', { integrations: ['stripe'] })`.
 Each must be one the jobs module lists. It narrows what the page shows, not who
 may read it.
+
+Each integration is one card: its `label` (without one, its name as a person
+reads it) and `description`, its secrets' names as a person reads them (`apiKey`
+is "API key"), a line saying whether it is configured, partly configured or not,
+and the webhook address its provider sends to. The line reports which secrets
+are saved; it does not ask the provider whether they work.
+
+An integration that declares `check` also gets a "Test connection" button for
+the people who may edit the settings. The server runs `check({ secrets, signal })`
+under the saved secrets (every one must be saved first) and the card shows the
+result beside the button: `{ ok: true }`, or `{ ok: false, message }` in words a
+person can act on. Make it one cheap read, such as the account endpoint. It has
+10 seconds. A throw or a time-out shows a generic failure and never the error's
+text, since an SDK's error can carry the key, and a saved secret that appears in
+a `message` is taken out.
 
 ## What core does
 

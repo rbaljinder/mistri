@@ -656,6 +656,10 @@
   /* The head does not sit on the trail's rule above it: a step of the title's size (20px, four fifths), so the
    two read as two things. A room that draws the head without a trail over it (a dialog) takes it back. */
   .page-head.has-record {
+    margin-top: var(--page-top);
+  }
+  /* Under a trail it is the trail that stands under the bar, and the head keeps the step it always had below it. */
+  .page-head.has-record.has-trail {
     margin-top: var(--space-5);
   }
   /* Under an App's trail the kind is heard and not seen (PageHead.tsx): the trail already says where the record is,

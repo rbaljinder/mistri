@@ -81,6 +81,7 @@ const FLAT = [
   'focus',
   'shadow',
   'band',
+  'ai',
 ];
 
 /** The names a color went by before the spec's were the only ones (0.9.2): the palette's, which the sheets and the

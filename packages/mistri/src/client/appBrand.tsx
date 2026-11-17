@@ -41,14 +41,16 @@ export function applyBrandLogo(host: Element | null, logo?: unknown, app?: strin
 }
 
 /** The tenant's logo a public page's head carries (a mapped host's sign-in page, its forms), when it carries one. */
-export function headBrandingMark(): { src: string; dark?: string } | undefined {
+export function headBrandingMark(): { src: string; dark?: string; aspect?: number } | undefined {
   try {
     const head = JSON.parse(shellById('mistri-branding')?.textContent || 'null') as {
       private?: boolean;
-      value?: { mark?: { src?: unknown; dark?: unknown } };
+      value?: { mark?: { src?: unknown; dark?: unknown; aspect?: unknown } };
     } | null;
     const mark = head && !head.private ? head.value?.mark : undefined;
-    return typeof mark?.src === 'string' ? { src: mark.src, ...(typeof mark.dark === 'string' ? { dark: mark.dark } : {}) } : undefined;
+    return typeof mark?.src === 'string'
+      ? { src: mark.src, ...(typeof mark.dark === 'string' ? { dark: mark.dark } : {}), ...aspectOf(mark.aspect) }
+      : undefined;
   } catch {
     return undefined;
   }
@@ -56,9 +58,9 @@ export function headBrandingMark(): { src: string; dark?: string } | undefined {
 
 /** A tenant's own logo (server tenantBranding.ts): only the App's own logo address, by content hash, is drawn. */
 function tenantLogo(logo: unknown): LogoPicture | undefined {
-  const { src, dark } = logo && typeof logo === 'object' ? (logo as { src?: unknown; dark?: unknown }) : {};
+  const { src, dark, aspect } = logo && typeof logo === 'object' ? (logo as { src?: unknown; dark?: unknown; aspect?: unknown }) : {};
   const own = (address: unknown): address is string => typeof address === 'string' && /^\/api\/branding\/logo\/[0-9a-f]{64}$/.test(address);
-  return own(src) ? { src: served(src), ...(own(dark) ? { dark: served(dark) } : {}) } : undefined;
+  return own(src) ? { src: served(src), ...(own(dark) ? { dark: served(dark) } : {}), ...aspectOf(aspect) } : undefined;
 }
 
 /** A picture's addresses: the bar's, the one drawn by night, and the tab's. */
@@ -66,6 +68,18 @@ interface LogoPicture {
   src: string;
   dark?: string;
   mark?: string;
+  /** Width over height, as the server read it from the file: known before the picture has loaded. */
+  aspect?: number;
+}
+
+/** A picture's aspect as the server said it: a positive number, or nothing. */
+const aspectOf = (aspect: unknown): { aspect?: number } =>
+  typeof aspect === 'number' && Number.isFinite(aspect) && aspect > 0 ? { aspect } : {};
+
+/** Whether a logo is drawn as a picture, and its shape when the server said it (a glyph and an initial are square tiles). */
+export function brandShape(logo: unknown): { picture: boolean; aspect?: number } {
+  const image = tenantLogo(logo) ?? ownLogo(logo);
+  return image ? { picture: true, ...aspectOf(image.aspect) } : { picture: false };
 }
 
 /**
@@ -74,7 +88,7 @@ interface LogoPicture {
  */
 function ownLogo(logo: unknown): LogoPicture | undefined {
   if (!logo || typeof logo !== 'object') return undefined;
-  const { href, darkHref, markHref } = logo as { href?: unknown; darkHref?: unknown; markHref?: unknown };
+  const { href, darkHref, markHref, aspect } = logo as { href?: unknown; darkHref?: unknown; markHref?: unknown; aspect?: unknown };
   if (!isBrandAddress(href)) return undefined;
   /* An inside address, as a theme's faces are (visualTheme.ts): `/acme/_brand/…` is `/_brand/…` with the App at the
      root, and the Provider's endpoint's in an embed. Unplaced, so the picture's one address is the one its year-long
@@ -83,6 +97,7 @@ function ownLogo(logo: unknown): LogoPicture | undefined {
     src: appFileUnplaced(href),
     ...(isBrandAddress(darkHref) ? { dark: appFileUnplaced(darkHref) } : {}),
     ...(isBrandAddress(markHref) ? { mark: appFileUnplaced(markHref) } : {}),
+    ...aspectOf(aspect),
   };
 }
 

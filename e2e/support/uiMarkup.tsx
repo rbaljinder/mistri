@@ -11,10 +11,10 @@ import { Field } from '../../packages/ui/src/Field.tsx';
 import { Icon, registerIcons } from '../../packages/ui/src/Icon.tsx';
 
 const words: DateFieldWords = {
-  dateTimePattern: 'YYYY-MM-DD HH:MM',
-  enterDateAndTime: 'Enter a date and time.',
+  timePattern: 'HH:MM',
+  enterDateAndTime: (format) => `Enter a date and time as ${format}.`,
   enterDate: (format) => `Enter a date as ${format}.`,
-  dateAndTimeFormat: 'Date and time.',
+  dateAndTimeFormat: (format) => `Date and time format: ${format}.`,
   dateFormat: (format) => `Date format: ${format}.`,
   openWithKeys: 'Alt and Down arrow opens the calendar.',
   chooseDate: (label) => `Choose date${label ? ` for ${label}` : ''}`,

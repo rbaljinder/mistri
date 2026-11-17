@@ -342,3 +342,20 @@ test('a sandbox is marked as one wherever it is named: in the list, and in the b
   render(<TenantControl {...choices} currentTenant="north" />);
   expect(screen.queryByText('Sandbox')).toBeNull();
 });
+
+test('the trigger carries the whole name as its title, so a long one cut to the bar loses nothing', () => {
+  const long = 'Northern Plains Regional Veterinary Hospital Group';
+  render(<TenantControl {...props} tenantIds={['n']} names={{ n: long }} currentTenant="n" />);
+  expect(screen.getByRole('button', { name: /Northern Plains/ })).toHaveAttribute('title', long);
+});
+
+test('the dialog keeps its foot (the Close row) as a sibling of the scrolling list, not inside it', async () => {
+  const user = userEvent.setup();
+  render(<TenantControl {...props} currentTenant="north" actions={[{ label: 'All tenants', onClick: () => {} }]} />);
+  await user.click(screen.getByRole('button', { name: /north/ }));
+  const dialog = screen.getByRole('dialog');
+  const chooser = dialog.querySelector('.tenant-chooser')!;
+  const foot = dialog.querySelector('.tenant-chooser-actions')!;
+  expect(chooser.contains(foot)).toBe(false);
+  expect(foot.parentElement).toBe(chooser.parentElement);
+});

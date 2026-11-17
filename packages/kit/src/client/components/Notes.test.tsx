@@ -144,3 +144,14 @@ test('a section that throws keeps its heading over the note', () => {
   expect(screen.getByRole('heading', { name: 'Invoices' })).toBeInTheDocument();
   expect(screen.getByRole('alert')).toHaveAttribute('data-section-error');
 });
+
+test('an empty place stands as one block (mark, then sentence) that a card can sit flush, and is not the room-sized one', () => {
+  const { container } = render(
+    <div className="panel">
+      <Empty text="No invoices yet." />
+    </div>,
+  );
+  const block = container.querySelector('.panel > .empty-note')!;
+  expect(block).not.toHaveClass('is-room');
+  expect([...block.children].map((child) => child.className)).toEqual([expect.stringContaining('empty-note-mark'), 'empty-note-text']);
+});

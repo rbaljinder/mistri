@@ -35,7 +35,7 @@ import {
   type ListTab,
 } from '@mistriwork/engine/shared/listQuestion.js';
 import { shell } from '../shellMode.js';
-import { canonicalize, conditionTail, hasShowClause, squeeze, stripCondition } from '../filterbar.js';
+import { canonicalize, conditionTail, hasShowClause, ownedTails, squeeze, stripCondition } from '../filterbar.js';
 import { maskQuoted, splitConditions, splitQuery } from '../clauses.js';
 import { appRooms, isListRoom, offeredBy, resourceOf, viewRoom } from './appRooms.js';
 import type { AppAction } from '@mistriwork/engine/schema/model.js';
@@ -479,6 +479,27 @@ export function litTabFor(tabs: ListTab[], refinement: string, boxColumns: strin
     }
   });
   return best;
+}
+
+/**
+ * The columns a tab's own question fixes to one value: on "To submit" (`status = to_submit`) the status column
+ * says the same thing on every row, so the grid leaves it out while that tab is lit. Only an exact single-value
+ * equality pins — `in` with two or more values, a range, `!=`, a contains or a relative date do not — and a column
+ * that two conditions both speak for is left shown.
+ */
+export function pinnedColumns(tabQuery: string, columns: string[]): string[] {
+  const single = /^=\s*(?:"[^"]*"|'[^']*'|[^\s,"'()]+)$|^in\s*\(\s*(?:"[^"]*"|'[^']*'|[^\s,"'()]+)\s*\)$/i;
+  return columns.filter((column) => {
+    const tails = ownedTails(tabQuery, column) as string[];
+    return tails.length === 1 && single.test(tails[0]!);
+  });
+}
+
+/** pinnedColumns for a lit tab of a view: a named tab (`tabs: ['new']`) carries its segment's word, not its
+    conditions, so the word is expanded through the table's segments before the columns are read. */
+export function tabPinnedColumns(spec: ListSpec, tabQuery: string, columns: string[]): string[] {
+  const segments = (findTable(spec.table) as TableMeta | undefined)?.segments;
+  return pinnedColumns(unwrapped(expandSegments(tabQuery, segments).text), columns);
 }
 
 /** The refinement with every box column's conditions taken out. */

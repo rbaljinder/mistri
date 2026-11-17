@@ -76,7 +76,7 @@ test.each([390, 1440].flatMap((width) => ['', 'sidebar-hidden', 'app-topnav'].ma
 
     expect(document.querySelector('.brand-name')).toHaveTextContent('Ignition · Assignments');
     expect(document.title).toBe('Sign in · Ignition · Assignments');
-    expect(screen.getByRole('heading', { name: 'Sign in to Ignition · Assignments' })).toBeVisible();
+    expect(screen.getByRole('heading', { name: 'Ignition · Assignments' })).toBeVisible();
     expect(document.getElementById('home-button')).toBeDisabled();
     expect(document.getElementById('home-button')).not.toHaveAttribute('title');
     for (const selector of [
@@ -120,7 +120,7 @@ test('public names are literal text and do not supply private branding or markup
     showSignIn({ app, providers: ['email'], signUp: 'invite' });
   });
   expect(document.querySelector('.brand-name')!.textContent).toBe(app);
-  expect(screen.getByRole('heading').textContent).toBe(`Sign in to ${app}`);
+  expect(screen.getByRole('heading').textContent).toBe(app);
   expect(document.querySelector('img')).toBeNull();
   expect(fetch).not.toHaveBeenCalled();
 });

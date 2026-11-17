@@ -361,7 +361,7 @@ body.app-mode .page-edit { font-family: var(--sans); }
 
 /* A rootless page shows the real list as its chooser; the notice and the
    list each take the full row of the page's flex host, notice first. */
-.page-empty { flex: 1 1 100%; }
+.page-empty { flex: 1 1 100%; text-align: center; }
 .page-root-list { flex: 1 1 100%; min-width: 0; }
 
 /* The diagram, over everything: a schema drawing is the one view that
@@ -381,7 +381,7 @@ body.app-mode .page-edit { font-family: var(--sans); }
    Everything here hangs on the 14px inset the rest of the page already
    uses — crumbs, the tab strip, the result head, the pager, the first
    cell of every row. One left edge, or the page reads as four. */
-.applist-head { padding: var(--space-4h) var(--space-4h) 0; }
+.applist-head { padding: var(--page-top) var(--space-4h) 0; }
 .applist-head-row { display: flex; align-items: baseline; gap: var(--space-4); }
 .applist-head-row .applist-new { margin-left: auto; font-size: var(--text-sm); }
 /* Import, quiet, before New: the pair keeps New's place at the row's end. */
@@ -719,10 +719,17 @@ body.page-bare :is(.topbar, .sidebar, .sidebar-reveal, #topnav, #explain-pane) {
 body.app-mode.page-bare .content { padding-inline: 0; }
 /* The title shares the body's centered 76rem column — a head pinned to
    the pane edge over a centered grid read as two different screens. */
-.dash-head { margin-top: var(--space-2h); margin-bottom: var(--space-6); width: 100%; }
+.dash-head { margin-top: 0; margin-bottom: var(--space-6); width: 100%; }
 .dash-head .dash-description { padding: 0; margin: var(--space-2h) 0 0; max-width: 70ch; font-size: var(--text-md); line-height: 1.5; }
 /* `head: 'compact'`: the title at a list's size on one line with its star, and the body close under it — a working
    page whose own controls are its intro. Same gutters as the full head, so switching the form moves nothing sideways. */
+/* A head that carries verbs or a way back (PageHeader): the verbs go to the
+   far end of the title's line, the intro under both, and the way back is a
+   line of its own over the title. */
+.applist-head.dash-head:is(.has-actions, .has-back) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2h); }
+.dash-head.has-back > .dash-head-back { flex-basis: 100%; margin-left: calc(var(--space-2) * -1); }
+.dash-head.has-actions > .dash-head-actions { margin-left: auto; }
+.dash-head:is(.has-actions, .has-back) > .dash-description { flex-basis: 100%; margin: 0; }
 .dash-head-compact { align-items: center; gap: var(--space-2h); width: 100%; margin-bottom: var(--space-3); }
 .dash-head-compact .applist-title { margin: 0; }
 .dash-strip { border: none; padding: 0; }
@@ -1591,6 +1598,10 @@ body.app-mode .confirm:is(.insert-dialog, .command-form, .set-field-dialog) > h2
 .picker-input { flex: 1 1 8rem; min-width: 6rem; height: auto; border: 0; outline: none; background: none; color: var(--ink);
   font: inherit; padding: var(--space-1h) var(--space-1); }
 .picker-input::placeholder { color: var(--ink-subtle); }
+/* The magnifier of a picker that is a search box (the command form's
+   reference field); the input keeps the row's rule. */
+.picker-glyph { flex: none; display: inline-flex; align-items: center; color: var(--ink-subtle); }
+.picker:focus-within > .picker-glyph { color: var(--ink-muted); }
 .picker-clear { position: absolute; right: 4px; top: 50%; transform: translateY(-50%); border: 0; background: none;
   color: var(--ink-muted); font-size: var(--text-md); line-height: 1; padding: var(--space-1) var(--space-2h); cursor: pointer; border-radius: var(--radius); }
 .picker-clear:hover { color: var(--ink); background: var(--raised); }
@@ -1753,7 +1764,7 @@ div.form-problems button {
 .signin { display: grid; justify-items: center; align-content: start; min-height: 70vh; padding: clamp(32px, 14vh, 140px) var(--space-5) var(--space-8); }
 /* One column at the optical centre (a little above the middle), 22rem wide and drawn in no box: the door is the
    only thing on its screen, so a frame round it framed nothing, and on a phone it never had one. The App's mark,
-   the heading — "Sign in to Payday" — the fields and the links share the column's left edge. */
+   the heading — "Payday" — the fields and the links share the column's left edge. */
 .signin-card { width: min(22rem, 100%); box-sizing: border-box; display: grid; gap: var(--space-5); }
 /* off-scale: the door's heading is the one headline on its screen, a display size as a landing's is, over 20px. */
 .signin-title { margin: 0 0 var(--space-2); font: var(--heading-weight, 600) calc(28px * var(--type-k))/1.2 var(--heading-font, var(--sans)); letter-spacing: var(--track-display, -0.022em); overflow-wrap: anywhere; text-wrap: balance; }

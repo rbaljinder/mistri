@@ -1,5 +1,5 @@
 /**
- * `/api/integrations` and `/api/integrations/save`: the integrations'
+ * `/api/integrations`, `/api/integrations/save` and `/api/integrations/check` ("Test connection", the same grant as a save): the integrations'
  * settings screen on an App without tenants (a tenant App's are tenantHttp.ts's,
  * one tenant's each). Which secrets are set, never a value; saved only by a
  * signed-in person holding a role the jobs module names in
@@ -9,6 +9,7 @@
 import { sessionRoles } from '../../shared/appViewRoles.js';
 import { appForConnection } from '../app/apps.js';
 import {
+  checkIntegrationConnection,
   integrationRuntimeOf,
   IntegrationSettingsRefusal,
   readIntegrationSettings,
@@ -19,10 +20,11 @@ import type { PostContext } from '@mistriwork/engine/server/http/context.js';
 
 const READ_PATH = '/api/integrations';
 const SAVE_PATH = '/api/integrations/save';
+const CHECK_PATH = '/api/integrations/check';
 
 export async function integrationRoutes(post: PostContext): Promise<boolean> {
   const { res, path, body, registry, connection, appHosts, principal, role } = post;
-  if (path !== READ_PATH && path !== SAVE_PATH) return false;
+  if (path !== READ_PATH && path !== SAVE_PATH && path !== CHECK_PATH) return false;
   const host = appHosts?.length ? appForConnection(appHosts, connection, registry.configOf(connection)?.name) : undefined;
   const runtime = host ? integrationRuntimeOf(host.app.app.id) : undefined;
   if (!host?.auth || !runtime) {
@@ -40,6 +42,19 @@ export async function integrationRoutes(post: PostContext): Promise<boolean> {
     return true;
   }
   if (!editor) throw new HttpError(403, "Only this App's admins may change its integrations.");
+  if (path === CHECK_PATH) {
+    try {
+      const { app: _app, ...asked } = body;
+      send(res, 200, await checkIntegrationConnection(runtime, '', asked));
+    } catch (error) {
+      if (error instanceof IntegrationSettingsRefusal) {
+        send(res, 422, { error: error.message, code: 'integration_refused', outcome: 'not_applied' });
+        return true;
+      }
+      throw error;
+    }
+    return true;
+  }
   try {
     const { app: _app, ...saved } = body;
     await saveIntegrationSettings(runtime, '', principal, saved);

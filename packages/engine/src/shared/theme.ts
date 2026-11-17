@@ -475,6 +475,10 @@ const CONTRAST_PAIRS: ReadonlyArray<readonly [keyof ThemePalette, keyof ThemePal
         [role, 'raised', 4.5, 'a status word in a hovered row or on a raised panel'],
       ] as const,
   ),
+  /* The AI mark (`colors.ai`, said by few themes) is a graphic: a badge or an edge a reader looks for, 3:1 (1.4.11) wherever it can stand. */
+  ['ai', 'surface', 3, 'the mark of what an AI made'],
+  ['ai', 'ground', 3, 'the mark of what an AI made'],
+  ['ai', 'raised', 3, 'the mark of what an AI made'],
   ['lineControl', 'surface', 3],
   ['lineControl', 'ground', 3],
   /* A field stands on a raised panel too, and a list's sort and filter controls on its head: a control's edge that

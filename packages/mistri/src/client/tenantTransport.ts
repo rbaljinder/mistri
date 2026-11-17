@@ -82,6 +82,7 @@ const reads = new Set([
   // Its integrations' secrets, set or not, never a value, and its admins' save (server tenantIntegrations.ts).
   '/api/integrations',
   '/api/integrations/save',
+  '/api/integrations/check',
   // A dealer's own log of support visits into it: a read on the dealer's
   // ordinary tenant lease, which the selector below addresses like any other.
   SUPPORT_LOG_PATH,

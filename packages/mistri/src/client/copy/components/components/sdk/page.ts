@@ -20,5 +20,6 @@ export const say = defineMessages({
   recordKeyOther: 'useRecordKey("{resource}") on a tab of a "{table}" record: name the record\'s own resource, "{table}".',
   recordKeyUnread:
     'useRecordKey("{resource}"): "{label}" reads {map}. A record\'s tab reads its record\'s resource: add "{resource}" to its reads.',
+  backTo: 'Back to {label}',
   blocksUnregistered: '@mistriwork/mistri/page: no page has said how its blocks load.',
 });

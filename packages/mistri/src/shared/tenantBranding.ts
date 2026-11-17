@@ -45,7 +45,7 @@ export interface TenantBrandingValue {
   /** The name the tenant's people see in the shell, the title and email. */
   readonly name?: string;
   /** The logo's content hash and served type (brandingLogo.ts); the bytes live in the branding store. */
-  readonly logo?: { readonly hash: string; readonly type: string };
+  readonly logo?: { readonly hash: string; readonly type: string; readonly aspect?: number };
   /** The logo drawn on a dark bar or by night, where the light one would not read. Allowed with `logo`; the light logo
       stands where this is none. */
   readonly logoDark?: { readonly hash: string; readonly type: string };
@@ -284,7 +284,13 @@ export function parseTenantBranding(raw: unknown, declaration: BrandingDeclarati
                 ? 'Upload the logo again: the saved one was not recognized.'
                 : 'Upload the dark logo again: the saved one was not recognized.',
           });
-        else out[key as 'logo' | 'logoDark'] = { hash: logo.hash, type: logo.type };
+        else
+          out[key as 'logo' | 'logoDark'] = {
+            hash: logo.hash,
+            type: logo.type,
+            // Read from the bytes when the upload was admitted; a row saved before it has none.
+            ...(typeof logo.aspect === 'number' && Number.isFinite(logo.aspect) && logo.aspect > 0 ? { aspect: logo.aspect } : {}),
+          };
         break;
       }
       case 'favicon': {

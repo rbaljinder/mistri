@@ -10,7 +10,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { effectiveThemeDefinition, effectiveThemePalette, THEME_PRESETS } from '../packages/engine/src/shared/themePresets.js';
-import { LOOK_PALETTES } from '../packages/engine/src/shared/lookPalettes.js';
+import { INFO_APART, LOOK_PALETTES, hueGap } from '../packages/engine/src/shared/lookPalettes.js';
 import { chartPairFailure } from '../packages/mistri/src/shared/themeCheck.js';
 import type { ThemePalette } from '../packages/engine/schema/theme.js';
 
@@ -53,6 +53,10 @@ function pairs(): Pair[] {
     ['navAccent', 'navGround', 4.5],
     ...GROUNDS.map((ground): Pair => ['lineControl', ground, 3]),
     ...GROUNDS.map((ground): Pair => ['focus', ground, 3]),
+    // Status colors are also drawn as marks (a dot, a lane's strip, a chip's edge), 3:1 (1.4.11); the text pairs above are stricter, this keeps the floor named. The AI mark is only ever a mark.
+    ...['statusGood', 'statusWarning', 'statusCritical', 'statusInfo', 'ai'].flatMap((mark) =>
+      GROUNDS.map((ground): Pair => [mark, ground, 3]),
+    ),
   ];
 }
 
@@ -272,9 +276,48 @@ test("the database browser's own look meets AA, light and dark", () => {
       statusWarning: '--status-warning',
       statusCritical: '--status-critical',
       statusInfo: '--status-info',
+      ai: '--ai',
     };
     for (const [role, name] of Object.entries(names)) palette[role] = get(name);
     failures.push(...measure(palette, `browser/${mode}`, pairs()));
   }
   assert.deepEqual(failures, []);
+});
+
+test('info has a hue of its own: apart from the accent in every look, palette and mode', () => {
+  // Cobalt's info was Cobalt, and Bloom wore the palette's hue for it: a tab, a link and a "new" chip read as one thing.
+  const failures: string[] = [];
+  let measured = 0;
+  for (const look of THEME_PRESETS)
+    for (const id of ['default', ...(look.palettes ?? []).map((p) => p.id)])
+      for (const mode of ['light', 'dark'] as const) {
+        const palette = effectiveThemePalette(
+          effectiveThemeDefinition(look, id)[mode] as ThemePalette,
+          mode === 'dark',
+        ) as unknown as Record<string, string>;
+        const gap = hueGap(palette.accent!, palette.statusInfo!);
+        if (gap < INFO_APART)
+          failures.push(
+            `${look.id}/${id}/${mode}: info ${palette.statusInfo} is ${gap.toFixed(0)} degrees from the accent ${palette.accent}`,
+          );
+        measured++;
+      }
+  assert.ok(measured >= THEME_PRESETS.length * LOOK_PALETTES.length * 2, `every look, palette and mode was measured (${measured})`);
+  assert.deepEqual(failures, []);
+});
+
+test("the browser's own --ai and --status-info stand apart from its accent and from each other, light and dark", () => {
+  const css = readFileSync(new URL('../packages/ui/src/tokens.css', import.meta.url), 'utf8');
+  const light = css.slice(css.indexOf(':root {'), css.indexOf('@media (prefers-color-scheme: dark)'));
+  const dark = css.slice(css.indexOf(':root[data-theme="dark"] {'));
+  for (const [mode, block] of [
+    ['light', light],
+    ['dark', dark],
+  ] as const) {
+    const token = (name: string) => new RegExp(`\\s${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(block)?.[1];
+    const [accent, info, ai] = [token('--accent'), token('--status-info'), token('--ai')];
+    assert.ok(accent && info && ai, `${mode}: the three are written`);
+    assert.ok(hueGap(accent, info) >= INFO_APART, `${mode}: info is ${hueGap(accent, info).toFixed(0)} degrees from the accent`);
+    assert.ok(hueGap(ai, info) >= 30, `${mode}: ai is ${hueGap(ai, info).toFixed(0)} degrees from info`);
+  }
 });

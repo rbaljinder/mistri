@@ -257,6 +257,7 @@
         "./client/messages.js",
         "./client/page.js",
         "./client/palette.js",
+        "./client/paletteRecents.js",
         "./client/peek.js",
         "./client/peekpanel.js",
         "./client/prompt.js",

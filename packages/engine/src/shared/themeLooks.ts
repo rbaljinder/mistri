@@ -6,7 +6,7 @@
  * first paint that needs only the looks.
  */
 import type { ThemeBase, ThemeColorsOver, ThemeSpec } from '../../schema/theme.js';
-import { LOOK_PALETTES, paletteAccent, paletteColors, rehued, sameHue } from './lookPalettes.js';
+import { LOOK_PALETTES, infoApart, paletteAccent, paletteColors, rehued } from './lookPalettes.js';
 import { familyRecipes, recipeParts } from './themeRecipeFamilies.js';
 
 /** The system's own interface face on every machine; nothing is fetched and
@@ -102,16 +102,10 @@ function withPalettes({ tinted, ...look }: HouseLook): ThemeSpec {
     tinted && id !== tinted
       ? rehued(look.colors[mode], paletteAccent(look.id, named(id), mode), paletteAccent(look.id, named(tinted), mode))
       : look.colors[mode];
-  const worn = (id: string, mode: 'light' | 'dark') => {
-    const colors = overColors(own(id, mode), paletteColors(look.id, named(id), mode, series(mode)));
-    /* A tinted look says what is merely so in its hue (lookPalettes.ts, Bloom). Under a green palette that hue is
-       the colour of what went well, and a step that is new stood beside one that is done in one tint: there the
-       look's own colour for it stands, so the two still read apart. */
-    const lookStatus = look.colors[mode].status;
-    if (tinted && colors.status?.info && colors.status.good && lookStatus?.info && sameHue(colors.status.info, colors.status.good))
-      return { ...colors, status: { ...colors.status, info: lookStatus.info } };
-    return colors;
-  };
+  /* What is merely so (`status.info`) is a hue of its own under every palette: a look's blue under Cobalt or Slate, or
+     a look that wore the palette's own hue for it, was the accent said twice (infoApart). */
+  const worn = (id: string, mode: 'light' | 'dark') =>
+    infoApart(overColors(own(id, mode), paletteColors(look.id, named(id), mode, series(mode))), mode);
   return {
     ...look,
     colors: { light: worn(look.defaultPalette, 'light'), dark: worn(look.defaultPalette, 'dark') },

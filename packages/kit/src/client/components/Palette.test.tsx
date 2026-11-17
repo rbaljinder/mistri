@@ -322,6 +322,24 @@ test("before anything is typed a long menu's pages are a first handful, so Creat
   expect(pagesGroup().querySelectorAll('[role="option"]')).toHaveLength(7);
 });
 
+test('a typed word reaches every page it names, past the shortlist an empty box shows', async () => {
+  appMode = true;
+  morePages = Array.from({ length: 30 }, (_, i) => ({
+    kind: 'page',
+    label: `Ward ${i + 1}`,
+    search: `Ward ${i + 1}`,
+    detail: null,
+    room: `ward${i + 1}`,
+    run: () => ran.push(`Ward ${i + 1}`),
+  }));
+  const user = userEvent.setup();
+  render(<Palette onClose={vi.fn()} />);
+  await user.type(screen.getByRole('combobox'), 'ward');
+  expect(screen.getByRole('group', { name: 'Pages' }).querySelectorAll('[role="option"]')).toHaveLength(30);
+  await user.type(screen.getByRole('combobox'), ' 30');
+  expect(labels()).toContain('Ward 30');
+});
+
 test('the term is searched in every list the menu holds, not the first six, a few at a time', async () => {
   const user = userEvent.setup();
   appMode = true;

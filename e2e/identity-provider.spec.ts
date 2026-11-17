@@ -145,7 +145,7 @@ test('a person signs in through the identity provider, and one with no role is t
     });
     await page.addInitScript(() => localStorage.setItem('mistri.tour.v1', 'done'));
     await page.goto(`${app.origin}/`);
-    await expect(page.getByRole('heading', { name: 'Sign in to Crew desk', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Crew desk', exact: true })).toBeVisible();
     // Accounts are made at a first sign-in through the provider: no email sign-up, and no "made by an admin".
     await expect(page.getByText('Accounts are created by an admin.')).toHaveCount(0);
 
@@ -157,7 +157,7 @@ test('a person signs in through the identity provider, and one with no role is t
 
     await page.getByRole('button', { name: /^Account:/ }).click();
     await page.getByRole('menuitem', { name: 'Sign out', exact: true }).click();
-    await expect(page.getByRole('heading', { name: 'Sign in to Crew desk', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Crew desk', exact: true })).toBeVisible();
 
     idp.next({ sub: 'crew-bo', email: 'bo@crew.example', email_verified: true, claims: { groups: ['canteen'] } });
     await page.getByRole('button', { name: 'Continue with Crew SSO', exact: true }).click();

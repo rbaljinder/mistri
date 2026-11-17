@@ -1,5 +1,15 @@
 import { expect, test } from 'vitest';
-import { appListQuery, litTabFor, newRecordNoun, shownTabs, visibleQuestion, wholeQuery, type ListSpec } from './appListModel.js';
+import {
+  appListQuery,
+  litTabFor,
+  pinnedColumns,
+  tabPinnedColumns,
+  newRecordNoun,
+  shownTabs,
+  visibleQuestion,
+  wholeQuery,
+  type ListSpec,
+} from './appListModel.js';
 
 test("New makes one of the table's records: its resource's noun, else the table's own name", () => {
   // Never the list's label, which may name a layout or a workspace, and never a label singularised by rule.
@@ -137,6 +147,38 @@ test("a question that spells out a tab's segment is said in the tab's word, and 
     expect(visibleQuestion(incidents, 'incident status != resolved')).toBe('status != resolved');
     // A tab's own question is its word.
     expect(visibleQuestion(incidents, appListQuery(incidents, 0))).toBe('active');
+  } finally {
+    state.schema = before;
+  }
+});
+
+test('a tab that pins a column to one value fixes it; lists, ranges and negations do not', () => {
+  const columns = ['status', 'amount', 'owner', 'kind'];
+  expect(pinnedColumns('status = to_submit', columns)).toEqual(['status']);
+  expect(pinnedColumns("status = 'to submit' and amount > 5", columns)).toEqual(['status']);
+  expect(pinnedColumns('kind in (a)', columns)).toEqual(['kind']);
+  // The tabs that do not pin it, and "All", keep the column.
+  expect(pinnedColumns('', columns)).toEqual([]);
+  expect(pinnedColumns('status in (open, review)', columns)).toEqual([]);
+  expect(pinnedColumns('status != closed', columns)).toEqual([]);
+  expect(pinnedColumns('amount between 1 and 5', columns)).toEqual([]);
+  expect(pinnedColumns('status = a or owner = b', columns)).toEqual([]);
+  expect(pinnedColumns('status = a and status = b', columns)).toEqual([]);
+});
+
+test("a named tab pins through its segment's conditions, not its word", async () => {
+  const { state } = await import('../core.js');
+  const before = state.schema;
+  state.schema = {
+    tables: [{ id: 'lead', name: 'lead', columns: [], segments: { new: 'status = new', open: 'status != lost and status != won' } }],
+  } as unknown as typeof state.schema;
+  try {
+    const leads = { table: 'lead', label: 'Leads', tabs: [{ label: 'New', query: 'new' }, { label: 'All' }] } as ListSpec;
+    const columns = ['name', 'status', 'owner'];
+    expect(tabPinnedColumns(leads, 'new', columns)).toEqual(['status']);
+    expect(tabPinnedColumns(leads, 'open', columns)).toEqual([]);
+    expect(tabPinnedColumns(leads, 'status = new', columns)).toEqual(['status']);
+    expect(tabPinnedColumns(leads, '', columns)).toEqual([]);
   } finally {
     state.schema = before;
   }

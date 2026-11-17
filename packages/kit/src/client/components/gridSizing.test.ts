@@ -1,5 +1,14 @@
 import { describe, expect, test } from 'vitest';
-import { columnSizeHint, fitGridColumns, holdFold, keepFitting, tagsThatFit, isGroupedNumber, GRID_EXPANDER_WIDTH } from './gridSizing.js';
+import {
+  columnFloor,
+  columnSizeHint,
+  fitGridColumns,
+  holdFold,
+  keepFitting,
+  tagsThatFit,
+  isGroupedNumber,
+  GRID_EXPANDER_WIDTH,
+} from './gridSizing.js';
 
 const catalog = [
   { label: 'Name', kind: 'text', values: ['Managed laptop'] },
@@ -28,6 +37,19 @@ describe('fit table allocation', () => {
     expect(columnSizeHint({ label: 'Date', kind: 'date', showTime: true, values: [] }).minimum).toBe(176);
     // A head's menu caret stands over its label's end under a pointer (style.css): the head keeps its sort's room only.
     expect(columnSizeHint({ label: 'Assigned to', kind: 'text', controls: true, values: [] }).minimum).toBe(11 * 7 + 34);
+  });
+
+  test('a bar or ring beside the words is room the words do not measure', () => {
+    // Compass's probability column held 88px and cut "100%" to "10…" beside its 52px bar.
+    const measure = (text: string) => text.length * 7;
+    const pct = { label: 'Probability', kind: 'number', dressed: true, values: ['100%', '40%'] };
+    const bare = columnSizeHint(pct, undefined, measure);
+    const withBar = columnSizeHint({ ...pct, beside: 60 }, undefined, measure);
+    expect(withBar.least).toBeGreaterThan(bare.least);
+    expect(withBar.least).toBeGreaterThanOrEqual(measure('100%') + 60);
+    // Counted, with no canvas: the bar still counts.
+    const counted = { label: 'Probability', kind: 'number', values: ['100%'] };
+    expect(columnSizeHint({ ...counted, beside: 60 }).minimum).toBeGreaterThan(columnSizeHint(counted).minimum);
   });
 
   test('the totals row sizes its column: a sum is wider than any row it adds up and is never cut', () => {
@@ -452,5 +474,15 @@ describe('heads that give their room to a value', () => {
     expect(columns[4]).toBeLessThan(columnSizeHint(roll[4]!, 8, (text) => measure(text, 4)).minimum);
     expect(columns[9]).toBeGreaterThanOrEqual(columnSizeHint(roll[9]!, 8, (text) => measure(text, 9)).least);
     expect(columns.reduce((sum, size) => sum + size, GRID_EXPANDER_WIDTH)).toBe(978);
+  });
+});
+
+describe('columnFloor', () => {
+  const base = { label: 'Created', values: ['Aug 22, 2026'] };
+  test('holds a date, a figure and a chip to the width of their values, and lets text give way', () => {
+    expect(columnFloor({ ...base, kind: 'date' })).toBeGreaterThanOrEqual(112);
+    expect(columnFloor({ ...base, label: 'Price', kind: 'number', values: ['$22,495'] })).toBeGreaterThanOrEqual(88);
+    expect(columnFloor({ ...base, label: 'Status', kind: 'text', chip: true, values: ['In review'] })).toBeGreaterThan(60);
+    expect(columnFloor({ ...base, label: 'Notes', kind: 'text', values: ['A long sentence of free text that may be cut'] })).toBe(0);
   });
 });

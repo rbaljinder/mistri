@@ -41,6 +41,7 @@ export const PALETTE_TOKENS = {
   rulesHead: '--rules-head',
   shadow: '--shadow-ink',
   band: '--band',
+  ai: '--ai',
   rulesWeight: '--rules-weight',
   rulesControl: '--control-border-w',
   chart1: '--chart-1',

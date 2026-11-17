@@ -1287,7 +1287,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 throw error;
               }
             }
-            if (path === '/api/integrations' || path === '/api/integrations/save') {
+            if (path === '/api/integrations' || path === '/api/integrations/save' || path === '/api/integrations/check') {
               /* The lease's tenant's integrations: which secrets are set, never a value, read by any member and
                  saved only by the roles the jobs module names as its editors, in their own tenant. Not in the
                  platform realm, and never by a support operator: a dealer does not hold a tenant's keys. */
@@ -1307,6 +1307,15 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 };
               const session = await verified(req);
               if (!session) return denyTenant();
+              if (path === '/api/integrations/check') {
+                try {
+                  return reply(await integrationSettings.check(tenantId, input));
+                } catch (error) {
+                  if (error instanceof IntegrationSettingsRefusal)
+                    return { status: 422, body: { error: error.message, code: 'integration_refused', outcome: 'not_applied' } };
+                  throw error;
+                }
+              }
               try {
                 await integrationSettings.save(tenantId, session.identity.id, input);
               } catch (error) {

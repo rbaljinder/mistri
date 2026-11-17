@@ -51,6 +51,7 @@ export const COLOR_ROLES: ReadonlyArray<readonly [string, keyof ThemePalette]> =
   ['rules.head', 'rulesHead'],
   ['shadow', 'shadow'],
   ['band', 'band'],
+  ['ai', 'ai'],
   ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => [`chart[${n - 1}]`, `chart${n}` as keyof ThemePalette] as const),
 ];
 

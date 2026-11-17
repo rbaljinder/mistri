@@ -535,11 +535,24 @@ test('cold routed links resolve their complete string key before record reads', 
   expect(api.mock.calls[0][1].key).toEqual(key);
 });
 
-test('rootless routed pages retain their chooser and do not run root/plan queries', async () => {
+test("a rootless page in an App goes to its table's list, replacing history, and runs no root or plan queries", async () => {
   const selected: PageEntry = { kind: 'page', pageId: definition.id, table: 'issue' };
   currentEntry = selected;
   render(<PageRoom entry={selected} />, { wrapper: provider().wrapper });
-  await screen.findByText('Collection chooser');
+  await waitFor(() => expect(go).toHaveBeenCalledWith({ kind: 'table', table: 'issue' }, 'replace'));
+  expect(screen.queryByText('Collection chooser')).toBeNull();
+  expect(api).not.toHaveBeenCalled();
+  expect(visit).not.toHaveBeenCalled();
+});
+
+test('a rootless page with no list to go to keeps its chooser, and the words that say to pick one', async () => {
+  appMode = false;
+  const selected: PageEntry = { kind: 'page', pageId: definition.id, table: 'issue' };
+  currentEntry = selected;
+  render(<PageRoom entry={selected} />, { wrapper: provider().wrapper });
+  await screen.findByText('Workbench chooser');
+  expect(screen.getByText(/below to open this page/)).toBeInTheDocument();
+  expect(go).not.toHaveBeenCalledWith({ kind: 'table', table: 'issue' }, 'replace');
   expect(selected.label).toBe('Issue');
   expect(api).not.toHaveBeenCalled();
   expect(visit).not.toHaveBeenCalled();

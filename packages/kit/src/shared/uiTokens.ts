@@ -34,6 +34,7 @@ const SHEET_TOKENS = [
   '--control-h',
   '--section-seam',
   '--page-head-gap',
+  '--page-top',
   '--page-measure',
   '--room-inset',
   '--row-h',

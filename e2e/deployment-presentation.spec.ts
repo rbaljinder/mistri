@@ -173,7 +173,7 @@ test('the second is another program from the same App, its mark served under its
 
 test('the sign-in screen wears the deployment name, not the App one', async ({ page }) => {
   await page.goto(`${origins.gate}/`);
-  await expect(page.getByRole('heading', { name: 'Sign in to Northside Bank', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Northside Bank', exact: true })).toBeVisible();
   expect(await page.title()).toContain('Northside Bank');
   await expect(page.getByText('Retail Banking')).toHaveCount(0);
 });

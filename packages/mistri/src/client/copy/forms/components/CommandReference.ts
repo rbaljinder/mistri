@@ -2,6 +2,8 @@
 import { defineMessages } from '@mistriwork/kit/client/messages.js';
 
 export const say = defineMessages({
+  searchPlaceholder: 'Search {label}…',
+  searchBare: 'Search…',
   choicesCouldNotBeLoaded: 'Choices could not be loaded. Try again.',
   loadingChoices: 'Loading choices…',
   noMatchingChoices: 'No matching choices.',

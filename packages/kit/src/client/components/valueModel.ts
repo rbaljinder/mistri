@@ -35,6 +35,7 @@ import { leadTonePath, subtitlePath } from '@mistriwork/engine/shared/subtitlePa
 import type { ColumnMeta } from '@mistriwork/engine/shared/schema.js';
 import { say } from '../copy/record/components/valueModel.js';
 import { shellBody } from '../shellHost.js';
+import { ISO_DAY } from '../dayLabel.js';
 
 export interface DisplayRule {
   /** What a missing value is said as where the dash would stand (`display: { resolved_at: { empty: 'Open' } }`). */
@@ -538,8 +539,6 @@ function relativeSaid(rule: DisplayRule, text: string): { text: string; title: s
     ? { text: formatDate(text), title: said }
     : { text: said, title: text, date: formatDate(text) };
 }
-
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}(?::?\d{2})?)?)?$/;
 
 /**
  * A toned day says what it would say untoned: its tone is the pill it wears, not a reason to draw the stored ISO day.

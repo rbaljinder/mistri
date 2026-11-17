@@ -21,6 +21,16 @@
 .empty-note.is-room > .empty-note-text { color: var(--ink); font-size: var(--text-lg); font-weight: 500; text-wrap: balance; }
 .empty-note.is-room .empty-note-detail { margin-top: var(--space-1); font-size: var(--text-md); font-weight: 400; }
 .empty-note.is-room > .empty-note-action { margin-top: var(--space-4); }
+/* An empty place is centered in its room, mark over sentence, where it was
+   left on the edge with its mark beside it: off centre in a wide card and
+   nowhere in particular on a page. Inside a card it sits flush on the card's
+   own edge and draws nothing of its own (no border, ground or shadow a look
+   may give a note): the card is the box, not the note in it. */
+.empty-note:not(.is-room, .is-refused) { grid-template-columns: minmax(0, 1fr); justify-items: center; row-gap: var(--space-1h); margin-inline: auto; text-align: center; }
+.empty-note:not(.is-room, .is-refused) > * { grid-column: 1; grid-row: auto; }
+.empty-note:not(.is-room, .is-refused) > .empty-note-mark { margin-top: 0; }
+.empty-note:not(.is-room, .is-refused) .page-related-create, .empty-note:not(.is-room, .is-refused) .empty-note-action { justify-content: center; }
+:is(.panel, .page-section, .dash-list, [data-slot='card']) :is(.empty-note, .page-empty) { border: 0; border-radius: 0; background: none; box-shadow: none; padding-inline: 0; }
 .empty-note-text { margin: 0; color: var(--ink-muted); font-size: var(--text-md); line-height: 1.5; }
 .empty-note-detail { color: var(--ink-muted); }
 /* An authored title leads in the text ink at the same size: the sentence is what it says, not a heading. */

@@ -1223,9 +1223,9 @@ export function PlatformControl({
            what the field is told, not from an attribute put on the input after it is drawn. */
         aria-invalid={errorId ? true : undefined}
         aria-label={app ? spoken : `${column.name} (${column.type})`}
-        /* A day's box says the locale's pattern, as its hint does and as it reads what is typed (MM/DD/YYYY in
-           en-US; ISO is read too): the field's own (DateField.tsx). */
-        placeholder={said || (kind === 'datetime' ? say('yyyyMmDdHh') : undefined)}
+        /* A day's box, with or without a time, says the locale's pattern, as its hint does and as it reads what is typed
+           (MM/DD/YYYY, and HH:MM after it for a moment, in en-US; ISO is read too): the field's own (DateField.tsx). */
+        placeholder={said || undefined}
         locale={formatLocale()}
         timezone={formatTimezone()}
         now={appNow()}

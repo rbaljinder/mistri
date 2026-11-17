@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/kit",
-  "version": "1.0.0-rc.62",
+  "version": "1.0.0-rc.63",
   "description": "The shared React client both shells are drawn with: the walk and the address, Grid, Value, the record page, lists, filters and charts.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -108,6 +108,10 @@
     "./client/components/DashHead.js": {
       "mistri-built": "./dist/client/components/DashHead.js",
       "default": "./src/client/components/DashHead.tsx"
+    },
+    "./client/components/PageHeading.js": {
+      "mistri-built": "./dist/client/components/PageHeading.js",
+      "default": "./src/client/components/PageHeading.tsx"
     },
     "./client/components/FavoriteStar.js": {
       "mistri-built": "./dist/client/components/FavoriteStar.js",
@@ -617,6 +621,10 @@
       "mistri-built": "./dist/client/palette.js",
       "default": "./src/client/palette.js"
     },
+    "./client/paletteRecents.js": {
+      "mistri-built": "./dist/client/paletteRecents.js",
+      "default": "./src/client/paletteRecents.ts"
+    },
     "./client/peek.js": {
       "mistri-built": "./dist/client/peek.js",
       "default": "./src/client/peek.js"
@@ -785,8 +793,8 @@
     "postpack": "node ../../scripts/pack-manifest.mjs restore"
   },
   "dependencies": {
-    "@mistriwork/engine": "1.0.0-rc.62",
-    "@mistriwork/ui": "1.0.0-rc.62",
+    "@mistriwork/engine": "1.0.0-rc.63",
+    "@mistriwork/ui": "1.0.0-rc.63",
     "intl-messageformat": "12.1.2",
     "qrcode-generator": "^2.0.4"
   },

@@ -38,8 +38,10 @@ interface GridColumnSize {
   avatar?: boolean;
   /** The row's state (a tone chip, or a vocabulary named status or stage): kept with the name when columns are left out. */
   status?: boolean;
-  /** Every value is the words the cell draws ("4 weeks ago", "$22,495"), not a raw value it formats, and nothing beside them (a bar, a ring, an App's own renderer). */
+  /** Every value is the words the cell draws ("4 weeks ago", "$22,495"), not a raw value it formats, and nothing beside them but what `beside` counts (a bar, a ring; never an App's own renderer). */
   dressed?: boolean;
+  /** What the cell draws beside its words (a percent's bar or ring, a meter's bar, and the gap): width the words do not measure. */
+  beside?: number;
   /** A date no rule dresses: its values are the words the cell draws ("Aug 22, 2026"), measured in the cell's font. */
   drawnDate?: boolean;
 }
@@ -127,7 +129,8 @@ export function columnSizeHint(
   const totalWidth = measure && column.total ? Math.ceil(measure(column.total) * TOTAL_WEIGHT) : 0;
   const textWidth =
     (measure ? Math.max(Math.ceil(widest(column.values)), totalWidth) + (column.chip ? (column.chipExtra ?? CHIP_EXTRA) : 0) : length * 8) +
-    (column.avatar ? AVATAR_WIDTH : 0);
+    (column.avatar ? AVATAR_WIDTH : 0) +
+    (column.beside ?? 0);
   /* A second line asks for room, never lowers the floor: an email under a
      name wants its width, but a narrow panel still keeps the name's minimum.
      It is set a size down (12.5px under 14px). */
@@ -169,7 +172,9 @@ export function columnSizeHint(
      name beside them was cut to "2024 Toyota C…". */
   if (column.kind === 'number') {
     const width =
-      measured && (column.chip || column.dressed) ? Math.min(264, textWidth + pad) : Math.min(264, Math.max(88, (length + 4) * 8 + 24));
+      measured && (column.chip || column.dressed)
+        ? Math.min(264, textWidth + pad)
+        : Math.min(264, Math.max(88, (length + 4) * 8 + 24 + (column.beside ?? 0)));
     return fixed(width);
   }
   /* A number set in groups (a telephone number, a card's last digits, a part number of digits) is a number that
@@ -235,6 +240,26 @@ function sizeHints(
 ): ReturnType<typeof columnSizeHint>[] {
   const hints = columns.map((column, index) => columnSizeHint(column, headChar, measure && ((text) => measure(text, index)), squeezeName));
   return cut ? giveWay(hints, room) : hints;
+}
+
+/**
+ * The least a reader may drag a column to. Text keeps its ellipsis (no floor of its own); a date, a figure, a yes-or-no
+ * and a status chip are cut by no one, so each holds the width its value measures (its minimum, as sized above): a date
+ * is never "Aug 22, 20…" and a pill never "In rev…" because a handle was dragged a pixel too far.
+ */
+export function columnFloor(column: GridColumnSize, headChar = GRID_HEAD_CHAR, measure?: TextMeasure): number {
+  const whole =
+    column.kind === 'date' ||
+    column.kind === 'number' ||
+    column.kind === 'boolean' ||
+    column.chip ||
+    isGroupedNumber(
+      (column.values ?? [])
+        .slice(0, GRID_SIZE_SAMPLE)
+        .filter((value) => value != null)
+        .map(String),
+    );
+  return whole ? columnSizeHint(column, headChar, measure).least : 0;
 }
 
 /* Where the minima together run past the room, the heads wider than their columns' values give way first, the

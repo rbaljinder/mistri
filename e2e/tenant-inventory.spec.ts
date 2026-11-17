@@ -90,7 +90,7 @@ async function enter(page: Page, app: Fixture, role: keyof Fixture['accounts'] =
   const selected = page.waitForResponse(isSelection);
   await page.goto(`${app.origin}/${app.appId}/${app.inventory.vehicle}?tenant=northstar`);
   if (nativeForm) {
-    await expect(page.getByRole('heading', { name: `Sign in to ${app.appName}`, exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: app.appName, exact: true })).toBeVisible();
     await expect(page.locator('#content')).not.toContainText('Northstar vehicle');
     await page.getByLabel('Email', { exact: true }).fill(account.email);
     await page.getByLabel('Password', { exact: true }).fill(account.password);

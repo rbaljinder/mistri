@@ -374,10 +374,10 @@
       "route": "/sign-in",
       "viewport": "desk",
       "clip": {
-        "x": 400,
-        "y": 140,
-        "width": 480,
-        "height": 440
+        "x": 417,
+        "y": 97,
+        "width": 446,
+        "height": 401
       }
     },
     {

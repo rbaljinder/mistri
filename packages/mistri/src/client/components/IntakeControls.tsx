@@ -167,15 +167,35 @@ function maskRaw(mask: string, typed: string): string {
 /** The keyboard a mask asks for: digits alone are the number pad. */
 const maskKeys = (mask: string): 'numeric' | 'text' => ([...mask].every((c) => !PLACE.test(c) || c === '0') ? 'numeric' : 'text');
 
-/** A month typed `MM/YYYY` as the `YYYY-MM` the reader reads; anything short of one is handed on as typed. */
-function monthValue(typed: string): string {
-  const digits = typed.replace(/\D/g, '').slice(0, 6);
-  return digits.length === 6 ? `${digits.slice(2)}-${digits.slice(0, 2)}` : digits;
+/** How the reader's locale writes a month and a year ("MM/YYYY" in en-US, "YYYY-MM" in Swedish): the order of the two
+    parts, their separator, and the hint that says so — the one pattern the box shows, reads and is described by. */
+function monthMask(locale: string | undefined): { order: ('month' | 'year')[]; sep: string; hint: string } {
+  let parts: Intl.DateTimeFormatPart[] = [];
+  try {
+    parts = new Intl.DateTimeFormat(locale, { year: 'numeric', month: '2-digit', timeZone: 'UTC', calendar: 'gregory' }).formatToParts(
+      Date.UTC(2006, 10, 22),
+    );
+  } catch {
+    /* An unknown locale reads as the default below. */
+  }
+  const order = parts.flatMap((part) => (part.type === 'month' || part.type === 'year' ? [part.type] : []));
+  if (order.length !== 2) return { order: ['month', 'year'], sep: '/', hint: 'MM/YYYY' };
+  const sep = parts.find((part) => part.type === 'literal')?.value.trim() || '/';
+  return { order, sep, hint: order.map((type) => (type === 'month' ? 'MM' : 'YYYY')).join(sep) };
 }
-const monthShown = (value: string): string => {
+
+/** A month typed in the locale's order as the `YYYY-MM` the reader reads; anything short of one is handed on as typed. */
+function monthValue(typed: string, locale: string | undefined): string {
+  const digits = typed.replace(/\D/g, '').slice(0, 6);
+  if (digits.length !== 6) return digits;
+  return monthMask(locale).order[0] === 'year' ? `${digits.slice(0, 4)}-${digits.slice(4)}` : `${digits.slice(2)}-${digits.slice(0, 2)}`;
+}
+const monthShown = (value: string, locale: string | undefined): string => {
+  const { order, sep } = monthMask(locale);
   const iso = /^(\d{4})-(\d{2})$/.exec(value);
-  const digits = iso ? `${iso[2]}${iso[1]}` : value.replace(/\D/g, '');
-  return digits.length > 2 ? `${digits.slice(0, 2)}/${digits.slice(2)}` : digits;
+  const digits = iso ? (order[0] === 'year' ? `${iso[1]}${iso[2]}` : `${iso[2]}${iso[1]}`) : value.replace(/\D/g, '');
+  const first = order[0] === 'year' ? 4 : 2;
+  return digits.length > first ? `${digits.slice(0, first)}${sep}${digits.slice(first)}` : digits;
 };
 
 const optionKey = (option: Choice) => `${typeof option.value}:${option.value}`;
@@ -328,11 +348,11 @@ export function IntakeControl(props: IntakeControlProps) {
         inputMode="numeric"
         enterKeyHint="next"
         autoComplete="off"
-        placeholder={appWord('mistri.form.monthHint', say('monthPlaceholder'))}
+        placeholder={appWord('mistri.form.monthHint', monthMask(formatLocale()).hint)}
         disabled={disabled}
         required={field.required}
-        value={monthShown(typeof value === 'string' ? value : '')}
-        onChange={(event) => onChange(monthValue(event.target.value))}
+        value={monthShown(typeof value === 'string' ? value : '', formatLocale())}
+        onChange={(event) => onChange(monthValue(event.target.value, formatLocale()))}
       />
     );
   }

@@ -82,6 +82,7 @@ export const TENANT_METADATA_POSTS: ReadonlySet<string> = new Set([
   '/api/branding/save',
   '/api/integrations',
   '/api/integrations/save',
+  '/api/integrations/check',
   PAGE_LOAD_PATH,
   TENANT_BOOT_PATH,
 ]);
@@ -111,6 +112,7 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/branding/save': ['branding', 'logo', 'darkLogo', 'favicon'],
   '/api/integrations': [],
   '/api/integrations/save': ['integration', 'secrets'],
+  '/api/integrations/check': ['integration'],
   '/api/query': ['table', 'filter', 'columns', 'orderBy', 'limit', 'offset'],
   '/api/count': ['table', 'filter', 'exactCount', 'countLimit'],
   '/api/counts': ['items', 'countLimit'],

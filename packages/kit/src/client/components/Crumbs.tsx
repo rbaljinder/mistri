@@ -120,11 +120,12 @@ export function Crumbs({ onHome }: { onHome: () => void }) {
   const setting = trailSetting();
   const home = Boolean(setting && setting.home);
   const previous = stack.length > 1 ? stack[stack.length - 2] : null;
-  /* A public reader's record page names itself in its heading straight
-     below: the trail ends at the list it came from, which stays a link. */
+  /* An App's record page names itself in its heading straight below, so the trail ends at the list it came from, which
+     stays a link: the name stands once, as the title, and not again as the last crumb beside it. The Workbench's record
+     has no such heading, and keeps its crumb. */
   const top = stack[stack.length - 1];
   const trail =
-    shell().publicVisitor() && stack.length > 1 && top && (top.kind === 'row' || top.kind === 'page') && top.table
+    (shell().publicVisitor() || shell().inApp()) && stack.length > 1 && top && (top.kind === 'row' || top.kind === 'page') && top.table
       ? stack.slice(0, -1)
       : stack;
   // Each crumb keeps its index in the walk, which is where it goes back to.
@@ -151,6 +152,9 @@ export function Crumbs({ onHome }: { onHome: () => void }) {
       )}
       {shown.map(({ entry, index: i }, n) => {
         const last = i === stack.length - 1;
+        /* Where the step stands in what is drawn, for the stylesheet: a short bar cuts the middle steps first and keeps
+           the first, where the trail began, and the last, where the reader is. */
+        const place = n === 0 ? 'first' : n === shown.length - 1 ? 'last' : 'middle';
         /* Without the house the first step stands at the start of the bar, with nothing before it to separate. */
         const first = n === 0 && !home;
         /* A row crumb names its table when the walk has changed table —
@@ -186,14 +190,18 @@ export function Crumbs({ onHome }: { onHome: () => void }) {
             {ownStep && (
               <>
                 {!first && <span className="sep">›</span>}
-                <span className="crumb-table-step">{tableWord}</span>
+                <span className="crumb-table-step" data-crumb={place}>
+                  {tableWord}
+                </span>
               </>
             )}
             {(!first || ownStep) && <span className="sep">›</span>}
             {last ? (
-              <span className="current">{content}</span>
+              <span className="current" data-crumb={place}>
+                {content}
+              </span>
             ) : (
-              <button type="button" onClick={() => backTo(i)}>
+              <button type="button" data-crumb={place} onClick={() => backTo(i)}>
                 {content}
               </button>
             )}

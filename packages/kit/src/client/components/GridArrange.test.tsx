@@ -31,6 +31,9 @@ describe('gridArrange', () => {
 
   test('a width never goes below its floor, and a dragged width stands in place of its fitted one', () => {
     expect(clampColumnWidth(20)).toBe(48);
+    // A type's floor stands over the grid's: a date or a pill is not dragged under its value.
+    expect(clampColumnWidth(60, 112.2)).toBe(113);
+    expect(clampColumnWidth(300, 112)).toBe(300);
     expect(clampColumnWidth(120.4)).toBe(120);
     expect(applyColumnWidths([100, 120, 80], ['id', 'name', 'active'], { name: 200 })).toEqual([100, 200, 80]);
   });
@@ -203,7 +206,7 @@ test('a scrolled grid takes a colgroup only once a width is dragged', () => {
 test('dragging a scrolled column keeps every other column at the width it was drawn at, and starts from the drawn width', () => {
   draw({ sizing: 'scroll' });
   // happy-dom lays nothing out, so the heads are given the widths a browser would have drawn.
-  const drawn: Record<string, number> = { id: 70, name: 310, active: 150 };
+  const drawn: Record<string, number> = { id: 90, name: 310, active: 150 };
   for (const th of document.querySelectorAll<HTMLElement>('thead th[data-col]')) {
     th.getBoundingClientRect = () => ({ width: drawn[th.dataset.col!]! }) as DOMRect;
   }
@@ -212,7 +215,7 @@ test('dragging a scrolled column keeps every other column at the width it was dr
   // A press that never moves arranges nothing.
   expect(document.querySelector('colgroup')).toBeNull();
   fireEvent.pointerMove(resizer, { clientX: 130 });
-  expect(colWidths()).toEqual([70, 340, 150]);
+  expect(colWidths()).toEqual([90, 340, 150]);
   fireEvent.pointerUp(resizer);
 });
 

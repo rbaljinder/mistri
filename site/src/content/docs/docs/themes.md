@@ -299,7 +299,7 @@ Each file is cut to Latin as the App loads — the letters, digits, accents and 
 ui: { logo: { src: './brand/acme.svg', dark: './brand/acme-night.svg', mark: './brand/acme-mark.png' } },
 ```
 
-The bar draws `src` in a 96 by 24 box, so a wide wordmark and a square mark take the same room; `dark` is drawn in dark mode, and `mark`, a square picture, is the browser tab's icon. An SVG is written again from an allowlist of shapes, a raster stays under 256 KB, and the name stays the bar's label for a screen reader. A tenant's logo, and one read from a record, are drawn over it. `mistri check` refuses a URL or a file it cannot read (`app-logo`) and warns on a picture with no `dark` (`theme-dark`); `mistri build` ships the files as served.
+The bar draws `src` in a 96 by 24 box, so a wide wordmark and a square mark take the same room; `dark` is drawn in dark mode, and `mark`, a square picture, is the browser tab's icon. An SVG is written again from an allowlist of shapes, a raster stays under 256 KB, and the name stays the bar's label for a screen reader. On the sign-in page a picture wider than it is tall (a wordmark) stands in for the App's name: the heading under it is kept for a screen reader and not drawn, while a square picture, a glyph or an initial keeps the name in sight beside it. A tenant's logo, and one read from a record, are drawn over it. `mistri check` refuses a URL or a file it cannot read (`app-logo`) and warns on a picture with no `dark` (`theme-dark`); `mistri build` ships the files as served.
 
 ## Publish a look
 

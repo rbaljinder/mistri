@@ -93,6 +93,9 @@ type AnyAction<Client> = Readonly<{
   run(client: Client, input: never, call: Readonly<{ idempotencyKey: string; signal: AbortSignal }>): unknown;
 }>;
 
+/** What a connection check answers: it works, or why not, in words a person can act on. */
+export type IntegrationCheckResult = Readonly<{ ok: true }> | Readonly<{ ok: false; message: string }>;
+
 /** What a package passes to defineIntegration. */
 export interface IntegrationDefinition<
   Name extends string,
@@ -105,6 +108,18 @@ export interface IntegrationDefinition<
   readonly name: Name;
   /** The secrets a deployment enters on the settings screen, by name. Never in App source. */
   readonly secrets: readonly Secret[];
+  /** What the settings screen calls it, in place of the name made readable: "Twilio SMS" for `twilio-sms`. */
+  readonly label?: string;
+  /** One sentence under the label on the settings screen: what the integration is for. */
+  readonly description?: string;
+  /**
+   * A cheap call that proves the saved secrets work (the account endpoint, say). The settings screen's "Test
+   * connection" runs it on the server for the people who may edit the settings, under a time limit, and shows
+   * `message` beside the button. A throw is shown as a generic failure, never its text: an SDK's error can carry a key.
+   */
+  check?(
+    context: Readonly<{ secrets: Readonly<Record<Secret, string>>; signal: AbortSignal }>,
+  ): IntegrationCheckResult | Promise<IntegrationCheckResult>;
   /** The vendor client, made from one tenant's secrets when a call or a message needs it. */
   client(context: Readonly<{ secrets: Readonly<Record<Secret, string>> }>): Client;
   readonly actions?: Actions;
@@ -205,7 +220,10 @@ export interface CapturedIntegration {
   /** The integration an extension extends (`extendIntegration`); the extension holds the base's definition and what it adds. */
   readonly base?: CapturedIntegration;
   readonly name: string;
+  readonly label?: string;
+  readonly description?: string;
   readonly secrets: readonly string[];
+  check?(context: Readonly<{ secrets: Readonly<Record<string, string>>; signal: AbortSignal }>): unknown;
   client(secrets: Readonly<Record<string, string>>): unknown;
   readonly actions: ReadonlyMap<string, CapturedAction>;
   readonly webhooks?: Readonly<{
@@ -336,7 +354,7 @@ export function defineIntegration<
   const Events extends Readonly<Record<string, IntegrationEventDefinition<unknown>>>,
 >(definition: IntegrationDefinition<Name, Secret, Client, Actions, Events>): Integration<Name, ActionTypes<Actions>, Client> {
   const value = record(definition, 'An integration');
-  only(value, 'An integration', ['name', 'secrets', 'client'], ['actions', 'webhooks', 'channel']);
+  only(value, 'An integration', ['name', 'secrets', 'client'], ['label', 'description', 'check', 'actions', 'webhooks', 'channel']);
   const name = value.name;
   if (typeof name !== 'string' || !INTEGRATION_NAME.test(name))
     fail('An integration is named in lowercase letters, digits and hyphens, starting with a letter, at most 40: name: "fakepay".');
@@ -350,6 +368,13 @@ export function defineIntegration<
   )
     fail(`${where} secrets is a list of at most 16 distinct names of letters, digits and underscores: secrets: ['apiKey'].`);
   const client = fn<(context: { secrets: Readonly<Record<string, string>> }) => unknown>(value.client, `${where} client`);
+  for (const key of ['label', 'description'] as const)
+    if (
+      value[key] !== undefined &&
+      (typeof value[key] !== 'string' || !(value[key] as string).trim() || (value[key] as string).length > 280)
+    )
+      fail(`${where} ${key} is a sentence of at most 280 characters: ${key}: 'Fake payments'.`);
+  const check = value.check === undefined ? undefined : fn<NonNullable<CapturedIntegration['check']>>(value.check, `${where} check`);
   const actions = captureActions(value.actions, where);
   let webhooks: CapturedIntegration['webhooks'];
   if (value.webhooks !== undefined) {
@@ -383,6 +408,9 @@ export function defineIntegration<
     Object.freeze({
       name: name as string,
       secrets: Object.freeze([...(secrets as string[])]),
+      ...(value.label === undefined ? {} : { label: (value.label as string).trim() }),
+      ...(value.description === undefined ? {} : { description: (value.description as string).trim() }),
+      ...(check ? { check } : {}),
       client: (given: Readonly<Record<string, string>>) => client({ secrets: given }),
       actions,
       ...(webhooks ? { webhooks } : {}),

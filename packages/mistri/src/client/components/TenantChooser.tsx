@@ -198,6 +198,7 @@ export function TenantControl({ actions = [], ...props }: TenantChooserProps & {
         type="button"
         className="ghost tenant-control-trigger"
         aria-haspopup="dialog"
+        title={props.currentTenant === undefined ? undefined : nameOf(props.currentTenant, props.names, props.platformLabel)}
         aria-expanded={open}
         disabled={props.busy}
         onClick={() => setOpen(true)}

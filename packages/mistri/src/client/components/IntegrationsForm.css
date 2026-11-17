@@ -8,9 +8,17 @@
 .integrations-form-card h3 { margin: 0; font: 600 var(--text-md) var(--sans); color: var(--ink); }
 .integrations-form-note { margin: 0; color: var(--ink-muted); font-size: var(--text-base); }
 .integrations-form-address { font-family: var(--mono); }
+.integrations-form-state { display: flex; align-items: center; gap: var(--space-2); margin: calc(var(--space-2) * -1) 0 0; color: var(--ink-muted); font-size: var(--text-base); }
+/* A dot beside the words, never the colour alone: the sentence says it.
+   Not configured is neutral, not an alarm. */
+.integrations-form-state::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ink-subtle); }
+.integrations-form-state[data-state='configured']::before { background: var(--status-good); }
+.integrations-form-state[data-state='partial']::before { background: var(--status-warning); }
 .integrations-form-secret { display: flex; justify-content: space-between; gap: var(--space-4); margin: 0; font-size: var(--text-base); }
 .integrations-form-secret span:first-child { font-family: var(--mono); color: var(--ink); }
 .integrations-form-secret span:last-child { color: var(--ink-muted); }
 .integrations-form-card .form-actions { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-3); }
 .integrations-form-status { flex: 1; margin: 0; color: var(--ink-muted); font-size: var(--text-base); }
+.integrations-form-status[data-ok='true'] { color: var(--status-good); }
+.integrations-form-status[data-ok='false'] { color: var(--status-danger, var(--ink)); }
 }

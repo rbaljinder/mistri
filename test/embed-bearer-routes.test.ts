@@ -70,6 +70,7 @@ test("a bearer stands for its session on a browser route, and on no member's API
     '/api/tenant/invitations/create',
     '/api/tenant/invitations/status',
     '/api/integrations/save',
+    '/api/integrations/check',
     '/API/Integrations/Save',
     // What is a platform operator's, or a tenant's settings: a support session
     // into a tenant and its trail, a tenant's branding, the Suite console.

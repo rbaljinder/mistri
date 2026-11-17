@@ -33,6 +33,7 @@ import {
 } from '../../shared/tenantBranding.js';
 import type { BrandingPresentation } from '../http/recordBranding.js';
 import type { MailBrand } from '../email/mailLinkPage.js';
+import { imageAspect } from '../app/imageShape.js';
 import { admitFavicon, admitLogo, imageHeaders, LogoRefused, type AdmittedLogo } from '../app/brandImage.js';
 
 /** The deployment's store, as its facade lends it (tenantDeployment.ts). */
@@ -142,7 +143,9 @@ export function createTenantBrandingService(options: {
             revision: String(revision),
             theme,
             ...(value.name ? { name: value.name } : {}),
-            ...(value.logo ? { mark: brandingLogoAddress(value.logo.hash) } : {}),
+            ...(value.logo
+              ? { mark: brandingLogoAddress(value.logo.hash), ...(value.logo.aspect ? { markAspect: value.logo.aspect } : {}) }
+              : {}),
             ...(value.logo && value.logoDark ? { darkMark: brandingLogoAddress(value.logoDark.hash) } : {}),
             ...(value.favicon ? { icon: brandingLogoAddress(value.favicon.hash) } : {}),
           }),
@@ -177,8 +180,10 @@ export function createTenantBrandingService(options: {
         delete fields.logoDark;
         delete fields.favicon;
         const current = input.logo === null && input.darkLogo === null && input.favicon === null ? undefined : (await load(tenant)).value;
-        if (admitted) fields.logo = { hash: admitted.hash, type: admitted.type };
-        else if (input.logo !== null && current?.logo) fields.logo = current.logo;
+        if (admitted) {
+          const aspect = imageAspect(admitted.bytes);
+          fields.logo = { hash: admitted.hash, type: admitted.type, ...(aspect ? { aspect } : {}) };
+        } else if (input.logo !== null && current?.logo) fields.logo = current.logo;
         // A dark logo belongs to a logo: with none, there is nothing for it to stand in for.
         if (fields.logo) {
           if (admittedDark) fields.logoDark = { hash: admittedDark.hash, type: admittedDark.type };

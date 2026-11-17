@@ -321,14 +321,78 @@ export function paletteAccent(look: ThemeBase, palette: LookPalette, mode: 'ligh
   return { ...palette[mode], ...palette.looks?.[look]?.[mode] }.accent;
 }
 
-/** Whether two colours are near enough in hue to be taken for one: within forty degrees of each other on OKLab's
-    wheel, both with colour enough to have a hue at all. */
-export function sameHue(a: string, b: string): boolean {
+/** How far apart two colours' hues are on OKLab's wheel, in degrees; 180 where one has no hue at all (a grey reads as
+    nothing the other could be taken for). */
+export function hueGap(a: string, b: string): number {
   const [, aA, aB] = oklab(linear(a));
   const [, bA, bB] = oklab(linear(b));
-  if (Math.hypot(aA, aB) < 0.03 || Math.hypot(bA, bB) < 0.03) return false;
+  if (Math.hypot(aA, aB) < 0.03 || Math.hypot(bA, bB) < 0.03) return 180;
   const turn = Math.abs(Math.atan2(aB, aA) - Math.atan2(bB, bA));
-  return Math.min(turn, 2 * Math.PI - turn) < (40 * Math.PI) / 180;
+  return (Math.min(turn, 2 * Math.PI - turn) * 180) / Math.PI;
+}
+
+/** The least hue gap between `info` and the accent that reads as another color, and not as the accent's own. */
+export const INFO_APART = 50;
+
+const chromaOf = (hex: string) => {
+  const [, a, b] = oklab(linear(hex));
+  return Math.hypot(a, b);
+};
+const relativeLuminance = (hex: string) => {
+  const [r, g, b] = linear(hex);
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrastOf = (a: string, b: string) => {
+  const x = relativeLuminance(a);
+  const y = relativeLuminance(b);
+  return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+};
+const hexMix = (a: string, b: string, weight: number) =>
+  `#${[1, 3, 5]
+    .map((at) =>
+      Math.round(parseInt(a.slice(at, at + 2), 16) * weight + parseInt(b.slice(at, at + 2), 16) * (1 - weight))
+        .toString(16)
+        .padStart(2, '0'),
+    )
+    .join('')}`;
+
+/**
+ * `info` is what is merely so (a new step, a note, a key): its own hue, never the accent's. A look's blue under a
+ * Cobalt or Slate palette, or a look that wore the palette's hue for it (Bloom), was the accent said twice, so a
+ * tab, a link and a "new" chip read as one thing. Where the hue is within INFO_APART degrees of the accent's, it
+ * turns to the first of blue, cyan, violet and teal that stands clear of the accent, at the lightness that keeps the
+ * 4.5:1 the status colors owe the grounds it is read on (the page, a panel and a raised row), and as much colour as
+ * the screen holds at that hue (about what the look's own had). A hue already apart, and a look with no accent hue to be taken for, keep what they wrote.
+ */
+export function infoApart(colors: ThemeColorsOver, mode: 'light' | 'dark'): ThemeColorsOver {
+  const info = colors.status?.info;
+  const accent = colors.accent;
+  const hex = /^#[0-9a-f]{6}$/i;
+  if (!info || !accent || !hex.test(info) || !hex.test(accent) || hueGap(info, accent) >= INFO_APART) return colors;
+  const grounds = [colors.ground, colors.surface].filter((ground): ground is string => !!ground && hex.test(ground));
+  if (colors.ink && colors.surface && hex.test(colors.ink) && hex.test(colors.surface))
+    grounds.push(hexMix(colors.ink, colors.surface, 0.04));
+  const [L, a, b] = oklab(linear(info));
+  const [, accentA, accentB] = oklab(linear(accent));
+  const accentHue = (Math.atan2(accentB, accentA) * 180) / Math.PI;
+  const gap = (hue: number) => {
+    const turn = Math.abs(((((hue - accentHue) % 360) + 540) % 360) - 180);
+    return turn;
+  };
+  /* Blue first, then cyan, violet and teal: the first that stands INFO_APART away, else the furthest. */
+  const hues = [255, 215, 295, 185];
+  const chosen = hues.find((hue) => gap(hue) >= INFO_APART) ?? [...hues].sort((x, y) => gap(y) - gap(x))[0]!;
+  const radians = (chosen * Math.PI) / 180;
+  const chroma = Math.min(Math.max(Math.hypot(a, b), 0.09), 0.13);
+  for (const keep of [1, 0.8, 0.6, 0.45]) {
+    for (let step = 0; step <= 40; step++) {
+      const lightness = mode === 'light' ? L - step * 0.01 : L + step * 0.01;
+      const worn = hexOf([lightness, chroma * keep * Math.cos(radians), chroma * keep * Math.sin(radians)]);
+      if (hueGap(worn, accent) >= INFO_APART && chromaOf(worn) >= 0.06 && grounds.every((ground) => contrastOf(worn, ground) >= 4.9))
+        return { ...colors, status: { ...colors.status, info: worn } };
+    }
+  }
+  return colors;
 }
 
 /**
@@ -437,16 +501,15 @@ export function paletteColors(look: ThemeBase, palette: LookPalette, mode: 'ligh
     }
     case 'bloom':
       /* The hue is the look: the primary button is filled in it, what is chosen sits on its tint. What is merely so
-         (a step that is new or under way, a note) is said in it too: the look's own blue beside an emerald page was a
-         second hue with nothing to say, and a tile tinted in it read as left over from another palette. What a colour
-         warns of or confirms keeps its own. */
+         (a step that is new or under way, a note) keeps the look's own blue, moved off the hue only where the palette
+         is itself a blue (infoApart): the accent said twice read as one thing. What a colour warns of or confirms
+         keeps its own. */
       return {
         accent: tone.accent,
         primary: tone.accent,
         accentSoft: tone.soft,
         link,
         focus: tone.focus,
-        status: { info: link },
         nav: { accent: link },
         chart: ledSeries(series, tone.chart),
       };

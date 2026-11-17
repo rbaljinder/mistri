@@ -126,6 +126,7 @@ const PAGE_ONLY = [
   'Scope',
   'List',
   'Grid',
+  'PageHeader',
   'Panel',
   'Tabs',
   'Rows',

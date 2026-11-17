@@ -303,11 +303,14 @@ test.describe('Tick checklist', () => {
     expect(calls).toBe(1);
   });
 
-  test('an unbound record page remains a chooser, not a disabled task workspace', async ({ page }) => {
+  test('an unbound record page goes to the list, not a disabled task workspace', async ({ page }) => {
+    /* A record page opened with no record is a dead end where its table has a list: the person came for a task, and the
+       list is where one is picked. It replaces the address, so Back does not return to the empty page. */
     await page.goto(`${sample.origin}/@task`);
-    await expect(page.locator('.applist-grid tbody tr').first()).toBeVisible();
-    await expect(page.locator('.checklist-toggle')).toHaveCount(0);
-    await expect(page.locator('.quick-add')).toHaveCount(0);
+    await expect(page).toHaveURL(`${sample.origin}/tasks`);
+    await expect(page.locator('.checklist')).toBeVisible();
+    await expect(page.locator('.checklist-toggle').first()).toBeEnabled();
+    await expect(page.locator('.page-body')).toHaveCount(0);
   });
 
   test('modal becomes a full phone overlay, holds focus and returns it on dismissal', async ({ page }) => {

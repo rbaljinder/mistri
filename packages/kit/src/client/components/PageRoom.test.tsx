@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { cleanup, render, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Revealed } from './PageRoom.js';
@@ -92,4 +92,39 @@ test('covered and complete, the page is never touched', async () => {
   pane.classList.remove('nav-holding');
   await frames(50);
   expect(page.getAttribute('style')).toBeNull();
+});
+
+/* A page opened with no record (Rootless) goes to its table's list where the App has one. */
+describe('a record page opened with no record', () => {
+  test('goes to the table list, replacing history, where the App has a list for it', async () => {
+    vi.resetModules();
+    const go = vi.fn();
+    vi.doMock('../core.js', async (original) => ({
+      ...(await original<object>()),
+      go,
+      tableView: (id: string) => ({ kind: 'table', table: id }),
+      currentEntry: () => undefined,
+    }));
+    vi.doMock('../shellMode.js', () => ({ shell: () => ({ inApp: () => true }) }));
+    vi.doMock('./appListModel.js', async (original) => ({ ...(await original<object>()), appListFor: () => ({ id: 'leads' }) }));
+    const { Rootless } = await import('./PageRoom.js');
+    const client = new QueryClient();
+    const entry = { kind: 'page', label: 'Lead' } as never;
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <Rootless
+          entry={entry}
+          page={{ name: 'Lead' } as never}
+          base={{ id: 'leads', name: 'leads' } as never}
+          others={[]}
+          onLayout={() => {}}
+        />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(go).toHaveBeenCalledWith({ kind: 'table', table: 'leads' }, 'replace'));
+    expect(container.textContent).not.toContain('Pick a');
+    vi.doUnmock('../core.js');
+    vi.doUnmock('../shellMode.js');
+    vi.doUnmock('./appListModel.js');
+  });
 });

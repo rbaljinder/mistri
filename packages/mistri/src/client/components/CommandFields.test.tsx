@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { userEvent } from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { AppCommandAction, AppCommandField } from '../../shared/app.js';
+import { forgetVisits, noteVisit } from '../../../../kit/src/client/paletteRecents.js';
 import { establishSessionIdentity } from '../../../../kit/src/client/sessionIdentity.js';
 
 const { api, state, tables } = vi.hoisted(() => ({
@@ -752,4 +753,42 @@ test("a repeating group's file field is a picker in every row, held by the field
   expect(revoke).not.toHaveBeenCalledWith('blob:left');
   expect(values).toEqual({ attachments: [{ file: [], caption: 'Left wall' }] });
   vi.unstubAllGlobals();
+});
+
+test('a reference picker is a search box, and offers the records just opened before anything is typed', async () => {
+  api.mockImplementation(async (_path: string, body: { q?: string }) => ({
+    rows: body.q?.includes(' in (')
+      ? [{ id: 7, name: 'Recently Opened' }]
+      : [
+          { id: 1, name: 'Alpha' },
+          { id: 7, name: 'Recently Opened' },
+        ],
+  }));
+  noteVisit({ kind: 'row', table: 'reviewer', key: { id: 7 }, label: 'Recently Opened' });
+  noteVisit({ kind: 'table', view: 'elsewhere' });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <FormSurface
+        form={{
+          id: 'assign',
+          label: 'Assign reviewer',
+          input: [{ name: 'reviewer', label: 'Reviewer', type: 'reference', from: 'reviewer', by: 'id', labelColumn: 'name' }],
+        }}
+        appName="Desk"
+        connection="loans"
+        submit={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  const box = await screen.findByRole('combobox', { name: 'Reviewer' });
+  expect(box).toHaveAttribute('placeholder', 'Search reviewers…');
+  fireEvent.focus(box);
+  fireEvent.click(box);
+  const options = await screen.findAllByRole('option');
+  // The recent record first, then the rest, none twice.
+  expect(options.map((option) => option.textContent)).toEqual(['Recently Opened', 'Alpha']);
+  forgetVisits();
+  cleanup();
+  client.clear();
 });

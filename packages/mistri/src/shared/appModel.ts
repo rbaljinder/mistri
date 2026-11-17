@@ -1173,6 +1173,9 @@ export interface AppLogoImage {
   href?: string;
   darkHref?: string;
   markHref?: string;
+  /** The light `src`'s width over its height, read from the file at load (server/app/imageShape.ts): the sign-in door
+      places the picture from it before it has loaded. Absent where the file's header does not say. */
+  aspect?: number;
 }
 
 export interface AppUi {

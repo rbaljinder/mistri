@@ -9,7 +9,7 @@ async function signedOutShell(page: Page) {
   await expect(page.locator('html')).not.toHaveAttribute('data-starting');
   await expect(page.locator('.topbar .brand-name')).toHaveText('Session workspace');
   await expect(page).toHaveTitle('Sign in · Session workspace');
-  await expect(page.getByRole('heading', { name: 'Sign in to Session workspace', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Session workspace', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeVisible();
   await expect(page.locator('#home-button')).toBeDisabled();
   await expect(page.locator('#home-button')).not.toHaveAttribute('title');

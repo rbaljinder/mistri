@@ -16,7 +16,7 @@ export const say = defineMessages({
   join: 'Join {app}',
   resetYourPassword: 'Reset your password',
   chooseANewPassword: 'Choose a new password',
-  sign: 'Sign in to {app}',
+  sign: '{app}',
   back: 'Back to {app}',
   yourAccountIsReady: 'Your account is ready. Sign in to continue.',
   yourName: 'Your name',

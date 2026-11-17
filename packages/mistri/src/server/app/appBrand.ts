@@ -18,6 +18,7 @@ import type { AppDef } from '../../shared/app.js';
 import type { AppLogoImage } from '../../shared/appModel.js';
 import { BRAND_SEGMENT } from '../../shared/appBrandAddress.js';
 import { admitLogo, LogoRefused } from './brandImage.js';
+import { imageAspect } from './imageShape.js';
 import { readThemeStylesheet, STYLESHEET_MAX } from './themeStylesheet.js';
 import { partSelector } from './themePartSelectors.js';
 import { themeFileRoot } from '../../shared/themeSpec.js';
@@ -115,6 +116,11 @@ export async function readAppBrand(
     brand.types[name] = admitted.type;
     brand.sources[name] = inside.split(sep).join('/');
     logo[served] = `/${encodeURIComponent(app.id)}/${BRAND_SEGMENT}/${name}`;
+    if (key === 'src') {
+      const aspect = imageAspect(admitted.bytes);
+      if (aspect) logo.aspect = aspect;
+      else delete logo.aspect;
+    }
   }
   return brand;
 }

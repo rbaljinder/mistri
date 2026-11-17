@@ -52,6 +52,11 @@
   --status-warning: #9a4b12;
   --status-critical: #a12d2d;
   --status-info: #7a5cc0;
+  /* What an AI made (a generated draft's badge, a suggestion's edge, the
+     assistant's mark): a fuchsia, a hue no status colour and no look's info
+     wears, so a mark that says "a model wrote this" is never taken for good
+     news or a note. 3:1 as a mark on every ground; a theme's `ai` role replaces it. */
+  --ai: #a62a9c;
   /* Success, independent of --accent: an app may theme its accent indigo,
      and "good" must stay green there. */
   --status-good: #1f7a46;
@@ -88,6 +93,12 @@
   /* The one space under a room's head, to its first control or part: a list's filter bar and a free-form page's first
      part stand this far below the head's rule, so no kind of page starts further down than another. */
   --page-head-gap: var(--space-3);
+  /* The space from the top bar to a page's first heading, on every page that begins with one (a list, a settings room,
+     a dashboard, a record's name when no trail stands over it): one step, said once, because each head used to say its
+     own (14px, 20px, 16px) and the rooms stood at three heights. A step of the layout's, so a theme's rhythm moves it; a
+     phone takes the one below (the pane's gutter is 4px there, and 24px of air over a title is a third of a short
+     screen). Under a trail the title keeps the 16px the trail leaves (page.css). */
+  --page-top: var(--space-6);
   /* The space scale (docs/design.md, Space and text): every padding, margin
      and gap is a step of it or a semantic token over it. The steps from 16px
      up are the layout's and move with a theme's rhythm (themeFamilies.css);
@@ -187,6 +198,9 @@
 @media (pointer: coarse) {
   :root, :root[data-density] { --row-h: calc(44px / var(--density-zoom, 1)); }
 }
+@media (max-width: 760px) {
+  :root { --page-top: var(--space-5); }
+}
 
 /* The browser draws its own controls — a checkbox, a radio, a date's
    calendar, the window's scroll bar — in the scheme it is told. Untold, they
@@ -217,6 +231,7 @@
     --status-warning: #e0a05c;
     --status-critical: #e8756f;
     --status-info: #b39ae8;
+    --ai: #e58bdc;
     --status-good: #57b884;
     --shadow-pop: 0 6px 20px rgb(0 0 0 / 0.5);
     --shadow-panel: 0 10px 34px rgb(0 0 0 / 0.55);
@@ -244,6 +259,7 @@
   --status-warning: #e0a05c;
   --status-critical: #e8756f;
   --status-info: #b39ae8;
+  --ai: #e58bdc;
   --status-good: #57b884;
   --shadow-pop: 0 6px 20px rgb(0 0 0 / 0.5);
   --shadow-panel: 0 10px 34px rgb(0 0 0 / 0.55);

@@ -100,7 +100,7 @@ export interface ResolvedBranding {
   readonly content: Readonly<Partial<Record<BrandingContentField, string>>>;
   readonly images: { readonly logo?: BrandingImage; readonly hero?: BrandingImage };
   /** A tenant's own logo (tenantBranding.ts): an address on the App's origin, by content hash. */
-  readonly mark?: { readonly src: string; readonly dark?: string };
+  readonly mark?: { readonly src: string; readonly dark?: string; readonly aspect?: number };
   /** A tenant's own tab icon (tenantBranding.ts `favicon`): an address on the App's origin, by content hash. */
   readonly icon?: string;
   readonly diagnostics: readonly BrandingDiagnostic[];
@@ -528,13 +528,17 @@ export function tenantBrandingPresentation(options: {
   readonly theme: ThemeDefinition;
   readonly name?: string;
   readonly mark?: string;
+  /** The mark's width over its height, when the upload's bytes said (imageShape.ts). */
+  readonly markAspect?: number;
   /** The logo for a dark bar or by night; the mark stands where there is none. */
   readonly darkMark?: string;
   /** The tenant's tab icon; the page's head carries it as its `<link rel="icon">`. */
   readonly icon?: string;
 }): ResolvedBranding {
-  const { selection, revision: version, theme, name: label, mark, darkMark, icon } = options;
+  const { selection, revision: version, theme, name: label, mark, markAspect, darkMark, icon } = options;
   const resolved = result('resolved', identity(selection, null, version), theme, 'plain', label ? { name: label } : {}, {}, []);
   const withIcon = icon ? { ...resolved, icon } : resolved;
-  return mark ? freeze({ ...withIcon, mark: { src: mark, ...(darkMark ? { dark: darkMark } : {}) } }) : freeze(withIcon);
+  return mark
+    ? freeze({ ...withIcon, mark: { src: mark, ...(darkMark ? { dark: darkMark } : {}), ...(markAspect ? { aspect: markAspect } : {}) } })
+    : freeze(withIcon);
 }

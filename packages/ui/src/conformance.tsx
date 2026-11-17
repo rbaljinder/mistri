@@ -246,10 +246,10 @@ function heardDetails(callback: { calls: unknown[][] }, at: number, what: string
 }
 
 const DATE_WORDS: DateFieldWords = {
-  dateTimePattern: 'YYYY-MM-DD HH:MM',
-  enterDateAndTime: 'Enter a date and time.',
+  timePattern: 'HH:MM',
+  enterDateAndTime: () => 'Enter a date and time.',
   enterDate: (format) => `Enter a date as ${format}.`,
-  dateAndTimeFormat: 'Date and time format.',
+  dateAndTimeFormat: () => 'Date and time format.',
   dateFormat: (format) => `Date format: ${format}.`,
   openWithKeys: 'Alt and Down arrow opens the calendar.',
   chooseDate: (label) => `Pick a day for ${label ?? 'it'}`,
