@@ -64,6 +64,9 @@
   --mono: var(--data-face, var(--code));
   --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius: 6px;
+  /* A card's, a tile's and a row's corner, apart from a control's: a round-control look makes --radius a box's 8px
+     and the control a pill, and an App's own card reads this one. It follows the panel corner a theme sets. */
+  --radius-card: var(--panel-radius, var(--radius));
   /* A form control's own size, said once for every one of them (the field box, a listbox, a choice, a button's pair):
      its fill, its height and the width of its edge. A theme sets them to draw a filled, taller or heavier field; the
      defaults are the look they have always had. The corner is --field-radius, read where it is used, --radius unsaid. */

@@ -830,17 +830,24 @@ export async function shotContext(
   });
   watchRequests(context);
   /* A reader who picks a look keeps the App's menu where it was; a look shot by name is the App wearing it, so its
-     menu stands where the theme suggests, unless the App says where itself (placementIn). */
+     menu stands where the theme suggests, unless the App says where itself (placementIn). The look asked for is
+     also the one drawn when a tenant has a look of its own: a tenant's branding replaces the App's theme on the
+     page whatever was picked (appTheme.js), so for a shot it is left out of the App's answer and the page's head,
+     as a field report found `--theme` shot the tenant's look instead. */
   const placement = window.look?.placement;
-  if (placement) await context.addInitScript({ content: ASK_FOR_THE_APP });
-  if (placement)
+  if (window.look) {
+    await context.addInitScript({ content: ASK_FOR_THE_APP + DROP_THE_BRANDING });
     await context.route(/\/api\/app(?:\?|$)/, async (route) => {
       const response = await route.fetch();
-      const payload = (await response.json().catch(() => undefined)) as { app?: { ui?: { shell?: Record<string, unknown> } } } | undefined;
+      const payload = (await response.json().catch(() => undefined)) as
+        | { app?: { ui?: { shell?: Record<string, unknown>; theme?: Record<string, unknown> } } }
+        | undefined;
       if (!payload?.app?.ui) return route.fulfill({ response });
-      payload.app.ui.shell = { ...payload.app.ui.shell, placement };
+      if (payload.app.ui.theme) delete payload.app.ui.theme.branding;
+      if (placement) payload.app.ui.shell = { ...payload.app.ui.shell, placement };
       return route.fulfill({ response, json: payload });
     });
+  }
   return context;
 }
 
@@ -854,6 +861,13 @@ const ASK_FOR_THE_APP =
   'const observer = new MutationObserver(remove);' +
   'observer.observe(document, { childList: true, subtree: true });' +
   "document.addEventListener('DOMContentLoaded', () => (remove(), observer.disconnect()), { once: true });";
+
+/** The tenant's request-time branding in the first page's head (`#mistri-branding`), which the page would wear before
+    /api/app answers: removed ahead of the page's own scripts, so a forced look is never the tenant's for a moment. */
+const DROP_THE_BRANDING =
+  "const dropBranding = () => document.getElementById('mistri-branding')?.remove();" +
+  'new MutationObserver(dropBranding).observe(document, { childList: true, subtree: true });' +
+  "document.addEventListener('DOMContentLoaded', dropBranding, { once: true });";
 
 /** Opened at `path` as shot opens it: the server's pinned clock, the tenant chosen where one must be, settled. The answer's status. */
 export async function openShot(page: Page, origin: string, path: string, choice?: string): Promise<number | undefined> {
@@ -1955,6 +1969,8 @@ export async function runShot(
       }
       for (const shot of shots) {
         for (const look of looks) {
+          // On stderr, so the picture paths on stdout stay one per line.
+          if (look) warn(`look: ${look.label}${look.own ? " (the App's own)" : ''}, drawn over any look a tenant has`);
           for (const size of options.sizes) {
             const named = look ? `-${look.theme}${look.palette ? `-${look.palette}` : ''}` : '';
             const file = options.text ? undefined : join(out, `${shot.name}${named}${options.dark ? '-dark' : ''}-${size}.png`);

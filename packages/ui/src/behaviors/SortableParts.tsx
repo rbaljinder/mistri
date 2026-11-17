@@ -22,25 +22,45 @@
    `data-disabled` for a stylesheet. */
 import { createParts } from '@ui-sdk/react/primitive';
 import type { ComponentProps, ReactNode } from 'react';
+import { type CommitProps, movedKeys, PendingProvider, useCommit, usePending } from './commit.js';
 import { type Change, heard } from './heard.js';
 import { sortable, type SortableReason } from './sortable.js';
 
 const parts = createParts(sortable, { root: 'div', item: 'div', handle: 'button' });
 
+/* With `onCommit` (./commit.tsx) a move is asked about before it is final: the item is `data-pending` meanwhile, and a
+   refusal puts it back. */
 export function Sortable({
   children,
   onValueChange,
+  onCommit,
+  commitDelay,
+  value,
+  defaultValue,
   ...props
-}: Omit<ComponentProps<typeof parts.Root>, 'children' | 'onValueChange'> & {
+}: Omit<ComponentProps<typeof parts.Root>, 'children' | 'onValueChange' | 'value' | 'defaultValue'> & {
   children: (key: string, at: number) => ReactNode;
+  value?: string[];
+  defaultValue?: string[];
   onValueChange?: (value: string[], details: Change<SortableReason>) => void;
-}) {
-  return (
-    <parts.Root {...props} {...heard({ onValueChange })}>
+} & CommitProps<string[], Change<SortableReason>>) {
+  const commit = useCommit<string[], Change<SortableReason>>({
+    value,
+    defaultValue,
+    onValueChange,
+    onCommit,
+    commitDelay,
+    moved: movedKeys,
+  });
+  const root = (
+    <parts.Root {...props} value={commit.value} defaultValue={commit.defaultValue} {...heard({ onValueChange: commit.onValueChange })}>
       {({ order }) => order.map((key, at) => children(key, at))}
     </parts.Root>
   );
+  return commit.pending ? <PendingProvider value={commit.pending}>{root}</PendingProvider> : root;
 }
 
-export const SortableItem = parts.Item;
+export function SortableItem(props: ComponentProps<typeof parts.Item>) {
+  return <parts.Item {...props} {...usePending(props.value)} />;
+}
 export const SortableHandle = parts.Handle;

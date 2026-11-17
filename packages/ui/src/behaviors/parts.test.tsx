@@ -196,6 +196,21 @@ test('spans: Alt with an arrow moves a stretch along its track, and the change n
   expect(said).toEqual([{ id: 'paint', action: 'move', reason: 'move-key' }]);
 });
 
+test('spans: the shortcuts a stretch announces are the keys that move it along its own axis', () => {
+  const plan = (axis?: 'x' | 'y') => (
+    <Spans value={[{ id: 'paint', track: 'paint', start: 2, end: 5 }]} min={0} max={20} stay axis={axis}>
+      <SpansTrack value="paint">
+        {(onTrack) => onTrack.map((bar) => <SpansSpan key={bar.id} value={bar.id} aria-label={bar.id} />)}
+      </SpansTrack>
+    </Spans>
+  );
+  const shortcuts = () => document.querySelector('[data-slot="spans-span"]')?.getAttribute('aria-keyshortcuts');
+  draw(plan());
+  expect(shortcuts()).toBe('Alt+ArrowLeft Alt+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight');
+  draw(plan('y'));
+  expect(shortcuts()).toBe('Alt+ArrowUp Alt+ArrowDown Alt+Shift+ArrowUp Alt+Shift+ArrowDown');
+});
+
 test("widths: a key's width is said in the caller's words where it gives them", async () => {
   const heard: string[] = [];
   const host = draw(

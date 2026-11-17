@@ -211,7 +211,8 @@
   /* A field keeps its problem's line in the flow (reserve), so a problem that arrives moves nothing: that line is the gap
      under it, not a second one on top of the stack's own. The line is a full line of the problem's text now, so what is
      left under it is a hair, and the two fields stand as far apart as two that reserve nothing. */
-  .kit-stack.kit-gap-field > [data-slot='field']:has(> :is([data-slot='field-reserve'], [data-slot='field-error']:not([hidden]))):not(:last-child) {
+  .kit-stack.kit-gap-field
+    > [data-slot='field']:has(> :is([data-slot='field-reserve'], [data-slot='field-error']:not([hidden]))):not(:last-child) {
     margin-block-end: calc(var(--space-2) - var(--field-gap));
   }
   .kit-row.kit-gap-field {
@@ -401,6 +402,88 @@
     display: block;
     width: 100%;
     height: 28px;
+  }
+  /* A Stat that is a link keeps its box and says so only on hover and focus: the figure is the thing to read. */
+  a.kit-stat-link {
+    color: inherit;
+    text-decoration: none;
+  }
+  @media (hover: hover) {
+    a.kit-stat-link:hover {
+      border-color: var(--line-strong, var(--line));
+    }
+  }
+  a.kit-stat-link:focus-visible {
+    outline: 2px solid var(--ring, var(--accent));
+    outline-offset: 2px;
+  }
+  .kit-spark {
+    display: block;
+    height: 28px;
+    min-width: 0;
+  }
+  /* Bars to the box's foot, in the look's first chart ink; the ones that are not the highlight stand quieter. */
+  .kit-minibars {
+    display: block;
+    min-width: 0;
+  }
+  .kit-minibars-bars {
+    display: flex;
+    align-items: flex-end;
+    gap: var(--space-1);
+    height: 28px;
+  }
+  .kit-minibars-bars > i {
+    flex: 1 1 0;
+    min-width: 2px;
+    border-radius: calc(var(--radius-item, var(--radius)) / 4) calc(var(--radius-item, var(--radius)) / 4) 0 0;
+    background: color-mix(in srgb, var(--chart-1, var(--accent)) 35%, transparent);
+  }
+  .kit-minibars-bars > i.is-lit {
+    background: var(--chart-1, var(--accent));
+  }
+  /* A tile is a card that is one control: the card's corner and lift (never a control's), the card's own hover, and
+     the selected one marked by the accent rather than by weight. */
+  .kit-tile {
+    display: block;
+    box-sizing: border-box;
+    min-width: 0;
+    padding: var(--space-4h) var(--space-5);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card, var(--radius));
+    background: var(--surface);
+    box-shadow: var(--shadow-card, none);
+    color: inherit;
+    font: inherit;
+    text-align: start;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  @media (hover: hover) {
+    .kit-tile:hover {
+      border-color: var(--line-strong, var(--line));
+    }
+  }
+  .kit-tile:focus-visible {
+    outline: 2px solid var(--ring, var(--accent));
+    outline-offset: 2px;
+  }
+  .kit-tile[data-selected] {
+    border-color: var(--accent);
+    background: var(--accent-soft, var(--surface));
+  }
+  .kit-tile[data-disabled] {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  .kit-datenav {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .kit-spark {
+    --spark-ink: var(--chart-1, var(--accent));
   }
   .kit-columns {
     min-width: 0;

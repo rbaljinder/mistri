@@ -1,5 +1,5 @@
 /* Pay history. Tokens only, so each look and both modes dress it; served
-   inside @layer components and scoped to the component's own element. */
+   inside @layer app and scoped to the component's own element. */
 .c-payroll-timeline { display: grid; gap: 6px; min-width: 0; }
 .c-payroll-timeline-rule { position: relative; height: 34px; margin: 0; padding: 0; list-style: none; border-bottom: 1px solid var(--line); }
 .c-payroll-timeline-period {

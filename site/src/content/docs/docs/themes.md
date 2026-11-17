@@ -58,7 +58,7 @@ See it in the sample (`examples/apps/lintel/theme.ts:8`). That is a small theme:
 | `ui.theme.for` | A theme per audience: `public` for every page a signed-out visitor sees, worn whatever a reader picked, and `roles: { rider: 'cadence' }`, the first entry the account holds, over a tenant's saved theme; a reader's own pick still wins in the shell | none | Stable |
 | `branding.allow` | What a tenant may change (`logo` includes the dark logo and the tab icon): `logo`, `name`, `accent`, `palette`, `radius`, `density`, `preset`, `font` (the interface's face: Inter, Barlow, or a face a theme of `branding.themes` ships), `locale` | required | Stable |
 | `branding.editors` | The tenant roles whose members may save it | required | Stable |
-| `branding.themes` | One to six themes a tenant picks from (`preset` needs two) | the App's own look | Stable |
+| `branding.themes` | One to twelve themes a tenant picks from (`preset` needs two) | the App's own look | Stable |
 | `brandingForm()` | A dashboard section: the form beside a live preview | none | Stable |
 
 ```ts
@@ -315,6 +315,15 @@ export default defineTheme({
 ```
 
 An App wears it as its own, `customThemes: [daybook]`, or starts from it: `defineTheme({ id: 'daybook-blue', extends: daybook, ... })`, one level deep. Ship a `.d.ts` beside it and `mistri` as a peer dependency. `mistri check` refuses another contract, a file outside the package and a `from` with no `contract` (`theme-contract`); `mistri build` copies the files in.
+
+## Contrast
+
+`mistri check` measures these pairs in light and dark, in every palette, and a look that sets one of the colors must set its partner so the pair passes:
+
+- Text, 4.5:1: `ink`, `inkMuted` and `inkSubtle` on `surface`, `ground` and `raised` (and on `field`, where `colors.field` is not the surface); `link` on `ground`, `raised` and `surface`; each status color (`status.good`, `warning`, `critical`, `info`) on the same three.
+- The accent: `accentInk` on `surface`, `ground` and `raised`, 4.5:1. The accent is a fill and may be bright; the text it is drawn as is `accentInk`. `onAccent` on `accent` and `onPrimary` on `primary`, 4.5:1.
+- The menu: `nav.ink`, `nav.muted` and `nav.accent` each on `nav.ground`, 4.5:1. A dark or graphite `nav.ground` needs a bright `nav.accent`, because the same accent underlines the current workspace and marks the current entry.
+- Graphics, 3:1: a control's edge (`lineControl`) on `surface`, `ground`, `raised` and `field`; the focus ring on the same; the first four chart series on `surface`.
 
 ## Seeing and fixing a theme
 

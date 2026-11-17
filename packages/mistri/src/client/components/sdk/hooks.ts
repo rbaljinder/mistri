@@ -772,6 +772,16 @@ export function useAddressState(
 }
 
 /**
+ * Raises the platform's own notice, the one a verb's outcome is said in: a toast, read out by assistive technology.
+ * `tone` is `ok` (the default) or `error`. A page that refuses something of its own (a move the rules do not allow)
+ * says it as a refused command does, instead of drawing a banner of its own.
+ */
+export function useNotice(): (notice: { text: string; tone?: 'ok' | 'error' }) => void {
+  const host = useUiHost();
+  return useCallback(({ text, tone = 'ok' }) => host.announce(text, tone), [host]);
+}
+
+/**
  * One of the App's messages (`messages/<locale>.ts`) in the reader's
  * language, its `{name}`s filled from `args`: `useMessage('help.title')`,
  * `useMessage('help.results', { count: 3 })`. Redraws when the reader picks

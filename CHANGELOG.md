@@ -5,6 +5,40 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.61
+
+**Upgrading from rc.59 or rc.60.** Three things a browser test of an App may lean on moved (a field report):
+
+- The kit's check box is drawn over a hidden input: click the role, `getByRole('checkbox')`, not the input.
+- A related section's heading includes its count ("Contacts 12"): match it with `^Contacts`, not the bare name.
+- A record page draws its lower sections as they scroll into view: scroll to the foot of the page first. There is no
+  test-kit helper that draws them all, because the testing entry (`@mistriwork/mistri/testing`) drives the server,
+  not a browser; a Playwright test scrolls the last section into view.
+
+- An App's own component and control-kit stylesheets are in a new `app` cascade layer, after the kit's control recipes
+  and the looks and before `theme` and `structure` (`base, components, kit, look, app, theme, structure, print`).
+  A `<button>` card an App draws used to become a pill under a round-control look, because the kit's recipe for
+  controls outranked a rule in `components`; its own `border-radius` now wins. The platform's components stay in
+  `components`.
+- `--radius-card`: the corner of a card, tile or row an App draws. It is the theme's `panel` radius (the look's box
+  corner when none is said), never a control's, so it stays a box under `radius.control: 'round'`.
+- A stretch in a vertical `Spans` announces the keys that move it (`Alt+ArrowUp`, `Alt+ArrowDown` and with Shift) in
+  `aria-keyshortcuts`, not the horizontal pair.
+- `branding.themes` takes one to twelve themes (it was six).
+- `mistri shot --theme <id>` draws that look even where a tenant has one of its own, and says which look it drew
+  (on stderr, so the picture paths stay one per line).
+- `Spans`, `Sortable` and `Transfer` take `onCommit` and `commitDelay` (a field report): a move is drawn
+  `data-pending` while the server is asked, keyboard steps within the delay become one call with the net change, and
+  a refusal or rejection puts the item back and says so.
+- New Spans parts (Preview): `SpansAxis` (labels and lines), `SpansNow` (a line for the present, redrawn each minute)
+  and `SpansRegion` (a stretch that refuses moves into it and says so).
+- `@mistriwork/mistri/ui` and `/page` gain `Sparkline`, `MiniBars` (with a table for a screen reader), `Tile` (a card
+  that is one control) and `useNotice` (the platform's own notice), all Preview; `Stat` gains `delta` and `href`.
+- `@mistriwork/mistri/page` gains `DateNav` (Preview): previous, Today, next and the date field, `step="week"`,
+  `skip`, and `T` for today.
+- Docs: a page shortcut should skip keys a behavior handled (`event.defaultPrevented`), a hand-drawn chart read with
+  `Scrub`, and the pairs `mistri check` measures for contrast (Looks).
+
 ## 1.0.0-rc.60
 
 - A click answers before the list redraws. A tab, a filter, a search, a header's sort and a page now yield to the

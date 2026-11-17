@@ -629,7 +629,7 @@ input's and a select's corner, `0px` through `16px` or `'round'`; `field` a reco
 half controls', at most 20px). Each look has one radius for controls and fields: Lumen and Sage 8px, Ledger 2px (its fields square), Mono
 square, and a theme that extends none 4px. A custom theme inherits its base's radii, and an explicit custom
 radius wins. A round control is a pill (`--control-radius`); every other box that follows the control's
-corner — a menu, a card, a row — takes 8px, because a card is not a pill, and a popup never passes 12px.
+corner — a menu, a card, a row — takes 8px, because a card is not a pill, and a popup never passes 12px. A card, tile or row an App draws reads `--radius-card`, which is the `panel` corner (the look's box corner when none is said) and never a control's, so it stays square-cornered under a round control; set it from `panel`, or override the token in the App's own stylesheet.
 `check` warns (`theme-radius`) when a `panel` is squarer than its `control`. `pill` is a status pill's, a
 tag's, a chip's and a count's corner, `0px` through `12px` or `'round'`, and only an object says it:
 omitted, they stay round under every look, so a ledger that wants square stamps says `radius: { pill: '2px' }`.

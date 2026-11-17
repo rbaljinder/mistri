@@ -283,7 +283,7 @@ nothing has to be built first. The build is the maintainer's, never the user's.
   `@mistriwork/ui` primitives, slot by slot (`packages/ui/src/UiKit.tsx`): each
   primitive is `slotted()`, so it draws the installed kit's component for its
   slot and its own where the kit has none. The kit is compiled like a custom
-  component (`compileUiKit`, with its stylesheet in the `components` layer),
+  component (`compileUiKit`, with its stylesheet in the `app` layer),
   named in the page head and installed before the first render
   (`components/sdk/uiKitLoader.ts`), so the first paint is already the kit's; the
   Workbench never takes one. `@mistriwork/ui/conformance` holds a kit to what

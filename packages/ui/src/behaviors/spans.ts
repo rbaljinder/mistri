@@ -209,9 +209,12 @@ export const spans = definePrimitive({
           style: span ? part.api.core.spanStyle(span, stackSpans(part.api.core.spansOn(state, span.track)).get(span.id)) : undefined,
           tabindex: part.api.focused(state) === part.key ? '0' : '-1',
           'data-locked': part.api.locked(part.key) ? '' : undefined,
+          // The keys that nudge along the axis, as the keydown below reads them.
           'aria-keyshortcuts': part.api.locked(part.key)
             ? undefined
-            : 'Alt+ArrowLeft Alt+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight',
+            : part.api.vertical()
+              ? 'Alt+ArrowUp Alt+ArrowDown Alt+Shift+ArrowUp Alt+Shift+ArrowDown'
+              : 'Alt+ArrowLeft Alt+ArrowRight Alt+Shift+ArrowLeft Alt+Shift+ArrowRight',
         };
       },
       bind: (el, part) => part.api.core.bindSpan(el, part.key),

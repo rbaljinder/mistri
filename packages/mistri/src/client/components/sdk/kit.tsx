@@ -34,7 +34,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useHostIfAny, useUiHost } from './context.js';
 /* Named apart: `say` is also Sparkline's prop below, a figure's speaker. */
 import { say as sayKit } from '../../copy/components/components/sdk/kit.js';
-import { Sparkline, StackedColumns } from '@mistriwork/kit/client/components/Chart.js';
+import { Sparkline as ChartSparkline, StackedColumns } from '@mistriwork/kit/client/components/Chart.js';
 
 export { Dropdown } from '@mistriwork/kit/client/components/Dropdown.js';
 export { SplitListDetail } from '../SplitListDetail.js';
@@ -511,37 +511,188 @@ export function Segmented<T extends string>({
  * figure, its label, its change against the period before (in the tone of
  * the news where the caller knows which way is good) and, from four points,
  * its trend. As tall as what it says, so a strip of them stands from one edge.
+ *
+ * `delta` says the change as a number and which way is good, and the Stat tones and signs it (`{ value: 12, good:
+ * 'up' }` is "+12" in the good ink; `{ value: -3, good: 'down' }` is "−3", also good); `change` is for words of the
+ * caller's own, and wins where both are given. With `href` the whole Stat is a link, followed in place for an address
+ * of this App, and it is named by its label and figure.
  */
 export function Stat({
   label,
   value,
   change,
+  delta,
   trend,
+  href,
   say = String,
 }: {
   label: ReactNode;
   value: ReactNode;
   change?: { text: ReactNode; tone?: ToneName };
+  delta?: { value: number | string; good?: 'up' | 'down' };
   trend?: ReadonlyArray<number | { key: string; value: number }>;
+  href?: string;
   say?: (value: unknown) => string;
 }) {
   const points = (trend ?? []).map((point, index) => (typeof point === 'number' ? { key: String(index), value: point } : point));
   /* In a Card it is a figure in that box, not a box in a box (as a Card in a Card is a plain group). */
   const nested = useContext(InCard);
-  return (
-    <div className={nested ? 'kit-stat kit-stat-plain' : 'kit-stat'}>
+  const follow = useFollow(href);
+  const news = change ?? (delta ? deltaSaid(delta, say) : undefined);
+  const body = (
+    <>
       <span className="kit-stat-label">{label}</span>
       {/* The trend rides beside the figure, so a Stat with none is the same height as one with. */}
       <span className="kit-stat-row">
         <span className="kit-stat-figure">{value}</span>
         {points.length >= 4 && (
-          <span className={`spark-host kit-stat-spark${change?.tone === 'good' ? ' good' : change?.tone === 'bad' ? ' bad' : ''}`}>
-            <Sparkline rows={points} say={say} />
+          <span className={`spark-host kit-stat-spark${news?.tone === 'good' ? ' good' : news?.tone === 'bad' ? ' bad' : ''}`}>
+            <ChartSparkline rows={points} say={say} />
           </span>
         )}
       </span>
-      {change && <span className={`kit-stat-change${change.tone ? ` kit-stat-${change.tone}` : ''}`}>{change.text}</span>}
-    </div>
+      {news && <span className={`kit-stat-change${news.tone ? ` kit-stat-${news.tone}` : ''}`}>{news.text}</span>}
+    </>
+  );
+  const className = `${nested ? 'kit-stat kit-stat-plain' : 'kit-stat'}${href === undefined ? '' : ' kit-stat-link'}`;
+  return href === undefined ? (
+    <div className={className}>{body}</div>
+  ) : (
+    <a className={className} href={href} onClick={follow}>
+      {body}
+    </a>
+  );
+}
+
+/** A delta as the news it is: signed, and toned where the caller said which way is good. */
+function deltaSaid(
+  delta: { value: number | string; good?: 'up' | 'down' },
+  say: (value: unknown) => string,
+): { text: ReactNode; tone?: ToneName } {
+  const { value, good } = delta;
+  if (typeof value === 'string') return { text: value };
+  const way = value > 0 ? 'up' : value < 0 ? 'down' : undefined;
+  const text = `${value > 0 ? '+' : value < 0 ? '\u2212' : ''}${say(Math.abs(value))}`;
+  return { text, tone: way && good ? (way === good ? 'good' : 'bad') : undefined };
+}
+
+/**
+ * The shape of a run of numbers, drawn in the look's chart ink: a line over a soft fill, the last point marked. It
+ * spans its container's width. Four values or more draw (fewer have no shape to read), and it is named for a screen
+ * reader by its values, `label` first where given.
+ */
+export function Sparkline({
+  values,
+  label,
+  say = String,
+}: {
+  values: ReadonlyArray<number>;
+  label?: string;
+  say?: (value: unknown) => string;
+}) {
+  const rows = values.map((value, index) => ({ key: String(index + 1), value }));
+  return (
+    <span className="spark-host kit-spark" role="group" aria-label={label}>
+      <ChartSparkline rows={rows} say={say} />
+    </span>
+  );
+}
+
+/**
+ * A few bars side by side, tallest to the top of the box: a week of orders, a month by day. `labels` name them (under
+ * the bars is the caller's to draw; a screen reader gets a table of label and value that the sighted reader does not
+ * need), and `highlight` is the index of the one that stands out, the rest drawn quieter.
+ */
+export function MiniBars({
+  values,
+  labels,
+  highlight,
+  label,
+  say = String,
+}: {
+  values: ReadonlyArray<number>;
+  labels?: ReadonlyArray<string>;
+  highlight?: number;
+  label?: string;
+  say?: (value: unknown) => string;
+}) {
+  const top = Math.max(...values, 0);
+  return (
+    <span className="kit-minibars" role="group" aria-label={label}>
+      <span className="kit-minibars-bars" aria-hidden="true">
+        {values.map((value, index) => (
+          <i
+            key={index}
+            className={highlight === undefined || highlight === index ? 'is-lit' : undefined}
+            style={{ height: `${top > 0 ? Math.max(4, Math.round((Math.max(value, 0) / top) * 100)) : 4}%` }}
+          />
+        ))}
+      </span>
+      <table className="kit-visually-hidden">
+        <tbody>
+          {values.map((value, index) => (
+            <tr key={index}>
+              <th scope="row">{labels?.[index] ?? String(index + 1)}</th>
+              <td>{say(value)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </span>
+  );
+}
+
+/**
+ * A card that is one control: a button with `onPress`, a link with `href` (an address of this App is followed in
+ * place), toggled with `selected`. Its children are whatever the card holds, so they must not be controls of their
+ * own. It is a card to the eye (the card's corner and lift, not a control's), which is why it says `data-slot="tile"`
+ * and not a button's, so the platform's control rules leave it its own box.
+ */
+export function Tile({
+  onPress,
+  href,
+  selected,
+  disabled,
+  children,
+  className,
+  ...rest
+}: {
+  onPress?: () => void;
+  href?: string;
+  selected?: boolean;
+  disabled?: boolean;
+  children?: ReactNode;
+  className?: string;
+} & Omit<ComponentProps<'button'>, 'onClick' | 'children' | 'type' | 'className' | 'disabled'>) {
+  const follow = useFollow(href, onPress);
+  const classes = `kit-tile${className ? ` ${className}` : ''}`;
+  const state = { 'data-slot': 'tile', 'data-selected': selected ? '' : undefined, 'data-disabled': disabled ? '' : undefined };
+  if (href !== undefined && !disabled)
+    return (
+      <a
+        /* The shared attributes (aria-*, data-*, title, handlers) suit either element; only the ref's type differs. */
+        {...(rest as unknown as ComponentProps<'a'>)}
+        {...state}
+        className={classes}
+        href={href}
+        aria-current={selected ? 'true' : undefined}
+        onClick={follow}
+      >
+        {children}
+      </a>
+    );
+  return (
+    <button
+      {...rest}
+      {...state}
+      type="button"
+      className={classes}
+      disabled={disabled}
+      aria-pressed={selected === undefined ? undefined : selected}
+      onClick={() => onPress?.()}
+    >
+      {children}
+    </button>
   );
 }
 

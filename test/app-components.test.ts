@@ -196,7 +196,7 @@ describe('the compile', () => {
     assert.match(js, /from "@mistriwork\/mistri\/ui"/);
     assert.match(js, /from "react\/jsx-runtime"/);
     assert.doesNotMatch(js, /react\.production|__SECRET_INTERNALS/);
-    assert.match(compiled.files[entry.css!], /^@layer components \{\n@scope \(\[data-component="hello"\]\) \{\n\.c-hello-list/);
+    assert.match(compiled.files[entry.css!], /^@layer app \{\n@scope \(\[data-component="hello"\]\) \{\n\.c-hello-list/);
     assert.deepEqual(entry.sources, ['widgets/Hello.jsx', 'widgets/hello.css']);
     // Same source, same names: a reload that changed nothing serves the same files.
     const again = (await compileComponents(at, new Map([['hello', { id: 'hello', module: './widgets/Hello.jsx', kind: 'section' }]])))!;
@@ -567,7 +567,7 @@ describe("an App's control kit (Preview)", () => {
     assert.match(kit.js, /^ui-kit-[0-9a-f]{12}\.js$/);
     assert.match(kit.css ?? '', /^ui-kit-[0-9a-f]{12}\.css$/);
     // Page-wide, not scoped to a placement: the kit draws every page's controls, under the look's layer.
-    assert.match(loaded.components!.files[kit.css!], /^@layer components \{[\s\S]*\.kit-button/);
+    assert.match(loaded.components!.files[kit.css!], /^@layer app \{[\s\S]*\.kit-button/);
     // React and the page module stay external: the kit draws in the page's one React, as a component does.
     assert.match(loaded.components!.files[kit.js], /from "react-dom";\nimport \{ defineUiKit \} from "@mistriwork\/mistri\/page";/);
     assert.deepEqual(componentsIndex(loaded.components!)['#uiKit'], { kind: 'kit', js: kit.js, css: kit.css });

@@ -21,18 +21,34 @@
    (`data-carried`, `data-dragging`) and `transfer-handle` (`data-carried`). */
 import { createParts } from '@ui-sdk/react/primitive';
 import type { ComponentProps, ReactNode } from 'react';
+import { type CommitProps, movedLists, PendingProvider, useCommit, usePending } from './commit.js';
 import { type Change, heard } from './heard.js';
 import { transfer, type TransferMove, type TransferReason } from './transfer.js';
 
 const parts = createParts(transfer, { root: 'div', list: 'ul', item: 'li', handle: 'button' });
 
+type Lists = Record<string, string[]>;
+type TransferChange = Change<TransferReason, TransferMove>;
+
+/* With `onCommit` (./commit.tsx) a move is asked about before it is final: the item is `data-pending` meanwhile, and a
+   refusal puts it back in the list it came from. */
 export function Transfer({
   onValueChange,
+  onCommit,
+  commitDelay,
+  value,
+  defaultValue,
   ...props
-}: Omit<ComponentProps<typeof parts.Root>, 'onValueChange'> & {
-  onValueChange?: (value: Record<string, string[]>, details: Change<TransferReason, TransferMove>) => void;
-}) {
-  return <parts.Root {...props} {...heard({ onValueChange })} />;
+}: Omit<ComponentProps<typeof parts.Root>, 'onValueChange' | 'value' | 'defaultValue'> & {
+  value?: Lists;
+  defaultValue?: Lists;
+  onValueChange?: (value: Lists, details: TransferChange) => void;
+} & CommitProps<Lists, TransferChange>) {
+  const commit = useCommit<Lists, TransferChange>({ value, defaultValue, onValueChange, onCommit, commitDelay, moved: movedLists });
+  const root = (
+    <parts.Root {...props} value={commit.value} defaultValue={commit.defaultValue} {...heard({ onValueChange: commit.onValueChange })} />
+  );
+  return commit.pending ? <PendingProvider value={commit.pending}>{root}</PendingProvider> : root;
 }
 
 export type TransferListState = { keys: string[]; over: boolean; takes: boolean; refuses: boolean; carrying: string | null };
@@ -55,5 +71,7 @@ export function TransferList({
   );
 }
 
-export const TransferItem = parts.Item;
+export function TransferItem(props: ComponentProps<typeof parts.Item>) {
+  return <parts.Item {...props} {...usePending(props.value)} />;
+}
 export const TransferHandle = parts.Handle;

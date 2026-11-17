@@ -34,6 +34,15 @@ const tenantAuth = { rows: 'tenant', roles: { admin: {}, agent: {}, staff: { rea
 const ui = { theme: { preset: 'mono' } } as never;
 const declare = (raw: unknown, auth: unknown = tenantAuth) => parseBrandingDeclaration(raw, { ui, auth: auth as never }, 'test');
 
+test('branding.themes lists one to twelve looks', () => {
+  const looks = (count: number) =>
+    Array.from({ length: count }, (_, index) => ({ kind: 'theme', id: `look-${index}`, label: `Look ${index}`, extends: 'lumen' }));
+  const raw = (count: number) => ({ allow: ['preset'], editors: ['admin'], themes: looks(count) });
+  assert.equal(declare(raw(12)).themes.length, 12);
+  assert.throws(() => declare(raw(13)), /one to twelve themes/);
+  assert.throws(() => declare({ ...raw(1), themes: [] }), /one to twelve themes/);
+});
+
 test('an App lets its tenants change only what branding.allow names, and only its tenant roles save it', () => {
   const ok = declare({ allow: ['name', 'logo', 'accent', 'radius', 'density'], editors: ['admin'] });
   assert.deepEqual(ok.allow, ['name', 'logo', 'accent', 'radius', 'density']);
