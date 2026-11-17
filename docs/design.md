@@ -73,7 +73,7 @@ Every stylesheet stands in a declared layer, named once at the top of
 controls wear, `packages/ui/src/tokens.css` and `controls.css`, the second in layers of
 its own nested in `base` so every rule here stands over a control's own dress), `components` (a sheet a component brings with it),
 `kit` (the dress under every look, and custom themes' token machinery), `look`
-(each look), `theme` (what an App's own theme says past the recipe menu: its
+(each look), `app` (the stylesheets an App's own components and control kit bring, after the kit's control recipes and the looks so a `<button>` card the App draws keeps the corner it gives it), `theme` (what an App's own theme says past the recipe menu: its
 parts' styles in `partsLook.css`, its patterns in `surfacesLook.css` and its
 own stylesheet as the server reads and scopes it, each fetched only when a worn
 theme says one), `structure` (`structure.css`: layout no look may move, such as
@@ -104,8 +104,8 @@ rules, a look's bold current sidebar room, and the pager's page box at the
 field radius.
 
 An App's own component (a custom section, a value renderer, an input, a
-list's rows or a whole room) is held to the same rules as the tool's. Its stylesheet is served inside `components` and
-under `@scope` of the component's own element, so a look still dresses it,
+list's rows or a whole room) is held to the same rules as the tool's. Its stylesheet is served inside `app` and
+under `@scope` of the component's own element, so it stands over the kit's control recipes and the looks (a `<button>` card keeps its own corner under a round-control look),
 `structure` still wins over it and nothing it writes leaks out. It draws with
 the public kit (`@mistriwork/mistri/ui`: `Card`, `Stack`, `Button`, `Value`, `Tone`,
 `Meter`, `Empty`, `Icon`, `Segmented`, `Stat`, `Columns`, `Table` (the look's table, so its head and hairlines are the platform's), whose own sheet `components/sdk/kit.css` is in the

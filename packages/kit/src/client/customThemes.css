@@ -5,7 +5,8 @@
 /* Round controls (`shape.radius.control: 'round'`) are pills; a check box, a radio and a slider keep their own
    shape, and a form's field keeps the field's corner (the rule below outranks this one). A look that corners its
    own controls (the dashboard's window and filters, a list's search and toggles) reads --control-radius there, unset
-   in every built-in look; a card that is a button keeps the look's panel corner. */
+   in every built-in look. An App's own <button> card is dressed in the `app` layer, which stands after this one, so
+   its rule keeps the corner it says (--radius-card is the look's card corner to read). */
 :root[data-control-radius] :is(button, input:not([role=switch], [type=checkbox], [type=radio], [type=range]), select, .tn-search,[data-slot='select-trigger']) { border-radius: var(--control-radius); }
 :root[data-custom-theme] :is(.applist-title, .root-current, .page-section-title) { font-family: var(--heading-font, var(--sans)); }
 :root[data-custom-theme] .page-field-edit :is(.cell-edit, .record-picker-trigger),

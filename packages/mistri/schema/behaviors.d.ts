@@ -39,6 +39,29 @@ export type PartProps<Tag extends keyof ReactTypes.JSX.IntrinsicElements, State 
   children?: ReactTypes.ReactNode | ((state: State) => ReactTypes.ReactNode);
 };
 
+/** What `onCommit` is asked: where the moves leave things, where they were, and what moved. */
+export type Committing<Value, Details = Change> = {
+  /** The whole value as the moves leave it. */
+  value: Value;
+  /** The whole value as it was last committed. */
+  from: Value;
+  /** The keys (or ids) of what the moves, taken together, left somewhere else. */
+  moved: string[];
+  /** The last change behind it: its reason, its hand, and what the part adds to it. */
+  details: Details;
+};
+/**
+ * Asks before a move is final, for a page that saves it on a server. The item is `data-pending` (and `aria-busy`)
+ * while it is asked, keyboard steps within `commitDelay` are one call carrying the net change, and a pointer's drop
+ * is asked at once. `true` keeps the move and then `onValueChange` is heard; `false` or a rejection puts everything
+ * back to the last committed place and says so to a screen reader. Without `onCommit` nothing changes.
+ */
+export type CommitProps<Value, Details = Change> = {
+  onCommit?: (change: Committing<Value, Details>) => Promise<boolean>;
+  /** How long keyboard steps are gathered into one commit, in milliseconds. Default 600. */
+  commitDelay?: number;
+};
+
 /* Without this a declaration file exports every name in it; `Part` is how the parts below are written, not one of them. */
 export {};
 
@@ -49,7 +72,9 @@ type Part<Tag extends keyof ReactTypes.JSX.IntrinsicElements, Props = {}, State 
 /* ---------- a list whose order is the reader's ---------- */
 
 export type SortableReason = 'drag' | 'move-key' | 'imperative';
-export interface SortableProps extends Omit<PartProps<'div', { order: string[]; moving: string | null }>, 'children' | 'defaultValue'> {
+export interface SortableProps
+  extends Omit<PartProps<'div', { order: string[]; moving: string | null }>, 'children' | 'defaultValue'>,
+    CommitProps<string[], Change<SortableReason>> {
   /** The order, as the items' keys. */
   value?: string[];
   defaultValue?: string[];
@@ -75,7 +100,9 @@ export type TransferReason = 'drag' | 'move-key' | 'imperative';
 /** What moved: the item, the list it left, the list it is in, and its place there. */
 export type TransferMove = { key: string; from: string; to: string; index: number };
 export type TransferListState = { keys: string[]; over: boolean; takes: boolean; refuses: boolean; carrying: string | null };
-export interface TransferProps extends Omit<PartProps<'div', { carrying: string | null }>, 'defaultValue'> {
+export interface TransferProps
+  extends Omit<PartProps<'div', { carrying: string | null }>, 'defaultValue'>,
+    CommitProps<Record<string, string[]>, Change<TransferReason, TransferMove>> {
   /** Every list by its name, each the keys of its items in order. A key is in one list. */
   value?: Record<string, string[]>;
   defaultValue?: Record<string, string[]>;
@@ -151,7 +178,9 @@ export function weeksOf(month: string, weekStart: number): string[][];
 export type Span = { id: string; track: string; start: number; end: number };
 export type SpansReason = 'drag' | 'move-key' | 'remove-press' | 'imperative';
 export type SpanAction = 'draw' | 'move' | 'resize' | 'delete';
-export interface SpansProps extends Omit<PartProps<'div', { spans: Span[]; changing: string | null }>, 'defaultValue'> {
+export interface SpansProps
+  extends Omit<PartProps<'div', { spans: Span[]; changing: string | null }>, 'defaultValue'>,
+    CommitProps<Span[], Change<SpansReason, { id: string; action: SpanAction }>> {
   value?: Span[];
   defaultValue?: Span[];
   onValueChange?: (value: Span[], details: Change<SpansReason, { id: string; action: SpanAction }>) => void;
@@ -175,8 +204,38 @@ export function Spans(props: SpansProps): ReactTypes.ReactElement | null;
 export function SpansTrack(
   props: Omit<PartProps<'div', { spans: Span[] }>, 'children'> & { value: string; children: (spans: Span[]) => ReactTypes.ReactNode },
 ): ReactTypes.ReactElement | null;
-/** One stretch. An element inside with `data-span-edge="start"` or `"end"` is the edge a pointer lengthens it by. */
+/** One stretch. An element inside with `data-span-edge="start"` or `"end"` is the edge a pointer lengthens it by. `data-pending` under `onCommit`. */
 export const SpansSpan: Part<'div', { value: string }, { span: Span | undefined; action: SpanAction | undefined }>;
+/**
+ * Labels and lines at every `step` from the range's start to its end. Fills the element it is in (a Spans root or a
+ * track), which stands where the range stands, and is placed along it by the root's `axis`. Decorative: `aria-hidden`.
+ * @preview
+ */
+export function SpansAxis(props: {
+  step: number;
+  /** Says a value: an hour, a date. */
+  format?: (value: number) => ReactTypes.ReactNode;
+  labels?: boolean;
+  lines?: boolean;
+  /** Labels one tick in so many. */
+  every?: number;
+  className?: string;
+}): ReactTypes.ReactElement | null;
+/** A line at `value`: drawn again each minute (or each `every` ms) when `value` is a function, and not drawn outside the range. @preview */
+export function SpansNow(props: { value: number | (() => number); every?: number; className?: string }): ReactTypes.ReactElement | null;
+/**
+ * A stretch from `from` to `to` that nothing is moved or lengthened into; a change that would leave a stretch in it is
+ * refused and said. Inside a track it refuses only that track's stretches; `track` names another; in the root, every
+ * track's. Its children are its label.
+ * @preview
+ */
+export function SpansRegion(props: {
+  from: number;
+  to: number;
+  track?: string;
+  children?: ReactTypes.ReactNode;
+  className?: string;
+}): ReactTypes.ReactElement | null;
 
 /* ---------- a position read along a line ---------- */
 

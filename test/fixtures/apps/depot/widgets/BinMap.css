@@ -2,7 +2,7 @@
    (BinMap.tsx, shadeOf), so every look's own accent says how full, in light
    and dark alike; a stocked bin is flat colour, its edge the same mix, an
    empty bin the surface under a hairline, an inactive one a dashed one.
-   Tokens only; served inside @layer components and scoped to the component. */
+   Tokens only; served inside @layer app and scoped to the component. */
 .c-bin-map { display: grid; gap: 16px; min-width: 0; }
 .c-bin-map-summary { margin: 0; font-size: 13px; color: var(--ink-muted); }
 .c-bin-map-aisles { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px 32px; }

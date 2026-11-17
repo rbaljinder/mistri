@@ -12,6 +12,7 @@ import { say } from '../../copy/components/components/sdk/pageControls.js';
 export { Avatar } from '@mistriwork/ui/Avatar.js';
 export { CheckCards, Checkbox, ChoiceCards, YesNo } from '@mistriwork/ui/Choices.js';
 export { DateField } from '@mistriwork/ui/DateField.js';
+export { DateNav } from './DateNav.js';
 /* The primitive says its close control in English unless told; a page's Drawer says it in the reader's language, as
    the shell's own panels do, and a page that names it keeps its word. */
 export function Drawer(props: ComponentProps<typeof UiDrawer>) {

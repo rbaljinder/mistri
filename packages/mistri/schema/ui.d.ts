@@ -398,11 +398,26 @@ export declare function Segmented<T extends string>(props: {
   label: string; value: T; options: ReadonlyArray<{ value: T; label: ReactTypes.ReactNode; count?: number; name?: string }>;
   onChange(value: T): void; size?: 'default' | 'compact'; className?: string;
 }): ReactTypes.ReactElement;
-/** A figure and what it counts: its label, its change against the period before (toned where the news is known) and, from four points, its trend. */
+/** A figure and what it counts: its label, its change against the period before (toned where the news is known) and, from four points, its trend.
+    `delta` says the change as a number and which way is good (`{ value: 12, good: 'up' }` is "+12" in the good ink); `change` is words of your own and wins
+    where both are given. With `href` the whole Stat is a link, followed in place for an address of this App. */
 export declare function Stat(props: {
   label: ReactTypes.ReactNode; value: ReactTypes.ReactNode; change?: { text: ReactTypes.ReactNode; tone?: ToneName };
-  trend?: ReadonlyArray<number | { key: string; value: number }>; say?: (value: unknown) => string;
+  delta?: { value: number | string; good?: 'up' | 'down' };
+  trend?: ReadonlyArray<number | { key: string; value: number }>; href?: string; say?: (value: unknown) => string;
 }): ReactTypes.ReactElement;
+/** The shape of a run of numbers in the look's chart ink, spanning its container. Four values or more draw; a screen reader gets the values. @preview */
+export declare function Sparkline(props: { values: ReadonlyArray<number>; label?: string; say?: (value: unknown) => string }): ReactTypes.ReactElement;
+/** A few bars side by side, the tallest to the top of the box. `labels` name them for a screen reader (which gets a table of label and value);
+    `highlight` is the index of the one that stands out, the rest drawn quieter. @preview */
+export declare function MiniBars(props: {
+  values: ReadonlyArray<number>; labels?: ReadonlyArray<string>; highlight?: number; label?: string; say?: (value: unknown) => string;
+}): ReactTypes.ReactElement;
+/** A card that is one control: a button with `onPress`, a link with `href` (an address of this App is followed in place), toggled with `selected`.
+    Drawn with the card's corner and lift, not a control's. Its children are what the card holds, which must not be controls of their own. @preview */
+export declare function Tile(props: {
+  onPress?: () => void; href?: string; selected?: boolean; disabled?: boolean; children?: ReactTypes.ReactNode; className?: string;
+} & Omit<ReactTypes.ComponentProps<'button'>, 'onClick' | 'children' | 'type' | 'className' | 'disabled'>): ReactTypes.ReactElement;
 /** Columns over periods (or any keys), each divided by series, with levels, the current column's parts in a pill and a legend. */
 export declare function Columns(props: {
   rows: ReadonlyArray<{ key: string; values: Record<string, number> }>; series: ReadonlyArray<{ key: string; label: string }>;
@@ -483,6 +498,8 @@ export declare function useNavigate(): {
       such address, outside a tenant's own lease, or for a view no visitor opens. */
   publicLink(view: string): string | undefined;
 };
+/** Raises the platform's own notice, the one a verb's outcome is said in (a toast, read out by assistive technology). `tone` is `ok` (the default) or `error`. @preview */
+export declare function useNotice(): (notice: { text: string; tone?: 'ok' | 'error' }) => void;
 /**
  * The App's own addresses as strings, for an `<a href>` and for an embedding app's navigator: `useHref().record('leads', { id: 4 })`.
  * Each is the one canonical address the router reads back, built through the App's own address rules, so

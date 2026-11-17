@@ -103,6 +103,7 @@ const controls = () => import('./pageControls.js');
 export const Avatar = onDemand(controls, 'Avatar', { quiet: true });
 export const CheckCards = onDemand(controls, 'CheckCards', { quiet: true });
 export const DateField = onDemand(controls, 'DateField', { quiet: true });
+export const DateNav = onDemand(controls, 'DateNav', { quiet: true });
 export const Drawer = onDemand(controls, 'Drawer', { quiet: true });
 export const Modal = onDemand(controls, 'Modal', { quiet: true });
 export const Pagination = onDemand(controls, 'Pagination', { quiet: true });

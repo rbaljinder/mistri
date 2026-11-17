@@ -19,9 +19,10 @@
  * component may never reach is refused here, as a compile error: the server
  * entries (`@mistriwork/mistri/commands` and its siblings), Node's builtins, any file
  * outside the App directory that is not an installed package. Its CSS is
- * wrapped in `@layer components` and scoped to the component's own element,
- * so a look still dresses it and `structure` still wins over it, and nothing
- * it writes reaches the rest of the page.
+ * wrapped in `@layer app` and scoped to the component's own element,
+ * so `structure` still wins over it, and nothing it writes reaches the rest of
+ * the page. The layer stands after the kit's control recipes and the looks, so a
+ * `<button>` card an App draws keeps its own corner under a round-control look.
  */
 import { createHash } from 'node:crypto';
 import { realpathSync, statSync } from 'node:fs';
@@ -97,11 +98,11 @@ function real(path: string): string {
 }
 
 function wrapCss(id: string, css: string): string {
-  /* After the base and before kit, look and structure (style.css names
-     the order): a look may dress a component, layout no look may move is not
-     the component's to move either, and `@scope` keeps every rule inside the
+  /* After the kit and the looks, before theme and structure (style.css names the order): a field report had an App's
+     own `<button>` card turned into a pill by the kit's round-control recipe, which a `components` rule could not
+     outrank. Layout no look may move is still not the component's to move, and `@scope` keeps every rule inside the
      component's own element — a `:root` or a bare `li` never leaks out. */
-  return `@layer components {\n@scope ([data-component="${id}"]) {\n${css.trim()}\n}\n}\n`;
+  return `@layer app {\n@scope ([data-component="${id}"]) {\n${css.trim()}\n}\n}\n`;
 }
 
 /**
@@ -255,8 +256,8 @@ const UI_KIT = 'ui-kit';
  * Compile an App's control kit (`uiKit`, Preview) into `compiled`, or into a set of its own when the App declares no
  * component. The same boundary as a component: the page's React and SDK are the kit's, and nothing of the server's.
  * Its stylesheet is not scoped to an element, as a component's is: a kit draws controls everywhere on the page,
- * popups in a portal included, so its rules are page-wide, still in the components layer a look and `structure` win
- * over.
+ * popups in a portal included, so its rules are page-wide, in the `app` layer, after the kit's control recipes and the looks, so a control
+ * the kit draws wears the App's dress; `theme` and `structure` win over it.
  */
 export async function compileUiKit(
   dir: string,
@@ -277,7 +278,7 @@ export async function compileUiKit(
   files[`${name}.js`] = `${built.code.trimEnd()}\n//# sourceMappingURL=${name}.js.map\n`;
   if (built.map) files[`${name}.js.map`] = JSON.stringify({ ...JSON.parse(built.map), file: `${name}.js` });
   const css = built.css.trim() ? `${name}.css` : undefined;
-  if (css) files[css] = `@layer components {\n${built.css.trim()}\n}\n`;
+  if (css) files[css] = `@layer app {\n${built.css.trim()}\n}\n`;
   return { entries: compiled?.entries ?? {}, files, kit: { js: `${name}.js`, ...(css ? { css } : {}), sources: built.sources } };
 }
 

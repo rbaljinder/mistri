@@ -36,6 +36,8 @@ export { Scrub, ScrubTrack } from './ScrubParts.js';
 export { scrub, type ScrubOptions, type ScrubReason } from './scrub.js';
 export { Sortable, SortableHandle, SortableItem } from './SortableParts.js';
 export { sortable, type SortableOptions, type SortableOrientation, type SortableReason } from './sortable.js';
+export type { CommitProps, Committing } from './commit.js';
+export { SpansAxis, SpansNow, SpansRegion } from './SpansGridParts.js';
 export { type Span, Spans, SpansSpan, SpansTrack } from './SpansParts.js';
 export { spans, type SpansChange, type SpansOptions } from './spans.js';
 export { Transfer, TransferHandle, TransferItem, TransferList, type TransferListState } from './TransferParts.js';

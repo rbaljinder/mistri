@@ -2,14 +2,16 @@
    base — the tool's own rules, and the components features.css imports;
    components — the stylesheets a component brings with it;
    kit — the shared dress under every look, and custom themes' token machinery;
-   look — each look; theme — what an App's own theme says beyond the menu: its
+   look — each look; app — the stylesheets an App's own components and control kit bring, over the kit's control
+   recipes and the look's (a card an App draws as a <button> keeps the corner it gives it) and under the theme;
+   theme — what an App's own theme says beyond the menu: its
    parts' styles, its patterns and its own stylesheet (partsLook.css,
    surfacesLook.css, themeStylesheet.ts), over the look it extends;
    structure — layout that no look may move (structure.css);
    print — paper, last.
    A later layer wins whatever its specificity: nothing here out-specifies or
    out-loads another to win. */
-@layer base, components, kit, look, theme, structure, print;
+@layer base, components, kit, look, app, theme, structure, print;
 /* The tokens are @mistriwork/ui's (packages/ui/src), and so is what the controls wear (controls.css): each control is
    drawn over UI SDK and dressed by its `data-slot`, in layers of its own. Nested in base they stand under every rule
    written here: a dialog this stylesheet places by its class, a menu a component dresses and a control a toolbar

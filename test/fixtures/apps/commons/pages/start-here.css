@@ -1,6 +1,6 @@
 /* Commons' front door: a page of its own, the width of a reading column at a desk and the phone's at a phone, with its
    own bar (a bare page has none), a two-part opening — the words and the photograph — and the forum's lists below.
-   Rules, not boxes, as the rest of Commons. Tokens only; served inside @layer components and scoped. */
+   Rules, not boxes, as the rest of Commons. Tokens only; served inside @layer app and scoped. */
 .c-page-start-here { box-sizing: border-box; max-width: 1120px; margin: 0 auto; padding: 0 20px 56px; min-width: 0; }
 
 .c-page-start-here-bar {

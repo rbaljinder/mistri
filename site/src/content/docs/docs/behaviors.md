@@ -99,6 +99,120 @@ A root's `onValueChange` is given the value and then why it changed:
 
 Give `value` and the root is controlled: it shows what it is given and asks for the change. Give `defaultValue` and it holds the value itself.
 
+## A page shortcut and a behavior's keys
+
+A behavior calls `preventDefault()` on every key it handles: Enter and Space on a stretch, a day or an option, Alt with the arrows on a stretch or a column header, the arrows, Home, End, Page Up and Page Down on a track, a day or a list. A plain arrow on a `Spans` stretch is handled only when there is a next stretch to go to; with none, it is left alone. A key a behavior does not act on is not prevented.
+
+So a shortcut of your own on the page (`window` or `document`) should stand down when a behavior has taken the key:
+
+```tsx
+useEffect(() => {
+  const onKey = (event: KeyboardEvent) => {
+    if (event.defaultPrevented) return; // a behavior, or a control, already answered it
+    if (event.key === 'j') next();
+  };
+  window.addEventListener('keydown', onKey);
+  return () => window.removeEventListener('keydown', onKey);
+}, [next]);
+```
+
+## Read a chart you drew by hand
+
+`Scrub` holds a position along a line and says nothing about how it is drawn. This is a bar chart in plain SVG, with a hairline and a readout that follow the pointer and the arrows:
+
+```tsx
+import { Scrub, ScrubTrack } from '@mistriwork/mistri/behaviors';
+
+const months = [
+  { name: 'Jul', rent: 41200 },
+  { name: 'Aug', rent: 43800 },
+  { name: 'Sep', rent: 40100 },
+  { name: 'Oct', rent: 45900 },
+];
+const peak = Math.max(...months.map((month) => month.rent));
+
+function Rent() {
+  return (
+    <Scrub
+      count={months.length}
+      scale="band"
+      text={(at) => `${months[at]!.name}: $${months[at]!.rent.toLocaleString('en-US')}`}
+    >
+      {(at) => (
+        <>
+          <ScrubTrack aria-label="Rent collected" className="c-page-rent-track">
+            <svg viewBox="0 0 400 120" preserveAspectRatio="none" className="c-page-rent-svg">
+              {months.map((month, index) => (
+                <rect
+                  key={month.name}
+                  x={index * 100 + 12}
+                  width={76}
+                  y={120 - (month.rent / peak) * 110}
+                  height={(month.rent / peak) * 110}
+                  data-current={at === index ? '' : undefined}
+                />
+              ))}
+            </svg>
+          </ScrubTrack>
+          <p className="c-page-rent-readout" aria-hidden="true">
+            {at === null ? 'Point at a month' : `${months[at]!.name}: $${months[at]!.rent.toLocaleString('en-US')}`}
+          </p>
+        </>
+      )}
+    </Scrub>
+  );
+}
+```
+
+`count` is how many positions the track has; `scale="band"` gives each an equal stretch (a column chart), and `"point"` makes the first and last positions the track's two ends (a line drawn edge to edge). The root's function is given `at`, the position being read or `null` when nothing is. The track is one Tab stop and a slider to a screen reader: the arrows, Home, End and Page Up/Down move along it and `text` is what is said at each place. The stylesheet marks the bar that is read with `rect[data-current]`. Give `onPick` for a press, Enter or Space on a position, and `value` with `onValueChange` to hold the position in the page (two charts reading the same month).
+
+## Spans with a server round-trip
+
+A page that saves a move on a server has three jobs every time: keep the item where it was put while the server answers, make a run of key presses one request, and put it back, saying so, when the server refuses. Give `Spans`, `Sortable` or `Transfer` an `onCommit` and they are done:
+
+```tsx
+<Spans
+  value={visits}
+  onValueChange={setVisits}
+  onCommit={async ({ value, moved }) => {
+    const outcome = await reschedule({ id: moved[0]!, ...rangeOf(value, moved[0]!) });
+    return outcome.status === 'applied';
+  }}
+  commitDelay={600}
+  min={0}
+  max={24 * 60}
+  step={30}
+  axis="y"
+>
+```
+
+- The moved item is `data-pending` (and `aria-busy`) while the server is asked; style it quieter.
+- Alt and arrow presses less than `commitDelay` apart (milliseconds, 600 unless you say) are one call, carrying the net change: `value` (the whole value as the moves leave it), `from` (as it was last committed), `moved` (the keys that ended up somewhere else) and `details` (the last change). A pointer's drop asks at once.
+- Resolve `true` and the move stands: `onValueChange` is heard then, and the part keeps drawing the move until the `value` you hold catches up, so nothing jumps back.
+- Resolve `false`, or reject, and the part goes back to the last committed place and says so to a screen reader (a rejection's message is said first).
+- An item moved again while it is pending is allowed; its next call waits for the one before.
+
+Without `onCommit` nothing changes: `onValueChange` is heard at once.
+
+## Draw the range of a Spans
+
+Three parts draw what a Spans is laid over, each told its numbers in the track's own units and filling the element it is in (a Spans root, or a track):
+
+```tsx
+<Spans value={visits} onValueChange={setVisits} axis="y" min={7 * 60} max={19 * 60} step={30}>
+  <SpansAxis step={60} format={(minute) => `${minute / 60}:00`} />
+  <SpansRegion from={12 * 60} to={13 * 60}>Lunch</SpansRegion>
+  <SpansNow value={() => minutesNow()} />
+  …tracks
+</Spans>
+```
+
+- `SpansAxis` draws a label and a line every `step` (`labels`, `lines` and `every` thin it out). `axis` on the root says whether the range runs across or down.
+- `SpansNow` draws a line at a value, again each minute when the value is a function, and not at all outside the range.
+- `SpansRegion` is a stretch nothing is moved or lengthened into: a change that would leave a stretch in it is refused, and said ("Lunch is not open to that"). Inside a track it refuses only that track's stretches; `track` names another.
+
+They carry `data-slot` (`spans-axis`, `spans-axis-label`, `spans-axis-line`, `spans-now`, `spans-region`) and wear a plain default in the look's tokens.
+
 ## What a screen reader is told
 
 The pick-up, each move and the drop are announced by the behavior, in English, from the labels you give: `label` and `listLabel` on `Transfer`, `label` on `Spans`, `text` on `Scrub`, `say` on `Widths`. Pass your own words there for another language.

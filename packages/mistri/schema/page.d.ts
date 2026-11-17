@@ -64,6 +64,20 @@ import type {
 export * from './ui.js';
 /* The house controls, drawn as the shell draws its own (the page loads their stylesheet with them). Preview, as they
    are in @mistriwork/ui. */
+/** A day or a week at a time: previous, Today, next and the date field. `T` goes to today from anywhere on the page that is not a box
+ * being typed in (a page with its own use for `T` prevents the key first). `skip` names days not to land on when stepping. @preview */
+export declare function DateNav(props: {
+  /** The day, as `2026-11-14`. */
+  value: string;
+  onChange: (day: string) => void;
+  step?: 'day' | 'week';
+  skip?: (day: string) => boolean;
+  label?: string;
+  locale?: string;
+  min?: string;
+  max?: string;
+  className?: string;
+}): import('react').ReactElement;
 export {
   Avatar,
   CheckCards,

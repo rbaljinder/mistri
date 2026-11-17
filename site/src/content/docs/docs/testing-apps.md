@@ -172,6 +172,9 @@ made with when the policy has `support`.
   database, auth or job path; point each at the workspace.
 - Every matrix row passes, including the wrong ones → add one deliberate wrong
   expectation under `assert.rejects` to prove the matrix detects a defect.
+- A browser test cannot find a check box, or a related section by name → the kit draws a check box over a hidden
+  input (click `getByRole('checkbox')`), a related section's heading carries its count (match `^Contacts`), and a
+  record page draws its lower sections as they scroll into view (scroll to the foot first).
 - A tenant test passes for the wrong tenant → make members with
   `host.tenant(id, { roles })`; `host.as(role)` is an App grant, not a
   membership.

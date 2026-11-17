@@ -170,11 +170,19 @@ async function expectHome(page: Page, id: AppId) {
 }
 async function phoneFits(page: Page) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
-  for (const popup of await page.locator('[role="menu"]:visible, [role="dialog"]:visible, [role="listbox"]:visible').all()) {
-    const box = await popup.boundingBox();
-    expect(box).not.toBeNull();
-    expect(box!.x).toBeGreaterThanOrEqual(-1);
-    expect(box!.x + box!.width).toBeLessThanOrEqual(391);
+  // Measured in one pass: a popup still fading out can match `:visible` and be gone a moment later, and a
+  // per-popup locator then waits out the whole test for it.
+  const boxes = await page.evaluate(() =>
+    [...document.querySelectorAll('[role="menu"], [role="dialog"], [role="listbox"]')]
+      .filter((el) => (el as HTMLElement).checkVisibility())
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right };
+      }),
+  );
+  for (const box of boxes) {
+    expect(box.left).toBeGreaterThanOrEqual(-1);
+    expect(box.right).toBeLessThanOrEqual(391);
   }
 }
 async function openPreferences(page: Page) {

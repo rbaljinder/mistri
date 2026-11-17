@@ -1,5 +1,5 @@
 /* The post stream. Rules between posts, not boxes; tokens only, so every
-   look and both modes dress it. Served inside @layer components and scoped
+   look and both modes dress it. Served inside @layer app and scoped
    to the component's own element. */
 .c-post-stream { margin: 0; padding: 0; list-style: none; min-width: 0; }
 .c-post-stream-post { display: grid; gap: 12px; padding: 20px 0; border-top: 1px solid var(--line); min-width: 0; }
