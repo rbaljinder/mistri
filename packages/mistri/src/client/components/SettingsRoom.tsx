@@ -11,8 +11,9 @@ import { personFacing } from '@mistriwork/kit/client/audience.js';
 import { PrefsRows } from '@mistriwork/kit/client/components/Prefs.js';
 import { message, messageLanguage, subscribeMessages } from '@mistriwork/kit/client/messages.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
-import { profileIsOffered } from '../appState.js';
+import { activeApp, profileIsOffered } from '../appState.js';
 import { AccountProfile } from './AccountProfile.js';
+import { TenantDomains } from './TenantDomains.js';
 import { say } from '../copy/account/components/AccountProfile.js';
 import { say as words } from '../copy/account/components/SettingsRoom.js';
 import './SettingsRoom.css';
@@ -96,6 +97,12 @@ export function SettingsRoom({ section }: { section?: string }) {
           {!person && <PrefsRows part="lists" />}
         </Section>
       </div>
+      {/* Only where the suite lets a tenant bring its own domain: the payload says so for a tenant's lease alone. */}
+      {(activeApp() as { domains?: true } | null)?.domains === true && (
+        <Section title={words('domains')} about={words('domainsHint')}>
+          <TenantDomains />
+        </Section>
+      )}
     </section>
   );
 }

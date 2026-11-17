@@ -125,6 +125,11 @@
       "source": "packages/cloudflare/src/index.ts",
       "types": "packages/cloudflare/src/index.ts"
     },
+    "@mistriwork/cloudflare/host-certificates": {
+      "layer": "cloudflare",
+      "source": "packages/cloudflare/src/hostCertificates.ts",
+      "types": "packages/cloudflare/src/hostCertificates.ts"
+    },
     "@mistriwork/kit": {
       "layer": "kit",
       "source": "packages/kit/src/client/kit.ts",

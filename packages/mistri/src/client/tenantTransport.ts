@@ -83,6 +83,12 @@ const reads = new Set([
   '/api/integrations',
   '/api/integrations/save',
   '/api/integrations/check',
+  // Its custom domains and their checks (server http/customDomains.ts): the lease names the tenant.
+  '/api/domains',
+  '/api/domains/add',
+  '/api/domains/check',
+  '/api/domains/remove',
+  '/api/domains/primary',
   // A dealer's own log of support visits into it: a read on the dealer's
   // ordinary tenant lease, which the selector below addresses like any other.
   SUPPORT_LOG_PATH,

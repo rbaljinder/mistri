@@ -86,17 +86,47 @@ const prefix = TENANT_STORE_PREFIX;
 const liveIndex = `${prefix}live_membership`;
 const liveSupportIndex = `${prefix}live_support`;
 const platformIndex = `${prefix}platform`;
-const definitions = new Map<string, string>([
-  [
-    TENANT_TABLES.meta,
-    `CREATE TABLE "${TENANT_TABLES.meta}" (
+const SQLITE_TENANT_STORE_VERSION = 2;
+const metaDefinition = (name: string) => `CREATE TABLE "${name}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  version INTEGER NOT NULL CHECK (version = 1),
+  version INTEGER NOT NULL CHECK (version = ${SQLITE_TENANT_STORE_VERSION}),
   app_id TEXT COLLATE BINARY NOT NULL,
   source_id TEXT COLLATE BINARY NOT NULL,
   store_id TEXT COLLATE BINARY NOT NULL
-)`,
-  ],
+)`;
+/* Version 2 adds the host table (http/tenantHosts.ts). No foreign key to the tenant row: a host is presentation, and a
+   static `hosts` entry is seeded from configuration before its tenant need exist. Its primary flag is an integer so the
+   column reads back the same on both engines. */
+const hostDefinition = `CREATE TABLE "${TENANT_TABLES.host}" (
+  host TEXT COLLATE BINARY PRIMARY KEY NOT NULL,
+  tenant_id TEXT COLLATE BINARY NOT NULL,
+  app TEXT COLLATE BINARY NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('subdomain', 'custom')),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'verified', 'live', 'suspended')),
+  verify_token TEXT,
+  checked_at INTEGER,
+  failures INTEGER NOT NULL DEFAULT 0 CHECK (failures >= 0),
+  is_primary INTEGER NOT NULL DEFAULT 0 CHECK (is_primary IN (0, 1)),
+  source TEXT NOT NULL CHECK (source IN ('claimed', 'operator')),
+  created_at INTEGER NOT NULL,
+  unavailable_since INTEGER
+)`;
+/** Version 1 to 2, as storeLayouts.ts runs it: the host table, and the meta row's version (its CHECK names the
+ * version, so the table is rebuilt rather than altered). */
+export function sqliteTenantStoreUpgradeFrom1(): readonly string[] {
+  const old = `${TENANT_TABLES.meta}_v1`;
+  return [
+    hostDefinition,
+    `ALTER TABLE "${TENANT_TABLES.meta}" RENAME TO "${old}"`,
+    metaDefinition(TENANT_TABLES.meta),
+    `INSERT INTO "${TENANT_TABLES.meta}" (singleton, version, app_id, source_id, store_id)
+      SELECT singleton, ${SQLITE_TENANT_STORE_VERSION}, app_id, source_id, store_id FROM "${old}"`,
+    `DROP TABLE "${old}"`,
+  ];
+}
+const definitions = new Map<string, string>([
+  [TENANT_TABLES.meta, metaDefinition(TENANT_TABLES.meta)],
+  [TENANT_TABLES.host, hostDefinition],
   [
     TENANT_TABLES.tenant,
     `CREATE TABLE "${TENANT_TABLES.tenant}" (
@@ -148,7 +178,6 @@ function catalog(db: DatabaseSync, schema: 'main' | 'temp'): CatalogEntry[] {
     WHERE substr(name, 1, ?) = ? COLLATE NOCASE OR substr(tbl_name, 1, ?) = ? COLLATE NOCASE`)
     .all(prefix.length, prefix, prefix.length, prefix) as unknown as CatalogEntry[];
 }
-const SQLITE_TENANT_STORE_VERSION = 1;
 /* A field report measured the store's layout read again inside every membership read. Any DDL on either schema
    moves its schema_version, so while the pair is the one this handle's last passing layout check saw, the layout
    it judged has not changed and the scan is skipped. The fingerprint is read before the scan, so DDL between the
@@ -199,7 +228,10 @@ export function assertSqliteTenantStore(db: DatabaseSync, input: TenantStoreBind
 }
 
 /** Explicit maintenance on an existing file only. A mismatch never adopts or repairs a store. */
-export function provisionSqliteTenantStore(existingPath: string, input: TenantStoreBinding): { version: 1; provisioned: boolean } {
+export function provisionSqliteTenantStore(
+  existingPath: string,
+  input: TenantStoreBinding,
+): { version: typeof SQLITE_TENANT_STORE_VERSION; provisioned: boolean } {
   const owner = binding(input);
   let db: DatabaseSync | undefined;
   try {
@@ -215,11 +247,15 @@ export function provisionSqliteTenantStore(existingPath: string, input: TenantSt
             ? ddl.replace('CREATE TABLE ', 'CREATE TABLE main.')
             : ddl.replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX main.'),
         );
-      db.prepare(`INSERT INTO main."${TENANT_TABLES.meta}" VALUES (1, 1, ?, ?, ?)`).run(owner.appId, owner.source.id, owner.storeId);
+      db.prepare(`INSERT INTO main."${TENANT_TABLES.meta}" VALUES (1, ${SQLITE_TENANT_STORE_VERSION}, ?, ?, ?)`).run(
+        owner.appId,
+        owner.source.id,
+        owner.storeId,
+      );
     }
     attest(db, owner);
     db.exec('COMMIT');
-    return { version: 1, provisioned };
+    return { version: SQLITE_TENANT_STORE_VERSION, provisioned };
   } catch (error) {
     try {
       if (db?.isTransaction) db.exec('ROLLBACK');

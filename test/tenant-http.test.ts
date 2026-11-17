@@ -3,6 +3,7 @@ import { tenantHistoryStoreKey } from '../packages/mistri/src/server/tenant/tena
 import { AppAccessDenied } from '../packages/mistri/src/server/app/appAccess.js';
 import type { TenantOwnershipSnapshot } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
 import { createTenantBrandingService } from '../packages/mistri/src/server/tenant/tenantBranding.js';
+import { CustomDomainRefusal, type TenantDomainsService } from '../packages/mistri/src/server/http/customDomains.js';
 import { MemoryCacheStore } from '../packages/engine/src/adapters/cache/cacheStore.js';
 import type { AppDef } from '../packages/mistri/src/shared/app.js';
 import { once } from 'node:events';
@@ -3641,6 +3642,50 @@ const proposalFence: Pointer = [
   "a journal bound to one tenant reads, decides, sweeps and confirms nothing of another's",
 ];
 
+/** A tenant-domains service that holds each hostname for the tenant that added it, as the real store does, and says
+    `seen` which tenant every call came for. A hostname another tenant holds is refused as one nobody holds. */
+function domainsStub(seen: string[] = []): TenantDomainsService {
+  const held = new Map<string, { tenantId: string; primary: boolean }>();
+  const view = (host: string, primary: boolean) =>
+    ({ host, kind: 'custom', status: 'pending', primary, claimed: true, records: [] }) as unknown as Awaited<
+      ReturnType<TenantDomainsService['add']>
+    >;
+  const own = (tenantId: string, host: string) => {
+    if (held.get(host)?.tenantId !== tenantId) throw new CustomDomainRefusal('That domain is not on this organization.', 404);
+    return held.get(host)!;
+  };
+  return {
+    limit: 5,
+    editors: ['operator'],
+    async list(tenantId) {
+      seen.push(`domains:${tenantId}`);
+      return [...held].filter(([, row]) => row.tenantId === tenantId).map(([host, row]) => view(host, row.primary));
+    },
+    async add(tenantId, host) {
+      seen.push(`domains:${tenantId}`);
+      if (held.has(host)) throw new CustomDomainRefusal('That domain is not available.', 422);
+      held.set(host, { tenantId, primary: false });
+      return view(host, false);
+    },
+    async check(tenantId, host) {
+      seen.push(`domains:${tenantId}`);
+      return { ...view(own(tenantId, host).primary ? host : host, false), outcome: 'failed' as const, from: 'pending' as const };
+    },
+    async remove(tenantId, host) {
+      seen.push(`domains:${tenantId}`);
+      own(tenantId, host);
+      held.delete(host);
+    },
+    async primary(tenantId, host) {
+      seen.push(`domains:${tenantId}`);
+      own(tenantId, host).primary = true;
+    },
+    async recheckDue() {
+      return { checked: 0, suspended: [], live: [], expired: [] };
+    },
+  };
+}
+
 function fenceDoors(): Record<string, Door> {
   const here = (title: string): Pointer => ['tenant-http.test.ts', title];
   const doors: Record<string, Door> = {
@@ -3852,6 +3897,33 @@ function fenceDoors(): Record<string, Door> {
         also: here("a tenant's branding is read by its members, saved only by its editors, and refused in a fixed sentence"),
       },
     },
+    '/api/domains': {
+      lease: { body: {}, also: here("a tenant's domains are its own: another tenant's hostname is refused as one nobody holds") },
+    },
+    '/api/domains/add': {
+      lease: {
+        body: { host: 'shop.fence.test' },
+        also: here("a tenant's domains are its own: another tenant's hostname is refused as one nobody holds"),
+      },
+    },
+    '/api/domains/check': {
+      lease: {
+        body: { host: 'shop.fence.test' },
+        also: here("a tenant's domains are its own: another tenant's hostname is refused as one nobody holds"),
+      },
+    },
+    '/api/domains/primary': {
+      lease: {
+        body: { host: 'shop.fence.test' },
+        also: here("a tenant's domains are its own: another tenant's hostname is refused as one nobody holds"),
+      },
+    },
+    '/api/domains/remove': {
+      lease: {
+        body: { host: 'shop.fence.test' },
+        also: here("a tenant's domains are its own: another tenant's hostname is refused as one nobody holds"),
+      },
+    },
     '/api/integrations': { lease: { body: {} } },
     '/api/integrations/save': { lease: { body: { integration: 'fence', secrets: {} } } },
     '/api/integrations/check': { lease: { body: { integration: 'fence' } } },
@@ -4006,6 +4078,44 @@ test('the tenant host serves exactly the routes its gate names, and each has a c
     denied(await f.call(f.select(path), {}, f.headers(a)));
 });
 
+test("a tenant's domains are its own: another tenant's hostname is refused as one nobody holds", async (t) => {
+  const seen: string[] = [];
+  const f = await fixture(t, { tenantBranding: true, host: { domains: domainsStub(seen) } });
+  const north = await f.open('north'),
+    south = await f.open('south');
+  const names = (reply: Answer) =>
+    (assert.equal(reply.status, 200, reply.text), reply.body.domains as { host: string }[]).map((row) => row.host);
+  assert.equal((await f.data('/api/domains/add', north, { host: 'north.shop.test' })).status, 200);
+  assert.equal((await f.data('/api/domains/add', south, { host: 'south.shop.test' })).status, 200);
+  // Each lists its own; a tenant named in the body is refused, never read as a selector.
+  assert.deepEqual(names(await f.data('/api/domains', north, {})), ['north.shop.test']);
+  assert.deepEqual(names(await f.data('/api/domains', south, {})), ['south.shop.test']);
+  denied(await f.data('/api/domains', south, { tenantId: 'north' }));
+  // The other tenant's hostname, asked of each route, is refused as one nobody holds, and the owner's row is as it was.
+  for (const route of ['check', 'primary', 'remove']) {
+    const other = await f.data(`/api/domains/${route}`, south, { host: 'north.shop.test' });
+    const nobody = await f.data(`/api/domains/${route}`, south, { host: 'nobody.shop.test' });
+    assert.equal(other.status, 404, `${route}: ${other.text}`);
+    assert.equal(other.text.replace('north.shop.test', '<host>'), nobody.text.replace('nobody.shop.test', '<host>'), route);
+    assert.equal(other.body.code, 'domain_refused');
+  }
+  assert.deepEqual(names(await f.data('/api/domains', north, {})), ['north.shop.test']);
+  // Adding what another tenant holds is refused without saying who holds it, and changes nothing.
+  const taken = await f.data('/api/domains/add', south, { host: 'north.shop.test' });
+  assert.equal(taken.status, 422, taken.text);
+  assert.doesNotMatch(taken.text, /north/);
+  assert.deepEqual(names(await f.data('/api/domains', south, {})), ['south.shop.test']);
+  // A selector naming the other tenant is refused as one naming none, and reaches the service for neither.
+  const before = seen.length;
+  for (const route of ['', '/add', '/check', '/primary', '/remove']) {
+    const other = await f.call(f.select(`/api/domains${route}`, 'south'), { host: 'south.shop.test' }, f.headers(north));
+    const none = await f.call(f.select(`/api/domains${route}`, 'missing'), { host: 'south.shop.test' }, f.headers(north));
+    denied(other);
+    denied(none);
+  }
+  assert.equal(seen.length, before);
+});
+
 /* Each served route, through the lease of the north tenant, answers another tenant's row as it answers a key nothing
    holds, changes nothing of it, and refuses a selector naming another tenant as it refuses one naming none. */
 test("every lease route answers another tenant's key and selector exactly as a missing one, and changes nothing of it", async (t) => {
@@ -4049,6 +4159,7 @@ test("every lease route answers another tenant's key and selector exactly as a m
           seen.push(`revoke:${principal.tenantId}`);
         },
       },
+      domains: domainsStub(seen),
       integrations: {
         editors: ['operator'],
         read: async (tenantId: string) => (seen.push(`integrations:${tenantId}`), { integrations: [] }),
@@ -4512,6 +4623,7 @@ test("every method of the tenant read and write sources is answered by a cross-t
       readRecordActivity: '/api/record-activity',
       readInbox: '/api/inbox',
       readEmailOff: '/api/inbox/email',
+      readHosts: ['tenant-domains.test.ts', "the running reader's readHosts returns what maintenance wrote, in byte order"],
       readBranding: '/api/branding',
       readBrandingLogo: [
         'tenant-branding.test.ts',

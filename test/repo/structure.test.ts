@@ -364,6 +364,10 @@ const TENANT_IMPORTERS = [
   // Suite composition is an entry point for an enrolled tenant App; tenant
   // runtime and policy still stay in their existing tenant modules.
   'packages/mistri/src/server/http/suiteTenant.ts',
+  // A tenant's custom domains are tenancy's own lifecycle (a claim, DNS checks, a certificate, a receipt in the host table),
+  // written through tenant maintenance's transactions; the suite and the CLI compose the service from here, never from the
+  // tenant folder, and the tenant's HTTP side holds only its type (tenant/tenantDomainsRoute.ts).
+  'packages/mistri/src/server/http/customDomains.ts',
   // The test host's setup routes (token, loopback and NODE_ENV=test only) make a tenant and a member the way
   // `mistri dev` does, so a tenant App's tests start from the same local access.
   'packages/mistri/src/server/http/testControl.ts',

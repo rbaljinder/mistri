@@ -596,6 +596,10 @@ const BENEATH: Readonly<Record<string, readonly { readonly store: string; readon
   'event-delivery': [EVENTS, JOURNAL, SEQUENCES, STAGING],
   'command-sequences': [JOURNAL, STAGING],
   'command-staging': [JOURNAL],
+  // These stand on the tenant store, whose layout moved on (the host table, version 2) with fixtures of its own.
+  'tenant-administration': [{ store: 'tenant-store' }],
+  'tenant-invitations': [{ store: 'tenant-store' }],
+  'tenant-support-audit': [{ store: 'tenant-store' }],
 };
 
 /** The tables a fixture creates, as the lines of `describeLayout` name them: bare on SQLite, schema-qualified on PostgreSQL. */

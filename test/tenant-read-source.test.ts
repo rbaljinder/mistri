@@ -313,6 +313,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         'readBrandingLogo',
         'readDueTimers',
         'readEmailOff',
+        'readHosts',
         'readInbox',
         'readMembership',
         'readMemberships',

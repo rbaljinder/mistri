@@ -171,10 +171,10 @@ test('a file provisioned only through provisionStores passes tenant startup', as
   await assert.rejects(prepareTenantStartup(f.startup), TenantStartupError, 'startup never creates the store');
   assert.deepEqual(f.tables(), []);
   const first = await stores(f.path, ['tenant-store']);
-  assert.deepEqual(first, { stores: { 'tenant-store': { version: 1, provisioned: true } }, destinations: [] });
+  assert.deepEqual(first, { stores: { 'tenant-store': { version: 2, provisioned: true } }, destinations: [] });
   assert.ok(Object.isFrozen(first) && Object.isFrozen(first.stores) && Object.isFrozen(first.stores['tenant-store']));
   assert.deepEqual(await stores(f.path, ['tenant-store']), {
-    stores: { 'tenant-store': { version: 1, provisioned: false } },
+    stores: { 'tenant-store': { version: 2, provisioned: false } },
     destinations: [],
   });
   assert.deepEqual(f.tables(), Object.values(TENANT_TABLES).sort());
@@ -267,7 +267,7 @@ test('provisioning is bound, explicit and refuses without writing', async (t) =>
   // The connection id is a transient alias, not stored identity: a renamed
   // connection attests the same store, as startup already allows.
   assert.deepEqual((await stores(f.path, ['tenant-store'], { ...binding, source: { ...binding.source, connection: 'renamed' } })).stores, {
-    'tenant-store': { version: 1, provisioned: false },
+    'tenant-store': { version: 2, provisioned: false },
   });
 });
 
@@ -295,7 +295,7 @@ test('published declarations type the provisioning steps without exposing privat
     publicCommands.provisionSqliteTenantInvitations;
     // @ts-expect-error
     publicCommands.provisionSqliteSupportAudit;
-    const postgres: Promise<{ version: 1; migrated: boolean }> = migratePostgresTenantStore('postgres://db/business', binding);
+    const postgres: Promise<{ version: 2; migrated: boolean }> = migratePostgresTenantStore('postgres://db/business', binding);
     const postgresJournal: Promise<{ version: 1; migrated: boolean }> = migratePostgresTenantAdministrationJournal('postgres://db/business', binding);
     // @ts-expect-error A binding names the source the store belongs to.
     const partial: TenantStoreBinding = { appId: 'app', storeId: 'store' };

@@ -147,8 +147,10 @@ const SURFACES: Record<string, { rules: string[]; why: string }> = {
       'proven',
       '{ writing: false }',
       "{ writing: writes(req), origin: ownProof ? 'none' : 'writes', sameSite: true, json: false }",
+      '{ writing: false }',
+      "{ writing: true, origin: 'writes', sameSite: true, json: false }",
     ],
-    why: 'Mail, an unsubscribe link and an integration’s webhook prove themselves (a signature, a signed token): the Host only. Then the Host for everything; each dispatcher further in holds its write’s line. Native auth asks the fetch site and Origin on a write but not a JSON body (sign-out is bodyless, a callback a form POST), and not the Origin where a route holds its own proof.',
+    why: 'A custom domain’s sign-in and handoff are GET only; its Continue is a POST from its own page (a form: no JSON body). Mail, an unsubscribe link and an integration’s webhook prove themselves (a signature, a signed token): the Host only. Then the Host for everything; each dispatcher further in holds its write’s line. Native auth asks the fetch site and Origin on a write but not a JSON body (sign-out is bodyless, a callback a form POST), and not the Origin where a route holds its own proof.',
   },
   'packages/mistri/src/server/tenant/tenantPublicHttp.ts': {
     rules: ["{ writing: true, origin: 'always', sameSite: true }", '{ writing: !reading }'],

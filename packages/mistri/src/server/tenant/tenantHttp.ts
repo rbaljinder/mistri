@@ -51,6 +51,7 @@ import { TENANT_HTTP_HEADERS as headers, type TenantContextAssertion, type Tenan
 import type { CommandProposalRow } from '../../adapters/commands/commandJournalTypes.js';
 import type { ProposalDraft } from '../commands/proposals.js';
 import type { VerifiedSessionInstance } from '../auth/auth.js';
+import { getTenantHostIntent } from '../http/tenantHosts.js';
 import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { businessCommandHttpError } from '../commands/businessCommandHttp.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
@@ -156,6 +157,9 @@ import { tenantLiveHub } from './tenantLive.js';
 import { tenantWriterPaused } from './tenantWriterHealth.js';
 import { openTenantLiveStream, tenantLiveAuthority, tenantLiveGrants, tenantProbe } from './tenantLiveRoute.js';
 import { brandingTenant, scopedRecordBranding, withRecordBranding, closeRecordBranding } from '../http/recordBranding.js';
+import type { TenantDomainsService } from '../http/customDomains.js';
+import { tenantDomainsRoute } from './tenantDomainsRoute.js';
+import { leaseAssertion, ownerHeadersRefused, tenantSelectors } from './tenantLeaseRequest.js';
 import { flagHttpRequest } from '../flags/httpRuntime.js';
 import { APP_FLAG_VALUES_PATH } from '../../shared/appFlagValues.js';
 import { carriesBearer } from '../embed/crossOrigin.js';
@@ -164,7 +168,6 @@ import {
   InvalidRequest,
   exposed,
   invalid,
-  revisionHeader,
   ownerHeaders,
   body,
   sendResource,
@@ -215,6 +218,8 @@ interface TenantHttpOptions {
   readonly search?: Pick<TenantSearch, 'reader'>;
   /** Each tenant's branding (tenantBranding.ts), when the App declares `branding`. */
   readonly branding?: TenantBrandingService;
+  /** The tenant's custom domains (http/customDomains.ts), when the suite configures `customDomains`. */
+  readonly domains?: TenantDomainsService;
   /** The integrations' settings screen (tenantIntegrations.ts), when the jobs module lists integrations. */
   readonly integrations?: NonNullable<TenantIntegrations['settings']>;
   /** Whether a tenant has the App's assistant (tenantAssistant.ts): its switch is on and a model is set up. */
@@ -239,37 +244,6 @@ interface TenantHttpOptions {
 /** Private integration server, deliberately not mounted by the CLI/createApp.
  * No Registry, ordinary adapter, authoring store, static UI or raw-SQL fallback
  * is reachable here. Successful construction transfers enrollment retirement. */
-/** The tenant a lease-bearing request selects: its URL's, never a header's. Platform and control requests that open
- * no tenant select none. */
-function tenantSelectors(url: URL, tenant: boolean): string[] {
-  if (!tenant) return [];
-  const selectors = [url.searchParams.get('tenant')!];
-  parseTenantSelector(selectors);
-  exposed(headers.tenant, selectors[0]);
-  return selectors;
-}
-
-/** app/tenant are URL selectors, never competing request headers. App's response header is accepted only as a
- * matching stale-App precondition. */
-function ownerHeadersRefused(req: IncomingMessage, appId: string): boolean {
-  return (
-    tenantHttpHeader(req, headers.tenant) !== undefined ||
-    tenantHttpHeader(req, headers.realm) !== undefined ||
-    (tenantHttpHeader(req, headers.app) !== undefined && tenantHttpHeader(req, headers.app) !== appId)
-  );
-}
-
-/** The lease a request bears, as its tab, context and revision headers assert it; none without a tab and a context.
- * A page's request and the assistant's proposal (`propose`) are both read here. */
-function leaseAssertion(req: IncomingMessage): TenantContextAssertion | undefined {
-  const assertion = {
-    tabId: tenantHttpHeader(req, headers.tab) ?? '',
-    expectedContext: tenantHttpHeader(req, headers.context) ?? '',
-    expectedRevision: revisionHeader(req),
-  };
-  return assertion.tabId && assertion.expectedContext ? assertion : undefined;
-}
-
 export function createTenantHttpServer(options: TenantHttpOptions) {
   const raw = tenantOptions(options, [
     'app',
@@ -282,6 +256,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     'tokens',
     'search',
     'branding',
+    'domains',
     'integrations',
     'assistant',
     'readerName',
@@ -293,6 +268,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
   const integrationSettings = raw.integrations as TenantHttpOptions['integrations'];
   const tokens = raw.tokens as TenantTokenService | undefined;
   const tenantBranding = raw.branding as TenantBrandingService | undefined;
+  const tenantDomains = raw.domains as TenantDomainsService | undefined;
+  const domainsRoute = tenantDomains && tenantDomainsRoute(tenantDomains, tenantBranding);
   const search = raw.search as TenantHttpOptions['search'];
   const assistantSwitch = raw.assistant as TenantHttpOptions['assistant'];
   if (raw.readerName !== undefined && (typeof raw.readerName !== 'function' || isProxy(raw.readerName))) return denyTenant();
@@ -397,7 +374,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
    * session throughout, and still live once discovery has answered. `seen` is told the tenants discovery's first
    * snapshot found (tenantBootstrap.ts), to start what it would ask of them next beside the rest.
    */
-  const discoverFor = async (req: IncomingMessage, seen?: (tenantIds: readonly string[]) => void): Promise<TenantDiscovery> => {
+  const discoverAll = async (req: IncomingMessage, seen?: (tenantIds: readonly string[]) => void): Promise<TenantDiscovery> => {
     const proof = await verified(req);
     let expiresAt = proof?.expiresAt;
     /* What each tenant is called, and which is a sandbox, asked of the tenants the first snapshot found beside the
@@ -459,6 +436,16 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         ...(sandboxes.has(member.tenantId) ? { sandbox: true as const } : {}),
       })),
     };
+  };
+  /* On a tenant's own host the person is in that tenant alone: their sign-in there was pinned to it (auth/hostHandoff.ts),
+     so the other tenants they belong to, and the platform realm, are not that host's to offer or to open ahead. */
+  const discoverFor = async (req: IncomingMessage, seen?: (tenantIds: readonly string[]) => void): Promise<TenantDiscovery> => {
+    const intent = getTenantHostIntent(req);
+    if (!intent) return discoverAll(req, seen);
+    const found = await discoverAll(req, seen && ((ids) => seen(ids.filter((id) => id === intent.tenant))));
+    if (found.status !== 'ready') return found;
+    const { platform: _platform, ...rest } = found;
+    return { ...rest, memberships: found.memberships.filter((member) => member.tenantId === intent.tenant) };
   };
   const contexts = createTenantContexts({
     deployment: enrollment.deployment,
@@ -639,6 +626,10 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
          as they are read. Its client exports through `/api/run`, one ledgered read held to its ceiling. */
       if (onSupport && path === TENANT_EXPORT_PATH) return invalid(403);
       let selectors = tenantSelectors(url, selected && !platform);
+      /* A tenant's own host names that tenant and no other, and no realm: a session pinned there reaches nothing else
+         by asking for it, and a staff session never reaches this far on that host (auth.ts `sessionInstance`). */
+      const hostIntent = getTenantHostIntent(req);
+      if (hostIntent && (platform || onSupport || realm !== null || (selected && selectors[0] !== hostIntent.tenant))) return denyTenant();
       if (ownerHeadersRefused(req, app.id)) return invalid();
       if (control && [headers.tab, headers.context, headers.revision].some((name) => tenantHttpHeader(req, name) !== undefined))
         return invalid();
@@ -707,7 +698,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
            admission, exactly what the page could ask of `/open` for any tenant without asking discovery first, and
            nothing of the tenant is read before discovery has answered that it is the person's one. Where it is not,
            the lease is let go unseen. */
-        const hint = asked.tenant ?? asked.kept?.tenantId;
+        const named = asked.tenant ?? asked.kept?.tenantId;
+        const onHost = getTenantHostIntent(req);
+        const hint = onHost && named !== onHost.tenant ? undefined : named;
         let ahead = hint === undefined ? undefined : { tenantId: hint, lease: leaseIn(hint) };
         let found: TenantDiscovery;
         try {
@@ -1034,7 +1027,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           /* A read asked inside another (the page's boot): its own query string, and where the tables it answered
              from are told, where its own request's reply would have said them. */
           asked: { query?: URLSearchParams; told?: ReadsTold } = {},
-        ): Promise<{ status: number; body: unknown }> => {
+        ): Promise<{ status: number; body: unknown; headers?: Record<string, string> }> => {
           if (path === '/api/schema') return { status: 200, body: schema };
           if (metadataGets.has(path) || metadataPosts.has(path)) {
             const reply = (body: unknown) => ({ status: 200, body });
@@ -1190,6 +1183,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   platform &&
                   context.principal.roles.some((role: string) => app.auth?.roles?.[role]?.supportAudit === true);
                 const apiTokens = tokens !== undefined && !platform && !onSupport;
+                /* The Domains section, on the tenant's own lease alone, where its route answers. */
+                const domains = tenantDomains !== undefined && !platform && !onSupport && typeof tenantId === 'string';
                 const addresses = await addressesAsked;
                 /* For review on the tenant's own lease, where the proposals route answers, as a single App's is. */
                 const review =
@@ -1202,6 +1197,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   ...served,
                   ...(supportAudit ? { supportAudit: true as const } : {}),
                   ...(apiTokens ? { apiTokens: true as const } : {}),
+                  ...(domains ? { domains: true as const } : {}),
                   ...(review ? { review: true as const } : {}),
                   ...(addresses && Object.keys(addresses).length ? { addresses: { ...addresses } } : {}),
                 };
@@ -1314,6 +1310,10 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   };
                 throw error;
               }
+            }
+            if (domainsRoute?.serves(path)) {
+              const answered = await domainsRoute.answer(path, input, context.principal, { platform, onSupport }, () => verified(req));
+              return answered;
             }
             if (path === '/api/integrations' || path === '/api/integrations/save' || path === '/api/integrations/check') {
               /* The lease's tenant's integrations: which secrets are set, never a value, read by any member and
@@ -1814,7 +1814,13 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           assertActive();
           if (req.aborted || res.destroyed) return denyTenant();
         }
-        return send(req, res, result.value.status, value, failure ? {} : ownerHeaders(result.context));
+        return send(
+          req,
+          res,
+          result.value.status,
+          value,
+          failure ? ((result.value as { headers?: Record<string, string> }).headers ?? {}) : ownerHeaders(result.context),
+        );
       }
       /* Who a write is, for the record history its transaction keeps
          (tenantRecordHistoryStore.ts): the verified session's account, never a

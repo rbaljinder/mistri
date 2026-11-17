@@ -11,7 +11,7 @@ vi.mock('./AccountProfile.js', () => ({
     <div data-profile data-embedded={String(embedded)} data-focus={String(focus)} />
   ),
 }));
-vi.mock('../appState.js', () => ({ profileIsOffered: () => mocks.offered }));
+vi.mock('../appState.js', () => ({ profileIsOffered: () => mocks.offered, activeApp: () => null }));
 vi.mock('@mistriwork/kit/client/sessionIdentity.js', () => {
   const identity = { mode: 'authenticated' };
   return { sessionIdentity: () => identity, subscribeSessionIdentity: () => () => {} };

@@ -70,7 +70,7 @@ async function fixture(work: (db: DatabaseSync, path: string) => void | Promise<
     db.exec(`PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 0;
       CREATE TABLE business_record(id TEXT PRIMARY KEY, value TEXT NOT NULL);
       INSERT INTO business_record VALUES ('one', 'original')`);
-    if (provision) assert.deepEqual(provisionSqliteTenantStore(path, binding()), { version: 1, provisioned: true });
+    if (provision) assert.deepEqual(provisionSqliteTenantStore(path, binding()), { version: 2, provisioned: true });
     await work(db, path);
   } finally {
     db.close();
@@ -126,7 +126,7 @@ function evidence(db: DatabaseSync): TenantMembershipEvidence {
 test('explicit provisioning is idempotent, source-bound, and preserves existing business data', async () => {
   await fixture((db, path) => {
     const before = catalog(db);
-    assert.deepEqual(provisionSqliteTenantStore(path, binding()), { version: 1, provisioned: false });
+    assert.deepEqual(provisionSqliteTenantStore(path, binding()), { version: 2, provisioned: false });
     assert.doesNotThrow(() => assertSqliteTenantStore(db, binding()));
     assert.deepEqual(catalog(db), before);
     assert.equal(db.prepare('SELECT value FROM business_record').get()?.value, 'original');
@@ -177,7 +177,7 @@ test('connection registry handles may rotate but each lookup must match its capt
   await fixture(async (db, path) => {
     await seed(db);
     const rebound = { ...binding(), source: { ...binding().source, connection: 'new-registry-handle' } };
-    assert.deepEqual(provisionSqliteTenantStore(path, rebound), { version: 1, provisioned: false });
+    assert.deepEqual(provisionSqliteTenantStore(path, rebound), { version: 2, provisioned: false });
     assert.doesNotThrow(() => assertSqliteTenantStore(db, rebound));
     await denied(() => readSqliteTenantMembership(db, rebound, lookup()));
     assert.equal(readSqliteTenantMembership(db, rebound, { ...lookup(), source: rebound.source })?.membershipId, 'grant-1');

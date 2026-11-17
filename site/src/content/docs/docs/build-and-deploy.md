@@ -199,6 +199,8 @@ npx @mistriwork/mistri suite ./suite.json
 
 A `host` is a bare lowercase name: no port, wildcard or IP, and not the `publicOrigin`'s own. Mapping a host places a visitor; it grants nothing, and each read is still authorized as the tenant's visitor.
 
+To let tenant admins bring their own domains, and have Caddy or Cloudflare issue the certificates, see [Set up custom domains](/docs/custom-domains-setup/).
+
 ## Behind a load balancer
 
 Run several instances of the same image and config, each stateless:

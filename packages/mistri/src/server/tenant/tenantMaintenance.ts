@@ -23,7 +23,7 @@
  * transaction: an account removed in between is granted a membership no
  * session can ever present.
  */
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { statSync } from 'node:fs';
 import type { DatabaseSync } from 'node:sqlite';
 import { isDeepStrictEqual } from 'node:util';
@@ -76,7 +76,9 @@ import {
   type TenantStoreAdministration,
   type TenantStoreBinding,
 } from './tenantStore.js';
-import { binding as storeBinding } from './tenantStoreContract.js';
+import { binding as storeBinding, type TenantHostRow } from './tenantStoreContract.js';
+import { postgresTenantHostOps, sqliteTenantHostOps, type TenantHostChange, type TenantHostOps } from './tenantHostStore.js';
+import { notifyTenantHostsChanged, slugLabel, subdomainHost, type TenantDomain } from '../http/tenantHosts.js';
 import { createPostgresTenantAdministration, readPostgresActiveTenants } from './tenantStorePostgres.js';
 import { assertSqliteSupportAudit, createSqliteSupportAuditOwner } from './tenantSupportAudit.js';
 import { SUPPORT_AUDIT_KEY_VARIABLE, SUPPORT_AUDIT_PREFIX, supportAuditKey, type SupportAuditOwner } from './tenantSupportAuditContract.js';
@@ -310,6 +312,8 @@ interface Step {
   audit(): Promise<SupportAuditOwner | null>;
   /** This transaction's statements, for a clone, an import plan or a sandbox's clock (tenantCloneEngine.ts). */
   readonly rows: SandboxSession;
+  /** The host table, on this transaction (tenantHostStore.ts). */
+  readonly hosts: TenantHostOps;
 }
 function anchorImage(row: Record<string, unknown> | undefined): MaintenanceAnchorImage | null {
   if (!row) return null;
@@ -344,6 +348,7 @@ function sqliteStep(db: DatabaseSync, operations: TransactionOperations, owner: 
   };
   return {
     rows: sqliteSandboxSession(db, assertCurrent),
+    hosts: sqliteTenantHostOps(db, assertCurrent),
     store: createSqliteTenantAdministration(db, operations, owner, assertCurrent),
     journal: createSqliteTenantAdministrationJournal(db, operations, owner, assertCurrent),
     activeTenants: async () => {
@@ -433,6 +438,7 @@ function postgresStep(client: PgQuery, operations: TransactionOperations, owner:
   const supportColumns = MEMBER_COLUMNS.replace('valid_until', 'valid_until::text AS valid_until');
   return {
     rows: postgresSandboxSession(client, assertCurrent),
+    hosts: postgresTenantHostOps(client, assertCurrent),
     store: createPostgresTenantAdministration(client, operations, owner, assertCurrent),
     journal: createPostgresTenantAdministrationJournal(client, operations, owner, assertCurrent),
     activeTenants: async () => {
@@ -716,7 +722,10 @@ export interface MembershipResult {
 }
 
 /** Create a tenant (`expectedVersion: null`, which starts it active) or change
- * its status: suspend, reactivate, or close it for good. */
+ * its status: suspend, reactivate, or close it for good. A new tenant given a
+ * `tenantDomain` also claims its subdomain in the same transaction (`subdomain`,
+ * else its id as a label): a label that is reserved or taken refuses the whole
+ * step, so a tenant is never made without the address it was promised. */
 export async function putTenant(
   where: TenantMaintenanceTarget,
   binding: TenantStoreBinding,
@@ -725,16 +734,22 @@ export async function putTenant(
     status: AnchorStatus;
     expectedVersion: string | null;
     operator: string;
+    tenantDomain?: TenantDomain;
+    subdomain?: string;
   }>,
-): Promise<TenantAnchorResult> {
-  const value = request(input, ['tenantId', 'status', 'expectedVersion', 'operator'], 'putTenant');
+): Promise<TenantAnchorResult & Readonly<{ host?: string; hostReceiptId?: string }>> {
+  const { tenantDomain, subdomain, ...core } = (input ?? {}) as Record<string, unknown>;
+  const value = request(core, ['tenantId', 'status', 'expectedVersion', 'operator'], 'putTenant');
   const owner = bindingOf(binding),
     tenantId = tenantOf(value.tenantId),
     status = statusOf(value.status);
   const expectedVersion = versionOf(value.expectedVersion, true),
     operator = operatorOf(value.operator);
   if (expectedVersion === null && status !== 'active') refuse('A new tenant starts active.');
-  return transact(where, owner, async (step) => {
+  if (subdomain !== undefined && !tenantDomain) refuse('A subdomain is claimed under a tenantDomain, and none is set.');
+  if (tenantDomain && expectedVersion !== null) refuse('A subdomain is claimed when a tenant is created.');
+  const claim = tenantDomain ? claimedHost(tenantDomain as TenantDomain, tenantId, subdomain as string | undefined) : undefined;
+  const result = await transact(where, owner, async (step) => {
     const before = await step.anchor(tenantId, 'tenant');
     if (expectedVersion === null ? before : !before || before.version !== expectedVersion) return refuse(STALE);
     if (before?.status === 'closed') return refuse('The tenant is closed, and closing is for good.');
@@ -753,8 +768,369 @@ export async function putTenant(
       { tenantId, status, expectedVersion },
       { operation: 'putTenant', before, after },
     );
-    return Object.freeze({ status, version: after.version, receiptId });
+    const hostReceiptId = claim
+      ? await insertHost(step, owner, operator, tenantId, {
+          host: claim,
+          app: owner.appId,
+          kind: 'subdomain',
+          status: 'live',
+          primary: true,
+          source: 'claimed',
+        })
+      : undefined;
+    return Object.freeze({ status, version: after.version, receiptId, ...(claim ? { host: claim, hostReceiptId } : {}) });
   });
+  if (claim) notifyTenantHostsChanged();
+  return result as TenantAnchorResult & Readonly<{ host?: string; hostReceiptId?: string }>;
+}
+
+/* ---------- hosts ---------- */
+
+/** The host a new tenant claims, or a refusal in the operator's words. */
+function claimedHost(domain: TenantDomain, tenantId: string, label: string | undefined): string {
+  const chosen = label ?? slugLabel(tenantId);
+  if (chosen === undefined) return refuse(`"${tenantId}" does not make a subdomain label: name one with a subdomain.`);
+  try {
+    return subdomainHost(domain, chosen);
+  } catch (error) {
+    return refuse((error as Error).message);
+  }
+}
+const hostImageOf = (row: Pick<TenantHostRow, 'host' | 'app' | 'kind' | 'status' | 'primary' | 'source'>) =>
+  Object.freeze({ host: row.host, app: row.app, kind: row.kind, status: row.status, primary: row.primary, source: row.source });
+/** One host added, with its receipt, in the step's transaction. A tenant's first host is its primary. */
+async function insertHost(
+  step: Step,
+  owner: TenantStoreBinding,
+  operator: string,
+  tenantId: string,
+  host: Pick<TenantHostRow, 'host' | 'app' | 'kind' | 'status' | 'primary' | 'source'>,
+): Promise<string> {
+  const row: TenantHostRow = Object.freeze({
+    ...host,
+    tenantId,
+    verifyToken: null,
+    checkedAt: null,
+    failures: 0,
+    createdAt: Date.now(),
+    unavailableSince: null,
+    primary: host.primary || !(await step.hosts.list()).some((each) => each.tenantId === tenantId && each.primary),
+  });
+  if (!(await step.hosts.insert(row))) return refuse(`The address ${host.host} is already taken.`);
+  return record(
+    step,
+    owner,
+    operator,
+    'putTenantHost',
+    tenantId,
+    { tenantId, host: host.host },
+    { operation: 'putTenantHost', before: null, after: hostImageOf(row) },
+  );
+}
+function hostOf(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    value.length > 253 ||
+    !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/.test(value)
+  )
+    return refuse('host is a lowercase hostname of two or more labels, with no port, wildcard or scheme.');
+  return value;
+}
+
+/** Every host row, in byte order: what `mistri tenant host list` prints, and what a suite's router reads. */
+export async function listTenantHosts(where: TenantMaintenanceTarget, binding: TenantStoreBinding): Promise<readonly TenantHostRow[]> {
+  return transact(where, bindingOf(binding), (step) => step.hosts.list());
+}
+
+/** Adds a host to a tenant: a subdomain label under `tenantDomain` (`subdomain`) or a whole hostname the operator maps
+ * (`host`, a `custom` host an operator vouches for, so live at once). The tenant must exist and be open. */
+export async function putTenantHost(
+  where: TenantMaintenanceTarget,
+  binding: TenantStoreBinding,
+  input: Readonly<{
+    tenantId: string;
+    operator: string;
+    host?: string;
+    subdomain?: string;
+    tenantDomain?: TenantDomain;
+    primary?: boolean;
+  }>,
+): Promise<Readonly<{ host: string; receiptId: string }>> {
+  const { host, subdomain, tenantDomain, primary, ...core } = (input ?? {}) as Record<string, unknown>;
+  const value = request(core, ['tenantId', 'operator'], 'putTenantHost');
+  const owner = bindingOf(binding),
+    tenantId = tenantOf(value.tenantId),
+    operator = operatorOf(value.operator);
+  if ((host === undefined) === (subdomain === undefined)) refuse('Name the host: a subdomain label, or a whole hostname.');
+  if (subdomain !== undefined && !tenantDomain) refuse('A subdomain is claimed under a tenantDomain, and none is set.');
+  const name = subdomain !== undefined ? claimedHost(tenantDomain as TenantDomain, tenantId, subdomain as string) : hostOf(host);
+  const row = {
+    host: name,
+    app: owner.appId,
+    kind: subdomain !== undefined ? ('subdomain' as const) : ('custom' as const),
+    status: 'live' as const,
+    primary: primary === true,
+    source: subdomain !== undefined ? ('claimed' as const) : ('operator' as const),
+  };
+  const result = await transact(where, owner, async (step) => {
+    const anchor = await step.anchor(tenantId, 'tenant');
+    if (!anchor || anchor.status === 'closed') return refuse(`"${tenantId}" is not an open tenant of ${owner.appId}.`);
+    const receiptId = await insertHost(step, owner, operator, tenantId, row);
+    if (row.primary) await step.hosts.setPrimary(tenantId, name);
+    return Object.freeze({ host: name, receiptId });
+  });
+  notifyTenantHostsChanged();
+  return result;
+}
+
+/** Removes a host. The tenant's pages stop answering on it once a running suite next reads the table. With `tenantId`
+ * (a tenant's own Domains panel) another tenant's host reads as no host at all, so the refusal says nothing of it. */
+export async function removeTenantHost(
+  where: TenantMaintenanceTarget,
+  binding: TenantStoreBinding,
+  input: Readonly<{ host: string; operator: string; tenantId?: string }>,
+): Promise<
+  Readonly<{
+    host: string;
+    tenantId: string;
+    kind: TenantHostRow['kind'];
+    source: TenantHostRow['source'];
+    status: TenantHostRow['status'];
+    receiptId: string;
+  }>
+> {
+  const { tenantId: scope, ...rest } = (input ?? {}) as Record<string, unknown>;
+  const value = request(rest, ['host', 'operator'], 'removeTenantHost');
+  const owner = bindingOf(binding),
+    host = hostOf(value.host),
+    operator = operatorOf(value.operator),
+    only = scope === undefined ? undefined : tenantOf(scope);
+  const result = await transact(where, owner, async (step) => {
+    const row = await step.hosts.get(host);
+    if (!row || (only !== undefined && row.tenantId !== only)) return refuse(`${host} is not a host of ${only ?? owner.appId}.`);
+    if (!(await step.hosts.remove(host))) return refuse(STALE);
+    const receiptId = await record(
+      step,
+      owner,
+      operator,
+      'removeTenantHost',
+      row.tenantId,
+      { tenantId: row.tenantId, host },
+      { operation: 'removeTenantHost', before: hostImageOf(row), after: null },
+    );
+    return Object.freeze({ host, tenantId: row.tenantId, kind: row.kind, source: row.source, status: row.status, receiptId });
+  });
+  notifyTenantHostsChanged();
+  return result;
+}
+
+/** Makes a host its tenant's primary: where that tenant's links are written. */
+export async function setPrimaryTenantHost(
+  where: TenantMaintenanceTarget,
+  binding: TenantStoreBinding,
+  input: Readonly<{ tenantId: string; host: string; operator: string }>,
+): Promise<Readonly<{ host: string; receiptId: string }>> {
+  const value = request(input, ['tenantId', 'host', 'operator'], 'setPrimaryTenantHost');
+  const owner = bindingOf(binding),
+    tenantId = tenantOf(value.tenantId),
+    host = hostOf(value.host),
+    operator = operatorOf(value.operator);
+  const result = await transact(where, owner, async (step) => {
+    const row = await step.hosts.get(host);
+    if (!row || row.tenantId !== tenantId) return refuse(`${host} is not a host of ${tenantId}.`);
+    if (row.status !== 'live') return refuse(`${host} is not live, so it cannot be primary.`);
+    if (row.primary) return refuse(`${host} is already ${tenantId}'s primary.`);
+    if (!(await step.hosts.setPrimary(tenantId, host))) return refuse(STALE);
+    const receiptId = await record(
+      step,
+      owner,
+      operator,
+      'setPrimaryTenantHost',
+      tenantId,
+      { tenantId, host },
+      { operation: 'setPrimaryTenantHost', before: hostImageOf(row), after: hostImageOf({ ...row, primary: true }) },
+    );
+    return Object.freeze({ host, receiptId });
+  });
+  notifyTenantHostsChanged();
+  return result;
+}
+
+/** A domain a tenant claims for itself (Settings → Domains, or `mistri tenant host add --custom`): a `pending` custom
+ * row with a fresh verification token, never primary, live only once a check has seen its DNS records. `limit` is how
+ * many claimed custom domains the tenant may hold, pending ones included, so an abandoned claim still counts. The
+ * refusal for a taken name does not say who holds it. */
+export async function addCustomTenantHost(
+  where: TenantMaintenanceTarget,
+  binding: TenantStoreBinding,
+  input: Readonly<{ tenantId: string; host: string; operator: string; limit: number }>,
+): Promise<Readonly<{ host: string; verifyToken: string; receiptId: string }>> {
+  const value = request(input, ['tenantId', 'host', 'operator', 'limit'], 'addCustomTenantHost');
+  const owner = bindingOf(binding),
+    tenantId = tenantOf(value.tenantId),
+    host = hostOf(value.host),
+    operator = operatorOf(value.operator);
+  if (!Number.isInteger(value.limit) || (value.limit as number) < 0) refuse('limit is a whole number of domains.');
+  // Per row and never reused: the token proves this claim, so a removed and re-added domain is asked for a new record.
+  const verifyToken = `mistri-${randomBytes(24).toString('base64url')}`;
+  const result = await transact(where, owner, async (step) => {
+    /* The anchor is read FOR UPDATE on PostgreSQL (the writer lock is SQLite's), so two adds for one tenant take turns:
+       the second counts after the first has committed its row, and the limit cannot be passed by racing. */
+    const anchor = await step.anchor(tenantId, 'tenant');
+    if (!anchor || anchor.status === 'closed') return refuse(`"${tenantId}" is not an open tenant of ${owner.appId}.`);
+    const rows = await step.hosts.list();
+    if (rows.some((row) => row.host === host)) return refuse(`The address ${host} is already taken.`);
+    const held = rows.filter((row) => row.tenantId === tenantId && row.kind === 'custom' && row.source === 'claimed').length;
+    if (held >= (value.limit as number))
+      return refuse(`A tenant may add ${value.limit} custom domain${value.limit === 1 ? '' : 's'}; remove one first.`);
+    const row: TenantHostRow = Object.freeze({
+      host,
+      tenantId,
+      app: owner.appId,
+      kind: 'custom',
+      status: 'pending',
+      primary: false,
+      source: 'claimed',
+      verifyToken,
+      checkedAt: null,
+      failures: 0,
+      createdAt: Date.now(),
+      unavailableSince: null,
+    });
+    if (!(await step.hosts.insert(row))) return refuse(`The address ${host} is already taken.`);
+    const receiptId = await record(
+      step,
+      owner,
+      operator,
+      'putTenantHost',
+      tenantId,
+      { tenantId, host },
+      { operation: 'putTenantHost', before: null, after: hostImageOf(row) },
+    );
+    return Object.freeze({ host, verifyToken, receiptId });
+  });
+  notifyTenantHostsChanged();
+  return result;
+}
+
+/** Drops a claimed custom domain that is still `pending` and was made at or before `madeBefore`: the claim was never
+ * proven, so it stops holding the name. Decided inside the transaction on the row as it is now, so a domain verified a
+ * moment ago is never dropped; false when there is nothing to drop. A pending row requested no certificate, so there is
+ * none to release. */
+export async function expirePendingTenantHost(
+  where: TenantMaintenanceTarget,
+  binding: TenantStoreBinding,
+  input: Readonly<{ host: string; operator: string; madeBefore: number }>,
+): Promise<boolean> {
+  const value = request(input, ['host', 'operator', 'madeBefore'], 'expirePendingTenantHost');
+  const owner = bindingOf(binding),
+    host = hostOf(value.host),
+    operator = operatorOf(value.operator);
+  if (!Number.isInteger(value.madeBefore)) refuse('madeBefore is a time in milliseconds.');
+  const dropped = await transact(where, owner, async (step) => {
+    const row = await step.hosts.get(host);
+    if (
+      !row ||
+      row.kind !== 'custom' ||
+      row.source !== 'claimed' ||
+      row.status !== 'pending' ||
+      row.createdAt > (value.madeBefore as number)
+    )
+      return false;
+    if (!(await step.hosts.remove(host))) return false;
+    await record(
+      step,
+      owner,
+      operator,
+      'removeTenantHost',
+      row.tenantId,
+      { tenantId: row.tenantId, host },
+      { operation: 'removeTenantHost', before: hostImageOf(row), after: null },
+    );
+    return true;
+  });
+  if (dropped) notifyTenantHostsChanged();
+  return dropped;
+}
+
+/** One check's outcome written to a custom domain's row, compare-and-set on what the check read: the DNS lookup and the
+ * certificate call run between the read and this write, outside any transaction, so a row removed or changed meanwhile
+ * refuses and nothing is written. A receipt is journaled only when the status moves; a check that keeps it only
+ * records when it ran and how many have failed. */
+export async function recordTenantHostCheck(
+  where: TenantMaintenanceTarget,
+  binding: TenantStoreBinding,
+  input: Readonly<{ tenantId: string; host: string; operator: string; read: TenantHostRow; next: TenantHostChange }>,
+): Promise<Readonly<{ host: string; status: TenantHostRow['status']; receiptId: string | null }>> {
+  const value = request(input, ['tenantId', 'host', 'operator', 'read', 'next'], 'recordTenantHostCheck');
+  const owner = bindingOf(binding),
+    tenantId = tenantOf(value.tenantId),
+    host = hostOf(value.host),
+    operator = operatorOf(value.operator);
+  const read = value.read as TenantHostRow,
+    next = value.next as TenantHostChange;
+  if (
+    !['pending', 'verified', 'live', 'suspended'].includes(next?.status) ||
+    !Number.isInteger(next.failures) ||
+    (next.unavailableSince !== null && !Number.isInteger(next.unavailableSince))
+  )
+    refuse('next is a check outcome: a status, when it ran, its failures and when its answers began being unavailable.');
+  const result = await transact(where, owner, async (step) => {
+    const row = await step.hosts.get(host);
+    if (!row || row.tenantId !== tenantId || row.kind !== 'custom') return refuse(`${host} is not a host of ${tenantId}.`);
+    if (!isDeepStrictEqual({ ...row }, { ...read })) return refuse(STALE);
+    if (!(await step.hosts.update(host, next))) return refuse(STALE);
+    const receiptId =
+      next.status === row.status
+        ? null
+        : await record(
+            step,
+            owner,
+            operator,
+            'checkTenantHost',
+            tenantId,
+            { tenantId, host, status: next.status },
+            { operation: 'checkTenantHost', before: hostImageOf(row), after: hostImageOf({ ...row, status: next.status }) },
+          );
+    return Object.freeze({ host, status: next.status, receiptId });
+  });
+  if (result.receiptId) notifyTenantHostsChanged();
+  return result;
+}
+
+/** A suite's static `hosts`, seeded as `operator` rows where they are not rows yet: so the table is the one place the
+ * CLI lists them and a primary is chosen among them. The configuration still decides what is served; a row removed
+ * here comes back at the next start, because removing it is the configuration's to do. */
+export async function seedTenantHosts(
+  where: TenantMaintenanceTarget,
+  binding: TenantStoreBinding,
+  input: Readonly<{ hosts: readonly Readonly<{ host: string; tenantId: string }>[]; operator: string }>,
+): Promise<number> {
+  const value = request(input, ['hosts', 'operator'], 'seedTenantHosts');
+  const owner = bindingOf(binding),
+    operator = operatorOf(value.operator);
+  const wanted = (value.hosts as readonly { host: string; tenantId: string }[]).map((entry) => ({
+    host: hostOf(entry.host),
+    tenantId: tenantOf(entry.tenantId),
+  }));
+  const seeded = await transact(where, owner, async (step) => {
+    let added = 0;
+    for (const entry of wanted) {
+      if (await step.hosts.get(entry.host)) continue;
+      await insertHost(step, owner, operator, entry.tenantId, {
+        host: entry.host,
+        app: owner.appId,
+        kind: 'custom',
+        status: 'live',
+        primary: false,
+        source: 'operator',
+      });
+      added++;
+    }
+    return added;
+  });
+  if (seeded) notifyTenantHostsChanged();
+  return seeded;
 }
 
 /* ---------- sandboxes ---------- */

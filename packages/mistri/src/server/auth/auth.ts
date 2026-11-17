@@ -120,6 +120,20 @@ import { createEmbedExchange } from '../embed/exchange.js';
 import { assertionLedger, embedSessionMarks, type LedgerAdapter } from '../embed/ledger.js';
 import type { ProxyRange } from '@mistriwork/engine/server/http/trust.js';
 import { embedSignInPlugin, type EmbedApi, type EmbedSignInAnswer } from '../embed/signInPlugin.js';
+import { getTenantHostIntent, tenantHostIntentOf, type TenantHostIntent } from '../http/tenantHosts.js';
+import {
+  hostHandoffCodes,
+  hostPins,
+  hostSignInPlugin,
+  sessionLive,
+  type HostAdapter,
+  type HostApi,
+  type HostPin,
+  type HostPlace,
+  type HostSignIn,
+  type SessionCookies,
+  clearingCookies,
+} from './hostHandoff.js';
 import { oauthProblems, oauthRoleCeiling, type OAuthServerConfig } from '../api/oauthConfig.js';
 import { bindOAuthResource, oauthTenancyOf } from './oauthResource.js';
 import { scimEntriesFor, type ScimDirectoryConfig } from './scimConfig.js';
@@ -283,6 +297,7 @@ const suiteAuthSources = new WeakMap<AppAuthRuntime, AppAuthRuntime>();
 const nativeSignInAges = new WeakMap<AppAuthRuntime, ReturnType<typeof createNativeSignInAge>>();
 const nativeDisplayNames = new WeakMap<AppAuthRuntime, Readonly<{ displayName(proof: VerifiedSessionInstance): string }>>();
 const nativeStepUpProviders = new WeakMap<AppAuthRuntime, Readonly<{ provider(proof: VerifiedSessionInstance): string | undefined }>>();
+const nativeHostSignIns = new WeakMap<AppAuthRuntime, HostSignIn>();
 /** Where the deployment's OAuth authorization server issues for this runtime's App: the ceiling on its tokens' roles.
  * Absent, a token it issued is refused (the token observers). */
 const nativeOAuth = new WeakMap<AppAuthRuntime, Readonly<{ roles: readonly string[] }>>();
@@ -312,6 +327,12 @@ export function captureNativeDisplayName(runtime: AppAuthRuntime) {
 export function captureNativeStepUpProvider(runtime: AppAuthRuntime) {
   captureAppAuthRuntime(runtime);
   return nativeStepUpProviders.get(runtime) ?? denyTenant();
+}
+
+/** The sign-in handed to tenants' hosts, where this runtime signs people in; undefined where it signs no one in. */
+export function captureHostSignIn(runtime: AppAuthRuntime): HostSignIn | undefined {
+  captureAppAuthRuntime(runtime);
+  return nativeHostSignIns.get(runtime);
 }
 
 /** Genuine native-pool observation only. The composition owner must retire
@@ -691,6 +712,21 @@ export function createSuiteAppAuth(
     runtime,
     Object.freeze({ provider: (proof: VerifiedSessionInstance) => sessionProvider.provider(original(proof)) }),
   );
+  /* The same pins, read through the native proof: a projection's proof is the native session's under the App's roles. */
+  const hosts = nativeHostSignIns.get(source);
+  if (hosts)
+    nativeHostSignIns.set(
+      runtime,
+      Object.freeze({
+        pinned: (proof: VerifiedSessionInstance) => hosts.pinned(original(proof)),
+        mint: (proof: VerifiedSessionInstance, at: HostPlace, verifierHash: string, to: string) =>
+          hosts.mint(original(proof), at, verifierHash, to),
+        redeem: hosts.redeem,
+        signOut: (proof: VerifiedSessionInstance, everywhere: boolean, ending?: (sessionIds: readonly string[]) => void) =>
+          hosts.signOut(original(proof), everywhere, ending),
+        clearing: hosts.clearing,
+      }),
+    );
   registerSuiteAccountObservations(runtime, source, synchronous ? eligible : eligibleCurrent, current);
   return Object.freeze(runtime);
 }
@@ -1260,6 +1296,7 @@ export async function createAppAuth(
     return embedIssuers(configs, jose, environment, at);
   })();
   const embedPlugin = embedded.length ? await embedSignInPlugin(load) : undefined;
+  const hostPlugin = sessions ? await hostSignInPlugin(load) : undefined;
   /* The authorization server that issues for this App (api/oauthConfig.ts):
      judged now, before the store opens, as an identity provider is. Its
      consent is a session's, so a process that signs no one in serves none. */
@@ -1363,6 +1400,7 @@ export async function createAppAuth(
         ...(federation ? [federation.plugin] : []),
         ...(federation?.saml ? [federation.saml] : []),
         ...(embedPlugin ? [embedPlugin] : []),
+        ...(hostPlugin ? [hostPlugin] : []),
         ...(provisioning ? [provisioning.plugin] : []),
       ],
       /* The SAML plugin's registration and management routes, also refused by its allowlist (samlSignIn.ts). */
@@ -1547,6 +1585,31 @@ export async function createAppAuth(
       openedByHost.set(sessionId, marked);
       return marked;
     };
+    /* Sessions handed to a tenant's own host (hostHandoff.ts), and where each is pinned. A pin is written before its
+       session's cookie is handed to anyone and never changes, so an answer, either way, holds for the session's life
+       and is kept, bounded as a cache is. A store that cannot say refuses the session, never counts it as either. */
+    const hostAdapter = async () => ((await auth.$context) as unknown as { adapter: HostAdapter }).adapter;
+    const pins = hostPins(hostAdapter);
+    const handoffs = hostHandoffCodes(hostAdapter);
+    const pinsKnown = new Map<string, HostPin | null>();
+    const pinOf = async (sessionId: string): Promise<HostPin | null> => {
+      const known = pinsKnown.get(sessionId);
+      if (known !== undefined) return known;
+      const pin = await pins.read(sessionId);
+      if (pinsKnown.size >= 10_000) pinsKnown.delete(pinsKnown.keys().next().value!);
+      pinsKnown.set(sessionId, pin);
+      return pin;
+    };
+    /* Whether a session counts on this request's host: a pinned one only on the host, App and tenant it was pinned
+       to, and one of the deployment's own host never on a tenant's host, where its cookie was never meant to arrive. */
+    const countsAt = (intent: TenantHostIntent | undefined, pin: HostPin | null) => {
+      if (!intent) return pin === null;
+      return pin !== null && pin.host === intent.host && pin.app === intent.app && pin.tenant === intent.tenant;
+    };
+    const countsHere = (req: IncomingMessage, pin: HostPin | null) => countsAt(getTenantHostIntent(req), pin);
+    const pinnedProofs = new WeakMap<VerifiedSessionInstance, HostPin>();
+    const issuedProofs = new WeakSet<VerifiedSessionInstance>();
+    const hostApi = auth.api as unknown as HostApi;
     const embedExchange = embedded.length
       ? createEmbedExchange({
           appId: loaded.app.id,
@@ -1698,6 +1761,11 @@ export async function createAppAuth(
                 'tokenFor: the request carries no signed-in session, so there is no one to mint a token for.',
               );
             }
+            /* A token stands for its session wherever it is presented, so only a session that counts where this mint
+               was asked mints one: a session pinned to a tenant's host never becomes a bearer token anywhere else. */
+            const pin = await pinOf(got.session.id).catch(() => undefined);
+            if (pin === undefined || !countsAt(tenantHostIntentOf(request), pin))
+              throw new SurfaceTokenRefused('no_session', 'tokenFor: this session is not signed in here.');
             const identity = await identityOf(got.user as SessionUser, got.session.id);
             if (!identity) throw new SurfaceTokenRefused('no_session', 'tokenFor: this session has no roles in this App.');
             if (!surfaceFor(loaded.app, readerRoles(identity.role), input.surface)) {
@@ -1733,6 +1801,9 @@ export async function createAppAuth(
               return db.findOne<SessionUser & { banned?: unknown }>({ model: 'user', where: [{ field: 'id', value: claims.person }] });
             });
             if (!row || row.banned === true || row.banned === 1) return undefined;
+            // As the cookie's own session: one pinned to a tenant's host counts there and nowhere else.
+            const pin = await pinOf(claims.session).catch(() => undefined);
+            if (pin === undefined || !countsHere(req, pin)) return undefined;
             const identity = await identityOf(row, claims.session);
             if (!identity) return undefined;
             surfaceAdmitted.set(req, identity);
@@ -1762,6 +1833,24 @@ export async function createAppAuth(
         // Before anything reaches Better Auth, so no value the client sent under this name survives.
         req.headers[CLIENT_ADDRESS_HEADER] = clientAddress(req, opts.trustedProxies ?? []);
         const path = new URL(req.url ?? '', opts.baseURL).pathname;
+        /* A session handed to a tenant's host is that host's alone: none of Better Auth's own doors answer it, wherever
+           its cookie is replayed (a tenant's host never routes here; the deployment's own host could). */
+        if (req.headers.cookie?.includes(`${sessionCookie}=`)) {
+          const got = await sessionOf(req, true).catch(() => null);
+          const id = got?.session?.id;
+          if (typeof id === 'string' && (await pinOf(id).catch(() => undefined)) !== null) {
+            res
+              .writeHead(401, { 'content-type': 'application/json', 'cache-control': 'no-store' })
+              .end(JSON.stringify({ error: 'unauthorized' }));
+            return;
+          }
+          /* Retirement may have torn the request down while its session was read: handed on, Better Auth would take
+             the torn body for an empty one, and a sign-out needs no body. */
+          if (req.destroyed || closed) {
+            req.destroy();
+            return;
+          }
+        }
         if (path === `${under}/api/auth/profile`) return profileHandler(req, res);
         if (workEmail && path === `${under}/api/auth/work-email`) return workEmail(req, res);
         // Every provider's logout address answers, 404 for one that does not take it: none reaches Better Auth.
@@ -1830,6 +1919,9 @@ export async function createAppAuth(
             (asked = (async () => {
               const got = await sessionOf(req, false);
               if (!got?.user) return null;
+              /* The same rule as `sessionInstance`; a store that cannot say is no session here. */
+              const pin = typeof got.session?.id === 'string' ? await pinOf(got.session.id).catch(() => undefined) : null;
+              if (pin === undefined || !countsHere(req, pin)) return null;
               return identityOf(got.user as SessionUser, got.session?.id);
             })()),
           );
@@ -1849,6 +1941,9 @@ export async function createAppAuth(
           // That delegated login must never become the user's own tenant or
           // operator authority after its provenance is projected away.
           if (session.impersonatedBy !== undefined && session.impersonatedBy !== null) return denyTenant();
+          const pin = typeof session.id === 'string' ? await pinOf(session.id) : null;
+          if (closed) return denyTenant();
+          if (!countsHere(req, pin)) return null;
           const evidence = await federation?.stepUp.evidence(session.id);
           if (closed) return denyTenant();
           const role = await embedRole(
@@ -1881,7 +1976,13 @@ export async function createAppAuth(
           if (sayableName(name)) displayNames.set(proof, name);
           /* A session an identity provider opened is as recent, for a step-up,
              as the provider's own authentication says (identityProviders.ts). */
-          if (evidence) {
+          issuedProofs.add(proof);
+          if (pin) {
+            /* A session handed to a tenant's host was opened by a code, not by the person proving anything there: it
+               is never a recent sign-in, so a step-up there sends them to sign in again. */
+            pinnedProofs.set(proof, pin);
+            stepUps.instants.set(proof, null);
+          } else if (evidence) {
             stepUps.instants.set(proof, evidence.at);
             stepUps.providers.set(proof, evidence.provider);
           } else if (
@@ -1913,6 +2014,67 @@ export async function createAppAuth(
             sessionInstance: async () => denyTenant(),
           }),
     };
+    if (sessions)
+      nativeHostSignIns.set(
+        runtime,
+        Object.freeze({
+          pinned: (proof: VerifiedSessionInstance) => (issuedProofs.has(proof) ? (pinnedProofs.get(proof) ?? null) : denyTenant()),
+          async mint(proof: VerifiedSessionInstance, at: HostPlace, verifierHash: string, to: string) {
+            /* Only a session of the deployment's own host hands one out: a pinned one would carry its pin elsewhere. */
+            if (!issuedProofs.has(proof) || pinnedProofs.has(proof) || !(proof.expiresAt > Date.now())) return denyTenant();
+            return handoffs.mint({ ...at, userId: proof.identity.id, staffSessionId: proof.sessionId, to }, verifierHash);
+          },
+          async redeem(code: unknown, verifier: unknown, at: HostPlace, userAgent: string) {
+            if (closed) return denyTenant();
+            const handoff = await handoffs.redeem(code, verifier, at);
+            if (!handoff) return null;
+            /* The session that asked must still be there: signing out on the deployment's own host within the minute
+               leaves its code nothing to open. */
+            if (!(await sessionLive(await hostAdapter(), handoff.staffSessionId, Date.now(), handoff.userId))) return null;
+            const answer = await hostApi.mistriHostSignIn({
+              body: { userId: handoff.userId },
+              headers: new Headers({ 'user-agent': userAgent }),
+              returnHeaders: true,
+            });
+            if ('refused' in answer.response) return null;
+            const { sessionId, expiresAt } = answer.response;
+            const pin = Object.freeze({ ...at, staffSessionId: handoff.staffSessionId });
+            try {
+              await pins.pin(sessionId, pin, expiresAt);
+            } catch (error) {
+              /* Never handed out unpinned: unpinned, it would be a session of the deployment's own host. */
+              await hostApi.mistriHostEnd({ body: { sessionIds: [sessionId] } }).catch(() => {});
+              throw error;
+            }
+            pinsKnown.set(sessionId, pin);
+            return { cookies: answer.headers.getSetCookie(), to: handoff.to };
+          },
+          async signOut(proof: VerifiedSessionInstance, everywhere: boolean, ending?: (sessionIds: readonly string[]) => void) {
+            const pin = issuedProofs.has(proof) ? pinnedProofs.get(proof) : undefined;
+            if (!pin) return denyTenant();
+            /* Everywhere is the sign-in this host's session came from, and what it handed to any tenant's host: never the
+               account's other sessions, which this host has no business with. */
+            const ended = new Set([proof.sessionId]);
+            if (everywhere) {
+              ended.add(pin.staffSessionId);
+              for (const id of await pins.from(pin.staffSessionId)) ended.add(id);
+            }
+            ending?.([...ended]);
+            try {
+              await hostApi.mistriHostEnd({ body: { sessionIds: [...ended] } });
+            } finally {
+              for (const id of ended) {
+                pinsKnown.delete(id);
+                await pins.drop(id).catch(() => {});
+              }
+            }
+          },
+          async clearing(cookieHeader: string | undefined) {
+            const { authCookies } = (await auth.$context) as unknown as { authCookies: SessionCookies };
+            return clearingCookies(authCookies, cookieHeader);
+          },
+        }),
+      );
     /* A 5xx from any auth route is one line on stderr, with the route and the error but no request data (authFailureLog.ts). */
     const unwatched = runtime.handler;
     runtime.handler = (req, res) => failures.watch(req, res, () => unwatched(req, res));

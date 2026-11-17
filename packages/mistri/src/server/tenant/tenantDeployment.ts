@@ -619,6 +619,8 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
          operator's own tooling): the tenant is the caller's argument and wins
          over anything the query says, so a read for one tenant never returns
          another's rows. No member's route reads it. */
+      /* The host table's rows, for the suite's router: a plain read on the reader (http/tenantHosts.ts). Presentation only. */
+      readHosts: () => reader.readHosts(),
       readAudit: Object.freeze({
         read: (tenant: string, query: Omit<ReadAuditQuery, 'tenant'>) => writer.readReadAudit({ ...query, tenant }),
       }),

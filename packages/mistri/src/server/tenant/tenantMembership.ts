@@ -11,6 +11,7 @@ import {
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
 import { evidenceRefused, type AdmissionCache } from './tenantAdmissionCache.js';
+import { tenantHostIntentOf } from '../http/tenantHosts.js';
 
 /**
  * The reason recorded on a refusal whose evidence no longer matches the
@@ -268,6 +269,9 @@ export function createTenantMembershipIssuer<Request>(options: TenantMembershipO
           tenantIdentifier(session.id, 1024);
           if (typeof session.who !== 'string' || (session.role !== undefined && typeof session.role !== 'string')) return denyTenant();
           const tenantId = parseTenantSelector(selected);
+          /* On a tenant's own host, that tenant's membership and no other (http/tenantHosts.ts). */
+          const onHost = tenantHostIntentOf(request);
+          if (onHost && tenantId !== onHost.tenant) return denyTenant();
           const lookup = captureTenantData({
             appId: ownership.appId,
             accountId: session.id,

@@ -46,7 +46,10 @@ export function revisionHeader(req: IncomingMessage): number {
 /** Shared restart-only host boundary for the data transport and auth host. */
 export function tenantHttpBinding(value: unknown): () => Bound {
   const capture = (): Bound => {
-    const bound = captureTenantData(tenantOptions(value, ['host', 'port', 'allowedHosts', 'identityHeader']));
+    // `allowsHost` is a function, which captured data cannot hold: it is lifted out and put back, and it is pinned like the list.
+    const { allowsHost, ...plain } = tenantOptions(value, ['host', 'port', 'allowedHosts', 'identityHeader', 'allowsHost']);
+    if (allowsHost !== undefined && typeof allowsHost !== 'function') return denyTenant();
+    const bound = captureTenantData(plain);
     if (
       bound.identityHeader !== undefined ||
       typeof bound.host !== 'string' ||
@@ -59,12 +62,17 @@ export function tenantHttpBinding(value: unknown): () => Bound {
         (!Array.isArray(bound.allowedHosts) || bound.allowedHosts.some((value) => typeof value !== 'string')))
     )
       return denyTenant();
-    return bound as unknown as Bound;
+    return { ...bound, ...(allowsHost ? { allowsHost } : {}) } as unknown as Bound;
   };
   const original = capture();
   return () => {
     const current = capture();
-    if (current.host !== original.host || !isDeepStrictEqual(current.allowedHosts, original.allowedHosts)) return denyTenant();
+    if (
+      current.host !== original.host ||
+      !isDeepStrictEqual(current.allowedHosts, original.allowedHosts) ||
+      current.allowsHost !== original.allowsHost
+    )
+      return denyTenant();
     return current;
   };
 }

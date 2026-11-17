@@ -608,9 +608,26 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'tenant-store',
     title: 'tenants and memberships',
     tables: { prefix: '__mistri_tenant_' },
-    current: both(1),
+    current: both(2),
     read: marked({ sqlite: { table: '__mistri_tenant_meta' }, postgres: { table: '__mistri_tenant_meta' } }),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: "adds the host table: the subdomains and domains that show a tenant's public pages",
+          run: async ({ db }) => {
+            for (const sql of (await import('./tenant/tenantStore.js')).sqliteTenantStoreUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: "adds the host table: the subdomains and domains that show a tenant's public pages",
+          run: async ({ db }) => {
+            for (const sql of (await import('./tenant/tenantStorePostgres.js')).postgresTenantStoreUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+    },
     provisionTenant: {
       sqlite: async (path, binding) => ({ ...(await import('./tenant/tenantStore.js')).provisionSqliteTenantStore(path, binding) }),
       postgres: async (url, binding) => {

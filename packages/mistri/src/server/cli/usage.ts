@@ -820,6 +820,30 @@ A tenant App's sandboxes — a copy of a tenant to try changes in:
   clock, which its machine timers fall due on; a live tenant has none.
   Exit codes: 1 could not run.
 
+A tenant's addresses — a suite whose config sets tenantDomain or customDomains:
+  mistri tenant init [<tenant>...] [--app <dir>] --policy <file> --suite <suite.json> [--subdomain <label>]
+  mistri tenant host list [<tenant>] [--app <dir>] --policy <file>
+  mistri tenant host add <tenant> (--subdomain <label> --suite <suite.json> | --host <hostname>) [--primary]
+                  [--app <dir>] --policy <file> [--operator <name>]
+  mistri tenant host add <tenant> --custom <hostname> --suite <suite.json> [--app <dir>] --policy <file>
+  mistri tenant host verify <tenant> <host> --suite <suite.json> [--app <dir>] --policy <file>
+  mistri tenant host remove <host> [--suite <suite.json>] [--app <dir>] --policy <file>
+  mistri tenant host primary <tenant> <host> [--app <dir>] --policy <file>
+  With --suite, init gives each new tenant a subdomain under the suite's
+  tenantDomain in the step that makes it (--subdomain chooses the label, for
+  one tenant; else its id). host add gives a tenant a subdomain or a whole
+  hostname the operator vouches for, remove takes one away, primary picks
+  the host its links are written with. A label that is reserved (www, api,
+  app, admin, mail, auth, static, assets, status, docs, the suite's own) or
+  taken is refused. host add --custom adds a domain the tenant owns, pending
+  until its CNAME and its TXT _mistri-verify.<host> record (list prints
+  both) are found; host verify checks them over DNS-over-HTTPS, as the
+  tenant's Settings > Domains does, and a verified domain goes live once its
+  certificate is (the suite's customDomains.certificates). remove with
+  --suite releases a custom domain's certificate. Each change writes a
+  receipt; a running suite reads it within 30 seconds. Exit codes: 1 could
+  not run.
+
 Building an App for production — optional; an App also runs from its source:
 
   mistri build [--app <dir>] [--app-entry <file>] [--out <dir>]

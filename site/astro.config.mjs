@@ -167,6 +167,7 @@ export default defineConfig({
                 { label: 'Row access', slug: 'docs/row-access' },
                 { label: 'Secrets and hidden columns', slug: 'docs/secrets' },
                 { label: 'Tenant Apps', slug: 'docs/tenant-apps' },
+                { label: 'Tenant domains', slug: 'docs/tenant-domains' },
                 { label: 'Identity providers', slug: 'docs/identity-providers' },
                 { label: 'SAML 2.0', slug: 'docs/saml' },
                 { label: 'SCIM provisioning', slug: 'docs/scim' },
@@ -219,6 +220,7 @@ export default defineConfig({
           items: [
             { label: 'Build and deploy', slug: 'docs/build-and-deploy' },
             { label: 'Self-host', slug: 'docs/self-host' },
+            { label: 'Custom domains setup', slug: 'docs/custom-domains-setup' },
             { label: 'Move from tablewalk 0.9', slug: 'docs/upgrade-from-0-9' },
             { label: 'Connections and services', slug: 'docs/services' },
             { label: 'Installable PWAs', slug: 'docs/pwa' },

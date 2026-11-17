@@ -2,7 +2,14 @@
 import { readFile } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
 import { appMounts, parseBasePath, parseMountPath } from '@mistriwork/engine/shared/mount.js';
-import { normalizeSuitePublicOrigin, validateTenantHosts, type TenantHostIntent } from '../http/tenantHosts.js';
+import {
+  normalizeSuitePublicOrigin,
+  validateTenantDomain,
+  validateTenantHosts,
+  type TenantDomain,
+  type TenantHostIntent,
+} from '../http/tenantHosts.js';
+import { validateCustomDomains, type CustomDomainsConfig } from '../http/customDomains.js';
 import { EMAIL_KEYS, emailConnectionOf, type EmailServiceConfig } from '../email/email.js';
 import { checkIdentityProviders, oidcConnectionOf, samlConnectionOf, type FederatedProviderConfig } from '../auth/identityConfig.js';
 import { parseAnalyticsConfiguration, type AnalyticsConfiguration } from '../analytics/config.js';
@@ -16,6 +23,10 @@ export interface SuiteConfiguration {
   basePath: string;
   publicOrigin?: string;
   hosts?: readonly TenantHostIntent[];
+  /** The wildcard parent under which each tenant has a subdomain (tenantHosts.ts); absent, no subdomain is claimed. */
+  tenantDomain?: TenantDomain;
+  /** Domains a tenant brings itself (customDomains.ts); absent or `enabled: false`, none can be added. */
+  customDomains?: CustomDomainsConfig;
   identity?: {
     id: string;
     name: string;
@@ -116,6 +127,8 @@ export async function readSuiteConfiguration(file: string, environment: NodeJS.P
       'identity',
       'publicOrigin',
       'hosts',
+      'tenantDomain',
+      'customDomains',
       'email',
       'flags',
       'console',
@@ -263,6 +276,13 @@ export async function readSuiteConfiguration(file: string, environment: NodeJS.P
     apps.map((app) => app.id),
     publicOrigin,
   );
+  const tenantDomain = validateTenantDomain(input.tenantDomain, publicOrigin);
+  if (tenantDomain && !publicOrigin)
+    throw new Error("Suite tenantDomain needs publicOrigin: the staff address is one the tenants' subdomains must never take.");
+  const customDomains = validateCustomDomains(input.customDomains, {
+    ...(tenantDomain ? { tenantDomain } : {}),
+    ...(publicOrigin ? { publicOrigin } : {}),
+  });
   const identitySecrets = [identity?.environment.BETTER_AUTH_SECRET, ...apps.map((app) => app.environment.BETTER_AUTH_SECRET)].filter(
     (value): value is string => value !== undefined,
   );
@@ -297,5 +317,35 @@ export async function readSuiteConfiguration(file: string, environment: NodeJS.P
     ...(email ? { email } : {}),
     ...(publicOrigin ? { publicOrigin } : {}),
     ...(input.hosts === undefined ? {} : { hosts }),
+    ...(tenantDomain ? { tenantDomain } : {}),
+    ...(customDomains ? { customDomains } : {}),
   };
+}
+
+/** What `mistri tenant host` needs of a suite to add or check a tenant's own domain: read as a start reads them. */
+export async function readSuiteCustomDomains(
+  file: string,
+): Promise<{ customDomains?: CustomDomainsConfig; tenantDomain?: TenantDomain; staffHost?: string }> {
+  const input = record(JSON.parse(await readFile(file, 'utf8')), undefined, 'Suite');
+  const publicOrigin = input.publicOrigin === undefined ? undefined : normalizeSuitePublicOrigin(input.publicOrigin);
+  const tenantDomain = validateTenantDomain(input.tenantDomain, publicOrigin);
+  const customDomains = validateCustomDomains(input.customDomains, {
+    ...(tenantDomain ? { tenantDomain } : {}),
+    ...(publicOrigin ? { publicOrigin } : {}),
+  });
+  return {
+    ...(customDomains ? { customDomains } : {}),
+    ...(tenantDomain ? { tenantDomain } : {}),
+    ...(publicOrigin ? { staffHost: new URL(publicOrigin).hostname } : {}),
+  };
+}
+
+/** The `tenantDomain` of a suite file and nothing else, for the one-off commands that name a suite only to know its domain
+ * (`mistri tenant init --suite`): the rest of the file is not theirs to validate or to need the environment for. */
+export async function readSuiteTenantDomain(file: string): Promise<TenantDomain | undefined> {
+  const input = record(JSON.parse(await readFile(file, 'utf8')), undefined, 'Suite');
+  return validateTenantDomain(
+    input.tenantDomain,
+    input.publicOrigin === undefined ? undefined : normalizeSuitePublicOrigin(input.publicOrigin),
+  );
 }

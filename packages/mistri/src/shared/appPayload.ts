@@ -130,6 +130,8 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
   supportAudit?: true;
   /** Whether this member may make and end API tokens on their tenant's lease (a tenant App with an `api` block): a runtime answer. */
   apiTokens?: true;
+  /** Whether this member's tenant has custom domains to manage here (the suite's `customDomains`): a runtime answer, like `apiTokens`. */
+  domains?: true;
   /** The tenant's own public addresses, on its own lease alone: the intake address its public forms are
       published by and the public address its pages are, each only when it resolves back to this tenant. A runtime
       answer, read on every load, so a rotated address shows on the next; `useNavigate().publicLink` says them. */

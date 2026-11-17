@@ -130,6 +130,7 @@ const NOT_FOR_BEARERS = [
   '/api/integrations/save',
   '/api/integrations/check',
   '/api/branding/save',
+  '/api/domains',
   '/api/console',
   '/api/connections',
   '/api/sql',
