@@ -3,7 +3,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { readSqliteScopeCatalog } from '../packages/engine/src/adapters/scoped/sqliteScopeCatalog.js';
 import type { ColumnMeta, DatabaseSchema } from '../packages/engine/src/shared/schema.js';
-import { TenantContextError } from '../packages/engine/src/server/evidence.js';
+import { refusalCause, TenantContextError } from '../packages/engine/src/server/evidence.js';
 import {
   assertTenantOwnership,
   captureTenantOwnership,
@@ -899,3 +899,27 @@ for (const ddl of [
     }
   });
 }
+
+test('a refusal records the table, the column and the rule for the operator', () => {
+  const said = (value: Input) => {
+    try {
+      captureTenantOwnership(value as TenantOwnershipInput);
+    } catch (error) {
+      return String(refusalCause(error));
+    }
+    assert.fail('expected a refusal');
+  };
+  const nullable = input();
+  field(nullable).nullable = true;
+  synchronize(nullable);
+  assert.match(said(nullable), /tenant ownership: table "item" column "tenant_id" — the ownership column must be NOT NULL/);
+  const absent = input();
+  absent.ownership.item = { kind: 'tenant', column: 'clinic_id' };
+  assert.match(said(absent), /tenant ownership: table "item" column "clinic_id" — the ownership column is not in the table/);
+  const platform = input();
+  platform.ownership.country = { kind: 'platform' };
+  assert.match(
+    said(platform),
+    /table "item" column "country_code" — a tenant table may reference a platform table only as the tenancy profile/,
+  );
+});

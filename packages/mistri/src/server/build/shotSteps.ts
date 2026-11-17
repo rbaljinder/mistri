@@ -40,14 +40,68 @@ const said = (step: ShotStep) =>
 const CSS = 'css:';
 
 /** What a person would press: a button, link, tab, menu item, option or box by its accessible name, else any visible text; `css:<selector>` is a selector. */
-function clickable(page: Page, target: string): Locator {
+function clickableAll(page: Page, target: string): Locator {
   if (target.startsWith(CSS)) return page.locator(target.slice(CSS.length));
   const roles = ['button', 'link', 'tab', 'menuitem', 'option', 'checkbox', 'radio', 'switch'] as const;
   return roles
     .map((role) => page.getByRole(role, { name: target }))
     .reduce((all, next) => all.or(next))
-    .or(page.getByText(target).filter({ visible: true }))
-    .first();
+    .or(page.getByText(target).filter({ visible: true }));
+}
+
+/** How the matches of a click stand: a name often matches a hidden twin (a mobile menu, a template) or a disabled one. */
+interface Matches {
+  count: number;
+  /** Indexes into the matches that a person could press. */
+  usable: number[];
+  visible: number;
+}
+
+async function matchesOf(all: Locator): Promise<Matches> {
+  const found = await all.evaluateAll((elements) =>
+    elements.map((element) => {
+      const box = element as HTMLElement & { disabled?: boolean };
+      const shown =
+        (box.offsetWidth > 0 || box.offsetHeight > 0 || box.getClientRects().length > 0) &&
+        globalThis.getComputedStyle(box).visibility !== 'hidden';
+      return {
+        shown,
+        enabled: !box.disabled && !box.closest('[disabled], [aria-disabled="true"]'),
+        /* A button and the text inside it both match the name: that is one thing to press, the outer one. */
+        inner: elements.some((other) => other !== element && other.contains(element)),
+      };
+    }),
+  );
+  const own = found.map((match, index) => ({ ...match, index })).filter((match) => !match.inner);
+  return {
+    count: own.length,
+    visible: own.filter((match) => match.shown).length,
+    usable: own.filter((match) => match.shown && match.enabled).map((match) => match.index),
+  };
+}
+
+/** A click whose name more than one thing answers to: said as it is, not as a failure of the page. */
+class Ambiguous extends Error {}
+
+/** The one element a click means: the visible, enabled match, or a refusal that says how many there were. */
+async function clickable(page: Page, target: string): Promise<Locator> {
+  const all = clickableAll(page, target);
+  const { usable } = await matchesOf(all);
+  if (usable.length === 1) return all.nth(usable[0]!);
+  if (usable.length > 1)
+    throw new Ambiguous(`ambiguous: ${usable.length} matches for ${JSON.stringify(target)}; use a CSS selector (css:<selector>).`);
+  /* None usable yet: the page may still be drawing it, so the click's own wait decides, and a timeout says what was found. */
+  return all.first();
+}
+
+/** What a timed-out click found, to say beside the refusal. */
+async function foundFor(page: Page, target: string): Promise<string> {
+  try {
+    const { count, visible } = await matchesOf(clickableAll(page, target));
+    return count === 0 ? 'no element matched' : `${count} matched (${visible} visible, ${count - visible} hidden)`;
+  } catch {
+    return 'what matched could not be read';
+  }
 }
 
 /** What a person would type into: a box by its label, placeholder or accessible name; `css:<selector>` is a selector. */
@@ -77,15 +131,17 @@ export async function performSteps(
 ): Promise<void> {
   for (const step of steps) {
     try {
-      if (step.kind === 'click') await clickable(page, step.target).click({ timeout: STEP_MS });
+      if (step.kind === 'click') await (await clickable(page, step.target)).click({ timeout: STEP_MS });
       else if (step.kind === 'type') await typable(page, step.target).fill(step.text, { timeout: STEP_MS });
       else if (step.kind === 'press') await page.keyboard.press(step.key);
       else await page.getByText(step.text).filter({ visible: true }).first().waitFor({ state: 'visible', timeout: STEP_MS });
     } catch (error) {
+      if (error instanceof Ambiguous) refuse(`${said(step)} on ${path}: ${error.message}`);
       const why = (error as Error).message.split('\n')[0];
+      const found = step.kind === 'click' && /Timeout/i.test(why) ? await foundFor(page, step.target) : '';
       refuse(
         /Timeout/i.test(why)
-          ? `${said(step)}: nothing on ${path} matched within ${STEP_MS / 1000}s (a name is matched against buttons, links, tabs, menu items, boxes and visible text; css:<selector> names an element by selector).`
+          ? `${said(step)}: nothing on ${path} matched within ${STEP_MS / 1000}s${found ? ` (${found})` : ''} (a name is matched against buttons, links, tabs, menu items, boxes and visible text; css:<selector> names an element by selector).`
           : `${said(step)} failed on ${path}: ${why}`,
       );
     }

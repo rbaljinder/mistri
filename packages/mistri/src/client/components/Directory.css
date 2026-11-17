@@ -12,6 +12,7 @@
 .directory-section { display: grid; gap: var(--space-1); }
 .directory-group { margin: 0 0 var(--space-1); font: 500 var(--text-xs) var(--sans); letter-spacing: .06em; text-transform: uppercase; color: var(--ink-muted); }
 .directory-line { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3); border-radius: var(--radius-item); cursor: pointer; }
+@media (pointer: coarse) { .directory-line { min-height: 44px; } }
 .directory-line.active { background: var(--accent-soft); color: var(--accent-ink); }
 .directory-icon { width: 16px; height: 16px; color: var(--ink-muted); }
 .directory-line.active .directory-icon { color: inherit; }

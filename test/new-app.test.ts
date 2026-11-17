@@ -39,6 +39,11 @@ test('new writes a starter App that has rows, checks, and names its database for
   const db = new DatabaseSync(join(dir, 'house-chores.db'), { readOnly: true });
   try {
     assert.equal((db.prepare('SELECT count(*) AS n FROM task').get() as { n: number }).n, 5);
+    /* AUTOINCREMENT: a deleted row's id is never handed to a new one, which broke a link made to the old record. */
+    assert.match(
+      (db.prepare("SELECT sql FROM sqlite_master WHERE name = 'task'").get() as { sql: string }).sql,
+      /PRIMARY KEY AUTOINCREMENT/,
+    );
   } finally {
     db.close();
   }

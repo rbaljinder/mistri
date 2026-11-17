@@ -4,4 +4,7 @@ import { defineMessages } from '@mistriwork/kit/client/messages.js';
 export const say = defineMessages({
   openRecord: 'Open {label}',
   checkAgain: 'Check again',
+  copy: 'Copy',
+  copied: 'Copied',
+  copyLink: 'Copy link',
 });

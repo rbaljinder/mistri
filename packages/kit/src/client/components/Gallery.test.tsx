@@ -5,7 +5,7 @@
  * photo last seen.
  */
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { Gallery, type GalleryItem } from './Gallery.js';
 
@@ -85,7 +85,7 @@ test('the lead opens the lightbox on its photo; the steps, the arrow keys and th
   expect(within(dialog).getByText('2 of 4')).toBeInTheDocument();
   expect(within(dialog).getByText('Side profile', { selector: 'figcaption' })).toBeInTheDocument();
   // The neighbours either side were asked for before a step was taken.
-  expect(fetched).toEqual(expect.arrayContaining([items[0].src, items[2].src]));
+  await waitFor(() => expect(fetched).toEqual(expect.arrayContaining([items[0].src, items[2].src])));
 
   await user.click(within(dialog).getByRole('button', { name: 'Next photo' }));
   expect(within(dialog).getByText('3 of 4')).toBeInTheDocument();

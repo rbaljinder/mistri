@@ -265,7 +265,7 @@ export function schemaSql(brief: Brief): string {
   brief.entities.forEach(place);
   const tables = ordered.map(
     (entity) =>
-      `CREATE TABLE ${entity.name} (\n${['  id INTEGER PRIMARY KEY', ...entity.fields.map((f) => `  ${columnSql(f)}`)].join(',\n')}\n);`,
+      `CREATE TABLE ${entity.name} (\n${['  id INTEGER PRIMARY KEY AUTOINCREMENT', ...entity.fields.map((f) => `  ${columnSql(f)}`)].join(',\n')}\n);`,
   );
   /* A record page lists what points at it by the referencing column, and `mistri check` asks for an index there. */
   const indexes = ordered.flatMap((entity) =>

@@ -353,3 +353,23 @@ test('command payload: a listed target is named by the position the platform cou
     assert.equal(new CommandInputError(name).field, undefined, name);
   }
 });
+
+test('a command that names no record accepts its target members omitted, null or empty, and refuses a non-empty list', () => {
+  const base = { command: 'createLead', commandVersion: 1, idempotencyKey: 'request_123456789', input: { name: 'Ada' } };
+  const creating = { creating: true };
+  for (const spelled of [
+    {},
+    { key: null, expectedVersion: null },
+    { keys: null },
+    { keys: [], expectedVersions: [] },
+    { key: {}, expectedVersion: 0 },
+  ]) {
+    const parsed = parseCommandEnvelope({ ...base, ...spelled }, creating) as { key: object; expectedVersion: number };
+    assert.deepEqual(Object.keys(parsed.key), [], JSON.stringify(spelled));
+    assert.equal(parsed.expectedVersion, 0);
+  }
+  rejected(() => parseCommandEnvelope({ ...base, keys: [{ id: 1 }], expectedVersions: [0] }, creating));
+  // A command that does name a record is still refused the omission.
+  rejected(() => parseCommandEnvelope({ ...base, key: null, expectedVersion: 0 }));
+  rejected(() => parseCommandEnvelope(base));
+});

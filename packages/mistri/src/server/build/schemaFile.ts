@@ -40,6 +40,24 @@ const shownPath = (file: string) => {
   return short && !short.startsWith('..') ? short : file;
 };
 
+/**
+ * The stores the server makes beside the App's tables, made in the scratch too: the schema file declares only the
+ * App's own tables, so a check that reads the command journal, or a store the App declares (history, inbox, …),
+ * found nothing and failed on a database that is fine. Provisioned by the functions the stores step reads them with.
+ */
+export async function provisionJournals(scratch: { url: string; dialect: string }, app: AppDef | undefined): Promise<void> {
+  const [{ migrateSqliteCommandJournal }, { migratePostgresCommandJournal }, { provisionStores }] = await Promise.all([
+    import('../../adapters/commands/commandJournal.js'),
+    import('../../adapters/commands/postgresCommandJournal.js'),
+    import('../maintenance.js'),
+  ]);
+  const sqlite = scratch.dialect === 'sqlite';
+  const where = sqlite ? { sqlite: scratch.url } : { postgres: scratch.url };
+  if (sqlite) migrateSqliteCommandJournal(scratch.url);
+  else await migratePostgresCommandJournal(scratch.url);
+  if (app) await provisionStores(where, { app: { id: app.id, definition: app } });
+}
+
 /** The scratch database made from the App's schema file, or the reason it could not be (thrown, in the person's words). */
 export async function schemaFileCopy(
   appDir: string,
@@ -96,6 +114,7 @@ export async function schemaFileCopy(
       ...(opts.schemas[0] !== undefined ? { schema: opts.schemas[0] } : {}),
     });
     try {
+      await provisionJournals(scratch, app);
       const pointed = await pointAt(rest, opts, config, argument, connection?.name, scratch.url);
       return {
         args: pointed.args,

@@ -6,11 +6,31 @@
  * line; the host says how loudly (a polite status, an alert) through the
  * element's own attributes.
  */
-import type { HTMLAttributes } from 'react';
+import { useState, type HTMLAttributes } from 'react';
 import { Button } from '@mistriwork/ui/Button.js';
 import { outcomeTitle, type Outcome } from './outcomeModel.js';
 import { say } from '../copy/forms/components/CommandOutcome.js';
+import { copyLink } from './commandResult.js';
 import './CommandOutcome.css';
+
+/** An address the command handed back, drawn to be read and copied: selectable text beside a Copy that says it worked. */
+function ResultLink({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <p className="command-outcome-link">
+      <input data-slot="input" readOnly value={url} aria-label={say('copyLink')} onFocus={(event) => event.target.select()} />
+      <Button
+        intent="secondary"
+        size="compact"
+        onClick={() => {
+          void copyLink(url).then(setCopied);
+        }}
+      >
+        {copied ? say('copied') : say('copy')}
+      </Button>
+    </p>
+  );
+}
 
 export function CommandOutcome({
   outcome,
@@ -34,6 +54,7 @@ export function CommandOutcome({
     >
       <p className="command-outcome-title">{outcomeTitle(outcome)}</p>
       {outcome.said && <p className="command-outcome-body">{outcome.said}</p>}
+      {outcome.state === 'done' && outcome.links?.map((url) => <ResultLink key={url} url={url} />)}
       {outcome.state === 'done' && outcome.changed && onOpen && (
         <p className="command-outcome-next">
           <Button intent="quiet" size="compact" onClick={onOpen}>

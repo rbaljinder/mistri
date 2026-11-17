@@ -15,4 +15,7 @@
 .command-outcome-body { line-height: 1.45; overflow-wrap: anywhere; }
 .command-outcome-next { color: var(--ink-muted); line-height: 1.45; }
 .command-outcome > .command-outcome-check { margin-top: var(--space-2); }
+/* A minted link: the field takes the row, Copy keeps its width. */
+.command-outcome > .command-outcome-link { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-1); }
+.command-outcome-link input { flex: 1 1 auto; min-width: 0; }
 }

@@ -19,7 +19,7 @@ import { shownPath } from '../scaffold.js';
 
 const TABLES = `-- The schema this App wants. Change it here, then: npm run schema:diff -- <name>
 CREATE TABLE task (
-  id INTEGER PRIMARY KEY,
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
   version INTEGER NOT NULL DEFAULT 0,
   title TEXT NOT NULL CHECK (length(title) BETWEEN 1 AND 200),
   notes TEXT,

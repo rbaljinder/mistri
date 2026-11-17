@@ -32,6 +32,7 @@ import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/clien
 import { useCommandAnswers } from '../commandAvailability.js';
 import type { ActionBarProps, RecordActions } from '@mistriwork/kit/client/components/pageContext.js';
 import { orderActions } from './actionOrder.js';
+import { toastDone } from './commandResult.js';
 import { say } from '@mistriwork/kit/client/copy/record/components/Actions.js';
 import { addHostListener, removeHostListener } from '@mistriwork/kit/client/shellHost.js';
 
@@ -299,7 +300,7 @@ export function ActionBar({
         return;
       }
       // The command's own words when it said any ("Order #2461 is packed at SEC"), as its form would have said them.
-      toast(operation.said ?? say('actionDone', { label: action.label }), 'ok');
+      toastDone(operation.said ?? say('actionDone', { label: action.label }), operation.output);
       told(action, submitted.key, { status: 'done' });
       if (isCurrent(surface)) onDone();
       return;

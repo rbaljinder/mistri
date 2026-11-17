@@ -173,3 +173,22 @@ describe('on PostgreSQL', { skip: PG ? false : 'set TABLEWALK_TEST_PG=<a server 
     await assert.rejects(catalogOf(scratch.url));
   });
 });
+
+describe('the scratch database carries the stores the server makes', () => {
+  test('the command journal is there, so a check that reads it does not fail on a database that is fine', async () => {
+    const { provisionJournals } = await import('../packages/mistri/src/server/build/schemaFile.js');
+    const file = join(work, 'journal-scratch.db');
+    new DatabaseSync(file).close();
+    await provisionJournals({ url: file, dialect: 'sqlite' }, undefined);
+    const db = new DatabaseSync(file, { readOnly: true });
+    try {
+      const names = (db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as { name: string }[]).map((row) => row.name);
+      assert.ok(
+        names.some((name) => /command_receipt/.test(name)),
+        names.join(', '),
+      );
+    } finally {
+      db.close();
+    }
+  });
+});

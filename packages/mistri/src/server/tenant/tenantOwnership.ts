@@ -1,6 +1,6 @@
 import type { ColumnMeta, DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { assertScopeCatalog, captureScopeCatalog, mapScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
-import { captureTenantData, denyTenant, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
+import { captureTenantData, denyTenant, TenantContextError, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 
 /** `platform` rows belong to the platform realm: never readable or writable in
  * a tenant context, read in a platform context under its own row policy. */
@@ -46,12 +46,16 @@ export function captureTenantOwnership(input: TenantOwnershipInput): TenantOwner
 function judgeOwnership(input: TenantOwnershipInput): TenantOwnershipSnapshot {
   try {
     const given = captureTenantData(input);
+    /* The refusals below say where they stopped (the table, the column, the rule): recorded on the refusal for the
+       operator who started the deployment, never sent to a caller (evidence.ts). */
+    const refuse = (message: string) => denyTenant(new Error(`tenant ownership: ${message}`));
     tenantRecord(given, ['appId', 'source', 'schema', 'physicalSchema', 'resources', 'ownership', 'profile']);
     tenantIdentifier(given.appId);
     tenantRecord(given.source, ['id', 'connection']);
     tenantIdentifier(given.source.id);
     tenantIdentifier(given.source.connection, 1024);
-    if (!simple.test(given.source.id)) return denyTenant();
+    if (!simple.test(given.source.id))
+      return refuse(`source "${given.source.id}" — its id must be letters, digits and underscores, starting with a letter or underscore`);
     const schema = captureScopeCatalog(given.schema),
       physicalSchema = captureScopeCatalog(given.physicalSchema);
     const dialect = physicalSchema.dialect;
@@ -61,7 +65,9 @@ function judgeOwnership(input: TenantOwnershipInput): TenantOwnershipSnapshot {
       !schema.tables.length ||
       schema.tables.length > 256
     )
-      return denyTenant();
+      return refuse(
+        `the catalog must be one dialect, sqlite or postgres, in both the logical and the physical schema, with 1 to 256 tables (found ${schema.tables.length} ${schema.dialect}, physical ${dialect})`,
+      );
     tenantRecord(given.resources);
     tenantRecord(given.ownership);
     const logical = new Set(schema.tables.map((table) => table.id));
@@ -70,8 +76,15 @@ function judgeOwnership(input: TenantOwnershipInput): TenantOwnershipSnapshot {
       Object.keys(given.ownership).length !== logical.size ||
       Object.keys(given.resources).some((id) => !logical.has(id)) ||
       Object.keys(given.ownership).some((id) => !logical.has(id))
-    )
-      return denyTenant();
+    ) {
+      const nameless = schema.tables.map((table) => table.id).filter((id) => !(id in given.ownership));
+      const stray = Object.keys(given.ownership).filter((id) => !logical.has(id));
+      return refuse(
+        `every table needs exactly one owner and one physical resource` +
+          (nameless.length ? `; no owner for ${nameless.map((id) => `table "${id}"`).join(', ')}` : '') +
+          (stray.length ? `; owner for ${stray.map((id) => `"${id}"`).join(', ')}, which is not a table` : ''),
+      );
+    }
     const physical = new Map(physicalSchema.tables.map((table) => [table.id, table]));
     // SQLite's canonical IDs are main-table names; PostgreSQL's are always
     // schema-qualified. A presentation-only catalog comparison cannot attest
@@ -83,15 +96,21 @@ function judgeOwnership(input: TenantOwnershipInput): TenantOwnershipSnapshot {
           : !table.schema || table.id !== `${table.schema}.${table.name}`,
       )
     )
-      return denyTenant();
+      return refuse('a physical table id must be the bare table name in main (SQLite) or "schema.table" (PostgreSQL)');
     const mapped = new Map<string, string>();
     let tenants = 0;
     for (const table of schema.tables) {
-      if (!simple.test(table.id) || privateName(table.id) || table.isView) return denyTenant();
+      if (!simple.test(table.id) || privateName(table.id) || table.isView)
+        return refuse(
+          `table "${table.id}" — must be a plain table named with letters, digits and underscores, not a view and not __mistri_-prefixed`,
+        );
       const id = given.resources[table.id];
       tenantIdentifier(id, 1024);
       const source = physical.get(id);
-      if (!source || source.isView || privateName(source.name) || privateName(source.id) || mapped.has(id)) return denyTenant();
+      if (!source || source.isView || privateName(source.name) || privateName(source.id) || mapped.has(id))
+        return refuse(
+          `table "${table.id}" — its resource "${id}" ${!source ? 'is not in the database' : mapped.has(id) ? `is also the resource of table "${mapped.get(id)}"` : 'must be a plain table, not a view and not __mistri_-prefixed'}`,
+        );
       mapped.set(id, table.id);
       const ownership = given.ownership[table.id];
       tenantRecord(ownership);
@@ -111,19 +130,29 @@ function judgeOwnership(input: TenantOwnershipInput): TenantOwnershipSnapshot {
             ? /INT/i.test(field.type) || !/CHAR|CLOB|TEXT/i.test(field.type)
             : field.type !== 'text' && field.type !== 'character varying')
         )
-          return denyTenant();
+          return refuse(
+            `table "${table.id}" column "${ownership.column}" — ` +
+              (!field
+                ? 'the ownership column is not in the table'
+                : field.nullable
+                  ? 'the ownership column must be NOT NULL'
+                  : field.identity
+                    ? 'the ownership column must not be an identity column'
+                    : `the ownership column must be ${dialect === 'sqlite' ? 'text (not an integer type)' : 'text or varchar'}, not ${field.type || 'untyped'}`),
+          );
         tenants++;
       } else if (ownership.kind === 'global') {
         tenantRecord(ownership, ['kind', 'access']);
-        if (ownership.access !== 'read-only') return denyTenant();
+        if (ownership.access !== 'read-only') return refuse(`table "${table.id}" — a global table's access must be 'read-only'`);
       } else if (ownership.kind === 'platform') {
         tenantRecord(ownership, ['kind']);
-      } else return denyTenant();
+      } else return refuse(`table "${table.id}" — an owner is tenant, global or platform`);
     }
-    if (!tenants) return denyTenant();
+    if (!tenants) return refuse('no table is owned by a tenant column; at least one must be');
     if (given.profile !== undefined) {
       tenantIdentifier(given.profile);
-      if (!logical.has(given.profile) || given.ownership[given.profile].kind !== 'platform') return denyTenant();
+      if (!logical.has(given.profile) || given.ownership[given.profile].kind !== 'platform')
+        return refuse(`table "${given.profile}" — the tenancy profile must be a table the policy gives to the platform`);
     }
     assertScopeCatalog(schema, mapScopeCatalog(physicalSchema, mapped));
     // A global row is readable in every context, so it references globals
@@ -134,13 +163,17 @@ function judgeOwnership(input: TenantOwnershipInput): TenantOwnershipSnapshot {
     const checkEdge = (from: string, to: string, columns: readonly string[]) => {
       const source = given.ownership[from],
         target = given.ownership[to];
-      if (source.kind === 'global' && target.kind !== 'global') denyTenant();
+      const at = `table "${from}" column ${columns.map((column) => `"${column}"`).join(', ')}`;
+      if (source.kind === 'global' && target.kind !== 'global')
+        refuse(`${at} — a global table may reference only global tables, and "${to}" is ${target.kind}-owned`);
       if (
         source.kind === 'tenant' &&
         target.kind === 'platform' &&
         (to !== given.profile || columns.length !== 1 || columns[0] !== source.column)
       )
-        denyTenant();
+        refuse(
+          `${at} — a tenant table may reference a platform table only as the tenancy profile (${given.profile ?? 'none declared'}), and through its ownership column "${source.column}" alone`,
+        );
     };
     for (const fk of schema.foreignKeys) checkEdge(fk.from.table, fk.to.table, fk.from.columns);
     for (const table of schema.tables)
@@ -151,7 +184,9 @@ function judgeOwnership(input: TenantOwnershipInput): TenantOwnershipSnapshot {
     const snapshot = captureTenantData({ ...given, schema, physicalSchema });
     snapshots.add(snapshot);
     return snapshot;
-  } catch {
+  } catch (error) {
+    // A refusal above already says where it stopped; any other failure is denied as before.
+    if (error instanceof TenantContextError) throw error;
     return denyTenant();
   }
 }

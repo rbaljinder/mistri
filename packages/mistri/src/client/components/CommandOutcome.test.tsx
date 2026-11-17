@@ -2,6 +2,10 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { CommandOutcome } from './CommandOutcome.js';
 import { fieldWord, outcomeOfOperation, pendingOf, refusalNext } from './outcomeModel.js';
+import { resultLinks, toastDone } from './commandResult.js';
+import { toast } from '@mistriwork/kit/client/core.js';
+
+vi.mock('@mistriwork/kit/client/core.js', async (original) => ({ ...(await original<object>()), toast: vi.fn() }));
 import { formFailureOutcome } from './FormSurface.js';
 
 afterEach(cleanup);
@@ -105,4 +109,40 @@ test('unknown: the answer was lost, and Check again reads what was kept instead 
   expect(formFailureOutcome({ message: 'x' }, 'The form could not be sent.').state).toBe('unknown');
   expect(formFailureOutcome({ message: 'x', status: 502 }, 'x').state).toBe('unknown');
   expect(formFailureOutcome({ message: 'x', status: 503, code: 'temporarily_unavailable' }, 'x').state).toBe('refused');
+});
+
+test('done: an address the command handed back is shown, with a Copy that puts it on the clipboard', async () => {
+  const url = 'https://app.example.com/l/mstl1.abc';
+  const outcome = outcomeOfOperation({
+    phase: 'success',
+    message: '',
+    said: 'Invitation ready.',
+    output: { message: 'Invitation ready.', url },
+  });
+  expect(outcome).toMatchObject({ state: 'done', links: [url] });
+  const write = vi.fn(() => Promise.resolve());
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText: write }, configurable: true });
+  render(<CommandOutcome outcome={outcome} />);
+  expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe(url);
+  fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+  expect(write).toHaveBeenCalledWith(url);
+  expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
+});
+
+test('done: a result with no address, or text that only looks like one, adds nothing', () => {
+  expect(outcomeOfOperation({ phase: 'success', message: '', output: { id: 4, note: 'see https://x.test later' } })).not.toHaveProperty(
+    'links',
+  );
+  expect(resultLinks('https://a.test/x')).toEqual(['https://a.test/x']);
+  expect(resultLinks({ a: 'https://a.test', b: ['https://b.test'], c: 'javascript:alert(1)' })).toEqual([
+    'https://a.test',
+    'https://b.test',
+  ]);
+});
+
+test('the notice of a one-click command carries the address with a Copy beside it', () => {
+  toastDone('Done.', { url: 'https://a.test/x' });
+  expect(toast).toHaveBeenCalledWith('Done. https://a.test/x', 'ok', expect.objectContaining({ label: 'Copy' }));
+  toastDone('Done.', { id: 1 });
+  expect(toast).toHaveBeenLastCalledWith('Done.', 'ok');
 });

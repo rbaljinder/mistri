@@ -172,6 +172,24 @@ export function parseCommandRecoveryRequest(raw: unknown) {
   return Object.freeze({ command: data.command, commandVersion: data.commandVersion, idempotencyKey: data.idempotencyKey });
 }
 
+/**
+ * A command that names no record (`targets: 'none'`) has nothing to put in its target members, and callers spell that
+ * three ways: leave them out, null, or an empty list. All three are the same request, completed here to the
+ * single-target envelope's own spelling (an empty key, revision 0). A non-empty `keys` or `expectedVersions` is left
+ * as it came, and the creating command refuses it as before.
+ */
+function noTargets(request: Record<string, Json>, creating: boolean | ((command: string) => boolean) | undefined): Record<string, Json> {
+  const command = request.command;
+  if (typeof command !== 'string' || !(typeof creating === 'function' ? creating(command) === true : creating === true)) return request;
+  const empty = (member: Json | undefined) => member === undefined || member === null || (Array.isArray(member) && member.length === 0);
+  const kept: Record<string, Json> = { ...request };
+  for (const member of ['keys', 'expectedVersions'] as const) if (Object.hasOwn(kept, member) && empty(kept[member])) delete kept[member];
+  if (Object.hasOwn(kept, 'keys') || Object.hasOwn(kept, 'expectedVersions')) return request;
+  if (kept.key === null) delete kept.key;
+  if (kept.expectedVersion === null) delete kept.expectedVersion;
+  return { ...kept, key: kept.key ?? {}, expectedVersion: kept.expectedVersion ?? 0 };
+}
+
 /** The route supplies App identity separately; this payload never accepts actor/source/SQL.
  * `creating` admits an empty key: a form's command names no existing row. It
  * is the caller's answer for the command the envelope names.
@@ -185,7 +203,8 @@ export function parseCommandEnvelope(
     // The entire request has the same bound as input alone, including envelope overhead.
     const value = snapshot(raw, MAX_COMMAND_BYTES).value;
     if (!value || typeof value !== 'object' || Array.isArray(value)) return invalid();
-    const request = value as Record<string, Json>;
+    let request = value as Record<string, Json>;
+    request = noTargets(request, options.creating);
     const fields = Object.keys(request);
     const multi = Object.hasOwn(request, 'keys');
     const expected = multi ? multiFields : requestFields;

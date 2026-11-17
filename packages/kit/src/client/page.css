@@ -906,6 +906,11 @@
    were a scroll away from the record they act on. The page keeps the dock's clearance under its last section
    (style.css), and the pending dock, when it is up, stands over the bar. */
   @media (max-width: 600px) {
+    /* The bar's height with its safe-area inset, one number for the bar and for the room's clearance under it. */
+    body.app-mode { --record-bar-h: calc(64px + env(safe-area-inset-bottom, 0px)); }
+    /* A record laid out in a grid (.page-layout) is not the sibling the dock's clearance (style.css) is set on, so
+       its last section stood under the bar. */
+    body.app-mode .page-head.has-record.is-room:has(> .page-head-actions) + .page-layout { padding-bottom: var(--record-bar-h); }
     body.app-mode .page-head.has-record.is-room > .page-head-actions {
       position: fixed;
       z-index: 40;

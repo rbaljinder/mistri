@@ -147,7 +147,7 @@ describe('seed reads the domain off the schema', async () => {
     }
   });
 
-  test('the schedule spans the quarter, today and the weeks ahead', () => {
+  test('the schedule spans a fortnight either side of today', () => {
     const days = clinic.all('SELECT substr(scheduled_at, 1, 10) AS day FROM appointments').map((r) => String(r.day));
     const today = TODAY.toISOString().slice(0, 10);
     const ahead = days.filter((d) => d > today);
@@ -155,9 +155,9 @@ describe('seed reads the domain off the schema', async () => {
     assert.ok(days.includes(today), 'nothing today');
     assert.ok(ahead.length >= 3, 'nothing ahead');
     assert.ok(behind.length >= 3, 'nothing behind');
-    const ninety = new Date(TODAY.getTime() - 90 * 86_400_000).toISOString().slice(0, 10);
-    assert.ok(behind.every((d) => d >= ninety));
-    assert.ok(Math.max(...ahead.map((d) => Date.parse(d))) - Date.parse(today) <= 22 * 86_400_000);
+    const fortnight = new Date(TODAY.getTime() - 14 * 86_400_000).toISOString().slice(0, 10);
+    assert.ok(behind.every((d) => d >= fortnight));
+    assert.ok(Math.max(...ahead.map((d) => Date.parse(d))) - Date.parse(today) <= 15 * 86_400_000);
   });
 });
 
@@ -193,4 +193,52 @@ test('a table of things that happen at a time dates its plain date around today,
   } finally {
     read.close();
   }
+});
+
+test('planned-time columns (at, remind_at) on a schedule-like table spread across a fortnight, deterministically; audit columns stay behind', async () => {
+  const run = async (name: string) => {
+    const file = join(dir, name);
+    const db = new DatabaseSync(file);
+    db.exec(`CREATE TABLE customers (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+      CREATE TABLE slots (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id),
+        at TEXT NOT NULL, created_at TEXT NOT NULL);
+      CREATE TABLE reminders (id INTEGER PRIMARY KEY, customer_id INTEGER NOT NULL REFERENCES customers(id),
+        remind_at TEXT NOT NULL, created_at TEXT NOT NULL);`);
+    db.close();
+    const adapter = connect(file, { schemas: [] });
+    try {
+      await seedDatabase(adapter, await adapter.introspect(), {
+        rows: 40,
+        seed: 5,
+        today: TODAY,
+        resources: { customers: {}, slots: {}, reminders: {} },
+      });
+    } finally {
+      await adapter.close();
+    }
+    const read = new DatabaseSync(file, { readOnly: true });
+    try {
+      return {
+        slots: read.prepare('SELECT at, created_at FROM slots ORDER BY id').all() as Array<{ at: string; created_at: string }>,
+        reminders: read.prepare('SELECT remind_at, created_at FROM reminders ORDER BY id').all() as Array<{
+          remind_at: string;
+          created_at: string;
+        }>,
+      };
+    } finally {
+      read.close();
+    }
+  };
+  const first = await run('window-a.db');
+  assert.deepEqual(await run('window-b.db'), first);
+  const today = TODAY.toISOString().slice(0, 10);
+  const edge = (offset: number) => new Date(TODAY.getTime() + offset * 86_400_000).toISOString().slice(0, 10);
+  for (const days of [first.slots.map((r) => r.at.slice(0, 10)), first.reminders.map((r) => r.remind_at.slice(0, 10))]) {
+    assert.ok(days.some((d) => d > today) && days.some((d) => d < today), 'not spread around today');
+    assert.ok(
+      days.every((d) => d >= edge(-14) && d <= edge(14)),
+      'outside the fortnight',
+    );
+  }
+  for (const row of [...first.slots, ...first.reminders]) assert.ok(row.created_at.slice(0, 10) <= today, 'created_at after today');
 });

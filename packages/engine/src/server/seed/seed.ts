@@ -120,12 +120,12 @@ const COMPANY = /^(companies|company|accounts?|organi[sz]ations?|orgs?|vendors?|
 const BORN = [/created/i, /opened/i, /received|registered|reported|requested|raised|booked|logged/i, /ordered|placed|submitted/i, /date$/i];
 /* Columns that hold when something is to happen, not when it did: a schedule's dashboards read "today" and "next". */
 const SCHEDULE =
-  /(^|_)(appointment|appt|scheduled|starts?|begins?|follow_?up|planned|booked_for|check_?in|session|visit)(_|$)|^start_(at|on|date|time)$/i;
+  /(^|_)(appointment|appt|scheduled|starts?|begins?|follow_?up|planned|booked_for|check_?in|session|visit)(_|$)|^start_(at|on|date|time)$|^(remind|run|send|publish|fire|notify|trigger|release)_(at|on)$/i;
 /* Tables whose rows are things that happen at a time: their plain dates are when, not when the row was written. */
 /* When a row was written, as against a plain `date` or `at` that may say when the thing it holds happens. */
 const WRITTEN = BORN.slice(0, 4);
 const SCHEDULE_TABLE =
-  /^(appointments?|bookings?|visits?|sessions?|events?|reservations?|shifts?|lessons?|classes|meetings?|rentals?|viewings?)$/i;
+  /^(appointments?|bookings?|visits?|sessions?|events?|reservations?|shifts?|lessons?|classes|meetings?|rentals?|viewings?|slots?|schedules?|tours?|interviews?|deliver(y|ies)|pickups?)$/i;
 /* Optional by nature: a note may well be blank; every other text column is filled nearly always. */
 const OPTIONAL_TEXT =
   /(^|_)(notes?|comments?|remarks?|cancel(l?ation)?|middle_name|nickname|suffix|address_?line_?2|line_?2|fax|alt|secondary)(_|$)/i;
@@ -156,6 +156,8 @@ function moment(column: ColumnMeta, types: Record<string, string> | undefined): 
   const read = momentColumn(column);
   if (read) return read;
   if (columnKind(column.type ?? '') === 'date') return /time/i.test(column.type) ? 'instant' : 'date';
+  /* A bare `at` is the moment a thing is at, as a `_at` is (a slot's `at`), though the shared reading wants the suffix. */
+  if (columnKind(column.type ?? '') === 'text' && column.name === 'at') return 'instant';
   return columnKind(column.type ?? '') === 'text' && /(^|_)date$/i.test(column.name) ? 'date' : undefined;
 }
 
@@ -902,10 +904,11 @@ function crowd(dice: Dice, options: Array<Record<string, unknown>>): Crowd {
   };
 }
 
-/** When a scheduled thing happens: a little of it today, most of it ahead, a good deal behind within the quarter. */
+/** When a scheduled thing happens: a window of two weeks either side of today, a little of it today, as much behind as
+ * ahead, so a calendar's week and its "upcoming" and "past" lists all have rows (rows a quarter back left a week empty). */
 function scheduledFor(dice: Dice, today: Date): Date {
   const roll = dice.next();
-  const days = roll < 0.15 ? 0 : roll < 0.6 ? dice.int(1, 21) : -dice.int(1, 90);
+  const days = roll < 0.12 ? 0 : roll < 0.56 ? dice.int(1, 14) : -dice.int(1, 14);
   return new Date(today.getTime() + days * DAY + dice.int(8, 17) * 3_600_000 + dice.int(0, 3) * 15 * 60_000);
 }
 
