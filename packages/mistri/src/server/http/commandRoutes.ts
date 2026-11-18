@@ -10,13 +10,26 @@ import { clientAddress, publicFormLimiter } from '@mistriwork/engine/server/http
 import { COMMAND_ROUTES } from '../../shared/commandRoutes.js';
 import { commandActionLabel } from '../recordHistory.js';
 import { sessionActorWords } from '../app/appStamps.js';
-import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
+import type { Identity, RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { captureHttpCommandFlags } from '../flags/httpRuntime.js';
 import { stageFileHttp } from '../commands/stagedFileHttp.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { servesLinks, withLinkUrls } from '../links/linkLookup.js';
 import { withAppPublicUrls } from '../links/publicLink.js';
 import { personLocale, requestLocale } from '../app/readerLocale.js';
+
+/** Who runs a command on an App with no row policy: the verified session's account, roles and words. */
+export function sessionCommandActor(identity: Identity, id: string, appId: string) {
+  return {
+    id,
+    appId,
+    roles: (identity.role ?? '')
+      .split(',')
+      .map((role) => role.trim())
+      .filter(Boolean),
+    ...sessionActorWords(identity),
+  };
+}
 
 /**
  * `body`: the command's body where it was read already — availability asked
@@ -88,15 +101,7 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
       return true;
     }
     res.setHeader('x-mistri-app', signedIn.app.app.id);
-    const actor = {
-      id: identity.id,
-      appId: signedIn.app.app.id,
-      roles: (identity.role ?? '')
-        .split(',')
-        .map((role) => role.trim())
-        .filter(Boolean),
-      ...sessionActorWords(identity),
-    };
+    const actor = sessionCommandActor(identity, identity.id, signedIn.app.app.id);
     /* A file held for a command's files field, under the grant that runs the command (stagedFiles.ts). */
     if (path === COMMAND_ROUTES.files) {
       await stageFileHttp(ctx, connection, actor);

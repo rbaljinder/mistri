@@ -200,9 +200,28 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'record-history',
     title: 'record history',
     tables: { prefix: '__mistri_history_' },
-    current: both(1),
+    current: both(2),
     read: marked(everywhere('__mistri_history_meta')),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: "adds who made a command's write and the proposal it carried out",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/history/sqliteRecordHistory.js')).sqliteRecordHistoryUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: "adds who made a command's write and the proposal it carried out",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/history/postgresRecordHistory.js')).postgresRecordHistoryUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+    },
     provision: {
       sqlite: async (path) => (await import('../adapters/history/sqliteRecordHistory.js')).provisionSqliteRecordHistory(path),
       postgres: async (url) => (await import('../adapters/history/postgresRecordHistory.js')).provisionPostgresRecordHistory(url),
@@ -399,9 +418,9 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
   },
   {
     id: 'command-journal',
-    title: 'command receipts, audit and links',
+    title: 'command receipts, audit, links, proposals and provenance',
     tables: { prefix: '__mistri_command_' },
-    current: both(4),
+    current: both(5),
     read: marked({ sqlite: { table: '__mistri_command_meta' }, postgres: { table: '__mistri_command_meta' } }),
     upgrades: {
       sqlite: {
@@ -426,6 +445,15 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
             for (const sql of (await import('../adapters/commands/commandJournalSchema.js')).sqliteJournalUpgradeFrom3()) await db.run(sql);
           },
         },
+        4: {
+          says: 'says who a receipt ran for and the proposal it ran from, and adds the proposal and provenance tables',
+          run: async ({ db }) => {
+            /* Rebuilt as step 3 rebuilds it, under the same rule. */
+            const [keys] = await db.all<{ foreign_keys: number }>('PRAGMA foreign_keys');
+            if (Number(keys?.foreign_keys) !== 0) throw new StoreRefused('the journal is rebuilt with foreign keys off, and they are on');
+            for (const sql of (await import('../adapters/commands/commandJournalSchema.js')).sqliteJournalUpgradeFrom4()) await db.run(sql);
+          },
+        },
       },
       postgres: {
         1: {
@@ -446,6 +474,13 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
           says: "lets a receipt record an empty event batch, and gives a link its row's stamp",
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/commands/postgresCommandJournalSchema.js')).postgresJournalUpgradeFrom3())
+              await db.run(sql);
+          },
+        },
+        4: {
+          says: 'says who a receipt ran for and the proposal it ran from, and adds the proposal and provenance tables',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/commands/postgresCommandJournalSchema.js')).postgresJournalUpgradeFrom4())
               await db.run(sql);
           },
         },

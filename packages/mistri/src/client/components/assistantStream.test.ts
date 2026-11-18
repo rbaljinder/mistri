@@ -55,6 +55,9 @@ test('a proposal waits until its outcome, and a later message ends the wait', ()
     waitingProposal([...items.slice(0, 1), { type: 'proposal', id: 'p1', proposal, outcome: { status: 'declined' } }]),
   ).toBeUndefined();
   expect(waitingProposal([...items, { type: 'person', text: 'later' }])).toBeUndefined();
+  // A command kept for review waits in the queue, not in the conversation: the turn went on.
+  const kept = { ...proposal, kind: 'command' as const, review: 'r1' };
+  expect(waitingProposal([items[0], { type: 'proposal', id: 'p2', proposal: kept }])).toBeUndefined();
 });
 
 test('consecutive steps fold into one group', () => {

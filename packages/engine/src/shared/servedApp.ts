@@ -700,6 +700,10 @@ export interface ServedApp<View extends object = ServedDashboardView | ServedFor
   /** The menu holds more than `DIRECTORY_AT` places: a Directory room lists them all, at `/{app}/all-pages`. Its icon
       is named here so its glyph rides the payload, as the assistant's does. */
   directory?: { icon: import('./appIcons.js').AppIconName };
+  /** The word the App's AI mark says (`ai.label`), "AI" when absent (kit AiMark). */
+  ai?: { label: string };
+  /** This reader may approve something an AI can propose: For review, `/{app}/review`, and the proposals list. */
+  review?: true;
 }
 
 /** A menu node as the view order reads it: a view's reference, a group of nodes, or a link elsewhere. */
@@ -732,6 +736,9 @@ export const DIRECTORY_ROOM = 'all-pages';
 /** The reader's settings, `/{app}/settings`: their profile and their preferences on one page. An App that already
  * uses the word keeps it, as with the Directory, and the account menu still opens the room. */
 export const SETTINGS_ROOM = 'settings';
+/** For review, `/{app}/review`: what an AI proposed that this reader may approve, and the values it wrote that no
+ * person has confirmed. Claimed like the settings: an App that already uses the word keeps it. */
+export const REVIEW_ROOM = 'review';
 /** How many places a menu holds before a Directory is offered beside it: past a dozen, scanning a menu is a search. */
 export const DIRECTORY_AT = 12;
 

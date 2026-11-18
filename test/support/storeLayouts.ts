@@ -579,7 +579,10 @@ export async function applyFixture(engine: Engine, url: string, text: string): P
 const SEQUENCES = { store: 'command-sequences', only: /^(\w+\.)?(__mistri_)?sequence_/ } as const;
 const STAGING = { store: 'command-staging', only: /^(\w+\.)?(__mistri_)?staged_/ } as const;
 const EVENTS = { store: 'command-events', only: /^(\w+\.)?(__mistri_)?event_(meta|event)$/ } as const;
-const JOURNAL = { store: 'command-journal', only: /^(\w+\.)?(__mistri_)?command_(meta|receipt|audit_part|link)$/ } as const;
+const JOURNAL = {
+  store: 'command-journal',
+  only: /^(\w+\.)?(__mistri_)?command_(meta|receipt|audit_part|link|proposal|provenance)$/,
+} as const;
 const BENEATH: Readonly<Record<string, readonly { readonly store: string; readonly only?: RegExp }[]>> = {
   'api-tokens': [{ store: 'auth' }],
   // Provisioning a journal also leaves its sequences and its held files, which have versions of their own; the

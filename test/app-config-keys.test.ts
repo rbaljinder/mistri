@@ -18,6 +18,7 @@ const KEYS: Record<string, string> = {
   experiments: 'Preview: epochs span flags and analytics',
   analytics: 'Preview: behavior events are declared once for the whole App',
   assistant: 'The in-App assistant composes any block under the signed-in role, so it belongs to no one view',
+  ai: 'The one word every AI mark says, the same on every surface',
   retention: 'How long the runtime keeps what it writes about the whole App',
   id: 'The App is addressed by it',
   name: 'The App is titled by it',

@@ -5,18 +5,31 @@
  *
  * Until the chip's code is here its place is held by the answer's words in the same muted ink, so the line it stands
  * on is the height it will be.
+ *
+ * The same slot says what waits on the record from a maker that is not a person: the AI proposals on it, as a line
+ * under its head, and the fields an AI or a job wrote that no person has confirmed, marked at the field. Both are read
+ * from the shell's one review list (commandProposals.ts `useReview`, asked once after first paint and only where the
+ * App offers review), so a record opening adds no request. Here it is only asked whether anything waits on this
+ * table; RecordProposalLine.tsx narrows it to the record and draws it, and loads the first time a table has some.
+ * That narrowing is not here because this module is in every App's first paint.
  */
-import { lazy, Suspense, useMemo, useRef } from 'react';
+import { lazy, Suspense, useMemo, useRef, type ReactNode } from 'react';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { api } from '@mistriwork/kit/client/core.js';
+import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import type { FieldAdornment } from '@mistriwork/kit/client/components/pageContext.js';
 import type { FieldSuggestion } from '../../shared/decisionSuggestions.js';
 import { activeApp } from '../appState.js';
+import { useReview } from '../commandProposals.js';
 import './decisionMarks.css';
 
 const NOTHING: readonly string[] = Object.freeze([]);
 
 const DecisionChip = lazy(() => import('./DecisionChip.js'));
+/* Both from one module, drawn as nothing until it is here: one chunk request, and a line that only appears. */
+const proposalLine = () => import('./RecordProposalLine.js');
+const RecordReview = onDemand(proposalLine, 'RecordReview', { quiet: true });
+const FieldReview = onDemand(proposalLine, 'FieldReview', { quiet: true });
 
 const suggestionsKey = (connection: string, table: string, key?: string) =>
   key === undefined ? ['record-decisions', connection, table] : ['record-decisions', connection, table, key];
@@ -37,10 +50,16 @@ export function useRecordDecisions(
   table: string,
   recordKey: Readonly<Record<string, unknown>> | undefined,
   onLanded: () => void,
-): { adorn?: FieldAdornment; held: readonly string[] } {
+): { adorn?: FieldAdornment; held: readonly string[]; notice?: ReactNode } {
   const keyText = JSON.stringify(recordKey ?? null);
   const client = useQueryClient();
-  const answered = activeApp()?.decisions?.[table];
+  const app = activeApp();
+  const answered = app?.decisions?.[table];
+  const review = useReview(connection || null, Boolean(app?.review) && recordKey !== undefined);
+  /* Whether anything waits on this table at all: the proposals are of commands the reader may decide, any of which may
+     be on this record, and the marks name their table. */
+  const waiting = Boolean(review && recordKey && (review.proposals.length || review.unconfirmed.some((mark) => mark.resource === table)));
+  const fieldMarks = review && recordKey ? review.unconfirmed.filter((mark) => mark.resource === table && mark.field !== null) : [];
   const decided = Boolean(answered) && recordKey !== undefined;
   const asked = useQuery({
     queryKey: suggestionsKey(connection, table, keyText),
@@ -53,7 +72,7 @@ export function useRecordDecisions(
   const landed = useRef(onLanded);
   landed.current = onLanded;
   const adorn = useMemo((): FieldAdornment | undefined => {
-    if (!decided || !recordKey) return undefined;
+    if (!recordKey || (!decided && !fieldMarks.length)) return undefined;
     const settled = () => {
       refreshDecisions(client, connection, table);
       landed.current();
@@ -62,17 +81,27 @@ export function useRecordDecisions(
        a phone gives its value the line under the caption before one comes (decisionMarks.css): beside the caption, a
        suggestion trailing the value widened it past the line, and the value dropped under the caption late. */
     return ({ column, filled }) => {
+      const unconfirmed = fieldMarks.some((each) => each.field === column) ? (
+        <FieldReview marks={fieldMarks} table={table} column={column} recordKey={recordKey} />
+      ) : null;
+      if (!decided) return unconfirmed;
       const suggestion = suggestions?.find((each) => each.field === column);
-      if (!suggestion) return filled && Object.hasOwn(answered!, column) ? <span className="decision-slot" /> : null;
+      if (!suggestion)
+        return filled && Object.hasOwn(answered!, column) ? <span className="decision-slot">{unconfirmed}</span> : unconfirmed;
       return (
         <span className="decision-slot">
           <Suspense fallback={<span className="decision-chip-held">{suggestion.label}</span>}>
             <DecisionChip suggestion={suggestion} table={table} recordKey={recordKey} onSettled={settled} />
           </Suspense>
+          {unconfirmed}
         </span>
       );
     };
-  }, [decided, suggestions, client, connection, table, keyText]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [decided, suggestions, review, client, connection, table, keyText]); // eslint-disable-line react-hooks/exhaustive-deps
   const held = decided && asked.isPending && asked.fetchStatus !== 'idle' ? Object.keys(answered!) : NOTHING;
-  return adorn ? { adorn, held } : { held };
+  const notice =
+    review && recordKey && waiting ? (
+      <RecordReview review={review} table={table} recordKey={recordKey} onLanded={() => landed.current()} />
+    ) : undefined;
+  return { ...(adorn ? { adorn } : {}), held, ...(notice ? { notice } : {}) };
 }

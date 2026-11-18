@@ -178,6 +178,20 @@ async function runManaged<T>(
     counting = own('countLinks') ? journalMethod('countLinks') : undefined,
     opening = own('openLink') ? journalMethod('openLink') : undefined,
     reading = own('readLink') ? journalMethod('readLink') : undefined;
+  // Proposals and provenance marks, where the store keeps them, in the same namespace (commandProposals.ts).
+  const proposing = (
+    [
+      'createProposal',
+      'readProposal',
+      'listProposals',
+      'decideProposal',
+      'settleProposal',
+      'expireProposals',
+      'markProvenance',
+      'confirmProvenance',
+      'unconfirmedProvenance',
+    ] as const
+  ).flatMap((name) => (own(name) ? [[name, journalMethod(name)] as const] : []));
   const operations = new TransactionOperations();
   let accepting = true;
   let callbackFailure: { error: unknown } | undefined;
@@ -434,6 +448,12 @@ async function runManaged<T>(
                 invoke({ appId, id, now }, (input) => reading(input.appId, input.id, input.now)),
             }
           : {}),
+        ...Object.fromEntries(
+          proposing.map(([name, method]) => [
+            name,
+            (...args: unknown[]) => invoke({ args }, (input) => (method as (...args: unknown[]) => Promise<unknown>)(...input.args)),
+          ]),
+        ),
       })
     : undefined;
   const completed = (value: T): T => {

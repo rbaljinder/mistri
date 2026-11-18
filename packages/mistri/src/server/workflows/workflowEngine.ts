@@ -44,6 +44,7 @@ import {
   FlowStopped,
   parseDuration,
   stepName,
+  StepPending,
   StepRefused,
   WorkflowDeclarationError,
   type CallOptions,
@@ -253,8 +254,10 @@ export async function advance(env: EngineEnvironment, id: string): Promise<Advan
     const maxBackoffMs = parseDuration(options?.retry?.max ?? defaults.max, 'retry.max');
     const timeoutMs = Math.min(stepTimeoutMs, parseDuration(options?.timeout ?? DEFAULTS.timeout, 'timeout'));
     const tried = recorded?.attempts ?? 0;
-    // A back-off that has not run out is waited for by a timer, not by this advance.
-    if (recorded?.wakeAt != null && env.now() < recorded.wakeAt) return suspend(name, recorded.wakeAt).then(() => undefined);
+    /* A back-off that has not run out is waited for by a timer, not by this advance. A step waiting on a person is
+       looked at again whenever the instance is woken: an approval wakes it (workflowHost.ts), and the look is cheap. */
+    if (recorded?.wakeAt != null && recorded.status !== 'pending' && env.now() < recorded.wakeAt)
+      return suspend(name, recorded.wakeAt).then(() => undefined);
     if (performance.now() - startedAt > budgetMs) {
       const next = await serial(() => store.release(id, epoch, env.now()));
       return stop(next === undefined ? { status: 'overtaken' } : { status: 'continue', epoch: next });
@@ -293,6 +296,21 @@ export async function advance(env: EngineEnvironment, id: string): Promise<Advan
       return JSON.parse(json);
     } catch (error) {
       if (ended) return new Promise<never>(() => {});
+      if (error instanceof StepPending) {
+        // Waiting on a person is not a failed try: the attempt count stays, and the step is looked at again then.
+        await persist(name, {
+          kind,
+          hash,
+          status: 'pending',
+          attempts: tried,
+          wakeAt: error.wakeAt,
+          resultJson: null,
+          eventId: null,
+          errorCode: 'proposed',
+        });
+        await suspend(name, error.wakeAt);
+        return undefined;
+      }
       if (error instanceof StepRefused) {
         await persist(name, {
           kind,

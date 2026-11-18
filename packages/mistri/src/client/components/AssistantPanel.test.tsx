@@ -15,6 +15,8 @@ import { registerPeek } from '../../../../kit/src/client/uiBridge.js';
 /* The App the panel sits in, set per test; the rest of appState is the real one. */
 const mocks = vi.hoisted(() => ({ app: null as unknown }));
 vi.mock('../appState.js', async (original) => ({ ...(await original<typeof import('../appState.js')>()), activeApp: () => mocks.app }));
+/* A command's revision is the command pipeline's own read (sdk/proposalCommands.ts); here it is the record's version as it is now. */
+vi.mock('./sdk/proposalCommands.js', () => ({ commandRevision: async () => 3 }));
 /* The kit reads the App through the shell's answers (shellMode.ts), which the mock above gives it. */
 beforeEach(bridgeShell);
 /* The record's verbs are ActionBar's own (Actions.test.tsx drives it, outcome
@@ -144,10 +146,57 @@ test('a turn streams in as words, a folded step and a proposal card; nothing is 
   expect(box).toBeEnabled();
   expect(box).not.toHaveAccessibleDescription();
   expect(screen.queryByText('Waiting for you to confirm or decline.')).toBeNull();
-  expect(screen.getByText('Declined.')).toBeInTheDocument();
+  expect(screen.getByText('Dismissed')).toBeInTheDocument();
   expect(bodies()[1]).toEqual(['/api/assistant/resolve', { app: 'compass', conversation: 'c1', proposal: 'p1', outcome: 'declined' }]);
   // No write path was asked: declining writes nothing.
   expect(fetcher.mock.calls.some(([url]) => String(url).startsWith('/api/update'))).toBe(false);
+});
+
+test('a command kept for review holds nothing up; Review approves the stored proposal and Decline dismisses it', async () => {
+  const user = userEvent.setup();
+  const assign = { id: 'assign', label: 'Assign', command: { id: 'assign', version: 1, target: 'lead', targets: 'one', input: {} } };
+  mocks.app = { name: 'compass', resources: { lead: { actions: [assign] } }, grantedActions: { lead: [] }, grantedCommands: ['assign'] };
+  const kept = (id: string, review: string, record: string, key: number) => ({
+    id,
+    proposal: { ...proposal, id, kind: 'command', action: 'assign', label: 'Assign', record, key: { id: key }, review },
+  });
+  fetcher.mockImplementation(async (url) => {
+    const path = String(url);
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path === '/api/assistant/turn')
+      return events(
+        ['conversation', { id: 'c1', title: 'Assign', person: 1 }],
+        ['proposal', kept('p1', 'r1', 'Margot Fontaine', 127)],
+        ['proposal', kept('p2', 'r2', 'Felix Duval', 4)],
+        ['text', { delta: 'Kept both for review.' }],
+        ['done', { state: 'idle', tokens: 10 }],
+      );
+    if (path === '/api/assistant/acted') return json({ item: { type: 'note', text: 'Assign on Margot Fontaine: applied.' } });
+    if (path.startsWith('/api/commands/proposals/')) return json({ ok: true });
+    return json({ error: 'unexpected' }, 404);
+  });
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  const box = await screen.findByRole('textbox', { name: 'Message the assistant' });
+  await user.type(box, 'Assign both{Enter}');
+  expect(await screen.findByText('Kept both for review.')).toBeInTheDocument();
+  // The turn went on: nothing waits in the conversation.
+  expect(box).toBeEnabled();
+  const [first, second] = screen.getAllByRole('region', { name: 'Proposed change' });
+
+  await user.click(within(first).getByRole('button', { name: 'Review and confirm' }));
+  expect(await within(first).findByText('Assigned')).toBeInTheDocument();
+  await user.click(within(second).getByRole('button', { name: 'Decline' }));
+  expect(await within(second).findByText('Dismissed')).toBeInTheDocument();
+  // The query names the App; the path is the verb.
+  const sent = bodies()
+    .map(([path, body]) => [path.split('?')[0], body])
+    .filter(([path]) => path.startsWith('/api/commands/'));
+  expect(sent).toEqual([
+    ['/api/commands/proposals/approve', expect.objectContaining({ id: 'r1', command: 'assign', expectedVersion: 3 })],
+    ['/api/commands/proposals/dismiss', expect.objectContaining({ id: 'r2', command: 'assign' })],
+  ]);
+  // The queue's verbs decided them: the in-chat resolve is for a proposal the turn waited on, and none did.
+  expect(bodies().some(([path]) => path === '/api/assistant/resolve')).toBe(false);
 });
 
 test('Escape closes the panel when nothing is running; a server without a model says so and takes no words', async () => {

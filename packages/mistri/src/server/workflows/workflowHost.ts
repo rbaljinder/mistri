@@ -39,7 +39,8 @@ import type { CapturedJob, CapturedJobModule } from '../jobs/jobModule.js';
 import { defineJobHandler, JobRejected, type AnyJobDefinition, type JobContext } from '../jobs/jobs.js';
 import { advance, type EngineEnvironment } from './workflowEngine.js';
 import { stepRequestId, wakeKey, WORKFLOW_JOB_VERSION, workflowJobId, workflowPartition } from './workflowKeys.js';
-import { StepRefused, type CapturedWorkflow } from './workflowModule.js';
+import { StepPending, StepRefused, type CapturedWorkflow } from './workflowModule.js';
+import { createProposal, onProposalApproved } from '../commands/proposals.js';
 import { flowCommandId } from './flowCommand.js';
 
 /* A refusal the next try may not repeat: the record moved, the writer was
@@ -224,9 +225,46 @@ export interface WorkflowHandlerOptions {
   readonly tenancy?: boolean;
 }
 
+/* The steps waiting in this process on a proposal, by its id: what an approval wakes (onProposalApproved). Listening
+   only while one waits, so a host that proposes nothing holds no listener. Lost on a restart, which loses only the
+   haste: the step's own poll (proposalPollMs) still finds the decision. */
+interface ProposalWait {
+  readonly workflow: CapturedWorkflow;
+  readonly tenantId: string | undefined;
+  readonly instance: string;
+}
+function proposalWaits(options: WorkflowHandlerOptions) {
+  const waits = new Map<string, ProposalWait>();
+  let stop: (() => void) | undefined;
+  return (id: string, wait: ProposalWait) => {
+    waits.set(id, wait);
+    stop ??= onProposalApproved(options.appId, ({ id: approved }) => {
+      const woken = waits.get(approved);
+      if (!woken) return;
+      waits.delete(approved);
+      if (!waits.size) {
+        stop?.();
+        stop = undefined;
+      }
+      void wake(
+        options.jobs,
+        woken.workflow,
+        options.appId,
+        woken.tenantId,
+        woken.instance,
+        wakeKey('resume', woken.instance, `proposal:${approved}`),
+        options.now(),
+      ).catch(() => {
+        // The poll is the account; a wake-up that could not be enqueued only leaves the step to it.
+      });
+    });
+  };
+}
+
 /** The runner's handlers for the module's workflows: `wf-<name>`, each advancing one instance. */
 export function workflowHandlers(options: WorkflowHandlerOptions): Record<string, AnyJobDefinition> {
   const handlers: Record<string, AnyJobDefinition> = {};
+  const awaitProposal = proposalWaits(options);
   for (const workflow of options.module.workflows.values()) {
     const actor = serviceActor(options.appId, workflow.runAs, options.module.principals.get(workflow.runAs)!);
     const pseudo = Object.freeze({
@@ -247,14 +285,15 @@ export function workflowHandlers(options: WorkflowHandlerOptions): Record<string
               attributed(() =>
                 'dispatch' in input
                   ? dispatchFlows(options, workflow, actor, pseudo, context, input.dispatch)
-                  : advanceInstance(options, workflow, actor, pseudo, context, input.instance),
+                  : advanceInstance(options, workflow, actor, pseudo, context, input.instance, awaitProposal),
               ),
             ),
         })
       : defineJobHandler<WakeInput>({
           version: WORKFLOW_JOB_VERSION,
           input: { parse: wakeInput },
-          handle: (context, input) => asBackgroundWork(() => advanceInstance(options, workflow, actor, pseudo, context, input.instance)),
+          handle: (context, input) =>
+            asBackgroundWork(() => advanceInstance(options, workflow, actor, pseudo, context, input.instance, awaitProposal)),
         });
   }
   return handlers;
@@ -267,6 +306,7 @@ async function stepCommand(
   pseudo: CapturedJob,
   context: JobContext,
   request: Parameters<EngineEnvironment['runCommand']>[0],
+  pending?: (proposalId: string) => void,
 ): Promise<unknown> {
   const now = options.now;
   const registered = Object.hasOwn(options.commands, request.command) ? options.commands[request.command] : undefined;
@@ -306,12 +346,14 @@ async function stepCommand(
       now: () => new Date(now()),
       flags,
     };
+    if (authorized.command.approval === 'ai')
+      return await proposed(bound.binding, actor, pseudo.command.id, request, command, now(), pending);
     // Status before running: an earlier try may have committed and lost its answer.
     const status = await lookupBusinessCommandStatus(bound.binding, actor, command, attempt);
     if (status.status === 'applied') return status.result;
     return (await executeBusinessCommand(bound.binding, actor, command, { ...attempt, door: 'workflow' })).result;
   } catch (error) {
-    if (error instanceof StepRefused) throw error;
+    if (error instanceof StepRefused || error instanceof StepPending) throw error;
     if (error instanceof AppAccessDenied) throw new StepRefused(request.step, 'forbidden');
     if (isBusinessCommandExecutionError(error)) {
       if (RETRIED.has(error.code)) throw new Error(`The step's command answered ${error.code}.`);
@@ -323,6 +365,49 @@ async function stepCommand(
   }
 }
 
+/** How long a step waits before looking at its proposal again: a tenth of its age, between a minute and an hour. */
+const proposalPollMs = (age: number) => Math.min(60 * 60_000, Math.max(60_000, Math.floor(age / 10)));
+
+/**
+ * A step whose command waits for a person (`approval: 'ai'`): the step proposes it (actor `flow:<workflow>`) under an
+ * id made from its receipt key, so every look finds the same proposal, and waits on it. Approved, the step is done and
+ * answers the proposal (its receipt is the approver's); dismissed, expired or failed, the step is refused
+ * (`proposal_dismissed`, `proposal_expired`, `proposal_failed`), which a workflow may catch to take another way and a
+ * row-driven flow stops on.
+ */
+export async function proposed(
+  binding: Parameters<typeof createProposal>[0],
+  actor: ReturnType<typeof serviceActor>,
+  workflow: string,
+  request: Pick<Parameters<EngineEnvironment['runCommand']>[0], 'step' | 'idempotencyKey'>,
+  command: { command: string; key: Readonly<Record<string, string | number>>; input: unknown },
+  now: number,
+  pending?: (proposalId: string) => void,
+): Promise<unknown> {
+  const proposal = await createProposal(
+    binding,
+    actor,
+    {
+      id: createHash('sha256').update(`flow\n${request.idempotencyKey}`).digest('base64url').slice(0, 22),
+      command: command.command,
+      ...(Object.keys(command.key).length ? { key: command.key } : {}),
+      input: command.input as Record<string, unknown>,
+      maker: 'flow',
+      makerActor: `${FLOW_ACTOR_PREFIX}${workflow}`,
+      evidence: [],
+      reason: `The workflow "${workflow}" proposed this at its step "${request.step}".`,
+    },
+    () => new Date(now),
+  );
+  if (proposal.state === 'approved') return { proposal: proposal.id, state: 'approved', receipt: proposal.receiptId };
+  if (proposal.state === 'proposed' && now < proposal.expiresAt) {
+    // Woken at once when a person approves it in this process; the poll is for every other case.
+    pending?.(proposal.id);
+    throw new StepPending(Math.min(proposal.expiresAt, now + proposalPollMs(now - proposal.createdAt)));
+  }
+  throw new StepRefused(request.step, `proposal_${proposal.state === 'proposed' ? 'expired' : proposal.state}`);
+}
+
 async function advanceInstance(
   options: WorkflowHandlerOptions,
   workflow: CapturedWorkflow,
@@ -330,6 +415,7 @@ async function advanceInstance(
   pseudo: CapturedJob,
   context: JobContext,
   instance: string,
+  awaitProposal: ReturnType<typeof proposalWaits>,
 ): Promise<unknown> {
   const { jobs, appId } = options,
     now = options.now;
@@ -354,7 +440,8 @@ async function advanceInstance(
     budgetMs: Math.floor(options.attemptTimeoutMs / 2),
     stepTimeoutMs: Math.max(1_000, options.attemptTimeoutMs - 2_000),
 
-    runCommand: (request) => stepCommand(options, actor, pseudo, context, request),
+    runCommand: (request) =>
+      stepCommand(options, actor, pseudo, context, request, (id) => awaitProposal(id, { workflow, tenantId, instance })),
 
     async call(request) {
       const webhook = options.webhooks.get(request.connection);

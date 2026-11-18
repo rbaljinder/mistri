@@ -11,10 +11,11 @@ import {
   historyKey,
   sayableActorName,
 } from '../packages/mistri/src/adapters/history/recordHistory.js';
-import { attributeAction, attributeWrites } from '../packages/engine/src/adapters/writeAttribution.js';
+import { attributeAction, attributeMaker, attributeWrites } from '../packages/engine/src/adapters/writeAttribution.js';
 import { provisionSqliteRecordHistory, sqliteRecordHistoryReady } from '../packages/mistri/src/adapters/history/sqliteRecordHistory.js';
 import { appStoresOf } from '../packages/mistri/src/server/stores/appStores.js';
 import { bindRecordHistory } from '../packages/mistri/src/server/stores/writeCaptures.js';
+import { groupHistory } from '../packages/mistri/src/server/recordHistory.js';
 
 async function fixture(run: (adapter: SqliteAdapter, db: DatabaseSync, path: string) => Promise<void>, provision = true) {
   const dir = mkdtempSync(join(tmpdir(), 'mistri-record-history-'));
@@ -42,8 +43,8 @@ const history = (adapter: SqliteAdapter, id = 1, before?: number) =>
 test('provisioning is explicit, idempotent and refuses a foreign layout unchanged', async () => {
   await fixture(async (adapter, db, path) => {
     assert.equal(await appStoresOf(adapter).recordHistoryReady(), false);
-    assert.deepEqual(provisionSqliteRecordHistory(path), { version: 1, provisioned: true });
-    assert.deepEqual(provisionSqliteRecordHistory(path), { version: 1, provisioned: false });
+    assert.deepEqual(provisionSqliteRecordHistory(path), { version: 2, provisioned: true });
+    assert.deepEqual(provisionSqliteRecordHistory(path), { version: 2, provisioned: false });
     assert.equal(await appStoresOf(adapter).recordHistoryReady(), true);
     // A trigger could rewrite or drop what a write appends.
     db.exec(`CREATE TRIGGER "${RECORD_HISTORY_TABLES.change}_scrub" AFTER INSERT ON "${RECORD_HISTORY_TABLES.change}" BEGIN SELECT 1; END`);
@@ -95,6 +96,45 @@ test('a bound table records each write in its own transaction, attributed by the
     );
     // A value no timestamp or id can hold by chance: '120' once matched a time's milliseconds.
     assert.ok(!JSON.stringify(read).includes('7319426'), 'a redacted value never reaches the store');
+  });
+});
+
+test('a write keeps who made it beside the person it ran as, and the proposal it carried out', async () => {
+  await fixture(async (adapter, db) => {
+    bindRecordHistory(adapter, new Map([['ticket', { redact: new Set() }]]));
+    const as = { actor: 'maya@example.com', name: 'Maya Chen', via: 'app' as const };
+    await attributeWrites(as, () =>
+      attributeMaker('assistant', 'prop-7', () =>
+        adapter.transaction((tx) => tx.update({ table: 'ticket', key: { id: 1 }, values: { status: 'appealed' } })),
+      ),
+    );
+    await attributeMaker('decision:triage', undefined, () =>
+      adapter.transaction((tx) => tx.update({ table: 'ticket', key: { id: 1 }, values: { status: 'triaged' } })),
+    );
+    await attributeMaker('job:nightly-close', undefined, () =>
+      adapter.transaction((tx) => tx.update({ table: 'ticket', key: { id: 1 }, values: { status: 'closed' } })),
+    );
+    await attributeWrites(as, () =>
+      adapter.transaction((tx) => tx.update({ table: 'ticket', key: { id: 1 }, values: { status: 'open' } })),
+    );
+    const stored = rows(db);
+    assert.deepEqual(
+      stored.map((row) => [row.actor, row.actor_kind, row.proposal_id]),
+      [
+        ['maya@example.com', 'assistant', 'prop-7'],
+        ['', 'decision:triage', null],
+        ['', 'job:nightly-close', null],
+        ['maya@example.com', null, null],
+      ],
+    );
+    // The approver stays the person; the model and the job are named beside them.
+    const said = groupHistory(await history(adapter)).map(({ by, maker, job, proposed }) => ({ by, maker, job, proposed }));
+    assert.deepEqual(said, [
+      { by: 'Maya Chen', maker: undefined, job: undefined, proposed: undefined },
+      { by: undefined, maker: 'job', job: 'nightly-close', proposed: undefined },
+      { by: undefined, maker: 'ai', job: undefined, proposed: undefined },
+      { by: 'Maya Chen', maker: 'ai', job: undefined, proposed: true },
+    ]);
   });
 });
 

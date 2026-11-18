@@ -28,8 +28,10 @@ import {
 } from '../commands/businessCommandExecution.js';
 import { parseEventPayload } from '../commands/businessEvents.js';
 import { canonicalCommandJson } from '../commands/commandPayload.js';
+import { createProposal } from '../commands/proposals.js';
 import type { EventPublicationTransport } from '../events/eventPublisher.js';
 import { serviceActor } from './jobAuthorization.js';
+import { noteMakerModule } from '../commands/makerWrites.js';
 import type { CapturedJob, CapturedJobModule } from './jobModule.js';
 import { defineJobHandler, defineJobHandlers, JobRejected, type AnyJobDefinition, type JobContext, type JobRegistry } from './jobs.js';
 import type { CaptureCommandFlags } from '../commands/commandFlags.js';
@@ -180,6 +182,9 @@ export function jobHandlers(
   }>,
 ): JobRegistry {
   const handlers: Record<string, AnyJobDefinition> = {};
+  /* The App's loader noted these declarations before the server listened (makerWrites.ts); noting them again is a
+     no-op there, and covers a host opened without that loader. */
+  noteMakerModule(options.appId, options.module);
   for (const job of options.module.jobs.values()) {
     const actor = serviceActor(options.appId, job.runAs, options.module.principals.get(job.runAs)!);
     /* Background work: its command writes through the background writer
@@ -228,7 +233,44 @@ export function jobHandlers(
               const status = await lookupBusinessCommandStatus(bound.binding, actor, request, attempt);
               if (status.status === 'applied') return settled(status);
             }
-            return settled(await executeBusinessCommand(bound.binding, actor, request, { ...attempt, door: 'job' }));
+            /* A command that waits for a person (`approval: 'ai'`) is proposed, not run: the job's input, judged
+               by the command now, waits in the queue under the job's name. The proposal's id comes from the
+               command's own idempotency key, so a retried attempt finds the one already kept. */
+            if (authorized.command.approval === 'ai') {
+              const proposal = await createProposal(
+                bound.binding,
+                actor,
+                {
+                  id: createHash('sha256').update(request.idempotencyKey).digest('base64url').slice(0, 22),
+                  command: request.command,
+                  ...(Object.keys(input.key).length ? { key: input.key } : {}),
+                  input: (input.input ?? {}) as Record<string, unknown>,
+                  maker: 'job',
+                  makerActor: `job:${job.id}`,
+                  /* What the platform knows of why: the record the job ran on, and the job's name. An App's own evidence
+                     and reason wait for a second App that asks for them. */
+                  evidence: Object.keys(input.key).length
+                    ? [
+                        {
+                          kind: 'record',
+                          ref: `${authorized.resource}/${canonicalCommandJson(input.key, 8192)}`,
+                          label: `${authorized.resource} ${Object.values(input.key).map(String).join(', ')}`,
+                        },
+                      ]
+                    : [],
+                  reason: `The job "${job.id}" proposed this.`,
+                },
+                execution.now,
+              );
+              return Object.freeze({ proposalId: proposal.id, replayed: false });
+            }
+            return settled(
+              await executeBusinessCommand(bound.binding, actor, request, {
+                ...attempt,
+                door: 'job',
+                makerActor: `job:${job.id}`,
+              }),
+            );
           } catch (error) {
             throw classified(error);
           } finally {

@@ -28,7 +28,21 @@ import { catalogFromPayload, mayRunAction, systemPrompt, toolSpecs } from '../as
 import { assistantModel } from '../assistant/assistantModel.js';
 import { assistantStoreFor, storeUnavailableReply } from '../assistant/assistantStores.js';
 import { recordContext, type ToolSession } from '../assistant/assistantTools.js';
-import { actedNote, continueTurn, itemsOf, pendingProposal, type Acted, type Emit } from '../assistant/assistantTurn.js';
+import type { CommandProposalRow } from '../../adapters/commands/commandJournalTypes.js';
+import type { ProposalDraft } from '../commands/proposals.js';
+import { createAssistantProposal } from './assistantProposal.js';
+import {
+  actedNote,
+  continueTurn,
+  itemsOf,
+  pendingProposal,
+  reviewOutcome,
+  undecidedReviews,
+  type Acted,
+  type Emit,
+  type ReviewOutcomes,
+} from '../assistant/assistantTurn.js';
+import { COMMAND_ROUTES } from '../../shared/commandRoutes.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import type { Loop } from '@mistriwork/engine/server/http/firstPaint.js';
 import { HttpError, readJson, send } from '@mistriwork/engine/server/http/reply.js';
@@ -111,6 +125,24 @@ async function tablesOf(loop: Loop, app: string, signal: AbortSignal): Promise<s
   return answer?.status === 200 && Array.isArray(tables) ? tables.map((table) => table.id) : [];
 }
 
+/**
+ * What became of the stored proposals a conversation's cards name, asked as the person (so only those of commands
+ * they are granted): approved or dismissed in the review queue, the conversation never heard, and a reload drew the
+ * card live again. Nothing asked, or the ask refused, draws them as the events say.
+ */
+async function reviewsOf(loop: Loop, ids: readonly string[]): Promise<ReviewOutcomes | undefined> {
+  if (!ids.length) return undefined;
+  const answer = await loop('POST', COMMAND_ROUTES.proposals, { ids: [...new Set(ids)].slice(-50) });
+  const rows = (answer?.body as { proposals?: Array<{ id: string; state: string }> } | undefined)?.proposals;
+  if (answer?.status !== 200 || !Array.isArray(rows)) return undefined;
+  const outcomes = new Map<string, NonNullable<ReturnType<typeof reviewOutcome>>>();
+  for (const row of rows) {
+    const outcome = reviewOutcome(row.state);
+    if (outcome) outcomes.set(row.id, outcome);
+  }
+  return outcomes;
+}
+
 /** Who is asking, where their conversations are kept, and how their reads go: everything a route needs that
  * differs between an ordinary App (below) and a tenant App's host (tenant/tenantAssistant.ts). */
 interface AssistantScope {
@@ -123,6 +155,9 @@ interface AssistantScope {
   readonly tokensPerTenantPerDay?: number;
   /** A tenant App's: asked before every model call; a reason ends the turn (the switch was turned off). */
   readonly withdrawn?: () => Promise<string | undefined>;
+  /** Keeps a command's proposal for review as this person, under their grant and rows (assistantProposal.ts; a
+   * tenant App's, tenantHttp.ts `propose`). */
+  readonly propose?: (draft: ProposalDraft) => Promise<CommandProposalRow>;
 }
 
 export async function assistantRoutes(ctx: Base, loop: () => Loop): Promise<boolean> {
@@ -138,7 +173,7 @@ export async function assistantRoutes(ctx: Base, loop: () => Loop): Promise<bool
     } catch (error) {
       throw storeUnavailableReply(error);
     }
-    return { app: host.app.app, owner, store, loop };
+    return { app: host.app.app, owner, store, loop, propose: (draft) => createAssistantProposal(ctx, draft) };
   });
   return true;
 }
@@ -178,7 +213,11 @@ export async function answerAssistant(
       const conversation = typeof id === 'string' ? await store.get(owner, id) : null;
       if (!conversation) throw new HttpError(404, 'No such conversation.');
       const events = await store.events(owner, conversation.id);
-      send(res, 200, { conversation, items: itemsOf(events), ...(pendingProposal(events) ? { awaiting: true } : {}) });
+      send(res, 200, {
+        conversation,
+        items: itemsOf(events, await reviewsOf(loop(), undecidedReviews(events))),
+        ...(pendingProposal(events) ? { awaiting: true } : {}),
+      });
       return;
     }
     if (path === '/api/assistant/search') {
@@ -301,7 +340,15 @@ export async function answerAssistant(
     });
     const payload = await servedTo(loop(), app.id, controller.signal);
     const catalog = catalogFromPayload(payload, assistant, await tablesOf(loop(), app.id, controller.signal));
-    const session: ToolSession = { loop: loop(), app: app.id, payload, assistant, catalog, signal: controller.signal };
+    const session: ToolSession = {
+      loop: loop(),
+      app: app.id,
+      payload,
+      assistant,
+      catalog,
+      signal: controller.signal,
+      ...(scope.propose ? { propose: scope.propose } : {}),
+    };
     const line =
       text !== undefined && context && assistant.placement.includes('record')
         ? await recordContext(session, context.resource, context.key)

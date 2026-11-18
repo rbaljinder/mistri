@@ -88,6 +88,8 @@ export const appChrome = {
       Directory: onDemand(() => import('./components/Directory.js'), 'DirectoryRoom'),
       /* The reader's settings: the profile and the preferences as one page, fetched when it is first opened. */
       Settings: onDemand(() => import('./components/SettingsRoom.js'), 'SettingsRoom'),
+      /* What waits for review: its own part, fetched when first opened, so no first page carries the queue. */
+      Review: onDemand(() => import('./components/ReviewRoom.js'), 'ReviewRoom'),
       Page: FreePage,
       /* A free-form page that is a record's tab: drawn by the record page's tab strip (PageSections.tsx). */
       RecordTab: RecordTabPage,
@@ -117,6 +119,7 @@ export const appChrome = {
   settings: chrome.appSettingsCommands,
   menu: chrome.appMenuShell,
   compactNavigation: chrome.compactAppNavigation,
+  tabletNavigation: chrome.tabletAppNavigation,
   whenMenuMoves: whenHostPlacementMoves,
   followSaves: chrome.followSaves,
   initHelp: chrome.initHelp,

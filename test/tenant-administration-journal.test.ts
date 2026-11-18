@@ -151,8 +151,9 @@ test('provisioning independently attests version 1 and preserves existing tenant
     assert.deepEqual(provisionSqliteTenantAdministrationJournal(path, binding()), { version: 1, provisioned: false });
     assert.deepEqual(image(db), after);
     assert.equal(db.prepare(`SELECT version FROM "${TENANT_TABLES.meta}"`).get()?.version, 1);
-    // Version 4 since audit parts (2), capability links (3) and a link's row stamp (4); provisioning leaves it as created.
-    assert.equal(db.prepare(`SELECT version FROM "${COMMAND_JOURNAL_TABLES.meta}"`).get()?.version, 4);
+    // Version 5 since audit parts (2), capability links (3), a link's row stamp (4) and proposals with provenance (5);
+    // provisioning leaves it as created.
+    assert.equal(db.prepare(`SELECT version FROM "${COMMAND_JOURNAL_TABLES.meta}"`).get()?.version, 5);
     await transaction(db, async (journal) => {
       assert.equal(await journal.read(scope()), null);
     });

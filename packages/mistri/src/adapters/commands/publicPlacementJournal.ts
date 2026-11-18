@@ -41,7 +41,7 @@ function namespace(owner: PublicPlacementOwner, submission: string): Value[] {
   return [owner.issuerId, owner.sourceIdentity, owner.appId, owner.form, owner.tenant, owner.commandId, owner.commandVersion, submission];
 }
 function scopeValues(owner: PublicPlacementOwner, scope: CommandReceiptScope): Value[] {
-  rules.record(scope, rules.receiptFields);
+  rules.record(scope, rules.receiptWriteFields);
   rules.scopeValues(scope);
   if (
     scope.appId !== owner.appId ||

@@ -23,6 +23,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
   AppDef: {
     file: 'packages/mistri/src/shared/appModel.ts',
     keys: [
+      // rc.64: how the App names its AI, the word every AI mark draws (kit AiMark.tsx).
+      'ai',
       'analytics',
       'api',
       'approvedTriggers',
@@ -158,6 +160,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
     file: 'packages/mistri/src/shared/appPayload.ts',
     keys: [
       'addresses',
+      // rc.64: the App's AI label, for every AI mark the shell draws.
+      'ai',
       'apiTokens',
       'assistant',
       'components',
@@ -184,6 +188,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       // rc.1: a public page's public commands, by name, which its door runs signed out (http/pageCommandRoutes.ts).
       'publicCommands',
       'resources',
+      // rc.64: true where this reader may decide some proposal or confirm some mark, so the shell draws For review.
+      'review',
       // rc.46: the tables whose record links this reader may revoke (shared/appPayload.ts).
       'revokesLinks',
       'shortName',

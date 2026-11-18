@@ -395,6 +395,61 @@ export async function runTenantCommandTransaction<T>(
                     invoke({ appId, id, now }, (input) => journal.readLink!(input.appId, input.id, input.now)),
                 }
               : {}),
+            // A proposal is claimed and settled with the command that carries it out, kept or rolled back with it.
+            ...(journal.createProposal
+              ? {
+                  createProposal: (...args: Parameters<NonNullable<CommandJournal['createProposal']>>) =>
+                    invoke({ args }, (input) => journal.createProposal!(...input.args)),
+                }
+              : {}),
+            ...(journal.readProposal
+              ? {
+                  readProposal: (...args: Parameters<NonNullable<CommandJournal['readProposal']>>) =>
+                    invoke({ args }, (input) => journal.readProposal!(...input.args)),
+                }
+              : {}),
+            ...(journal.listProposals
+              ? {
+                  listProposals: (...args: Parameters<NonNullable<CommandJournal['listProposals']>>) =>
+                    invoke({ args }, (input) => journal.listProposals!(...input.args)),
+                }
+              : {}),
+            ...(journal.decideProposal
+              ? {
+                  decideProposal: (...args: Parameters<NonNullable<CommandJournal['decideProposal']>>) =>
+                    invoke({ args }, (input) => journal.decideProposal!(...input.args)),
+                }
+              : {}),
+            ...(journal.settleProposal
+              ? {
+                  settleProposal: (...args: Parameters<NonNullable<CommandJournal['settleProposal']>>) =>
+                    invoke({ args }, (input) => journal.settleProposal!(...input.args)),
+                }
+              : {}),
+            ...(journal.expireProposals
+              ? {
+                  expireProposals: (...args: Parameters<NonNullable<CommandJournal['expireProposals']>>) =>
+                    invoke({ args }, (input) => journal.expireProposals!(...input.args)),
+                }
+              : {}),
+            ...(journal.markProvenance
+              ? {
+                  markProvenance: (...args: Parameters<NonNullable<CommandJournal['markProvenance']>>) =>
+                    invoke({ args }, (input) => journal.markProvenance!(...input.args)),
+                }
+              : {}),
+            ...(journal.confirmProvenance
+              ? {
+                  confirmProvenance: (...args: Parameters<NonNullable<CommandJournal['confirmProvenance']>>) =>
+                    invoke({ args }, (input) => journal.confirmProvenance!(...input.args)),
+                }
+              : {}),
+            ...(journal.unconfirmedProvenance
+              ? {
+                  unconfirmedProvenance: (...args: Parameters<NonNullable<CommandJournal['unconfirmedProvenance']>>) =>
+                    invoke({ args }, (input) => journal.unconfirmedProvenance!(...input.args)),
+                }
+              : {}),
           }),
         }
       : {}),

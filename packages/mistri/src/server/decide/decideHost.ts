@@ -35,6 +35,8 @@ import type { DecisionOwner, DecisionStore, OutcomeReason } from '../../adapters
 import { logicalResource, type AppDef } from '../../shared/app.js';
 import type { AuthorizedBusinessCommand } from '../commands/businessCommandAccess.js';
 import { executeBusinessCommand, isBusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
+import { createProposal } from '../commands/proposals.js';
+import type { ProposalEvidence } from '../../adapters/commands/commandJournalTypes.js';
 import { commandFlagsOnce } from '../commands/commandFlagCapture.js';
 import { serviceActor } from '../jobs/jobAuthorization.js';
 import { jobCommandKey, type JobAttemptBinding, type JobCommandBinding } from '../jobs/jobCommands.js';
@@ -45,6 +47,7 @@ import { answerSpec, decisionReads } from './decisionChecks.js';
 import { decisionTrust, type LockedDecision } from './decisionLock.js';
 import type { CapturedDecision, DecisionKey } from './decisionModule.js';
 import {
+  decisionProposalId,
   digestOf,
   isEmpty,
   readCurrent,
@@ -437,7 +440,7 @@ async function ask(
       await runtime.store.answer(owner, each.id, { ...base, answer: null, probability: null, outcome: 'none', outcomeReason: 'invalid' });
       continue;
     }
-    const acted = await act(job, context, bound, authorized, read, each, answer, provider.name, result, runtime);
+    const acted = await act(job, context, bound, authorized, read, each, answer, provider.name, result, runtime, base.costMicros);
     await runtime.store.answer(owner, each.id, {
       ...base,
       answer: answer.answer,
@@ -461,8 +464,13 @@ async function act(
   provider: ProviderName,
   result: DecisionResult,
   runtime: DecisionRuntime,
+  costMicros: number,
 ): Promise<{ outcome: 'applied' | 'suggested' | 'accepted' | 'below' | 'none'; reason: OutcomeReason }> {
   const { decision } = asked;
+  const suggested = async (reason: OutcomeReason) => {
+    await propose(job, context, bound, authorized, read, asked, answer, result, costMicros);
+    return { outcome: 'suggested' as const, reason };
+  };
   const current = read.current.get(decision.name);
   /* A field already holding this answer is the answer accepted: someone got there first (design §2). */
   if (!isEmpty(current) && sameAnswer(current, answer.answer)) return { outcome: 'accepted', reason: 'filled' };
@@ -470,13 +478,15 @@ async function act(
   const trust = decisionTrust(runtime.lock, decision.name, runtime.digests.get(decision.name) ?? '');
   /* Only a pinned (provider, model version) applies: a fallback, or a model that drifted, only suggests (design §5). */
   const applies = decision.apply !== undefined && answer.probability >= decision.apply && trust.pinned(provider, result.modelVersion);
-  if (!applies) return { outcome: 'suggested', reason: isEmpty(current) ? '' : 'filled' };
+  if (!applies) return suggested(isEmpty(current) ? '' : 'filled');
   /* Never overwrite a person's value: a filled field gets a suggestion beside it. */
-  if (!isEmpty(current)) return { outcome: 'suggested', reason: 'filled' };
+  if (!isEmpty(current)) return suggested('filled');
+  /* A command that waits for a person (`approval: 'ai'`) is never applied by a decision, however sure: proposed. */
+  if (authorized.command.approval === 'ai') return suggested('');
   /* The guard read again, just before the write: a field filled meanwhile is a person's. */
   const now = await readCurrent(authorized, read.key, [decision.answer.field]);
   if (!now) return { outcome: 'none', reason: 'stale' };
-  if (!isEmpty(now[decision.answer.field])) return { outcome: 'suggested', reason: 'stale' };
+  if (!isEmpty(now[decision.answer.field])) return suggested('stale');
   try {
     const flags = await commandFlagsOnce(() => bound.captureFlags?.(authorized.actor))();
     /* The history line says what ran, and which decision ran it how surely: "Categorize · Triage category (very likely)". */
@@ -501,6 +511,10 @@ async function act(
             now: () => appTime(context.now()),
             flags,
             door: 'job',
+            // The receipt says a decision made it, and the field it wrote is marked as the decision's until a person confirms it.
+            maker: 'decision',
+            makerActor: decisionActor(decision.name),
+            evidence: decisionEvidence(read, decision.name),
           },
         ),
       ),
@@ -510,7 +524,62 @@ async function act(
     /* The command's own refusal (its `when`, a guard) is the record's word: `none (refused)`. Anything that
        may pass on a retry leaves the answer offered instead, so a person can still take it. */
     if (isBusinessCommandExecutionError(error) && !RETRIED.has(error.code)) return { outcome: 'none', reason: 'refused' };
-    return { outcome: 'suggested', reason: 'stale' };
+    return suggested('stale');
   }
 }
+
+/** What a decision read to answer: each input, its value quoted (bounded), as the proposal and the mark show it. */
+function decisionEvidence(read: RecordRead, name: string): ProposalEvidence[] {
+  return Object.entries(read.inputs.get(name) ?? {})
+    .slice(0, 64)
+    .map(([field, value]) => {
+      const quote = value === null || value === undefined ? '' : typeof value === 'string' ? value : JSON.stringify(value);
+      return { kind: 'text' as const, ref: `input:${field}`, label: humanName(field), quote: quote.slice(0, 1000) };
+    });
+}
+
+/**
+ * A suggestion as a proposal (actor kind `decision`): the answer as its command's input, on the record, for whoever
+ * may run the command to approve or dismiss. Its id is the decision row's own, hashed, so a retried attempt finds it
+ * and the decision record stays the calibration's (accepted when the field later holds the answer, decisionRoutes.ts
+ * `reconcile`). A proposal that cannot be kept (a journal that keeps none, an answer the command refuses) leaves the
+ * suggestion as it was: the decision's own surfaces still show it.
+ */
+async function propose(
+  job: CapturedJob,
+  context: JobContext,
+  bound: JobCommandBinding,
+  authorized: AuthorizedBusinessCommand,
+  read: RecordRead,
+  asked: Asked,
+  answer: { answer: unknown; probability: number },
+  result: DecisionResult,
+  costMicros: number,
+): Promise<void> {
+  const { decision } = asked;
+  try {
+    await createProposal(
+      bound.binding,
+      authorized.actor,
+      {
+        id: decisionProposalId(asked.id),
+        command: job.command.id,
+        key: read.key,
+        input: { [decision.answer.field]: answer.answer },
+        maker: 'decision',
+        makerActor: decisionActor(decision.name),
+        model: result.model,
+        modelVersion: result.modelVersion,
+        costMicros,
+        evidence: decisionEvidence(read, decision.name),
+        reason: `${humanName(decision.name)}: ${CONFIDENCE_WORDS[confidenceOf(answer.probability)]}.`,
+      },
+      () => appTime(context.now()),
+    );
+  } catch {
+    /* The suggestion stands without its proposal. */
+  }
+}
+
+export { decisionProposalId } from './decideReads.js';
 const RETRIED = new Set(['stale_record', 'temporarily_unavailable', 'row_locked', 'cancelled']);

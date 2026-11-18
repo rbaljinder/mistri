@@ -95,6 +95,8 @@ export interface ShellChrome {
   settings?(): Array<Record<string, unknown>>;
   /** The width at which an App's side menu becomes a phone's drawer; the menu is drawn again when it is crossed. */
   compactNavigation?: MediaQueryList;
+  /** The width at which an App's side menu stands as its icon rail (a tablet's); the menu is drawn again when it is crossed. */
+  tabletNavigation?: MediaQueryList;
   /** The theme bench moved the menu (themeBench.ts): the kit draws the shell again around the same room. */
   whenMenuMoves?(listener: () => void): unknown;
   /** Follow the App's source on disk, where the server watches it. */

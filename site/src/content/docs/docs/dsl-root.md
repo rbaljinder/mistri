@@ -109,6 +109,18 @@ commands keep `'730 days'` and attempts `'30 days'`. A daily job forgets what is
 older, a few thousand rows at a time; a try still pending or waiting for a
 redrive is never forgotten, however old.
 
+## `ai`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `ai` | object | Stable | How the App names its AI. Every built-in AI surface draws the same mark (kit AiMark) with this word. |
+
+## `ai.label`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `ai.label` | string | Stable | The word every built-in AI mark says beside its glyph: the review queue, a record's proposal line, history and the assistant. "AI" when absent. |
+
 ## `connection`
 
 | Key | Type | Status | What it does |

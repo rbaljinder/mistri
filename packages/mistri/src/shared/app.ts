@@ -179,6 +179,8 @@ export { resolveDisplay } from './appDisplayResolve.js';
 
 /** The longest `shortName`: what a phone's bar and a home screen's icon label show whole. */
 export const SHORT_NAME_MAX = 12;
+/** The longest `ai.label`: the word beside the AI mark, which sits inline in a row, a chip and a history line. */
+const AI_LABEL_MAX = 24;
 
 /** The root, by group: identity, data, auth, content, ui. */
 export const ROOT_KEYS = [
@@ -206,6 +208,7 @@ export const ROOT_KEYS = [
   'experiments',
   'analytics',
   'assistant',
+  'ai',
   'retention',
 ] as const;
 /* The homes a refused key is told it belongs in: a function to call, built on the first refusal (appKeyHomes.ts). */
@@ -285,6 +288,18 @@ function dataHalfOf(a: Record<string, unknown>, id: string, name: string, ui: ()
   return { id, name, connection: a.connection, resources, views: {}, nav: [], home: [], ui: ui() } as unknown as AppDef;
 }
 
+/* Every built-in AI surface says one word beside its mark (the review queue, a record's proposal line, history,
+   the assistant): an App that calls its model "Assistant" or "Copilot" names it once here, not per surface. */
+function parseAi(raw: unknown, where: string): { label: string } | undefined {
+  if (raw === undefined) return undefined;
+  const ai = plainRecord(raw, `${where}: ai`, 'an object');
+  allowKeys(ai, ['label'], `${where}: ai`);
+  const label = typeof ai.label === 'string' ? ai.label.trim() : '';
+  if (!label || Array.from(label).length > AI_LABEL_MAX)
+    throw new Error(`${where}: ai.label is ${AI_LABEL_MAX} characters or fewer of text: the word every AI mark says, "AI" when absent.`);
+  return { label };
+}
+
 function parseRoot(raw: unknown, where: string, problems: string[], composed?: AppApiDef, surfaces?: readonly SurfaceFile[]): AppDef {
   const a = plainRecord(raw, where, 'an object');
   allowKeys(a, ROOT_KEYS, where);
@@ -297,6 +312,7 @@ function parseRoot(raw: unknown, where: string, problems: string[], composed?: A
     throw new Error(
       `${where} has a "shortName" that is not ${SHORT_NAME_MAX} characters or fewer of text: it is what a phone's bar and an installed icon say where "name" does not fit.`,
     );
+  const ai = parseAi(a.ai, where);
   if (a.id !== undefined && (typeof a.id !== 'string' || !a.id.trim()))
     throw new Error(`${where} has an "id" that is not a non-empty string.`);
   /* The id is the App's address (`/helpdesk`) and its account store's name,
@@ -481,6 +497,7 @@ function parseRoot(raw: unknown, where: string, problems: string[], composed?: A
     id,
     name,
     ...(shortName ? { shortName } : {}),
+    ...(ai ? { ai } : {}),
     ...(Object.hasOwn(a, 'flags') ? { flags: catalog.flags } : {}),
     ...(Object.hasOwn(a, 'audiences') ? { audiences: catalog.audiences } : {}),
     ...(Object.hasOwn(a, 'experiments') ? { experiments } : {}),

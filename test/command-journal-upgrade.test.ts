@@ -104,7 +104,7 @@ for (const engine of ENGINES)
           await insertReceipt(db, receipt, RECEIPT.id);
           const [status] = await storeStatuses(db, layouts);
           assert.equal(status.found, 1);
-          assert.deepEqual(status.pending, [1, 2, 3]);
+          assert.deepEqual(status.pending, [1, 2, 3, 4]);
         });
         // A start refuses version 1 and says how to bring it forward; it never upgrades it itself.
         await assert.rejects(attest(engine, where.url), (error: unknown) => {
@@ -121,6 +121,7 @@ for (const engine of ENGINES)
             ['command-journal', 1, 2],
             ['command-journal', 2, 3],
             ['command-journal', 3, 4],
+            ['command-journal', 4, 5],
           ],
         );
         await attest(engine, where.url);
@@ -186,7 +187,7 @@ for (const engine of ENGINES)
         await applyFixture(engine, where.url, readFileSync(v2.path, 'utf8'));
         await withDb(where.url, async (db) => {
           await insertReceipt(db, receipt, RECEIPT.id);
-          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [2, 3]);
+          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [2, 3, 4]);
         });
         await assert.rejects(attest(engine, where.url), CommandJournalUnavailable);
         const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
@@ -196,6 +197,7 @@ for (const engine of ENGINES)
           [
             ['command-journal', 2, 3],
             ['command-journal', 3, 4],
+            ['command-journal', 4, 5],
           ],
         );
         await attest(engine, where.url);
@@ -260,14 +262,17 @@ for (const engine of ENGINES)
               ['0'.repeat(64), RECEIPT.id],
             ),
           );
-          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [3]);
+          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [3, 4]);
         });
         await assert.rejects(attest(engine, where.url), CommandJournalUnavailable);
         const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
         assert.deepEqual(done.failed, []);
         assert.deepEqual(
           done.applied.map((each) => [each.id, each.from, each.to]),
-          [['command-journal', 3, 4]],
+          [
+            ['command-journal', 3, 4],
+            ['command-journal', 4, 5],
+          ],
         );
         await attest(engine, where.url);
         await PROVISION['command-journal'][engine]!(fresh.url);
@@ -278,7 +283,7 @@ for (const engine of ENGINES)
         await withDb(where.url, async (db) => {
           assert.deepEqual(
             (await db.all<{ version: number }>(`SELECT version FROM ${meta}`)).map((row) => Number(row.version)),
-            [4],
+            [JOURNAL_VERSION],
           );
           assert.deepEqual(
             (await db.all<{ id: string; changes_json: string }>(`SELECT id, changes_json FROM ${receipt}`)).map((row) => [
@@ -346,7 +351,7 @@ test('sqlite: the version 4 rebuild leaves the event and delivery stores beneath
     );
     const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
     assert.deepEqual(done.failed, []);
-    assert.equal(done.applied.at(-1)?.to, 4);
+    assert.equal(done.applied.at(-1)?.to, JOURNAL_VERSION);
     assert.deepEqual(others(), before);
     const db = new DatabaseSync(where.url);
     try {

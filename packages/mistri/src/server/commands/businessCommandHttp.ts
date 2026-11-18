@@ -30,6 +30,8 @@ import { MAX_COMMAND_BYTES, snapshot } from '@mistriwork/engine/adapters/command
 import type { CaptureCommandFlags, CommandFlags } from './commandFlags.js';
 import { authorizedCommandFlags, commandFlagsOnce } from './commandFlagCapture.js';
 import { servesLinks, withLinkUrls } from '../links/linkLookup.js';
+import { PROPOSAL_ROUTES, ProposalRefusal, proposeForAssistant, runProposalRoute, type ProposalDraft } from './proposals.js';
+import type { CommandProposalRow } from '../../adapters/commands/commandJournalTypes.js';
 import { withAppPublicUrls } from '../links/publicLink.js';
 
 export const isBusinessCommandPath = (path: string): boolean => path.startsWith('/api/commands/');
@@ -56,30 +58,33 @@ export function businessCommandHttpError(error: unknown, statusOnly = false) {
             'unknown',
             error instanceof CommandInputError ? error.field : undefined,
           );
+  // A proposal past its time is gone, 410, where every other ineligible state is 409 (proposals.ts).
   const status =
-    safe.code === 'unauthenticated'
-      ? 401
-      : safe.code === 'forbidden'
-        ? 403
-        : safe.code === 'not_found'
-          ? 404
-          : safe.code === 'invalid_input'
-            ? 400
-            : safe.code === 'invalid_result'
-              ? 500
-              : safe.code === 'consumes_refused' || safe.code === 'out_of_scope'
-                ? 422
-                : [
-                      'stale_account',
-                      'stale_record',
-                      'command_version_mismatch',
-                      'idempotency_conflict',
-                      'ineligible_state',
-                      'reviewer_unavailable',
-                      'duplicate_record',
-                    ].includes(safe.code)
-                  ? 409
-                  : 503;
+    safe instanceof ProposalRefusal
+      ? safe.status
+      : safe.code === 'unauthenticated'
+        ? 401
+        : safe.code === 'forbidden'
+          ? 403
+          : safe.code === 'not_found'
+            ? 404
+            : safe.code === 'invalid_input'
+              ? 400
+              : safe.code === 'invalid_result'
+                ? 500
+                : safe.code === 'consumes_refused' || safe.code === 'out_of_scope'
+                  ? 422
+                  : [
+                        'stale_account',
+                        'stale_record',
+                        'command_version_mismatch',
+                        'idempotency_conflict',
+                        'ineligible_state',
+                        'reviewer_unavailable',
+                        'duplicate_record',
+                      ].includes(safe.code)
+                    ? 409
+                    : 503;
   return {
     status,
     ...(safe.code === 'row_locked' ? { retryAfter: ROW_LOCKED_RETRY_AFTER_SECONDS } : {}),
@@ -243,6 +248,11 @@ export async function dispatchScopedBusinessCommandHttp(options: {
       if (!commands.draft) throw new BusinessCommandExecutionError('forbidden', 'unknown');
       return await commands.draft(body, { ...execution, door: browserDoor(req), ...said });
     }
+    if (PROPOSAL_ROUTES.has(path)) {
+      // A context that keeps no proposals (a server's own) offers none to decide.
+      if (!commands.proposals) throw new BusinessCommandExecutionError('forbidden', 'unknown');
+      return await commands.proposals(path, body, { ...execution, door: browserDoor(req), ...said });
+    }
     if (path === '/api/commands/availability') {
       if (!commands.availability) throw new BusinessCommandExecutionError('temporarily_unavailable');
       return await commands.availability(body, execution);
@@ -382,6 +392,29 @@ export async function dispatchBusinessCommandHttp(options: {
       if (!asked) throw new CommandInputError('fields');
       return { problems: checkCommandStep(authorized.command, request.input, asked) };
     }
+    /* A proposal's approval runs its command as this reader, under their grant, flags and locale, as their own
+       execute would; the proposal's id is its idempotency key and the receipt names it (proposals.ts). */
+    if (PROPOSAL_ROUTES.has(path)) {
+      const locale = path === COMMAND_ROUTES.approveProposal ? await askedLocale(app, resources, actor, req) : undefined;
+      return await runProposalRoute({
+        path,
+        body,
+        binding,
+        actor,
+        offered: references,
+        unoffered: (command) => unofferedRefusal(new AppAccessDenied(), command),
+        execute: async (envelope, proposalId) =>
+          attributeAction(options.label?.(envelope), async () =>
+            executeBusinessCommand(binding, actor, envelope, {
+              ...execution,
+              flags: await authorizedCommandFlags(binding, actor, envelope, admittedFlags),
+              door: browserDoor(req),
+              locale,
+              proposalId,
+            }),
+          ),
+      });
+    }
     if (path === '/api/commands/prepare')
       return await prepareBusinessCommand({ body, app, binding, references, resources, actor, execution, captureFlags: admittedFlags });
     const captured = await authorizedCommandFlags(binding, actor, body, admittedFlags, path === '/api/commands/status');
@@ -402,6 +435,46 @@ export async function dispatchBusinessCommandHttp(options: {
   } finally {
     req.off('aborted', abort);
     res.off('close', abort);
+    for (const release of releases.reverse()) release();
+  }
+}
+
+/**
+ * The assistant's proposal on an App with no row policy: kept for `actor` through the binding their own execute would
+ * use, under their grant (proposals.ts). The draft is the host's (http/assistantProposal.ts), never a client's body.
+ */
+export async function proposeBusinessCommand(options: {
+  registry: Registry;
+  app: AppDef;
+  commands: BusinessCommandRegistry;
+  connection: string;
+  actor: BusinessCommandActor;
+  events?: CommandJournalAppScope;
+  draft: ProposalDraft;
+}): Promise<CommandProposalRow> {
+  const { registry, app, commands, connection, actor, events } = options;
+  const releases: Array<() => void> = [];
+  try {
+    const resources = await loadAppRuntimeResources(registry, app, connection, (owner) => releases.push(registry.lease(owner)));
+    const { binding, references } = bindHttpBusinessCommands(
+      app,
+      commands,
+      resources,
+      (owner) => registry.configOf(owner)?.writable === true,
+      events,
+    );
+    return await proposeForAssistant({
+      draft: snapshot(options.draft, MAX_COMMAND_BYTES).value,
+      binding,
+      actor,
+      offered: references,
+      unoffered: (command) => unofferedRefusal(new AppAccessDenied(), command),
+    });
+  } catch (error) {
+    if (error instanceof CommandInputError) throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.field);
+    if (error instanceof AppAccessDenied) throw forbiddenBy(error);
+    throw error;
+  } finally {
     for (const release of releases.reverse()) release();
   }
 }

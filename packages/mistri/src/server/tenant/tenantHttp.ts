@@ -47,6 +47,8 @@ import {
 } from '@mistriwork/engine/server/http/reply.js';
 import type { ResourceHttpPath } from '@mistriwork/engine/shared/resourceHttp.js';
 import { TENANT_HTTP_HEADERS as headers, type TenantContextAssertion, type TenantContextReply } from '../../shared/tenantContext.js';
+import type { CommandProposalRow } from '../../adapters/commands/commandJournalTypes.js';
+import type { ProposalDraft } from '../commands/proposals.js';
 import type { VerifiedSessionInstance } from '../auth/auth.js';
 import { MAX_COMMAND_BYTES } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { businessCommandHttpError } from '../commands/businessCommandHttp.js';
@@ -123,6 +125,7 @@ import type { PageLoader } from '../commands/pageLoaders.js';
 import { attributeAction, attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { tenantHistoryStoreKey } from './tenantRecordHistoryStore.js';
 import { decisionsServedBy, servedDecisions } from '../decide/decisionServing.js';
+import { offersReview } from '../commands/makerWrites.js';
 import { answerDecisions, DECISION_PATHS } from '../http/decisionRoutes.js';
 import { inboxEmailFor, markInboxFor, readInboxFor } from '../inbox.js';
 import { TenantTokenRefusal, type TenantTokenService } from './tenantTokenService.js';
@@ -235,6 +238,37 @@ interface TenantHttpOptions {
 /** Private integration server, deliberately not mounted by the CLI/createApp.
  * No Registry, ordinary adapter, authoring store, static UI or raw-SQL fallback
  * is reachable here. Successful construction transfers enrollment retirement. */
+/** The tenant a lease-bearing request selects: its URL's, never a header's. Platform and control requests that open
+ * no tenant select none. */
+function tenantSelectors(url: URL, tenant: boolean): string[] {
+  if (!tenant) return [];
+  const selectors = [url.searchParams.get('tenant')!];
+  parseTenantSelector(selectors);
+  exposed(headers.tenant, selectors[0]);
+  return selectors;
+}
+
+/** app/tenant are URL selectors, never competing request headers. App's response header is accepted only as a
+ * matching stale-App precondition. */
+function ownerHeadersRefused(req: IncomingMessage, appId: string): boolean {
+  return (
+    tenantHttpHeader(req, headers.tenant) !== undefined ||
+    tenantHttpHeader(req, headers.realm) !== undefined ||
+    (tenantHttpHeader(req, headers.app) !== undefined && tenantHttpHeader(req, headers.app) !== appId)
+  );
+}
+
+/** The lease a request bears, as its tab, context and revision headers assert it; none without a tab and a context.
+ * A page's request and the assistant's proposal (`propose`) are both read here. */
+function leaseAssertion(req: IncomingMessage): TenantContextAssertion | undefined {
+  const assertion = {
+    tabId: tenantHttpHeader(req, headers.tab) ?? '',
+    expectedContext: tenantHttpHeader(req, headers.context) ?? '',
+    expectedRevision: revisionHeader(req),
+  };
+  return assertion.tabId && assertion.expectedContext ? assertion : undefined;
+}
+
 export function createTenantHttpServer(options: TenantHttpOptions) {
   const raw = tenantOptions(options, [
     'app',
@@ -601,29 +635,12 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       /* Nor the streamed export: a support read is ledgered before its body is released, and a stream releases its rows
          as they are read. Its client exports through `/api/run`, one ledgered read held to its ceiling. */
       if (onSupport && path === TENANT_EXPORT_PATH) return invalid(403);
-      let selectors = selected && !platform ? [url.searchParams.get('tenant')!] : [];
-      if (selected && !platform) {
-        parseTenantSelector(selectors);
-        exposed(headers.tenant, selectors[0]);
-      }
-      // app/tenant are URL selectors, never competing request headers. App's
-      // response header is accepted only as a matching stale-App precondition.
-      if (
-        tenantHttpHeader(req, headers.tenant) !== undefined ||
-        tenantHttpHeader(req, headers.realm) !== undefined ||
-        (tenantHttpHeader(req, headers.app) !== undefined && tenantHttpHeader(req, headers.app) !== app.id)
-      )
-        return invalid();
+      let selectors = tenantSelectors(url, selected && !platform);
+      if (ownerHeadersRefused(req, app.id)) return invalid();
       if (control && [headers.tab, headers.context, headers.revision].some((name) => tenantHttpHeader(req, name) !== undefined))
         return invalid();
-      let assertion: TenantContextAssertion | undefined = control
-        ? undefined
-        : {
-            tabId: tenantHttpHeader(req, headers.tab) ?? '',
-            expectedContext: tenantHttpHeader(req, headers.context) ?? '',
-            expectedRevision: revisionHeader(req),
-          };
-      if (!control && (!assertion!.tabId || !assertion!.expectedContext)) return invalid();
+      let assertion: TenantContextAssertion | undefined = control ? undefined : leaseAssertion(req);
+      if (!control && !assertion) return invalid();
       let input =
         get || flagExposures
           ? {}
@@ -1171,10 +1188,18 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   context.principal.roles.some((role: string) => app.auth?.roles?.[role]?.supportAudit === true);
                 const apiTokens = tokens !== undefined && !platform && !onSupport;
                 const addresses = await addressesAsked;
+                /* For review on the tenant's own lease, where the proposals route answers, as a single App's is. */
+                const review =
+                  path === '/api/app' &&
+                  !platform &&
+                  !onSupport &&
+                  typeof tenantId === 'string' &&
+                  offersReview(app.id, appCommandGrants(app, context.principal.roles));
                 served = {
                   ...served,
                   ...(supportAudit ? { supportAudit: true as const } : {}),
                   ...(apiTokens ? { apiTokens: true as const } : {}),
+                  ...(review ? { review: true as const } : {}),
                   ...(addresses && Object.keys(addresses).length ? { addresses: { ...addresses } } : {}),
                 };
               }
@@ -1827,7 +1852,12 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           () => tenantCommandRoute(contexts, { path, platform, req, selectors, expected, input, execution }),
           commandActionLabel(app, input),
         );
-        completedWrite = path.endsWith('/execute') || path.endsWith('/draft');
+        // A proposal decided or a mark confirmed wrote too; a list of proposals wrote nothing a retry could repeat.
+        completedWrite =
+          path.endsWith('/execute') ||
+          path.endsWith('/draft') ||
+          path.startsWith('/api/commands/proposals/') ||
+          path === '/api/commands/provenance/confirm';
         // A file refused is answered in the ordinary host's words and status (commands/stagedFileHttp.ts).
         if (path.endsWith('/files') && result.value && typeof result.value === 'object' && 'refused' in result.value) {
           const { status, code, message } = (result.value as { refused: { status: number; code: string; message: string } }).refused;
@@ -2158,6 +2188,35 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
   );
   return Object.freeze({
     server,
+    /**
+     * A command's proposal for review, kept for the assistant on a tenant App's host (tenantAssistant.ts). Built here,
+     * by the host, never from a client's body: no route takes a `propose` step (tenantDraftHttp.ts proposalRequest
+     * builds a client's). `req` is the host's request on the recovered lease, read as a command request's is (the
+     * same selectors and assertion); the lease is admitted again on the way in, the member's grant and row policy
+     * decide the proposal (commands/proposals.ts createProposal), as they would decide the member's own run.
+     */
+    async propose(req: IncomingMessage, draft: ProposalDraft, signal: AbortSignal): Promise<CommandProposalRow> {
+      assertActive();
+      const url = new URL(req.url ?? '', 'http://localhost');
+      if (
+        [...url.searchParams.keys()].some((key) => key !== 'app' && key !== 'tenant') ||
+        url.searchParams.getAll('app').length !== 1 ||
+        url.searchParams.get('app') !== app.id ||
+        url.searchParams.getAll('tenant').length !== 1
+      )
+        return denyTenant();
+      for (const name of Object.values(headers)) tenantHttpHeader(req, name);
+      expectedAccounts.set(req, tenantHttpHeader(req, headers.account));
+      try {
+        const selectors = tenantSelectors(url, true);
+        const expected = leaseAssertion(req);
+        if (ownerHeadersRefused(req, app.id) || !expected) return denyTenant();
+        const proposed = await contexts.proposals(req, selectors, expected, { step: 'propose', draft }, { signal });
+        return proposed.value as CommandProposalRow;
+      } finally {
+        expectedAccounts.delete(req);
+      }
+    },
     retire(): Promise<void> {
       retired = true;
       closeRecordBranding(enrollment);

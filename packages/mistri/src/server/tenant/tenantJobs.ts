@@ -45,6 +45,7 @@ import {
   type BusinessCommandBinding,
 } from '../commands/businessCommandAccess.js';
 import { assertLookupOwners, scopedLookupReader } from '../commands/commandLookup.js';
+import { noteMakerModule } from '../commands/makerWrites.js';
 import { brandTenantJobs } from './tenantJobsBrand.js';
 import { createBusinessCommandAuthorizer } from '../commands/businessCommandAuthorization.js';
 import { defineCommands, getCommandEvents, type BusinessCommandActor, type BusinessCommandRegistry } from '../commands/businessCommands.js';
@@ -522,6 +523,8 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     tenantOptions(raw.registry, Object.keys(Object.getOwnPropertyDescriptors(raw.registry))) as BusinessCommandRegistry,
   );
   const module = pinJobs(capturedJobModule(raw.module), registry);
+  // What a maker can write, known before the tenant App serves (makerWrites.ts).
+  noteMakerModule(app.id, module);
   if (module.inbound.size) refuse('inbound endpoints are not served on a tenant App: a delivery has no tenant to act for.');
   // Derived again, never taken from a caller: the deployment enrollment attested.
   const deployment = tenantJobDeployment(module, {

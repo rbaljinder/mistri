@@ -772,9 +772,10 @@ export async function boot(me, landingAt, installed) {
   whenPagesChange(() => void registerPages());
   initSidebarToggle();
   // Only remount navigation on a breakpoint crossing; record editors keep their owner.
-  chrome.compactNavigation?.addEventListener('change', () => {
-    if (!businessRetired && sessionIdentity().mode !== 'locked') renderTableList($('table-filter').value);
-  });
+  for (const band of [chrome.compactNavigation, chrome.tabletNavigation])
+    band?.addEventListener('change', () => {
+      if (!businessRetired && sessionIdentity().mode !== 'locked') renderTableList($('table-filter').value);
+    });
   // The theme bench moved the menu (themeBench.ts): the shell is drawn again around the same room.
   chrome.whenMenuMoves?.(() => {
     if (!businessRetired && sessionIdentity().mode !== 'locked') renderTableList($('table-filter').value);

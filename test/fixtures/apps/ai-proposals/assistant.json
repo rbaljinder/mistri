@@ -1,0 +1,32 @@
+{
+  "turns": [
+    {
+      "when": "appeal",
+      "steps": [
+        {
+          "tools": [
+            {
+              "name": "run",
+              "input": {
+                "action": "claim.appeal",
+                "id": 1,
+                "values": { "note": "The crown was medically necessary." },
+                "why": "The denial cites a missing X-ray that is on file."
+              }
+            }
+          ]
+        },
+        { "text": "The appeal is kept for review." }
+      ]
+    },
+    {
+      "when": "close",
+      "steps": [
+        {
+          "tools": [{ "name": "run", "input": { "action": "claim.close", "id": 2, "why": "The cleaning was paid in full." } }]
+        },
+        { "text": "Closing it is kept for review." }
+      ]
+    }
+  ]
+}

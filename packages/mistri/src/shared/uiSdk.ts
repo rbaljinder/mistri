@@ -75,6 +75,7 @@ export const UI_EXPORTS = [
   'Item',
   'Text',
   'VisuallyHidden',
+  'AiMark',
   'Checkbox',
   'ChoiceCards',
   'FileField',

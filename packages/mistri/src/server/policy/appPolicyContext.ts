@@ -7,6 +7,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
+import type { CommandProposalRow } from '../../adapters/commands/commandJournalTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import {
   appActionGrants,
@@ -32,6 +33,7 @@ import { compileAppTransitions } from '../app/appTransitions.js';
 import { whenPerson } from '../commands/commandWhen.js';
 import { checkCommandStep, checkedNames } from '../commands/commandCheck.js';
 import { runDraftRoute } from '../forms/draftHttp.js';
+import { proposeForAssistant, runProposalRoute, type ProposalDraft } from '../commands/proposals.js';
 import { forbiddenBy } from '../commands/commandErrors.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 import {
@@ -119,6 +121,11 @@ export interface AppPolicyContext {
     draft?(raw: unknown, options?: PolicyCommandOptions): Promise<unknown>;
     /** A step of a form checked before it goes on (commandCheck.ts): no row is read, so no scope is needed for it. */
     check?(raw: unknown): Promise<{ problems: Record<string, string> }>;
+    /** A proposal route (commands/proposals.ts): listed, decided and approved in this principal's rows and grants. */
+    proposals?(path: string, raw: unknown, options?: PolicyCommandOptions): Promise<unknown>;
+    /** The assistant's proposal for this principal (commands/proposals.ts): under their grant and row policy. The host
+     * builds the draft; no route passes a client's body here. */
+    propose?(draft: ProposalDraft): Promise<CommandProposalRow>;
   };
   transaction<T>(source: string, run: (tx: WriteTransaction) => Promise<T>): Promise<T>;
   /** One source's connection read alone, under this principal's rows there: a
@@ -901,6 +908,54 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                     if (error instanceof CommandInputError)
                       throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.field);
                     throw new BusinessCommandExecutionError('temporarily_unavailable');
+                  }
+                }),
+              proposals: (path, raw, options) =>
+                track(async () => {
+                  const body = snapshotScopedData(raw);
+                  try {
+                    return await runProposalRoute({
+                      path,
+                      body,
+                      binding: commandBinding,
+                      actor: principal,
+                      offered: commandReferences!,
+                      unoffered: (command) => unofferedRefusal(new AppAccessDenied(), command),
+                      // An approval runs as this principal's own execute would, in their rows.
+                      execute: async (envelope, proposalId) =>
+                        executeBusinessCommand(commandBinding, principal, envelope, {
+                          signal: options?.signal,
+                          requestId: options?.requestId,
+                          ...(options?.door ? { door: options.door } : {}),
+                          ...(options?.locale ? { locale: options.locale } : {}),
+                          flags: await authorizedCommandFlags(commandBinding, principal, envelope, flags),
+                          proposalId,
+                        }),
+                    });
+                  } catch (thrown) {
+                    const error = thrown instanceof CommandTransactionFailure ? thrown.cause : thrown;
+                    if (error instanceof AppAccessDenied) throw forbiddenBy(error);
+                    if (error instanceof CommandInputError)
+                      throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.field);
+                    throw error;
+                  }
+                }),
+              propose: (draft) =>
+                track(async () => {
+                  try {
+                    return await proposeForAssistant({
+                      draft: snapshotScopedData(draft),
+                      binding: commandBinding,
+                      actor: principal,
+                      offered: commandReferences!,
+                      unoffered: (command) => unofferedRefusal(new AppAccessDenied(), command),
+                    });
+                  } catch (thrown) {
+                    const error = thrown instanceof CommandTransactionFailure ? thrown.cause : thrown;
+                    if (error instanceof AppAccessDenied) throw forbiddenBy(error);
+                    if (error instanceof CommandInputError)
+                      throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.field);
+                    throw error;
                   }
                 }),
               status: (raw, options) =>

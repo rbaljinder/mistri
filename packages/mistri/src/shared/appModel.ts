@@ -1307,6 +1307,8 @@ export interface AppDef {
   name: string;
   /** What a phone's bar and an installed icon say where `name` does not fit; 12 characters or fewer. */
   shortName?: string;
+  /** The word every built-in AI mark says (the review queue, a record's proposal line, history); "AI" when absent. */
+  ai?: { label: string };
   /** Connection this app is for, by id or name. Absent means every connection. */
   connection?: string;
   /** Every resource the App declares, by logical name. A physical binding

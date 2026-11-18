@@ -308,3 +308,8 @@ export function sameAnswer(a: unknown, b: unknown): boolean {
 /** Whether a column holds nothing: a decision fills an empty field, and only suggests beside a filled one. */
 export const isEmpty = (value: unknown): boolean =>
   value === null || value === undefined || value === '' || (Array.isArray(value) && value.length === 0);
+
+/** The proposal a decision row suggested: the link between the two, computed from the row's id alone, so the record's
+    suggestion can name it (decisionRoutes.ts) without reading the journal. */
+export const decisionProposalId = (decisionId: string): string =>
+  createHash('sha256').update(`decision\n${decisionId}`).digest('base64url').slice(0, 22);

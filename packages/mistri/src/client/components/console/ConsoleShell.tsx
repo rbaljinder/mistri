@@ -15,7 +15,8 @@ import { useAddressState } from '@mistriwork/mistri/page';
 import { useMessageLanguage } from '@mistriwork/kit/client/components/useMessageLanguage.js';
 import { say } from '../../copy/console/components/console/ConsoleShell.js';
 import type { ConsoleRequest } from './model.js';
-import { addHostListener, removeHostListener, shellById, shellRoot } from '@mistriwork/kit/client/shellHost.js';
+import { addHostListener, removeHostListener, shellById } from '@mistriwork/kit/client/shellHost.js';
+import { relativeTime } from '../../relativeTime.js';
 
 /** How often a room's reads refresh while the tab is visible. */
 const LIVE_EVERY = 15_000;
@@ -496,29 +497,10 @@ export function useListKeys(list: RefObject<HTMLElement | null>, onEscape?: () =
   }, [list]);
 }
 
-const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
-  ['second', 1],
-  ['minute', 60],
-  ['hour', 3600],
-  ['day', 86_400],
-  ['month', 2_592_000],
-  ['year', 31_536_000],
-];
 /** "12 minutes ago", "in 3 hours": the largest whole unit, in the page's language. */
 function ago(at: string, now = Date.now()): string | undefined {
   const ms = Date.parse(at);
-  if (Number.isNaN(ms)) return undefined;
-  const seconds = Math.round((ms - now) / 1000),
-    size = Math.abs(seconds);
-  let unit: Intl.RelativeTimeFormatUnit = 'second',
-    per = 1;
-  for (const [name, length] of UNITS)
-    if (size >= length) {
-      unit = name;
-      per = length;
-    }
-  if (size < 45) return new Intl.RelativeTimeFormat(shellRoot().lang || undefined, { numeric: 'auto' }).format(0, 'second');
-  return new Intl.RelativeTimeFormat(shellRoot().lang || undefined, { numeric: 'auto' }).format(Math.round(seconds / per), unit);
+  return Number.isNaN(ms) ? undefined : relativeTime(ms, now);
 }
 
 /** A moment said relatively ("12 minutes ago"), with the moment itself on hover. */

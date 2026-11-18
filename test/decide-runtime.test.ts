@@ -19,6 +19,8 @@ import type { StoredDecision } from '../packages/mistri/src/adapters/decide/deci
 import { decisionDigests } from '../packages/mistri/src/server/decide/decisionCheck.js';
 import { decisionLockText, readDecisionLock, withPin } from '../packages/mistri/src/server/decide/decisionLock.js';
 import { capturedJobModule } from '../packages/mistri/src/server/jobs/jobModule.js';
+import { decisionProposalId } from '../packages/mistri/src/server/decide/decideHost.js';
+import { COMMAND_JOURNAL_TABLES as journalTables } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { ROOT, childEnv, runCli } from './appApiCli.js';
 
 const src = (path: string) => JSON.stringify(pathToFileURL(join(ROOT, path)).href);
@@ -204,6 +206,61 @@ export default defineJobs({}, {
   // Confident, but the field holds a person's value: never overwritten, only offered beside it.
   assert.deepEqual([laptop[0].outcome, laptop[0].outcomeReason], ['suggested', 'filled']);
   assert.equal(read()[2].category, 'hardware');
+  /* Each suggestion is also a proposal in the one review queue, linked to its decision row by id: made by the
+     decision, its evidence the inputs it read, its model named. The applied answer's receipt says a decision made it,
+     and the field it wrote is marked as the decision's until a person confirms it. */
+  const journal = <T>(sql: string, ...params: Array<string | number>) => {
+    const db = new DatabaseSync(database, { readOnly: true, timeout: 10_000 });
+    try {
+      return db.prepare(sql).all(...params) as T[];
+    } finally {
+      db.close();
+    }
+  };
+  const proposalOf = (id: string) =>
+    journal<{
+      command: string;
+      target: string;
+      input: string;
+      actor_kind: string;
+      actor: string;
+      model_version: string;
+      evidence: string;
+      state: string;
+    }>(
+      `SELECT command, target, input, actor_kind, actor, model_version, evidence, state FROM "${journalTables.proposal}" WHERE id = ?`,
+      decisionProposalId(id),
+    )[0];
+  for (const [row, key] of [
+    [printer[0], 2],
+    [laptop[0], 3],
+  ] as const) {
+    const proposal = proposalOf(row.id);
+    assert.ok(proposal, `the suggestion on incident ${key} is a proposal`);
+    assert.deepEqual(
+      [proposal.command, JSON.parse(proposal.target), JSON.parse(proposal.input), proposal.actor_kind, proposal.actor, proposal.state],
+      ['categorize', { id: key }, { category: 'printer' }, 'decision', 'decision:triageCategory', 'proposed'],
+    );
+    assert.equal(proposal.model_version, 'jev-1-2026-10');
+    assert.deepEqual(
+      (JSON.parse(proposal.evidence) as Array<{ ref: string }>).map((each) => each.ref),
+      ['input:title'],
+    );
+  }
+  assert.equal(proposalOf(vpn[0].id), undefined, 'an applied answer is not proposed');
+  assert.deepEqual(
+    journal<{ actor_kind: string }>(`SELECT actor_kind FROM "${journalTables.receipt}" WHERE command_id = 'categorize'`).map(
+      (each) => each.actor_kind,
+    ),
+    ['decision'],
+  );
+  const provenanceMarks = () =>
+    journal<{ row_key: string; field: string; actor_kind: string; actor: string; confirmed_by: string | null }>(
+      `SELECT row_key, field, actor_kind, actor, confirmed_by FROM "${journalTables.provenance}" ORDER BY created_at`,
+    ).map((each) => ({ ...each }));
+  assert.deepEqual(provenanceMarks(), [
+    { row_key: '{"id":1}', field: 'category', actor_kind: 'decision', actor: 'decision:triageCategory', confirmed_by: null },
+  ]);
   // What was asked is named and digested, never kept: the row holds field names, a digest and the answer.
   assert.deepEqual(vpn[0].inputFields, ['title']);
   assert.match(vpn[0].inputsDigest, /^[0-9a-f]{64}$/);
@@ -310,6 +367,7 @@ export default defineJobs({}, {
   await suggestions(1);
   const corrected = await outcome(1, 'triageCategory');
   assert.deepEqual([corrected.outcome, corrected.outcomeReason, corrected.correctedTo], ['corrected', 'edited', 'hardware']);
+  assert.ok(provenanceMarks()[0].confirmed_by, "a person's edit of the field confirms the decision's mark");
   const usage = await store.usage('desk', undefined, '2000-01-01');
   assert.equal(usage[0].calls, 6, 'three event decisions and three swept: one call each');
 });

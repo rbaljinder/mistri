@@ -287,12 +287,29 @@ export interface HistoryEntry {
   /** What the person who made the write was called when they made it. Never their email: the store keeps
       the account, and no reader of a history is shown it. Absent where no name was kept ("Someone"). */
   by?: string;
+  /** Made by no person: an AI (the assistant, a decision) or a scheduled job. Absent for a person's write. */
+  maker?: 'ai' | 'job';
+  /** The job's id, where a job made it and said which. */
+  job?: string;
+  /** The write carried out a proposal an AI made and `by` approved. */
+  proposed?: true;
   fields: HistoryField[];
 }
 
 interface HistoryReply {
   entries: HistoryEntry[];
   more?: number;
+}
+
+/** Who made a row, in a reader's words: the stored maker kind (`job:<id>` where it named itself) and proposal, no more. */
+function madeBy(row: StoredRecordChange): Pick<HistoryEntry, 'maker' | 'job' | 'proposed'> {
+  const [kind, ...named] = (row.actorKind ?? '').split(':');
+  const id = named.join(':');
+  return {
+    ...(kind === 'assistant' || kind === 'decision' ? { maker: 'ai' as const } : {}),
+    ...(kind === 'job' ? { maker: 'job' as const, ...(id ? { job: id } : {}) } : {}),
+    ...(row.proposalId ? { proposed: true as const } : {}),
+  };
 }
 
 /** Merge a record's rows into one entry per write, newest first. Rows arrive newest first. */
@@ -318,6 +335,7 @@ export function groupHistory(rows: readonly StoredRecordChange[]): Array<Omit<Hi
       via: row.via,
       ...(row.action ? { action: row.action } : {}),
       ...(row.actorName ? { by: row.actorName } : {}),
+      ...madeBy(row),
       changes: row.changes.map((item) => ({ ...item })),
     });
   }

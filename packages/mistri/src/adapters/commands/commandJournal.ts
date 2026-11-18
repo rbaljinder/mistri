@@ -14,6 +14,8 @@ import {
   definitions,
   isCommandJournalTable,
   JOURNAL_VERSION,
+  RECEIPT_ACTOR_KINDS,
+  type ProposalState,
 } from './commandJournalSchema.js';
 import { assertSqliteCommandEventStore } from '../events/commandEventSchema.js';
 import { appendSqliteCommandEvents, assertSqliteCommandEvents, tenantCommandEventOwner } from '../events/commandEventStore.js';
@@ -23,6 +25,7 @@ import { BULK_LIMIT } from '../../shared/command.js';
 import { isTokenActorId } from '../../shared/publicActor.js';
 import { nextSqliteCommandNumber, provisionSqliteCommandSequences } from './commandSequences.js';
 import { countSqliteLinks, mintSqliteLink, openSqliteLink, readSqliteLink, revokeSqliteLinks } from './commandLinks.js';
+import { sqliteProposals } from './commandProposals.js';
 import { appendSqliteReadAudit } from '../readAudit/sqliteReadAudit.js';
 import type { ReadAuditRow } from '../readAudit/readAudit.js';
 import {
@@ -38,6 +41,8 @@ import type {
   StoredCommandReceipt,
   CommandAudit,
   CommandLinkRow,
+  CommandProposalRow,
+  ProvenanceRow,
   CommandJournal,
   CommandJournalAppScope,
   CommandJournalPlatform,
@@ -148,6 +153,8 @@ const receiptFields = [
   'requestId',
   'completedAt',
 ];
+/** What a write may carry beyond what a lookup reads back: who it ran for, by kind, and the proposal it ran from. */
+const receiptWriteFields = [...receiptFields, 'actorKind', 'proposalId'];
 const invalid = (): never => {
   throw new Refusal('Invalid structured operation.');
 };
@@ -344,7 +351,9 @@ const eventStoreOf = (source: CommandJournalTenant | CommandJournalAppScope) => 
 });
 
 function validateReceipt(receipt: StoredCommandReceipt): void {
-  record(receipt, receiptFields);
+  record(receipt, receiptWriteFields);
+  if (receipt.actorKind !== undefined && !(RECEIPT_ACTOR_KINDS as readonly unknown[]).includes(receipt.actorKind)) return invalid();
+  if (receipt.proposalId !== undefined) text(receipt.proposalId, 'proposal ID', 128);
   scopeValues(receipt);
   text(receipt.id, 'receipt ID', 128);
   text(receipt.fingerprint, 'fingerprint', 256);
@@ -489,7 +498,7 @@ const AUDIT_PART_COLUMNS = 'receipt_id, target_index, part, changes_json';
 /** The columns a receipt row is written with, in the order receiptRow gives them. */
 const RECEIPT_COLUMNS = `id, app_id, store_id, source_id, realm, tenant_id, actor_id, command_id, command_version, idempotency_key,
   fingerprint, result_json, request_id, completed_at, membership_id, membership_version, realm_version, roles_json, deployment,
-  target, owners_json, keys_json, changes_json`;
+  target, owners_json, keys_json, changes_json, actor_kind, proposal_id`;
 /** One receipt row's values: the receipt under its scope (receiptValues), its provenance and its targets. */
 function receiptRow(
   receipt: StoredCommandReceipt,
@@ -507,6 +516,8 @@ function receiptRow(
     receipt.completedAt,
     ...provenanceOf(member),
     ...packTargets(audits, owners),
+    receipt.actorKind ?? 'person',
+    receipt.proposalId ?? null,
   ];
 }
 /** What a lookup reads of a receipt row, by the names readReceiptRow takes. `completed` is how the engine says the
@@ -614,6 +625,7 @@ export const commandJournalValidation = Object.freeze({
   capture,
   record,
   receiptFields,
+  receiptWriteFields,
   scopeValues,
   validateReceipt,
   validateAudit,
@@ -676,7 +688,7 @@ export function createSqliteCommandJournal(
   const guard = verify;
   const namespace = namespaceOf(bound, platform);
   const values = (scope: CommandReceiptScope) => {
-    record(scope, receiptFields); // StoredCommandReceipt is a supported structural subtype.
+    record(scope, receiptWriteFields); // A receipt being written is a supported structural subtype of its scope.
     const [app, actor, command, version, key] = scopeValues(scope);
     if ((member && (app !== member.appId || actor !== member.actorId)) || (appScope && app !== appScope.appId)) return invalid();
     return [app, ...namespace, actor, command, version, key] as const;
@@ -838,6 +850,61 @@ export function createSqliteCommandJournal(
       invoke({ appId, id, now }, async (input) => {
         if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
         return readSqliteLink(db, input.appId, namespace[3], input.id, input.now);
+      }),
+    // Proposals and provenance marks in the journal's namespace too: a tenant's are its own (commandProposals.ts).
+    createProposal: (row: CommandProposalRow) =>
+      invoke({ row }, async ({ row }) => {
+        if ((member && row?.app !== member.appId) || (appScope && row?.app !== appScope.appId) || row?.tenant !== namespace[3])
+          return invalid();
+        await sqliteProposals(db, namespace[3]).create(row);
+      }),
+    readProposal: (appId: string, id: string) =>
+      invoke({ appId, id }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return sqliteProposals(db, namespace[3]).read(input.appId, input.id);
+      }),
+    listProposals: (appId: string, query: { commands: readonly string[]; states?: readonly ProposalState[]; limit: number }) =>
+      invoke({ appId, query }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return sqliteProposals(db, namespace[3]).list(input.appId, input.query);
+      }),
+    decideProposal: (appId: string, id: string, command: string, state: 'approved' | 'dismissed' | 'failed', by: string, now: number) =>
+      invoke({ appId, id, command, state, by, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return sqliteProposals(db, namespace[3]).decide(input.appId, input.id, input.command, input.state, input.by, input.now);
+      }),
+    settleProposal: (appId: string, id: string, receiptId: string) =>
+      invoke({ appId, id, receiptId }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return sqliteProposals(db, namespace[3]).settle(input.appId, input.id, input.receiptId);
+      }),
+    expireProposals: (appId: string, now: number) =>
+      invoke({ appId, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return sqliteProposals(db, namespace[3]).expire(input.appId, input.now);
+      }),
+    markProvenance: (row: ProvenanceRow) =>
+      invoke({ row }, async ({ row }) => {
+        if ((member && row?.app !== member.appId) || (appScope && row?.app !== appScope.appId) || row?.tenant !== namespace[3])
+          return invalid();
+        await sqliteProposals(db, namespace[3]).mark(row);
+      }),
+    confirmProvenance: (
+      appId: string,
+      resource: string,
+      rowKey: string,
+      field: string | readonly string[] | undefined,
+      by: string,
+      now: number,
+    ) =>
+      invoke({ appId, resource, rowKey, field, by, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return sqliteProposals(db, namespace[3]).confirm(input.appId, input.resource, input.rowKey, input.field, input.by, input.now);
+      }),
+    unconfirmedProvenance: (appId: string, resource: string, rowKey: string | null) =>
+      invoke({ appId, resource, rowKey }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return sqliteProposals(db, namespace[3]).unconfirmed(input.appId, input.resource, input.rowKey);
       }),
     kept: (appId: string, commandId: string, commandVersion: number) =>
       invoke({ appId, commandId, commandVersion }, async (input) => {

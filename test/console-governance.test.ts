@@ -45,8 +45,8 @@ function journal(path: string, count: number) {
   // One row per command: the targets are its arrays, each key and change set the exact JSON text.
   const receipt = db.prepare(`INSERT INTO "${COMMAND_JOURNAL_TABLES.receipt}" (id, app_id, store_id, source_id, realm, tenant_id, actor_id,
     command_id, command_version, idempotency_key, fingerprint, result_json, request_id, completed_at, membership_id, membership_version,
-    realm_version, roles_json, deployment, target, owners_json, keys_json, changes_json)
-    VALUES (?, ?, 'store', 'source', 'tenant', '', ?, ?, 1, ?, 'f', '{}', 'request', ?, '', '', '', '[]', 'production', ?, ?, ?, ?)`);
+    realm_version, roles_json, deployment, target, owners_json, keys_json, changes_json, actor_kind)
+    VALUES (?, ?, 'store', 'source', 'tenant', '', ?, ?, 1, ?, 'f', '{}', 'request', ?, '', '', '', '[]', 'production', ?, ?, ?, ?, 'person')`);
   const at = (minute: number) => new Date(Date.UTC(2026, 9, 1, 9, minute)).toISOString();
   const record = (
     id: string,
@@ -446,9 +446,9 @@ test('the audit reads a long change set whole: the fields only its continuation 
   const db = new DatabaseSync(path);
   db.prepare(`INSERT INTO "${COMMAND_JOURNAL_TABLES.receipt}" (id, app_id, store_id, source_id, realm, tenant_id, actor_id,
     command_id, command_version, idempotency_key, fingerprint, result_json, request_id, completed_at, membership_id, membership_version,
-    realm_version, roles_json, deployment, target, owners_json, keys_json, changes_json)
+    realm_version, roles_json, deployment, target, owners_json, keys_json, changes_json, actor_kind)
     VALUES ('receipt-long', 'depot', 'store', 'source', 'tenant', '', 'alice', 'count_item', 1, 'key-long', 'f', '{}', 'request',
-      '2026-10-01T09:00:00.000Z', '', '', '', '[]', 'production', 'items', '[""]', ?, ?)`).run(
+      '2026-10-01T09:00:00.000Z', '', '', '', '[]', 'production', 'items', '[""]', ?, ?, 'person')`).run(
     JSON.stringify([JSON.stringify({ id: 1 })]),
     JSON.stringify([split.changesJson]),
   );

@@ -84,6 +84,8 @@ export const DIRECTORY_PAGE = 'app:directory';
 
 /** The page id the reader's settings ride (SettingsRoom.tsx): their profile and their preferences, at `/{app}/settings`. */
 export const SETTINGS_PAGE = 'app:settings';
+/** For review (`/{app}/review`): proposals this reader may approve and values no person has confirmed. */
+export const REVIEW_PAGE = 'app:review';
 
 /** Whether a room is the assistant's page. */
 export const isAssistantRoom = (room: object): room is AssistantRoom => Object.hasOwn(room, 'assistant');

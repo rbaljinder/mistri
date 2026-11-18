@@ -110,8 +110,14 @@ test.describe('Service Atlas ITSM', () => {
         const main = (await page.locator('.page-main').boundingBox())!;
         expect(bounds.x).toBeGreaterThanOrEqual(0);
         expect(bounds.x + bounds.width).toBeLessThanOrEqual(width + 1);
-        if (width > 1100) expect(bounds.x).toBeGreaterThanOrEqual(main.x + main.width);
+        // A desk and a tablet (761–1100px) keep the context beside the work, a tablet's at 280px with the main
+        // column still wide enough to read; a phone stacks it under.
+        if (width > 760) expect(bounds.x).toBeGreaterThanOrEqual(main.x + main.width);
         else expect(bounds.y).toBeGreaterThanOrEqual(main.y + main.height);
+        if (width > 760 && width <= 1100) {
+          expect(Math.round(bounds.width)).toBe(280);
+          expect(main.width).toBeGreaterThanOrEqual(360);
+        }
         await context.scrollIntoViewIfNeeded();
         await expect(context.getByRole('button', { name: /^Edit Asset(?: |$)/ })).toBeVisible();
         await context.getByRole('button', { name: /^Edit Asset(?: |$)/ }).click();

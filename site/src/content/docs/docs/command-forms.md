@@ -41,6 +41,8 @@ Its command, `reportIssue`, says `targets: 'none'`: it names no record and inser
 - Use the resource's own New form (`form` on the resource) instead when a new row is its columns and the role writes the table ([forms](/docs/compose-form/)).
 - Use `targets: 'many'` with `bulk: true` on the action when the same command should apply to a queue's whole selection at once.
 
+A command a person runs from a record opens its form over the record: a short one (up to eight inputs) as a centered dialog, a longer one as a side drawer on the right, a full screen on a phone. Nothing is declared for it; the page behind stays where it is. A flow that creates something about a record, such as a note or a visit, belongs as a command on that record, not as a second New form.
+
 ## Options
 
 | Key                                  | What it does                                                                                                                              | Default       | Status |

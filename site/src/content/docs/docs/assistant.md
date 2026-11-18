@@ -31,7 +31,7 @@ assistant: assistant({
 ## What you'll see
 
 - A button in the App bar opens a panel beside the page; its corner button makes it full screen, and Escape puts it back. With `'page'` placed, it is also a page of its own (`/assistant`). Your conversations are listed beside it, the ones waiting for you first, and you can search them by what was said.
-- Answers stream in as text, with tables, figures, charts and records drawn by the App's own components. A change is a card: Confirm runs it through the record's own button or form; nothing is written before.
+- Answers stream in as text, with tables, figures, charts and records drawn by the App's own components. A change is a card: Confirm runs it through the record's own button or form; nothing is written before. A command's change is kept for review instead and the turn goes on: the card's Review and confirm approves it and Decline dismisses it, or the person decides it later at [For review](/docs/commands/#when-an-ai-calls-it). A reloaded conversation says what became of it (the command's verb in the past tense, such as Sent for Send appeal, or Dismissed) with no buttons.
 - A record card carries the record's own buttons and Edit, and a table's rows their ⋯ menu where a list of that table has `rowActions`: shown only to people who may press them, and what they did is noted in the conversation.
 
 ## When to use it, and when not

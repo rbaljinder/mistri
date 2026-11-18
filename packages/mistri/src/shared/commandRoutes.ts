@@ -14,6 +14,14 @@ export const COMMAND_ROUTES = {
   draft: '/api/commands/draft',
   /** A file sent to be held for a command's `field.files` or `field.signature` (server/commands/stagedFiles.ts). */
   files: '/api/commands/files',
+  /** The proposals a reader may decide, of the commands they are granted (server/commands/proposals.ts). */
+  proposals: '/api/commands/proposals',
+  /** A proposal run as whoever approves it, its receipt naming the proposal. */
+  approveProposal: '/api/commands/proposals/approve',
+  /** A proposal set aside, nothing run. */
+  dismissProposal: '/api/commands/proposals/dismiss',
+  /** What a non-person maker wrote, vouched for by a person. */
+  confirmProvenance: '/api/commands/provenance/confirm',
 } as const;
 
 export const COMMAND_ROUTE_PATHS: readonly string[] = Object.values(COMMAND_ROUTES);

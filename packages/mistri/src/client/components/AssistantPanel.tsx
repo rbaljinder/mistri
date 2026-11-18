@@ -65,6 +65,8 @@ import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import { assistantEntry } from '../publicAddress.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { ActionBar, ActionOutcomes, type ActionOutcome as ActionOutcomeReport } from './Actions.js';
+import { approveProposal, dismissProposal } from '../proposalDecisions.js';
+import { commandRevision } from './sdk/proposalCommands.js';
 import { ASSISTANT_PAGE, dashViewKey, formViewKey, resourceOf } from '@mistriwork/kit/client/components/appRooms.js';
 import { startersHere } from '../../shared/appAssistant.js';
 import { rootMatches } from '@mistriwork/kit/client/components/pageModel.js';
@@ -101,6 +103,7 @@ import { useWalk } from '@mistriwork/kit/client/components/walk.js';
 import { RefJump, Value } from '@mistriwork/kit/client/components/Value.js';
 import { referenceProjection } from '@mistriwork/engine/shared/referenceModel.js';
 import type { DashboardDef } from '@mistriwork/kit/client/components/dashboardModel.js';
+import { proposalStateWord } from '../proposalWords.js';
 import { say } from '../copy/shell/components/AssistantPanel.js';
 import './AssistantPanel.css';
 import { addHostListener, navFollow, portalRoot, removeHostListener, shellById } from '@mistriwork/kit/client/shellHost.js';
@@ -354,14 +357,18 @@ function Steps({ steps, running }: { steps: Extract<PanelItem, { type: 'step' }>
   );
 }
 
-const outcomeWords = (outcome: ProposalOutcome) =>
+/* A settled card says the one vocabulary every proposal does (proposalWords.ts): its action's verb in the past tense
+   ("Started" for Start working, a set as much as a command), Dismissed, or Failed with the reason; a New form's label
+   names a thing, not a verb, and says Done. A reloaded conversation reads the stored proposal's outcome
+   (assistantTurn.ts `itemsOf`), so it says the same and offers no buttons. */
+const outcomeWords = (outcome: ProposalOutcome, proposal: Proposal) =>
   outcome.status === 'done'
-    ? say('applied')
+    ? proposalStateWord('done', proposal.kind === 'new' ? undefined : proposal.label)
     : outcome.status === 'declined'
-      ? say('declined')
+      ? proposalStateWord('dismissed', undefined)
       : outcome.detail
         ? say('failed', { detail: outcome.detail })
-        : say('failedPlain');
+        : proposalStateWord('failed', undefined);
 
 interface CardProps {
   proposal: Proposal;
@@ -456,8 +463,38 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
     );
   };
 
+  /* A command kept for review is the stored proposal: Confirm approves it as the person, on the record as it is now, so
+     the receipt names the proposal (proposals.ts); Decline dismisses it. Either is the queue's own verb. */
+  const confirmReview = async () => {
+    const review = proposal.review;
+    const stored = action?.command ? (action as AppCommandAction) : undefined;
+    if (!review || !stored || !proposal.key) return settled({ status: 'failed', detail: say('failedPlain') });
+    setBusy(true);
+    try {
+      const expectedVersion = await commandRevision(stored.command.id, { ...proposal.key });
+      if (expectedVersion === undefined) return settled({ status: 'failed', detail: say('failedPlain') });
+      await approveProposal(state.activeConnection ?? null, { id: review, command: stored.command.id, expectedVersion });
+      settled({ status: 'done' });
+    } catch (error) {
+      settled({ status: 'failed', detail: error instanceof Error ? error.message : undefined });
+    }
+  };
+  const declineReview = async () => {
+    const review = proposal.review;
+    const stored = action?.command ? (action as AppCommandAction) : undefined;
+    if (!review || !stored) return settled({ status: 'declined' });
+    setBusy(true);
+    try {
+      await dismissProposal(state.activeConnection ?? null, { id: review, command: stored.command.id });
+      settled({ status: 'declined' });
+    } catch (error) {
+      settled({ status: 'failed', detail: error instanceof Error ? error.message : undefined });
+    }
+  };
+
   const confirm = () => {
-    if (proposal.kind === 'set') void confirmSet();
+    if (proposal.review) void confirmReview();
+    else if (proposal.kind === 'set') void confirmSet();
     else if (proposal.kind === 'command') setCommandOpen(true);
     else confirmNew();
   };
@@ -500,7 +537,7 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
         </dl>
       )}
       {outcome ? (
-        <p className="assistant-proposal-outcome">{outcomeWords(outcome)}</p>
+        <p className="assistant-proposal-outcome">{outcomeWords(outcome, proposal)}</p>
       ) : live ? (
         <>
           {reasonColumn && (
@@ -513,7 +550,7 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
             <Button intent="primary" onClick={confirm} disabled={busy || (reasonColumn !== undefined && !reason.trim())}>
               {proposal.kind === 'set' ? say('confirm') : say('review')}
             </Button>
-            <Button onClick={() => settled({ status: 'declined' })} disabled={busy}>
+            <Button onClick={() => (proposal.review ? void declineReview() : settled({ status: 'declined' }))} disabled={busy}>
               {say('decline')}
             </Button>
           </div>
@@ -869,6 +906,22 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
   const resolve = (proposal: Proposal, outcome: ProposalOutcome) => {
     if (!conversation) return;
     setItems((now) => now.map((item) => (item.type === 'proposal' && item.id === proposal.id ? { ...item, outcome } : item)));
+    /* One kept for review was never waited on: the turn went on. What the person did with it is told as any verb they
+       ran here is, so the model reads it next turn. */
+    const app = activeApp() as AppPayloadApp | null;
+    const action = (app?.resources[proposal.resource]?.actions as AppAction[] | undefined)?.find((each) => each.id === proposal.action);
+    if (proposal.review) {
+      if (action && proposal.key && outcome.status !== 'declined')
+        acted({
+          tableId: proposal.resource,
+          key: proposal.key,
+          label: proposal.record ?? proposal.label,
+          action,
+          outcome:
+            outcome.status === 'done' ? { status: 'done' } : { status: 'failed', ...(outcome.detail ? { detail: outcome.detail } : {}) },
+        });
+      return;
+    }
     void run('/api/assistant/resolve', {
       conversation,
       proposal: proposal.id,
@@ -1190,7 +1243,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
                       key={`c${item.id}`}
                       proposal={item.proposal}
                       outcome={item.outcome}
-                      live={!busy && waiting?.id === item.id}
+                      live={!busy && (item.proposal.review ? !item.outcome : waiting?.id === item.id)}
                       onResolve={(outcome) => resolve(item.proposal, outcome)}
                       onFollow={onFollow}
                     />

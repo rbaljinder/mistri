@@ -1430,6 +1430,33 @@ body.app-mode .confirm:is(.insert-dialog, .command-form, .set-field-dialog) > h2
     background: color-mix(in srgb, var(--raised) 60%, var(--surface));
   }
 }
+/* A long command form (formFrame, as New's: past eight fields) is a drawer on the window's right edge, over the page
+   it was started from, which stays where it is: an overlay takes no room from the page, so nothing under it moves.
+   Its foot is the band above (sticky in the box), its body the box's own scroll. A phone's, and the 641-760 band
+   where a 34rem drawer would leave a sliver of page, fills the screen. Enters on the drawer's own curve, under
+   reduced motion at once; leaving is at once (Motion doctrine 2, 14). */
+[data-slot='dialog-content'][data-kind='modal'].command-drawer {
+  position: fixed; inset: 0 0 0 auto; margin: 0; transform: none;
+  width: min(560px, calc(100vw - 48px)); height: 100dvh; max-height: none;
+  border-width: 0 0 0 1px; border-radius: 0; box-shadow: var(--shadow-panel);
+}
+@media (max-width: 760px) {
+  [data-slot='dialog-content'][data-kind='modal'].command-drawer { inset: 0; width: 100%; border-width: 0; }
+}
+@media (prefers-reduced-motion: no-preference) {
+  [data-slot='dialog-content'][data-kind='modal'].command-drawer {
+    transition: transform var(--t-panel) var(--ease-drawer), opacity var(--t-panel) var(--ease-drawer);
+    @starting-style { transform: translateX(2rem); opacity: 0; }
+  }
+}
+/* The evidence slot: beside the form from 900px, under it (ruled off) below that. Present, the drawer is wide enough
+   for both columns; absent, none of this is drawn. */
+.command-aside { min-width: 0; margin-top: var(--space-6); padding-top: var(--space-4h); border-top: 1px solid var(--line); }
+@media (min-width: 900px) {
+  [data-slot='dialog-content'][data-kind='modal'].command-drawer.command-drawer-wide { width: min(960px, calc(100vw - 48px)); }
+  .command-drawer-wide .command-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(16rem, 20rem); column-gap: var(--space-6); align-items: start; }
+  .command-drawer-wide .command-aside { margin-top: 0; padding-top: 0; border-top: 0; }
+}
 .peekpanel-open { flex: none; font-size: var(--text-sm); color: var(--ink-muted); }
 .peekpanel-open:hover { color: var(--ink); }
 /* A 28px square with the cross at a size it is seen at: at the text's 16px in the faint ink it was the smallest
@@ -1585,6 +1612,10 @@ body.app-mode .confirm:is(.insert-dialog, .command-form, .set-field-dialog) > h2
   border: 1px solid var(--line); border-radius: 999px; color: var(--ink-muted);
   font: var(--text-sm) var(--mono); padding: var(--space-1) var(--space-3h); white-space: nowrap;
 }
+/* The one AI mark (AiMark.tsx): the glyph at the text's cap height and the App's word, in --ai, at the size of the text
+   it stands in, so a row's mark is a row's height. */
+.ai-mark { display: inline-flex; align-items: center; gap: .25em; color: var(--ai); font-weight: 500; white-space: nowrap; }
+.ai-mark-glyph { width: .9em; height: .9em; flex: none; fill: currentColor; }
 
 /* ---------- the record picker ---------- */
 
@@ -1949,6 +1980,12 @@ body.session-locked > :not(#session-lock) { display: none !important; }
    The attribute is named twice to keep the weight the :has() rule had over a hovered row's tint. */
 .table-wrap tbody tr[data-chosen][data-chosen] > td { background: var(--accent-soft); }
 .row-host .row-select { width: 15px; height: 15px; margin: 0; accent-color: var(--accent); cursor: pointer; }
+/* The box's label (GridSelection.tsx) is laid out as nothing under a fine pointer. Under a finger it pads the 15px box
+   to a 44px target without moving it, as the checklist's does (structure.css): a checkbox cannot be padded itself. */
+.row-select-hit { display: contents; }
+@media (pointer: coarse) {
+  .row-select-hit { display: inline-flex; vertical-align: middle; padding: 14.5px; margin: -14.5px; cursor: pointer; } /* off-scale: (44px − the 15px box) / 2, a target's geometry */
+}
 /* Select all sat against the first column's sort button, a finger's 24px
    round it 0.4px short of clear (WCAG 2.5.8, which a 15px box meets by its
    spacing): the sort button reaches back over the column's edge. The box

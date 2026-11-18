@@ -59,18 +59,27 @@ test('ordinary private recovery shares find and returns immutable ordered target
       assert.deepEqual(Object.keys(journal).sort(), [
         'appendReadAudit',
         'commit',
+        'confirmProvenance',
         'countLinks',
+        'createProposal',
+        'decideProposal',
+        'expireProposals',
         'find',
         'insert',
         'kept',
+        'listProposals',
+        'markProvenance',
         'mintLink',
         'nextNumber',
         'openLink',
         'readLink',
+        'readProposal',
         'revokeLinks',
+        'settleProposal',
         'stage',
         'takeStaged',
         'taken',
+        'unconfirmedProvenance',
       ]);
       assert.deepEqual(await journal.find(receipt), receipt);
       const recovered = await recoverSqliteCommandReceipt(journal, receipt);

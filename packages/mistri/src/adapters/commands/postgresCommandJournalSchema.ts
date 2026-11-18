@@ -5,7 +5,15 @@
 
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { layoutRefusal, postgresLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
-import { COMMAND_JOURNAL_TABLES, COMMAND_TARGET_BOUNDS, CommandJournalUnavailable } from './commandJournalSchema.js';
+import {
+  COMMAND_JOURNAL_TABLES,
+  COMMAND_TARGET_BOUNDS,
+  CommandJournalUnavailable,
+  MAKER_KINDS,
+  PROPOSAL_BOUNDS,
+  PROPOSAL_STATES,
+  RECEIPT_ACTOR_KINDS,
+} from './commandJournalSchema.js';
 import { postgresRuntimeNames, runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 
@@ -20,9 +28,11 @@ export const q = (name: string) => runtimeTable('postgres', name);
    batch: PostgreSQL assigns ids at insert, not at commit, so delivery
    discovery walks batches by transaction (postgresEventDeliveryStore.ts).
    Version 2 adds the audit-part table, version 3 the link table and version 4
-   the empty event batch and a link's row stamp (see the SQLite journal). A
-   link's times are epoch milliseconds in both engines. */
-export const JOURNAL_VERSION = 4;
+   the empty event batch and a link's row stamp, version 5 a receipt's actor
+   kind and proposal and the proposal and provenance tables (see the SQLite
+   journal). A link's, a proposal's and a mark's times are epoch milliseconds
+   in both engines. */
+export const JOURNAL_VERSION = 5;
 const B = COMMAND_TARGET_BOUNDS;
 const COMPLETED_INDEX = `${tables.receipt}_completed`;
 const XACT_INDEX = `${tables.receipt}_xact`;
@@ -65,6 +75,54 @@ const linkDdl = (version: 3 | 4) => [
 )`,
   `CREATE INDEX "${LINK_INDEX}" ON ${q(tables.link)} (app_id, resource, row_key)`,
 ];
+const listed = (values: readonly string[]) => values.map((value) => `'${value}'`).join(', ');
+const ACTOR_KIND = `actor_kind text COLLATE "C" NOT NULL CHECK (actor_kind IN (${listed(RECEIPT_ACTOR_KINDS)}))`;
+const PROPOSAL_ID = `proposal_id text COLLATE "C" CHECK (octet_length(proposal_id) BETWEEN 1 AND 128)`;
+const PROPOSAL_INDEX = `${tables.proposal}_state`;
+const PROVENANCE_INDEX = `${tables.provenance}_row`;
+const EVIDENCE = `evidence text NOT NULL CHECK (octet_length(evidence) <= ${PROPOSAL_BOUNDS.evidence} AND json_typeof(evidence::json) = 'array')`;
+/* The proposal and provenance tables (see the SQLite journal), as version 5 lays them out and its upgrade creates them. */
+const proposalDdl = (): readonly string[] => [
+  `CREATE TABLE ${q(tables.proposal)} (
+  id text COLLATE "C" PRIMARY KEY,
+  app_id text COLLATE "C" NOT NULL,
+  tenant_id text COLLATE "C" NOT NULL,
+  command text COLLATE "C" NOT NULL,
+  target text COLLATE "C",
+  input text NOT NULL CHECK (octet_length(input) <= ${PROPOSAL_BOUNDS.input} AND json_typeof(input::json) = 'object'),
+  actor_kind text COLLATE "C" NOT NULL CHECK (actor_kind IN (${listed(MAKER_KINDS)})),
+  actor text COLLATE "C" NOT NULL,
+  model text,
+  model_version text,
+  cost_micros bigint CHECK (cost_micros >= 0),
+  ${EVIDENCE},
+  reason text NOT NULL CHECK (octet_length(reason) <= ${PROPOSAL_BOUNDS.reason}),
+  state text COLLATE "C" NOT NULL CHECK (state IN (${listed(PROPOSAL_STATES)})),
+  decided_by text COLLATE "C",
+  decided_at bigint,
+  receipt_id text COLLATE "C",
+  created_at bigint NOT NULL,
+  expires_at bigint NOT NULL CHECK (expires_at > created_at),
+  CHECK ((state = 'proposed') = (decided_at IS NULL))
+)`,
+  `CREATE INDEX "${PROPOSAL_INDEX}" ON ${q(tables.proposal)} (app_id, tenant_id, state, created_at)`,
+  `CREATE TABLE ${q(tables.provenance)} (
+  id text COLLATE "C" PRIMARY KEY,
+  app_id text COLLATE "C" NOT NULL,
+  tenant_id text COLLATE "C" NOT NULL,
+  resource text COLLATE "C" NOT NULL,
+  row_key text COLLATE "C" NOT NULL,
+  field text COLLATE "C",
+  actor_kind text COLLATE "C" NOT NULL CHECK (actor_kind IN (${listed(MAKER_KINDS)})),
+  actor text COLLATE "C" NOT NULL,
+  ${EVIDENCE},
+  created_at bigint NOT NULL,
+  confirmed_by text COLLATE "C",
+  confirmed_at bigint,
+  CHECK ((confirmed_by IS NULL) = (confirmed_at IS NULL))
+)`,
+  `CREATE INDEX "${PROVENANCE_INDEX}" ON ${q(tables.provenance)} (app_id, tenant_id, resource, row_key)`,
+];
 export const definitions: readonly string[] = [
   `CREATE TABLE ${q(tables.meta)} (
   singleton integer PRIMARY KEY CHECK (singleton = 1),
@@ -98,6 +156,8 @@ export const definitions: readonly string[] = [
   event_count integer CHECK (event_count BETWEEN 0 AND 32),
   digest text COLLATE "C" CHECK (digest ~ '^[0-9a-f]{64}$'),
   xact_id xid8,
+  ${ACTOR_KIND},
+  ${PROPOSAL_ID},
   CHECK (realm = 'tenant' OR tenant_id = ''),
   CHECK ((manifest_json IS NULL) = (event_count IS NULL) AND (manifest_json IS NULL) = (digest IS NULL) AND (manifest_json IS NULL) = (xact_id IS NULL)),
   UNIQUE (app_id, store_id, source_id, realm, tenant_id, actor_id, command_id, command_version, idempotency_key)
@@ -106,6 +166,7 @@ export const definitions: readonly string[] = [
   `CREATE INDEX "${XACT_INDEX}" ON ${q(tables.receipt)} (xact_id) WHERE xact_id IS NOT NULL`,
   AUDIT_PART_DDL,
   ...linkDdl(4),
+  ...proposalDdl(),
 ];
 
 /** What the upgrade from version 1 runs (storeLayouts.ts, in its one transaction under the store's lock): the new
@@ -132,6 +193,18 @@ export const postgresJournalUpgradeFrom3 = (): readonly string[] => [
   `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT ${tables.meta}_version_check`,
   `UPDATE ${q(tables.meta)} SET version = 4`,
   `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${tables.meta}_version_check CHECK (version = 4)`,
+];
+/** What the upgrade from version 4 runs: a receipt's actor kind, every earlier receipt a person's (no other maker
+ * wrote one under its own kind before), with the default dropped once filled so the column reads as created; its
+ * proposal; the proposal and provenance tables; and the version row moved on. */
+export const postgresJournalUpgradeFrom4 = (): readonly string[] => [
+  `ALTER TABLE ${q(tables.receipt)} ADD COLUMN ${ACTOR_KIND.replace(' NOT NULL ', " NOT NULL DEFAULT 'person' ")}`,
+  `ALTER TABLE ${q(tables.receipt)} ALTER COLUMN actor_kind DROP DEFAULT`,
+  `ALTER TABLE ${q(tables.receipt)} ADD COLUMN ${PROPOSAL_ID}`,
+  ...proposalDdl(),
+  `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT ${tables.meta}_version_check`,
+  `UPDATE ${q(tables.meta)} SET version = 5`,
+  `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${tables.meta}_version_check CHECK (version = 5)`,
 ];
 
 /* ---------- catalog description ---------- */
@@ -181,6 +254,9 @@ const text = (name: string) => c(name, 'text', 'default');
 const REALM = `CHECK ((realm = ANY (ARRAY['tenant'::text, 'platform'::text])))`;
 const PLATFORM_TENANTLESS = `CHECK (((realm = 'tenant'::text) OR (tenant_id = ''::text)))`;
 const on = (index: string) => index.replace(' ON ', ` ON ${runtimeSchema('postgres')}.`);
+const anyOf = (column: string, values: readonly string[]) =>
+  `CHECK ((${column} = ANY (ARRAY[${values.map((value) => `'${value}'::text`).join(', ')}])))`;
+const EVIDENCE_CHECK = `CHECK (((octet_length(evidence) <= ${PROPOSAL_BOUNDS.evidence}) AND (json_typeof((evidence)::json) = 'array'::text)))`;
 const LAYOUT: readonly PostgresRelationDescription[] = [
   // Sorted by name, as the description reads back.
   table(
@@ -234,6 +310,67 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
     [on(`CREATE UNIQUE INDEX ${tables.meta}_pkey ON ${tables.meta} USING btree (singleton)`)],
   ),
   table(
+    tables.proposal,
+    [
+      id('id'),
+      id('app_id'),
+      id('tenant_id'),
+      id('command'),
+      c('target', 'text', 'C', false),
+      text('input'),
+      id('actor_kind'),
+      id('actor'),
+      c('model', 'text', 'default', false),
+      c('model_version', 'text', 'default', false),
+      c('cost_micros', 'bigint', null, false),
+      text('evidence'),
+      text('reason'),
+      id('state'),
+      c('decided_by', 'text', 'C', false),
+      c('decided_at', 'bigint', null, false),
+      c('receipt_id', 'text', 'C', false),
+      c('created_at', 'bigint'),
+      c('expires_at', 'bigint'),
+    ],
+    [
+      `CHECK (((octet_length(input) <= ${PROPOSAL_BOUNDS.input}) AND (json_typeof((input)::json) = 'object'::text)))`,
+      anyOf('actor_kind', MAKER_KINDS),
+      `CHECK ((cost_micros >= 0))`,
+      EVIDENCE_CHECK,
+      `CHECK ((octet_length(reason) <= ${PROPOSAL_BOUNDS.reason}))`,
+      anyOf('state', PROPOSAL_STATES),
+      `CHECK ((expires_at > created_at))`,
+      `CHECK (((state = 'proposed'::text) = (decided_at IS NULL)))`,
+      `PRIMARY KEY (id)`,
+    ],
+    [
+      on(`CREATE INDEX ${PROPOSAL_INDEX} ON ${tables.proposal} USING btree (app_id, tenant_id, state, created_at)`),
+      on(`CREATE UNIQUE INDEX ${tables.proposal}_pkey ON ${tables.proposal} USING btree (id)`),
+    ],
+  ),
+  table(
+    tables.provenance,
+    [
+      id('id'),
+      id('app_id'),
+      id('tenant_id'),
+      id('resource'),
+      id('row_key'),
+      c('field', 'text', 'C', false),
+      id('actor_kind'),
+      id('actor'),
+      text('evidence'),
+      c('created_at', 'bigint'),
+      c('confirmed_by', 'text', 'C', false),
+      c('confirmed_at', 'bigint', null, false),
+    ],
+    [anyOf('actor_kind', MAKER_KINDS), EVIDENCE_CHECK, `CHECK (((confirmed_by IS NULL) = (confirmed_at IS NULL)))`, `PRIMARY KEY (id)`],
+    [
+      on(`CREATE INDEX ${PROVENANCE_INDEX} ON ${tables.provenance} USING btree (app_id, tenant_id, resource, row_key)`),
+      on(`CREATE UNIQUE INDEX ${tables.provenance}_pkey ON ${tables.provenance} USING btree (id)`),
+    ],
+  ),
+  table(
     tables.receipt,
     [
       id('id'),
@@ -263,6 +400,8 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       c('event_count', 'integer', null, false),
       c('digest', 'text', 'C', false),
       c('xact_id', 'xid8', null, false),
+      id('actor_kind'),
+      c('proposal_id', 'text', 'C', false),
     ],
     [
       'CHECK ((((manifest_json IS NULL) = (event_count IS NULL)) AND ((manifest_json IS NULL) = (digest IS NULL)) AND ((manifest_json IS NULL) = (xact_id IS NULL))))',
@@ -277,6 +416,8 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       `CHECK ((command_version > 0))`,
       "CHECK ((digest ~ '^[0-9a-f]{64}$'::text))",
       REALM,
+      anyOf('actor_kind', RECEIPT_ACTOR_KINDS),
+      `CHECK (((octet_length(proposal_id) >= 1) AND (octet_length(proposal_id) <= 128)))`,
       `PRIMARY KEY (id)`,
       `UNIQUE (app_id, store_id, source_id, realm, tenant_id, actor_id, command_id, command_version, idempotency_key)`,
     ],

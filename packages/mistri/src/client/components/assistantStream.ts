@@ -25,6 +25,8 @@ export interface Proposal {
   address?: string;
   values: Record<string, unknown>;
   why?: string;
+  /** A command kept for review: the stored proposal's id (commands/proposals.ts). The turn went on without it. */
+  review?: string;
 }
 export type AssistantBlock =
   | { kind: 'section'; section: Record<string, unknown> }
@@ -167,12 +169,13 @@ export function cutAt(items: readonly PanelItem[], at: number): PanelItem[] {
   return items.slice(0, at);
 }
 
-/** The proposal still waiting for the person: the last one, if it has no outcome. */
+/** The proposal still waiting for the person: the last one, if it has no outcome. One kept for review holds nothing up:
+ * the turn went on past it, and it waits in the queue as well as here. */
 export function waitingProposal(items: readonly PanelItem[]): Proposal | undefined {
   for (let at = items.length - 1; at >= 0; at--) {
     const item = items[at];
     if (item.type === 'person') return undefined;
-    if (item.type === 'proposal') return item.outcome ? undefined : item.proposal;
+    if (item.type === 'proposal' && !item.proposal.review) return item.outcome ? undefined : item.proposal;
   }
   return undefined;
 }

@@ -438,6 +438,8 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       'model.d.ts ViewTo.tab',
       /* A choice's `where` operand names the form field whose answer it reads, not words. */
       'model.d.ts CommandChoiceOperand.answer',
+      /* The App's name for its AI, a mark's word like `shortName` is the App's: one name, not a sentence to translate. */
+      'app.d.ts AppConfig.label',
     ]);
     const found = new Set<string>();
     const property = new RegExp(`\\b(${[...CAPTION_KEYS].join('|')})\\??: ([^;,)=]*)`, 'g');

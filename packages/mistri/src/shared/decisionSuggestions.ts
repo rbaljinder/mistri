@@ -9,6 +9,9 @@ export interface FieldSuggestion {
   readonly decision: string;
   readonly field: string;
   readonly command: string;
+  /** The proposal it was also made as (decideHost.ts), which Accept approves; it may not exist, where the journal
+      keeps no proposals or the answer could not be proposed, and Accept then runs the command as any run. */
+  readonly proposal: string;
   readonly answer: unknown;
   /** What the answer is called: a reference's record by its label, a choice as itself. */
   readonly label: string;

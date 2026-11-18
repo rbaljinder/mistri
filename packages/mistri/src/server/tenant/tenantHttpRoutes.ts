@@ -57,6 +57,11 @@ export const TENANT_COMMAND_ROUTES: ReadonlySet<string> = new Set([
   '/api/commands/execute',
   '/api/commands/status',
   '/api/commands/draft',
+  // A proposal listed, approved or dismissed, and a mark confirmed (commands/proposals.ts), under the member's grant.
+  '/api/commands/proposals',
+  '/api/commands/proposals/approve',
+  '/api/commands/proposals/dismiss',
+  '/api/commands/provenance/confirm',
   // A file held for a signed-in form's command (commands/stagedFiles.ts); its body is the file's, not an envelope.
   '/api/commands/files',
 ]);
@@ -145,6 +150,10 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/commands/status': ['command', 'commandVersion', 'key', 'expectedVersion', 'idempotencyKey', 'input'],
   '/api/commands/draft': ['form', 'op', 'step', 'draft', 'version', 'request'],
   '/api/commands/files': ['command', 'field', 'file'],
+  '/api/commands/proposals': ['command', 'states', 'ids', 'unconfirmed'],
+  '/api/commands/proposals/approve': ['id', 'command', 'expectedVersion', 'input'],
+  '/api/commands/proposals/dismiss': ['id', 'command'],
+  '/api/commands/provenance/confirm': ['command', 'resource', 'key', 'field'],
 };
 
 /** Hold a body to the fields its route takes. The caller hears the one fixed

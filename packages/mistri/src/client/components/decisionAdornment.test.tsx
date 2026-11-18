@@ -19,6 +19,7 @@ const suggestion: FieldSuggestion = {
   decision: 'route',
   field: 'assignee_id',
   command: 'assign',
+  proposal: 'prop-1',
   answer: 7,
   label: 'Ada Nguyen',
   probability: 0.9,

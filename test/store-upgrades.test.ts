@@ -198,7 +198,7 @@ for (const engine of ENGINES)
           const table = db.dialect === 'sqlite' ? '"__mistri_history_meta"' : 'mistri.history_meta';
           for (const [version, why] of [
             [0, /no upgrade from version 0/],
-            [2, /newer than this mistri/],
+            [3, /newer than this mistri/],
           ] as const) {
             // The marker's own CHECK pins the version, so a forged marker is a table of the same name without it.
             await db.run(`DROP TABLE ${table}`);
@@ -231,7 +231,7 @@ test('migrate stores status and up, on a SQLite file', async (t) => {
       await PROVISION['record-history'].sqlite!(where.url);
       const status = await run('stores', 'status', '--no-config', where.url);
       assert.equal(status.code, 0);
-      assert.match(status.text, /record-history\s+v1\s+current v1\s+up to date/);
+      assert.match(status.text, /record-history\s+v2\s+current v2\s+up to date/);
       assert.match(status.text, /inbox\s+absent/);
       const up = await run('stores', 'up', '--no-config', where.url);
       assert.equal(up.code, 0);

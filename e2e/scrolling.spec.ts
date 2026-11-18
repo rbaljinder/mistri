@@ -39,7 +39,9 @@ for (const theme of ['lumen', 'mono'])
       // portrait iPad, whose related rows stand 44px tall under a finger since 7c2082f5d), the short scroll is
       // still scrolled and its end reached. Mono's taller record scrolls far.
       const room = await content.evaluate((node) => node.scrollHeight - node.clientHeight);
-      if (room < 2 && theme === 'lumen') {
+      // The approved 280px tablet side column makes this record fit a portrait iPad (1024×1366) in either theme.
+      const portrait = viewport.height > viewport.width;
+      if (room < 2 && (theme === 'lumen' || portrait)) {
         await bottom();
         continue;
       }

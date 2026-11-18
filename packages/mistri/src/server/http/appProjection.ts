@@ -8,6 +8,7 @@ import { suggestPage, validatePage } from '@mistriwork/engine/shared/page.js';
 import { assistantModel } from '../assistant/assistantModel.js';
 import { viewerAudience } from '../../shared/appAudience.js';
 import { servedDecisions } from '../decide/decisionServing.js';
+import { offersReview } from '../commands/makerWrites.js';
 import { anatomyPage, type AnatomyHints } from '@mistriwork/engine/shared/pageAnatomy.js';
 import { headingOf, pluralOf, recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
@@ -174,6 +175,9 @@ export function browserApp(ctx: RequestContext, source: ResolvedSource) {
         )
       : undefined;
   if (app && decided) app = { ...app, decisions: decided };
+  /* For review is offered to whoever could approve something an AI can propose: the proposals route lists only
+     those commands' proposals (commands/proposals.ts), so a person granted none is not shown an empty room. */
+  if (app && host && offersReview(host.app.app.id, appCommandGrants(host.app.app, opening))) app = { ...app, review: true };
   /* A granted command that names no record and that no signed-in form runs: a component's `useCommand`
      reaches it by name, under the same grant and reads a form's would need. */
   const formCommands = host ? grantedFormCommands(host.app.app, commandRegistry, schema!, opening) : {};

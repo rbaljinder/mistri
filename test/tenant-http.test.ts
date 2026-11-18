@@ -659,6 +659,25 @@ test("a record's history is its tenant's: kept under its key and its owner, read
   // The request names no tenant, owner or store key of its own.
   denied(await f.data('/api/record-history', north, { table: 'item', key: { id: 'north-item', tenant_id: 'south' } }));
   denied(await f.data('/api/record-history', north, { table: 'item', key: { id: 'north-item' }, tenant: 'south' }));
+  /* A write a model proposed and a person approved keeps both hands in the tenant's store too, and reads back as
+     them: the approver stays the entry's person. A plain edit keeps neither. */
+  assert.deepEqual(
+    f.db
+      .prepare(`SELECT actor_kind, proposal_id FROM __mistri_history_change WHERE write_id NOT LIKE '%-planted'`)
+      .all()
+      .map((row) => ({ ...row })),
+    [{ actor_kind: null, proposal_id: null }],
+  );
+  f.db
+    .prepare(`INSERT INTO __mistri_history_change (write_id, at, resource, key_json, kind, changes_json, actor, actor_name, via, action, actor_kind, proposal_id)
+    SELECT write_id || '-proposed', at, resource, key_json, kind, changes_json, actor, actor_name, via, 'Send appeal', 'assistant', 'prop-7'
+    FROM __mistri_history_change WHERE write_id NOT LIKE '%-planted'`)
+    .run();
+  const proposed = ((await history(north, 'north-item')).body.entries as Array<Record<string, unknown>>).find(
+    (entry) => entry.action === 'Send appeal',
+  );
+  assert.equal(proposed?.proposed, true);
+  assert.equal(proposed?.maker, 'ai');
 });
 
 test("a dashboard's activity is its tenant's: the store reads that tenant's changes alone, and each record is read in the tenant first", async (t) => {
@@ -3581,7 +3600,8 @@ type Door = { lease?: Lease; control?: true; elsewhere?: Pointer };
 
 const fenceItems = ['south-item', 'alias-item'],
   fenceTasks = ['south-task'],
-  fenceFiles = ['south-att'];
+  fenceFiles = ['south-att'],
+  fenceProposals = ['south-proposal-pending'];
 const fenceWhere = (key: 'column' | 'path', id: string) => ({ groups: [[{ [key]: 'id', op: '=', value: id }]] });
 const fenceCommand = (id: string, idempotencyKey: string) => ({
   command: 'advance',
@@ -3592,6 +3612,10 @@ const fenceCommand = (id: string, idempotencyKey: string) => ({
   input: {},
 });
 const fenceBase64 = (text: string) => Buffer.from(text).toString('base64');
+const proposalFence: Pointer = [
+  'command-proposals.test.ts',
+  "a journal bound to one tenant reads, decides, sweeps and confirms nothing of another's",
+];
 
 function fenceDoors(): Record<string, Door> {
   const here = (title: string): Pointer => ['tenant-http.test.ts', title];
@@ -3698,6 +3722,23 @@ function fenceDoors(): Record<string, Door> {
         'tenant-signed-in-drafts.test.ts',
         'neither another member of the tenant nor an account of another tenant can open, step, submit or discard it',
       ],
+    },
+    // Another tenant's proposal and mark, seeded below, answer as ids nothing holds; the journal's own fence is `also`.
+    '/api/commands/proposals': { lease: { body: { command: 'advance' }, also: proposalFence } },
+    '/api/commands/proposals/approve': {
+      lease: {
+        body: { id: 'north-proposal-approve', command: 'advance', expectedVersion: 0 },
+        probe: { ids: fenceProposals, body: (id) => ({ id, command: 'advance', expectedVersion: 0 }) },
+      },
+    },
+    '/api/commands/proposals/dismiss': {
+      lease: {
+        body: { id: 'north-proposal-dismiss', command: 'advance' },
+        probe: { ids: fenceProposals, body: (id) => ({ id, command: 'advance' }) },
+      },
+    },
+    '/api/commands/provenance/confirm': {
+      lease: { probe: { ids: fenceTasks, body: (id) => ({ command: 'advance', resource: 'task', key: { id } }) } },
     },
     '/api/commands/files': {
       elsewhere: [
@@ -4004,6 +4045,24 @@ test("every lease route answers another tenant's key and selector exactly as a m
   );
   assert.equal((await f.data('/api/commands/execute', south, f.command('south'))).status, 200);
   assert.equal(f.version('south'), 1);
+  /* A proposal of each tenant, and a mark on each tenant's task, as a job would leave them. The north proposal to
+     approve targets a task of its own, so no other door's run of the north task moves the version it expects. */
+  f.db.exec(`INSERT INTO db_task VALUES ('north-proposed','north','proposed','North proposed',0)`);
+  const proposal = f.db.prepare(
+    `INSERT INTO "${COMMAND_JOURNAL_TABLES.proposal}" (id, app_id, tenant_id, command, target, input, actor_kind, actor, evidence, reason, state, created_at, expires_at)
+     VALUES (?, ?, ?, 'advance', ?, '{}', 'job', 'job:fence', '[]', 'Fence', 'proposed', 1, 4102444800000)`,
+  );
+  for (const [id, tenant, task] of [
+    ['north-proposal-approve', 'north', 'north-proposed'],
+    ['north-proposal-dismiss', 'north', 'north-task'],
+    ['south-proposal-pending', 'south', 'south-task'],
+  ])
+    proposal.run(id, appId, tenant, JSON.stringify({ id: task }));
+  const mark = f.db.prepare(
+    `INSERT INTO "${COMMAND_JOURNAL_TABLES.provenance}" (id, app_id, tenant_id, resource, row_key, field, actor_kind, actor, evidence, created_at)
+     VALUES (?, ?, ?, 'task', ?, NULL, 'job', 'job:fence', '[]', 1)`,
+  );
+  for (const tenant of ['north', 'south']) mark.run(`${tenant}-mark`, appId, tenant, JSON.stringify({ id: `${tenant}-task` }));
   const tables = (f.db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as { name: string }[]).map(
     (row) => row.name,
   );
@@ -4101,7 +4160,91 @@ test("every lease route answers another tenant's key and selector exactly as a m
     // A refused route may retire nothing; if it did, the next route opens afresh rather than inheriting a failure.
     if ((await f.data('/api/app', a)).status !== 200) a = await f.open();
   }
+  // The north tenant's proposals were decided and its mark confirmed; the other tenant's are as they were left.
+  const journal = (table: string) =>
+    f.db
+      .prepare(
+        `SELECT id, tenant_id, ${table === 'proposal' ? 'state' : 'confirmed_by'} AS was FROM "${COMMAND_JOURNAL_TABLES[table as 'proposal']}" ORDER BY id`,
+      )
+      .all()
+      .map((row) => ({ ...row }));
+  assert.deepEqual(journal('proposal'), [
+    { id: 'north-proposal-approve', tenant_id: 'north', was: 'approved' },
+    { id: 'north-proposal-dismiss', tenant_id: 'north', was: 'dismissed' },
+    { id: 'south-proposal-pending', tenant_id: 'south', was: 'proposed' },
+  ]);
+  // The approved run left a mark of its own on the north row it wrote; the seeded marks are the ones probed.
+  assert.deepEqual(
+    journal('provenance').filter((row) => String(row.id).endsWith('-mark')),
+    [
+      { id: 'north-mark', tenant_id: 'north', was: 'alice' },
+      { id: 'south-mark', tenant_id: 'south', was: null },
+    ],
+  );
+  const listed = await f.data('/api/commands/proposals', a, { command: 'advance' });
+  assert.equal(listed.status, 200, listed.text);
+  assert.doesNotMatch(listed.text, /south/);
   assert.deepEqual([...new Set(seen.map((entry) => entry.split(':')[1]))], ['north'], seen.join(' '));
+});
+
+/* The assistant's proposal is not a route: the host builds its `propose` step itself (tenantHttp.ts `propose`), on
+   the person's tab lease, as the assistant's turn asks it. It is fenced as a route is: on the north lease it keeps a
+   proposal of a north row in the north journal; a selector naming the other tenant, or the other tenant's row, keeps
+   nothing; and a client's body shaped like the host's step reaches no door as one. */
+test("the assistant proposes only into its person's own tenant, and no client body is read as its step", async (t) => {
+  const f = await fixture(t);
+  const a = await f.open();
+  const draft = (id: string, reason = 'Fence') => ({
+    command: 'advance',
+    key: { id },
+    input: {},
+    maker: 'assistant' as const,
+    makerActor: 'assistant',
+    model: 'scripted',
+    evidence: [{ kind: 'record' as const, ref: `task/{"id":"${id}"}`, label: id }],
+    reason,
+  });
+  // As the assistant's own forwarded request carries them (tenantAssistant.ts `forwarded`): headers and rawHeaders.
+  const asked = (tenant: string, lease: Context = a, account = lease.accountId) => {
+    const pairs = Object.entries({ cookie: 'fixture=alice', 'x-mistri-app': appId, ...f.headers(lease), 'x-mistri-account': account });
+    return {
+      url: f.select('/api/commands/propose', tenant),
+      method: 'POST',
+      headers: Object.fromEntries(pairs),
+      rawHeaders: pairs.flat(),
+    } as unknown as IncomingMessage;
+  };
+  const kept = () =>
+    f.db
+      .prepare(`SELECT tenant_id, target, actor_kind, reason FROM "${COMMAND_JOURNAL_TABLES.proposal}" ORDER BY created_at, id`)
+      .all()
+      .map((row) => ({ ...row }));
+
+  const proposed = await f.owner.propose(asked('north'), draft('north-task'), AbortSignal.timeout(10_000));
+  assert.equal(proposed.state, 'proposed');
+  assert.deepEqual(kept(), [{ tenant_id: 'north', target: '{"id":"north-task"}', actor_kind: 'assistant', reason: 'Fence' }]);
+
+  // The north lease naming the south tenant, the south row on the north lease: refused, and nothing kept.
+  await assert.rejects(f.owner.propose(asked('south'), draft('south-task', 'Across'), AbortSignal.timeout(10_000)));
+  await assert.rejects(f.owner.propose(asked('north'), draft('south-task', 'Across'), AbortSignal.timeout(10_000)));
+  // Another account's lease, on the tenant it names, is not the person's: refused.
+  const south = await f.open('south');
+  await assert.rejects(f.owner.propose(asked('south', south, 'mallory'), draft('south-task', 'Across'), AbortSignal.timeout(10_000)));
+
+  // A client's body shaped like the host's step: every proposal door reads it as its own body, and keeps nothing.
+  for (const path of [
+    '/api/commands/propose',
+    '/api/commands/proposals',
+    '/api/commands/proposals/approve',
+    '/api/commands/proposals/dismiss',
+  ]) {
+    const answer = await f.data(path, a, { step: 'propose', draft: draft('north-task', 'Forged'), ...draft('north-task', 'Forged') });
+    assert.ok(answer.status !== 200 || !answer.body.id, `${path}: ${answer.text}`);
+  }
+  assert.deepEqual(
+    kept().map((row) => row.reason),
+    ['Fence'],
+  );
 });
 
 /* The control routes take a tenant or a tab rather than a key: for a person who is a member of one tenant, another

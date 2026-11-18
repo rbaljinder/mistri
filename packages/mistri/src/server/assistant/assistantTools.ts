@@ -5,9 +5,12 @@
  * they do to the page. There is no other read path here to get wrong.
  *
  * `run` writes nothing. It checks the verb against the person's catalog and
- * the record's state now, and returns a proposal the panel draws as a card;
- * the person's own confirmation runs it through the page's write path, and
- * its outcome comes back to the conversation (assistantTurn.ts).
+ * the record's state now, and returns a proposal the panel draws as a card.
+ * A New form or a fixed action waits for the person's own confirmation, which
+ * runs it through the page's write path, and its outcome comes back to the
+ * conversation (assistantTurn.ts). A command is kept as a stored proposal for
+ * review (commands/proposals.ts), with the records the turn read as its
+ * evidence, and the turn goes on: approving it runs it as the approver.
  *
  * Every tool answers twice: the model gets a compact summary (ids, counts,
  * the first rows, addresses), the person gets what the panel draws (a folded
@@ -22,6 +25,9 @@ import { dashboardListQuery } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { formShownFields } from '@mistriwork/engine/shared/form.js';
 import type { Loop } from '@mistriwork/engine/server/http/firstPaint.js';
 import { lookupsOf } from '../http/firstPaintRooms.js';
+import type { CommandProposalRow, ProposalEvidence } from '../../adapters/commands/commandJournalTypes.js';
+import { isBusinessCommandExecutionError } from '../commands/commandErrors.js';
+import type { ProposalDraft } from '../commands/proposals.js';
 import type { AssistantCatalog, CatalogVerb } from './assistantCatalog.js';
 
 /** A block as the panel draws it: a dashboard section, or one record's card. */
@@ -42,6 +48,9 @@ export interface Proposal {
   address?: string;
   values: Record<string, unknown>;
   why?: string;
+  /** A command's stored proposal (commands/proposals.ts): decided by approve or dismiss, as the review queue does, and
+   * the turn did not wait for it. */
+  review?: string;
 }
 
 export type DisplayItem =
@@ -64,6 +73,9 @@ export interface ToolSession {
   assistant: AppAssistant;
   catalog: AssistantCatalog;
   signal: AbortSignal;
+  /** Keeps a command's proposal for review as this person, under the grant and row policy their own run would meet
+   * (http/assistantProposal.ts; a tenant App's host, tenant/tenantHttp.ts `propose`). */
+  propose?: (draft: ProposalDraft) => Promise<CommandProposalRow>;
 }
 
 /** A refusal the model is told and may act on: a wrong name, a field that is not there. */
@@ -79,6 +91,14 @@ const RESULT_CHARS = 6_000;
 /* A table block's rows the model is told: enough to name and link a few. The person sees the block itself. */
 const TABLE_ROWS_TO_MODEL = 5;
 const RECORDS_TO_MODEL = 20;
+/* What a stored proposal may carry as evidence (adapters/commands/commandProposals.ts keeps 64): the last records the
+   turn read, nearest the proposal. */
+const EVIDENCE_KEPT = 32;
+const plain = (text: unknown, most: number) =>
+  String(text ?? '')
+    .replace(/\p{Cc}+/gu, ' ')
+    .trim()
+    .slice(0, most);
 const CHOICES_TO_MODEL = 20;
 
 const quoted = (value: unknown): string => {
@@ -140,6 +160,16 @@ function toolContext(session: ToolSession) {
 function makeContext(session: ToolSession) {
   let schema: Promise<DatabaseSchema> | undefined;
   let book: AddressBook | undefined;
+  /* The records this turn read, as a reviewer is shown them: what the assistant had before it proposed. Read again,
+     a record moves to the end, so the newest reads are the ones kept. */
+  const evidence = new Map<string, ProposalEvidence>();
+  const read = (table: string, key: Record<string, unknown>, label: unknown) => {
+    const ref = `${table}/${JSON.stringify(key)}`;
+    if (ref.length > 2048) return;
+    evidence.delete(ref);
+    evidence.set(ref, { kind: 'record', ref, label: plain(label, 200) || ref.slice(0, 200) });
+  };
+  const evidenceRead = () => [...evidence.values()].slice(-EVIDENCE_KEPT);
   const target = (path: string) => `${path}${path.includes('?') ? '&' : '?'}app=${encodeURIComponent(session.app)}`;
   const ask = async (method: 'GET' | 'POST', path: string, body?: Record<string, unknown>) => {
     const answer = await session.loop(method, target(path), body, session.signal);
@@ -221,6 +251,7 @@ function makeContext(session: ToolSession) {
     if (!rows.length) return undefined;
     const label = labelColumn(table);
     const key = { [pk]: rows[0][pk] ?? id };
+    read(table.id, key, label && rows[0][label] != null ? rows[0][label] : `${table.id} ${String(id)}`);
     return {
       row: rows[0],
       key,
@@ -247,7 +278,7 @@ function makeContext(session: ToolSession) {
     (session.payload.resources[resource] as { actions?: Array<Record<string, unknown>> } | undefined)?.actions?.find(
       (each) => each.id === id,
     );
-  return { ask, run, measure, record, tableOf, addressOf, verbOf, servedAction, catalogSchema };
+  return { ask, run, measure, record, tableOf, addressOf, verbOf, servedAction, catalogSchema, read, evidenceRead };
 }
 type Context = ReturnType<typeof toolContext>;
 
@@ -283,6 +314,7 @@ async function find(context: Context, session: ToolSession, input: Record<string
       );
       for (const row of rows) {
         const key = { [pk]: row[pk] };
+        context.read(table.id, key, row[label]);
         records.push({ resource, id: row[pk], label: row[label], address: await context.addressOf(table.id, key) });
       }
     } catch {
@@ -386,8 +418,11 @@ async function query(context: Context, input: Record<string, unknown>) {
   const schema = await context.catalogSchema();
   const meta = table ? schema.tables.find((each) => each.id === table) : undefined;
   const [pk] = meta ? primaryKey(meta) : [];
+  const label = meta && labelColumn(meta);
   const shown = await Promise.all(
     rows.slice(0, SHOWN_TO_MODEL).map(async (row) => {
+      if (meta && pk && row[pk] !== undefined)
+        context.read(meta.id, { [pk]: row[pk] }, label && row[label] != null ? row[label] : `${meta.id} ${String(row[pk])}`);
       const out = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, clipped(value)]));
       if (meta && pk && row[pk] !== undefined) {
         const address = await context.addressOf(meta.id, { [pk]: row[pk] });
@@ -529,7 +564,7 @@ async function propose(
   session: ToolSession,
   input: Record<string, unknown>,
   id: string,
-): Promise<{ proposal: Proposal; label: string; result: unknown }> {
+): Promise<{ proposal: Proposal; label: string; result: unknown; review?: boolean }> {
   const verb = context.verbOf(String(input.action ?? ''));
   const table = await context.tableOf(verb.resource);
   const values =
@@ -586,6 +621,41 @@ async function propose(
     values: kept,
     ...(why ? { why } : {}),
   };
+  const command = verb.kind === 'command' ? (action.command as { id?: unknown } | undefined)?.id : undefined;
+  if (session.propose && typeof command === 'string') {
+    /* A command is kept for review, as the person: their grant and their rows decide it (http/assistantProposal.ts),
+       and approving it runs it as whoever approves. The turn does not wait for it. */
+    let row: CommandProposalRow;
+    try {
+      row = await session.propose({
+        command,
+        key: found.key as Record<string, string | number>,
+        input: kept,
+        maker: 'assistant',
+        makerActor: 'assistant',
+        ...(session.assistant.model ? { model: plain(session.assistant.model, 200) } : {}),
+        evidence: context.evidenceRead(),
+        reason: plain(why ?? `${verb.label}: ${found.title}`, 2000) || verb.label,
+      });
+    } catch (error) {
+      if (session.signal.aborted || !isBusinessCommandExecutionError(error)) throw error;
+      throw new ToolRefusal(
+        error.code === 'forbidden'
+          ? `This person may not run ${verb.label}, so it cannot be proposed for them.`
+          : error.code === 'invalid_input'
+            ? `${verb.label} does not take those values${error.field ? `: ${error.field} is not right` : ''}.`
+            : error.code === 'not_found'
+              ? `No ${verb.resource} with that id is visible to this person.`
+              : `${verb.label} could not be kept for review just now.`,
+      );
+    }
+    return {
+      proposal: { ...proposal, review: row.id },
+      label: `Proposed ${verb.label}: ${found.title}`,
+      result: { proposed: `${verb.resource}.${verb.id}`, record: found.title, kept: 'for review in the queue', id: row.id },
+      review: true,
+    };
+  }
   return {
     proposal,
     label: `Proposed ${verb.label}: ${found.title}`,
@@ -619,10 +689,11 @@ export async function answerTool(session: ToolSession, name: string, input: unkn
   try {
     if (!(session.assistant.tools as string[]).includes(name)) throw new ToolRefusal(`There is no tool "${name}" here.`);
     if (name === 'run') {
-      const { proposal, label, result } = await propose(context, session, args, id);
+      const { proposal, label, result, review } = await propose(context, session, args, id);
       return {
         result: JSON.stringify(result),
-        proposal,
+        // A stored proposal is not waited for: without `proposal`, the turn goes on (assistantTurn.ts).
+        ...(review ? {} : { proposal }),
         display: [
           { type: 'step', id, tool: name, label },
           { type: 'proposal', id, proposal },

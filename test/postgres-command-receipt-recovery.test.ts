@@ -94,18 +94,27 @@ test('native PostgreSQL private ordinary receipt recovery', { skip: liveSkip('po
         assert.deepEqual(Object.keys(journal).sort(), [
           'appendReadAudit',
           'commit',
+          'confirmProvenance',
           'countLinks',
+          'createProposal',
+          'decideProposal',
+          'expireProposals',
           'find',
           'insert',
           'kept',
+          'listProposals',
+          'markProvenance',
           'mintLink',
           'nextNumber',
           'openLink',
           'readLink',
+          'readProposal',
           'revokeLinks',
+          'settleProposal',
           'stage',
           'takeStaged',
           'taken',
+          'unconfirmedProvenance',
         ]);
         assert.deepEqual(await journal.find(receipt), receipt);
         const recovered = await recoverPostgresCommandReceipt(journal, receipt);

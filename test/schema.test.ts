@@ -262,6 +262,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
        test in the same change, with the site marking it stable or preview. */
     assert.deepEqual(props(appSchema), sorted(ROOT_KEYS));
     assert.deepEqual(sorted(ROOT_KEYS), [
+      /* `ai` (1.0.0-rc.64): the word every built-in AI mark says. */
+      'ai',
       'analytics',
       'api',
       'assistant',
@@ -776,7 +778,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // there (one entry; the name was a card's already): 1768/524.
     // A dashboard's rows and a record page's related list take that `primary` too (two entries, no new name): 1770/524.
     // A theme's `ai` in a mode's colors, the mark of what an AI made (two entries, a mode each, and one new name): 1772/525.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1772, names: 525 });
+    // Root `ai` with its `label`, the word the AI mark says (two entries; both names were keys already): 1774/525.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1774, names: 525 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

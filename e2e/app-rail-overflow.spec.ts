@@ -113,16 +113,34 @@ test('a folded rail with a menu taller than the window leaves the page no taller
   await page.setViewportSize({ width: 1100, height: 500 });
   await page.goto(`${origin}/`);
   await expect(page.locator('#table-list button').first()).toBeVisible();
-  await page.locator('.sidebar-collapse').click();
+  // 1100px is a tablet (761–1100px): the rail stands folded there from the start, on screen, and its menu is the
+  // one taller than the window. The fold button opens it for the visit and folds it again.
   await expect(page.locator('body')).toHaveClass(/app-nav-rail/);
+  const fitsTheWindow = async () => {
+    await expect(page.locator('.sidebar')).toBeVisible();
+    const list = await page.locator('#table-list').evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
+    expect(list.scroll).toBeGreaterThan(list.client);
+    // Every entry is reachable inside the list's own scroll: its last one scrolls into the window.
+    const last = page.locator('#table-list button:not(.nav-group-fold)').last();
+    await last.scrollIntoViewIfNeeded();
+    const box = (await last.boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(500 + 1);
+    await page.locator('#table-list').evaluate((el) => {
+      el.scrollTop = 0;
+    });
+    const page_ = await page.evaluate(() => ({
+      scroll: document.scrollingElement!.scrollHeight,
+      inner: window.innerHeight,
+    }));
+    expect(page_.scroll).toBeLessThanOrEqual(page_.inner);
+  };
   await expect(page.locator('body')).toHaveClass(/sidebar-hidden/);
-  const list = await page.locator('#table-list').evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight }));
-  expect(list.scroll).toBeGreaterThan(list.client);
-  const page_ = await page.evaluate(() => ({
-    scroll: document.scrollingElement!.scrollHeight,
-    inner: window.innerHeight,
-  }));
-  expect(page_.scroll).toBeLessThanOrEqual(page_.inner);
+  await fitsTheWindow();
+  await page.locator('.sidebar-collapse').click();
+  await expect(page.locator('body')).not.toHaveClass(/sidebar-hidden/);
+  await page.locator('.sidebar-collapse').click();
+  await expect(page.locator('body')).toHaveClass(/sidebar-hidden/);
+  await fitsTheWindow();
 });
 
 /*

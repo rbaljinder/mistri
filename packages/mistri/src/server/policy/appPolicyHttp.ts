@@ -290,6 +290,11 @@ export function httpRowPolicyAllows(method: string | undefined, path: string, co
             COMMAND_ROUTES.draft,
             /* A step's check reads the answers alone, never a row (commands/commandCheck.ts), under this principal's grants. */
             COMMAND_ROUTES.check,
+            /* Proposals of the commands this principal is granted, decided in the context's own transaction. */
+            COMMAND_ROUTES.proposals,
+            COMMAND_ROUTES.approveProposal,
+            COMMAND_ROUTES.dismissProposal,
+            COMMAND_ROUTES.confirmProvenance,
           ].includes(path))
     : (method === 'GET' || method === 'HEAD') && readGets.has(path);
 }

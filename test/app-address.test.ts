@@ -354,6 +354,18 @@ test('the assistant’s page is a room of its own, a conversation under it; only
   assert.equal(readAppSegments(book, ['assistant']), undefined);
 });
 
+test('For review is every App’s room, listed by check --routes; a view that already uses the word keeps it', () => {
+  assert.deepEqual(readAppSegments(book, ['review']), { kind: 'route', target: { kind: 'review' } });
+  assert.equal(readAppSegments(book, ['review', 'more']), undefined);
+  assert.deepEqual(
+    routeTable(book, '/crm').filter((row) => row.path === '/crm/review'),
+    [{ path: '/crm/review', what: 'the review queue' }],
+  );
+  const owned = appAddressBook({ ...input, views: { ...input.views, review: { table: 'lead' } }, order: [...input.order, 'review'] });
+  assert.deepEqual(owned.problems, []);
+  assert.equal((readAppSegments(owned, ['review']) as { target: { kind: string } }).target.kind, 'list');
+});
+
 /* Lintel's shape: a resident's own repairs first in the menu, the office's repairs under Maintenance, a technician's
    visits (a standing query) and the board (a query too) beside it, and the repair's page over the table. */
 test("a record's address is the first view showing its table among the views that person is served", () => {

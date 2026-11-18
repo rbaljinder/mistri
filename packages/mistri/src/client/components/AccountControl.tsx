@@ -21,6 +21,7 @@ import { post, reload } from './authRequest.js';
 import { menuItems, menuMode, setAccountMenu, whenMenuChanges } from '@mistriwork/kit/client/menu.js';
 import { MenuRegistryItems } from '@mistriwork/kit/client/components/OverflowMenu.js';
 import { InboxBell } from './InboxBell.js';
+import { activeApp } from '../appState.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import type { AppSwitcherConfig, AppSwitcherLocal } from './SuiteAppSwitcher.js';
 import { say } from '../copy/account/components/AccountControl.js';
@@ -37,6 +38,8 @@ const looksLikeEmail = (value: string) => /^[^\s@]+@[^\s@]+$/.test(value);
 const AccountProfile = onDemand(() => import('./AccountProfile.js'), 'AccountProfile', { quiet: true });
 const AccountAdministration = onDemand(() => import('./AccountAdministration.js'), 'AccountAdministration', { quiet: true });
 const TenantAdministration = onDemand(() => import('./TenantAdministration.js'), 'TenantAdministration', { quiet: true });
+/* The For review key: its own chunk, fetched only where the App offers review (ReviewNav.tsx). */
+const ReviewNav = onDemand(() => import('./ReviewNav.js'), 'ReviewNav', { quiet: true });
 const TenantInvitations = onDemand(() => import('./TenantInvitations.js'), 'TenantInvitations', { quiet: true });
 const TenantApiTokens = onDemand(() => import('./TenantApiTokens.js'), 'TenantApiTokens', { quiet: true });
 const SuiteAppSwitcher = onDemand(() => import('./SuiteAppSwitcher.js'), 'SuiteAppSwitcher', { quiet: true });
@@ -208,10 +211,17 @@ export function AccountControl({
     .join('')
     .toUpperCase();
   const settingsRoom = inApp && Boolean(shell().rooms.Settings);
+  const review = inApp && Boolean(activeApp()?.review);
   return (
     <>
       {appSwitcher?.placement === 'navbar' && <SuiteAppSwitcher config={appSwitcher} local={appSwitcherLocal} placement="navbar" />}
-      <span ref={host} className={inbox || settingsRoom ? 'account-with-inbox' : undefined} onPointerEnter={reach} onFocusCapture={reach}>
+      <span
+        ref={host}
+        className={inbox || settingsRoom || review ? 'account-with-inbox' : undefined}
+        onPointerEnter={reach}
+        onFocusCapture={reach}
+      >
+        {review && <ReviewNav />}
         {inbox && <InboxBell />}
         {/* The reader's settings are a room with an address (SettingsRoom.tsx): a key that goes there, between the
             bell and the account. A link to a page, not a second menu beside the account's. */}

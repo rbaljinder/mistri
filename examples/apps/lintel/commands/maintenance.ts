@@ -83,6 +83,8 @@ export const assignTechnician = defineCommand({
   source: lintel,
   target: 'maintenance_request',
   read: ['staff', 'unit', 'property'],
+  /* The triage decision only suggests a technician: a call no person made waits in For review. */
+  approval: 'ai',
   input: {
     assigned_to: field.reference('staff', {
       by: 'id',

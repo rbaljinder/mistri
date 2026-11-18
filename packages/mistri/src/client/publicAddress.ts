@@ -43,6 +43,7 @@ import {
   ASSISTANT_PAGE,
   DIRECTORY_PAGE,
   INBOX_PAGE,
+  REVIEW_PAGE,
   SETTINGS_PAGE,
   dashPageId,
   dashViewKey,
@@ -80,6 +81,7 @@ import {
   INBOX_SEGMENT,
   ASSISTANT_ROOM,
   DIRECTORY_ROOM,
+  REVIEW_ROOM,
   SETTINGS_ROOM,
   addressSlug,
   appAddressBook,
@@ -539,6 +541,7 @@ function sayEntry(book: AddressBook, entry: Entry): Said | undefined {
     // The section the room was opened at rides the walk, not the address: the page is one page.
     if (entry.pageId === SETTINGS_PAGE)
       return book.routes.get(SETTINGS_ROOM)?.kind === 'settings' ? { segments: [SETTINGS_ROOM] } : undefined;
+    if (entry.pageId === REVIEW_PAGE) return book.routes.get(REVIEW_ROOM)?.kind === 'review' ? { segments: [REVIEW_ROOM] } : undefined;
     // The assistant's page, and one conversation on it (`tab` holds its id).
     if (entry.pageId === ASSISTANT_PAGE)
       return book.routes.get(ASSISTANT_ROOM)?.kind === 'assistant'
@@ -653,6 +656,9 @@ const settingsEntry = (section?: string): Entry => ({
   ...(section ? { tab: section } : {}),
 });
 
+/** For review as the walk holds it. */
+export const reviewEntry = (): Entry => ({ kind: 'page', pageId: REVIEW_PAGE, table: undefined, label: say('forReview') });
+
 /** The assistant's page as the walk holds it, on one conversation when `conversation` names it. */
 export const assistantEntry = (conversation?: string): Entry => ({
   kind: 'page',
@@ -714,6 +720,7 @@ export function appStackFrom(hash: string): { connection: string; stack: Entry[]
     if (target.kind === 'inbox') return { connection, stack: [inboxEntry()] };
     if (target.kind === 'directory') return { connection, stack: [directoryEntry()] };
     if (target.kind === 'settings') return { connection, stack: [settingsEntry()] };
+    if (target.kind === 'review') return { connection, stack: [reviewEntry()] };
     if (target.kind === 'assistant') return { connection, stack: [assistantEntry()] };
     return { connection, stack: [tableView(target.table) as Entry] };
   }

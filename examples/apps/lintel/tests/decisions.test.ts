@@ -90,3 +90,12 @@ test('the clock suggests a technician for each new repair; the office sees it, n
   });
   assert.equal(refused.status, 403, await refused.clone().text());
 });
+
+test('For review answers under the row policy: the scoped journal carries proposals', async () => {
+  // Lintel runs every command through its row policy's journal facade; one that forgot the proposal
+  // members answered this list 503 'temporarily unavailable'.
+  const manager = await lintel.as('manager');
+  const listed = await manager.request('/api/commands/proposals?app=lintel', { method: 'POST', json: { connection: 'lintel' } });
+  assert.equal(listed.status, 200, await listed.clone().text());
+  assert.ok(Array.isArray(((await listed.json()) as { proposals: unknown }).proposals));
+});

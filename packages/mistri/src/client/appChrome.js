@@ -11,6 +11,7 @@
  */
 import { personFacing } from '@mistriwork/kit/client/audience.js';
 import { createElement } from 'react';
+import { PHONE_QUERY, TABLET_QUERY } from '@mistriwork/ui/internal/ruler.js';
 import { AssistantTrigger } from './components/AssistantTrigger.js';
 import { element, mount, queryClient, unmount } from '@mistriwork/kit/client/components/mount.js';
 import { captureAccountIdentity, requireTenantSelection, sessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
@@ -364,7 +365,10 @@ function renderTopNav(host, app, mobileDrawer = false) {
 }
 
 /** Whether the App's menu is a phone's drawer: the boot draws the shell again when this crosses. */
-export const compactAppNavigation = window.matchMedia('(max-width: 900px)');
+export const compactAppNavigation = window.matchMedia(PHONE_QUERY);
+/** Whether the App's side menu is a tablet's icon rail, whatever the App asked for at a desk: the boot draws the
+    shell again when this crosses too (docs/design.md, Mobile). */
+export const tabletAppNavigation = window.matchMedia(TABLET_QUERY);
 
 /**
  * The App's menu shell, drawn each time the kit draws its menu. True where
@@ -406,7 +410,10 @@ export function appMenuShell() {
   /* The icon rail: folding this App's side menu leaves its icons standing
      rather than hiding it (palette.js reads the class for the fold button). The sidebar that holds the bar always
      folds to it: hidden whole, it would take the mark, the search and the account with it. */
-  shellBody().classList.toggle('app-nav-rail', Boolean(appMode && !topMode && !mobileDrawer && (railed() || sidebarHead)));
+  shellBody().classList.toggle(
+    'app-nav-rail',
+    Boolean(appMode && !topMode && !mobileDrawer && (railed() || sidebarHead || (rooms && !noMenu && tabletAppNavigation.matches))),
+  );
   const header = shellQuery('.topbar');
   /* In the sidebar the head is the sidebar's width: the content's ruler (`headerWidth`) is a band's. */
   if (header instanceof HTMLElement) applyHeaderShell(header, $('content'), appMode && !sidebarHead ? app?.ui.shell : undefined);

@@ -5,7 +5,7 @@
  * key the operation store keeps, for one record or a queue's selection.
  */
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AppCommandAction } from '../../shared/app.js';
 import { api, go, rowView, state } from '@mistriwork/kit/client/core.js';
@@ -26,7 +26,9 @@ import {
 } from './CommandFields.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Modal } from '@mistriwork/ui/Modal.js';
+import { formFrame } from '@mistriwork/kit/client/components/newRecordModel.js';
 import { headingOf } from '@mistriwork/engine/shared/appNoun.js';
+import { COMMAND_ROUTES } from '../../shared/commandRoutes.js';
 import { say } from '../copy/forms/components/CommandForm.js';
 import { liveKeyText, registerEditing, releaseEditNotice, useEditNotice } from '@mistriwork/kit/client/liveState.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
@@ -74,6 +76,36 @@ interface CommandTarget {
   label: string;
 }
 
+/** The envelope the operation store sends, as far as a proposal's approval reads it. */
+interface ProposalEnvelope {
+  command: string;
+  expectedVersion?: number;
+  input: Record<string, unknown>;
+}
+
+/**
+ * A proposal's submit, as the operation store sends it: execute is the approval, with the input only when the person
+ * corrected it (the server then marks those fields theirs), and a status read asks under the proposal's id, which is
+ * the run's idempotency key (server/commands/proposals.ts approveProposal).
+ */
+function proposalRequest(
+  proposal: { id: string; input: Readonly<Record<string, unknown>> },
+  path: string,
+  envelope: ProposalEnvelope,
+): ['/api/commands/status' | typeof COMMAND_ROUTES.approveProposal, Record<string, unknown>] {
+  if (path === '/api/commands/status') return ['/api/commands/status', { ...envelope, idempotencyKey: proposal.id }];
+  const edited = Object.keys(envelope.input).some((name) => JSON.stringify(envelope.input[name]) !== JSON.stringify(proposal.input[name]));
+  return [
+    COMMAND_ROUTES.approveProposal,
+    {
+      id: proposal.id,
+      command: envelope.command,
+      expectedVersion: envelope.expectedVersion ?? 0,
+      ...(edited ? { input: envelope.input } : {}),
+    },
+  ];
+}
+
 export function CommandForm({
   action,
   owner,
@@ -88,6 +120,8 @@ export function CommandForm({
   initial,
   headless,
   onApplied,
+  aside,
+  proposal,
 }: {
   action: AppCommandAction;
   owner: CommandOwner;
@@ -111,8 +145,14 @@ export function CommandForm({
   targets?: CommandTarget[];
   /** Drop these records from the group. The host owns the selection, and the form follows it. */
   onDeselect?: (keys: Array<Record<string, unknown>>) => void;
+  /** Evidence beside the form: a second column from 900px up, folded under the form below that, and not drawn at all
+      when absent. The form's own pipeline is untouched; whoever fills this slot only reads. */
+  aside?: ReactNode;
   /** Where the host wants focus when the form closes — its report of the outcome. */
   finalFocus?: RefObject<HTMLElement | null>;
+  /** A proposal this form decides (ProposalPanel.tsx): its input is `initial`, the verb approves it — with the input
+      the person corrected, when they did — and Dismiss stands where Cancel does. Always the drawer. */
+  proposal?: { id: string; input: Readonly<Record<string, unknown>>; onDismiss: () => Promise<unknown> };
 }) {
   // A group is one request for several records: every one commits or none does.
   const group = owner.keys !== undefined;
@@ -288,6 +328,8 @@ export function CommandForm({
      quick submit sent the blank form ("Amount is required"). React renders
      again at once, before anything is drawn. */
   const [filledFrom, setFilledFrom] = useState<PreparedRecord | undefined>(undefined);
+  // A proposal's Dismiss in flight; declared before the stale-host return below, as every hook here must be.
+  const [dismissing, setDismissing] = useState(false);
   if (record?.initial && !operation && filledFrom !== record) {
     setFilledFrom(record);
     // What a component handed over stands over the command's own starting values.
@@ -319,6 +361,10 @@ export function CommandForm({
       (path, envelope) => {
         if (path !== '/api/commands/execute' && path !== '/api/commands/status') throw new Error(say('common.invalidCommandPath'));
         if (!current()) throw Object.assign(new Error(say('common.thisCommandFormIsNoLonger')), { outcome: 'not_applied' });
+        if (proposal) {
+          const [route, body] = proposalRequest(proposal, path, envelope as unknown as ProposalEnvelope);
+          return api(route, { ...body, ...ownedBy(owner.connection) });
+        }
         return api(path, { ...envelope, ...ownedBy(owner.connection) });
       },
       () => {
@@ -384,15 +430,27 @@ export function CommandForm({
           : group
             ? say('readyToSubmit', { count })
             : say('readyToSubmitOne'));
-  return (
-    <Modal
-      className="confirm command-form"
-      ariaLabel={verb}
-      closeLabel={say('common.close')}
-      onClose={close}
-      closeDisabled={locked}
-      finalFocus={finalFocus}
-    >
+  /* The frame follows New's rule (formFrame): a short form is the centered dialog, a long one a side drawer over the page.
+     Counted from the command's whole input, not what prepare leaves asked, so the box does not change frame (and
+     remount, losing what was typed) when a `when` answer arrives. A page's `given` inputs are not drawn, so not counted. */
+  const asked = [...commandFieldsDeep(action.command.input)].filter(
+    ({ field, path }) => field.type !== 'group' && !action.given?.includes(path),
+  ).length;
+  const drawer = proposal !== undefined || formFrame(undefined, asked) === 'page';
+  const dismiss = async () => {
+    if (!proposal || !current() || operation) return;
+    setDismissing(true);
+    try {
+      await proposal.onDismiss();
+      close();
+    } catch (error) {
+      setProblem((error as Error).message);
+    } finally {
+      if (mounted.current) setDismissing(false);
+    }
+  };
+  const head = (
+    <>
       <h2>{verb}</h2>
       {named && <p className="insert-lede">{named}</p>}
       {group && ineligible.length > 0 && !operation && (
@@ -415,102 +473,130 @@ export function CommandForm({
           )}
         </div>
       )}
-      <form
-        noValidate
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!current() || operation || !ready || prepared.isFetching) return;
-          try {
-            const input = commandInput(fields, values, record?.questions);
-            setProblem('');
-            setBeside(undefined);
-            send(
-              commandOperations.start(owner, group ? (versions as number[]) : record!.expectedVersion, input, action, headless),
-              'execute',
-            );
-          } catch (error) {
-            setProblem((error as Error).message);
-          }
-        }}
-      >
-        <fieldset className="command-fields" disabled={Boolean(operation)}>
-          <CommandFields
-            fields={drawn}
-            values={values}
-            idPrefix={id}
-            disabled={Boolean(operation)}
-            inputs={action.inputs}
-            connection={owner.connection}
-            held={{ command: owner.command, connection: owner.connection }}
-            {...(!owner.keys && Object.keys(owner.key).length ? { record: { table: owner.target, key: owner.key } } : {})}
-            identityEpoch={identity.epoch}
-            isCurrent={current}
-            {...(beside ? { problems: beside } : {})}
-            bound={record ? (record.choices ?? {}) : waitingPickers(action.command.input)}
-            {...(record?.questions ? { questions: record.questions } : {})}
-            onChange={(next, path) => {
-              for (const field of action.command.input)
-                if (JSON.stringify(next[field.name]) !== JSON.stringify(values[field.name])) touched.current.add(field.name);
-              if (beside && path !== undefined && Object.hasOwn(beside, path)) setBeside(undefined);
-              setValues(next);
-            }}
-          />
-        </fieldset>
-        <div
-          className="command-feedback"
-          data-phase={problem ? 'error' : (operation?.phase ?? (prepared.isError ? 'error' : 'ready'))}
-          /* Drawn while it holds a change from elsewhere: a ready line is otherwise said to a screen reader only, and
+    </>
+  );
+  const form = (
+    <form
+      noValidate
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!current() || operation || !ready || prepared.isFetching) return;
+        try {
+          const input = commandInput(fields, values, record?.questions);
+          setProblem('');
+          setBeside(undefined);
+          send(
+            commandOperations.start(owner, group ? (versions as number[]) : record!.expectedVersion, input, action, headless),
+            'execute',
+          );
+        } catch (error) {
+          setProblem((error as Error).message);
+        }
+      }}
+    >
+      <fieldset className="command-fields" disabled={Boolean(operation)}>
+        <CommandFields
+          fields={drawn}
+          values={values}
+          idPrefix={id}
+          disabled={Boolean(operation)}
+          inputs={action.inputs}
+          connection={owner.connection}
+          held={{ command: owner.command, connection: owner.connection }}
+          {...(!owner.keys && Object.keys(owner.key).length ? { record: { table: owner.target, key: owner.key } } : {})}
+          identityEpoch={identity.epoch}
+          isCurrent={current}
+          {...(beside ? { problems: beside } : {})}
+          bound={record ? (record.choices ?? {}) : waitingPickers(action.command.input)}
+          {...(record?.questions ? { questions: record.questions } : {})}
+          onChange={(next, path) => {
+            for (const field of action.command.input)
+              if (JSON.stringify(next[field.name]) !== JSON.stringify(values[field.name])) touched.current.add(field.name);
+            if (beside && path !== undefined && Object.hasOwn(beside, path)) setBeside(undefined);
+            setValues(next);
+          }}
+        />
+      </fieldset>
+      <div
+        className="command-feedback"
+        data-phase={problem ? 'error' : (operation?.phase ?? (prepared.isError ? 'error' : 'ready'))}
+        /* Drawn while it holds a change from elsewhere: a ready line is otherwise said to a screen reader only, and
              Keep editing has to be seen and pressed. */
-          {...(noticed ? { 'data-live': '' } : {})}
-          role="status"
-          aria-live="polite"
-          aria-atomic="true"
-        >
-          {noticed ? (
-            <LiveEditNotice table={liveTable(owner.target)} recordKey={owner.key} place="inline" />
-          ) : operation && !problem ? (
-            /* How it ended, in the one outcome view a command and a public form share (outcomeModel.ts). */
-            <CommandOutcome outcome={outcome!} {...(elsewhere ? { onOpen: openChanged } : {})} />
-          ) : (
-            feedback
-          )}
-        </div>
-        <div className="confirm-actions">
+        {...(noticed ? { 'data-live': '' } : {})}
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {noticed ? (
+          <LiveEditNotice table={liveTable(owner.target)} recordKey={owner.key} place="inline" />
+        ) : operation && !problem ? (
+          /* How it ended, in the one outcome view a command and a public form share (outcomeModel.ts). */
+          <CommandOutcome outcome={outcome!} {...(elsewhere ? { onOpen: openChanged } : {})} />
+        ) : (
+          feedback
+        )}
+      </div>
+      <div className="confirm-actions">
+        {proposal && !operation ? (
+          <Button intent="secondary" busy={dismissing} onClick={() => void dismiss()}>
+            {say('dismiss')}
+          </Button>
+        ) : (
           <Button intent="secondary" disabled={locked} onClick={close}>
             {success ? say('common.done') : dismissLabel(verb)}
           </Button>
-          {unknown && !untracked ? (
-            <>
-              <Button
-                intent="secondary"
-                onClick={() => {
-                  if (current()) send(operation!, 'status');
-                }}
-              >
-                {say('checkResult')}
-              </Button>
-              <Button
-                intent="primary"
-                onClick={() => {
-                  if (current()) send(operation!, 'execute');
-                }}
-              >
-                {say('retrySameSubmission')}
-              </Button>
-            </>
-          ) : operation?.phase === 'error' || unknown || prepared.isError ? (
-            <Button intent="primary" onClick={review}>
-              {say('refreshAndReview')}
+        )}
+        {unknown && !untracked ? (
+          <>
+            <Button
+              intent="secondary"
+              onClick={() => {
+                if (current()) send(operation!, 'status');
+              }}
+            >
+              {say('checkResult')}
             </Button>
-          ) : (
-            !success && (
-              <Button intent="primary" type="submit" disabled={pending || !ready || prepared.isFetching}>
-                {pending ? say('common.submitting') : (action.submitLabel ?? verb)}
-              </Button>
-            )
-          )}
+            <Button
+              intent="primary"
+              onClick={() => {
+                if (current()) send(operation!, 'execute');
+              }}
+            >
+              {say('retrySameSubmission')}
+            </Button>
+          </>
+        ) : operation?.phase === 'error' || unknown || prepared.isError ? (
+          <Button intent="primary" onClick={review}>
+            {say('refreshAndReview')}
+          </Button>
+        ) : (
+          !success && (
+            <Button intent="primary" type="submit" disabled={pending || !ready || prepared.isFetching}>
+              {pending ? say('common.submitting') : (action.submitLabel ?? verb)}
+            </Button>
+          )
+        )}
+      </div>
+    </form>
+  );
+  return (
+    <Modal
+      className={`confirm command-form${drawer ? ' command-drawer' : ''}${drawer && aside ? ' command-drawer-wide' : ''}`}
+      ariaLabel={verb}
+      closeLabel={say('common.close')}
+      onClose={close}
+      closeDisabled={locked}
+      finalFocus={finalFocus}
+    >
+      {head}
+      {aside ? (
+        <div className="command-body">
+          {form}
+          <aside className="command-aside">{aside}</aside>
         </div>
-      </form>
+      ) : (
+        form
+      )}
     </Modal>
   );
 }

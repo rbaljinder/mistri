@@ -28,6 +28,7 @@ import type { HttpAppPolicy } from '../policy/appPolicyHttp.js';
 import { commandsOf } from '../stores/commandStores.js';
 import { renderedLink, servesLinks } from '../links/linkLookup.js';
 import { appPublicUrl } from '../links/publicLink.js';
+import { noteMakerModule } from '../commands/makerWrites.js';
 import { resolveConnection } from '@mistriwork/engine/server/auth/credentials.js';
 
 /* What hosting needs, loaded only when there is something to host: every
@@ -360,6 +361,8 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
           return config?.listen ? (await resolveConnection(config.name, config.listen, { secrets: true, environment })).url : undefined;
         },
       });
+      // What a maker can write is known from here on, before the server listens: a person's run confirms there.
+      noteMakerModule(app.id, prepared.module);
       /* A flows runner's reads and writes are a command the platform adds to
            the registry its jobs run against (flowCommand.ts), never the App's. */
       const { flowCommandProblems, withFlowCommands } = await import('../workflows/flowCommand.js');

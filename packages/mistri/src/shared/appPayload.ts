@@ -166,6 +166,12 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
   /** The fields a decision answers, by table id then column (decide/decisionServing.ts): where a record reserves a
       suggestion's place, and the command its Accept runs. Only the tables this reader is served. */
   decisions?: Readonly<Record<string, Readonly<Record<string, { readonly decision: string; readonly command: string }>>>>;
+  /** The word the App's AI mark says (`ai.label`), when the App names it; the kit says "AI" otherwise. */
+  ai?: { label: string };
+  /** This person may approve something an AI can propose (a command with `approval: 'ai'`, a decision that
+      suggests, a job that proposes, the assistant): the For review room, `/{app}/review`, and the proposals list the
+      shell reads after first paint. A runtime answer from this person's grants, like `decisions`. */
+  review?: true;
 }
 
 export interface AppPayload {
@@ -244,6 +250,7 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
     id: app.id,
     name: app.name,
     ...(app.shortName ? { shortName: app.shortName } : {}),
+    ...(app.ai ? { ai: app.ai } : {}),
     ...(app.landing ? { landingView: app.landing.view } : {}),
     views,
     nav,

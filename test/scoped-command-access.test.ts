@@ -228,13 +228,22 @@ for (const secondary of [false, true]) {
         assert.deepEqual(Reflect.ownKeys(journal).sort(), [
           'appendReadAudit',
           'commit',
+          'confirmProvenance',
+          'createProposal',
+          'decideProposal',
+          'expireProposals',
           'find',
           'insert',
+          'listProposals',
+          'markProvenance',
           'mintLink',
           'nextNumber',
           'readLink',
+          'readProposal',
           'revokeLinks',
+          'settleProposal',
           'taken',
+          'unconfirmedProvenance',
         ]);
         assert.deepEqual(
           (await records.query(query('tickets'))).rows.map((row) => row.id),

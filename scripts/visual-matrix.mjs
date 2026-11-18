@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * The visual review matrix: every Storybook story and a set of real sample-App
- * pages, in every built-in look, light and dark, at a desk and on a phone. An
+ * pages, in every built-in look, light and dark, at a desk, on a tablet and on a phone. An
  * App's page is also seen in the App's own look (the `default` column: no
  * look chosen, so Payday's, Forecourt's and Compass's own themes), dark on a
  * phone, and whole: the window is made as tall as the room, so what is below
@@ -34,6 +34,7 @@
  *   node scripts/visual-matrix.mjs --baseline       capture and keep as the baseline
  *   node scripts/visual-matrix.mjs --only stories   (or apps)
  *   node scripts/visual-matrix.mjs --looks mono,sage --filter record
+ *   node scripts/visual-matrix.mjs --only apps --variants tablet,desk   (a variant's key holds one of the parts)
  *   node scripts/visual-matrix.mjs --styles --filter lintel/,tick/   (a filter is one or more substrings, by commas)
  *   node scripts/visual-matrix.mjs --smoke --only apps
  *   node scripts/visual-matrix.mjs --smoke --only apps --shard 2/6
@@ -47,7 +48,8 @@
  * and without the page scrolling sideways, or the run fails. It keeps no
  * baseline, compares nothing (pixel baselines need one machine's fonts) and
  * takes no pictures, and it reads each page at a desk in light and on a phone
- * in dark only: the two widths and the two modes, at half the captures.
+ * in dark only: the two widths and the two modes, at half the captures — and a tablet held upright, light, where the
+ * rail and the side column meet a thumb.
  *
  * `--tokens` (`npm run test:tokens`) reads the same App pages, at the smoke's
  * two variants, under four canary themes (scripts/token-canary.mjs): every
@@ -105,6 +107,11 @@ export const VARIANTS = [
   { key: 'light-phone', mode: 'light', width: 390, height: 844, touch: true },
   // Dark on a phone was never seen: the drawer, the sheet and a card's dark ground.
   { key: 'dark-phone', mode: 'dark', width: 390, height: 844, touch: true, apps: true, smoke: true },
+  /* A tablet is a touch screen at a width between the two: portrait (820) is the tablet band of the ruler
+     (packages/ui/src/internal/ruler.ts), landscape (1180) is a desk's width under a thumb, so it reads the dense desk layout
+     with touch-sized targets. App pages only: a story has no rail, no side column and no list to fold. */
+  { key: 'light-tablet-portrait', mode: 'light', width: 820, height: 1180, touch: true, apps: true, smoke: true },
+  { key: 'light-tablet-landscape', mode: 'light', width: 1180, height: 820, touch: true, apps: true },
   /* Reflow (WCAG 1.4.10): a 640px window at 200% zoom is 320 CSS pixels at twice the density. Its only look is the
      App's own — the cost is one load per App page, not one per look — and the smoke's sideways-scroll check is the
      point: a label, a figure or a step's row that will not wrap shows up here first. */
@@ -131,7 +138,12 @@ const looks = option('--looks')?.split(',') ?? (tokens ? CANARY_LOOKS : [APP_DEF
 // The token run is a smoke run that reads colors: no pictures, the smoke's two variants.
 const smoke = flag('--smoke') || tokens || styles;
 // A style fingerprint reads every variant: a token that moves only by night or only on a phone is a difference too.
-const variants = VARIANTS.filter((variant) => !smoke || variant.smoke || styles);
+/* `--variants tablet,desk` keeps the variants whose key holds one of the parts: a baseline for a change meant for one
+   band need not capture the others. */
+const variantParts = option('--variants')?.split(',');
+const variants = VARIANTS.filter((variant) => !smoke || variant.smoke || styles).filter(
+  (variant) => !variantParts || variantParts.some((part) => variant.key.includes(part)),
+);
 const filter = option('--filter');
 const storybook = process.env.STORYBOOK_URL ?? 'http://localhost:6006';
 const concurrency = Number(option('--jobs') ?? 4);

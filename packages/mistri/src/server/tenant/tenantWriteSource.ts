@@ -1137,6 +1137,79 @@ export async function openPostgresTenantWriteSource(
                       },
                     }
                   : {}),
+                // Proposals and provenance marks are the tenant's too, behind the same fence (commandProposals.ts).
+                ...(journal.createProposal
+                  ? {
+                      createProposal: (...args: Parameters<NonNullable<CommandJournal['createProposal']>>) => {
+                        live();
+                        return journal.createProposal!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.readProposal
+                  ? {
+                      readProposal: (...args: Parameters<NonNullable<CommandJournal['readProposal']>>) => {
+                        live();
+                        return journal.readProposal!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.listProposals
+                  ? {
+                      listProposals: (...args: Parameters<NonNullable<CommandJournal['listProposals']>>) => {
+                        live();
+                        return journal.listProposals!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.decideProposal
+                  ? {
+                      decideProposal: (...args: Parameters<NonNullable<CommandJournal['decideProposal']>>) => {
+                        live();
+                        return journal.decideProposal!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.settleProposal
+                  ? {
+                      settleProposal: (...args: Parameters<NonNullable<CommandJournal['settleProposal']>>) => {
+                        live();
+                        return journal.settleProposal!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.expireProposals
+                  ? {
+                      expireProposals: (...args: Parameters<NonNullable<CommandJournal['expireProposals']>>) => {
+                        live();
+                        return journal.expireProposals!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.markProvenance
+                  ? {
+                      markProvenance: (...args: Parameters<NonNullable<CommandJournal['markProvenance']>>) => {
+                        live();
+                        return journal.markProvenance!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.confirmProvenance
+                  ? {
+                      confirmProvenance: (...args: Parameters<NonNullable<CommandJournal['confirmProvenance']>>) => {
+                        live();
+                        return journal.confirmProvenance!(...args);
+                      },
+                    }
+                  : {}),
+                ...(journal.unconfirmedProvenance
+                  ? {
+                      unconfirmedProvenance: (...args: Parameters<NonNullable<CommandJournal['unconfirmedProvenance']>>) => {
+                        live();
+                        return journal.unconfirmedProvenance!(...args);
+                      },
+                    }
+                  : {}),
               });
             const outcome = await kind.run(
               owned,

@@ -205,6 +205,8 @@ interface AppRoomSlots {
   Directory: ComponentType<Record<string, never>> | null;
   /** The reader's settings (SettingsRoom.tsx): their profile and preferences as one page, opened at `section`. */
   Settings: ComponentType<{ section?: string }> | null;
+  /** What waits for the reader's review (ReviewRoom.tsx): AI-made proposals and unconfirmed writes, at `/{app}/review`. */
+  Review: ComponentType<Record<string, never>> | null;
   /** A free-form page (FreePage.tsx), where a dashboard entry names one. */
   Page: ComponentType<{ entry?: PageEntry; dashboard: DashboardDef; page: NonNullable<DashboardDef['page']> }> | null;
   /** A split's pick: its list kept beside the record (SplitRecordRoom.tsx). */
@@ -289,13 +291,14 @@ interface RecordSlots {
   ) => ((row: Record<string, unknown>, column: string, form?: 'cell' | 'summary') => ReactNode | undefined) | undefined;
   /** What a record page draws at its own fields (pageContext.ts `FieldAdornment`), and whether that is still being
       asked; `onLanded` re-reads the record after one wrote to it. A hook: read in render, by every record page, routed
-      or in a dialog. */
+      or in a dialog. `notice` is one line drawn under the record's head (what waits on the record as a whole, such
+      as an AI proposal). */
   useFieldAdornment?: (
     connection: string,
     table: string,
     key: Readonly<Record<string, unknown>> | undefined,
     onLanded: () => void,
-  ) => { adorn?: FieldAdornment; held: readonly string[] };
+  ) => { adorn?: FieldAdornment; held: readonly string[]; notice?: ReactNode };
 }
 
 /** A command run on one record: its outcome, a refusal already said where it was refused. */
@@ -466,6 +469,7 @@ const WORKBENCH: ShellMode = Object.freeze({
     Assistant: null,
     Directory: null,
     Settings: null,
+    Review: null,
     Page: null,
     SplitRecord: null,
     Document: null,

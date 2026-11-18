@@ -20,6 +20,8 @@ import { provisionSqliteAssistant } from '../packages/mistri/src/adapters/assist
 import { setAssistantModel, type AssistantModel, type ModelRequest } from '../packages/mistri/src/server/assistant/assistantModel.js';
 import { scriptedModel, type AssistantScript } from '../packages/mistri/src/server/assistant/assistantScripted.js';
 import { ADMINISTRATION_JOURNAL_TABLES as journal } from '../packages/mistri/src/server/tenant/tenantAdministrationJournal.js';
+import { COMMAND_JOURNAL_TABLES } from '../packages/mistri/src/adapters/commands/commandJournal.js';
+import { defineCommand, defineCommands, type BusinessCommandRegistry } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { createTenantAssistant } from '../packages/mistri/src/server/tenant/tenantAssistant.js';
 import { TENANT_TABLES } from '../packages/mistri/src/server/tenant/tenantStoreContract.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
@@ -42,7 +44,17 @@ import {
 after(() => setAssistantModel(undefined));
 
 const SCRIPT: AssistantScript = {
-  turns: [{ when: 'leads', steps: [{ tools: [{ name: 'query', input: { q: 'lead' } }] }, { text: 'Here they are.' }] }],
+  turns: [
+    { when: 'leads', steps: [{ tools: [{ name: 'query', input: { q: 'lead' } }] }, { text: 'Here they are.' }] },
+    {
+      when: 'rename',
+      steps: [
+        { tools: [{ name: 'show', input: { kind: 'record', resource: 'lead', id: 'n1' } }] },
+        { tools: [{ name: 'run', input: { action: 'lead.rename', id: 'n1', values: { name: 'North lead, called' }, why: 'They rang.' } }] },
+        { text: 'Kept it for review.' },
+      ],
+    },
+  ],
   otherwise: 'Hello.',
 };
 interface Event {
@@ -57,12 +69,17 @@ async function assistantFixture(
   dialect: 'sqlite' | 'postgres',
   cap?: number,
   declared: Record<string, unknown> = {},
+  commands?: { registry: BusinessCommandRegistry; manifest: (raw: Record<string, any>) => void; resultReferences: Record<string, unknown> },
 ) {
   setAssistantModel(undefined);
-  const tenantPolicy: Record<string, unknown> = {};
+  const tenantPolicy: Record<string, unknown> = commands ? { resultReferences: commands.resultReferences } : {};
   const f = await tenantSupportFixture(t, dialect, {
-    manifest: (raw) => Object.assign(raw, { assistant: declared }),
+    manifest: (raw) => {
+      Object.assign(raw, { assistant: declared });
+      commands?.manifest(raw);
+    },
     tenantPolicy,
+    ...(commands ? { commands: commands.registry } : {}),
   });
   const { avery, sam, oscar } = f.accounts;
   // Sam works for both dealers; Oscar is North's own admin.
@@ -462,4 +479,85 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
     assert.equal(await count(f, event), 0);
     assert.equal(await count(f, usage, 'tenant = ?', ['north']), 1);
   });
+
+  test(
+    `${dialect}: a command verb is kept in the person's own tenant for review, with its evidence, and the turn goes on`,
+    { skip },
+    async (t) => {
+      let runs = 0;
+      const registry = defineCommands({
+        rename: defineCommand({
+          source: 'business',
+          target: 'lead',
+          input: { name: { label: 'Name', type: 'text' } },
+          async handle({ db, record }, input) {
+            runs++;
+            await db.lead.update(record, { name: (input as { name: string }).name });
+          },
+        }),
+      });
+      const h: Harness = await assistantFixture(
+        t,
+        dialect,
+        undefined,
+        {},
+        {
+          registry,
+          manifest: (raw) => {
+            raw.resources.lead.actions = {
+              rename: { label: 'Rename', command: { id: 'rename', version: 1, target: 'lead', input: { name: { type: 'text' } } } },
+            };
+            raw.auth.roles.dealer_staff.commands = ['rename'];
+            // The command is how a lead changes here: no role also edits it in place.
+            raw.auth.roles.dealer_admin.write = [];
+          },
+          resultReferences: { rename: () => [] },
+        },
+      );
+      const { f } = h,
+        { sam } = f.accounts;
+      applied(await h.setSwitch('north', true));
+      applied(await h.setSwitch('south', true));
+      const north = await h.lease(sam, 'north');
+      const asked = await h.assistant(sam, north, '/api/assistant/turn', { text: 'rename the north lead' });
+      assert.equal(asked.status, 200, JSON.stringify(asked.body));
+      const [card] = of(asked.events, 'proposal');
+      assert.ok(card?.proposal.review, JSON.stringify(asked.events));
+      assert.equal(of(asked.events, 'done').at(-1).state, 'idle');
+      assert.match(
+        of(asked.events, 'text')
+          .map((each) => each.delta)
+          .join(''),
+        /Kept it for review/,
+      );
+      assert.equal(runs, 0);
+      const kept = await f.rows(
+        `SELECT id, tenant_id, command, target, actor_kind, evidence, reason, state FROM "${COMMAND_JOURNAL_TABLES.proposal}"`,
+      );
+      assert.equal(kept.length, 1, JSON.stringify(kept));
+      const [row] = kept as Record<string, string>[];
+      assert.equal(row.id, card.proposal.review);
+      assert.deepEqual(
+        {
+          tenant: row.tenant_id,
+          command: row.command,
+          target: JSON.parse(row.target),
+          kind: row.actor_kind,
+          reason: row.reason,
+          state: row.state,
+        },
+        { tenant: 'north', command: 'rename', target: { id: 'n1' }, kind: 'assistant', reason: 'They rang.', state: 'proposed' },
+      );
+      assert.deepEqual(
+        (typeof row.evidence === 'string' ? JSON.parse(row.evidence) : row.evidence).map((each: { ref: string }) => each.ref),
+        ['lead/{"id":"n1"}'],
+      );
+
+      // In South the same verb on North's lead finds nothing to propose into: no second row, nowhere.
+      const south = await h.lease(sam, 'south');
+      await h.assistant(sam, south, '/api/assistant/turn', { text: 'rename the north lead' });
+      assert.equal(await count(f, COMMAND_JOURNAL_TABLES.proposal), 1);
+      assert.equal(runs, 0);
+    },
+  );
 }

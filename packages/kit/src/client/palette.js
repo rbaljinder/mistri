@@ -18,6 +18,7 @@
  * it below something that merely contains the same letters.
  */
 import { createElement } from 'react';
+import { TABLET_QUERY } from '@mistriwork/ui/internal/ruler.js';
 import { message, subscribeMessages } from './messages.js';
 import { $, currentEntry, el, findTable, go, pageView, state, subscribeWalk, tableView, svgEl } from './core.js';
 import { allSavedFilters } from './views.js';
@@ -258,6 +259,12 @@ export function initSidebarToggle() {
   let appMode = shellBody().classList.contains('app-mode');
   let compactOpen = false;
   const narrowWorkbench = () => compact.matches && !appMode;
+  /* On a tablet an App's menu stands folded to its icon rail (docs/design.md, Mobile): the room keeps the width, and
+     the rail's names come on hover and focus. Opening it there is for the visit, never remembered: the desk's
+     preference is the one stored, and a tablet's window must not overwrite it. */
+  const tablet = window.matchMedia(TABLET_QUERY);
+  let tabletOpen = false;
+  const tabletRail = () => tablet.matches && appMode && shellBody().classList.contains('app-nav-rail');
 
   const remember = (next) => {
     try {
@@ -342,7 +349,7 @@ export function initSidebarToggle() {
   );
 
   function renderToggle() {
-    const next = narrowWorkbench() ? !compactOpen : desktopHidden;
+    const next = narrowWorkbench() ? !compactOpen : tabletRail() ? !tabletOpen : desktopHidden;
     shellBody().classList.toggle('sidebar-hidden', next);
     const inApp = shellBody().classList.contains('app-mode');
     const wasFocused = document.activeElement === collapse;
@@ -389,6 +396,7 @@ export function initSidebarToggle() {
 
   function apply(next) {
     if (narrowWorkbench()) compactOpen = !next;
+    else if (tabletRail()) tabletOpen = !next;
     else {
       desktopHidden = next;
       remember(next);
@@ -417,6 +425,10 @@ export function initSidebarToggle() {
     compactOpen = false;
     renderToggle();
   });
+  tablet.addEventListener('change', () => {
+    tabletOpen = false;
+    renderToggle();
+  });
   // App/Workbench switches reuse the shell. Responsive disclosure state is
   // temporary and must never replace the user's desktop sidebar preference.
   // An App that asks for the rail (app.js sets `app-nav-rail`) changes what
@@ -428,7 +440,7 @@ export function initSidebarToggle() {
     const nextRail = shellBody().classList.contains('app-nav-rail');
     const nextBar = shellBody().classList.contains('app-sidebar-shell');
     if (next === appMode && nextRail === railMode && nextBar === barMode) return;
-    if (next !== appMode) compactOpen = false;
+    if (next !== appMode) compactOpen = tabletOpen = false;
     appMode = next;
     railMode = nextRail;
     barMode = nextBar;

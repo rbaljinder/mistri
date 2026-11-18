@@ -21,6 +21,7 @@ import { defineEvent } from '../packages/mistri/src/server/commands/businessEven
 import { bool, number, shape, text } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { createWorkflowDriver } from '../packages/mistri/src/server/testing/workflows.js';
 import { defineWorkflow, StepRefused, type WorkflowApi } from '../packages/mistri/src/server/workflows.js';
+import { StepPending } from '../packages/mistri/src/server/workflows/workflowModule.js';
 import { LIVE_PG, ownedPostgresDatabase, pgControl } from './support/jobStoreEngines.js';
 import { liveSkip } from './live.js';
 import { runtimeTable } from '../packages/engine/src/shared/runtimeTables.js';
@@ -240,6 +241,36 @@ function suite(name: string, skip: false | string, open: () => Promise<{ store?:
       assert.equal(await driver.resume(id), 'completed');
       assert.equal(driver.executed('approveLoan'), 1, 'the receipt answered the second ask');
       assert.equal((await only(driver)).state, 'completed');
+    });
+
+    test('a step waiting on its proposal is looked at again when it asks, uses no attempt, and finishes once approved', async () => {
+      let decided = false;
+      const driver = await make(underwrite, {
+        commands: {
+          ...commands(),
+          approveLoan: () => {
+            if (!decided) throw new StepPending(driver.now() + HOUR);
+            return { ok: 'approved' };
+          },
+        },
+      });
+      await driver.emit(Applied, { id: 'L-20', amount: 1 });
+      const waiting = await only(driver);
+      assert.notEqual(waiting.state, 'failed');
+      const pendingStep = async () => (await driver.steps(waiting.id)).find((each) => each.name === 'approve');
+      assert.deepEqual(
+        [(await pendingStep())?.status, (await pendingStep())?.attempts, (await pendingStep())?.errorCode],
+        ['pending', 0, 'proposed'],
+      );
+      // Many looks over days: still waiting, never failed for retries.
+      for (let look = 0; look < 30; look++) await driver.advance(HOUR);
+      assert.equal(driver.executed('approveLoan'), 31);
+      assert.notEqual((await only(driver)).state, 'failed');
+      assert.equal((await pendingStep())?.attempts, 0);
+      decided = true;
+      await driver.advance(HOUR);
+      assert.equal((await only(driver)).state, 'completed');
+      assert.equal(driver.executed('call:bureau'), 1, 'the steps before it were kept');
     });
 
     test('a refused step fails the instance at once; retrying runs from that step, and cancelling ends a waiting one', async () => {

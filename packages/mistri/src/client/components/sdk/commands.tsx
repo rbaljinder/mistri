@@ -22,7 +22,7 @@
  * offers is not one a component can reach; one only a component runs is an
  * action with `header: false`, offered in no menu.
  */
-import { createElement } from 'react';
+import { createElement, type ReactNode } from 'react';
 import type { AppCommandAction } from '../../../shared/app.js';
 import type { AppUpdateAction } from '../../../shared/appModel.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
@@ -85,7 +85,7 @@ export function actionOf(id: UiCommandRef): AppCommandAction | undefined {
 }
 
 /** The resource whose actions hold this one: the table its records are rows of. */
-function resourceOffering(action: AppCommandAction): string | undefined {
+export function resourceOffering(action: AppCommandAction): string | undefined {
   const app = pageBridge.activeApp() as ServedApp | null;
   return Object.entries(app?.resources ?? {}).find(([, resource]) => (resource.actions as unknown[] | undefined)?.includes(action))?.[0];
 }
@@ -175,7 +175,7 @@ function keyFor(action: AppCommandAction, record: Readonly<Record<string, unknow
   return key;
 }
 
-const ownerFor = (action: AppCommandAction, key: Record<string, unknown>): CommandOwner => ({
+export const ownerFor = (action: AppCommandAction, key: Record<string, unknown>): CommandOwner => ({
   connection: state.activeConnection ?? '',
   target: action.command.target,
   command: action.command.id,
@@ -197,12 +197,19 @@ function outcomeOf(operation: CommandOperation | undefined, fields?: Readonly<Re
   return { status: 'closed' };
 }
 
+/** What a proposal adds to the platform's form: the proposal it decides, and its evidence beside the fields. */
+export interface ProposalFormProps {
+  proposal?: { id: string; input: Readonly<Record<string, unknown>>; onDismiss: () => Promise<unknown> };
+  aside?: ReactNode;
+}
+
 /** The platform's own form over the page, resolved when it closes. */
-function openForm(
+export function openForm(
   action: AppCommandAction,
   key: Record<string, unknown>,
   input: Readonly<Record<string, unknown>> | undefined,
   options: UiCommandOptions = {},
+  extra: ProposalFormProps = {},
 ): Promise<UiCommandOutcome> {
   return new Promise((resolve) => {
     const host = document.createElement('div');
@@ -236,6 +243,7 @@ function openForm(
         label: options.label ?? '',
         initial: input,
         headless: true,
+        ...extra,
         onClose: close,
         onDone: () => {
           void queryClient.invalidateQueries();

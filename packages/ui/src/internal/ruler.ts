@@ -59,3 +59,15 @@ export function viewportSize(): { width: number; height: number } {
   const z = viewportScale();
   return { width: window.innerWidth / z, height: window.innerHeight / z };
 }
+
+/*
+ * The window's three bands, named once (docs/design.md, Mobile). A phone is up to 760px: one column, the
+ * navigation in a drawer, a list drawn as cards. A tablet is 761–1100px: the navigation folded to its icon rail, a
+ * record keeping its side column at 280px, a dashboard two-up. A desk is 1101px and wider. A media query measures
+ * the window in CSS pixels before the root's zoom, so these are read with matchMedia, not against the ruler above;
+ * the stylesheets say the same numbers in their @media rules, which cannot import them.
+ */
+const PHONE_MAX = 760;
+const DESK_MIN = 1101;
+export const PHONE_QUERY = `(max-width: ${PHONE_MAX}px)`;
+export const TABLET_QUERY = `(min-width: ${PHONE_MAX + 1}px) and (max-width: ${DESK_MIN - 1}px)`;
