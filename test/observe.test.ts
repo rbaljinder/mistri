@@ -218,7 +218,15 @@ test(
       // The agent's view of the same trace: one line per span, the SQL and its parameters beneath.
       const tree = traceTree(trace as never).tree as string[];
       assert.ok(tree.some((line) => /^\s+command annotate/.test(line)));
-      assert.ok(tree.some((line) => /params: .*looks good/.test(line)));
+      /* The command's own SQL, its parameters beneath: read from its subtree, since a first request's schema read
+         (every table, the journal's own among them) can fill the whole view's 400 lines before the command starts. */
+      const under = new Set([spans.find((span) => span.name === 'command annotate')!.spanId]);
+      for (let size = 0; size !== under.size;) {
+        size = under.size;
+        for (const span of spans) if (under.has(span.parentSpanId)) under.add(span.spanId);
+      }
+      const commandTree = traceTree({ ...trace, spans: spans.filter((span) => under.has(span.spanId)) } as never).tree as string[];
+      assert.ok(commandTree.some((line) => /params: .*looks good/.test(line)));
 
       // A refusal names its cause in the observer, and is listed among the errors.
       control.fail = 'Nothing to annotate on a closed loan';

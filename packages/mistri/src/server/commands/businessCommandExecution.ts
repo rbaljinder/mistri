@@ -18,7 +18,13 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
-import { AUDIT_PART_ENTRIES, AUDIT_TARGET_ENTRIES, COMMAND_TARGET_BOUNDS } from '../../adapters/commands/commandJournalSchema.js';
+import {
+  AUDIT_PART_ENTRIES,
+  AUDIT_TARGET_ENTRIES,
+  COMMAND_TARGET_BOUNDS,
+  type ReceiptActorKind,
+} from '../../adapters/commands/commandJournalSchema.js';
+import type { ProposalEvidence } from '../../adapters/commands/commandJournalTypes.js';
 import { scopedAudit, splitAudit } from '../../adapters/commands/commandAuditParts.js';
 import { EffectBodyTooLarge, EffectProjectionRefused, type CommandEventBatch } from '../../adapters/events/commandEventTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
@@ -59,6 +65,7 @@ import { rowRevision } from './commandRevision.js';
 import { NO_OUTPUT } from './commandShapes.js';
 import { preparesInitial } from './commandPrepareNeeds.js';
 import { zoneDay } from '../app/appStamps.js';
+import { asMaker, claimProposal, settleProvenance, targetWrites } from './commandProvenance.js';
 import { createLookupSources, lookupResult } from './commandLookup.js';
 import { immutableCommandResult as immutableResult, validateHistoricalCommandOutput } from './commandHistoricalOutput.js';
 import { COMMAND_INPUT_LIMITS } from '../../shared/command.js';
@@ -105,6 +112,7 @@ export { BusinessCommandExecutionError, isBusinessCommandExecutionError, refuse 
 export { effectiveTrack, type CommandDoor, type CommandHandlerDoor } from './commandTrack.js';
 import { effectiveTrack, handlerDoorOf, type CommandDoor, type CommandHandlerDoor, type CommandTrack } from './commandTrack.js';
 import { integrationCalls } from '../integrations/integrationRuntime.js';
+
 export type { RefusalCode } from './commandErrors.js';
 
 export interface BusinessCommandResult {
@@ -165,6 +173,36 @@ interface ExecutionOptions {
    * the handler's `ctx.locale` once clamped to the App's catalogs. Absent, it is the App's own. Never input.
    */
   locale?: string;
+  /**
+   * The proposal an approval runs this command from (proposals.ts): its receipt names it. Server-set when a
+   * person approves, never input.
+   */
+  proposalId?: string;
+  /**
+   * Who made the run when no person did and the principal alone does not say: the assistant, or a decision applied
+   * on its own. Server-set; a job and a workflow are read off the door, and nothing passes `agent`.
+   */
+  maker?: 'assistant' | 'decision';
+  /**
+   * The maker's own name on what its run wrote (proposals.ts `ProvenanceMark`): `job:<id>`, `decision:<name>`, a flow's.
+   * Absent, the kind alone names it. Server-set.
+   */
+  makerActor?: string;
+  /** What the maker read to write what it wrote, kept on its provenance marks. Server-set, never input. */
+  evidence?: readonly ProposalEvidence[];
+}
+
+/** Who a receipt ran for, by kind: the principal's kind, a service told apart by the door it came through. */
+function receiptActorKind(actor: BusinessCommandActor, door: CommandDoor | undefined, maker: ExecutionOptions['maker']): ReceiptActorKind {
+  if (maker) return maker;
+  if (actor.kind === 'service') return door === 'job' ? 'job' : door === 'workflow' ? 'flow' : 'service';
+  return actor.kind ?? 'person';
+}
+
+/** A run an AI or a machine made: the makers a command with `approval: 'ai'` hears only as proposals. */
+function madeByNoPerson(actor: BusinessCommandActor, door: CommandDoor | undefined, maker?: ExecutionOptions['maker']): boolean {
+  const kind = receiptActorKind(actor, door, maker);
+  return kind === 'assistant' || kind === 'job' || kind === 'decision' || kind === 'flow';
 }
 
 interface CommandAnalyticsEvent {
@@ -372,6 +410,17 @@ async function executeUntraced(
     if (scoped && (typeof authorized.assertTarget !== 'function' || typeof authorized.assertResult !== 'function'))
       throw new AppAccessDenied();
     const { command } = authorized;
+    /* `approval: 'ai'`: what no person made runs only from a proposal a person approved. Every maker's own door
+       proposes instead (a job, jobCommands.ts; a decision, decideHost.ts; a flow, workflowHost.ts; the assistant, its
+       `run` tool); this is the backstop for one that does not. */
+    if (command.approval === 'ai' && options.proposalId === undefined && madeByNoPerson(authorized.actor, options.door, options.maker))
+      throw new BusinessCommandExecutionError(
+        'forbidden',
+        'not_applied',
+        undefined,
+        undefined,
+        'This command runs only once a person approves it.',
+      );
     snapshot = command.snapshot === true;
     const flags = commandFlagsReader(options.flags);
     const flagEnabled = commandFlagEnabled(command, flags);
@@ -707,8 +756,10 @@ async function executeUntraced(
     const targetTable = authorized.catalog?.[command.target];
     const ahead: WriteAhead = {
       ...(track === undefined ? { receipt: scope } : {}),
+      /* Not for an approval, whose claim on its proposal is written first and drops the read sent ahead, nor for a
+         status check, which answers from the receipt and reads no target. */
       targets:
-        command.targets !== 'none' && !creating && targetTable
+        command.targets !== 'none' && !creating && targetTable && options.proposalId === undefined && !options.statusOnly
           ? list.keys.flatMap((key) => {
               const exact = canonicalKey(targetTable, key);
               // The table as the transaction names it (the catalog's id), not the command's local name for it.
@@ -810,1024 +861,1068 @@ async function executeUntraced(
         ),
       ).then(() => undefined);
     };
+    /* Who made the run and the proposal it carried out, on each history row it writes: the receipt's own values, read
+       here once rather than looked up again (recordHistory.ts, captureRecordHistory). A maker that names itself is kept so. */
+    const madeAs = receiptActorKind(authorized.actor, options.door, options.maker);
     const committed: BusinessCommandStatus = await inWriteLanes(lanes, () =>
       reading(() =>
-        authorized.commandTransaction!(async (records, journal) => {
-          afterCommit.length = 0;
-          transactionStarted = true;
-          checkCancelled();
-          /* Targets this transaction wrote through the row scope, which proved
+        asMaker(madeAs, options.makerActor, options.proposalId, () =>
+          authorized.commandTransaction!(async (records, journal) => {
+            afterCommit.length = 0;
+            transactionStarted = true;
+            checkCancelled();
+            /* Targets this transaction wrote through the row scope, which proved
          each visible after the write and holds it to commit (a row lock, or
          SQLite's write lock): a visibility check of one again before commit
          would read what cannot have changed. Only a policy of the row's own
          columns decides visibility (shared/rowScope.ts), so nothing else in
          the transaction moves it. */
-          const held = new Set<string>();
-          const heldKey = (key: unknown) => {
-            const table = authorized.catalog?.[command.target];
-            const exact = table && key && typeof key === 'object' ? canonicalKey(table, key as Record<string, unknown>) : undefined;
-            return exact ? JSON.stringify(table!.key.map((column) => exact[column])) : undefined;
-          };
-          // Row ceilings are judged per key: one hidden target refuses the whole
-          // request before the receipt is even looked up.
-          /* Targets this transaction removed (A row action that deletes its own row). Each was judged
+            const held = new Set<string>();
+            const heldKey = (key: unknown) => {
+              const table = authorized.catalog?.[command.target];
+              const exact = table && key && typeof key === 'object' ? canonicalKey(table, key as Record<string, unknown>) : undefined;
+              return exact ? JSON.stringify(table!.key.map((column) => exact[column])) : undefined;
+            };
+            // Row ceilings are judged per key: one hidden target refuses the whole
+            // request before the receipt is even looked up.
+            /* Targets this transaction removed (A row action that deletes its own row). Each was judged
            against its ceiling just before the removal; after it there is no row left to judge, and "gone, removed
            by this request" is inside the ceiling the request was granted. */
-          const removed = new Set<string>();
-          const assertTargets = async () => {
-            for (const key of list.keys) {
-              const at = heldKey(key) ?? '';
-              if (removed.has(at) || (track !== undefined && held.has(at))) continue;
-              await authorized.assertTarget?.(records, key);
-            }
-          };
-          /* The fresh path reads each target through the row scope before the
+            const removed = new Set<string>();
+            const assertTargets = async () => {
+              for (const key of list.keys) {
+                const at = heldKey(key) ?? '';
+                if (removed.has(at) || (track !== undefined && held.has(at))) continue;
+                await authorized.assertTarget?.(records, key);
+              }
+            };
+            /* The fresh path reads each target through the row scope before the
          handler runs (below); a hidden one is refused there, as forbidden,
          before anything is written. Only a command that names no record is
          checked here first. */
-          const readsTargets = command.targets !== 'none' && !creating;
-          if (track === undefined || !readsTargets) await assertTargets();
-          // Nothing to replay without a receipt: a refusal is this attempt's own.
-          if (track === 'none') priorOutcomeUnknown = false;
-          const saved = track === undefined ? await journal.find(scope, events?.expectation) : undefined;
-          if (scoped && !saved && track === undefined) priorOutcomeUnknown = false;
-          if (saved) {
-            if (saved.fingerprint !== fingerprint) throw new BusinessCommandExecutionError('idempotency_conflict');
-            if (scoped) {
-              let result: unknown;
-              try {
-                result = validateHistoricalCommandOutput(saved.resultJson, command.output);
-              } catch (error) {
-                throw recordRefusalCause(
-                  new BusinessCommandExecutionError('invalid_result'),
-                  recordRefusalCause(
-                    new Error(
-                      `Command "${commandId}"'s saved result for this idempotency key ` +
-                        'no longer matches its declared output; the output shape changed since that run.',
+            const readsTargets = command.targets !== 'none' && !creating;
+            if (track === undefined || !readsTargets) await assertTargets();
+            // Nothing to replay without a receipt: a refusal is this attempt's own.
+            if (track === 'none') priorOutcomeUnknown = false;
+            const saved = track === undefined ? await journal.find(scope, events?.expectation) : undefined;
+            if (scoped && !saved && track === undefined) priorOutcomeUnknown = false;
+            if (saved) {
+              if (saved.fingerprint !== fingerprint) throw new BusinessCommandExecutionError('idempotency_conflict');
+              if (scoped) {
+                let result: unknown;
+                try {
+                  result = validateHistoricalCommandOutput(saved.resultJson, command.output);
+                } catch (error) {
+                  throw recordRefusalCause(
+                    new BusinessCommandExecutionError('invalid_result'),
+                    recordRefusalCause(
+                      new Error(
+                        `Command "${commandId}"'s saved result for this idempotency key ` +
+                          'no longer matches its declared output; the output shape changed since that run.',
+                      ),
+                      error,
                     ),
-                    error,
-                  ),
-                );
+                  );
+                }
+                await authorized.assertResult!(records, list.keys[0], result);
+                await assertTargets();
+                checkCancelled();
+                return answer(saved.id, result, true);
               }
-              await authorized.assertResult!(records, list.keys[0], result);
-              await assertTargets();
-              checkCancelled();
-              return answer(saved.id, result, true);
+              return answer(saved.id, JSON.parse(saved.resultJson), true);
             }
-            return answer(saved.id, JSON.parse(saved.resultJson), true);
-          }
-          if (options.statusOnly) return { status: 'not_found', outcome: 'unknown' };
-          /* The fresh path asks only whether the receipt is there — one read, no
+            if (options.statusOnly) return { status: 'not_found', outcome: 'unknown' };
+            /* The fresh path asks only whether the receipt is there — one read, no
          lock — and a taken one is replayed by the receipt-first lookup, so a
          retry never runs the handler again. A delivery racing its original
          is caught by the receipt's insert at commit instead. */
-          if (track !== undefined && track !== 'none') {
-            if (typeof journal.insert !== 'function' || typeof journal.taken !== 'function')
-              throw new BusinessCommandExecutionError('temporarily_unavailable');
-            if (await journal.taken(scope)) throw new ReceiptTaken();
-          }
-          // Both receipt paths can recover while disabled, but neither can run a new handler.
-          if (!flagEnabled) throw new BusinessCommandExecutionError('forbidden');
-          // No receipt answers the request: a failed lookup refuses it now.
-          if (lookupFailure) throw lookupFailure;
-          /* A saved form's step runs in its own application and nowhere else: the
+            if (track !== undefined && track !== 'none') {
+              if (typeof journal.insert !== 'function' || typeof journal.taken !== 'function')
+                throw new BusinessCommandExecutionError('temporarily_unavailable');
+              if (await journal.taken(scope)) throw new ReceiptTaken();
+            }
+            // Both receipt paths can recover while disabled, but neither can run a new handler.
+            if (!flagEnabled) throw new BusinessCommandExecutionError('forbidden');
+            // No receipt answers the request: a failed lookup refuses it now.
+            if (lookupFailure) throw lookupFailure;
+            if (options.proposalId !== undefined) await claimProposal(journal, authorized, options.proposalId, commandId, now().getTime());
+            /* A saved form's step runs in its own application and nowhere else: the
          root is found by the cookie's hash here, in this transaction, and
          every read and write below is fenced to it. Only a public submission
          carries one. */
-          /* A public form's draft is a visitor's, a signed-in form's a person's (savedForms.ts): the other
+            /* A public form's draft is a visitor's, a signed-in form's a person's (savedForms.ts): the other
              kind of principal never opens either. */
-          if (options.draft && (options.draft.owner !== undefined) === publicActor) throw new AppAccessDenied();
-          /* A person's draft is owned by `me`, found in this transaction through the command's reading of the
+            if (options.draft && (options.draft.owner !== undefined) === publicActor) throw new AppAccessDenied();
+            /* A person's draft is owned by `me`, found in this transaction through the command's reading of the
              people table: the request names nobody. */
-          const owner = options.draft?.owner
-            ? (await whenPerson(records, authorized.actor, authorized.people, ['owner = me']))?.person?.key
-            : undefined;
-          const draft = options.draft
-            ? await openSavedDraft(
-                options.draft,
-                records,
-                authorized.catalog ??
-                  (() => {
-                    throw new AppAccessDenied();
-                  })(),
-                now(),
-                options.draft.owner ? (owner ?? null) : undefined,
-                authorized.files,
-              )
-            : undefined;
-          const store = draft?.records ?? records;
-          /* A handler's reads asked together start together here, in the order asked, and the store beneath decides
+            const owner = options.draft?.owner
+              ? (await whenPerson(records, authorized.actor, authorized.people, ['owner = me']))?.person?.key
+              : undefined;
+            const draft = options.draft
+              ? await openSavedDraft(
+                  options.draft,
+                  records,
+                  authorized.catalog ??
+                    (() => {
+                      throw new AppAccessDenied();
+                    })(),
+                  now(),
+                  options.draft.owner ? (owner ?? null) : undefined,
+                  authorized.files,
+                )
+              : undefined;
+            const store = draft?.records ?? records;
+            /* A handler's reads asked together start together here, in the order asked, and the store beneath decides
              whether they leave together: a writer that pipelines sends them in one flight, any other one by one. */
-          let operations = new TransactionOperations(true);
-          const accept = <Request, Result>(
-            request: Request,
-            run: (snapshot: Request) => Promise<Result>,
-            read = false,
-          ): Promise<Result> => {
-            // Capture before joining the queue: handlers still own their arguments.
-            try {
-              const snapshot = scoped ? snapshotScopedData(request) : structuredClone(request);
-              return read ? operations.read(() => run(snapshot)) : operations.run(() => run(snapshot));
-            } catch (error) {
-              return operations.run(async () => {
-                throw error;
-              });
-            }
-          };
-          // One audit row per target. A write to a target row is that target's;
-          // any other write is recorded on the target written most recently
-          // before it — the first target's, before any — so a handler that works
-          // record by record leaves each record's dependents on its own row.
-          const keyTexts = list.keys.map(commandKeyText);
-          const changes: unknown[][] = list.keys.map(() => []);
-          // The bytes each target's entries come to as one array, kept as they are added so a long audit is not walked again.
-          const changeBytes: number[] = list.keys.map(() => 1);
-          let attributed = 0;
-          // What the audit keeps of each image. A public command's default is
-          // keys and column names only: an applicant's input is not the journal's
-          // to hold outside every role's ceiling unless the command says so.
-          const redact = command.audit?.redact ?? (command.public === true ? 'values' : undefined);
-          const redacted = Array.isArray(redact) ? new Set<string>(redact) : undefined;
-          const image = (row: unknown): unknown =>
-            !redact || !row || typeof row !== 'object' || Array.isArray(row)
-              ? row
-              : Object.fromEntries(
-                  Object.entries(row).map(([column, value]) => [
-                    column,
-                    redact === 'values' || redacted!.has(column) ? AUDIT_REDACTED : value,
-                  ]),
+            let operations = new TransactionOperations(true);
+            const accept = <Request, Result>(
+              request: Request,
+              run: (snapshot: Request) => Promise<Result>,
+              read = false,
+            ): Promise<Result> => {
+              // Capture before joining the queue: handlers still own their arguments.
+              try {
+                const snapshot = scoped ? snapshotScopedData(request) : structuredClone(request);
+                return read ? operations.read(() => run(snapshot)) : operations.run(() => run(snapshot));
+              } catch (error) {
+                return operations.run(async () => {
+                  throw error;
+                });
+              }
+            };
+            // One audit row per target. A write to a target row is that target's;
+            // any other write is recorded on the target written most recently
+            // before it — the first target's, before any — so a handler that works
+            // record by record leaves each record's dependents on its own row.
+            const keyTexts = list.keys.map(commandKeyText);
+            const changes: unknown[][] = list.keys.map(() => []);
+            // The bytes each target's entries come to as one array, kept as they are added so a long audit is not walked again.
+            const changeBytes: number[] = list.keys.map(() => 1);
+            let attributed = 0;
+            // What the audit keeps of each image. A public command's default is
+            // keys and column names only: an applicant's input is not the journal's
+            // to hold outside every role's ceiling unless the command says so.
+            const redact = command.audit?.redact ?? (command.public === true ? 'values' : undefined);
+            const redacted = Array.isArray(redact) ? new Set<string>(redact) : undefined;
+            const image = (row: unknown): unknown =>
+              !redact || !row || typeof row !== 'object' || Array.isArray(row)
+                ? row
+                : Object.fromEntries(
+                    Object.entries(row).map(([column, value]) => [
+                      column,
+                      redact === 'values' || redacted!.has(column) ? AUDIT_REDACTED : value,
+                    ]),
+                  );
+            const attribute = (key: unknown) => {
+              if (!many) return;
+              const index = keyTexts.indexOf(commandKeyText(key));
+              if (index >= 0) attributed = index;
+            };
+            const recordChange = (change: { resource: string; key?: unknown } & Record<string, unknown>) => {
+              if (change.resource === command.target) attribute(change.key);
+              const list = changes[attributed];
+              if (list.length >= AUDIT_TARGET_ENTRIES) {
+                throw recordRefusalCause(
+                  new BusinessCommandExecutionError('invalid_result'),
+                  `Command "${request.command}" made more than ${AUDIT_TARGET_ENTRIES.toLocaleString('en-US')} changes for one target; ` +
+                    `its audit keeps at most ${AUDIT_TARGET_ENTRIES.toLocaleString('en-US')} (and 4 MiB).`,
                 );
-          const attribute = (key: unknown) => {
-            if (!many) return;
-            const index = keyTexts.indexOf(commandKeyText(key));
-            if (index >= 0) attributed = index;
-          };
-          const recordChange = (change: { resource: string; key?: unknown } & Record<string, unknown>) => {
-            if (change.resource === command.target) attribute(change.key);
-            const list = changes[attributed];
-            if (list.length >= AUDIT_TARGET_ENTRIES) {
-              throw recordRefusalCause(
-                new BusinessCommandExecutionError('invalid_result'),
-                `Command "${request.command}" made more than ${AUDIT_TARGET_ENTRIES.toLocaleString('en-US')} changes for one target; ` +
-                  `its audit keeps at most ${AUDIT_TARGET_ENTRIES.toLocaleString('en-US')} (and 4 MiB).`,
-              );
-            }
-            try {
-              // Redacted before the bound is measured: what is checked is what is stored.
-              const entry = JSON.parse(canonicalCommandJson(change, AUDIT_TARGET_BYTES)) as Record<string, unknown>;
-              for (const side of ['before', 'after']) if (Object.hasOwn(entry, side)) entry[side] = image(entry[side]);
-              list.push(entry);
-              // Stored in pieces of AUDIT_PART_ENTRIES, each serialized alone (the canonical walk is bounded in nodes, so
-              // a whole list of thousands is not one walk): the piece this entry joins, and the target's bytes in all.
-              canonicalCommandJson(list.slice(list.length - 1 - ((list.length - 1) % AUDIT_PART_ENTRIES)), AUDIT_TARGET_BYTES);
-              changeBytes[attributed] += Buffer.byteLength(canonicalCommandJson(entry, AUDIT_TARGET_BYTES), 'utf8') + 1;
-              if (changeBytes[attributed] > AUDIT_TARGET_BYTES) throw new Error('over the audit');
-            } catch {
-              throw developerError(auditRefusal(request.command, change));
-            }
-          };
-          /* The target's revision, checked up front, or, for a command that declares `appendOnly`, at its first write to the
+              }
+              try {
+                // Redacted before the bound is measured: what is checked is what is stored.
+                const entry = JSON.parse(canonicalCommandJson(change, AUDIT_TARGET_BYTES)) as Record<string, unknown>;
+                for (const side of ['before', 'after']) if (Object.hasOwn(entry, side)) entry[side] = image(entry[side]);
+                list.push(entry);
+                // Stored in pieces of AUDIT_PART_ENTRIES, each serialized alone (the canonical walk is bounded in nodes, so
+                // a whole list of thousands is not one walk): the piece this entry joins, and the target's bytes in all.
+                canonicalCommandJson(list.slice(list.length - 1 - ((list.length - 1) % AUDIT_PART_ENTRIES)), AUDIT_TARGET_BYTES);
+                changeBytes[attributed] += Buffer.byteLength(canonicalCommandJson(entry, AUDIT_TARGET_BYTES), 'utf8') + 1;
+                if (changeBytes[attributed] > AUDIT_TARGET_BYTES) throw new Error('over the audit');
+              } catch {
+                throw developerError(auditRefusal(request.command, change));
+              }
+            };
+            /* The target's revision, checked up front, or, for a command that declares `appendOnly`, at its first write to the
            target. `owed` holds each record whose refusal waits for that write, by key: decided from the revision the
            first read took (`movedSince`) and never read again, so a trigger or a digest column that its own child insert
            moved cannot refuse it. Only the declaration moves the check; a command that writes other tables without it
            is refused up front, as every command was. */
-          const lazyRevision =
-            command.appendOnly === true && !(preparesInitial(command) || registeredAvailability(command) || authorized.machine?.verb);
-          const owed = new Set<string>();
-          const guardTarget = (key: Record<string, string | number>) => {
-            if (owed.delete(commandKeyText(key))) throw new BusinessCommandExecutionError('stale_record', 'not_applied', undefined, key);
-          };
-          /* The rows this command has made on its target, by key text: a public command's link names the one it made. */
-          const madeOnTarget: string[] = [];
-          /* One insert as the handler asked it, written through `write`: the store's own insert for one row, one row of
+            const lazyRevision =
+              command.appendOnly === true && !(preparesInitial(command) || registeredAvailability(command) || authorized.machine?.verb);
+            const owed = new Set<string>();
+            const guardTarget = (key: Record<string, string | number>) => {
+              if (owed.delete(commandKeyText(key))) throw new BusinessCommandExecutionError('stale_record', 'not_applied', undefined, key);
+            };
+            /* The rows this command has made on its target, by key text: a public command's link names the one it made. */
+            const madeOnTarget: string[] = [];
+            const { written: wroteOnTarget, wrote } = targetWrites(authorized, command.target);
+            /* One insert as the handler asked it, written through `write`: the store's own insert for one row, one row of
              one statement for a batch (adapter.ts gathered), with the same stamps, footprint and audit either way. */
-          const insertVia = async (
-            request: InsertRequest,
-            write: (request: InsertRequest) => Promise<InsertResult>,
-          ): Promise<InsertResult> => {
-            checkCancelled();
-            request = machineInsert(authorized.machine, request, now(), authorized.catalog, authorized.timezone);
-            request = bindMoments(authorized, request);
-            const file = fileInsert(commandId, authorized, request);
-            let result: InsertResult;
-            try {
-              result = await write(request);
-            } catch (error) {
-              if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
-              throw error;
-            }
-            if (request.table === command.target && result.key !== undefined) madeOnTarget.push(commandKeyText(result.key));
-            if (auditing)
-              recordChange({
-                operation: 'insert',
-                resource: request.table,
-                key: result.key,
-                after: file ? { ...result.applied, ...file } : result.applied,
-              });
-            return result;
-          };
-          /* One update, likewise. `read` is the audit's before image where a batch read them all in one statement:
+            const insertVia = async (
+              request: InsertRequest,
+              write: (request: InsertRequest) => Promise<InsertResult>,
+            ): Promise<InsertResult> => {
+              checkCancelled();
+              const said = Object.keys(request.values);
+              request = machineInsert(authorized.machine, request, now(), authorized.catalog, authorized.timezone);
+              request = bindMoments(authorized, request);
+              const file = fileInsert(commandId, authorized, request);
+              let result: InsertResult;
+              try {
+                result = await write(request);
+              } catch (error) {
+                if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
+                throw error;
+              }
+              if (request.table === command.target && result.key !== undefined) {
+                madeOnTarget.push(commandKeyText(result.key));
+                wrote(result.key, Object.keys(request.values), said);
+              }
+              if (auditing)
+                recordChange({
+                  operation: 'insert',
+                  resource: request.table,
+                  key: result.key,
+                  after: file ? { ...result.applied, ...file } : result.applied,
+                });
+              return result;
+            };
+            /* One update, likewise. `read` is the audit's before image where a batch read them all in one statement:
              a row it lacks a column of (a machine's `since`, added here) is read on its own, as a single update's is. */
-          const updateVia = async (
-            request: UpdateRequest,
-            write: (request: UpdateRequest) => Promise<UpdateResult>,
-            read?: (request: UpdateRequest) => QueryResult | undefined,
-          ): Promise<UpdateResult> => {
-            checkCancelled();
-            if (request.table === command.target) guardTarget(request.key);
-            /* A machine's column moves along an edge of its graph, and its `since` with it. The audit's before image
+            const updateVia = async (
+              request: UpdateRequest,
+              write: (request: UpdateRequest) => Promise<UpdateResult>,
+              read?: (request: UpdateRequest) => QueryResult | undefined,
+            ): Promise<UpdateResult> => {
+              checkCancelled();
+              if (request.table === command.target) guardTarget(request.key);
+              const said = Object.keys(request.values);
+              /* A machine's column moves along an edge of its graph, and its `since` with it. The audit's before image
                is read with the state, in its one read, where the machine reads one. */
-            let seen: QueryResult | undefined;
-            request = await machineUpdate(
-              authorized.machine,
-              request,
-              store,
-              now(),
-              authorized.catalog,
-              authorized.timezone,
-              auditing ? Object.keys(request.values) : [],
-              (found) => (seen = found),
-            );
-            request = bindMoments(authorized, request);
-            seen ??= auditing ? read?.(request) : undefined;
-            // The before image is the audit's; a command that keeps none does not read it.
-            const audited = Object.keys(request.values);
-            const before = !auditing
-              ? undefined
-              : seen && seen.rows.every((row) => audited.every((column) => Object.hasOwn(row, column)))
-                ? { rows: seen.rows.map((row) => Object.fromEntries(audited.map((column) => [column, row[column]]))) }
-                : await store.query({
-                    table: request.table,
-                    columns: audited,
-                    limit: 2,
-                    offset: 0,
-                    filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
-                  });
-            let result: UpdateResult;
-            try {
-              result = await write(request);
-            } catch (error) {
-              if (isWriteConflict(error) && request.table === command.target) conflictKey = request.key;
-              else if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
-              throw error;
-            }
-            if (before && before.rows.length !== 1) {
-              throw recordRefusalCause(
-                new BusinessCommandExecutionError('invalid_result'),
-                `Command "${commandId}" updated ${request.table} by a key that ` +
-                  `matched ${before.rows.length} rows; an update names exactly one row by its primary key.`,
-              );
-            }
-            if (auditing)
-              recordChange({
-                operation: 'update',
-                resource: request.table,
-                key: request.key,
-                before: before!.rows[0],
-                after: result.applied,
-              });
-            else if (request.table === command.target) attribute(request.key);
-            if (scoped && request.table === command.target) {
-              const at = heldKey(request.key);
-              if (at) held.add(at);
-            }
-            return result;
-          };
-          /* A batch update's before images, read in one statement: every row it names, by its key. */
-          const beforeImages = async (requests: readonly UpdateRequest[]) => {
-            if (!auditing || !requests.length) return undefined;
-            const keyColumns = Object.keys(requests[0]!.key);
-            const columns = [...new Set([...keyColumns, ...requests.flatMap((request) => Object.keys(request.values))])];
-            const found = await store.query({
-              table: requests[0]!.table,
-              columns,
-              limit: requests.length * 2,
-              offset: 0,
-              filter: {
-                groups: requests.map((request) =>
-                  Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value })),
-                ),
-              },
-            });
-            return (request: UpdateRequest): QueryResult => ({
-              ...found,
-              rows: found.rows.filter((row) =>
-                Object.entries(request.key).every(([column, value]) => String(row[column]) === String(value)),
-              ),
-            });
-          };
-          /* A table it writes that the actor cannot read takes this command's new rows and gives nothing back
-             (businessCommandAuthorization.ts insertOnly): every read, change and removal of it is refused. */
-          const addingOnly = (table: string) => {
-            const said = authorized.insertOnly?.get(table);
-            if (said !== undefined) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, undefined, said);
-          };
-          // Audit explicit write intent, not trigger/default after-images. Deletions
-          // retain identity, not potentially sensitive fields from the deleted row.
-          const tx = Object.freeze<WriteTransaction>({
-            query: (request) =>
-              accept(
+              let seen: QueryResult | undefined;
+              request = await machineUpdate(
+                authorized.machine,
                 request,
-                async (request) => {
+                store,
+                now(),
+                authorized.catalog,
+                authorized.timezone,
+                auditing ? Object.keys(request.values) : [],
+                (found) => (seen = found),
+              );
+              request = bindMoments(authorized, request);
+              seen ??= auditing ? read?.(request) : undefined;
+              // The before image is the audit's; a command that keeps none does not read it.
+              const audited = Object.keys(request.values);
+              const before = !auditing
+                ? undefined
+                : seen && seen.rows.every((row) => audited.every((column) => Object.hasOwn(row, column)))
+                  ? { rows: seen.rows.map((row) => Object.fromEntries(audited.map((column) => [column, row[column]]))) }
+                  : await store.query({
+                      table: request.table,
+                      columns: audited,
+                      limit: 2,
+                      offset: 0,
+                      filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
+                    });
+              let result: UpdateResult;
+              try {
+                result = await write(request);
+              } catch (error) {
+                if (isWriteConflict(error) && request.table === command.target) conflictKey = request.key;
+                else if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
+                throw error;
+              }
+              if (before && before.rows.length !== 1) {
+                throw recordRefusalCause(
+                  new BusinessCommandExecutionError('invalid_result'),
+                  `Command "${commandId}" updated ${request.table} by a key that ` +
+                    `matched ${before.rows.length} rows; an update names exactly one row by its primary key.`,
+                );
+              }
+              if (auditing)
+                recordChange({
+                  operation: 'update',
+                  resource: request.table,
+                  key: request.key,
+                  before: before!.rows[0],
+                  after: result.applied,
+                });
+              else if (request.table === command.target) attribute(request.key);
+              if (request.table === command.target) wrote(request.key, Object.keys(request.values), said);
+              if (scoped && request.table === command.target) {
+                const at = heldKey(request.key);
+                if (at) held.add(at);
+              }
+              return result;
+            };
+            /* A batch update's before images, read in one statement: every row it names, by its key. */
+            const beforeImages = async (requests: readonly UpdateRequest[]) => {
+              if (!auditing || !requests.length) return undefined;
+              const keyColumns = Object.keys(requests[0]!.key);
+              const columns = [...new Set([...keyColumns, ...requests.flatMap((request) => Object.keys(request.values))])];
+              const found = await store.query({
+                table: requests[0]!.table,
+                columns,
+                limit: requests.length * 2,
+                offset: 0,
+                filter: {
+                  groups: requests.map((request) =>
+                    Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value })),
+                  ),
+                },
+              });
+              return (request: UpdateRequest): QueryResult => ({
+                ...found,
+                rows: found.rows.filter((row) =>
+                  Object.entries(request.key).every(([column, value]) => String(row[column]) === String(value)),
+                ),
+              });
+            };
+            /* A table it writes that the actor cannot read takes this command's new rows and gives nothing back
+             (businessCommandAuthorization.ts insertOnly): every read, change and removal of it is refused. */
+            const addingOnly = (table: string) => {
+              const said = authorized.insertOnly?.get(table);
+              if (said !== undefined) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, undefined, said);
+            };
+            // Audit explicit write intent, not trigger/default after-images. Deletions
+            // retain identity, not potentially sensitive fields from the deleted row.
+            const tx = Object.freeze<WriteTransaction>({
+              query: (request) =>
+                accept(
+                  request,
+                  async (request) => {
+                    checkCancelled();
+                    addingOnly(request.table);
+                    return store.query(request);
+                  },
+                  true,
+                ),
+              count: (table, filter) =>
+                accept(
+                  { table, filter },
+                  async ({ table, filter }) => {
+                    checkCancelled();
+                    addingOnly(table);
+                    return store.count(table, filter);
+                  },
+                  true,
+                ),
+              /* Sums and groups read as `count` reads, through the same store and its scope; a store that cannot say one
+               leaves this out, and the handler's db refuses (commandDb.ts). */
+              ...(store.aggregate
+                ? {
+                    aggregate: (request: AggregateRequest) =>
+                      accept(
+                        request,
+                        async (request) => {
+                          checkCancelled();
+                          addingOnly(request.table);
+                          return store.aggregate!(request);
+                        },
+                        true,
+                      ),
+                  }
+                : {}),
+              insert: (request) => accept(request, (request) => insertVia(request, (request) => store.insert(request))),
+              update: (request) =>
+                accept(request, async (request) => {
+                  addingOnly(request.table);
+                  return updateVia(request, (request) => store.update(request));
+                }),
+              remove: (request) =>
+                accept(request, async (request) => {
                   checkCancelled();
                   addingOnly(request.table);
-                  return store.query(request);
-                },
-                true,
-              ),
-            count: (table, filter) =>
-              accept(
-                { table, filter },
-                async ({ table, filter }) => {
-                  checkCancelled();
-                  addingOnly(table);
-                  return store.count(table, filter);
-                },
-                true,
-              ),
-            /* Sums and groups read as `count` reads, through the same store and its scope; a store that cannot say one
-               leaves this out, and the handler's db refuses (commandDb.ts). */
-            ...(store.aggregate
-              ? {
-                  aggregate: (request: AggregateRequest) =>
-                    accept(
-                      request,
-                      async (request) => {
-                        checkCancelled();
-                        addingOnly(request.table);
-                        return store.aggregate!(request);
-                      },
-                      true,
-                    ),
-                }
-              : {}),
-            insert: (request) => accept(request, (request) => insertVia(request, (request) => store.insert(request))),
-            update: (request) =>
-              accept(request, async (request) => {
-                addingOnly(request.table);
-                return updateVia(request, (request) => store.update(request));
-              }),
-            remove: (request) =>
-              accept(request, async (request) => {
-                checkCancelled();
-                addingOnly(request.table);
-                if (request.table === command.target) guardTarget(request.key);
-                const own = request.table === command.target ? heldKey(request.key) : undefined;
-                if (own && !held.has(own)) await authorized.assertTarget?.(records, request.key);
-                const result = await store.remove(request);
-                if (own) {
-                  held.delete(own);
-                  if (result.affected === 1) removed.add(own);
-                }
-                // A removed row's links end with it, in this transaction: a key reused later opens nothing minted before.
-                const linked = authorized.linkedTables?.get(request.table);
-                if (linked !== undefined && result.affected > 0 && typeof journal.revokeLinks === 'function')
-                  await journal.revokeLinks(authorized.actor.appId, linked, commandKeyText(request.key), undefined, now().getTime());
-                if (auditing) recordChange({ operation: 'delete', resource: request.table, key: request.key });
-                return result;
-              }),
-          });
-          /* The handler's `db` has a transaction with batches beside it; `context.tx`, the escape hatch, keeps its
+                  if (request.table === command.target) guardTarget(request.key);
+                  const own = request.table === command.target ? heldKey(request.key) : undefined;
+                  if (own && !held.has(own)) await authorized.assertTarget?.(records, request.key);
+                  const result = await store.remove(request);
+                  if (own) {
+                    held.delete(own);
+                    if (result.affected === 1) removed.add(own);
+                  }
+                  // A removed row's links end with it, in this transaction: a key reused later opens nothing minted before.
+                  const linked = authorized.linkedTables?.get(request.table);
+                  if (linked !== undefined && result.affected > 0 && typeof journal.revokeLinks === 'function')
+                    await journal.revokeLinks(authorized.actor.appId, linked, commandKeyText(request.key), undefined, now().getTime());
+                  if (auditing) recordChange({ operation: 'delete', resource: request.table, key: request.key });
+                  return result;
+                }),
+            });
+            /* The handler's `db` has a transaction with batches beside it; `context.tx`, the escape hatch, keeps its
              one-row surface. A batch: each row through everything above, its write one row of one statement. A store
              that carries none (a draft, a scoped or tenant writer) leaves these out, and the db writes a row at a time. */
-          const batched = Object.freeze<WriteTransaction>({
-            ...tx,
-            ...(store.insertMany
-              ? {
-                  insertMany: (requests: readonly InsertRequest[]) =>
-                    accept(requests, (requests) => gathered(requests, insertVia, (rows) => store.insertMany!(rows))),
-                }
-              : {}),
-            ...(store.updateMany
-              ? {
-                  updateMany: (requests: readonly UpdateRequest[]) =>
-                    accept(requests, async (requests) => {
-                      for (const request of requests) addingOnly(request.table);
-                      const read = await beforeImages(requests);
-                      return gathered(
-                        requests,
-                        (request, write) => updateVia(request, write, read),
-                        (rows) => store.updateMany!(rows),
-                      );
-                    }),
-                }
-              : {}),
-          });
-          try {
-            // A command that names a record gets it read here, in this transaction,
-            // before its handler runs: present, at the revision the form saw (a
-            // service principal names none: a job acts on the row as it is now),
-            // and in the state `when` requires. Every target in the client's
-            // order; a refusal names the key when the request listed several.
-            const catalog = authorized.catalog,
-              table = catalog?.[command.target];
-            if (!table) throw new AppAccessDenied();
-            /* Inside the command's transaction, so through its journal: a second writer would nest in it (SQLite
+            const batched = Object.freeze<WriteTransaction>({
+              ...tx,
+              ...(store.insertMany
+                ? {
+                    insertMany: (requests: readonly InsertRequest[]) =>
+                      accept(requests, (requests) => gathered(requests, insertVia, (rows) => store.insertMany!(rows))),
+                  }
+                : {}),
+              ...(store.updateMany
+                ? {
+                    updateMany: (requests: readonly UpdateRequest[]) =>
+                      accept(requests, async (requests) => {
+                        for (const request of requests) addingOnly(request.table);
+                        const read = await beforeImages(requests);
+                        return gathered(
+                          requests,
+                          (request, write) => updateVia(request, write, read),
+                          (rows) => store.updateMany!(rows),
+                        );
+                      }),
+                  }
+                : {}),
+            });
+            try {
+              // A command that names a record gets it read here, in this transaction,
+              // before its handler runs: present, at the revision the form saw (a
+              // service principal names none: a job acts on the row as it is now),
+              // and in the state `when` requires. Every target in the client's
+              // order; a refusal names the key when the request listed several.
+              const catalog = authorized.catalog,
+                table = catalog?.[command.target];
+              if (!table) throw new AppAccessDenied();
+              /* Inside the command's transaction, so through its journal: a second writer would nest in it (SQLite
                refuses that) or wait on it. The rows commit with the command or roll back with it; a journal that
                keeps no read audit fails the command (ReadAuditFailed). */
-            const heldAudit: CommandReadAudit | undefined = authorized.readAudit && {
-              ...authorized.readAudit,
-              sink: Object.freeze<ReadAuditSink>({
-                ...authorized.readAudit.sink,
-                held: true,
-                append: async (row) => {
-                  if (typeof journal.appendReadAudit !== 'function')
-                    throw new Error('this database keeps no read audit in a command transaction');
-                  await journal.appendReadAudit([row]);
-                },
-              }),
-            };
-            /* The target is the one read of the executor's own that the read audit hears: the person acted on that
+              const heldAudit: CommandReadAudit | undefined = authorized.readAudit && {
+                ...authorized.readAudit,
+                sink: Object.freeze<ReadAuditSink>({
+                  ...authorized.readAudit.sink,
+                  held: true,
+                  append: async (row) => {
+                    if (typeof journal.appendReadAudit !== 'function')
+                      throw new Error('this database keeps no read audit in a command transaction');
+                    await journal.appendReadAudit([row]);
+                  },
+                }),
+              };
+              /* The target is the one read of the executor's own that the read audit hears: the person acted on that
                record, so it is a line under this command whether or not a lookup or the handler reads it too. */
-            const auditedTarget = authorized.audited?.tables.get(command.target);
-            const targets: UntypedRow[] = [];
-            /* `me` in the command's `when` and its inputs' is this actor (commandWhen.ts whenPerson), read once; it
+              const auditedTarget = authorized.audited?.tables.get(command.target);
+              const targets: UntypedRow[] = [];
+              /* `me` in the command's `when` and its inputs' is this actor (commandWhen.ts whenPerson), read once; it
                carries the tenant's profile, which an input's record part may compare with. */
-            const person =
-              command.targets !== 'none' && !creating
-                ? await whenPerson(tx, authorized.actor, authorized.people, [
-                    command.when,
-                    ...command.fields.map((field) => (field.type === 'group' ? undefined : field.when)),
-                  ])
-                : undefined;
-            const me = authorized.tenant ? { ...(person ?? { email: authorized.actor.email ?? null }), tenant: authorized.tenant } : person;
-            if (command.targets !== 'none' && !creating) {
-              for (const [index, key] of list.keys.entries()) {
-                checkCancelled();
-                const refused = (code: 'not_found' | 'stale_record' | 'ineligible_state') =>
-                  new BusinessCommandExecutionError(code, 'not_applied', undefined, key);
-                const exact = canonicalKey(table, key);
-                if (!exact) throw refused('not_found');
-                /* The row as `when` admits it, in one read: the common case, an
+              const person =
+                command.targets !== 'none' && !creating
+                  ? await whenPerson(tx, authorized.actor, authorized.people, [
+                      command.when,
+                      ...command.fields.map((field) => (field.type === 'group' ? undefined : field.when)),
+                    ])
+                  : undefined;
+              const me = authorized.tenant
+                ? { ...(person ?? { email: authorized.actor.email ?? null }), tenant: authorized.tenant }
+                : person;
+              if (command.targets !== 'none' && !creating) {
+                for (const [index, key] of list.keys.entries()) {
+                  checkCancelled();
+                  const refused = (code: 'not_found' | 'stale_record' | 'ineligible_state') =>
+                    new BusinessCommandExecutionError(code, 'not_applied', undefined, key);
+                  const exact = canonicalKey(table, key);
+                  if (!exact) throw refused('not_found');
+                  /* The row as `when` admits it, in one read: the common case, an
                eligible target, is then one statement where it was a read and
                a count. Only a row it does not admit is read again by its key
                alone, to say which refusal it is — not found, moved, or not in
                the state `when` requires — in that order, as before. A `when`
                that reads a rollup or a computed column is judged once the row
                is read (commandWhen.ts), in this transaction all the same. */
-                const when = command.when === undefined ? undefined : compileWhen(table, command.when, now(), me);
-                const derives = Boolean(when?.derived.size);
-                const [named] = keyFilter(exact).groups;
-                let found =
-                  when && !when.none && !derives
-                    ? await tx.query({
-                        table: command.target,
-                        ...(authorized.versionField === undefined ? { binary: true as const } : {}),
-                        limit: 2,
-                        offset: 0,
-                        filter: { groups: when.filter.groups.length ? when.filter.groups.map((group) => [...named, ...group]) : [named] },
-                      })
-                    : undefined;
-                let eligible = found?.rows.length === 1;
-                if (!eligible)
-                  found = await tx.query({
-                    table: command.target,
-                    ...(authorized.versionField === undefined ? { binary: true as const } : {}),
-                    filter: keyFilter(exact),
-                    limit: 2,
-                    offset: 0,
-                  });
-                if (!found!.rows.length) {
-                  // Hidden or absent: a hidden one is refused as the row scope refuses it.
-                  if (track !== undefined) await authorized.assertTarget?.(records, key);
-                  throw refused('not_found');
-                }
-                if (found!.rows.length !== 1) {
-                  throw recordRefusalCause(
-                    new BusinessCommandExecutionError('invalid_result'),
-                    `Command "${commandId}"'s target key matched ` +
-                      `${found!.rows.length} rows of ${command.target}; a target names exactly one row.`,
-                  );
-                }
-                /* The revision the request holds is the row's as read now: its
+                  const when = command.when === undefined ? undefined : compileWhen(table, command.when, now(), me);
+                  const derives = Boolean(when?.derived.size);
+                  const [named] = keyFilter(exact).groups;
+                  let found =
+                    when && !when.none && !derives
+                      ? await tx.query({
+                          table: command.target,
+                          ...(authorized.versionField === undefined ? { binary: true as const } : {}),
+                          limit: 2,
+                          offset: 0,
+                          filter: { groups: when.filter.groups.length ? when.filter.groups.map((group) => [...named, ...group]) : [named] },
+                        })
+                      : undefined;
+                  let eligible = found?.rows.length === 1;
+                  if (!eligible)
+                    found = await tx.query({
+                      table: command.target,
+                      ...(authorized.versionField === undefined ? { binary: true as const } : {}),
+                      filter: keyFilter(exact),
+                      limit: 2,
+                      offset: 0,
+                    });
+                  if (!found!.rows.length) {
+                    // Hidden or absent: a hidden one is refused as the row scope refuses it.
+                    if (track !== undefined) await authorized.assertTarget?.(records, key);
+                    throw refused('not_found');
+                  }
+                  if (found!.rows.length !== 1) {
+                    throw recordRefusalCause(
+                      new BusinessCommandExecutionError('invalid_result'),
+                      `Command "${commandId}"'s target key matched ` +
+                        `${found!.rows.length} rows of ${command.target}; a target names exactly one row.`,
+                    );
+                  }
+                  /* The revision the request holds is the row's as read now: its
                version column, or the digest of the row (commandRevision.ts),
                taken before the row is normalized, as prepare takes it. A job
                names none: it acts on the row as it is. */
-                let movedSince = false;
-                if (authorized.actor.kind !== 'service') {
-                  const revision = rowRevision(found!.rows[0], authorized.versionField);
-                  if (revision === undefined) {
-                    throw recordRefusalCause(
-                      new BusinessCommandExecutionError('invalid_result'),
-                      `Command "${commandId}" could not take the revision of its ` +
-                        `${command.target} row${authorized.versionField === undefined ? '' : ` from its version column "${authorized.versionField}"`}.`,
-                    );
-                  }
-                  /* A command is refused here, before the handler, if the record moved since the request read it. One that
+                  let movedSince = false;
+                  if (authorized.actor.kind !== 'service') {
+                    const revision = rowRevision(found!.rows[0], authorized.versionField);
+                    if (revision === undefined) {
+                      throw recordRefusalCause(
+                        new BusinessCommandExecutionError('invalid_result'),
+                        `Command "${commandId}" could not take the revision of its ` +
+                          `${command.target} row${authorized.versionField === undefined ? '' : ` from its version column "${authorized.versionField}"`}.`,
+                      );
+                    }
+                    /* A command is refused here, before the handler, if the record moved since the request read it. One that
                    declares `appendOnly` is adding child rows — a note, a comment, an attachment — and has nothing of the
                    target's to overwrite; under churn on the record every retry was refused for a change it never touched.
                    It is refused at its first write to the target instead (`guardTarget`), so a stale one that does write a
                    target field still is. A verb of a machine, and a command whose form was prefilled from the record,
                    depend on the record as the person saw it and keep the check up front. */
-                  if (!lazyRevision) {
-                    if (revision !== list.expectedVersions[index]) throw refused('stale_record');
-                  } else {
-                    movedSince = revision !== list.expectedVersions[index];
-                    if (movedSince) owed.add(commandKeyText(exact));
+                    if (!lazyRevision) {
+                      if (revision !== list.expectedVersions[index]) throw refused('stale_record');
+                    } else {
+                      movedSince = revision !== list.expectedVersions[index];
+                      if (movedSince) owed.add(commandKeyText(exact));
+                    }
                   }
-                }
-                const row = normalizeRow(table, found!.rows[0]) as UntypedRow;
-                if (auditedTarget && !lookupAudited.has(commandKeyText(exact)))
-                  await auditCommandRead(heldAudit, request.command, {
-                    ...auditedTarget,
-                    keys: table.key,
-                    groups: keyFilter(exact).groups,
-                    rows: [row],
-                  });
-                let derivedFailure: DerivedFailure | undefined;
-                if (when !== undefined && derives)
-                  [eligible] = await whenHolds(
-                    tx,
-                    catalog!,
-                    command.target,
-                    when,
-                    [row],
-                    now(),
-                    (_row, failure) => (derivedFailure = failure),
-                  );
-                /* A timer's run is its stay's: still in the state it waited in, at the instant it was swept for, and,
+                  const row = normalizeRow(table, found!.rows[0]) as UntypedRow;
+                  if (auditedTarget && !lookupAudited.has(commandKeyText(exact)))
+                    await auditCommandRead(heldAudit, request.command, {
+                      ...auditedTarget,
+                      keys: table.key,
+                      groups: keyFilter(exact).groups,
+                      rows: [row],
+                    });
+                  let derivedFailure: DerivedFailure | undefined;
+                  if (when !== undefined && derives)
+                    [eligible] = await whenHolds(
+                      tx,
+                      catalog!,
+                      command.target,
+                      when,
+                      [row],
+                      now(),
+                      (_row, failure) => (derivedFailure = failure),
+                    );
+                  /* A timer's run is its stay's: still in the state it waited in, at the instant it was swept for, and,
                  for a resource's `at` (appAt.ts), still matching its when — judged in this transaction. */
-                if (options.timer) {
-                  const timer = options.timer;
-                  if (
-                    (timer.column !== undefined && String(row[timer.column]) !== timer.state) ||
-                    String(row[timer.since]) !== timer.enteredAt
-                  )
-                    throw refused('ineligible_state');
-                  if (timer.when !== undefined) {
-                    const holds = compileWhen(table, timer.when, now());
-                    const still = holds.none
-                      ? 0
-                      : (
-                          await tx.query({
-                            table: command.target,
-                            limit: 2,
-                            offset: 0,
-                            filter: {
-                              groups: holds.filter.groups.length ? holds.filter.groups.map((group) => [...named, ...group]) : [named],
-                            },
-                          })
-                        ).rows.length;
-                    if (still !== 1) throw refused('ineligible_state');
+                  if (options.timer) {
+                    const timer = options.timer;
+                    if (
+                      (timer.column !== undefined && String(row[timer.column]) !== timer.state) ||
+                      String(row[timer.since]) !== timer.enteredAt
+                    )
+                      throw refused('ineligible_state');
+                    if (timer.when !== undefined) {
+                      const holds = compileWhen(table, timer.when, now());
+                      const still = holds.none
+                        ? 0
+                        : (
+                            await tx.query({
+                              table: command.target,
+                              limit: 2,
+                              offset: 0,
+                              filter: {
+                                groups: holds.filter.groups.length ? holds.filter.groups.map((group) => [...named, ...group]) : [named],
+                              },
+                            })
+                          ).rows.length;
+                      if (still !== 1) throw refused('ineligible_state');
+                    }
                   }
-                }
-                /* A record that moved and no longer qualifies is stale first, as the up-front check always said. */
-                if (movedSince && when !== undefined && !eligible) throw refused('stale_record');
-                if (when !== undefined && !eligible) {
-                  /* Say which part of the `when` the record fails, in the App's words for the column and only to a person
+                  /* A record that moved and no longer qualifies is stale first, as the up-front check always said. */
+                  if (movedSince && when !== undefined && !eligible) throw refused('stale_record');
+                  if (when !== undefined && !eligible) {
+                    /* Say which part of the `when` the record fails, in the App's words for the column and only to a person
                    who reads it; the generic sentence stays where it cannot be said. */
-                  const stored = failingCondition(table, when, row);
-                  /* A computed column is no column of the table: it may be said when everything it is computed from is
+                    const stored = failingCondition(table, when, row);
+                    /* A computed column is no column of the table: it may be said when everything it is computed from is
                      the person's to read, and its value is the one the `when` was judged by. */
-                  const computed = derivedFailure && table.derived?.computed[derivedFailure.condition.column];
-                  const reads = typeof computed === 'object' ? computed.reads : undefined;
-                  const why = whenRefusalSentence(
-                    catalog![command.target].saying,
-                    stored ?? derivedFailure?.condition,
-                    row,
-                    (column) =>
-                      !stored && reads
-                        ? reads.every((read) => Object.hasOwn(table.kinds, read) && mayReadTargetColumn(authorized.actor, read))
-                        : mayReadTargetColumn(authorized.actor, column),
-                    stored ? undefined : derivedFailure,
-                  );
-                  throw why === undefined
-                    ? refused('ineligible_state')
-                    : new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, key, why);
+                    const computed = derivedFailure && table.derived?.computed[derivedFailure.condition.column];
+                    const reads = typeof computed === 'object' ? computed.reads : undefined;
+                    const why = whenRefusalSentence(
+                      catalog![command.target].saying,
+                      stored ?? derivedFailure?.condition,
+                      row,
+                      (column) =>
+                        !stored && reads
+                          ? reads.every((read) => Object.hasOwn(table.kinds, read) && mayReadTargetColumn(authorized.actor, read))
+                          : mayReadTargetColumn(authorized.actor, column),
+                      stored ? undefined : derivedFailure,
+                    );
+                    throw why === undefined
+                      ? refused('ineligible_state')
+                      : new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, key, why);
+                  }
+                  /* A verb of the target's machine runs only from a state that lists it: the graph is its precondition. */
+                  const graph = authorized.machine?.verb && authorized.machine.tables.get(command.target);
+                  if (graph && !authorized.machine!.verb!.from.has(String(row[graph.column]))) {
+                    throw recordRefusalCause(
+                      refused('ineligible_state'),
+                      `Command "${request.command}" is a verb of the machine of "${command.target}" ` +
+                        `from ${[...authorized.machine!.verb!.from].map((state) => `"${state}"`).join(', ')}, and the record is "${String(row[graph.column])}".`,
+                    );
+                  }
+                  targets.push(row);
                 }
-                /* A verb of the target's machine runs only from a state that lists it: the graph is its precondition. */
-                const graph = authorized.machine?.verb && authorized.machine.tables.get(command.target);
-                if (graph && !authorized.machine!.verb!.from.has(String(row[graph.column]))) {
-                  throw recordRefusalCause(
-                    refused('ineligible_state'),
-                    `Command "${request.command}" is a verb of the machine of "${command.target}" ` +
-                      `from ${[...authorized.machine!.verb!.from].map((state) => `"${state}"`).join(', ')}, and the record is "${String(row[graph.column])}".`,
-                  );
-                }
-                targets.push(row);
+                if (lookupHeld) throw new BusinessCommandExecutionError('stale_record', 'not_applied', undefined, list.keys[0]);
               }
-              if (lookupHeld) throw new BusinessCommandExecutionError('stale_record', 'not_applied', undefined, list.keys[0]);
-            }
-            /* An input asked only where its `when` holds, where that `when` reads the record or the tenant: each
+              /* An input asked only where its `when` holds, where that `when` reads the record or the tenant: each
                `record.<path>` part judged of the record in this transaction (following its references as the actor
                reads them), each `tenant.<column>` of the profile the request read, and the rest over the draft — the
                form's truths are judged again here, whatever it was told. A value for one the draft hides is refused,
                as is a required one left empty where it is shown; each names its field, as the form's own checks do. */
-            const conditional = command.fields.filter(
-              (field) =>
-                field.type !== 'group' &&
-                field.type !== 'lines' &&
-                field.when !== undefined &&
-                readsRecord(field.when) &&
-                (targets.length === 1 || !readsTarget(field.when)),
-            );
-            if (conditional.length) {
-              const bound: Record<string, BoundCondition> = {};
-              for (const field of conditional) {
-                bound[field.name] = await bindRecord(
-                  (field as { when: string }).when,
-                  `input "${field.name}"`,
-                  (comparison) =>
-                    targets.length === 1
-                      ? recordPartHolds(tx, catalog!, command.target, comparison, targets[0], now(), me)
-                      : Promise.resolve(false),
-                  now(),
-                  command.fields,
-                  authorized.tenant ?? {},
-                );
+              const conditional = command.fields.filter(
+                (field) =>
+                  field.type !== 'group' &&
+                  field.type !== 'lines' &&
+                  field.when !== undefined &&
+                  readsRecord(field.when) &&
+                  (targets.length === 1 || !readsTarget(field.when)),
+              );
+              if (conditional.length) {
+                const bound: Record<string, BoundCondition> = {};
+                for (const field of conditional) {
+                  bound[field.name] = await bindRecord(
+                    (field as { when: string }).when,
+                    `input "${field.name}"`,
+                    (comparison) =>
+                      targets.length === 1
+                        ? recordPartHolds(tx, catalog!, command.target, comparison, targets[0], now(), me)
+                        : Promise.resolve(false),
+                    now(),
+                    command.fields,
+                    authorized.tenant ?? {},
+                  );
+                }
+                try {
+                  judgeDraft(command, (input ?? {}) as Record<string, unknown>, bound, now());
+                } catch (error) {
+                  if (error instanceof DraftRefusal)
+                    throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.path, undefined, error.said);
+                  throw error;
+                }
+                checkCancelled();
               }
-              try {
-                judgeDraft(command, (input ?? {}) as Record<string, unknown>, bound, now());
-              } catch (error) {
-                if (error instanceof DraftRefusal)
-                  throw new BusinessCommandExecutionError('invalid_input', 'not_applied', error.path, undefined, error.said);
-                throw error;
-              }
-              checkCancelled();
-            }
-            /* Answers to questions defined in rows, judged against the rows as they stand in this
+              /* Answers to questions defined in rows, judged against the rows as they stand in this
              transaction and in the reader's tenant, whatever the form drew. */
-            const unanswered = await definedAnswerBreak(tx, catalog!, command, input, targets.length === 1 ? targets[0] : undefined);
-            if (unanswered)
-              throw new BusinessCommandExecutionError('invalid_input', 'not_applied', unanswered.path, undefined, unanswered.reason);
-            /* A choice from a table's rows names a row this reader reads here and now (field.choice({ from })). */
-            const unsourced = await sourcedChoiceBreak(tx, command, input);
-            if (unsourced)
-              throw new BusinessCommandExecutionError('invalid_input', 'not_applied', unsourced.path, undefined, unsourced.reason);
-            checkCancelled();
-            const available = await evaluateCommandAvailability({
-              command,
-              commandId: request.command,
-              actor: authorized.actor,
-              records: targets,
-              catalog,
-              reader: tx,
-              signal,
-              now,
-              requestId,
-              flags,
-            });
-            const denied = available.findIndex((value) => !value);
-            if (denied >= 0) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, list.keys[denied]);
-            /* What the handler reads through its `db` and `tx` of an audited resource is written before it has the
+              const unanswered = await definedAnswerBreak(tx, catalog!, command, input, targets.length === 1 ? targets[0] : undefined);
+              if (unanswered)
+                throw new BusinessCommandExecutionError('invalid_input', 'not_applied', unanswered.path, undefined, unanswered.reason);
+              /* A choice from a table's rows names a row this reader reads here and now (field.choice({ from })). */
+              const unsourced = await sourcedChoiceBreak(tx, command, input);
+              if (unsourced)
+                throw new BusinessCommandExecutionError('invalid_input', 'not_applied', unsourced.path, undefined, unsourced.reason);
+              checkCancelled();
+              const available = await evaluateCommandAvailability({
+                command,
+                commandId: request.command,
+                actor: authorized.actor,
+                records: targets,
+                catalog,
+                reader: tx,
+                signal,
+                now,
+                requestId,
+                flags,
+              });
+              const denied = available.findIndex((value) => !value);
+              if (denied >= 0) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, list.keys[denied]);
+              /* What the handler reads through its `db` and `tx` of an audited resource is written before it has the
                rows, under this command (readAudit.ts auditCommandRead); the executor's own reads around it —
                availability, constants — are the command's machinery, not the handler's reads. */
-            const auditedTables = authorized.audited?.tables;
-            const audit = (inner: WriteTransaction): WriteTransaction =>
-              auditedTables?.size
-                ? Object.freeze<WriteTransaction>({
-                    ...inner,
-                    async query(read) {
-                      const result = await inner.query(read);
-                      const found = auditedTables.get(read.table);
-                      if (found)
-                        await auditCommandRead(heldAudit, request.command, {
-                          ...found,
-                          keys: catalog[read.table]?.key ?? [],
-                          groups: read.filter?.groups,
-                          sort: read.orderBy,
-                          offset: read.offset,
-                          rows: result.rows,
-                        });
-                      return result;
-                    },
-                  })
-                : inner;
-            const db = createCommandDb({
-              tx: audit(batched),
-              catalog,
-              read: command.read,
-              write: command.write,
-              now,
-              ...(authorized.versionField === undefined ? {} : { versionField: authorized.versionField }),
-              target: command.target,
-              constant: (table, column, word) => commandConstant(authorized, tx, table.meta, column, word, now()),
-              ...(authorized.fileReads ? { fileReads: authorized.fileReads, fileScope } : {}),
-              ...(authorized.files
-                ? {
-                    files: authorized.files,
-                    afterCommit: (run: () => void) => void afterCommit.push(run),
-                    stored: (table: string, data: Uint8Array) => void storedFiles.push([table, data]),
-                    placeFile: async (rule: CommandFileRule, values: Record<string, unknown>) => {
-                      const placed = await placeFile(rule, values, fileScope);
-                      placedFiles.push(placed);
-                      return placed.values;
-                    },
-                  }
-                : {}),
-            });
-            /* The rows of the machines that move with this command, read before its handler runs: the move at its end
+              const auditedTables = authorized.audited?.tables;
+              const audit = (inner: WriteTransaction): WriteTransaction =>
+                auditedTables?.size
+                  ? Object.freeze<WriteTransaction>({
+                      ...inner,
+                      async query(read) {
+                        const result = await inner.query(read);
+                        const found = auditedTables.get(read.table);
+                        if (found)
+                          await auditCommandRead(heldAudit, request.command, {
+                            ...found,
+                            keys: catalog[read.table]?.key ?? [],
+                            groups: read.filter?.groups,
+                            sort: read.orderBy,
+                            offset: read.offset,
+                            rows: result.rows,
+                          });
+                        return result;
+                      },
+                    })
+                  : inner;
+              const db = createCommandDb({
+                tx: audit(batched),
+                catalog,
+                read: command.read,
+                write: command.write,
+                now,
+                ...(authorized.versionField === undefined ? {} : { versionField: authorized.versionField }),
+                target: command.target,
+                constant: (table, column, word) => commandConstant(authorized, tx, table.meta, column, word, now()),
+                ...(authorized.fileReads ? { fileReads: authorized.fileReads, fileScope } : {}),
+                ...(authorized.files
+                  ? {
+                      files: authorized.files,
+                      afterCommit: (run: () => void) => void afterCommit.push(run),
+                      stored: (table: string, data: Uint8Array) => void storedFiles.push([table, data]),
+                      placeFile: async (rule: CommandFileRule, values: Record<string, unknown>) => {
+                        const placed = await placeFile(rule, values, fileScope);
+                        placedFiles.push(placed);
+                        return placed.values;
+                      },
+                    }
+                  : {}),
+              });
+              /* The rows of the machines that move with this command, read before its handler runs: the move at its end
              is of the rows that stood then, so a row the handler inserts (the new one a "replace the earlier ones"
              verb adds) is not moved with the old. */
-            const carriedRows = async (at: number, index: number, limit = 257) => {
-              const carried = authorized.machine!.carried![at];
-              const parent: Record<string, unknown> = { ...targets[index], ...canonicalKey(table, list.keys[index]) };
-              return (
-                await tx.query({
-                  table: carried.table,
-                  columns: [...(authorized.catalog?.[carried.table]?.key ?? []), carried.column],
-                  filter: {
-                    groups: [
-                      carried.reference.from.map((column, at) => ({
-                        column,
-                        op: '=' as const,
-                        value: parent[carried.reference.to[at]] as string | number,
-                      })),
-                    ],
-                  },
-                  limit,
-                  offset: 0,
-                })
-              ).rows;
-            };
-            const stood: Set<string>[][] = [];
-            for (const [at, carried] of (authorized.machine?.carried ?? []).entries()) {
-              const key = authorized.catalog?.[carried.table]?.key ?? [];
-              stood[at] = [];
-              for (const index of targets.keys()) {
-                const rows = await carriedRows(at, index);
-                if (rows.length > 256)
-                  throw recordRefusalCause(
-                    new BusinessCommandExecutionError('invalid_result'),
-                    `Command "${request.command}" moves more than 256 "${carried.table}" rows of one "${command.target}" with it; its audit keeps at most 256.`,
-                  );
-                stood[at][index] = new Set(rows.map((row) => carriedKey(key, row)));
-              }
-            }
-            const named = command.targets === 'none' || creating ? {} : many ? { records: Object.freeze(targets) } : { record: targets[0] };
-            /* A flow's notify step tells of the record its command runs on and no other, in this transaction: the
-             notice is kept with the step's receipt, so a replay tells nobody twice (flowCommand.ts). */
-            const flowTell =
-              flowCommandOf(command) && !many && 'record' in named
-                ? (audience: string, message: string) => {
-                    const exact = canonicalKey(authorized.catalog![command.target]!, list.keys[0]);
-                    if (!exact || !store.tell) throw new BusinessCommandExecutionError('temporarily_unavailable');
-                    const tell = store.tell.bind(store);
-                    return accept(
-                      { table: command.target, key: exact as Record<string, string | number>, audience, message },
-                      async (request) => {
-                        checkCancelled();
-                        await tell(request);
-                      },
+              const carriedRows = async (at: number, index: number, limit = 257) => {
+                const carried = authorized.machine!.carried![at];
+                const parent: Record<string, unknown> = { ...targets[index], ...canonicalKey(table, list.keys[index]) };
+                return (
+                  await tx.query({
+                    table: carried.table,
+                    columns: [...(authorized.catalog?.[carried.table]?.key ?? []), carried.column],
+                    filter: {
+                      groups: [
+                        carried.reference.from.map((column, at) => ({
+                          column,
+                          op: '=' as const,
+                          value: parent[carried.reference.to[at]] as string | number,
+                        })),
+                      ],
+                    },
+                    limit,
+                    offset: 0,
+                  })
+                ).rows;
+              };
+              const stood: Set<string>[][] = [];
+              for (const [at, carried] of (authorized.machine?.carried ?? []).entries()) {
+                const key = authorized.catalog?.[carried.table]?.key ?? [];
+                stood[at] = [];
+                for (const index of targets.keys()) {
+                  const rows = await carriedRows(at, index);
+                  if (rows.length > 256)
+                    throw recordRefusalCause(
+                      new BusinessCommandExecutionError('invalid_result'),
+                      `Command "${request.command}" moves more than 256 "${carried.table}" rows of one "${command.target}" with it; its audit keeps at most 256.`,
                     );
-                  }
-                : undefined;
-            // Only a public submission is told where it lands, and only by its binding.
-            const intake =
-              publicActor && (authorized.intake === 'tenant' || authorized.intake === 'platform') ? authorized.intake : undefined;
-            const placement = publicActor && authorized.placement ? Object.freeze({ tenantId: authorized.placement.tenantId }) : undefined;
-            /* The files the input names by id, taken from what this sender holds for this command (stagedFiles.ts):
+                  stood[at][index] = new Set(rows.map((row) => carriedKey(key, row)));
+                }
+              }
+              const named =
+                command.targets === 'none' || creating ? {} : many ? { records: Object.freeze(targets) } : { record: targets[0] };
+              /* A flow's notify step tells of the record its command runs on and no other, in this transaction: the
+             notice is kept with the step's receipt, so a replay tells nobody twice (flowCommand.ts). */
+              const flowTell =
+                flowCommandOf(command) && !many && 'record' in named
+                  ? (audience: string, message: string) => {
+                      const exact = canonicalKey(authorized.catalog![command.target]!, list.keys[0]);
+                      if (!exact || !store.tell) throw new BusinessCommandExecutionError('temporarily_unavailable');
+                      const tell = store.tell.bind(store);
+                      return accept(
+                        { table: command.target, key: exact as Record<string, string | number>, audience, message },
+                        async (request) => {
+                          checkCancelled();
+                          await tell(request);
+                        },
+                      );
+                    }
+                  : undefined;
+              // Only a public submission is told where it lands, and only by its binding.
+              const intake =
+                publicActor && (authorized.intake === 'tenant' || authorized.intake === 'platform') ? authorized.intake : undefined;
+              const placement =
+                publicActor && authorized.placement ? Object.freeze({ tenantId: authorized.placement.tenantId }) : undefined;
+              /* The files the input names by id, taken from what this sender holds for this command (stagedFiles.ts):
              deleted in this transaction, so a refusal below holds them again and a commit uses them up. */
-            const held = await takeHeldFiles(command.fields, input, journal, {
-              appId: authorized.actor.appId,
-              command: request.command,
-              owner: stagedOwner(publicActor ? actor : authorized.actor, options.visitor),
-              now: now().getTime(),
-            });
-            const handed = Object.keys(held.files).length ? { ...held.files, ...revealed } : revealed;
-            /* A link's run is read again in the transaction that runs it: one revoked or expired since the page
+              const held = await takeHeldFiles(command.fields, input, journal, {
+                appId: authorized.actor.appId,
+                command: request.command,
+                owner: stagedOwner(publicActor ? actor : authorized.actor, options.visitor),
+                now: now().getTime(),
+              });
+              const handed = Object.keys(held.files).length ? { ...held.files, ...revealed } : revealed;
+              /* A link's run is read again in the transaction that runs it: one revoked or expired since the page
                opened runs nothing, whatever session its holder still carries. In a tenant App it is the tenant's own
                link that is read, so one minted in another tenant is none here. */
-            if (authorized.actor.kind === 'link') {
-              const holds = authorized.actor.link;
-              const live = holds && (await journal.readLink?.(authorized.actor.appId, holds.id, now().getTime()));
-              if (
-                !holds ||
-                !live ||
-                live.tenant !== (receiptOwner?.tenantId ?? '') ||
-                live.resource !== holds.resource ||
-                live.rowKey !== holds.key ||
-                live.name !== holds.name
-              )
-                throw new AppAccessDenied();
-            }
-            const links = handlerLinks({
-              journal,
-              appId: authorized.actor.appId,
-              tenant: receiptOwner?.tenantId ?? '',
-              resource: authorized.resource,
-              command: request.command,
-              actorId: authorized.actor.id,
-              links: authorized.links,
-              tenantApp: receiptOwner !== undefined,
-              rowKey:
-                authorized.actor.kind === 'public'
-                  ? () => (madeOnTarget.length === 1 ? madeOnTarget[0] : undefined)
-                  : (command.targets ?? 'one') === 'one' && !creating && !many && list.keys.length === 1
-                    ? commandKeyText(list.keys[0])
-                    : undefined,
-              now,
-            });
-            const output = await withoutRevealed(revealed, () =>
-              executeWithCommandFlags(flags, command.enabledBy, (executionFlags) =>
-                command.handle(
-                  Object.freeze({
-                    actor: authorized.actor,
-                    door: options.entry ?? (options.door ? handlerDoorOf(options.door) : 'ui'),
-                    requestId,
-                    commandId: request.command,
-                    version: command.version,
-                    source: command.source,
-                    signal,
-                    now,
-                    today: () => zoneDay(now(), authorized.timezone),
-                    timezone: authorized.timezone ?? 'UTC',
-                    locale,
-                    flags: executionFlags,
-                    db,
-                    tx: audit(tx),
-                    nextNumber: handlerNextNumber(journal, authorized.actor.appId),
-                    link: links.link,
-                    revokeLinks: links.revokeLinks,
-                    publicLink: authorized.publicLink ?? noPublicLinks,
-                    ...named,
-                    ...(lookupRun ? { lookup } : {}),
-                    ...(intake ? { intake } : {}),
-                    ...(authorized.tenant ? { tenant: authorized.tenant } : {}),
-                    ...(placement ? { placement } : {}),
-                    ...(draft ? { draft: draft.context } : {}),
-                    ...(options.files ? { files: Object.freeze(options.files.map((file) => Object.freeze({ ...file }))) } : {}),
-                    ...(flowTell ? { [FLOW_TELL]: flowTell } : {}),
-                  }),
-                  Object.keys(handed).length ? Object.freeze({ ...(input as object), ...handed }) : input,
+              if (authorized.actor.kind === 'link') {
+                const holds = authorized.actor.link;
+                const live = holds && (await journal.readLink?.(authorized.actor.appId, holds.id, now().getTime()));
+                if (
+                  !holds ||
+                  !live ||
+                  live.tenant !== (receiptOwner?.tenantId ?? '') ||
+                  live.resource !== holds.resource ||
+                  live.rowKey !== holds.key ||
+                  live.name !== holds.name
+                )
+                  throw new AppAccessDenied();
+              }
+              const links = handlerLinks({
+                journal,
+                appId: authorized.actor.appId,
+                tenant: receiptOwner?.tenantId ?? '',
+                resource: authorized.resource,
+                command: request.command,
+                actorId: authorized.actor.id,
+                links: authorized.links,
+                tenantApp: receiptOwner !== undefined,
+                rowKey:
+                  authorized.actor.kind === 'public'
+                    ? () => (madeOnTarget.length === 1 ? madeOnTarget[0] : undefined)
+                    : (command.targets ?? 'one') === 'one' && !creating && !many && list.keys.length === 1
+                      ? commandKeyText(list.keys[0])
+                      : undefined,
+                now,
+              });
+              const output = await withoutRevealed(revealed, () =>
+                executeWithCommandFlags(flags, command.enabledBy, (executionFlags) =>
+                  command.handle(
+                    Object.freeze({
+                      actor: authorized.actor,
+                      door: options.entry ?? (options.door ? handlerDoorOf(options.door) : 'ui'),
+                      requestId,
+                      commandId: request.command,
+                      version: command.version,
+                      source: command.source,
+                      signal,
+                      now,
+                      today: () => zoneDay(now(), authorized.timezone),
+                      timezone: authorized.timezone ?? 'UTC',
+                      locale,
+                      flags: executionFlags,
+                      db,
+                      tx: audit(tx),
+                      nextNumber: handlerNextNumber(journal, authorized.actor.appId),
+                      link: links.link,
+                      revokeLinks: links.revokeLinks,
+                      publicLink: authorized.publicLink ?? noPublicLinks,
+                      ...named,
+                      ...(lookupRun ? { lookup } : {}),
+                      ...(intake ? { intake } : {}),
+                      ...(authorized.tenant ? { tenant: authorized.tenant } : {}),
+                      ...(placement ? { placement } : {}),
+                      ...(draft ? { draft: draft.context } : {}),
+                      ...(options.files ? { files: Object.freeze(options.files.map((file) => Object.freeze({ ...file }))) } : {}),
+                      ...(flowTell ? { [FLOW_TELL]: flowTell } : {}),
+                    }),
+                    Object.keys(handed).length ? Object.freeze({ ...(input as object), ...handed }) : input,
+                  ),
                 ),
-              ),
-            );
-            /* A held file becomes its row in this transaction or the command does not commit: one left unstored would be
+              );
+              /* A held file becomes its row in this transaction or the command does not commit: one left unstored would be
              used up and kept nowhere. */
-            for (const file of held.taken)
-              if (!storedFiles.some(([table, data]) => table === held.from.get(file) && data === file.data))
-                throw recordRefusalCause(
-                  new BusinessCommandExecutionError('invalid_result'),
-                  `Command "${request.command}" was sent the file "${file.name}" for ${held.from.get(file)} and did not store it; ` +
-                    `store each with db.${held.from.get(file)}.insertFile(file, values).`,
-                );
-            /* A whole sensitive value is the handler's alone: an output that says it back would put it in the receipt,
+              for (const file of held.taken)
+                if (!storedFiles.some(([table, data]) => table === held.from.get(file) && data === file.data))
+                  throw recordRefusalCause(
+                    new BusinessCommandExecutionError('invalid_result'),
+                    `Command "${request.command}" was sent the file "${file.name}" for ${held.from.get(file)} and did not store it; ` +
+                      `store each with db.${held.from.get(file)}.insertFile(file, values).`,
+                  );
+              /* A whole sensitive value is the handler's alone: an output that says it back would put it in the receipt,
              the journal and the reader's screen. */
-            if (Object.keys(revealed).length) {
-              const said = JSON.stringify(output ?? null);
-              if (Object.values(revealed).some((value) => value.length >= 4 && said.includes(value)))
-                throw recordRefusalCause(
-                  new BusinessCommandExecutionError('invalid_result'),
-                  `Command "${request.command}" returned a sensitive input's whole value; a handler may use it, never return it.`,
-                );
-            }
-            /* The machines that move with this command (a payment's `cancelOrder: 'voided'`): each row of each
+              if (Object.keys(revealed).length) {
+                const said = JSON.stringify(output ?? null);
+                if (Object.values(revealed).some((value) => value.length >= 4 && said.includes(value)))
+                  throw recordRefusalCause(
+                    new BusinessCommandExecutionError('invalid_result'),
+                    `Command "${request.command}" returned a sensitive input's whole value; a handler may use it, never return it.`,
+                  );
+              }
+              /* The machines that move with this command (a payment's `cancelOrder: 'voided'`): each row of each
              record moves along its edge, through the same writes a handler's go through — the graph, `since`
              and the audit. A row already final, or already where the command leads, stays; any other means
              the command does not apply to it, and the whole command is refused. */
-            for (const [at, carried] of (authorized.machine?.carried ?? []).entries()) {
-              const key = authorized.catalog?.[carried.table]?.key ?? [];
-              for (const index of targets.keys()) {
-                attribute(list.keys[index]);
-                // What stood, and room for what the handler added beside it; past that, a row that stood could be unread.
-                const limit = stood[at][index].size + 257;
-                const rows = await carriedRows(at, index, limit);
-                const seen = new Set(rows.map((row) => carriedKey(key, row)));
-                if (rows.length === limit && [...stood[at][index]].some((row) => !seen.has(row)))
-                  throw recordRefusalCause(
-                    new BusinessCommandExecutionError('invalid_result'),
-                    `Command "${request.command}" inserted more than 256 "${carried.table}" rows of one "${command.target}" that moves them with it; ` +
-                      'its move reads at most 256 beside the ones that stood.',
-                  );
-                for (const row of rows) {
-                  // A row the command made itself is where the command meant it to be.
-                  if (!stood[at][index].has(carriedKey(key, row))) continue;
-                  const state = String(row[carried.column]);
-                  const to = carried.moves.get(state);
-                  if (to !== undefined) {
-                    await tx.update({
-                      table: carried.table,
-                      key: Object.fromEntries(key.map((column) => [column, row[column] as string | number])),
-                      values: { [carried.column]: to },
-                    });
-                  } else if (!carried.done.has(state)) {
+              for (const [at, carried] of (authorized.machine?.carried ?? []).entries()) {
+                const key = authorized.catalog?.[carried.table]?.key ?? [];
+                for (const index of targets.keys()) {
+                  attribute(list.keys[index]);
+                  // What stood, and room for what the handler added beside it; past that, a row that stood could be unread.
+                  const limit = stood[at][index].size + 257;
+                  const rows = await carriedRows(at, index, limit);
+                  const seen = new Set(rows.map((row) => carriedKey(key, row)));
+                  if (rows.length === limit && [...stood[at][index]].some((row) => !seen.has(row)))
+                    throw recordRefusalCause(
+                      new BusinessCommandExecutionError('invalid_result'),
+                      `Command "${request.command}" inserted more than 256 "${carried.table}" rows of one "${command.target}" that moves them with it; ` +
+                        'its move reads at most 256 beside the ones that stood.',
+                    );
+                  for (const row of rows) {
+                    // A row the command made itself is where the command meant it to be.
+                    if (!stood[at][index].has(carriedKey(key, row))) continue;
+                    const state = String(row[carried.column]);
+                    const to = carried.moves.get(state);
+                    if (to !== undefined) {
+                      await tx.update({
+                        table: carried.table,
+                        key: Object.fromEntries(key.map((column) => [column, row[column] as string | number])),
+                        values: { [carried.column]: to },
+                      });
+                    } else if (!carried.done.has(state)) {
+                      throw recordRefusalCause(
+                        new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, list.keys[index]),
+                        `Command "${request.command}" moves each "${carried.table}" of the "${command.target}" with it, from ` +
+                          `${[...carried.moves.keys()].map((from) => `"${from}"`).join(', ')}; one is "${state}".`,
+                      );
+                    }
+                  }
+                }
+              }
+              await operations.finish();
+              checkCancelled();
+              /* A verb leaves its record in one of the states it leads to, or where it was. */
+              const graph = authorized.machine?.verb?.to.size ? authorized.machine.tables.get(command.target) : undefined;
+              if (graph && targets.length) {
+                for (const [index, before] of targets.entries()) {
+                  const exact = canonicalKey(table, list.keys[index])!;
+                  const after = await store.query({
+                    table: command.target,
+                    columns: [graph.column],
+                    filter: keyFilter(exact),
+                    limit: 1,
+                    offset: 0,
+                  });
+                  const state = String(after.rows[0]?.[graph.column]);
+                  const destinations = authorized.machine!.verb!.to.get(String(before[graph.column]));
+                  if (after.rows.length && state !== String(before[graph.column]) && destinations && !destinations.has(state)) {
                     throw recordRefusalCause(
                       new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, list.keys[index]),
-                      `Command "${request.command}" moves each "${carried.table}" of the "${command.target}" with it, from ` +
-                        `${[...carried.moves.keys()].map((from) => `"${from}"`).join(', ')}; one is "${state}".`,
+                      `Command "${request.command}" left the "${command.target}" in "${state}"; the machine's verb leads to ${[...destinations].map((to) => `"${to}"`).join(' or ')}.`,
                     );
                   }
                 }
               }
-            }
-            await operations.finish();
-            checkCancelled();
-            /* A verb leaves its record in one of the states it leads to, or where it was. */
-            const graph = authorized.machine?.verb?.to.size ? authorized.machine.tables.get(command.target) : undefined;
-            if (graph && targets.length) {
-              for (const [index, before] of targets.entries()) {
-                const exact = canonicalKey(table, list.keys[index])!;
-                const after = await store.query({
-                  table: command.target,
-                  columns: [graph.column],
-                  filter: keyFilter(exact),
-                  limit: 1,
-                  offset: 0,
-                });
-                const state = String(after.rows[0]?.[graph.column]);
-                const destinations = authorized.machine!.verb!.to.get(String(before[graph.column]));
-                if (after.rows.length && state !== String(before[graph.column]) && destinations && !destinations.has(state)) {
-                  throw recordRefusalCause(
-                    new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, list.keys[index]),
-                    `Command "${request.command}" left the "${command.target}" in "${state}"; the machine's verb leads to ${[...destinations].map((to) => `"${to}"`).join(' or ')}.`,
-                  );
-                }
-              }
-            }
-            // The application keeps its place, or is finished, in this transaction.
-            await draft?.finish();
-            let resultJson: string;
-            try {
-              resultJson = canonicalCommandJson(command.output.parse(output), 16384);
-            } catch (error) {
-              throw recordRefusalCause(
-                new BusinessCommandExecutionError('invalid_result'),
-                command.output === NO_OUTPUT
-                  ? `Command "${request.command}" returned a value but declares no output. Declare \`output: shape({ … })\` naming what it returns, or return nothing.`
-                  : error instanceof CommandInputError && error.field
-                    ? `Command "${request.command}" returned a result its output declaration refuses at "${error.field}".`
-                    : `Command "${request.command}" returned a result that is not its declared output, or is over 16 KiB of JSON.`,
-              );
-            }
-            const result = immutableResult(resultJson);
-            await authorized.assertResult?.(records, list.keys[0], result);
-            await assertTargets();
-            checkCancelled();
-            let eventBatch: CommandEventBatch | undefined;
-            try {
-              /* An effect's body may be read from rows: through the command's db, read-only, in this transaction and
-                 limited to what the command reads, opened only when it has an effect. A replay never comes here. */
-              const resolved = events
-                ? await resolveCommandEffects(events, result, () => {
-                    /* The handler's queue was finished above, once its writes had settled; the projection's reads take a
-                       fresh one on the same transaction, finished below, so a read it leaves in flight cannot outlive it. */
-                    operations = new TransactionOperations(true);
-                    return {
-                      db: effectProjectionDb(
-                        createCommandDb({
-                          tx: audit(batched),
-                          catalog,
-                          read: command.read,
-                          write: [],
-                          now,
-                          target: command.target,
-                          constant: (table, column, word) => commandConstant(authorized, tx, table.meta, column, word, now()),
-                        }),
-                      ),
-                    };
-                  })
-                : undefined;
-              await operations.finish();
-              eventBatch = events ? projectCommandEvents(events, result, resolved) : undefined;
-            } catch (error) {
-              // A body over its limit, or a projection that wrote or read past the grants, is the author's to fix: by name.
-              if (error instanceof EffectBodyTooLarge || error instanceof EffectProjectionRefused)
+              // The application keeps its place, or is finished, in this transaction.
+              await draft?.finish();
+              let resultJson: string;
+              try {
+                resultJson = canonicalCommandJson(command.output.parse(output), 16384);
+              } catch (error) {
                 throw recordRefusalCause(
                   new BusinessCommandExecutionError('invalid_result'),
-                  recordRefusalCause(new Error(`Command "${commandId}": ${error.message}`), error),
+                  command.output === NO_OUTPUT
+                    ? `Command "${request.command}" returned a value but declares no output. Declare \`output: shape({ … })\` naming what it returns, or return nothing.`
+                    : error instanceof CommandInputError && error.field
+                      ? `Command "${request.command}" returned a result its output declaration refuses at "${error.field}".`
+                      : `Command "${request.command}" returned a result that is not its declared output, or is over 16 KiB of JSON.`,
                 );
-              throw recordRefusalCause(
-                new BusinessCommandExecutionError('invalid_result'),
-                recordRefusalCause(new Error(`Command "${commandId}"'s events could not be ` + 'made from its result.'), error),
-              );
-            }
-            // Each event the command records, on its span: the name and version travel, the payload stays local.
-            for (const event of eventBatch ?? []) {
-              currentSpan()?.event('mistri.event', { 'mistri.event.name': event.name, 'mistri.event.version': event.version });
-            }
-            if (eventBatch?.length)
-              currentSpan()?.detail(() => ({
-                events: eventBatch!.map((event) => ({ name: event.name, version: event.version, payload: event.payloadJson })),
+              }
+              const result = immutableResult(resultJson);
+              await authorized.assertResult?.(records, list.keys[0], result);
+              await assertTargets();
+              checkCancelled();
+              let eventBatch: CommandEventBatch | undefined;
+              try {
+                /* An effect's body may be read from rows: through the command's db, read-only, in this transaction and
+                 limited to what the command reads, opened only when it has an effect. A replay never comes here. */
+                const resolved = events
+                  ? await resolveCommandEffects(events, result, () => {
+                      /* The handler's queue was finished above, once its writes had settled; the projection's reads take a
+                       fresh one on the same transaction, finished below, so a read it leaves in flight cannot outlive it. */
+                      operations = new TransactionOperations(true);
+                      return {
+                        db: effectProjectionDb(
+                          createCommandDb({
+                            tx: audit(batched),
+                            catalog,
+                            read: command.read,
+                            write: [],
+                            now,
+                            target: command.target,
+                            constant: (table, column, word) => commandConstant(authorized, tx, table.meta, column, word, now()),
+                          }),
+                        ),
+                      };
+                    })
+                  : undefined;
+                await operations.finish();
+                eventBatch = events ? projectCommandEvents(events, result, resolved) : undefined;
+              } catch (error) {
+                // A body over its limit, or a projection that wrote or read past the grants, is the author's to fix: by name.
+                if (error instanceof EffectBodyTooLarge || error instanceof EffectProjectionRefused)
+                  throw recordRefusalCause(
+                    new BusinessCommandExecutionError('invalid_result'),
+                    recordRefusalCause(new Error(`Command "${commandId}": ${error.message}`), error),
+                  );
+                throw recordRefusalCause(
+                  new BusinessCommandExecutionError('invalid_result'),
+                  recordRefusalCause(new Error(`Command "${commandId}"'s events could not be ` + 'made from its result.'), error),
+                );
+              }
+              // Each event the command records, on its span: the name and version travel, the payload stays local.
+              for (const event of eventBatch ?? []) {
+                currentSpan()?.event('mistri.event', { 'mistri.event.name': event.name, 'mistri.event.version': event.version });
+              }
+              if (eventBatch?.length)
+                currentSpan()?.detail(() => ({
+                  events: eventBatch!.map((event) => ({ name: event.name, version: event.version, payload: event.payloadJson })),
+                }));
+              checkCancelled();
+              const id = randomUUID();
+              const completedAt = now().toISOString();
+              // One receipt names every target through its audit rows, in order.
+              const audits = list.keys.map((key, index) => ({
+                target: receiptOwner ? resource : authorized.resource,
+                keyJson: canonicalCommandJson(key, 8192),
+                ...splitAudit(changes[index], (head) =>
+                  publicActor && eventBatch?.length
+                    ? commandVisitorAudit(flags, head)
+                    : authorized.actor.scope
+                      ? scopedAudit(authorized.actor.scope, head)
+                      : head,
+                ),
               }));
-            checkCancelled();
-            const id = randomUUID();
-            const completedAt = now().toISOString();
-            // One receipt names every target through its audit rows, in order.
-            const audits = list.keys.map((key, index) => ({
-              target: receiptOwner ? resource : authorized.resource,
-              keyJson: canonicalCommandJson(key, 8192),
-              ...splitAudit(changes[index], (head) =>
-                publicActor && eventBatch?.length
-                  ? commandVisitorAudit(flags, head)
-                  : authorized.actor.scope
-                    ? scopedAudit(authorized.actor.scope, head)
-                    : head,
-              ),
-            }));
-            const receipt = { ...scope, id, fingerprint, resultJson, requestId, completedAt };
-            await mintQueued(journal, links, id);
-            if (track === undefined) await journal.commit(receipt, audits.length === 1 ? audits[0] : audits, eventBatch);
-            // The receipt, its audit and the replay check are one statement: taken, this attempt rolls back and replays it.
-            else if (track !== 'none' && !(await journal.insert!(receipt, audits.length === 1 ? audits[0] : audits)))
-              throw new ReceiptTaken();
-            checkCancelled();
-            return answer(id, scoped ? result : JSON.parse(resultJson), false);
-          } catch (error) {
-            await operations.finish().catch(() => {});
-            throw error;
-          }
-        }),
+              const actorKind = madeAs;
+              if (wroteOnTarget.size)
+                await settleProvenance(journal, actorKind, completedAt, {
+                  authorized,
+                  written: wroteOnTarget,
+                  tenant: receiptOwner?.tenantId ?? '',
+                  input: request.input,
+                  proposalId: options.proposalId,
+                  makerActor: options.makerActor,
+                  evidence: options.evidence,
+                });
+              const receipt = {
+                ...scope,
+                id,
+                fingerprint,
+                resultJson,
+                requestId,
+                completedAt,
+                actorKind,
+                ...(options.proposalId === undefined ? {} : { proposalId: options.proposalId }),
+              };
+              await mintQueued(journal, links, id);
+              // A command that keeps no receipt leaves receipt_id empty: the id would name a row that never exists.
+              if (
+                options.proposalId !== undefined &&
+                track !== 'none' &&
+                !(await journal.settleProposal?.(authorized.actor.appId, options.proposalId, id))
+              )
+                throw new BusinessCommandExecutionError('temporarily_unavailable');
+              if (track === undefined) await journal.commit(receipt, audits.length === 1 ? audits[0] : audits, eventBatch);
+              // The receipt, its audit and the replay check are one statement: taken, this attempt rolls back and replays it.
+              else if (track !== 'none' && !(await journal.insert!(receipt, audits.length === 1 ? audits[0] : audits)))
+                throw new ReceiptTaken();
+              checkCancelled();
+              return answer(id, scoped ? result : JSON.parse(resultJson), false);
+            } catch (error) {
+              await operations.finish().catch(() => {});
+              throw error;
+            }
+          }),
+        ),
       ),
     );
     for (const run of afterCommit.splice(0)) {

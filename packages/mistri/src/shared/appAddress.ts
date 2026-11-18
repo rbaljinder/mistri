@@ -61,8 +61,8 @@ import { filterAddressWord } from '@mistriwork/engine/shared/listFilters.js';
 import { slug as slugOf } from '@mistriwork/engine/shared/slug.js';
 import { tabKey } from '@mistriwork/engine/shared/addressParams.js';
 import { SERVER_SEGMENTS } from '@mistriwork/engine/shared/mount.js';
-import { ASSISTANT_ROOM, DIRECTORY_ROOM, SETTINGS_ROOM } from '@mistriwork/engine/shared/servedApp.js';
-export { ASSISTANT_ROOM, DIRECTORY_ROOM, SETTINGS_ROOM } from '@mistriwork/engine/shared/servedApp.js';
+import { ASSISTANT_ROOM, DIRECTORY_ROOM, REVIEW_ROOM, SETTINGS_ROOM } from '@mistriwork/engine/shared/servedApp.js';
+export { ASSISTANT_ROOM, DIRECTORY_ROOM, REVIEW_ROOM, SETTINGS_ROOM } from '@mistriwork/engine/shared/servedApp.js';
 
 /** Words an App route may not take: `new` is the New form's, the rest the server's own (mount.ts). */
 export const RESERVED_PATHS: readonly string[] = ['new', ...SERVER_SEGMENTS, '_components', 'sign-in', 'welcome', 'form'];
@@ -146,7 +146,8 @@ export type RouteTarget =
   | { kind: 'inbox' }
   | { kind: 'assistant' }
   | { kind: 'directory' }
-  | { kind: 'settings' };
+  | { kind: 'settings' }
+  | { kind: 'review' };
 
 /** How one table's records are addressed. */
 interface RecordRoute {
@@ -245,6 +246,8 @@ const describe = (target: RouteTarget): string => {
       return 'the directory';
     case 'settings':
       return 'the settings';
+    case 'review':
+      return 'the review queue';
     default:
       return `the table "${target.table}"`;
   }
@@ -335,6 +338,9 @@ export function appAddressBook(input: AddressBookInput): AddressBook {
   /* The reader's settings are every App's, claimed the same way: a view or page called "settings" is the App's own
      and keeps the word. */
   claim(SETTINGS_ROOM, { kind: 'settings' }, 'the settings', false);
+  /* For review too: whether a reader is offered it is their grants' answer (the payload's `review`), but its address
+     is the App's, so a link to it is one address for everyone and the room says when there is nothing for them. */
+  claim(REVIEW_ROOM, { kind: 'review' }, 'the review queue', false);
 
   for (const table of input.tables) {
     const resource = Object.hasOwn(input.resources, table.id) ? input.resources[table.id] : undefined;
@@ -546,7 +552,8 @@ export function readAppSegments(book: AddressBook, raw: readonly string[]): Pars
     target.kind === 'form' ||
     target.kind === 'inbox' ||
     target.kind === 'directory' ||
-    target.kind === 'settings'
+    target.kind === 'settings' ||
+    target.kind === 'review'
   )
     return undefined;
   if (raw.length === 2 && raw[1] === 'new') return target.kind === 'page' ? undefined : { kind: 'new', target };

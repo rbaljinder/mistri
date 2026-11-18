@@ -56,16 +56,18 @@ export function GridSelection({
         <RowHeadDecoration>
           {/* Mixed is a property, not an attribute: set on every paint, because
           the box may reach the header after the selection changed. */}
-          <input
-            type="checkbox"
-            className="row-select"
-            aria-label={say('selectAll', { noun })}
-            checked={every}
-            ref={(box) => {
-              if (box) box.indeterminate = partly;
-            }}
-            onChange={() => change(every ? [] : keyed.map((record) => record.id))}
-          />
+          <label className="row-select-hit">
+            <input
+              type="checkbox"
+              className="row-select"
+              aria-label={say('selectAll', { noun })}
+              checked={every}
+              ref={(box) => {
+                if (box) box.indeterminate = partly;
+              }}
+              onChange={() => change(every ? [] : keyed.map((record) => record.id))}
+            />
+          </label>
         </RowHeadDecoration>
       )}
       {group &&
@@ -127,5 +129,11 @@ function RowBox({ checked, indeterminate = false, ...props }: ComponentProps<'in
     row.setAttribute('data-chosen', '');
     return () => row.removeAttribute('data-chosen');
   }, [checked]);
-  return <input ref={box} type="checkbox" className="row-select" checked={checked} {...props} />;
+  /* In its label, which a coarse pointer pads to a finger's 44px (features.css): a checkbox cannot be padded itself.
+     A tap on that padding is the box's, never the row's, so it does not open the record. */
+  return (
+    <label className="row-select-hit" onClick={(event) => event.stopPropagation()}>
+      <input ref={box} type="checkbox" className="row-select" checked={checked} {...props} />
+    </label>
+  );
 }

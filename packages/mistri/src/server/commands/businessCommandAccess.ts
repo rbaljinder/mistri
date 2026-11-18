@@ -36,6 +36,7 @@ import { appSourceVerifiedCommandRunner } from '../app/appSourceAdapter.js';
 import { isProxy } from 'node:util/types';
 import { commandsOf } from '../stores/commandStores.js';
 import { apiScopeName } from '../api/apiRowScope.js';
+import { bindMakerWrites } from './makerWrites.js';
 
 export interface AuthorizedBusinessCommand {
   readonly command: AnyBusinessCommand;
@@ -213,6 +214,7 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
       throw new BusinessCommandDefinitionError("Command events require a provisioned event store on the command's own source.");
     }
   }
+  bindMakerWrites(options.app, options.registry);
   const bound: BusinessCommandBinding = Object.freeze({
     ...(options.app.track === undefined ? {} : { track: options.app.track }),
     creates: (id: string): boolean => authorizer.creates(id),

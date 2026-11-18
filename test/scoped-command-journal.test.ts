@@ -125,8 +125,8 @@ test('scoped command capability requires explicit migration before entering the 
   assert.equal(called, false);
   assert.equal(db.prepare('SELECT name FROM sqlite_master WHERE name LIKE ?').all('__mistri_command_%').length, 0);
   assert.equal(name(db), 'Original');
-  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 4, migrated: true });
-  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 4, migrated: false });
+  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 5, migrated: true });
+  assert.deepEqual(migrateSqliteCommandJournal(path), { version: 5, migrated: false });
   await commandsOf(adapter).scopeCommandTransaction(scopeA(), async (tx, journal) => {
     await tx.update(update);
     await journal.commit(receipt, audit);
@@ -170,18 +170,27 @@ test('scoped reads and CRUD share one atomic commit with the receipt and paired 
     assert.deepEqual(Object.keys(journal).sort(), [
       'appendReadAudit',
       'commit',
+      'confirmProvenance',
       'countLinks',
+      'createProposal',
+      'decideProposal',
+      'expireProposals',
       'find',
       'insert',
       'kept',
+      'listProposals',
+      'markProvenance',
       'mintLink',
       'nextNumber',
       'openLink',
       'readLink',
+      'readProposal',
       'revokeLinks',
+      'settleProposal',
       'stage',
       'takeStaged',
       'taken',
+      'unconfirmedProvenance',
     ]);
     assert.ok(Object.isFrozen(tx) && Object.isFrozen(journal));
     assert.ok(catalog.tables.some((table) => table.id === 'item'));

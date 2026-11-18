@@ -20,7 +20,7 @@ import { after, before, describe, test } from 'node:test';
 import { isRuntimeTable, runtimeTable } from '../packages/engine/src/shared/runtimeTables.js';
 import { COMMAND_JOURNAL_TABLES as tables, migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { auditRows } from './support/commandTargets.js';
-import { migratePostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
+import { JOURNAL_VERSION, migratePostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
 import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
 import { loadAppRuntimeResources } from '../packages/mistri/src/server/app/appRuntimeResources.js';
 import { bindBusinessCommands } from '../packages/mistri/src/server/commands/businessCommandAccess.js';
@@ -442,7 +442,7 @@ describe('the command audit on PostgreSQL, against a real server', { skip: liveS
         `INSERT INTO public.enrolment (name, email, reference) VALUES ('First', 'first@example.invalid', 'ENR-FIRST')`,
       ])
         await control.query(statement);
-      assert.equal((await migratePostgresCommandJournal(LIVE!)).version, 4);
+      assert.equal((await migratePostgresCommandJournal(LIVE!)).version, JOURNAL_VERSION);
       return LIVE!;
     },
     async rows(sql) {

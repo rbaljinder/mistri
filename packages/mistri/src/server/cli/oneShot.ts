@@ -33,6 +33,7 @@ import { appAdvisories, appProblems, type LoadedApp } from '../app/apps.js';
 import { appDestinationWarnings, appRoleFormDefaultProblems, appRoleReach, appRoleWarnings } from '../app/appRoleChecks.js';
 import { commandRestatedWarnings } from '../commands/commandRestated.js';
 import { lookupFileWarnings } from '../commands/stagedFiles.js';
+import { aiApprovalWarnings, aiTextWarnings } from '../app/appAiChecks.js';
 import { snapshotCommandChecks } from '../app/appSnapshotChecks.js';
 import { consumesCommandWarnings, machineCommandWarnings, referenceReadWarnings } from '../app/appMachineChecks.js';
 import { appIndexWarnings } from '../../shared/appIndexWarnings.js';
@@ -803,6 +804,11 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
         ...brandWarnings(app.app).map((warning) => `${app.path}: ${warning}`),
         // Links a record page may revoke, with no history to note who did (recordHistory.ts).
         ...linkHistoryWarnings(app.app, app.pages).map((warning) => `${app.path}: ${warning}`),
+        // AI said as a word where the App's one word belongs, and an AI's commands that run without a person's word.
+        ...aiTextWarnings(app.app, commandHosting?.registry ?? app.commands?.registry).map((warning) => `${app.path}: ${warning}`),
+        ...aiApprovalWarnings(app.app, commandHosting?.registry ?? app.commands?.registry, decisions).map(
+          (warning) => `${app.path}: ${warning}`,
+        ),
       ];
       /* A command whose writes fire a trigger the row policy cannot bound: refused when it runs, said here. */
       const commands = commandHosting?.registry ?? app.commands?.registry;

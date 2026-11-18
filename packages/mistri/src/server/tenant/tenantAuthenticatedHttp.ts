@@ -719,6 +719,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         where: held.source,
         ...(held.assistant ? { policy: held.assistant } : {}),
         now,
+        propose: (req, draft, signal) => (data ? data.propose(req, draft, signal) : denyTenant()),
       });
       await tenantAssistant.attest();
       auth.assertCurrent();

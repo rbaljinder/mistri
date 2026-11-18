@@ -15,8 +15,15 @@ import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
-import { COMMAND_JOURNAL_TABLES, migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
-import { migratePostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
+import {
+  COMMAND_JOURNAL_TABLES,
+  JOURNAL_VERSION,
+  migrateSqliteCommandJournal,
+} from '../packages/mistri/src/adapters/commands/commandJournal.js';
+import {
+  JOURNAL_VERSION as POSTGRES_JOURNAL_VERSION,
+  migratePostgresCommandJournal,
+} from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
 import { provisionPostgresSchemaEpoch } from '../packages/engine/src/adapters/postgresSchemaEpoch.js';
 import { EpochCache } from '../packages/engine/src/adapters/epochCache.js';
 import { statementsOf } from './support/statements.js';
@@ -89,7 +96,7 @@ test('SQLite: a warm command transaction reads the catalog not at all, and sees 
     await write({ name: 'again' });
     f.db.exec(`DELETE FROM "${COMMAND_JOURNAL_TABLES.meta}"`);
     await assert.rejects(write({ name: 'no meta' }), refusedWith(/journal/i));
-    f.db.exec(`INSERT INTO "${COMMAND_JOURNAL_TABLES.meta}" (singleton, version) VALUES (1, 4)`);
+    f.db.exec(`INSERT INTO "${COMMAND_JOURNAL_TABLES.meta}" (singleton, version) VALUES (1, ${JOURNAL_VERSION})`);
     await write({ name: 'restored' });
   } finally {
     await adapter.close();
@@ -195,7 +202,9 @@ test(
       } finally {
         await restarted.close();
       }
-      await control.query(`INSERT INTO ${runtimeTable('postgres', COMMAND_JOURNAL_TABLES.meta)} (singleton, version) VALUES (1, 4)`);
+      await control.query(
+        `INSERT INTO ${runtimeTable('postgres', COMMAND_JOURNAL_TABLES.meta)} (singleton, version) VALUES (1, ${POSTGRES_JOURNAL_VERSION})`,
+      );
       await write({ name: 'restored' });
 
       // A reserved store is attested once per adapter, and a change underneath is refused by the next adapter to start.

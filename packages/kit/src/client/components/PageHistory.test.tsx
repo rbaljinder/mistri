@@ -273,3 +273,36 @@ test('who and what are said in words when no person or action is named', () => {
   expect(whatWrote({ kind: 'update' })).toBe('Edited');
   expect(whatWrote({ kind: 'update', action: 'Approve' })).toBe('Approve');
 });
+
+test('a write a model or a job made names its maker, and a proposal carried out names both hands', async () => {
+  pages = [
+    {
+      entries: [
+        {
+          at: '2026-09-20T14:07:00.000Z',
+          kind: 'update',
+          via: 'app',
+          by: 'Maya Chen',
+          proposed: true,
+          maker: 'ai',
+          action: 'Send appeal',
+          fields: [],
+        },
+        { at: '2026-09-20T14:06:00.000Z', kind: 'update', via: 'system', maker: 'ai', action: 'Triage', fields: [] },
+        { at: '2026-09-20T14:05:00.000Z', kind: 'update', via: 'system', maker: 'job', job: 'nightly-close', action: 'Close', fields: [] },
+      ],
+    },
+  ];
+  draw();
+  const [appeal] = await screen.findAllByText('Send appeal');
+  const approved = appeal.closest('.history-entry') as HTMLElement;
+  expect(approved.querySelector('.history-by')).toHaveTextContent('Proposed by AI · approved by Maya Chen');
+  expect(approved.querySelector('.history-by .ai-mark')).not.toBeNull();
+  const [triage] = await screen.findAllByText('Triage');
+  expect((triage.closest('.history-entry') as HTMLElement).querySelector('.history-by')).toHaveTextContent('Made by AI');
+  const [close] = await screen.findAllByText('Close');
+  const job = close.closest('.history-entry') as HTMLElement;
+  expect(job.querySelector('.history-by')).toHaveTextContent('Made by job nightly-close');
+  expect(job.querySelector('.ai-mark')).toBeNull();
+  expect(whoWrote({ via: 'system', maker: 'job' })).toBe('Made by a job');
+});

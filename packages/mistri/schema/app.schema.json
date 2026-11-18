@@ -28,6 +28,20 @@
       "maxLength": 12,
       "description": "The name a phone's bar and an installed icon say where the name does not fit (Northwind for Northwind Field Service). The full name stays the bar's accessible name and the page's title."
     },
+    "ai": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label"],
+      "properties": {
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "description": "The word every built-in AI mark says beside its glyph: the review queue, a record's proposal line, history and the assistant. \"AI\" when absent."
+        }
+      },
+      "description": "How the App names its AI. Every built-in AI surface draws the same mark (kit AiMark) with this word."
+    },
     "connection": {
       "type": "string",
       "description": "The one connection this App is for, by id or name. Absent means every connection. Not with sources. A name that is an identifier is also the App's one source's: commands name it in defineSource."

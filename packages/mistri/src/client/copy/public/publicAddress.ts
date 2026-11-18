@@ -6,4 +6,5 @@ export const say = defineMessages({
   assistant: 'Assistant',
   allPages: 'All pages',
   settings: 'Settings',
+  forReview: 'For review',
 });

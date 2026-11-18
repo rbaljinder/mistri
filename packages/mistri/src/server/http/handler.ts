@@ -58,6 +58,7 @@ import { referencedBeneath } from '@mistriwork/engine/adapters/scoped/scopedTran
 import { AppAccessDenied } from '@mistriwork/engine/server/columnGrants.js';
 import { httpRowPolicyAllows, type HttpAppPolicy } from '../policy/appPolicyHttp.js';
 import type { AppPolicyContext } from '../policy/appPolicyContext.js';
+import { withPersonPolicy } from './personPolicy.js';
 import { writeFailureOutcome, writeRefusalStatus } from '@mistriwork/engine/server/constraints.js';
 import { PathError, type ViewDef } from '@mistriwork/engine/shared/view.js';
 import type { SavedQuery } from '@mistriwork/engine/shared/sqlsaved.js';
@@ -456,32 +457,7 @@ async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyCont
   const deferred: { reply?: () => void } = {};
   policyResponses.set(res, deferred);
   try {
-    await policy.withContext(req, async (context) => {
-      // Session verification belongs to the deployment. If it changed during
-      // the outer auth check, do not mix its rows with the earlier account/UI.
-      const roles = [
-        ...new Set(
-          (identity.role ?? '')
-            .split(',')
-            .map((role) => role.trim())
-            .filter(Boolean),
-        ),
-      ].sort();
-      if (context.principal.kind === 'public') {
-        /* The deployment answered this as a signed-out visitor at an App
-           with `auth.public`. The same cross-check applies, in the only
-           form it can take here: the gate must agree that nobody is
-           signed in. A session that appeared between the two is a
-           disagreement, and a disagreement is a denial. */
-        if (identity.id !== undefined || roles.length || context.principal.appId !== signedIn.app.app.id) throw new AppAccessDenied();
-      } else if (
-        context.principal.id !== identity.id ||
-        context.principal.appId !== signedIn.app.app.id ||
-        JSON.stringify([...context.principal.roles].sort()) !== JSON.stringify(roles)
-      )
-        throw new AppAccessDenied();
-      return run(context);
-    });
+    await withPersonPolicy({ req, identity, signedIn, policy }, run);
   } catch (error) {
     // Preserve executor-confirmed outcomes. Before the executor can establish
     // receipt absence, even a refusal cannot claim that an earlier attempt did

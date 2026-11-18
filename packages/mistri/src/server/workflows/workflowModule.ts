@@ -48,6 +48,20 @@ export class StepRefused extends Error {
 }
 
 /**
+ * A step that is waiting on a person, not failing: its command (`approval: 'ai'`) became a proposal that is not
+ * decided yet. The engine looks again at `wakeAt` and counts no attempt, so a proposal left for days never uses up
+ * the step's retries. Platform-internal: a workflow never throws one.
+ */
+export class StepPending extends Error {
+  readonly wakeAt: number;
+  constructor(wakeAt: number) {
+    super('The step waits for its proposal to be decided.');
+    this.name = 'StepPending';
+    this.wakeAt = wakeAt;
+  }
+}
+
+/**
  * A row-driven flow that cannot go on (flowRunner.ts): a step its rows
  * describe that the run cannot take. Not a crash and not a refusal: the
  * instance ends as `failed` with this reason, which its record page shows,

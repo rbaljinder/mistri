@@ -250,7 +250,16 @@ for (const secondary of [false, true]) {
     const issuer = f.issue();
     await issuer.withContext({ body: { actor: { roles: ['viewer'] } } }, async (context) => {
       assert.ok(Object.isFrozen(context.commands));
-      assert.deepEqual(Reflect.ownKeys(context.commands!).sort(), ['availability', 'check', 'draft', 'execute', 'prepare', 'status']);
+      assert.deepEqual(Reflect.ownKeys(context.commands!).sort(), [
+        'availability',
+        'check',
+        'draft',
+        'execute',
+        'prepare',
+        'proposals',
+        'propose',
+        'status',
+      ]);
       const { prepare } = context.commands!;
       assert.deepEqual(await prepare(request(), { requestId: 'trusted-prepare' }), { expectedVersion: 7 });
       assert.deepEqual(await prepare(request({ key: { id: '1', part: 'b' } })), { expectedVersion: 9 });

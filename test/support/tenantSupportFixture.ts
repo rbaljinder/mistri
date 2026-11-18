@@ -18,6 +18,10 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { TestContext } from 'node:test';
 import { TransactionOperations } from '../../packages/engine/src/adapters/adapter.js';
+import { migrateSqliteCommandJournal } from '../../packages/mistri/src/adapters/commands/commandJournal.js';
+import { migratePostgresCommandJournal } from '../../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
+import { parseTestApp } from './commandCatalog.js';
+import type { BusinessCommandRegistry } from '../../packages/mistri/src/server/commands/businessCommands.js';
 import type { LoadedApp } from '../../packages/mistri/src/server/app/apps.js';
 import {
   captureAppAuthRuntime,
@@ -133,6 +137,8 @@ export interface FixtureOptions {
   readonly scim?: readonly ScimDirectoryConfig[];
   /** More of the tenant policy (administration, assistant), read at each start so it can name accounts a test signed up. */
   readonly tenantPolicy?: Record<string, unknown>;
+  /** The App's business commands (their result references go in `tenantPolicy`); the command journal is migrated for them. */
+  readonly commands?: BusinessCommandRegistry;
 }
 
 const numbered = (sql: string) => {
@@ -193,6 +199,7 @@ export async function tenantSupportFixture(t: TestContext, dialect: TenantDialec
     provisionSqliteTenantStore(path, binding);
     provisionSqliteTenantAdministrationJournal(path, binding);
     provisionSqliteSupportAudit(path, binding, key);
+    if (options.commands) migrateSqliteCommandJournal(path);
   } else {
     database = await uuidPostgresDatabase('support');
     control = await pgClient(database.url);
@@ -201,6 +208,7 @@ export async function tenantSupportFixture(t: TestContext, dialect: TenantDialec
     await migratePostgresTenantStore(database.url, binding);
     await migratePostgresTenantAdministrationJournal(database.url, binding);
     await migratePostgresSupportAudit(database.url, binding, key);
+    if (options.commands) await migratePostgresCommandJournal(database.url);
   }
   const rows = async (sql: string, params: readonly unknown[] = []): Promise<Record<string, unknown>[]> =>
     dialect === 'sqlite'
@@ -253,7 +261,7 @@ export async function tenantSupportFixture(t: TestContext, dialect: TenantDialec
     dir: directory,
     pages: [],
     sources: {},
-    app: parseAppConfig(raw, 'tenant support fixture'),
+    app: options.commands ? parseTestApp(raw, 'tenant support fixture') : parseAppConfig(raw, 'tenant support fixture'),
   };
   const policyOf = () =>
     defineAppTenantPolicy({
@@ -293,6 +301,7 @@ export async function tenantSupportFixture(t: TestContext, dialect: TenantDialec
         roles: ROLES,
         maxLifetimeMs: 300000,
         now: () => Date.now() + clock.offset,
+        ...(options.commands ? { commands: { registry: options.commands } } : {}),
       },
     });
     await held!.adopt(host.server);

@@ -25,6 +25,7 @@ import {
   assertChangeRow,
   assertHistoryQuery,
   parseStoredChanges,
+  storedMaker,
   type RecordActivityQuery,
   type RecordChangeRow,
   type RecordHistoryQuery,
@@ -54,7 +55,9 @@ const definitions = new Map<string, string>([
   actor TEXT COLLATE BINARY NOT NULL,
   actor_name TEXT NOT NULL,
   via TEXT NOT NULL CHECK (via IN ('app', 'workbench', 'agent', 'api', 'form', 'system')),
-  action TEXT NOT NULL
+  action TEXT NOT NULL,
+  actor_kind TEXT COLLATE BINARY,
+  proposal_id TEXT COLLATE BINARY
 )`,
   ],
 ]);
@@ -147,11 +150,33 @@ export function provisionSqliteRecordHistory(existingPath: string): { version: t
   }
 }
 
+/**
+ * Version 1 to 2: who made a command's write and the proposal it carried out
+ * (`actor_kind`, `proposal_id`). SQLite keeps the CREATE text, which an added
+ * column would leave reading unlike a fresh store's, so both tables are made
+ * again and the rows copied, ids and all.
+ */
+export function sqliteRecordHistoryUpgradeFrom1(): readonly string[] {
+  const parked = (name: string) => `${name}_v1`;
+  const kept = 'id, write_id, at, resource, key_json, kind, changes_json, actor, actor_name, via, action';
+  return Object.freeze([
+    ...[...INDEXES.keys()].map((name) => `DROP INDEX "${name}"`),
+    `ALTER TABLE "${change}" RENAME TO "${parked(change)}"`,
+    `ALTER TABLE "${meta}" RENAME TO "${parked(meta)}"`,
+    ...definitions.values(),
+    `INSERT INTO "${change}" (${kept}) SELECT ${kept} FROM "${parked(change)}"`,
+    `INSERT INTO "${meta}" (singleton, version) VALUES (1, ${RECORD_HISTORY_VERSION})`,
+    `DROP TABLE "${parked(change)}"`,
+    `DROP TABLE "${parked(meta)}"`,
+    ...INDEXES.values(),
+  ]);
+}
+
 /** One row, on the business write's own handle, inside its transaction. */
 export function appendSqliteRecordChange(db: DatabaseSync, row: RecordChangeRow): void {
   const changes = assertChangeRow(row);
-  db.prepare(`INSERT INTO main."${change}" (write_id, at, resource, key_json, kind, changes_json, actor, actor_name, via, action)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
+  db.prepare(`INSERT INTO main."${change}" (write_id, at, resource, key_json, kind, changes_json, actor, actor_name, via, action, actor_kind, proposal_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(
     row.writeId,
     row.at,
     row.resource,
@@ -162,6 +187,8 @@ export function appendSqliteRecordChange(db: DatabaseSync, row: RecordChangeRow)
     row.actorName,
     row.via,
     row.action,
+    row.actorKind ?? null,
+    row.proposalId ?? null,
   );
 }
 
@@ -175,7 +202,7 @@ export function readSqliteRecordHistory(db: DatabaseSync, query: RecordHistoryQu
   assertHistoryQuery(query);
   if (!attested) assertSqliteRecordHistory(db);
   const rows = db
-    .prepare(`SELECT id, write_id, at, resource, key_json, kind, changes_json, actor, actor_name, via, action
+    .prepare(`SELECT id, write_id, at, resource, key_json, kind, changes_json, actor, actor_name, via, action, actor_kind, proposal_id
     FROM main."${change}"
     WHERE resource = ? AND key_json = ?
       AND id > COALESCE((SELECT MAX(id) FROM main."${change}" WHERE resource = ? AND key_json = ? AND kind = 'delete'), 0)
@@ -196,6 +223,7 @@ export function readSqliteRecordHistory(db: DatabaseSync, query: RecordHistoryQu
     actorName: String(row.actor_name),
     via: row.via as WriteVia,
     action: String(row.action),
+    ...storedMaker(row),
   }));
 }
 
@@ -211,7 +239,7 @@ export function readSqliteRecordActivity(db: DatabaseSync, query: RecordActivity
   // One tenant's feed: each tenant-owned resource's rows by the owner its stored key names (historyKey).
   const owned = Object.entries(query.owners?.columns ?? {});
   const rows = db
-    .prepare(`SELECT c.id, c.write_id, c.at, c.resource, c.key_json, c.kind, c.changes_json, c.actor, c.actor_name, c.via, c.action
+    .prepare(`SELECT c.id, c.write_id, c.at, c.resource, c.key_json, c.kind, c.changes_json, c.actor, c.actor_name, c.via, c.action, c.actor_kind, c.proposal_id
     FROM main."${change}" c
     WHERE c.resource IN (${query.resources.map(() => '?').join(', ')}) AND c.kind <> 'delete'
       ${query.from === undefined ? '' : 'AND c.at >= ?'} ${query.to === undefined ? '' : 'AND c.at < ?'} ${query.after === undefined ? '' : 'AND c.id > ?'}
@@ -239,5 +267,6 @@ export function readSqliteRecordActivity(db: DatabaseSync, query: RecordActivity
     actorName: String(row.actor_name),
     via: row.via as WriteVia,
     action: String(row.action),
+    ...storedMaker(row),
   }));
 }

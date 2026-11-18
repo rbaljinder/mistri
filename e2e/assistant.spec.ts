@@ -199,7 +199,7 @@ test('the open record is the context: a summary, then a proposed edit applied on
   await expect(panel(page).getByRole('textbox', { name: 'Message the assistant' })).toBeDisabled();
   expect(read<{ status: string }>('SELECT status FROM lead WHERE id = ?', lead.id)[0].status).toBe('new');
   await card.getByRole('button', { name: 'Confirm' }).click();
-  await expect(card.getByText('Applied.')).toBeVisible();
+  await expect(card.getByText('Started', { exact: true })).toBeVisible();
   await expect(panel(page).getByText('Done: the lead is now being worked.')).toBeVisible();
   expect(read<{ status: string }>('SELECT status FROM lead WHERE id = ?', lead.id)[0].status).toBe('working');
   // The page under the panel reads as the record now is.
@@ -210,7 +210,7 @@ test('the open record is the context: a summary, then a proposed edit applied on
   await expect(second).toContainText('Mark lost');
   expect(read<{ status: string }>('SELECT status FROM lead WHERE id = ?', lead.id)[0].status).toBe('working');
   await second.getByRole('button', { name: 'Decline' }).click();
-  await expect(second.getByText('Declined.')).toBeVisible();
+  await expect(second.getByText('Dismissed', { exact: true })).toBeVisible();
   await expect(panel(page).locator('.assistant-body')).toHaveAttribute('aria-busy', 'false');
   expect(read<{ status: string }>('SELECT status FROM lead WHERE id = ?', lead.id)[0].status).toBe('working');
 });
@@ -242,7 +242,7 @@ test('“log a call” is a New form filled in, which the person completes and a
     await page.getByRole('option').first().click();
   }
   await form.getByRole('button', { name: 'Add' }).click();
-  await expect(card.getByText('Applied.')).toBeVisible();
+  await expect(card.getByText('Done', { exact: true })).toBeVisible();
   await expect(panel(page).getByText('The call is logged.')).toBeVisible();
   const logged = read<{ kind: string; subject: string; minutes: number }>(
     'SELECT kind, subject, minutes FROM activity WHERE opportunity_id = ? ORDER BY id DESC LIMIT 1',

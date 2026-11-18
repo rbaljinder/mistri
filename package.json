@@ -1,6 +1,6 @@
 {
   "name": "mistri-workspace",
-  "version": "1.0.0-rc.63",
+  "version": "1.0.0-rc.64",
   "private": true,
   "description": "The workspace root: the packages under packages/ (mistri, create-mistri, @mistriwork/cloudflare, @mistriwork/kit, @mistriwork/ui, @mistriwork/engine), their tests, the site and the tools. Nothing here is published.",
   "license": "MIT",
@@ -38,7 +38,7 @@
     "test:load:smoke": "node test/load/run.mjs --smoke",
     "e2e": "node scripts/test-e2e.mjs",
     "lint": "oxlint",
-    "audit:prod": "npm audit --omit=dev --audit-level=high",
+    "audit:prod": "node scripts/audit-prod.mjs",
     "seed:live": "tsx test/seed-live.ts",
     "smoke": "playwright test e2e/smoke-mistri.spec.ts",
     "test:tokens": "node scripts/visual-matrix.mjs --tokens",

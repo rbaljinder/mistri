@@ -30,6 +30,7 @@ import type { PageSection } from './pageModel.js';
 import { Empty } from './Notes.js';
 import { Value } from './Value.js';
 import { say } from '../copy/record/components/PageHistory.js';
+import { AiMark, aiWord } from './AiMark.js';
 import { pageBridge } from '../uiBridge.js';
 import type { ServedMachine } from '@mistriwork/engine/shared/servedApp.js';
 
@@ -53,6 +54,11 @@ export interface HistoryEntry {
   via: 'app' | 'workbench' | 'agent' | 'api' | 'form' | 'system';
   action?: string;
   /** The writer's name when they wrote; never an email. */ by?: string;
+  /** Who made the write when no one typed it: a model's decision, or a job (by its id when it has one). */
+  maker?: 'ai' | 'job';
+  job?: string;
+  /** The write carried out a proposal a person approved: `by` is the approver. */
+  proposed?: true;
   fields: HistoryField[];
 }
 interface HistoryPage {
@@ -76,7 +82,16 @@ interface HistoryProps {
 
 /** Who made a write, as a person reads it: their name when they wrote, else the door it came through.
     Never an address: the server sends none, and a name that reads as one is not said either. */
-export function whoWrote(entry: Pick<HistoryEntry, 'by' | 'via'>): string {
+export function whoWrote(entry: Pick<HistoryEntry, 'by' | 'via' | 'maker' | 'job' | 'proposed'>): string {
+  /* A proposal carried out names both hands, the model's and the approver's; a write no person approved names its
+     maker, so a model's change never reads as the person whose session it ran under. */
+  if (entry.proposed) return say('proposedBy', { ai: aiWord(), by: writer(entry) });
+  if (entry.maker === 'ai') return say('madeByAi', { ai: aiWord() });
+  if (entry.maker === 'job') return entry.job ? say('madeByJob', { job: entry.job }) : say('madeByAJob');
+  return writer(entry);
+}
+
+function writer(entry: Pick<HistoryEntry, 'by' | 'via'>): string {
   if (entry.by && !/[^\s@]+@[^\s@]+\.[^\s@]+/.test(entry.by)) return entry.by;
   switch (entry.via) {
     case 'agent':
@@ -216,7 +231,14 @@ function HistoryItem({ entry, base, names }: { entry: HistoryEntry; base: TableM
   return (
     <li className="history-entry">
       <div className="history-head">
-        <span className="history-by">{whoWrote(entry)}</span>
+        <span className="history-by">
+          {(entry.proposed || entry.maker === 'ai') && (
+            <>
+              <AiMark quiet />{' '}
+            </>
+          )}
+          {whoWrote(entry)}
+        </span>
         <span className="history-what">{whatWrote(entry)}</span>
         <time className="history-when" dateTime={entry.at} title={entry.at}>
           {said}

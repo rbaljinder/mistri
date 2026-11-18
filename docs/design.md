@@ -514,6 +514,16 @@ the same effective-color checks as the original pair.
 A phone is a first-class room, not a squeezed desk (`e2e` runs every spec at
 a desk and at 390px).
 
+- **Three bands.** A phone is 760px and under, a tablet 761–1100px, a desk
+  1101px and over, declared once beside the zoom-aware ruler
+  (`packages/ui/src/internal/ruler.ts`: `PHONE_QUERY`, `TABLET_QUERY`,
+  `DESK_QUERY`) and named the same in every stylesheet. A tablet is a desk
+  with a thumb: an App's side menu folds to the icon rail rather than the
+  phone's drawer, a record keeps its side column at 280px, a list folds its
+  columns by the hide order rather than scrolling sideways, and a dashboard's
+  sections stand two to a row. The other widths a stylesheet still names
+  (600, 640, 720, 900px) are a component's own fits, not bands.
+
 - **Safe areas.** Anything fixed to an edge (a bottom bar, a sheet, a toast)
   pads by `env(safe-area-inset-*)` on that edge, and the page declares
   `viewport-fit=cover` so the insets exist.
@@ -552,8 +562,10 @@ a desk and at 390px).
   left off whole, never cut and never scrolled, and the Table beside the
   Records says it. An empty value is not drawn (a mark with no caption says
   nothing) and the values after it close up. The Workbench keeps its captions.
-- Targets are 44px on a coarse pointer (rule 8); sideways scroll is a
-  defect (rule 10).
+- Targets are 44px on a coarse pointer (rule 8), at a tablet as on a phone:
+  a row's box, a column's sort and filter, a chip's ×, a file's name — every
+  visible control in a list and a record but a link inside prose
+  (`e2e/touch-targets.spec.ts`). Sideways scroll is a defect (rule 10).
 
 ## Truncation
 
@@ -1047,7 +1059,9 @@ every look, so the picture it keeps reads on whatever page shows it.
   an initial in a hairline square for an entry without one, group headings as
   hairlines. In Apps the fold button lives in the sidebar footer, centered in
   the folded rail; Workbench keeps its sidebar control. The words stay each entry's
-  accessible name and appear on hover.
+  accessible name and appear on hover. At a tablet (761–1100px) an App's side
+  menu starts folded to the rail; its fold button opens the full menu for the
+  visit and is not remembered as a desk's preference.
 - Every sidebar group folds through its heading button, the top level's too. A
   footer group's heading stays at the foot, under its rows, so it opens upward
   and the heading a reader pressed does not move. Groups start open and remember a reader's choice per App and
@@ -1056,7 +1070,7 @@ every look, so the picture it keeps reads on whatever page shows it.
   Folding updates the keyboard's row model as well as the rendered list; it
   never leaves invisible destinations in the arrow order. Groups open and close
   immediately, without height animation.
-- Apps with sidebar navigation use a modal left drawer on phones. The menu
+- Apps with sidebar navigation use a modal left drawer on phones (760px and under). The menu
   trigger shares the main header row; the drawer carries navigation and workspace
   identity, dismisses on selection, Escape or backdrop click, and returns focus
   to its trigger. Under the rooms it ends with the reader's own two rows, Settings

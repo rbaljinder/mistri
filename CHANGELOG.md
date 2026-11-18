@@ -5,6 +5,80 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.64
+
+- A command form with more than eight inputs opens as a side drawer over the page (560px at the right edge, the verb and
+  Cancel in a foot that stays in view; a full screen on a phone) instead of a centered dialog; a shorter one stays the
+  dialog. It uses New's threshold and takes no setting. The drawer has no address of its own, Esc and Cancel return
+  focus to the button that opened it, and the page under it does not move. Every caller (a record's action bar, bulk,
+  the assistant, a page's `<CommandForm>`) goes through the same form. It also has an empty evidence slot (`aside`)
+  that the form draws beside it from 900px and under it below that.
+- Proposals and provenance in the command journal (journal version 5). A proposal is a command input waiting for a
+  person: anyone granted the command may list it (`/api/commands/proposals`), approve it, which runs the command as the
+  approver under their own grant (`/api/commands/proposals/approve`), or dismiss it
+  (`/api/commands/proposals/dismiss`). It is decided once (409 after), expires after 14 days (410), and records a
+  failed run. Receipts now say `actor_kind` and, for an approved proposal, `proposal_id`. A value written by a job or
+  a decision is marked until a person confirms it (`/api/commands/provenance/confirm`). Tenant journals keep both to
+  their tenant.
+- `approval: 'ai'` on a command makes a call no person made a proposal instead of a write: a job's command (its
+  retried attempt finds the same proposal; its evidence is the record the job ran on, its reason the job's name), a decision's answer however sure (a suggested answer of any command is now
+  a proposal too, with the decision's inputs as evidence and its model and cost), and a workflow's step, which waits
+  until the proposal is decided and is refused when it is dismissed, fails or expires. Any other run no person made is
+  refused. A person who runs the command, including from the assistant's confirm, runs it as always. A workflow step
+  waiting on a proposal is woken when it is approved in the same process, rather than at its next look.
+- An approval may carry the input as the approver corrected it (`input` on `/api/commands/proposals/approve`): the
+  command runs with it, judged as any run's input is, and a field the approver changed is theirs, not marked as the
+  maker's. A decision's suggestion names its proposal, and its Accept approves that proposal as it stands, so the
+  receipt names it; a decision with no stored proposal runs as the person's own, as before.
+- Provenance is one mark per field: a job or a decision that writes a row marks each field it changed (never the
+  version column, a change stamp, or a column the platform fills), a person who edits a field confirms its mark, and
+  confirming a row writes a receipt to its history that names the fields confirmed. Only a command on a resource some
+  maker can write confirms marks. A receipt of a command that keeps nothing (`track: 'none'`) names no receipt on its
+  proposal.
+- The assistant's command verb is kept for review instead of waiting in the chat: `run` on a command stores a
+  proposal (`actor_kind` `assistant`, the records the turn read as evidence, the model, the model's reason) under the
+  grant and row policy the person's own run would need, in their own tenant in a tenant App, and the turn goes on. The
+  card's Review approves it and Decline dismisses it. A New form or fixed action still waits for the person's confirm
+  as before. The tenant door's `propose` step is built only by the host.
+- The client reads the review queue through one module (`client/commandProposals.ts`): the proposals a reader may
+  decide, how many wait on one record, and approve, dismiss and confirm, each of which reads the queue again.
+- For review (`/<app>/review`, or `/review` for a single App, known to `check --routes`): the proposals and unconfirmed
+  fields waiting for the reader, under their own grants. Proposals are grouped by command, each with the AI mark, its
+  record, the reason, its age, and Approve or Dismiss; Approve all and Dismiss all only where the command declares
+  `bulk`. Unconfirmed fields are listed under them with Confirm. Its key, the AI mark with a count, sits beside the
+  bell only while something waits. The room is loaded on demand and the queue is read once after first paint, shared
+  by the key, the room, a record's head line and its field marks, so a record page asks nothing more.
+- Change… (in the queue, on a record's head line and on a decision chip) opens the proposal panel: the command's own
+  form, filled with the proposal and editable, the evidence beside it, Approve sending the corrected input and Dismiss
+  in place of Cancel. A record with a proposal says so under its title, the AI mark and then the command
+  ("1 proposal: Send appeal · Review"), and an unconfirmed field carries the mark and Confirm in place; the review
+  room calls such a field "Not yet confirmed by a person".
+- One vocabulary for a proposal's state everywhere: Drafted, Approved, then the command's verb in the past tense (Done
+  where it has none), or Dismissed. A reloaded assistant conversation reads each card's outcome from its stored
+  proposal and offers no buttons on a decided one.
+- `ai: { label }` (24 characters at most) names the App's AI; every AI surface draws the kit's `AiMark` with it, and
+  `AiMark` is exported to components and pages from `@mistriwork/mistri/ui`.
+- A record's history says who made a change as well as who did it: an approved proposal's entry reads "Proposed by AI ·
+  approved by" its approver, a maker's own run "Made by AI" or "Made by job" and its name, each with the AI mark. The
+  record history store keeps the maker's kind and the proposal beside each entry (`actor_kind`, `proposal_id`, store
+  layout version 2); an older store gains both columns, empty, when it is upgraded, and its entries read as before.
+- `mistri check` advises three things about AI, each a warning. `ai-text-bare`: a label or title in the declarations (a
+  command's, an action's, a view's, a menu entry's) or a component's or page's markup that says the word AI as a whole
+  word, capitals only, outside `<AiMark/>`; the App's own `ai` and `assistant` settings are not read, and text an
+  expression builds is not seen. `ai-command-unreviewed`: a command the assistant may run (its `run` tool, an action
+  its `exclude` leaves in) or the answer command of a decision that only suggests (no `apply`) without `approval: 'ai'`;
+  a job's own command, an endpoint's or a workflow's is no AI's by its declaration, so none is advised. `page-single-form`:
+  a free-form page whose only content is one `<CommandForm>` in layout wrappers, which is better a command started from
+  the record or list, opening as the drawer.
+- A tablet band. 761–1100px is a tablet, declared once beside the zoom-aware ruler (`PHONE_QUERY`, `TABLET_QUERY`,
+  `DESK_QUERY` in `@mistriwork/ui/internal/ruler`); a phone is 760px and under and a desk 1101px and over. At a
+  tablet an App's side menu folds to the icon rail instead of the phone's drawer (its fold button opens the full menu
+  for the visit), a record keeps its side column at 280px instead of stacking it under the page, and a dashboard's
+  halves and thirds stand two to a row. Lists already fold their columns by the hide order there. On a touch screen
+  every visible control in a list and a record is a 44px target at any width: a row's box, a column's sort and filter
+  buttons, a removable chip's ×, an attachment's name and the list's search row, without growing what they draw.
+  `e2e/touch-targets.spec.ts` holds it, and the visual matrix gains a tablet axis (820×1180 and 1180×820, touch).
+
 ## 1.0.0-rc.63
 
 - `defineIntegration` takes an optional `label`, `description` and `check`. The settings screen shows the label (the

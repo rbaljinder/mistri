@@ -132,6 +132,8 @@ export function bindTenantDeploymentContext<Request>(input: TenantDeployment<Req
       deployment.draft(request, selectors, value, options, guard),
     stage: (request: Request, selectors: readonly string[], value: unknown, options?: Parameters<typeof deployment.stage>[3]) =>
       deployment.stage(request, selectors, value, options, guard),
+    proposals: (request: Request, selectors: readonly string[], value: unknown, options?: Parameters<typeof deployment.proposals>[3]) =>
+      deployment.proposals(request, selectors, value, options, guard),
     countLinks: (request: Request, selectors: readonly string[], value: RecordLinksRequest) =>
       deployment.countLinks(request, selectors, value, guard),
     revokeLinks: (request: Request, selectors: readonly string[], value: RecordLinksRequest) =>
@@ -248,6 +250,9 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
           throw new BusinessCommandExecutionError('forbidden', 'unknown');
         },
         stage: async () => {
+          throw new BusinessCommandExecutionError('forbidden', 'unknown');
+        },
+        proposals: async () => {
           throw new BusinessCommandExecutionError('forbidden', 'unknown');
         },
       });

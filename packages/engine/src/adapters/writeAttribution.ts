@@ -19,6 +19,10 @@ interface WriteAttribution {
   readonly via: WriteVia;
   /** The action or command the write came from, in the App's words. */
   readonly action?: string;
+  /** What kind of maker ran the command (a receipt's actor kind), or `job:<id>` and the like when the maker names itself. */
+  readonly kind?: string;
+  /** The proposal a person approved, when the command ran as one. */
+  readonly proposal?: string;
 }
 
 const attributions = new AsyncLocalStorage<WriteAttribution>();
@@ -34,6 +38,15 @@ export function attributeAction<T>(action: string | undefined, work: () => T): T
   const outer = attributions.getStore();
   if (!action) return work();
   return attributions.run(Object.freeze({ ...(outer ?? { via: 'system' as const }), action }), work);
+}
+
+/** Name who made a command's writes and the proposal it carried out, keeping the person and the action. */
+export function attributeMaker<T>(kind: string, proposal: string | undefined, work: () => T): T {
+  const outer = attributions.getStore();
+  return attributions.run(
+    Object.freeze({ ...(outer ?? { via: 'system' as const }), kind, ...(proposal === undefined ? {} : { proposal }) }),
+    work,
+  );
 }
 
 export const currentWriteAttribution = (): WriteAttribution | undefined => attributions.getStore();

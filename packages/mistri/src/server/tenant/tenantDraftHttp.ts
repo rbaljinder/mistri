@@ -10,6 +10,8 @@ import { appFileRules, type AppDef } from '../../shared/app.js';
 import { TENANT_FILE_MOST } from '@mistriwork/engine/server/http/reply.js';
 import type { TenantContextAssertion } from '../../shared/tenantContext.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
+import { announceProposalApproved, PROPOSAL_ROUTES as TENANT_PROPOSAL_ROUTES } from '../commands/proposals.js';
+import { COMMAND_ROUTES } from '../../shared/commandRoutes.js';
 import { lookupTenantPerson } from '../app/appMe.js';
 import { stampInsert, type compileAppStamps } from '../app/appStamps.js';
 import { uploadValues } from '../http/fileRows.js';
@@ -37,6 +39,34 @@ async function draftRequest<C>(
   };
 }
 
+/**
+ * A proposal route's request on the tenant host (commands/proposals.ts `runProposalStep`). A tenant request holds one
+ * transaction, so an approval is three: the proposal read into its envelope, its run as the approver, and, when the run
+ * is refused, what that means for the proposal, said in a transaction of its own. Each step is built here, from the
+ * client's body, so a client never names one.
+ */
+async function proposalRequest<C>(
+  path: string,
+  input: Record<string, unknown>,
+  run: (step: Record<string, unknown>) => Promise<{ readonly context: C; readonly value: unknown }>,
+): Promise<{ readonly context: C; readonly value: unknown }> {
+  if (path !== COMMAND_ROUTES.approveProposal) return run({ step: 'route', path, body: input });
+  const read = (await run({ step: 'read', body: input })).value as {
+    approval: { id: string; command: string };
+    envelope: unknown;
+    appId: string;
+  };
+  try {
+    const ran = await run({ step: 'run', approval: read.approval, envelope: read.envelope });
+    // The run's transaction has committed: a flow woken now reads the approved proposal (proposals.ts).
+    announceProposalApproved(read.appId, read.approval.id, read.approval.command);
+    return ran;
+  } catch (error) {
+    if (!(error instanceof BusinessCommandExecutionError)) throw error;
+    return run({ step: 'refused', approval: read.approval, code: error.code, outcome: error.outcome });
+  }
+}
+
 /** One command route's answer: the four ordinary verbs, and a saved form's draft and a staged file for a signed-in member. */
 export function tenantCommandRoute(
   contexts: ReturnType<typeof createTenantContexts<IncomingMessage>>,
@@ -52,9 +82,12 @@ export function tenantCommandRoute(
 ) {
   const { path, platform, req, selectors, expected, input, execution } = route;
   /* A signed-in draft is a member's own root in a tenant's rows; the platform realm has no member
-     and no draft, so it refuses as an unknown command would. */
-  if (path.endsWith('/files') || path.endsWith('/draft')) {
+     and no draft, so it refuses as an unknown command would. Proposals are a tenant's own journal rows, and nothing
+     proposes in the platform realm yet. */
+  if (path.endsWith('/files') || path.endsWith('/draft') || TENANT_PROPOSAL_ROUTES.has(path)) {
     if (platform) return Promise.reject(new BusinessCommandExecutionError('forbidden', 'not_applied'));
+    if (TENANT_PROPOSAL_ROUTES.has(path))
+      return proposalRequest(path, input, (step) => contexts.proposals(req, selectors, expected, step, execution));
     return path.endsWith('/files')
       ? contexts.stage(req, selectors, expected, input, execution)
       : draftRequest(input, (body) => contexts.draft(req, selectors, expected, body, execution));

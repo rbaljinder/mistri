@@ -3547,6 +3547,9 @@ export interface AppConfig {
   /** The name a phone's bar and an installed icon say where `name` does not fit: "Northwind" for "Northwind Field
       Service". 12 characters or fewer. The full `name` stays the bar's accessible name and the page's title. */
   shortName?: string;
+  /** How the App names its AI: `label` is the word every built-in AI mark says beside its glyph (the review queue, a
+      record's proposal line, history, the assistant), 24 characters or fewer. "AI" when absent. */
+  ai?: { label: string };
   /* data */
   /** The one connection this App is for, by id or name. Absent means every connection. Not with `sources`. A name that is
       an identifier is also the App's one source's, as `sources: { <name>: { connection: '<name>', default: true } }` says

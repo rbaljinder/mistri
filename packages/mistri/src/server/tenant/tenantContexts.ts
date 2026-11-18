@@ -63,14 +63,15 @@ interface TenantContextResult<T> {
 }
 /* Availability is a command family as prepare is, with prepare's options and failure classes; it is named apart
    only because it acts on nothing, so a fenced answer needs no second admission (below). */
-type Family = 'read' | 'preview' | 'write' | 'availability' | 'prepare' | 'execute' | 'status' | 'draft' | 'stage';
+type Family = 'read' | 'preview' | 'write' | 'availability' | 'prepare' | 'execute' | 'status' | 'draft' | 'stage' | 'proposals';
 const commandFamily = (family: Family): boolean =>
   family === 'availability' ||
   family === 'prepare' ||
   family === 'execute' ||
   family === 'status' ||
   family === 'draft' ||
-  family === 'stage';
+  family === 'stage' ||
+  family === 'proposals';
 /** A tab holds one lease: a tenant's, the platform realm's, or a support
  * session's inside one dealer. A support lease reads that dealer's rows through
  * its own read family, every read ledgered before a body is released; it acts
@@ -1508,6 +1509,25 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         expected,
         value,
         (bound, selected, captured, options) => bound.stage(request, selected, captured, options),
+        options,
+      );
+    },
+    /** One step of a proposal route (commands/proposals.ts `runProposalStep`), under the actor's grant in the tenant's
+     * own journal rows: a command family, since an approval's run is a command's run. */
+    proposals(
+      request: Request,
+      selectors: readonly string[],
+      expected: TenantContextAssertion,
+      value: unknown,
+      options?: TenantCommandExecutionOptions,
+    ) {
+      return execute(
+        'proposals',
+        request,
+        selectors,
+        expected,
+        value,
+        (bound, selected, captured, options) => bound.proposals(request, selected, captured, options),
         options,
       );
     },

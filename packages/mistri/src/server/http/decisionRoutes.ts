@@ -33,7 +33,7 @@ import type { DecisionOwner, StoredDecision } from '../../adapters/decide/decisi
 import { AppAccessDenied } from '../app/appAccess.js';
 import { sessionRoles } from '../../shared/appViewRoles.js';
 import { appForConnection } from '../app/apps.js';
-import { isEmpty, recordKeyText, sameAnswer } from '../decide/decideReads.js';
+import { decisionProposalId, isEmpty, recordKeyText, sameAnswer } from '../decide/decideReads.js';
 import { decisionsServedBy, type ServedDecisions } from '../decide/decisionServing.js';
 import { exactKey } from '../recordHistory.js';
 import { appCommandGrants, type AppDef } from '../../shared/app.js';
@@ -261,6 +261,7 @@ async function recordSuggestions(
       decision: row.decision,
       field: row.field,
       command: decision.answer.command.id,
+      proposal: decisionProposalId(row.id),
       answer: row.answer,
       label: say(row.answer),
       probability: row.probability,

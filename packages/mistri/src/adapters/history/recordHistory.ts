@@ -48,7 +48,7 @@ import { captureNotices, noticeBinding, type NoticeRow } from '../inbox/inbox.js
 import type { QueuedChannelNotice } from '../integrations/integrationStore.js';
 import { currentWriteAttribution, WRITE_VIAS, type WriteVia } from '@mistriwork/engine/adapters/writeAttribution.js';
 
-export const RECORD_HISTORY_VERSION = 1;
+export const RECORD_HISTORY_VERSION = 2;
 export const RECORD_HISTORY_PREFIX = '__mistri_history_';
 export const RECORD_HISTORY_TABLES = Object.freeze({
   meta: `${RECORD_HISTORY_PREFIX}meta`,
@@ -209,6 +209,13 @@ export interface RecordChangeRow {
   actorName: string;
   via: WriteVia;
   action: string;
+  /**
+   * Who made a command's write, by kind, as its receipt says (`person`, `assistant`, `decision`, `flow`, `job`, …), or
+   * the maker's own name where it gives one (`job:<id>`); absent for a write no command made.
+   */
+  actorKind?: string;
+  /** The proposal a person approved, when the write carried one out. */
+  proposalId?: string;
 }
 
 /** A stored row read back, newest first. */
@@ -332,6 +339,8 @@ export function captureRecordHistory(
   const actorName = actor ? sayableActorName(attribution?.name) : '';
   const via: WriteVia = attribution?.via && WRITE_VIAS.includes(attribution.via) ? attribution.via : 'system';
   const action = (attribution?.action ?? '').slice(0, RECORD_HISTORY_LIMITS.action);
+  const actorKind = attribution?.kind?.slice(0, RECORD_HISTORY_LIMITS.actor);
+  const proposalId = attribution?.proposal?.slice(0, RECORD_HISTORY_LIMITS.actor);
   const append = (resource: string, key: Record<string, unknown>, kind: ChangeKind, changes: StoredChange[], said = action) => {
     const appended = sink.append({
       writeId,
@@ -344,6 +353,8 @@ export function captureRecordHistory(
       actorName,
       via,
       action: said,
+      ...(actorKind ? { actorKind } : {}),
+      ...(proposalId ? { proposalId } : {}),
     });
     // A change may start a flow (workflows/flowTail.ts): the jobs host in this process looks soon rather than at its longest wait.
     commandEventsAppended();
@@ -544,10 +555,21 @@ export function assertChangeRow(row: RecordChangeRow): string {
     !WRITE_VIAS.includes(row.via) ||
     typeof row.actorName !== 'string' ||
     Buffer.byteLength(row.actorName, 'utf8') > RECORD_HISTORY_LIMITS.actorName ||
+    [row.actorKind, row.proposalId].some(
+      (said) => said !== undefined && (typeof said !== 'string' || Buffer.byteLength(said, 'utf8') > RECORD_HISTORY_LIMITS.actor),
+    ) ||
     Buffer.byteLength(changes, 'utf8') > RECORD_HISTORY_LIMITS.changes
   )
     throw new Refusal('Invalid record history entry.');
   return changes;
+}
+
+/** A stored row's maker and proposal, as the reads return them: absent where the column is null. */
+export function storedMaker(row: Record<string, unknown>): Pick<RecordChangeRow, 'actorKind' | 'proposalId'> {
+  return {
+    ...(typeof row.actor_kind === 'string' && row.actor_kind ? { actorKind: row.actor_kind } : {}),
+    ...(typeof row.proposal_id === 'string' && row.proposal_id ? { proposalId: row.proposal_id } : {}),
+  };
 }
 
 /** How many of a record's rows a read returns at most. */

@@ -14,6 +14,10 @@
  * mid-conversation is refused at the next call. A renewal that moved the
  * lease on is followed once; a lease now in another tenant is not.
  *
+ * A command the assistant would run is kept as a proposal for review (commands/proposals.ts). The data server builds
+ * it (tenantHttp.ts `propose`), on the same lease, admitted again, under the person's own grant and row policy: the
+ * step is the host's to make, never a request's body.
+ *
  * Whether a tenant has the assistant at all is its switch, held by the
  * platform owner in Manage tenants (tenantAdministration.ts) and read on every
  * request and before every model call: off, the panel is not drawn
@@ -22,6 +26,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { Readable } from 'node:stream';
 import type { AssistantStore } from '../../adapters/assistant/assistantStore.js';
+import type { CommandProposalRow } from '../../adapters/commands/commandJournalTypes.js';
+import type { ProposalDraft } from '../commands/proposals.js';
 import type { AppDef } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import { PLATFORM_TENANT_ID, TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
@@ -34,6 +40,7 @@ import type { Loop, LoopAnswer } from '@mistriwork/engine/server/http/firstPaint
 import { HttpError } from '@mistriwork/engine/server/http/reply.js';
 import { doorRefusal, type Bound } from '@mistriwork/engine/server/http/trust.js';
 import { TENANT_ASSISTANT_RETENTION_DAYS, type TenantAssistantPolicy } from '../policy/appTenantPolicy.js';
+import { TenantLeaseError } from './tenantContexts.js';
 import { tenantHttpHeader } from './tenantHttp.js';
 
 interface TenantAssistantOptions {
@@ -45,6 +52,8 @@ interface TenantAssistantOptions {
   readonly where: { readonly path: string } | { readonly url: string };
   readonly policy?: TenantAssistantPolicy;
   readonly now?: () => number;
+  /** The data server's proposal for review, built by it (tenantHttp.ts `propose`) on the request's lease. */
+  readonly propose?: (req: IncomingMessage, draft: ProposalDraft, signal: AbortSignal) => Promise<CommandProposalRow>;
 }
 
 interface Lease {
@@ -157,9 +166,9 @@ export function createTenantAssistant(options: TenantAssistantOptions) {
   };
 
   /** Reads on the lease, each admitted by the data server; a lease renewed meanwhile is followed once, in its tenant. */
-  const leaseLoop = (req: IncomingMessage, first: Lease): Loop => {
-    let lease = first;
+  const leaseLoop = (req: IncomingMessage, first: Lease, held: { lease: Lease }): Loop => {
     return async (method, target, body, signal) => {
+      let lease = held.lease;
       for (let attempt = 0; ; attempt++) {
         const answer = await ask(
           forwarded(req, method, `${target}${target.includes('?') ? '&' : '?'}tenant=${encodeURIComponent(first.tenantId)}`, body, {
@@ -181,7 +190,40 @@ export function createTenantAssistant(options: TenantAssistantOptions) {
         }
         // The tab moved to another customer: this conversation's reads stop rather than follow it there.
         if (renewed.tenantId !== first.tenantId) return answer;
-        lease = renewed;
+        lease = held.lease = renewed;
+      }
+    };
+  };
+
+  /** The proposal on the lease the loop holds; a lease renewed meanwhile is followed once, in its tenant, as a read is. */
+  const leasePropose = (req: IncomingMessage, first: Lease, held: { lease: Lease }) => {
+    const propose = options.propose;
+    if (!propose) return undefined;
+    return async (draft: ProposalDraft): Promise<CommandProposalRow> => {
+      const signal = new AbortController().signal;
+      for (let attempt = 0; ; attempt++) {
+        const lease = held.lease;
+        const request = forwarded(
+          req,
+          'POST',
+          `/api/commands/propose?app=${encodeURIComponent(app.id)}&tenant=${encodeURIComponent(first.tenantId)}`,
+          undefined,
+          {
+            [headers.account]: lease.accountId,
+            [headers.app]: app.id,
+            [headers.tab]: lease.tabId,
+            [headers.context]: lease.context,
+            [headers.revision]: String(lease.revision),
+          },
+        );
+        try {
+          return await propose(request, draft, signal);
+        } catch (error) {
+          if (attempt > 0 || !(error instanceof TenantLeaseError)) throw error;
+          const renewed = await recover(req, lease.accountId, lease.tabId);
+          if (renewed.tenantId !== first.tenantId) throw error;
+          held.lease = renewed;
+        }
       }
     };
   };
@@ -206,7 +248,9 @@ export function createTenantAssistant(options: TenantAssistantOptions) {
     const lease = await recover(req, account, tabId);
     // The tab's own context, as it said it holds it: a token from another tab or a past one is not this one.
     if (lease.context !== context) throw new HttpError(403, 'Choose a customer first.');
-    const loop = leaseLoop(req, lease);
+    const held = { lease };
+    const loop = leaseLoop(req, lease, held);
+    const propose = leasePropose(req, lease, held);
     /* The App as this person is served it in this tenant: the assistant is in it only where its role is offered
        one, a model is set up and the tenant's switch is on (tenantHttp.ts). Asked on every request. */
     const served = await loop('GET', `/api/app?app=${encodeURIComponent(app.id)}`);
@@ -224,6 +268,7 @@ export function createTenantAssistant(options: TenantAssistantOptions) {
       owner: { app: app.id, tenant: tenantId, account },
       store: opened,
       loop: () => loop,
+      ...(propose ? { propose } : {}),
       ...(policy?.tokensPerTenantPerDay === undefined ? {} : { tokensPerTenantPerDay: policy.tokensPerTenantPerDay }),
       withdrawn: async () => ((await offered(tenantId)) ? undefined : 'The assistant was turned off for this customer.'),
     };

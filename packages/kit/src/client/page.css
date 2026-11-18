@@ -123,6 +123,25 @@
     border-left: 1px solid var(--line);
     padding-left: var(--space-6);
   }
+  /* A tablet (761–1100px, the ruler's band, @mistriwork/ui/internal/ruler) keeps a record's side column at 280px
+   beside the main one, as a desk does: stacked, the record's state and its history went a screen under the
+   work. An archetype and a dashboard place their own regions and still stack there (below). */
+  @media (min-width: 761px) and (max-width: 1100px) {
+    .page-layout:where(:not([data-layout], .dashboard-layout)) {
+      grid-template-columns: minmax(0, 1fr) 280px;
+    }
+    .page-layout:where(:not([data-layout], .dashboard-layout)) > .page-aside {
+      align-self: stretch;
+      align-content: flex-start;
+    }
+    .page-layout:where(:not([data-layout], .dashboard-layout)) .page-aside .page-section {
+      flex-basis: 100%;
+      margin-inline: 0;
+    }
+    :where(.page-layout:not([data-layout], .dashboard-layout)) .page-aside .page-metric-row {
+      flex-direction: column;
+    }
+  }
   @media (min-width: 1101px) {
     /* The aside's rule runs the length of the page it stands beside: stopping
      at its last field, it read as a short box rather than a column. */
@@ -146,7 +165,7 @@
    drawing a hairline of its own a row under the last field's (two rules, a
    gap apart, where one was meant). A headline or a card is a box, and a line
    of facts draws no rule: those stay as they are. */
-  @media (max-width: 1100px) {
+  @media (max-width: 760px) {
     .page-layout {
       grid-template-columns: minmax(0, 1fr);
       gap: var(--page-row-gap, var(--section-seam));
@@ -156,6 +175,22 @@
       padding-left: 0;
     }
     .page-aside > .page-section:first-child:not(:has(.page-headline, > .page-facts), .page-card-section) {
+      border-top-style: solid;
+      padding-top: var(--space-3h);
+    }
+  }
+  /* The same stacking at a tablet for the pages that place their own regions; the selectors keep the weight the
+   phone's have. */
+  @media (min-width: 761px) and (max-width: 1100px) {
+    .page-layout:where([data-layout], .dashboard-layout) {
+      grid-template-columns: minmax(0, 1fr);
+      gap: var(--page-row-gap, var(--section-seam));
+    }
+    :where(.page-layout[data-layout], .dashboard-layout) > .page-aside {
+      border-left: 0;
+      padding-left: 0;
+    }
+    :where(.page-layout[data-layout], .dashboard-layout) > .page-aside > .page-section:first-child:not(:has(.page-headline, > .page-facts), .page-card-section) {
       border-top-style: solid;
       padding-top: var(--space-3h);
     }
@@ -279,6 +314,32 @@
     .page-section:first-child.width-two-thirds + .page-section.width-third {
       border-top: none;
       padding-top: 0;
+    }
+  }
+  /* A dashboard at a tablet (761–1100px, the ruler's band) is two to a row: its halves, thirds and two-thirds each
+   take half, rather than a phone's one column under 900px or a desk's three thirds in 760px. An offset is no
+   placement in two columns. The second of a leading pair draws no rule, as a shared row's does; a third of three
+   now starts a row of its own and takes the rule back. */
+  @media (min-width: 761px) and (max-width: 1100px) {
+    .dash-body:not(.page-aside, .dash-laid) > .page-section:is(.width-half, .width-third, .width-two-thirds) {
+      flex-basis: calc(50% - 16px);
+    }
+    .dash-body:not(.page-aside, .dash-laid) > .page-section[class*='offset-'] {
+      margin-left: 0;
+      margin-right: 0;
+    }
+    .dash-body:not(.page-aside, .dash-laid)
+      > .page-section:first-child:is(.width-half, .width-third, .width-two-thirds)
+      + .page-section:is(.width-half, .width-third, .width-two-thirds) {
+      border-top: none;
+      padding-top: 0;
+    }
+    .dash-body:not(.page-aside, .dash-laid)
+      > .page-section:first-child.width-third
+      + .page-section.width-third
+      + .page-section.width-third {
+      border-top: 1px solid var(--line);
+      padding-top: var(--space-3h);
     }
   }
 
@@ -2973,6 +3034,22 @@
   .attachments-name:hover {
     text-decoration: underline;
   }
+  /* Under a finger the name is a 44px target across its text, drawn no taller: the reach hangs off the text column,
+     since the name clips its own overflow for the ellipsis and would clip a reach of its own with it. */
+  @media (pointer: coarse) {
+    .attachments-text {
+      position: relative;
+    }
+    .attachments-name::after {
+      content: '';
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 50%;
+      height: max(100%, 44px);
+      transform: translateY(-50%);
+    }
+  }
   .attachments-actions {
     flex: none;
     display: inline-flex;
@@ -3078,6 +3155,30 @@
     cursor: pointer;
     font: inherit;
     line-height: 1;
+  }
+  /* Under a finger the × takes a 44px reach without growing the chip, as a list chip's does (structure.css). A tone
+     clips what overflows it, the reach with it, so a removable chip's label carries the ellipsis instead. */
+  @media (pointer: coarse) {
+    .record-tag:has(> .record-tag-remove) {
+      overflow: visible;
+    }
+    .record-tag:has(> .record-tag-remove) > span {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .record-tag-remove {
+      position: relative;
+    }
+    .record-tag-remove::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
   }
   .record-tags-add {
     padding: var(--space-1) var(--space-3);
@@ -3590,7 +3691,7 @@
    flex column: its items fill the width however little they hold (a shut
    accordion), and a section's row-wrap flex-basis means nothing here
    instead of becoming a height. */
-  @media (max-width: 1100px) {
+  @media (max-width: 760px) {
     /* Which layouts these are is said by the page (`data-leads`, Page.tsx), not asked with
      `:has(> .page-aside :is(.page-headline, .page-card-section))`: a :has() over the whole layout restyled every
      section on the page each time an element came or went in it (test/built-client-vitals.mjs). The attribute

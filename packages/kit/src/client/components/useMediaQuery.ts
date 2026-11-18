@@ -4,6 +4,7 @@
  * share, so a breakpoint is asked of the browser the same way everywhere.
  */
 import { useSyncExternalStore } from 'react';
+import { PHONE_QUERY as PHONE_BAND } from '@mistriwork/ui/internal/ruler.js';
 
 const watched = new Map<string, { subscribe: (listener: () => void) => () => void; snapshot: () => boolean }>();
 
@@ -37,8 +38,9 @@ export function useMediaQuery(query: string): boolean {
 /** A phone: where a record's actions fold into one menu rather than wrap. */
 export const PHONE_QUERY = '(max-width: 600px)';
 
-/** Where a list's records stand in for its grid: style.css's `@media (max-width: 760px)`, which shows them. */
-export const RECORDS_QUERY = '(max-width: 760px)';
+/** Where a list's records stand in for its grid: the phone band (packages/ui/src/internal/ruler.ts), which style.css's
+    `@media (max-width: 760px)` shows them at. */
+export const RECORDS_QUERY = PHONE_BAND;
 
 /** Where a filter rail has no room to stand beside the rows. The rail is
     12-15rem and a card grid wants 520px before it draws a second column, so

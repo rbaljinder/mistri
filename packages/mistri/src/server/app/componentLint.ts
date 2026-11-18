@@ -34,7 +34,7 @@ import { basename, dirname, join } from 'node:path';
 import type { AppDef } from '../../shared/appModel.js';
 import type { CompiledComponents } from './appComponents.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { astParser, componentCommands, pageLinks, scanPageSource } from './appPages.js';
+import { aiWordsIn, astParser, componentCommands, onlyCommandForm, pageLinks, scanPageSource } from './appPages.js';
 import { nearestToken, RENAMED_TOKENS, UI_TOKENS } from '@mistriwork/kit/shared/uiTokens.js';
 import { APP_ICONS, parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 
@@ -481,7 +481,7 @@ export async function lintComponents(
     for (const file of entry.sources) if (file.endsWith('.css')) sharers.set(file, [...(sharers.get(file) ?? []), id]);
   const sheetNames = new Map<string, number>();
   for (const file of sharers.keys()) sheetNames.set(stylesheetName(file), (sheetNames.get(stylesheetName(file)) ?? 0) + 1);
-  const parse = pages.size || unprepared.size ? await astParser() : undefined;
+  const parse = pages.size || unprepared.size || Object.keys(compiled.entries).length ? await astParser() : undefined;
   /* The pages any component's source links to, for the pages only a link opens. */
   const linked = new Set<string>();
   const unplaced = [...pages.values()].some((manifest) => manifest.unplaced);
@@ -523,6 +523,22 @@ export async function lintComponents(
         const links = pageLinks(parse, raw, lang);
         for (const page of links.pages) linked.add(page);
         unseen ||= links.unseen;
+      }
+      /* The word AI is the App's to say once (`ai.label`, <AiMark/>), so a person who renames it renames it everywhere. */
+      if (parse && lang)
+        for (const { line, text: said } of aiWordsIn(parse, raw, lang))
+          warn(
+            line,
+            `[ai-text-bare] "${said}" says AI as text: draw <AiMark/> from @mistriwork/mistri/ui, which says the App's ai.label ("AI" when absent) and its mark`,
+          );
+      if (manifest && parse && lang && /\bdefinePage\s*\(/.test(text)) {
+        const form = onlyCommandForm(parse, raw, lang);
+        if (form)
+          warn(
+            1,
+            `[page-single-form] the page "${manifest.key}" is one ${form.command ? `command form (${form.command})` : 'command form'} and nothing else: ` +
+              `make it a command started from the record or list, which opens as a drawer there, and drop the page`,
+          );
       }
       if (manifest && parse && lang) {
         const scan = scanPageSource(parse, raw, lang, manifest, schema);

@@ -251,6 +251,8 @@ export declare function Cluster(props: Children & { min?: string; gap?: Gap; cla
 export declare function Text(props: { tone?: 'default' | 'muted' | 'danger'; size?: 'sm' | 'md'; children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /** Words only a screen reader hears: `<VisuallyHidden>, opens in a new tab</VisuallyHidden>`. Clipped, not `display: none`, so they stay announced and take no room. */
 export declare function VisuallyHidden(props: { children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
+/** The one mark for what a model made or proposed: a glyph and the App's word for AI (`ai: { label }` on the App, "AI" when absent), in the `--ai` ink. `quiet` keeps the glyph and leaves the word to screen readers. */
+export declare function AiMark(props: { quiet?: boolean; className?: string }): ReactTypes.ReactElement;
 /** A heading inside a section, whose own title is its h2. */
 export declare function Heading(props: Children & { level?: 3 | 4; className?: string }): ReactTypes.ReactElement;
 /** The platform's one button: 44px tall on a coarse pointer or at a phone's width. With `href` it is an `<a>` in the

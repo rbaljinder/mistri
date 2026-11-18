@@ -158,8 +158,31 @@ function answered(messages: ModelMessage[]): ModelMessage[] {
   return messages;
 }
 
-/** The panel's items, from the events. */
-export function itemsOf(events: readonly StoredEvent[]): PanelItem[] {
+/** A stored proposal's outcome as the panel says it (`reviewOutcome`): decided in the review queue, on the record or
+ * here, the conversation never heard of it, so a reload asks the store (assistantRoutes.ts). */
+export type ReviewOutcomes = ReadonlyMap<string, Omit<Outcome, 'id'>>;
+
+/** What a stored proposal's state says to the panel: nothing while it waits for a person. */
+export function reviewOutcome(state: string): Omit<Outcome, 'id'> | undefined {
+  if (state === 'approved') return { status: 'done' };
+  if (state === 'dismissed' || state === 'expired') return { status: 'declined' };
+  if (state === 'failed') return { status: 'failed' };
+  return undefined;
+}
+
+/** The stored proposals (by their review id) a conversation's cards name and whose outcome its events do not say. */
+export function undecidedReviews(events: readonly StoredEvent[]): string[] {
+  const outcomes = outcomesOf(events);
+  const ids: string[] = [];
+  for (const event of events)
+    if (event.kind === 'tool')
+      for (const item of (event.body as { display: DisplayItem[] }).display)
+        if (item.type === 'proposal' && item.proposal.review && !outcomes.has(item.id)) ids.push(item.proposal.review);
+  return ids;
+}
+
+/** The panel's items, from the events, and from `reviewed` each stored proposal's outcome the events do not say. */
+export function itemsOf(events: readonly StoredEvent[], reviewed?: ReviewOutcomes): PanelItem[] {
   const outcomes = outcomesOf(events);
   const items: PanelItem[] = [];
   for (const event of events) {
@@ -175,7 +198,7 @@ export function itemsOf(events: readonly StoredEvent[]): PanelItem[] {
       for (const item of body.display as DisplayItem[]) {
         if (item.type !== 'proposal') items.push(item);
         else {
-          const outcome = outcomes.get(item.id);
+          const outcome = outcomes.get(item.id) ?? (item.proposal.review ? reviewed?.get(item.proposal.review) : undefined);
           items.push({
             ...item,
             ...(outcome ? { outcome: { status: outcome.status, ...(outcome.detail ? { detail: outcome.detail } : {}) } } : {}),

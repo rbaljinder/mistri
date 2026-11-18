@@ -165,9 +165,9 @@ test('a half-written batch and an event without its receipt are refused', (t) =>
         .prepare(
           `INSERT INTO "${COMMAND_JOURNAL_TABLES.receipt}" (id, app_id, store_id, source_id, realm, tenant_id, actor_id, command_id,
             command_version, idempotency_key, fingerprint, result_json, request_id, completed_at, membership_id, membership_version,
-            realm_version, roles_json, deployment, target, owners_json, keys_json, changes_json, manifest_json, event_count, digest)
+            realm_version, roles_json, deployment, target, owners_json, keys_json, changes_json, manifest_json, event_count, digest, actor_kind)
           VALUES ('half', 'a', 's', 'b', 'tenant', 't', 'x', 'c', 1, 'k', 'f', '{}', 'q', '2026-01-01T00:00:00.000Z', '', '', '', '[]', '',
-            'item', '["t"]', '["{}"]', '["[]"]', '[]', NULL, NULL)`,
+            'item', '["t"]', '["{}"]', '["[]"]', '[]', NULL, NULL, 'person')`,
         )
         .run(),
     /CHECK/,

@@ -32,6 +32,12 @@ for (const name of ['relay', 'thread'] as const) {
           await expect(filter).toBeHidden();
           await expect(page.locator('.sidebar').getByRole('button', { name: /^Issues/ })).toBeVisible();
           await expect(page.locator('.sidebar').getByRole('button', { name: /^Cycles/ })).toBeVisible();
+        } else if (name === 'thread' && width > 760) {
+          // A tablet (761–1100px) keeps the menu on screen as its folded icon rail, which leaves the room the width.
+          await expect(page.locator('body')).toHaveClass(/app-nav-rail/);
+          await expect(page.locator('body')).toHaveClass(/sidebar-hidden/);
+          await expect(page.locator('.sidebar').getByRole('button', { name: /^Issues/ })).toBeVisible();
+          expect(await page.locator('.sidebar').evaluate((node) => node.getBoundingClientRect().width)).toBeLessThanOrEqual(64);
         } else await expect(page.locator('.sidebar')).toBeHidden();
         await expect(page.locator('#db-label')).toBeHidden();
         await expect(page.locator('#conn-picker')).toBeHidden();

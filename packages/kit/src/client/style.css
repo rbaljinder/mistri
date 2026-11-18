@@ -1046,7 +1046,14 @@ th:focus-within .th-move { opacity: 1; }
   .th-resizer::before { opacity: 1; }
 }
 @media (pointer: coarse) {
-  .th-move { position: relative; }
+  /* A head's sort and its caret take the same finger's reach: the caret, later in the head, is drawn over the sort,
+     so where the two reaches meet the tap is the caret's, the one control with no other way in. */
+  .th-move, .th-sort, .th-filter { position: relative; }
+  .th-sort::after, .th-filter::after {
+    content: ''; position: absolute; left: 50%; top: 50%;
+    width: max(100%, 44px); height: max(100%, 44px);
+    transform: translate(-50%, -50%);
+  }
   .th-move::after {
     content: ''; position: absolute; left: 50%; top: 50%;
     width: max(100%, 44px); height: max(100%, 44px);

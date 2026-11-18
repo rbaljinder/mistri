@@ -634,7 +634,8 @@ export async function addresses(
   const other = realm === 'tenant' ? "the platform's" : "a tenant's";
   for (const [segment, target] of book.routes) {
     if (target.kind === 'table') continue; // a table no view declares: its rows are addressed through its records
-    if (target.kind === 'settings') continue; // the reader's own settings: the product's page, not one the App wrote
+    // The reader's own settings and review queue: the product's pages, not ones the App wrote.
+    if (target.kind === 'settings' || target.kind === 'review') continue;
     if (elsewhere(target)) {
       skipped.push({ what: `/${app}/${segment}`, why: `${other}, not this context's` });
       continue;

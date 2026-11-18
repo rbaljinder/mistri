@@ -7,6 +7,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournal.js';
+type J = CommandJournal;
 import type { CommandJournalAppScope, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { logicalResource, type AppDef } from '../../shared/app.js';
@@ -355,6 +356,65 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                       ? {
                           readLink: (appId: string, id: string, now: number) =>
                             accept({ appId, id, now }, (input) => readResult(journal.readLink!(input.appId, input.id, input.now))),
+                        }
+                      : {}),
+                    /* Proposals and provenance marks are platform rows, like links: the command they name is
+                     authorized by the proposal route and the run itself, not by the row scope. A facade that
+                     dropped them answered every list and decision 'temporarily unavailable'. */
+                    ...(journal.createProposal
+                      ? {
+                          createProposal: (row: Parameters<NonNullable<J['createProposal']>>[0]) =>
+                            accept({ row }, (input) => journal.createProposal!(input.row)),
+                        }
+                      : {}),
+                    ...(journal.readProposal
+                      ? {
+                          readProposal: (appId: string, id: string) =>
+                            accept({ appId, id }, (input) => readResult(journal.readProposal!(input.appId, input.id))),
+                        }
+                      : {}),
+                    ...(journal.listProposals
+                      ? {
+                          listProposals: (appId: string, query: Parameters<NonNullable<J['listProposals']>>[1]) =>
+                            accept({ appId, query }, (input) => readResult(journal.listProposals!(input.appId, input.query))),
+                        }
+                      : {}),
+                    ...(journal.decideProposal
+                      ? {
+                          decideProposal: (...args: Parameters<NonNullable<J['decideProposal']>>) =>
+                            accept({ args }, (input) => journal.decideProposal!(...input.args)),
+                        }
+                      : {}),
+                    ...(journal.settleProposal
+                      ? {
+                          settleProposal: (appId: string, id: string, receiptId: string) =>
+                            accept({ appId, id, receiptId }, (input) => journal.settleProposal!(input.appId, input.id, input.receiptId)),
+                        }
+                      : {}),
+                    ...(journal.expireProposals
+                      ? {
+                          expireProposals: (appId: string, now: number) =>
+                            accept({ appId, now }, (input) => journal.expireProposals!(input.appId, input.now)),
+                        }
+                      : {}),
+                    ...(journal.markProvenance
+                      ? {
+                          markProvenance: (row: Parameters<NonNullable<J['markProvenance']>>[0]) =>
+                            accept({ row }, (input) => journal.markProvenance!(input.row)),
+                        }
+                      : {}),
+                    ...(journal.confirmProvenance
+                      ? {
+                          confirmProvenance: (...args: Parameters<NonNullable<J['confirmProvenance']>>) =>
+                            accept({ args }, (input) => journal.confirmProvenance!(...input.args)),
+                        }
+                      : {}),
+                    ...(journal.unconfirmedProvenance
+                      ? {
+                          unconfirmedProvenance: (appId: string, resource: string, rowKey: string | null) =>
+                            accept({ appId, resource, rowKey }, (input) =>
+                              readResult(journal.unconfirmedProvenance!(input.appId, input.resource, input.rowKey)),
+                            ),
                         }
                       : {}),
                   });

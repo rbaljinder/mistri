@@ -24,6 +24,8 @@ export const COMMAND_JOURNAL_TABLES = Object.freeze({
   receipt: `${PREFIX}receipt`,
   auditPart: `${PREFIX}audit_part`,
   link: `${PREFIX}link`,
+  proposal: `${PREFIX}proposal`,
+  provenance: `${PREFIX}provenance`,
 });
 /** Pass the unqualified catalog table name, never a SQL fragment or resource alias. */
 export const isCommandJournalTable = (name: string): boolean => name.toLowerCase().startsWith(PREFIX);
@@ -64,8 +66,16 @@ export const AUDIT_TARGET_ENTRIES = 4096;
    manifest `[]`): a command whose projections all declined still says so, and
    delivery reads that row as nothing to deliver rather than a missing batch.
    It also gives a link its row's stamp (`row_stamp`), where the row has one,
-   so a link outlives neither the row it names nor that row's replacement. */
-export const JOURNAL_VERSION = 4;
+   so a link outlives neither the row it names nor that row's replacement.
+
+   Version 5 says who a receipt's command ran for (`actor_kind`: a person, the
+   public, a service, a link, or a non-person maker — assistant, job, decision,
+   outside agent, flow) and which proposal, when one, a person approved to run
+   it (`proposal_id`). It adds the proposal table, a command invocation a
+   non-person maker prepared for a person to approve, and the provenance table,
+   a mark on a row or field a non-person write made, until a person confirms
+   it. Both sit beside the receipts they lead to, in the same tenant fence. */
+export const JOURNAL_VERSION = 5;
 const meta = (version: number) => `CREATE TABLE "${COMMAND_JOURNAL_TABLES.meta}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   version INTEGER NOT NULL CHECK (version = ${version})
@@ -124,7 +134,31 @@ export const sqliteJournalUpgradeFrom2 = (): readonly string[] => [
   `INSERT INTO "${COMMAND_JOURNAL_TABLES.meta}" (singleton, version) VALUES (1, 3)`,
 ];
 
-const RECEIPT_DDL = `CREATE TABLE "${COMMAND_JOURNAL_TABLES.receipt}" (
+/** Who a receipt's command ran for: the in-memory actor kinds (commands/businessCommands.ts) and the non-person makers. */
+export const RECEIPT_ACTOR_KINDS = Object.freeze([
+  'person',
+  'public',
+  'service',
+  'link',
+  'assistant',
+  'job',
+  'decision',
+  'agent',
+  'flow',
+] as const);
+export type ReceiptActorKind = (typeof RECEIPT_ACTOR_KINDS)[number];
+/** Who may make a proposal or a provenance mark: never a person, whose own write needs no approval and is its own confirmation. */
+export const MAKER_KINDS = Object.freeze(['assistant', 'job', 'decision', 'agent', 'flow'] as const);
+export type MakerKind = (typeof MAKER_KINDS)[number];
+export const PROPOSAL_STATES = Object.freeze(['proposed', 'approved', 'dismissed', 'expired', 'failed'] as const);
+export type ProposalState = (typeof PROPOSAL_STATES)[number];
+const listed = (values: readonly string[]) => values.map((value) => `'${value}'`).join(', ');
+/** A proposal's and a mark's evidence and a proposal's input: what a person reads before deciding, bounded as a receipt's result is. */
+export const PROPOSAL_BOUNDS = Object.freeze({ input: 65_536, evidence: 65_536, reason: 2048 });
+
+/* The receipt as versions 1 to 4 lay it out (the upgrade from version 3 rebuilds exactly that text) and as version 5
+   does, with who it ran for and the proposal it ran from after the columns version 4 has. */
+const receiptDdl = (version: 4 | 5) => `CREATE TABLE "${COMMAND_JOURNAL_TABLES.receipt}" (
   id TEXT COLLATE BINARY PRIMARY KEY NOT NULL,
   app_id TEXT COLLATE BINARY NOT NULL,
   store_id TEXT COLLATE BINARY NOT NULL,
@@ -150,7 +184,13 @@ const RECEIPT_DDL = `CREATE TABLE "${COMMAND_JOURNAL_TABLES.receipt}" (
   ${array('changes_json', B.changes)},
   manifest_json TEXT CHECK (manifest_json IS NULL OR (typeof(manifest_json) = 'text' AND json_valid(manifest_json) AND json_type(manifest_json) = 'array' AND length(CAST(manifest_json AS BLOB)) BETWEEN 1 AND 65536)),
   event_count INTEGER CHECK (event_count IS NULL OR (typeof(event_count) = 'integer' AND event_count BETWEEN 0 AND 32)),
-  digest TEXT CHECK (digest IS NULL OR (typeof(digest) = 'text' AND length(digest) = 64 AND digest NOT GLOB '*[^0-9a-f]*')),
+  digest TEXT CHECK (digest IS NULL OR (typeof(digest) = 'text' AND length(digest) = 64 AND digest NOT GLOB '*[^0-9a-f]*')),${
+    version === 4
+      ? ''
+      : `
+  actor_kind TEXT COLLATE BINARY NOT NULL CHECK (actor_kind IN (${listed(RECEIPT_ACTOR_KINDS)})),
+  proposal_id TEXT COLLATE BINARY CHECK (proposal_id IS NULL OR (typeof(proposal_id) = 'text' AND length(CAST(proposal_id AS BLOB)) BETWEEN 1 AND 128)),`
+  }
   CHECK (realm = 'tenant' OR tenant_id = ''),
   CHECK ((manifest_json IS NULL) = (event_count IS NULL) AND (manifest_json IS NULL) = (digest IS NULL)),
   UNIQUE (app_id, store_id, source_id, realm, tenant_id, actor_id, command_id, command_version, idempotency_key)
@@ -172,7 +212,7 @@ export const sqliteJournalUpgradeFrom3 = (): readonly string[] => {
   return [
     `CREATE TABLE ${PARKED(receipt)} AS SELECT * FROM "${receipt}"`,
     `DROP TABLE "${receipt}"`,
-    RECEIPT_DDL,
+    receiptDdl(4),
     `INSERT INTO "${receipt}" SELECT * FROM ${PARKED(receipt)}`,
     `DROP TABLE ${PARKED(receipt)}`,
     COMPLETED_INDEX_DDL,
@@ -185,6 +225,81 @@ export const sqliteJournalUpgradeFrom3 = (): readonly string[] => {
     `DROP TABLE "${metaTable}"`,
     meta(4),
     `INSERT INTO "${metaTable}" (singleton, version) VALUES (1, 4)`,
+  ];
+};
+
+const PROPOSAL_INDEX = `${COMMAND_JOURNAL_TABLES.proposal}_state`;
+/* One row per proposal: the command and its input as the maker prepared them, who made it and on what evidence, and
+   what became of it. A proposal is decided once: the state leaves 'proposed' by one conditional update, and an
+   approved one names the receipt its run wrote (without a key to it, as a link names its receipt: each is forgotten
+   on its own window). Times are epoch milliseconds, as a link's are. */
+const PROPOSAL_DDL = `CREATE TABLE "${COMMAND_JOURNAL_TABLES.proposal}" (
+  id TEXT COLLATE BINARY PRIMARY KEY NOT NULL,
+  app_id TEXT COLLATE BINARY NOT NULL,
+  tenant_id TEXT COLLATE BINARY NOT NULL,
+  command TEXT COLLATE BINARY NOT NULL,
+  target TEXT COLLATE BINARY,
+  input TEXT NOT NULL CHECK (json_valid(input) AND json_type(input) = 'object' AND length(CAST(input AS BLOB)) <= ${PROPOSAL_BOUNDS.input}),
+  actor_kind TEXT COLLATE BINARY NOT NULL CHECK (actor_kind IN (${listed(MAKER_KINDS)})),
+  actor TEXT COLLATE BINARY NOT NULL,
+  model TEXT,
+  model_version TEXT,
+  cost_micros INTEGER CHECK (cost_micros IS NULL OR (typeof(cost_micros) = 'integer' AND cost_micros >= 0)),
+  ${array('evidence', PROPOSAL_BOUNDS.evidence)},
+  reason TEXT NOT NULL CHECK (length(CAST(reason AS BLOB)) <= ${PROPOSAL_BOUNDS.reason}),
+  state TEXT COLLATE BINARY NOT NULL CHECK (state IN (${listed(PROPOSAL_STATES)})),
+  decided_by TEXT COLLATE BINARY,
+  decided_at INTEGER,
+  receipt_id TEXT COLLATE BINARY,
+  created_at INTEGER NOT NULL,
+  expires_at INTEGER NOT NULL CHECK (expires_at > created_at),
+  CHECK ((state = 'proposed') = (decided_at IS NULL))
+)`;
+const PROPOSAL_INDEX_DDL = `CREATE INDEX "${PROPOSAL_INDEX}" ON "${COMMAND_JOURNAL_TABLES.proposal}" (app_id, tenant_id, state, created_at)`;
+const PROVENANCE_INDEX = `${COMMAND_JOURNAL_TABLES.provenance}_row`;
+/* One mark per non-person write of a row (`field` NULL) or one of its fields: who made it and on what evidence. The
+   value is live; the mark says it is unconfirmed until a person confirms it, which stamps it rather than deleting it,
+   so the record keeps who made it. The columns are `resource`, `row_key` and `field`, as a link's are, because table,
+   key and column are words SQL keeps. */
+const PROVENANCE_DDL = `CREATE TABLE "${COMMAND_JOURNAL_TABLES.provenance}" (
+  id TEXT COLLATE BINARY PRIMARY KEY NOT NULL,
+  app_id TEXT COLLATE BINARY NOT NULL,
+  tenant_id TEXT COLLATE BINARY NOT NULL,
+  resource TEXT COLLATE BINARY NOT NULL,
+  row_key TEXT COLLATE BINARY NOT NULL,
+  field TEXT COLLATE BINARY,
+  actor_kind TEXT COLLATE BINARY NOT NULL CHECK (actor_kind IN (${listed(MAKER_KINDS)})),
+  actor TEXT COLLATE BINARY NOT NULL,
+  ${array('evidence', PROPOSAL_BOUNDS.evidence)},
+  created_at INTEGER NOT NULL,
+  confirmed_by TEXT COLLATE BINARY,
+  confirmed_at INTEGER,
+  CHECK ((confirmed_by IS NULL) = (confirmed_at IS NULL))
+)`;
+const PROVENANCE_INDEX_DDL = `CREATE INDEX "${PROVENANCE_INDEX}" ON "${COMMAND_JOURNAL_TABLES.provenance}" (app_id, tenant_id, resource, row_key)`;
+const RECEIPT_V4_COLUMNS =
+  'id, app_id, store_id, source_id, realm, tenant_id, actor_id, command_id, command_version, idempotency_key, fingerprint, result_json, request_id, completed_at, membership_id, membership_version, realm_version, roles_json, deployment, target, owners_json, keys_json, changes_json, manifest_json, event_count, digest';
+/**
+ * What the upgrade from version 4 runs. The receipt is rebuilt as the upgrade from version 3 rebuilds it, under the
+ * same foreign-key rule, and every receipt written before reads as a person's with no proposal: before this version
+ * no other maker wrote one under its own kind. The proposal and provenance tables are new and empty.
+ */
+export const sqliteJournalUpgradeFrom4 = (): readonly string[] => {
+  const { receipt, meta: metaTable } = COMMAND_JOURNAL_TABLES;
+  return [
+    `CREATE TABLE ${PARKED(receipt)} AS SELECT * FROM "${receipt}"`,
+    `DROP TABLE "${receipt}"`,
+    receiptDdl(5),
+    `INSERT INTO "${receipt}" (${RECEIPT_V4_COLUMNS}, actor_kind, proposal_id) SELECT ${RECEIPT_V4_COLUMNS}, 'person', NULL FROM ${PARKED(receipt)}`,
+    `DROP TABLE ${PARKED(receipt)}`,
+    COMPLETED_INDEX_DDL,
+    PROPOSAL_DDL,
+    PROPOSAL_INDEX_DDL,
+    PROVENANCE_DDL,
+    PROVENANCE_INDEX_DDL,
+    `DROP TABLE "${metaTable}"`,
+    meta(5),
+    `INSERT INTO "${metaTable}" (singleton, version) VALUES (1, 5)`,
   ];
 };
 
@@ -208,14 +323,27 @@ registerPrune({
   ],
 });
 /* A link past its expiry opens nothing, whatever the App keeps of anything else: gone with the daily run. */
+/* A decided or lapsed proposal is history like a receipt: forgotten on the same window. One still waiting is not. */
+registerPrune({
+  id: 'command-proposals',
+  window: 'commands',
+  table: COMMAND_JOURNAL_TABLES.proposal,
+  time: 'created_at',
+  clock: 'epoch-ms',
+  where: () => "state <> 'proposed'",
+});
 registerPrune({ id: 'command-links', window: 'expired', table: COMMAND_JOURNAL_TABLES.link, time: 'expires_at', clock: 'epoch-ms' });
 export const definitions = new Map<string, string>([
   [COMMAND_JOURNAL_TABLES.meta, meta(JOURNAL_VERSION)],
-  [COMMAND_JOURNAL_TABLES.receipt, RECEIPT_DDL],
+  [COMMAND_JOURNAL_TABLES.receipt, receiptDdl(5)],
   [COMPLETED_INDEX, COMPLETED_INDEX_DDL],
   [COMMAND_JOURNAL_TABLES.auditPart, AUDIT_PART_DDL],
   [COMMAND_JOURNAL_TABLES.link, linkDdl(4)],
   [LINK_INDEX, LINK_INDEX_DDL],
+  [COMMAND_JOURNAL_TABLES.proposal, PROPOSAL_DDL],
+  [PROPOSAL_INDEX, PROPOSAL_INDEX_DDL],
+  [COMMAND_JOURNAL_TABLES.provenance, PROVENANCE_DDL],
+  [PROVENANCE_INDEX, PROVENANCE_INDEX_DDL],
 ]);
 interface CatalogEntry {
   type: string;

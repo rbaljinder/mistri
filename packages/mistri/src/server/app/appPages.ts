@@ -832,3 +832,100 @@ export function pageLinks(parseAst: Parse, code: string, lang: 'ts' | 'tsx' | 'j
   });
   return found;
 }
+
+/** The props whose quoted text a person reads, for the word AI said bare (`aiWordIn`). */
+const TEXT_PROPS = new Set(['label', 'title', 'text', 'placeholder', 'aria-label', 'alt', 'description']);
+const AI_WORD = /\bAI\b/;
+
+/**
+ * The text in one source file's markup that says the word AI as a whole word, case-sensitive, outside `<AiMark>`: a
+ * JSX text, a string in braces, or a quoted `label`, `title`, `text`, `placeholder`, `aria-label`, `alt` or
+ * `description`. Text an expression builds, or a helper returns, is not seen.
+ */
+export function aiWordsIn(parseAst: Parse, code: string, lang: 'ts' | 'tsx' | 'js' | 'jsx'): Array<{ line: number; text: string }> {
+  let program: unknown;
+  try {
+    program = parseAst(code, { lang });
+  } catch {
+    return [];
+  }
+  const lineOf = (offset: number | undefined) => (offset === undefined ? 1 : code.slice(0, offset).split('\n').length);
+  const found: Array<{ line: number; text: string }> = [];
+  const said = (node: AstNode, text: string) => {
+    if (AI_WORD.test(text)) found.push({ line: lineOf(node.start), text: text.trim().replace(/\s+/g, ' ').slice(0, 60) });
+  };
+  const literal = (node: AstNode | undefined): AstNode | undefined =>
+    node?.type === 'Literal' && typeof node.value === 'string'
+      ? node
+      : node?.type === 'TemplateLiteral' && !(node.expressions as unknown[]).length
+        ? node
+        : undefined;
+  const textOf = (node: AstNode): string =>
+    node.type === 'Literal' ? (node.value as string) : (((node.quasis as AstNode[])[0]?.value as { cooked?: string })?.cooked ?? '');
+  const visit = (node: unknown, inMark: boolean): void => {
+    if (Array.isArray(node)) {
+      for (const each of node) visit(each, inMark);
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    const here = node as AstNode;
+    if (typeof here.type !== 'string') return;
+    let marked = inMark;
+    if (here.type === 'JSXElement') {
+      const tag = (here.openingElement as AstNode).name as AstNode;
+      if (tag.type === 'JSXIdentifier' && tag.name === 'AiMark') marked = true;
+    }
+    if (!marked) {
+      if (here.type === 'JSXText') said(here, String(here.value ?? ''));
+      else if (here.type === 'JSXExpressionContainer') {
+        const inside = literal(here.expression as AstNode);
+        if (inside) said(inside, textOf(inside));
+      } else if (here.type === 'JSXAttribute' && TEXT_PROPS.has(String((here.name as AstNode).name))) {
+        const value = here.value as AstNode | undefined;
+        const inside = literal(value?.type === 'JSXExpressionContainer' ? (value.expression as AstNode) : value);
+        if (inside) said(inside, textOf(inside));
+      }
+    }
+    for (const [key, value] of Object.entries(here)) if (key !== 'type' && value && typeof value === 'object') visit(value, marked);
+  };
+  visit(program, false);
+  return found;
+}
+
+/* The layout a form may sit in without being anything but the form: no text, no read, no other action. */
+const FORM_WRAPPERS = new Set(['Stack', 'Card', 'Panel', 'Grid', 'Columns', 'Page', 'Section']);
+
+/**
+ * Whether a page's markup is one command form and nothing else: a single `<CommandForm>` (or `page.CommandForm`), in
+ * at most layout wrappers and fragments, with no text of its own. Its command's id, where it is quoted. A page that
+ * holds a second block, a heading or a line of text, or builds its form elsewhere, is not this.
+ */
+export function onlyCommandForm(parseAst: Parse, code: string, lang: 'ts' | 'tsx' | 'js' | 'jsx'): { command?: string } | undefined {
+  let program: unknown;
+  try {
+    program = parseAst(code, { lang });
+  } catch {
+    return undefined;
+  }
+  let forms = 0,
+    others = 0,
+    text = false;
+  let command: string | undefined;
+  walk(program, (node) => {
+    if (node.type === 'JSXText' && String(node.value ?? '').trim()) text = true;
+    if (node.type !== 'JSXOpeningElement') return;
+    const tag = node.name as AstNode;
+    const name =
+      tag.type === 'JSXIdentifier'
+        ? (tag.name as string)
+        : tag.type === 'JSXMemberExpression'
+          ? ((tag.property as AstNode).name as string)
+          : undefined;
+    if (name === 'CommandForm') {
+      forms++;
+      const value = jsxAttribute(node, 'command');
+      if (value?.type === 'Literal' && typeof value.value === 'string') command = value.value;
+    } else if (!(tag.type === 'JSXIdentifier' && FORM_WRAPPERS.has(name!))) others++;
+  });
+  return forms === 1 && others === 0 && !text ? { ...(command ? { command } : {}) } : undefined;
+}

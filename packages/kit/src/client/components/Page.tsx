@@ -337,6 +337,9 @@ export function PageView(props: PageProps) {
             />
           </ErrorBoundary>
         )}
+        {/* The shell's line about the record as a whole (an AI proposal waiting on it), under the head and over the
+            fields; never in a preview or a bare page, which draw no head either. */}
+        {!props.preview && !props.bare && !gone && adornment?.notice ? <ErrorBoundary>{adornment.notice}</ErrorBoundary> : null}
         {gone && entry.key ? (
           <PageLayout>
             <RecordGone base={base} spoken={spoken(base.name)} className="page-gone" />

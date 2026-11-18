@@ -31,6 +31,7 @@ import {
   assertChangeRow,
   assertHistoryQuery,
   parseStoredChanges,
+  storedMaker,
   type RecordActivityQuery,
   type RecordChangeRow,
   type RecordHistoryQuery,
@@ -61,7 +62,9 @@ const definitions: readonly string[] = [
   actor text COLLATE "C" NOT NULL,
   actor_name text NOT NULL,
   via text NOT NULL CHECK (via IN ('app', 'workbench', 'agent', 'api', 'form', 'system')),
-  action text NOT NULL
+  action text NOT NULL,
+  actor_kind text COLLATE "C",
+  proposal_id text COLLATE "C"
 )`,
   `CREATE INDEX "${RECORD_HISTORY_INDEX}" ON ${q(change)} (resource, key_json, id)`,
   `CREATE INDEX "${RECORD_HISTORY_AT_INDEX}" ON ${q(change)} (at)`,
@@ -71,10 +74,15 @@ const definitions: readonly string[] = [
 const AT_ISO = `to_char(c.at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 
 const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
-const column = (name: string, type: string, collation: string | null = null): PostgresRelationDescription['columns'][number] => ({
+const column = (
+  name: string,
+  type: string,
+  collation: string | null = null,
+  notnull = true,
+): PostgresRelationDescription['columns'][number] => ({
   name,
   type,
-  notnull: true,
+  notnull,
   collation,
   default: null,
 });
@@ -113,6 +121,8 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       column('actor_name', 'text', 'default'),
       column('via', 'text', 'default'),
       column('action', 'text', 'default'),
+      column('actor_kind', 'text', 'C', false),
+      column('proposal_id', 'text', 'C', false),
     ],
     [
       `CHECK ((kind = ANY (ARRAY['insert'::text, 'update'::text, 'delete'::text])))`,
@@ -171,13 +181,36 @@ export async function provisionPostgresRecordHistory(
   });
 }
 
+/** Version 1 to 2: who made a command's write and the proposal it carried out. Added columns read as a fresh store's. */
+export function postgresRecordHistoryUpgradeFrom1(): readonly string[] {
+  return Object.freeze([
+    `ALTER TABLE ${q(change)} ADD COLUMN actor_kind text COLLATE "C", ADD COLUMN proposal_id text COLLATE "C"`,
+    `ALTER TABLE ${q(meta)} DROP CONSTRAINT ${meta}_version_check`,
+    `UPDATE ${q(meta)} SET version = ${RECORD_HISTORY_VERSION}`,
+    `ALTER TABLE ${q(meta)} ADD CONSTRAINT ${meta}_version_check CHECK (version = ${RECORD_HISTORY_VERSION})`,
+  ]);
+}
+
 /** One row, on the business write's leased client, inside its transaction. */
 export async function appendPostgresRecordChange(client: PgQuery, row: RecordChangeRow): Promise<void> {
   const changes = assertChangeRow(row);
   const append = {
-    text: `INSERT INTO ${q(change)} (write_id, at, resource, key_json, kind, changes_json, actor, actor_name, via, action)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-    values: [row.writeId, row.at, row.resource, row.key, row.kind, changes, row.actor, row.actorName, row.via, row.action],
+    text: `INSERT INTO ${q(change)} (write_id, at, resource, key_json, kind, changes_json, actor, actor_name, via, action, actor_kind, proposal_id)
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+    values: [
+      row.writeId,
+      row.at,
+      row.resource,
+      row.key,
+      row.kind,
+      changes,
+      row.actor,
+      row.actorName,
+      row.via,
+      row.action,
+      row.actorKind ?? null,
+      row.proposalId ?? null,
+    ],
   };
   /* Nothing in the transaction reads the row back: on a writer that pipelines it
      leaves with the COMMIT, in that flight, the way the receipt does. The before
@@ -199,7 +232,7 @@ export async function readPostgresRecordHistory(
   const params: unknown[] = [query.resource, query.key, query.limit];
   if (query.before !== undefined) params.push(query.before);
   const result = await client.query(
-    `SELECT c.id::text AS id, c.write_id, ${AT_ISO} AS at, c.resource, c.key_json, c.kind, c.changes_json, c.actor, c.actor_name, c.via, c.action
+    `SELECT c.id::text AS id, c.write_id, ${AT_ISO} AS at, c.resource, c.key_json, c.kind, c.changes_json, c.actor, c.actor_name, c.via, c.action, c.actor_kind, c.proposal_id
     FROM ${q(change)} c
     WHERE resource = $1 AND key_json = $2
       AND id > COALESCE((SELECT max(id) FROM ${q(change)} WHERE resource = $1 AND key_json = $2 AND kind = 'delete'), 0)
@@ -219,6 +252,7 @@ export async function readPostgresRecordHistory(
     actorName: String(row.actor_name),
     via: row.via as WriteVia,
     action: String(row.action),
+    ...storedMaker(row),
   }));
 }
 
@@ -238,7 +272,7 @@ export async function readPostgresRecordActivity(
   // One tenant's feed: each tenant-owned resource's rows by the owner its stored key names (historyKey).
   const owned = Object.entries(query.owners?.columns ?? {});
   const result = await client.query(
-    `SELECT c.id::text AS id, c.write_id, ${AT_ISO} AS at, c.resource, c.key_json, c.kind, c.changes_json, c.actor, c.actor_name, c.via, c.action
+    `SELECT c.id::text AS id, c.write_id, ${AT_ISO} AS at, c.resource, c.key_json, c.kind, c.changes_json, c.actor, c.actor_name, c.via, c.action, c.actor_kind, c.proposal_id
     FROM ${q(change)} c
     WHERE c.resource = ANY($1::text[]) AND c.kind <> 'delete'
       ${query.from === undefined ? '' : `AND c.at >= ${bound(query.from)}::timestamptz`} ${query.to === undefined ? '' : `AND c.at < ${bound(query.to)}::timestamptz`} ${query.after === undefined ? '' : `AND c.id > ${bound(query.after)}`}
@@ -268,5 +302,6 @@ export async function readPostgresRecordActivity(
     actorName: String(row.actor_name),
     via: row.via as WriteVia,
     action: String(row.action),
+    ...storedMaker(row),
   }));
 }

@@ -24,7 +24,7 @@ export const scheduleVisit = defineCommand({
 });
 ```
 
-See it in the sample (`examples/apps/lintel/commands/maintenance.ts:105`).
+See it in the sample (`examples/apps/lintel/commands/maintenance.ts:107`).
 The App names it as a machine verb (`scheduleVisit: 'scheduled'`) or in an action, `reply: action('Message the resident', { command: 'replyToResident' })`,
 and never imports the module. The module is `commands.ts` beside `app.ts` (or
 `--commands <file>`); its default export lists every command by id:
@@ -57,6 +57,7 @@ and never imports the module. The module is `commands.ts` beside `app.ts` (or
 | `track`                       | What it keeps for a retry: `'none'`, `'receipts'` or `'audit'` ([below](#what-a-command-keeps))                                                                                                                                                                                                                                                                                       | by caller | Stable |
 | `snapshot`                    | `true`: every read in the handler sees one moment, so a total and its rows agree while others write ([below](#sums-groups-and-pages))                                                                                                                                                                                                                                                 | off       | Stable |
 | `lookup`, `effects`, `events` | Read another source first, post a webhook after commit, record [events](/docs/events-and-jobs/)                                                                                                                                                                                                                                                                                       | none      | Stable |
+| `approval`                    | `'ai'`: a call no person made (a job, a decision, a workflow) waits as a [proposal](#when-an-ai-calls-it) a person approves                                                                                                                                                                                                                                                           | none      | Stable |
 
 Commands run only on the server. `mistri check` writes
 `mistri-commands.d.ts`, so a command name that does not exist, or one placed
@@ -488,6 +489,67 @@ role that cannot read it may still run the command, which may only add rows
 there (a log line, a hand-off for another team). A handler that reads, counts,
 changes or removes those rows for that role is refused, naming them, and
 nothing it wrote lands.
+
+## When an AI calls it
+
+`approval: 'ai'` makes a call no person made wait for one: a job's command, a
+decision's answer and a workflow's step become a **proposal**, with its maker,
+reason and evidence, instead of a write.
+
+```ts
+export const sendAppeal = defineCommand({
+  // …
+  approval: 'ai',
+  input: { letter: field.textarea() },
+  // …
+});
+```
+
+Anyone granted the command may approve it, which runs it as them, under their
+own grant, or dismiss it; a proposal is decided once and expires after 14 days.
+An approver who corrects the input first approves with theirs, and the fields
+they changed are theirs, not the maker's. A job's proposal carries the record
+it ran on (its `on` event's row, when it has one) as evidence and the job's name
+as its reason. A workflow's step waits until it is
+decided. A person who runs the command
+runs it as always. A value a job or a decision writes without a proposal is
+marked on its field until a person confirms it or edits the field, and a
+confirmation is written to the record's history.
+
+A person sees what waits for them at **For review** (`/<app>/review`, or
+`/review` for a single App): its key sits beside the bell with a count, only
+while something waits. Proposals are grouped by command, each with the AI mark,
+its record, the reason and its age, and Approve or Dismiss; a command that
+declares `bulk` also gets Approve all and Dismiss all. Change… opens the
+command's form filled with the proposal, the evidence beside it, and its
+Approve runs what the person corrected. Under them, Unconfirmed lists the
+fields a job, a decision or an approved proposal wrote, each with Confirm. A
+record with a proposal says so under its title, and an unconfirmed field
+carries the mark and Confirm in place. Each reader sees only the commands they
+are granted. The receipt names the approver and the proposal the AI made.
+
+The mark's word is the App's: `ai: { label: 'Assist' }` (24 characters at
+most) renames it on every surface. A component or page that shows what a model
+made draws the same mark, so the word stays in one place:
+
+```tsx
+import { AiMark } from '@mistriwork/mistri/ui';
+
+<p><AiMark /> Suggested reply</p>
+```
+
+A record's history says who made a change as well as who did it: "Proposed by
+AI · approved by" the approver for an approved proposal, and "Made by AI" or
+"Made by job" with its name for a maker's own run, each with the mark.
+
+`mistri check` advises three things here, none of which fails it: the word AI
+spelled in a label, a title or a page's text rather than drawn as `<AiMark />`
+([`ai-text-bare`](/docs/check-codes/#ai-text-bare)); a command the assistant may
+run, or that a suggest-only decision answers through, without `approval: 'ai'`
+([`ai-command-unreviewed`](/docs/check-codes/#ai-command-unreviewed)); and a
+free-form page that is only one `<CommandForm>`, which is better a command
+started from the record or list, opening as the drawer
+([`page-single-form`](/docs/check-codes/#page-single-form)).
 
 ## A link to one record
 

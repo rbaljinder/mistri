@@ -1,3 +1,4 @@
+import type { MakerKind, ProposalState, ReceiptActorKind } from './commandJournalSchema.js';
 import type { CommandEventBatch, CommandEventManifest } from '../events/commandEventTypes.js';
 import type { PublicPlacementAdmission, PublicPlacementOwner, PublicPlacementRun } from './publicPlacementTypes.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -62,6 +63,10 @@ export interface StoredCommandReceipt extends CommandReceiptScope {
   resultJson: string;
   requestId: string;
   completedAt: string;
+  /** Who the command ran for, by kind: a person when absent. Written, never read back into the receipt. */
+  actorKind?: ReceiptActorKind;
+  /** The proposal an approval ran this command from (commandProposals.ts). */
+  proposalId?: string;
 }
 
 /** One target's row. A receipt has one per target, in request order: a
@@ -102,6 +107,58 @@ export interface CommandLinkRow {
   /** What the record was when the link was minted, where the App says (layout 4): a link whose record no longer
    * carries it names a different record that took the same key. Null, or absent on a mint, where none is kept. */
   rowStamp?: string | null;
+}
+
+/** One source a proposal or a provenance mark was made from: a record it read, a passage, a file, or a page. */
+export interface ProposalEvidence {
+  kind: 'record' | 'text' | 'file' | 'url';
+  ref: string;
+  label: string;
+  quote?: string;
+}
+
+/** A command invocation a non-person maker prepared and a person decides (commandProposals.ts). Times are epoch
+ * milliseconds; `tenant` is '' outside a tenant. */
+export interface CommandProposalRow {
+  id: string;
+  app: string;
+  tenant: string;
+  command: string;
+  /** The record key as canonical JSON, or null for a command that names none (a create). */
+  target: string | null;
+  input: Record<string, unknown>;
+  actorKind: MakerKind;
+  actor: string;
+  model: string | null;
+  modelVersion: string | null;
+  costMicros: number | null;
+  evidence: readonly ProposalEvidence[];
+  reason: string;
+  state: ProposalState;
+  decidedBy: string | null;
+  decidedAt: number | null;
+  receiptId: string | null;
+  createdAt: number;
+  expiresAt: number;
+}
+
+/** What a conditional decision answered: decided now, unknown (or another command's), past its time, or decided before. */
+export type ProposalDecision = 'decided' | 'missing' | 'expired' | 'taken';
+
+/** A mark on a row (`field` null) or one of its fields that a non-person write made; unconfirmed until a person confirms. */
+export interface ProvenanceRow {
+  id: string;
+  app: string;
+  tenant: string;
+  resource: string;
+  rowKey: string;
+  field: string | null;
+  actorKind: MakerKind;
+  actor: string;
+  evidence: readonly ProposalEvidence[];
+  createdAt: number;
+  confirmedBy: string | null;
+  confirmedAt: number | null;
 }
 
 export interface CommandJournal {
@@ -161,6 +218,47 @@ export interface CommandJournal {
   openLink?(appId: string, id: string, now: number): Promise<CommandLinkRow | undefined>;
   /** A live link, read without taking a use: what a run under an opened link checks. */
   readLink?(appId: string, id: string, now: number): Promise<CommandLinkRow | undefined>;
+  /** Writes a proposal, in the owner's transaction. Absent where the store keeps none; proposing then refuses. */
+  createProposal?(row: CommandProposalRow): Promise<void>;
+  /** One proposal of this App, whatever its state. */
+  readProposal?(appId: string, id: string): Promise<CommandProposalRow | undefined>;
+  /** Proposals of the named commands (none named, none listed), newest first. */
+  listProposals?(
+    appId: string,
+    query: { commands: readonly string[]; states?: readonly ProposalState[]; limit: number },
+  ): Promise<CommandProposalRow[]>;
+  /** Takes a proposal out of 'proposed' in one conditional statement, so of two decisions at once one decides. A
+   * proposal found past its time is marked expired and answered so. */
+  decideProposal?(
+    appId: string,
+    id: string,
+    command: string,
+    state: 'approved' | 'dismissed' | 'failed',
+    by: string,
+    now: number,
+  ): Promise<ProposalDecision>;
+  /** Names the receipt an approved proposal's run wrote, in that run's transaction. */
+  settleProposal?(appId: string, id: string, receiptId: string): Promise<boolean>;
+  /** Marks every proposal of this App past its time expired. The count marked. */
+  expireProposals?(appId: string, now: number): Promise<number>;
+  /** Writes a provenance mark, in the owner's transaction. */
+  markProvenance?(row: ProvenanceRow): Promise<void>;
+  /**
+   * Confirms the unconfirmed marks of one row (one field and the row's own, or every mark where no field is named). The
+   * count confirmed. `atCommit` is a caller that reads no count (a run settling what it wrote): a writer that pipelines
+   * sends the statement with the transaction's COMMIT, in its round trip, and answers 0.
+   */
+  confirmProvenance?(
+    appId: string,
+    resource: string,
+    rowKey: string,
+    field: string | readonly string[] | undefined,
+    by: string,
+    now: number,
+    atCommit?: boolean,
+  ): Promise<number>;
+  /** The unconfirmed marks of one row, oldest first; with no row, the resource's newest (For review lists them). */
+  unconfirmedProvenance?(appId: string, resource: string, rowKey: string | null): Promise<ProvenanceRow[]>;
 }
 
 /*

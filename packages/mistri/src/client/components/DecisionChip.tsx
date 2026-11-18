@@ -12,12 +12,17 @@ import { useQuery } from '@tanstack/react-query';
 import { Button } from '@mistriwork/ui/Button.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { Modal } from '@mistriwork/ui/Modal.js';
-import { api, findTable, toast } from '@mistriwork/kit/client/core.js';
+import { api, findTable, state, toast } from '@mistriwork/kit/client/core.js';
 import { formatDateTime } from '@mistriwork/kit/client/locale.js';
 import { Value } from '@mistriwork/kit/client/components/Value.js';
 import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { confidenceOf, type DecisionWhy, type FieldSuggestion } from '../../shared/decisionSuggestions.js';
 import { commandHandle } from './sdk/commands.js';
+import { commandRevision } from './sdk/proposalCommands.js';
+import { reviewQuery } from '../commandProposals.js';
+import { approveProposal } from '../proposalDecisions.js';
+import { openProposal } from './ProposalPanel.js';
+import { queryClient } from '@mistriwork/kit/client/components/mount.js';
 import { say } from '../copy/record/components/DecisionChip.js';
 import './DecisionChip.css';
 
@@ -61,6 +66,49 @@ export default function DecisionChip({
       setBusy(false);
     }
   };
+  /* Accept approves the decision's stored proposal as it stands, so the receipt names it and the field stays marked
+     as the decision's, confirmed by the person (proposals.ts). A decision written before proposals were (none stored,
+     404), or a command with no record action here, runs as the person's own, as it always did. Change... is the
+     person's own answer and runs as theirs; the settle then records it corrected. */
+  const accept = async () => {
+    if (!suggestion.proposal) return run('run');
+    setBusy(true);
+    try {
+      const expectedVersion = await commandRevision(suggestion.command, recordKey);
+      if (expectedVersion === undefined) return await run('run');
+      try {
+        await approveProposal(state.activeConnection ?? null, { id: suggestion.proposal, command: suggestion.command, expectedVersion });
+      } catch (error) {
+        if ((error as { status?: number }).status === 404) return await run('run');
+        toast((error as Error).message, 'error');
+        return;
+      }
+      void queryClient.invalidateQueries();
+      await settle('done');
+    } finally {
+      setBusy(false);
+    }
+  };
+  /* Change... opens the decision's stored proposal in the proposal panel, prefilled and editable beside its evidence;
+     Approve there sends the corrected input, so the receipt still names the proposal. With none stored (or not in the
+     reader's review list), the person's own form opens as it always did. */
+  const change = async () => {
+    if (!suggestion.proposal) return run('open');
+    setBusy(true);
+    try {
+      const connection = state.activeConnection ?? null;
+      const review = await queryClient.fetchQuery(reviewQuery(connection)).catch(() => undefined);
+      const proposal = review?.proposals.find((each) => each.id === suggestion.proposal && each.state === 'proposed');
+      if (!proposal) return await run('open');
+      const outcome = await openProposal(proposal, connection);
+      if (outcome?.status === 'applied') {
+        void queryClient.invalidateQueries();
+        await settle('done');
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <span className={`decision-chip${suggestion.filled ? ' decision-chip-trailing' : ''}`}>
       <span className="decision-chip-value" aria-label={say('suggestion', { value: suggestion.label, confidence })}>
@@ -70,7 +118,7 @@ export default function DecisionChip({
         </span>
       </span>
       {handle.granted && (
-        <Button intent="quiet" size="compact" className="decision-chip-accept" busy={busy} onClick={() => void run('run')}>
+        <Button intent="quiet" size="compact" className="decision-chip-accept" busy={busy} onClick={() => void accept()}>
           {say('accept')}
         </Button>
       )}
@@ -85,7 +133,7 @@ export default function DecisionChip({
         finalFocus={more}
       >
         {handle.granted && (
-          <DropItem className="page-actions-item" disabled={busy} onClick={() => void run('open')}>
+          <DropItem className="page-actions-item" disabled={busy} onClick={() => void change()}>
             {say('change')}
           </DropItem>
         )}

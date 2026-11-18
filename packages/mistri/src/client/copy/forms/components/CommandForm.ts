@@ -7,6 +7,7 @@ export const say = defineMessages({
   readyToSubmit: 'Ready to submit {count}.',
   readyToSubmitOne: 'Ready to submit.',
   deselectIneligible: 'Deselect ineligible',
+  dismiss: 'Dismiss',
   checkResult: 'Check result',
   retrySameSubmission: 'Retry same submission',
   refreshAndReview: 'Refresh and review',

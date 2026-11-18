@@ -129,18 +129,27 @@ for (const mode of modes) {
       assert.deepEqual(Reflect.ownKeys(journal).sort(), [
         'appendReadAudit',
         'commit',
+        'confirmProvenance',
         'countLinks',
+        'createProposal',
+        'decideProposal',
+        'expireProposals',
         'find',
         'insert',
         'kept',
+        'listProposals',
+        'markProvenance',
         'mintLink',
         'nextNumber',
         'openLink',
         'readLink',
+        'readProposal',
         'revokeLinks',
+        'settleProposal',
         'stage',
         'takeStaged',
         'taken',
+        'unconfirmedProvenance',
       ]);
       assert.notEqual(evidence, catalog);
       frozen(evidence);

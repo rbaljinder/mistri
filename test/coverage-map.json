@@ -703,6 +703,12 @@
       ]
     },
     {
+      "id": "ai-label",
+      "surface": ["dsl: app: ai", "dsl: app: ai.label"],
+      "tests": [{ "file": "test/app-ai-label.test.ts" }, { "file": "e2e/ai-proposals.spec.ts" }],
+      "browser": true
+    },
+    {
       "id": "assistant",
       "surface": ["dsl: app: assistant"],
       "tests": [

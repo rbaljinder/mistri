@@ -535,6 +535,9 @@ export interface CommandDefinition<
   /** What the command keeps: `none`, `receipts` or `audit`; overrides the App's `track`. See BusinessCommand. */
   readonly track?: 'none' | 'receipts' | 'audit';
   readonly support?: 'refuse';
+  /** `'ai'`: a call made by no person (the assistant, a job, a decision, a flow) becomes a proposal a person approves
+      before it runs (proposals.ts); a person running the command runs it at once. */
+  readonly approval?: 'ai';
   handle(
     context: CommandHandlerContext<Src, Target, Read, Write, Many, Lookup, Pub>,
     input: Input,
@@ -665,6 +668,8 @@ export interface BusinessCommand<Input, Output, I extends CommandInput = Command
    * dealer's own members.
    */
   readonly support?: 'refuse';
+  /** See CommandDefinition.approval: what no person calls is proposed, not run. */
+  readonly approval?: 'ai';
   /** See CommandDefinition.appendOnly: the stale check waits for a write to the target, if the command makes one. */
   readonly appendOnly?: true;
   /** See CommandDefinition.refused: the tables a refusal's `keep` writes, each in the write footprint. */
@@ -782,6 +787,7 @@ const definitionKeys = new Set([
   'realm',
   'tenant',
   'support',
+  'approval',
   'handle',
   'availability',
   'enabledBy',
@@ -1171,6 +1177,7 @@ export function defineCommand<
   // One word, and only the withholding one: there is no "allow" to write,
   // because allowed is what a command already is under support.
   if (Object.hasOwn(value, 'support') && value.support !== 'refuse') fail('Command support must be "refuse" when present.');
+  if (Object.hasOwn(value, 'approval') && value.approval !== 'ai') fail('Command approval must be "ai" when present.');
   // The platform realm's commands are refused under support for the whole
   // account already (tenantContexts.ts), so saying it again per command would
   // read as if the rule were this option's to grant.
@@ -1392,6 +1399,7 @@ export function defineCommand<
     ...(value.track === undefined ? {} : { track: value.track as 'none' | 'receipts' | 'audit' }),
     ...(value.snapshot === true ? { snapshot: true as const } : {}),
     ...(value.support === undefined ? {} : { support: value.support as 'refuse' }),
+    ...(value.approval === 'ai' ? { approval: 'ai' as const } : {}),
     ...(value.appendOnly === true ? { appendOnly: true as const } : {}),
     ...(refused === undefined ? {} : { refused }),
     handle: value.handle as BusinessCommand<Input, Output, I>['handle'],

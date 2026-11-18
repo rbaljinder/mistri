@@ -35,6 +35,21 @@ draws. Concretely:
   outcome is reported back to the conversation afterwards. A model that is
   talked into "running" something by text in a record can only ever produce a
   card nobody has to press.
+- **A command verb is kept for review, not waited on.** On a command (not a
+  New form or a fixed action), `run` stores the proposal in the command
+  journal's review queue (`actor_kind` `assistant`, the records the turn read
+  as its evidence, the model named, the model's `why` as its reason) and the
+  turn goes on. It is made only if the person is granted the command and the
+  target is in their rows: the grant and row-policy check their own run would
+  make, so the assistant cannot propose what its person could not run. In a
+  tenant App it is kept in the person's own tenant, through the tenant door's
+  host-only `propose` step, which no client body can name. The card's Review
+  approves it (`/api/commands/proposals/approve`, the run the person's own)
+  and Decline dismisses it; anyone granted the command may also decide it from
+  the queue (For review, `/<app>/review`). A reloaded conversation reads each
+  card's outcome from the stored proposal (`assistantTurn.ts` `itemsOf`), so a
+  card decided elsewhere says the same state word as the queue and offers no
+  buttons. New forms and fixed actions keep the in-chat confirm below.
 - **Record text is data.** Tool results are JSON the model is told is data
   from the App's records, never instructions; the system prompt says so, and
   the structure above means it does not have to be believed. A result is
@@ -193,7 +208,7 @@ per App per day (`limits`; a person's day is 200,000 tokens unless the App names
 another figure, so an App that forgets a cap still has one), and in a tenant App per tenant per day (the tenant policy's
 `assistant.tokensPerTenantPerDay`). A turn past a cap is refused before the model is asked.
 
-A proposal waiting for the person is a durable pause: the conversation's
+A New form or fixed action waiting for the person is a durable pause: the conversation's
 state is `awaiting`, and the panel, opened on any device or after a restart,
 draws the card again; its outcome continues the turn. Stop aborts the stream
 (the server sees the request close and aborts the model call; what was said

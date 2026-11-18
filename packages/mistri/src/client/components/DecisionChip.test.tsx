@@ -30,8 +30,17 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
 vi.mock('../../../../kit/src/client/components/Value.js', () => ({
   Value: ({ value }: { value: unknown }) => <span data-testid="input-value">{String(value)}</span>,
 }));
+const { revision, approve } = vi.hoisted(() => ({ revision: vi.fn(), approve: vi.fn() }));
 vi.mock('./sdk/commands.js', () => ({
   commandHandle: () => ({ label: 'Assign', available: async () => handle.granted, ...handle }),
+}));
+vi.mock('./sdk/proposalCommands.js', () => ({ commandRevision: revision }));
+const { review, openProposal } = vi.hoisted(() => ({ review: vi.fn(), openProposal: vi.fn() }));
+vi.mock('../commandProposals.js', () => ({ reviewQuery: (connection: string | null) => ({ connection }) }));
+vi.mock('../proposalDecisions.js', () => ({ approveProposal: approve }));
+vi.mock('./ProposalPanel.js', () => ({ openProposal }));
+vi.mock('../../../../kit/src/client/components/mount.js', () => ({
+  queryClient: { invalidateQueries: vi.fn(), fetchQuery: review },
 }));
 
 const { default: DecisionChip } = await import('./DecisionChip.js');
@@ -41,6 +50,7 @@ const suggestion: FieldSuggestion = {
   decision: 'route',
   field: 'assignee_id',
   command: 'assign',
+  proposal: 'prop-1',
   answer: 7,
   label: 'Ada Nguyen',
   probability: 0.9,
@@ -81,6 +91,11 @@ beforeEach(() => {
   api.mockReset().mockImplementation(async (path: string) => (path === '/api/record-decisions/why' ? why : {}));
   toast.mockReset();
   settled.mockReset();
+  // No record action to read a revision for: Accept runs as the person's own, as before proposals were stored.
+  revision.mockReset().mockResolvedValue(undefined);
+  approve.mockReset().mockResolvedValue({});
+  review.mockReset().mockResolvedValue({ proposals: [], unconfirmed: [] });
+  openProposal.mockReset();
 });
 afterEach(cleanup);
 
@@ -119,6 +134,36 @@ describe('granted', () => {
     expect(settled).toHaveBeenCalledTimes(1);
   });
 
+  test("Accept approves the decision's stored proposal at the record's revision, and nothing else runs", async () => {
+    revision.mockResolvedValue(4);
+    draw();
+    await userEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    expect(revision).toHaveBeenCalledWith('assign', { id: 3 });
+    expect(approve).toHaveBeenCalledWith(null, { id: 'prop-1', command: 'assign', expectedVersion: 4 });
+    expect(handle.run).not.toHaveBeenCalled();
+    expect(settleCalls()).toEqual([['/api/record-decisions/settle', { id: 'dec-1', action: 'done' }]]);
+    expect(settled).toHaveBeenCalledTimes(1);
+  });
+
+  test('a decision with no stored proposal (404) runs the command as the person, as before', async () => {
+    revision.mockResolvedValue(4);
+    approve.mockRejectedValue(Object.assign(new Error('gone'), { status: 404 }));
+    draw();
+    await userEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    expect(handle.run).toHaveBeenCalledWith({ id: 3 }, { assignee_id: 7 });
+    expect(settleCalls()).toHaveLength(1);
+  });
+
+  test('an approval refused for another reason says so and settles nothing', async () => {
+    revision.mockResolvedValue(4);
+    approve.mockRejectedValue(Object.assign(new Error('The record changed.'), { status: 409 }));
+    draw();
+    await userEvent.click(screen.getByRole('button', { name: 'Accept' }));
+    expect(toast).toHaveBeenCalledWith('The record changed.', 'error');
+    expect(handle.run).not.toHaveBeenCalled();
+    expect(settleCalls()).toEqual([]);
+  });
+
   test('a command that closed without applying tells the server nothing', async () => {
     handle.run.mockResolvedValue({ status: 'closed' });
     draw();
@@ -128,7 +173,7 @@ describe('granted', () => {
     expect(settled).not.toHaveBeenCalled();
   });
 
-  test('Change… opens the command with the answer filled, and settles when it applied', async () => {
+  test('Change… with no stored proposal in the review list opens the command with the answer filled, and settles when it applied', async () => {
     draw();
     await menu();
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Change…' }));
@@ -136,6 +181,32 @@ describe('granted', () => {
     expect(handle.run).not.toHaveBeenCalled();
     expect(settleCalls()).toEqual([['/api/record-decisions/settle', { id: 'dec-1', action: 'done' }]]);
     expect(settled).toHaveBeenCalledTimes(1);
+  });
+
+  test('Change… on a stored proposal opens the proposal panel, and settles when the corrected input was approved', async () => {
+    const proposal = { id: 'prop-1', command: 'assign', state: 'proposed', input: { assignee_id: 7 }, evidence: [] };
+    review.mockResolvedValue({ proposals: [proposal], unconfirmed: [] });
+    openProposal.mockResolvedValue({ status: 'applied' });
+    draw();
+    await menu();
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Change…' }));
+    await vi.waitFor(() => expect(settleCalls()).toEqual([['/api/record-decisions/settle', { id: 'dec-1', action: 'done' }]]));
+    expect(openProposal).toHaveBeenCalledWith(proposal, null);
+    expect(handle.open).not.toHaveBeenCalled();
+  });
+
+  test('a proposal panel closed without a decision settles nothing', async () => {
+    review.mockResolvedValue({
+      proposals: [{ id: 'prop-1', command: 'assign', state: 'proposed', input: {}, evidence: [] }],
+      unconfirmed: [],
+    });
+    openProposal.mockResolvedValue({ status: 'closed' });
+    draw();
+    await menu();
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Change…' }));
+    await vi.waitFor(() => expect(openProposal).toHaveBeenCalled());
+    expect(settleCalls()).toEqual([]);
+    expect(settled).not.toHaveBeenCalled();
   });
 
   test('Dismiss tells the server so and the record is asked again', async () => {

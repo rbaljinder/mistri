@@ -44,7 +44,7 @@ import {
   withPostgresMaintenanceTransaction,
   type PostgresRelationDescription,
 } from './postgresCommandJournalSchema.js';
-import { CommandJournalUnavailable } from './commandJournalSchema.js';
+import { CommandJournalUnavailable, type ProposalState } from './commandJournalSchema.js';
 export {
   assertPostgresCommandJournal,
   describePostgresRelations,
@@ -55,6 +55,8 @@ export {
 import type {
   CommandAudit,
   CommandLinkRow,
+  CommandProposalRow,
+  ProvenanceRow,
   CommandJournal,
   CommandJournalAppScope,
   CommandJournalPlatform,
@@ -75,6 +77,7 @@ import { nextPostgresCommandNumber, provisionPostgresCommandSequences } from './
 import { provisionPostgresCommandStaging, stagePostgresFile, takePostgresStaged } from './postgresCommandStaging.js';
 import type { StagedFileRow, StagedLimits, StagedTake } from './commandStaging.js';
 import { countPostgresLinks, mintPostgresLink, openPostgresLink, readPostgresLink, revokePostgresLinks } from './commandLinks.js';
+import { postgresProposals, postgresProposalsAtCommit } from './commandProposals.js';
 import { appendPostgresReadAudits } from '../readAudit/postgresReadAudit.js';
 import type { ReadAuditRow } from '../readAudit/readAudit.js';
 
@@ -138,7 +141,7 @@ function receiptValues(owner: JournalOwner | undefined) {
   const member = bound ?? platform;
   const namespace = rules.namespaceOf(bound, platform);
   return (scope: CommandReceiptScope) => {
-    rules.record(scope, rules.receiptFields); // StoredCommandReceipt is a supported structural subtype.
+    rules.record(scope, rules.receiptWriteFields); // A receipt being written is a supported structural subtype of its scope.
     const [app, actor, command, version, key] = rules.scopeValues(scope);
     if ((member && (app !== member.appId || actor !== member.actorId)) || (appScope && app !== appScope.appId)) return invalid();
     return [app, ...namespace, actor, command, version, key] as const;
@@ -379,6 +382,82 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
       invoke({ appId, id, now }, async (input) => {
         if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
         return readPostgresLink(client, input.appId, namespace[3], input.id, input.now);
+      }),
+    // Proposals and provenance marks in the journal's namespace too: a tenant's are its own (commandProposals.ts).
+    createProposal: (row: CommandProposalRow) =>
+      invoke({ row }, async ({ row }) => {
+        if ((member && row?.app !== member.appId) || (appScope && row?.app !== appScope.appId) || row?.tenant !== namespace[3])
+          return invalid();
+        await postgresProposals(client, namespace[3]).create(row);
+      }),
+    readProposal: (appId: string, id: string) =>
+      invoke({ appId, id }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return postgresProposals(client, namespace[3]).read(input.appId, input.id);
+      }),
+    listProposals: (appId: string, query: { commands: readonly string[]; states?: readonly ProposalState[]; limit: number }) =>
+      invoke({ appId, query }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return postgresProposals(client, namespace[3]).list(input.appId, input.query);
+      }),
+    decideProposal: (appId: string, id: string, command: string, state: 'approved' | 'dismissed' | 'failed', by: string, now: number) =>
+      invoke({ appId, id, command, state, by, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return postgresProposals(client, namespace[3]).decide(input.appId, input.id, input.command, input.state, input.by, input.now);
+      }),
+    settleProposal: (appId: string, id: string, receiptId: string) =>
+      invoke({ appId, id, receiptId }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return postgresProposals(client, namespace[3]).settle(input.appId, input.id, input.receiptId);
+      }),
+    expireProposals: (appId: string, now: number) =>
+      invoke({ appId, now }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return postgresProposals(client, namespace[3]).expire(input.appId, input.now);
+      }),
+    markProvenance: (row: ProvenanceRow) =>
+      invoke({ row }, async ({ row }) => {
+        if ((member && row?.app !== member.appId) || (appScope && row?.app !== appScope.appId) || row?.tenant !== namespace[3])
+          return invalid();
+        await postgresProposals(client, namespace[3]).mark(row);
+      }),
+    confirmProvenance: (
+      appId: string,
+      resource: string,
+      rowKey: string,
+      field: string | readonly string[] | undefined,
+      by: string,
+      now: number,
+      atCommit?: boolean,
+    ) => {
+      const confirm = async (input: { appId: string; resource: string; rowKey: string; field: typeof field; by: string; now: number }) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return (atCommit === true ? postgresProposalsAtCommit : postgresProposals)(client, namespace[3]).confirm(
+          input.appId,
+          input.resource,
+          input.rowKey,
+          input.field,
+          input.by,
+          input.now,
+        );
+      };
+      /* A run settling what it wrote reads no count: on a writer that pipelines its statement leaves with the COMMIT,
+         and like the receipt's (commit, above) proves no block of its own; a statement outside one fails the COMMIT. */
+      if (atCommit !== true || !beforeCommit(client, [])) return invoke({ appId, resource, rowKey, field, by, now }, confirm);
+      let captured: Parameters<typeof confirm>[0];
+      try {
+        captured = rules.capture({ appId, resource, rowKey, field, by, now });
+      } catch (error) {
+        return operations.run(async () => {
+          throw error;
+        });
+      }
+      return operations.run(() => confirm(captured));
+    },
+    unconfirmedProvenance: (appId: string, resource: string, rowKey: string | null) =>
+      invoke({ appId, resource, rowKey }, async (input) => {
+        if ((member && input.appId !== member.appId) || (appScope && input.appId !== appScope.appId)) return invalid();
+        return postgresProposals(client, namespace[3]).unconfirmed(input.appId, input.resource, input.rowKey);
       }),
     /* No advisory lock and no savepoint probe (which proves a transaction
        block for the lock's sake): a new key is the common case, and a

@@ -56,6 +56,7 @@ import { authorizedCommandFlags, commandFlagsOnce } from '../commands/commandFla
 import type { TenantMembershipEvidence } from './tenantMembership.js';
 import { actingPrincipal, requestScope } from './tenantApiRequest.js';
 import { runDraftRoute } from '../forms/draftHttp.js';
+import { ProposalRefusal, runProposalStep } from '../commands/proposals.js';
 import { tenantCommandReadAudit } from './tenantReadAudit.js';
 import { PLATFORM_TENANT_ID } from './tenantPlatform.js';
 
@@ -81,7 +82,7 @@ export interface TenantCommandExecutionOptions {
 type StagedFileAnswer =
   | { id: string; name: string; type: string; size: number }
   | { refused: { status: number; code: string; message: string } };
-type Mode = 'availability' | 'prepare' | 'execute' | 'status' | 'draft' | 'stage';
+type Mode = 'availability' | 'prepare' | 'execute' | 'status' | 'draft' | 'stage' | 'proposals';
 const deny = (): never => {
   throw new AppAccessDenied();
 };
@@ -89,6 +90,8 @@ function domain(error: unknown): BusinessCommandExecutionError | undefined {
   if (error instanceof BusinessCommandExecutionError) return error;
   if (error instanceof CommandTransactionFailure) {
     const cause = domain(error.cause);
+    // A proposal's refusal is its own status (410 for one past its time): rebuilt, it would be a plain 409.
+    if (cause instanceof ProposalRefusal) return cause;
     // What the refusal objected to travels with it: a field named here is the
     // only way an App author or an agent learns which part was rejected.
     return cause
@@ -271,6 +274,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
     guard?: TenantInvocationGuard,
   ): Promise<BusinessCommandStatus | PreparedCommand | CommandAvailabilityResult | StagedFileAnswer> => {
     let commandError: BusinessCommandExecutionError | undefined, context: ReturnType<typeof captureTenantCommandExecution> | undefined;
+    let running = mode === 'execute' || mode === 'draft';
     try {
       let captured: unknown;
       try {
@@ -281,6 +285,8 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
       }
       if (context.options.signal.aborted)
         throw new BusinessCommandExecutionError('cancelled', mode === 'prepare' ? 'not_applied' : 'unknown');
+      /* An approval's run is the one proposal step that runs a command, and is told what an execute is told. */
+      running = mode === 'execute' || mode === 'draft' || (mode === 'proposals' && (captured as { step?: unknown } | null)?.step === 'run');
       return await runtime.run(
         request,
         selectors,
@@ -298,7 +304,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
             ...(rowScope ? { scope: { name: rowScope.name, key: rowScope.key } } : {}),
           });
           /* This tenant's zone for `today()` and `now()` (readerZone.ts), where `ui.timezone` names a column. */
-          const acting = mode === 'execute' || mode === 'draft';
+          const acting = running;
           /* And this member's own locale (`ctx.locale`): their row first, then what their door picked (the cookie). */
           const [zone, person] = acting
             ? await Promise.all([
@@ -451,6 +457,22 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                 // One transaction per tenant request: the host reads the step's draft back with a resume (tenantHttp.ts).
                 stepSummary: false,
               })) as BusinessCommandStatus;
+            /* A proposal, decided or listed under this member's grant in the tenant's own journal rows (proposals.ts):
+               one step per request, since this request opens one transaction; the host composes an approval. */
+            if (mode === 'proposals')
+              return (await runProposalStep({
+                step: captured,
+                binding,
+                actor,
+                offered: references,
+                unoffered: (command) => unofferedRefusal(new AppAccessDenied(), command),
+                execute: async (envelope, proposalId) =>
+                  executeBusinessCommand(binding, actor, envelope, {
+                    ...said,
+                    flags: await authorizedCommandFlags(binding, actor, envelope, flags),
+                    proposalId,
+                  }),
+              })) as BusinessCommandStatus;
             /* A file held for this member's own command (stagedFiles.ts): in the tenant's journal store, under the
                member's grant, for `actor:<account>`. A refusal is the answer, never a thrown denial. */
             if (mode === 'stage') {
@@ -501,7 +523,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
         mode === 'status' ||
         known?.outcome === 'unknown' ||
         (error instanceof TenantWriteFailure && error.outcome === 'unknown') ||
-        ((mode === 'execute' || mode === 'draft') && !known);
+        (running && !known);
       /* The refusal a caller hears is unchanged, and so is what travels with
          it. What the realm boundary must stop discarding is the reason: a
          replacement error with the original dropped is why an unexplained
@@ -511,6 +533,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
       // A cancellation replaces the refusal, so it carries neither field nor
       // key: they would describe something this answer is no longer about.
       const cancelled = !!context?.options.signal.aborted;
+      if (!cancelled && known instanceof ProposalRefusal) throw known;
       throw recordRefusalCause(
         new BusinessCommandExecutionError(
           cancelled ? 'cancelled' : (known?.code ?? 'temporarily_unavailable'),
@@ -570,5 +593,13 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
       options?: TenantCommandExecutionOptions,
       guard?: TenantInvocationGuard,
     ) => operation('stage', request, selectors, body, options, guard) as Promise<StagedFileAnswer>,
+    /** One step of a proposal route (proposals.ts `runProposalStep`): the body is the host's step, never the client's. */
+    proposals: (
+      request: Request,
+      selectors: readonly string[],
+      body: unknown,
+      options?: TenantCommandExecutionOptions,
+      guard?: TenantInvocationGuard,
+    ) => operation('proposals', request, selectors, body, options, guard) as Promise<unknown>,
   });
 }

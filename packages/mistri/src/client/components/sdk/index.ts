@@ -60,6 +60,9 @@ export const Switch = onDemand(controls, 'Switch', { quiet: true });
 export const TextArea = onDemand(controls, 'TextArea', { quiet: true });
 export const TextField = onDemand(controls, 'TextField', { quiet: true });
 export const YesNo = onDemand(controls, 'YesNo', { quiet: true });
+/* The one AI mark the shell draws on what a model made or proposed (kit's AiMark.tsx), so an App's own component says
+   it the same way; fetched the first time one is drawn, as the fields are. */
+export const AiMark = onDemand(() => import('@mistriwork/kit/client/components/AiMark.js'), 'AiMark', { quiet: true });
 export {
   useAction,
   useAnalytics,

@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
 import { RECORD_HISTORY_TABLES, RecordHistoryUnavailable, historyKey } from '../packages/mistri/src/adapters/history/recordHistory.js';
 import { bindRecordHistory } from '../packages/mistri/src/server/stores/writeCaptures.js';
-import { attributeWrites } from '../packages/engine/src/adapters/writeAttribution.js';
+import { attributeMaker, attributeWrites } from '../packages/engine/src/adapters/writeAttribution.js';
 import { provisionPostgresRecordHistory } from '../packages/mistri/src/adapters/history/postgresRecordHistory.js';
 import { LIVE_PG, ownedPostgresDatabase } from './support/jobStoreEngines.js';
 import { liveSkip } from './live.js';
@@ -44,8 +44,8 @@ test("PostgreSQL record history: provisioned once, appended in the write's trans
     await control.query(`CREATE TABLE public.rh_ticket (id integer PRIMARY KEY, status text, salary integer)`);
     await control.query(`INSERT INTO public.rh_ticket VALUES (1, 'open', 100)`);
     assert.equal(await appStoresOf(adapter).recordHistoryReady(), false);
-    assert.deepEqual(await provisionPostgresRecordHistory(url), { version: 1, provisioned: true });
-    assert.deepEqual(await provisionPostgresRecordHistory(url), { version: 1, provisioned: false });
+    assert.deepEqual(await provisionPostgresRecordHistory(url), { version: 2, provisioned: true });
+    assert.deepEqual(await provisionPostgresRecordHistory(url), { version: 2, provisioned: false });
     assert.equal(await appStoresOf(adapter).recordHistoryReady(), true);
 
     const schema = await adapter.introspect();
@@ -53,6 +53,15 @@ test("PostgreSQL record history: provisioned once, appended in the write's trans
     bindRecordHistory(adapter, new Map([[table, { redact: new Set(['salary']) }]]));
     await attributeWrites({ actor: 'maya@example.com', name: 'Maya Chen', via: 'app', action: 'Close' }, () =>
       adapter.transaction((tx) => tx.update({ table, key: { id: 1 }, values: { status: 'closed', salary: 150 } })),
+    );
+    // A model's proposal a person approved keeps both hands; a job keeps its id.
+    await attributeWrites({ actor: 'maya@example.com', name: 'Maya Chen', via: 'app', action: 'Appeal' }, () =>
+      attributeMaker('assistant', 'prop-7', () =>
+        adapter.transaction((tx) => tx.update({ table, key: { id: 1 }, values: { status: 'appealed' } })),
+      ),
+    );
+    await attributeMaker('job:nightly-close', undefined, () =>
+      adapter.transaction((tx) => tx.update({ table, key: { id: 1 }, values: { status: 'closed' } })),
     );
     // The public write goes through a transaction for a recorded table.
     await adapter.update({ table, key: { id: 1 }, values: { status: 'open' } });
@@ -66,13 +75,15 @@ test("PostgreSQL record history: provisioned once, appended in the write's trans
     );
     const read = await appStoresOf(adapter).readRecordHistory({ resource: table, key: historyKey({ id: 1 }), limit: 20 });
     assert.deepEqual(
-      read.map((row) => [row.action, row.via, row.actor, row.actorName]),
+      read.map((row) => [row.action, row.via, row.actor, row.actorName, row.actorKind, row.proposalId]),
       [
-        ['', 'system', '', ''],
-        ['Close', 'app', 'maya@example.com', 'Maya Chen'],
+        ['', 'system', '', '', undefined, undefined],
+        ['', 'system', '', '', 'job:nightly-close', undefined],
+        ['Appeal', 'app', 'maya@example.com', 'Maya Chen', 'assistant', 'prop-7'],
+        ['Close', 'app', 'maya@example.com', 'Maya Chen', undefined, undefined],
       ],
     );
-    assert.deepEqual(read[1].changes, [
+    assert.deepEqual(read[3].changes, [
       { c: 'status', b: 'open', a: 'closed' },
       { c: 'salary', r: 1 },
     ]);
