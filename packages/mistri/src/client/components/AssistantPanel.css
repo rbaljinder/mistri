@@ -277,4 +277,9 @@
 /* Waiting for the person: said over the field it shuts, a dot and its words, and the field names it as the reason. */
 .assistant-waiting { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-base); color: var(--ink); }
 .assistant-waiting-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+/* An Ask's read: the line it ran, quiet and set as code, then the rows it read as the review queue lists evidence. */
+.assistant-ask-read { display: grid; gap: var(--space-2h); min-width: 0; }
+.assistant-ask-query { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); overflow-wrap: anywhere; }
+.assistant-ask-query code { font: var(--text-sm) var(--mono); color: var(--ink); padding: 0 var(--space-1h); background: var(--raised); border-radius: min(3px, var(--radius)); }
+.assistant-ask-evidence { gap: var(--space-2); }
 }

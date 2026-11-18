@@ -6,7 +6,8 @@
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import { renamedAnyRows } from '@mistriwork/engine/shared/filter.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { commandCatalog, createCommandDb, type ReadTable, type UntypedRow } from './commandDb.js';
+import { zoneDay } from '../app/appStamps.js';
+import { commandCatalog, createCommandDb, zonedCatalog, type ReadTable, type UntypedRow } from './commandDb.js';
 import { isBusinessCommandExecutionError } from './commandErrors.js';
 import { LOADER_RESULT_MOST, type PageLoader, type PageLoaderViewer } from './pageLoaders.js';
 
@@ -46,14 +47,19 @@ export async function runPageLoader(options: {
   logical?: (local: string) => string;
   params: Readonly<Record<string, string | undefined>>;
   viewer: PageLoaderViewer;
+  /** The instant the page is loaded at. */
   now: Date;
+  /** The reader's zone (the tenant's, then the App's): what `today()` and a date phrase read; UTC where none is named. */
+  timezone?: string;
 }): Promise<unknown> {
   const { loader, reader, schema } = options;
   const logical = options.logical ?? ((local: string) => local);
   const idOf = (local: string) => tableNamed(schema, logical(local))?.id;
-  const catalog = loader.reads.every((name) => idOf(name) !== undefined)
+  const found = loader.reads.every((name) => idOf(name) !== undefined)
     ? commandCatalog(schema, loader.reads, (name) => idOf(name)!)
     : undefined;
+  /* `now` stays an instant, as a command's is; the catalog's zone is what reads a date phrase on the wall clock. */
+  const catalog = found && zonedCatalog(found, options.timezone);
   if (!catalog) throw new PageLoaderRefused(403, 'page_undeclared', `The loader "${options.name}" reads what this reader cannot.`);
   let open = true;
   const controller = new AbortController();
@@ -112,6 +118,8 @@ export async function runPageLoader(options: {
             params: Object.freeze({ ...options.params }),
             viewer: options.viewer,
             now: () => options.now,
+            today: () => zoneDay(options.now, options.timezone),
+            timezone: options.timezone ?? 'UTC',
             signal: controller.signal,
           }),
         ),

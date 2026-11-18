@@ -61,6 +61,7 @@ import { commandFlagsOnce } from '../commands/commandFlagCapture.js';
 import { FILE_MAX_BYTES_DEFAULT } from '../../shared/appModel.js';
 import type { AppDef, AppFileRule } from '../../shared/app.js';
 import type { CommandFile } from '../commands/businessCommands.js';
+import { deliveredFiles, StageRefusal, type DeliveredPart } from '../commands/stagedFiles.js';
 import { receivedFiles } from '../http/fileRows.js';
 import { serviceActor } from './jobAuthorization.js';
 import type { JobCommandBinding } from './jobCommands.js';
@@ -94,6 +95,12 @@ export interface InboundPlan {
     target?: Readonly<Record<string, string | number>>;
     /** Files the delivery carried, checked: the handler's `ctx.files`, never its input or its receipt. */
     files?: readonly CommandFile[];
+    /**
+     * Files the delivery brought in its own multipart body, each for the command input it is named for: put in that
+     * `field.files` as a person's upload is and judged by the field's own declaration (stagedFiles.ts
+     * `deliveredFiles`), which the host reads once the command is authorized.
+     */
+    parts?: readonly DeliveredPart[];
   }>;
   /** Without a command: 202 for a delivery nothing reads, 204 for one that was recorded. */
   readonly status?: 202 | 204;
@@ -114,6 +121,8 @@ export interface InboundEndpoint {
   readonly windowMs: number;
   /** The most a delivery may weigh, when it is not 256 KiB: an endpoint that takes files. */
   readonly maxBytes?: number;
+  /** The most this delivery may weigh, read off its headers, when that depends on what it says it is (a multipart body). */
+  maxBytesFor?(headers: IncomingMessage['headers']): number | undefined;
   /**
    * Whether the headers alone could be a fresh signed delivery: asked before an endpoint past 256 KiB reads its
    * body, so a sender with no signature is not buffered. Not the verification, which still reads the body.
@@ -364,7 +373,7 @@ export function createInboundHost(
     res: ServerResponse,
     outcome: (value: string) => void,
   ): Promise<void> {
-    const cap = endpoint.maxBytes ?? INBOUND_MAX_BYTES;
+    const cap = endpoint.maxBytesFor?.(req.headers) ?? endpoint.maxBytes ?? INBOUND_MAX_BYTES;
     if (cap <= INBOUND_MAX_BYTES) return received(endpoint, tenant, req, res, outcome, cap);
     // A large body is held only for a sender who could have signed it: refused on its headers, unread, and the
     // connection closed rather than drained, since what is left of the body is the cost being refused.
@@ -483,7 +492,9 @@ export function createInboundHost(
     try {
       await asBackgroundWork(async () => {
         bound = await options.bind(Object.freeze({ endpoint: endpoint.name, runAs: run.runAs, tenant }));
-        bound.binding.authorize(run.command.id, actor);
+        const authorized = bound.binding.authorize(run.command.id, actor);
+        // Judged as an upload is, before the command opens: a refusal here runs nothing.
+        const brought = run.parts?.length ? deliveredFiles(authorized, run.parts, reading.key) : undefined;
         const captureFlags = bound.captureFlags;
         const flags = await commandFlagsOnce(() => captureFlags?.(actor))();
         await executeBusinessCommand(
@@ -495,7 +506,7 @@ export function createInboundHost(
             key: run.target ?? {},
             expectedVersion: 0,
             idempotencyKey: inboundCommandKey(endpoint.receipts(tenant), reading.key),
-            input: run.input,
+            input: brought ? { ...(run.input as object), ...brought.input } : run.input,
           },
           {
             door: 'api',
@@ -503,12 +514,17 @@ export function createInboundHost(
             requestId: `inbound:${endpoint.name}`,
             now: () => new Date(now()),
             ...(run.files ? { files: run.files } : {}),
+            ...(brought ? { delivered: brought.files } : {}),
           },
         );
       });
       outcome(fresh ? 'applied' : 'replayed');
       return status(res, 204);
     } catch (error) {
+      if (error instanceof StageRefusal) {
+        outcome(error.code);
+        return status(res, error.status);
+      }
       if (error instanceof InboundNoTenant) {
         outcome('no_tenant');
         return status(res, 404);

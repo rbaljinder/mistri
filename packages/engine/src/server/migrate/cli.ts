@@ -397,6 +397,28 @@ export async function runMigrate<A extends MigrateApp>(
       return EXIT.ok;
     }
 
+    /* A database named on the command line beside one the run is bound to (--connection, or the connection the App
+       binds) was never the one migrated: the bound one wins, and a field report migrated its development database
+       twice while aiming at a copy. It is refused by name, rather than one of the two chosen quietly. */
+    const bound = connection ?? loaded?.binding?.connection;
+    if (argument !== undefined && !opts.targetFromEnvironment && bound !== undefined) {
+      const named = registry.configs().find((each) => each.id === bound || each.name === bound);
+      /* The same database written twice (the file the config names, or its URL) is one database, and runs. */
+      const file = named && registry.sqliteFile(named.id);
+      const same =
+        named !== undefined &&
+        (named.id === argument ||
+          named.url === registry.configOf(argument)?.url ||
+          (file !== undefined && file === registry.sqliteFile(argument)));
+      if (!same) {
+        const by = connection !== undefined ? `--connection ${connection}` : `the App's connection "${bound}"`;
+        return fail(
+          `${command} migrates one database and was given two: ${redact(opts.target)} and ${by}. ` +
+            `To migrate ${redact(opts.target)}, name it with --db alone (the migrations, no App) or in a --config's connection; ` +
+            `to migrate "${bound}", drop the path.`,
+        );
+      }
+    }
     const target = await resolveTarget(registry, config, flags, appDir, loaded?.binding);
     /* An App's own database is the App's to migrate (`--app`): the plan it carries out is the deployment, and the
        connection is the one it binds. The database browser, and a run with no App, answer to the flag. */

@@ -92,10 +92,15 @@ const EMBED = join(ROOT, 'packages/mistri/dist/embed/react');
    rc.63 moved the public script's raw target: a field report's form fixes, all drawn on a public form's first page
    (the accept checkbox beside its label, the tenant chooser's foot, one locale date format with a month control, and
    the record picker's search and recent records). Measured 778,547 raw, 500 bytes over 778,000; set about 3% above.
-   Its brotli stayed inside its target. */
+   Its brotli stayed inside its target.
+
+   rc.65 moved the public script's brotli target: the form surface became a chunk of its own (the kit's vite.ts,
+   `parts`), preloaded beside the public chunk, so an App's shell can fetch it on demand without fetching the whole
+   public surface. The same code, compressed as two files instead of one, measured 213.2 KB, 0.3 KB over 212.9 KB;
+   set about 3% above. The App's first paint lost the form surface in the same change. */
 export const BUDGET = {
   mistri: {
-    public: { script: { raw: 802_000, br: 218_000 }, style: { raw: 514_000, br: 66_700 } },
+    public: { script: { raw: 802_000, br: 224_000 }, style: { raw: 514_000, br: 66_700 } },
     app: { script: { raw: 1_590_000, br: 437_000 }, style: { raw: 514_000, br: 66_700 } },
   },
 };

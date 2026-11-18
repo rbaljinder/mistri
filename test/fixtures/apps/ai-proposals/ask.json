@@ -1,0 +1,11 @@
+{
+  "turns": [
+    {
+      "when": "open",
+      "steps": [
+        { "tools": [{ "name": "query", "input": { "q": "claim show id, name, status sort id" } }] },
+        { "text": "Both claims are open." }
+      ]
+    }
+  ]
+}

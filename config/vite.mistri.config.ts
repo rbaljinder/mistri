@@ -34,8 +34,22 @@ export default defineConfig(
         tenant: [resolve(CLIENT, 'tenantShell.js')],
       },
       sharedWithEntry: [['shell', 'public']],
-      /* An App's page preloads the shell with the App's chrome, a public one its own surface. */
-      pages: { [SURFACE_PAGES.shell]: ['shell'], [SURFACE_PAGES.public]: ['public'] },
+      /* What a signed-out visit draws first and an App's shell draws only on demand: the form surface (a home that
+         is a form, the form room), the visitor's language (a landing home) and the sign-in request (the account
+         menu, a form dialog). They are neither surface's, or the shell's on-demand part would fetch the whole
+         public chunk to use one of them. */
+      parts: {
+        guest: {
+          roots: [
+            resolve(CLIENT, 'components/FormSurface.tsx'),
+            resolve(CLIENT, 'publicLanguage.js'),
+            resolve(CLIENT, 'components/authRequest.ts'),
+          ],
+          with: ['public'],
+        },
+      },
+      /* An App's page preloads the shell with the App's chrome, a public one its own surface and the guest part. */
+      pages: { [SURFACE_PAGES.shell]: ['shell'], [SURFACE_PAGES.public]: ['public', 'guest'] },
     },
   }),
 );

@@ -203,6 +203,23 @@ describe('the compile', () => {
     assert.equal(again.entries.hello.js, entry.js);
   });
 
+  test('collects the stylesheet of a module reached through import(), after the static ones', async () => {
+    const at = dir('lazy', {
+      'widgets/Lazy.jsx': [
+        "import './first.css';",
+        "const Part = import('./Part.jsx');",
+        'export default function Lazy() { return <div className="c-lazy">{String(Boolean(Part))}</div>; }',
+      ].join('\n'),
+      'widgets/Part.jsx': 'import \'./part.css\';\nexport default function Part() { return <p className="c-part" />; }\n',
+      'widgets/first.css': '.c-lazy { color: var(--ink); }\n',
+      'widgets/part.css': '.c-part { color: var(--ink-2); }\n',
+    });
+    const compiled = (await compileComponents(at, new Map([['lazy', { id: 'lazy', module: './widgets/Lazy.jsx', kind: 'section' }]])))!;
+    const entry = compiled.entries.lazy;
+    assert.match(compiled.files[entry.css!], /\.c-lazy[^]*\.c-part/);
+    assert.deepEqual(entry.sources, ['widgets/Lazy.jsx', 'widgets/Part.jsx', 'widgets/first.css', 'widgets/part.css']);
+  });
+
   test("the App framework's own SDK name is the same page module, served as the same file", async () => {
     const at = dir('@mistriwork/ui', {
       'widgets/Hello.jsx': HELLO.replace("from '@mistriwork/mistri/ui'", "from '@mistriwork/mistri/ui'").replace(

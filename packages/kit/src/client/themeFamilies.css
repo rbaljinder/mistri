@@ -1186,6 +1186,27 @@ html:root[data-theme-style][data-look-tabs='pill'] :is(.tab, :where(body.app-mod
 }
 }
 @layer structure {
+  /* `recipes.pane: 'edge'`: the room runs to the window's right and bottom edges, so no band of the menu's ground
+     frames it. The one line left is between the menu and the room; the bar keeps its rule over the room. A raised
+     look's lift (lumenLook.css) belongs to a pane that stands on something, so it goes with the inset. In the
+     structure layer, over the pane it undoes (structure.css), and said here, where the menu's test looks for it. */
+  :root[data-look-pane='edge'] body.app-sidebar-shell .layout > .pane-bar {
+    margin: 0;
+    border: 0;
+    border-left: 1px solid var(--line);
+    border-radius: 0;
+  }
+  :root[data-look-pane='edge'] body.app-sidebar-shell .layout > .content {
+    margin: 0;
+    border: 0;
+    border-left: 1px solid var(--line);
+    border-top: var(--pane-rule, 1px solid var(--line));
+    border-radius: 0;
+    box-shadow: none;
+  }
+  :root[data-look-pane='edge'] body.app-sidebar-shell.page-bare .layout > .content {
+    border: 0;
+  }
   /* The figures of a row stand on one line and a trend stands beside its figure, in every look that sets the label
      over the figure (said here and not in structure.css: a rule that names a treatment lives where the menu's test
      looks for it). Under the figure, the trend made its tile a line taller than the rest and the row as tall as

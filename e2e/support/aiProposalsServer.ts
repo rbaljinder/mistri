@@ -15,7 +15,8 @@ import { pathToFileURL } from 'node:url';
 const APP_ID = 'ai-proposals-fixture';
 const FIXTURE = resolve('test/fixtures/apps/ai-proposals');
 
-export async function startProposalsApp() {
+/** `script` is the scripted model's turns (the fixture's own by default): Ask's spec answers a question instead. */
+export async function startProposalsApp({ script = join(FIXTURE, 'assistant.json') }: { script?: string } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-ai-proposals-'));
   let child: ReturnType<typeof spawn> | undefined;
   const stop = async () => {
@@ -67,7 +68,7 @@ export async function startProposalsApp() {
             XDG_CONFIG_HOME: join(directory, 'xdg'),
             MISTRI_OPEN: '0',
             ANTHROPIC_API_KEY: '',
-            MISTRI_ASSISTANT_SCRIPT: join(FIXTURE, 'assistant.json'),
+            MISTRI_ASSISTANT_SCRIPT: script,
             BETTER_AUTH_SECRET: 'isolated-ai-proposals-secret-at-least-thirty-two-characters',
             MISTRI_AUTH_ADMIN_EMAIL: '',
             MISTRI_AUTH_ADMIN_PASSWORD: '',

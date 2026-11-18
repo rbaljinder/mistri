@@ -891,6 +891,31 @@ describe('a loader reads as the reader, never writes, and ends', () => {
   const loader = (load: PageLoader['load'], options: { timeout?: '1 second' } = {}) =>
     defineLoader({ reads: ['ticket'], ...options, load: load as never }) as unknown as PageLoader;
 
+  test("its now() is the instant; today() and timezone are the reader's zone", async (t) => {
+    const at = await reader(t);
+    // 10:30 UTC is already tomorrow on Kiritimati (UTC+14) and still today in Chicago.
+    const instant = new Date('2026-03-10T10:30:00Z');
+    const seen = loader(({ now, today, timezone }) => ({ now: now().toISOString(), today: today(), timezone }));
+    const at2 = (timezone?: string) =>
+      runPageLoader({
+        name: 'x',
+        loader: seen,
+        reader: at.adapter,
+        schema: at.schema,
+        params: {},
+        viewer: { roles: ['clerk'] },
+        now: instant,
+        ...(timezone ? { timezone } : {}),
+      });
+    assert.deepEqual(await at2('Pacific/Kiritimati'), {
+      now: '2026-03-10T10:30:00.000Z',
+      today: '2026-03-11',
+      timezone: 'Pacific/Kiritimati',
+    });
+    assert.deepEqual(await at2('America/Chicago'), { now: '2026-03-10T10:30:00.000Z', today: '2026-03-10', timezone: 'America/Chicago' });
+    assert.deepEqual(await at2(), { now: '2026-03-10T10:30:00.000Z', today: '2026-03-10', timezone: 'UTC' });
+  });
+
   test('it sums and groups through its reader, as the reader counts', async (t) => {
     const at = await reader(t);
     const answer = await run(
@@ -927,7 +952,7 @@ describe('a loader reads as the reader, never writes, and ends', () => {
       loader(async (context) => ({ keys: Object.keys(context).sort(), tables: Object.keys(context.db), sql: 'sql' in context.db.ticket })),
       at,
     );
-    assert.deepEqual(reached, { keys: ['db', 'now', 'params', 'signal', 'viewer'], tables: ['ticket'], sql: false });
+    assert.deepEqual(reached, { keys: ['db', 'now', 'params', 'signal', 'timezone', 'today', 'viewer'], tables: ['ticket'], sql: false });
   });
 
   /* A field report: a page handed its program's configuration had to declare a read it never made. */

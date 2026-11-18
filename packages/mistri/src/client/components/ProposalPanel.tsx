@@ -6,12 +6,13 @@
  * Opened from the For review room, a record's proposal line and a decision's Change…; loaded with the first of them,
  * never in a first page.
  */
-import { go, rowView, toast } from '@mistriwork/kit/client/core.js';
+import { toast } from '@mistriwork/kit/client/core.js';
+import { EvidenceItem } from './EvidenceList.js';
 import { queryClient } from '@mistriwork/kit/client/components/mount.js';
 import { AiMark } from '@mistriwork/kit/client/components/AiMark.js';
 import { openProposalForm } from './sdk/proposalCommands.js';
 import type { UiCommandOutcome } from './sdk/context.js';
-import { PROPOSALS_KEY, type CommandProposal, type ProposalEvidence } from '../commandProposals.js';
+import { PROPOSALS_KEY, type CommandProposal } from '../commandProposals.js';
 import { dismissProposal } from '../proposalDecisions.js';
 import { say } from '../copy/review/components/ProposalPanel.js';
 import './ProposalPanel.css';
@@ -46,64 +47,6 @@ export function openProposal(proposal: CommandProposal, connection: string | nul
   }
   // Approved or dismissed, the queue and every record's line are read again; a closed form changed nothing.
   return opened.finally(() => void queryClient.invalidateQueries({ queryKey: [PROPOSALS_KEY] }));
-}
-
-/** A reference a proposal carries as a link only where it is the web's: a `javascript:` ref is text. */
-const WEB = /^(https?:\/\/|\/(?!\/))/i;
-
-/** A record's evidence, `<table>/<key as JSON>`, opened as the record. */
-function recordOf(ref: string): { table: string; key: Record<string, unknown> } | undefined {
-  const cut = ref.indexOf('/');
-  if (cut <= 0) return undefined;
-  try {
-    const key = JSON.parse(ref.slice(cut + 1)) as unknown;
-    return key && typeof key === 'object' && !Array.isArray(key)
-      ? { table: ref.slice(0, cut), key: key as Record<string, unknown> }
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function EvidenceItem({ evidence }: { evidence: ProposalEvidence }) {
-  if (evidence.kind === 'text')
-    return (
-      <li className="proposal-evidence-item">
-        <span className="proposal-evidence-label">{evidence.label}</span>
-        {evidence.quote ? <blockquote className="proposal-evidence-quote">{evidence.quote}</blockquote> : null}
-      </li>
-    );
-  if (evidence.kind === 'record') {
-    const record = recordOf(evidence.ref);
-    return (
-      <li className="proposal-evidence-item">
-        {record ? (
-          <button
-            type="button"
-            className="proposal-evidence-link"
-            onClick={() => go(rowView(record.table, record.key, evidence.label), 'push')}
-          >
-            {evidence.label}
-          </button>
-        ) : (
-          <span className="proposal-evidence-label">{evidence.label}</span>
-        )}
-        {evidence.quote ? <blockquote className="proposal-evidence-quote">{evidence.quote}</blockquote> : null}
-      </li>
-    );
-  }
-  return (
-    <li className="proposal-evidence-item">
-      {WEB.test(evidence.ref) ? (
-        <a className="proposal-evidence-link" href={evidence.ref} target="_blank" rel="noreferrer noopener">
-          {evidence.label}
-        </a>
-      ) : (
-        <span className="proposal-evidence-label">{evidence.label}</span>
-      )}
-      {evidence.quote ? <blockquote className="proposal-evidence-quote">{evidence.quote}</blockquote> : null}
-    </li>
-  );
 }
 
 /** The panel's Evidence column: who proposed it and why, then what it read. */

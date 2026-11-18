@@ -58,7 +58,7 @@ export const ASSISTANT_PATHS: ReadonlySet<string> = new Set([
   '/api/assistant/search',
 ]);
 const SAID: Record<string, readonly string[]> = {
-  '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry'],
+  '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode'],
   '/api/assistant/resolve': ['app', 'conversation', 'proposal', 'outcome', 'detail'],
   '/api/assistant/delete': ['app', 'conversation'],
   '/api/assistant/rename': ['app', 'conversation', 'title'],
@@ -299,6 +299,7 @@ export async function answerAssistant(
     let cutFrom: number | undefined;
     let context = body.context as { resource?: unknown; key?: unknown } | undefined;
     if (path === '/api/assistant/turn') {
+      if (body.mode !== undefined && body.mode !== 'ask') throw new HttpError(400, 'A turn is asked with mode "ask", or none.');
       if (waiting) throw new HttpError(409, 'Confirm or decline the proposed change first.');
       const people = events.filter((event) => event.kind === 'person');
       const from =
@@ -348,6 +349,7 @@ export async function answerAssistant(
       catalog,
       signal: controller.signal,
       ...(scope.propose ? { propose: scope.propose } : {}),
+      ...(body.mode === 'ask' ? { ask: true as const } : {}),
     };
     const line =
       text !== undefined && context && assistant.placement.includes('record')
@@ -371,7 +373,7 @@ export async function answerAssistant(
       conversation: conversation!.id,
       model,
       assistant,
-      system: systemPrompt(catalog),
+      system: systemPrompt(catalog, session.ask ? 'ask' : undefined),
       tools: toolSpecs(assistant),
       session,
       emit,

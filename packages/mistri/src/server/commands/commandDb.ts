@@ -863,6 +863,8 @@ interface CommandDbOptions {
   readonly stored?: (table: string, data: Uint8Array) => void;
   /** What a constant (`now`, `today`, `me`) writes to a column; absent, a constant is refused. */
   readonly constant?: (table: CommandTable, column: ColumnMeta, word: WriteConstant['auto']) => Promise<Value>;
+  /** The file bytes this run read before its handler (its lookup's `files.read`): readFile's budget starts there. */
+  readonly fileRead?: number;
 }
 
 const isConstant = (value: unknown): value is WriteConstant =>
@@ -889,8 +891,9 @@ async function withConstants(
   return out ?? values;
 }
 
-/** The most file bytes one command reads through `readFile`, all its reads together: a loop over rows that reads each
-    one's file is refused here rather than filling the server's memory. A fixed bound, not a setting. */
+/** The most file bytes one command reads, all its reads together: its lookup's `files.read` and its handler's
+    `readFile` (`fileRead` starts the handler where the lookup stopped). A loop over rows that reads each one's file
+    is refused here rather than filling the server's memory. A fixed bound, not a setting. */
 export const COMMAND_FILE_READ_MOST = 50 * 1024 * 1024;
 
 const sizeOf = (bytes: number) => `${Math.ceil((bytes / 1024 / 1024) * 10) / 10} MB`;
@@ -903,7 +906,7 @@ interface FileReadBudget {
 /** The `db` of one command run: a frozen object of table handles, exactly the footprint's. */
 export function createCommandDb(options: CommandDbOptions): Readonly<Record<string, ReadTable<UntypedRow> | WriteTable<UntypedRow>>> {
   const handles: Record<string, ReadTable<UntypedRow> | WriteTable<UntypedRow>> = {};
-  const budget: FileReadBudget = { read: 0 };
+  const budget: FileReadBudget = { read: options.fileRead ?? 0 };
   const names = new Set([...options.read, ...options.write]);
   for (const name of names) {
     const table = options.catalog[name];

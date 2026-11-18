@@ -34,6 +34,21 @@ assistant: assistant({
 - Answers stream in as text, with tables, figures, charts and records drawn by the App's own components. A change is a card: Confirm runs it through the record's own button or form; nothing is written before. A command's change is kept for review instead and the turn goes on: the card's Review and confirm approves it and Decline dismisses it, or the person decides it later at [For review](/docs/commands/#when-an-ai-calls-it). A reloaded conversation says what became of it (the command's verb in the past tense, such as Sent for Send appeal, or Dismissed) with no buttons.
 - A record card carries the record's own buttons and Edit, and a table's rows their ⋯ menu where a list of that table has `rowActions`: shown only to people who may press them, and what they did is noted in the conversation.
 
+## Ask
+
+Ask answers a question from the records and shows how: the query it ran and the rows it read. Open it from a list's
+**Ask** button or **Ask** in the command palette (⌘K); it is there whenever the assistant is.
+
+```txt
+Which claims are open?
+  Ran  claim show id, name, status sort id   2 rows
+  Records read: Corner dental, crown · Hart family, cleaning
+```
+
+The query is in the App's query language, run as the person asking, so it reads only their rows and fields (in a
+tenant App, their customer's). Each row read opens as its record. Ask only reads: a change it is asked for is not
+made, and the person asks the assistant for it instead, where it becomes a proposal.
+
 ## When to use it, and when not
 
 - Use it when people ask questions the menus answer in several steps: "which deals are stale", "sum up this lead".

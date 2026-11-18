@@ -916,7 +916,7 @@ td.dressed { white-space: nowrap; }
 td.has-more { white-space: normal; }
 /* The name over its folded columns takes a second line rather than an ellipsis: a folded row is two lines already,
    and "Redgate Analytics Holdi…" stood cut over a detail line that wrapped whole beneath it (G187). */
-td.has-more .cell-main { white-space: normal; text-overflow: clip; }
+td.has-more .cell-main { white-space: normal; text-overflow: clip; flex: none; }
 .cell-more { display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-4); font: 400 var(--text-xs)/1.35 var(--sans); color: var(--ink-muted); }
 .cell-more-item { display: inline-flex; flex-wrap: wrap; align-items: baseline; column-gap: var(--space-2); min-width: 0; }
 .cell-more-head { color: var(--ink-subtle); }

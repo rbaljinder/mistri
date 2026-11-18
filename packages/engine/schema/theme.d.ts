@@ -339,6 +339,10 @@ export interface ThemeRecipes {
       page's ground, on a band of the raised ground from edge to edge, or a band with the record's avatar large beside
       its title. It paints the box the page placed: it never moves a region, adds to the head or reorders it. */
   header?: 'plain' | 'band' | 'hero';
+  /** A side-placed App's room: a pane inset from the window's edge on the menu's ground, a hairline round it, or
+      running to the window's right and bottom edges with one hairline between it and the menu. A top-placed App's
+      room, a phone's and a bare page's already run to the edge. */
+  pane?: 'inset' | 'edge';
   /** A list's filter not yet asked for ("+ Status"): on a dashed hairline, on a solid edge, or with no edge until a
       pointer is over it. Its own part, so a theme picks it apart from its buttons. */
   filters?: 'dashed' | 'solid' | 'quiet';

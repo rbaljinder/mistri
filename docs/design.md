@@ -1089,7 +1089,10 @@ every look, so the picture it keeps reads on whatever page shows it.
   the menu's ground**: inset 8px from the window's edge on the three sides the
   menu is not, a hairline round it and corners four pixels rounder than a
   control's, so the menu reads as the frame and the room as the thing that
-  changes; the menu draws no edge of its own beside the pane's. **The pane's
+  changes; the menu draws no edge of its own beside the pane's. A theme whose
+  room should meet the window says `recipes.pane: 'edge'`: the room runs to the
+  right and bottom edges, square and unlifted, one hairline between it and the
+  menu. **The pane's
   bar** is its head, 52px over a rule (in the ink where the look rules in
   ink): the menu's toggle first (a 32px key, its mark on the room's left
   edge; ⌘B does the same, and the menu's foot has no Collapse row), then

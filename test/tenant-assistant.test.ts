@@ -276,6 +276,29 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
     },
   );
 
+  test(`${dialect}: Ask reads in the lease's tenant alone: its query and evidence are that tenant's rows`, { skip }, async (t) => {
+    const h: Harness = await assistantFixture(t, dialect);
+    const { f, requests } = h,
+      { sam } = f.accounts;
+    applied(await h.setSwitch('north', true));
+    applied(await h.setSwitch('south', true));
+    const north = await h.lease(sam, 'north'),
+      south = await h.lease(sam, 'south');
+    const cited = async (lease: typeof north) => {
+      const asked = await h.assistant(sam, lease, '/api/assistant/turn', { text: 'which leads', mode: 'ask' });
+      assert.equal(asked.status, 200, JSON.stringify(asked.body));
+      const [read] = of(asked.events, 'query');
+      assert.equal(read?.q, 'lead', JSON.stringify(asked.events));
+      return { said: JSON.stringify(read.evidence), sent: JSON.stringify(requests.at(-1)!.messages) };
+    };
+    const inNorth = await cited(north);
+    assert.match(inNorth.said, /North lead/);
+    assert.doesNotMatch(inNorth.said + inNorth.sent, /South lead/);
+    const inSouth = await cited(south);
+    assert.match(inSouth.said, /South lead/);
+    assert.doesNotMatch(inSouth.said + inSouth.sent, /North lead/);
+  });
+
   test(`${dialect}: a person removed mid-conversation is refused at the next call`, { skip }, async (t) => {
     const h = await assistantFixture(t, dialect);
     const { f } = h;

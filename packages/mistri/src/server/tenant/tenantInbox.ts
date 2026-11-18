@@ -64,6 +64,8 @@ export function tenantNoticeBinding(
   members?: NoticeMembers,
   /** A tenant's default locale (its branding's `locale`), for a recipient whose own row names none. */
   tenantLocale?: (tenant: string) => Promise<string | undefined>,
+  /** A tenant's time zone (its profile's `ui.timezone` column), for a date the words say. */
+  tenantZone?: (tenant: string) => Promise<string | undefined>,
 ): NoticeBinding {
   const binding = new Map<string, NoticeRule[]>();
   if (!appKeepsInbox(app)) return binding;
@@ -140,6 +142,7 @@ export function tenantNoticeBinding(
                     schema: ownership.schema,
                     physical,
                     ...(tenantLocale ? { tenantLocale } : {}),
+                    ...(tenantZone ? { tenantZone } : {}),
                   },
                 );
                 return said ? { say: said } : {};

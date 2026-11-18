@@ -15,7 +15,6 @@ import { useRecordDecisions } from './components/decisionAdornment.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { setRecordDialog } from '@mistriwork/kit/client/peekpanel.js';
 import { AppHome } from './components/AppHome.js';
-import { FormRoom } from './components/FormRoom.js';
 import { FreePage } from './components/FreePage.js';
 import { RecordTabPage } from './components/RecordTabPage.js';
 import { ImportButton } from './components/ImportButton.js';
@@ -79,7 +78,8 @@ export const appChrome = {
       /* A dashboard and its charts are a chunk of their own, loaded when one is first shown. */
       Dashboard: onDemand(() => import('./components/Dashboard.js'), 'Dashboard'),
       Home: AppHome,
-      Form: FormRoom,
+      /* The form surface is a part of its own: a first page that is not a form never fetches it. */
+      Form: onDemand(() => import('./components/FormRoom.js'), 'FormRoom'),
       /* The signed-in person's notifications, loaded when first opened (the bell's menu shares the chunk). */
       Inbox: onDemand(() => import('./components/InboxList.js'), 'InboxRoom'),
       /* The assistant's page is the panel's own component, in its own chunk: nothing of it in a first page. */

@@ -170,13 +170,20 @@ async function compileOne(
          before the module itself, each once — the cascade order a page would get. */
       const seen = new Set<string>();
       order = [];
+      /* A module reached by `import()` is inlined into the one script (no code splitting), so its stylesheet
+         ships with it too: walked after everything the entry imports, as a page would load it later. Left out,
+         a component's lazily loaded part drew without its rules (a field report). */
+      const later: string[] = [];
       const visit = (id: string) => {
         if (seen.has(id)) return;
         seen.add(id);
-        for (const dependency of this.getModuleInfo(id)?.importedIds ?? []) visit(dependency);
+        const info = this.getModuleInfo(id);
+        for (const dependency of info?.importedIds ?? []) visit(dependency);
+        later.push(...(info?.dynamicallyImportedIds ?? []));
         order.push(id);
       };
       visit(this.getModuleInfo(file) ? file : entry);
+      for (let next = later.shift(); next !== undefined; next = later.shift()) visit(next);
       modules = [...this.getModuleIds()];
     },
   };

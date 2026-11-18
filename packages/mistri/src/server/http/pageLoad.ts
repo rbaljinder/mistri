@@ -20,7 +20,7 @@
  * reader may read and run is their grants', decided below this, per request.
  */
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
-import { logicalResource, zonedNow, type AppDef, type AppDashboardView } from '../../shared/app.js';
+import { logicalResource, type AppDef, type AppDashboardView } from '../../shared/app.js';
 import type { AppSurface } from '../../shared/appModel.js';
 import { appForRoles } from '../../shared/appViewRoles.js';
 import { appZone } from '../../shared/appUi.js';
@@ -105,7 +105,8 @@ export async function pageLoad(options: {
       ...(loader.source ? { logical: (local: string) => logicalResource(app, loader.source!, local) } : {}),
       params,
       viewer: { ...(options.account === undefined ? {} : { account: options.account }), roles: [...options.roles] },
-      now: zonedNow(appZone(app.ui, options.zone), clockNow()),
+      now: clockNow(),
+      timezone: appZone(app.ui, options.zone),
     });
     return { status: 200, body: { data } };
   } catch (error) {

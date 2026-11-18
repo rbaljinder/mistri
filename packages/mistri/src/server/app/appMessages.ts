@@ -28,6 +28,7 @@ import { pathToFileURL } from 'node:url';
 import { FRAMEWORK_ARGS, isMessageRef, MESSAGE_KEY, type AppMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { FRAMEWORK_WORDS, frameworkWordArgs, isFrameworkWordKey, type FrameworkWordKey } from '@mistriwork/engine/shared/frameworkWords.js';
 import { nearest } from '@mistriwork/engine/shared/suggest.js';
+import { zonedNow } from '../../shared/appZone.js';
 import type IntlMessageFormatClass from 'intl-messageformat';
 
 type Formatter = InstanceType<typeof IntlMessageFormatClass>;
@@ -263,7 +264,22 @@ export class MessageSayer {
     readonly overrides?: MessageOverrides,
     /** The tenant's variant folder (`ui.catalog`), where the App has it. */
     readonly variant?: string,
+    /** The zone a date argument that is an instant is said in (a notice's: the tenant's, then the App's, then UTC).
+        Absent, it is said on this process's clock, as before. */
+    readonly zone?: string,
   ) {}
+
+  /* A date argument as ICU says it: an instant (a Date, a number, text with `Z` or an offset) on the zone's wall
+     clock; a calendar date (`2026-03-10`) as that day, which no zone moves; other text as it reads. */
+  private dated(value: Date | string | number): Date {
+    if (typeof value === 'string') {
+      const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+      if (day && this.zone) return new Date(Number(day[1]), Number(day[2]) - 1, Number(day[3]));
+      if (!/T.*(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)) return new Date(value);
+    }
+    const at = value instanceof Date ? value : new Date(value);
+    return this.zone ? zonedNow(this.zone, at) : at;
+  }
 
   /**
    * Where a key's text comes from, nearest first: the tenant's row for the locale, then its language; the variant's
@@ -339,7 +355,8 @@ export class MessageSayer {
       const kind = types.get(name);
       /* A column's value as its ICU type reads it: a stored date's text a Date, a decimal's text a number. */
       if (kind === 'date' && (typeof value === 'string' || typeof value === 'number') && !Number.isNaN(new Date(value).getTime()))
-        filled[name] = new Date(value);
+        filled[name] = this.dated(value);
+      else if (kind === 'date' && value instanceof Date && !Number.isNaN(value.getTime())) filled[name] = this.dated(value);
       else if (kind === 'number' && typeof value === 'string' && value.trim() && Number.isFinite(Number(value)))
         filled[name] = Number(value);
       else if (typeof value === 'bigint') filled[name] = value.toString();

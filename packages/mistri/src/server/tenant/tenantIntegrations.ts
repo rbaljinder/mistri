@@ -130,7 +130,7 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
     if (runtime && owned) {
       const { deliver, principals, commands } = owned;
       webhookRoutes = createInboundHost({
-        endpoints: integrationEndpoints(runtime, commands),
+        endpoints: integrationEndpoints(runtime, commands, app),
         appId: app.id,
         principals,
         tenants: true,

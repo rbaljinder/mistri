@@ -14,6 +14,7 @@ import { createTestClient, type TestClient } from './client.js';
 import { runTestMaintenance } from './worker.js';
 import { readResult, type TestCommandResult, type TestRow } from './appRequests.js';
 import type { AssistantScript } from '../assistant/assistantScripted.js';
+import { isReplay, replayEnvironment, type TestReplay } from './replay.js';
 import type { DecisionScript } from '../decide/providers/scriptedDecisions.js';
 import type { StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
 import { TEST_CONTROL_HEADER, TEST_CONTROL_PATHS } from './control.js';
@@ -42,8 +43,9 @@ export interface TestAppOptions extends HostOptions {
       --jobs is the App directory's, as `--jobs jobs.ts` beside app.ts reads. */
   args?: readonly string[];
   /** The in-App assistant's model, scripted: each turn answers the person's words a pattern matches with text and
-      tool calls, offline and the same every run. Without it the assistant has no model in a test. */
-  assistant?: TestAssistantScript;
+      tool calls, offline and the same every run. Or a cassette, `replay(file)`: requests recorded with their replies.
+      Without it the assistant has no model in a test. */
+  assistant?: TestAssistantScript | TestReplay;
   /** The decision providers, scripted (decide/providers/scriptedDecisions.ts): each decision's answers by name, a
       `when` matching the inputs sent, offline and the same every run. Without it a test App's decisions have no provider. */
   decisions?: TestDecisionScript;
@@ -286,9 +288,11 @@ export async function startTestApp(options: TestAppOptions) {
   const directory = resolve(options.directory);
   /* What the test host alone may ask of its server: setup rows and a job run now (http/testControl.ts). */
   const control = randomBytes(32).toString('hex');
-  const script = options.assistant
-    ? await options.workspace.write(`assistant-${randomBytes(6).toString('hex')}.json`, options.assistant)
-    : undefined;
+  const replayed = isReplay(options.assistant) ? replayEnvironment(options.assistant) : undefined;
+  const script =
+    options.assistant && !isReplay(options.assistant)
+      ? await options.workspace.write(`assistant-${randomBytes(6).toString('hex')}.json`, options.assistant)
+      : undefined;
   const decide = options.decisions
     ? await options.workspace.write(`decisions-${randomBytes(6).toString('hex')}.json`, options.decisions)
     : undefined;
@@ -304,11 +308,13 @@ export async function startTestApp(options: TestAppOptions) {
   options = {
     ...options,
     database,
+    ...(replayed?.hosts.length ? { allowedHosts: [...(options.allowedHosts ?? []), ...replayed.hosts] } : {}),
     environment: {
       MISTRI_AUTH_ADMIN_EMAIL: admin.email,
       MISTRI_AUTH_ADMIN_PASSWORD: admin.password,
       ...(database && !options.config ? { MISTRI_TEST_DATABASE: 'app-writes' } : {}),
       ...(script ? { MISTRI_ASSISTANT_SCRIPT: script } : {}),
+      ...replayed?.environment,
       ...(decide ? { MISTRI_DECIDE_SCRIPT: decide } : {}),
       ...options.environment,
       MISTRI_TEST_CONTROL: control,

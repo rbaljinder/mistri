@@ -31,7 +31,7 @@ import { nowStamp } from './appStamps.js';
 import { stateStampColumn } from '@mistriwork/engine/shared/schema.js';
 import { frozenWords } from '../../shared/appMachine.js';
 import { AppAccessDenied } from './appAccessDenied.js';
-import { sayRefusal } from '@mistriwork/engine/shared/refusal.js';
+import { recordRefusalCause, sayRefusal } from '@mistriwork/engine/shared/refusal.js';
 import type { ColumnMeta, DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 
 export type { AppTransitionRules };
@@ -328,19 +328,38 @@ export async function assertGrantedAction(
   zone?: string,
 ): Promise<void> {
   const written = Object.keys(request.values ?? {});
+  /* Why each granted action passed this body by, for the operator: the caller hears one fixed sentence, and a tenant
+     member's refused verb left its author nothing to go on (a field report). Columns and the `when` are the author's
+     own words; no stored value is quoted. */
+  const missed: string[] = [];
   for (const action of granted) {
     const columns = new Set([...Object.keys(action.set), ...(action.reason === undefined ? [] : [action.reason])]);
-    if (written.length !== columns.size || written.some((column) => !columns.has(column))) continue;
-    if (Object.entries(action.set).some(([column, value]) => request.values[column] !== value)) continue;
+    if (written.length !== columns.size || written.some((column) => !columns.has(column))) {
+      missed.push(`"${action.id}" writes ${[...columns].join(', ')}, the body ${written.join(', ') || 'nothing'}`);
+      continue;
+    }
+    const differs = Object.entries(action.set).filter(([column, value]) => request.values[column] !== value);
+    if (differs.length) {
+      missed.push(`"${action.id}" sets ${differs.map(([column]) => column).join(', ')} to other values`);
+      continue;
+    }
     if (
       action.reason !== undefined &&
       (Object.hasOwn(action.set, action.reason) ||
         typeof request.values[action.reason] !== 'string' ||
         !String(request.values[action.reason]).trim())
-    )
+    ) {
+      missed.push(`"${action.id}" asks for a reason in ${action.reason}`);
       continue;
-    if (!(await holds(reader, schema, request.table, request.key, action.when, zonedNow(zone, now), me))) continue;
+    }
+    if (!(await holds(reader, schema, request.table, request.key, action.when, zonedNow(zone, now), me))) {
+      missed.push(`"${action.id}" runs when ${action.when}, which does not hold for this record`);
+      continue;
+    }
     return;
   }
-  throw new AppActionNotGranted();
+  throw recordRefusalCause(
+    new AppActionNotGranted(),
+    `An update to ${request.table} is none of the fixed actions this role runs there: ${missed.join('; ')}.`,
+  );
 }

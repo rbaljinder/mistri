@@ -33,6 +33,7 @@ import {
   createPostgresTenantAdministration,
   migratePostgresTenantStore,
 } from '../packages/mistri/src/server/tenant/tenantStorePostgres.js';
+import { addSink, type LogRecord } from '../packages/engine/src/adapters/telemetry/trace.js';
 import { liveSkip } from './live.js';
 import { pgClient, uuidPostgresDatabase } from './support/tenantDialects.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
@@ -353,9 +354,20 @@ for (const { dialect, skip } of [
       assert.doesNotMatch(foreign.text, /South one/);
       assert.equal((await f.item('south-one')).state, 'draft');
       // An invoice with no amount: the verb's `when` (amount > 0) is false on the stored row.
-      const refused = await f.update(ada, 'north-empty', SEND);
+      const lines: LogRecord[] = [];
+      const remove = addSink({ onEnd: () => {}, onLog: (record) => lines.push(record) });
+      let refused: Awaited<ReturnType<typeof f.update>>;
+      try {
+        refused = await f.update(ada, 'north-empty', SEND);
+      } finally {
+        remove();
+      }
       assert.ok([403, 409, 422].includes(refused.status), refused.text);
       assert.match(String(refused.body.error ?? refused.body.errors?.[0]?.message ?? refused.text), /\w+ \w+/, 'said in words');
+      // The operator is told which action passed the body by and why; the member is not (a field report).
+      const cause = lines.find((line) => line.source === 'refusal')?.attributes['mistri.refusal.cause'];
+      assert.match(String(cause), /"send" runs when state = draft and \(amount > 0\), which does not hold for this record/);
+      assert.doesNotMatch(refused.text, /amount > 0/);
       assert.equal((await f.item('north-empty')).state, 'draft');
     });
 

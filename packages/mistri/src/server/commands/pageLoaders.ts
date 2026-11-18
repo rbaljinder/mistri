@@ -56,8 +56,12 @@ export interface PageLoaderContext<Src = string, R extends string = string> {
   /** The page's address parameters it keeps, as the address says them now. */
   readonly params: Readonly<Record<string, string | undefined>>;
   readonly viewer: PageLoaderViewer;
-  /** The App's now, in its timezone: called as a command's is (`now()`), so a line moves between them unchanged. */
+  /** The instant the page is loaded at, as a command's `now()` is, so a line moves between them unchanged. */
   readonly now: () => Date;
+  /** Today's date (`YYYY-MM-DD`) in the reader's zone: the tenant's, then the App's `ui.timezone`, then UTC. */
+  readonly today: () => string;
+  /** The zone `today()` reads: an IANA name, `UTC` where none is set. */
+  readonly timezone: string;
   /** Aborted when its time is up. */
   readonly signal: AbortSignal;
 }

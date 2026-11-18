@@ -6,7 +6,8 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
@@ -156,4 +157,26 @@ test("a tenant App's policy named in the profile is its enrollment, and a profil
   assert.doesNotMatch(enrolled.said, /explicit --policy enrollment/);
   assert.match(enrolled.stdout, /policy\s+\S*tenant-policy\.ts mistri\.json/);
   assert.match(enrolled.stderr, /Tenant startup requires one matching, row-readable connection/);
+});
+
+test('migrate up <copy> refuses a database the App does not migrate, rather than migrating the one it binds', (t) => {
+  /* A field report (#91): `migrate up /path/copy.db` ran beside a profile that names the App, and the App's own
+     connection was migrated twice while the copy was never touched. The path is refused by name; --db alone or a
+     --config naming the copy are the two ways to aim at it. */
+  const { dir, app, db } = bootstrapApp(t, { profile: { dir: '.' } });
+  const copy = join(dir, 'copy.db');
+  new DatabaseSync(copy).close();
+  const up = mistri(['migrate', 'up', copy], app, quiet(dir));
+  assert.equal(up.code, 1, up.said);
+  assert.match(up.stderr, /copy\.db/);
+  assert.match(up.stderr, /"desk"/);
+  assert.match(up.stderr, /--db/);
+  assert.equal(existsSync(db), false, "the App's own database is not made");
+  const tables = new DatabaseSync(copy, { readOnly: true }).prepare(`SELECT name FROM sqlite_master WHERE type = 'table'`).all();
+  assert.deepEqual(tables, []);
+
+  /* --db alone aims at the copy: the migrations, no App. */
+  const aimed = mistri(['migrate', 'up', '--db', copy, '--migrations', join(app, 'migrations')], app, quiet(dir));
+  assert.equal(aimed.code, 0, aimed.said);
+  assert.equal(existsSync(db), false);
 });

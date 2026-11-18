@@ -84,6 +84,14 @@ const installDesk = () =>
                   ],
                 },
               },
+              // Offered only on an open deal: a role granted it is granted it on every deal, and offered it on the open ones.
+              {
+                id: 'reopen',
+                label: 'Escalate',
+                header: false,
+                when: "stage = 'open'",
+                command: { id: 'escalate', version: 1, target: 'deal', input: [] },
+              },
               {
                 id: 'checkStep',
                 label: 'Mark a step done',
@@ -414,6 +422,30 @@ test('a reader not granted it is refused before anything is sent', async () => {
   expect(await command.available({})).toBe(false);
   expect((await command.run({}, { title: 'x' })).status).toBe('refused');
   expect(calls).toEqual([]);
+});
+
+test("a record's command is granted by role and command, and available only where the action's condition holds of the record", async () => {
+  await onDesk();
+  const { state } = await import('../../../../../kit/src/client/core.js');
+  const before = state.schema;
+  const col = (name: string, primaryKey = false) => ({ name, type: primaryKey ? 'INTEGER' : 'TEXT', nullable: !primaryKey, primaryKey });
+  state.schema = { tables: [{ id: 'deal', name: 'deal', schema: '', isView: false, columns: [col('id', true), col('stage')] }] } as never;
+  onTestFinished(() => {
+    state.schema = before;
+  });
+  granted = [...granted, 'escalate'];
+  // The condition's query answers the open deal (7) and not the won one (8); availability answers yes for any key.
+  answer = async () => {
+    const last = calls.at(-1)!;
+    if (last.path === '/api/run') return { rows: String(last.body.q).includes('id = 7') ? [{ id: 7 }] : [] };
+    const checks = last.body.checks as Array<{ command: string; commandVersion: number; keys: unknown[] }>;
+    return { checks: checks.map(({ command, commandVersion, keys }) => ({ available: keys.map(() => true), command, commandVersion })) };
+  };
+  const command = handle('escalate');
+  expect(command.granted).toBe(true);
+  expect(await command.available({ id: 7, stage: 'open' })).toBe(true);
+  expect(await command.available({ id: 8, stage: 'won' })).toBe(false);
+  expect(calls.some((call) => call.path === '/api/run' && String(call.body.q).includes("stage = 'open'"))).toBe(true);
 });
 
 test('a granted command no form runs is reached by name, and sent with no record under the word the component gives it', async () => {

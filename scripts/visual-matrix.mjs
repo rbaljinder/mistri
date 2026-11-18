@@ -364,6 +364,16 @@ export const APPS = [
       ['calendar', '/task-calendar'],
       ['new', '/leads', click('+ New lead')],
       ['editing', '/leads/~11', click(/^Edit /)],
+      /* `recipes.pane: 'edge'` (themeRecipes.ts): the room to the window's edges in every look, set the way the
+         server serves it, as the one attribute on the root; on a phone there is no pane and it draws as `list`. */
+      [
+        'list, edge pane',
+        '/leads',
+        async (page) => {
+          await page.evaluate(() => globalThis.document.documentElement.setAttribute('data-look-pane', 'edge'));
+          await quiet(page);
+        },
+      ],
     ],
   },
   {

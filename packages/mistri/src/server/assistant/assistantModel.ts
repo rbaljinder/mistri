@@ -17,6 +17,7 @@
 import { readFileSync } from 'node:fs';
 import { scriptedModel, type AssistantScript } from './assistantScripted.js';
 import { openaiModel } from './assistantOpenAI.js';
+import { recordingKeyMissing, recordingModel, replayModel } from './assistantCassette.js';
 
 export interface ModelUsage {
   input: number;
@@ -232,17 +233,35 @@ export function setAssistantModel(factory: (() => AssistantModel | undefined) | 
 /**
  * The model this server reaches, or none: a test's, then a scripted one the
  * operator names (`MISTRI_ASSISTANT_SCRIPT`, a JSON file — for a demo or a
- * browser test, never a network call), then the provider the operator names
- * (`MISTRI_ASSISTANT_PROVIDER`, `anthropic` or `openai`; Anthropic unless the
- * operator says otherwise and only Anthropic's key is set), with that
- * provider's key. Under NODE_ENV=production a script is not read: a
- * deployment's assistant is the model, never a canned answer left in its
- * environment.
+ * browser test, never a network call), then a cassette
+ * (`MISTRI_ASSISTANT_CASSETTE`, assistantCassette.ts: replayed offline, or
+ * recorded from the real model under `MISTRI_REPLAY=record`), then the
+ * provider the operator names (`MISTRI_ASSISTANT_PROVIDER`, `anthropic` or
+ * `openai`; Anthropic unless the operator says otherwise and only Anthropic's
+ * key is set), with that provider's key. Under NODE_ENV=production neither a
+ * script nor a cassette is read: a deployment's assistant is the model, never
+ * a canned answer left in its environment.
  */
 export function assistantModel(): AssistantModel | undefined {
   if (chosen) return chosen();
-  const script = process.env.NODE_ENV === 'production' ? undefined : process.env.MISTRI_ASSISTANT_SCRIPT;
+  const production = process.env.NODE_ENV === 'production';
+  const script = production ? undefined : process.env.MISTRI_ASSISTANT_SCRIPT;
   if (script) return scriptedModel(JSON.parse(readFileSync(script, 'utf8')) as AssistantScript);
+  const cassette = production ? undefined : process.env.MISTRI_ASSISTANT_CASSETTE;
+  if (cassette) {
+    if (process.env.MISTRI_REPLAY !== 'record') return replayModel(cassette);
+    const missing = recordingKeyMissing();
+    const real = providerModel();
+    if (missing || !real)
+      return {
+        stream: () => Promise.reject(Object.assign(new Error(missing ?? 'No model to record from.'), { name: 'ModelUnavailable' })),
+      };
+    return recordingModel(cassette, real);
+  }
+  return providerModel();
+}
+
+function providerModel(): AssistantModel | undefined {
   const provider = process.env.MISTRI_ASSISTANT_PROVIDER;
   if (provider === 'openai') {
     const key = process.env.OPENAI_API_KEY;

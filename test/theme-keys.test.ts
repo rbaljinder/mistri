@@ -128,6 +128,7 @@ const FULL = {
     steps: 'tinted',
     lanes: 'tag',
     header: 'hero',
+    pane: 'edge',
     filters: 'quiet',
     required: 'optional-word',
     formStep: 'ruled',

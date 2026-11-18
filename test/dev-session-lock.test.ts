@@ -122,3 +122,16 @@ test(
     assert.equal(existsSync(file), false, 'a clean stop removes the file');
   },
 );
+
+/* A field report: `mistri dev --port 4190` waited a minute for its own server and said it did not answer ready, since
+   fetch refuses that port without a connection. It is refused at the start, by name, and nothing is made. */
+test('a port fetch and browsers refuse is refused when dev starts, naming it; one they open is not', (t) => {
+  const dir = appFolder(t);
+  for (const flag of ['--port', '-p'])
+    assert.throws(
+      () => prepareDev(['--app', dir, '--no-config', flag, '4190'], env()),
+      (error: unknown) => error instanceof DevRefusal && error.message.includes('--port 4190') && /bad ports/.test(error.message),
+    );
+  assert.equal(existsSync(join(dir, '.mistri')), false);
+  assert.doesNotThrow(() => prepareDev(['--app', dir, '--no-config', '--port', '4191'], env()));
+});

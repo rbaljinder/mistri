@@ -1,0 +1,10 @@
+/* One piece of evidence (EvidenceList.tsx), the review queue's and Ask's: a plain list, a record a link in the link
+   ink, a quote set in by a rule in the line ink rather than boxed. In the components layer, as ProposalPanel.css is. */
+@layer components {
+.proposal-evidence-list { display: grid; gap: var(--space-3); margin: 0; padding: 0; list-style: none; }
+.proposal-evidence-item { display: grid; gap: var(--space-1); min-width: 0; }
+.proposal-evidence-label { color: var(--ink-muted); overflow-wrap: anywhere; }
+.proposal-evidence-link { justify-self: start; padding: 0; border: 0; background: none; color: var(--link); font: inherit; text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+@media (hover: hover) { .proposal-evidence-link:hover { text-decoration: underline; } }
+.proposal-evidence-quote { margin: 0; padding-inline-start: var(--space-3); border-inline-start: 2px solid var(--line); color: var(--ink); overflow-wrap: anywhere; }
+}

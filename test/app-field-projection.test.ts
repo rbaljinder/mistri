@@ -325,6 +325,23 @@ test('App projection drops entire unsafe actions while preserving the owning lis
   assert.deepEqual(definition, before);
 });
 
+test('an action whose when reads through a reference is served while the reader reads the path, as the App loaded it', () => {
+  const command = { id: 'triage', version: 1, target: 'incident', input: [] } as unknown as NonNullable<AppAction['command']>;
+  const definition = app({
+    actions: [
+      { id: 'triage', label: 'Triage', set: {}, command, when: `site_id.name = clinic` } as unknown as AppAction,
+      { id: 'hiddenHop', label: 'Hidden hop', set: {}, command, when: `site_id.hidden_secret = ${literal}` } as unknown as AppAction,
+    ],
+  });
+  assert.deepEqual(
+    fieldAccessibleApp(definition, schema).resources?.incident.actions?.map((action) => action.id),
+    ['triage'],
+  );
+  const restricted = structuredClone(schema);
+  restricted.tables[2].columns = restricted.tables[2].columns.filter((column) => column.name !== 'name');
+  assert.deepEqual(fieldAccessibleApp(definition, restricted).resources?.incident.actions, []);
+});
+
 test('a default on a column the reader does not write is left out alone; the form keeps the rest', () => {
   const cases: Array<[AppForm, AppForm]> = [
     [{ defaults: { hidden_secret: literal, name: 'public' } }, { defaults: { name: 'public' } }],

@@ -3,4 +3,6 @@ import { defineMessages } from '@mistriwork/kit/client/messages.js';
 
 export const say = defineMessages({
   assistant: 'Assistant',
+  ask: 'Ask',
+  askDetail: 'A question about your records',
 });

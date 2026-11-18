@@ -33,9 +33,11 @@ const northYard = () => ({ rows: [{ id: 7, name: 'North yard' }] });
 let reply: (q: string) => unknown = northYard;
 vi.mock('../core.js', () => ({
   state: { schema: { tables: [site] } },
-  api: async (_p: string, body: { q: string }) => {
+  // The server answers at most `limit` rows, so the mock does too.
+  api: async (_p: string, body: { q: string; limit?: number }) => {
     calls.push(body.q);
-    return reply(body.q);
+    const answer = (await reply(body.q)) as { rows?: unknown[] };
+    return body.limit !== undefined && answer?.rows ? { ...answer, rows: answer.rows.slice(0, body.limit) } : answer;
   },
   findTable: (id: string) => tableById(id),
   labelPath: () => 'name',
@@ -365,6 +367,18 @@ test('the term is searched in every list the menu holds, not the first six, a fe
   // The nine it shows are one from each table before a second from any, so the last lists are not crowded out.
   await screen.findByText('Yard of t7');
   expect(screen.queryByRole('note')).toBeNull();
+});
+
+test('a word that names many rows in one list shows twenty of them, not the nine a shortlist held', async () => {
+  // A field report: one list of two dozen matching rows showed three, and nothing past them could be reached.
+  const user = userEvent.setup();
+  appMode = true;
+  reply = () => ({ rows: Array.from({ length: 25 }, (_, at) => ({ id: at + 1, name: `Yard ${at + 1}` })) });
+  render(<Palette onClose={vi.fn()} />);
+  await user.type(screen.getByRole('combobox'), 'yard');
+  await screen.findByText('Yard 20');
+  expect(screen.getByRole('group', { name: 'Records' }).querySelectorAll('[role="option"]')).toHaveLength(20);
+  expect(screen.queryByText('Yard 21')).toBeNull();
 });
 
 test('a menu with more lists than one search asks says how many are searched', async () => {

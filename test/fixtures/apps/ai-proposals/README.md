@@ -8,6 +8,7 @@ the assistant made.
 
 - `app.ts`: one resource, `claim`, with two command actions and a panel assistant.
 - `commands.ts`: `sendAppeal` (declared `approval: 'ai'`) and `closeClaim`.
+- `ask.json`: the scripted model for `e2e/ai-ask.spec.ts`, which asks over the claims and reads them.
 - `seed.mjs`: two open claims, the command journal and the assistant store.
 
 Owned by the test suite; not a sample App.

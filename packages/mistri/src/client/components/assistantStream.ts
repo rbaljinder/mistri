@@ -40,7 +40,17 @@ export type PanelItem =
   | { type: 'note'; text: string }
   | { type: 'step'; id: string; tool: string; label: string; failed?: true }
   | { type: 'block'; id: string; block: AssistantBlock }
-  | { type: 'proposal'; id: string; proposal: Proposal; outcome?: ProposalOutcome };
+  | { type: 'proposal'; id: string; proposal: Proposal; outcome?: ProposalOutcome }
+  /** An Ask's read: the line it ran and the rows it read there. */
+  | { type: 'query'; id: string; q: string; resource?: string; total: number; evidence: AskEvidence[] };
+
+/** A row an Ask read, in a proposal's evidence shape, with the address it opens at. */
+interface AskEvidence {
+  kind: string;
+  ref: string;
+  label: string;
+  address?: string;
+}
 
 export interface StreamEvent {
   event: string;
@@ -155,6 +165,19 @@ export function applyEvent(items: readonly PanelItem[], { event, data }: StreamE
     case 'proposal':
       if (typeof data.id === 'string' && record(data.proposal))
         next.push({ type: 'proposal', id: data.id, proposal: data.proposal as unknown as Proposal });
+      return next;
+    case 'query':
+      if (typeof data.id === 'string' && typeof data.q === 'string' && Array.isArray(data.evidence))
+        next.push({
+          type: 'query',
+          id: data.id,
+          q: data.q,
+          ...(typeof data.resource === 'string' ? { resource: data.resource } : {}),
+          total: typeof data.total === 'number' ? data.total : data.evidence.length,
+          evidence: data.evidence.filter(
+            (entry): entry is AskEvidence => record(entry) && typeof entry.ref === 'string' && typeof entry.label === 'string',
+          ),
+        });
       return next;
     case 'note':
       if (typeof data.text === 'string') next.push({ type: 'note', text: data.text });

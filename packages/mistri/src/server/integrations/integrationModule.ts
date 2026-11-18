@@ -35,6 +35,8 @@ declare const clientType: unique symbol;
 export interface IntegrationDelivery {
   readonly headers: Readonly<Record<string, string | undefined>>;
   readonly body: Buffer;
+  /** The non-file parts of a `multipart/form-data` delivery, by name; absent for any other body. The signature is still over `body`. */
+  readonly form?: Readonly<Record<string, string>>;
 }
 
 /** One verified event: the provider's id for it (what a retry repeats), its type, when the provider sent it, and its data. */

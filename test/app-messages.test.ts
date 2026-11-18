@@ -30,7 +30,7 @@ import {
 import { CAPTION_KEYS, isMessageRef, parseCaption } from '../packages/engine/src/shared/appMessages.js';
 import { canonicalLocale, negotiateLocale, resolveLocale } from '../packages/engine/src/shared/appLocale.js';
 import { appAdvisories, appProblems, loadApp, localizedApp, type AppHost, type LoadedApp } from '../packages/mistri/src/server/app/apps.js';
-import { appCatalogs, componentMessages, frameworkWords } from '../packages/mistri/src/server/app/appMessages.js';
+import { appCatalogs, componentMessages, frameworkWords, MessageSayer } from '../packages/mistri/src/server/app/appMessages.js';
 import {
   localeRow,
   pickedLocale,
@@ -715,6 +715,22 @@ describe('a notice, said per recipient', () => {
       'Assigned: Printer jam',
       "another tenant's row is never this one's",
     );
+  });
+
+  test("a date in the words reads on the tenant's clock at one instant; a calendar date is that day in every zone", async () => {
+    const { app } = await words();
+    const base = appCatalogs(app)!;
+    const catalogs = {
+      ...base,
+      locales: { ...base.locales, [base.source]: { ...base.locales[base.source], 'ticket.due': 'Due {at, date, short}' } },
+    };
+    const say = (zone: string, at: unknown) => new MessageSayer(catalogs, 'en-US', undefined, undefined, zone).format('ticket.due', { at });
+    // 10:30 UTC is already the 11th on Kiritimati (UTC+14) and still the 10th in Chicago.
+    assert.equal(say('Pacific/Kiritimati', '2026-03-10T10:30:00Z'), 'Due 3/11/26');
+    assert.equal(say('America/Chicago', '2026-03-10T10:30:00Z'), 'Due 3/10/26');
+    assert.equal(say('Pacific/Kiritimati', new Date('2026-03-10T10:30:00Z')), 'Due 3/11/26');
+    assert.equal(say('America/Chicago', '2026-03-10'), 'Due 3/10/26');
+    assert.equal(say('Pacific/Kiritimati', '2026-03-10'), 'Due 3/10/26');
   });
 
   test('an App without catalogs says its titles as it always did, and loads no formatter for them', async () => {

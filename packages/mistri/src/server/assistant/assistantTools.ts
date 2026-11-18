@@ -56,7 +56,15 @@ export interface Proposal {
 export type DisplayItem =
   | { type: 'step'; id: string; tool: string; label: string; failed?: true }
   | { type: 'block'; id: string; block: AssistantBlock }
-  | { type: 'proposal'; id: string; proposal: Proposal };
+  | { type: 'proposal'; id: string; proposal: Proposal }
+  /* Ask shows what it read: the line it ran, as the query bar would take it, and the rows it read there, each a record
+     the person may open. Only what this person's own read returned, so it says nothing they could not see. */
+  | { type: 'query'; id: string; q: string; resource?: string; total: number; evidence: AskEvidence[] };
+
+/** One row an Ask read: the evidence shape a proposal keeps, with the address the reader opens it at. */
+interface AskEvidence extends ProposalEvidence {
+  address?: string;
+}
 
 interface ToolAnswer {
   /** What the model is told, as JSON text. */
@@ -76,6 +84,8 @@ export interface ToolSession {
   /** Keeps a command's proposal for review as this person, under the grant and row policy their own run would meet
    * (http/assistantProposal.ts; a tenant App's host, tenant/tenantHttp.ts `propose`). */
   propose?: (draft: ProposalDraft) => Promise<CommandProposalRow>;
+  /** Ask: the turn reads and shows what it read; the only change it may make is a command kept for review. */
+  ask?: true;
 }
 
 /** A refusal the model is told and may act on: a wrong name, a field that is not there. */
@@ -410,6 +420,7 @@ async function query(context: Context, input: Record<string, unknown>) {
   if (/\b(count|sum|avg|min|max)\b/i.test(q) && !/\bshow\b/i.test(q)) {
     const grouped = await context.measure(q, limit);
     return {
+      asked: { q, total: grouped.total ?? grouped.rows.length, evidence: [] as AskEvidence[] },
       result: { columns: grouped.columns, rows: grouped.rows.slice(0, SHOWN_TO_MODEL), groups: grouped.total ?? grouped.rows.length },
       label: `Counted: ${q.split(/\s+/)[0]}`,
     };
@@ -419,19 +430,25 @@ async function query(context: Context, input: Record<string, unknown>) {
   const meta = table ? schema.tables.find((each) => each.id === table) : undefined;
   const [pk] = meta ? primaryKey(meta) : [];
   const label = meta && labelColumn(meta);
+  const cited: AskEvidence[] = [];
   const shown = await Promise.all(
     rows.slice(0, SHOWN_TO_MODEL).map(async (row) => {
-      if (meta && pk && row[pk] !== undefined)
-        context.read(meta.id, { [pk]: row[pk] }, label && row[label] != null ? row[label] : `${meta.id} ${String(row[pk])}`);
+      const said =
+        meta && pk && row[pk] !== undefined ? (label && row[label] != null ? row[label] : `${meta.id} ${String(row[pk])}`) : undefined;
+      if (meta && pk && row[pk] !== undefined) context.read(meta.id, { [pk]: row[pk] }, said);
       const out = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, clipped(value)]));
       if (meta && pk && row[pk] !== undefined) {
         const address = await context.addressOf(meta.id, { [pk]: row[pk] });
         if (address) out.address = address;
+        const ref = `${meta.id}/${JSON.stringify({ [pk]: row[pk] })}`;
+        if (ref.length <= 2048)
+          cited.push({ kind: 'record', ref, label: plain(said, 200) || ref.slice(0, 200), ...(address ? { address } : {}) });
       }
       return out;
     }),
   );
   return {
+    asked: { q, ...(table ? { resource: table } : {}), total: total ?? rows.length, evidence: cited },
     result: {
       ...(table ? { resource: table } : {}),
       total: total ?? rows.length,
@@ -566,6 +583,10 @@ async function propose(
   id: string,
 ): Promise<{ proposal: Proposal; label: string; result: unknown; review?: boolean }> {
   const verb = context.verbOf(String(input.action ?? ''));
+  /* Ask changes nothing in front of the person: a command may be kept for review (below), where someone approves it
+     on its own; a set or a New form would be a card confirmed in the answer, which Ask does not draw. */
+  const readOnly = () => new ToolRefusal(`Ask only reads: ${verb.label} cannot be proposed here. Say what would change, in words.`);
+  if (session.ask && (verb.kind !== 'command' || !session.propose)) throw readOnly();
   const table = await context.tableOf(verb.resource);
   const values =
     input.values && typeof input.values === 'object' && !Array.isArray(input.values) ? (input.values as Record<string, unknown>) : {};
@@ -656,6 +677,7 @@ async function propose(
       review: true,
     };
   }
+  if (session.ask) throw readOnly();
   return {
     proposal,
     label: `Proposed ${verb.label}: ${found.title}`,
@@ -710,6 +732,7 @@ export async function answerTool(session: ToolSession, name: string, input: unkn
             : await show(context, session, args);
     const display: DisplayItem[] = [{ type: 'step', id, tool: name, label: answered.label }];
     if ('block' in answered && answered.block) display.push({ type: 'block', id, block: answered.block });
+    if (session.ask && 'asked' in answered && answered.asked) display.push({ type: 'query', id, ...answered.asked });
     return { result: fitted(answered.result), display };
   } catch (error) {
     if (session.signal.aborted) throw error;

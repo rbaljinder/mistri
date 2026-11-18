@@ -189,6 +189,12 @@ export function CardsList({
   const caption = (name: string) => (columnLabel(table.id, name) as string | null) ?? humanName(name.split('.').pop() ?? name);
   const present = (row: Record<string, unknown>, name: string) => row[name] !== null && row[name] !== undefined && row[name] !== '';
   const canOpen = interactive || recordNavigation;
+  /* The title is the record's label, and a column that is the title is not said again under it: the card leaves its own
+     name out of its figure, summary, lines and foot (a phone's summaries do the same, RecordSummaries.tsx). */
+  const apart = (names: readonly string[] | undefined) => names?.filter((name) => name !== spec.primary);
+  const summary = apart(spec.facts);
+  const lines = apart(spec.lines);
+  const footer = apart(spec.footer);
   /* A fact as a card says it, on its line under the figure or along the foot: its value, and its own word after it
      ("1 owner") or before it ("Born …") as its caption for everyone; without one, the caption only assistive
      technology hears. */
@@ -250,7 +256,7 @@ export function CardsList({
           const hasMedia = image !== undefined || avatar;
           /* The summary as words, masked where its rule says: the whole of it rides the title attribute, since three lines may not hold it. */
           const description =
-            spec.description && present(row, spec.description)
+            spec.description && spec.description !== spec.primary && present(row, spec.description)
               ? (maskedText(columnDisplay(table.id, spec.description) as DisplayRule | null, row[spec.description]) ??
                 String(row[spec.description]))
               : undefined;
@@ -308,15 +314,17 @@ export function CardsList({
                     </p>
                   )}
                   {(!hasMedia || avatar) && badge}
-                  {spec.value && row[spec.value] != null && <p className="cards-value">{saidWithSecond(row, spec.value)}</p>}
-                  {spec.facts?.some((name) => present(row, name)) ? (
+                  {spec.value && spec.value !== spec.primary && row[spec.value] != null && (
+                    <p className="cards-value">{saidWithSecond(row, spec.value)}</p>
+                  )}
+                  {summary?.some((name) => present(row, name)) ? (
                     <p className="cards-summary">
-                      {spec.facts.filter((name) => present(row, name)).map((name) => fact(row, name, 'cards-summary-item'))}
+                      {summary.filter((name) => present(row, name)).map((name) => fact(row, name, 'cards-summary-item'))}
                     </p>
                   ) : null}
-                  {spec.lines?.length ? (
+                  {lines?.length ? (
                     <dl className="cards-facts">
-                      {spec.lines.map((name) => (
+                      {lines.map((name) => (
                         <div key={name} className="cards-fact">
                           <dt>{caption(name)}</dt>
                           <dd>{saidWithSecond(row, name)}</dd>
@@ -326,10 +334,10 @@ export function CardsList({
                   ) : null}
                 </div>
                 {/* The foot stands on every card that declares one, filled or not, so a row of cards ends on one line. */}
-                {spec.footer?.length ? (
+                {footer?.length ? (
                   <p className="cards-foot">
-                    {spec.footer.some((name) => present(row, name))
-                      ? spec.footer.filter((name) => present(row, name)).map((name) => fact(row, name, 'cards-foot-item'))
+                    {footer.some((name) => present(row, name))
+                      ? footer.filter((name) => present(row, name)).map((name) => fact(row, name, 'cards-foot-item'))
                       : '\u00a0'}
                   </p>
                 ) : null}

@@ -1,9 +1,11 @@
 /**
  * What `mistri check` says of an App's machines (appMachine.ts), beside
  * the graph's own shape: its column and `since` are the table's, and every
- * verb can run through a role or a public form — a command granted to a role
- * or named by a public form, a fixed verb on a table a role writes or runs by
- * name. Otherwise the record cannot leave that state by that verb.
+ * verb can run through a role, a public form, a public page or a link — a
+ * command granted to a role, named by a public form or public page, or run by
+ * a link's holder (`links.<name>.commands`); a fixed verb on a table a role
+ * writes or runs by name. Otherwise the record cannot leave that state by that
+ * verb.
  *
  * `machineCommandWarnings` reads the commands module beside the App: a
  * command that judges a machine's column in its `when`, writes that column in
@@ -13,7 +15,15 @@
  * source (`status:` in an object it passes), so the check can miss a column
  * written through a computed key; the run-time refusal cannot.
  */
-import { appCommandGrants, grantsByRole, isPublicForm, logicalResource, resolveAppAccess, type AppDef } from '../../shared/app.js';
+import {
+  appCommandGrants,
+  grantsByRole,
+  isPublicCommandPage,
+  isPublicForm,
+  logicalResource,
+  resolveAppAccess,
+  type AppDef,
+} from '../../shared/app.js';
 import { machineProblems, machineVerbs } from '../../shared/appMachine.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { appConsumesRules } from '../../shared/appConsumes.js';
@@ -32,11 +42,14 @@ export function machineChecks(app: AppDef, schema: DatabaseSchema): string[] {
      was answered 500. */
   if (Object.keys(app.resources ?? {}).some((name) => !schema.tables.some((table) => table.id === name))) return problems;
   const roles = Object.keys(app.auth?.roles ?? {});
-  const publicCommands = new Set(
-    Object.values(app.views)
+  /* Run with no role's grant: by a public form or public page's visitor, and by a link's holder on its one record. */
+  const publicCommands = new Set([
+    ...Object.values(app.views)
       .filter(isPublicForm)
       .flatMap((form) => [form.command.id, ...(form.steps ?? []).flatMap((step) => (step.command ? [step.command.id] : []))]),
-  );
+    ...Object.values(app.views).flatMap((view) => (isPublicCommandPage(view) ? view.page.commands : [])),
+    ...Object.values(app.resources ?? {}).flatMap((resource) => Object.values(resource.links ?? {}).flatMap((link) => link.commands ?? [])),
+  ]);
   /* Each role's command grants and access, read once for every verb: both
      re-read the App's whole policy, and a large App's machines have many
      verbs. */

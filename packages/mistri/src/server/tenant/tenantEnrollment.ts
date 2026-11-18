@@ -40,7 +40,8 @@ import {
   sqliteSourceLocation,
   type TenantPlatformSource,
 } from './tenantPlatformSource.js';
-import { openPostgresTenantReadSource, openSqliteTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
+import { openPostgresTenantReadSource, openSqliteTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
+import { readerZone, zoneColumn } from '../../shared/appZone.js';
 import { tenantRetirement } from './tenantRetirement.js';
 import { canonicalLocale } from '@mistriwork/engine/shared/appLocale.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
@@ -403,7 +404,7 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
         now,
         auditing,
         tenantHistoryBinding(app, pages, ownership),
-        tenantNoticeBinding(app, ownership, members, tenantLocaleReader(app, reader)),
+        tenantNoticeBinding(app, ownership, members, tenantLocaleReader(app, reader), tenantZoneReader(app, reader)),
         app.branding !== undefined,
         auditsReads(app),
       );
@@ -648,7 +649,7 @@ async function acquirePostgres(
     now,
     audit,
     tenantHistoryBinding(app, pages, ownership),
-    tenantNoticeBinding(app, ownership, members, tenantLocaleReader(app, reader)),
+    tenantNoticeBinding(app, ownership, members, tenantLocaleReader(app, reader), tenantZoneReader(app, reader)),
     app.branding !== undefined,
     auditsReads(app),
   );
@@ -707,6 +708,23 @@ export async function loadTenantEnrollment<Request>(input: TenantEnrollmentLoadO
   } catch (error) {
     return denyTenant(error);
   }
+}
+
+/* A tenant's time zone, where `ui.timezone: { column: 'tenant.<column>' }` names its shared profile: read outside
+   the write, as its language is. A zone it cannot read is the App's (noticeWords.ts). */
+function tenantZoneReader(
+  app: AppDef,
+  reader: Pick<TenantReadSource, 'readTenantProfile'>,
+): ((tenant: string) => Promise<string | undefined>) | undefined {
+  const named = zoneColumn(app.ui);
+  if (named?.resource !== 'tenant') return undefined;
+  return async (tenant) => {
+    try {
+      return readerZone((await readSharedProfile(reader, app, tenant))[named.column]);
+    } catch {
+      return undefined;
+    }
+  };
 }
 
 /* A tenant's saved language, where the App lets its tenants set one (`branding.allow: 'locale'`): read through the
