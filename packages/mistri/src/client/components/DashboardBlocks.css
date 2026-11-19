@@ -120,7 +120,8 @@ a.dash-step-card { text-decoration: none; }
     display: flex; align-items: center; gap: var(--space-2) 18px; flex-wrap: wrap;
     width: 100%; padding: var(--space-4) var(--space-4h) var(--space-2);
   }
-  .dash-picks { display: flex; gap: var(--space-3); margin-left: auto; }
+  /* The period pills and the filters stand together in one group; a filter pushed to the far edge read as another bar. */
+  .dash-picks { display: flex; flex-wrap: wrap; gap: var(--space-3); }
   .dash-pick [data-slot='select-trigger'] { font-size: var(--text-sm); padding: var(--space-1h) var(--space-3); }
   .dash-delta { font-size: var(--text-sm); color: var(--ink-muted); font-family: var(--mono); }
   /* Only when the author said which way is better: a fall in "won" is bad,

@@ -14,6 +14,7 @@ import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/clien
 import { activeApp, profileIsOffered } from '../appState.js';
 import { AccountProfile } from './AccountProfile.js';
 import { TenantDomains } from './TenantDomains.js';
+import { TenantReads } from './TenantReads.js';
 import { say } from '../copy/account/components/AccountProfile.js';
 import { say as words } from '../copy/account/components/SettingsRoom.js';
 import './SettingsRoom.css';
@@ -101,6 +102,12 @@ export function SettingsRoom({ section }: { section?: string }) {
       {(activeApp() as { domains?: true } | null)?.domains === true && (
         <Section title={words('domains')} about={words('domainsHint')}>
           <TenantDomains />
+        </Section>
+      )}
+      {/* Only for the tenant's admins where the App audits reads: the payload says so, and /api/reads judges again. */}
+      {(activeApp() as { reads?: true } | null)?.reads === true && (
+        <Section title={words('reads')} about={words('readsHint')}>
+          <TenantReads />
         </Section>
       )}
     </section>

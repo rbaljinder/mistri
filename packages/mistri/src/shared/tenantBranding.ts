@@ -89,8 +89,8 @@ export function parseBrandingDeclaration(raw: unknown, app: { ui: AppUi; auth?: 
   let themes: ThemeDefinition[];
   if (raw.themes === undefined) themes = [ownLook(app.ui)];
   else {
-    if (!Array.isArray(raw.themes) || !raw.themes.length || raw.themes.length > 12)
-      throw new Error(`${at}.themes must list one to twelve themes: defineTheme(...) results or built-in names.`);
+    if (!Array.isArray(raw.themes) || !raw.themes.length || raw.themes.length > 20)
+      throw new Error(`${at}.themes must list one to twenty themes: defineTheme(...) results or built-in names.`);
     themes = raw.themes.map((spec: unknown, index: number) => {
       const here = `${at}.themes[${index}]`;
       if (typeof spec === 'string') {

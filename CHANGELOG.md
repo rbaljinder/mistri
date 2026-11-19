@@ -5,6 +5,24 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.68
+
+- Read audit room: a tenant's admins (the roles that edit its domains or branding) see who opened or listed the
+  organization's audited records under Settings → Reads, newest first, 50 at a time with Show older paging by row id
+  (no cap). Each row names the person from the sign-in store, links an opened record to its address, and says how many
+  rows a list showed. Filter by person, resource, record (matched where it was opened and in every list that returned
+  it) and a day range. The rows are the lease's tenant's alone; a member who is not an admin is refused (403), and the
+  room is not served in the platform realm or on a support visit (404). `mistri audit reads` gains `--until`, `--before
+  <id>` and `--all`, which pages past the 1000-row default with no cap (field report #92).
+- A command's bulk action can be `bulk: 'each'`: a one-record command with no inputs runs once per picked record, each in its own transaction, and the selection's report lists how each went.
+- A custom page section's read can say `same: [...]` to list records that share those columns with the page's record, as a related list's `same` does.
+- `elevate.read` may name a table the command also appends to; the command can read it under its own authority, while updates and removes of it stay refused.
+- A list's search box searches by the record's name when the table has a name template.
+- A page may declare up to 24 params; a tenant may define up to 20 themes; a dashboard may have any number of layout rows.
+- A dashboard metric's `measure` accepts `count distinct <column>`. A sparkline is neutral; only the change figure is colored. A filter's "Any" choice uses the column's label.
+- `Beside` takes `stackBelow` (such as `'40rem'`) to stack its columns when the container is narrower.
+- A dashboard's period pills and filters sit together instead of the filters pushing to the far edge.
+
 ## 1.0.0-rc.67
 
 - A tenant can use its own domain (opt in with `customDomains: { enabled: true }`; off by default). A tenant admin adds

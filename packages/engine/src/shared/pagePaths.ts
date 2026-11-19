@@ -842,7 +842,30 @@ export function customReadView(
   key: Record<string, string | number>,
   index: number,
   now?: Date,
+  rootValues?: RootValues,
 ): { view?: ViewDef; empty?: boolean; error?: string } {
+  if (read.similar) {
+    /* Rows that share the record's values: planned as a related list's `same` is, from values read off the record's row. */
+    const built = similarView(
+      schema,
+      page,
+      {
+        kind: 'list',
+        from: read.from,
+        path: '',
+        columns: read.columns,
+        filter: read.filter,
+        orderBy: read.orderBy,
+        limit: read.limit ?? DEFAULT_PAGE_LIST_LIMIT,
+        similar: read.similar,
+      } as PageList,
+      key,
+      index,
+      now,
+      rootValues,
+    );
+    return built.view ? { ...built, view: { ...built.view, id: `page:${page.id}:${index}:${name}` } } : built;
+  }
   if (read.path) {
     const built = listView(
       schema,
@@ -904,6 +927,10 @@ export function customProblem(schema: DatabaseSchema, page: PageDef, section: Pa
     const here = `rows "${name}"`;
     const table = findTable(schema, read.from);
     if (!table) return `${here}: "${read.from}" is not a table on this connection.`;
+    if (read.similar) {
+      const problem = similarProblem(schema, page, { from: read.from, similar: read.similar } as PageList);
+      if (problem) return `${here}: ${problem}`;
+    }
     if (read.path) {
       const resolved = resolvePath(schema, read.from, read.path);
       if (resolved.error) return `${here}: ${resolved.error}`;

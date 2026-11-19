@@ -34,7 +34,7 @@ import { TenantContextError, TenantUnavailableError } from '@mistriwork/engine/s
 import { noticeForReader } from '../inbox.js';
 import { canonicalLocale } from '@mistriwork/engine/shared/appLocale.js';
 import { createTenantApiRequest } from './tenantApiRequest.js';
-import { readAdapter } from './tenantHttp.js';
+import { readAdapter } from './tenantReadAdapter.js';
 import type { TenantNames } from './tenantNames.js';
 import type { PlatformReadContext } from './tenantPlatformReadRuntime.js';
 import type { TenantReadContext } from './tenantReadRuntime.js';

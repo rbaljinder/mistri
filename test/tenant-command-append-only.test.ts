@@ -38,7 +38,7 @@ const app = parseTestApp(
       tenancy: { label: 'Customer', profile: 'customer', platform: { label: 'Operator' } },
       /* The agent reads tickets and nothing of the hand-offs another team works from. */
       roles: {
-        agent: { realm: 'tenant', read: ['ticket'], commands: ['handOff', 'peekHandoffs'] },
+        agent: { realm: 'tenant', read: ['ticket'], commands: ['handOff', 'peekHandoffs', 'peekElevated'] },
         operator: { realm: 'platform', read: true },
       },
     },
@@ -56,8 +56,9 @@ const app = parseTestApp(
 );
 
 /* Opens a ticket and leaves a hand-off beside it; `then` is what the handler does after. */
-const handOff = (then?: (db: Handle) => Promise<unknown>) =>
+const handOff = (then?: (db: Handle) => Promise<unknown>, elevate?: { read: Array<'handoff'> }) =>
   defineCommand({
+    ...(elevate ? { elevate } : {}),
     source: 'business',
     target: 'ticket',
     targets: 'none',
@@ -73,6 +74,8 @@ const handOff = (then?: (db: Handle) => Promise<unknown>) =>
 const registry = defineCommands({
   handOff: handOff(),
   peekHandoffs: handOff((db) => db.handoff.count()),
+  /* The same peek, with its read of the log elevated: it reads the log's lines under its own authority. */
+  peekElevated: handOff((db) => db.handoff.count(), { read: ['handoff'] }),
 });
 const rows: RowScope = { ticket: true };
 const policy = defineAppTenantPolicy({
@@ -86,7 +89,7 @@ const policy = defineAppTenantPolicy({
   },
   resolveMembershipRows: () => rows,
   resolveRows: () => rows,
-  resultReferences: { handOff: () => [], peekHandoffs: () => [] },
+  resultReferences: { handOff: () => [], peekHandoffs: () => [], peekElevated: () => [] },
   resolvePlatformRows: () => ({ ...rows, customer: true, handoff: true }),
 });
 
@@ -198,6 +201,15 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       assert.deepEqual(await f.handoffs(), [{ id: 't1-h', tenant_id: 'north', ticket_id: 't1' }]);
       const read = await f.data('/api/run', { q: 'handoff', limit: 5, offset: 0, count: 'none' });
       assert.match(read.text, /No table called \\"handoff\\"/, 'the role still reads no hand-off');
+    });
+
+    test('a command that elevates its read of the log reads its earlier lines, and the role still reads none', async (t) => {
+      const f = await fixture(t, dialect);
+      const ran = await f.run('peekElevated', 't3');
+      assert.equal(ran.status, 200, ran.text);
+      assert.deepEqual(await f.handoffs(), [{ id: 't3-h', tenant_id: 'north', ticket_id: 't3' }]);
+      const read = await f.data('/api/run', { q: 'handoff', limit: 5, offset: 0, count: 'none' });
+      assert.match(read.text, /No table called \\"handoff\\"/);
     });
 
     test('a handler that reads what it may only add is refused, naming them, and nothing lands', async (t) => {

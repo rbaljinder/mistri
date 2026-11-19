@@ -1163,10 +1163,11 @@ async function executeUntraced(
                 ),
               });
             };
-            /* A table it writes that the actor cannot read takes this command's new rows and gives nothing back
-             (businessCommandAuthorization.ts insertOnly): every read, change and removal of it is refused. */
-            const addingOnly = (table: string) => {
+            /* A table the actor cannot read takes this command's new rows and gives nothing back (insertOnly): every
+             read, change and removal is refused, but an `elevate: { read }` table is read under the command's authority. */
+            const addingOnly = (table: string, reading = false) => {
               const said = authorized.insertOnly?.get(table);
+              if (reading && command.elevate?.read.includes(table)) return;
               if (said !== undefined) throw new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, undefined, said);
             };
             // Audit explicit write intent, not trigger/default after-images. Deletions
@@ -1177,7 +1178,7 @@ async function executeUntraced(
                   request,
                   async (request) => {
                     checkCancelled();
-                    addingOnly(request.table);
+                    addingOnly(request.table, true);
                     return store.query(request);
                   },
                   true,
@@ -1187,7 +1188,7 @@ async function executeUntraced(
                   { table, filter },
                   async ({ table, filter }) => {
                     checkCancelled();
-                    addingOnly(table);
+                    addingOnly(table, true);
                     return store.count(table, filter);
                   },
                   true,
@@ -1201,7 +1202,7 @@ async function executeUntraced(
                         request,
                         async (request) => {
                           checkCancelled();
-                          addingOnly(request.table);
+                          addingOnly(request.table, true);
                           return store.aggregate!(request);
                         },
                         true,

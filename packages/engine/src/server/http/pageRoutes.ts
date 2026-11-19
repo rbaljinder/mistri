@@ -220,7 +220,13 @@ export async function pageRoutes(post: PostContext, hooks: PageHooks): Promise<b
        read is refused like any other read of it. */
     const likeColumns = [
       ...new Set(
-        page.sections.flatMap((s) => (s.kind === 'list' && s.similar ? [...s.similar.same, ...Object.keys(s.similar.near ?? {})] : [])),
+        page.sections.flatMap((s) =>
+          s.kind === 'list' && s.similar
+            ? [...s.similar.same, ...Object.keys(s.similar.near ?? {})]
+            : s.kind === 'custom'
+              ? Object.values(s.reads ?? {}).flatMap((read) => read.similar?.same ?? [])
+              : [],
+        ),
       ),
     ];
     let rootValues: Record<string, unknown> | undefined;

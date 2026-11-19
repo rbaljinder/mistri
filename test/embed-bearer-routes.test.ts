@@ -87,6 +87,9 @@ test("a bearer stands for its session on a browser route, and on no member's API
     '/api/domains/remove',
     '/api/domains/primary',
     '/API/Domains/add',
+    // A tenant's read audit is its admins' to read in Settings, never an embedded page's.
+    '/api/reads',
+    '/API/Reads',
     '/api/console',
     '/api/console/flags',
     // The rest of the account's and the operator's, held as before.

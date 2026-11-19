@@ -628,6 +628,23 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
     expect(start).toHaveClass('kit-beside-start', 'mine');
     expect([...start.children].map((c) => c.textContent)).toEqual(['Body', 'Left']);
   });
+
+  test('Beside stacks under the width it is told, and takes only a plain length', () => {
+    const { container } = render(
+      <>
+        <ui.Beside rail={<span>Rail</span>} stackBelow="60rem">
+          <span>Main</span>
+        </ui.Beside>
+        <ui.Beside rail={<span>Rail</span>} stackBelow="1px) { } body { display: none">
+          <span>Main</span>
+        </ui.Beside>
+      </>,
+    );
+    const rules = [...container.querySelectorAll('style')].map((style) => style.textContent ?? '');
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toMatch(/@container kit-beside \(max-width: 60rem\)/);
+    expect(container.querySelector('.kit-beside')?.className).toMatch(/kit-beside-\w+/);
+  });
 });
 
 describe('the words and levels a page under the platform head needs', () => {

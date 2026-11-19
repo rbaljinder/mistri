@@ -157,7 +157,7 @@ export function fieldAccessiblePage(schema: DatabaseSchema, page: PageDef): bool
           // The record's fields as a fields section reads them, and every declared read compiled as it will run.
           for (const path of section.record ?? []) resolvePath(schema, checked.base, path);
           for (const [name, read] of Object.entries(section.reads ?? {})) {
-            const built = customReadView(schema, checked, name, read, key, index, now);
+            const built = customReadView(schema, checked, name, read, key, index, now, rootValues);
             if (built.error || !built.view) return false;
             compileView(schema, built.view, ANSI_STYLE);
           }

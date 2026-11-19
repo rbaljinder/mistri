@@ -1783,11 +1783,11 @@ every look, so the picture it keeps reads on whatever page shows it.
   Groups read in their column's vocabulary order (a pipeline's stages), else
   biggest first — never the alphabet. Stat cards and their trends take no
   colour by position: one edge colour for every card (the first series)
-  and every trend in the first series, as the refusal list asks — save where
-  the metric says which way is good news (`better`) and its change is known:
-  then the trend is drawn in its change's tone, the green or red its delta is
-  said in, because that colour is meaning, not position (Lumen, alone,
-  colours its stat cards by their place: Lumen's exceptions).
+  and every trend in the first series, as the refusal list asks. The one
+  figure that wears green or red is the change, where the metric says which
+  way is good news (`better`): a trend is its shape, never a verdict, so it
+  stays neutral beside it (Lumen, alone, colours its stat cards by their
+  place: Lumen's exceptions).
 - Bars (`shape: 'bar'`) are one series: a bar per group, the quiet ones a
   tint of the first series and one current bar in the
   series itself — the last, the period in hand, until the

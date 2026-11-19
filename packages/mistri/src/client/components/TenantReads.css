@@ -1,0 +1,32 @@
+/* A component's own rules, brought with it: after the base, before any look (style.css names the order).
+   Settings is loaded on demand (appnav.js), so none of it stands in a first paint. */
+@layer components {
+/* A read is a row between hairlines that wraps on a phone: its time, who, then what was seen. Record ids are long
+   (a composite key is JSON), so they break rather than scroll sideways. */
+.reads { display: grid; gap: var(--space-4); min-width: 0; }
+.reads [role="alert"] { margin: 0; color: var(--status-warning); }
+.reads [role="status"] { margin: 0; }
+.reads-dim { margin: 0; color: var(--ink-muted); line-height: 1.5; }
+.reads-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-3); }
+.reads-filters > * { flex: 1 1 10rem; min-width: 0; }
+.reads-filters > :nth-child(2) { flex-basis: 14rem; }
+.reads-apply { display: flex; flex: 0 0 auto; flex-wrap: wrap; gap: var(--space-2h); }
+.reads-person { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2h); margin: 0; }
+.reads-list { list-style: none; margin: 0; padding: 0; }
+.reads-list > li {
+  display: grid; grid-template-columns: minmax(9rem, auto) minmax(8rem, 12rem) minmax(0, 1fr);
+  align-items: baseline; gap: var(--space-2) var(--space-3);
+  padding: var(--space-2h) 0; border-bottom: 1px solid var(--line);
+}
+.reads-list > li:first-child { border-top: 1px solid var(--line); }
+.reads-at { color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.reads-who { min-width: 0; overflow-wrap: anywhere; text-align: left; }
+button.reads-who { all: unset; cursor: pointer; overflow-wrap: anywhere; text-decoration: underline; text-decoration-color: var(--line); text-underline-offset: 3px; }
+@media (hover: hover) { button.reads-who:hover { text-decoration-color: currentColor; } }
+button.reads-who:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 2px; }
+.reads-what { min-width: 0; overflow-wrap: anywhere; }
+.reads-what code { font-family: var(--mono); overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .reads-list > li { grid-template-columns: minmax(0, 1fr); gap: var(--space-1); }
+}
+}

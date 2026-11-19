@@ -223,13 +223,17 @@ export function editedReferences(spec: Pick<ListSpec, 'table' | 'show' | 'editab
 }
 
 /** The column a list's search box searches: the one its records are named by,
-    where a filter box can read it — not a templated name (`$label`), which is
-    computed, nor a column an API cannot filter by. The list draws that box and
-    its address says it as `search=` (publicAddress.ts), by this one rule. */
+    where a filter box can read it — not a column an API cannot filter by. A
+    record named by a template (`'{patient_id.name} · {kind}'`, the name read
+    through a reference) is searched by that name, `$label`, which the server
+    computes in the statement from every column the template reads, references
+    included, so the box finds a visit by its patient. The list draws that box
+    and its address says it as `search=` (publicAddress.ts), by this one rule. */
 export function searchColumn(t: TableMeta | undefined): string | undefined {
   if (!t) return undefined;
   const label = recordLabel(t) === undefined ? labelColumn(t) : labelPath(t);
-  return label && label !== LABEL_SEGMENT && (!t.filterable || t.filterable.includes(label)) ? label : undefined;
+  if (label === LABEL_SEGMENT) return t.labelTemplate ? label : undefined;
+  return label && (!t.filterable || t.filterable.includes(label)) ? label : undefined;
 }
 
 /** The show clause that fetches the app's columns plus the keys a row needs to open. */

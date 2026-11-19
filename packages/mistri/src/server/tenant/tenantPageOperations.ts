@@ -75,7 +75,11 @@ export async function tenantPagePlan(
   const rootColumns = needed(page.base);
   // A matched list's values come from this same scoped read of the record, never the request.
   const likeColumns = page.sections.flatMap((section) =>
-    section.kind === 'list' && section.similar ? [...section.similar.same, ...Object.keys(section.similar.near ?? {})] : [],
+    section.kind === 'list' && section.similar
+      ? [...section.similar.same, ...Object.keys(section.similar.near ?? {})]
+      : section.kind === 'custom'
+        ? Object.values(section.reads ?? {}).flatMap((read) => read.similar?.same ?? [])
+        : [],
   );
   const row = await rootRow(adapter, schema, page.base, key, [
     ...rootColumns,

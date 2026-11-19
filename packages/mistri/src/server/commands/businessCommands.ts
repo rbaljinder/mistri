@@ -470,8 +470,10 @@ export interface CommandDefinition<
   readonly refused?: { readonly writes: readonly (Target | Write[number])[] };
   /** Tables of `read` the handler reads under the command's own authority, not the caller's:
       `elevate: { read: ['rate_card'] }`. A role granted the command need not read them; what the handler
-      reads there reaches the caller only as the declared output. `mistri check --design` lists each one. */
-  readonly elevate?: { readonly read: readonly Read[number][] };
+      reads there reaches the caller only as the declared output. It may also name a table the command writes (and the
+      role cannot read): the handler reads that log's earlier lines, and the role still only adds rows there.
+      `mistri check --design` lists each one. */
+  readonly elevate?: { readonly read: readonly (Read[number] | Write[number])[] };
   /** The App's sources, and the resources of each, that `lookup` reads before the transaction: `{ valuations: ['estimate'] }`. */
   readonly sources?: Readonly<Record<string, readonly string[]>>;
   /** The integrations `lookup` calls, and the actions of each: `{ fakepay: ['charge'] }`. Each call carries an
@@ -880,9 +882,11 @@ function registeredRuleBreaks(command: AnyBusinessCommand, input: unknown, now =
  * `elevate: { read: [...] }`: tables of the read footprint the handler reads
  * under the command's authority. Each is named in `read` as well — the
  * handler's typed `db` is built from `read` — so `elevate` only says whose
- * authority a read is under, never a second footprint. Never the target or a
- * written table: whoever runs a command reads its target (it is shown to them)
- * and must be able to write what it writes.
+ * authority a read is under, never a second footprint. Never the target:
+ * whoever runs a command reads its target (it is shown to them). A table it
+ * writes may be named, for a command that appends to a log and reads that
+ * log's earlier lines: the role still only adds there (a change or removal of
+ * those rows is refused), and the handler's read is the command's own.
  */
 function elevateOption(
   value: unknown,
@@ -897,9 +901,10 @@ function elevateOption(
     fail('Command elevate read names no table: name the tables of read the handler reads above the caller, or drop elevate.');
   for (const table of tables) {
     if (table === target) fail(`Command elevate read names the target "${table}"; whoever runs a command reads its target.`);
-    if (writes.includes(table))
-      fail(`Command elevate read names "${table}", which it writes; whoever runs a command must write what it writes.`);
-    if (!reads.includes(table)) fail(`Command elevate read names "${table}", which is not in its read footprint; add it to read.`);
+    /* A table it writes beside its target may be named: whoever lacks a read grant there only adds rows (insertOnly), and
+       elevating the read lets the handler see that log's earlier lines without opening the whole log to the role. */
+    if (!reads.includes(table) && !writes.includes(table))
+      fail(`Command elevate read names "${table}", which is not in its read footprint; add it to read.`);
   }
   return Object.freeze({ read: Object.freeze([...tables]) });
 }

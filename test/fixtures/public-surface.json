@@ -1121,6 +1121,7 @@
         "app: pages.*.sections[][kind=custom].rows.*.from",
         "app: pages.*.sections[][kind=custom].rows.*.limit",
         "app: pages.*.sections[][kind=custom].rows.*.query",
+        "app: pages.*.sections[][kind=custom].rows.*.same",
         "app: pages.*.sections[][kind=custom].rows.*.show",
         "app: pages.*.sections[][kind=custom].rows.*.sort",
         "app: pages.*.sections[][kind=custom].rows.*.whose",

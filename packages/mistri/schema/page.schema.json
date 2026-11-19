@@ -2485,6 +2485,13 @@
                 "minLength": 1,
                 "description": "The from rows whose named column is this record. Absent, the rows are not tied to it."
               },
+              "same": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 4,
+                "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+                "description": "The from rows that share these columns' values with the record, the record left out (as a related list's same). Not beside whose."
+              },
               "query": {
                 "type": "string",
                 "minLength": 1,

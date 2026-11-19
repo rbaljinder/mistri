@@ -312,8 +312,10 @@ export interface CommandActionBase<Label extends string | AppMessageRef> {
    * Offered for a queue selection only when the command declares
    * `targets: 'many'`: one request names every selected record, and the
    * handler applies all of them in one transaction or none.
+   * `'each'` offers a command that names one record, and asks nothing, for a selection too: it runs once per selected
+   * record, each in its own transaction and each answered on its own, as a fixed action's bulk does.
    */
-  bulk?: boolean;
+  bulk?: boolean | 'each';
   /**
    * `false` keeps the button out of the record's action bar and its menu, for
    * a verb the App runs from its own place — a custom component through

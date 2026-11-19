@@ -215,8 +215,8 @@ export declare function Card(
 ): ReactTypes.ReactElement;
 /** A main column beside a rail (notes, filters, facts). The rail is `railWidth` wide (a CSS length, `'20rem'` by default,
     never past half the box) at the `side` edge (`'end'` by default); the main takes the rest. Where the box itself is
-    under 40rem wide, or the main would be left under 24rem, it stacks, main first, and it never scrolls sideways. Cluster makes equal columns; this makes two unequal ones. */
-export declare function Beside(props: Children & { rail: ReactTypes.ReactNode; railWidth?: string; side?: 'start' | 'end'; className?: string }): ReactTypes.ReactElement;
+    under 40rem wide (or `stackBelow`, a CSS length), or the main would be left under 24rem, it stacks, main first, and it never scrolls sideways. Cluster makes equal columns; this makes two unequal ones. */
+export declare function Beside(props: Children & { rail: ReactTypes.ReactNode; railWidth?: string; side?: 'start' | 'end'; stackBelow?: string; className?: string }): ReactTypes.ReactElement;
 /** Rows with no head row, each an `Item`. `label` names the list for assistive technology; `empty` is drawn when there are no rows.
     `groups` draws the rows in runs, `{ title, count?, items, key? }` each, under a head that holds the top of the room while
     its own rows pass beneath it (the next run's head takes its place); a run with no `Item`s is not drawn, and the lead

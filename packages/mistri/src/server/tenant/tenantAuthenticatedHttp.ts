@@ -62,7 +62,9 @@ import {
   safeReturnPath,
   verifierHashOf,
 } from '../auth/hostHandoff.js';
-import { nativeAccountEmailOf, nativeMailAccount } from '../auth/authAccounts.js';
+import { nativeAccountEmailOf, nativeAccountProfileOf, nativeMailAccount } from '../auth/authAccounts.js';
+import { auditsReads } from './tenantReadAudit.js';
+import type { TenantReadsService } from './tenantReadsRoute.js';
 import { expandEnvReferences } from '@mistriwork/engine/server/auth/credentials.js';
 import { doorRefusal, writes, type Bound, type ProxyRange } from '@mistriwork/engine/server/http/trust.js';
 import { frontDoor } from '@mistriwork/engine/server/http/frontDoor.js';
@@ -255,6 +257,7 @@ const NOT_FOR_PINNED = [
   '/api/integrations',
   '/api/branding',
   '/api/domains',
+  '/api/reads',
   '/api/console',
   '/api/suite',
   '/api/apps',
@@ -595,6 +598,34 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     const platformHost = raw.platformHost as ((host: string) => boolean) | undefined;
     if (raw.domains !== undefined && (typeof raw.domains !== 'object' || raw.domains === null)) return denyTenant();
     const domains = raw.domains as TenantDomainsService | undefined;
+    /* The tenant's read audit for its admins, where a resource audits its reads and the App names admins (the domains
+       editors, else the branding editors, as the Domains section judges): read through the deployment's fenced
+       reader, which takes the tenant as its own argument, with each reader named from the sign-in store. */
+    const readsEditors = domains?.editors ?? branding?.declaration.editors ?? [];
+    const readsAudited = Object.entries(loaded.app.resources ?? {})
+      .filter(([, resource]) => resource.audit?.reads === true)
+      .map(([name]) => name);
+    const auditReader = enrollment.deployment.readAudit;
+    const reads: TenantReadsService | undefined =
+      auditsReads(loaded.app) && readsEditors.length
+        ? Object.freeze({
+            editors: readsEditors,
+            resources: Object.freeze(readsAudited),
+            read: (tenantId: string, query: Parameters<TenantReadsService['read']>[1]) => auditReader.read(tenantId, query),
+            people: async (accountIds: readonly string[]) => {
+              const named = new Map<string, { name?: string; email: string | null }>();
+              for (const id of accountIds) {
+                try {
+                  const who = await nativeAccountProfileOf(raw.auth as AppAuthRuntime, id);
+                  if (who) named.set(id, who);
+                } catch {
+                  /* An account the store cannot say is shown by its id: the page is never refused for it. */
+                }
+              }
+              return named;
+            },
+          })
+        : undefined;
     if (
       raw.suiteBase !== undefined &&
       (typeof raw.suiteBase !== 'string' || (raw.suiteBase !== '' && !/^\/[^?#]*[^/?#]$/.test(raw.suiteBase)))
@@ -792,6 +823,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       ...(search ? { search } : {}),
       ...(branding ? { branding } : {}),
       ...(domains ? { domains } : {}),
+      ...(reads ? { reads } : {}),
       ...(integrations?.settings ? { integrations: integrations.settings } : {}),
       renderLinks: renderAnswerLinks,
       // Asked once the assistant below exists; it is made on this server's own listener.

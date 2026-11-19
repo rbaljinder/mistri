@@ -420,15 +420,6 @@
     margin-top: auto;
     padding-top: var(--space-3);
   }
-  :root[data-look-stat='icon'] .dash-strip .spark-host:is(.good, .bad) {
-    --spark-ink: initial;
-  }
-  :root[data-look-stat='icon'] .dash-strip .spark-host.good {
-    --spark-ink: var(--status-good);
-  }
-  :root[data-look-stat='icon'] .dash-strip .spark-host.bad {
-    --spark-ink: var(--status-critical);
-  }
   :root[data-look-stat='icon'] .dash-strip .spark {
     height: 44px;
   }

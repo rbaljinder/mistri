@@ -76,7 +76,7 @@ interface Run {
   total: number;
 }
 interface Asking {
-  action: AppUpdateAction;
+  action: AppUpdateAction | AppCommandAction;
   count: number;
   skipped: number;
   answer: (yes: boolean) => void;
@@ -159,8 +159,8 @@ export function offeredBulk(
   const grantedCommands = shell().app()?.grantedCommands ?? [];
   const commandAllowed = (action: AppCommandAction) =>
     interactive &&
-    action.bulk === true &&
-    action.command.targets === 'many' &&
+    /* `true` is one request for a command that names many records; `'each'` is the one-record command, run once per record. */
+    (action.bulk === 'each' ? action.command.targets !== 'many' : action.bulk === true && action.command.targets === 'many') &&
     identity.mode === 'authenticated' &&
     identity.appId === connection &&
     grantedCommands.includes(action.command.id) &&
@@ -370,10 +370,51 @@ export function useBulkSelection({
      only narrow them (Deselect ineligible), never widen them. */
   const openCommand = (action: AppCommandAction) => {
     if (running || commandForm || !availableCommands.includes(action)) return;
+    if (action.bulk === 'each') return void runEach(action);
     const targets = keyed.filter((record) => selection.includes(record.id)).map(({ key, label }) => ({ key, label }));
     if (!targets.length) return;
     setReported(null);
     setCommandRun({ action, targets, epoch: identity.epoch });
+  };
+  /* `bulk: 'each'`: the command runs once per selected record, in list order, each in its own transaction and each
+     answered on its own, so a refusal on one neither undoes nor stops the others (as a fixed action's bulk does). */
+  const runEach = async (action: AppCommandAction) => {
+    const runOne = commanding?.runEach;
+    if (!runOne) return;
+    const targets = keyed.filter((record) => selection.includes(record.id));
+    if (!targets.length) return;
+    const epoch = sessionIdentity().epoch;
+    const current = () => alive.current && sessionIdentity().epoch === epoch && (state.activeConnection ?? null) === connection;
+    setReported(null);
+    if (action.confirm) {
+      const yes = await new Promise<boolean>((answer) => setAsking({ action, count: targets.length, skipped: 0, answer }));
+      if (alive.current) setAsking(null);
+      if (!yes || !current()) return;
+    }
+    setRunning({ label: action.label, done: 0, total: targets.length });
+    const outcomes: BulkRecordOutcome[] = [];
+    let stopped = false;
+    for (const [at, record] of targets.entries()) {
+      if (!current()) {
+        stopped = true;
+        outcomes.push(
+          ...targets.slice(at).map(({ key, label }): BulkRecordOutcome => ({ key, label, kind: 'skipped', message: say('notRunTheList') })),
+        );
+        break;
+      }
+      const answer = await runOne(action, record.key);
+      outcomes.push({ key: record.key, label: record.label, kind: answer.kind, message: answer.message });
+      if (alive.current) setRunning({ label: action.label, done: at + 1, total: targets.length });
+    }
+    if (!alive.current) return;
+    setRunning(null);
+    const result = tally(outcomes, stopped);
+    setReported({ label: action.label, result });
+    if (result.counts.applied && current()) {
+      void client.invalidateQueries({ queryKey: ['run', connection] });
+      void client.invalidateQueries({ queryKey: ['count', connection] });
+      void client.invalidateQueries({ queryKey: ['when', table.id] });
+    }
   };
   const deselect = (keys: Array<Record<string, unknown>>) => {
     const drop = new Set(keys.map(commandKeyText));
@@ -462,7 +503,7 @@ export function useBulkSelection({
               key={`command:${action.command.id}:${action.label}`}
               type="button"
               className="ghost"
-              title={say('oneRequestForTheWhole')}
+              title={action.bulk === 'each' ? say('eachOnItsOwn') : say('oneRequestForTheWhole')}
               disabled={busy}
               onClick={() => openCommand(action)}
             >
@@ -569,9 +610,11 @@ function Confirm({ asking, onAnswer }: { asking: Asking; onAnswer: (yes: boolean
         {say('applyToSelectedRecords', { count })}
         {skipped ? say('willBeSkipped', { skipped: formatNumber(skipped) }) : ''}.
       </p>
-      <p>
-        <strong>{setSummary(action)}</strong>
-      </p>
+      {isUpdate(action) && (
+        <p>
+          <strong>{setSummary(action)}</strong>
+        </p>
+      )}
       <div className="confirm-actions">
         <Button intent="secondary" onClick={() => answer(false)}>
           {say('common.cancel')}

@@ -552,6 +552,17 @@ addresses. A natural key may be unique within the tenant,
 `UNIQUE (tenant_id, number)`; another tenant's record address opens the
 ordinary not-found.
 
+### Who read a tenant's records
+
+When a resource has `audit: { reads: true }`, a tenant's admins (the roles that
+edit its domains, else its branding) see Settings → Reads: who opened or listed
+the organization's audited records, newest first, 50 at a time with Show older.
+Filter by person (click a name), resource, record and a day range; a record's
+id matches where it was opened and every list that returned it. The rows are the
+signed-in tenant's alone, whatever the request names; another member gets 403,
+and the platform realm and a support visit get 404. The operator reads every
+tenant's with [`mistri audit reads`](/docs/cli/#reading-the-read-audit).
+
 ### Sandboxes
 
 Mark a tenant-owned resource `clone: 'config'` (copied, and imported back) or

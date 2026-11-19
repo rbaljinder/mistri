@@ -383,9 +383,16 @@ test('bulk is a boolean; a command action offers it only when its registered com
     () => parse({ actions: { assign: { label: 'Assign', command: { ...command, targets: 'one' }, bulk: true } } }),
     /targets: 'many'/,
   );
+  /* 'each' runs a one-record command over every picked record, one after another. */
+  assert.doesNotThrow(() => parse({ actions: { assign: { label: 'Assign', command, bulk: 'each' } } }));
+  assert.throws(() => parse({ actions: { assign: { label: 'Assign', command: { ...command, targets: 'many' }, bulk: 'each' } } }), /each/);
+  assert.throws(
+    () => parse({ actions: { assign: { label: 'Assign', command: { ...command, input: { to: { type: 'text' } } }, bulk: 'each' } } }),
+    /each/,
+  );
   assert.throws(
     () => parse({ actions: { assign: { label: 'Assign', command: { ...command, targets: 'many' }, bulk: 'yes' } } }),
-    /has a "bulk" that is not true or false/,
+    /has a "bulk" that is not true, false or 'each'/,
   );
   assert.throws(
     () =>

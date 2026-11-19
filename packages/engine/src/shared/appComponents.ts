@@ -64,7 +64,7 @@ const MAX_CUSTOM_LIST_SHOW = 32;
  */
 export const MAX_CUSTOM_FIGURES = 8;
 /** The keys a declared read of rows takes, on a page and on a dashboard. */
-export const PAGE_READ_KEYS = ['from', 'whose', 'query', 'show', 'sort', 'limit'] as const;
+export const PAGE_READ_KEYS = ['from', 'whose', 'same', 'query', 'show', 'sort', 'limit'] as const;
 export const DASH_READ_KEYS = ['from', 'query', 'show', 'sort', 'limit', 'over'] as const;
 /** The keys a declared aggregate read takes, on a page and on a dashboard. */
 const PAGE_TOTAL_KEYS = ['from', 'measure', 'by', 'whose', 'query', 'limit'] as const;
@@ -241,6 +241,8 @@ export interface PageCustomRead {
   from: string;
   /** Config `whose`: the path from `from` back to the page's record. Absent, the rows are not tied to it. */
   path?: string;
+  /** Config `same`: the rows that share these columns' values with the record (as a related list's `same`), the record left out. */
+  similar?: { same: string[] };
   filter?: string;
   columns: string[];
   /** Query-bar text, as authored; `orderBy` is what the planner runs. */
@@ -301,9 +303,25 @@ function reads<T>(
 export function parsePageReads(raw: unknown, at: string): Record<string, PageCustomRead> | undefined {
   return reads(raw, at, (entry, here) => {
     const r = readShape(entry, here, PAGE_READ_KEYS);
+    let similar: PageCustomRead['similar'];
+    if (r.same !== undefined) {
+      if (r.whose !== undefined)
+        throw new Error(`${here} has "whose" beside "same": its rows share the record's values rather than point at it.`);
+      const same = r.same;
+      if (
+        !Array.isArray(same) ||
+        !same.length ||
+        same.length > 4 ||
+        same.some((column) => typeof column !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) ||
+        new Set(same).size !== same.length
+      )
+        throw new Error(`${here}: "same" must be one to 4 different columns a row shares with the record, e.g. ['body_type'].`);
+      similar = { same: [...(same as string[])] };
+    }
     return {
       from: (r.from as string).trim(),
       ...(r.whose === undefined ? {} : { path: (r.whose as string).trim() }),
+      ...(similar ? { similar } : {}),
       ...(r.query === undefined ? {} : { filter: (r.query as string).trim() }),
       columns: (r.show as string[]).map((path) => path.trim()),
       ...(r.sort === undefined ? {} : { sort: (r.sort as string).trim() }),
@@ -494,8 +512,8 @@ interface PageDecl {
   props: Record<string, unknown>;
 }
 
-/** The most address parameters one page keeps, and the most loaders it names. */
-const MAX_PAGE_PARAMS = 8;
+/** The most address parameters one page keeps, and the most loaders it names. A filter bar of a dozen fields is a real page; the address stays well inside a URL's length at 24 short names. */
+const MAX_PAGE_PARAMS = 24;
 const MAX_PAGE_LOADERS = 8;
 const PARAM = /^[a-z][a-z0-9_]{0,31}$/;
 const LOADER = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;

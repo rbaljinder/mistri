@@ -9,6 +9,7 @@
  */
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { bridgeShell } from '../../../../../test/shellBridge.js';
+import { installShell, shell } from '../shellMode.js';
 import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -186,4 +187,34 @@ test('a list with nothing to offer says so, and draws no bar whatever is picked'
   expect(screen.getByTestId('offered')).toHaveTextContent('false');
   await userEvent.click(screen.getByRole('button', { name: 'pick two' }));
   expect(toolbar()).toBeNull();
+});
+
+test("bulk: 'each' runs a one-record command once per picked record, in order, and reports each on its own", async () => {
+  const runEach = vi.fn(async (_action: unknown, key: Record<string, unknown>) =>
+    key.id === 2 ? { kind: 'rejected' as const, message: 'Already closed.' } : { kind: 'applied' as const, message: 'Done.' },
+  );
+  const noRuns = { subscribe: () => () => {}, version: () => 0, unresolvedGroups: () => [] };
+  installShell({
+    app: (() => ({ grantedCommands: ['bump'] })) as never,
+    slots: {
+      ...shell().slots,
+      bulkCommands: { operations: noRuns, useAvailability: (c: unknown[]) => c.map(() => true), runEach, Form: () => null } as never,
+    },
+  });
+  mocks.identity = { epoch: 1, mode: 'authenticated', appId: 'desk', tenantRequired: false };
+  const bump = {
+    id: 'bump',
+    label: 'Bump',
+    bulk: 'each',
+    command: { id: 'bump', version: 1, target: 'ticket', input: [] },
+  } as unknown as AppAction;
+  draw([1, 2, 3].map(record), [bump]);
+  await userEvent.click(screen.getByRole('button', { name: 'pick all' }));
+  /* Only the 'each' one is offered for a one-record command; `true` needs targets: 'many'. */
+  expect(within(toolbar()!).queryByRole('button', { name: 'Bump many' })).toBeNull();
+  await userEvent.click(within(toolbar()!).getByRole('button', { name: 'Bump' }));
+  await waitFor(() => expect(runEach).toHaveBeenCalledTimes(3));
+  expect(runEach.mock.calls.map(([, key]) => key.id)).toEqual([1, 2, 3]);
+  expect(await screen.findByText(/Bump: 2 applied/)).toBeTruthy();
+  mocks.identity = { epoch: 1, mode: 'anonymous', tenantRequired: false };
 });

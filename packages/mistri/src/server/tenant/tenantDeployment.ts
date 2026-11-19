@@ -615,12 +615,13 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
         logo: (query: BrandingLogoQuery) => reader.readBrandingLogo(query),
         write: (write: BrandingWrite) => writer.writeBranding(write),
       }),
-      /* One tenant's read audit, for the operator's host (the test kit, an
-         operator's own tooling): the tenant is the caller's argument and wins
-         over anything the query says, so a read for one tenant never returns
-         another's rows. No member's route reads it. */
       /* The host table's rows, for the suite's router: a plain read on the reader (http/tenantHosts.ts). Presentation only. */
       readHosts: () => reader.readHosts(),
+      /* One tenant's read audit, for the operator's host (the test kit, an
+         operator's own tooling) and the tenant's own admins' Reads room
+         (tenantReadsRoute.ts): the tenant is the caller's argument and wins
+         over anything the query says, so a read for one tenant never returns
+         another's rows. */
       readAudit: Object.freeze({
         read: (tenant: string, query: Omit<ReadAuditQuery, 'tenant'>) => writer.readReadAudit({ ...query, tenant }),
       }),

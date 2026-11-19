@@ -278,7 +278,7 @@ export async function readPostgresReadAudit(client: PgQuery, query: ReadAuditQue
   const values = filters.map(([, , value]) => value);
   const result = await client.query(
     `SELECT id::text AS id, ${AT_ISO} AS at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership, scope
-    FROM ${q(log)} ${filters.length ? `WHERE ${filters.map(([name, op], index) => (op === 'shown' ? `(${name} = $${index + 1} OR ids_json::jsonb @> jsonb_build_array($${index + 1}::text))` : `${name} ${op} $${index + 1}`)).join(' AND ')}` : ''}
+    FROM ${q(log)} ${filters.length ? `WHERE ${filters.map(([name, op], index) => (op === 'shown' ? `(${name} = $${index + 1} OR ids_json::jsonb @> jsonb_build_array($${index + 1}::text))` : `${name} ${op} $${index + 1}${name === 'id' ? '::bigint' : name === 'at' ? '::timestamptz' : ''}`)).join(' AND ')}` : ''}
     ORDER BY id DESC LIMIT $${values.length + 1}`,
     [...values, query.limit],
   );

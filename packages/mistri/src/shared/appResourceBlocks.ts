@@ -1634,10 +1634,10 @@ function parseGiven(a: Record<string, unknown>, command: ReturnType<typeof parse
         `${here} gives "${name}", which is not one of the command's inputs (${command.input.map((f) => f.name).join(', ') || 'it has none'}) [action-given].`,
       );
     if (field.required !== true || ('default' in field && field.default !== undefined)) continue;
-    if (a.header !== false || a.bulk === true)
+    if (a.header !== false || a.bulk === true || a.bulk === 'each')
       throw new Error(
         `${here} gives "${name}", which the command requires and starts with no default, so only a page can fill it: ` +
-          `say header: false${a.bulk === true ? ' and leave bulk out' : ''}, so the record's bar and a selection never open a form that cannot be sent [action-given].`,
+          `say header: false${a.bulk === true || a.bulk === 'each' ? ' and leave bulk out' : ''}, so the record's bar and a selection never open a form that cannot be sent [action-given].`,
       );
   }
   return given;
@@ -1698,11 +1698,23 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
         throw new Error(
           `${here} confirms, but its command "${command.id}" asks for input in its form, which is already the confirmation; leave "confirm" out.`,
         );
-      if (a.bulk !== undefined && typeof a.bulk !== 'boolean') throw new Error(`${here} has a "bulk" that is not true or false.`);
+      if (a.bulk !== undefined && typeof a.bulk !== 'boolean' && a.bulk !== 'each')
+        throw new Error(`${here} has a "bulk" that is not true, false or 'each'.`);
       // A selection is one request only for a command built to name several
       // records in its envelope, receipt and audit; any other names one.
       if (a.bulk === true && command.targets !== 'many') {
-        throw new Error(`${here} can offer "${command.id}" in bulk only when the command declares targets: 'many'.`);
+        throw new Error(
+          `${here} can offer "${command.id}" in bulk only when the command declares targets: 'many'; say bulk: 'each' to run it once per selected record.`,
+        );
+      }
+      /* 'each' runs the one-record command once per record, with no form: it has nothing to ask, and no one to ask it of. */
+      if (a.bulk === 'each') {
+        if (command.targets === 'many')
+          throw new Error(`${here} says bulk: 'each', but "${command.id}" already names many records; say bulk: true.`);
+        if (command.input.length)
+          throw new Error(
+            `${here} says bulk: 'each', but "${command.id}" asks for input (${command.input.map((field) => field.name).join(', ')}); a command run once per record asks nothing.`,
+          );
       }
       /* A component standing in one of the command's own inputs, in its form. */
       const inputs = parseInputs(a.inputs, here, { paths: true });
@@ -1733,7 +1745,7 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
         ...(offered === undefined ? {} : { offered }),
         ...(labels ? { labels } : {}),
         ...(move ? { move } : {}),
-        ...(a.bulk === undefined ? {} : { bulk: a.bulk as boolean }),
+        ...(a.bulk === undefined ? {} : { bulk: a.bulk as boolean | 'each' }),
         ...(a.confirm === true ? { confirm: true } : {}),
         ...header,
         ...(inputs ? { inputs } : {}),
