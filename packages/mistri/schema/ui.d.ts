@@ -544,6 +544,44 @@ export declare function useDeployment(): {
   /** The path a reverse proxy serves the server under (`/tools`), or '' at the root. */
   readonly basePath: string;
 };
+/** The current tenant's team: its members and pending invitations, the roles the reader may place people in, and whether
+    they may change the team (`canManage`, the grant the administration and invitation routes enforce). Read through the page's
+    query cache; each action refreshes it. An empty, non-managing team outside a tenant App. The server judges every request. */
+export declare function useTeam(): {
+  members: readonly { id: string; name: string; email: string; role: string; you: boolean }[];
+  invitations: readonly { id: string; email: string; role: string; expiresAt: number }[];
+  roles: readonly string[];
+  canManage: boolean;
+  loading: boolean;
+  error: Error | null;
+  /** Invite by email into a role; `token` is the one-time handoff the invitee is given, where the server returned one. */
+  invite(email: string, role: string): Promise<{ token?: string }>;
+  changeRole(memberId: string, role: string): Promise<void>;
+  remove(memberId: string): Promise<void>;
+  /** A fresh invitation in place of a pending one; `token` as for `invite`. */
+  reissue(invitationId: string): Promise<{ token?: string }>;
+  cancel(invitationId: string): Promise<void>;
+};
+/** Open a tenant in one request from a platform App's own screen: `useOpenTenant('createClinicProfile')`. `open` runs that
+    platform command under a key derived from `key`, then creates the tenant and issues its first invitation under `key`.
+    The command's step is not atomic with the other two: when `open` resolves null (`error` says why), send it again with
+    the same `key` and it completes the rest without running anything twice. The same `key` with other details is refused
+    and applies nothing. `key` is 16 to 128 letters, digits, dashes or underscores, made once per intent and kept. */
+export declare function useOpenTenant(command: string): {
+  open(input: {
+    key: string;
+    input?: Readonly<Record<string, unknown>>;
+    tenant: { tenantId: string };
+    invitation:
+      | { accountId: string; roles: readonly string[]; redeemUntil: number; validUntil: number }
+      | { email: string; roles: readonly string[]; redeemUntil: number; validUntil: number };
+  }): Promise<{ tenantId: string; version: string; invitation: { result: { receiptId: string }; token?: string } } | null>;
+  pending: boolean;
+  error: Error | null;
+  result: { tenantId: string; version: string; invitation: { result: { receiptId: string }; token?: string } } | null;
+};
+/** The brand the reader sees now: the current tenant's name, logo address and accent in a tenant App that dresses one, else the App's own name, logo mark and accent (`null` where it has none). Presentation only. */
+export declare function useBranding(): { readonly name: string; readonly logo: string | null; readonly accent: string | null };
 /** How a command a component ran ended: applied, with what its handler returned as `output`, typed from the command's
     declared `output` (`undefined` for a command that declares none), refused in the server's words, a form closed with
     nothing sent, or `unknown`: it was sent and no answer said whether it ran (the connection dropped, the server could

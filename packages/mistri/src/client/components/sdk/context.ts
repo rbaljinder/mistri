@@ -81,6 +81,12 @@ export interface UiDeployment {
   /** The path a reverse proxy serves the server under (`/tools`), or '' at the root. */
   readonly basePath: string;
 }
+/** The current brand (`useBranding()`): the tenant's own name, logo address and accent where a tenant App dresses one, else the App's. */
+export interface UiBranding {
+  readonly name: string;
+  readonly logo: string | null;
+  readonly accent: string | null;
+}
 interface UiColumn {
   meta?: ColumnMeta;
   rule?: DisplayRule | null;
@@ -315,6 +321,10 @@ export interface UiHost {
   look(): UiLook;
   /** The App as this deployment presents it (UiDeployment). */
   deployment(): UiDeployment;
+  /** The tenant's team and what the reader may do with it (`useTeam`): empty outside a tenant App. */
+  team: import('../../teamTypes.js').TeamAccess;
+  /** The brand the reader sees now (UiBranding). */
+  branding(): UiBranding;
   token(name: string): string;
   /** Called when the look, the mode or the density changes; returns the unsubscribe. */
   subscribeLook(listener: () => void): () => void;

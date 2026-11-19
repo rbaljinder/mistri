@@ -101,6 +101,32 @@ test('an ordinary integer key stays visible and is validated before submission',
   expect(insert).toHaveBeenCalledWith({ id: '41' });
 });
 
+/* A field report: an App's New form that left out a text key nothing in the catalog fills was stopped before the wire.
+   A tenant App's store fills that key where the table says so (`fillsKey`), so the form sends none. */
+test("an App's New form does not demand a text key its store fills", async () => {
+  const user = userEvent.setup();
+  const insert = vi.fn().mockResolvedValue({ key: { id: 'k' } });
+  const table: TableMeta = {
+    ...lead,
+    fillsKey: true,
+    columns: [col('id', 'TEXT', { primaryKey: true, nullable: false }), col('name', 'TEXT')],
+  };
+  draw(<NewRecordForm {...props()} app table={table} insert={insert} form={{ show: ['name'] }} />);
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Ada');
+  await user.click(screen.getByRole('button', { name: /^Add$/ }));
+  expect(insert).toHaveBeenCalledWith({ name: 'Ada' });
+});
+
+test("an App's New form that is not marked fillsKey is stopped before the wire for a text key left out", async () => {
+  const user = userEvent.setup();
+  const insert = vi.fn().mockResolvedValue({ key: { id: 'k' } });
+  const table: TableMeta = { ...lead, columns: [col('id', 'TEXT', { primaryKey: true, nullable: false }), col('name', 'TEXT')] };
+  draw(<NewRecordForm {...props()} app table={table} insert={insert} form={{ show: ['name'] }} />);
+  await user.type(screen.getByRole('textbox', { name: 'Name' }), 'Ada');
+  await user.click(screen.getByRole('button', { name: /^Add$/ }));
+  expect(insert).not.toHaveBeenCalled();
+});
+
 test('a default-only form submits an explicit empty values object', async () => {
   const user = userEvent.setup();
   const insert = vi.fn().mockResolvedValue({ key: { id: 1 } });

@@ -352,7 +352,7 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       // Every change is journaled: who, when and the consent reference.
       const changes = await f.rows(
         `SELECT r.actor_id, r.completed_at, r.change_json FROM "${journal.receipt}" r
-       WHERE r.operation = 'setTenantAssistant' ORDER BY r.completed_at, r.id`,
+       WHERE r.operation = 'setTenantAssistant' ORDER BY r.completed_at, ${dialect === 'sqlite' ? 'r.rowid' : 'r.id'}`,
       );
       assert.equal(changes.length, 2);
       const [on, off] = changes.map((row) => ({

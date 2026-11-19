@@ -209,6 +209,33 @@ export async function nativeAccountEmailOf(runtime: AppAuthRuntime, accountId: s
   return rows[0].email.toLowerCase();
 }
 
+/** An account's address and display name, as a tenant's team list says who a member is. Null for no such account;
+ * `name` is absent where the store keeps none that is plain text. */
+export async function nativeAccountProfileOf(
+  runtime: AppAuthRuntime,
+  accountId: string,
+): Promise<{ readonly email: string | null; readonly name?: string } | null> {
+  const projection = suiteObservations.get(runtime);
+  if (projection) {
+    projection.current();
+    if (!(await projection.eligible(accountId))) return null;
+    const found = await nativeAccountProfileOf(projection.source, accountId);
+    projection.current();
+    return (await projection.eligible(accountId)) ? found : null;
+  }
+  const store = registered(runtime);
+  exact(accountId);
+  const rows = store.file
+    ? store.file.prepare('SELECT id, email, name FROM "user" WHERE id = ? COLLATE BINARY').all(accountId)
+    : (await store.pool!.query(`SELECT id, email, name FROM ${ACCOUNTS} WHERE id = $1`, [accountId])).rows;
+  if (store.closed() || rows.length > 1) throw new NativeAccountRefusal('unavailable');
+  if (!rows.length) return null;
+  const row = rows[0] as Record<string, unknown>;
+  if (row.id !== accountId) throw new NativeAccountRefusal('unavailable');
+  const name = profileName(row.name);
+  return { email: typeof row.email === 'string' ? row.email.toLowerCase() : null, ...(name ? { name } : {}) };
+}
+
 /**
  * One account, through Better Auth, with the deployment's default native role
  * (a native role grants no tenant or platform authority). An address that

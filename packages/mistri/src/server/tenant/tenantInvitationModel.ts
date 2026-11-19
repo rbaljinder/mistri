@@ -11,6 +11,7 @@ import {
 import { nativeAccountEmail } from '../auth/authAccounts.js';
 import { OPERATOR_TENANTS_WORDS, operatorReaches, operatorsOverlap, type OperatorTenants } from './tenantOperatorReach.js';
 import { captureDelegates, type DelegateRule } from './tenantDelegation.js';
+import { operatorPrincipal } from './tenantAdministrationModel.js';
 
 export interface InvitationPolicy {
   readonly id: string;
@@ -19,8 +20,12 @@ export interface InvitationPolicy {
   readonly maxRedemptionLifetimeMs: number;
   /** Pending rows include expired reservations until explicit revoke/reissue. */
   readonly maxPendingPerTenant: number;
+  /** Each rule names exactly one of `accountId` (one account) or `platformRole`
+   * (every account whose active platform membership holds it), as an
+   * administration rule does; the rules naming a principal grant together. */
   readonly operators: readonly {
-    readonly accountId: string;
+    readonly accountId?: string;
+    readonly platformRole?: string;
     readonly tenants: OperatorTenants;
     readonly operations: readonly InvitationIssuerOperation[];
     readonly roles: readonly string[];
@@ -29,6 +34,12 @@ export interface InvitationPolicy {
   readonly delegates?: readonly DelegateRule<InvitationIssuerOperation>[];
 }
 type InvitationGrant = InvitationPolicy['operators'][number];
+/** Who issues: the account, and the roles its active platform membership holds (read only for a policy with a
+ * `platformRole` rule; an account id alone holds none). */
+type InvitationPrincipal = ReturnType<typeof operatorPrincipal>;
+/** The role ceiling every rule naming one principal, tenant and operation grants together. */
+type InvitationCeiling = Readonly<{ roles: readonly string[] }>;
+const ruleFields = ['accountId', 'platformRole', 'tenants', 'operations', 'roles'];
 const day = 24 * 60 * 60 * 1000;
 const common = ['operation', 'tenantId', 'expectedTenantVersion'];
 const pair = ['invitationId', 'expectedInvitationVersion', 'membershipId', 'expectedMembershipVersion'];
@@ -87,8 +98,13 @@ function roles(value: unknown): asserts value is readonly string[] {
   for (const entry of value) id(entry);
 }
 function grant(value: unknown): asserts value is InvitationGrant {
-  exact(value, ['accountId', 'tenants', 'operations', 'roles']);
-  id(value.accountId, 1024);
+  tenantRecord(value, ruleFields);
+  if (ruleFields.slice(2).some((field) => !Object.hasOwn(value, field))) denyTenant();
+  // One subject per rule: an account, or a platform role its holders share.
+  if (Object.hasOwn(value, 'accountId') === Object.hasOwn(value, 'platformRole'))
+    return policyRefusal('operators rule names exactly one of accountId or platformRole.');
+  if (Object.hasOwn(value, 'accountId')) id(value.accountId, 1024);
+  else id(value.platformRole);
   if (value.tenants !== 'all') {
     if (
       !Array.isArray(value.tenants) ||
@@ -149,12 +165,15 @@ export function captureInvitationPolicy(input: unknown): InvitationPolicy {
   // With delegates, a policy may name no operator at all; without, it grants nothing and is refused.
   const operators = Array.isArray(value.operators)
     ? (value.operators as unknown[])
-    : policyRefusal('operators is a list of { accountId, tenants, operations, roles }.');
+    : policyRefusal('operators is a list of { accountId or platformRole, tenants, operations, roles }.');
   if (!operators.length && !delegated) policyRefusal('operators is empty and there are no delegates, so it grants nothing.');
   if (operators.length > 256) policyRefusal(`operators names ${operators.length} grants; at most 256.`);
+  /* One account's target/operation has one ceiling, independent of declaration order. Role rules may overlap each
+     other and an account's rule: an account holding several platform roles is granted what they grant together. */
   const previous: InvitationGrant[] = [];
   for (const entry of operators) {
     grant(entry);
+    if (entry.accountId === undefined) continue;
     if (
       previous.some(
         (other) =>
@@ -206,40 +225,45 @@ export function captureInvitationIntent(input: unknown): InvitationIntent {
   }
   return value as unknown as InvitationIntent;
 }
-export function invitationGrant(
-  policy: InvitationPolicy,
-  accountId: string,
-  tenantId: string,
-  operation: InvitationIssuerOperation,
-): InvitationGrant {
-  const captured = captureInvitationPolicy(policy);
-  id(accountId, 1024);
-  id(tenantId, 128);
-  parseTenantSelector([tenantId]);
-  if (!INVITATION_ISSUER_OPERATIONS.includes(operation)) return denyTenant();
-  return (
-    captured.operators.find(
-      (entry) => entry.accountId === accountId && operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation),
-    ) ?? denyTenant()
-  );
+/** Whether the policy has a rule naming a platform role: only then is the
+ * issuer's platform membership read to admit it. */
+export function hasInvitationRoleRules(policy: InvitationPolicy): boolean {
+  return policy.operators.some((entry) => entry.platformRole !== undefined);
 }
-/** The explicit operator grant, or null: a delegate's is read from the store. */
+const ruleNames = (entry: InvitationGrant, principal: InvitationPrincipal) =>
+  entry.accountId !== undefined ? entry.accountId === principal.accountId : principal.platformRoles.includes(entry.platformRole!);
+/** The rules naming the principal, whatever their tenants and operations. */
+export function invitationOperatorRules(policy: InvitationPolicy, input: InvitationPrincipal | string): readonly InvitationGrant[] {
+  const principal = operatorPrincipal(input);
+  return policy.operators.filter((entry) => ruleNames(entry, principal));
+}
+/** The explicit operator ceiling, or null: a delegate's is read from the store. */
 export function invitationOperatorGrant(
   policy: InvitationPolicy,
-  accountId: string,
+  input: InvitationPrincipal | string,
   tenantId: string,
   operation: InvitationIssuerOperation,
-): InvitationGrant | null {
+): InvitationCeiling | null {
   const captured = captureInvitationPolicy(policy);
-  id(accountId, 1024);
+  const principal = operatorPrincipal(input);
+  id(principal.accountId, 1024);
   id(tenantId, 128);
   parseTenantSelector([tenantId]);
   if (!INVITATION_ISSUER_OPERATIONS.includes(operation)) return denyTenant();
-  return (
-    captured.operators.find(
-      (entry) => entry.accountId === accountId && operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation),
-    ) ?? null
+  const matched = captured.operators.filter(
+    (entry) => ruleNames(entry, principal) && operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation),
   );
+  if (!matched.length) return null;
+  return Object.freeze({ roles: Object.freeze([...new Set(matched.flatMap((entry) => entry.roles))]) });
+}
+/** The ceiling of every rule naming the principal, the tenant and the operation, or a refusal when none does. */
+export function invitationGrant(
+  policy: InvitationPolicy,
+  principal: InvitationPrincipal | string,
+  tenantId: string,
+  operation: InvitationIssuerOperation,
+): InvitationCeiling {
+  return invitationOperatorGrant(policy, principal, tenantId, operation) ?? denyTenant();
 }
 /** Exact operation grant, not a union of issue/reissue/revoke role ceilings. */
 export function assertInvitationTerms(

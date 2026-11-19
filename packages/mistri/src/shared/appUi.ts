@@ -28,6 +28,7 @@ import { parseFooter } from './appLanding.js';
 import { parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 import { unknownKey } from '@mistriwork/engine/shared/suggest.js';
 import { zoneKnown } from './appZone.js';
+import { parseWhen } from './appWhen.js';
 
 /** Who the header's search is offered to; false hides it from everyone. */
 const SHELL_SEARCH: readonly string[] = ['members', 'everyone'];
@@ -489,7 +490,7 @@ function parseShellNew(raw: unknown, where: string): AppShellNew[] {
   const headings = new Set<string>();
   const entry = (item: unknown, at: string, group?: string): AppShellNew => {
     if (!isRecord(item)) throw new Error(`${at} must be an object: { view: 'tickets' } or { command: 'raiseTicket' }.`);
-    allowKeys(item, ['view', 'command', 'label', 'icon'], at);
+    allowKeys(item, ['view', 'command', 'label', 'icon', 'when'], at);
     const named = (['view', 'command'] as const).filter((key) => item[key] !== undefined);
     if (named.length !== 1) {
       throw new Error(
@@ -509,6 +510,7 @@ function parseShellNew(raw: unknown, where: string): AppShellNew[] {
       ...(key === 'view' ? { view: name } : { command: name }),
       ...(item.label === undefined ? {} : { label: item.label as string }),
       ...(item.icon === undefined ? {} : { icon: parseIcon(item.icon, at) }),
+      ...parseWhen(item.when, at),
       ...(group === undefined ? {} : { group }),
     } as AppShellNew;
   };

@@ -6,6 +6,8 @@
  * row is an insert like any other, so the policy that judges an insert
  * judges it, and nothing else may write a file under a row policy.
  */
+import type { IncomingMessage } from 'node:http';
+import { columnCaption } from '@mistriwork/engine/shared/columnCaption.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { signedInAs } from '../app/appStamps.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
@@ -19,6 +21,14 @@ import { appFileRules } from '../../shared/appResourceRules.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { judgeLines } from './formLinesWrite.js';
 import type { LineCollection } from '@mistriwork/engine/server/recordWriteOperations.js';
+
+/**
+ * What the App calls a column of the table a Save or New is writing, by request: the handler's refusal says a
+ * required field by it (appErrors.ts namedRequired). Only a column of that table on this principal's own catalog has
+ * one, so no physical name or hidden column is said.
+ */
+const writtenCaptions = new WeakMap<IncomingMessage, (column: string) => string | undefined>();
+export const writtenCaption = (req: IncomingMessage) => writtenCaptions.get(req);
 
 export async function scopedWriteRoutes(ctx: RequestContext): Promise<boolean> {
   const { req, res, path, policy, policyContext } = ctx;
@@ -34,6 +44,16 @@ export async function scopedWriteRoutes(ctx: RequestContext): Promise<boolean> {
       const body = await readJson(req, path === FILE_UPLOAD_PATH ? FILE_UPLOAD_BODY : undefined);
       if (!body || typeof body !== 'object' || Array.isArray(body)) throw new AppAccessDenied();
       if (Object.hasOwn(body, 'app') && body.app !== policy!.appId) throw new AppAccessDenied();
+      if ((path === '/api/insert' || path === '/api/update') && typeof body.table === 'string') {
+        const written = policyContext.schema.tables.find((table) => table.id === body.table);
+        const host = ctx.appHosts?.find((candidate) => candidate.app.app.id === policy!.appId);
+        if (written && host)
+          writtenCaptions.set(req, (column) =>
+            written.columns.some((at) => at.name === column)
+              ? columnCaption(host.app.app.resources ?? {}, policyContext.schema, written.id, column)
+              : undefined,
+          );
+      }
       // An action's stamps: the server's clock and the verified session's person, never the body's.
       const who = signedInAs(ctx.identity);
       const account = who ? ctx.identity.id : undefined;

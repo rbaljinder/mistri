@@ -8,7 +8,7 @@
  * and row ceilings as execution, and only reads. Nothing is written and no
  * receipt is kept.
  */
-import { bindRecord, boundText } from '../../shared/commandDraft.js';
+import { bindRecord, boundText, withheldOptions } from '../../shared/commandDraft.js';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { readCommandInput } from '../../shared/commandInput.js';
@@ -30,7 +30,7 @@ import type { PreparedCommandTarget } from './commandTargets.js';
 import { revisionColumns, rowRevision, versionColumn } from './commandRevision.js';
 import { commandFlagEnabled, commandFlagsReader, type CommandFlags } from './commandFlags.js';
 import { definedInputs, readCommandDefinitions } from './commandDefined.js';
-import { askedWhen, preparedStarts, preparesInitial, recordPickers } from './commandPrepareNeeds.js';
+import { askedWhen, optionWhens, preparedStarts, preparesInitial, recordPickers } from './commandPrepareNeeds.js';
 import type { DefinedField } from '@mistriwork/engine/shared/definedFields.js';
 import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { withWriteAhead } from '@mistriwork/engine/adapters/writeAhead.js';
@@ -46,6 +46,9 @@ export interface PreparedCommand {
   /** The inputs whose `when` reads both this record and the draft: the draft's part, the record's judged here
       (commandDraft.ts boundText), which the form judges as it is typed. */
   when?: Record<string, string>;
+  /** The options of a choice input that the tenant's profile does not offer (their `when` does not hold of it), by
+      input name: the form leaves them out. Absent when none is withheld. */
+  withheldOptions?: Record<string, (string | number)[]>;
   /** Each `field.defined` input's questions, by input name, as the rows say them now: the form draws one field each. */
   defined?: Record<string, DefinedField[]>;
 }
@@ -210,7 +213,16 @@ export async function readPreparedRecord(
   const starts = preparedStarts(command);
   const conditional = askedWhen(command);
   const questions = definedInputs(command).length > 0;
-  if (!initial && !registeredAvailability(command) && !pickers.length && !starts.length && !conditional.length && !questions)
+  const offered = optionWhens(command);
+  if (
+    !initial &&
+    !registeredAvailability(command) &&
+    !pickers.length &&
+    !starts.length &&
+    !conditional.length &&
+    !questions &&
+    !offered.length
+  )
     return { expectedVersion };
   // Reads only: the handler's writes are not the prefill's to make.
   const tx = Object.freeze<Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>>({
@@ -279,9 +291,11 @@ export async function readPreparedRecord(
     else if (text !== true) said[field.name] = text;
   }
   checkCancelled();
+  const withheldChoices = withheldOptions(offered, options.tenant ?? {});
   const asked = {
     ...(withheld.length ? { withheld } : {}),
     ...(Object.keys(said).length ? { when: said } : {}),
+    ...(Object.keys(withheldChoices).length ? { withheldOptions: withheldChoices } : {}),
     // The questions the record is asked, read as the reader reads them (only a table they read, never one elevated).
     ...(questions ? { defined: await readCommandDefinitions(tx, catalog, command, record) } : {}),
   };
@@ -424,10 +438,13 @@ async function readPreparedStart(
     else if (text !== true) said[field.name] = text;
   }
   for (const name of withheld) delete started[name];
+  // The options the tenant's profile does not offer, judged as the inputs it does not ask are.
+  const offered = withheldOptions(optionWhens(command), options.tenant ?? {});
   // Its questions, where it asks some: those that name no record, as no record is named.
   const asked = {
     ...(withheld.length ? { withheld } : {}),
     ...(Object.keys(said).length ? { when: said } : {}),
+    ...(Object.keys(offered).length ? { withheldOptions: offered } : {}),
     ...(definedInputs(command).length ? { defined: await readCommandDefinitions(tx, catalog, command) } : {}),
   };
   if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');

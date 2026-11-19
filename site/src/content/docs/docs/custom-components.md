@@ -231,7 +231,7 @@ See it in the sample (`examples/apps/ladle/pages/check-in.page.tsx:24`).
 - The path is the file's name, and the address: `/check-in?class=2`. `home` may name a page by its path.
 - A page's path is its address alone: a view with the same key is refused (`[page-path]`), and the page never replaces it. Rename the file, or remove the view and let the page take its place.
 - `nav: { group }` is the nav group the page stands in. In a nav split into workspaces, a list stands in each: `nav: { group: ['sales', 'support'] }`. A group the nav lacks, or one named twice, is refused (`[page-nav]`).
-- A page places itself: naming it in the App's own `nav` is refused at load, and by the types where they know the page (`mistri check` writes its path into `mistri-commands.d.ts`). `nav: false` keeps it out of the menu, and a `public: true` page that says nothing of `nav` stays off the signed-in menu too (it is the signed-out door's); say `nav: {}` or `nav: { group }` to put it in both. A `nav: false` page is still served at its address; another page reaches it with `pageHref('<key>')` or `openPage('<key>')`, and `mistri check` warns ([`page-unlinked`](/docs/check-codes/#page-unlinked)) when no source links to it.
+- A page stands where it asks (`nav: { group, position }`), or where the App's own `nav` names it by its path, like a view: `nav: ['tickets', 'check-in', navGroup('desk', 'Desk', ['queue', 'tally'])]` puts the pages `check-in` second in the menu and `tally` last in the Desk group, each at its declared place among its siblings (`mistri check` writes its path into `mistri-commands.d.ts` so the types know it, and an id that is no view and no page is refused by name). Say it in one place: a page the nav names takes no `nav: { group, position }` or `nav: false` of its own (`[page-nav]`). `nav: false` keeps it out of the menu, and a `public: true` page that says nothing of `nav` stays off the signed-in menu too (it is the signed-out door's); say `nav: {}` or `nav: { group }` to put it in both. A `nav: false` page is still served at its address; another page reaches it with `pageHref('<key>')` or `openPage('<key>')`, and `mistri check` warns ([`page-unlinked`](/docs/check-codes/#page-unlinked)) when no source links to it.
 - `nav.position` is an index into the siblings as they stand when the page is placed. Pages are placed in path order after the App's own `nav`, so at the top level a group counts as one sibling and a page placed earlier counts as one for the next: `position: 0` leads the menu, a position past the end goes last, and of two pages asking the same place the later in path order stands first, since each is put in at that place as it comes. To keep a menu's order in one place, give the pages a group (an empty `navGroup('desk', 'Desk', [])` in `app.ts`) and order them inside it.
 - A command a page lists in `commands` is offered by that declaration alone: it needs no `action('…', { command })` on its table, and the role still needs the grant (an ungranted role is refused at prepare and at run). The page's command stays off the record's bar, its More menu and every row menu until an action offers it there.
 - A page that must stay current needs `live: true` on the App (live sync is off unless the App asks; `dev` says so), or its own timer that calls `refresh()` for its loader and each read's `refetch()` (`page.useRows(…).refetch()`) for the rows it draws.
@@ -334,6 +334,51 @@ function Welcome() {
     <Stack>
       <Heading>Welcome to {deployment.name}</Heading>
       {deployment.theme && <p>Set in {deployment.theme}.</p>}
+    </Stack>
+  );
+}
+```
+
+### Read the brand
+
+`useBranding()` is the brand the reader sees now: `{ name, logo, accent }`. In a tenant App that lets each customer brand it, they are the current tenant's own name, logo address and accent; elsewhere they are the App's name, logo mark and accent. `logo` and `accent` are `null` where there is none.
+
+```tsx
+function Masthead() {
+  const brand = useBranding();
+  return (
+    <Row>
+      {brand.logo && <img src={brand.logo} alt="" height={24} />}
+      <Heading>{brand.name}</Heading>
+    </Row>
+  );
+}
+```
+
+### The tenant's team
+
+`useTeam()` is the current tenant's team: `{ members, invitations, roles, canManage, loading, error, invite, changeRole, remove, reissue, cancel }`. A member is `{ id, name, email, role, you }`, an invitation `{ id, email, role, expiresAt }`; `roles` are the roles the reader may place people in. Each action returns a promise and the team is read again when it settles, so a list drawn from `members` stays current. Outside a tenant App it is an empty team with `canManage: false`.
+
+It is a view over the routes the shell's own account dialogs use, so the reader's grant is exactly what those routes enforce: administration (`/api/tenant/administration/…`: `memberships` lists a tenant's members by the operation they may be changed with, `execute` replaces or revokes a membership) and invitations (`/api/tenant/invitations/…`: `targets`, `list`, and `execute` to issue, reissue or revoke), each under the signed-in account's own session context. Member and invitation rows carry the account's name and address, said from the sign-in store. `canManage` is true when the reader holds any of those grants on this tenant; the server still judges every request. `invite` and `reissue` resolve with the one-time `token` the invitee is handed, where the server returned one.
+
+```tsx
+function Team() {
+  const team = useTeam();
+  const [email, setEmail] = useState('');
+  return (
+    <Stack>
+      {team.members.map((member) => (
+        <Row key={member.id}>
+          <Text>{member.name || member.email}</Text>
+          {team.canManage && !member.you && <Button onClick={() => team.remove(member.id)}>Remove</Button>}
+        </Row>
+      ))}
+      {team.canManage && (
+        <Row>
+          <TextField label="Email" value={email} onChange={setEmail} />
+          <Button onClick={() => team.invite(email, team.roles[0])}>Invite</Button>
+        </Row>
+      )}
     </Stack>
   );
 }

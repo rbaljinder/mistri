@@ -9,6 +9,10 @@ import {
   assertAdministrationRoles,
   captureAdministrationIntent,
   captureAdministrationPolicy,
+  decodePlatformRoles,
+  hasRoleRules,
+  operatorGrant,
+  operatorRules,
   type AdministrationIntent,
   type AdministrationOperation,
   type AdministrationPolicy,
@@ -100,7 +104,13 @@ test('runtime API contains only the operation vocabulary and pure model function
       'assistantSwitch',
       'captureAdministrationIntent',
       'captureAdministrationPolicy',
+      'decodePlatformRoles',
+      'hasRoleRules',
+      'openingFingerprint',
       'operatorGrant',
+      'operatorPrincipal',
+      'operatorRuleNames',
+      'operatorRules',
     ].sort(),
   );
   assert.deepEqual(ADMINISTRATION_OPERATIONS, [
@@ -341,7 +351,7 @@ test('grants require the exact operator, target and operation without combining 
   const captured = captureAdministrationPolicy(policy());
   for (const operation of ADMINISTRATION_OPERATIONS) {
     const grant = administrationGrant(captured, 'operator', 'north', operation);
-    assert.deepEqual(grant, captured.operators[0]);
+    assert.deepEqual(grant, { roles: captured.operators[0].roles });
     frozen(grant);
   }
   for (const accountId of ['target', 'admin', 'administrator', '*', 'Operator']) {
@@ -361,7 +371,7 @@ test('grants require the exact operator, target and operation without combining 
   denied(() => administrationGrant(split, 'operator', 'south', 'grantMembership'));
   const grant = administrationGrant(split, 'operator', 'north', 'grantMembership');
   assert.deepEqual(grant.roles, ['reader']);
-  denied(() => assertAdministrationRoles(split, grant, ['reader', 'manager'], 1500, 1000));
+  denied(() => assertAdministrationRoles(split, 'operator', 'north', 'grantMembership', ['reader', 'manager'], 1500, 1000));
 });
 
 test("an operator rule may name tenants: 'all', which reaches every tenant and overlaps every rule", () => {
@@ -379,10 +389,8 @@ test("an operator rule may name tenants: 'all', which reaches every tenant and o
   denied(() => captureAdministrationPolicy({ ...policy(), operators: [everyone, { ...everyone, tenants: ['north'], roles: ['reader'] }] }));
   denied(() => captureAdministrationPolicy({ ...policy(), operators: [{ ...everyone, tenants: ['north'] }, everyone] }));
   captureAdministrationPolicy({ ...policy(), operators: [everyone, { ...everyone, accountId: 'other', tenants: ['north'] }] });
-  // The role ceiling a grant carries is the rule's own: 'all' is not any list.
-  const grant = administrationGrant(captured, 'platform', 'west', 'grantMembership');
-  assertAdministrationRoles(captured, grant, ['reader'], 1500, 1000);
-  denied(() => assertAdministrationRoles(captured, { ...grant, tenants: ['west'] } as typeof grant, ['reader'], 1500, 1000));
+  assertAdministrationRoles(captured, 'platform', 'west', 'grantMembership', ['reader'], 1500, 1000);
+  denied(() => assertAdministrationRoles(captured, 'platform', 'west', 'replaceMembership', ['reader'], 1500, 1000));
   for (const value of ['ALL', ' all', null]) {
     denied(() => captureAdministrationPolicy({ ...policy(), operators: [{ ...everyone, tenants: value }] }));
   }
@@ -405,47 +413,113 @@ test('overlapping operator target/operation ceilings refuse regardless of order 
   }
 });
 
-test('role assertions reject forged, removed and stale policy ceilings', () => {
+test('role assertions read the ceiling from the policy, never from the caller', () => {
   const input = policy(),
     captured = captureAdministrationPolicy(input);
-  const grant = administrationGrant(captured, 'operator', 'north', 'grantMembership');
-  for (const change of [{ roles: ['owner'] }, { accountId: 'another' }, { tenants: ['west'] }, { operations: ['grantMembership'] }]) {
-    denied(() =>
-      assertAdministrationRoles(captured, { ...grant, ...change } as typeof grant, 'roles' in change ? ['owner'] : ['reader'], 1500, 1000),
-    );
+  assertAdministrationRoles(captured, 'operator', 'north', 'grantMembership', ['reader'], 1500, 1000);
+  for (const [account, tenant, roles] of [
+    ['another', 'north', ['reader']],
+    ['operator', 'west', ['reader']],
+    ['operator', 'north', ['owner']],
+  ] as const) {
+    denied(() => assertAdministrationRoles(captured, account, tenant, 'grantMembership', roles, 1500, 1000));
   }
+  // The captured policy is detached: a later change to the input is not read, and the changed input is.
   input.operators[0].roles = ['owner'];
-  assertAdministrationRoles(captured, grant, ['reader'], 1500, 1000);
-  denied(() => assertAdministrationRoles(input, grant, ['reader'], 1500, 1000));
-  assertAdministrationRoles(
-    captured,
-    { ...grant, roles: [...grant.roles].reverse(), tenants: [...grant.tenants].reverse(), operations: [...grant.operations].reverse() },
-    ['reader'],
-    1500,
-    1000,
-  );
+  assertAdministrationRoles(captured, 'operator', 'north', 'grantMembership', ['reader'], 1500, 1000);
+  denied(() => assertAdministrationRoles(input, 'operator', 'north', 'grantMembership', ['reader'], 1500, 1000));
 });
 
 test('role assertion enforces nonempty canonical subsets and inclusive lifetime ceiling', () => {
   const captured = captureAdministrationPolicy(policy());
-  const grant = administrationGrant(captured, 'operator', 'north', 'grantMembership');
+  const check = (target: AdministrationPolicy, roles: readonly string[], expiry: number, now: number) =>
+    assertAdministrationRoles(target, 'operator', 'north', 'grantMembership', roles, expiry, now);
   for (const roles of [['reader'], ['manager', 'reader']]) {
-    for (const expiry of [1001, 2000]) assertAdministrationRoles(captured, grant, roles, expiry, 1000);
+    for (const expiry of [1001, 2000]) check(captured, roles, expiry, 1000);
   }
   for (const roles of [[], ['owner'], ['reader', 'owner'], ['reader', 'reader'], [' reader']]) {
-    denied(() => assertAdministrationRoles(captured, grant, roles, 1500, 1000));
+    denied(() => check(captured, roles, 1500, 1000));
   }
   for (const expiry of [999, 1000, 2001, 1500.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
-    denied(() => assertAdministrationRoles(captured, grant, ['reader'], expiry, 1000));
+    denied(() => check(captured, ['reader'], expiry, 1000));
   }
   for (const now of [-1, 1000.5, Infinity, NaN, Number.MAX_SAFE_INTEGER + 1]) {
-    denied(() => assertAdministrationRoles(captured, grant, ['reader'], 1500, now));
+    denied(() => check(captured, ['reader'], 1500, now));
   }
-  assertAdministrationRoles(captured, grant, ['reader'], Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER - 1000);
-  denied(() => assertAdministrationRoles(captured, grant, ['reader'], Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER - 999));
+  check(captured, ['reader'], Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER - 1000);
+  denied(() => check(captured, ['reader'], Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER - 999));
   const year = captureAdministrationPolicy({ ...policy(), maxMembershipLifetimeMs: maximumLifetimeMs });
-  assertAdministrationRoles(year, year.operators[0], ['reader'], maximumLifetimeMs, 0);
-  denied(() => assertAdministrationRoles(year, year.operators[0], ['reader'], maximumLifetimeMs + 1, 0));
+  check(year, ['reader'], maximumLifetimeMs, 0);
+  denied(() => check(year, ['reader'], maximumLifetimeMs + 1, 0));
+});
+
+test('an operator rule names exactly one of accountId or platformRole', () => {
+  const rule = { tenants: ['north'], operations: ['createTenant'], roles: ['reader'] };
+  for (const named of [
+    {},
+    { accountId: 'operator', platformRole: 'support' },
+    { platformRole: '' },
+    { platformRole: 1 },
+    { accountId: '' },
+  ]) {
+    denied(() => captureAdministrationPolicy({ ...policy(), operators: [{ ...rule, ...named }] }));
+  }
+  const captured = captureAdministrationPolicy({ ...policy(), operators: [{ ...rule, platformRole: 'support' }] });
+  assert.equal(captured.operators[0].platformRole, 'support');
+  assert.equal(captured.operators[0].accountId, undefined);
+  assert.equal(hasRoleRules(captured), true);
+  assert.equal(hasRoleRules(captureAdministrationPolicy(policy())), false);
+});
+
+test('a platformRole rule admits the accounts holding that platform role, and overlapping rules union', () => {
+  const role = { platformRole: 'support', tenants: 'all' as const, operations: ['grantMembership', 'createTenant'], roles: ['reader'] };
+  const wider = { platformRole: 'billing', tenants: ['north'], operations: ['grantMembership'], roles: ['manager'] };
+  const own = { accountId: 'operator', tenants: ['north'], operations: ['grantMembership'], roles: ['owner'] };
+  // Role rules may overlap each other and an account rule: they union rather than refuse.
+  const captured = captureAdministrationPolicy({ ...policy(), operators: [role, wider, own, { ...role, roles: ['reader', 'auditor'] }] });
+  const supportOnly = { accountId: 'someone', platformRoles: ['support'] };
+  assert.deepEqual(administrationGrant(captured, supportOnly, 'west', 'grantMembership').roles, ['reader', 'auditor']);
+  assert.deepEqual(
+    [
+      ...administrationGrant(captured, { accountId: 'someone', platformRoles: ['support', 'billing'] }, 'north', 'grantMembership').roles,
+    ].sort(),
+    ['auditor', 'manager', 'reader'],
+  );
+  assert.deepEqual(
+    [...administrationGrant(captured, { accountId: 'operator', platformRoles: ['support'] }, 'north', 'grantMembership').roles].sort(),
+    ['auditor', 'owner', 'reader'],
+  );
+  assertAdministrationRoles(captured, supportOnly, 'west', 'grantMembership', ['auditor'], 1500, 1000);
+  denied(() => assertAdministrationRoles(captured, supportOnly, 'west', 'grantMembership', ['manager'], 1500, 1000));
+  // An account id alone holds no platform role, and an unnamed role admits nothing.
+  denied(() => administrationGrant(captured, 'someone', 'west', 'grantMembership'));
+  denied(() => administrationGrant(captured, { accountId: 'someone', platformRoles: ['Support'] }, 'west', 'grantMembership'));
+  assert.equal(operatorGrant(captured, supportOnly, 'west', 'importTenant'), null);
+  assert.equal(operatorRules(captured, supportOnly).length, 2);
+  assert.equal(operatorRules(captured, 'someone').length, 0);
+  // A forged principal is refused rather than read.
+  for (const forged of [
+    { accountId: 'someone' },
+    { accountId: '', platformRoles: [] },
+    { accountId: 'someone', platformRoles: 'support' },
+  ]) {
+    denied(() => administrationGrant(captured, forged as never, 'west', 'grantMembership'));
+  }
+});
+
+test('a platform membership row decodes to its roles and expiry, and nothing else', () => {
+  assert.equal(decodePlatformRoles(null), null);
+  assert.equal(decodePlatformRoles(undefined), null);
+  assert.deepEqual(decodePlatformRoles({ roles: '["support"]', validUntil: 2000 }), { roles: ['support'], validUntil: 2000 });
+  for (const row of [
+    { roles: ['support'], validUntil: 2000 },
+    { roles: '["support"]', validUntil: 1.5 },
+    { roles: '["support"]' },
+    { roles: '["support"]', validUntil: 2000, accountId: 'someone' },
+    { roles: '["support","support"]', validUntil: 2000 },
+  ]) {
+    denied(() => decodePlatformRoles(row));
+  }
 });
 
 test('fingerprints are SHA256 with operation version 1 and canonical object/role ordering', () => {
@@ -531,8 +605,8 @@ test('fingerprint and assertion entry points also refuse hooks without executing
   const proxy = new Proxy({}, { get: hook, ownKeys: hook, getPrototypeOf: hook });
   const captured = captureAdministrationPolicy(policy());
   denied(() => administrationGrant(proxy as AdministrationPolicy, 'operator', 'north', 'createTenant'));
-  denied(() => assertAdministrationRoles(captured, proxy as AdministrationPolicy['operators'][number], ['reader'], 1500, 1000));
-  denied(() => assertAdministrationRoles(captured, captured.operators[0], proxy as readonly string[], 1500, 1000));
+  denied(() => assertAdministrationRoles(captured, proxy as never, 'north', 'grantMembership', ['reader'], 1500, 1000));
+  denied(() => assertAdministrationRoles(captured, 'operator', 'north', 'grantMembership', proxy as readonly string[], 1500, 1000));
   denied(() => administrationFingerprint(proxy as AdministrationPolicy, binding(), intents[0]));
   denied(() => administrationFingerprint(captured, proxy as TenantStoreBinding, intents[0]));
   denied(() => administrationFingerprint(captured, binding(), proxy as AdministrationIntent));

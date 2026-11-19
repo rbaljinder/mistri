@@ -12,7 +12,8 @@
         "y": 0,
         "width": 1280,
         "height": 720
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/dashboard.webp",
@@ -26,7 +27,8 @@
         "y": 0,
         "width": 1280,
         "height": 1000
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/form.webp",
@@ -39,7 +41,8 @@
         "y": 0,
         "width": 1280,
         "height": 700
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/record-page.webp",
@@ -52,7 +55,8 @@
         "y": 0,
         "width": 1280,
         "height": 800
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/shell.webp",
@@ -65,7 +69,8 @@
         "y": 0,
         "width": 1280,
         "height": 800
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "start/tick.webp",
@@ -90,7 +95,8 @@
         "y": 0,
         "width": 1280,
         "height": 800
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/lists.webp",
@@ -103,7 +109,8 @@
         "y": 0,
         "width": 1280,
         "height": 720
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/pages.webp",
@@ -117,7 +124,8 @@
         "y": 0,
         "width": 1440,
         "height": 760
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/forms.webp",
@@ -129,7 +137,8 @@
         "y": 0,
         "width": 1280,
         "height": 480
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/dashboards.webp",
@@ -142,7 +151,8 @@
         "y": 0,
         "width": 1280,
         "height": 660
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/nav.webp",
@@ -156,7 +166,8 @@
         "y": 0,
         "width": 1024,
         "height": 740
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "screens/landing.webp",
@@ -168,7 +179,8 @@
         "y": 0,
         "width": 1280,
         "height": 800
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "screens/custom-component.webp",
@@ -181,7 +193,8 @@
         "y": 455,
         "width": 640,
         "height": 420
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "looks/mono.webp",
@@ -352,7 +365,8 @@
         "y": 0,
         "width": 800,
         "height": 320
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/command-form.webp",
@@ -365,7 +379,8 @@
         "y": 0,
         "width": 1280,
         "height": 700
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/sign-in.webp",
@@ -378,7 +393,8 @@
         "y": 97,
         "width": 446,
         "height": 401
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "guide/commands.webp",
@@ -392,7 +408,8 @@
         "y": 0,
         "width": 1280,
         "height": 900
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "data/resources.webp",
@@ -405,7 +422,8 @@
         "y": 0,
         "width": 1280,
         "height": 900
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "data/relationships.webp",
@@ -418,7 +436,8 @@
         "y": 0,
         "width": 1280,
         "height": 860
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "data/display-rules.webp",
@@ -431,7 +450,8 @@
         "y": 0,
         "width": 1280,
         "height": 520
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "data/dates.webp",
@@ -441,11 +461,12 @@
       "viewport": "desk",
       "full": true,
       "clip": {
-        "x": 240,
-        "y": 120,
-        "width": 1040,
-        "height": 800
-      }
+        "x": 270,
+        "y": 170,
+        "width": 990,
+        "height": 1312
+      },
+      "look": "bloom"
     },
     {
       "file": "gallery/banner.webp",
@@ -750,9 +771,9 @@
       "viewport": "desk",
       "clip": {
         "x": 24,
-        "y": 108,
+        "y": 118,
         "width": 1232,
-        "height": 400
+        "height": 390
       }
     },
     {
@@ -788,7 +809,7 @@
       "route": "/leases/1",
       "as": "manager",
       "viewport": "desk",
-      "look": "lumen",
+      "look": "bloom",
       "clip": {
         "x": 0,
         "y": 0,
@@ -802,7 +823,7 @@
       "route": "/leases/1",
       "as": "manager",
       "viewport": "desk",
-      "look": "lumen",
+      "look": "bloom",
       "scheme": "dark",
       "clip": {
         "x": 0,
@@ -822,7 +843,8 @@
         "y": 0,
         "width": 1280,
         "height": 800
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "home/tab-pages.webp",
@@ -835,7 +857,8 @@
         "y": 0,
         "width": 1280,
         "height": 800
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "home/tab-dashboards.webp",
@@ -848,7 +871,8 @@
         "y": 0,
         "width": 1280,
         "height": 800
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "home/pair-list.webp",
@@ -861,7 +885,8 @@
         "y": 50,
         "width": 1010,
         "height": 550
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "home/pair-page.webp",
@@ -874,7 +899,8 @@
         "y": 50,
         "width": 1010,
         "height": 380
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "home/pair-dashboard.webp",
@@ -887,7 +913,8 @@
         "y": 200,
         "width": 1010,
         "height": 190
-      }
+      },
+      "look": "bloom"
     },
     {
       "file": "recipes/nav.webp",

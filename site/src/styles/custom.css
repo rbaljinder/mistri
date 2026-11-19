@@ -494,8 +494,32 @@ site-search button[data-open-modal] { border-radius: 8px; border-color: var(--sl
 }
 .tw-lightbox-close:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 2px; }
 .tw-lightbox-open { overflow: hidden; }
+/* Zoom (src/lightbox.ts) is a transform on the fitted picture; a zoomed
+   dialog no longer scrolls, the picture pans instead. */
+.tw-lightbox { touch-action: none; }
+.tw-lightbox img { user-select: none; cursor: zoom-in; transform-origin: center; }
+.tw-lightbox-zoomed { overflow: hidden; }
+.tw-lightbox-zoomed img { cursor: grab; }
+.tw-lightbox-dragging img { cursor: grabbing; }
+.tw-lightbox-tools {
+  position: fixed; bottom: 1rem; left: 50%; translate: -50% 0; display: flex; align-items: center; gap: 2px;
+  padding: 3px; border: 1px solid var(--sl-color-gray-5); border-radius: 999px;
+  background: var(--sl-color-black); color: var(--sl-color-white);
+}
+.tw-lightbox-tools button {
+  display: grid; place-items: center; min-width: 2.25rem; height: 2.25rem; padding: 0 0.5rem;
+  border: 0; border-radius: 999px; background: none; color: inherit; cursor: pointer;
+  font: 500 0.8125rem/1 var(--sl-font); font-variant-numeric: tabular-nums;
+}
+.tw-lightbox-tools .tw-lightbox-level { min-width: 3.5rem; }
+.tw-lightbox-tools button:hover { background: var(--sl-color-gray-6); }
+.tw-lightbox-tools button:focus-visible { outline: 2px solid var(--sl-color-accent); outline-offset: 1px; }
 @media (prefers-reduced-motion: no-preference) {
   .tw-lightbox[open], .tw-lightbox[open]::backdrop { animation: tw-lightbox-in 160ms ease-out; }
+  /* Buttons and the keyboard ease between zoom steps; a wheel, pinch or drag
+     follows the hand with no lag. */
+  .tw-lightbox img { transition: transform 160ms ease-out; }
+  .tw-lightbox-dragging img { transition: none; }
   @keyframes tw-lightbox-in { from { opacity: 0; } }
 }
 

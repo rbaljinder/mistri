@@ -1424,6 +1424,24 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         options,
       );
     },
+    /* A multistep form's step: prepare's family, since it acts on nothing and its failures are prepare's. */
+    check(
+      request: Request,
+      selectors: readonly string[],
+      expected: TenantContextAssertion,
+      value: unknown,
+      options?: TenantCommandExecutionOptions,
+    ) {
+      return execute(
+        'prepare',
+        request,
+        selectors,
+        expected,
+        value,
+        (bound, selected, captured, options) => bound.check(request, selected, captured, options),
+        options,
+      );
+    },
     availability(
       request: Request,
       selectors: readonly string[],

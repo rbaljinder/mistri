@@ -53,6 +53,7 @@ import {
   type ComputedColumn,
 } from '@mistriwork/engine/shared/computed.js';
 import { parseComputed } from '@mistriwork/engine/shared/computedParse.js';
+import { withFillsKey } from './appKeyFill.js';
 import { labelTemplateProblem, stitchedLabelProblem } from './appRecordLabels.js';
 export { appLabelTemplates, labelTemplateProblem, withLabelTemplates } from './appRecordLabels.js';
 export { appCatalog, appRollupRules, withRollups } from './appRollups.js';
@@ -1889,7 +1890,7 @@ export function resolveResources(app: AppDef, schema: DatabaseSchema): { resourc
     }
     problem ??=
       resource.form &&
-      (validateAppForm(resource.form, table, resource.fields?.read, {
+      (validateAppForm(resource.form, withFillsKey(table, resource), resource.fields?.read, {
         schema,
         derivedFrom: storedComputed(app, schema),
         person: formPerson,

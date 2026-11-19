@@ -18,14 +18,24 @@ export function membershipRole(app: AppDef, role: string, realm: 'tenant' | 'pla
   return (roles[role].realm === 'platform') === (realm === 'platform');
 }
 
-const outsideCeiling = (app: AppDef, policy: AppTenantPolicy) =>
-  [...(policy.administration?.operators ?? []), ...(policy.invitations?.operators ?? [])].some((operator) =>
-    operator.roles.some((role) => !membershipRole(app, role, 'tenant')),
+/* An administration or invitation rule naming a platform role admits whoever holds it through the platform's own
+   membership, as a support grant does: so it names one of the App's platform-realm roles, on an App that has
+   a platform tenant. Its ceiling is tenant roles like any rule's, so no role rule places a platform role. */
+const outsideCeiling = (app: AppDef, policy: AppTenantPolicy) => {
+  const operators = [...(policy.administration?.operators ?? []), ...(policy.invitations?.operators ?? [])];
+  return (
+    operators.some((operator) => operator.roles.some((role) => !membershipRole(app, role, 'tenant'))) ||
+    operators.some(
+      (operator) =>
+        operator.platformRole !== undefined && (!app.auth?.tenancy?.platform || !membershipRole(app, operator.platformRole, 'platform')),
+    )
   );
+};
 
 export const roleCeilingCheck = Object.freeze<TenantStartupCheck>({
   phase: 'policy',
-  stage: "administration and invitation role ceilings (this App's tenant-realm roles only, and no service role)",
+  stage:
+    "administration and invitation role ceilings (this App's tenant-realm roles only, and no service role; an operator's platformRole one of its platform-realm roles)",
   run: ({ app, policy }) => {
     if (outsideCeiling(app, policy)) throw new TenantStartupError();
   },

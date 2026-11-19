@@ -14,6 +14,7 @@ import { captureAppAuthRuntime, type AppAuthRuntime, type AppAuthRuntimeBinding,
 import { assertAuthStoreSeparation, captureAuthStoreExclusion } from '../auth/authStoreSeparation.js';
 import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { parseTenantSelector } from './tenantMembership.js';
+import { PLATFORM_TENANT_ID } from '../../shared/tenantContext.js';
 import { WriterRetargeted, writerLifecycle } from './tenantWriterLifecycle.js';
 import { createSqliteTenantAdministration, TENANT_TABLES, type TenantStoreAdministration, type TenantStoreBinding } from './tenantStore.js';
 import { createPostgresTenantAdministration } from './tenantStorePostgres.js';
@@ -29,7 +30,11 @@ import {
   captureAdministrationIntent,
   captureAdministrationPolicy,
   DELEGABLE_ADMINISTRATION_OPERATIONS,
+  decodePlatformRoles,
+  hasRoleRules,
   operatorGrant,
+  operatorPrincipal,
+  operatorRules,
   type AdministrationIntent,
   type AdministrationPolicy,
   type DelegableAdministrationOperation,
@@ -41,7 +46,13 @@ import {
   delegateCeiling,
   type DelegateMembership,
 } from './tenantDelegation.js';
-import { createNativeAccount, findNativeAccountByEmail, nativeAccountEmailOf, type NativeAccountInput } from '../auth/authAccounts.js';
+import {
+  createNativeAccount,
+  findNativeAccountByEmail,
+  nativeAccountEmailOf,
+  nativeAccountProfileOf,
+  type NativeAccountInput,
+} from '../auth/authAccounts.js';
 import {
   assertSqliteTenantAdministrationJournal,
   createSqliteTenantAdministrationJournal,
@@ -50,10 +61,7 @@ import {
 } from './tenantAdministrationJournal.js';
 import { postgresAssistantSwitch, sqliteAssistantSwitch, type AssistantSwitchStore } from './tenantAssistantSwitch.js';
 import { postgresDecisionSwitch, sqliteDecisionSwitch, type DecisionSwitchStore } from './tenantDecisionSwitch.js';
-import { assistantSwitch } from './tenantAdministrationModel.js';
 import type {
-  AdministrationAssistantImage as AssistantImage,
-  AdministrationDecisionSwitch as DecisionSwitch,
   AdministrationDecisionUsagePage,
   AdministrationUsagePage,
   AdministrationUsageRequest,
@@ -69,6 +77,8 @@ import {
   ADMINISTRATION_OPERATIONS,
   ASSISTANT_USAGE_MOST,
   DECISION_USAGE_MOST,
+  type AdministrationOpenTenantAttempt,
+  type AdministrationOpenTenantResult,
   type AdministrationOwner,
   type AdministrationPageRequest,
   type AdministrationTenantPage,
@@ -78,6 +88,8 @@ import {
   type AdministrationImportPlan,
   type AdministrationImportPlanRequest,
 } from '../../shared/tenantAdministration.js';
+import { count, exact, membershipImage, next, stateImage, tenantImage, time } from './tenantAdministrationImages.js';
+import { createTenantOpening, TenantOpenKeyConflict, type OpeningClaim } from './tenantOpening.js';
 import { captureInvitationPolicy, type InvitationPolicy } from './tenantInvitationModel.js';
 import { assertSqliteTenantInvitations, createSqliteTenantInvitations } from './tenantInvitationStore.js';
 import { captureInvitationChange } from './tenantInvitationChange.js';
@@ -90,7 +102,7 @@ import { createPostgresInvitationTransaction } from './tenantInvitationTransacti
 import { assertSqliteSupportAudit, createSqliteSupportAuditOwner } from './tenantSupportAudit.js';
 import type { SupportAuditKey, SupportAuditOwner } from './tenantSupportAuditContract.js';
 import type { TenantClonePlan } from './tenantClonePlan.js';
-import { CLONE_ROWS_MOST, copyTenant, planImport } from './tenantCloneEngine.js';
+import { copyTenant, planImport } from './tenantCloneEngine.js';
 import {
   assertSandboxStore,
   postgresSandboxSession,
@@ -133,6 +145,11 @@ export interface TenantAdministration {
   decisionUsage(request: IncomingMessage, input: AdministrationUsageRequest): Promise<AdministrationDecisionUsagePage>;
   /** Exact-intent recovery, authorized independently of current business membership. */
   status(request: IncomingMessage, input: AdministrationRequest): Promise<AdministrationResult | null>;
+  /** createTenant then issueInvitation under one key; a retry with the key resumes, another input under it is refused. */
+  openTenant(
+    request: IncomingMessage,
+    input: AdministrationOpenTenantAttempt & AdministrationOwner,
+  ): Promise<AdministrationOpenTenantResult>;
   /** What importing a sandbox into its live tenant would change, and what conflicts: for the live tenant's owner, who approves it. */
   importPlan(request: IncomingMessage, input: AdministrationImportPlanRequest): Promise<AdministrationImportPlan>;
   retire(): Promise<void>;
@@ -167,69 +184,6 @@ interface TenantDirectory {
   apply(accountId: string, roles: readonly string[] | null): Promise<boolean>;
 }
 
-function exact(value: unknown, fields: readonly string[], optional: readonly string[] = []): asserts value is Record<string, unknown> {
-  tenantRecord(value, [...fields, ...optional]);
-  if (fields.some((field) => !Object.hasOwn(value, field))) denyTenant();
-}
-function revision(value: unknown): asserts value is string {
-  if (typeof value !== 'string' || value.length > 128 || !/^[1-9][0-9]*$/.test(value)) denyTenant();
-}
-function next(value: string): string {
-  const result = String(BigInt(value) + 1n);
-  revision(result);
-  return result;
-}
-function time(value: unknown): asserts value is number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) denyTenant();
-}
-function count(value: unknown): asserts value is number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0 || value > CLONE_ROWS_MOST) denyTenant();
-}
-function tenantImage(value: unknown): asserts value is TenantImage {
-  exact(value, ['tenantId', 'status', 'version']);
-  tenantIdentifier(value.tenantId, 128);
-  parseTenantSelector([value.tenantId]);
-  revision(value.version);
-  if (!['active', 'suspended', 'closed'].includes(value.status as string)) denyTenant();
-}
-function membershipImage(value: unknown): asserts value is MembershipImage {
-  exact(value, ['membershipId', 'tenantId', 'accountId', 'status', 'version', 'roles', 'validUntil']);
-  tenantIdentifier(value.membershipId, 1024);
-  tenantIdentifier(value.tenantId, 128);
-  parseTenantSelector([value.tenantId]);
-  tenantIdentifier(value.accountId, 1024);
-  revision(value.version);
-  time(value.validUntil);
-  if (
-    !['active', 'invited', 'revoked'].includes(value.status as string) ||
-    !Array.isArray(value.roles) ||
-    value.roles.length > 256 ||
-    new Set(value.roles).size !== value.roles.length
-  )
-    return denyTenant();
-  for (const role of value.roles) tenantIdentifier(role);
-}
-function assistantImage(value: unknown): asserts value is AssistantImage {
-  exact(value, ['enabled', 'consent']);
-  // A stored switch was off and unconsented before it was first set; its consent is otherwise a switch's.
-  if (!(value.enabled === false && value.consent === '')) assistantSwitch(value.enabled, value.consent);
-}
-function decisionImage(value: unknown): asserts value is DecisionSwitch {
-  exact(value, ['provider', 'enabled', 'consent']);
-  if (typeof value.provider !== 'string' || !/^[a-z]{1,32}$/.test(value.provider)) return denyTenant();
-  // As the assistant's: a switch never set was off and unconsented.
-  if (!(value.enabled === false && value.consent === '')) assistantSwitch(value.enabled, value.consent);
-}
-function stateImage(value: unknown): asserts value is AdministrationState {
-  exact(value, ['tenant'], ['membership', 'assistant', 'decisions']);
-  tenantImage(value.tenant);
-  if (Object.hasOwn(value, 'assistant')) assistantImage(value.assistant);
-  if (Object.hasOwn(value, 'decisions')) decisionImage(value.decisions);
-  if (Object.hasOwn(value, 'membership')) {
-    membershipImage(value.membership);
-    if (value.membership.tenantId !== value.tenant.tenantId) denyTenant();
-  }
-}
 const sameRoles = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((role) => b.includes(role));
 
 function pagination(input: AdministrationPageRequest, maximumKeyLength: number): number {
@@ -511,6 +465,16 @@ interface AdministrationStore {
   ): DelegateMembership | null | Promise<DelegateMembership | null>;
   /** The id of the account's live (active or invited) member row in a tenant, whatever the tenant's status. */
   liveMembershipId(session: StoreSession, tenantId: string, accountId: string): string | null | Promise<string | null>;
+  /** The roles of the account's active, unexpired member row in `@platform`,
+   * while that tenant row is active, and when it expires; or null. Read only for
+   * a policy with a `platformRole` rule. `lock` holds both rows FOR SHARE to
+   * COMMIT where the engine has row locks, so a demotion waits for the change. */
+  readPlatformRoles(
+    session: StoreSession,
+    accountId: string,
+    now: number,
+    lock?: boolean,
+  ): ReturnType<typeof decodePlatformRoles> | Promise<ReturnType<typeof decodePlatformRoles>>;
   /** Every active tenant where the account holds an active, unexpired member row. */
   listAccountTenants(
     session: StoreSession,
@@ -628,6 +592,17 @@ async function openSqliteAdministrationStore(
           .get(tenantId, accountId);
         return typeof row?.id === 'string' ? row.id : null;
       },
+      readPlatformRoles: (session, accountId, now) =>
+        decodePlatformRoles(
+          sqlite(session)
+            .prepare(
+              `SELECT m.roles_json AS roles, m.valid_until AS validUntil
+            FROM main."${TENANT_TABLES.membership}" m JOIN main."${TENANT_TABLES.tenant}" t ON t.id = m.tenant_id
+            WHERE t.id = ? COLLATE BINARY AND t.kind = 'platform' AND t.status = 'active'
+              AND m.account_id = ? COLLATE BINARY AND m.kind = 'member' AND m.status = 'active' AND m.valid_until > ?`,
+            )
+            .get(PLATFORM_TENANT_ID, accountId, now),
+        ),
       listAccountTenants: (session, accountId, now) =>
         decodeDelegateTenants(
           sqlite(session)
@@ -778,6 +753,20 @@ async function openPostgresAdministrationStore(
         ).rows;
         if (rows.length > 1) return denyTenant();
         return decodeDelegateMembership(rows[0]);
+      },
+      async readPlatformRoles(session, accountId, now, lock = false) {
+        wellFormed(accountId);
+        const rows = (
+          await pg(session).query(
+            `SELECT m.roles_json AS roles, m.valid_until::float8 AS "validUntil"
+          FROM ${runtimeTable('postgres', TENANT_TABLES.membership)} m JOIN ${runtimeTable('postgres', TENANT_TABLES.tenant)} t ON t.id = m.tenant_id
+          WHERE t.id = $1 AND t.kind = 'platform' AND t.status = 'active'
+            AND m.account_id = $2 AND m.kind = 'member' AND m.status = 'active' AND m.valid_until > $3${lock ? ' FOR SHARE' : ''}`,
+            [PLATFORM_TENANT_ID, accountId, now],
+          )
+        ).rows;
+        if (rows.length > 1) return denyTenant();
+        return decodePlatformRoles(rows[0]);
       },
       async listAccountTenants(session, accountId, now) {
         wellFormed(accountId);
@@ -1084,6 +1073,16 @@ async function openAdministration(
         tenants.map((tenant) => [tenant.tenantId, delegateCapabilities(tenant.roles)] as const).filter(([, found]) => found.length),
       );
     };
+    /* Who asks: the account, and the roles its active platform membership holds, the way a support grant is
+       resolved. Read only when a rule names a platform role; an accountId-only policy reads no tenant store. */
+    const principalOf = async (session: StoreSession, accountId: string, lock: boolean) => {
+      if (!policy || !hasRoleRules(policy)) return { principal: operatorPrincipal(accountId), validUntil: Number.MAX_SAFE_INTEGER };
+      const found = await opened().readPlatformRoles(session, accountId, clock(), lock);
+      return {
+        principal: operatorPrincipal({ accountId, platformRoles: found?.roles ?? [] }),
+        validUntil: found?.validUntil ?? Number.MAX_SAFE_INTEGER,
+      };
+    };
     const delegatedGrant = async (session: StoreSession, accountId: string, tenantId: string, operation: string, lock: boolean) => {
       if (!policy?.delegates || !(DELEGABLE_ADMINISTRATION_OPERATIONS as readonly string[]).includes(operation) || !offered(operation))
         return denyTenant();
@@ -1125,18 +1124,20 @@ async function openAdministration(
           // account directory is queried for an ordinary authenticated account,
           // unless the policy delegates: then the account's own member rows say.
           if (!policy?.operators.some((entry) => entry.accountId === accountId)) {
-            if (!policy?.delegates) return null;
+            if (!policy?.delegates && !(policy && hasRoleRules(policy))) return null;
             const fence = () => {
               auth.assertSessionCurrent(proof);
               if (request.aborted) denyTenant();
             };
-            const delegated = await queue.run(() =>
-              maintenance<number>(
+            const admitted = await queue.run(() =>
+              maintenance<boolean>(
                 (session) => attested(session, fence),
-                async (session) => (await delegatedTargets(session, accountId)).size,
+                async (session) =>
+                  operatorRules(policy!, (await principalOf(session, accountId, false)).principal).length > 0 ||
+                  (await delegatedTargets(session, accountId)).size > 0,
               ),
             );
-            if (!delegated) return null;
+            if (!admitted) return null;
           }
           const fresh = await auth.sessionInstance(request);
           const before = instant;
@@ -1245,9 +1246,11 @@ async function openAdministration(
         exact(captured, ['expectedAccount', 'context'], ['after', 'limit']);
         const limit = pagination(captured, 128);
         if (captured.after !== undefined) parseTenantSelector([captured.after]);
-        const grants = policy?.operators.filter((entry) => entry.accountId === captured.expectedAccount) ?? [];
-        if (!grants.length && !policy?.delegates) return denyTenant();
+        const named = policy?.operators.filter((entry) => entry.accountId === captured.expectedAccount) ?? [];
+        if (!named.length && !policy?.delegates && !(policy && hasRoleRules(policy))) return denyTenant();
         return await readOwned(request, captured, async (session, active) => {
+          const grants = policy ? operatorRules(policy, (await principalOf(session, captured.expectedAccount, false)).principal) : [];
+          active();
           // Policy enumeration discloses only explicitly delegated targets, even
           // before creation, and a delegate's own tenants. Never enumerate the
           // database's global tenant table.
@@ -1262,11 +1265,14 @@ async function openAdministration(
             active();
             const capabilities = ADMINISTRATION_OPERATIONS.filter(offered).flatMap((operation) => {
               // Where an operator grant covers the operation, it decides.
-              const grant =
+              const matched =
                 operation === 'importTenant'
-                  ? undefined
-                  : grants.find((entry) => operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation));
-              const roles = grant?.roles ?? delegated.get(tenantId)?.find((found) => found.operation === operation)?.roles;
+                  ? []
+                  : grants.filter((entry) => operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation));
+              /* Overlapping rules union, as the grant a mutation is checked against does. */
+              const roles = matched.length
+                ? [...new Set(matched.flatMap((entry) => entry.roles))]
+                : delegated.get(tenantId)?.find((found) => found.operation === operation)?.roles;
               return roles ? [{ operation, roles }] : [];
             });
             const switchable = capabilities.some((capability) => capability.operation === 'setTenantAssistant');
@@ -1321,9 +1327,18 @@ async function openAdministration(
         parseTenantSelector([captured.tenantId]);
         if (captured.operation !== 'replaceMembership' && captured.operation !== 'revokeMembership') return denyTenant();
         if (!policy) return denyTenant();
-        const operator = operatorGrant(policy, captured.expectedAccount, captured.tenantId, captured.operation);
-        if (!operator && !policy.delegates) return denyTenant();
+        const named = operatorGrant(policy, captured.expectedAccount, captured.tenantId, captured.operation);
+        if (!named && !policy.delegates && !hasRoleRules(policy)) return denyTenant();
         return await readOwned(request, captured, async (session, active) => {
+          active();
+          const operator = hasRoleRules(policy)
+            ? operatorGrant(
+                policy,
+                (await principalOf(session, captured.expectedAccount, false)).principal,
+                captured.tenantId,
+                captured.operation,
+              )
+            : named;
           active();
           const grant = operator ?? (await delegatedGrant(session, captured.expectedAccount, captured.tenantId, captured.operation, false));
           active();
@@ -1348,12 +1363,21 @@ async function openAdministration(
             if (member.roles.some((role) => !grant.roles.includes(role))) return denyTenant();
             return member;
           });
-          return {
-            tenant,
-            operation: captured.operation,
-            roles: grant.roles,
-            ...pageItems(candidates, limit, (item) => item.membershipId),
-          };
+          const paged = pageItems(candidates, limit, (item) => item.membershipId);
+          /* Who each member is, in words (the account's address and name): read from the sign-in store once for the
+             page; an account it cannot say is listed by its id alone, and the page is never refused for it. */
+          const items = [];
+          for (const member of paged.items) {
+            active();
+            let who: Awaited<ReturnType<typeof nativeAccountProfileOf>> = null;
+            try {
+              who = await nativeAccountProfileOf(raw.auth as AppAuthRuntime, member.accountId);
+            } catch {
+              who = null;
+            }
+            items.push({ ...member, ...(who?.email ? { email: who.email } : {}), ...(who?.name ? { name: who.name } : {}) });
+          }
+          return { tenant, operation: captured.operation, roles: grant.roles, items, next: paged.next };
         });
       } catch {
         throw new TenantAdministrationFailure('not_applied');
@@ -1369,15 +1393,16 @@ async function openAdministration(
         tenantIdentifier(captured.context);
         const since = captured.since ?? '0000-01-01';
         if (typeof since !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(since) || raw.assistant !== true) return denyTenant();
-        const tenants = [
+        const billed = (rules: readonly AdministrationPolicy['operators'][number][]) => [
           ...new Set(
-            (policy?.operators ?? [])
-              .filter((entry) => entry.accountId === captured.expectedAccount && entry.operations.includes('setTenantAssistant'))
-              .flatMap((entry) => operatorIds(entry.tenants)),
+            rules.filter((entry) => entry.operations.includes('setTenantAssistant')).flatMap((entry) => operatorIds(entry.tenants)),
           ),
         ];
-        if (!tenants.length) return denyTenant();
+        if (!policy || (!billed(operatorRules(policy, captured.expectedAccount)).length && !hasRoleRules(policy))) return denyTenant();
         return await readOwned(request, captured, async (session, active) => {
+          const tenants = billed(operatorRules(policy, (await principalOf(session, captured.expectedAccount, false)).principal));
+          active();
+          if (!tenants.length) return denyTenant();
           const rows = await opened()
             .assistant(session)
             .usage(tenants, since, ASSISTANT_USAGE_MOST + 1);
@@ -1400,15 +1425,16 @@ async function openAdministration(
         tenantIdentifier(captured.context);
         const since = captured.since ?? '0000-01-01';
         if (typeof since !== 'string' || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(since) || providers === undefined) return denyTenant();
-        const tenants = [
+        const billed = (rules: readonly AdministrationPolicy['operators'][number][]) => [
           ...new Set(
-            (policy?.operators ?? [])
-              .filter((entry) => entry.accountId === captured.expectedAccount && entry.operations.includes('setTenantDecisions'))
-              .flatMap((entry) => operatorIds(entry.tenants)),
+            rules.filter((entry) => entry.operations.includes('setTenantDecisions')).flatMap((entry) => operatorIds(entry.tenants)),
           ),
         ];
-        if (!tenants.length) return denyTenant();
+        if (!policy || (!billed(operatorRules(policy, captured.expectedAccount)).length && !hasRoleRules(policy))) return denyTenant();
         return await readOwned(request, captured, async (session, active) => {
+          const tenants = billed(operatorRules(policy, (await principalOf(session, captured.expectedAccount, false)).principal));
+          active();
+          if (!tenants.length) return denyTenant();
           const rows = await opened()
             .decisions(session)
             .usage(tenants, since, DECISION_USAGE_MOST + 1);
@@ -1446,7 +1472,12 @@ async function openAdministration(
         throw new TenantAdministrationFailure('not_applied');
       }
     };
-    const run = (execute: boolean, request: IncomingMessage, input: AdministrationRequest): Promise<AdministrationResult | null> => {
+    const run = (
+      execute: boolean,
+      request: IncomingMessage,
+      input: AdministrationRequest,
+      claim?: OpeningClaim,
+    ): Promise<AdministrationResult | null> => {
       let captured: AdministrationRequest, started: number;
       let session: {
         readonly value: AdministrationSession;
@@ -1486,10 +1517,15 @@ async function openAdministration(
         /* A clone is authorized at its source as well: an operator's grant names both tenants, and a delegate's
            authority is its membership in the source, the tenant it is copying. */
         const authority = intent.operation === 'cloneTenant' ? intent.sourceTenantId : intent.tenantId;
-        const operator =
-          policy && (intent.operation !== 'cloneTenant' || operatorGrant(policy, captured.expectedAccount, authority, intent.operation))
-            ? operatorGrant(policy, captured.expectedAccount, intent.tenantId, intent.operation)
+        /* The account's platform roles join it inside the transaction, read (and on PostgreSQL locked) as a
+           delegate's member row is, and only when a rule names a platform role. */
+        let principal = operatorPrincipal(captured.expectedAccount);
+        let platformValidUntil: number | undefined;
+        const operatorOf = (who: typeof principal) =>
+          policy && (intent.operation !== 'cloneTenant' || operatorGrant(policy, who, authority, intent.operation))
+            ? operatorGrant(policy, who, intent.tenantId, intent.operation)
             : null;
+        let operator = operatorOf(principal);
         let delegated:
           | Readonly<{
               roles: readonly string[];
@@ -1505,6 +1541,7 @@ async function openAdministration(
           if (
             (requiredValidity !== undefined && instant >= requiredValidity) ||
             (delegated !== undefined && instant >= delegated.validUntil) ||
+            (platformValidUntil !== undefined && instant >= platformValidUntil) ||
             (requiredAccount && auth.synchronous && auth.lookupAccount(requiredAccount)?.accountId !== requiredAccount)
           )
             return denyTenant();
@@ -1535,10 +1572,10 @@ async function openAdministration(
           }
           if (!policy) return denyTenant();
           // Null until a delegate's own membership is read in the transaction.
-          if (operator && intent.operation === 'cloneTenant')
-            administrationGrant(policy, verified.identity.id, authority, intent.operation);
+          const who = { accountId: verified.identity.id, platformRoles: principal.platformRoles };
+          if (operator && intent.operation === 'cloneTenant') administrationGrant(policy, who, authority, intent.operation);
           const grant: { readonly roles: readonly string[] } | null = operator
-            ? administrationGrant(policy, verified.identity.id, intent.tenantId, intent.operation)
+            ? administrationGrant(policy, who, intent.tenantId, intent.operation)
             : (delegated ?? null);
           if (requiredAccount && auth.synchronous && auth.lookupAccount(requiredAccount)?.accountId !== requiredAccount)
             return denyTenant();
@@ -1546,7 +1583,7 @@ async function openAdministration(
           return grant;
         };
         try {
-          if (!policy || (!operator && !policy.delegates)) return denyTenant();
+          if (!policy || (!operator && !policy.delegates && !hasRoleRules(policy))) return denyTenant();
           await current();
           const fingerprint = administrationFingerprint(policy, owner, intent);
           const scope = {
@@ -1579,6 +1616,13 @@ async function openAdministration(
                 };
                 const journal = opened().journal(session, operations, active);
                 const administration = opened().administration(session, operations, active);
+                if (hasRoleRules(policy)) {
+                  const found = await principalOf(session, captured.expectedAccount, true);
+                  principal = found.principal;
+                  if (found.principal.platformRoles.length) platformValidUntil = found.validUntil;
+                  operator = operatorOf(principal);
+                  active();
+                }
                 if (!operator) {
                   // A delegate: the tenant row, then its own member row, locked to
                   // COMMIT where the engine has row locks (SQLite's writer fence
@@ -1587,6 +1631,38 @@ async function openAdministration(
                   active();
                 }
                 let grant = (await current()) ?? denyTenant();
+                /* An opening's key is claimed beside its createTenant receipt: the same key with another input is
+                   refused before anything is read back or written, whichever tenant either names. */
+                const claimScope = claim && {
+                  actorId: captured.expectedAccount,
+                  tenantId: PLATFORM_TENANT_ID,
+                  operation: 'openTenant',
+                  operationVersion: 1,
+                  idempotencyKey: claim.key,
+                };
+                const claimed = claimScope ? await journal.read(claimScope) : null;
+                if (claim && claimed && claimed.fingerprint !== claim.fingerprint) throw new TenantOpenKeyConflict(claim.key);
+                const commitClaim = async (requestId: string, completedAt: string) => {
+                  if (!claim || !claimScope || claimed) return;
+                  await journal.commit(
+                    {
+                      ...claimScope,
+                      id: randomUUID(),
+                      fingerprint: claim.fingerprint,
+                      requestId,
+                      completedAt,
+                      resultJson: claim.resultJson,
+                    },
+                    {
+                      policyId: policy.id,
+                      policyVersion: policy.version,
+                      deployment,
+                      sessionId: proof!.sessionId,
+                      changeJson: claim.resultJson,
+                    },
+                  );
+                  await current();
+                };
                 const stored = await journal.read(scope);
                 // A verified matching receipt establishes a historical commit even
                 // if the next authentication barrier refuses its disclosure.
@@ -1595,6 +1671,7 @@ async function openAdministration(
                 if (stored) {
                   if (stored.fingerprint !== fingerprint) return denyTenant();
                   const change = captureChange(JSON.parse(stored.resultJson), intent, grant.roles);
+                  if (execute) await commitClaim(stored.requestId, stored.completedAt);
                   return {
                     receiptId: stored.id,
                     requestId: stored.requestId,
@@ -1798,7 +1875,9 @@ async function openAdministration(
                         } else {
                           assertAdministrationRoles(
                             policy,
-                            administrationGrant(policy, captured.expectedAccount, intent.tenantId, intent.operation),
+                            principal,
+                            intent.tenantId,
+                            intent.operation,
                             intent.roles,
                             intent.validUntil,
                             live(),
@@ -1888,6 +1967,7 @@ async function openAdministration(
                   changeJson: receipt.resultJson,
                 });
                 await current();
+                await commitClaim(receipt.requestId, receipt.completedAt);
                 return {
                   receiptId: receipt.id,
                   requestId: receipt.requestId,
@@ -1904,6 +1984,8 @@ async function openAdministration(
           live();
           return captureTenantData(returned);
         } catch (error) {
+          // A refused key applied nothing and says which key; it is no uncertain outcome.
+          if (error instanceof TenantOpenKeyConflict && Object.getPrototypeOf(error) === TenantOpenKeyConflict.prototype) throw error;
           // A checkout the pool refused leased nothing: busy, not uncertain (tenantWriteSource.ts says why).
           if (error instanceof TransactionOutcomeUnknown || (attempted && !entered && !isPoolBusy(error))) uncertain();
           throw new TenantAdministrationFailure(completed || error instanceof TransactionOutcomeUnknown ? 'unknown' : 'not_applied');
@@ -1959,6 +2041,20 @@ async function openAdministration(
             ),
           ),
       });
+    const openTenant = createTenantOpening({
+      owner,
+      invitations,
+      clock,
+      run: (request, input, claim) => run(true, request, input, claim),
+      tenantVersion: (request, input, tenantId) =>
+        readOwned(request, input, async (session, active) => {
+          active();
+          const image = await opened().readTenant(session, tenantId);
+          active();
+          return image?.version ?? denyTenant();
+        }),
+      fail: (outcome) => new TenantAdministrationFailure(outcome),
+    });
     const supportHistory = support?.create({
       clock,
       tracked,
@@ -2075,6 +2171,7 @@ async function openAdministration(
       importPlan,
       execute: async (request: IncomingMessage, input: AdministrationRequest) => (await run(true, request, input))!,
       status: (request: IncomingMessage, input: AdministrationRequest) => run(false, request, input),
+      openTenant,
       retire,
     });
   } catch {

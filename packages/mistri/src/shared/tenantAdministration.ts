@@ -1,6 +1,6 @@
 /** Browser-safe administration data. Policies, native login identifiers,
  * database bindings and durable fingerprints stay server-only. */
-import type { InvitationImage } from './tenantInvitations.js';
+import type { InvitationImage, InvitationIssueReply } from './tenantInvitations.js';
 
 export const ADMINISTRATION_OPERATIONS = Object.freeze([
   'createTenant',
@@ -89,6 +89,9 @@ export interface AdministrationMembershipImage {
   readonly membershipId: string;
   readonly tenantId: string;
   readonly accountId: string;
+  /** The member's account address and display name, said on a membership list only to a reader who may manage the team (an operator, or a delegate: the list is refused to anyone else) (words for a person, never authority). */
+  readonly email?: string;
+  readonly name?: string;
   readonly status: 'active' | 'invited' | 'revoked';
   readonly version: string;
   readonly roles: readonly string[];
@@ -268,3 +271,29 @@ export interface AdministrationExecuteReply {
 export type AdministrationStatusReply =
   | Readonly<{ status: 'completed'; outcome: 'applied'; result: AdministrationResult }>
   | Readonly<{ status: 'not_found'; outcome: 'unknown'; result: null }>;
+/** Opening a tenant under one request key: the App's profile command (already run, through
+ * the leased command path, under `${key}:profile`), then createTenant and issueInvitation,
+ * journaled under the key with a fingerprint of all of it. The profile step is not atomic
+ * with the other two; a retry with the same key and the same input completes the rest. */
+export interface AdministrationOpenTenantAttempt {
+  readonly key: string;
+  /** The profile command's receipt or record id: part of the intent, not read back. */
+  readonly profile: string;
+  readonly tenant: Readonly<{ tenantId: string }>;
+  readonly invitation:
+    | Readonly<{ accountId: string; roles: readonly string[]; redeemUntil: number; validUntil: number }>
+    | Readonly<{ email: string; roles: readonly string[]; redeemUntil: number; validUntil: number }>;
+}
+export interface AdministrationOpenTenantResult {
+  readonly tenantId: string;
+  /** The tenant's version as createTenant left it, or as it stands when a retry finishes the invitation. */
+  readonly version: string;
+  /** The invitation's token is in the first reply only, never in a retry's. */
+  readonly invitation: InvitationIssueReply;
+}
+export interface AdministrationOpenTenantReply {
+  readonly outcome: 'applied';
+  readonly result: AdministrationOpenTenantResult;
+}
+/** The 409 a reused key answers when the input differs: `key` names it. */
+export const OPEN_TENANT_KEY_CONFLICT = 'tenant_open_key_conflict';

@@ -23,7 +23,7 @@ import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { draftTransport } from './draftFormApi.js';
 import { checkCommandStep } from './commandStepCheck.js';
 import type { SavedFormPresentation } from './SavedFormSurface.js';
-import { askedFields, type CommandQuestions } from './CommandFields.js';
+import { askedFields, servedWithheldOptions, type CommandQuestions } from './CommandFields.js';
 import type { PageEntry } from '@mistriwork/kit/client/components/pageModel.js';
 import { say } from '../copy/forms/components/FormRoom.js';
 import type { UiCommandOutcome } from './sdk/context.js';
@@ -158,6 +158,7 @@ export function FormBody({
       questions?: CommandQuestions;
       withheld?: string[];
       when?: Record<string, string>;
+      withheldOptions?: Record<string, (string | number)[]>;
     }> => {
       const result = await api('/api/commands/prepare', {
         ...ownedBy(connection),
@@ -171,7 +172,15 @@ export function FormBody({
       // The inputs the tenant's profile does not ask, and what is left of the rest to judge over the draft.
       const withheld = Array.isArray(result?.withheld) ? (result.withheld as unknown[]).filter((name) => typeof name === 'string') : [];
       const when = result?.when && typeof result.when === 'object' ? (result.when as Record<string, string>) : undefined;
-      return { initial, ...(questions ? { questions } : {}), ...(withheld.length ? { withheld } : {}), ...(when ? { when } : {}) };
+      // The options the tenant's profile does not offer.
+      const withheldOptions = servedWithheldOptions(result?.withheldOptions);
+      return {
+        initial,
+        ...(questions ? { questions } : {}),
+        ...(withheld.length ? { withheld } : {}),
+        ...(when ? { when } : {}),
+        ...(withheldOptions ? { withheldOptions } : {}),
+      };
     },
   });
   const draft = useMemo(() => {

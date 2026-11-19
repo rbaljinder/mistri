@@ -67,8 +67,17 @@ vi.mock('../../../../kit/src/client/components/inputRenderers.js', () => ({
 
 const { FormSurface } = await import('./FormSurface.js');
 const { ActionBar } = await import('./Actions.js');
-const { CommandFields, blankCommandValues, commandInput, commandPathLabel, commandProblems, loadLines, prefilledCommandValues } =
-  await import('./CommandFields.js');
+const {
+  CommandFields,
+  askedFields,
+  blankCommandValues,
+  commandInput,
+  commandPathLabel,
+  commandProblems,
+  loadLines,
+  prefilledCommandValues,
+  servedWithheldOptions,
+} = await import('./CommandFields.js');
 
 const input: AppCommandField[] = [
   {
@@ -791,4 +800,30 @@ test('a reference picker is a search box, and offers the records just opened bef
   forgetVisits();
   cleanup();
   client.clear();
+});
+
+test('an option whose when the tenant does not meet is not offered, and none with a when is before prepare', () => {
+  const pay = {
+    name: 'pay',
+    label: 'Pay',
+    type: 'choice',
+    options: [
+      { value: 'card', label: 'Card' },
+      { value: 'upi', label: 'UPI', when: "tenant.country = 'IN'" },
+      { value: 'ach', label: 'ACH', when: "tenant.country = 'US'" },
+    ],
+  } as AppCommandField;
+  const offered = (prepared: Parameters<typeof askedFields>[1]) =>
+    (askedFields([pay], prepared)[0] as Extract<AppCommandField, { type: 'choice' }>).options;
+  expect(offered(undefined)).toEqual([{ value: 'card', label: 'Card' }]);
+  expect(offered({ withheldOptions: { pay: ['ach'] } })).toEqual([
+    { value: 'card', label: 'Card' },
+    { value: 'upi', label: 'UPI' },
+  ]);
+  expect(offered({})).toHaveLength(3);
+  expect(offered({}).some((option) => 'when' in option)).toBe(false);
+  // As served: a key per input with something withheld, anything else read as nothing.
+  expect(servedWithheldOptions({ pay: ['ach', 2, null], note: [] })).toEqual({ pay: ['ach', 2] });
+  expect(servedWithheldOptions(undefined)).toBeUndefined();
+  expect(servedWithheldOptions(['ach'])).toBeUndefined();
 });

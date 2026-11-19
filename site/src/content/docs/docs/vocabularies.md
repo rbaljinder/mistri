@@ -39,7 +39,7 @@ See it in the sample (`examples/apps/lintel/resources.ts:55`) (on `unit`); `doll
 | Key | What it does | Default | Status |
 | --- | --- | --- | --- |
 | `tone` | Value → `good`, `warn`, `bad`, `info`, `neutral`; numbers take thresholds (`'>= 3'`); `'*'` for the rest; a yes/no column is keyed `true` and `false` | unnamed values are `neutral` | Stable |
-| `values` | Value → its word (≤80 characters); unnamed values are still said as words | `in_review` reads "In review" where the column is a vocabulary | Stable |
+| `values` | Value → its word (≤80 characters, or a `msg()` said in the reader's language); unnamed values are still said as words | `in_review` reads "In review" where the column is a vocabulary | Stable |
 | `icons` | Value → an App icon before the word; not on a figure | none | Stable |
 | `format`, `unit`, `currency` | `money`, `percent`, `number`, `relative`, `duration`, `email`, `phone`, `url`; `unit: 'min'`, said in the singular for one (`unit: 'bikes'` reads "1 bike"); money always in the currency's decimals | as stored | Stable |
 | `whole` | Money said without its minor digits where it has none: "$24,495", but "$24,495.50" if it has cents (a listing price). A CSV stays exact | cents always shown | Stable |

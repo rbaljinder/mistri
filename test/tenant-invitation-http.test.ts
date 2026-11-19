@@ -259,7 +259,7 @@ test('real issue, target/list pages and one-time handoff preserve independent ow
   for (const operation of ['revokeInvitation', 'reissueInvitation']) {
     const page = await f.call(f.url('list', `&tenantId=north&operation=${operation}&limit=1`), undefined, issued.issuer.owned);
     owned(page, issued.issuer.owned);
-    assert.deepEqual(page.body.page.items, [issued.pair]);
+    assert.deepEqual(page.body.page.items, [{ ...issued.pair, email: 'target@example.test' }]);
     assert.equal(page.text.includes(issued.token), false);
     assert.equal(page.text.includes('digest'), false);
   }

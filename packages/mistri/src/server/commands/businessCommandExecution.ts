@@ -51,7 +51,7 @@ import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
 import { compileWhen, failingCondition, plainlyFails, recordPartHolds, type DerivedFailure, whenHolds, whenPerson } from './commandWhen.js';
 import { mentionsMe } from '../../shared/appMe.js';
 import { whenRefusalSentence } from './commandSaying.js';
-import { bindRecord, readsRecord, readsTarget, type BoundCondition } from '../../shared/commandDraft.js';
+import { bindRecord, readsRecord, readsTarget, withheldAnswer, withheldOptions, type BoundCondition } from '../../shared/commandDraft.js';
 import { mayReadTargetColumn } from './commandActorColumns.js';
 import { rowRevision } from './commandRevision.js';
 import { NO_OUTPUT } from './commandShapes.js';
@@ -1494,6 +1494,19 @@ async function executeUntraced(
                 }
                 checkCancelled();
               }
+              /* An option the tenant's profile does not offer (its `when`), refused as no choice whatever the form drew. */
+              const withheldChoice = withheldAnswer(
+                withheldOptions(command.fields, authorized.tenant ?? {}),
+                (input ?? {}) as Record<string, unknown>,
+              );
+              if (withheldChoice)
+                throw new BusinessCommandExecutionError(
+                  'invalid_input',
+                  'not_applied',
+                  withheldChoice.path,
+                  undefined,
+                  withheldChoice.reason,
+                );
               /* Answers to questions defined in rows, judged against the rows as they stand in this
              transaction and in the reader's tenant, whatever the form drew. */
               const unanswered = await definedAnswerBreak(tx, catalog!, command, input, targets.length === 1 ? targets[0] : undefined);

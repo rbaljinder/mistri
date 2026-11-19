@@ -97,11 +97,16 @@ const EMBED = join(ROOT, 'packages/mistri/dist/embed/react');
    rc.65 moved the public script's brotli target: the form surface became a chunk of its own (the kit's vite.ts,
    `parts`), preloaded beside the public chunk, so an App's shell can fetch it on demand without fetching the whole
    public surface. The same code, compressed as two files instead of one, measured 213.2 KB, 0.3 KB over 212.9 KB;
-   set about 3% above. The App's first paint lost the form surface in the same change. */
+   set about 3% above. The App's first paint lost the form surface in the same change.
+
+   rc.66 moved the stylesheet's targets: one drawing for every two-or-three-way switch (a Segmented, a list's Rows and
+   Board, the phone's Records and Table, Tree and Raw) in every look, with its three recipes for the chosen one, the
+   toolbar controls' one height and the round controls' popup corner (themeFamilies.css), about 68 lines. Measured
+   505.5 KB raw and 65.3 KB in brotli on the App's, over 502.0 and 65.1; set to the next round steps. */
 export const BUDGET = {
   mistri: {
-    public: { script: { raw: 802_000, br: 224_000 }, style: { raw: 514_000, br: 66_700 } },
-    app: { script: { raw: 1_590_000, br: 437_000 }, style: { raw: 514_000, br: 66_700 } },
+    public: { script: { raw: 802_000, br: 224_000 }, style: { raw: 520_000, br: 67_300 } },
+    app: { script: { raw: 1_590_000, br: 437_000 }, style: { raw: 520_000, br: 67_300 } },
   },
 };
 

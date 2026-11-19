@@ -38,6 +38,7 @@ import {
 } from '../commands/commandPayload.js';
 import { collectTenantAvailability } from './tenantCommandAvailability.js';
 import { readPreparedRecord, withPreparedAhead, type PreparedCommand } from '../commands/commandPrepare.js';
+import { checkCommandStep, checkedNames } from '../commands/commandCheck.js';
 import { captureTenantData, tenantOptions, refusalCause, recordRefusalCause } from '@mistriwork/engine/server/evidence.js';
 import { refusalSaid } from '@mistriwork/engine/shared/refusal.js';
 import { runTenantCommandTransaction, type TenantCommandRecords } from './tenantCommandTransaction.js';
@@ -77,12 +78,16 @@ export interface TenantCommandExecutionOptions {
   readonly entry?: 'api' | 'mcp';
   /** The locale its door resolved for whoever asked (readerLocale.ts): the command's `ctx.locale`, clamped by the executor. */
   readonly locale?: string;
+  /** The signed-in account's display name, off its verified session (`actor.name`); absent where the store keeps none. */
+  readonly name?: string;
 }
 /** What holding a file answers: the file as held, or the refusal as the ordinary host says it. */
 type StagedFileAnswer =
   | { id: string; name: string; type: string; size: number }
   | { refused: { status: number; code: string; message: string } };
-type Mode = 'availability' | 'prepare' | 'execute' | 'status' | 'draft' | 'stage' | 'proposals';
+/** What a step's check answers: each problem of the answers so far, by path (commandCheck.ts). */
+type StepProblems = { problems: Record<string, string> };
+type Mode = 'availability' | 'prepare' | 'check' | 'execute' | 'status' | 'draft' | 'stage' | 'proposals';
 const deny = (): never => {
   throw new AppAccessDenied();
 };
@@ -120,7 +125,7 @@ export const tenantCommandDomain = domain;
 /** Capture host options without accepting replacement getters or a forged signal.
  * Handlers get an independently owned native signal, not the mutable input. */
 export function captureTenantCommandExecution(input: TenantCommandExecutionOptions) {
-  const raw = tenantOptions(input, ['signal', 'requestId', 'entry', 'locale']);
+  const raw = tenantOptions(input, ['signal', 'requestId', 'entry', 'locale', 'name']);
   const requestId = captureTenantData(raw.requestId);
   if (requestId !== undefined && (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(requestId)))
     throw new CommandInputError('requestId');
@@ -128,6 +133,9 @@ export function captureTenantCommandExecution(input: TenantCommandExecutionOptio
   if (entry !== undefined && entry !== 'api' && entry !== 'mcp') throw new CommandInputError('entry');
   // A tag, never a sentence: the executor clamps it to the App's catalogs.
   const locale = captureTenantData(raw.locale);
+  const name = captureTenantData(raw.name);
+  if (name !== undefined && (typeof name !== 'string' || !name.trim() || name.length > 200 || /\p{Cc}/u.test(name)))
+    throw new CommandInputError('name');
   if (locale !== undefined && (typeof locale !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(locale))) throw new CommandInputError('locale');
   const origin = raw.signal as AbortSignal | undefined,
     controller = new AbortController();
@@ -170,6 +178,7 @@ export function captureTenantCommandExecution(input: TenantCommandExecutionOptio
       ...(requestId === undefined ? {} : { requestId }),
       ...(entry === undefined ? {} : { entry: entry as 'api' | 'mcp' }),
       ...(locale === undefined ? {} : { locale }),
+      ...(name === undefined ? {} : { name }),
     },
     close: () => {
       try {
@@ -272,7 +281,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
     body: unknown,
     input: TenantCommandExecutionOptions = {},
     guard?: TenantInvocationGuard,
-  ): Promise<BusinessCommandStatus | PreparedCommand | CommandAvailabilityResult | StagedFileAnswer> => {
+  ): Promise<BusinessCommandStatus | PreparedCommand | CommandAvailabilityResult | StagedFileAnswer | StepProblems> => {
     let commandError: BusinessCommandExecutionError | undefined, context: ReturnType<typeof captureTenantCommandExecution> | undefined;
     let running = mode === 'execute' || mode === 'draft';
     try {
@@ -300,7 +309,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
             id: scope.principal.accountId,
             appId: app.id,
             roles: actingPrincipal(request, scope.principal).roles,
-            ...sessionActorWords({ id: scope.principal.accountId, who: scope.who() }),
+            ...sessionActorWords({ id: scope.principal.accountId, who: scope.who(), name: context!.options.name }),
             ...(rowScope ? { scope: { name: rowScope.name, key: rowScope.key } } : {}),
           });
           /* This tenant's zone for `today()` and `now()` (readerZone.ts), where `ui.timezone` names a column. */
@@ -312,7 +321,8 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                 scopedLocale(app, scope.principal.accountId, () => scope.reads()),
               ])
             : [undefined, undefined];
-          const said = person ? { ...context!.options, locale: person } : context!.options;
+          const { name: _name, ...asked } = context!.options;
+          const said = person ? { ...asked, locale: person } : asked;
           const flags = commandFlagsOnce(async () => {
             await scope.session();
             const captured = await captureFlags?.(scope.principal, request);
@@ -380,6 +390,28 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                   authorization.write,
                 ),
               );
+            }
+            /* A multistep form's step, checked before it is left (commandCheck.ts): the ordinary host's check, asked of
+               this member, on the answers alone and the tenant's shared profile; nothing is read or run. */
+            if (mode === 'check') {
+              const request = (captured && typeof captured === 'object' ? captured : {}) as Record<string, unknown>;
+              if (typeof request.command !== 'string') throw new BusinessCommandExecutionError('invalid_input', 'unknown', 'command');
+              own(request.command);
+              const authorization = authorizer.authorize(request.command, actor);
+              if (!references.has(request.command)) throw unofferedRefusal(new AppAccessDenied(), request.command);
+              if (request.commandVersion !== authorization.command.version)
+                throw new BusinessCommandExecutionError('command_version_mismatch', 'unknown');
+              const asked = checkedNames(authorization.command, request.fields);
+              if (!asked) throw new BusinessCommandExecutionError('invalid_input', 'unknown', 'fields');
+              return {
+                problems: checkCommandStep(
+                  authorization.command,
+                  request.input,
+                  asked,
+                  undefined,
+                  scope.principal.tenantId === PLATFORM_TENANT_ID ? {} : { tenant: scope.tenant },
+                ),
+              };
             }
             const binding = registerTenantCommandEventBinding(
               runtime,
@@ -577,6 +609,14 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
       options?: TenantCommandExecutionOptions,
       guard?: TenantInvocationGuard,
     ) => operation('status', request, selectors, body, options, guard) as Promise<BusinessCommandStatus>,
+    /** A multistep form's step checked before it is left: `{ problems }` by path, nothing run. */
+    check: (
+      request: Request,
+      selectors: readonly string[],
+      body: unknown,
+      options?: TenantCommandExecutionOptions,
+      guard?: TenantInvocationGuard,
+    ) => operation('check', request, selectors, body, options, guard) as Promise<StepProblems>,
     /** A step, resume, review or start-over of a signed-in saved form (draftHttp.ts): its answer is the route's own. */
     draft: (
       request: Request,

@@ -81,6 +81,7 @@ const SQL = `CREATE TABLE supplier (id INTEGER PRIMARY KEY, name TEXT NOT NULL, 
     supplier_id INTEGER NOT NULL REFERENCES supplier(id), unit_cost NUMERIC NOT NULL, list_price NUMERIC NOT NULL,
     status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'discontinued', 'on_hold')), received_on TEXT, secret TEXT);
   CREATE TABLE note (id INTEGER PRIMARY KEY, body TEXT);
+  CREATE TABLE tag (id TEXT PRIMARY KEY, label TEXT NOT NULL);
   INSERT INTO supplier VALUES (1, 'Summit Gear', 'SUM'), (2, 'Trailhead', 'TRL'), (3, 'Trailhead', 'TR2');
   INSERT INTO product (sku, name, supplier_id, unit_cost, list_price) VALUES ('KEEP-1', 'Kept', 1, 5, 9);`;
 
@@ -303,4 +304,22 @@ test('an import is checked at load: a tenant App serves one, a read-only resourc
       parseAppConfig({ ...APP, resources: { ...APP.resources, product: { access: 'write', import: { match: ['sku'] } } } }, 'match only'),
     /has "match" and no "command"/,
   );
+});
+
+test('an import into a text-keyed table fills no key where the App is not tenant-owned', async () => {
+  const tagged = {
+    ...APP,
+    resources: { ...APP.resources, tag: { access: 'write', import: true, labels: { label: 'Label' } } },
+    auth: { ...APP.auth, roles: { ...APP.auth.roles, buyer: { read: true, write: ['product', 'supplier', 'tag'] } } },
+  };
+  await fixture(async ({ post, db }) => {
+    const keyless = { table: 'tag', csv: ['Label', 'Rain', 'Wind'].join('\r\n'), mapping: ['label'], mode: 'check' };
+    await post({ ...keyless, mode: 'commit' });
+    // SQLite lets a text key be NULL; what matters is that the store made none up.
+    const rows = db.prepare('SELECT id FROM tag').all() as Array<{ id: string | null }>;
+    assert.ok(
+      rows.every((row) => row.id === null),
+      'no key was made up for a row',
+    );
+  }, tagged);
 });

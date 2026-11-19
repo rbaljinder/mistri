@@ -780,7 +780,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // A theme's `ai` in a mode's colors, the mark of what an AI made (two entries, a mode each, and one new name): 1772/525.
     // Root `ai` with its `label`, the word the AI mark says (two entries; both names were keys already): 1774/525.
     // 1.0.0-rc.65: a theme's `recipes.pane`, an App's room inset or to the edge (one entry and its name): 1775/526.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1775, names: 526 });
+    // 1.0.0-rc.66: a `ui.shell.new` line's `when`, as a nav entry's (one entry; the name was a key already): 1776/526.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1776, names: 526 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

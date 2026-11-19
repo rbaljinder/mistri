@@ -219,8 +219,8 @@ export function saidIconProblem(fields: readonly AppCommandField[], where: strin
   return undefined;
 }
 
-function choiceOption(raw: unknown, where: string): AppCommandChoice {
-  const o = record(raw, ['value', 'label', 'icon', 'help'], where);
+function choiceOption(raw: unknown, where: string, rules: FieldRules): AppCommandChoice {
+  const o = record(raw, ['value', 'label', 'icon', 'help', 'when'], where);
   const value = o.value;
   if (!(typeof value === 'string' && value.trim() && value.length <= 120) && !(typeof value === 'number' && Number.isFinite(value))) {
     return fail(where, 'a choice value must be nonempty text of at most 120 characters or a finite number');
@@ -232,7 +232,28 @@ function choiceOption(raw: unknown, where: string): AppCommandChoice {
     label: caption(o.label, where, 120),
     ...(o.icon === undefined ? {} : { icon: o.icon as string }),
     ...(o.help === undefined ? {} : { help: caption(o.help, where, 200) }),
+    ...(o.when === undefined ? {} : { when: optionWhen(o.when, `${where} (${JSON.stringify(value)})`, rules) }),
   };
+}
+
+/* An option offered only where the placing tenant's profile holds a condition (`tenant.country = 'IN'`). It reads
+   the tenant alone: it is judged once, as the form is prepared or a public form is served, and the run refuses a
+   withheld value by the same reading; a draft field or the record would make the list change as the person types. */
+function optionWhen(raw: unknown, where: string, rules: FieldRules): string {
+  const at = `${where}: when`;
+  if (typeof raw !== 'string' || !raw.trim() || raw.length > 1000)
+    return fail(at, "is a condition over the tenant's profile, as text: tenant.<column> (tenant.country = 'IN')");
+  if (rules.depth) return fail(at, 'offers an option of a field of the input itself, not one inside a group');
+  let names: { fields: string[]; record: string[]; tenant: string[]; has: string[]; plain: string[] };
+  try {
+    names = rules.names(raw.trim(), at);
+  } catch (error) {
+    return fail(at, (error as Error).message.replace(/^.*?: /, '').replace(/\.$/, ''));
+  }
+  const other = names.fields[0] ?? (names.record[0] === undefined ? undefined : `record.${names.record[0]}`);
+  if (other !== undefined || !names.tenant.length)
+    return fail(at, `${other === undefined ? 'reads no tenant column' : `reads ${other}`}; an option's when reads only tenant.<column>`);
+  return raw.trim();
 }
 
 /** A field's label when it gives none, read from its key: `applicant_email` is "Applicant email", `reviewerId` "Reviewer id". */
@@ -844,7 +865,7 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
     const options = source
       ? []
       : items(f.options, where, 'options', COMMAND_INPUT_LIMITS.choiceOptions, 'options').map((option, index) =>
-          choiceOption(option, `${where}, option ${index + 1}`),
+          choiceOption(option, `${where}, option ${index + 1}`, rules),
         );
     if (!source && !options.length) return fail(where, 'a choice needs at least one option');
     if (new Set(options.map((option) => `${typeof option.value}:${option.value}`)).size !== options.length)

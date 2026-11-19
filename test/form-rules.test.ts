@@ -694,8 +694,27 @@ test('richer form checks preserve manual keys, required omissions, NOT NULL defa
     'App',
   );
   const check = (resource: TableMeta) => resolveResources(app, { ...schema, tables: [resource] }).problems[0];
-  assert.match(check(manual) ?? '', /requires "id"/);
+  assert.match(check(manual) ?? '', /has no way to fill its key "id" \[new-key-unfilled\]/);
   assert.deepEqual(validateAppForm({ ...form, defaults: { id: 1 } }, manual), []);
+  /* A field report: a text key left off the form is a tenant App's store to fill, so that form is not refused for it
+     (a tenant-owned resource whose `address` does not name the key); anywhere else, and for a text column too short for
+     a UUID or a key that references another row, it is one nothing fills. */
+  const texted = (type: string, references?: ColumnMeta['references']) => ({
+    ...manual,
+    columns: [{ ...column('id', type), primaryKey: true, nullable: false, references }, manual.columns[1]],
+  });
+  const owned = (resource: TableMeta, extra: Record<string, unknown> = {}) =>
+    resolveResources({ ...app, resources: { items: { ...app.resources!.items, owner: 'tenant', ...extra } } } as typeof app, {
+      ...schema,
+      tables: [resource],
+    }).problems[0];
+  assert.match(check(texted('text')) ?? '', /\[new-key-unfilled\]/, 'an App that is not tenant-owned fills nothing');
+  assert.match(check(texted('varchar(64)')) ?? '', /\[new-key-unfilled\]/);
+  assert.equal(owned(texted('text')), undefined);
+  assert.equal(owned(texted('varchar(64)')), undefined);
+  assert.match(owned(texted('text'), { address: 'id' }) ?? '', /\[new-key-unfilled\]/, 'a key its address names is typed, not filled');
+  assert.match(owned(texted('varchar(12)')) ?? '', /\[new-key-unfilled\]/);
+  assert.match(owned(texted('text', { table: 'other', column: 'id' })) ?? '', /\[new-key-unfilled\]/);
   assert.match(validateAppForm({ defaults: { name: null } }, manual).join(' '), /cannot default to null \(NOT NULL\)/);
   const automatic: TableMeta = { ...manual, columns: [{ ...manual.columns[0], identity: 'always' }, manual.columns[1]] };
   assert.equal(check(automatic), undefined);

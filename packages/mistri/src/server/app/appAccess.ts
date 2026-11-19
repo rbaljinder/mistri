@@ -25,6 +25,9 @@ import type { AppUpdateAction } from '../../shared/app.js';
 import { consumesImage, consumesOf, moveConsumed } from './appConsumes.js';
 import { auditQueryRead, auditViewRead, type AuditedAccess } from '../readAudit.js';
 import { byKeyAdapter } from './publicByKey.js';
+import { randomUUID } from 'node:crypto';
+import { filledKey } from '@mistriwork/engine/shared/form.js';
+import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
 
 import {
   AppAccessDenied,
@@ -101,6 +104,19 @@ async function richTextCleaned<R extends InsertRequest | UpdateRequest>(operatio
  */
 export function authorizeTransaction(full: DatabaseSchema, access: ResourceAccess, writer: WriteTransaction): WriteTransaction {
   return authorizeColumnWrites(full, access, writer, (checks) => appWriteRules(full, writer, checks));
+}
+
+/**
+ * A new row given no key where the table's text key is nothing the catalog fills (filledKey): the store's to fill with
+ * a fresh UUID, after the grant is judged on what the caller sent and never over a key that was sent. One rule for a
+ * New form, a CSV import (a file seldom carries an opaque key) and the row policy's writer. Only Apps call it; the
+ * Workbench keeps autoKey's behavior.
+ */
+export function withFilledKey(schema: DatabaseSchema, request: InsertRequest): InsertRequest {
+  const table = schema.tables.find((item) => item.id === request.table);
+  const key = table && filledKey(table);
+  if (!key || (request.values?.[key] ?? null) !== null) return request;
+  return carryServerRequest(request, { ...request, values: { ...request.values, [key]: randomUUID() } });
 }
 
 function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: ResourceChecks): WriteRules<ResourceAccess> {
@@ -212,8 +228,10 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
     // A recorded update locks its row first, a granted action's included.
     locksUnwritable: (table, access) => access.actions?.has(table) ?? false,
     insert: (request, operationAccess, server, write = (filled) => writer.insert(filled)) => {
-      const insert = (cleaned: InsertRequest, initial?: InsertRequest['values']) =>
-        write(initial ? { ...cleaned, values: { ...cleaned.values, ...initial } } : cleaned);
+      const insert = (cleaned: InsertRequest, initial?: InsertRequest['values']) => {
+        const keyed = withFilledKey(full, cleaned);
+        return write(initial ? carryServerRequest(cleaned, { ...keyed, values: { ...keyed.values, ...initial } }) : keyed);
+      };
       /* A value the form takes from a referenced record (`{ from: 'service_id.price' }`), left out, is read here. */
       const filledIn = richTextCleaned(operationAccess, request).then(async (said) => {
         const cleaned = operationAccess.fill && !server ? await operationAccess.fill(said, writer) : said;

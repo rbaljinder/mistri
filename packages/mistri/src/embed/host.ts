@@ -10,6 +10,7 @@
  * the server's refusal comes back as the outcome; a link and a move go through the Provider's navigator. No kit module
  * is imported, at run time or for its types' sake, so the headless chunk stays the size of what it does.
  */
+import { noTeamAccess } from '../client/teamTypes.js';
 import type {
   UiAddress,
   UiCommandHandle,
@@ -461,6 +462,9 @@ export function embedHost({ surface, endpoint, authorization, navigator, basePat
     },
     look: () => ({ look: 'workshop', preset: 'workshop', mode: 'light', density: 'comfortable' }),
     deployment: () => ({ name: surface.label, mark: null, theme: null, locale: null, basePath: base }),
+    branding: () => ({ name: surface.label, logo: null, accent: null }),
+    /* A headless surface has no tenant lease: an empty team that manages nothing. */
+    team: noTeamAccess,
     token: () => '',
     subscribeLook: () => () => {},
     app: true,

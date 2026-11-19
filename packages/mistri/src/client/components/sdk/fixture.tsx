@@ -43,6 +43,7 @@ import { say } from '../../copy/components/components/sdk/fixture.js';
 import { heldReview, holdReview, reviewFresh, reviewOwner, staleReview } from '../../commandReviews.js';
 import { captureAppFlagValues, type AppFlagValue } from '../../../shared/appFlagValues.js';
 import { registerPageBlocks } from './pageBlocks.js';
+import { noTeamAccess } from '../../teamTypes.js';
 import { sayAppMessage } from './appMessage.js';
 import { totalFigure, totalGroups } from '../../../shared/customTotals.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
@@ -121,6 +122,8 @@ export interface RenderOptions {
   /** The section's width in pixels; below 420 it is compact, as on a phone. */
   width?: number;
   locale?: string;
+  /** The team `useTeam()` reads in a test (empty and managing nothing when absent). */
+  team?: import('../../teamTypes.js').TeamAccess;
   currency?: string;
   timezone?: string;
   /** Token values `useToken` answers, by name. */
@@ -646,6 +649,8 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     },
     look: () => look,
     deployment: () => ({ name: 'Fixture App', mark: null, theme: look.look, locale: options.locale ?? null, basePath: '' }),
+    branding: () => ({ name: 'Fixture App', logo: null, accent: null }),
+    team: options.team ?? noTeamAccess,
     token: (name) => options.tokens?.[name] ?? '',
     subscribeLook: () => () => {},
     app: true,

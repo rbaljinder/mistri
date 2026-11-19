@@ -31,10 +31,18 @@ export const askedWhen = (command: AnyBusinessCommand) =>
     (field) => field.type !== 'group' && field.type !== 'lines' && field.when !== undefined && readsRecord(field.when),
   ) as Array<AppCommandField & { when: string }>;
 
+/* The choice inputs with an option offered only where the tenant's profile holds its `when` (`tenant.country = 'IN'`):
+   prepare judges each, so the form is served without the options withheld. */
+export const optionWhens = (command: AnyBusinessCommand) =>
+  command.fields.filter(
+    (field) => (field.type === 'choice' || field.type === 'choices') && field.options.some((option) => option.when !== undefined),
+  );
+
 /** Whether preparing reads a target context (prefill or business eligibility).
  * Keep this internal name compatible with existing host integrations. */
 export const preparesInitial = (command: AnyBusinessCommand): boolean =>
   askedWhen(command).length > 0 ||
+  optionWhens(command).length > 0 ||
   command.enabledBy !== undefined ||
   registeredInitial(command) !== undefined ||
   registeredAvailability(command) !== undefined ||

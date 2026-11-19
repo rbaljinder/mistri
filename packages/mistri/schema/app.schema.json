@@ -1532,9 +1532,7 @@
           "type": "object",
           "minProperties": 1,
           "additionalProperties": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 80
+            "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 80 }, { "$ref": "page.schema.json#/$defs/messageRef" }]
           },
           "description": "The words a vocabulary's values are said as: a map of stored value to word ({ \"PUB\": \"Published\" }); any value it does not name is still said as words, as are the values of a column with a tone (IN_REVIEW reads \"In review\"). The stored value still sorts, filters and keys tone and icons."
         },
@@ -6434,7 +6432,8 @@
         "view": { "type": "string", "minLength": 1, "description": "A list (its New form) or a signed-in form, by view key." },
         "command": { "type": "string", "minLength": 1, "description": "A command exactly one signed-in form runs; the entry opens that form." },
         "label": { "type": "string", "minLength": 1, "description": "The line's words. Absent, the list's noun or the form's label." },
-        "icon": { "$ref": "#/$defs/appIcon" }
+        "icon": { "$ref": "#/$defs/appIcon" },
+        "when": { "$ref": "#/$defs/navWhen" }
       },
       "oneOf": [{ "required": ["view"] }, { "required": ["command"] }]
     },

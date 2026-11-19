@@ -25,6 +25,7 @@ async function fixture(t: TestContext) {
   const file = join(directory, 'desks.db');
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE ticket(id INTEGER PRIMARY KEY, desk INTEGER NOT NULL DEFAULT 1, name TEXT NOT NULL UNIQUE, status TEXT DEFAULT 'open');
+    CREATE TABLE tag(id TEXT PRIMARY KEY, desk INTEGER NOT NULL DEFAULT 1, label TEXT NOT NULL);
     INSERT INTO ticket(desk, name) VALUES (1, 'Existing');`);
   const registry = new Registry();
   registry.add({ id: owner, name: owner, url: file, source: 'config', writable: true });
@@ -33,8 +34,8 @@ async function fixture(t: TestContext) {
       id: appId,
       name: 'Desks',
       sources: { main: { connection: owner, default: true } },
-      resources: { ticket: { access: 'write', import: true } },
-      auth: { rows: 'policy', roles: { editor: { read: true, write: ['ticket'] }, viewer: { read: true } } },
+      resources: { ticket: { access: 'write', import: true }, tag: { access: 'write', import: true } },
+      auth: { rows: 'policy', roles: { editor: { read: true, write: ['ticket', 'tag'] }, viewer: { read: true } } },
       views: { tickets: { kind: 'list', from: 'ticket' } },
       home: 'tickets',
       nav: ['tickets'],
@@ -57,7 +58,7 @@ async function fixture(t: TestContext) {
   writeFileSync(
     policyFile,
     `export default { appId: ${JSON.stringify(appId)},
-    resolveRows(principal) { return { ticket: { groups: [[{ column: 'desk', op: '=', value: principal.id === 'desk-two' ? 2 : 1 }]] } }; } };`,
+    resolveRows(principal) { const rows = { groups: [[{ column: 'desk', op: '=', value: principal.id === 'desk-two' ? 2 : 1 }]] }; return { ticket: rows, tag: rows }; } };`,
   );
   const policy = await loadHttpAppPolicy({ app, registry, file: policyFile, verifySession: async () => control.identity });
   const bound = { host: '127.0.0.1', port: 0 };
@@ -90,7 +91,8 @@ async function fixture(t: TestContext) {
       .prepare('SELECT desk, name FROM ticket ORDER BY id')
       .all()
       .map((row) => ({ ...row }));
-  return { post, control, names };
+  const tags = () => db.prepare('SELECT id, label FROM tag ORDER BY label').all() as Array<{ id: string; label: string }>;
+  return { post, control, names, tags };
 }
 
 const file = (lines: string[], mode = 'check', extra: object = {}) => ({
@@ -129,4 +131,24 @@ test('under a row policy a reader without the write is refused before any row is
   const refused = await post('/api/import', file(['1,Printer jam'], 'commit'));
   assert.equal(refused.status, 403);
   assert.deepEqual(names(), [{ desk: 1, name: 'Existing' }]);
+});
+
+test('under a row policy an import into a table with a text key nothing fills refuses each row and writes none', async (t) => {
+  // Only a tenant-owned table's text key is filled by its store (appKeyFill.ts); elsewhere a row without one is refused.
+  const { post, tags } = await fixture(t);
+  const keyless = { table: 'tag', csv: 'Desk,Label\n1,Rain\n1,Wind', mapping: ['desk', 'label'], mode: 'check' };
+  const checked = await post('/api/import', keyless);
+  assert.equal(checked.body.ready, 0, JSON.stringify(checked.body));
+  assert.equal(checked.body.refused.length, 2, JSON.stringify(checked.body));
+  await post('/api/import', { ...keyless, mode: 'commit' });
+  assert.deepEqual(tags(), [], 'no row is written without a key');
+});
+
+test("under a row policy a row refused for a missing required value names the field by the App's word, and no physical name", async (t) => {
+  const { post } = await fixture(t);
+  const refused = await post('/api/insert', { table: 'ticket', values: { desk: 1 } });
+  assert.equal(refused.status, 422, JSON.stringify(refused.body));
+  assert.equal(refused.body.code, 'required_value');
+  assert.equal(refused.body.message, 'Name is required. Fill it in and try again.');
+  assert.deepEqual(refused.body.errors[0].fields, [{ field: 'name', message: 'This is required.' }]);
 });

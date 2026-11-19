@@ -542,7 +542,8 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     assert.equal(granted.body.outcome, 'applied');
     const membership = object(object(object(granted.body.result).change).after).membership as Record<string, string>;
     const members = await call(root('memberships', '&tenantId=east&operation=revokeMembership'), undefined, operating);
-    assert.deepEqual(object(members.body.page).items, [membership]);
+    // The listing names the account it holds, as the members page shows it.
+    assert.deepEqual(object(members.body.page).items, [{ ...membership, email: 'member@example.test', name: 'Member' }]);
 
     // The granted member now works inside the new tenant, and only there.
     const tenantOpen = await call(`/api/tenant/context/open?app=${appId}&tenant=east`, {}, identity(member));

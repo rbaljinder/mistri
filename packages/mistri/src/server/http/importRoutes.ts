@@ -7,7 +7,7 @@
  * scoped writer, or the resource's declared command. Nothing here grants a
  * write the reader could not make one record at a time.
  */
-import { AppAccessDenied } from '../app/appAccess.js';
+import { AppAccessDenied, withFilledKey } from '../app/appAccess.js';
 import { appEntrypoint } from '../app/appEntrypoint.js';
 import { ImportUnavailable, readImportRequest, runImport, type ImportWriter } from '../app/appImport.js';
 import { lookupPerson } from '../app/appMe.js';
@@ -164,7 +164,7 @@ export async function importRoutes(ctx: RequestContext): Promise<boolean> {
         trial: async (insert) => {
           try {
             await options.adapter.transaction!(async (tx) => {
-              await tx.insert(insert);
+              await tx.insert(withFilledKey(source.schema, insert));
               throw TRIAL;
             });
           } catch (error) {
@@ -172,9 +172,13 @@ export async function importRoutes(ctx: RequestContext): Promise<boolean> {
           }
         },
         commit: async (inserts: InsertRequest[]) => {
-          const { result } = await recordedImport(options, inserts, () => {
-            if (controller.signal.aborted) throw new AppAccessDenied();
-          });
+          const { result } = await recordedImport(
+            options,
+            inserts.map((insert) => withFilledKey(source.schema, insert)),
+            () => {
+              if (controller.signal.aborted) throw new AppAccessDenied();
+            },
+          );
           for (const written of result) indexed(table.id, written.key);
         },
       };

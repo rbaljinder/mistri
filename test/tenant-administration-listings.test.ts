@@ -26,6 +26,12 @@ const defaults: readonly Rule[] = [
   { tenants: ['north', 'south', 'unborn'], operations: ['createTenant', 'setTenantStatus'], roles: [] },
   { tenants: ['north'], operations: ['grantMembership'], roles: ['contributor'] },
 ];
+/* A listed member of a real account is told by name and address too (the sign-in store's, words for a person). */
+const told = (row: AdministrationMembershipImage, name: string): AdministrationMembershipImage => ({
+  ...row,
+  email: `${name}@example.test`,
+  name,
+});
 const plain = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const safeFailure = (error: unknown) => {
   assert.ok(error instanceof TenantAdministrationFailure);
@@ -171,14 +177,14 @@ test('replace and revoke listings enforce the complete existing role set, never 
     tenant: { tenantId: 'north', status: 'active', version: '1' },
     operation: 'replaceMembership',
     roles: ['reader'],
-    items: [reader],
+    items: [told(reader, 'target')],
     next: null,
   });
   assert.deepEqual(plain(revoke), {
     tenant: plain(replace.tenant),
     operation: 'revokeMembership',
     roles: ['reader', 'manager'],
-    items: [reader, manager, mixed],
+    items: [told(reader, 'target'), told(manager, 'outsider'), mixed],
     next: null,
   });
   frozen(replace);
@@ -363,7 +369,7 @@ test('invited rows are revoke-only, revoked rows disappear, and expired active r
   member(f, 'c-revoked', { status: 'revoked' });
   const admin = await open(f);
   assert.deepEqual(plain((await admin.memberships()).items), [expired]);
-  assert.deepEqual(plain((await admin.memberships({ operation: 'revokeMembership' })).items), [expired, invited]);
+  assert.deepEqual(plain((await admin.memberships({ operation: 'revokeMembership' })).items), [expired, told(invited, 'target')]);
   await admin.execute({
     operation: 'revokeMembership',
     tenantId: 'north',

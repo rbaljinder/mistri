@@ -231,6 +231,74 @@
    is, it read as a second primary over every list and on every record. */
 html:root[data-theme-style][data-look-tabs='pill'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true'] { background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); }
 :root[data-theme-style] .tab .tab-count { font-size: var(--text-sm); line-height: 1; }
+/* A two-or-three-way switch (a Segmented, a list's Rows/Board, the phone's Records/Table, Tree/Raw) is one drawing in every
+   look: a tray on the raised ground with a hairline, and the chosen one inside it. The tray's corner is the item's plus
+   what stands between them (padding and the hairline), so the two curves share a centre: a pill in a pill under round
+   controls, and 0 in 0 under square ones (the min() holds a square item's tray square). Its height is the toolbar
+   control's, so it stands level with the search and the filters beside it; a finger's 44px (kit.css) still outgrows it.
+   Never a `--line-control` edge: that is a field's, and a switch framed like a text field read as one. How the chosen
+   one shows is the look's `current` recipe, as the dashboard's windows are (`data-look-windows`): a filled segment
+   (the base), a lifted key (`lifted`) or a tint (`tint`). */
+:root[data-theme-style] :is(.kit-segmented, .list-layout, .record-presentation, .json-modes) {
+  --seg-pad: var(--space-1h);
+  --seg-item-radius: var(--control-radius, var(--radius));
+  box-sizing: border-box; align-items: stretch; gap: var(--space-1); padding: var(--seg-pad);
+  border: 1px solid var(--line); background: var(--raised);
+  border-radius: min(calc(var(--seg-item-radius) + var(--seg-pad) + 1px), calc(var(--seg-item-radius) * 1000));
+}
+:root[data-theme-style] :is(.kit-segmented:not(.kit-segmented-compact), .list-layout, .record-presentation) { min-height: var(--control-h-sm); }
+:root[data-theme-style] .record-presentation { width: fit-content; }
+html:root[data-theme-style] .record-presentation { margin-inline-start: auto; }
+:root[data-theme-style] :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode) { margin: 0; border: 0; border-radius: var(--seg-item-radius); }
+:root[data-theme-style] :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode):not([aria-checked='true'], [aria-pressed='true']) { background: transparent; color: var(--ink-muted); }
+@media (min-width: 761px) and (pointer: fine) {
+  :root[data-theme-style] :is(.kit-segmented, .list-layout) > :is(.kit-segment, .list-layout-seg) { min-height: 0; }
+}
+@media (hover: hover) {
+  :root[data-theme-style] :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode):hover:not([aria-checked='true'], [aria-pressed='true']) { color: var(--ink); }
+}
+:root[data-theme-style] :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode):focus-visible { outline: var(--focus-width, 2px) solid var(--focus); outline-offset: -2px; }
+@media (prefers-reduced-motion: no-preference) {
+  :root[data-theme-style] :is(.list-layout-seg, .presentation-seg, .json-mode) { transition: color var(--t-hover, 120ms) ease, background-color var(--t-hover, 120ms) ease; }
+}
+/* The base: the chosen segment filled, in the accent, or in the ink where the look inverts its current one (Mono). */
+:root[data-theme-style]:not([data-look-windows='lifted'], [data-look-windows='tint']) :is(.list-layout-seg, .presentation-seg, .json-mode):is([aria-pressed='true']) { background: var(--accent); color: var(--on-accent); }
+:root[data-theme-style][data-look-tabs='inverted']:not([data-look-windows='lifted'], [data-look-windows='tint']) :is(.list-layout-seg, .presentation-seg, .json-mode)[aria-pressed='true'] { background: var(--ink); color: var(--surface); }
+/* Lifted: the chosen one is a white key out of the tray, in the ink, with the control's hairline of shadow and no fill in the accent. */
+:root[data-theme-style][data-look-windows='lifted'] :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode):is([aria-checked='true'], [aria-pressed='true']) {
+  --kit-segment-fill: var(--ink); --kit-segment-ink: var(--raised);
+  background: var(--surface); color: var(--ink); box-shadow: var(--shadow-control);
+}
+/* In the dark a lifted chip is lit, not shaded: --surface sits below --raised there, so the chosen one would sink. */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme-style][data-look-windows='lifted']:not([data-theme='light']) :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode):is([aria-checked='true'], [aria-pressed='true']) { background: color-mix(in oklab, var(--raised) 86%, var(--ink)); }
+}
+:root[data-theme-style][data-look-windows='lifted'][data-theme='dark'] :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode):is([aria-checked='true'], [aria-pressed='true']) { background: color-mix(in oklab, var(--raised) 86%, var(--ink)); }
+/* Tint: no tray, the chosen one a soft wash of the accent, as the dashboard's windows are. */
+:root[data-theme-style][data-look-windows='tint'] :is(.kit-segmented, .list-layout, .record-presentation, .json-modes) { background: transparent; border-color: transparent; }
+:root[data-theme-style][data-look-windows='tint'] :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode):is([aria-checked='true'], [aria-pressed='true']) {
+  --kit-segment-fill: var(--ink); --kit-segment-ink: var(--surface);
+  background: var(--chosen, var(--accent-soft)); color: var(--ink);
+}
+/* A toolbar's controls stand at one height: the dashboard's window, its filters and a chart's series pick, a list's
+   Filters toggle beside its Columns. Each had its own (a literal 32, the field's 34, a literal 28, a toggle sized by its
+   padding to 27), so a row of them was ragged by up to six pixels. The compact size is the token a bar's control takes
+   (@mistriwork/ui tokens.css); a finger's 44px (the coarse-pointer rule on a Select trigger) still outgrows it. */
+:root[data-theme-style] :is(.dash-window-button, .dash-picks [data-slot='select-trigger'], .dash-period [data-slot='select-trigger'], .chart-series-pick, .applist-toggle) { box-sizing: border-box; height: var(--control-h-sm); min-height: var(--control-h-sm); }
+:root[data-theme-style] .applist-toggle { display: inline-flex; align-items: center; }
+@media (pointer: coarse), (max-width: 40rem) { :root[data-theme-style] :is(.dash-picks, .dash-period) [data-slot='select-trigger'] { min-height: calc(44px / var(--density-zoom, 1)); } }
+/* A facet's date is a field in a narrow rail, the text box's height beside it: the form's 36px on its inner box stood two
+   pixels over the 34px one under the same label. */
+:root[data-theme-style] .facet-input [data-slot='input'] { min-height: var(--control-h); }
+/* Round controls: what opens from a pill is a card of the same family, not the house's 8px box with 5px rows. The popup
+   takes the round step (a menu rounder than 16px loses its first row's corner) and a row is the popup's corner less the
+   padding between them, so the two curves share a centre (as the switch's tray and its keys, above). Square and sharp looks
+   set no --control-radius and keep --radius-pop and --radius-item as they were. */
+:root[data-control-radius][data-visual-theme] body { --radius-pop: 16px; }
+:root[data-control-radius][data-visual-theme] :is([data-slot='menu-content'], [data-slot='select-content'], [data-slot='autocomplete-content'], .page-actions-popup, .th-menu, .account-menu-popup, .export-menu, .picker-popup) { --radius-item: calc(var(--radius-pop) - var(--space-2)); }
+:root[data-control-radius][data-visual-theme] .tn-pop { --radius-item: calc(var(--radius-pop) - var(--space-2h)); }
+/* A keycap and a brand mark inside a pill are pills: a corner of the box's own on a pill's end read as a square in a curve. */
+:root[data-control-radius] :is(.tn-search-key, #home-button .brand-mark.brand-mark--logo) { border-radius: var(--control-radius); }
 :root[data-theme-style] button.ghost:not(.fav-star, .dash-open, .account, .live-act, .pager *) { border-color: var(--line); color: var(--ink); background: var(--surface); box-shadow: var(--shadow-control); }
 :root[data-theme-style] button.ghost:not(.fav-star, .dash-open, .account, .live-act, .pager *):hover:not(:disabled) { background: var(--raised); }
 /* A secondary Button that is a toggle says it is on: the ink's edge on the tinted ground, in every look. */

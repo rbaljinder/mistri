@@ -212,7 +212,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "safety",
         "label": "Safety orange",
-        "light": p("- - - - - - - - - #b33d0b #fdeee4 #b33d0b #d4612a - - - - - #2d4fd6 - - - - #b33d0b - - #e8691f #2557e0 #9a6cf7 #0e9a6c #0e8fb0 #e0428a"),
+        "light": p("- - - - - - - - - #b33d0b #fdeee4 #aa3600 #d4612a - - - - - #2d4fd6 - - - - #aa3600 - - #e8691f #2557e0 #9a6cf7 #0e9a6c #0e8fb0 #e0428a"),
         "dark": p("- - - - - - - - - #ff9d66 #3b2112 #ffb88f #d8743a - - - - - #91a8ff - - - - #ffb88f - - #f07a32 #3559e6 - #12a678 #1597b9 #e0559b #c88317")
       },
       {
@@ -236,7 +236,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "teal",
         "label": "Teal",
-        "light": p("- - - - - - - - - #0b6f86 #e3f5f8 #0b6f86 #3c90a4 - - - - - #684fa2 - - - - #0b6f86 - - #0e8fb0 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
+        "light": p("- - - - - - - - - #0b6f86 #e3f5f8 #00687e #3c90a4 - - - - - #684fa2 - - - - #00687e - - #0e8fb0 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
         "dark": p("- - - - - - - - - #4cc6db #0f3540 #79d6e6 #2a8a9c - - - - - #91a8ff - - - - #79d6e6 - - #0c8ab0 #3559e6 - #12a678 #c88317 #e0559b")
       },
       {

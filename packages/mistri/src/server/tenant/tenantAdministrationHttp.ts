@@ -3,7 +3,10 @@ import { isProxy } from 'node:util/types';
 import {
   ADMINISTRATION_HTTP_HEADER,
   ADMINISTRATION_HTTP_ROOT,
+  OPEN_TENANT_KEY_CONFLICT,
   type AdministrationAttempt,
+  type AdministrationOpenTenantAttempt,
+  type AdministrationOpenTenantReply,
   type AdministrationExecuteReply,
   type AdministrationOpenReply,
   type AdministrationStatusReply,
@@ -12,6 +15,7 @@ import {
 import { TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
 import { doorRefusal, type Bound } from '@mistriwork/engine/server/http/trust.js';
 import { TenantAdministrationFailure, type TenantAdministration } from './tenantAdministration.js';
+import { TenantOpenKeyConflict } from './tenantOpening.js';
 import { captureTenantData, denyTenant, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { tenantHttpBinding, tenantHttpHeader } from './tenantHttp.js';
 import { namedTenants, type TenantNames } from './tenantNames.js';
@@ -144,7 +148,17 @@ export function createTenantAdministrationHttp(options: {
       if (
         path !== rawPath ||
         path !== `${ADMINISTRATION_HTTP_ROOT}/${operation}` ||
-        !['open', 'tenants', 'memberships', 'execute', 'status', 'assistant-usage', 'decision-usage', 'import-plan'].includes(operation)
+        ![
+          'open',
+          'tenants',
+          'memberships',
+          'execute',
+          'open-tenant',
+          'status',
+          'assistant-usage',
+          'decision-usage',
+          'import-plan',
+        ].includes(operation)
       )
         return refuse();
       if (target.includes('#') || !target.startsWith('/') || target.startsWith('//')) return refuse();
@@ -239,13 +253,22 @@ export function createTenantAdministrationHttp(options: {
         const body = await readBody(req);
         assertActive();
         if (req.aborted || res.destroyed) return denyTenant();
-        const fields = operation === 'open' ? [] : ['idempotencyKey', 'intent'];
+        const fields =
+          operation === 'open'
+            ? []
+            : operation === 'open-tenant'
+              ? ['key', 'profile', 'tenant', 'invitation']
+              : ['idempotencyKey', 'intent'];
         tenantRecord(body, fields);
         if (fields.some((field) => !Object.hasOwn(body, field))) return refuse();
         if (operation === 'open') {
           const session = await administration.open(req, { expectedAccount: account });
           reply = { session } satisfies AdministrationOpenReply;
           if (session !== null) ownership[ADMINISTRATION_HTTP_HEADER] = session.context;
+        } else if (operation === 'open-tenant') {
+          const input = { ...(body as unknown as AdministrationOpenTenantAttempt), expectedAccount: account, context: context! };
+          dispatched = true;
+          reply = { outcome: 'applied', result: await administration.openTenant(req, input) } satisfies AdministrationOpenTenantReply;
         } else {
           const input = { ...(body as unknown as AdministrationAttempt), expectedAccount: account, context: context! };
           dispatched = true;
@@ -265,6 +288,17 @@ export function createTenantAdministrationHttp(options: {
       if (req.aborted || res.destroyed) return denyTenant();
       send(req, res, 200, reply, ownership);
     } catch (error) {
+      // A reused opening key with another input applied nothing: 409, and the cause names the key.
+      if (error instanceof TenantOpenKeyConflict && Object.getPrototypeOf(error) === TenantOpenKeyConflict.prototype) {
+        const key = Object.getOwnPropertyDescriptor(error, 'key')?.value;
+        send(req, res, 409, {
+          error: 'This request key already opened a tenant with other details.',
+          code: OPEN_TENANT_KEY_CONFLICT,
+          outcome: 'not_applied',
+          cause: { key: typeof key === 'string' ? key : null },
+        });
+        return;
+      }
       const outcome = statusRequest ? 'unknown' : (safeTenantAdministrationFailure(error) ?? (dispatched ? 'unknown' : 'not_applied'));
       const refusal =
         error && typeof error === 'object' && !isProxy(error) && Object.getPrototypeOf(error) === AdministrationHttpRefusal.prototype

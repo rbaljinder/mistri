@@ -486,7 +486,22 @@ journal ([provisioning](#provisioning)). Connection `"writable": true`
 is required even when ordinary business grants remain read-only. Startup and
 `mistri check` attest the journal; neither creates it. Changes require a restart.
 Each account/tenant/operation must have one unambiguous role ceiling. Separate
-rules cannot overlap that triple or combine into broader membership access.
+`accountId` rules cannot overlap that triple or combine into broader membership access.
+
+A rule names exactly one of `accountId` or `platformRole`. A `platformRole` rule
+admits every account whose active, unexpired platform membership holds that role,
+resolved the way a [support grant](#support-sessions-enter-as-a-dealer-5a) is, so a new operator is a
+platform membership rather than a policy edit. `platformRole` must be one of the
+App's platform-realm roles, on an App with a platform tenant, and its `roles` are
+tenant roles like any rule's: no rule places a platform membership. Role rules may
+overlap each other and an `accountId` rule; the rules that match one account, tenant
+and operation give their roles together. The platform membership is read only when
+the policy has a role rule, inside the transaction, so a demotion stops the next
+request.
+
+```ts
+operators: [{ platformRole: 'platform_admin', tenants: 'all', operations: ['createTenant', 'grantMembership'], roles: ['dealer_admin'] }],
+```
 
 An authorized operator sees **Account → Manage tenants**, including before
 choosing a business tenant and when they have no business memberships. Whether
@@ -536,6 +551,42 @@ Browser journeys cover desktop/phone management before business
 selection, exact lost-reply recovery, held selection and self-suspension.
 Invitation delivery and broader lifecycle tooling (store migrations, export,
 deletion) remain queued.
+
+### Opening a tenant in one request
+
+`POST /api/tenant/administration/open-tenant` (the administration door,
+with its context header) takes `{ key, profile, tenant: { tenantId },
+invitation }` and runs `createTenant`, then `issueInvitation`, each authorized
+exactly as it is alone: the administration policy's operator rules for the
+first, the invitation policy's for the second. Both policies take a
+`platformRole` rule, so a platform role's holder opens a tenant with no rule
+naming its account. Both are journaled under keys derived from `key`, and the key is
+claimed in `createTenant`'s transaction with a fingerprint of the whole
+intent: the profile reference, the tenant and the invitation's recipient and roles (not its
+instants, which a retry after a reload asks with afresh). The reply is
+`{ tenantId, version, invitation }`; the invitation's token is in the first
+reply only.
+
+A retry with the same key and the same intent resumes from the last finished
+step and answers with the same tenant and invitation receipt (and the tenant's version as it stands, if it changed between the attempts), so a
+failure between the two steps is finished by retrying, never by starting
+over. The same key with any other intent is refused with 409,
+`code: 'tenant_open_key_conflict'`, and `cause.key` names it; nothing is
+written. A refused attempt claims nothing.
+
+In a custom component, `useOpenTenant('createDealerProfile')` from
+`@mistriwork/ui` runs the App's own platform command first, through the normal
+command path, with an idempotency key derived from the request key, then the
+opening with that key. It returns `{ open(input), pending, error, result }`;
+`input` is `{ key, input?, tenant, invitation }`, and the profile reference is
+the command's `output.id` when it returns one. Keep the key for the whole
+attempt and call `open` with it again after a failure.
+
+The profile step is a business command, not part of the administration
+journal, so it is **not atomic** with the other two: a profile can exist with
+no tenant yet. Retrying with the same key completes the operation — the
+command replays its receipt and the opening resumes — and nothing is created
+twice.
 
 ## The assistant
 
@@ -1826,7 +1877,17 @@ reads on an ordinary tenant lease and needs none of that.
 <!-- piece 6: delegated administration and account-creating invitations -->
 ## Delegated administration and account-creating invitations
 
-**Delegates.** Beside `operators`, which name native account ids, the
+**Invitation operators** are written as administration operators are: each
+rule names exactly one of `accountId` or `platformRole`, with `tenants`,
+`operations` and `roles`, and the rules matching one account, tenant and
+operation give their roles together. As there, `platformRole` rules may overlap
+each other and an `accountId` rule; only two `accountId` rules for one operation
+and tenant refuse. A `platformRole` rule is resolved from the
+issuer's active platform membership inside the change's transaction, and
+startup refuses one that is not a platform-realm role of an App with a platform
+tenant.
+
+**Delegates.** Beside `operators`, which name native account ids or platform roles, the
 `administration` and `invitations` policies may name `delegates`: a tenant's
 own members administering it.
 

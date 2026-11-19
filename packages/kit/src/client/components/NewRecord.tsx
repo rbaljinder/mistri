@@ -43,7 +43,7 @@ import { DateField } from './DateField.js';
 import { isPickerDate } from '@mistriwork/ui/internal/datePickerModel.js';
 import { appNow, formatClockZone, formatLocale, formatTimezone } from '../locale.js';
 import { InputSlot, columnInput } from './inputRenderers.js';
-import { autoKey, enteredNow, isRequired, platformWritten } from '@mistriwork/engine/shared/form.js';
+import { appAssignedKey, autoKey, enteredNow, isRequired, platformWritten } from '@mistriwork/engine/shared/form.js';
 import { columnTextRule, textRuleBreak, type TextRule } from '@mistriwork/engine/shared/textRules.js';
 import { shell } from '../shellMode.js';
 import { resourceOf } from './appRooms.js';
@@ -192,7 +192,8 @@ function NewRecordFormBody({
   frame = app ? 'drawer' : 'dialog',
 }: FormBodyProps) {
   useMessageLanguage();
-  const assigned = autoKey(table);
+  /* An App's store fills a single text key nothing in the catalog fills (filledKey), so its form does not demand one. */
+  const assigned = app ? appAssignedKey(table) : autoKey(table);
   const written = app ? newFormWritten(table) : undefined;
   /* A display-only vocabulary is chosen from in an App's form (withDisplayChoices). */
   const choosing = (column: ColumnMeta) =>

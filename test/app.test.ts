@@ -960,7 +960,7 @@ describe('actions and the curated form', () => {
       ],
     };
     const resolve = (schema: DatabaseSchema, config = app) => resolveResources(config, schema).problems[0];
-    assert.match(resolve(manual) ?? '', /requires "id"/);
+    assert.match(resolve(manual) ?? '', /has no way to fill its key "id" \[new-key-unfilled\]/);
     const assigned: DatabaseSchema = {
       ...manual,
       tables: [{ ...manual.tables[0], columns: [{ ...manual.tables[0].columns[0], identity: 'always' }, manual.tables[0].columns[1]] }],

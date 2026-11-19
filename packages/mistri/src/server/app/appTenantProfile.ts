@@ -100,32 +100,52 @@ function queriesIn(value: unknown, out: string[] = []): string[] {
   return out;
 }
 
-/* Each `when` in the menu, with where it stands and the realm its group puts it in. */
-function menuWhens(
-  nodes: readonly AppNavNode[],
-  realm?: string,
-  out: Array<{ when: string; at: string; realm?: string }> = [],
-): Array<{ when: string; at: string; realm?: string }> {
-  for (const node of nodes) {
-    const here = 'group' in node ? (node.realm ?? realm) : realm;
-    const at = 'group' in node ? `group "${node.group}"` : 'view' in node ? `entry "${node.view}"` : `entry "${node.label}"`;
-    if (node.when !== undefined) out.push({ when: node.when, at, ...(here ? { realm: here } : {}) });
-    if ('group' in node) menuWhens(node.children, here, out);
-  }
+/* Each `when` in the menu and the New menu (`ui.shell.new`), with where it stands and the realm its group puts it in.
+   A New line has no realm: it is the signed-in header's, for the tenant's reader. */
+function menuWhens(app: Pick<AppDef, 'nav' | 'ui'>): Array<{ when: string; at: string; realm?: string }> {
+  const out: Array<{ when: string; at: string; realm?: string }> = [];
+  const walk = (nodes: readonly AppNavNode[], realm?: string) => {
+    for (const node of nodes) {
+      const here = 'group' in node ? (node.realm ?? realm) : realm;
+      const at = 'group' in node ? `group "${node.group}"` : 'view' in node ? `entry "${node.view}"` : `entry "${node.label}"`;
+      if (node.when !== undefined) out.push({ when: node.when, at: `nav ${at}`, ...(here ? { realm: here } : {}) });
+      if ('group' in node) walk(node.children, here);
+    }
+  };
+  walk(app.nav);
+  for (const entry of app.ui?.shell?.new ?? [])
+    if (entry.when !== undefined)
+      out.push({ when: entry.when, at: `ui.shell.new entry "${'view' in entry ? entry.view : entry.command}"` });
   return out;
 }
+
+/** The New menu without each line whose `when` is not met, no `when` sent on; `ui.shell.new` goes when none is left. */
+function pruneNew(ui: AppDef['ui'], met: (when: string) => boolean): AppDef['ui'] {
+  const lines = ui?.shell?.new;
+  if (!ui?.shell || !lines?.some((line) => line.when !== undefined)) return ui;
+  const kept = lines.filter((line) => line.when === undefined || met(line.when)).map(({ when: _when, ...line }) => line);
+  const { new: _new, ...shell } = ui.shell;
+  return { ...ui, shell: kept.length ? { ...shell, new: kept } : shell };
+}
+
+/** The App with its menu and New menu judged by `met`. */
+const judgedBy = (app: AppDef, met: (when: string) => boolean): AppDef => ({
+  ...app,
+  nav: pruneMenu(app.nav, met),
+  ui: pruneNew(app.ui, met),
+});
 
 /**
  * Startup's check of the menu's `when`s ([nav-when]): each folds over the tenant's shared profile (commandWhen.ts
  * foldWhen), so a tenant App with a profile; and none stands in the platform realm, which reads no tenant's.
  */
 export function menuWhenProblems(app: AppDef, schema: DatabaseSchema): string[] {
-  const whens = menuWhens(app.nav);
+  const whens = menuWhens(app);
   if (!whens.length) return [];
   const profile = app.auth?.tenancy?.profile;
   const table = profile === undefined ? undefined : tableNamed(schema, profile);
   return whens.flatMap(({ when, at, realm }): string[] => {
-    const where = `nav ${at} has when "${when}"`;
+    const where = `${at} has when "${when}"`;
     if (profile === undefined)
       return [`${where}; a menu's when reads the tenant's profile, and the App has no auth.tenancy.profile [nav-when].`];
     if (realm === 'platform') return [`${where} in the platform realm, which spans tenants and reads no tenant's profile [nav-when].`];
@@ -164,7 +184,7 @@ const menus = new WeakMap<AppDef, TenantMenu | null>();
 export function menuFor(app: AppDef, schema: DatabaseSchema): TenantMenu | undefined {
   const held = menus.get(app);
   if (held !== undefined) return held ?? undefined;
-  const whens = menuWhens(app.nav);
+  const whens = menuWhens(app);
   const profile = app.auth?.tenancy?.profile;
   const table = profile === undefined ? undefined : tableNamed(schema, profile);
   if (!whens.length || !table) {
@@ -190,7 +210,7 @@ export function menuFor(app: AppDef, schema: DatabaseSchema): TenantMenu | undef
       let held = shown.get(app);
       if (!held) shown.set(app, (held = new Map()));
       let pruned = held.get(key);
-      if (!pruned) held.set(key, (pruned = captureTenantData({ ...app, nav: pruneMenu(app.nav, meets) })));
+      if (!pruned) held.set(key, (pruned = captureTenantData(judgedBy(app, meets))));
       return pruned;
     },
   };
@@ -217,8 +237,8 @@ const visitors = new WeakMap<AppDef, AppDef>();
  * finds it again.
  */
 export function visitorApp(app: AppDef): AppDef {
-  if (!menuWhens(app.nav).length) return app;
+  if (!menuWhens(app).length) return app;
   let visited = visitors.get(app);
-  if (!visited) visitors.set(app, (visited = captureTenantData({ ...app, nav: pruneMenu(app.nav, () => false) })));
+  if (!visited) visitors.set(app, (visited = captureTenantData(judgedBy(app, () => false))));
   return visited;
 }

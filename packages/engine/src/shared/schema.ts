@@ -208,6 +208,12 @@ export interface TableMeta {
    * new one. Absent elsewhere, AUTOINCREMENT and every other engine included.
    */
   reusesKeys?: true;
+  /**
+   * Set on a tenant App's table (appKeyFill.ts) whose single text key the App's store fills with a fresh UUID when a new
+   * row is given none, as the database fills an identity's (filledKey in form.ts). Absent everywhere else: an App that
+   * is not tenant-owned, or a key a person types (its `address`), is never filled, and a form that leaves it off is refused.
+   */
+  fillsKey?: true;
   /** True for views — read-only, and worth saying so rather than surprising. */
   isView: boolean;
   /** An App's union (appUnions.ts): read by asking each branch it holds, never as a table. */

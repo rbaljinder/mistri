@@ -22,6 +22,7 @@ import { createHash } from 'node:crypto';
 import { isFormView, isPublicCommandPage, logicalResource, type AppDef } from '../../shared/app.js';
 import type { AppFormCommandReference, CommandCatalog } from '../../shared/command.js';
 import { canonicalCommandJson } from './commandPayload.js';
+import { askedWhen, optionWhens, preparedStarts } from './commandPrepareNeeds.js';
 import { describeShape } from './commandShapes.js';
 import { commandEventContracts } from './businessEvents.js';
 import {
@@ -109,17 +110,19 @@ export function appCommandCatalog(registry: BusinessCommandRegistry, app: Pick<A
   );
 }
 
-/* A signed-in form's command whose form prepares as it opens: over no record, only `initial` and the
-   reader's `default: me` start anything, and questions defined in rows (G40) are read; a literal starts in the browser. */
+/* A signed-in form's command whose form prepares as it opens: over no record, only `initial`, a field that starts
+   from the reader or the tenant (`default: me`, `default: { tenant }`), an input asked only where the tenant's
+   profile holds its `when`, questions defined in rows (G40) and the options the profile offers (an option's
+   `when`) are read or judged; a literal starts in the browser. Prepare's own needs (commandPrepareNeeds.ts) say
+   which, so a form never opens on a field its prepare would have withheld or started. */
 const formPrepares = (command: AnyBusinessCommand): boolean =>
   command.targets === 'none' &&
   command.public !== true &&
   (registeredInitial(command) !== undefined ||
-    command.fields.some(
-      (field) =>
-        field.type === 'defined' ||
-        (field.type !== 'group' && typeof field.default === 'object' && 'auto' in field.default && field.default.auto === 'me'),
-    ));
+    preparedStarts(command).length > 0 ||
+    askedWhen(command).length > 0 ||
+    optionWhens(command).length > 0 ||
+    command.fields.some((field) => field.type === 'defined'));
 
 /**
  * The signed-in commands that name no record this reader is granted and no

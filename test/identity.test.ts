@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { SqliteAdapter } from '../packages/engine/src/adapters/sqlite.js';
-import { autoKey, isRequired } from '../packages/engine/src/shared/form.js';
+import { appAssignedKey, autoKey, filledKey, isRequired, unformedColumns } from '../packages/engine/src/shared/form.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
 const folder = mkdtempSync(join(tmpdir(), 'mistri-identity-'));
@@ -28,6 +28,9 @@ before(async () => {
     CREATE TABLE strict_key (id INT PRIMARY KEY, note TEXT) STRICT;
     CREATE TABLE composite_key (id INTEGER, part INTEGER, PRIMARY KEY(id, part));
     CREATE TABLE defaults_only (id INTEGER PRIMARY KEY, status TEXT NOT NULL DEFAULT 'new', created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE text_key (id TEXT PRIMARY KEY NOT NULL, note TEXT);
+    CREATE TABLE short_text_key (id VARCHAR(12) PRIMARY KEY NOT NULL, note TEXT);
+    CREATE TABLE defaulted_text_key (id TEXT PRIMARY KEY NOT NULL DEFAULT (lower(hex(randomblob(16)))), note TEXT);
     CREATE VIEW projected AS SELECT id, note FROM rowid_key;
   `);
   db.close();
@@ -59,6 +62,35 @@ test('manual integer keys remain required, including WITHOUT ROWID and STRICT ta
     const result = await adapter.insert({ table: name, values: { id: 17, note: 'Supplied key' } });
     assert.deepEqual(result.key, { id: 17 });
   }
+});
+
+/* A field report: a text key nothing fills was left off the New form and refused by NOT NULL. A tenant App's store fills
+   it (app/appAccess.ts) where the table says so (`fillsKey`, appKeyFill.ts), so it is not a column a grant has to write
+   before New is offered; a key the catalog fills, one too short for a UUID, or one of another type is not the store's,
+   and a table not marked (an App that is not tenant-owned) fills nothing. */
+test("a single text key nothing in the catalog fills is a tenant App store's to fill, where the table says so", () => {
+  const marked = (name: string) => ({ ...table(name), fillsKey: true as const });
+  assert.equal(filledKey(marked('text_key')), 'id');
+  assert.equal(appAssignedKey(marked('text_key')), 'id');
+  assert.deepEqual(
+    unformedColumns(marked('text_key'), (column) => column === 'note'),
+    [],
+  );
+  for (const name of ['short_text_key', 'defaulted_text_key', 'int_key', 'rowid_key', 'composite_key'])
+    assert.equal(filledKey(marked(name)), null, name);
+  assert.equal(appAssignedKey(marked('defaulted_text_key')), 'id');
+  assert.equal(appAssignedKey(marked('int_key')), null);
+  assert.deepEqual(
+    unformedColumns(marked('short_text_key'), (column) => column === 'note'),
+    ['id'],
+  );
+  // Not marked: nothing is filled, and a grant must write the key.
+  assert.equal(filledKey(table('text_key')), null);
+  assert.equal(appAssignedKey(table('text_key')), null);
+  assert.deepEqual(
+    unformedColumns(table('text_key'), (column) => column === 'note'),
+    ['id'],
+  );
 });
 
 test('an explicit default-only insert returns the assigned identity and actual server defaults', async () => {

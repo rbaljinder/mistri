@@ -103,7 +103,7 @@ function freezeWarnings(app: AppDef): string[] {
 
 /** Commands that judge a machine's column and are neither its verbs, its timers nor a service's own moves. */
 export function machineCommandWarnings(app: AppDef, commands: BusinessCommandRegistry | undefined): string[] {
-  const warnings: string[] = freezeWarnings(app);
+  const warnings: string[] = [...freezeWarnings(app), ...machineInsertWarnings(app, commands)];
   if (!commands) return warnings;
   for (const [id, command] of Object.entries(commands)) {
     const target = logicalResource(app, command.source, command.target);
@@ -127,6 +127,52 @@ export function machineCommandWarnings(app: AppDef, commands: BusinessCommandReg
     }
   }
   return warnings;
+}
+
+/**
+ * A command that inserts a row of a machine's table in a state written out as a literal that is neither the first state
+ * nor one of the machine's `entry`: the run refuses it as ineligible_state, which the caller hears as "not eligible"
+ * (businessCommandExecution, machineInsert). Read off the handler's source as the checks around it are, so a state
+ * chosen by a variable is missed and a literal in a branch that never runs is named all the same: advice, not a problem.
+ */
+function machineInsertWarnings(app: AppDef, commands: BusinessCommandRegistry | undefined): string[] {
+  if (!commands) return [];
+  const machines = Object.entries(app.resources ?? {}).filter(([, resource]) => resource.machine);
+  if (!machines.length) return [];
+  const resourceOf = (name: string) =>
+    machines.find(
+      ([key, resource]) =>
+        key === name || resource.physical === name || resource.physical?.slice(resource.physical.lastIndexOf('.') + 1) === name,
+    );
+  const warnings = new Set<string>();
+  for (const [id, command] of Object.entries(commands)) {
+    const source = String(command.handle);
+    const check = (tableName: string, written: string) => {
+      const found = resourceOf(tableName);
+      const machine = found?.[1].machine;
+      if (!found || !machine) return;
+      const state = new RegExp(`(?:^|[^\\w.])['"]?${machine.column}['"]?\\s*:\\s*(['"\`])([^'"\`\\n]+)\\1`).exec(written)?.[2];
+      const start = machine.states[0]!.name;
+      if (state === undefined || state === start || (machine.entry ?? []).includes(state)) return;
+      if (!machine.states.some((candidate) => candidate.name === state)) return; // Not a state of it: another refusal says so.
+      const entry = machine.entry?.length ? `, or ${machine.entry.map((name) => `"${name}"`).join(', ')} (its entry)` : '';
+      warnings.add(
+        `command "${id}" inserts a "${found[0]}" in "${state}", past the first state of its machine on "${machine.column}" [machine-insert-state]: ` +
+          `a new record starts in "${start}"${entry}, so the run refuses it as "not eligible". ` +
+          `Name "${state}" in the machine's entry (resources.${found[0]}.machine.entry: ['${state}']), or insert it in "${start}" and move it with a verb.`,
+      );
+    };
+    for (const match of source.matchAll(/\b([A-Za-z_$][\w$]*)\s*\.\s*(insert|insertFile)\s*\(/g)) {
+      const open = match.index + match[0].length - 1;
+      const call = source.slice(open, closing(source, open));
+      if (match[1] === 'tx') {
+        const table = /\btable\s*:\s*['"]([^'"]+)['"]/.exec(call)?.[1];
+        const values = call.search(/\bvalues\b/);
+        if (table && values !== -1) check(table, call.slice(values));
+      } else check(match[1]!, call);
+    }
+  }
+  return [...warnings];
 }
 
 /* What a table's handle says it reads and writes; the rest of a call is the table's own. A moveFile's values are

@@ -94,6 +94,16 @@ const modelChoice = { label: 'Model', type: 'choice', from: 'model', labelColumn
 const askInput = {
   name: { label: 'Name', type: 'text', max: 80 },
   state: { label: 'State', type: 'text', max: 2, when: "tenant.country = 'US'" },
+  /* An option offered by the profile: a text message only to a US dealer's visitor. */
+  reach: {
+    label: 'Reach me by',
+    type: 'choice',
+    optional: true,
+    options: [
+      { value: 'email', label: 'Email' },
+      { value: 'text', label: 'Text message', when: "tenant.country = 'US'" },
+    ],
+  },
 } as const;
 
 export interface TenantPublicFormOptions {
@@ -128,7 +138,8 @@ export interface TenantPublicFormOptions {
   /** `apply`'s reference ends in the command's `ctx.locale` (`YRD-<name>-<locale>`, `none` where it has none). */
   readonly localeReference?: true;
   /** Each dealer shares its country (`auth.tenancy.shared`), and a form, `ask`, asks a state only of a US dealer's
-      visitor (`when: "tenant.country = 'US'"`): north is in the US, south is not. */
+      visitor (`when: "tenant.country = 'US'"`), and offers a text message as a way to reach them only there (an
+      option's `when`): north is in the US, south is not. */
   readonly askByCountry?: true;
   /** With `publicReads` and `words: 'both'`: `make` has a Spanish name column, `name_es` (north's Ford is "Vado", its Kia
       has none), and the quote form's choice says its rows by it to a Spanish reader (`labelColumns`). */

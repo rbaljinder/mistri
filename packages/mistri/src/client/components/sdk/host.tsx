@@ -40,7 +40,18 @@ import { tableNamed, type TableMeta } from '@mistriwork/engine/shared/schema.js'
 import { HOST_GLOBAL, uiBreakdownText, uiRowsQuery, uiViewRunBody } from '../../../shared/uiSdk.js';
 import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
-import { setPageHost, type UiDeployment, type UiHost, type UiLook, type UiOption, type UiResourceChoices, type UiRow } from './context.js';
+import {
+  setPageHost,
+  type UiBranding,
+  type UiDeployment,
+  type UiHost,
+  type UiLook,
+  type UiOption,
+  type UiResourceChoices,
+  type UiRow,
+} from './context.js';
+import type { ResolvedBranding } from '../../../shared/branding.js';
+import { createTeamAccess } from '../../teamAccess.js';
 import { rowsByPath } from './rows.js';
 import { sayAppMessage } from './appMessage.js';
 import { publicMessages } from './publicMessages.js';
@@ -157,6 +168,23 @@ function deployment(): UiDeployment {
     theme: app?.ui?.theme?.preset ?? null,
     locale: app?.ui?.locale ?? null,
     basePath: served(''),
+  };
+}
+
+/** The brand the reader sees: a tenant's resolved branding (name, mark, theme accent) over the App's own. */
+function branding(): UiBranding {
+  const app = pageBridge.activeApp() as {
+    name?: string;
+    ui?: { logo?: string | { href?: string; markHref?: string }; theme?: { accent?: unknown; branding?: ResolvedBranding } };
+  } | null;
+  const own = deployment();
+  const tenant = app?.ui?.theme?.branding;
+  const accent = tenant?.theme?.light?.accent ?? app?.ui?.theme?.accent;
+  const light = accent && typeof accent === 'object' ? (accent as { light?: unknown }).light : accent;
+  return {
+    name: tenant?.content?.name ?? own.name,
+    logo: tenant?.mark?.src ?? own.mark,
+    accent: typeof light === 'string' ? light : null,
   };
 }
 
@@ -321,6 +349,8 @@ const pageHost: UiHost = {
   },
   look,
   deployment,
+  branding,
+  team: createTeamAccess(),
   token: (name) => getComputedStyle(root()).getPropertyValue(name).trim(),
   subscribeLook(listener) {
     const observer = new MutationObserver(listener);

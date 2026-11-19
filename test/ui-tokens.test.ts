@@ -89,3 +89,10 @@ test('every token a component may read has a value under every built-in look, li
   }
   assert.deepEqual(missing, []);
 });
+
+/** A field report: check accepts --pill-radius, and a look that never said `shape.radius.pill` gave a page that reads it no value. */
+test('every built-in look says its pill corner, so var(--pill-radius) always has a value', async () => {
+  const { LOOKS } = await import('../packages/engine/src/shared/themeLooks.js');
+  assert.ok(LOOKS.length >= 7);
+  for (const look of LOOKS) assert.ok(look.shape?.radius?.pill !== undefined, `${look.id}`);
+});

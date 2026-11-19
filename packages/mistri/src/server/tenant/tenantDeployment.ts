@@ -124,6 +124,8 @@ export function bindTenantDeploymentContext<Request>(input: TenantDeployment<Req
       deployment.prepare(request, selectors, value, options, guard),
     availability: (request: Request, selectors: readonly string[], value: unknown, options?: Parameters<typeof deployment.prepare>[3]) =>
       deployment.availability(request, selectors, value, options, guard),
+    check: (request: Request, selectors: readonly string[], value: unknown, options?: Parameters<typeof deployment.check>[3]) =>
+      deployment.check(request, selectors, value, options, guard),
     execute: (request: Request, selectors: readonly string[], value: unknown, options?: Parameters<typeof deployment.execute>[3]) =>
       deployment.execute(request, selectors, value, options, guard),
     status: (request: Request, selectors: readonly string[], value: unknown, options?: Parameters<typeof deployment.status>[3]) =>
@@ -238,6 +240,9 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
           throw new BusinessCommandExecutionError('forbidden');
         },
         prepare: async () => {
+          throw new BusinessCommandExecutionError('forbidden');
+        },
+        check: async () => {
           throw new BusinessCommandExecutionError('forbidden');
         },
         execute: async () => {

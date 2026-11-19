@@ -234,7 +234,8 @@ async function chooseMembership(
     tenant: tenant('active', '3'),
     operation,
     roles: ['manager', 'reader'],
-    items: [member],
+    // An operator's list says who each member is, in words: the account's address and name (the sign-up's).
+    items: [{ ...member, email: 'target@example.test', name: 'target' }],
     next: null,
   });
   const memberships = editor(page).getByRole('region', { name: 'Authorized memberships', exact: true });
@@ -549,7 +550,7 @@ test.describe('native tenant administration browser integration', () => {
         .click();
       const roster = responseAt(page, 'memberships');
       await review(page, 'Replace membership');
-      expect((await (await roster).json()).page.items).toEqual([member]);
+      expect((await (await roster).json()).page.items).toEqual([{ ...member, email: 'target@example.test', name: 'target' }]);
       await expect(editor(page).getByRole('region', { name: 'Authorized memberships' })).toContainText(member.membershipId);
       await modal(page).getByRole('button', { name: 'Close', exact: true }).click();
       await expect(modal(page)).toHaveCount(0);

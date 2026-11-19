@@ -92,15 +92,22 @@ const readsRecord = (when: string): boolean => (drafting ? drafting.readsRecord(
 
 /* The fields a prepared form is asked. A `when` that reads the record or the tenant waits for prepare: left out where
    that part never holds, a plain field where it always does, and otherwise the draft's part prepare left to judge as
-   it is typed. A `when` over the draft alone is the form's own to judge (commandDraft.ts). The browser is told only
-   these truths, never the values behind them. */
+   it is typed. A `when` over the draft alone is the form's own to judge (commandDraft.ts). A choice's option offered
+   by the tenant's profile (its `when`) waits for prepare too, and is left out where prepare withheld it. The browser
+   is told only these truths, never the values behind them. */
 export function askedFields(
   input: readonly AppCommandField[],
-  prepared: { withheld?: string[]; when?: Record<string, string> } | undefined,
+  prepared: { withheld?: string[]; when?: Record<string, string>; withheldOptions?: Record<string, (string | number)[]> } | undefined,
 ): readonly AppCommandField[] {
-  if (!input.some((field) => field.type !== 'group' && field.type !== 'lines' && field.when !== undefined && readsRecord(field.when)))
+  if (
+    !input.some(
+      (field) =>
+        (field.type !== 'group' && field.type !== 'lines' && field.when !== undefined && readsRecord(field.when)) || offersByTenant(field),
+    )
+  )
     return input;
-  return input.flatMap((field): AppCommandField[] => {
+  return input.flatMap((offered): AppCommandField[] => {
+    const field = offersByTenant(offered) ? offeredBy(offered, prepared && (prepared.withheldOptions?.[offered.name] ?? [])) : offered;
     if (field.type === 'group' || field.type === 'lines' || field.when === undefined || !readsRecord(field.when)) return [field];
     if (!prepared || prepared.withheld?.includes(field.name)) return [];
     const { when: _when, ...plain } = field;
@@ -108,6 +115,29 @@ export function askedFields(
     return [(left === undefined ? plain : { ...plain, when: left }) as AppCommandField];
   });
 }
+/** A prepare's `withheldOptions` as served: each input's withheld values, or undefined where none is. */
+export function servedWithheldOptions(served: unknown): Record<string, (string | number)[]> | undefined {
+  if (!served || typeof served !== 'object' || Array.isArray(served)) return undefined;
+  const read = Object.entries(served as Record<string, unknown>).flatMap(([name, values]) => {
+    const kept = Array.isArray(values) ? values.filter((value) => typeof value === 'string' || typeof value === 'number') : [];
+    return kept.length ? [[name, kept] as const] : [];
+  });
+  return read.length ? Object.fromEntries(read) : undefined;
+}
+type Offering = Extract<AppCommandField, { type: 'choice' | 'choices' }>;
+const offersByTenant = (field: AppCommandField): field is Offering =>
+  (field.type === 'choice' || field.type === 'choices') && field.options.some((option) => option.when !== undefined);
+/* A choice with the options prepare withheld gone, and its offered ones with no `when`; before prepare (`withheld`
+   undefined), only the options with no `when`. */
+const offeredBy = (field: Offering, withheld: readonly (string | number)[] | undefined): AppCommandField => ({
+  ...field,
+  options: field.options.flatMap((option) => {
+    if (option.when === undefined) return [option];
+    if (!withheld || withheld.some((value) => String(value) === String(option.value))) return [];
+    const { when: _when, ...rest } = option;
+    return [rest];
+  }),
+});
 /* A record's lines: the grid, with the catalog's cells and the words for a cell, fetched the first time a form asks
    lines. A public form cannot ask them, so its first page carries none of it. The cells are judged here by kind once it
    has arrived, which it has by the time a grid is drawn; before then, and in any case, the server reads them again. */

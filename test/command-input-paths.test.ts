@@ -24,6 +24,8 @@ import type { WriteTransaction } from '../packages/engine/src/adapters/adapter.j
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { defineSource, type CommandCatalog } from '../packages/mistri/src/server/commands/commandDb.js';
 import { field } from '../packages/mistri/src/server/commands/commandFields.js';
+import { appCommandCatalog } from '../packages/mistri/src/server/commands/commandContracts.js';
+import { checkCommandStep } from '../packages/mistri/src/server/commands/commandCheck.js';
 import { readPreparedRecord } from '../packages/mistri/src/server/commands/commandPrepare.js';
 import { bool } from '../packages/mistri/src/server/commands/commandShapes.js';
 import { parseCommandInput } from '../packages/mistri/src/shared/commandInputParse.js';
@@ -105,6 +107,74 @@ test("prepare judges a tenant's when locally and starts a field from its profile
   const asked = await prepare(none, 'US', {});
   assert.equal(asked.withheld, undefined);
   assert.deepEqual(asked.initial, { region: 'US' });
+});
+
+test("an option's when reads the tenant alone, is judged at prepare, and a withheld value is no choice", async () => {
+  // Parsed: an option's when names the option it is on, and reads neither a draft field nor the record.
+  const tax = (when: string) => ({
+    tax: {
+      type: 'choice',
+      options: [
+        { value: 'vat', label: 'VAT' },
+        { value: 'gst', label: 'GST', when },
+      ],
+    },
+    note: { type: 'text' },
+  });
+  assert.doesNotThrow(() => parseCommandInput(tax("tenant.country = 'IN'"), 'input'));
+  assert.throws(() => parseCommandInput(tax("note = 'x'"), 'input'), /option 2 \("gst"\).*reads only tenant/);
+  assert.throws(() => parseCommandInput(tax("record.state = 'open'"), 'input'), /option 2 \("gst"\).*reads only tenant/);
+  assert.throws(() => parseCommandInput(tax('true'), 'input'), /option 2 \("gst"\)/);
+
+  const reader = {
+    query: async () => ({ rows: [{ id: 4, version: 2, state: 'open', note: null }] }),
+    count: async () => 1,
+  } as unknown as WriteTransaction;
+  const prepare = (command: object, country: string | null, key: Record<string, number> = { id: 4 }) =>
+    readPreparedRecord(reader, {
+      command: command as Parameters<typeof readPreparedRecord>[1]['command'],
+      commandId: 'bill',
+      actor: { id: 'account', appId: 'desk', roles: ['agent'] },
+      key,
+      catalog,
+      tenant: { country },
+    });
+  const pay = field.choice([
+    { value: 'card', label: 'Card' },
+    { value: 'upi', label: 'UPI', when: "tenant.country = 'IN'" },
+    { value: 'ach', label: 'ACH', when: "tenant.country = 'US'" },
+  ]);
+  const one = defineCommand({ ...base, input: { pay } });
+  const none = defineCommand({ ...base, targets: 'none', input: { pay } });
+  for (const [command, key] of [
+    [one, { id: 4 }],
+    [none, {}],
+  ] as const) {
+    assert.deepEqual((await prepare(command, 'IN', key)).withheldOptions, { pay: ['ach'] });
+    assert.deepEqual((await prepare(command, 'CA', key)).withheldOptions, { pay: ['upi', 'ach'] });
+    assert.deepEqual((await prepare(command, null, key)).withheldOptions, { pay: ['upi', 'ach'] }, 'an unset value offers nothing');
+  }
+  const all = defineCommand({ ...base, input: { pay: field.choice(['card', 'cash']) } });
+  assert.equal((await prepare(all, 'IN')).withheldOptions, undefined, 'absent when nothing is withheld');
+
+  // The check refuses a withheld value as no choice where the request read the tenant, and leaves it to the run where not.
+  assert.deepEqual(checkCommandStep(one, { pay: 'ach' }, ['pay'], undefined, { tenant: { country: 'IN' } }), {
+    pay: '"ach" is not one of the choices.',
+  });
+  assert.deepEqual(checkCommandStep(one, { pay: 'upi' }, ['pay'], undefined, { tenant: { country: 'IN' } }), {});
+  assert.deepEqual(checkCommandStep(one, { pay: 'ach' }, ['pay']), {});
+});
+
+test("a form over no record prepares where a field's when or default reads the tenant, so it opens judged", () => {
+  const prepares = (input: Record<string, unknown>) =>
+    appCommandCatalog(defineCommands({ ask: defineCommand({ ...base, targets: 'none', input: input as never }) }), {
+      sources: { desk: { connection: 'desk-db', default: true } },
+    }).get('ask')!.prepares;
+  assert.equal(prepares({ region: field.text({ when: "tenant.country = 'US'" }) }), true);
+  assert.equal(prepares({ region: field.text({ default: { tenant: 'country' } }) }), true);
+  assert.equal(prepares({ pay: field.choice([{ value: 'upi', label: 'UPI', when: "tenant.country = 'IN'" }]) }), true);
+  assert.equal(prepares({ note: field.text({ default: 'none' }) }), undefined, 'a literal starts in the browser');
+  assert.equal(prepares({ note: field.text(), more: field.text({ when: "note = 'x'" }) }), undefined, 'a draft when is judged there');
 });
 
 const agent: Identity = { id: 'account-agent', who: 'agent@example.test', role: 'agent' };
