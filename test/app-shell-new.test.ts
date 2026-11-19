@@ -142,3 +142,21 @@ test('a long New menu groups its lines under headings, each line carrying its gr
     assert.throws(() => parseAppConfig(listed(entries), 'fixture'), message, JSON.stringify(entries));
   }
 });
+
+test("a New line takes a `when`, written as a nav entry's is, and refuses a blank one", () => {
+  const app = parseAppConfig(
+    raw([
+      { view: 'tickets', when: ' tenant.plan = pro ' },
+      { command: 'raise', when: 'tenant.plan in (pro, team)' },
+    ]),
+    'fixture',
+  );
+  assert.deepEqual(
+    app.ui.shell?.new?.map((line) => line.when),
+    ['tenant.plan = pro', 'tenant.plan in (pro, team)'],
+  );
+  /* Arrangement only, judged per tenant on the server: the browser is never sent the condition. */
+  assert.doesNotMatch(JSON.stringify(servedUi(app.ui, app.views).shell?.new), /when/);
+  assert.throws(() => parseAppConfig(raw([{ view: 'tickets', when: ' ' }]), 'fixture'), /ui\.shell\.new\[0\] has a "when"/);
+  assert.throws(() => parseAppConfig(raw([{ view: 'tickets', when: 3 }]), 'fixture'), /has a "when"/);
+});

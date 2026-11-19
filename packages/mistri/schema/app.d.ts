@@ -611,10 +611,11 @@ export interface AppDisplayRule {
   /** The words a vocabulary's values are said as, in a cell, a field, a card and a group's head. A column with a
       `tone` is a vocabulary already: `IN_REVIEW` and `in_review` read "In review". A map names your own —
       `values: { PUB: 'Published', DRF: 'Draft' }` — and any value it does not name is still said as words. The stored
-      value is what filters, exports and is written, and `tone` and `icons` stay keyed by it. A column whose values
+      value is what filters, exports and is written, and `tone` and `icons` stay keyed by it. A word may be a `msg()` of
+      the App's catalogs, said in each reader's language (without arguments: a value has no record to fill it). A column whose values
       the database declares (an enum, a `CHECK (stage IN (…))`) sorts in that declared order, in lists, the column
       menu and the API; free text sorts as text. At most 80 characters a word. */
-  values?: Readonly<Record<string, string>>;
+  values?: Readonly<Record<string, string | AppMessageRef>>;
   /** Another column of the same record, said as a muted second line under the value: in lists, a block of fields, a header's facts, a card section, a headline's figure, a card's title, figure and properties, and a board card's title. A card's badge, description, summary and foot, a board card's line and facts, and a summary figure have one line, and do not draw it. */
   subtitle?: string;
   /** A small tinted square before the value in a list's cell: an App icon, in the accent's tint, or with `toneOf`
@@ -3202,10 +3203,11 @@ export interface AppShell {
 }
 
 /** One line of the New menu (`ui.shell.new`): the view or command it opens, and its words and mark —
-    absent, a list's noun ("Ticket") or the form's label. */
+    absent, a list's noun ("Ticket") or the form's label. `when` offers the line to the tenants whose shared profile meets
+    it, as a nav entry's `when` does (`'tenant.plan = pro'`): arrangement only, never access. */
 export type AppShellNew =
-  | { readonly view: string; readonly label?: string | AppMessageRef; readonly icon?: AppIcon }
-  | { readonly command: string; readonly label?: string | AppMessageRef; readonly icon?: AppIcon };
+  | { readonly view: string; readonly label?: string | AppMessageRef; readonly icon?: AppIcon; readonly when?: string }
+  | { readonly command: string; readonly label?: string | AppMessageRef; readonly icon?: AppIcon; readonly when?: string };
 /** A run of New menu lines under a heading, written as a nav group is: `{ label: 'Service desk', children: [{ view:
     'tickets' }, ...] }`. A long menu reads by its groups; a line outside every group is drawn where it is written,
     with no heading. */
@@ -3785,7 +3787,7 @@ type PublicFormIdOf<C> = string extends ViewId<C> ? string : FormIds<Contributed
 type SignedInFormIdOf<C> = string extends ViewId<C> ? string : FormIds<Contributed<C, 'views'>, false>;
 /* The assistant's own room, by its word, where the App gives it one (`assistant({ placement: [..., 'page'] })`). */
 type AssistantRoomOf<C> = C extends { assistant: { placement: readonly (infer P)[] } } ? ('page' extends P ? 'assistant' : never) : never;
-type NavRef<C> = AppNavNode<ViewIdOf<C, 'list' | 'dashboard'> | SignedInFormIdOf<C> | AssistantRoomOf<C>, AppNavPlacement<NavFeature<C>>>;
+type NavRef<C> = AppNavNode<ViewIdOf<C, 'list' | 'dashboard'> | SignedInFormIdOf<C> | AssistantRoomOf<C> | PagePath, AppNavPlacement<NavFeature<C>>>;
 /* An id typed wide — `string`, or the `Lowercase<string>` an annotation such as
    `const nav: NonNullable<App['nav']>` gives — is one the checker cannot know:
    it passes, and the parser judges it at load. */
@@ -3847,10 +3849,7 @@ export type AppRefs<C> = {
   api?: ApiRefs<C, C>;
   ui?: ThemeRefs<C> & ShellRefs<C>;
   nav?: C extends { nav: infer L extends readonly unknown[] }
-    ? [Extract<NavLeaf<L[number]>, PagePath>] extends [never]
-      ? (Wide<NavLeaf<L[number]>> extends true ? unknown : Same<L, readonly NavRef<C>[]>)
-      /* A free-form page places itself (`definePage({ nav })`); the loader refuses it here, and so does the type, in words. */
-      : readonly { readonly 'a free-form page places itself: definePage({ nav: { group } }), it is not named in the App nav': never }[]
+    ? (Wide<NavLeaf<L[number]>> extends true ? unknown : Same<L, readonly NavRef<C>[]>)
     : unknown;
   home?: HomeRefs<C, C>;
   views?: { [I in Keys<ViewsOf<C>>]: ViewRefs<C, ViewsOf<C>[I]> };

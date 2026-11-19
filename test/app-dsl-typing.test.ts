@@ -1087,7 +1087,7 @@ test('a reference input is typed by the key it points at', () => {
   assert.notEqual(wrong.status, 0);
 });
 
-test('nav names views, not a free-form page: the page places itself', () => {
+test('nav names views and free-form pages by their ids, and refuses an id it does not know', () => {
   const types = commandTypes({}, 'Helpdesk', undefined, ['book']);
   const app = (nav: string) => `
     import './mistri-commands.d.ts';
@@ -1101,6 +1101,7 @@ test('nav names views, not a free-form page: the page places itself', () => {
   const fine = compile(app("'tickets'"), {}, files);
   assert.equal(fine.status, 0, fine.stdout + fine.stderr);
   const page = compile(app("'tickets', 'book'"), {}, files);
-  assert.notEqual(page.status, 0, 'a page named in nav compiles');
-  assert.match(page.stdout, /a free-form page places itself/);
+  assert.equal(page.status, 0, page.stdout + page.stderr);
+  const unknown = compile(app("'tickets', 'nowhere'"), {}, files);
+  assert.notEqual(unknown.status, 0, 'an id that is no view and no page compiles');
 });

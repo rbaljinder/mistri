@@ -271,6 +271,32 @@ test('a command naming no record starts though its target points at a table outs
   assert.doesNotThrow(() => createBusinessCommandAuthorizer({ ...f.options, registry: defineCommands({ change: command }) }));
 });
 
+test("an option's when reads a tenant column the App shares, or the load names the option", () => {
+  const f = fixture();
+  const command = defineCommand({
+    source: 'business',
+    target: 'item',
+    read: ['item', 'reference'],
+    write: ['item'],
+    input: {
+      tax: {
+        label: 'Tax',
+        type: 'choice',
+        options: [
+          { value: 'vat', label: 'VAT' },
+          { value: 'gst', label: 'GST', when: "tenant.country = 'IN'" },
+        ],
+      },
+    },
+    output: { parse: (value) => value },
+    handle: () => ({ ok: true }),
+  });
+  assert.throws(
+    () => createBusinessCommandAuthorizer({ ...f.options, registry: defineCommands({ change: command }) }),
+    /input "tax" option "gst" when: reads "tenant\.country", and the App has no auth\.tenancy\.profile \[tenant-shared-column\]/,
+  );
+});
+
 test('current actor must have matching App, command grant and complete read footprint', () => {
   const f = fixture(),
     authorizer = f.create();

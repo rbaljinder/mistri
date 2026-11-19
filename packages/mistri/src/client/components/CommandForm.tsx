@@ -19,6 +19,7 @@ import {
   blankCommandValues,
   draftLogic,
   askedFields,
+  servedWithheldOptions,
   commandInput,
   prefilledCommandValues,
   type CommandQuestions,
@@ -57,6 +58,8 @@ interface PreparedRecord {
   withheld?: string[];
   /** What is left of a record-reading `when` to judge over the draft, by input. */
   when?: Record<string, string>;
+  /** The options of a choice the tenant's profile does not offer, by input: the form leaves them out. */
+  withheldOptions?: Record<string, (string | number)[]>;
   /** The questions defined in rows this record is asked, by input name (`field.defined`). */
   questions?: CommandQuestions;
   /** The count of applied commands when this prepare was asked (commandOperations.appliedOn). */
@@ -286,12 +289,14 @@ export function CommandForm({
           ? Object.fromEntries(Object.entries(result.when as Record<string, unknown>).filter(([, text]) => typeof text === 'string'))
           : undefined;
       const questions = result.defined && typeof result.defined === 'object' ? (result.defined as CommandQuestions) : undefined;
+      const withheldOptions = servedWithheldOptions(result.withheldOptions);
       return {
         expectedVersion: result.expectedVersion as number,
         ...(initial ? { initial } : {}),
         ...(choices ? { choices } : {}),
         ...(withheld.length ? { withheld } : {}),
         ...(when && Object.keys(when).length ? { when: when as Record<string, string> } : {}),
+        ...(withheldOptions ? { withheldOptions } : {}),
         ...(questions ? { questions } : {}),
         seen,
       };

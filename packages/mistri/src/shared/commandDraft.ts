@@ -254,6 +254,41 @@ function tenantHolds(c: Comparison, tenant: Readonly<Record<string, TenantValue>
   return conditionResult([[c]], { [c.field]: value }, columns) === true;
 }
 
+/** The options of an input's choice fields whose `when` the tenant's profile does not hold, by field: what the form
+    is served without and what a run refuses. A field with none withheld is absent. */
+export function withheldOptions(
+  fields: readonly Field[],
+  tenant: Readonly<Record<string, TenantValue>> | undefined,
+): Record<string, (string | number)[]> {
+  const withheld: Record<string, (string | number)[]> = {};
+  for (const field of fields) {
+    if (field.type !== 'choice' && field.type !== 'choices') continue;
+    const values = field.options
+      .filter((option) => option.when !== undefined && !optionHolds(option.when, field.name, tenant))
+      .map((option) => option.value);
+    if (values.length) withheld[field.name] = values;
+  }
+  return withheld;
+}
+
+const optionHolds = (text: string, name: string, tenant: Readonly<Record<string, TenantValue>> | undefined): boolean =>
+  draftCondition(text, `input "${name}" option`).some((group) => group.every((c) => tenantHolds(c, tenant)));
+
+/** The first answer an input gives that is a withheld option of its field: the field, the value and the refusal as a
+    choice's is said, or undefined. */
+export function withheldAnswer(
+  withheld: Readonly<Record<string, readonly (string | number)[]>>,
+  input: Readonly<Record<string, unknown>>,
+): { path: string; value: string | number; reason: string } | undefined {
+  for (const [path, values] of Object.entries(withheld)) {
+    const given = input[path];
+    for (const answer of Array.isArray(given) ? given : [given])
+      if ((typeof answer === 'string' || typeof answer === 'number') && values.some((value) => String(value) === String(answer)))
+        return { path, value: answer, reason: `${JSON.stringify(String(answer))} is not one of the choices.` };
+  }
+  return undefined;
+}
+
 /** Bind a condition's record parts by `holds` (the server's judgement of each one over the target), and its tenant
     parts by the tenant's profile values. */
 export async function bindRecord(

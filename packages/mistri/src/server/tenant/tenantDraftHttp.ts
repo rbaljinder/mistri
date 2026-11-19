@@ -67,7 +67,7 @@ async function proposalRequest<C>(
   }
 }
 
-/** One command route's answer: the four ordinary verbs, and a saved form's draft and a staged file for a signed-in member. */
+/** One command route's answer: the four ordinary verbs, a step's check, and a saved form's draft and a staged file for a signed-in member. */
 export function tenantCommandRoute(
   contexts: ReturnType<typeof createTenantContexts<IncomingMessage>>,
   route: {
@@ -91,6 +91,12 @@ export function tenantCommandRoute(
     return path.endsWith('/files')
       ? contexts.stage(req, selectors, expected, input, execution)
       : draftRequest(input, (body) => contexts.draft(req, selectors, expected, body, execution));
+  }
+  /* A step's check reads the tenant's shared profile and nothing else; the platform realm has no tenant to read, and no
+     multistep form of its own yet, so it refuses as a draft does. */
+  if (path.endsWith('/check')) {
+    if (platform) return Promise.reject(new BusinessCommandExecutionError('forbidden', 'not_applied'));
+    return contexts.check(req, selectors, expected, input, execution);
   }
   if (platform) {
     return path.endsWith('/availability')

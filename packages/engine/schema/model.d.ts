@@ -79,6 +79,10 @@ export interface AppCommandChoice {
   icon?: string;
   /** A line under the label, on a card. */
   help?: string;
+  /** Offered only where the tenant's profile holds this condition, as a field's `when` reads it:
+      `tenant.<column>` alone (`"tenant.country = 'IN'"`), shared through `auth.tenancy.shared`. Judged as the form
+      is prepared or a public form is served; a submitted withheld value is refused as no choice. */
+  when?: string;
   /** Set by the server on a table's row it served (`source.served`): the columns its `where` compares, so the page
       offers the rows the answers given match without a read of its own. Never written in an App. */
   row?: Readonly<Record<string, string | number | boolean | null>>;

@@ -421,6 +421,53 @@ test("a menu's when folds over a shared flag or vocabulary column, and an entry 
   assert.equal(menuFor(menu(plain), catalog), undefined);
 });
 
+test("a New line's when is judged as a menu entry's is: refused without a profile, left out unless met, never served", () => {
+  const column = (name: string, type = 'TEXT', extra: object = {}) => ({ name, type, nullable: true, primaryKey: false, ...extra });
+  const catalog: DatabaseSchema = {
+    label: 'Desk',
+    dialect: 'sqlite',
+    readAt: '',
+    foreignKeys: [],
+    tables: [
+      {
+        id: 'customer',
+        name: 'customer',
+        schema: '',
+        isView: false,
+        columns: [
+          column('id', 'TEXT', { primaryKey: true, nullable: false }),
+          column('plan', 'TEXT', { allowed: ['free', 'pro', 'team'] }),
+        ],
+      },
+    ],
+  };
+  const lines = [{ view: 'tickets' }, { view: 'tickets', when: 'tenant.plan = pro' }] as unknown as NonNullable<
+    NonNullable<typeof app.ui.shell>['new']
+  >;
+  const withNew = (profile: string | null, entries = lines) =>
+    ({
+      ...app,
+      auth: { ...app.auth!, tenancy: profile === null ? undefined : { ...app.auth!.tenancy!, profile, shared: ['plan'] } },
+      ui: { ...app.ui, shell: { ...app.ui.shell, new: entries } },
+    }) as typeof app;
+  assert.deepEqual(menuWhenProblems(withNew('customer'), catalog), []);
+  assert.match(
+    menuWhenProblems(withNew(null), catalog)[0] ?? '',
+    /ui\.shell\.new entry "tickets" has when "tenant\.plan = pro".*no auth\.tenancy\.profile \[nav-when\]/,
+  );
+  const bad = [{ view: 'tickets', when: 'tenant.country = US' }] as unknown as typeof lines;
+  assert.match(menuWhenProblems(withNew('customer', bad), catalog)[0] ?? '', /ui\.shell\.new entry "tickets".*\[nav-when\]/);
+
+  const judged = menuFor(withNew('customer'), catalog)!;
+  const full = withNew('customer');
+  const kept = (tenant?: Record<string, string | null>) => JSON.parse(JSON.stringify(judged.shown(full, tenant).ui.shell?.new)) as unknown;
+  assert.deepEqual(kept({ plan: 'pro' }), [{ view: 'tickets' }, { view: 'tickets' }], 'met: the line stays, its when does not');
+  assert.deepEqual(kept({ plan: 'free' }), [{ view: 'tickets' }]);
+  assert.deepEqual(kept(), [{ view: 'tickets' }], 'a visitor or the platform realm meets none');
+  const only = withNew('customer', [{ view: 'tickets', when: 'tenant.plan = pro' }] as unknown as typeof lines);
+  assert.equal('new' in (visitorApp(only).ui.shell ?? {}), false, 'no line left, no menu');
+});
+
 for (const { dialect, skip } of TENANT_DIALECTS)
   describe(`a profile's zone on ${dialect}`, { skip }, () => {
     test("each tenant's person reads their days in the zone their profile row holds, with no grant on the profile", async (t) => {

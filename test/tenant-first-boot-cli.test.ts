@@ -113,7 +113,7 @@ async function fixture(t: TestContext, platform = true, named = true, branded = 
   const anchors = () => read(`SELECT id, status, kind FROM "${tables.tenant}" ORDER BY id`);
   const memberships = () =>
     read(`SELECT tenant_id AS tenant, account_id AS account, status, roles_json AS roles FROM "${tables.membership}" ORDER BY tenant_id`);
-  const receipts = () => read(`SELECT actor_id AS actor, operation FROM "${journal.receipt}" ORDER BY completed_at, id`);
+  const receipts = () => read(`SELECT actor_id AS actor, operation FROM "${journal.receipt}" ORDER BY completed_at, rowid`);
   const branding = () => read(`SELECT tenant, value_json AS value, saved_by AS by FROM "${BRANDING_TABLES.value}" ORDER BY tenant`);
   return { directory, appDir, run, anchors, memberships, receipts, branding };
 }

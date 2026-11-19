@@ -193,3 +193,45 @@ test("the looks' own shadow tokens and a blur-free inset stripe are not a shadow
   });
   assert.ok(odd.warnings.some((w) => /a shadow/.test(w.text)));
 });
+
+test('an infinite slow animation inside the no-preference guard is content, not a slow answer to a press', async () => {
+  const { warnings } = await lint({
+    'tile.css': [
+      '@media (prefers-reduced-motion: no-preference) {',
+      '  .c-tile-pulse { animation: c-tile-pulse 2400ms ease-in-out infinite; }',
+      '  .c-tile-fade { animation: c-tile-fade 600ms ease-out; }',
+      '  .c-tile-btn:active { transition: transform 400ms; }',
+      '}',
+    ].join('\n'),
+  });
+  const said = warnings.map((w) => w.text);
+  assert.equal(said.length, 2, said.join('\n'));
+  assert.match(said[0]!, /animation of 600ms/);
+  assert.match(said[1]!, /transition of 400ms/);
+});
+
+test('a property the App sets itself and reads with a fallback is its own; an unknown one with none still warns', async () => {
+  const { warnings } = await lint({
+    'tile.css': '.c-tile { gap: var(--tile-gap, 8px); color: var(--tile-ink); margin: var(--tile-none); }',
+    'tile.tsx': "export default (p) => <b ref={(el) => el?.style.setProperty('--tile-gap', p.gap)} />;",
+  });
+  assert.deepEqual(
+    warnings.map((w) => /"(--[a-z-]+)"/.exec(w.text)?.[1]),
+    ['--tile-ink', '--tile-none'],
+  );
+});
+
+test('a hex in a plain data list is data; a hex in a style, a style object or a color attribute is a literal color', async () => {
+  const { warnings } = await lint({
+    'tile.tsx': [
+      "const STAGES = [{ name: 'Open', color: '#2563eb' }, { name: 'Won', color: 'rgb(0, 128, 0)' }];",
+      "const box: React.CSSProperties = { background: '#fafafa' };",
+      "export default () => <svg><rect fill=\"#ff0000\" /><b style={{ color: '#123456' }} /><i style={{ borderColor: 'rgb(1,2,3)' }} /></svg>;",
+    ].join('\n'),
+  });
+  const colors = warnings.filter((w) => componentCode(w.text) === 'component-color');
+  assert.deepEqual(
+    colors.map((w) => w.line),
+    [2, 3],
+  );
+});

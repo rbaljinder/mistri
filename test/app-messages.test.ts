@@ -259,6 +259,23 @@ describe('the one locale resolution', () => {
 });
 
 describe('loading', () => {
+  test("a display rule's values are captions: a word is a msg(), said in the reader's language, the stored value untouched", async () => {
+    const base = definition();
+    const loaded = await loadApp(
+      appDir('values', {
+        ...base,
+        resources: {
+          ...base.resources,
+          ticket: { ...base.resources.ticket, display: { status: { values: { open: msg('ticket.open'), done: 'Done' } } } },
+        },
+      }),
+      { lock: 'report' },
+    );
+    const values = (app: Pick<LoadedApp, 'app'>) => app.app.resources!.ticket.display!.status.values;
+    assert.deepEqual({ ...values(loaded) }, { open: 'Open', done: 'Done' });
+    assert.deepEqual({ ...values(localizedApp(loaded, 'es-MX')) }, { open: 'Abiertas', done: 'Done' });
+  });
+
   test("the load reads the catalogs and is said in the App's own words; a reader's in theirs, addresses kept", async () => {
     const loaded = await words();
     assert.deepEqual(loaded.messageFiles, ['messages/en.mjs', 'messages/es.mjs']);

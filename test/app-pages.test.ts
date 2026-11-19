@@ -232,7 +232,7 @@ export default definePage({ label: String(typeof process === 'object' && process
     );
   });
 
-  test('page-nav: a page placed where nav has no group, or named in nav as well as placing itself', () => {
+  test('page-nav: a page placed where nav has no group; named in nav it stands where nav puts it, and says nothing of its own place', () => {
     const page = (nav: unknown) => ({
       key: 'walk',
       module: './pages/walk.page.tsx',
@@ -240,10 +240,21 @@ export default definePage({ label: String(typeof process === 'object' && process
     });
     const grouped = { ...APP, nav: [{ id: 'floor', label: 'Floor', children: ['tickets'] }] };
     assert.throws(() => placePages(grouped, [page({ group: 'yard' })], 'desk'), /\[page-nav\].*nav has no group "yard"/);
+    // Named in nav, a page takes the declared place: not spliced in a second time at the end.
+    const listed = { ...APP, nav: ['walk', 'tickets'] };
+    assert.deepEqual(placePages(listed, [page(undefined)], 'desk').nav, ['walk', 'tickets']);
+    assert.deepEqual(placePages(listed, [page({})], 'desk').nav, ['walk', 'tickets']);
+    const inGroup = { ...APP, nav: [{ id: 'floor', label: 'Floor', children: ['tickets', 'walk'] }] };
+    assert.deepEqual((placePages(inGroup, [page(undefined)], 'desk').nav as Array<{ children: string[] }>)[0].children, [
+      'tickets',
+      'walk',
+    ]);
+    // Two places for one page are refused, by name.
     assert.throws(
-      () => placePages({ ...APP, nav: ['tickets', 'walk'] }, [page({})], 'desk'),
-      /\[page-nav\] desk: nav names "walk", a free-form page/,
+      () => placePages({ ...APP, nav: ['tickets', 'walk'] }, [page({ group: 'floor' })], 'desk'),
+      /\[page-nav\] desk: nav names "walk", and the page says where it stands itself/,
     );
+    assert.throws(() => placePages(listed, [page(false)], 'desk'), /\[page-nav\] desk: nav names "walk".*nav: false/);
     const placed = placePages(grouped, [page({ group: 'floor', position: 0 })], 'desk');
     assert.deepEqual((placed.nav as Array<{ children: string[] }>)[0].children, ['walk', 'tickets'], 'a page places itself where it asks');
     assert.deepEqual(placePages(APP, [page(false)], 'desk').nav, APP.nav, 'nav: false keeps it out of the menu');

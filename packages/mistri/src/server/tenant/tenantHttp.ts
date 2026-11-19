@@ -37,6 +37,7 @@ import { shownWrite } from '../http/fileRows.js';
 import { fileStoreTrouble, placeFile, writePlaced } from '../files/fileStorage.js';
 import { judgeLines } from '../http/formLinesWrite.js';
 import type { LineCollection } from '@mistriwork/engine/server/recordWriteOperations.js';
+import { columnCaption } from '@mistriwork/engine/shared/columnCaption.js';
 import { findTable, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import {
   FILE_READ_PATH,
@@ -488,6 +489,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     accepted.add(req);
     let path = '',
       completedWrite = false;
+    /* The App table a Save or New writes, for naming a required field the database refused it (refusedWrite). */
+    let writtenTable: string | undefined;
     /* An arrival's turn (below), given back when the request is done, however it ends. */
     let arrival: (() => void) | undefined;
     const controller = new AbortController(),
@@ -1847,7 +1850,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         }
         /* What this member picked (the cookie), for `ctx.locale` where their row names none (tenantCommands.ts scopedLocale). */
         const picked = pickedLocale(app, req);
-        const execution = { signal: controller.signal, ...(picked ? { locale: picked } : {}) };
+        /* And who they are by name, off the verified session (`actor.name`): a window onto the sign-in store, never input. */
+        const named = nameOf(req);
+        const execution = { signal: controller.signal, ...(picked ? { locale: picked } : {}), ...(named ? { name: named } : {}) };
         const result = await attributed(
           () => tenantCommandRoute(contexts, { path, platform, req, selectors, expected, input, execution }),
           commandActionLabel(app, input),
@@ -1876,6 +1881,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         if (imported.refused) return send(req, res, imported.refused.status, { error: imported.refused.message });
         return send(req, res, 200, imported.report, ownerHeaders(imported.context!));
       }
+      if ((path === '/api/insert' || path === '/api/update') && typeof input.table === 'string') writtenTable = input.table;
       /* A record's lines (formLinesWrite.ts), judged on the lease's own catalog and grants; each row is then
          written in the record's transaction as this member could write it alone (tenantRecordHistory.ts). */
       let lines: LineCollection[] | undefined;
@@ -2074,7 +2080,18 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         }
         if (writes.has(path)) {
           const unknown = completedWrite || (error instanceof TenantWriteFailure && error.outcome === 'unknown');
-          const refused = unknown ? undefined : refusedWrite(path, error);
+          /* A column of the written table by the App's word for it, on the deployment's own catalog: nothing for the
+             tenant's column or any other name the engine reports (refusedWrite). */
+          const written = writtenTable === undefined ? undefined : findTable(ownership.schema, writtenTable);
+          const owner = written ? ownership.ownership[written.id] : undefined;
+          const tenantColumn = owner?.kind === 'tenant' ? owner.column : undefined;
+          const caption = written
+            ? (column: string) =>
+                written.columns.some((at) => at.name === column && at.name !== tenantColumn)
+                  ? columnCaption(app.resources ?? {}, ownership.schema, written.id, column)
+                  : undefined
+            : undefined;
+          const refused = unknown ? undefined : refusedWrite(path, error, caption);
           if (refused) {
             reportRefusal(req, refused.status, refused.code, String(refused.body.error), error);
             return send(req, res, refused.status, refused.body, {}, error);

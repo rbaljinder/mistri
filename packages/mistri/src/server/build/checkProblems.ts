@@ -146,6 +146,9 @@ export const VALIDATION_CODES: ReadonlyArray<{ code: string; pattern: RegExp }> 
   { code: 'env-not-passed', pattern: /which mistri\.json does not pass to it/ },
   { code: 'route-clash', pattern: /address(?:es)? (?:another App holds|is taken|collides)|already answers to/ },
   { code: 'money-minor', pattern: /minor units|the currency column "/ },
+  /* Said in brackets by the form's check (shared/formRules.ts), which this page's sources do not reach: listed so the
+     code is held to its row in check-codes.md. */
+  { code: 'new-key-unfilled', pattern: /has no way to fill its key/ },
   { code: 'form-lines', pattern: /\bform\.lines\b/ },
   { code: 'form-live', pattern: /\bform\.live\b/ },
   /* A warning about the connection, not the App's declaration: it was reported as `invalid-app`, which reads as an error. */

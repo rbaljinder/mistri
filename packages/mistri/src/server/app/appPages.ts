@@ -188,8 +188,8 @@ function checkedFields(raw: unknown, key: string, at: string, tab = false): Reco
 
 /**
  * The App's raw definition with its pages in it: each a view of kind `page`
- * under its path, and in nav where it asks to be. A page places itself, so
- * the App's own nav naming one is refused, as is a path a view already has.
+ * under its path, and in nav where it asks to be, or where the App's own nav
+ * names it (the order nav declares). A path a view already has is refused.
  */
 export function placePages(raw: Record<string, unknown>, pages: readonly PageFile[], where: string): Record<string, unknown> {
   if (!pages.length) return raw;
@@ -215,20 +215,25 @@ export function placePages(raw: Record<string, unknown>, pages: readonly PageFil
           `Rename the file (pages/<another path>.page.tsx), or remove the view from the App's views and let the page take its place.`,
       );
     }
-    if (named.has(page.key)) {
+    /* A page the App's own nav names is placed where nav says, in the order nav declares, as a view is; its own
+       `nav: { group, position }` would be a second place, so the two are refused together, in words. */
+    const listed = named.has(page.key);
+    if (listed && (fields.nav === false || (isRecord(fields.nav) && Object.keys(fields.nav).length > 0))) {
       throw new Error(
-        `[page-nav] ${where}: nav names "${page.key}", a free-form page. A page places itself: definePage({ nav: { group: '…' } }).`,
+        `[page-nav] ${where}: nav names "${page.key}", and the page says where it stands itself (${fields.nav === false ? 'nav: false' : 'nav: { group, position }'}). ` +
+          `Say it in one place: name the page in the App's nav and leave the page's \`nav\` out, or remove it from the App's nav.`,
       );
     }
     /* A public page that says nothing of nav is the signed-out door's: the signed-in menu is not where it belongs
        (a field report: a kiosk's check-in page showed in the staff sidebar). Saying `nav` still places it. */
-    const placing = page.record
-      ? undefined
-      : isRecord(fields.nav)
-        ? fields.nav
-        : fields.nav === false || (fields.nav === undefined && fields.public === true)
-          ? undefined
-          : {};
+    const placing =
+      page.record || listed
+        ? undefined
+        : isRecord(fields.nav)
+          ? fields.nav
+          : fields.nav === false || (fields.nav === undefined && fields.public === true)
+            ? undefined
+            : {};
     views[page.key] = {
       kind: 'page',
       label: fields.label,

@@ -16,7 +16,7 @@
 import { serveClient, shellEgress, type SocialHead } from '@mistriwork/engine/server/clientHttp.js';
 import { CLIENT_FILES } from '../clientFiles.js';
 import { AppValidationDenied } from '../app/appValidationDenied.js';
-import { appError } from '../app/appErrors.js';
+import { appError, namedRequired } from '../app/appErrors.js';
 import {
   appFaceHead,
   groundsOf,
@@ -70,7 +70,7 @@ import { HttpError, policyResponses, send, sendBusy, sendRowLocked, FILE_UPLOAD_
 import { lockTimedOut } from '@mistriwork/engine/adapters/writeLanes.js';
 import { isPoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { gate } from './gate.js';
-import { scopedWriteRoutes } from './scopedWrites.js';
+import { scopedWriteRoutes, writtenCaption } from './scopedWrites.js';
 import { operationsRoutes } from './operationsRoutes.js';
 import { commandRoutes } from './commandRoutes.js';
 import { challengeOf, publicFormRoutes } from './formRoutes.js';
@@ -557,8 +557,11 @@ async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyCont
       /* A delete refused while rows still point at it (scopedTransaction.ts ReferencedRefusal) says only the rows
          the principal reads, or nothing, so its own sentence is the answer, by the code the database's would be. */
       const referenced = rejected && !conflict && !denied && !refusedBy ? referencedBeneath(error) : undefined;
-      const said = refusedBy ? appError({ code, errcode, severity }, 'write') : referenced && appError(referenced, 'write');
-      const failure = said ? { code: said.code, message: said.message } : refused;
+      /* A required value missing from the row written is said by the field, by the App's word (writtenCaption). */
+      const caption = writtenCaption(req);
+      const named = refusedBy && caption ? namedRequired(broke, caption) : undefined;
+      const said = refusedBy ? (named ?? appError({ code, errcode, severity }, 'write')) : referenced && appError(referenced, 'write');
+      const failure = said ? { code: said.code, message: said.message, ...(said.fields ? { fields: said.fields } : {}) } : refused;
       // A body past its ceiling is too large, not a refusal of the change: the client can shrink it.
       const tooLarge = error instanceof HttpError && error.status === 413;
       const status = tooLarge ? 413 : denied ? 403 : conflict ? 409 : (refusedBy ?? (referenced ? 409 : rejected ? 400 : 200));

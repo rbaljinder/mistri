@@ -879,7 +879,15 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                       throw new BusinessCommandExecutionError('command_version_mismatch', 'unknown');
                     const asked = checkedNames(authorized.command, request.fields);
                     if (!asked) throw new CommandInputError('fields');
-                    return { problems: checkCommandStep(authorized.command, request.input, asked) };
+                    return {
+                      problems: checkCommandStep(
+                        authorized.command,
+                        request.input,
+                        asked,
+                        undefined,
+                        authorized.tenant ? { tenant: authorized.tenant } : {},
+                      ),
+                    };
                   } catch (error) {
                     if (error instanceof CommandInputError)
                       throw new BusinessCommandExecutionError('invalid_input', 'unknown', error.field);

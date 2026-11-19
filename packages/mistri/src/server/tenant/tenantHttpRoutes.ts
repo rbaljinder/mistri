@@ -57,6 +57,8 @@ export const TENANT_COMMAND_ROUTES: ReadonlySet<string> = new Set([
   '/api/commands/execute',
   '/api/commands/status',
   '/api/commands/draft',
+  // A multistep form's step, checked before it is left (client commandStepCheck.ts).
+  '/api/commands/check',
   // A proposal listed, approved or dismissed, and a mark confirmed (commands/proposals.ts), under the member's grant.
   '/api/commands/proposals',
   '/api/commands/proposals/approve',

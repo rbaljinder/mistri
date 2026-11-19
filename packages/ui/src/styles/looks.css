@@ -325,11 +325,13 @@
   }
 
   /* ---------- formStep: plain (UI SDK's own), ruled ---------- */
-  /* The bar a form's actions stand on, lifted off the page under it instead of ruled off: the package's own bar,
-     and the one a form draws by hand for the same purpose. A popup's foot (a calendar's Clear and Today) is not
-     one: nothing scrolls under it, and lifted it was a white slab with a shadow inside the popup. */
+  /* The bar a form's actions stand on, lifted off the page under it instead of ruled off. A popup's foot (a
+     calendar's Clear and Today) is not one: nothing scrolls under it, and lifted it was a white slab with a shadow
+     inside the popup. Nor is a stepped form's (.intake-actions): it follows its step's fields with nothing between
+     them, and lifted it was a heavy slab across the form's panel under a short step; a phone's fade already says
+     the step goes on under it. */
   @scope ([data-look-action-bar='raised']) to ([data-custom-theme], [data-look-action-bar]) {
-    :is([data-slot='action-bar'], .intake-actions):not([data-slot='popover-content'] *) {
+    [data-slot='action-bar']:not(.intake-actions, [data-slot='popover-content'] *) {
       border-block-start-color: transparent;
       background: var(--m-surface);
       box-shadow: 0 -6px 18px color-mix(in oklab, var(--m-ink) 12%, transparent);

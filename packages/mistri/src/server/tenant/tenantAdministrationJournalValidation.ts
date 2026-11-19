@@ -51,7 +51,11 @@ export function scopeValues(value: AdministrationReceiptScope): [string, string,
   identifier(value.operation);
   // Platform maintenance is scoped to the platform's reserved row, the one
   // scope that is not a tenant selector, and only under those operation names.
-  if (value.tenantId !== PLATFORM_TENANT_ID || !PLATFORM_MAINTENANCE_OPERATIONS.includes(value.operation))
+  // An opening's key claim is there too: one key names one opening, whichever tenant it names.
+  if (
+    value.tenantId !== PLATFORM_TENANT_ID ||
+    !(PLATFORM_MAINTENANCE_OPERATIONS.includes(value.operation) || value.operation === 'openTenant')
+  )
     parseTenantSelector([value.tenantId]);
   identifier(value.idempotencyKey);
   if (!Number.isSafeInteger(value.operationVersion) || value.operationVersion < 1) return denyTenant();

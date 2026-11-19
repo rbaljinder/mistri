@@ -42,3 +42,31 @@ test('a test fixture host answers with the same five keys', () => {
   expect(Object.keys(seen).sort()).toEqual(['basePath', 'locale', 'mark', 'name', 'theme']);
   expect(seen).toMatchObject({ theme: 'mono', locale: 'de-DE' });
 });
+
+test('useBranding says the tenant brand over the App, and the App where no tenant dresses one', async () => {
+  const { useBranding } = await import('./deployment.js');
+  showing({
+    id: 'a',
+    name: 'App',
+    ui: { logo: { href: '/a.svg', markHref: '/a-mark.svg' }, theme: { accent: { light: '#112233', dark: '#445566' } } },
+  });
+  expect(renderHook(() => useBranding()).result.current).toEqual({ name: 'App', logo: '/a-mark.svg', accent: '#112233' });
+  showing({
+    id: 'a',
+    name: 'App',
+    ui: {
+      theme: {
+        branding: {
+          content: { name: 'Northside Dental' },
+          mark: { src: '/api/branding/logo/abc' },
+          theme: { light: { accent: '#aa0000' } },
+        },
+      },
+    },
+  });
+  expect(renderHook(() => useBranding()).result.current).toEqual({
+    name: 'Northside Dental',
+    logo: '/api/branding/logo/abc',
+    accent: '#aa0000',
+  });
+});

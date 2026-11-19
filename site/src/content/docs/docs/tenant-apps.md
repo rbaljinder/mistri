@@ -145,7 +145,7 @@ export default defineAppTenantPolicy({
 | `resultReferences`                       | per command id, `(result) => [{ table, key }]`                                                               | none                                        | one per command under `--commands`; 4096                                                                                             |
 | `administration.id`, `.version`          | text                                                                                                         | required                                    | 256 characters                                                                                                                       |
 | `administration.maxMembershipLifetimeMs` | milliseconds                                                                                                 | required                                    | 1 to 366 days                                                                                                                        |
-| `administration.operators`               | `[{ accountId, tenants, operations, roles }]`                                                                | required                                    | 256 rules, each `'all'` or 1 to 256 tenants (`'all'` reaches every tenant, audited like a listed one); empty only beside `delegates` |
+| `administration.operators`               | `[{ accountId or platformRole, tenants, operations, roles }]`; role rules union                              | required                                    | 256 rules, each `'all'` or 1 to 256 tenants (`'all'` reaches every tenant, audited like a listed one); empty only beside `delegates` |
 | `administration.delegates`               | `[{ role, operations, roles }]`                                                                              | none                                        | each operation in one rule                                                                                                           |
 | `invitations.id`, `.version`             | text                                                                                                         | required                                    | 256 bytes                                                                                                                            |
 | `invitations.maxMembershipLifetimeMs`    | milliseconds                                                                                                 | required                                    | 1 to 366 days                                                                                                                        |
@@ -168,8 +168,12 @@ Administration operations: `createTenant`, `setTenantStatus`,
 `setTenantAssistant`, `cloneTenant` and `importTenant`; a delegate takes any
 but the first two, and `importTenant` is a delegate's alone. Invitation
 operations: `issueInvitation`, `revokeInvitation` and `reissueInvitation`.
-A rule's `roles` is the ceiling of what it grants, and no two operator rules
-grant one account the same operation on the same tenant.
+A rule's `roles` is the ceiling of what it grants, and no two `accountId` rules
+grant one account the same operation on the same tenant. An administration rule
+names exactly one of `accountId` or `platformRole`: a `platformRole` rule admits
+every account whose active platform membership holds that platform-realm role, so
+a new operator is a platform membership, not a policy edit. Role rules may overlap;
+the rules matching one account, tenant and operation give their roles together.
 
 A role's `write` on a tenant table gives it Save and New there; Delete needs
 `authorizeDeletedRecord` as well; `mistri check` warns
@@ -282,6 +286,22 @@ parent included; `mistri check` names one it is missing. That tenant must be
 active. Rows are written as a member's command writes them, the owner placed
 for it, and no other tenant's row is in reach. The receipt is the platform
 member's; every audit row names the tenant.
+
+### Opening a tenant
+
+`useOpenTenant` from `@mistriwork/ui` sets up a customer in one call: the App's platform command writes its profile, then the administration door creates the tenant and invites its first member, all under one request key.
+
+```tsx
+const opening = useOpenTenant('createDealerProfile');
+await opening.open({
+  key: requestKey, // kept for the whole attempt, reused on retry
+  input: { name: 'East Motors' },
+  tenant: { tenantId: 'east' },
+  invitation: { email: 'owner@east.test', roles: ['dealer_admin'], redeemUntil, validUntil },
+});
+```
+
+Each step is authorized as it is alone: the command by its grant, `createTenant` by an administration operator rule, `issueInvitation` by an invitation operator rule. Either policy's rule may name a `platformRole` instead of an `accountId`, so a platform role's holder needs no rule naming its account. The profile step is **not atomic** with the other two. A retry with the same key completes the operation and creates nothing twice; the same key with other details is refused with 409 (`tenant_open_key_conflict`).
 
 ### What members read
 

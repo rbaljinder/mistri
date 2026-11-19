@@ -1305,14 +1305,14 @@ body.app-mode .sidebar[data-density="comfortable"] #table-list .nav-dot { width:
   max-height: var(--available-height);
   overflow-y: auto; overscroll-behavior: contain;
   background: var(--surface); border: 1px solid var(--line-strong);
-  border-radius: var(--radius);
+  border-radius: var(--radius-pop, var(--radius));
   box-shadow: var(--shadow-pop);
   display: flex; flex-direction: column;
 }
 /* display:flex outranks the UA's [hidden] rule — say it ourselves. */
 .tn-pop[hidden] { display: none; }
 .tn-popitem {
-  background: none; border: none; border-radius: var(--radius);
+  background: none; border: none; border-radius: var(--radius-item, var(--radius));
   font: var(--text-base) var(--mono); color: var(--ink);
   padding: var(--space-2h) var(--space-3); text-align: left; white-space: normal; overflow-wrap: anywhere;
 }

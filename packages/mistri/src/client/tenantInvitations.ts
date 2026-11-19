@@ -128,7 +128,7 @@ function intentShape(v: unknown): v is InvitationIntent {
   );
 }
 function pair(v: unknown): v is InvitationPair {
-  if (!exact(v, ['invitation', 'membership'])) return false;
+  if (!exact(v, ['invitation', 'membership'], ['email']) || (v.email !== undefined && !id(v.email, 320))) return false;
   const i = v.invitation,
     m = v.membership;
   return (

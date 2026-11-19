@@ -2746,6 +2746,30 @@ test('generic HTTP insert/update project ordinary values, inject ownership priva
   assert.equal(f.db.prepare("SELECT count(*) AS n FROM db_item WHERE id='forged'").get()!.n, 0);
 });
 
+/* A field report: a tenant table keyed by text with no default, whose New form leaves the key out, was refused with a
+   "required value" that named nothing. The store fills the key the way the database fills an identity's, and never
+   over a key the caller sent. */
+test('a New record with no text key is given a fresh one, and a key that was sent is kept', async (t) => {
+  const f = await fixture(t),
+    a = await f.open();
+  const keyless = await f.data('/api/insert', a, { table: 'item', values: { business_id: 'keyless', name: 'Keyless' } });
+  owned(keyless, a);
+  const key = object(keyless.body.key).id;
+  assert.match(String(key), /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  assert.equal(f.db.prepare('SELECT tenant_id, name FROM db_item WHERE id=?').get(String(key))!.name, 'Keyless');
+  const sent = await f.data('/api/insert', a, { table: 'item', values: { id: 'chosen', business_id: 'chosen', name: 'Chosen' } });
+  owned(sent, a);
+  assert.deepEqual(sent.body.key, { id: 'chosen' });
+  /* A required value the form left out is named by its field, not "a required value is missing" (a field report). */
+  const nameless = await f.data('/api/insert', a, { table: 'item', values: { business_id: 'nameless' } });
+  assert.equal(nameless.status, 422, nameless.text);
+  const refusal = object((nameless.body.errors as unknown[])[0]);
+  assert.equal(refusal.code, 'required_value');
+  assert.equal(refusal.message, 'Name is required. Fill it in and try again.');
+  assert.deepEqual(refusal.fields, [{ field: 'name', message: 'This is required.' }]);
+  assert.doesNotMatch(nameless.text, /db_item|tenant_id|nameless/);
+});
+
 /* A unique rule names its column of a row that may be another tenant's: an id unique across every tenant meets this
    tenant's row and another's alike, so that answer is the scope's own refusal, the same word for word, naming neither
    the column nor the value. A key the tenant's own rows hold (the owner column is in the unique rule, compared by its
@@ -3717,6 +3741,8 @@ function fenceDoors(): Record<string, Door> {
         probe: { ids: fenceTasks, body: (id) => fenceCommand(id, `fence-attempt-${id}`) },
       },
     },
+    // A step check names no row: under another tenant's selector it is refused as execute is, and reads nothing.
+    '/api/commands/check': { lease: { body: { command: 'advance', commandVersion: 1, input: {}, fields: [] } } },
     '/api/commands/draft': {
       elsewhere: [
         'tenant-signed-in-drafts.test.ts',

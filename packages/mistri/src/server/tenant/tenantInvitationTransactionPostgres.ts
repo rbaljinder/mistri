@@ -14,6 +14,8 @@ import { captureStoredTenantInvitation, invitationBinding } from './tenantInvita
 import { invitationMembershipPair, invitationTenantImage, type InvitationTransaction } from './tenantInvitationTransaction.js';
 import { invitationUuid } from './tenantInvitationTransition.js';
 import { decodeDelegateMembership, decodeDelegateTenants } from './tenantDelegation.js';
+import { decodePlatformRoles } from './tenantAdministrationModel.js';
+import { PLATFORM_TENANT_ID } from '../../shared/tenantContext.js';
 import { runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 
 export function createPostgresInvitationTransaction(
@@ -204,6 +206,24 @@ export function createPostgresInvitationTransaction(
             )
           ).rows,
         );
+      }),
+    /* The platform membership a `platformRole` rule reads: both rows FOR SHARE to COMMIT, as the
+       administration owner holds them, so a demotion waits for this transaction. */
+    platformRoles: (accountId, now) =>
+      invoke({ accountId, now }, async (value) => {
+        identifier(value.accountId, 1024);
+        if (!Number.isSafeInteger(value.now)) return denyTenant();
+        const rows = (
+          await query(
+            `SELECT m.roles_json AS roles,m.valid_until::float8 AS "validUntil"
+        FROM ${runtimeTable('postgres', TENANT_TABLES.membership)} m JOIN ${runtimeTable('postgres', TENANT_TABLES.tenant)} t ON t.id=m.tenant_id
+        WHERE t.id=$1 AND t.kind='platform' AND t.status='active'
+          AND m.account_id=$2 AND m.kind='member' AND m.status='active' AND m.valid_until>$3 FOR SHARE`,
+            [PLATFORM_TENANT_ID, value.accountId, value.now],
+          )
+        ).rows;
+        if (rows.length > 1) return denyTenant();
+        return decodePlatformRoles(rows[0]);
       }),
     invitations: createPostgresTenantInvitations(client, operations, binding, check),
     administration: createPostgresTenantAdministration(client, operations, binding, check),

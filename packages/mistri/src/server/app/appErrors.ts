@@ -28,6 +28,19 @@ interface AppError {
 /* Its rule is the engine's (constraints.ts): the database browser answers it with the same 400. */
 export { wrongTypeValue } from '@mistriwork/engine/server/constraints.js';
 
+/**
+ * A required value missing from the row being written, said by the App's word for each column: the one refusal that
+ * names its field (a field report: a New form answered "a required value is missing"). `caption` says what the App
+ * calls a column of the written table and nothing for any other name the engine reports, so the sentence names a
+ * field only where every column it reports is one the App shows by that table, never a physical name.
+ */
+export function namedRequired(error: unknown, caption: (column: string) => string | undefined): AppError | undefined {
+  const broke = constraintColumns(error);
+  if (broke?.kind !== 'required' || broke.parent || broke.columns.length === 0) return undefined;
+  if (!broke.columns.every((column) => caption(column) !== undefined)) return undefined;
+  return appError(error, 'write', false, (column) => caption(column)!);
+}
+
 /** Driver messages, details and stacks can contain SQL, values and credentials.
  * Only structured engine codes select public text; messages are never scrubbed. The one thing taken from what an
  * engine said is a column's name, from the parts each engine fills with names alone (constraints.ts), never a value. */

@@ -243,6 +243,7 @@ function servedAfresh(context: ServedContext, app: AppDef, now: Date, me: string
       insertable: context.capabilities?.resources[table.id]?.insertable ?? false,
       deletable: context.capabilities?.resources[table.id]?.deletable ?? false,
       ...(context.capabilities?.resources[table.id]?.appendOnly ? { appendOnly: true } : {}),
+      ...(table.fillsKey ? { fillsKey: true as const } : {}),
       columns: table.columns.map((column) => {
         const writable = context.capabilities?.resources[table.id]?.write.includes(column.name) ?? false;
         /* The SQL default stays private (a sequence, a function, a physical name), but a plain value on a column this

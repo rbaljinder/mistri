@@ -14,5 +14,6 @@ export const say = defineMessages({
   accessRefreshedLoadTheAuthorized: 'Access refreshed. Load the authorized tenant list.',
   assistantUsageCouldNotBeLoaded: 'The assistant’s usage could not be loaded. Refresh access and try again.',
   decisionUsageCouldNotBeLoaded: 'The decisions’ usage could not be loaded. Refresh access and try again.',
+  thisKeyOpenedAnother: 'This request key already opened a tenant with other details. Nothing was applied; start a new request.',
   theImportCouldNotBeRead: 'What the import would change could not be read. Refresh the tenant list and try again.',
 });

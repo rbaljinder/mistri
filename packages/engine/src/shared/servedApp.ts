@@ -510,7 +510,7 @@ export interface AppShell {
 
 /** One entry of the header's New menu: a view, or the command a signed-in form runs, and the heading of the group it
     was written under (`{ label, children }`), which parsing flattens onto each of its entries. */
-export type AppShellNew = ({ view: string } | { command: string }) & { label?: string; icon?: AppIconName; group?: string };
+export type AppShellNew = ({ view: string } | { command: string }) & { label?: string; icon?: AppIconName; group?: string; when?: string };
 
 /** Optional presentation for a roomier side menu and its fixed workspace identity. */
 export interface AppSidebar {

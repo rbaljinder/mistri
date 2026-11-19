@@ -15,7 +15,7 @@ import {
 } from '@mistriwork/engine/adapters/adapter.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { inRecordLane } from '@mistriwork/engine/adapters/writeLanes.js';
-import { AppAccessDenied } from '../app/appAccess.js';
+import { AppAccessDenied, withFilledKey } from '../app/appAccess.js';
 import { ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
 import { recordRefusalCause, refusalSaid, sayRefusal } from '@mistriwork/engine/shared/refusal.js';
 import type { AppPolicyContext } from './appPolicyContext.js';
@@ -302,7 +302,7 @@ export function createHttpPolicyUpdates(
         assertWritable(context, request.table);
         if (signal.aborted) throw new AppAccessDenied();
         const initial = assertTransitionInsert(transitions(context.schema), request, context.schema);
-        await tx.insert(initial ? { ...request, values: { ...request.values, ...initial } } : request);
+        await tx.insert(withFilledKey(context.schema, initial ? { ...request, values: { ...request.values, ...initial } } : request));
       });
     },
     /** An import's rows in one scoped transaction. */
@@ -318,7 +318,8 @@ export function createHttpPolicyUpdates(
             assertWritable(context, table);
             if (signal.aborted) throw new AppAccessDenied();
             const initial = assertTransitionInsert(transitions(context.schema), request, context.schema);
-            written.push({ ...(await tx.insert(initial ? { ...request, values: { ...request.values, ...initial } } : request)).key });
+            const row = withFilledKey(context.schema, initial ? { ...request, values: { ...request.values, ...initial } } : request);
+            written.push({ ...(await tx.insert(row)).key });
           }
           return written;
         });

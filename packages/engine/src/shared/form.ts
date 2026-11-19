@@ -19,6 +19,40 @@ export function autoKey(table: TableMeta): string | null {
   return pk.length === 1 && (pk[0].identity || pk[0].default !== undefined || pk[0].hasDefault === true) ? pk[0].name : null;
 }
 
+/* Text a fresh UUID fits in: a bounded type only when it holds its 36 characters. */
+const TEXT_KEY = /char|text|clob|string|uuid/i;
+const fitsUuid = (type: string) => {
+  const bound = /\(\s*(\d+)\s*\)/.exec(type);
+  return !bound || Number(bound[1]) >= 36;
+};
+
+/**
+ * A single text key with nothing in the catalog to fill it — no identity, no default, no reference to another row —
+ * which a tenant App's store fills with a fresh UUID when a new row is given none (app/appAccess.ts), as the database
+ * fills an identity's: only where the table says so (`fillsKey`, set for a tenant-owned table whose key is not the
+ * natural key its `address` names, appKeyFill.ts). A tenant's opaque text key (tenantWriteSource.ts) is the common one:
+ * its New form never asks for it, since no person should invent a key, and before the store filled it the insert met
+ * NOT NULL (a field report). Anywhere else a key nothing fills is the form's to ask, and `mistri check` says so.
+ */
+export function filledKey(table: TableMeta): string | null {
+  return table.fillsKey === true ? fillableKey(table) : null;
+}
+
+/** The text key of a table nothing in the catalog fills: what `fillsKey` may be set on. */
+export function fillableKey(table: TableMeta): string | null {
+  const pk = table.columns.filter((c) => c.primaryKey);
+  if (pk.length !== 1) return null;
+  const [key] = pk;
+  const type = key.type ?? '';
+  const filled = !key.identity && key.default === undefined && key.hasDefault !== true && !key.references;
+  return filled && TEXT_KEY.test(type) && fitsUuid(type) ? key.name : null;
+}
+
+/** The key an App's New form leaves out: one the catalog promises (autoKey) or one its store fills (filledKey). */
+export function appAssignedKey(table: TableMeta): string | null {
+  return autoKey(table) ?? filledKey(table);
+}
+
 /** Omitting this column cannot rely on a database default or assigned key. */
 export function isRequired(column: ColumnMeta, assigned: string | null): boolean {
   return !column.nullable && column.default === undefined && column.hasDefault !== true && !column.identity && column.name !== assigned;
@@ -32,7 +66,8 @@ export function isRequired(column: ColumnMeta, assigned: string | null): boolean
  * cannot fill either.
  */
 export function unformedColumns(table: TableMeta, writes: (column: string) => boolean): string[] {
-  const assigned = autoKey(table);
+  // Only an App's grants ask this, and an App's store fills a text key no grant writes (filledKey).
+  const assigned = appAssignedKey(table);
   return table.columns.filter((column) => isRequired(column, assigned) && !writes(column.name)).map((column) => column.name);
 }
 

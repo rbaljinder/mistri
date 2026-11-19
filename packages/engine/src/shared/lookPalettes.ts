@@ -78,8 +78,12 @@ export const LOOK_PALETTES: readonly LookPalette[] = [
       onSignal: '#15130f',
       chart: '#f07a32',
     },
-    /* Workshop's ring is its own deeper orange (a field report's theme, where the look began). */
-    looks: { workshop: { light: { accent: '#c9530b', link: '#aa3600' }, dark: { accent: '#e8742c' } } },
+    /* Workshop's ring is its own deeper orange (a field report's theme, where the look began). Lumen's pill menu
+       writes its current entry in the link on the hue's tint, 4.48:1 at the accent: its link is Workshop's. */
+    looks: {
+      workshop: { light: { accent: '#c9530b', link: '#aa3600' }, dark: { accent: '#e8742c' } },
+      lumen: { light: { link: '#aa3600' } },
+    },
   },
   {
     id: 'amber',
@@ -147,8 +151,13 @@ export const LOOK_PALETTES: readonly LookPalette[] = [
       onSignal: '#15130f',
       chart: '#0c8ab0',
     },
-    /* A step deeper on Workshop's paper and on Atelier's, whose menu's hover is the warm ground a shade down. */
-    looks: { workshop: { light: { link: '#00687e' } }, atelier: { light: { link: '#00687e' } } },
+    /* A step deeper on Workshop's paper and on Atelier's, whose menu's hover is the warm ground a shade down, and on
+       Lumen's, whose pill menu writes its current entry in the link on the hue's tint (4.43:1 at the accent). */
+    looks: {
+      workshop: { light: { link: '#00687e' } },
+      atelier: { light: { link: '#00687e' } },
+      lumen: { light: { link: '#00687e' } },
+    },
   },
   {
     id: 'cobalt',

@@ -25,6 +25,7 @@ import { captureInvitationPolicy, type InvitationPolicy } from '../packages/mist
 import { TenantInvitationFailure } from '../packages/mistri/src/server/tenant/tenantInvitationOperations.js';
 import { invitationTokenId } from '../packages/mistri/src/server/tenant/tenantInvitationToken.js';
 import { delegationRoleCheck } from '../packages/mistri/src/server/tenant/tenantFeatureDelegation.js';
+import { roleCeilingCheck, roleCeilingHook } from '../packages/mistri/src/server/tenant/tenantFeatureMembershipRoles.js';
 import { TenantStartupError } from '../packages/mistri/src/server/tenant/tenantStartupError.js';
 import { ADMINISTRATION_JOURNAL_TABLES as journal } from '../packages/mistri/src/server/tenant/tenantAdministrationJournal.js';
 import { TENANT_TABLES as tables } from '../packages/mistri/src/server/tenant/tenantStore.js';
@@ -131,8 +132,11 @@ async function fixture(t: TestContext, dialect: TenantDialect) {
     f.addCleanup(owner.retire);
     return owner;
   };
+  // Receipts written in one millisecond tie on completed_at: SQLite's rowid is their insertion order.
   const receipts = () =>
-    all(`SELECT actor_id AS actor, tenant_id AS tenant, operation FROM "${journal.receipt}" ORDER BY completed_at, id`);
+    all(
+      `SELECT actor_id AS actor, tenant_id AS tenant, operation FROM "${journal.receipt}" ORDER BY completed_at, ${dialect === 'sqlite' ? 'rowid' : 'operation, id'}`,
+    );
   const memberships = () =>
     all(`SELECT id, tenant_id AS tenant, account_id AS account, status, version, roles_json AS roles, kind
     FROM "${tables.membership}" ORDER BY id`);
@@ -452,5 +456,150 @@ test('delegate rules: one ceiling per operation, never the tenant row, and tenan
     [{ role: 'dealer_admin', operations: ['grantMembership'], roles: ['nobody'] }],
   ]) {
     assert.throws(() => delegationRoleCheck.run({ app, policy: { administration: { ...base, delegates } } } as never), TenantStartupError);
+  }
+});
+
+/* An operator rule naming a platform role: whoever holds it through an active platform membership administers,
+   resolved as a support grant is, read in the transaction that makes the change, and only when such a rule exists. */
+const byRole = (extra: AdministrationPolicy['operators'] = []): AdministrationPolicy => ({
+  id: 'dealer-management',
+  version: 'v1',
+  maxMembershipLifetimeMs: 600_000,
+  operators: [
+    { platformRole: 'platform_admin', tenants: ['north'], operations: ['grantMembership', 'setTenantStatus'], roles: ['dealer_staff'] },
+    ...extra,
+  ],
+});
+
+for (const { dialect, skip } of TENANT_DIALECTS) {
+  describe(`platform-role operator rules on ${dialect}`, { skip }, () => {
+    const platform = async (f: Awaited<ReturnType<typeof fixture>>, account: string, roles: string[]) => {
+      await f.exec(`INSERT INTO "${tables.tenant}" (id, status, version, kind) VALUES ('@platform', 'active', '1', 'platform')`);
+      await f.exec(
+        `INSERT INTO "${tables.membership}" (id, tenant_id, account_id, status, version, roles_json, valid_until, kind)
+        VALUES ('platform-member', '@platform', ?, 'active', '1', ?, ?, 'member')`,
+        account,
+        JSON.stringify(roles),
+        f.until,
+      );
+    };
+
+    test('an active platform membership holding the role admits, within the rule, and nobody else', async (t) => {
+      const f = await fixture(t, dialect),
+        owner = await f.open({ policy: byRole() });
+      const { target, outsider } = f.users;
+      await platform(f, target.accountId, ['platform_admin']);
+      assert.equal(await owner.open(outsider.request, { expectedAccount: outsider.accountId }), null);
+      const session = (await owner.open(target.request, { expectedAccount: target.accountId }))!;
+      assert.ok(session);
+      const context = { expectedAccount: target.accountId, context: session.context };
+      const page = await owner.tenants(target.request, context);
+      assert.deepEqual(
+        page.items.map((item) => [item.tenantId, item.capabilities.map((capability) => `${capability.operation}:${capability.roles}`)]),
+        [['north', ['setTenantStatus:dealer_staff', 'grantMembership:dealer_staff']]],
+      );
+      const run = (intent: AdministrationIntent) =>
+        owner.execute(target.request, { ...context, idempotencyKey: crypto.randomUUID(), intent });
+      const soon = Date.now() + 60_000;
+      const grant = { operation: 'grantMembership', tenantId: 'north', expectedTenantVersion: '1', accountId: outsider.accountId } as const;
+      await assert.rejects(run({ ...grant, roles: ['dealer_admin'], validUntil: soon }), refusedAdministration);
+      await assert.rejects(run({ ...grant, tenantId: 'south', roles: ['dealer_staff'], validUntil: soon }), refusedAdministration);
+      const done = await run({ ...grant, roles: ['dealer_staff'], validUntil: soon });
+      assert.equal(done.change.after.membership!.status, 'active');
+      assert.deepEqual(await f.receipts(), [{ actor: target.accountId, tenant: 'north', operation: 'grantMembership' }]);
+    });
+
+    test('an expired or revoked platform membership, or a suspended platform, admits nothing, read at the change', async (t) => {
+      const f = await fixture(t, dialect),
+        owner = await f.open({ policy: byRole() });
+      const { target, outsider } = f.users;
+      await platform(f, target.accountId, ['platform_admin']);
+      const session = (await owner.open(target.request, { expectedAccount: target.accountId }))!;
+      const run = () =>
+        owner.execute(target.request, {
+          expectedAccount: target.accountId,
+          context: session.context,
+          idempotencyKey: crypto.randomUUID(),
+          intent: {
+            operation: 'grantMembership',
+            tenantId: 'north',
+            expectedTenantVersion: '1',
+            accountId: outsider.accountId,
+            roles: ['dealer_staff'],
+            validUntil: Date.now() + 60_000,
+          },
+        });
+      await f.exec(`UPDATE "${tables.membership}" SET status = 'revoked', version = '2' WHERE id = 'platform-member'`);
+      await assert.rejects(run(), refusedAdministration);
+      await f.exec(`UPDATE "${tables.membership}" SET status = 'active', valid_until = ?, version = '3' WHERE id = 'platform-member'`, 1);
+      await assert.rejects(run(), refusedAdministration);
+      assert.equal(await owner.open(target.request, { expectedAccount: target.accountId }), null);
+      await f.exec(`UPDATE "${tables.membership}" SET valid_until = ?, version = '4' WHERE id = 'platform-member'`, f.until);
+      await f.exec(`UPDATE "${tables.tenant}" SET status = 'suspended', version = '2' WHERE id = '@platform'`);
+      await assert.rejects(run(), refusedAdministration);
+      // A platform role the rule does not name admits nothing either.
+      await f.exec(`UPDATE "${tables.tenant}" SET status = 'active', version = '3' WHERE id = '@platform'`);
+      await f.exec(`UPDATE "${tables.membership}" SET roles_json = '["reviewer"]', version = '5' WHERE id = 'platform-member'`);
+      await assert.rejects(run(), refusedAdministration);
+      assert.deepEqual(await f.receipts(), []);
+      await f.exec(`UPDATE "${tables.membership}" SET roles_json = '["platform_admin"]', version = '6' WHERE id = 'platform-member'`);
+      await run();
+    });
+
+    test('a role rule and an account rule matching one account give their roles together', async (t) => {
+      const f = await fixture(t, dialect);
+      const { operator } = f.users;
+      const owner = await f.open({
+        policy: byRole([{ accountId: operator.accountId, tenants: ['north'], operations: ['grantMembership'], roles: ['dealer_admin'] }]),
+      });
+      await platform(f, operator.accountId, ['platform_admin']);
+      const session = (await owner.open(operator.request, { expectedAccount: operator.accountId }))!;
+      const page = await owner.tenants(operator.request, { expectedAccount: operator.accountId, context: session.context });
+      const grant = page.items[0].capabilities.find((capability) => capability.operation === 'grantMembership')!;
+      assert.deepEqual([...grant.roles].sort(), ['dealer_admin', 'dealer_staff']);
+    });
+
+    if (dialect === 'sqlite')
+      test('a policy without a role rule reads no platform membership: the store is not touched to refuse', async (t) => {
+        const f = await fixture(t, dialect);
+        const { operator, outsider } = f.users;
+        const accounts = await f.open({
+          policy: {
+            ...byRole(),
+            operators: [{ accountId: operator.accountId, tenants: ['north'], operations: ['grantMembership'], roles: ['dealer_staff'] }],
+          },
+        });
+        // A second policy on one deployment needs its own version.
+        const roles = await f.open({ policy: { ...byRole(), version: 'v2' } });
+        // The membership table gone: any read of it fails.
+        f.db.exec(`PRAGMA foreign_keys = OFF; DROP TABLE "${tables.membership}"`);
+        assert.equal(await accounts.open(outsider.request, { expectedAccount: outsider.accountId }), null);
+        assert.ok(await accounts.open(operator.request, { expectedAccount: operator.accountId }));
+        await assert.rejects(roles.open(outsider.request, { expectedAccount: outsider.accountId }), refusedAdministration);
+      });
+  });
+}
+
+test('a role rule names a platform-realm role of an App with a platform, and places tenant roles only', () => {
+  const roles = { dealer_staff: { realm: 'tenant' }, platform_admin: { realm: 'platform' }, robot: { realm: 'platform', service: true } };
+  const app = { auth: { roles, tenancy: { platform: {} } } };
+  // An invitation operator rule is held to the same ceiling as an administration one.
+  for (const policy of [
+    (operator: Record<string, unknown>) =>
+      ({ administration: { ...byRole(), operators: [{ tenants: ['north'], operations: ['grantMembership'], ...operator }] } }) as never,
+    (operator: Record<string, unknown>) =>
+      ({ invitations: { operators: [{ tenants: ['north'], operations: ['issueInvitation'], ...operator }] } }) as never,
+  ]) {
+    roleCeilingCheck.run({ app, policy: policy({ platformRole: 'platform_admin', roles: ['dealer_staff'] }) } as never);
+    for (const [subject, operator] of [
+      [app, { platformRole: 'platform_admin', roles: ['platform_admin'] }],
+      [app, { platformRole: 'dealer_staff', roles: ['dealer_staff'] }],
+      [app, { platformRole: 'robot', roles: ['dealer_staff'] }],
+      [app, { platformRole: 'nobody', roles: ['dealer_staff'] }],
+      [{ auth: { roles } }, { platformRole: 'platform_admin', roles: ['dealer_staff'] }],
+    ] as const) {
+      assert.throws(() => roleCeilingCheck.run({ app: subject, policy: policy(operator) } as never), TenantStartupError);
+      assert.throws(() => roleCeilingHook.declare!({ app: subject, policy: policy(operator) } as never));
+    }
   }
 });

@@ -196,6 +196,35 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       assert.equal(signedIn.response.status, 200);
     });
 
+    test('the name typed on the claim becomes the new account name', async (t) => {
+      const f = await fixture(t, dialect);
+      const token = await f.issue({ email: 'named@example.test' });
+      await f.api.claim!(signedOut(), { token, name: '  Nina Named ', password: newcomer.password });
+      const made = f.authDb.prepare('SELECT name FROM "user" WHERE email = ?').get('named@example.test') as { name: string };
+      assert.equal(made.name.trim(), 'Nina Named');
+    });
+
+    test('an issuer list says where each pending invitation was sent', async (t) => {
+      const f = await fixture(t, dialect);
+      const { operator, target } = f.users;
+      await f.issue({ email: 'later@example.test' });
+      await f.issue({ accountId: target.accountId });
+      const issuer = (await f.api.openIssuer(operator.request, { expectedAccount: operator.accountId }))!;
+      const page = await f.api.list(operator.request, {
+        expectedAccount: operator.accountId,
+        context: issuer.context,
+        tenantId: 'north',
+        operation: 'revokeInvitation',
+      });
+      const sent = page.items.map((item) => item.email).sort();
+      assert.equal(sent.length, 2);
+      assert.ok(sent.includes('later@example.test'));
+      assert.ok(
+        sent.every((address) => typeof address === 'string' && address.includes('@')),
+        JSON.stringify(sent),
+      );
+    });
+
     test('an address that has an account is refused a claim, and its account accepts signed in with the same token', async (t) => {
       const f = await fixture(t, dialect);
       const { target, outsider } = f.users;

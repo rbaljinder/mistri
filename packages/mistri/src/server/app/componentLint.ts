@@ -120,11 +120,47 @@ const SCRIPT_WARNINGS: Array<[RegExp, string]> = [
     /\bgetBoundingClientRect\s*\(/,
     "places something by the window's ruler, which the density zoom does not match; draw popups with the kit, which anchors them on the zoom-aware ruler, and read a pointer's place in an element with layoutPoint(event, element)",
   ],
-  [
-    /['"`]#[0-9a-fA-F]{3,8}['"`]|\b(rgb|rgba|hsl|hsla)\s*\(/,
-    "a literal color no look can dress; use a token — var(--accent), var(--ink-muted) — or useToken('--accent') for an SVG attribute",
-  ],
 ];
+
+/**
+ * The literal colors a source draws with: those inside a style (a JSX `style` prop or `style:` key, an object typed
+ * CSSProperties, an assignment to `el.style.x`, `setProperty`) or written as a color attribute (`fill`, `stroke`, `stopColor`).
+ * A hex in a plain data list (`{ name: 'Open', color: '#2563eb' }`, a value the person's own column holds) is data, not a
+ * look, and a token cannot stand in for it, so it is not one of these (a field report).
+ */
+function styleColors(text: string): number[] {
+  const closing = (open: number): number => {
+    const pair: Record<string, string> = { '{': '}', '(': ')' };
+    let depth = 0;
+    for (let at = open; at < text.length; at++) {
+      const c = text[at]!;
+      if (/['"`]/.test(c)) {
+        const close = text.indexOf(c, at + 1);
+        if (close < 0) break;
+        at = close;
+      } else if (c === text[open]) depth++;
+      else if (c === pair[text[open]!] && --depth === 0) return at;
+    }
+    return text.length;
+  };
+  const ranges: Array<[number, number]> = [];
+  // Each opens at a brace or a parenthesis, and runs to the one that closes it.
+  for (const match of text.matchAll(/\bstyle\s*[=:]\s*(\{)|\bCSSProperties\s*=\s*(\{)|\bsetProperty\s*(\()/g))
+    ranges.push([match.index, closing(match.index + match[0].length - 1)]);
+  // A color attribute's value: a quoted string or a braced expression.
+  for (const match of text.matchAll(/\b(?:fill|stroke|stopColor|floodColor|color)=(\{|['"])/g))
+    ranges.push([
+      match.index,
+      match[1] === '{' ? closing(match.index + match[0].length - 1) : text.indexOf(match[1]!, match.index + match[0].length),
+    ]);
+  for (const match of text.matchAll(/\.style\.\w+\s*=\s*[^;\n]*/g)) ranges.push([match.index, match.index + match[0].length]);
+  const lines = new Set<number>();
+  for (const color of text.matchAll(/(?<![\w&])#[0-9a-fA-F]{3,8}\b|\b(?:rgb|rgba|hsl|hsla)\s*\(/g)) {
+    // A `#` that opens a string's fragment (a link, `#main`) is not a hex unless a style says it.
+    if (ranges.some(([from, to]) => color.index >= from && color.index <= to)) lines.add(text.slice(0, color.index).split('\n').length);
+  }
+  return [...lines];
+}
 
 /* A widget's role written by hand: the role promises keys, focus and states (arrows through a listbox, Escape out of a
    dialog, aria-selected on a tab) that the shipped primitive keeps and a hand-drawn one almost never does. A warning,
@@ -253,15 +289,30 @@ function sanctionedShadow(value: string): boolean {
   });
 }
 
+/** The custom properties a source sets itself: `--x:` (a rule, an inline style object), `style.setProperty('--x'` and `@property --x`. */
+function setProperties(raw: string): string[] {
+  return [
+    ...raw.matchAll(/(--[A-Za-z][\w-]*)['"]?\s*:/g),
+    ...raw.matchAll(/setProperty\(\s*['"`](--[A-Za-z][\w-]*)/g),
+    ...raw.matchAll(/@property\s+(--[A-Za-z][\w-]*)/g),
+  ].map((match) => match[1]!);
+}
+
 /** Each `var(--name` in a source whose name no look defines and the component did not declare itself: a misspelt or borrowed token resolves to nothing, so the declaration silently does not apply. */
 function tokenFindings(
   text: string,
   own: ReadonlySet<string>,
   ids: readonly string[],
   warn: (line: number, message: string) => void,
+  appSets: ReadonlySet<string> = new Set(),
 ): void {
   for (const match of text.matchAll(/var\(\s*(--[A-Za-z][\w-]*)|useToken\(\s*['"`](--[A-Za-z][\w-]*)/g)) {
     const name = (match[1] ?? match[2])!;
+    /* A property some source of the App sets itself (an inline style, a `setProperty`, a sibling component's rule) and
+       that this read gives a fallback is the author's own, however far the setter is: `var(--tile-gap, 8px)` resolves
+       whether or not it was set. Only an unknown name with no fallback resolves to nothing (a field report). */
+    if (match[1] && appSets.has(name) && /^\s*,/.test(text.slice(match.index + match[0].length, match.index + match[0].length + 3)))
+      continue;
     /* `--c-<id>-*` is the component's own name-space, the way `.c-<id>` is for classes: a data-driven color handed to its stylesheet
        (`style.setProperty`, a spread style object) is declared where no `--x:` can be read. */
     if (UI_TOKENS.includes(name) || own.has(name) || ids.some((id) => name.startsWith(`--c-${id}-`))) continue;
@@ -369,7 +420,11 @@ function cssFindings(
   for (const match of text.matchAll(/\b(transition|animation)(-duration)?\s*:\s*([^;}]+)/g)) {
     const inside = guarded.some(([from, to]) => match.index > from && match.index < to);
     const longest = Math.max(0, ...[...match[3].matchAll(/(\d*\.?\d+)(ms|s)\b/gi)].map((time) => millis(time[1], time[2])));
-    if (longest > 200)
+    /* A slow loop that is the content (a pulse, a spinner's turn) is not an answer to a press: the 200ms rule is for motion
+       a person waits on, and an `infinite` animation inside the no-preference guard is neither. Press feedback keeps it. */
+    const rule = text.slice(text.lastIndexOf('{', match.index) + 1, Math.max(match.index, text.indexOf('}', match.index)));
+    const ambient = inside && match[1] === 'animation' && /\binfinite\b/.test(rule);
+    if (longest > 200 && !ambient)
       warn(lineAt(match.index), `${match[1]} of ${longest}ms: motion answers a person inside 200ms (docs/design.md, motion)`);
     else if (!inside && !/^\s*none\b/.test(match[3]))
       warn(
@@ -466,11 +521,15 @@ export async function lintComponents(
   const seen = new Set<string>();
   /* A component may define tokens of its own (`--tile-gap: 8px`) in any of its files. */
   const own = new Map<string, Set<string>>();
+  const appSets = new Set<string>();
   for (const [id, entry] of Object.entries(compiled.entries)) {
     const names = new Set<string>();
     for (const file of entry.sources) {
       const raw = await readFile(join(dir, file), 'utf8').catch(() => '');
-      for (const match of raw.matchAll(/(--[A-Za-z][\w-]*)['"]?\s*:/g)) names.add(match[1]!);
+      for (const name of setProperties(raw)) {
+        names.add(name);
+        appSets.add(name);
+      }
     }
     own.set(id, names);
   }
@@ -498,13 +557,13 @@ export async function lintComponents(
       const warn = (line: number, message: string) => warnings.push({ component: id, file, line, text: message });
       if (css) {
         const ids = sharers.get(file)!;
-        tokenFindings(text, new Set(ids.flatMap((sharer) => [...own.get(sharer)!])), ids, warn);
+        tokenFindings(text, new Set(ids.flatMap((sharer) => [...own.get(sharer)!])), ids, warn, appSets);
         const name = stylesheetName(file);
         const ownName = name && sheetNames.get(name) === 1 ? [`c-${name}`] : [];
         cssFindings(ids, text, warn, [...ownName, ...(await packagePrefixes(dir, file))]);
         continue;
       }
-      tokenFindings(text, own.get(id)!, [id], warn);
+      tokenFindings(text, own.get(id)!, [id], warn, appSets);
       iconFindings(text, (line, message) => problems.push({ component: id, file, line, text: message }));
       const manifest = pages.get(id);
       const lang = /\.(tsx?|jsx?)$/.exec(file)?.[1] as 'ts' | 'tsx' | 'js' | 'jsx' | undefined;
@@ -560,6 +619,11 @@ export async function lintComponents(
                 `api.commands entry offers, so the browser is refused it (403, "not available to this account") whatever a role ` +
                 `is granted. Offer it on its target: actions: [action('…', { command: '${name}', header: false })] keeps it off the record's bar`,
             });
+      for (const line of styleColors(text))
+        warn(
+          line,
+          "a literal color no look can dress; use a token — var(--accent), var(--ink-muted) — or useToken('--accent') for an SVG attribute",
+        );
       text.split('\n').forEach((line, i) => {
         for (const [pattern, message] of SCRIPT_PROBLEMS)
           if (pattern.test(line)) problems.push({ component: id, file, line: i + 1, text: message });

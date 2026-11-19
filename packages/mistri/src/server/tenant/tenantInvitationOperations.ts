@@ -9,10 +9,11 @@ import type { StoredAdministrationReceipt } from './tenantAdministrationJournal.
 import {
   captureInvitationIntent,
   captureInvitationPolicy,
+  hasInvitationRoleRules,
   invitationFingerprint,
-  invitationGrant,
   invitationIssuePrincipal,
   invitationOperatorGrant,
+  invitationOperatorRules,
   invitationPrincipalEmail,
   assertInvitationTermsWithin,
   type InvitationPolicy,
@@ -30,6 +31,7 @@ import {
 import { captureInvitationChange } from './tenantInvitationChange.js';
 import { applyInvitationClaim } from './tenantInvitationClaim.js';
 import { assertDelegateMembership, delegateCeiling } from './tenantDelegation.js';
+import { operatorPrincipal } from './tenantAdministrationModel.js';
 import { NativeAccountRefusal, nativeAccountPassword, type NativeAccountInput } from '../auth/authAccounts.js';
 import { profileName } from '../../shared/accountProfile.js';
 import type { AdministrationMembershipImage, AdministrationOwner, AdministrationTenantImage } from '../../shared/tenantAdministration.js';
@@ -156,13 +158,32 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
     const own = assertDelegateMembership(await transaction.accountMembership(tenantId, accountId), accountId, tenantId, owner.clock());
     return Object.freeze({ roles: delegateCeiling(policy.delegates, own.roles, operation) ?? denyTenant(), validUntil: own.validUntil });
   };
+  /* Who issues, as an administration operator is resolved: the account, and the roles its active platform
+     membership holds, read in the caller's transaction (on PostgreSQL FOR SHARE to COMMIT). Read only when a rule
+     names a platform role; an accountId-only policy reads no platform row. */
+  const roleRules = hasInvitationRoleRules(policy);
+  const principalOf = async (transaction: InvitationTransaction, accountId: string) => {
+    if (!roleRules) return { principal: operatorPrincipal(accountId), validUntil: Number.MAX_SAFE_INTEGER };
+    const found = await transaction.platformRoles(accountId, owner.clock());
+    return {
+      principal: operatorPrincipal({ accountId, platformRoles: found?.roles ?? [] }),
+      validUntil: found?.validUntil ?? Number.MAX_SAFE_INTEGER,
+    };
+  };
   /** The recorded inviter's authority now: its operator grant, or its own
    * delegate membership, which only the store can say. */
   const inviterAuthority = async (
     transaction: InvitationTransaction,
     row: StoredTenantInvitation,
   ): Promise<InvitationEligibilityOptions> => {
-    if (invitationOperatorGrant(policy, row.inviterId, row.tenantId, row.issuanceOperation)) return {};
+    // A role-based grant is the inviter's only while its platform membership holds the role: read now, its ceiling passed on.
+    const operator = invitationOperatorGrant(
+      policy,
+      (await principalOf(transaction, row.inviterId)).principal,
+      row.tenantId,
+      row.issuanceOperation,
+    );
+    if (operator) return roleRules ? { ceiling: operator.roles } : {};
     return { ceiling: (await delegatedCeiling(transaction, row.inviterId, row.tenantId, row.issuanceOperation)).roles };
   };
   /** An account invitation is its account's; an email invitation is the
@@ -206,8 +227,8 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
           if (request.aborted || instant < before || instant >= Math.min(started + owner.lifetime, proof.expiresAt)) return denyTenant();
         }
         if (kind === 'issuer' && !policy.operators.some((entry) => entry.accountId === accountId)) {
-          // A delegate is one only while its own membership says so: read now, and again at every step.
-          if (!policy.delegates) return null;
+          // A delegate, or a platform role's holder, is one only while its membership says so: read now, and again at every step.
+          if (!policy.delegates && !roleRules) return null;
           const fence = () => {
             owner.clock();
             auth.assertSessionCurrent(proof);
@@ -221,7 +242,11 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
                 fence();
               },
             },
-            async (bind) => (await delegatedTargets(bind(fence), accountId)).size,
+            async (bind) => {
+              const transaction = bind(fence);
+              if (roleRules && invitationOperatorRules(policy, (await principalOf(transaction, accountId)).principal).length) return 1;
+              return (await delegatedTargets(transaction, accountId)).size;
+            },
           );
           if (!delegated) return null;
         }
@@ -359,9 +384,13 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
       const value = captureTenantData(input);
       exact(value, ['expectedAccount', 'context'], ['after', 'limit']);
       const limit = pageLimit(value),
-        grants = policy.operators.filter((entry) => entry.accountId === value.expectedAccount);
-      if (!grants.length && !policy.delegates) return denyTenant();
+        named = invitationOperatorRules(policy, value.expectedAccount);
+      if (!named.length && !policy.delegates && !roleRules) return denyTenant();
       return await readOwned(request, value, async (transaction, active) => {
+        const grants = roleRules
+          ? invitationOperatorRules(policy, (await principalOf(transaction, value.expectedAccount)).principal)
+          : named;
+        active();
         const delegated = await delegatedTargets(transaction, value.expectedAccount);
         active();
         const ids = [...new Set([...grants.flatMap((entry) => operatorIds(entry.tenants)), ...delegated.keys()])]
@@ -377,9 +406,11 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
             tenantId,
             tenant,
             capabilities: INVITATION_ISSUER_OPERATIONS.flatMap((operation) => {
-              // Where an operator grant covers the operation, it decides.
-              const grant = grants.find((entry) => operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation));
-              const roles = grant?.roles ?? delegated.get(tenantId)?.find((found) => found.operation === operation)?.roles;
+              // Where operator rules cover the operation, they decide, together.
+              const matched = grants.filter((entry) => operatorReaches(entry.tenants, tenantId) && entry.operations.includes(operation));
+              const roles = matched.length
+                ? [...new Set(matched.flatMap((entry) => entry.roles))]
+                : delegated.get(tenantId)?.find((found) => found.operation === operation)?.roles;
               return roles ? [{ operation, roles }] : [];
             }),
           });
@@ -396,11 +427,16 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
       exact(value, ['expectedAccount', 'context', 'tenantId', 'operation'], ['after', 'limit']);
       const limit = pageLimit(value);
       if (value.operation !== 'revokeInvitation' && value.operation !== 'reissueInvitation') return denyTenant();
-      const operator = invitationOperatorGrant(policy, value.expectedAccount, value.tenantId, value.operation);
-      if (!operator && !policy.delegates) return denyTenant();
+      const operation = value.operation,
+        operator = invitationOperatorGrant(policy, value.expectedAccount, value.tenantId, operation);
+      if (!operator && !policy.delegates && !roleRules) return denyTenant();
       return await readOwned(request, value, async (transaction, active) => {
         active();
-        const grant = operator ?? (await delegatedCeiling(transaction, value.expectedAccount, value.tenantId, value.operation));
+        const found = roleRules
+          ? invitationOperatorGrant(policy, (await principalOf(transaction, value.expectedAccount)).principal, value.tenantId, operation)
+          : operator;
+        active();
+        const grant = found ?? (await delegatedCeiling(transaction, value.expectedAccount, value.tenantId, value.operation));
         active();
         const currentTenant = await transaction.optionalTenant(value.tenantId);
         active();
@@ -412,7 +448,18 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
           const row = await store.read(id);
           if (!row || row.tenantId !== value.tenantId || row.status !== 'pending' || row.roles.some((role) => !grant.roles.includes(role)))
             return denyTenant();
-          items.push(await transaction.pair(row));
+          const state = await transaction.pair(row);
+          active();
+          /* Where it was sent: an email invitation's own address, or the invited account's (words only). */
+          let address = invitationPrincipalEmail(row.accountId);
+          if (address === null && accounts) {
+            try {
+              address = await accounts.emailOf(row.accountId);
+            } catch {
+              address = null;
+            }
+          }
+          items.push(address ? { ...state, email: address } : state);
           active();
         }
         return {
@@ -527,19 +574,18 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
       // An issuer is an operator, whose grant the policy says, or a delegate,
       // whose ceiling its own membership earns inside the transaction below.
       const issuing = intent.operation as InvitationIssuerOperation;
-      const operator = recipient ? null : invitationOperatorGrant(policy, value.expectedAccount, intent.tenantId, issuing);
+      // A platform role's grant is read in the transaction too, and holds only until that membership ends.
+      let operator = recipient ? null : invitationOperatorGrant(policy, value.expectedAccount, intent.tenantId, issuing),
+        platformValidUntil: number | undefined;
       let delegated: Readonly<{ roles: readonly string[]; validUntil: number }> | undefined;
       const issuerRoles = (): readonly string[] =>
-        recipient
-          ? denyTenant()
-          : operator
-            ? invitationGrant(policy, value.expectedAccount, intent.tenantId, issuing).roles
-            : (delegated?.roles ?? denyTenant());
+        recipient ? denyTenant() : operator ? operator.roles : (delegated?.roles ?? denyTenant());
       const active = () => {
         const now = live();
         if (!recipient && (operator || delegated)) {
           issuerRoles();
           if (delegated && now >= delegated.validUntil) denyTenant();
+          if (operator && platformValidUntil !== undefined && now >= platformValidUntil) denyTenant();
         }
         if (required) eligible(required, now, requiredOptions);
       };
@@ -570,7 +616,7 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
         return captureInvitationChange(input, intent, ceiling);
       };
       try {
-        if (!recipient && !operator && !policy.delegates) return denyTenant();
+        if (!recipient && !operator && !policy.delegates && !roleRules) return denyTenant();
         await checkpoint();
         const fingerprint = invitationFingerprint(policy, binding, intent);
         const scope = {
@@ -594,6 +640,12 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
             assertCurrent();
             const transaction = bind(active),
               { journal, invitations: store, administration } = transaction;
+            if (!recipient && roleRules) {
+              const found = await principalOf(transaction, value.expectedAccount);
+              operator = invitationOperatorGrant(policy, found.principal, intent.tenantId, issuing);
+              platformValidUntil = found.principal.platformRoles.length ? found.validUntil : undefined;
+              active();
+            }
             if (!recipient && !operator) {
               // A delegate: its own member row, read — and on PostgreSQL locked — in this transaction.
               delegated = await delegatedCeiling(transaction, value.expectedAccount, intent.tenantId, issuing);
@@ -720,7 +772,8 @@ export function createTenantInvitationOperations(owner: InvitationOwner): Tenant
                   version: '1',
                   digest: minted.digest,
                 };
-                requiredOptions = delegated ? { ceiling: delegated.roles } : {};
+                // A delegate's or a platform role's ceiling is the one read here; an account rule's the policy says.
+                requiredOptions = delegated || roleRules ? { ceiling: issuerRoles() } : {};
                 required = row;
                 active();
                 if (!auth.synchronous) {

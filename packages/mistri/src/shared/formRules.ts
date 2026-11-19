@@ -1,6 +1,6 @@
 import type { AppForm, FormLines } from './app.js';
 import { columnKind, isFlagColumn, type ColumnMeta, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
-import { autoKey, formShownFields, isRequired } from '@mistriwork/engine/shared/form.js';
+import { appAssignedKey, formShownFields, isRequired } from '@mistriwork/engine/shared/form.js';
 import { unknownKey } from '@mistriwork/engine/shared/suggest.js';
 import { computedColumnMeta } from '@mistriwork/engine/shared/computed.js';
 import {
@@ -719,11 +719,21 @@ export function validateAppForm(
     problems.push(...derivedProblems(name, path, table, context.derivedFrom ?? context.schema));
   if (shownFields) {
     const shown = new Set([...shownFields, ...Object.keys(defaults), ...Object.keys(captured.derived ?? {})]);
-    const assigned = autoKey(table);
+    /* A text key the store fills (filledKey) is no more the form's to ask than an identity is; a key of another kind
+       left off the form is one nothing can fill, so every New of it would be refused by the database. */
+    const assigned = appAssignedKey(table);
     const starved = table.columns.filter((c) => isRequired(c, assigned) && !shown.has(c.name));
-    if (starved.length)
+    const keys = starved.filter((c) => c.primaryKey);
+    const rest = starved.filter((c) => !c.primaryKey);
+    if (keys.length)
       problems.push(
-        `Form: "${table.name}" requires ${starved.map((c) => `"${c.name}"`).join(', ')} (NOT NULL, no default) — show it, or give it a default.`,
+        `Form: "${table.name}" has no way to fill its key ${keys.map((c) => `"${c.name}"`).join(', ')} [new-key-unfilled]: ` +
+          'it has no default, is not an identity, is not a text key the store fills, and the form does not ask for it — ' +
+          'show it, give it a default or an identity, or make it a text key.',
+      );
+    if (rest.length)
+      problems.push(
+        `Form: "${table.name}" requires ${rest.map((c) => `"${c.name}"`).join(', ')} (NOT NULL, no default) — show it, or give it a default.`,
       );
   }
   if (captured.steps) {

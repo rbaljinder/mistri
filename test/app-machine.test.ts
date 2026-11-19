@@ -730,3 +730,28 @@ test('a verb whose command a public page runs is runnable without granting it to
     [],
   );
 });
+
+test("a command that inserts a record in a state past the first, and not in the machine's entry, is named", () => {
+  const said = (resource: Record<string, unknown>, handle: unknown) =>
+    machineCommandWarnings(app(resource), { intake: handle } as never).filter((line) => line.includes('[machine-insert-state]'));
+  const graph = machine('status', states);
+  // The literal sits in the handler's source; `status` is not the first state and no entry names it.
+  const literal = {
+    source: undefined,
+    target: 'application',
+    handle: async ({ db }: { db: any }) => db.application.insert({ status: 'in_review', note: 'n' }),
+  };
+  const warning = said({ machine: graph }, literal);
+  assert.equal(warning.length, 1);
+  assert.match(
+    warning[0]!,
+    /command "intake" inserts a "application" in "in_review".*starts in "submitted".*"not eligible".*entry: \['in_review'\]/,
+  );
+  // Named in the entry, or the first state, or no literal at all: nothing to say.
+  assert.deepEqual(said({ machine: machine('status', states, { entry: ['in_review'] }) }, literal), []);
+  const first = { ...literal, handle: async ({ db }: { db: any }) => db.application.insert({ status: 'submitted' }) };
+  assert.deepEqual(said({ machine: graph }, first), []);
+  const chosen = { ...literal, handle: async ({ db }: { db: any }) => db.application.insert({ status: pick() }) };
+  assert.deepEqual(said({ machine: graph }, chosen), []);
+});
+const pick = () => 'submitted';

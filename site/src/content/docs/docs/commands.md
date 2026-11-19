@@ -115,7 +115,11 @@ field. A `field.choices` answer is a list, asked with `has`:
 only whether those parts hold, never the values behind them. The form
 draws it while the condition holds and then requires it; the server refuses
 it sent while the condition does not hold, and requires it while it does.
-Only a top-level field takes `when`. A command's `rules`
+Only a top-level field takes `when`. A top-level choice's option takes one too,
+over the tenant alone (`{ value: 'gst', label: 'GST', when: "tenant.country = 'IN'" }`):
+the form is served without the options the tenant's profile does not hold, and a
+withheld value sent is refused as no choice. A draft field or `record.` there is a
+load error naming the option. A command's `rules`
 (`[{ must: 'confirm_email = email', message: 'The addresses differ.' }]`) are
 checked at each step and again by the run, and may ask a list with `has` too.
 
@@ -231,7 +235,8 @@ declaration off.
 | `record`, `records`                                                       | The target as this transaction reads it; every target, in request order, for `targets: 'many'`                                                                                                                                                                                                                                                                             |
 | `db.<table>`                                                              | The footprint, typed from `Rows`: `get`, `find`, `where(…).orderBy().limit()`, `segment(name)`, `count(where)` on the table itself (a query counts with `aggregate({ n: count() })`), [sums, groups and pages](#sums-groups-and-pages), `insert`, `update(row, changes)`, `remove(row)`, [`insertMany(rows)` and `updateWhere(where, changes)`](#many-rows-at-once); on a file resource, `insertFile({ name, type, data }, values)` and `readFile(row)` |
 | `files`                                                                   | The files a delivery brought, `[{ name, type, size, data }]`: a tenant's received mail, an inbound endpoint's `files`                                                                                                                                                                                                                                                      |
-| `actor`                                                                   | The verified principal: `id`, `roles`, and for an account `email` and `name`; `kind` is `'public'` or `'service'` for a public form or a job                                                                                                                                                                                                                               |
+| `actor`                                                                   | The verified principal: `id`, `roles`, and for an account `email` and `name` (each absent where the sign-in store has none); `kind` is `'public'` or `'service'` for a public form or a job                                                                                                                                                                                                                               |
+| `tenant` | In a tenant App, the tenant profile columns `auth.tenancy.shared` lists, read once for the request: `ctx.tenant.plan`, `ctx.tenant.country` (null where the row has none). Absent off a tenant App |
 | `door`                                                                    | Where the request came in: `'ui'` (a screen or a form), `'api'` (the App API), `'mcp'` (App MCP), `'job'` or `'workflow'`. The host says it, never the request                                                                                                                                                                                                             |
 | `now()`, `today()`, `timezone`, `nextNumber(name, { per, start, after })` | The server clock; the day it falls on in `timezone` (`YYYY-MM-DD`); that zone, `ui.timezone` or in a tenant App the running tenant's own (`UTC` without one); the next number of a sequence, taken in this transaction. `after` is the highest number rows already hold (a seed's): the number taken is past it                                                            |
 
@@ -527,6 +532,11 @@ fields a job, a decision or an approved proposal wrote, each with Confirm. A
 record with a proposal says so under its title, and an unconfirmed field
 carries the mark and Confirm in place. Each reader sees only the commands they
 are granted. The receipt names the approver and the proposal the AI made.
+
+The queue is also an API for a component or a script that signs in as the person: `POST /api/commands/proposals` lists
+what they may decide, and `POST /api/commands/proposals/approve` (with `input` to approve a correction),
+`/api/commands/proposals/dismiss` and `/api/commands/provenance/confirm` act on one. Each runs under the caller's own
+grant; a decided proposal answers 409 and an expired one 410. Nothing is declared beyond `approval: 'ai'`.
 
 The mark's word is the App's: `ai: { label: 'Assist' }` (24 characters at
 most) renames it on every surface. A component or page that shows what a model

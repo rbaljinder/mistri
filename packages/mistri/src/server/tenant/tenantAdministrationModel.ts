@@ -39,8 +39,11 @@ export interface AdministrationPolicy {
   readonly id: string;
   readonly version: string;
   readonly maxMembershipLifetimeMs: number;
+  /** Each rule names exactly one of `accountId` (one account) or
+   * `platformRole` (every account whose active platform membership holds it). */
   readonly operators: readonly {
-    readonly accountId: string;
+    readonly accountId?: string;
+    readonly platformRole?: string;
     readonly tenants: OperatorTenants;
     readonly operations: readonly AdministrationOperation[];
     readonly roles: readonly string[];
@@ -49,8 +52,16 @@ export interface AdministrationPolicy {
   readonly delegates?: readonly DelegateRule<DelegableAdministrationOperation>[];
 }
 type AdministrationGrant = AdministrationPolicy['operators'][number];
+/** Who asks: the account, and the roles its active platform membership holds,
+ * read only when the policy has a `platformRole` rule (none otherwise). */
+interface OperatorPrincipal {
+  readonly accountId: string;
+  readonly platformRoles: readonly string[];
+}
+/** The role ceiling every rule matching one principal, tenant and operation grants together. */
+type AdministrationCeiling = Readonly<{ roles: readonly string[] }>;
 const maximumLifetimeMs = 366 * 24 * 60 * 60 * 1000;
-const ruleFields = ['accountId', 'tenants', 'operations', 'roles'];
+const ruleFields = ['accountId', 'platformRole', 'tenants', 'operations', 'roles'];
 const intentFields: Record<AdministrationOperation, readonly string[]> = {
   createTenant: ['operation', 'tenantId'],
   setTenantStatus: ['operation', 'tenantId', 'expectedTenantVersion', 'status'],
@@ -84,8 +95,13 @@ function time(value: unknown): asserts value is number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) denyTenant();
 }
 function rule(value: unknown): asserts value is AdministrationGrant {
-  exact(value, ruleFields);
-  tenantIdentifier(value.accountId, 1024);
+  tenantRecord(value, ruleFields);
+  if (ruleFields.slice(2).some((field) => !Object.hasOwn(value, field))) denyTenant();
+  // One subject per rule: an account, or a platform role its holders share.
+  if (Object.hasOwn(value, 'accountId') === Object.hasOwn(value, 'platformRole'))
+    return policyRefusal('operators rule names exactly one of accountId or platformRole.');
+  if (Object.hasOwn(value, 'accountId')) tenantIdentifier(value.accountId, 1024);
+  else tenantIdentifier(value.platformRole);
   if (value.tenants !== 'all') {
     // Recorded for the operator's console alone (evidence.ts), as the policy's other refusals.
     if (!Array.isArray(value.tenants) || !value.tenants.length || value.tenants.length > 256)
@@ -127,11 +143,13 @@ export function captureAdministrationPolicy(input: unknown): AdministrationPolic
   // With delegates, a policy may name no operator at all; without, it grants nothing and is refused.
   if (!Array.isArray(value.operators) || (!value.operators.length && !Object.hasOwn(value, 'delegates')) || value.operators.length > 256)
     return policyRefusal(
-      `operators is a list of 1 to 256 { accountId, tenants, operations, roles }, or empty beside delegates; ${OPERATOR_TENANTS_WORDS}`,
+      `operators is a list of 1 to 256 { accountId or platformRole, tenants, operations, roles }, or empty beside delegates; ${OPERATOR_TENANTS_WORDS}`,
     );
   for (const entry of value.operators) rule(entry);
-  // A target/operation must have one ceiling, independent of declaration order.
-  const operators = value.operators as AdministrationGrant[];
+  /* One account's target/operation has one ceiling, independent of declaration
+     order. Role rules may overlap each other and an account's rule: an account
+     holding several platform roles is granted what they grant together. */
+  const operators = (value.operators as AdministrationGrant[]).filter((entry) => entry.accountId !== undefined);
   for (const [index, entry] of operators.entries()) {
     if (
       operators
@@ -201,42 +219,90 @@ export function assistantSwitch(enabled: unknown, consent: unknown): void {
     denyTenant();
 }
 
-/** Policy capture guarantees one matching rule and one role ceiling. */
-export function administrationGrant(
-  policy: AdministrationPolicy,
-  accountId: string,
-  tenantId: string,
-  requestedOperation: AdministrationOperation,
-): AdministrationGrant {
-  const captured = captureAdministrationPolicy(policy);
-  tenantIdentifier(accountId, 1024);
-  parseTenantSelector([tenantId]);
-  operation(requestedOperation);
-  return (
-    captured.operators.find(
-      (entry) => entry.accountId === accountId && operatorReaches(entry.tenants, tenantId) && entry.operations.includes(requestedOperation),
-    ) ?? denyTenant()
-  );
+/** Whether the policy has a rule naming a platform role: only then is the
+ * account's platform membership read to admit it. */
+export function hasRoleRules(policy: AdministrationPolicy): boolean {
+  return policy.operators.some((entry) => entry.platformRole !== undefined);
 }
 
-/** The explicit operator grant for this exact account, tenant and operation,
- * or null: a delegate's authority is read from the store, never from here. */
-export function operatorGrant(
+/** The account's active, unexpired platform member row, as either owner's
+ * query returns it (`roles` still JSON text), or null. */
+export function decodePlatformRoles(input: unknown): Readonly<{ roles: readonly string[]; validUntil: number }> | null {
+  if (input === undefined || input === null) return null;
+  const row = captureTenantData(input);
+  exact(row, ['roles', 'validUntil']);
+  if (typeof row.roles !== 'string') return denyTenant();
+  time(row.validUntil);
+  const parsed: unknown = JSON.parse(row.roles);
+  roles(parsed, 0);
+  return Object.freeze({ roles: Object.freeze([...parsed]), validUntil: row.validUntil });
+}
+
+/** A principal's detached image; an account id alone holds no platform role. */
+export function operatorPrincipal(input: OperatorPrincipal | string): OperatorPrincipal {
+  const value = captureTenantData(typeof input === 'string' ? { accountId: input, platformRoles: [] } : input);
+  exact(value, ['accountId', 'platformRoles']);
+  tenantIdentifier(value.accountId, 1024);
+  roles(value.platformRoles, 0);
+  return Object.freeze({ accountId: value.accountId, platformRoles: Object.freeze([...value.platformRoles]) });
+}
+
+/** Whether a rule names this principal: its account, or one of its platform roles. */
+export function operatorRuleNames(entry: AdministrationGrant, principal: OperatorPrincipal): boolean {
+  return entry.accountId !== undefined ? entry.accountId === principal.accountId : principal.platformRoles.includes(entry.platformRole!);
+}
+
+/** The rules naming the principal, whatever their tenants and operations. */
+export function operatorRules(policy: AdministrationPolicy, input: OperatorPrincipal | string): readonly AdministrationGrant[] {
+  const principal = operatorPrincipal(input);
+  return policy.operators.filter((entry) => operatorRuleNames(entry, principal));
+}
+
+function ceiling(
   policy: AdministrationPolicy,
-  accountId: string,
+  input: OperatorPrincipal | string,
   tenantId: string,
   requestedOperation: AdministrationOperation,
-): AdministrationGrant | null {
+): AdministrationCeiling | null {
   const captured = captureAdministrationPolicy(policy);
+  const principal = operatorPrincipal(input);
+  parseTenantSelector([tenantId]);
+  operation(requestedOperation);
+  const matched = captured.operators.filter(
+    (entry) =>
+      operatorRuleNames(entry, principal) && operatorReaches(entry.tenants, tenantId) && entry.operations.includes(requestedOperation),
+  );
+  if (!matched.length) return null;
+  return Object.freeze({ roles: Object.freeze([...new Set(matched.flatMap((entry) => entry.roles))]) });
+}
+
+/** The ceiling of every rule naming the principal, the tenant and the
+ * operation, as their roles together; or a refusal when none does. */
+export function administrationGrant(
+  policy: AdministrationPolicy,
+  principal: OperatorPrincipal | string,
+  tenantId: string,
+  requestedOperation: AdministrationOperation,
+): AdministrationCeiling {
+  return ceiling(policy, principal, tenantId, requestedOperation) ?? denyTenant();
+}
+
+/** The operator ceiling for this principal, tenant and operation, or null:
+ * a delegate's authority is read from the store, never from here. */
+export function operatorGrant(
+  policy: AdministrationPolicy,
+  principal: OperatorPrincipal | string,
+  tenantId: string,
+  requestedOperation: AdministrationOperation,
+): AdministrationCeiling | null {
   /* An import is approved by the live tenant's own owner, through its own
      membership: never an operator's side door. A rule may list it, as a rule
      listing every operation does, and it grants nothing. */
-  if (requestedOperation === 'importTenant') return null;
-  return (
-    captured.operators.find(
-      (entry) => entry.accountId === accountId && operatorReaches(entry.tenants, tenantId) && entry.operations.includes(requestedOperation),
-    ) ?? null
-  );
+  if (requestedOperation === 'importTenant') {
+    captureAdministrationPolicy(policy);
+    return null;
+  }
+  return ceiling(policy, principal, tenantId, requestedOperation);
 }
 
 /** A delegate's terms: the requested roles within the ceiling its own
@@ -266,34 +332,22 @@ export function assertDelegatedTerms(
     denyTenant();
 }
 
-/** The service separately checks existing roles and current tenant/membership revisions. */
+/** The service separately checks existing roles and current tenant/membership
+ * revisions. The ceiling is read from this policy here, never handed in. */
 export function assertAdministrationRoles(
   policy: AdministrationPolicy,
-  grant: AdministrationGrant,
+  principal: OperatorPrincipal | string,
+  tenantId: string,
+  requestedOperation: AdministrationOperation,
   requestedRoles: readonly string[],
   validUntil: number,
   now: number,
 ): void {
   const captured = captureAdministrationPolicy(policy);
-  const ceiling = captureTenantData(grant);
-  rule(ceiling);
-  const sameSet = (left: readonly string[], right: readonly string[]) =>
-    left.length === right.length && left.every((value) => right.includes(value));
-  if (
-    !captured.operators.some(
-      (entry) =>
-        entry.accountId === ceiling.accountId &&
-        (entry.tenants === 'all' || ceiling.tenants === 'all'
-          ? entry.tenants === ceiling.tenants
-          : sameSet(entry.tenants, ceiling.tenants)) &&
-        sameSet(entry.operations, ceiling.operations) &&
-        sameSet(entry.roles, ceiling.roles),
-    )
-  )
-    return denyTenant();
+  const grant = administrationGrant(captured, principal, tenantId, requestedOperation);
   const requested = captureTenantData(requestedRoles);
   roles(requested);
-  if (requested.some((role) => !ceiling.roles.includes(role))) return denyTenant();
+  if (requested.some((role) => !grant.roles.includes(role))) return denyTenant();
   time(now);
   time(validUntil);
   if (
@@ -318,6 +372,28 @@ function canonical(value: unknown): string {
 
 /** Durable attempt meaning excludes connection aliases and deployment/session epochs.
  * Policy content changes require a new policy version; current grants are rechecked by the service. */
+/** An opening's whole intent (its profile ref, its tenant, its invitation, roles sorted): one key names one of these.
+ * The invitation's instants (`redeemUntil`, `validUntil`) are not part of it: a retry after a reload asks with fresh ones,
+ * and the key's first attempt already decided what was issued. */
+export function openingFingerprint(
+  binding: TenantStoreBinding,
+  opening: Readonly<{ profile: string; tenant: unknown; invitation: Readonly<{ roles: readonly string[] }> }>,
+): string {
+  const owner = captureTenantData(binding);
+  const { redeemUntil: _redeemUntil, validUntil: _validUntil, ...invitation } = opening.invitation as Record<string, unknown>;
+  return createHash('sha256')
+    .update(
+      canonical({
+        operation: 'openTenant',
+        operationVersion: 1,
+        binding: { appId: owner.appId, storeId: owner.storeId, source: { id: owner.source.id } },
+        profile: opening.profile,
+        tenant: opening.tenant,
+        invitation: { ...invitation, roles: [...opening.invitation.roles].sort() },
+      }),
+    )
+    .digest('hex');
+}
 export function administrationFingerprint(policy: AdministrationPolicy, binding: TenantStoreBinding, intent: AdministrationIntent): string {
   const capturedPolicy = captureAdministrationPolicy(policy);
   const owner = captureTenantData(binding);

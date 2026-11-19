@@ -92,6 +92,8 @@ export interface InvitationImage {
 export interface InvitationPair {
   readonly invitation: InvitationImage;
   readonly membership: AdministrationMembershipImage;
+  /** Where the invitation was sent, said on an issuer's list (the address of an email invitation, or the invited account's own). */
+  readonly email?: string;
 }
 /** Reissue retains the terminated pair as well as the newly reserved pair. */
 export interface InvitationChange {

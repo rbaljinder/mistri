@@ -9,6 +9,8 @@ import { createSqliteTenantAdministration, TENANT_TABLES, type TenantStoreBindin
 import { createSqliteTenantAdministrationJournal } from './tenantAdministrationJournal.js';
 import { createSqliteTenantInvitations, INVITATION_TABLES, type StoredTenantInvitation } from './tenantInvitationStore.js';
 import { decodeDelegateMembership, decodeDelegateTenants } from './tenantDelegation.js';
+import { decodePlatformRoles } from './tenantAdministrationModel.js';
+import { PLATFORM_TENANT_ID } from '../../shared/tenantContext.js';
 
 export function invitationTenantImage(input: unknown, tenantId: string): AdministrationTenantImage {
   const row = captureTenantData(input) as Record<string, unknown> | undefined;
@@ -140,13 +142,26 @@ export function createSqliteInvitationTransaction(
             .all(accountId, now),
         ),
       ),
+    /* The roles of the account's active, unexpired member row in the platform tenant, and when it expires: read
+       for a policy with a `platformRole` rule. The writer's BEGIN IMMEDIATE holds it to COMMIT. */
+    platformRoles: (accountId: string, now: number) =>
+      read(() =>
+        decodePlatformRoles(
+          db
+            .prepare(`SELECT m.roles_json AS roles, m.valid_until AS validUntil
+      FROM main."${TENANT_TABLES.membership}" m JOIN main."${TENANT_TABLES.tenant}" t ON t.id = m.tenant_id
+      WHERE t.id = ? COLLATE BINARY AND t.kind = 'platform' AND t.status = 'active'
+        AND m.account_id = ? COLLATE BINARY AND m.kind = 'member' AND m.status = 'active' AND m.valid_until > ?`)
+            .get(PLATFORM_TENANT_ID, accountId, now),
+        ),
+      ),
     invitations: createSqliteTenantInvitations(db, operations, binding, active),
     administration: createSqliteTenantAdministration(db, operations, binding, active),
     journal: createSqliteTenantAdministrationJournal(db, operations, binding, active),
   });
 }
 type SqliteInvitationTransaction = ReturnType<typeof createSqliteInvitationTransaction>;
-type Fact = 'tenant' | 'optionalTenant' | 'pair' | 'pendingIds' | 'pendingCount' | 'accountMembership' | 'accountTenants';
+type Fact = 'tenant' | 'optionalTenant' | 'pair' | 'pendingIds' | 'pendingCount' | 'accountMembership' | 'accountTenants' | 'platformRoles';
 /** Awaitable facts do not make the stores' synchronous lifetime fences async. */
 export type InvitationTransaction = Omit<SqliteInvitationTransaction, Fact> & {
   [K in Fact]: (

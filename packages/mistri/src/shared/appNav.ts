@@ -10,6 +10,7 @@ import { isRoom, type DestinationKind } from './appDestinations.js';
 import { parseAppTarget } from '@mistriwork/engine/shared/appLinks.js';
 import { parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 import { allowKeys, isRecord } from '@mistriwork/engine/shared/model.js';
+import { parseWhen } from './appWhen.js';
 import { parseRealm, type SeriesColor, type AppNavNode } from './appModel.js';
 
 /** Local references normalize to `{ view, label? }`, checked static destinations
@@ -53,13 +54,7 @@ export function parseNav<View extends { readonly key: string; readonly kind: str
         );
     return { roles: [...(value as string[])] };
   };
-  /* `when` offers an entry to the tenants whose shared profile meets it: arrangement only, as `roles` is. Its columns
-     are judged against the catalog when the App loads (appTenantProfile.ts), where the profile is known. */
-  const whenOf = (value: unknown, at: string): { when?: string } => {
-    if (value === undefined) return {};
-    if (typeof value !== 'string' || !value.trim()) throw new Error(`${at} has a "when" that is not a condition like 'tenant.plan = pro'.`);
-    return { when: value.trim() };
-  };
+  const whenOf = parseWhen;
   const leaf = (
     key: unknown,
     label: string | undefined,

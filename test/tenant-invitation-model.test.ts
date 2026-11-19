@@ -8,6 +8,7 @@ import {
   invitationFingerprint,
   invitationGrant,
   invitationOperatorGrant,
+  invitationOperatorRules,
   type InvitationPolicy,
 } from '../packages/mistri/src/server/tenant/tenantInvitationModel.js';
 import { TenantContextError } from '../packages/engine/src/server/evidence.js';
@@ -163,10 +164,48 @@ test("an invitation operator rule may name tenants: 'all'", () => {
   const captured = captureInvitationPolicy({ ...policy(), operators: [first, everyone] });
   assert.equal(captured.operators[1].tenants, 'all');
   for (const tenantId of ['north', 'west'])
-    assert.equal(invitationOperatorGrant(captured, 'platform', tenantId, 'issueInvitation')?.tenants, 'all');
+    assert.deepEqual(invitationOperatorGrant(captured, 'platform', tenantId, 'issueInvitation')?.roles, everyone.roles);
   assert.equal(invitationOperatorGrant(captured, 'operator', 'west', 'issueInvitation'), null);
   denied(() => captureInvitationPolicy({ ...policy(), operators: [everyone, { ...everyone, tenants: ['north'] }] }));
   for (const value of ['ALL', null]) denied(() => captureInvitationPolicy({ ...policy(), operators: [{ ...everyone, tenants: value }] }));
+});
+
+test('an invitation operator rule names exactly one of accountId or platformRole, and the rules naming a principal union', () => {
+  const first = policy().operators[0];
+  const rest = { tenants: first.tenants, operations: first.operations, roles: first.roles };
+  const byRole = { ...rest, platformRole: 'platform_admin', roles: ['dealer_viewer'] };
+  const captured = captureInvitationPolicy({ ...policy(), operators: [first, byRole] });
+  for (const operator of [rest, { ...first, platformRole: 'platform_admin' }, { ...rest, platformRole: '' }])
+    denied(() => captureInvitationPolicy({ ...policy(), operators: [operator] }));
+  // Role rules may overlap each other (an account holding several platform roles is granted what they grant together);
+  // two rules for one account's same operation and tenant still refuse.
+  const wider = { ...byRole, platformRole: 'billing', roles: ['dealer_staff'] };
+  const together = captureInvitationPolicy({ ...policy(), operators: [byRole, byRole, wider] });
+  assert.deepEqual(
+    [
+      ...invitationOperatorGrant(
+        together,
+        { accountId: 'other', platformRoles: ['platform_admin', 'billing'] },
+        first.tenants[0],
+        'issueInvitation',
+      )!.roles,
+    ].sort(),
+    ['dealer_staff', 'dealer_viewer'],
+  );
+  denied(() => captureInvitationPolicy({ ...policy(), operators: [first, first] }));
+  const holder = { accountId: first.accountId, platformRoles: ['platform_admin'] };
+  const tenantId = first.tenants[0];
+  assert.equal(invitationOperatorRules(captured, holder).length, 2);
+  assert.deepEqual(invitationOperatorGrant(captured, holder, tenantId, 'issueInvitation')?.roles, [
+    ...new Set([...first.roles, 'dealer_viewer']),
+  ]);
+  // A role alone admits; the account without the role keeps only its own rule.
+  assert.deepEqual(
+    invitationOperatorGrant(captured, { accountId: 'other', platformRoles: ['platform_admin'] }, tenantId, 'issueInvitation')?.roles,
+    ['dealer_viewer'],
+  );
+  assert.deepEqual(invitationOperatorGrant(captured, first.accountId, tenantId, 'issueInvitation')?.roles, first.roles);
+  assert.equal(invitationOperatorGrant(captured, { accountId: 'other', platformRoles: [] }, tenantId, 'issueInvitation'), null);
 });
 
 test('bounded nonempty unique role, tenant and operator lists refuse overflow', () => {

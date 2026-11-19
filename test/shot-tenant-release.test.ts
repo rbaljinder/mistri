@@ -94,7 +94,7 @@ async function fixture(t: TestContext) {
   const receipts = () =>
     db
       .prepare(`SELECT actor_id AS actor, tenant_id AS tenant, operation FROM "${journal.receipt}"
-    WHERE actor_id = 'maintenance:mistri-shot' ORDER BY completed_at, id`)
+    WHERE actor_id = 'maintenance:mistri-shot' ORDER BY completed_at, rowid`)
       .all()
       .map((row) => ({ ...row }));
   writeFileSync(join(directory, 'mistri.json'), JSON.stringify({ connections: [{ name: 'db', url: path }] }));

@@ -862,6 +862,12 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         } catch (error) {
           invalid(`Command "${id}" input "${field.name}" default ${(error as Error).message}`);
         }
+        // An option's `when` reads the tenant alone (command.ts optionWhen): its columns judged as a field's are.
+        for (const option of field.type === 'choice' || field.type === 'choices' ? field.options : [])
+          for (const column of option.when === undefined ? [] : draftNames(option.when, 'when').tenant) {
+            const problem = tenantProblem(column);
+            if (problem) invalid(`Command "${id}" input "${field.name}" option ${JSON.stringify(option.value)} when: ${problem}`);
+          }
         if (field.when === undefined) continue;
         try {
           for (const column of draftNames(field.when, 'when').tenant) {

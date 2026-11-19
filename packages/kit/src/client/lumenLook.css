@@ -1326,6 +1326,7 @@
   /* A form is a white card too: a drawer's body, a page form. */
   :root[data-look-fields='card'] .form-page {
     background: var(--surface);
+    --form-ground: var(--surface);
     border: var(--panel-border-width, 1px) solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);

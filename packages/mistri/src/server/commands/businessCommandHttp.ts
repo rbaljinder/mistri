@@ -390,7 +390,15 @@ export async function dispatchBusinessCommandHttp(options: {
         throw new BusinessCommandExecutionError('command_version_mismatch', 'unknown');
       const asked = checkedNames(authorized.command, request.fields);
       if (!asked) throw new CommandInputError('fields');
-      return { problems: checkCommandStep(authorized.command, request.input, asked) };
+      return {
+        problems: checkCommandStep(
+          authorized.command,
+          request.input,
+          asked,
+          undefined,
+          authorized.tenant ? { tenant: authorized.tenant } : {},
+        ),
+      };
     }
     /* A proposal's approval runs its command as this reader, under their grant, flags and locale, as their own
        execute would; the proposal's id is its idempotency key and the receipt names it (proposals.ts). */

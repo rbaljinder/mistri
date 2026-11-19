@@ -63,12 +63,13 @@
   .multi-step-form[data-style='intake'] [data-slot='input'][data-hidden] { letter-spacing: 0.12em; }
 
   /* The actions: Back a quiet word, the primary the one filled thing on the page, in the theme's primary-action color
-     (formDress.css). No rule over them. */
+     (formDress.css). No rule over them. Their ground is the form's (--form-ground, which a look that draws the form
+     as a panel or a card sets): on the page's own, a look whose page is tinted drew a grey band across the panel. */
   .intake-actions {
     margin-inline: 0;
     padding: var(--space-4) 0 max(var(--space-4), env(safe-area-inset-bottom));
     border-top: 0;
-    background: var(--ground);
+    background: var(--form-ground, var(--ground));
     align-items: center;
   }
   .intake-actions [data-slot='button'] { min-height: var(--control-h); }
@@ -91,7 +92,7 @@
     .intake-actions { margin-top: auto; }
     .intake-actions::before {
       content: ''; position: absolute; inset-inline: 0; bottom: 100%; height: var(--space-5);
-      background: linear-gradient(to bottom, transparent, var(--ground)); pointer-events: none;
+      background: linear-gradient(to bottom, transparent, var(--form-ground, var(--ground))); pointer-events: none;
     }
   }
 

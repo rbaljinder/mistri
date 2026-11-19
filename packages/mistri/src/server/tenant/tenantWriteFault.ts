@@ -14,7 +14,7 @@ import { ReferencedRefusal } from '@mistriwork/engine/adapters/scoped/scopedTran
 import { refusalCause } from '@mistriwork/engine/shared/refusal.js';
 import { writeRefusalStatus } from '@mistriwork/engine/server/constraints.js';
 import { TenantContextError, TenantUnavailableError } from '@mistriwork/engine/server/evidence.js';
-import { appError } from '../app/appErrors.js';
+import { appError, namedRequired } from '../app/appErrors.js';
 
 /* The walk lives beside `databaseFault` (evidence.ts), since the read path's
    `denyTenantFor` reads a fault the same way. */
@@ -62,8 +62,18 @@ export function unansweredWrite(
  * as one this tenant holds, word for word: the reply is chosen by the SQLSTATE alone, and says nothing more of whose
  * row it met. A delete refused for the rows still pointing at it is answered the same way, by reference_conflict.
  * Undefined for anything else, and for a denial on the way down, which stays a denial.
+ *
+ * One refusal names its field: a required value missing from the row being written. That row is the caller's own and
+ * the name carries no value, and a New form answered "a required value is missing" left the person to guess which of
+ * its fields (a field report). `caption` says what the App calls a column of the written table, and nothing for any
+ * other name the engine reports — the tenant's own column, a column a trigger wrote elsewhere — so the sentence
+ * names a field only where every column it reports is one the App shows by that table.
  */
-export function refusedWrite(path: string, error: unknown): { status: 409 | 422; code: string; body: Record<string, unknown> } | undefined {
+export function refusedWrite(
+  path: string,
+  error: unknown,
+  caption?: (column: string) => string | undefined,
+): { status: 409 | 422; code: string; body: Record<string, unknown> } | undefined {
   let at: unknown = error;
   for (let depth = 0; at !== null && typeof at === 'object' && depth < 16; depth++) {
     /* A delete refused while rows still point at it (scopedTransaction.ts ReferencedRefusal): its sentence names
@@ -73,13 +83,15 @@ export function refusedWrite(path: string, error: unknown): { status: 409 | 422;
     if (status) {
       // Its codes and nothing else: no column, constraint or detail reaches appError, so it says the fixed sentence.
       const { code, errcode, severity } = at as { code?: unknown; errcode?: unknown; severity?: unknown };
-      const failure = referenced ? appError(at, 'write') : appError({ code, errcode, severity }, 'write');
+      /* A required value missing from the row written, by the App's word for each column (namedRequired). */
+      const named = caption && !referenced ? namedRequired(at, caption) : undefined;
+      const failure = referenced ? appError(at, 'write') : (named ?? appError({ code, errcode, severity }, 'write'));
       return {
         status,
         code: failure.code,
         body: {
           error: failure.message,
-          errors: [{ code: failure.code, message: failure.message }],
+          errors: [{ code: failure.code, message: failure.message, ...(failure.fields ? { fields: failure.fields } : {}) }],
           outcome: 'rejected',
           ...(path === '/api/delete' ? { deleted: false } : path === '/api/revert' ? { reverted: false } : {}),
         },

@@ -12,7 +12,8 @@
 import type { AppCommandField } from '../../shared/command.js';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { commandInputProblems, type CommandInputReason } from '../../shared/commandInput.js';
-import { brokenRules, draftHolds, readsRecord } from '../../shared/commandDraft.js';
+import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
+import { brokenRules, draftHolds, readsRecord, withheldAnswer, withheldOptions } from '../../shared/commandDraft.js';
 import type { AnyBusinessCommand } from './businessCommands.js';
 
 /** A reason in plain words, for a caller that has no form of its own to say it (an import, a check). */
@@ -57,6 +58,9 @@ export function checkCommandStep(
   raw: unknown,
   asked: readonly string[],
   now = appTime(),
+  /* The asker's tenant profile, where the request read one: an option it does not offer (an option's `when`) is
+     refused as no choice. Without it the check leaves that to the run. */
+  context: { tenant?: Readonly<Record<string, TenantValue>> } = {},
 ): Record<string, string> {
   const names = new Set(asked);
   const fields = command.fields.filter((field) => names.has(field.name));
@@ -70,6 +74,10 @@ export function checkCommandStep(
   for (const name of Object.keys(input)) if (!names.has(name)) say(name, REASON_SENTENCES.shape);
   /* A choice from a table is the run's to judge against its rows; here its shape alone. */
   for (const problem of commandInputProblems(fields, given, { sourced: () => true })) say(problem.path, REASON_SENTENCES[problem.reason]);
+  if (context.tenant) {
+    const withheld = withheldAnswer(withheldOptions(fields, context.tenant), given);
+    if (withheld) say(withheld.path, withheld.reason);
+  }
   for (const field of fields) {
     const when = whenOf(field);
     if (when === undefined || readsRecord(when)) continue;

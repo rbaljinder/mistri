@@ -108,6 +108,9 @@ interface Literal {
   key: string;
 }
 
+/* A display rule's `values` says each stored value as words: `display.<column>.values.<value>` (a resource's or a page's). */
+const isValueWord = (path: ReadonlyArray<string | number>) => path.at(-1) === 'values' && path.at(-3) === 'display';
+
 /** Every caption the definition writes as literal text, in the order it holds them. */
 export function literalCaptions(raw: unknown): Literal[] {
   const found: Literal[] = [];
@@ -128,7 +131,7 @@ export function literalCaptions(raw: unknown): Literal[] {
     if (Array.isArray(value)) value.forEach((item, i) => visit(item, [...path, i], false));
     else if (value && typeof value === 'object')
       for (const [key, item] of Object.entries(value))
-        visit(item, [...path, key], isCaptionKey(key, path.at(-1)) || path.at(-1) === 'labels');
+        visit(item, [...path, key], isCaptionKey(key, path.at(-1)) || path.at(-1) === 'labels' || isValueWord(path));
   };
   visit(raw, [], false);
   return found;

@@ -15,6 +15,7 @@
  *   node scripts/docs-shots.mjs --list          print the manifest, run nothing
  *   node scripts/docs-shots.mjs --out <dir>     write there instead of site/src/assets (to compare before replacing)
  *   node scripts/docs-shots.mjs --whole --out <dir>  each picture uncropped, its clip ignored (to choose a clip)
+ *   node scripts/docs-shots.mjs --look bloom --out <dir>  every App picture in one look (to try it before changing the manifest)
  *
  * An entry is { file, app, route, viewport: "desk" | "phone", width?, full?: true, scheme?: "light" | "dark",
  * look?, compare?, as?, clip?: { x, y, width, height } } with the clip in CSS pixels, so a
@@ -64,6 +65,9 @@ const PINNED = {
   MISTRI_CLOCK: CLOCK,
   /* The pin is a test's: a server refuses it outside mistri dev and NODE_ENV=test (http/clock.ts). */
   NODE_ENV: 'test',
+  /* A picture looks at an App and must not change it: a scheduled job (Lintel's lease clock, its repair routing)
+     running partway through a run left the same count reading two ways across one set of pictures. */
+  MISTRI_JOBS: 'off',
 };
 
 /** How each sample App's database is made. Each seeder writes `<db>.json` (or this does), naming the connection. */
@@ -322,11 +326,16 @@ async function main() {
     return at < 0 ? undefined : argv.splice(at, 2)[1];
   };
   const out = flag('--out');
+  /* Every App picture in one look, to see the documentation in it before changing the manifest; a gallery's
+     comparisons and contact sheets keep the looks they compare, and stories keep the library's. */
+  const look = flag('--look');
   const listOnly = argv.includes('--list');
   const whole = argv.includes('--whole');
   if (whole && !out) throw new Error("--whole writes uncropped pictures, so it needs --out <dir>: they never replace the site's.");
   const filters = argv.filter((arg) => !arg.startsWith('--'));
-  const shots = readManifest().filter((entry) => !filters.length || filters.some((text) => entry.file.includes(text)));
+  const shots = readManifest()
+    .filter((entry) => !filters.length || filters.some((text) => entry.file.includes(text)))
+    .map((entry) => (look && !entry.story && !entry.compare && !entry.recipes ? { ...entry, look } : entry));
   if (listOnly) {
     for (const entry of shots)
       console.log(

@@ -30,6 +30,7 @@ import { createTenantDeployment } from './tenantDeployment.js';
 import type { TenantEnrollmentAttestation, TenantEnrollmentDeclaration } from './tenantFeatureContract.js';
 import { TENANT_ENROLLMENT_HOOKS } from './tenantFeatures.js';
 import { bindTenantJobs, registerTenantJobs, tenantJobDeployment, withTenantMachineTimers } from './tenantJobs.js';
+import { withFillsKeys } from '../../shared/appKeyFill.js';
 import { captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
 import {
   assertTenantSourcesApart,
@@ -385,7 +386,7 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
           appId: app.id,
           source: binding.source,
           physicalSchema,
-          schema: catalog.schema,
+          schema: withFillsKeys(app, catalog.schema),
           resources: Object.fromEntries(catalog.schema.tables.map((table) => [table.id, catalog.toPhysical(table.id)])),
           ownership: policy.ownership,
           ...(profile === undefined ? {} : { profile }),
@@ -631,7 +632,7 @@ async function acquirePostgres(
     appId: app.id,
     source: binding.source,
     physicalSchema,
-    schema: catalog.schema,
+    schema: withFillsKeys(app, catalog.schema),
     resources: Object.fromEntries(catalog.schema.tables.map((table) => [table.id, catalog.toPhysical(table.id)])),
     ownership: policy.ownership,
     ...(profile === undefined ? {} : { profile }),

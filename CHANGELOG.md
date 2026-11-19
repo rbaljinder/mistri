@@ -5,6 +5,34 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.66
+
+- Page kit, tenant parity: `useTeam()` reads a tenant's members, invitations and roles and offers the invite, revoke
+  and role changes the person may make (`canManage`); `useBranding()` reads the tenant's branding; a handler's ctx
+  carries `tenant` with the tenant's shared values; and a claimed name reaches `actor.name` (absent when unknown).
+- `openTenant` and `useOpenTenant()`: one idempotent "open a tenant" operation. The App's own platform command makes
+  the profile, then the server makes the tenant and issues the first invitation, each step journaled under one key so
+  a retry resumes; the answer is `{ tenantId, version, invitation }`. The same key with a different intent is a 409;
+  an invitation's instants are not part of that intent, and a replay reads the tenant's live version.
+- Operators by `platformRole`: an operator rule may name a platform role instead of an account, resolved from the
+  platform membership, so `tenant grant` gives admin rights. Overlapping rules union, in administration and in
+  invitations alike; a role rule may never grant platform-realm memberships (the check refuses).
+- A choice's option may carry `when: tenant.<col>`: judged when the form prepares, the options it withholds are not
+  offered, and a run that sends one anyway is refused.
+- Fixed: a tenant App's multistep form checks its steps again (`/api/commands/check` ran the command).
+- Fixed: a field's `when: tenant.*` or `default: { tenant }` makes the form prepare, so the value is there.
+- Fixed: a tenant-owned resource keyed by text gets a UUID key when its New form sends none, as an identity key is
+  assigned (a regression since rc.37); a natural or addressed key is never filled. `mistri check` refuses a New form
+  whose key nothing fills (`new-key-unfilled`) and names the field.
+- Navigation may name a free-form page by id, as it names a view, and place it among a group's final entries.
+- A `ui.shell.new` line takes `when`, as a nav entry does, and `display.*.values` may use `msg()`.
+- `mistri check` warns (`machine-insert-state`) where a command's handler inserts a row of a state machine's table in
+  a state past its first that the machine's `entry` does not name, which the run would refuse as "not eligible". Lint fixes for content motion, a theme's own custom properties and colors outside
+  styles.
+- Lumen light's link color is set per palette, so the pill menu's current entry meets contrast on Safety and Teal.
+- The App and public stylesheet ceilings rise by 6 KB (the segmented switch, one toolbar control height, the round
+  popup corner).
+
 ## 1.0.0-rc.65
 
 - An integration's webhook may be a signed `multipart/form-data` callback: each file part is put in the mapped

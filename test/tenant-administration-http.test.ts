@@ -10,6 +10,7 @@ import { createTenantAuthenticatedHttpServer } from '../packages/mistri/src/serv
 import { TenantContextError } from '../packages/engine/src/server/evidence.js';
 import { ADMINISTRATION_JOURNAL_TABLES } from '../packages/mistri/src/server/tenant/tenantAdministrationJournal.js';
 import { TENANT_TABLES } from '../packages/mistri/src/server/tenant/tenantStore.js';
+import { provisionSqliteTenantInvitations } from '../packages/mistri/src/server/tenant/tenantInvitationStore.js';
 import {
   ADMINISTRATION_HTTP_HEADER as contextHeader,
   ADMINISTRATION_HTTP_ROOT as root,
@@ -29,10 +30,17 @@ function gate() {
   });
   return { promise, release };
 }
-async function fixture(t: TestContext, enabled = true, launch = true, operatorTenants: 'all' | string[] = ['north', 'south']) {
+async function fixture(
+  t: TestContext,
+  enabled = true,
+  launch = true,
+  operatorTenants: 'all' | string[] = ['north', 'south'],
+  invite = false,
+) {
   const f = await tenantAdministrationFixture(t);
   f.db.exec(`CREATE TABLE tenant_item(id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL, name TEXT NOT NULL);
     INSERT INTO tenant_item VALUES ('one', 'north', 'Original')`);
+  if (invite) provisionSqliteTenantInvitations(f.path, f.binding);
   const loaded: LoadedApp = {
     path: join(f.directory, 'app.ts'),
     dir: f.directory,
@@ -88,6 +96,25 @@ async function fixture(t: TestContext, enabled = true, launch = true, operatorTe
                     tenants: ['north'],
                     operations: ['revokeMembership' as const],
                     roles: ['manager'],
+                  },
+                ],
+              },
+            }
+          : {}),
+        ...(invite
+          ? {
+              invitations: {
+                id: 'PRIVATE_INVITATION_POLICY',
+                version: 'private-v1',
+                maxMembershipLifetimeMs: 120_000,
+                maxRedemptionLifetimeMs: 60_000,
+                maxPendingPerTenant: 10,
+                operators: [
+                  {
+                    accountId: f.users.operator.accountId,
+                    tenants: operatorTenants,
+                    operations: ['issueInvitation' as const],
+                    roles: ['reader'],
                   },
                 ],
               },
@@ -270,6 +297,34 @@ test("an operator rule naming tenants: 'all' administers a tenant no list names,
   assert.equal(other.body.outcome, 'applied');
 });
 
+test('open-tenant answers a reused key with another input with 409 naming the key, and the same input with what it did', async (t) => {
+  const f = await fixture(t, true, true, ['west'], true),
+    a = await f.open();
+  assert.ok(a.session);
+  const soon = Date.now();
+  const opening = {
+    key: 'opening-west-0001',
+    profile: 'profile-1',
+    tenant: { tenantId: 'west' },
+    invitation: { accountId: f.users.outsider.accountId, roles: ['reader'], redeemUntil: soon + 30_000, validUntil: soon + 60_000 },
+  };
+  const opened = await f.call(f.url('open-tenant'), opening, a.owned);
+  assert.equal(opened.status, 200, opened.text);
+  assert.equal(opened.body.outcome, 'applied');
+  assert.equal(opened.body.result.tenantId, 'west');
+  assert.equal(typeof opened.body.result.invitation.token, 'string');
+  const again = await f.call(f.url('open-tenant'), opening, a.owned);
+  assert.equal(again.status, 200, again.text);
+  assert.equal(again.body.result.invitation.result.receiptId, opened.body.result.invitation.result.receiptId);
+  assert.equal(again.body.result.invitation.token, undefined);
+  const other = await f.call(f.url('open-tenant'), { ...opening, profile: 'profile-2' }, a.owned);
+  assert.equal(other.status, 409, other.text);
+  assert.deepEqual(
+    { code: other.body.code, outcome: other.body.outcome, cause: other.body.cause },
+    { code: 'tenant_open_key_conflict', outcome: 'not_applied', cause: { key: opening.key } },
+  );
+});
+
 test('administration tenant/member pages, versioned execution and exact-intent status preserve independent ceilings', async (t) => {
   const f = await fixture(t),
     a = await f.open();
@@ -319,7 +374,8 @@ test('administration tenant/member pages, versioned execution and exact-intent s
   const member = granted.body.result.change.after.membership;
   const members = await f.call(f.url('memberships', '&tenantId=north&operation=replaceMembership&limit=1'), undefined, a.owned);
   owned(members, f, a.session.context);
-  assert.deepEqual(members.body.page.items, [member]);
+  /* A listed member is told by the account's own name and address too (the sign-in store's). */
+  assert.deepEqual(members.body.page.items, [{ ...member, email: 'target@example.test', name: 'target' }]);
   const hidden = await f.call(f.url('memberships', '&tenantId=north&operation=revokeMembership'), undefined, a.owned);
   assert.deepEqual(hidden.body.page.items, []);
   assert.deepEqual(hidden.body.page.roles, ['manager']);

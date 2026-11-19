@@ -5,6 +5,7 @@ import {
   ASSISTANT_CONSENT_MOST,
   ASSISTANT_USAGE_MOST,
   DECISION_USAGE_MOST,
+  OPEN_TENANT_KEY_CONFLICT,
   type AdministrationAssistantImage,
   type AdministrationAttempt,
   type AdministrationDecisionSwitch,
@@ -14,6 +15,8 @@ import {
   type AdministrationMembershipImage,
   type AdministrationMembershipOperation,
   type AdministrationMembershipPage,
+  type AdministrationOpenTenantAttempt,
+  type AdministrationOpenTenantResult,
   type AdministrationResult,
   type AdministrationSession,
   type AdministrationTenantImage,
@@ -43,6 +46,15 @@ class TenantAdministrationError extends Error {
   }
 }
 
+/** A key already used to open a tenant with another input: nothing was applied, and `key` is the one the server named. */
+class OpenTenantKeyConflict extends Error {
+  readonly code = OPEN_TENANT_KEY_CONFLICT;
+  readonly outcome = 'not_applied';
+  constructor(readonly key: string) {
+    super(say('thisKeyOpenedAnother'));
+  }
+}
+
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const id = (value: unknown): value is string =>
   typeof value === 'string' && value.length > 0 && value.length <= 1024 && value.trim() === value && !/\p{Cc}/u.test(value);
@@ -62,6 +74,8 @@ function membership(value: unknown): value is AdministrationMembershipImage {
     id(value.membershipId) &&
     id(value.tenantId) &&
     id(value.accountId) &&
+    (value.email === undefined || id(value.email)) &&
+    (value.name === undefined || id(value.name)) &&
     version(value.version) &&
     ['active', 'invited', 'revoked'].includes(String(value.status)) &&
     roles(value.roles) &&
@@ -194,9 +208,11 @@ async function request(
   session: AdministrationSession | null,
   route: string,
   query: Record<string, string> = {},
-  attempt?: AdministrationAttempt,
+  attempt?: AdministrationAttempt | AdministrationOpenTenantAttempt,
 ): Promise<{ data: Record<string, unknown>; context: string | null }> {
   let dispatched = false;
+  // Opening a tenant writes as execute does: an answer lost after it was sent is not known, not refused.
+  const writes = route === 'execute' || route === 'open-tenant';
   try {
     assertAccountCurrent(owner);
     if (owner.mode !== 'authenticated' || !owner.accountId || !owner.appId) throw new Error();
@@ -239,15 +255,23 @@ async function request(
     verify();
     if (!object(data)) throw new Error();
     if (!response.ok) {
-      if (route === 'execute' && data.outcome === 'not_applied') throw new TenantAdministrationError('not_applied', say('theChangeWasNot'));
+      if (
+        route === 'open-tenant' &&
+        response.status === 409 &&
+        data.code === OPEN_TENANT_KEY_CONFLICT &&
+        object(data.cause) &&
+        data.cause.key === (attempt as AdministrationOpenTenantAttempt).key
+      )
+        throw new OpenTenantKeyConflict(data.cause.key);
+      if (writes && data.outcome === 'not_applied') throw new TenantAdministrationError('not_applied', say('theChangeWasNot'));
       throw new Error();
     }
     return { data, context: response.headers.get(ADMINISTRATION_HTTP_HEADER) };
   } catch (error) {
-    if (route !== 'status' && error instanceof TenantAdministrationError) throw error;
+    if (route !== 'status' && (error instanceof TenantAdministrationError || error instanceof OpenTenantKeyConflict)) throw error;
     throw new TenantAdministrationError(
-      route === 'status' || (route === 'execute' && dispatched) ? 'unknown' : 'not_applied',
-      route === 'status' || (route === 'execute' && dispatched) ? say('theChangeIsUnconfirmed') : undefined,
+      route === 'status' || (writes && dispatched) ? 'unknown' : 'not_applied',
+      route === 'status' || (writes && dispatched) ? say('theChangeIsUnconfirmed') : undefined,
     );
   }
 }
@@ -400,6 +424,31 @@ async function importPlan(
   )
     throw new TenantAdministrationError('not_applied');
   return frozen(plan as unknown as AdministrationImportPlan);
+}
+/**
+ * Opens a tenant under one request key (`AdministrationOpenTenantAttempt`): createTenant then issueInvitation, journaled
+ * under the key. An answer not known, or a failure between the two steps, is completed by sending the same attempt
+ * again; the same key with another input is refused (`OpenTenantKeyConflict`) and applies nothing.
+ */
+export async function openTenant(
+  owner: SessionIdentitySnapshot,
+  session: AdministrationSession,
+  attempt: AdministrationOpenTenantAttempt,
+): Promise<AdministrationOpenTenantResult> {
+  const { data } = await request(owner, session, 'open-tenant', {}, attempt);
+  const r = data.result;
+  if (
+    data.outcome !== 'applied' ||
+    !object(r) ||
+    r.tenantId !== attempt.tenant.tenantId ||
+    !version(r.version) ||
+    !object(r.invitation) ||
+    !object(r.invitation.result) ||
+    !id(r.invitation.result.receiptId) ||
+    (r.invitation.token !== undefined && typeof r.invitation.token !== 'string')
+  )
+    throw new TenantAdministrationError('unknown', say('theChangeIsUnconfirmed'));
+  return frozen(r as unknown as AdministrationOpenTenantResult);
 }
 export async function executeAdministration(
   owner: SessionIdentitySnapshot,

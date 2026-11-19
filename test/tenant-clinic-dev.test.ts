@@ -157,6 +157,23 @@ test('mistri dev serves a tenant App and prints a sign-in per role, each a membe
     'north',
   );
   assert.equal((await member.enter('east')).ok, true);
+  // The operator made again holds its platform membership too, where a copied dev database once left it none (a field
+  // report): the copy's memberships belong to the other tree's accounts.
+  const operatorSignIn = remade.output.match(/^ {2}operator +(\S+@example\.test) +(\S+)$/m)!;
+  const operatorSession = await fetch(`${remade.origin}/api/auth/sign-in/email`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', origin: remade.origin },
+    body: JSON.stringify({ email: operatorSignIn[1], password: operatorSignIn[2] }),
+  });
+  assert.equal(operatorSession.status, 200, await operatorSession.clone().text());
+  const { user: operatorUser } = (await operatorSession.json()) as { user: { id: string } };
+  const remadeOperator = await tenantTestClient(
+    remade.origin,
+    'clinic',
+    { accountId: operatorUser.id, email: operatorSignIn[1], password: operatorSignIn[2] },
+    '@platform',
+  );
+  assert.ok((await remadeOperator.rows('clinic')).ok, 'the operator made again works in the platform realm');
   assert.equal(
     (JSON.parse(readFileSync(devFile, 'utf8')) as typeof dev).accounts.reception,
     user.id,

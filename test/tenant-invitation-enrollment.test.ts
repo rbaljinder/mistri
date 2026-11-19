@@ -581,7 +581,9 @@ for (const grant of ['invitations', 'administration'] as const)
     for (const role of ['lender', 'sweeper'])
       await assert.rejects(
         prepareTenantStartup({ ...f.startup, loaded, policyFile: write(role) }),
-        refusedStartup(/role ceilings \(this App's tenant-realm roles only, and no service role\)/),
+        refusedStartup(
+          /role ceilings \(this App's tenant-realm roles only, and no service role; an operator's platformRole one of its platform-realm roles\)/,
+        ),
       );
     // The enrollment owner holds the same line when handed a policy directly.
     await assert.rejects(f.open({ app: loaded.app, policy: policy('lender'), roles: ['reader', 'lender'] }), TenantContextError);
