@@ -51,6 +51,9 @@ export const RECIPE_MENU = {
   steps: { flat: null, tinted: 'lumen', strip: 'lumen' },
   lanes: { tint: null, tag: 'brand', plain: 'brand' },
   header: { plain: null, band: null, hero: null },
+  /* A side-placed App's room: a pane inset on the menu's ground, or running to the window's right and bottom edges.
+     Both are structure.css's, beside the pane they dress. */
+  pane: { inset: null, edge: null },
   /* A list's filter not yet asked for: its own part, so a theme may keep its keyed or raised buttons and still pick the
      adders' edge (Workshop keys them solid; Lumen's are quiet, as its raised buttons were). */
   /* `solid` first: it is the default, drawn by the filter bar's own sheet. A dashed edge read as a place left empty. */

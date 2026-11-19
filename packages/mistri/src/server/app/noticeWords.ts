@@ -13,6 +13,7 @@ import { recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import { canonicalLocale, localeColumn } from '@mistriwork/engine/shared/appLocale.js';
 import { peopleByAccount, personTable } from '../../shared/appMe.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { appZone, readerZone } from '../../shared/appZone.js';
 import { appCatalogs, MessageSayer, type MessageOverrides } from './appMessages.js';
 import { checkTenantMessages, messageColumns, MOST_MESSAGE_ROWS } from './recordMessages.js';
 
@@ -23,6 +24,8 @@ interface NoticeWordsOptions {
   readonly physical: (table: string) => string;
   /** A tenant's default locale, where its branding sets one. */
   readonly tenantLocale?: (tenant: string) => Promise<string | undefined>;
+  /** A tenant's time zone, where `ui.timezone` names its profile's column: what a date in the words is said in. */
+  readonly tenantZone?: (tenant: string) => Promise<string | undefined>;
 }
 
 /** The `say` a compiled rule's message title becomes, or undefined where the App has no catalogs to say it from. */
@@ -55,12 +58,12 @@ export function noticeWords(
     wordsTable = undefined;
   }
   const sayers = new Map<string, MessageSayer>();
-  const sayerFor = (locale: string, overrides?: { stamp: string; words: MessageOverrides }) => {
-    const key = `${locale}\n${overrides?.stamp ?? ''}`;
+  const sayerFor = (locale: string, zone: string, overrides?: { stamp: string; words: MessageOverrides }) => {
+    const key = `${locale}\n${zone}\n${overrides?.stamp ?? ''}`;
     let sayer = sayers.get(key);
     if (!sayer) {
       if (sayers.size > 64) sayers.clear();
-      sayers.set(key, (sayer = new MessageSayer(catalogs, locale, overrides?.words)));
+      sayers.set(key, (sayer = new MessageSayer(catalogs, locale, overrides?.words, undefined, zone)));
     }
     return sayer;
   };
@@ -82,6 +85,9 @@ export function noticeWords(
       }
       if (!locale && tenant && options.tenantLocale) locale = canonicalLocale(await options.tenantLocale(tenant).catch(() => undefined));
       locale ??= canonicalLocale(app.ui.locale) ?? catalogs.source;
+      /* A date in the words reads on the tenant's clock, then the App's, then UTC: one stamp, whoever's server says it. */
+      const tenantZone = tenant && options.tenantZone ? readerZone(await options.tenantZone(tenant).catch(() => undefined)) : undefined;
+      const zone = tenantZone ?? appZone(app.ui) ?? 'UTC';
       /* The tenant's own words, read in the write's transaction among its own rows (recordMessages.ts). */
       const overrides =
         tenant && spec && wordsTable
@@ -91,12 +97,12 @@ export function noticeWords(
               .catch(() => undefined)
           : undefined;
       try {
-        return sayerFor(locale, overrides).format(message, values);
+        return sayerFor(locale, zone, overrides).format(message, values);
       } catch {
         /* A word that cannot be said in this locale is said in the App's own; one that cannot be said at all tells
            nobody, rather than failing the write it follows. */
         try {
-          return sayerFor(catalogs.source).format(message, values);
+          return sayerFor(catalogs.source, zone).format(message, values);
         } catch {
           return '';
         }

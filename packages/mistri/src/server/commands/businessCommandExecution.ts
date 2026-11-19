@@ -45,15 +45,7 @@ import {
   registeredAvailability,
   type BusinessCommandActor,
 } from './businessCommands.js';
-import {
-  canonicalKey,
-  COMMAND_FILE_READ_MOST,
-  createCommandDb,
-  keyFilter,
-  normalizeRow,
-  type UntypedRow,
-  type WriteTable,
-} from './commandDb.js';
+import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow, type WriteTable } from './commandDb.js';
 import { auditCommandRead, type CommandReadAudit, type ReadAuditSink } from '../readAudit.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
 import { compileWhen, failingCondition, plainlyFails, recordPartHolds, type DerivedFailure, whenHolds, whenPerson } from './commandWhen.js';
@@ -97,7 +89,7 @@ import { attributeAction, currentWriteAttribution } from '@mistriwork/engine/ada
 import { evaluateCommandAvailability } from './commandAvailability.js';
 import { constraintColumns, writeFailureKind } from '@mistriwork/engine/server/constraints.js';
 import { placeFile, type FileScope, type PlacedFile } from '../files/fileStorage.js';
-import { readHeldFile, stagedOwner, takeHeldFiles } from './stagedFiles.js';
+import { lookupFileReader, stagedOwner, takeHeldFiles } from './stagedFiles.js';
 import type { CommandFileRule } from './businessCommandAuthorization.js';
 import { openSavedDraft, type SavedDraftRun } from '../forms/savedForms.js';
 import { currentSpan, errorCode, inSpan, tracing } from '@mistriwork/engine/adapters/telemetry/trace.js';
@@ -166,6 +158,9 @@ interface ExecutionOptions {
   /** Files the host received for this run, beside the input (an inbound email's attachments, an inbound endpoint's
       `files`): the handler's `files`. */
   files?: readonly import('./businessCommands.js').CommandFile[];
+  /** Files a callback delivered in its own body, by the ids its input names them with in a `field.files` (stagedFiles.ts
+      `delivered`): the host has checked each as an upload is. */
+  delivered?: ReadonlyMap<string, import('./businessCommands.js').CommandFile>;
   /** A public form's visitor token, from their own cookie: whose held files (stagedFiles.ts) a submission may take. */
   visitor?: string;
   /**
@@ -614,6 +609,8 @@ async function executeUntraced(
        and says why; one that admits the record after all (it moved between the two reads) is refused as stale, since
        the handler would run without its lookup. A `when` naming `me` waits for the transaction, which reads the person. */
     let lookupHeld = false;
+    /* The file bytes lookup read: the handler's readFile starts its budget there, so the two share one bound. */
+    let lookupFiles: ReturnType<typeof lookupFileReader> | undefined;
     const refusedAsItStands = (table: NonNullable<typeof authorized.catalog>[string], row: UntypedRow): boolean => {
       const graph = authorized.machine?.verb && authorized.machine.tables.get(command.target);
       if (graph && !authorized.machine!.verb!.from.has(String(row[graph.column]))) return true;
@@ -670,25 +667,12 @@ async function executeUntraced(
         }
         const stood = command.targets === 'none' || creating ? {} : many ? { records: Object.freeze(before) } : { record: before[0] };
         /* The files the form attached, read and left held for the handler; only this sender's, a public form's
-           visitor by their cookie. Within the one budget a handler's readFile keeps, so a lookup reading the same
-           id over and over is refused rather than filling memory. */
-        let lookupRead = 0;
-        const lookupFiles = Object.freeze({
-          read: async (id: string) => {
-            const file = await readHeldFile(command.fields, input, id, authorized.commandTransaction, {
-              appId: authorized.actor.appId,
-              command: request.command,
-              owner: stagedOwner(publicActor ? actor : authorized.actor, options.visitor),
-              now: now().getTime(),
-            });
-            if (lookupRead + file.size > COMMAND_FILE_READ_MOST)
-              throw authorFault(
-                new BusinessCommandExecutionError('invalid_result'),
-                `lookup: one command reads at most ${COMMAND_FILE_READ_MOST / 1024 / 1024} MB of files; read fewer, or move the rest to a job.`,
-              );
-            lookupRead += file.size;
-            return file;
-          },
+           visitor by their cookie (stagedFiles.ts: within the one budget the handler's readFile shares). */
+        lookupFiles = lookupFileReader(command.fields, input, authorized.commandTransaction, {
+          appId: authorized.actor.appId,
+          command: request.command,
+          owner: stagedOwner(publicActor ? actor : authorized.actor, options.visitor),
+          now: () => now().getTime(),
         });
         lookupHeld = !options.statusOnly && before.some((row) => refusedAsItStands(table, row));
         const value = lookupHeld
@@ -705,7 +689,7 @@ async function executeUntraced(
                 flags,
                 locale,
                 sources: createLookupSources({ catalogs: reader.catalogs, query: lookupQuery, now }),
-                files: lookupFiles,
+                files: lookupFiles.files,
                 // Each call keyed by this request, so a replay re-running lookup is answered from the call's record.
                 integrations: integrationCalls({
                   appId: scope.appId,
@@ -1567,6 +1551,7 @@ async function executeUntraced(
                 ...(authorized.versionField === undefined ? {} : { versionField: authorized.versionField }),
                 target: command.target,
                 constant: (table, column, word) => commandConstant(authorized, tx, table.meta, column, word, now()),
+                fileRead: lookupFiles?.read() ?? 0,
                 ...(authorized.fileReads ? { fileReads: authorized.fileReads, fileScope } : {}),
                 ...(authorized.files
                   ? {
@@ -1650,6 +1635,7 @@ async function executeUntraced(
                 command: request.command,
                 owner: stagedOwner(publicActor ? actor : authorized.actor, options.visitor),
                 now: now().getTime(),
+                ...(options.delivered ? { delivered: options.delivered } : {}),
               });
               const handed = Object.keys(held.files).length ? { ...held.files, ...revealed } : revealed;
               /* A link's run is read again in the transaction that runs it: one revoked or expired since the page

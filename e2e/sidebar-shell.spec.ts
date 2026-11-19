@@ -210,6 +210,39 @@ test("the sidebar runs the window's height with the mark and New at its head; th
   await page.keyboard.press('Escape');
 });
 
+test("recipes.pane: 'edge' runs the room to the window's right and bottom edges, square and unlifted", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto(`${origin}/suppliers`);
+  await expect(page.getByRole('heading', { level: 1, name: 'Suppliers' })).toBeVisible({ timeout: 45_000 });
+  // The theme says nothing, so the server serves the default (recipeAttributes): the inset pane above.
+  await expect(page.locator('html')).toHaveAttribute('data-look-pane', 'inset');
+  // The recipe is the one attribute the server would serve for `recipes.pane: 'edge'`; the sheet is always loaded.
+  await page.evaluate(() => document.documentElement.setAttribute('data-look-pane', 'edge'));
+  const at = await shellGeometry(page);
+  const sidebar = at.sidebar as NonNullable<Box>;
+  const paneBar = at.paneBar as NonNullable<Box>;
+  const content = at.content as NonNullable<Box>;
+  expect(sidebar).toMatchObject({ x: 0, y: 0, width: 240, height: 800 });
+  expect(paneBar).toMatchObject({ x: 240, y: 0, width: 1040, height: 52 });
+  expect(content.x).toBe(240);
+  expect(content.y).toBe(paneBar.y + paneBar.height);
+  expect(content.x + content.width).toBe(1280);
+  expect(content.y + content.height).toBe(800);
+  // One hairline between the menu and the room, none on the window's edges, no corners, and no lift (Lumen's
+  // raised buttons lift the inset pane, lumenLook.css).
+  const drawn = await page.evaluate(() => {
+    const style = getComputedStyle(document.querySelector('#content')!);
+    return {
+      left: style.borderLeftWidth,
+      right: style.borderRightWidth,
+      bottom: style.borderBottomWidth,
+      radius: style.borderBottomRightRadius,
+      shadow: style.boxShadow,
+    };
+  });
+  expect(drawn).toEqual({ left: '1px', right: '0px', bottom: '0px', radius: '0px', shadow: 'none' });
+});
+
 test('walking between rooms moves nothing in the sidebar', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await page.goto(`${origin}/suppliers`);

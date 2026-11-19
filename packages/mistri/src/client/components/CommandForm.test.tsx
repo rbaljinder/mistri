@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
@@ -630,6 +631,23 @@ test('a box that starts checked and is cleared sends false', async () => {
   await vi.waitFor(() => expect(api).toHaveBeenCalledWith('/api/commands/execute', expect.anything()));
   const sent = api.mock.calls.find(([path]) => path === '/api/commands/execute')![1] as { input: Record<string, unknown> };
   expect(sent.input).toEqual({ active: false });
+});
+
+test('a yes-or-no box stands in one row with its words, at the kit checkbox measure', async () => {
+  /* A field report: the browser's own box took a field's width and stood its words on the line under it. happy-dom
+     lays nothing out, so the row is read from the tree and the measure from the rule. */
+  const accept: AppCommandAction = {
+    ...action,
+    command: { ...action.command, input: [{ name: 'agree', label: 'I accept the terms', type: 'boolean', accept: true }] },
+  };
+  api.mockImplementation(async (path: string) => (path.endsWith('/prepare') ? { expectedVersion: 3 } : success));
+  draw({ actions: [accept] });
+  const { dialog } = await open();
+  const box = await within(dialog).findByRole('checkbox', { name: /I accept the terms/ });
+  expect(box.classList.contains('command-check')).toBe(true);
+  expect(box.parentElement?.getAttribute('data-slot')).toBe('field-check-row');
+  const css = readFileSync('packages/mistri/src/client/components/formDress.css', 'utf8');
+  expect(css).toMatch(/input\.command-check \{[^}]*inline-size: 1rem;[^}]*accent-color: var\(--accent\)/);
 });
 
 test('starting values that arrive after the person has typed fill every field they have not touched', async () => {

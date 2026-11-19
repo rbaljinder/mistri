@@ -16,6 +16,7 @@ import { after, before, describe, test } from 'node:test';
 import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { clearJournal } from '../packages/engine/src/server/journal.js';
+import { refusalCause } from '../packages/engine/src/shared/refusal.js';
 import { runtimeName, runtimeTable } from '../packages/engine/src/shared/runtimeTables.js';
 import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { COMMAND_STAGED_TABLE } from '../packages/mistri/src/adapters/commands/commandStaging.js';
@@ -284,4 +285,116 @@ test('check advises a lookup that reads files.read on a command whose form attac
   assert.equal(warnings.length, 1, warnings.join('\n'));
   assert.match(warnings[0]!, /command "quote" reads files\.read in its lookup and takes no file \[lookup-files-unattached\]/);
   assert.deepEqual(lookupFileWarnings(undefined), []);
+});
+
+test("a lookup's file reads and its handler's readFile share one command's 50 MB", async () => {
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-lookup-budget-'));
+  const path = join(directory, 'repairs.db');
+  const db = new DatabaseSync(path);
+  db.exec(`CREATE TABLE repair (id INTEGER PRIMARY KEY, title TEXT NOT NULL);
+    CREATE TABLE repair_photo (id INTEGER PRIMARY KEY, repair_id INTEGER NOT NULL REFERENCES repair(id), file_name TEXT NOT NULL,
+      content_type TEXT, byte_size INTEGER, data BLOB);
+    CREATE TABLE scan (id INTEGER PRIMARY KEY, file_name TEXT NOT NULL, content_type TEXT, byte_size INTEGER, data BLOB);`);
+  migrateSqliteCommandJournal(path);
+  // Two scans ten bytes short of the bound between them (a file is at most 25 MB): the handler alone may read both,
+  // but not after the lookup's 24.
+  const most = 25 * 1024 * 1024;
+  const plant = (size: number) =>
+    String(
+      db
+        .prepare(
+          `INSERT INTO scan (file_name, content_type, byte_size, data) VALUES ('scan.tiff', 'image/tiff', ?, zeroblob(?)) RETURNING id`,
+        )
+        .get(size, size)!.id,
+    );
+  const scans = [plant(most), plant(most - 10)];
+  const CONNECTION = 'lookup-file-budget';
+  const registry = new Registry();
+  try {
+    clearJournal(CONNECTION);
+    registry.add({ id: CONNECTION, name: 'Repairs', url: path, writable: true, source: 'config' });
+    const quote = (look: boolean) =>
+      defineCommand({
+        source: 'main',
+        target: 'repair',
+        targets: 'none',
+        read: ['scan'],
+        write: ['repair', 'repair_photo'],
+        input: { photos, first: field.text(), second: field.text() },
+        output: { parse: (result: unknown) => result },
+        async lookup({ files }, value) {
+          return look ? (await files.read(value.photos[0] as unknown as string)).size : 0;
+        },
+        async handle({ db: tx, lookup }, value) {
+          const scan = tx.scan as unknown as { readFile(id: string): Promise<{ size: number }> };
+          let read = 0;
+          for (const id of [value.first, value.second]) read += (await scan.readFile(id)).size;
+          const repair = await tx.repair.insert({ title: 'Quote' });
+          for (const photo of value.photos) await tx.repair_photo.insertFile(photo, { repair_id: repair.id as number });
+          return { lookup, read };
+        },
+      });
+    const app = parseTestApp(
+      {
+        id: APP,
+        name: 'Repairs',
+        sources: { main: { connection: CONNECTION, default: true } },
+        resources: {
+          repair: { access: 'write' },
+          repair_photo: {
+            access: 'write',
+            file: { content: 'data', name: 'file_name', type: 'content_type', size: 'byte_size', maxBytes: 4096 },
+          },
+          scan: { file: { content: 'data', name: 'file_name', type: 'content_type', size: 'byte_size', maxBytes: most } },
+        },
+        auth: { roles: { tech: { read: true, commands: ['quoteAlone', 'quoteAfterLookup'] } } },
+        views: { repairs: { kind: 'list', from: 'repair' } },
+        home: 'repairs',
+      },
+      'lookup file budget fixture',
+    );
+    const resources = await loadAppRuntimeResources(registry, app, CONNECTION);
+    const binding = bindBusinessCommands({
+      app,
+      registry: defineCommands({ quoteAlone: quote(false), quoteAfterLookup: quote(true) }),
+      resources,
+      writableConnection: () => true,
+    });
+    const run = async (command: string) => {
+      const photo = await stageCommandFile(binding, staff(), {
+        command,
+        field: 'photos',
+        file: { name: 'photo.png', type: 'image/png', data: base64(PNG(1)) },
+      });
+      return executeBusinessCommand(
+        binding,
+        staff(),
+        {
+          command,
+          commandVersion: 1,
+          key: {},
+          expectedVersion: 0,
+          idempotencyKey: `budget-${randomUUID()}`,
+          input: { photos: [photo.id], first: scans[0], second: scans[1] },
+        },
+        { door: 'api' },
+      );
+    };
+    assert.deepEqual((await run('quoteAlone')).result, { lookup: 0, read: 2 * most - 10 });
+    await assert.rejects(run('quoteAfterLookup'), (error: unknown) => {
+      const words: string[] = [];
+      for (let at: unknown = error, depth = 0; at && depth < 8; depth++) {
+        if (typeof at === 'string') words.push(at);
+        else if (at instanceof Error) words.push(at.message);
+        at = typeof at !== 'object' ? undefined : (refusalCause(at) ?? (at as { cause?: unknown }).cause);
+      }
+      assert.match(words.join(' | '), /scan: one command reads at most 50 MB of files; this one has read 25\.1 MB and this file is 25 MB/);
+      return true;
+    });
+  } finally {
+    await registry.closeAll();
+    clearJournal(CONNECTION);
+    db.close();
+    rmSync(directory, { recursive: true, force: true });
+  }
 });

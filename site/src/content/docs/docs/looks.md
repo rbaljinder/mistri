@@ -105,6 +105,7 @@ Each part's treatment in each look, as `mistri theme show <look>` prints it. A t
 | `steps` | `strip` | `strip` | `flat` | `flat` | `strip` | `strip` | `strip` | `tinted` |
 | `lanes` | `tag` | `tint` | `tint` | `tint` | `plain` | `plain` | `tag` | `tint` |
 | `header` | `band` | `plain` | `plain` | `band` | `plain` | `plain` | `plain` | `plain` |
+| `pane` | `inset` | `inset` | `inset` | `inset` | `inset` | `inset` | `inset` | `inset` |
 | `filters` | `solid` | `quiet` | `solid` | `solid` | `solid` | `quiet` | `solid` | `solid` |
 | `required` | `star` | `star` | `star` | `star` | `star` | `optional-word` | `star` | `star` |
 | `formStep` | `plain` | `plain` | `plain` | `plain` | `plain` | `ruled` | `ruled` | `plain` |

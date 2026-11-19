@@ -673,3 +673,60 @@ test('a command verb that asks nothing may ask before it runs, and one with inpu
     /confirms, but its command "decide" asks for input in its form/,
   );
 });
+
+test('a verb whose command a link runs is runnable without granting it to a signed-in role', () => {
+  const lending = (extra: { links?: unknown; views?: Record<string, unknown> }) =>
+    parseAppConfig(
+      {
+        name: 'Lending',
+        resources: {
+          application: {
+            access: 'write',
+            ...(extra.links ? { links: extra.links } : {}),
+            machine: machine('status', { draft: { on: { withdraw: 'withdrawn' } }, withdrawn: { final: true } }),
+          },
+        },
+        auth: { roles: { staff: { read: true } } },
+        views: { applications: { kind: 'list', from: 'application' }, ...extra.views },
+        home: 'applications',
+      },
+      'app.ts',
+      {
+        commands: catalogOf({
+          withdraw: { target: 'application' },
+        }),
+      },
+    );
+  assert.match(machineChecks(lending({}), schema).join('\n'), /machine-verb-unrunnable/);
+  // The link's holder runs it on the one record the link names.
+  assert.deepEqual(machineChecks(lending({ links: { status: { show: ['status'], commands: ['withdraw'] } } }), schema), []);
+});
+
+test('a verb whose command a public page runs is runnable without granting it to a signed-in role', () => {
+  const lending = (views: Record<string, unknown>) =>
+    parseAppConfig(
+      {
+        name: 'Lending',
+        resources: {
+          application: {
+            access: 'write',
+            machine: machine('status', { draft: { on: { apply: 'submitted' } }, submitted: { final: true } }),
+          },
+        },
+        auth: { roles: { staff: { read: true } }, public: { read: ['application'] } },
+        views: { applications: { kind: 'list', from: 'application' }, ...views },
+        home: 'applications',
+      },
+      'app.ts',
+      { commands: catalogOf({ apply: { target: 'application', targets: 'none', public: true, input: { name: { type: 'text' } } } }) },
+    );
+  const page = { id: 'page-lobby', module: './pages/lobby.page.tsx', kind: 'page' };
+  assert.match(machineChecks(lending({}), schema).join('\n'), /machine-verb-unrunnable/);
+  assert.deepEqual(
+    machineChecks(
+      lending({ lobby: { kind: 'page', label: 'Lobby', component: page, reads: ['application'], commands: ['apply'], public: true } }),
+      schema,
+    ),
+    [],
+  );
+});

@@ -31,6 +31,14 @@ const ADMIN = 'admin@example.test';
 
 export class DevRefusal extends Error {}
 
+/* https://fetch.spec.whatwg.org/#port-blocking: fetch (the dev accounts' client) and every browser refuse these
+   without a connection. On --port 4190 dev waited a minute for a server curl read as ready (a field report). */
+const FETCH_BAD_PORTS = new Set([
+  1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79, 87, 95, 101, 102, 103, 104, 109, 110, 111, 113, 115, 117,
+  119, 123, 135, 137, 139, 143, 161, 179, 389, 427, 465, 512, 513, 514, 515, 526, 530, 531, 532, 540, 548, 554, 556, 563, 587, 601, 636,
+  989, 990, 993, 995, 1719, 1720, 1723, 2049, 3659, 4045, 4190, 5060, 5061, 6000, 6566, 6665, 6666, 6667, 6668, 6669, 6679, 6697, 10080,
+]);
+
 interface DevFile {
   secret: string;
   passwords: Record<string, string>;
@@ -153,9 +161,16 @@ export function prepareDev(argv: string[], env: NodeJS.ProcessEnv = process.env)
     if (config) args.push('--config', config.path);
   }
 
+  const portAt = args.indexOf('--port') >= 0 ? args.indexOf('--port') : args.indexOf('-p');
+  const port = portAt >= 0 ? Number(args[portAt + 1]) : undefined;
+  if (port !== undefined && FETCH_BAD_PORTS.has(port))
+    throw new DevRefusal(
+      `--port ${port} is a port browsers and fetch refuse to open (the fetch standard's bad ports), so neither the dev ` +
+        'accounts nor a browser could reach the App there: choose another port.',
+    );
+
   const folder = join(app, '.mistri');
   const { file, dev } = devFile(folder);
-  const portAt = args.indexOf('--port');
   const claimed = claimDevFolder(folder, portAt >= 0 && /^\d+$/.test(args[portAt + 1] ?? '') ? Number(args[portAt + 1]) : undefined);
   env.BETTER_AUTH_SECRET = dev.secret;
   env.MISTRI_AUTH_ADMIN_EMAIL = ADMIN;
@@ -284,13 +299,21 @@ async function ready(opts: Options): Promise<{ origin: () => string; base: strin
   const base = (opts.basePath ?? '').replace(/\/$/, '');
   /* The port is read each time: it is the one the server bound, which the serve path writes back on listening. */
   const origin = () => `http://${host}:${opts.port}`;
+  /* The last try's own reason is the one said: "did not answer ready" hid a fetch that never left the process. */
+  let reason = 'no try finished';
   for (let tries = 0; ; tries++) {
     const answered = await fetch(`${origin()}${base}/readyz`).then(
-      (response) => response.ok,
-      () => false,
+      (response) => {
+        reason = `${origin()}${base}/readyz answered ${response.status}`;
+        return response.ok;
+      },
+      (error: Error & { cause?: { message?: string; code?: string } }) => {
+        reason = `reaching ${origin()}${base}/readyz failed: ${error.cause?.message ?? error.cause?.code ?? error.message}`;
+        return false;
+      },
     );
     if (answered) return { origin, base };
-    if (tries > 600) throw new Error('the server did not answer ready within a minute.');
+    if (tries > 600) throw new Error(`the server did not answer ready within a minute (the last try: ${reason}).`);
     await new Promise((done) => setTimeout(done, 100));
   }
 }

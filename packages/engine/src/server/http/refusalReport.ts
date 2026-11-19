@@ -98,8 +98,11 @@ export function reportRefusal(
   const span = currentSpan();
   span?.setAttributes({ 'mistri.refusal.code': code ?? String(status), 'mistri.refusal.status': status });
   span?.detail(() => ({ refusal: { status, ...(code ? { code } : {}), ...(heard ? { said: heard } : {}) }, because: reasons }));
+  /* The cause rides on the exported line as an attribute, beside the code: a deployment that reads its logs from a
+     collector, not a terminal, saw "Request refused (403)" and nothing of why (a field report). It is the innermost
+     reason, the one stderr leads with, already cut of link tokens; the full list stays in `detail`, local. */
   log(status >= 500 ? 'error' : 'warn', 'refusal', `Request refused (${status}${code ? ` ${code}` : ''})`, {
-    attributes: { 'mistri.refusal.code': code, 'http.response.status_code': status },
+    attributes: { 'mistri.refusal.code': code, 'mistri.refusal.cause': reasons.at(-1), 'http.response.status_code': status },
     detail: () => ({ said: heard, because: reasons }),
   });
   /* A refusal that said its rule (sayRefusal) is the operator's business too: a role or a policy that refuses

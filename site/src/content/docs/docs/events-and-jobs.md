@@ -167,6 +167,11 @@ Only such an endpoint's body may weigh more than 256 KB: up to the resource's
 is not base64 is `400`. Startup and `mistri check` refuse `files` naming a
 resource with no `file`, or one its command does not write.
 
+An [integration's webhook](/docs/integrations/#what-core-does) takes files in
+the same way without naming a resource: a signed `multipart/form-data` callback
+puts each file part in the mapped command's `field.files` of that name, and the
+field's own `accept`, `min`, `max` and the file resource's cap bound it.
+
 ### A workflow
 
 ```ts title="examples/apps/lintel/late-fees.ts"

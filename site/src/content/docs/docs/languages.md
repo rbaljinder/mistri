@@ -79,7 +79,7 @@ A caption is said from the tenant's own rows, then the variant in the reader's l
 
 ## The platform's words
 
-A command's form, a public form and its status check say a few words of their own around the App's: "Step 2 of 3", "Back", "(optional)", "We sent a code by text message." An App's catalog says them in its own words under a `mistri.*` key, in the language it is written in:
+A command's form, a public form and its status check say a few words of their own around the App's: "Step 2 of 3", "Back", "(optional)", "Review your answers", "Submit", "Received", a refusal such as "Something with these details already exists.", "We sent a code by text message." An App's catalog says them in its own words under a `mistri.*` key, in the language it is written in:
 
 ```ts
 export default defineMessages<typeof en>('es', {
@@ -102,6 +102,32 @@ export default defineMessages<typeof en>('es', {
 | `mistri.form.no` | No | |
 | `mistri.form.monthHint` | MM/YYYY | |
 | `mistri.form.timeHint` | HH:MM | How a time of day is written after the date |
+| `mistri.form.review` | Review | |
+| `mistri.form.reviewTitle` | Review your answers | |
+| `mistri.form.reviewLead` | Check each section. Change anything that is not right. | |
+| `mistri.form.change` | Change | |
+| `mistri.form.changeNamed` | Change {label} | `{label}` |
+| `mistri.form.submit` | Submit | |
+| `mistri.form.checkBox` | Check this box to continue. | |
+| `mistri.form.notAccepted` | This answer was not accepted. Check it and try again. | |
+| `mistri.receipt.received` | Received | |
+| `mistri.receipt.keepReference` | Keep this reference. | |
+| `mistri.receipt.another` | Fill in another | |
+| `mistri.receipt.backTo` | Back to {name} | `{name}` |
+| `mistri.refusal.unreachable` | The form could not be sent. Check your connection and try again. | |
+| `mistri.refusal.failed` | The form could not be submitted ({status}). | `{status}` |
+| `mistri.refusal.tooMany` | Too many submissions from this address. Try again in {retryAfter} seconds. | `{retryAfter}` |
+| `mistri.refusal.invalidInput` | Some answers need another look. | |
+| `mistri.refusal.version` | This form has changed since the page was opened. Reload the page to continue. | |
+| `mistri.refusal.notFound` | What this form was about is no longer here. Reload the page to continue. | |
+| `mistri.refusal.ineligible` | This can’t be sent as it stands. Check your answers and try again. | |
+| `mistri.refusal.forbidden` | This form can’t be sent from this page. Reload it and try again. | |
+| `mistri.refusal.keyReused` | This was already sent with different answers. Reload the page to start again. | |
+| `mistri.refusal.duplicate` | Something with these details already exists. | |
+| `mistri.refusal.stale` | Something changed while you were filling this in. Reload the page and try again. | |
+| `mistri.refusal.cancelled` | It was not sent. | |
+| `mistri.refusal.unavailable` | It could not be sent just now. Try again in a moment; it will not be sent twice. | |
+| `mistri.refusal.locked` | Someone else is changing this record right now. Nothing was sent; try again in a moment. | |
 | `mistri.status.offerEmail` | We can email a code to the address on this application. It opens its details once, for 10 minutes. | |
 | `mistri.status.offerText` | We can send a code to the phone number on this application. It opens its details once, for 10 minutes. | |
 | `mistri.status.askEmail` | Email me a code | |

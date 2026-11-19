@@ -354,6 +354,17 @@ A record's head and a list's: on the page's ground, or one band from edge to edg
 
 <!-- /recipe words -->
 
+## `pane`
+
+A side-placed App's room against the window: a pane on the menu's ground, inset on its three open sides with its corners rounded, or running to the window's right and bottom edges with one hairline between it and the menu. Only a desk with the menu at the side (`ui.shell.header: 'sidebar'`) has a pane; a phone's drawer and the top placement draw neither.
+
+<!-- recipe words: pane -->
+
+- `inset`: A side-placed App’s room is a pane on the menu’s ground: inset from the window’s edge on the three sides the menu is not, a hairline round it and its corners rounded.
+- `edge`: A side-placed App’s room runs to the window’s right and bottom edges, square, with one hairline between it and the menu.
+
+<!-- /recipe words -->
+
 ## `filters`
 
 A list's filter not yet asked for, the "+ Status" beside its search: a dashed place, a key on a solid edge, or no edge until a pointer is over it. Its own part, so a theme picks it apart from its buttons: Workshop's keyed buttons with solid filters, Lumen's raised buttons with quiet ones.

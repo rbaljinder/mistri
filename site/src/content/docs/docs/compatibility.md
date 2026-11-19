@@ -59,7 +59,7 @@ At 1.0 these stay Preview:
 - An installable PWA (`ui.pwa`).
 - `@mistriwork/ui`, the React primitives.
 - `mistri deploy` and `@mistriwork/cloudflare`.
-- `roundTrips` in `@mistriwork/mistri/testing`.
+- `roundTrips` and `replay` in `@mistriwork/mistri/testing`.
 - The triggers a row-policy App names (`resources.<t>.triggers`).
 - What rc.11 to rc.15 added that no more than one sample App uses: timeline reactions, a display rule's `copy`,
   `timezone`, `whole` and `address`, a metric's `figure`, a list's `group`, a calendar's `span`, a reference's `tree`,

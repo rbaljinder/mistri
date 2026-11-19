@@ -210,7 +210,10 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
                   if (error instanceof TransactionOutcomeUnknown) throw error;
                   // The App's rules refusing the record: the person's to fix, said by field name (tenantWriteFailed).
                   if (error instanceof AppValidationDenied) throw error;
-                  return denyTenant();
+                  /* Every other refusal is the same value-free denial to the caller, with what refused it kept for
+                     the operator: dropped here, a member's refused fixed action logged nothing but "the tenant
+                     context could not be verified" (a field report). */
+                  return denyTenant(error);
                 }
               });
             };

@@ -5,6 +5,61 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.65
+
+- An integration's webhook may be a signed `multipart/form-data` callback: each file part is put in the mapped
+  command's `field.files` (or `field.signature`) of that name as a person's upload is, so the command stores it with
+  `insertFile` instead of reading base64 out of a 64 KB JSON body. The signature is still over the whole body and
+  `verify` reads the non-file parts as `form`. The field's own `accept`, `min`, `max` and the file resource's cap bound
+  the files, with an upload's refusals (415, 400, 413); nothing new is declared.
+- Ask: a mode of the assistant panel, opened from a list's **Ask** button or **Ask** in the command palette, and
+  offered only where the App's assistant is on. The answer shows the query the assistant ran, in the App's query
+  language, and the rows it read, each opening as its record (the evidence list the review queue uses). A turn sent
+  with `mode: 'ask'` (`/api/assistant/turn`; another mode is a 400) only reads: the assistant is not asked to change
+  anything, and a proposal it tries anyway is refused. Its reads go through the person's own session, so grants, row
+  policies, field grants and a tenant App's customer bound it as they bound the person.
+- `replay(cassette)` in `@mistriwork/mistri/testing` (Preview): `startTestApp({ assistant: replay(file) })` answers
+  the assistant from a cassette of recorded model requests and replies, keyed by the request, offline. A request the
+  cassette lacks fails the turn and names it. `MISTRI_REPLAY=record` asks the real model and writes the cassette; it
+  needs the model key and refuses without it. Cassettes redact API keys, bearer tokens, cookies and auth headers. The
+  server reads a cassette from `MISTRI_ASSISTANT_CASSETTE` outside production.
+- `mistri migrate <command> <path> --app …` (or `--connection`) refuses a path that is not the database the App or
+  connection binds, naming both: the bound one was migrated and the path ignored. The path alone with `--db`, or the
+  same database written either way, still runs.
+- `mistri dev --port` refuses a port that browsers and `fetch` will not open (the fetch standard's bad ports, 4190 among
+  them) when it starts, naming it, instead of waiting a minute for a ready server. When readiness does time out, the
+  message gives the last try's own reason.
+- `mistri dev` starts its host again, once and with a log line, when something outside stops it (a signal under load),
+  instead of waiting for the next save. A host stopped again within a minute waits for a save, so nothing loops.
+- A free-form page's `useCommand` treats a record command as granted when an action that offers it has a `when` through
+  a reference (`when: 'location_id.x = y'`). Before, the page's button was never drawn for a role that could run the
+  command from the record's menu.
+- The state-machine check (`mistri check`) counts a command run by a public page or by a link's holder
+  (`links.<name>.commands`) as a way out of a state, as it already counted a public form's.
+- A public form's own sentences (review, change, submit, the receipt, every refusal) are `mistri.*` catalog words, so
+  an App's catalog translates or rewords them as it does its own.
+- A command reads at most 50 MB of files in all: its lookup's `files.read` and its handler's `readFile` share the one
+  budget, where each had 50 MB of its own.
+- `recipes.pane: 'edge'`: a side-placed App's room runs to the window's right and bottom edges, square and without a
+  lift, with one hairline between it and the menu, so no band of the menu's color frames it. `inset`, the pane on the
+  menu's ground, stays the default in every built-in look.
+- A page loader's `now()` is the instant, as a command's is, where it was a wall-clock date in the App's zone. Beside
+  it, `today()` and `timezone` take the reader's zone: the tenant's time zone setting, then the App's `ui.timezone`,
+  then UTC. A date argument in a notice's title (`{at, date}`) is said in that zone, and a `DATE` value stays its own day.
+- The command palette finds a record past the first nine rows: a typed word asks each list for its share of twenty
+  rows, at least three, so a word that names the tenth row of one list reaches it.
+- A command form's accept box (a yes-or-no input, a public intake's consent) is drawn as the kit's checkbox is: its
+  square in the App's accent, level with the first line of its words, where it took a field's width.
+- The custom components docs name `ButtonLink` from `@mistriwork/ui` as the one link-styled button for code outside
+  the kit.
+- A refusal's log line carries its cause as `mistri.refusal.cause` beside `mistri.refusal.code`, when the refusal
+  recorded one. What the caller reads is unchanged.
+- A refused fixed action records which of the role's actions it missed and why (the columns it writes, a value it
+  sets, a reason it asks for, a `when` that does not hold), and a tenant write keeps that cause, where its log said
+  only that the tenant context could not be verified. The caller's refusal still names no value.
+- A component's stylesheet includes the stylesheets that modules reached through `import()` import, after the static
+  ones, in `mistri dev` and `mistri build` alike. Before, a lazily loaded part drew without its rules.
+
 ## 1.0.0-rc.64
 
 - A command form with more than eight inputs opens as a side drawer over the page (560px at the right edge, the verb and

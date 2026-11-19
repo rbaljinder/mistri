@@ -63,6 +63,11 @@
   :is(.form-page, .command-form, .insert-form-app) [data-slot='field'][data-required] > [data-slot='field-label']::after { content: none; }
   /* A checkbox's words beside it are an answer, not a question: the regular weight; a question's label stays medium. */
   :is(.form-page, .command-form, .insert-form-app) [data-slot='field-check-row'] > [data-slot='field-label'] { font-weight: 400; }
+  /* An accept box the browser draws (CommandFields' yes-or-no, IntakeControls' consent) wears the kit's Checkbox's
+     measure: its square, the App's accent, level with its words' first line. Undressed it took a field's width and
+     stood its words on the line under it. */
+  input.command-check { flex: none; inline-size: 1rem; block-size: 1rem; margin: 0.2em 0 0; accent-color: var(--accent); cursor: pointer; }
+  input.command-check:disabled { cursor: not-allowed; }
 
   /* A sensitive answer's Show stands over the box's inline end, a Tab stop of its own after the box (never a control
      inside a control); the box keeps the room for it, so a long value never runs under the word. */

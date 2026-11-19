@@ -88,7 +88,7 @@ node --import tsx --test tests/*.test.ts
 | Helper | Does |
 | --- | --- |
 | `createTestWorkspace()` | A temporary directory that owns cleanup: `copy`, `write`, `database`, `own(close)`, `path` |
-| `startTestApp({ workspace, directory, database, config?, args?, environment?, assistant? })` | Starts the production CLI on the App, with your config, policy, commands and jobs. A relative `--policy`, `--commands` or `--jobs` in `args` is the App directory's. A `database` without a `config` is writable when the App writes, and a SQLite file from outside the workspace is served as a copy. `assistant` is a script the in-App assistant answers from instead of a model: `{ turns: [{ when, steps: [{ text, tools }] }] }` |
+| `startTestApp({ workspace, directory, database, config?, args?, environment?, assistant? })` | Starts the production CLI on the App, with your config, policy, commands and jobs. A relative `--policy`, `--commands` or `--jobs` in `args` is the App directory's. A `database` without a `config` is writable when the App writes, and a SQLite file from outside the workspace is served as a copy. `assistant` is a script the in-App assistant answers from instead of a model: `{ turns: [{ when, steps: [{ text, tools }] }] }`, or `replay(cassette)` |
 | `host.seed(table, row \| rows)` | Inserts rows as a test's setup, past grants and the row policy, as a seed script would; the rows come back with their ids |
 | `host.readAudit({ resource, record, actor, tenant, since, limit })` | The [read audit](/docs/dsl-resources/#read-audit) of a resource with `audit: { reads: true }`, newest first: who read what, through which door. On a tenant App, `tenant` names the one tenant's log |
 | `host.runJob(name, { tenant })` | Runs a job at times now, as its service, and waits for its attempt: `{ state, code }`. A tenant App's job per tenant names the tenant it runs for |
@@ -105,6 +105,25 @@ node --import tsx --test tests/*.test.ts
 | `validateTestApp(dir)` | Loads the App and checks `authority.lock`, without a database |
 | `createTestClock(initial)` | `now`, `date`, `advance`, `reset` for your own business functions |
 | `settled(page, { quietMs?, timeout? })` | In a Playwright test, waits until no request has been in flight for 400 ms. The live-sync stream and other event streams are not counted. Use it before a screenshot or an assertion on a whole page |
+
+## Replay the assistant (Preview)
+
+`replay(cassette)` answers the assistant from a cassette: a JSON file of the model requests a turn made and the
+replies recorded for them, so an AI command or an Ask runs the same every time, offline.
+
+```ts
+import { replay, startTestApp } from '@mistriwork/mistri/testing';
+
+const host = await startTestApp({ workspace, directory, database, assistant: replay('tests/ask.cassette.json') });
+const rep = await host.as('rep');
+const answer = await rep.request('/api/assistant/turn', { method: 'POST', json: { app: 'crm', text: 'Which leads are new?', mode: 'ask' } });
+// Assert on the stream's `query` event (its `q` and `evidence`) or its `proposal`.
+```
+
+Replay never reaches the network. A request the cassette does not hold fails the turn, naming the request's key and
+the words it followed. `MISTRI_REPLAY=record` asks the real model instead and writes what it answered; it needs
+`ANTHROPIC_API_KEY` or `OPENAI_API_KEY` and refuses to start without one. A cassette keeps no API key, bearer token,
+cookie or auth header, so it can be committed beside its test.
 
 ## Tenant Apps
 

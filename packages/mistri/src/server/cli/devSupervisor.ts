@@ -9,6 +9,9 @@
  *
  * A child that fails to start (a page that does not load, a policy that refuses) printed why; this parent keeps
  * watching the App's files and starts it again on the next save instead of leaving the terminal.
+ * A child stopped from outside by a signal (the machine, under load) did not fail: it is started again at once, with a
+ * line saying so, since a browser walk against a host waiting for a save saw only refused connections (a field
+ * report). Once: a host stopped again within a minute of that start waits for the next save, so nothing loops.
  * Sessions live in the auth store and the cookies, which the dev folder keeps (cli/devMode.ts), so a restart signs
  * nobody out.
  */
@@ -72,7 +75,12 @@ interface DevSupervision {
    * fails waits for the next save instead: a half-typed commands module must not end the session.
    */
   readonly onlyOnChange?: boolean;
+  /** What is run, before `argv`: this process's own command unless a test names another. */
+  readonly entry?: readonly string[];
 }
+
+/** How long a host started again after an outside stop must run for another outside stop to start it again at once. */
+const OUTSIDE_STOP_SETTLED_MS = 60_000;
 
 /** Runs the child until the person stops it; resolves to the exit code the parent should leave with. */
 export async function superviseDev(options: DevSupervision): Promise<number> {
@@ -86,10 +94,14 @@ export async function superviseDev(options: DevSupervision): Promise<number> {
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  const entry = options.entry ?? [...process.execArgv, process.argv[1]];
+  /* Whether this start was made for an outside stop: a second stop soon after it waits for a save instead. */
+  let afterOutsideStop = false;
   try {
     for (let start = 0; ; start++) {
       const env = { ...options.env, [DEV_SUPERVISED_ENV]: '1', ...(start ? { MISTRI_OPEN: '0' } : {}) };
-      const running = spawn(process.execPath, [...process.execArgv, process.argv[1], ...options.argv], { env, stdio: 'inherit' });
+      const startedAt = Date.now();
+      const running = spawn(process.execPath, [...entry, ...options.argv], { env, stdio: 'inherit' });
       child = running;
       if (stopping) running.kill('SIGTERM');
       const exit = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((done) => {
@@ -101,6 +113,14 @@ export async function superviseDev(options: DevSupervision): Promise<number> {
       if (exit.code === 0) return 0;
       if (exit.code === DEV_CHANGED_EXIT) {
         console.error('mistri dev: the App changed; starting it again…');
+        afterOutsideStop = false;
+        continue;
+      }
+      const again = afterOutsideStop && Date.now() - startedAt < OUTSIDE_STOP_SETTLED_MS;
+      afterOutsideStop = false;
+      if (exit.signal && !again) {
+        console.error(`mistri dev: the host was stopped from outside (${exit.signal}); starting it again…`);
+        afterOutsideStop = true;
         continue;
       }
       if (options.onlyOnChange && start === 0) return exit.code ?? 1;

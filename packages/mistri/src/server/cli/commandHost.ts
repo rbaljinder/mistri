@@ -561,7 +561,7 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
             ...[...prepared.module.inbound.values()].map((endpoint) =>
               inboundEndpoint(endpoint, environment, inboundFileRule(app, endpoint)),
             ),
-            ...(integrations ? integrationEndpoints(integrations.runtime, commands) : []),
+            ...(integrations ? integrationEndpoints(integrations.runtime, commands, app) : []),
           ],
           appId: app.id,
           principals: prepared.module.principals,

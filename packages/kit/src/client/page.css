@@ -2876,6 +2876,9 @@
     -webkit-line-clamp: 3;
     line-clamp: 3;
     overflow: hidden;
+    /* Whole lines inside the card, never shrunk by the column it stands in: a flex item that clips (overflow) may
+       shrink below its content, and the third line was cut through the middle over the card's rule. */
+    flex: none;
   }
   .cards-value {
     margin: 0;

@@ -12,7 +12,7 @@
 import { personFacing } from '@mistriwork/kit/client/audience.js';
 import { createElement } from 'react';
 import { PHONE_QUERY, TABLET_QUERY } from '@mistriwork/ui/internal/ruler.js';
-import { AssistantTrigger } from './components/AssistantTrigger.js';
+import { AssistantTrigger, registerAskInPalette } from './components/AssistantTrigger.js';
 import { element, mount, queryClient, unmount } from '@mistriwork/kit/client/components/mount.js';
 import { captureAccountIdentity, requireTenantSelection, sessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { configureSuiteNavigation } from './suiteNavigation.js';
@@ -514,6 +514,7 @@ function renderAssistant() {
     host.style.cssText = 'display:inline-flex;min-width:32px';
     menuHost.before(host);
   }
+  registerAskInPalette();
   mount(host, createElement(AssistantTrigger, { key: app.id, app: app.id, record: app.assistant.record === true }));
 }
 

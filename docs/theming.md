@@ -239,6 +239,7 @@ CSS.
 | `steps`    | `flat`, `tinted` (Bloom), `strip` (Workshop, Lumen)                                                                       |
 | `lanes`    | `tint`, `tag` (Workshop, Graphite), `plain` (Ledger, Atelier)                                                                                 |
 | `header`   | `plain`, `band` (Workshop, Sage), `hero` (own)                                                                          |
+| `pane`     | `inset`, `edge` (own: the room runs to the window's right and bottom edges beside a side menu)                          |
 | `filters`  | `solid`, `dashed`, `quiet` (Lumen)                                                                                      |
 
 Each value is pictured on the CRM (the former Compass sample) in the site's recipe gallery

@@ -92,6 +92,7 @@ import {
   type StreamEvent,
 } from './assistantStream.js';
 import { Button } from '@mistriwork/ui/Button.js';
+import { EvidenceItem } from './EvidenceList.js';
 import { assistantApi, assistantOwner } from './assistantRequest.js';
 import { ConversationList, DeleteConversation, RenameField, type ConversationSummary } from './ConversationList.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
@@ -645,12 +646,44 @@ interface AssistantProps {
   onClose?: () => void;
   /** The room's conversation, from its address; the panel keeps the last one it showed. */
   conversation?: string;
+  /** Opened to Ask (the palette's, a list's): a fresh conversation whose turns read and show what they read. */
+  ask?: boolean;
+}
+
+/** What an Ask read: the line it ran, in the App's query language, and the rows it read there, each opening as its
+ * record. The reader's own read, so nothing here is anything they could not have opened themselves. */
+function AskRead({ read }: { read: Extract<PanelItem, { type: 'query' }> }) {
+  return (
+    <section className="assistant-ask-read" aria-label={say('askRan')}>
+      <p className="assistant-ask-query">
+        <span className="assistant-ask-ran">{say('askRan')}</span> <code>{read.q}</code>{' '}
+        <span className="assistant-ask-total">{say('askRows', { count: read.total })}</span>
+      </p>
+      {read.evidence.length > 0 && (
+        <ul className="proposal-evidence-list assistant-ask-evidence" aria-label={say('askEvidence')}>
+          {read.evidence.map((each, index) => (
+            <EvidenceItem key={`${each.ref}:${index}`} evidence={{ kind: 'record', ref: each.ref, label: each.label }} />
+          ))}
+        </ul>
+      )}
+    </section>
+  );
 }
 
 /** The trigger's panel, beside the page or full screen over its content. */
-export function AssistantPanel({ app, record, onClose }: { app: string; record: boolean; onClose: () => void }) {
-  // Another customer, or another person, is another history: the panel starts again in it.
-  return <Assistant key={assistantOwner()} app={app} record={record} mode="panel" onClose={onClose} />;
+export function AssistantPanel({ app, record, onClose, ask }: { app: string; record: boolean; onClose: () => void; ask?: number }) {
+  /* Another customer, or another person, is another history: the panel starts again in it. Each Ask (`ask` counts
+     them) starts again too, on a fresh conversation. */
+  return (
+    <Assistant
+      key={`${assistantOwner()}${ask ? `\nask${ask}` : ''}`}
+      app={app}
+      record={record}
+      mode="panel"
+      onClose={onClose}
+      ask={Boolean(ask)}
+    />
+  );
 }
 
 /** The App's assistant room (`placement: 'page'`), on the conversation its address names. */
@@ -662,12 +695,15 @@ export function AssistantRoom({ conversation }: { conversation?: string }) {
   );
 }
 
-function Assistant({ app, record, mode, onClose, conversation: addressed }: AssistantProps) {
+function Assistant({ app, record, mode, onClose, conversation: addressed, ask }: AssistantProps) {
   const room = mode === 'page';
   const owner = assistantOwner();
   const [conversation, setConversation] = useState<string | null>(
-    room ? (addressed ?? null) : lastConversation.owner === owner ? lastConversation.id : null,
+    room ? (addressed ?? null) : !ask && lastConversation.owner === owner ? lastConversation.id : null,
   );
+  // Ask holds until the person leaves it for another conversation or a new one.
+  const [asking, setAsking] = useState(Boolean(ask));
+  const askMode = asking ? { mode: 'ask' } : {};
   const [started, setStarted] = useState<string | null>(null);
   const [items, setItems] = useState<PanelItem[]>([]);
   const [listing, setListing] = useState(false);
@@ -877,7 +913,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
   const say_ = (said: string) => {
     if (!said || busy) return;
     let next = items;
-    const request: Record<string, unknown> = { text: said, ...(conversation ? { conversation } : {}) };
+    const request: Record<string, unknown> = { text: said, ...(conversation ? { conversation } : {}), ...askMode };
     if (editing !== null) {
       const at = items.findIndex((item) => item.type === 'person' && item.seq === editing);
       if (at >= 0) next = cutAt(items, at);
@@ -894,7 +930,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
     const at = items.map((item) => item.type).lastIndexOf('person');
     if (at < 0 || !conversation) return;
     setItems([...cutAt(items, at), items[at]]);
-    void run('/api/assistant/turn', { conversation, text: (items[at] as { text: string }).text, retry: true });
+    void run('/api/assistant/turn', { conversation, text: (items[at] as { text: string }).text, retry: true, ...askMode });
   };
   /* A turn cut off on the way, tried again: from the person's words if the server kept them, else sent as it was. */
   const again = () => {
@@ -962,6 +998,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
   const open = (id: string) => {
     stop.current?.abort();
     setListing(false);
+    setAsking(false);
     if (room) {
       go(assistantEntry(id), 'push');
       return;
@@ -973,6 +1010,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
   const startNew = () => {
     stop.current?.abort();
     setListing(false);
+    setAsking(false);
     if (room) {
       if (conversation) go(assistantEntry(), 'push');
       return;
@@ -1064,7 +1102,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
   const Title = room ? 'h1' : 'h2';
   /* The room is headed by the conversation it shows, once it has one; a new one is the Assistant. */
   const titled = room && conversation ? conversations.data?.conversations.find((each) => each.id === conversation) : undefined;
-  const heading = titled?.title || say('assistant');
+  const heading = asking ? say('ask') : titled?.title || say('assistant');
   const starting = ready && items.length === 0 && !(conversation && opened.isPending);
   const canSend = Boolean(text.trim()) && ready && !waiting;
   return (
@@ -1176,7 +1214,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
               {!ready && <p className="assistant-empty">{say('noModel')}</p>}
               {starting && (
                 <div className="assistant-start">
-                  <p className="assistant-empty">{say('emptyHint')}</p>
+                  <p className="assistant-empty">{say(asking ? 'askHint' : 'emptyHint')}</p>
                   {starters.length > 0 && (
                     <div className="assistant-starters" role="group" aria-label={say('starters')}>
                       {starters.map((starter) => (
@@ -1237,6 +1275,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
                     </p>
                   );
                 if (item.type === 'block') return <Block key={`b${at}`} block={item.block} onFollow={onFollow} />;
+                if (item.type === 'query') return <AskRead key={`q${at}`} read={item} />;
                 if (item.type === 'proposal')
                   return (
                     <ProposalCard
@@ -1314,9 +1353,9 @@ function Assistant({ app, record, mode, onClose, conversation: addressed }: Assi
                 ref={box}
                 rows={1}
                 value={text}
-                aria-label={say('message')}
+                aria-label={say(asking ? 'askMessage' : 'message')}
                 aria-describedby={waiting && !busy ? waitingNote : undefined}
-                placeholder={say('message')}
+                placeholder={say(asking ? 'askMessage' : 'message')}
                 disabled={!ready || Boolean(waiting && !busy)}
                 onChange={(event) => setText(event.target.value)}
                 onKeyDown={onKey}

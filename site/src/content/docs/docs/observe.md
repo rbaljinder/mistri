@@ -16,7 +16,7 @@ OTEL_SERVICE_NAME=loans npx @mistriwork/mistri --app ./my-app   # in production:
 ## What you'll see
 
 - With `--dev`, `http://localhost:4111/_mistri/observe/` shows every request as a waterfall: its SQL with parameters, commands with their input and refusal cause, logs, N+1 and slow statements, and the page's web vitals.
-- With the `OTEL_*` variables set, a trace per request, a span per statement, command, job, delivery and outbound call, and a log line per refusal.
+- With the `OTEL_*` variables set, a trace per request, a span per statement, command, job, delivery and outbound call, and a log line per refusal, with its code (`mistri.refusal.code`) and, where the refusal recorded one, its cause (`mistri.refusal.cause`).
 - Neither sends a row value, a body, SQL parameters, an email or a token off the machine; the observer masks credentials and hidden columns.
 
 ## When to use it

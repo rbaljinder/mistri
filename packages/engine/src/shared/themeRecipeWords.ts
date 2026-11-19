@@ -142,6 +142,11 @@ export const RECIPE_WORDS = {
     band: 'A record’s head and a list’s are one band of the raised ground from edge to edge: the trail, the title, its status, facts and verbs, a list’s tabs and filters; the contents keep their edge.',
     hero: 'A band, with the record’s avatar large beside its title (above it on a phone); a record without one, and a list, draw the band.',
   },
+  pane: {
+    inset:
+      'A side-placed App’s room is a pane on the menu’s ground: inset from the window’s edge on the three sides the menu is not, a hairline round it and its corners rounded.',
+    edge: 'A side-placed App’s room runs to the window’s right and bottom edges, square, with one hairline between it and the menu.',
+  },
   filters: {
     solid: 'A list’s filter not yet asked for is its name before a caret on a solid edge: a key, as the search beside it is.',
     dashed: 'The same key on a dashed hairline. No built-in look wears it: to people meeting a list it read as a place left empty.',

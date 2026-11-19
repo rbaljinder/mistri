@@ -1,6 +1,6 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.64 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.65 scope, stable and preview features, current limitations and planned work.
 ---
 
 The scope of this release, stable and preview features, current limitations and planned work.
@@ -10,7 +10,7 @@ npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.64**, a release candidate. Since rc.2, the first release under the mistri name,
+This site describes **mistri 1.0.0-rc.65**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -25,7 +25,7 @@ outside the compatibility promise; `mistri check` lists the Preview features
 an App uses, as information. At 1.0 these stay Preview: feature flags,
 audiences and `@mistriwork/mistri/openfeature`, experiments, the Suite Console, behavior
 analytics, SCIM, the Gantt presentation, a resource's `search` (its packs ship
-after 1.0), an App's installable PWA (`ui.pwa`, [installable PWAs](/docs/pwa/)), `@mistriwork/ui`, `mistri deploy` with `@mistriwork/cloudflare`, `roundTrips` in the testing entry, and the triggers a row-policy App names (`resources.<t>.triggers`). Also Preview, because they were added late and no more than one sample App uses them: reactions on a timeline, a value's `copy`, `timezone` and `whole`, the `address` format, a metric's `figure`, a list's `group` and `summary`, a calendar's `span`, a reference's `tree`, the crumb bar's `home` and `top`, the command inputs `field.time`, `field.files`, `field.signature`, `as: 'rating'`, `'scan'` and `'color'`, the command aggregates (`count`, `sum`, `avg`, `min`, `max`, `period`), and the embed router adapters. The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
+after 1.0), an App's installable PWA (`ui.pwa`, [installable PWAs](/docs/pwa/)), `@mistriwork/ui`, `mistri deploy` with `@mistriwork/cloudflare`, `roundTrips` and `replay` in the testing entry, and the triggers a row-policy App names (`resources.<t>.triggers`). Also Preview, because they were added late and no more than one sample App uses them: reactions on a timeline, a value's `copy`, `timezone` and `whole`, the `address` format, a metric's `figure`, a list's `group` and `summary`, a calendar's `span`, a reference's `tree`, the crumb bar's `home` and `top`, the command inputs `field.time`, `field.files`, `field.signature`, `as: 'rating'`, `'scan'` and `'color'`, the command aggregates (`count`, `sum`, `avg`, `min`, `max`, `period`), and the embed router adapters. The [compatibility promise](/docs/compatibility/) covers the rest. The kernel, tenant Apps, SAML,
 flows and machines, the assistant, integrations and durable workflows are
 stable.
 
@@ -55,6 +55,7 @@ stable.
 | Gallery, `headline()` (and its earlier figure, `was`), `card()`, facts, sheet and property-rail sections, section `tab`, ordered workflow strip, related cards, `related(…, { same, near })` | Stable |
 | The Gantt presentation (`gantt()`, `kind: 'gantt'` and its keys) | Preview |
 | `roundTrips(response)` in `@mistriwork/mistri/testing`: the database flights a request made, for a test to hold a budget with | Preview |
+| `replay(cassette)` in `@mistriwork/mistri/testing`: the assistant answered from recorded model replies, offline | Preview |
 | Triggers a row-policy App names (`resources.<t>.triggers`): their keyed effects proven inside the person's rows, approved in `authority.lock`, kept in record history and announced to live sync ([row access](/docs/row-access/#triggers-the-app-names)) | Preview |
 | Reactions under a timeline's entries (`reactions: { from, kinds, command }`) | Preview |
 | A value's copy button (`copy: true`), the zone a moment is said in (`timezone`), a whole amount without minor digits (`whole: true`), the `address` format, and a dashboard metric's `figure: 'compact'` | Preview |
@@ -146,7 +147,7 @@ and `package.json` are files, not entry points.
 | `@mistriwork/mistri/workflows` | `defineWorkflow`, `defineWorkflows`, `flowRunner` | Stable |
 | `@mistriwork/mistri/integration` | `defineIntegration` and `extendIntegration`, for a vendor package | Stable |
 | `@mistriwork/mistri/handler` | [Mount an App in your server](/docs/mount-in-your-server/), `mintEmbedAssertion` | Stable |
-| `@mistriwork/mistri/testing` | Test helpers for Apps (`roundTrips` is Preview) | Stable |
+| `@mistriwork/mistri/testing` | Test helpers for Apps (`roundTrips` and `replay` are Preview) | Stable |
 | `@mistriwork/mistri/maintenance` | Operator steps: `provisionStores`, `applyMigrations`, inspect, redrive and prune | Stable |
 | `@mistriwork/mistri/react` | [Embed in a React app](/docs/embed-in-a-react-app/) | Stable |
 | `@mistriwork/mistri/react/next`, `/react/react-router`, `/react/tanstack-router` | The embed router adapters | Preview |
@@ -172,7 +173,7 @@ entry points above:
   "version": "1.0.0",
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "peerDependencies": { "@mistriwork/mistri": "^1.0.0-rc.64" }
+  "peerDependencies": { "@mistriwork/mistri": "^1.0.0-rc.65" }
 }
 ```
 

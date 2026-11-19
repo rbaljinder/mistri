@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { userEvent } from '@testing-library/user-event';
+import { holdAppWords } from '@mistriwork/kit/client/messages.js';
 import { formArrives, formRefusal, FormSurface, submitPublicForm, type FormPresentation } from './FormSurface.js';
 
 const form: FormPresentation = {
@@ -464,5 +465,37 @@ test('a public receipt links back to the App only where a visitor can go: signed
     // The reference stays, whatever the link does.
     expect(screen.getByText('Your reference')).toBeTruthy();
     cleanup();
+  }
+});
+
+test("a form's review, Submit, receipt and refusals are said in the App's own words where its catalog has them", async () => {
+  holdAppWords({
+    'mistri.form.review': 'Revisar',
+    'mistri.form.changeNamed': 'Cambiar {label}',
+    'mistri.form.submit': 'Enviar',
+    'mistri.receipt.received': 'Recibido',
+    'mistri.receipt.another': 'Llenar otro',
+    'mistri.refusal.duplicate': 'Ya existe algo con estos datos.',
+    'mistri.refusal.tooMany': 'Demasiados envíos. Inténtelo en {retryAfter} segundos.',
+  });
+  try {
+    expect(
+      formRefusal({ code: 'duplicate_record', status: 409, message: 'A record with this value already exists.' }, form.input).alone,
+    ).toBe('Ya existe algo con estos datos.');
+    expect(formRefusal({ message: 'x', status: 429, retryAfter: 7 }, form.input).alone).toBe('Demasiados envíos. Inténtelo en 7 segundos.');
+    const submit = vi.fn().mockResolvedValue({ receipt: { id: 'r1', status: 'applied' } });
+    const { submitLabel: _label, done: _done, ...plain } = form;
+    render(<FormSurface form={plain} appName="Ignition" submit={submit} review again />);
+    fireEvent.change(screen.getByLabelText('Full name (required)'), { target: { value: 'Mara Alder' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    fireEvent.change(await screen.findByLabelText('Amount (required)'), { target: { value: '21000' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(await screen.findByRole('heading', { name: 'Revisar' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cambiar About you' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+    expect(await screen.findByRole('heading', { name: 'Recibido' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Llenar otro' })).toBeInTheDocument();
+  } finally {
+    holdAppWords(undefined);
   }
 });

@@ -119,7 +119,11 @@ export function noDevtoolsClient(): Plugin {
  *             which every App page runs before anything else;
  *   surfaces  in the order given, each takes what it reaches that no earlier part has (`surfaces`), except what two
  *             of them both reach where the product says that is the entry's (`sharedWithEntry`): an App's shell
- *             and its public pages, both first pages, so neither fetches a third chunk they share.
+ *             and its public pages, both first pages, so neither fetches a third chunk they share;
+ *   parts     named pieces some surfaces draw on their first page and the others only on demand (`parts`): what
+ *             their roots reach that no surface outside `with` reaches statically. Before them the first surface
+ *             to reach such a module took it, and the other surface's part fetched on demand imported that whole
+ *             surface's chunk to use it (an App's form room took the public pages along).
  *
  * Reachability is read once, from the finished module graph, over static imports only: a part loaded on demand
  * (components/onDemand.tsx) stays a chunk of its own, as it always was. The server names a path's surface in the page
@@ -142,9 +146,16 @@ interface Surfaces {
   surfaces: Readonly<Record<string, readonly string[]>>;
   /** Pairs of surfaces whose shared modules are the entry's. */
   sharedWithEntry?: readonly (readonly [string, string])[];
+  /**
+   * Parts of their own that some surfaces draw on their first page and the rest only on demand, by name: what the
+   * roots reach that the entry does not hold and that no surface outside `with` reaches statically. Without it, the
+   * first surface to reach such a module claims it, and every other surface's part fetched on demand that uses it
+   * imports that whole surface's chunk.
+   */
+  parts?: Readonly<Record<string, { readonly roots: readonly string[]; readonly with: readonly string[] }>>;
 }
 
-function surfaces({ index = [], surfaces: parts, sharedWithEntry = [] }: Surfaces): {
+function surfaces({ index = [], surfaces: parts, sharedWithEntry = [], parts: shared = {} }: Surfaces): {
   plugin: Plugin;
   groups: CodeSplittingGroup[];
 } {
@@ -177,12 +188,17 @@ function surfaces({ index = [], surfaces: parts, sharedWithEntry = [] }: Surface
       home.clear();
       for (const id of entry) home.set(id, 'index');
       for (const [a, b] of sharedWithEntry) for (const id of from.get(a)!) if (from.get(b)!.has(id)) home.set(id, 'index');
+      for (const [name, part] of Object.entries(shared)) {
+        const others = names.filter((surface) => !part.with.includes(surface)).map((surface) => from.get(surface)!);
+        for (const id of reach(rooted(name, part.roots), entry))
+          if (!home.has(id) && !others.some((surface) => surface.has(id))) home.set(id, name);
+      }
       for (const name of names) for (const id of from.get(name)!) if (!home.has(id)) home.set(id, name);
     },
   };
   /* Highest first: a group takes its modules' dependencies with it unless a group before it has them, so the entry's
      are claimed before any surface's. */
-  const order = ['index', ...names];
+  const order = ['index', ...Object.keys(shared), ...names];
   const groups = order.map((name, i) => ({ name, priority: order.length - i, test: (id: string) => home.get(id) === name }));
   return { plugin, groups };
 }

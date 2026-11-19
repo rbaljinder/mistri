@@ -84,6 +84,28 @@ export function actionOf(id: UiCommandRef): AppCommandAction | undefined {
   return undefined;
 }
 
+/**
+ * Whether an action offers this command on the record: one with no `when`, or one whose `when` holds of it, judged per
+ * record as the record's menu judges it (Actions.tsx). The grant is the role's and the command's; a `when` says only
+ * where the command is offered, so a role granted it is not told "not granted" on a record the condition passes over.
+ */
+async function offeredOn(id: UiCommandRef, action: AppCommandAction, record: Readonly<Record<string, unknown>>): Promise<boolean> {
+  const app = pageBridge.activeApp() as ServedApp | null;
+  const resource = resourceOffering(action);
+  const served = resource ? app?.resources?.[resource]?.actions : undefined;
+  const offering = ((served ?? [action]) as readonly AppCommandAction[]).filter(
+    (each) => (each.command as AppCommandAction['command'] | undefined)?.id === id,
+  );
+  if (offering.some((each) => !each.when)) return true;
+  const table = findTable(action.command.target) as TableMeta | undefined;
+  if (!table) return false;
+  const key = keyFor(action, record);
+  for (const each of offering) {
+    if ((await matchingKeys(table, [key], each.when, state.activeConnection)).has(bulkKey(table, key))) return true;
+  }
+  return false;
+}
+
 /** The resource whose actions hold this one: the table its records are rows of. */
 export function resourceOffering(action: AppCommandAction): string | undefined {
   const app = pageBridge.activeApp() as ServedApp | null;
@@ -673,6 +695,7 @@ export function commandHandle(ref: UiCommandRef, page?: string): UiCommandHandle
     available: async (record) => {
       if (!granted) return false;
       try {
+        if (!(await offeredOn(ref, action!, record))) return false;
         return await commandAvailable({
           command: action!.command.id,
           commandVersion: action!.command.version,

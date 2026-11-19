@@ -35,6 +35,8 @@ import type { CommandJournal } from '../../adapters/commands/commandJournalTypes
 import type { AppCommandField } from '../../shared/command.js';
 import type { AuthorizedBusinessCommand, BusinessCommandBinding } from './businessCommandAccess.js';
 import { BusinessCommandExecutionError } from './commandErrors.js';
+import { COMMAND_FILE_READ_MOST } from './commandDb.js';
+import { authorFault } from '@mistriwork/engine/shared/refusal.js';
 import type { BusinessCommandActor, BusinessCommandRegistry, CommandFile } from './businessCommands.js';
 
 /** How long a held file waits for its command. */
@@ -221,6 +223,94 @@ export async function stageCommandFile(
   return { id, name: kept, type: media, size: bytes.byteLength };
 }
 
+/** A file a callback brought in its own body, for the command input `field`. */
+export interface DeliveredPart {
+  readonly field: string;
+  readonly name: string;
+  readonly type: string;
+  readonly data: Uint8Array;
+}
+
+/**
+ * Files a signed callback delivered beside its input (an integration's multipart webhook), put in the command's
+ * `field.files` or `field.signature` as a person's upload is, and judged as one is: the field's own `accept`, the file
+ * resource's cap and name rules, an empty file refused, a signature a PNG. Their count is the field's `min` and `max`,
+ * judged by the command's input check, which finds each field's value as the ids made here. Answers those ids, by
+ * field, and the files they stand for, to hand the run as `delivered`; refuses as an upload does (StageRefusal: 413 a
+ * file past the cap, 415 a type the field does not take, 400 the rest, 404 a part the command has no field for).
+ * `seed` makes the ids what the sender's own id for the delivery makes them, so a retry's input is the first's.
+ * Only a command's top-level file fields are named by a part.
+ */
+export function deliveredFiles(
+  authorized: Pick<AuthorizedBusinessCommand, 'command' | 'files'>,
+  parts: readonly DeliveredPart[],
+  seed: string,
+): { input: Record<string, string | string[]>; files: Map<string, CommandFile> } {
+  const input: Record<string, string | string[]> = {};
+  const files = new Map<string, CommandFile>();
+  for (const part of parts) {
+    const field = authorized.command.fields.find(
+      (each): each is HeldField => each.name === part.field && (each.type === 'files' || each.type === 'signature'),
+    );
+    const rule = field && authorized.files?.get(field.from);
+    if (!field || !rule) throw new StageRefusal(404, 'no_such_field', 'This command takes no file by that name.');
+    if (!part.data.byteLength) throw new StageRefusal(400, 'invalid_input', 'The file is empty.');
+    const made = fileValues(rule, { name: part.name, type: part.type || undefined, bytes: part.data }, {});
+    if ('error' in made)
+      throw new StageRefusal(made.status === 413 ? 413 : 400, made.status === 413 ? 'too_large' : 'invalid_input', made.error);
+    const kept = made.values[rule.name] as string;
+    const media = heldType(part.type, part.data);
+    if (field.type === 'signature' ? media !== 'image/png' : !acceptsMedia(field.accept, media))
+      throw new StageRefusal(
+        415,
+        'unsupported_type',
+        field.type === 'signature'
+          ? 'A signature is held as a PNG picture.'
+          : `"${kept}" is not a type this file takes${field.accept ? ` (${field.accept.join(', ')})` : ''}.`,
+      );
+    const held = input[field.name];
+    const index = Array.isArray(held) ? held.length : held === undefined ? 0 : 1;
+    const id = createHash('sha256')
+      .update(JSON.stringify(['mistri.inbound-file.v1', seed, field.name, index, createHash('sha256').update(part.data).digest('hex')]))
+      .digest('base64url');
+    files.set(id, Object.freeze({ name: kept, type: media, size: part.data.byteLength, data: part.data }));
+    if (field.type === 'signature') {
+      if (held !== undefined) throw new StageRefusal(400, 'invalid_input', 'A signature is one file.');
+      input[field.name] = id;
+    } else input[field.name] = [...(held ? (held as string[]) : []), id];
+  }
+  return { input, files };
+}
+
+/**
+ * What a lookup reads of the files its form attached: `files` is the lookup's `files`, and `read()` the bytes taken so
+ * far, where the handler's `readFile` starts its budget, so the two share one bound. A lookup reading the same id over
+ * and over is refused rather than filling memory, and what it read the handler cannot read again.
+ */
+export function lookupFileReader(
+  fields: readonly AppCommandField[],
+  input: unknown,
+  transaction: AuthorizedBusinessCommand['commandTransaction'],
+  scope: { appId: string; command: string; owner: string | undefined; now: () => number },
+): { files: { read: (id: string) => Promise<CommandFile> }; read: () => number } {
+  let total = 0;
+  return {
+    read: () => total,
+    files: Object.freeze({
+      read: async (id: string) => {
+        const file = await readHeldFile(fields, input, id, transaction, { ...scope, now: scope.now() });
+        if (total + file.size > COMMAND_FILE_READ_MOST)
+          throw authorFault(
+            new BusinessCommandExecutionError('invalid_result'),
+            `lookup: one command reads at most ${COMMAND_FILE_READ_MOST / 1024 / 1024} MB of files; read fewer, or move the rest to a job.`,
+          );
+        total += file.size;
+        return file;
+      },
+    }),
+  };
+}
+
 /* ---------- taking them ---------- */
 
 /**
@@ -234,7 +324,15 @@ export async function takeHeldFiles(
   fields: readonly AppCommandField[],
   input: unknown,
   journal: CommandJournal,
-  scope: { appId: string; command: string; owner: string | undefined; now: number },
+  scope: {
+    appId: string;
+    command: string;
+    owner: string | undefined;
+    now: number;
+    /** Files a callback delivered in its own body (inboundHost.ts), by the ids its input names them with: already
+        checked as a held upload is, so they are taken from here and no sender holds them. */
+    delivered?: ReadonlyMap<string, { name: string; type: string; size: number; data: Uint8Array }>;
+  },
 ): Promise<{
   files: Record<string, unknown>;
   taken: readonly CommandFile[];
@@ -246,17 +344,20 @@ export async function takeHeldFiles(
     if (value === undefined) return undefined;
     const ids = (Array.isArray(value) ? value : [value]) as string[];
     if (!ids.length) return undefined;
-    if (!scope.owner || typeof journal.takeStaged !== 'function')
+    const delivered = scope.delivered && ids.every((id) => scope.delivered!.has(id));
+    if (!delivered && (!scope.owner || typeof journal.takeStaged !== 'function'))
       throw new BusinessCommandExecutionError('invalid_input', 'not_applied', at);
     let held;
     try {
-      held = await journal.takeStaged(scope.appId, {
-        owner: scope.owner,
-        command: scope.command,
-        field: heldFilePath(at),
-        hashes: ids.map(stagedIdHash),
-        now: scope.now,
-      });
+      held = delivered
+        ? ids.map((id) => scope.delivered!.get(id)!)
+        : await journal.takeStaged!(scope.appId, {
+            owner: scope.owner!,
+            command: scope.command,
+            field: heldFilePath(at),
+            hashes: ids.map(stagedIdHash),
+            now: scope.now,
+          });
     } catch (error) {
       if (error instanceof StagedFileRefused) throw new BusinessCommandExecutionError('invalid_input', 'not_applied', at);
       throw error;
@@ -330,7 +431,7 @@ class HeldReadDone extends Error {}
  * fence, and a second copy of that rule would be one to drift. An id the input does not name, or one not held for this
  * sender (another visitor's, one used already, one past its day), refuses at its field as the take would.
  */
-export async function readHeldFile(
+async function readHeldFile(
   fields: readonly AppCommandField[],
   input: unknown,
   id: unknown,

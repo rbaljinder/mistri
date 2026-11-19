@@ -1009,3 +1009,68 @@ test("a turn's cached input counts at a tenth against its limit; the day's spend
     },
   );
 });
+
+/* Ask (docs/assistant.md): the same turn under mode "ask", which reads as the person and shows what it read. */
+const askScript: AssistantScript = {
+  turns: [
+    {
+      when: 'which leads',
+      steps: [{ tools: [{ name: 'query', input: { q: 'lead show id, name, status sort id' } }] }, { text: 'Two leads.' }],
+    },
+    {
+      when: 'lose acme',
+      steps: [{ tools: [{ name: 'run', input: { action: 'markLost', resource: 'lead', id: 1 } }] }, { text: 'Asked.' }],
+    },
+  ],
+};
+
+test('Ask reads as the person: the query it ran and the rows it read, each citing its record, and nothing outside a grant', async () => {
+  await fixture(
+    async ({ as, turn, requests }) => {
+      const asked = await turn({ text: 'which leads', mode: 'ask' });
+      assert.equal(asked.status, 200);
+      const [read] = of(asked.events, 'query');
+      assert.equal(read.q, 'lead show id, name, status sort id');
+      assert.equal(read.resource, 'lead');
+      assert.equal(read.total, 2);
+      assert.deepEqual(
+        read.evidence.map((row: { kind: string; ref: string; label: string }) => [row.kind, row.ref, row.label]),
+        [
+          ['record', 'lead/{"id":1}', 'Acme Corp'],
+          ['record', 'lead/{"id":2}', 'Globex'],
+        ],
+      );
+      assert.match(requests.at(-1)!.system, /Ask/);
+      // A person without the grant reads nothing through Ask: the step fails and no query, no evidence is shown.
+      as('outsider');
+      const outside = await turn({ text: 'which leads', mode: 'ask' });
+      assert.ok(of(outside.events, 'step').every((step) => step.failed === true));
+      assert.deepEqual(of(outside.events, 'query'), []);
+      assert.doesNotMatch(JSON.stringify(requests.at(-1)!.messages), /Acme Corp|Globex/);
+      // A field outside the grant is in neither the evidence nor what the model was sent.
+      as('clerk');
+      const narrowed = await turn({ text: 'which leads', mode: 'ask' });
+      assert.equal(of(narrowed.events, 'query')[0].evidence.length, 2);
+      assert.doesNotMatch(JSON.stringify(narrowed.events), /Budget 40k/);
+      assert.doesNotMatch(JSON.stringify(requests.at(-1)!.messages), /Budget 40k/);
+      // A chat turn shows no query item: Ask is the mode that cites.
+      as('ann');
+      assert.deepEqual(of((await turn({ text: 'which leads' })).events, 'query'), []);
+    },
+    { script: askScript },
+  );
+});
+
+test('Ask only reads: a change it is asked for is refused, not proposed, and a mode it does not know is refused', async () => {
+  await fixture(
+    async ({ turn, db }) => {
+      const asked = await turn({ text: 'lose acme', mode: 'ask' });
+      assert.equal(asked.status, 200);
+      assert.deepEqual(of(asked.events, 'proposal'), []);
+      assert.ok(of(asked.events, 'step').every((step) => step.failed === true));
+      assert.equal(status(db, 1), 'new');
+      assert.equal((await turn({ text: 'hello', mode: 'write' })).status, 400);
+    },
+    { script: askScript },
+  );
+});

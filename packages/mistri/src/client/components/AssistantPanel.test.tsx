@@ -612,3 +612,61 @@ test('a conversation the server refuses is said with a way out, and is never reo
   expect(screen.queryByRole('alert')).toBeNull();
   expect(await screen.findByText(/Ask about your records/)).toBeInTheDocument();
 });
+
+test('an Ask is a mode of the panel: its turn asks to read only, and the answer shows the query it ran and the records it read', async () => {
+  const user = userEvent.setup();
+  fetcher.mockImplementation(async (url) => {
+    const path = String(url);
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path === '/api/assistant/turn')
+      return events(
+        ['conversation', { id: 'c2', title: 'Which leads are new?', person: 1 }],
+        ['step', { id: 's1', tool: 'query', label: 'Read lead' }],
+        [
+          'query',
+          {
+            id: 's1',
+            q: 'lead show id, name where status = new',
+            resource: 'lead',
+            total: 2,
+            evidence: [
+              { ref: 'lead/{"id":1}', label: 'Acme Corp' },
+              { ref: 'lead/{"id":2}', label: 'Globex' },
+            ],
+          },
+        ],
+        ['text', { delta: 'Two leads are new.' }],
+        ['done', { state: 'idle', tokens: 8 }],
+      );
+    return json({ error: 'unexpected' }, 404);
+  });
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} ask={1} />);
+  expect(await screen.findByRole('heading', { name: 'Ask' })).toBeInTheDocument();
+  expect(screen.getByText(/The answer shows the query it ran/)).toBeInTheDocument();
+  const box = screen.getByRole('textbox', { name: 'Ask about your records' });
+  await user.type(box, 'Which leads are new?{Enter}');
+  expect(await screen.findByText('Two leads are new.')).toBeInTheDocument();
+  expect(bodies()).toEqual([['/api/assistant/turn', { app: 'compass', text: 'Which leads are new?', mode: 'ask' }]]);
+  // The read, in the query language, with how many rows it found; each row read opens as its record.
+  const read = screen.getByRole('region', { name: 'Ran' });
+  expect(within(read).getByText('lead show id, name where status = new').tagName).toBe('CODE');
+  expect(within(read).getByText('2 rows')).toBeInTheDocument();
+  const rows = within(read).getByRole('list', { name: 'Records read' });
+  expect(
+    within(rows)
+      .getAllByRole('button')
+      .map((each) => each.textContent),
+  ).toEqual(['Acme Corp', 'Globex']);
+  // Nothing to confirm: an Ask reads.
+  expect(screen.queryByRole('region', { name: 'Proposed change' })).toBeNull();
+  expect(box).toBeEnabled();
+});
+
+test('a panel opened without Ask is the chat: its turn names no mode', async () => {
+  const user = userEvent.setup();
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.type(await screen.findByRole('textbox', { name: 'Message the assistant' }), 'hello{Enter}');
+  await screen.findByRole('region', { name: 'Proposed change' });
+  expect(bodies()[0][1]).not.toHaveProperty('mode');
+  expect(screen.queryByRole('region', { name: 'Ran' })).toBeNull();
+});

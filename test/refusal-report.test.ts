@@ -7,6 +7,7 @@ import assert from 'node:assert/strict';
 import type { IncomingMessage } from 'node:http';
 import { test } from 'node:test';
 import { authoringApp, noteAuthorRequest, reportRefusal } from '../packages/engine/src/server/http/refusalReport.js';
+import { addSink, type LogRecord } from '../packages/engine/src/adapters/telemetry/trace.js';
 import {
   Refusal,
   recordRefusalCause,
@@ -124,4 +125,23 @@ test("a reason that quotes a capability link's token is logged with its id only"
     reportRefusal(request(), 500, 'data_unavailable', 'The data could not be loaded.', new Error(`bad link ${token}`)),
   );
   assert.deepEqual(logged.lines.slice(1), ['  because: bad link mstl1.AAAAAAAAAAAAAAAAAAAAAA.[redacted]']);
+});
+
+test('the exported log line carries the refusal cause beside its code, not only the local detail', () => {
+  // A field report: a collector showed "Request refused (503)" and nothing of why; the reasons were local-only detail.
+  const lines: LogRecord[] = [];
+  const remove = addSink({ onEnd: () => {}, onLog: (record) => lines.push(record) });
+  try {
+    const scoped = recordRefusalCause(new Refusal('Not in scope.'), 'The "loan" row id 9 is outside the principal\'s rows.');
+    heard(() => reportRefusal(request('/api/commands/execute'), 503, 'temporarily_unavailable', 'Try again.', scoped));
+    heard(() => reportRefusal(request(), 404, undefined, 'No such endpoint.', new Error('No such endpoint.')));
+  } finally {
+    remove();
+  }
+  const [refused, quiet] = lines.filter((line) => line.source === 'refusal');
+  assert.equal(refused.attributes['mistri.refusal.code'], 'temporarily_unavailable');
+  assert.equal(refused.attributes['mistri.refusal.cause'], 'The "loan" row id 9 is outside the principal\'s rows.');
+  assert.equal(refused.detail, undefined);
+  // A refusal that recorded nothing has no cause to carry.
+  assert.equal(quiet.attributes['mistri.refusal.cause'], undefined);
 });

@@ -161,7 +161,7 @@ export async function submitPublicForm(
     });
   } catch {
     // No answer at all: "Failed to fetch", or the timeout's abort, is the browser's sentence, not the visitor's.
-    throw new Error(say('couldNotReach'));
+    throw new Error(appWord('mistri.refusal.unreachable', say('couldNotReach')));
   }
   let data: Record<string, unknown> = {};
   try {
@@ -171,12 +171,21 @@ export async function submitPublicForm(
   }
   if (res.ok && typeof data.reference === 'string') return data as unknown as FormReceipt;
   const retryAfter = Number(res.headers.get('retry-after') ?? data.retryAfter);
-  throw Object.assign(new Error(String(data.message || data.error || say('theFormCouldNotBeSubmitted', { status: res.status }))), {
-    status: res.status,
-    code: typeof data.code === 'string' ? data.code : undefined,
-    field: typeof data.field === 'string' ? data.field : undefined,
-    retryAfter: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
-  });
+  throw Object.assign(
+    new Error(
+      String(
+        data.message ||
+          data.error ||
+          appWord('mistri.refusal.failed', say('theFormCouldNotBeSubmitted', { status: res.status }), { status: res.status }),
+      ),
+    ),
+    {
+      status: res.status,
+      code: typeof data.code === 'string' ? data.code : undefined,
+      field: typeof data.field === 'string' ? data.field : undefined,
+      retryAfter: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+    },
+  );
 }
 
 export interface Failure {
@@ -193,18 +202,18 @@ export interface Failure {
    (sign in, the account changed) keeps them; a handler's own reason is never
    replaced — it is the one sentence written for this reader. */
 const REFUSED: Partial<Record<CommandRefusalCode, () => string>> = {
-  invalid_input: () => say('refusedInvalidInput'),
-  command_version_mismatch: () => say('refusedVersion'),
-  not_found: () => say('refusedNotFound'),
-  ineligible_state: () => say('refusedIneligible'),
-  forbidden: () => say('refusedForbidden'),
-  idempotency_conflict: () => say('refusedKeyReused'),
-  duplicate_record: () => say('refusedDuplicate'),
-  stale_record: () => say('refusedStale'),
-  cancelled: () => say('refusedCancelled'),
-  temporarily_unavailable: () => say('refusedUnavailable'),
-  row_locked: () => say('refusedLocked'),
-  invalid_result: () => say('refusedUnavailable'),
+  invalid_input: () => appWord('mistri.refusal.invalidInput', say('refusedInvalidInput')),
+  command_version_mismatch: () => appWord('mistri.refusal.version', say('refusedVersion')),
+  not_found: () => appWord('mistri.refusal.notFound', say('refusedNotFound')),
+  ineligible_state: () => appWord('mistri.refusal.ineligible', say('refusedIneligible')),
+  forbidden: () => appWord('mistri.refusal.forbidden', say('refusedForbidden')),
+  idempotency_conflict: () => appWord('mistri.refusal.keyReused', say('refusedKeyReused')),
+  duplicate_record: () => appWord('mistri.refusal.duplicate', say('refusedDuplicate')),
+  stale_record: () => appWord('mistri.refusal.stale', say('refusedStale')),
+  cancelled: () => appWord('mistri.refusal.cancelled', say('refusedCancelled')),
+  temporarily_unavailable: () => appWord('mistri.refusal.unavailable', say('refusedUnavailable')),
+  row_locked: () => appWord('mistri.refusal.locked', say('refusedLocked')),
+  invalid_result: () => appWord('mistri.refusal.unavailable', say('refusedUnavailable')),
 };
 
 /** What a refusal says, twice over: `beside` its field when there is one, and `alone` on the form's own line, naming where. */
@@ -225,7 +234,8 @@ interface FormRefusal {
  */
 export function formRefusal(failure: Failure, fields: readonly AppCommandField[], values: CommandValues = {}): FormRefusal {
   if (failure.status === 429) {
-    const said = say('tooManySubmissionsFromThisAddress', { retryAfter: failure.retryAfter ?? 60 });
+    const retryAfter = failure.retryAfter ?? 60;
+    const said = appWord('mistri.refusal.tooMany', say('tooManySubmissionsFromThisAddress', { retryAfter }), { retryAfter });
     return { beside: said, alone: said };
   }
   const code = failure.code as CommandRefusalCode | undefined;
@@ -236,7 +246,13 @@ export function formRefusal(failure: Failure, fields: readonly AppCommandField[]
     const own = commandProblems(fields, Object.fromEntries(Object.entries(values).filter(([name]) => names.has(name))))[failure.field];
     const field = commandFieldAt(fields, failure.field);
     const unchecked = field?.type === 'boolean' && field.as !== 'buttons' && values[failure.field] !== true;
-    const beside = own ?? (!fixed ? failure.message : unchecked ? say('checkThisBoxTo') : say('thisAnswerWasNot'));
+    const beside =
+      own ??
+      (!fixed
+        ? failure.message
+        : unchecked
+          ? appWord('mistri.form.checkBox', say('checkThisBoxTo'))
+          : appWord('mistri.form.notAccepted', say('thisAnswerWasNot')));
     // A sentence that already names its field is not prefixed with the name again.
     return { field: failure.field, beside, alone: field && beside.includes(field.label) ? beside : `${where}: ${beside}` };
   }
@@ -463,8 +479,14 @@ export function FormSurface({
         ? [
             ...form.steps,
             intake
-              ? { id: REVIEW, label: say('review'), fields: [], title: say('reviewTitle'), lead: say('reviewLead') }
-              : { id: REVIEW, label: say('review'), fields: [] },
+              ? {
+                  id: REVIEW,
+                  label: appWord('mistri.form.review', say('review')),
+                  fields: [],
+                  title: appWord('mistri.form.reviewTitle', say('reviewTitle')),
+                  lead: appWord('mistri.form.reviewLead', say('reviewLead')),
+                }
+              : { id: REVIEW, label: appWord('mistri.form.review', say('review')), fields: [] },
           ]
         : form.steps,
     [form.steps, reviewing, intake],
@@ -586,12 +608,15 @@ export function FormSurface({
 
   if (receipt) {
     const DoneHeading = headingLevel === 1 ? 'h1' : 'h2';
-    const message = receipt.message ?? form.done?.description ?? (receipt.reference ? say('keepThisReference') : undefined);
+    const message =
+      receipt.message ??
+      form.done?.description ??
+      (receipt.reference ? appWord('mistri.receipt.keepReference', say('keepThisReference')) : undefined);
     return (
       <section ref={surface} className="form-page form-page-done" aria-labelledby={`${id}-done`}>
         {!intake && <p className="eyebrow">{appName}</p>}
         <DoneHeading id={`${id}-done`} tabIndex={-1}>
-          {form.done?.title ?? say('received')}
+          {form.done?.title ?? appWord('mistri.receipt.received', say('received'))}
         </DoneHeading>
         {receipt.reference && (
           <>
@@ -605,7 +630,7 @@ export function FormSurface({
         {again && !attempt && form.input.length > 0 && (
           <p>
             <Button intent="secondary" onClick={startAgain}>
-              {say('fillInAnother')}
+              {appWord('mistri.receipt.another', say('fillInAnother'))}
             </Button>
           </p>
         )}
@@ -619,7 +644,7 @@ export function FormSurface({
         {/* A page has nowhere to be dismissed to: the receipt ends in a quiet way back, never a dead end. */}
         {!onDismiss && home && (
           <p className="form-page-done-home">
-            <a href={home}>{say('backToApp', { name: appName })}</a>
+            <a href={home}>{appWord('mistri.receipt.backTo', say('backToApp', { name: appName }), { name: appName })}</a>
           </p>
         )}
       </section>
@@ -679,7 +704,7 @@ export function FormSurface({
       {...(questions ? { questions } : {})}
     />
   );
-  const submitLabel = form.submitLabel ?? say('submit');
+  const submitLabel = form.submitLabel ?? appWord('mistri.form.submit', say('submit'));
   /* Where a reference's choices are read, and so its name: the reader's connection, or the visitor's signed-out read. */
   const source = connection !== undefined ? connection : visitor ? { visitor } : undefined;
   const from: ReviewSource | undefined = source === undefined ? undefined : { source, identityEpoch };
@@ -702,13 +727,13 @@ export function FormSurface({
                   intent="secondary"
                   size="compact"
                   disabled={pending}
-                  aria-label={say('change', { label: field.label })}
+                  aria-label={appWord('mistri.form.changeNamed', say('change', { label: field.label }), { label: field.label })}
                   onClick={() => {
                     change({ ...values, [name]: '' }, name);
                     setAsked((before) => new Set(before).add(name));
                   }}
                 >
-                  {say('changeStep')}
+                  {appWord('mistri.form.change', say('changeStep'))}
                 </Button>
               </span>
             </div>
@@ -740,10 +765,10 @@ export function FormSurface({
                   <Button
                     intent="quiet"
                     disabled={pending}
-                    aria-label={say('change', { label: step.label })}
+                    aria-label={appWord('mistri.form.changeNamed', say('change', { label: step.label }), { label: step.label })}
                     onClick={() => setOpened((before) => new Set(before).add(step.id))}
                   >
-                    {say('changeStep')}
+                    {appWord('mistri.form.change', say('changeStep'))}
                   </Button>
                 )}
               </div>
@@ -789,8 +814,13 @@ export function FormSurface({
           <section key={step.id} aria-labelledby={`${id}-review-${index}`}>
             <div className="form-review-head">
               <h3 id={`${id}-review-${index}`}>{step.label}</h3>
-              <Button intent="quiet" size="compact" onClick={() => setCurrent(index)} aria-label={say('change', { label: step.label })}>
-                {say('changeStep')}
+              <Button
+                intent="quiet"
+                size="compact"
+                onClick={() => setCurrent(index)}
+                aria-label={appWord('mistri.form.changeNamed', say('change', { label: step.label }), { label: step.label })}
+              >
+                {appWord('mistri.form.change', say('changeStep'))}
               </Button>
             </div>
             <dl>

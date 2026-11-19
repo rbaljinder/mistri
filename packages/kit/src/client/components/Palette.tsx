@@ -49,9 +49,12 @@ const MOST: Record<Group, number> = { recent: 4, pages: 8, create: 5, commands: 
 const FIRST_PAGES = 5;
 /** Once a word is typed the list is what it names, not a shortlist: every page the word matches stays reachable, the
     cap only keeps a one-letter term from drawing a screenful. (The shortlist above capped a typed App at eight pages,
-    and the ninth named by the word could not be reached by any word.) Records are not here: the database answers those
-    a few at a time (`MOST.records`). */
-const MOST_TYPED: Record<Group, number> = { recent: MOST.recent, pages: 60, create: 20, commands: 20, records: MOST.records };
+    and the ninth named by the word could not be reached by any word.) Records too: nine across every list hid the
+    tenth row a word named in a list of one, so the database is asked for what fills twenty, the lists sharing it. */
+const MOST_TYPED: Record<Group, number> = { recent: MOST.recent, pages: 60, create: 20, commands: 20, records: 20 };
+/** Rows asked of each list: the typed records' room shared among them, never fewer than three, so one list fills it and
+    eight lists still each say what they hold. */
+const perList = (lists: number): number => Math.max(3, Math.ceil(MOST_TYPED.records / Math.max(1, lists)));
 
 const groupOf = (item: PaletteItem): Group =>
   item.kind === 'page' ? 'pages' : item.kind === 'create' ? 'create' : item.kind === 'record' ? 'records' : 'commands';
@@ -202,7 +205,7 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
     }
     const timer = setTimeout(
       () => {
-        void findAcross(tables, term, 3).then((found) => {
+        void findAcross(tables, term, perList(tables.length)).then((found) => {
           if (mine !== recordToken.current) return;
           const hits = found.map((own, at) =>
             own.map((each): PaletteItem => ({
@@ -214,7 +217,7 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
               run: each.open,
             })),
           );
-          setRecords({ term, items: interleaved(hits, MOST.records) });
+          setRecords({ term, items: interleaved(hits, MOST_TYPED.records) });
         });
       },
       prefill && query === prefill ? 0 : 180,

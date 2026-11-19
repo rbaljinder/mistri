@@ -18,16 +18,40 @@
  *  - an event the App does not map is 202; an `optOut`/`optIn` event records
  *    the recipient's consent (core's, read before every channel send); a
  *    mapped event runs its command as the mapping's principal with the
- *    payload as input, named by no record.
+ *    payload as input, named by no record;
+ *  - a callback may be `multipart/form-data`: the signature is still over the whole body, `verify` is given the
+ *    non-file parts as `form`, and each file part is put in the command's `field.files` of that name, judged as
+ *    a person's upload is (stagedFiles.ts `deliveredFiles`): the field's own accept and count, the file
+ *    resource's cap. Nothing is declared for it.
  * Everything else — size, time window, replay, the answer, the span — is the
  * inbound host's, so there is one implementation of it to secure.
  */
 import type { IncomingMessage } from 'node:http';
+import type { AppDef } from '../../shared/app.js';
+import { FILE_MAX_BYTES_DEFAULT } from '../../shared/appModel.js';
+import { multipartBoundary, readMultipart, type MultipartFile } from '../jobs/multipartBody.js';
 import type { InboundEndpoint, InboundPlan, InboundReading } from '../jobs/inboundHost.js';
 import type { JobCommandReference } from '../jobs/jobModule.js';
 import { channelHolder } from './integrationChannels.js';
 import type { IntegrationEvent } from './integrationModule.js';
 import type { IntegrationRuntime } from './integrationRuntime.js';
+
+/** What a callback's fields weigh beside its files: an endpoint's usual 256 KiB. */
+const INTEGRATION_BODY_BYTES = 256 * 1024;
+
+/** The largest file the App's resources take: the most a multipart callback may add to its fields. Zero for an App with none. */
+function fileBytesOf(app: AppDef | undefined): number {
+  let most = 0;
+  for (const resource of Object.values(app?.resources ?? {}))
+    if (resource.file) most = Math.max(most, resource.file.maxBytes ?? FILE_MAX_BYTES_DEFAULT);
+  return most;
+}
+
+/** What `verify` answers with: the event, and the files that came beside it in a multipart body. */
+interface Verified {
+  readonly event: IntegrationEvent;
+  readonly files: readonly MultipartFile[];
+}
 
 /** How far a delivery's own time may be from ours: five minutes, as providers' own libraries hold it. */
 const INTEGRATION_WEBHOOK_WINDOW_MS = 5 * 60_000;
@@ -57,7 +81,9 @@ function headersOf(headers: IncomingMessage['headers']): Readonly<Record<string,
 export function integrationEndpoints(
   runtime: IntegrationRuntime,
   commands: Readonly<Record<string, { readonly version: number }>>,
+  app?: AppDef,
 ): InboundEndpoint[] {
+  const fileBytes = fileBytesOf(app);
   const endpoints: InboundEndpoint[] = [];
   for (const [name, integration] of runtime.declared.use) {
     const webhooks = integration.webhooks;
@@ -68,19 +94,31 @@ export function integrationEndpoints(
       Object.freeze({
         name,
         windowMs: INTEGRATION_WEBHOOK_WINDOW_MS,
+        // A multipart callback may bring a file past 256 KiB, up to the largest the App's file resources take.
+        maxBytesFor: (headers: IncomingMessage['headers']) =>
+          fileBytes && multipartBoundary(headers['content-type']) ? INTEGRATION_BODY_BYTES + fileBytes : undefined,
         secrets: (tenant: string) => runtime.secrets(tenant, name),
         verify(
           delivery: Readonly<{ headers: IncomingMessage['headers']; body: Buffer }>,
           secrets: Readonly<Record<string, string>>,
           now: number,
         ) {
+          // The signature is over the whole body, as the provider signed it; the parts are only read to be handed on.
+          const boundary = multipartBoundary(delivery.headers['content-type']);
+          const form = boundary ? readMultipart(delivery.body, boundary) : undefined;
+          if (boundary && !form) return undefined;
           const event = eventOf(
-            webhooks.verify(Object.freeze({ headers: headersOf(delivery.headers), body: delivery.body }), Object.freeze({ secrets, now })),
+            webhooks.verify(
+              Object.freeze({ headers: headersOf(delivery.headers), body: delivery.body, ...(form ? { form: form.fields } : {}) }),
+              Object.freeze({ secrets, now }),
+            ),
           );
-          return event ? Object.freeze({ at: event.at, payload: event }) : undefined;
+          return event
+            ? Object.freeze({ at: event.at, payload: Object.freeze({ event, files: form?.files ?? [] }) as Verified })
+            : undefined;
         },
         read(payload: unknown): InboundReading {
-          const event = payload as IntegrationEvent;
+          const { event, files } = payload as Verified;
           return Object.freeze({
             key: event.id,
             plan(): InboundPlan {
@@ -118,7 +156,14 @@ export function integrationEndpoints(
               });
               return Object.freeze({
                 ...(record ? { record } : {}),
-                run: Object.freeze({ command: reference, runAs: mapping!.runAs, input: data }),
+                run: Object.freeze({
+                  command: reference,
+                  runAs: mapping!.runAs,
+                  input: data,
+                  ...(files.length
+                    ? { parts: files.map(({ field, name, type, data }) => Object.freeze({ field, name, type, data })) }
+                    : {}),
+                }),
               });
             },
           });

@@ -23,7 +23,7 @@ import {
   type PageDef,
   type PageList,
 } from '@mistriwork/engine/shared/page.js';
-import { ANYONE, parseQuery } from '@mistriwork/engine/shared/query.js';
+import { ANYONE } from '@mistriwork/engine/shared/query.js';
 import { relatedCreatePlan } from '@mistriwork/engine/shared/relatedCreate.js';
 import { findTable, tableNamed, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { compileView, parseViewQuery, resolvePath } from '@mistriwork/engine/shared/view.js';
@@ -328,8 +328,9 @@ export function fieldAccessibleApp(
         const segments = declared && Object.fromEntries(Object.entries(declared).filter(([key]) => Boolean(table?.segments?.[key])));
         const visibleActions = actions?.filter((action) => {
           if (!table) return false;
-          // Whether the condition reads here at all; whose `me` it is, the request judges (appTransitions.ts).
-          if (action.when && parseQuery(`${table.id} ${action.when}`, { schema, me: ANYONE }).errors.length) return false;
+          /* Whether the condition reads here at all, read as the App loaded it (a path through a reference this reader
+             reads is a condition as a column is); whose `me` it is, the request judges (appTransitions.ts). */
+          if (action.when && parseViewQuery(schema, table.id, action.when, undefined, { me: ANYONE }).errors.length) return false;
           if (action.command) return !commandReferenceProblem(action.command, table.id, schema);
           if (granted?.get(table.id)?.some((grant) => grant.label === action.label)) return true;
           return Object.keys(action.set).every((column) => writable(table, column));

@@ -33,6 +33,8 @@ export { validateTestApp, createTestClock } from './testing/unit.js';
 export { createWorkflowDriver } from './testing/workflows.js';
 export { evaluateDecision } from './testing/decisions.js';
 export type { EvaluateDecisionOptions } from './testing/decisions.js';
+export { replay } from './testing/replay.js';
+export type { TestReplay } from './testing/replay.js';
 export type { DecisionEvaluation, ReliabilityBucket } from './decide/decisionEval.js';
 export type { WorkflowDriverOptions } from './testing/workflows.js';
 export { settled, watchRequests } from './testing/settled.js';

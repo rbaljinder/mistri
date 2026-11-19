@@ -19,10 +19,19 @@ import { appListQuery } from '@mistriwork/kit/client/components/appListModel.js'
 import { homeRoom, isListRoom } from '@mistriwork/kit/client/components/appRooms.js';
 import type { DashboardDef } from '@mistriwork/kit/client/components/dashboardModel.js';
 import { preloadDashboardParts } from '@mistriwork/kit/client/components/dashboardParts.js';
-import { FormBody } from './FormRoom.js';
 import { LoadErrorNote } from '@mistriwork/kit/client/components/Landing.js';
-import { PublicHome } from './PublicHome.js';
 import { AppListRoom } from '@mistriwork/kit/client/components/Rooms.js';
+import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+
+/* Its rules stay in the first stylesheet (and so in one compression with it): they are shared with the public page,
+   and a second file for them would cost more in brotli than the rules weigh. */
+import './FormSurface.css';
+import './CommandOutcome.css';
+
+/* The form surface is a chunk of its own: a home that is a form (signed in, or a visitor's) is the only first page
+   that draws it, so every other App's first paint is without it. */
+const FormBody = onDemand(() => import('./FormRoom.js'), 'FormBody');
+const PublicHome = onDemand(() => import('./PublicHome.js'), 'PublicHome');
 
 export function AppHome({ paint, said, entry, pages }: AppHomeProps) {
   const app = activeApp();

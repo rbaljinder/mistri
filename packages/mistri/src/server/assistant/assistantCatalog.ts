@@ -131,9 +131,16 @@ How you work:
 - Name records by their label and link them with the address a tool gave you, as a Markdown link.
 - Be brief: plain sentences, no headings.`;
 
+/* Ask is a question about the data: the person is shown each query the answer ran and the rows it read, so the
+   answer must come from those reads. */
+const ASK = `This is Ask: the person asked a question about the application's data.
+- Answer it from what query returns, and query before you answer. Every row you read is shown to them as evidence, so cite the records you rely on.
+- Change nothing. If the question needs a change, say so; only an action kept for review may be proposed with run.`;
+
 /** The system prompt: fixed preamble, the App, its instructions, its catalog. Nothing that changes within a conversation. */
-export function systemPrompt(catalog: AssistantCatalog): string {
+export function systemPrompt(catalog: AssistantCatalog, mode?: 'ask'): string {
   const lines = [PREAMBLE, '', `The application is "${catalog.app}".`];
+  if (mode === 'ask') lines.push('', ASK);
   if (catalog.instructions) lines.push('', `The application's own instructions:\n${catalog.instructions}`);
   lines.push('', 'Resources (name: label; the changes this person may propose):');
   for (const resource of catalog.resources) {
