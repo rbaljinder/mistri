@@ -56,6 +56,7 @@ export function AccountControl({
   tenantInvitations = false,
   apiTokens = false,
   inbox = false,
+  hostSignOut = false,
   onInvitationAccepted,
 }: {
   who: string;
@@ -72,6 +73,8 @@ export function AccountControl({
   apiTokens?: boolean;
   /** The App keeps this account an inbox: the bell stands before the account menu. */
   inbox?: boolean;
+  /** Signed in on a tenant's own host: its sign-out ends that host's session, not through the auth routes it cannot reach. */
+  hostSignOut?: boolean;
   onInvitationAccepted?: () => void;
 }) {
   const owner = useRef(suppliedOwner ?? captureAccountIdentity()).current;
@@ -193,7 +196,7 @@ export function AccountControl({
     const title = shellById('session-lock-title');
     if (retry) retry.disabled = true;
     try {
-      await post('/api/auth/sign-out', {}, account ?? undefined);
+      await post(hostSignOut ? '/_mistri/sign-out' : '/api/auth/sign-out', {}, account ?? undefined);
       if (sessionIdentity() === locked) reload();
     } catch {
       // A later session (even one that has since locked) owns its own UI.

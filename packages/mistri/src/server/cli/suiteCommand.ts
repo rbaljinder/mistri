@@ -26,7 +26,8 @@ import { Registry, loadConfig } from '@mistriwork/engine/server/connections.js';
 import { createSuite } from '../http/suite.js';
 import { openSuiteApp } from '../http/suiteApp.js';
 import { openSuiteTenant } from '../http/suiteTenant.js';
-import type { TenantHostIntent } from '../http/tenantHosts.js';
+import { tenantDomainAdvisory, type TenantHostIntent } from '../http/tenantHosts.js';
+import type { TenantDomainsService, TenantDomainsStore } from '../http/customDomains.js';
 import type { FlagRequestRuntime } from '../flags/requestRuntime.js';
 import { readSuiteConfiguration, type SuiteConfiguration } from './suiteConfig.js';
 import { assertBuildEntries } from './apps.js';
@@ -77,6 +78,7 @@ async function loadSuiteApp(deployment: SuiteConfiguration['apps'][number]): Pro
 
 export async function startConfiguredSuite(file: string, environment: NodeJS.ProcessEnv = process.env) {
   const config = await readSuiteConfiguration(file, environment);
+  if (config.tenantDomain) console.warn(tenantDomainAdvisory(config.tenantDomain));
   if (config.experiments && !config.experiments.assignmentKey)
     throw new Error('Experiment analytics requires an explicit dedicated assignmentKeyEnv key.');
   const placements = createSuitePublicPlacement(config);
@@ -86,6 +88,9 @@ export async function startConfiguredSuite(file: string, environment: NodeJS.Pro
     mounts: Object.fromEntries(config.apps.map((app) => [app.id, app.mount])),
     publicOrigin: config.publicOrigin,
     hosts: config.hosts,
+    tenantDomain: config.tenantDomain,
+    customDomains: config.customDomains,
+    domainSeams: { environment },
   };
   const mount = appMounts(
     config.apps.map((app) => app.id),
@@ -123,7 +128,7 @@ export async function startConfiguredSuite(file: string, environment: NodeJS.Pro
         throw new Error(
           `Suite App "${deployment.id}": API tokens belong to the App's own sign-in store, and shared identity replaces it; serve this App's API from its own server.`,
         );
-      if (config.publicOrigin || config.hosts?.length)
+      if (config.publicOrigin || config.hosts?.length || config.tenantDomain || config.customDomains)
         throw new Error(
           `Suite App "${deployment.id}": the local read API answers only on loopback, as serve's --api-reads does, so it cannot be served beside a publicOrigin or host mapping.`,
         );
@@ -286,7 +291,25 @@ export async function startConfiguredSuite(file: string, environment: NodeJS.Pro
         public: publicSurface,
         open: async (
           basePath: string,
-          { allowedHosts, hosts }: { allowedHosts: readonly string[]; hosts: readonly TenantHostIntent[] },
+          {
+            allowedHosts,
+            allowsHost,
+            primaryHost,
+            hostIntent,
+            platformHost,
+            suiteBase,
+            hosts,
+            domains,
+          }: {
+            allowedHosts: readonly string[];
+            allowsHost?: (host: string) => boolean;
+            primaryHost?: (tenant: string) => string | undefined;
+            hostIntent?: (host: string) => TenantHostIntent | undefined;
+            platformHost?: (host: string) => boolean;
+            suiteBase?: string;
+            hosts: readonly TenantHostIntent[];
+            domains?: (store: TenantDomainsStore) => TenantDomainsService;
+          },
         ) => {
           const publicPlacement = await placements?.forApp(app.app, deployment.policy, basePath);
           if (publicPlacement) await captureSuitePlacementPolicy(deployment.policy!, publicPlacement.policyRevision);
@@ -314,7 +337,13 @@ export async function startConfiguredSuite(file: string, environment: NodeJS.Pro
                 publicURL,
                 port: config.port,
                 allowedHosts,
+                ...(allowsHost ? { allowsHost } : {}),
+                ...(primaryHost ? { primaryHost } : {}),
+                ...(hostIntent ? { hostIntent } : {}),
+                ...(platformHost ? { platformHost } : {}),
+                ...(suiteBase !== undefined ? { suiteBase } : {}),
                 hosts,
+                ...(domains ? { domains } : {}),
                 suiteAuth: identity?.forApp(app, basePath),
                 ...(identity ? { accountEmail: (accountId: string) => nativeAccountEmailOf(identity.native, accountId) } : {}),
               });

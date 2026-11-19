@@ -40,6 +40,7 @@ import {
 } from './tenantSupportLease.js';
 import type { SupportReadContext } from './tenantSupportReadRuntime.js';
 import { requireFreshAdmission } from './tenantAdmissionCache.js';
+import { tenantHostIntentOf } from '../http/tenantHosts.js';
 import { tenantAnswerProvenByCommit, tenantAnswerProvenByFence } from './tenantRequestRuntime.js';
 
 interface TenantContextsOptions<Request> {
@@ -423,6 +424,11 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
   const admittedCandidate = async (request: Request, target: Target, initial?: { started: number; proof: VerifiedSessionInstance }) => {
     const started = initial?.started ?? clock();
     if (started > Number.MAX_SAFE_INTEGER - lifetime) return denyTenant();
+    /* A tenant's own host admits its tenant alone, never a realm: the HTTP layer refuses the rest already, and this
+       is the same rule where the lease is made, so no other caller can open one past it. */
+    const onHost = tenantHostIntentOf(request);
+    if (onHost && (target.realm !== 'tenant' || target.selectors.length !== 1 || target.selectors[0] !== onHost.tenant))
+      return denyTenant();
     const proof = initial?.proof ?? (await session(request));
     let sessionExpiry = proof.expiresAt;
     if (target.realm === 'support') {

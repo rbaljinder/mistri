@@ -81,6 +81,12 @@ test("a bearer stands for its session on a browser route, and on no member's API
     '/api/tenant/support/sessions',
     '/API/Tenant/Support/open',
     '/api/branding/save',
+    '/api/domains',
+    '/api/domains/add',
+    '/api/domains/check',
+    '/api/domains/remove',
+    '/api/domains/primary',
+    '/API/Domains/add',
     '/api/console',
     '/api/console/flags',
     // The rest of the account's and the operator's, held as before.

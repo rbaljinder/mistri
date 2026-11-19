@@ -120,6 +120,8 @@ const expected = [
   'packages/kit/dist/vite.js',
   'packages/cloudflare/dist/index.js',
   'packages/cloudflare/dist/index.d.ts',
+  'packages/cloudflare/dist/hostCertificates.js',
+  'packages/cloudflare/dist/hostCertificates.d.ts',
   'packages/mistri/dist/client/index.html',
   'packages/mistri/dist/client/index.public.html',
   'packages/mistri/dist/ssr/render.js',

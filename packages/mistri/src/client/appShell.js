@@ -108,6 +108,13 @@ export async function start() {
          is drawn without the /api/landing probe that answered 401. */
       if (home && (await surface.showPublicHome(me.home, landingAt.app, { landingView: me.landingView ?? null }))) return;
       if (door) {
+        /* A tenant's own host signs no one in itself: the deployment's sign-in does, and hands the session back to
+           this host (auth/hostHandoff.ts), to the address the visitor stood on. */
+        if (typeof me.hostSignIn === 'string') {
+          const to = landingAt?.kind === 'sign-in' ? '/' : window.location.pathname + window.location.search;
+          window.location.assign(`${me.hostSignIn}?${new URLSearchParams({ to })}`);
+          return;
+        }
         surface.showSignInFor(me, landingAt);
         return;
       }

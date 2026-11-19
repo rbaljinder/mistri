@@ -576,3 +576,4 @@ time; a live tenant has no such clock. Provision the store once with
 - [Roles and field access](/docs/roles/): the grants each membership's role carries.
 - `docs/tenant-apps.md`: the full startup contract.
 - [Sign in with your identity provider](/docs/identity-providers/): a tenant's own provider.
+- [Give a tenant its own domain](/docs/tenant-domains/): a tenant's own address.

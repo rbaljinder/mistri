@@ -7,6 +7,7 @@ import { publicHome } from '../../shared/appHome.js';
 import { SERVER_SEGMENTS } from '@mistriwork/engine/shared/mount.js';
 import type { LoadedApp } from '../app/apps.js';
 import { suiteAppRoles } from './suiteAppRoles.js';
+import { hostSignInStaffPath } from './hostHandoff.js';
 
 /** One rule of `identity.landing`: the first that holds for the signed-in account names its App. */
 export interface SuiteLandingRule {
@@ -47,6 +48,8 @@ export function privateSuiteApp(app: LoadedApp['app']): boolean {
   );
 }
 
+const HOST_SIGN_IN_KEYS = ['app', 'host', 'v', 'to'];
+
 /** A deep link worth carrying through sign-in: a same-origin path, written
  * exactly as a browser would send it, into one deployed App's pages — never
  * its API, assets or the suite's own routes. Anything else is not a
@@ -70,6 +73,16 @@ export function suiteDeepLink<T extends { app: LoadedApp; basePath: string }>(
   }
   if (url.origin !== 'http://suite.invalid' || `${url.pathname}${url.search}` !== value) return undefined;
   if (path !== suiteBase && !path.startsWith(`${suiteBase}/`)) return undefined;
+  /* The one server route carried through sign-in: handing the sign-in to a tenant's own host (hostHandoff.ts), which
+     names its App and checks the account's membership there itself. It redirects only to a host the App's host table
+     holds, never to anything written in this link. */
+  if (path === hostSignInStaffPath(suiteBase)) {
+    const keys = [...url.searchParams.keys()];
+    const app = url.searchParams.getAll('app');
+    const deployment = app.length === 1 ? deployments.find((item) => item.app.app.id === app[0]) : undefined;
+    if (!deployment || keys.some((key) => !HOST_SIGN_IN_KEYS.includes(key)) || new Set(keys).size !== keys.length) return undefined;
+    return { deployment, href: value };
+  }
   const owner = deployments
     .filter((item) => path === item.basePath || path.startsWith(`${item.basePath}/`))
     .sort((a, b) => b.basePath.length - a.basePath.length)[0];

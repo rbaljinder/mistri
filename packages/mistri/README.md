@@ -30,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.66; the
+These App features ship in mistri 1.0.0-rc.67; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -709,6 +709,29 @@ it in Manage tenants. clock sets a sandbox's dev clock, --ahead of real time
 and --rate times as fast, which its machine timers fall due on; a live tenant
 has none. --operator names who ran it on the receipt (default: your login).
 Exit codes: 1 could not run.
+
+mistri tenant init [<tenant>...] [--app <dir>] --policy <file> --suite <suite.json> [--subdomain <label>]
+mistri tenant host list [<tenant>] [--app <dir>] --policy <file>
+mistri tenant host add <tenant> (--subdomain <label> --suite <suite.json> | --host <hostname>) [--primary]
+                [--app <dir>] --policy <file> [--operator <name>]
+mistri tenant host add <tenant> --custom <hostname> --suite <suite.json> [--app <dir>] --policy <file>
+mistri tenant host verify <tenant> <host> --suite <suite.json> [--app <dir>] --policy <file>
+mistri tenant host remove <host> [--suite <suite.json>] [--app <dir>] --policy <file>
+mistri tenant host primary <tenant> <host> [--app <dir>] --policy <file>
+A tenant's addresses, for a suite whose config sets `tenantDomain` or `customDomains`. With
+--suite, init gives each new tenant a subdomain under the suite's
+tenantDomain in the step that makes it (--subdomain chooses the label, for
+one tenant; else its id). host add gives a tenant a subdomain or a whole
+hostname the operator vouches for, remove takes one away, primary picks the
+host its links are written with. A label that is reserved (www, api, app,
+admin, mail, auth, static, assets, status, docs, the suite's own) or taken is
+refused. host add --custom adds a domain the tenant owns, pending until its
+CNAME and its TXT `_mistri-verify.<host>` record (list prints both) are
+found; host verify checks them over DNS-over-HTTPS, as the tenant's Settings
+> Domains does, and a verified domain goes live once its certificate is.
+remove with --suite releases a custom domain's certificate. Each change
+writes a receipt; a running suite reads it within 30 seconds. Exit codes: 1
+could not run.
       --migrations <dir>      with migrate: where the files are (default
                               migrations/ in the App, or the connection's
                               "migrations": { "dir": … })

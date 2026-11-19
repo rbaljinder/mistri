@@ -40,7 +40,8 @@ import { COMMAND_JOURNAL_TABLES as journal } from '../packages/mistri/src/adapte
 import { migratePostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
 import type { PgQuery, PgResult } from '../packages/engine/src/adapters/postgresPool.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
-import { captureAppAuthRuntime, createAppAuth, type AppAuthRuntime } from '../packages/mistri/src/server/auth/auth.js';
+import { captureAppAuthRuntime, captureHostSignIn, createAppAuth, type AppAuthRuntime } from '../packages/mistri/src/server/auth/auth.js';
+import { HOST_HANDOFF, HOST_PIN, newHostToken, verifierHashOf } from '../packages/mistri/src/server/auth/hostHandoff.js';
 import type { ConnectionConfig } from '../packages/engine/src/server/connections.js';
 import { migratePostgresTenantAdministrationJournal } from '../packages/mistri/src/server/tenant/tenantAdministrationJournalPostgres.js';
 import { ADMINISTRATION_JOURNAL_TABLES as administrationJournal } from '../packages/mistri/src/server/tenant/tenantAdministrationJournal.js';
@@ -1252,5 +1253,39 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
     await auth.query(`DELETE FROM ${S}.auth_session WHERE "userId" = $1`, [f.member.accountId]);
     await sleep(1_100);
     refused(await f.data('/api/query', context, { table: 'item' }));
+  });
+
+  test("a tenant host's sign-in code is spent once on PostgreSQL, by its verifier, on its host, before it expires", async (t) => {
+    const f = await fixture(t, { keptSessions: undefined });
+    await f.grant(f.member);
+    const hostSignIn = captureHostSignIn(f.runtime)!;
+    const staff = await captureAppAuthRuntime(f.runtime).sessionInstance(f.request(f.member));
+    assert.ok(staff && hostSignIn.pinned(staff) === null);
+    const north = { app: appId, tenant: 'north', host: 'north.example.test' };
+    const mint = async () => {
+      const verifier = newHostToken();
+      return { verifier, code: await hostSignIn.mint(staff, north, verifierHashOf(verifier), '/items') };
+    };
+
+    // Two redemptions racing for one code: the conditional delete lets exactly one through.
+    const raced = await mint();
+    const answers = await Promise.all([1, 2].map(() => hostSignIn.redeem(raced.code, raced.verifier, north, 'test')));
+    assert.deepEqual(
+      answers.filter((answer) => answer !== null).map((answer) => answer!.to),
+      ['/items'],
+    );
+    const pinned = await auth.query(`SELECT COUNT(*)::int AS n FROM ${S}.auth_verification WHERE identifier = $1`, [HOST_PIN]);
+    assert.equal(pinned.rows[0].n, 1, 'the one redemption pinned its session');
+    assert.equal(await hostSignIn.redeem(raced.code, raced.verifier, north, 'test'), null, 'spent');
+
+    const wrongVerifier = await mint();
+    assert.equal(await hostSignIn.redeem(wrongVerifier.code, newHostToken(), north, 'test'), null);
+    assert.equal(await hostSignIn.redeem(wrongVerifier.code, wrongVerifier.verifier, north, 'test'), null, 'a refusal spends it');
+    const wrongHost = await mint();
+    assert.equal(await hostSignIn.redeem(wrongHost.code, wrongHost.verifier, { ...north, host: 'south.example.test' }, 'test'), null);
+    assert.equal(await hostSignIn.redeem(wrongHost.code, wrongHost.verifier, { ...north, tenant: 'south' }, 'test'), null);
+    const expired = await mint();
+    await auth.query(`UPDATE ${S}.auth_verification SET "expiresAt" = now() - interval '1 hour' WHERE identifier = $1`, [HOST_HANDOFF]);
+    assert.equal(await hostSignIn.redeem(expired.code, expired.verifier, north, 'test'), null);
   });
 });

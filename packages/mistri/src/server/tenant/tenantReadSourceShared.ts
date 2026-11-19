@@ -26,6 +26,7 @@ import { type TenantPublicEvidence, type TenantPublicLookup, type TenantPublicRe
 import type { SupportMembershipEvidence } from './tenantSupportLease.js';
 import { provideTenantSourceProbe } from './tenantSourceIdentity.js';
 import { type TenantMembershipListLookup } from './tenantStore.js';
+import type { TenantHostRow } from './tenantStoreContract.js';
 import {
   type TenantAddresses,
   type TenantAddressesLookup,
@@ -190,6 +191,9 @@ export interface TenantReadSource {
    * (tenantDueTimers.ts). A plan, as readActiveTenants is: each run is
    * admitted again on its own tenant's row. Admits nobody. */
   readDueTimers(query: DueTimersQuery): Promise<readonly DueTimer[]>;
+  /** The host table's every row, by host in byte order: the suite router's refresh (http/tenantHosts.ts), a plain read on
+   * this reader with no writer and no new connection. Presentation only; admits nobody. */
+  readHosts(): Promise<readonly TenantHostRow[]>;
   /** The sandboxes whose dev clock reads ahead (tenantSandboxClock.ts), none where the store was never
    * provisioned: which tenants' timers the sweep also reads on their own clock. A live tenant has no row
    * there, so none is ever among them. Admits nobody. */

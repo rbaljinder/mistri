@@ -36,4 +36,5 @@ Rebuild the image. Do not copy a build between mistri versions. A database one v
 ## Related
 
 - [Build and deploy](/docs/build-and-deploy/): every flag, and Cloudflare Containers.
+- [Set up custom domains](/docs/custom-domains-setup/): tenants' own addresses and their certificates.
 - [Observe and operate](/docs/observe/): `/healthz`, `/readyz` and the logs.

@@ -1077,7 +1077,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
     test('construction never provisions a missing membership namespace', async (t) => {
       const f = await fixture(t, dialect);
       await f.engine.exec(
-        `DROP TABLE "${TENANT_TABLES.membership}"; DROP TABLE "${TENANT_TABLES.tenant}"; DROP TABLE "${TENANT_TABLES.meta}";`,
+        `DROP TABLE "${TENANT_TABLES.host}"; DROP TABLE "${TENANT_TABLES.membership}"; DROP TABLE "${TENANT_TABLES.tenant}"; DROP TABLE "${TENANT_TABLES.meta}";`,
       );
       await assert.rejects(() => f.open());
       assert.deepEqual(await f.engine.layout('__mistri_tenant_'), []);

@@ -1,4 +1,5 @@
 import { dirname } from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { namedTenants } from './tenantNames.js';
 import { createTenantBrandingService, brandingLogoHeaders, BRANDING_LOGO_PATH } from './tenantBranding.js';
 import { readsAs } from '@mistriwork/engine/adapters/replicas.js';
@@ -35,6 +36,7 @@ import { probe } from '@mistriwork/engine/server/http/probes.js';
 import { embedBoot } from '../embed/boot.js';
 import { observerRoute } from '../observe/mount.js';
 import type { TestControl } from '../http/testControl.js';
+import type { TenantDomainsService } from '../http/customDomains.js';
 import { signInOf, isPublicForm, type AppDef } from '../../shared/app.js';
 import { validateHeaderValue, type IncomingMessage, type ServerResponse } from 'node:http';
 import { isDeepStrictEqual } from 'node:util';
@@ -44,12 +46,22 @@ import {
   authHoldsOwnProof,
   captureAppAuthRuntime,
   captureNativeDisplayName,
+  captureHostSignIn,
   captureNativeSignInAge,
   signInInfo,
   type AppAuthRuntime,
   type VerifiedSessionInstance,
 } from '../auth/auth.js';
 import { appTenantDirectories, bindTenantDirectories } from '../auth/scimDirectory.js';
+import {
+  hostSignInConfirmPage,
+  hostSignInPath,
+  hostSignInStaffPath,
+  isHostToken,
+  newHostToken,
+  safeReturnPath,
+  verifierHashOf,
+} from '../auth/hostHandoff.js';
 import { nativeAccountEmailOf, nativeMailAccount } from '../auth/authAccounts.js';
 import { expandEnvReferences } from '@mistriwork/engine/server/auth/credentials.js';
 import { doorRefusal, writes, type Bound, type ProxyRange } from '@mistriwork/engine/server/http/trust.js';
@@ -187,6 +199,17 @@ interface TenantAuthenticatedHttpOptions {
   /** The suite's hosts mapped to a tenant of this App (http/tenantHosts.ts): where that tenant's capability links are
       written, so its customer opens them on its own address. Presentation only: the door still finds the tenant by the link. */
   readonly hosts?: readonly TenantHostIntent[];
+  /** A tenant's primary live host from the suite's host table, read as it stands when a link is written; ahead of
+      `hosts`, which is the configuration's. Presentation only, like `hosts`. */
+  readonly primaryHost?: (tenant: string) => string | undefined;
+  /** The suite router's reading of a host for this App: its tenant, or nothing for a host the table does not hold. */
+  readonly hostIntent?: (app: string, host: string) => TenantHostIntent | undefined;
+  /** Whether a host is a subdomain of the suite's `tenantDomain`: a host sign-in to any other asks the person first. */
+  readonly platformHost?: (host: string) => boolean;
+  /** The suite's own base, where its sign-in and a host sign-in's staff leg live; this App's own when it stands alone. */
+  readonly suiteBase?: string;
+  /** The suite's custom-domain service over this App's host table, when the suite configures `customDomains`. */
+  readonly domains?: TenantDomainsService;
   /** A test host's setup (http/testControl.ts): present only in a process startTestApp started, never in a deployment. */
   readonly testControl?: TestControl;
 }
@@ -214,6 +237,57 @@ function send(req: IncomingMessage, res: ServerResponse, status: number, body: u
     'content-length': Buffer.byteLength(json),
   });
   res.end(req.method === 'HEAD' ? undefined : json);
+}
+
+/* What a session pinned to a tenant's own host (auth/hostHandoff.ts) reaches there beyond a visitor's surface: the
+   tenant's data and its whoami, never native auth, an operator's routes, a bearer's, the assistant or the flags. Each
+   is a prefix and what is under it, matched on the routed path; anything else stays the visitor's. */
+const NOT_FOR_PINNED = [
+  '/api/auth',
+  '/api/v1',
+  '/api/mcp',
+  '/api/oauth',
+  '/api/accounts',
+  '/api/tokens',
+  '/api/tenant/administration',
+  '/api/tenant/invitations',
+  '/api/tenant/support',
+  '/api/integrations',
+  '/api/branding',
+  '/api/domains',
+  '/api/console',
+  '/api/suite',
+  '/api/apps',
+  '/api/inbound',
+  '/api/mail',
+  '/api/flags',
+  '/api/experiments',
+  '/api/assistant',
+];
+/** Whether a path is one a session pinned to a tenant's host may take there (exported for its test). */
+export function pinnedRoute(path: string): boolean {
+  if (!path.startsWith('/api/') || path.includes('%') || path.includes('//')) return false;
+  // A dot segment is a path some layer may still resolve: `/api/x/../auth` must not pass as `/api/x`.
+  if (path.split('/').some((segment) => segment === '.' || segment === '..')) return false;
+  const lower = path.toLowerCase();
+  return !NOT_FOR_PINNED.some((prefix) => lower === prefix || lower.startsWith(`${prefix}/`));
+}
+
+/* The browser's half of a host sign-in: set on the tenant's host before it leaves for the deployment's own, read
+   back on the handoff, so a code carried to any other browser redeems nothing. `__Host-` wherever it can be. */
+const HOST_VERIFIER = { secure: '__Host-mistri-host-v', plain: 'mistri-host-v' } as const;
+function cookieOf(req: IncomingMessage, name: string): string | undefined {
+  const header = req.headers.cookie;
+  if (typeof header !== 'string') return undefined;
+  let found: string | undefined;
+  for (const part of header.split(';')) {
+    const at = part.indexOf('=');
+    if (at < 0 || part.slice(0, at).trim() !== name) continue;
+    // Two of the same name is no answer: either could be a neighbour's.
+    if (found !== undefined) return undefined;
+    found = part.slice(at + 1).trim();
+  }
+  return found;
 }
 
 /** One dedicated host composes native authentication with the existing tenant
@@ -252,6 +326,11 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       'registry',
       'publicURL',
       'hosts',
+      'primaryHost',
+      'hostIntent',
+      'platformHost',
+      'suiteBase',
+      'domains',
       'testControl',
       'trustedProxies',
     ]);
@@ -320,6 +399,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     if (ownedAuth.has(raw.auth as AppAuthRuntime)) return denyTenant();
     claimedAuth = raw.auth as AppAuthRuntime;
     ownedAuth.add(claimedAuth);
+    /* Sign-in on a tenant's own host (auth/hostHandoff.ts): absent where the runtime keeps no native sessions. */
+    const hostSignIns = captureHostSignIn(claimedAuth);
     /* One tenant request asks for its session at every fence it crosses, a
        dozen times and more. The cookie cannot change within a request, so
        the token's resolution to a session (Better Auth's getSession, which
@@ -336,9 +417,9 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     const resolved = new WeakMap<IncomingMessage, VerifiedSessionInstance>();
     // Both adapters derive from the same captured strong method.
     const verify = async (request: IncomingMessage) => {
-      // Presentation-only storefront routing never resolves a native proof,
-      // including whoami and any static component's private-code check.
-      if (getTenantHostIntent(request)) return null;
+      /* On a tenant's own host only a session pinned to that host, App and
+         tenant resolves (auth.ts `sessionInstance`, hostHandoff.ts); a cookie of
+         the deployment's own host, or one pinned elsewhere, is no session there. */
       const kept = resolved.get(request);
       let proof: VerifiedSessionInstance | null = kept ?? null;
       /* A kept proof crosses no await before `assertSessionCurrent`, which
@@ -504,8 +585,24 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       raw.mount === undefined ? NO_MOUNT : (raw.mount as AddressMount),
       `/${encodeURIComponent(loaded.app.id)}/l`,
     ).slice(0, -2);
+    if (raw.primaryHost !== undefined && typeof raw.primaryHost !== 'function') return denyTenant();
+    const primaryHost = raw.primaryHost as ((tenant: string) => string | undefined) | undefined;
+    /* The router's own reading of a host for this App (tenantHosts.ts `intentFor`): the one place a host sign-in learns
+       where it may send a code, so a host the table does not hold is never a redirect's target. */
+    if (raw.hostIntent !== undefined && typeof raw.hostIntent !== 'function') return denyTenant();
+    const hostIntent = raw.hostIntent as ((app: string, host: string) => TenantHostIntent | undefined) | undefined;
+    if (raw.platformHost !== undefined && typeof raw.platformHost !== 'function') return denyTenant();
+    const platformHost = raw.platformHost as ((host: string) => boolean) | undefined;
+    if (raw.domains !== undefined && (typeof raw.domains !== 'object' || raw.domains === null)) return denyTenant();
+    const domains = raw.domains as TenantDomainsService | undefined;
+    if (
+      raw.suiteBase !== undefined &&
+      (typeof raw.suiteBase !== 'string' || (raw.suiteBase !== '' && !/^\/[^?#]*[^/?#]$/.test(raw.suiteBase)))
+    )
+      return denyTenant();
     const tenantOrigin = (tenant: string): string | undefined => {
-      const host = linkHosts.get(tenant);
+      // The table's primary, else the configuration's mapping, else the shared address.
+      const host = primaryHost?.(tenant) ?? linkHosts.get(tenant);
       if (host === undefined) return linkOrigin;
       try {
         const url = new URL(linkOrigin);
@@ -694,6 +791,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       ...(tokens ? { tokens } : {}),
       ...(search ? { search } : {}),
       ...(branding ? { branding } : {}),
+      ...(domains ? { domains } : {}),
       ...(integrations?.settings ? { integrations: integrations.settings } : {}),
       renderLinks: renderAnswerLinks,
       // Asked once the assistant below exists; it is made on this server's own listener.
@@ -860,11 +958,35 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       if (retired) return denyTenant();
       auth.assertCurrent();
     };
+    /* One membership read now by account, with no session at all: where an OAuth code is exchanged or a grant
+       refreshed, and where a sign-in is handed to a tenant's own host (hostHandoff.ts). Only an active membership of
+       an active tenant. */
+    const observeMember = captureSuiteFlagAccess(enrollment, active);
+    const memberOf = async (accountId: string, tenantId: string, environment: string) => {
+      const observed = await observeMember({ appId: loaded.app.id, environment, tenantId }, accountId);
+      if (!observed) return null;
+      const record = observed.record;
+      if (
+        record.appId !== loaded.app.id ||
+        record.accountId !== accountId ||
+        !('tenantId' in record) ||
+        record.tenantId !== tenantId ||
+        record.status !== 'active' ||
+        record.tenantStatus !== 'active' ||
+        !(record.validUntil > now())
+      )
+        return null;
+      observed.assertCurrent();
+      return Object.freeze({
+        tenantId,
+        membershipId: record.membershipId,
+        membershipVersion: record.membershipVersion,
+        roles: Object.freeze([...record.roles]),
+      });
+    };
     /* The authorization server's view of this App's memberships (auth/oauthServer.ts): the tenants a signed-in
-       person may consent for, as the host's chooser finds them, and one membership read now by account, where a
-       code is exchanged or a grant refreshed with no session at all. Only an active membership of an active tenant. */
+       person may consent for, as the host's chooser finds them, and one membership read now by account. */
     if (loaded.app.api) {
-      const observeMember = captureSuiteFlagAccess(enrollment, active);
       const enrolled = enrollment;
       bindOAuthTenancy(raw.auth as AppAuthRuntime, {
         async tenants(req) {
@@ -877,28 +999,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
           active();
           return ids.map((id) => (Object.hasOwn(named, id) ? { id, name: named[id] } : { id }));
         },
-        async membership(accountId, tenantId) {
-          const observed = await observeMember({ appId: loaded.app.id, environment: 'oauth', tenantId }, accountId);
-          if (!observed) return null;
-          const record = observed.record;
-          if (
-            record.appId !== loaded.app.id ||
-            record.accountId !== accountId ||
-            !('tenantId' in record) ||
-            record.tenantId !== tenantId ||
-            record.status !== 'active' ||
-            record.tenantStatus !== 'active' ||
-            !(record.validUntil > now())
-          )
-            return null;
-          observed.assertCurrent();
-          return Object.freeze({
-            tenantId,
-            membershipId: record.membershipId,
-            membershipVersion: record.membershipVersion,
-            roles: Object.freeze([...record.roles]),
-          });
-        },
+        membership: (accountId, tenantId) => memberOf(accountId, tenantId, 'oauth'),
       });
     }
     const dispatchAdministration = createTenantAdministrationHttp({
@@ -920,6 +1021,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     const addressesOf = enrollment.addresses;
     const home = publicHome(loaded.app);
     const mount: AddressMount = raw.mount === undefined ? NO_MOUNT : (captureTenantData(raw.mount) as AddressMount);
+    const suiteBase = (raw.suiteBase as string | undefined) ?? mount.base;
     /* A mapped host's public pages wear its tenant's branding: the host names the tenant there, and these pages
        show only what that tenant chose to publish about its look — never a member's private presentation. */
     const hostBranding = async (req: IncomingMessage) => {
@@ -1055,10 +1157,28 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       return host && host.app === loaded.app.id ? host : undefined;
     };
     /* Whether this request is a visitor's read: an address it carries, or this App's mapped host, on a read's route. */
+    /* The requests on this App's mapped host that carry a session pinned to it (auth/hostHandoff.ts), noted once at
+       the mapped host's gate: a member's reads there are a member's, never answered as the visitor's. */
+    const pinnedRequests = new WeakSet<IncomingMessage>();
+    const notePinned = async (req: IncomingMessage, path: string) => {
+      if (!hostSignIns || !mappedHost(req) || req.headers.cookie === undefined) return false;
+      if (path !== '/api/whoami' && !pinnedRoute(path)) return false;
+      // A bearer, an administrator's or an inviter's request is never a pinned session's, whatever its path.
+      if (req.headers.authorization !== undefined || isTenantInvitationHttpRequest(req) || isTenantAdministrationHttpRequest(req))
+        return false;
+      const proof = await verify(req).catch(() => null);
+      if (!proof || !hostSignIns.pinned(proof)) return false;
+      pinnedRequests.add(req);
+      return true;
+    };
+    /* Where a signed-out visitor on this App's mapped host signs in: through the deployment's own host, handed back
+       here (hostSignIn below). Nothing on any other host, nor where the runtime keeps no native sessions. */
+    const hostSignInOffer = (req: IncomingMessage) =>
+      hostSignIns && mappedHost(req) ? { hostSignIn: hostSignInPath(mount, loaded.app.id, 'sign-in') } : {};
     const visitorRead = (req: IncomingMessage, path: string, url: URL) =>
       dispatchPublicReads !== undefined &&
       isPublicReadRequest(req.method, path) &&
-      (url.searchParams.has('via') || mappedHost(req) !== undefined);
+      (url.searchParams.has('via') || (mappedHost(req) !== undefined && !pinnedRequests.has(req)));
     /* Each page's address in its inside form (`/{app}/…`), as the reserved
        routes read it before the handler (shared/mount.ts). */
     const insidePaths = new WeakMap<IncomingMessage, string>();
@@ -1169,10 +1289,13 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         // Before bearer APIs, support, administration or invitation dispatch:
         // mapped hosts expose only public intake/landing, static files and the
         // signed-out whoami. The canonical-path and Host checks below still
-        // apply; neither a cookie nor a tenant header can widen this surface.
+        // apply; neither a tenant header nor a cookie of the deployment's own
+        // host can widen this surface. Only a session pinned to this host, App
+        // and tenant (hostHandoff.ts) reaches the tenant's data here.
         const asked = new URL(req.url ?? '/', 'http://localhost');
         if (getTenantHostIntent(req)) {
           const path = (req.url ?? '').split('?')[0];
+          const pinned = await notePinned(req, path);
           if (
             !isTenantPublicPath(path) &&
             !visitorRead(req, asked.pathname, asked) &&
@@ -1185,7 +1308,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             /* A capability link: its holder has no account, and its tenant's own host is where the link names it. */
             !(deployment.links && LINK_PATH.test(insidePaths.get(req) ?? path)) &&
             !(browser && path === SHARE_CARD_PATH) &&
-            !(browser && path.startsWith('/') && path !== '/api' && !path.startsWith('/api/'))
+            !(browser && path.startsWith('/') && path !== '/api' && !path.startsWith('/api/')) &&
+            !pinned
           )
             return refuse(403);
         }
@@ -1527,7 +1651,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
              visitor's answer, whoever's cookie rides along — a member reads as a member at the App's own
              address, never through a tenant's public one. Whether the address places anyone is the reads'
              to say, each as one missing page; this answer names no tenant either way. */
-          if (dispatchPublicReads && (url.searchParams.has('via') || mappedHost(req))) {
+          if (dispatchPublicReads && (url.searchParams.has('via') || (mappedHost(req) && !pinnedRequests.has(req)))) {
             if (mappedHost(req) && url.searchParams.has('via')) return refuse();
             active();
             return send(req, res, 200, {
@@ -1543,6 +1667,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
               },
               public: true,
               tenantPublic: true,
+              ...hostSignInOffer(req),
               ...(browser
                 ? {
                     appName: loaded.app.name,
@@ -1580,6 +1705,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
                   ? { invitationClaim: loaded.app.id }
                   : {}),
               },
+              ...hostSignInOffer(req),
               ...(browser
                 ? {
                     tenant: true,
@@ -1597,6 +1723,9 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
           if (proof.expiresAt <= instant) return denyTenant();
           if (expected !== undefined && expected !== proof.identity.id) return refuse(409);
           res.setHeader(headers.account, proof.identity.id);
+          /* Signed in on a tenant's own host: one tenant, and none of an operator's rooms, which stay on the
+             deployment's own host (`pinnedRoute`); the client draws no tenant switcher for it. */
+          const pinned = hostSignIns?.pinned(proof) != null;
           return send(req, res, 200, {
             signedIn: true,
             accountId: proof.identity.id,
@@ -1607,9 +1736,10 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             ...roleLabelsOf(loaded.app.auth),
             ...keepsRoles(loaded.app.auth),
             ...(signIn.suite ? { suite: signIn.suite } : {}),
-            ...(administrationOptions?.policy ? { tenantAdministration: true } : {}),
-            ...(administration?.invitations ? { tenantInvitations: true } : {}),
-            ...(support ? { tenantSupport: true } : {}),
+            ...(pinned ? { pinned: true } : {}),
+            ...(!pinned && administrationOptions?.policy ? { tenantAdministration: true } : {}),
+            ...(!pinned && administration?.invitations ? { tenantInvitations: true } : {}),
+            ...(!pinned && support ? { tenantSupport: true } : {}),
             // A bell for the notices kept in each lease's own inbox (tenantInbox.ts).
             ...(appKeepsInbox(loaded.app) ? { inbox: true } : {}),
             /* The chooser is drawn before the App's payload, which needs a
@@ -1762,10 +1892,154 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     if (sourceClient) attachDevClient(server);
     const tenantNamesOf = enrollment.names;
     const readAudit = enrollment.deployment.readAudit;
+    /* Sign-in on a tenant's own host (auth/hostHandoff.ts), routed here by the suite ahead of any App's dispatch:
+       `sign-in`, `handoff` and `sign-out` on this App's mapped host, `staff` on the deployment's own. The mapped host
+       sets the browser's verifier and leaves for the deployment's host; that host, signed in, mints a code for the host
+       the router holds and sends the browser back with it; the handoff spends the code against the verifier. Every
+       answer is no-store and no-referrer, so the code's one hop leaves it in no cache and no next page's Referer. */
+    const hostSignIn = async (req: IncomingMessage, res: ServerResponse, route: 'sign-in' | 'handoff' | 'sign-out' | 'staff') => {
+      const answer = (status: number, extra: Record<string, string | string[]> = {}) => {
+        if (res.destroyed || res.writableEnded) return;
+        res.writeHead(status, { 'cache-control': 'no-store', 'referrer-policy': 'no-referrer', ...extra }).end();
+      };
+      active();
+      if (!hostSignIns) return answer(404);
+      let url: URL;
+      try {
+        url = new URL(req.url ?? '/', 'http://localhost');
+      } catch {
+        return answer(400);
+      }
+      const once = (name: string) => {
+        const all = url.searchParams.getAll(name);
+        return all.length === 1 ? all[0] : undefined;
+      };
+      const to = url.searchParams.getAll('to');
+      if (to.length > 1) return answer(400);
+      const secure = new URL(linkOrigin).protocol === 'https:';
+      const verifierName = secure ? HOST_VERIFIER.secure : HOST_VERIFIER.plain;
+      // Path=/ and no Domain, as `__Host-` requires: the verifier is this host's alone, whatever the App's mount.
+      const verifierCookie = (value: string, age: number) =>
+        `${verifierName}=${value}; Path=/; Max-Age=${age}; HttpOnly; SameSite=Lax${secure ? '; Secure' : ''}`;
+      if (route === 'staff') {
+        if (getTenantHostIntent(req)) return answer(404);
+        /* A POST is the custom domain's Continue (below), as a form's write: same-site and from this origin only. */
+        const confirming = req.method === 'POST';
+        if (req.method !== 'GET' && req.method !== 'HEAD' && !confirming) return answer(405);
+        if (doorRefusal(req, binding(), confirming ? { writing: true, origin: 'writes', sameSite: true, json: false } : { writing: false }))
+          return answer(403);
+        const host = once('host'),
+          verifierHash = once('v');
+        if (once('app') !== loaded.app.id || host === undefined || !isHostToken(verifierHash)) return answer(400);
+        const proof = await verify(req).catch(() => null);
+        active();
+        // Not signed in here yet: the deployment's own sign-in, which comes back to this address once it is.
+        if (!proof) return answer(303, { location: `${suiteBase}/_mistri/apps?next=${encodeURIComponent(req.url ?? '/')}` });
+        // Only a host the router holds for this App is a redirect's target; the address's own spelling goes no further.
+        const at = hostIntent?.(loaded.app.id, host);
+        if (!at || at.app !== loaded.app.id) return answer(404);
+        // Asked now, by account: a membership ended since this session began hands out nothing.
+        const member = await memberOf(proof.identity.id, at.tenant, 'host');
+        active();
+        if (!member) return answer(403);
+        const back = new URL(linkOrigin);
+        back.hostname = at.host;
+        /* A custom domain is a host the deployment does not name itself: whoever controls one can send a signed-in
+           person here with a link. So a link alone mints nothing for it: the person is asked, by name of the host, and
+           only their Continue — a same-site POST to this address — mints. A subdomain of the deployment's own is its
+           own, and goes straight back. */
+        if (!confirming && !platformHost?.(at.host)) {
+          const nonce = randomBytes(18).toString('base64');
+          res.writeHead(200, {
+            'content-type': 'text/html; charset=utf-8',
+            'cache-control': 'no-store',
+            // The Continue's answer is a redirect to the tenant's host, which a form's `form-action` must also allow.
+            'content-security-policy': `default-src 'none'; style-src 'nonce-${nonce}'; form-action 'self' ${back.origin}; base-uri 'none'; frame-ancestors 'none'`,
+            'x-content-type-options': 'nosniff',
+            /* same-origin, not no-referrer: under no-referrer a browser sends the Continue's POST with `Origin: null`, which
+               the door refuses. No Referer leaves for the tenant's host either way. */
+            'referrer-policy': 'same-origin',
+          });
+          res.end(
+            req.method === 'HEAD'
+              ? undefined
+              : hostSignInConfirmPage({
+                  host: at.host,
+                  who: proof.identity.name ? `${proof.identity.name} (${proof.identity.who})` : proof.identity.who,
+                  action: req.url ?? '/',
+                  cancel: `${suiteBase}/_mistri/apps`,
+                  nonce,
+                }),
+          );
+          return;
+        }
+        // The landing path goes into the code's row, not its address: what the handoff spends is all it follows.
+        const code = await hostSignIns.mint(
+          proof,
+          { app: at.app, tenant: at.tenant, host: at.host },
+          verifierHash,
+          safeReturnPath(to[0], appHome(mount, loaded.app.id)),
+        );
+        active();
+        back.pathname = hostSignInPath(mount, loaded.app.id, 'handoff');
+        back.search = new URLSearchParams({ code }).toString();
+        return answer(303, { location: back.href });
+      }
+      const intent = mappedHost(req);
+      if (!intent) return answer(404);
+      const place = { app: intent.app, tenant: intent.tenant, host: intent.host };
+      if (route === 'sign-in' || route === 'handoff') {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return answer(405);
+        if (doorRefusal(req, binding(), { writing: false })) return answer(403);
+      }
+      if (route === 'sign-in') {
+        const verifier = newHostToken();
+        const staff = new URL(`${linkOrigin}${hostSignInStaffPath(suiteBase)}`);
+        staff.search = new URLSearchParams({
+          app: loaded.app.id,
+          host: intent.host,
+          v: verifierHashOf(verifier),
+          to: safeReturnPath(to[0], appHome(mount, loaded.app.id)),
+        }).toString();
+        return answer(303, { location: staff.href, 'set-cookie': verifierCookie(verifier, 300) });
+      }
+      if (route === 'handoff') {
+        const cleared = verifierCookie('', 0);
+        const code = once('code');
+        if (!isHostToken(code)) return answer(400, { 'set-cookie': cleared });
+        const spent = await hostSignIns.redeem(code, cookieOf(req, verifierName), place, String(req.headers['user-agent'] ?? ''));
+        active();
+        if (!spent) return answer(403, { 'set-cookie': cleared });
+        return answer(303, { location: spent.to, 'set-cookie': [...spent.cookies, cleared] });
+      }
+      if (req.method !== 'POST') return answer(405);
+      if (doorRefusal(req, binding(), { writing: true, origin: 'writes', sameSite: true, json: false })) return answer(403);
+      const proof = await verify(req).catch(() => null);
+      active();
+      const pin = proof && hostSignIns.pinned(proof);
+      if (!proof || !pin) return answer(204);
+      const everywhere = url.searchParams.get('everywhere') === '1';
+      /* The clearing lines first, and sent however the sign-out goes: a store that fails to end the sessions still
+         leaves this browser signed out of this host. */
+      const cleared = await hostSignIns.clearing(req.headers.cookie);
+      let ended = false;
+      try {
+        // Each before its session ends, as the native sign-out does: evidence kept for them goes however the sign-out goes.
+        await hostSignIns.signOut(proof, everywhere, (sessionIds) => sessionIds.forEach((id) => endAdmissionSession(id)));
+        ended = true;
+      } finally {
+        active();
+        answer(ended ? 204 : 500, { 'set-cookie': cleared });
+      }
+    };
     return Object.freeze({
       server,
+      /** Sign-in on a tenant's own host: the suite routes its four addresses here, before any App's dispatch. */
+      hostSignIn,
       /* One tenant's read audit, for the test host's `readAudit()` (http/testControl.ts); no member's route reads it. */
       readAudit: readAudit.read,
+      /* The suite router's host refresh: a plain read on the running reader, never a maintenance transaction. */
+      readHosts: enrollment.deployment.readHosts,
       /** Wear a look a save changed in place (tenantLook.ts): the next page and payload are dressed in it. */
       restyle(next: TenantLook): void {
         if (retired) return;

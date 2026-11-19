@@ -57,6 +57,7 @@ import type { EmbedIssuerConfig } from '../../packages/mistri/src/server/embed/i
 import { TENANT_HTTP_HEADERS as headers, type TenantContextReply } from '../../packages/mistri/src/shared/tenantContext.js';
 import { pgClient, uuidPostgresDatabase, type Control, type TenantDialect } from './tenantDialects.js';
 import { postgresRuntimeSql } from './runtimeSql.js';
+import type { TenantDomainsService } from '../../packages/mistri/src/server/http/customDomains.js';
 import { holdPort, type HeldPort } from './heldPort.js';
 
 export const SUPPORT_SECRET = 'synthetic-support-audit-key-at-least-thirty-two-bytes';
@@ -139,6 +140,8 @@ export interface FixtureOptions {
   readonly tenantPolicy?: Record<string, unknown>;
   /** The App's business commands (their result references go in `tenantPolicy`); the command journal is migrated for them. */
   readonly commands?: BusinessCommandRegistry;
+  /** The tenants' custom-domains service, given the business database's path: the host serves `/api/domains` with it. */
+  readonly domains?: (path: string) => TenantDomainsService;
 }
 
 const numbered = (sql: string) => {
@@ -303,6 +306,7 @@ export async function tenantSupportFixture(t: TestContext, dialect: TenantDialec
         now: () => Date.now() + clock.offset,
         ...(options.commands ? { commands: { registry: options.commands } } : {}),
       },
+      ...(options.domains ? { domains: options.domains(path) } : {}),
     });
     await held!.adopt(host.server);
   };

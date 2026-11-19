@@ -24,6 +24,10 @@ export const MAINTENANCE_OPERATIONS = Object.freeze([
   'revokeTenantMembership',
   'cloneSandbox',
   'setSandboxClock',
+  'putTenantHost',
+  'removeTenantHost',
+  'setPrimaryTenantHost',
+  'checkTenantHost',
 ] as const);
 export type MaintenanceOperation = (typeof MAINTENANCE_OPERATIONS)[number];
 /** The operations whose receipt sits under the platform's reserved row, the
@@ -53,7 +57,22 @@ export interface MaintenanceMemberImage {
   readonly roles: readonly string[];
   readonly validUntil: number;
 }
+/** A host row as a receipt says it: the row without its verification bookkeeping, which is not an operator's change. */
+interface MaintenanceHostImage {
+  readonly host: string;
+  readonly app: string;
+  readonly kind: 'subdomain' | 'custom';
+  readonly status: 'pending' | 'verified' | 'live' | 'suspended';
+  readonly primary: boolean;
+  readonly source: 'claimed' | 'operator';
+}
 export type MaintenanceChange =
+  /** A host added to a tenant, removed from it, or made its primary (tenantHostStore.ts). */
+  | Readonly<{
+      operation: 'putTenantHost' | 'removeTenantHost' | 'setPrimaryTenantHost' | 'checkTenantHost';
+      before: MaintenanceHostImage | null;
+      after: MaintenanceHostImage | null;
+    }>
   | Readonly<{ operation: 'putTenant' | 'setPlatformStatus'; before: MaintenanceAnchorImage | null; after: MaintenanceAnchorImage }>
   | Readonly<{
       operation: 'grantPlatformMembership' | 'grantTenantMembership';
@@ -103,6 +122,22 @@ function clockImage(value: unknown): asserts value is MaintenanceClockImage {
   for (const field of [value.skewMs, value.rate, value.setAt])
     if (typeof field !== 'number' || !Number.isSafeInteger(field) || field < 0) denyTenant();
   if ((value.rate as number) < 1) denyTenant();
+}
+
+function hostImage(value: unknown): asserts value is MaintenanceHostImage {
+  exact(value, ['host', 'app', 'kind', 'status', 'primary', 'source']);
+  if (
+    typeof value.host !== 'string' ||
+    value.host.length > 253 ||
+    !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(value.host) ||
+    typeof value.app !== 'string' ||
+    !value.app ||
+    !['subdomain', 'custom'].includes(value.kind as string) ||
+    !['pending', 'verified', 'live', 'suspended'].includes(value.status as string) ||
+    typeof value.primary !== 'boolean' ||
+    !['claimed', 'operator'].includes(value.source as string)
+  )
+    denyTenant();
 }
 
 function exact(value: unknown, fields: readonly string[]): asserts value is Record<string, unknown> {
@@ -178,6 +213,33 @@ export function captureMaintenanceChange(input: unknown, operation: string, tena
       if (value.before.tenantId !== tenantId || value.before.status === 'closed' || value.after.version !== next(value.before.version))
         return denyTenant();
     }
+  } else if (
+    operation === 'putTenantHost' ||
+    operation === 'removeTenantHost' ||
+    operation === 'setPrimaryTenantHost' ||
+    operation === 'checkTenantHost'
+  ) {
+    exact(value, ['operation', 'before', 'after']);
+    if (value.operation !== operation) return denyTenant();
+    if (value.before !== null) hostImage(value.before);
+    if (value.after !== null) hostImage(value.after);
+    const { before, after } = value as unknown as { before: MaintenanceHostImage | null; after: MaintenanceHostImage | null };
+    if (
+      operation === 'putTenantHost'
+        ? before !== null || after === null
+        : operation === 'removeTenantHost'
+          ? before === null || after !== null
+          : operation === 'checkTenantHost'
+            ? // A check moves a custom domain's status and nothing else: never its name, kind, App, source or primacy.
+              !before ||
+              !after ||
+              before.kind !== 'custom' ||
+              // Field by field: the images are null-prototype records, and a spread copy would not be one.
+              (['host', 'app', 'kind', 'primary', 'source'] as const).some((field) => before[field] !== after[field]) ||
+              before.status === after.status
+            : !before || !after || before.host !== after.host || before.primary || !after.primary
+    )
+      return denyTenant();
   } else if (operation === 'grantPlatformMembership' || operation === 'grantTenantMembership') {
     exact(value, ['operation', 'anchor', 'membership']);
     anchor(value.anchor, platform);

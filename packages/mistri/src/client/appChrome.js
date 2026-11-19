@@ -306,8 +306,9 @@ export async function showAccount(me, kit) {
       key: captureAccountIdentity().epoch,
       owner: captureAccountIdentity(),
       who: me.who,
+      // A session pinned to a tenant's own host reaches no other App and no other tenant from it.
       appSwitcher:
-        (!sessionIdentity().tenantRequired || tenantNavigationReady) && activeApp()?.id === me.appId
+        me.pinned !== true && (!sessionIdentity().tenantRequired || tenantNavigationReady) && activeApp()?.id === me.appId
           ? activeApp()?.ui.appSwitcher
           : undefined,
       appSwitcherLocal:
@@ -321,6 +322,7 @@ export async function showAccount(me, kit) {
       // A member's own API tokens, on their tenant's lease: a per-lease answer on the App payload.
       apiTokens: Boolean(sessionIdentity().tenant && tenantNavigationReady && activeApp()?.apiTokens === true),
       inbox: me.inbox === true,
+      hostSignOut: me.pinned === true,
       onInvitationAccepted: () => {
         void tenant?.refreshTenantDiscovery();
       },
@@ -328,7 +330,7 @@ export async function showAccount(me, kit) {
     const existing = shellQuery('.account-host');
     if (existing) mount(existing, account);
     else $('more-host')?.parentElement?.append(element('span', account, 'account-host'));
-    if (sessionIdentity().tenant && tenantNavigationReady && tenant) {
+    if (sessionIdentity().tenant && tenantNavigationReady && tenant && me.pinned !== true) {
       shellQuery('.tenant-control-host')?.remove();
       $('more-host')?.parentElement?.append(
         tenant.tenantControl(

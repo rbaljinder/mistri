@@ -66,6 +66,12 @@ export interface Bound {
   host: string;
   port: number;
   allowedHosts?: readonly string[];
+  /**
+   * Names beyond `allowedHosts` that change while the process runs (a suite's tenant hosts, which live in a table):
+   * asked with the Host header's name, lowercase and without a port. Beside the list, never instead of it; a
+   * listener with one is no more a trusted loopback client than one with a list.
+   */
+  allowsHost?: (host: string) => boolean;
   /** See `--auth-proxy-header`. */
   identityHeader?: string;
   /** See `--trust-proxy`: proxies the public form rate limit may believe about who they forwarded for. Never identity. */
@@ -365,8 +371,8 @@ export function identityFor(
  * and "the network" that the README already draws, applied to the one API
  * that takes a database *address* rather than a query.
  */
-export function clientTrusted(bound: { host: string; allowedHosts?: readonly string[] }): boolean {
-  return LOOPBACK.test(bound.host) && !bound.allowedHosts?.length;
+export function clientTrusted(bound: { host: string; allowedHosts?: readonly string[]; allowsHost?: Bound['allowsHost'] }): boolean {
+  return LOOPBACK.test(bound.host) && !bound.allowedHosts?.length && !bound.allowsHost;
 }
 
 /**
@@ -441,7 +447,12 @@ export function hostRefusal(req: IncomingMessage, bound: Bound): string | null {
      bind could never pass its own check. */
   const expected = `${bound.host.includes(':') && !bound.host.startsWith('[') ? `[${bound.host}]` : bound.host}:${bound.port}`;
   const allowed = bound.allowedHosts ?? [];
-  if (!LOOPBACK.test(host) && host !== expected && !hostAllowed(host, allowed)) {
+  if (
+    !LOOPBACK.test(host) &&
+    host !== expected &&
+    !hostAllowed(host, allowed) &&
+    !bound.allowsHost?.(host.toLowerCase().replace(/:\d+$/, ''))
+  ) {
     return (
       `Refused: this request arrived for host "${host}". ${product()} only answers on ${expected}.` +
       ` Add --allowed-host, or set ${envName('ALLOWED_HOSTS')}, to trust another name.`

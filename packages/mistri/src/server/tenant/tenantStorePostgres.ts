@@ -103,7 +103,7 @@ import {
    membership says its kind, with the support columns the support owner fills
    (tenantSupportTransaction.ts).
    Every member read takes tenant rows and member rows only. */
-const POSTGRES_TENANT_STORE_VERSION = 1;
+const POSTGRES_TENANT_STORE_VERSION = 2;
 const tables = postgresRuntimeNames(TENANT_TABLES);
 const LIVE_INDEX = `${TENANT_STORE_PREFIX}live_membership`;
 const LIVE_SUPPORT_INDEX = `${TENANT_STORE_PREFIX}live_support`;
@@ -126,7 +126,35 @@ export class TenantStoreUnavailable extends Refusal {
   }
 }
 
+/* Version 2 adds the host table (tenantStore.ts says why it has no foreign key and an integer flag). */
+const hostDefinition = () => `CREATE TABLE ${q(tables.host)} (
+  host text COLLATE "C" PRIMARY KEY,
+  tenant_id text COLLATE "C" NOT NULL,
+  app text COLLATE "C" NOT NULL,
+  kind text COLLATE "C" NOT NULL CHECK (kind IN ('subdomain', 'custom')),
+  status text COLLATE "C" NOT NULL CHECK (status IN ('pending', 'verified', 'live', 'suspended')),
+  verify_token text COLLATE "C",
+  checked_at bigint,
+  failures integer NOT NULL DEFAULT 0 CHECK (failures >= 0),
+  is_primary integer NOT NULL DEFAULT 0 CHECK (is_primary IN (0, 1)),
+  source text COLLATE "C" NOT NULL CHECK (source IN ('claimed', 'operator')),
+  created_at bigint NOT NULL,
+  unavailable_since bigint
+)`;
+/** Version 1 to 2, as storeLayouts.ts runs it: the host table, and the meta row's version, which its CHECK names. */
+export function postgresTenantStoreUpgradeFrom1(): readonly string[] {
+  const check = `${tables.meta}_version_check`;
+  return [
+    hostDefinition(),
+    `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT "${check}"`,
+    // The row moves before the new CHECK is added: ADD CONSTRAINT validates the rows already there, and version 1 fails it.
+    `UPDATE ${q(tables.meta)} SET version = ${POSTGRES_TENANT_STORE_VERSION}`,
+    `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT "${check}" CHECK (version = ${POSTGRES_TENANT_STORE_VERSION})`,
+  ];
+}
+
 const definitions: readonly string[] = [
+  hostDefinition(),
   `CREATE TABLE ${q(tables.meta)} (
   singleton integer PRIMARY KEY CHECK (singleton = 1),
   version integer NOT NULL CHECK (version = ${POSTGRES_TENANT_STORE_VERSION}),
@@ -186,6 +214,32 @@ const pkey = (name: string, columns: string) => `CREATE UNIQUE INDEX ${name}_pke
    catalog. Pinned rather than derived, so the attestation is of this layout
    and not of whatever is there. */
 const layout: readonly PostgresRelationDescription[] = [
+  table(
+    tables.host,
+    [
+      id('host'),
+      id('tenant_id'),
+      id('app'),
+      id('kind'),
+      id('status'),
+      nullable('verify_token'),
+      { ...column('checked_at', 'bigint', null), notnull: false },
+      { ...column('failures', 'integer', null), default: '0' },
+      { ...column('is_primary', 'integer', null), default: '0' },
+      id('source'),
+      column('created_at', 'bigint', null),
+      { ...column('unavailable_since', 'bigint', null), notnull: false },
+    ],
+    [
+      `CHECK ((kind = ANY (ARRAY['subdomain'::text, 'custom'::text])))`,
+      `CHECK ((status = ANY (ARRAY['pending'::text, 'verified'::text, 'live'::text, 'suspended'::text])))`,
+      `CHECK ((failures >= 0))`,
+      `CHECK ((is_primary = ANY (ARRAY[0, 1])))`,
+      `CHECK ((source = ANY (ARRAY['claimed'::text, 'operator'::text])))`,
+      'PRIMARY KEY (host)',
+    ],
+    [pkey(tables.host, 'host')],
+  ),
   table(
     tables.membership,
     [

@@ -171,6 +171,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'directory',
       // 1.0: the records on paper this reader may open, each a verb on its record (shared/appDocuments.ts).
       'documents',
+      'domains',
       'exportableTables',
       'formCommands',
       'grantedActions',

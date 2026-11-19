@@ -82,6 +82,7 @@ import {
   type TenantLinkLookup,
 } from './tenantLinkModel.js';
 import { readSqliteActiveTenants, readSqliteIntakeAnchor } from './tenantStore.js';
+import { sqliteTenantHostOps } from './tenantHostStore.js';
 import { dueTimersPlan, type DueTimersQuery } from './tenantDueTimers.js';
 import { tenantNamesOf, tenantNamesQuery } from './tenantNames.js';
 import {
@@ -565,6 +566,7 @@ export function openSqliteTenantReadSource(
           const rows = db.prepare(tenantProfileColumnQuery(owned, zone)).all() as Record<string, unknown>[];
           return activeWithColumn(owned, zone, active, rows);
         }),
+      readHosts: () => invoke(null, () => sqliteTenantHostOps(db, () => {}).list()),
       readSandboxClocks: () =>
         invoke(null, async () => {
           const rows = sqliteSandboxSession(db);

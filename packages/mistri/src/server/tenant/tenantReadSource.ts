@@ -109,6 +109,7 @@ import {
 import { dueTimersPlan, type DueTimersQuery } from './tenantDueTimers.js';
 import { tenantNamesOf, tenantNamesQuery } from './tenantNames.js';
 import { readPostgresActiveTenants, readPostgresIntakeAnchor } from './tenantStorePostgres.js';
+import { postgresTenantHostOps } from './tenantHostStore.js';
 import {
   assertActivityQuery,
   assertHistoryQuery,
@@ -1482,6 +1483,15 @@ export async function openPostgresTenantReadSource(
             const rows = (await lease.client.query(tenantProfileColumnQuery(owned, zone))).rows as Record<string, unknown>[];
             return activeWithColumn(owned, zone, active, rows);
           },
+          undefined,
+          undefined,
+          false,
+          () => OWNER,
+        ),
+      readHosts: () =>
+        invoke(
+          null,
+          async (_none, lease) => postgresTenantHostOps(lease.client, () => {}).list(),
           undefined,
           undefined,
           false,

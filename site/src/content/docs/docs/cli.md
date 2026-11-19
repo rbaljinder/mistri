@@ -664,6 +664,35 @@ clock, which its machine timers fall due on; a live tenant has none.
 Exit codes: 1 could not run.
 ```
 
+## A tenant's addresses
+
+A suite whose config sets tenantDomain or customDomains.
+
+```text
+mistri tenant init [<tenant>...] [--app <dir>] --policy <file> --suite <suite.json> [--subdomain <label>]
+mistri tenant host list [<tenant>] [--app <dir>] --policy <file>
+mistri tenant host add <tenant> (--subdomain <label> --suite <suite.json> | --host <hostname>) [--primary]
+                [--app <dir>] --policy <file> [--operator <name>]
+mistri tenant host add <tenant> --custom <hostname> --suite <suite.json> [--app <dir>] --policy <file>
+mistri tenant host verify <tenant> <host> --suite <suite.json> [--app <dir>] --policy <file>
+mistri tenant host remove <host> [--suite <suite.json>] [--app <dir>] --policy <file>
+mistri tenant host primary <tenant> <host> [--app <dir>] --policy <file>
+With --suite, init gives each new tenant a subdomain under the suite's
+tenantDomain in the step that makes it (--subdomain chooses the label, for
+one tenant; else its id). host add gives a tenant a subdomain or a whole
+hostname the operator vouches for, remove takes one away, primary picks
+the host its links are written with. A label that is reserved (www, api,
+app, admin, mail, auth, static, assets, status, docs, the suite's own) or
+taken is refused. host add --custom adds a domain the tenant owns, pending
+until its CNAME and its TXT _mistri-verify.<host> record (list prints
+both) are found; host verify checks them over DNS-over-HTTPS, as the
+tenant's Settings > Domains does, and a verified domain goes live once its
+certificate is (the suite's customDomains.certificates). remove with
+--suite releases a custom domain's certificate. Each change writes a
+receipt; a running suite reads it within 30 seconds. Exit codes: 1 could
+not run.
+```
+
 ## Building an App for production
 
 Optional; an App also runs from its source.
@@ -934,7 +963,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--api-requests-per-minute` | [Options](#options) |
 | `--api-token-env` | [Options](#options) |
 | `--api-url` | [Options](#options) |
-| `--app` | [Options](#options), [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Reading the read audit](#reading-the-read-audit), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Bringing an App's source up to date](#bringing-an-apps-source-up-to-date), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
+| `--app` | [Options](#options), [Commands](#commands), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Reading the read audit](#reading-the-read-audit), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [A tenant's addresses](#a-tenants-addresses), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Bringing an App's source up to date](#bringing-an-apps-source-up-to-date), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
 | `--app-entry` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once) |
 | `--app-mcp` | [Options](#options) |
 | `--append` | [Rows to look at](#rows-to-look-at) |
@@ -956,6 +985,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--connection` | [Rows to look at](#rows-to-look-at), [Changing the schema](#changing-the-schema) |
 | `--connection-limit` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--cpus` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
+| `--custom` | [A tenant's addresses](#a-tenants-addresses) |
 | `--dark` | [Looking at an App](#looking-at-an-app) |
 | `--days` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--db` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Rows to look at](#rows-to-look-at), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Reading the read audit](#reading-the-read-audit), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
@@ -983,7 +1013,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--full` | [Looking at an App](#looking-at-an-app) |
 | `--help` | [Options](#options), [Commands](#commands) |
 | `--history-table` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Changing the schema](#changing-the-schema) |
-| `--host` | [Options](#options) |
+| `--host` | [Options](#options), [A tenant's addresses](#a-tenants-addresses) |
 | `--insecure-http-sign-in` | [Options](#options) |
 | `--jobs` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--json` | [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Grading an App](#grading-an-app), [A theme as it is worn](#a-theme-as-it-is-worn), [Changing the schema](#changing-the-schema), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [The project profile names an App and its modules once](#the-project-profile-names-an-app-and-its-modules-once), [Watching what a --dev server did](#watching-what-a---dev-server-did) |
@@ -1006,18 +1036,19 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--number` | [Changing the schema](#changing-the-schema) |
 | `--open` | [Options](#options) |
 | `--openapi` | [Options](#options) |
-| `--operator` | [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |
+| `--operator` | [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [A tenant's addresses](#a-tenants-addresses) |
 | `--out` | [Commands](#commands), [Looking at an App](#looking-at-an-app), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Writing a client from an exported App API document](#writing-a-client-from-an-exported-app-api-document) |
 | `--palette` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--pending` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--pending-on` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--phone` | [Looking at an App](#looking-at-an-app) |
 | `--pin` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
-| `--policy` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
+| `--policy` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it), [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Changing the schema](#changing-the-schema), [Starting flows on records already there](#starting-flows-on-records-already-there), [Running a job now](#running-a-job-now), [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [A tenant App's first boot](#a-tenant-apps-first-boot), [A tenant App's sandboxes](#a-tenant-apps-sandboxes), [A tenant's addresses](#a-tenants-addresses), [Building an App for production](#building-an-app-for-production), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
 | `--pooler` | [Options](#options) |
 | `--port` | [Options](#options) |
 | `--preset` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--press` | [Looking at an App](#looking-at-an-app) |
+| `--primary` | [A tenant's addresses](#a-tenants-addresses) |
 | `--provider` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies) |
 | `--rate` | [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |
 | `--read-pool` | [Options](#options) |
@@ -1045,7 +1076,8 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--smoke` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
 | `--store` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app) |
 | `--strict-migrations` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
-| `--suite` | [Changing the schema](#changing-the-schema) |
+| `--subdomain` | [A tenant's addresses](#a-tenants-addresses) |
+| `--suite` | [Changing the schema](#changing-the-schema), [A tenant's addresses](#a-tenants-addresses) |
 | `--template` | [Commands](#commands) |
 | `--tenant` | [Looking at an App](#looking-at-an-app), [Grading an App](#grading-an-app), [Starting flows on records already there](#starting-flows-on-records-already-there), [Reading the read audit](#reading-the-read-audit), [Running a job now](#running-a-job-now), [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--text` | [Looking at an App](#looking-at-an-app) |

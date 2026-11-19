@@ -1233,6 +1233,21 @@
       "tests": [{ "file": "test/new-app.test.ts" }, { "file": "e2e/new-intake.spec.ts" }]
     },
     {
+      "id": "cli-flag-subdomain",
+      "surface": ["cli: flag --subdomain"],
+      "tests": [{ "file": "test/tenant-domains.test.ts" }]
+    },
+    {
+      "id": "cli-flag-custom",
+      "surface": ["cli: flag --custom"],
+      "tests": [{ "file": "test/tenant-custom-domains.test.ts" }, { "file": "test/postgres-tenant-custom-domains.test.ts" }]
+    },
+    {
+      "id": "cli-flag-primary",
+      "surface": ["cli: flag --primary"],
+      "tests": [{ "file": "test/tenant-custom-domains.test.ts" }, { "file": "test/tenant-domains.test.ts" }]
+    },
+    {
       "id": "cli-flag-tenant",
       "surface": ["cli: flag --tenant"],
       "tests": [

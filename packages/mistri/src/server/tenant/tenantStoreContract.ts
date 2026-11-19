@@ -90,7 +90,13 @@ export class TenantStoreOfAnotherApp extends Refusal {
   }
 }
 const prefix = TENANT_STORE_PREFIX;
-export const TENANT_TABLES = Object.freeze({ meta: `${prefix}meta`, tenant: `${prefix}tenant`, membership: `${prefix}membership` });
+export const TENANT_TABLES = Object.freeze({
+  meta: `${prefix}meta`,
+  tenant: `${prefix}tenant`,
+  membership: `${prefix}membership`,
+  host: `${prefix}host`,
+});
+export type { TenantHostRow } from '../http/tenantHosts.js';
 export function binding(input: TenantStoreBinding): TenantStoreBinding {
   const value = captureTenantData(input);
   tenantRecord(value, ['appId', 'source', 'storeId']);

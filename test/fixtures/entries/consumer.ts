@@ -28,6 +28,7 @@ import * as kit from '@mistriwork/kit';
 import * as kitVite from '@mistriwork/kit/vite';
 import * as ui from '@mistriwork/ui';
 import * as cloudflare from '@mistriwork/cloudflare';
+import * as cloudflareHostCertificates from '@mistriwork/cloudflare/host-certificates';
 
 /** Compiles only when the module exports at least one value. */
 const some = <A>(any: [A] extends [never] ? false : true) => any;
@@ -58,4 +59,5 @@ export const entries = {
   '@mistriwork/kit/vite': some<keyof typeof kitVite>(true),
   '@mistriwork/ui': some<keyof typeof ui>(true),
   '@mistriwork/cloudflare': some<keyof typeof cloudflare>(true),
+  '@mistriwork/cloudflare/host-certificates': some<keyof typeof cloudflareHostCertificates>(true),
 };

@@ -4831,7 +4831,8 @@
     },
     "package @mistriwork/cloudflare": {
       "preview": [
-        "entry @mistriwork/cloudflare"
+        "entry @mistriwork/cloudflare",
+        "entry @mistriwork/cloudflare/host-certificates"
       ]
     },
     "package @mistriwork/kit": {
@@ -4902,6 +4903,7 @@
         "flag --connection",
         "flag --connection-limit",
         "flag --cpus",
+        "flag --custom",
         "flag --dark",
         "flag --days",
         "flag --db",
@@ -4962,6 +4964,7 @@
         "flag --port",
         "flag --preset",
         "flag --press",
+        "flag --primary",
         "flag --provider",
         "flag --rate",
         "flag --read-pool",
@@ -4988,6 +4991,7 @@
         "flag --smoke",
         "flag --store",
         "flag --strict-migrations",
+        "flag --subdomain",
         "flag --suite",
         "flag --template",
         "flag --tenant",

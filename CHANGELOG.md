@@ -5,6 +5,19 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.67
+
+- A tenant can use its own domain (opt in with `customDomains: { enabled: true }`; off by default). A tenant admin adds
+  it under Settings → Domains, or the operator runs `mistri tenant host add --custom`. The panel shows a CNAME and a
+  `TXT _mistri-verify.<host>` record, Check now looks them up over DNS-over-HTTPS, and a daily re-check suspends a domain
+  after three failures in 72 hours. A live domain can be made the tenant's primary host, which 301s page requests from
+  its subdomain. Certificates are the operator's (`none`), Caddy's on-demand TLS through `/_mistri/tls-allowed`, or
+  Cloudflare for SaaS through `@mistriwork/cloudflare`. A domain still pending after 7 days is deleted; a resolver that
+  stays unreachable for 72 hours counts as a failure; Cloudflare hostnames are tagged with the tenant, and only the
+  tenant's own are read or deleted; `/api/domains*` is rate limited; and a host verified in any App gets its
+  certificate from Caddy. Guides: "Give a tenant its own domain" and "Set up custom domains" on the docs site.
+- A custom domain becoming suspended or live again is written once to the operator log, with the host and the reason; a domain that stays in its state is not repeated.
+
 ## 1.0.0-rc.66
 
 - Page kit, tenant parity: `useTeam()` reads a tenant's members, invitations and roles and offers the invite, revoke
