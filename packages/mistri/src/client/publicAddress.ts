@@ -630,6 +630,29 @@ export function hrefFor(to: UiAddress): string | undefined {
   return segments && shownUnplaced(`${root}/${segments.join('/')}`);
 }
 
+/**
+ * A record's canonical address from its key as a store writes it (server readAudit.ts `keyText`): the value itself for
+ * one key column, a JSON array of the values for several. Undefined where the App has no room for the table's records,
+ * or the text is not a key of it: the Reads room then shows the key unlinked.
+ */
+export function recordHref(table: string, keyText: string): string | undefined {
+  const book = addressBook(),
+    app = activeApp();
+  if (!app || !book) return undefined;
+  const pk = (book.tables.get(table)?.columns ?? []).filter((column) => column.primaryKey).map((column) => column.name);
+  let values: unknown[] = [keyText];
+  if (pk.length > 1) {
+    try {
+      values = JSON.parse(keyText) as unknown[];
+    } catch {
+      return undefined;
+    }
+    if (!Array.isArray(values) || values.length !== pk.length) return undefined;
+  } else if (pk.length !== 1) return undefined;
+  const segments = recordSegments(book, table, { key: Object.fromEntries(pk.map((column, at) => [column, values[at]])) });
+  return segments && shownUnplaced(`/${encodeURIComponent(app.id)}/${segments.join('/')}`);
+}
+
 /** Whether a walk entry is a record whose natural key is not known yet. */
 export function needsNaturalKey(entry: Entry | undefined): { table: string; column: string } | undefined {
   const book = addressBook();

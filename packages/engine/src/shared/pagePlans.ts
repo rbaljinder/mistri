@@ -152,7 +152,10 @@ export function planPageSections(
         index,
         kind: section.kind,
         reads: Object.fromEntries(
-          Object.entries(section.reads ?? {}).map(([name, read]) => [name, customReadView(schema, page, name, read, key, index, now)]),
+          Object.entries(section.reads ?? {}).map(([name, read]) => [
+            name,
+            customReadView(schema, page, name, read, key, index, now, rootValues),
+          ]),
         ),
         aggregates: Object.fromEntries(
           Object.entries(section.aggregates ?? {}).map(([name, total]) => {

@@ -166,27 +166,37 @@ export function Cluster({
  * A main column beside a rail: the page's content and the notes, filters or facts that go with it. The main takes what
  * the rail leaves (`minmax(0, 1fr)`) and the rail is `railWidth` wide (a CSS length, `'20rem'` by default, and never
  * past half the box). `side` says which edge the rail stands at. Where the box itself is too narrow for both it stacks,
- * the main first and the rail under it, and it never scrolls sideways. Cluster makes equal columns; this makes two
+ * the main first and the rail under it, and it never scrolls sideways. `stackBelow` (a CSS length, `'40rem'` by
+ * default) is the box width under which it stacks: a rail that wants more room than the default says so. Cluster makes equal columns; this makes two
  * unequal ones.
  */
 export function Beside({
   rail,
   railWidth = '20rem',
   side = 'end',
+  stackBelow,
   children,
   className,
 }: {
   rail: ReactNode;
   railWidth?: string;
   side?: 'start' | 'end';
+  stackBelow?: string;
   children?: ReactNode;
   className?: string;
 }) {
+  /* A container query cannot read a custom property, so a width of the author's is a rule of its own, held to a plain
+     length so nothing else can ride in with it. */
+  const mark = `kit-beside-${useId().replace(/[^a-zA-Z0-9]/g, '')}`;
+  const stacks = stackBelow !== undefined && /^\d+(\.\d+)?(rem|em|px|ch)$/.test(stackBelow.trim()) ? stackBelow.trim() : undefined;
   return (
     /* The host is the container the stacking asks about, so the grid inside it can change with it. */
     <div className="kit-beside-host">
+      {stacks && (
+        <style>{`@container kit-beside (max-width: ${stacks}) { .${mark} > .kit-beside-main, .${mark} > .kit-beside-rail { flex-basis: 100%; } }`}</style>
+      )}
       <div
-        className={['kit-beside', side === 'start' && 'kit-beside-start', className].filter(Boolean).join(' ')}
+        className={['kit-beside', side === 'start' && 'kit-beside-start', stacks && mark, className].filter(Boolean).join(' ')}
         style={{ '--kit-beside-rail': railWidth } as CSSProperties}
       >
         <div className="kit-beside-main">{children}</div>
@@ -546,7 +556,7 @@ export function Stat({
       <span className="kit-stat-row">
         <span className="kit-stat-figure">{value}</span>
         {points.length >= 4 && (
-          <span className={`spark-host kit-stat-spark${news?.tone === 'good' ? ' good' : news?.tone === 'bad' ? ' bad' : ''}`}>
+          <span className="spark-host kit-stat-spark">
             <ChartSparkline rows={points} say={say} />
           </span>
         )}

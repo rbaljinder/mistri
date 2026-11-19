@@ -159,6 +159,7 @@ import { openTenantLiveStream, tenantLiveAuthority, tenantLiveGrants, tenantProb
 import { brandingTenant, scopedRecordBranding, withRecordBranding, closeRecordBranding } from '../http/recordBranding.js';
 import type { TenantDomainsService } from '../http/customDomains.js';
 import { tenantDomainsRoute } from './tenantDomainsRoute.js';
+import { tenantReadsRoute, type TenantReadsService } from './tenantReadsRoute.js';
 import { leaseAssertion, ownerHeadersRefused, tenantSelectors } from './tenantLeaseRequest.js';
 import { flagHttpRequest } from '../flags/httpRuntime.js';
 import { APP_FLAG_VALUES_PATH } from '../../shared/appFlagValues.js';
@@ -176,31 +177,8 @@ import {
   send,
 } from './tenantWire.js';
 export { tenantHttpBinding, tenantHttpHeader, send } from './tenantWire.js';
+import { readAdapter, together, type ReadContext } from './tenantReadAdapter.js';
 
-/** What a read needs from a context, a tenant's or the platform realm's. Both
- * present their granted commands; only a tenant context presents edits. */
-type ReadContext = Pick<TenantReadContext, 'schema' | 'data'> & {
-  readonly capabilities?: TenantReadContext['capabilities'];
-  readonly principal: { readonly roles: readonly string[]; readonly tenantId?: string };
-  /** A tenant context's zone; the platform realm, which spans tenants, keeps the App's own. */
-  readonly zone?: string;
-  /** A tenant context's member's own locale; the platform realm reads none, as it reads no zone. */
-  readonly locale?: string;
-  /** A member's context: many reads asked at once, on one snapshot (tenantReadRuntime.ts). */
-  readonly together?: TenantReadContext['together'];
-  /** A member's context: the columns of the tenant's profile `auth.tenancy.shared` lists, read for this request. */
-  readonly tenant?: TenantReadContext['tenant'];
-};
-/** `work` with its reads on one snapshot of `context`, where the context can share one; else as it is. */
-const together = <T>(context: ReadContext, work: () => Promise<T>): Promise<T> => (context.together ? context.together(work) : work());
-export function readAdapter(context: ReadContext): Adapter {
-  return Object.freeze({
-    dialect: context.schema.dialect,
-    introspect: async () => context.schema,
-    close: async () => denyTenant(),
-    ...context.data,
-  });
-}
 interface TenantHttpOptions {
   readonly app: AppDef;
   /** The look a save changed in place (tenantLook.ts, G175): worn by the App payload, never by its authority. */
@@ -220,6 +198,9 @@ interface TenantHttpOptions {
   readonly branding?: TenantBrandingService;
   /** The tenant's custom domains (http/customDomains.ts), when the suite configures `customDomains`. */
   readonly domains?: TenantDomainsService;
+  /** The tenant's read audit for its own admins (tenantReadsRoute.ts), when a resource audits its reads and the App
+      names admins (domains or branding editors). */
+  readonly reads?: TenantReadsService;
   /** The integrations' settings screen (tenantIntegrations.ts), when the jobs module lists integrations. */
   readonly integrations?: NonNullable<TenantIntegrations['settings']>;
   /** Whether a tenant has the App's assistant (tenantAssistant.ts): its switch is on and a model is set up. */
@@ -257,6 +238,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     'search',
     'branding',
     'domains',
+    'reads',
     'integrations',
     'assistant',
     'readerName',
@@ -270,6 +252,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
   const tenantBranding = raw.branding as TenantBrandingService | undefined;
   const tenantDomains = raw.domains as TenantDomainsService | undefined;
   const domainsRoute = tenantDomains && tenantDomainsRoute(tenantDomains, tenantBranding);
+  if (raw.reads !== undefined && (typeof raw.reads !== 'object' || raw.reads === null)) return denyTenant();
+  const readsRoute = raw.reads ? tenantReadsRoute(raw.reads as TenantReadsService) : undefined;
   const search = raw.search as TenantHttpOptions['search'];
   const assistantSwitch = raw.assistant as TenantHttpOptions['assistant'];
   if (raw.readerName !== undefined && (typeof raw.readerName !== 'function' || isProxy(raw.readerName))) return denyTenant();
@@ -1185,6 +1169,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 const apiTokens = tokens !== undefined && !platform && !onSupport;
                 /* The Domains section, on the tenant's own lease alone, where its route answers. */
                 const domains = tenantDomains !== undefined && !platform && !onSupport && typeof tenantId === 'string';
+                const reads = readsRoute?.offered(context.principal, { platform, onSupport });
                 const addresses = await addressesAsked;
                 /* For review on the tenant's own lease, where the proposals route answers, as a single App's is. */
                 const review =
@@ -1198,6 +1183,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   ...(supportAudit ? { supportAudit: true as const } : {}),
                   ...(apiTokens ? { apiTokens: true as const } : {}),
                   ...(domains ? { domains: true as const } : {}),
+                  ...(reads ? { reads: true as const } : {}),
                   ...(review ? { review: true as const } : {}),
                   ...(addresses && Object.keys(addresses).length ? { addresses: { ...addresses } } : {}),
                 };
@@ -1311,6 +1297,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 throw error;
               }
             }
+            if (readsRoute?.serves(path)) return await readsRoute.answer(input, context.principal, { platform, onSupport });
             if (domainsRoute?.serves(path)) {
               const answered = await domainsRoute.answer(path, input, context.principal, { platform, onSupport }, () => verified(req));
               return answered;

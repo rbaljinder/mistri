@@ -68,7 +68,7 @@ The module, `widgets/BinMap.tsx`, draws with `@mistriwork/mistri/ui`.
 | List              | `kind: 'list'`                                                     | `presentation: customList(comp, { show })`                                                      | `ListProps`    |
 | Page              | `definePage({ path, label, reads, … })` in `pages/<path>.page.tsx` | Its own address and nav place; see [free-form pages](#free-form-pages)                          | `PageProps`    |
 
-`props` are JSON-safe: `prop.number({ default, min, max })`, `prop.text`, `prop.bool`, `prop.choice([...])`. `rows` holds up to eight named reads, `{ from, show, query?, sort?, limit? }`, tied to the record by `whose` on a page or to the window by `over` on a dashboard. Every key: [pages reference](/docs/dsl-pages/#pagessectionskindcustom).
+`props` are JSON-safe: `prop.number({ default, min, max })`, `prop.text`, `prop.bool`, `prop.choice([...])`. `rows` holds up to eight named reads, `{ from, show, query?, sort?, limit? }`, tied to the record by `whose` on a page (or `same: ['body_type']` for the rows that share the record's values, the record left out) or to the window by `over` on a dashboard. Every key: [pages reference](/docs/dsl-pages/#pagessectionskindcustom).
 
 ## Write the module
 
@@ -194,7 +194,7 @@ A long list in runs (overdue, today, later) takes `groups`: `{ title, count?, it
 
 A `Card` takes a `count` (a quiet number beside the title) and an `action` (right-aligned in the title row): `<Card title="Open work" count={tasks.length} action={<Button intent="quiet">Add</Button>}>`. With neither, the title is the heading alone. `description` is one quiet line under the title (what the part holds), and `tone` (`good`, `warn`, `bad`, `info`) says the title in that status ink.
 
-`Beside` is a main column beside a rail. The rail is `railWidth` wide (`'20rem'` by default, never past half the box) on the `side` you name (`'end'` by default). Where its own box is under 40rem wide it stacks, the main first, and it never scrolls sideways: `<Beside rail={<Card title="Facts">…</Card>}>…</Beside>`.
+`Beside` is a main column beside a rail. The rail is `railWidth` wide (`'20rem'` by default, never past half the box) on the `side` you name (`'end'` by default). Where its own box is under 40rem wide (or under `stackBelow`, a CSS length such as `'56rem'`) it stacks, the main first, and it never scrolls sideways: `<Beside rail={<Card title="Facts">…</Card>}>…</Beside>`.
 
 `<Card ground="nav">`, or any element with `data-ground="nav"`, puts what is inside on the look's navigation ground: the kit's inks, hairlines and surfaces take the nav's own, so a `Stat`, `Value`, `Meter`, `Table`, `Items`, `Segmented` or `Empty` there reads in every look, light and dark, with no recipe of its own.
 

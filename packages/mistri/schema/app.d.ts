@@ -1774,7 +1774,7 @@ export interface MetricTarget {
 export interface MetricDashSection extends DashTableSection, DashFigureWords {
   kind: 'metric';
   readonly [madeBy]: 'metric';
-  /** "count" (default), "sum amount as pipeline", "median amount" (PostgreSQL only: SQLite has no median),
+  /** "count" (default), "count distinct patient_id" (different values, not rows), "sum amount as pipeline", "median amount" (PostgreSQL only: SQLite has no median),
       or a computed measure — aggregates and numbers joined by `+ - * /`: "sum won / sum amount as win_rate". */
   measure?: string;
   /** A second query for the same measure; the card shows the delta. The
@@ -2209,7 +2209,7 @@ export interface AppDashboardView<Table extends string = string, View extends st
       waits on the other's. For a section whose height lines up with the ones beside it, place it with `areas`
       instead; a dashboard says one or the other. */
   aside?: readonly (AppDashSection | AppViewDashSection<View>)[];
-  /** Sections placed on a grid of equal columns: one string per row (1 to 8), each the same count of 1 to 4 space-separated
+  /** Sections placed on a grid of equal columns: one string per row, each the same count of 1 to 4 space-separated
       cells, a cell an area's name (lowercase, up to 24 characters) or `.` for none:
       `['kpis kpis kpis', 'trend trend side', 'mix work side']`. A section names its `area`; an area covering cells in two
       rows spans them, and a narrow screen stacks the areas in the order the template reads. Every area has a section, and
@@ -2885,6 +2885,9 @@ export interface CustomRead {
   from: string;
   /** The from rows *whose* named column is this record. Absent, the rows are not tied to it: the query narrows them. */
   whose?: string;
+  /** The rows that share these columns' values with the record (one to four, each a column of both tables), the record
+      itself left out, as a related list's `same`: `same: ['body_type']`. Not beside `whose`. */
+  same?: readonly string[];
   query?: string;
   /** The columns the component reads, label paths welcome; each row carries exactly these. */
   show: readonly string[];
@@ -4012,8 +4015,10 @@ export type ActionSet<Set> = { -readonly [K in keyof Set]: Set[K] } & { readonly
     against that table. */
 export declare function action<const L extends string | AppMessageRef, const Name extends CommandOn>(
   label: L, options: Omit<CommandAction<Name>, 'label' | 'command' | 'bulk'> & { command: Name;
-    /** Offered for a queue selection only when the command declares `targets: 'many'`. */
-    bulk?: TakesMany<Name> extends true ? boolean : false },
+    /** `true`: offered for a queue selection when the command declares `targets: 'many'` (one request, all or none).
+        `'each'`: a command that names one record and asks nothing runs once per selected record, each in its own
+        transaction and each answered on its own. */
+    bulk?: TakesMany<Name> extends true ? boolean : false | 'each' },
 ): CommandAction<Name, L> & MadeBy<'action'>;
 export declare function action<const L extends string | AppMessageRef, const O extends Omit<AppUpdateAction<string | AppMessageRef>, 'id' | 'label' | 'set'> & { set: Readonly<Record<string, ActionSetValue>> }>(
   label: L, options: O & Record<Exclude<keyof O, Exclude<keyof AppUpdateAction, 'id'>>, never>,

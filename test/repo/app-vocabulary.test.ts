@@ -188,6 +188,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'problems',
       // rc.1: a public page's public commands, by name, which its door runs signed out (http/pageCommandRoutes.ts).
       'publicCommands',
+      // rc.68: true for a tenant's admins where a resource audits its reads, so Settings draws Reads (tenantReadsRoute.ts).
+      'reads',
       'resources',
       // rc.64: true where this reader may decide some proposal or confirm some mark, so the shell draws For review.
       'review',

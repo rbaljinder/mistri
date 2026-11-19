@@ -286,6 +286,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=custom].rows.*.from` | string | Stable | The resource its rows come from. Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=custom].rows.*.limit` | integer | Stable |  |
 | `pages.*.sections[][kind=custom].rows.*.query` | string | Stable | The query language, without the leading table name. |
+| `pages.*.sections[][kind=custom].rows.*.same` | array | Stable | The from rows that share these columns' values with the record, the record left out (as a related list's same). Not beside whose. Used in `examples/apps/lintel/pages/unit.ts`. |
 | `pages.*.sections[][kind=custom].rows.*.show` | array | Stable | The columns the component reads, label paths welcome; each row carries exactly these. |
 | `pages.*.sections[][kind=custom].rows.*.sort` | string | Stable | Written like the query bar. |
 | `pages.*.sections[][kind=custom].rows.*.whose` | string | Stable | The from rows whose named column is this record. Absent, the rows are not tied to it. Used in `examples/apps/lintel/resources.ts`. |

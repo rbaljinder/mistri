@@ -338,6 +338,11 @@ interface BulkCommands {
   };
   /** Whether each command can run on each record now; false while asked. A hook: read in render. */
   useAvailability(checks: Array<{ command: string; commandVersion: number; key: Record<string, unknown> }>, enabled: boolean): boolean[];
+  /**
+   * One record of a selection run on its own, as one click on that record runs the command (`bulk: 'each'`): prepared
+   * for its revision, sent in its own transaction and answered alone. `uncertain` is an answer that did not arrive.
+   */
+  runEach(action: AppCommandAction, key: Record<string, unknown>): Promise<{ kind: 'applied' | 'rejected' | 'uncertain'; message: string }>;
   /** The command's form, which prepares, asks and sends once for the group. */
   Form: ComponentType<{
     action: AppCommandAction;

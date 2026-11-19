@@ -146,7 +146,11 @@ export async function readAppReadAudit(
   try {
     const resources = await loadAppRuntimeResources(registry, app, entry, (owner) => releases.push(registry.lease(owner)));
     const rows: StoredReadAudit[] = [];
-    for (const connection of new Set(audited.map((resource) => resources.connectionFor(resource)))) {
+    const connections = new Set(audited.map((resource) => resources.connectionFor(resource)));
+    /* A row's id is its own store's: across two stores it orders nothing, so a page cannot continue from one. */
+    if (query.before !== undefined && connections.size > 1)
+      throw new Error(`${app.id} keeps its read audit in ${connections.size} databases; page one resource at a time (--resource).`);
+    for (const connection of connections) {
       const { adapter } = await registry.open(connection);
       rows.push(
         ...(await readAuditStoreOf(adapter, `connection "${connection}"`).readReadAudit({ ...query, app: query.app ?? app.id, limit })),

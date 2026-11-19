@@ -201,6 +201,23 @@ test('the store: provisioned only when asked, append-only, and a tampered layout
       readSqliteReadAudit(db, { record: '1', limit: 10 }).map((read) => read.record ?? read.ids),
       ['["2","1"]', '1'],
     );
+    /* Paging is a keyset on the row id, and a time range has two ends: neither stops at the 10,000-row ceiling. */
+    const [newest, middle, oldest] = readSqliteReadAudit(db, { limit: 10 });
+    assert.deepEqual(
+      readSqliteReadAudit(db, { before: newest.id, limit: 1 }).map((read) => read.id),
+      [middle.id],
+    );
+    assert.deepEqual(
+      readSqliteReadAudit(db, { before: middle.id, limit: 10 }).map((read) => read.id),
+      [oldest.id],
+    );
+    assert.equal(readSqliteReadAudit(db, { until: row.at, limit: 10 }).length, 0, 'until is exclusive');
+    assert.equal(
+      readSqliteReadAudit(db, { since: row.at, until: new Date(Date.parse(row.at) + 60_000).toISOString(), limit: 10 }).length,
+      3,
+    );
+    assert.throws(() => readSqliteReadAudit(db, { before: 0, limit: 10 }), /before/);
+    assert.throws(() => readSqliteReadAudit(db, { until: 'later', limit: 10 }), /until/);
     assert.throws(() => db.exec(`UPDATE "__mistri_read_audit_row" SET actor = 'someone-else'`), /append-only/);
     assert.throws(() => db.exec(`DELETE FROM "__mistri_read_audit_row"`), /append-only/);
     assert.equal(readSqliteReadAudit(db, { limit: 10 }).length, 3);
@@ -822,6 +839,9 @@ test('mistri audit reads: --since, and its refusals', async () => {
     assert.equal(await runAuditCommand(['writes'], write), 1);
     assert.equal(await runAuditCommand(['reads', '--since', 'soon'], write), 1);
     assert.equal(await runAuditCommand(['reads', '--limit', '0'], write), 1);
+    assert.equal(await runAuditCommand(['reads', '--before', '0'], write), 1);
+    assert.equal(await runAuditCommand(['reads', '--until', 'soon'], write), 1);
+    assert.equal(await runAuditCommand(['reads', '--all', '--limit', '5'], write), 1);
     assert.equal(await runAuditCommand(['reads', '--resource'], write), 1);
     assert.equal(await runAuditCommand(['reads', '--app', join(tmpdir(), 'no-such-app-dir-mistri')], write), 1);
   } finally {

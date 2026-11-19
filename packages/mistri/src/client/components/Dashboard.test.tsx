@@ -699,12 +699,12 @@ describe('the screen', () => {
     expect(card.querySelector('.spark-host.is-reserved')).not.toBeNull();
     await waitFor(() => expect(within(card).getByText('↑ 30')).toBeInTheDocument());
     await waitFor(() => expect(card.querySelector('.spark-host svg.spark')).not.toBeNull());
-    expect(card.querySelector('.spark-host')).toHaveClass('good');
+    expect(card.querySelector('.spark-host')).not.toHaveClass('good');
     const said = card.querySelector('svg.spark')!.getAttribute('aria-label')!;
     expect(said.split(', ').length).toBeGreaterThanOrEqual(30);
   });
 
-  test('a trend is drawn in its change’s news, and a section carries its mark in its heading row', async () => {
+  test('a trend stays neutral while its change wears the news, and a section carries its mark in its heading row', async () => {
     const trend = (query: string) => `deal ${andQuery(query, 'closed_on = last 12 months')} sum amount by month closed_on`;
     const months = {
       columns: ['month', 'sum'],
@@ -754,10 +754,11 @@ describe('the screen', () => {
       },
     });
     const good = await screen.findByRole('button', { name: /^250,000 Won(?:\s|$)/ });
-    await waitFor(() => expect(good.querySelector('.spark-host')).toHaveClass('good'));
+    await waitFor(() => expect(good.querySelector('.spark-host svg.spark')).not.toBeNull());
+    expect(good.querySelector('.spark-host')!.className).toBe('spark-host is-reserved');
     expect(good.querySelector('.home-card-label svg.dash-section-icon')).not.toBeNull();
     const bad = screen.getByRole('button', { name: /^250,000 Won, fewer is better\b/ });
-    await waitFor(() => expect(bad.querySelector('.spark-host')).toHaveClass('bad'));
+    await waitFor(() => expect(bad.querySelector('.spark-host svg.spark')).not.toBeNull());
     expect(within(bad).getByText('↑ 50,000').closest('.dash-delta')).toHaveClass('bad');
     const plain = screen.getByRole('button', { name: /^250,000 Won, unjudged\b/ });
     await waitFor(() => expect(plain.querySelector('.spark-host svg.spark')).not.toBeNull());

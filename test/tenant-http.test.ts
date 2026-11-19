@@ -23,6 +23,8 @@ import type { VerifiedSessionInstance } from '../packages/mistri/src/server/auth
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { createTenantEnrollment } from '../packages/mistri/src/server/tenant/tenantEnrollment.js';
 import { createTenantHttpServer } from '../packages/mistri/src/server/tenant/tenantHttp.js';
+import { tenantReadsRoute, type TenantReadsService } from '../packages/mistri/src/server/tenant/tenantReadsRoute.js';
+import { assertReadAuditQuery, type StoredReadAudit } from '../packages/mistri/src/adapters/readAudit/readAudit.js';
 import { tenantWriteMethods } from '../packages/mistri/src/server/tenant/tenantWriteKinds.js';
 import {
   TENANT_COMMAND_ROUTES,
@@ -3686,6 +3688,53 @@ function domainsStub(seen: string[] = []): TenantDomainsService {
   };
 }
 
+/** A tenant's read audit as the deployment's fenced reader holds it: rows of both tenants in one log, each read by the
+    tenant it is asked for and no other, newest first, paged by id. `seen` names the tenant every call came for. */
+function readsStub(seen: string[] = [], editors: readonly string[] = ['operator']): TenantReadsService {
+  const row = (id: number, tenant: string, actor: string, extra: Partial<StoredReadAudit>): StoredReadAudit => ({
+    id,
+    at: new Date(Date.UTC(2026, 10, 1, 0, id)).toISOString(),
+    app: 'fence',
+    tenant,
+    actor,
+    resource: 'item',
+    route: 'page',
+    ...extra,
+  });
+  const log = [
+    row(1, 'north', 'alice', { record: 'north-item' }),
+    row(2, 'south', 'bob', { record: 'south-item' }),
+    row(3, 'north', 'public', { query: '{}', count: 2, ids: '["north-item","alias-item"]' }),
+    row(4, 'south', 'support:ops', { query: '{}', count: 1, ids: '["south-item"]' }),
+    row(5, 'north', 'assistant:alice', { record: 'north-item' }),
+  ];
+  return {
+    editors,
+    resources: ['item'],
+    async read(tenantId, query) {
+      seen.push(`reads:${tenantId}`);
+      assertReadAuditQuery({ ...query, tenant: tenantId });
+      return log
+        .filter((read) => read.tenant === tenantId)
+        .filter((read) => query.actor === undefined || read.actor === query.actor)
+        .filter(
+          (read) =>
+            query.record === undefined || read.record === query.record || String(read.ids ?? '').includes(JSON.stringify(query.record)),
+        )
+        .filter((read) => query.before === undefined || read.id < query.before)
+        .toReversed()
+        .slice(0, query.limit);
+    },
+    async people(accountIds) {
+      return new Map(
+        accountIds
+          .filter((id) => id === 'alice' || id === 'bob')
+          .map((id) => [id, { name: id === 'alice' ? 'Alice North' : 'Bob South', email: null }]),
+      );
+    },
+  };
+}
+
 function fenceDoors(): Record<string, Door> {
   const here = (title: string): Pointer => ['tenant-http.test.ts', title];
   const doors: Record<string, Door> = {
@@ -3895,6 +3944,14 @@ function fenceDoors(): Record<string, Door> {
         body: { branding: { name: 'Fence Co' } },
         ok: 403,
         also: here("a tenant's branding is read by its members, saved only by its editors, and refused in a fixed sentence"),
+      },
+    },
+    '/api/reads': {
+      lease: {
+        body: {},
+        also: here(
+          "a tenant's reads are its own: each tenant's admins read their rows alone, a member is refused, and no selector reaches another's",
+        ),
       },
     },
     '/api/domains': {
@@ -4116,6 +4173,83 @@ test("a tenant's domains are its own: another tenant's hostname is refused as on
   assert.equal(seen.length, before);
 });
 
+test("a tenant's reads are its own: each tenant's admins read their rows alone, a member is refused, and no selector reaches another's", async (t) => {
+  const seen: string[] = [];
+  const f = await fixture(t, { tenantBranding: true, host: { reads: readsStub(seen, ['viewer']) } });
+  const north = await f.open('north'),
+    southMember = await f.open('south');
+  // A member who is not an admin is refused, the room is not drawn for them, and the log is never asked.
+  const refused = await f.data('/api/reads', north, {});
+  assert.equal(refused.status, 403, refused.text);
+  assert.equal(refused.body.code, 'forbidden');
+  assert.equal(object((await f.data('/api/app', north)).body.app).reads, undefined);
+  assert.equal((await f.data('/api/reads', southMember, {})).status, 403);
+  assert.deepEqual(seen, []);
+
+  await f.maintenance((admin) => admin.putMembership({ ...f.grant, roles: ['operator', 'viewer'], expectedVersion: '1' }).then(() => {}));
+  const admin = await f.open('north');
+  assert.equal(object((await f.data('/api/app', admin)).body.app).reads, true);
+  const page = await f.data('/api/reads', admin, {});
+  assert.equal(page.status, 200, page.text);
+  const reads = page.body.reads as Record<string, unknown>[];
+  assert.deepEqual(
+    reads.map((read) => read.id),
+    [5, 3, 1],
+  );
+  assert.doesNotMatch(page.text, /south|bob|Bob/);
+  assert.deepEqual(reads[0], {
+    id: 5,
+    at: reads[0]!.at,
+    actor: 'assistant:alice',
+    person: 'Alice North',
+    resource: 'item',
+    route: 'page',
+    kind: 'opened',
+    record: 'north-item',
+  });
+  assert.deepEqual(reads[1], { id: 3, at: reads[1]!.at, actor: 'public', resource: 'item', route: 'page', kind: 'listed', count: 2 });
+  assert.deepEqual(page.body.resources, ['item']);
+  // A record is matched where it was opened and in the lists that showed it; paging continues below a row's id.
+  assert.deepEqual(
+    ((await f.data('/api/reads', admin, { record: 'alias-item' })).body.reads as { id: number }[]).map((read) => read.id),
+    [3],
+  );
+  assert.deepEqual(
+    ((await f.data('/api/reads', admin, { before: 3 })).body.reads as { id: number }[]).map((read) => read.id),
+    [1],
+  );
+  // The other tenant's record and actor read as ones nobody holds.
+  for (const filter of [{ record: 'south-item' }, { actor: 'bob' }])
+    assert.deepEqual((await f.data('/api/reads', admin, filter)).body.reads, [], JSON.stringify(filter));
+  // A filter not audited, or of the wrong shape, is refused in the route's words.
+  for (const bad of [{ resource: 'task' }, { before: 'x' }, { since: 'yesterday' }]) {
+    const reply = await f.data('/api/reads', admin, bad);
+    assert.equal(reply.status, 422, `${JSON.stringify(bad)} ${reply.text}`);
+    assert.equal(reply.body.code, 'reads_refused');
+  }
+  // A tenant named in the body is refused, never read as a selector; a selector naming another tenant is as one naming none.
+  denied(await f.data('/api/reads', admin, { tenantId: 'south' }));
+  const before = seen.length;
+  const other = await f.call(f.select('/api/reads', 'south'), {}, f.headers(admin));
+  const none = await f.call(f.select('/api/reads', 'missing'), {}, f.headers(admin));
+  denied(other);
+  denied(none);
+  assert.equal(seen.length, before);
+  assert.deepEqual([...new Set(seen)], ['reads:north']);
+});
+
+test('the reads route answers the platform realm and a support visit as a route that is not there', async () => {
+  const route = tenantReadsRoute(readsStub([], ['operator']));
+  const principal = { roles: ['operator'], tenantId: 'north' };
+  for (const where of [
+    { platform: true, onSupport: false },
+    { platform: false, onSupport: true },
+  ])
+    assert.deepEqual(await route.answer({}, principal, where), { status: 404, body: { error: 'Not found.', code: 'not_found' } });
+  assert.equal((await route.answer({}, { roles: ['operator'] }, { platform: false, onSupport: false })).status, 404);
+  assert.equal((await route.answer({}, principal, { platform: false, onSupport: false })).status, 200);
+});
+
 /* Each served route, through the lease of the north tenant, answers another tenant's row as it answers a key nothing
    holds, changes nothing of it, and refuses a selector naming another tenant as it refuses one naming none. */
 test("every lease route answers another tenant's key and selector exactly as a missing one, and changes nothing of it", async (t) => {
@@ -4160,6 +4294,7 @@ test("every lease route answers another tenant's key and selector exactly as a m
         },
       },
       domains: domainsStub(seen),
+      reads: readsStub(seen),
       integrations: {
         editors: ['operator'],
         read: async (tenantId: string) => (seen.push(`integrations:${tenantId}`), { integrations: [] }),

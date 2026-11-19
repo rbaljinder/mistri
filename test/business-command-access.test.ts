@@ -791,9 +791,9 @@ test('an elevated read binds for a role that cannot read the table, and is refus
   assert.throws(() => elevated({ read: ['note'] }), /not in its read footprint/);
   assert.throws(() => elevated({ read: [] }), /names no table/);
   assert.throws(() => elevated({ write: ['reference'] }), /unknown option: write/);
-  assert.throws(
-    () => elevated({ read: ['reference'] }, { read: ['loan', 'reference', 'note'], write: ['loan', 'note'], elevate: { read: ['note'] } }),
-    /which it writes/,
+  // A table it writes beside its target may be elevated: the role only adds there, the handler reads under its own authority.
+  assert.doesNotThrow(() =>
+    elevated({ read: ['note'] }, { read: ['loan', 'reference', 'note'], write: ['loan', 'note'], elevate: { read: ['note'] } }),
   );
   assert.throws(() => elevated({ read: ['reference'] }, { public: true }), /public command has no role/);
 });

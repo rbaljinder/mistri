@@ -289,7 +289,9 @@ export function readSqliteReadAudit(db: DatabaseSync, query: ReadAuditQuery, att
   if (!attested) assertSqliteReadAudit(db);
   const filters = readAuditFilters(query);
   const clause = ([column, op]: (typeof filters)[number]) =>
-    op === 'shown' ? `(${column} = ? OR EXISTS (SELECT 1 FROM json_each(ids_json) WHERE value = ?))` : `${column} ${op} ?`;
+    op === 'shown'
+      ? `(${column} = ? OR EXISTS (SELECT 1 FROM json_each(ids_json) WHERE value = ?))`
+      : `${column} ${op} ${column === 'id' ? 'CAST(? AS INTEGER)' : '?'}`;
   const rows = db
     .prepare(`SELECT id, at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership, scope
     FROM main."${log}" ${filters.length ? `WHERE ${filters.map(clause).join(' AND ')}` : ''}

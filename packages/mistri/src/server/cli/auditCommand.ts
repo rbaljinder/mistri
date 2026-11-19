@@ -9,7 +9,8 @@ import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const AUDIT_USAGE = `mistri audit reads [--app <dir>] [--resource <name>] [--record <id>] [--actor <who>]
-                   [--tenant <id>] [--since <instant | 30m | 24h | 7d>] [--limit <n>]
+                   [--tenant <id>] [--since <instant | 30m | 24h | 7d>] [--until <instant | age>]
+                   [--before <row id>] [--limit <n> | --all]
                    [<db> | --db <target> | --config <path>]`;
 
 const HELP = `${AUDIT_USAGE}
@@ -29,7 +30,11 @@ const HELP = `${AUDIT_USAGE}
   --tenant <id>      only this tenant's rows, on a tenant App
   --since <when>     only rows written since: an ISO instant, or an age
                      (30m, 24h, 7d)
+  --until <when>     only rows written before: an ISO instant, or an age
+  --before <id>      only rows older than this row id: each line carries its
+                     id, so the last one printed is where the next page starts
   --limit <n>        at most n rows (1 to 10000; default 1000)
+  --all              every matching row, read a page at a time (no limit)
 Exit codes: 1 could not run.`;
 
 const AGE = /^(\d{1,6})([mhd])$/;
@@ -60,7 +65,12 @@ export async function runAuditCommand(
   const rest: string[] = [];
   for (let i = 1; i < argv.length; i++) {
     const arg = argv[i];
-    if (['--app', '--resource', '--record', '--actor', '--tenant', '--since', '--limit'].includes(arg)) {
+    if (arg === '--all') {
+      if (Object.hasOwn(flags, arg)) return fail(`${arg} may be supplied only once.`);
+      flags[arg] = '';
+      continue;
+    }
+    if (['--app', '--resource', '--record', '--actor', '--tenant', '--since', '--until', '--before', '--limit'].includes(arg)) {
       const value = argv[i + 1];
       if (value === undefined || value.startsWith('--')) return fail(`${arg} needs a value.\n${AUDIT_USAGE}`);
       if (Object.hasOwn(flags, arg)) return fail(`${arg} may be supplied only once.`);
@@ -78,6 +88,19 @@ export async function runAuditCommand(
     if (since === undefined)
       return fail(`--since takes an ISO instant or an age such as 30m, 24h or 7d; "${flags['--since']}" is neither.`);
   }
+  let until: string | undefined;
+  if (flags['--until'] !== undefined) {
+    until = sinceInstant(flags['--until'], now());
+    if (until === undefined)
+      return fail(`--until takes an ISO instant or an age such as 30m, 24h or 7d; "${flags['--until']}" is neither.`);
+  }
+  let before: number | undefined;
+  if (flags['--before'] !== undefined) {
+    before = Number(flags['--before']);
+    if (!Number.isSafeInteger(before) || before < 1) return fail("--before is a row's id, a whole number from 1.");
+  }
+  const all = flags['--all'] !== undefined;
+  if (all && flags['--limit'] !== undefined) return fail('--all reads every row; it takes no --limit.');
   let limit = 1000;
   if (flags['--limit'] !== undefined) {
     limit = Number(flags['--limit']);
@@ -122,18 +145,25 @@ export async function runAuditCommand(
       return fail(`${app.id} does not audit reads of "${resource}"; it audits ${audited.join(', ')}.`);
     const host = { app: loaded, pages: [] };
     if (!appEntrypoint(host, registry)) return fail(`no connection serves ${app.id}: name one with --config, --db or <db>.`);
-    const rows = await readAppReadAudit(registry, host, {
+    const query = {
       ...(resource !== undefined ? { resource } : {}),
       ...(flags['--record'] !== undefined ? { record: flags['--record'] } : {}),
       ...(flags['--actor'] !== undefined ? { actor: flags['--actor'] } : {}),
       ...(flags['--tenant'] !== undefined ? { tenant: flags['--tenant'] } : {}),
       ...(since !== undefined ? { since } : {}),
-      limit,
-    });
-    // The query and its ids are kept as JSON text; printed as JSON, so a line reads as one object.
-    for (const row of rows)
-      write(JSON.stringify({ ...row, ...(row.query !== undefined ? { query: JSON.parse(row.query), ids: JSON.parse(row.ids!) } : {}) }));
-    return 0;
+      ...(until !== undefined ? { until } : {}),
+    };
+    /* A page at a time, each continuing below the last row's id: the log is append-only and ids only grow, so the
+       pages neither repeat nor skip a row however many there are (a single read stopped at 10,000). */
+    let cursor = before;
+    for (;;) {
+      const rows = await readAppReadAudit(registry, host, { ...query, ...(cursor !== undefined ? { before: cursor } : {}), limit });
+      // The query and its ids are kept as JSON text; printed as JSON, so a line reads as one object.
+      for (const row of rows)
+        write(JSON.stringify({ ...row, ...(row.query !== undefined ? { query: JSON.parse(row.query), ids: JSON.parse(row.ids!) } : {}) }));
+      if (!all || rows.length < limit) return 0;
+      cursor = rows[rows.length - 1].id;
+    }
   } catch (error) {
     return fail((error as Error).message.split('\n')[0]);
   } finally {

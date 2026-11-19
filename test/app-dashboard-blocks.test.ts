@@ -333,7 +333,8 @@ test('areas that cannot be drawn is refused in words, every refusal in one pass'
   const refusing = (areas: unknown, sections: unknown[] = sound) => problemsOf(() => laid(sections, areas)).join('\n');
   assert.match(refusing(['kpis kpis', 'trend']), /rows of different lengths \(row 1 has 2, row 2 has 1\)/);
   assert.match(refusing(['a b c d e']), /5 columns in a row\. At most 4/);
-  assert.match(refusing(Array.from({ length: 9 }, () => 'a b')), /9 rows\. At most 8/);
+  // Rows past eight are not refused: the grid just carries on below.
+  assert.doesNotMatch(refusing(Array.from({ length: 9 }, () => 'a b')), /rows\. At most/);
   assert.match(refusing([]), /not a list of rows/);
   assert.match(refusing(['Kpis kpis']), /"Kpis", which is not an area name/);
   assert.match(refusing(['span span']), /"span", which is not an area name/);

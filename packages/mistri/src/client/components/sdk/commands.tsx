@@ -856,6 +856,20 @@ export function recordCommand(
 }
 
 /** A selection's commands in the kit's lists (shellMode.ts `bulkCommands`): the same pipeline and form, sent once for the group. */
-export const bulkCommands = { operations: commandOperations, useAvailability: useCommandAvailability, Form: CommandForm };
+export const bulkCommands = {
+  operations: commandOperations,
+  useAvailability: useCommandAvailability,
+  Form: CommandForm,
+  /* `bulk: 'each'`: the one-record command, once for this record, quietly: the list says every answer together. */
+  async runEach(action: AppCommandAction, key: Record<string, unknown>) {
+    const outcome = await runCommand(action, key as Record<string, string | number>, {}, { quiet: true });
+    if (outcome.status === 'applied') return { kind: 'applied' as const, message: '' };
+    if (outcome.status === 'unknown') return { kind: 'uncertain' as const, message: outcome.message };
+    return {
+      kind: 'rejected' as const,
+      message: outcome.status === 'refused' ? outcome.message : say('isNotAvailableOnThisRecord', { label: action.label }),
+    };
+  },
+};
 
 registerCommandHost({ command: commandHandle, action: actionHandle, openForm: openViewForm, form: formHandle });

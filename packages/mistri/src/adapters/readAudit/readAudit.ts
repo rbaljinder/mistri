@@ -125,6 +125,11 @@ export interface ReadAuditQuery {
   readonly actor?: string;
   /** ISO instant: rows at or after it. */
   readonly since?: string;
+  /** ISO instant: rows before it, so a time range has two ends. */
+  readonly until?: string;
+  /** A row's id: rows older than it. The keyset a page of the log continues from, so paging never re-reads a row
+      nor stops at the limit (the Reads room and `mistri audit reads --before`). */
+  readonly before?: number;
   readonly limit: number;
 }
 
@@ -174,8 +179,11 @@ export function assertReadAuditQuery(query: ReadAuditQuery): ReadAuditQuery {
     throw new Refusal('A read audit query reads 1 to 10000 rows.');
   for (const key of ['app', 'tenant', 'resource', 'record', 'actor'] as const)
     if (query[key] !== undefined && typeof query[key] !== 'string') throw new Refusal(`A read audit query's ${key} must be a string.`);
-  if (query.since !== undefined && (typeof query.since !== 'string' || Number.isNaN(Date.parse(query.since))))
-    throw new Refusal("A read audit query's since must be an ISO instant.");
+  for (const key of ['since', 'until'] as const)
+    if (query[key] !== undefined && (typeof query[key] !== 'string' || Number.isNaN(Date.parse(query[key]))))
+      throw new Refusal(`A read audit query's ${key} must be an ISO instant.`);
+  if (query.before !== undefined && (!Number.isSafeInteger(query.before) || query.before < 1))
+    throw new Refusal("A read audit query's before must be a row's id.");
   return query;
 }
 
@@ -204,13 +212,15 @@ export function storedReadAudit(row: Record<string, unknown>): StoredReadAudit {
  * its key, or a list read whose returned ids include it. A list page is how most records are seen, so a record's
  * readers asked by key alone missed every one who saw it in a list (a field report). Each engine says it its own way.
  */
-export function readAuditFilters(query: ReadAuditQuery): Array<readonly [column: string, op: '=' | '>=' | 'shown', value: string]> {
-  const filters: Array<readonly [string, '=' | '>=' | 'shown', string]> = [];
+export function readAuditFilters(query: ReadAuditQuery): Array<readonly [column: string, op: '=' | '>=' | '<' | 'shown', value: string]> {
+  const filters: Array<readonly [string, '=' | '>=' | '<' | 'shown', string]> = [];
   if (query.app !== undefined) filters.push(['app', '=', query.app]);
   if (query.tenant !== undefined) filters.push(['tenant', '=', query.tenant]);
   if (query.resource !== undefined) filters.push(['resource', '=', query.resource]);
   if (query.record !== undefined) filters.push(['record_key', 'shown', query.record]);
   if (query.actor !== undefined) filters.push(['actor', '=', query.actor]);
   if (query.since !== undefined) filters.push(['at', '>=', new Date(query.since).toISOString()]);
+  if (query.until !== undefined) filters.push(['at', '<', new Date(query.until).toISOString()]);
+  if (query.before !== undefined) filters.push(['id', '<', String(query.before)]);
   return filters;
 }

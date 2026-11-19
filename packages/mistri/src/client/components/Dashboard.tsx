@@ -400,7 +400,7 @@ export const Metric = memo(function Metric({
      stood on the card as three heavy dots. Heard as "…" still (heard, below). */
   const figure = shown === '…' ? <span className="sk-bar home-card-wait" aria-hidden="true" /> : shown;
   let delta: ReactNode = null;
-  /* The change's news, which the trend beside it is drawn in too. */
+  /* The change's news; the trend beside it stays neutral, so the one figure that judges is the one that wears the color. */
   let tone = '';
   if (section.compare && now.data != null && then.data != null) {
     const a = Number(now.data);
@@ -454,7 +454,7 @@ export const Metric = memo(function Metric({
       {section.compare && !section.error ? '\u00a0' : null}
     </span>
   );
-  const sparkSlot = sparkAsk ? <SparkHost points={sparkPoints} say={say} tone={tone} /> : null;
+  const sparkSlot = sparkAsk ? <SparkHost points={sparkPoints} say={say} /> : null;
   /* A goal makes the card a meter: the share reached drawn under the number
      and said beside it, the bar full at the goal and never past it. */
   const goalAt = typeof section.target === 'number' ? section.target : goalAsk ? Number(goalData.data ?? NaN) : NaN;
@@ -612,19 +612,11 @@ export const Metric = memo(function Metric({
 });
 
 /** The measure's shape inside the card, its height held while it is read and where it has too few points to draw. */
-function SparkHost({
-  points,
-  say,
-  tone,
-}: {
-  points: Array<{ key: unknown; value: unknown }> | null;
-  say: (v: unknown) => string;
-  tone: string;
-}) {
+function SparkHost({ points, say }: { points: Array<{ key: unknown; value: unknown }> | null; say: (v: unknown) => string }) {
   /* A trend is its shape: one bar standing in an empty window read as a mark left on the card, so it is drawn
      where two of its points or more have something to show. */
   const drawn = points && points.length >= 4 && points.filter((point) => Number(point.value) !== 0 && point.value != null).length >= 2;
-  return <span className={`spark-host is-reserved${tone}`}>{drawn && <Sparkline rows={points} say={say} />}</span>;
+  return <span className="spark-host is-reserved">{drawn && <Sparkline rows={points} say={say} />}</span>;
 }
 
 /* ---------- breakdown, chart, matrix ---------- */
@@ -1706,7 +1698,14 @@ function Pick({
   const records = useRows(q, 50);
   if (!meta || !table) return null;
   if (!meta.allowed?.length && !naming) return null;
-  const label = (labelColumn(table) === column ? column : column.replace(/_id$/, '')).replace(/_/g, ' ');
+  /* The choice "Any ..." is named from the column's own label ("Any assigned to"), as the person reads the field
+     everywhere else, never from the table the reference points at. A label that opens with an acronym keeps its case. */
+  const named = columnLabel(table.id, column);
+  const label = named
+    ? /^[A-Z]{2}/.test(named)
+      ? named
+      : named.charAt(0).toLowerCase() + named.slice(1)
+    : (labelColumn(table) === column ? column : column.replace(/_id$/, '')).replace(/_/g, ' ');
   const items = meta.allowed?.length
     ? meta.allowed.map((v) => ({ value: v, label: groupLabel(columnDisplay(table!.id, column) as DisplayRule | null, v, meta.allowed) }))
     : (records.data?.rows ?? []).map((r) => ({ value: String(r[pk!]), label: String(r[naming!] ?? r[pk!]) }));

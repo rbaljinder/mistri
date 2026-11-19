@@ -7,6 +7,8 @@ export const say = defineMessages({
   selectedRecords: 'Selected records',
   selected: '{selectionCount} selected',
   setField: 'Set field…',
+  notRunTheList: 'Not run: the list is no longer current.',
+  eachOnItsOwn: 'Each record runs on its own: one that cannot be changed does not stop the others.',
   oneRequestForTheWhole: 'One request for the whole selection: every record or none.',
   clearSelection: 'Clear selection',
   applying: 'Applying {done} of {total}…',

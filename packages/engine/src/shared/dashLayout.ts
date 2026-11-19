@@ -11,7 +11,6 @@ import { nearest } from './suggest.js';
 const AREA_NAME = /^[a-z][a-z0-9-]{0,23}$/;
 /** Words CSS reads before an area name: `grid-area: span` or `auto` is not a name. */
 const CSS_WORDS = new Set(['auto', 'span', 'initial', 'inherit', 'unset', 'revert', 'default']);
-const LAYOUT_MAX_ROWS = 8;
 const LAYOUT_MAX_COLUMNS = 4;
 /** The cell that holds no area. */
 const EMPTY_CELL = '.';
@@ -74,7 +73,6 @@ export function layoutProblems(layout: unknown, at: string): string[] {
     return [`${here} is not a list of rows, each a string of area names: ['kpis kpis', 'trend side'].`];
   }
   const problems: string[] = [];
-  if (layout.length > LAYOUT_MAX_ROWS) problems.push(`${here} has ${layout.length} rows. At most ${LAYOUT_MAX_ROWS}.`);
   const grid = layoutGrid(layout as string[]);
   const widest = Math.max(...grid.map((row) => row.length));
   if (grid.some((row) => !row.length)) problems.push(`${here} has an empty row. Write . for a cell with nothing in it.`);
