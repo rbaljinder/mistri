@@ -133,6 +133,7 @@ import { answerOAuthWellKnown, bearerChallenge, bindOAuthTenancy } from '../auth
 import { tenantAppMcpCommands, tenantAppMcpReads } from '../api/appMcpSession.js';
 import { runtimeVersion } from '@mistriwork/engine/server/packageVersion.js';
 import { createApiReadHandoffHttp } from '../api/postgresApiReadHttp.js';
+import { createTenantServiceLiveHttp } from './tenantServiceLive.js';
 import { createApiCommandHttp } from '../api/apiCommandHttp.js';
 import { apiAdmission } from '../api/apiHttpAdmission.js';
 import { createApiPublicSpec, renderAppApiOpenApi } from '../api/apiPublicSpec.js';
@@ -742,10 +743,12 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     let tokens: ReturnType<typeof createTenantTokenService> | undefined;
     if (loaded.app.api) {
       try {
+        const anchors = captureTenantEnrollment(enrollment).services.reader;
         tokens = createTenantTokenService({
           loaded,
           catalog: tenantApiScopeCatalog(enrollment),
           now: Date.now,
+          platformActive: async () => (await anchors.readServiceAnchors(null)).platformVersion !== null,
           ...(administrationOptions?.policy ? { administration: administrationOptions.policy } : {}),
         });
       } catch {
@@ -864,6 +867,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
           reads: ReturnType<typeof createApiReadHandoffHttp>;
           commands?: ReturnType<typeof createApiCommandHttp>;
           mcp: ReturnType<typeof createAppMcpHttp>;
+          live: ReturnType<typeof createTenantServiceLiveHttp>;
         }
       | undefined;
     if (raw.api !== undefined) {
@@ -981,7 +985,17 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         // A refused bearer names the authorization server an agent can get one from, where the deployment has one.
         challenge: (presented: boolean) => bearerChallenge(raw.auth, 'mcp', presented),
       });
-      api = { reads, mcp, ...(commands ? { commands } : {}) };
+      /* A tenant service token's change stream, admitted as the API admits it. Not in the API namespace the reads
+         claim: a member's `/api/live` (no bearer) still falls through to their lease. */
+      const live = createTenantServiceLiveHttp({
+        app: loaded.app,
+        ownership: captureTenantEnrollment(enrollment).ownership,
+        owner,
+        bound: transport.bound,
+        admission: transport.admission,
+        auth: raw.auth,
+      });
+      api = { reads, mcp, live, ...(commands ? { commands } : {}) };
     }
     let retired = false;
     const pending = new Set<Promise<void>>(),
@@ -1387,6 +1401,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
           if (await api.mcp.handle(req, res)) return;
           if (api.commands && (await api.commands.handle(req, res))) return;
           if (await api.reads.handle(req, res)) return;
+          if (await api.live.handle(req, res)) return;
         }
         // Never inside a dealer: an account holding a live support session
         // manages no tenant and no invitation until it exits. Fails closed.
@@ -1895,7 +1910,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
         ...(search ? [async () => search!.close()] : []),
         ...(tenantAssistant ? [tenantAssistant.close] : []),
         ...(api?.commands ? [api.commands.retire] : []),
-        ...(api ? [api.reads.retire] : []),
+        ...(api ? [api.reads.retire, api.live.retire] : []),
         data.retire,
         ...(administration ? [administration.retire] : []),
         ...(support ? [support.retire] : []),

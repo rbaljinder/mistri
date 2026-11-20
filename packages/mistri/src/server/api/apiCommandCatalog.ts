@@ -1,5 +1,5 @@
 /** Inactive metadata foundation, not an executor or publication authority. */
-import type { AppApiDef } from '../../shared/appApi.js';
+import { apiTokenRoles, type AppApiDef } from '../../shared/appApi.js';
 import { isFormView, logicalResource, resolveAppAccess, type AppDef } from '../../shared/app.js';
 import { commandTargets } from '../../shared/command.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
@@ -60,6 +60,8 @@ export function scopedCommandCatalog(
 ) {
   if (!api.roles.length || api.roles.some((role) => !Object.hasOwn(app.auth?.roles ?? {}, role)))
     fail('*', 'every API role must be declared');
+  if ((api.service?.roles ?? []).some((role) => !Object.hasOwn(app.auth?.roles ?? {}, role)))
+    fail('*', 'every API service role must be declared');
   const registry = defineCommands(declaredRegistry);
   validateBusinessCommandReferences(app, registry, { schema });
   const authorizer = createBusinessCommandAuthorizer({
@@ -130,9 +132,17 @@ export function scopedCommandCatalog(
     const eligibleRoles =
       form !== undefined
         ? []
-        : api.roles.filter((role) => {
+        : apiTokenRoles(api).filter((role) => {
             try {
-              authorizer.authorize(id, { id: 'api-catalog-check', appId: app.id, roles: [role] });
+              /* A service role is authorized as the service actor that runs it will be, so a role the runtime would
+                 refuse (generic writes, operations) is not listed as one that can call the verb. */
+              const service = !api.roles.includes(role);
+              authorizer.authorize(
+                id,
+                service
+                  ? { id: `service:${role}`, kind: 'service', appId: app.id, roles: [role] }
+                  : { id: 'api-catalog-check', appId: app.id, roles: [role] },
+              );
             } catch (error) {
               if (error instanceof AppAccessDenied) return false;
               throw error;

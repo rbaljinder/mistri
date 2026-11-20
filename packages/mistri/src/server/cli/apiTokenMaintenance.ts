@@ -28,9 +28,10 @@ import {
 } from '../auth/postgresApiTokenMaintenance.js';
 import { loadPostgresTokenSchema } from './postgresApiTokenSchema.js';
 import { describeFailure, MaintenanceRefusal } from './apiTokenRefusal.js';
-import { readTenantIssuance } from './apiTokenTenant.js';
-import { issueSqliteApiTenantToken } from '../auth/sqliteApiTokenMaintenance.js';
-import { issuePostgresApiTenantToken } from '../auth/postgresApiTokenMaintenance.js';
+import { readTenantIssuance, readTenantServiceIssuance } from './apiTokenTenant.js';
+import { issueSqliteApiServiceToken, issueSqliteApiTenantToken } from '../auth/sqliteApiTokenMaintenance.js';
+import { issuePostgresApiServiceToken, issuePostgresApiTenantToken } from '../auth/postgresApiTokenMaintenance.js';
+import { isTenantServiceRole } from '../api/apiTokenScope.js';
 
 const production = {
   loadApp,
@@ -54,6 +55,9 @@ const production = {
   tenant: readTenantIssuance,
   tenantIssue: issueSqliteApiTenantToken,
   pgTenantIssue: issuePostgresApiTenantToken,
+  serviceTenant: readTenantServiceIssuance,
+  serviceIssue: issueSqliteApiServiceToken,
+  pgServiceIssue: issuePostgresApiServiceToken,
 };
 /* The last step reaches the store itself: a commit may have happened, so it says so (apiTokenCommand.ts prints a Token ID). */
 const WRITING =
@@ -109,17 +113,28 @@ export async function runApiTokenMaintenance(
        exposes them, are checked against that deployment's attested ownership,
        not the ordinary command evidence. Decided before any data is read. */
     const tenantApp = app.app.auth?.rows === 'tenant';
+    /* A service token binds a tenant and an `api.service` role, and no membership:
+       nobody holds the role, so --actor is the only account it is judged against. */
+    const service = args.verb === 'issue' && 'service' in args ? args : undefined;
+    if (service && !tenantApp) return refuse('only a tenant App issues a --service token; this App is not one');
+    if (service && !isTenantServiceRole(app.app, service.service))
+      return refuse(`--service names "${service.service}", which is not one of this App's api.service.roles`);
+    const serviceInput = service && { policyFile: service.policy, tenantId: service.tenant };
     const tenantInput =
-      args.verb === 'issue' && args.tenant !== undefined && args.policy !== undefined
+      args.verb === 'issue' && !('service' in args) && args.tenant !== undefined && args.policy !== undefined
         ? { policyFile: args.policy, tenantId: args.tenant, accountId: args.subjectId }
         : undefined;
-    if (args.verb === 'issue' && (tenantApp !== (tenantInput !== undefined) || (args.tenant === undefined) !== (args.policy === undefined)))
+    if (
+      args.verb === 'issue' &&
+      !service &&
+      (tenantApp !== (tenantInput !== undefined) || (args.tenant === undefined) !== (args.policy === undefined))
+    )
       return refuse(
         tenantApp
           ? 'a tenant App needs both --tenant and --policy to issue a token'
           : 'only a tenant App takes --tenant and --policy; this App is not one',
       );
-    if (args.verb === 'issue' && args.scope && !Object.hasOwn(app.app.api?.scopes ?? {}, args.scope.name))
+    if (args.verb === 'issue' && 'scope' in args && args.scope && !Object.hasOwn(app.app.api?.scopes ?? {}, args.scope.name))
       return refuse(`--scope names "${args.scope.name}", which is not one of this App's api.scopes`);
     let evidence: TokenCommandEvidence | undefined;
     const capture = (captured: TokenCommandEvidence) => {
@@ -132,6 +147,39 @@ export async function runApiTokenMaintenance(
         step =
           "the --commands module could not be loaded, or the tenant membership (--tenant, --policy) or the App's database schema could not be read";
         const declared = commandsFile === undefined ? undefined : await dependencies.commands(commandsFile);
+        if ('service' in args) {
+          const read = await dependencies.serviceTenant(app, connections, serviceInput!, declared);
+          const current = await dependencies.pgContext([app], connections);
+          if (
+            current.url !== pg.url ||
+            current.appId !== pg.appId ||
+            JSON.stringify(current.excludeConnections) !== JSON.stringify(pg.excludeConnections)
+          )
+            return refuse('the Postgres store or App identity changed while the token was being issued');
+          step = WRITING;
+          const tokenId = randomUUID();
+          onIssueLocator?.(tokenId);
+          return Object.freeze({
+            verb: args.verb,
+            result: await dependencies.pgServiceIssue(
+              current.url,
+              app.app,
+              read.catalog,
+              {
+                storeId: args.storeId,
+                excludeConnections: current.excludeConnections,
+                tokenId,
+                role: args.service,
+                tenantId: read.tenantId,
+                actorId: args.actorId,
+                label: args.label,
+                expiresAt: args.expiresAt,
+                ...(args.operations === undefined ? {} : { operations: args.operations }),
+              },
+              dependencies.now,
+            ),
+          });
+        }
         const tenant = tenantInput && (await dependencies.tenant(app, connections, tenantInput, declared));
         const schema = tenant
           ? undefined
@@ -190,6 +238,39 @@ export async function runApiTokenMaintenance(
       step =
         "the --commands module could not be loaded, or the tenant membership (--tenant, --policy) or the App's database schema could not be read";
       const declared = commandsFile === undefined ? undefined : await dependencies.commands(commandsFile);
+      if ('service' in args) {
+        const read = await dependencies.serviceTenant(app, connections, serviceInput!, declared);
+        const current = await dependencies.context([app], connections);
+        if (
+          current.path !== context.path ||
+          current.appId !== context.appId ||
+          JSON.stringify(current.exclusions) !== JSON.stringify(context.exclusions)
+        )
+          return refuse('the SQLite store or App identity changed while the token was being issued');
+        step = WRITING;
+        const tokenId = randomUUID();
+        onIssueLocator?.(tokenId);
+        return Object.freeze({
+          verb: args.verb,
+          result: dependencies.serviceIssue(
+            current.path,
+            app.app,
+            read.catalog,
+            {
+              storeId: args.storeId,
+              exclusions: current.exclusions,
+              tokenId,
+              role: args.service,
+              tenantId: read.tenantId,
+              actorId: args.actorId,
+              label: args.label,
+              expiresAt: args.expiresAt,
+              ...(args.operations === undefined ? {} : { operations: args.operations }),
+            },
+            dependencies.now(),
+          ),
+        });
+      }
       const tenant = tenantInput && (await dependencies.tenant(app, connections, tenantInput, declared));
       // The schema loader closes its registry before returning. No awaited
       // cleanup can replace a committed secret with an unrelated close error.

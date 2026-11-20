@@ -174,5 +174,16 @@ test.describe('The page kit vocabulary', () => {
     await page.goto(`${app.origin}/vocabulary`);
     await settled(page);
     await expect(page.locator('[data-slot="button"]', { hasText: /Choose file/ }).first()).toBeVisible();
+    // The browser's own "Choose File" stays in the page for the keyboard but draws nothing (kit-fields.css).
+    const native = await page
+      .locator('[data-slot="file-field"] input[type="file"]')
+      .first()
+      .evaluate((input) => {
+        const box = input.getBoundingClientRect();
+        return { width: box.width, height: box.height, opacity: getComputedStyle(input).opacity };
+      });
+    expect(native.width).toBeLessThanOrEqual(1);
+    expect(native.height).toBeLessThanOrEqual(1);
+    expect(native.opacity).toBe('0');
   });
 });

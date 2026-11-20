@@ -107,13 +107,13 @@ test('what the command said it did is the done message, and an action with nothi
   expect(screen.queryByRole('button', { name: 'Fill in another' })).toBeNull();
 });
 
-test("a signed-in form's state refusal keeps the record's wording, where a public form's reads for the answers", async () => {
+test("a signed-in form names no record, so its state refusal reads for the answers rather than a record's refresh", async () => {
   refused = Object.assign(new Error('This call is already closed.'), { status: 409, code: 'ineligible_state', outcome: 'not_applied' });
   draw({ id: 'post-rent', label: 'Post rent', command: { id: 'postRent', version: 1, input: [] } } as unknown as Parameters<
     typeof draw
   >[0]);
   fireEvent.click(await screen.findByRole('button', { name: 'Submit' }));
   expect(await screen.findByText('This call is already closed.')).toBeVisible();
-  expect(screen.getByText(/Refresh to see where it stands/)).toBeVisible();
-  expect(screen.queryByText(/Review your answers/)).toBeNull();
+  expect(screen.getByText(/Review your answers and send again/)).toBeVisible();
+  expect(screen.queryByText(/Refresh to see where it stands/)).toBeNull();
 });

@@ -9,7 +9,7 @@ import { createElement } from 'react';
 import { $ } from '@mistriwork/kit/client/core.js';
 import { isMounted, mount } from '@mistriwork/kit/client/components/mount.js';
 import { SignIn } from './components/SignIn.js';
-import { applyBrandLogo, headBrandingMark } from './appBrand.js';
+import { applyBrandLogo, headBrandingMark, headBrandingName } from './appBrand.js';
 import { say } from './copy/public/signin.js';
 import { setTabTitle, shellBody, shellQuery } from '@mistriwork/kit/client/shellHost.js';
 
@@ -27,6 +27,10 @@ export function showSignIn(info, site, opening = {}) {
   // The bar is not drawn (signin-door): the App's mark is over the card (SignIn.tsx). The bar still holds the name
   // for the places that read it (the tab's mark, a screen reader walking the page's landmarks).
   shellBody().classList.add('app-mode', 'signed-out', 'signin-door');
+  /* A tenant's saved name, where its head carries one, as its logo and tab icon already are: the door says it, not
+     the App's (a field report). `info.app` is only ever said; the App is addressed by `info.id`. */
+  const named = headBrandingName();
+  if (named) info = { ...info, app: named };
   const brand = shellQuery('.brand-name');
   if (brand) brand.textContent = info.app;
   applyBrandLogo(shellQuery('.brand-mark'), headBrandingMark() ?? info.look?.logo, info.app, info.look?.icons);

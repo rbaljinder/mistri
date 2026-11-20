@@ -11,7 +11,7 @@ import { withPostgresMaintenanceTransaction } from '../../adapters/commands/post
 import { assertPostgresAuthStore } from '../../adapters/auth/postgresAuthStore.js';
 import { runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import { assertApiTokenAppId, assertApiTokenSecretId } from '../api/apiTokenSecret.js';
-import { issueAccountToken, type IssueCatalog } from './apiTokenIssuance.js';
+import { issueAccountToken, issueServiceToken, type IssueCatalog } from './apiTokenIssuance.js';
 import { apiReadTokenCatalog } from '../api/apiEventOperations.js';
 import {
   assertPostgresAuthStoreSeparation,
@@ -215,6 +215,74 @@ export async function issuePostgresApiTenantToken(
   clock: () => number,
 ) {
   return issuePostgresAccountToken(url, app, undefined, rawOptions, clock, catalog);
+}
+
+interface ServiceIssueOptions {
+  storeId: string;
+  excludeConnections: readonly PostgresSeparationConnection[];
+  /** An `api.service.roles` entry: the token's subject and its one role. */
+  role: string;
+  tenantId: string;
+  actorId: string;
+  label: string;
+  expiresAt: number;
+  operations?: readonly string[];
+  tokenId?: string;
+}
+
+/** A tenant service token, as on SQLite: the caller read the tenant active in
+ * the business database and supplies the tenant catalog. Only the actor's
+ * account is locked and judged; the role is no account's to hold. */
+export async function issuePostgresApiServiceToken(
+  url: string,
+  app: AppDef,
+  catalog: IssueCatalog,
+  rawOptions: ServiceIssueOptions,
+  clock: () => number,
+) {
+  try {
+    const options = exact(
+      snapshot(rawOptions, 131072).value,
+      ['storeId', 'excludeConnections', 'role', 'tenantId', 'actorId', 'label', 'expiresAt'],
+      ['operations', 'tokenId'],
+    );
+    if (Object.hasOwn(options, 'tokenId')) assertApiTokenSecretId(options.tokenId);
+    const tokenId = Object.hasOwn(options, 'tokenId') ? (options.tokenId as string) : randomUUID();
+    const binding = owner({ appId: app.id, storeId: options.storeId, excludeConnections: options.excludeConnections });
+    const now = clockReader(clock);
+    const prepare = () =>
+      issueServiceToken({
+        app,
+        appId: binding.appId,
+        catalog,
+        tokenId,
+        role: options.role as string,
+        tenantId: options.tenantId as string,
+        actorId: options.actorId as string,
+        label: options.label as string,
+        expiresAt: options.expiresAt as number,
+        createdAt: now(),
+        ...(Object.hasOwn(options, 'operations') ? { operations: options.operations as string[] } : {}),
+      });
+    const initial = prepare();
+    return await transaction(url, binding, [initial.record.createdBy], async (client, store) => {
+      const issue = prepare();
+      const { record } = issue;
+      const eligible = async () => issue.admit(await readPostgresEligibleAccountRoles(client, record.createdBy));
+      await eligible();
+      const minted = issue.mint();
+      await store.insert(minted.stored);
+      await eligible();
+      return {
+        result: minted.result,
+        finalCheck: () => {
+          if (now() >= record.expiresAt) return refuse();
+        },
+      };
+    });
+  } catch {
+    return refuse();
+  }
 }
 
 async function issuePostgresAccountToken(

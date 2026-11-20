@@ -323,6 +323,8 @@ export interface UiHost {
   deployment(): UiDeployment;
   /** The tenant's team and what the reader may do with it (`useTeam`): empty outside a tenant App. */
   team: import('../../teamTypes.js').TeamAccess;
+  /** The tenant's read audit as its admins read it (`useReadAudit`): empty outside a tenant App. */
+  reads: import('../../readAuditTypes.js').ReadAuditAccess;
   /** The brand the reader sees now (UiBranding). */
   branding(): UiBranding;
   token(name: string): string;

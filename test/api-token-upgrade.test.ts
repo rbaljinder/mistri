@@ -3,6 +3,8 @@
  * operator meets it: a database holding the committed version 1 fixture with a token and the OAuth access row that
  * names it, `upgradeStores` (what `mistri migrate stores up` calls) taking it forward, both rows kept, the result the
  * layout a fresh store has, and provisioning — which attests an existing store — accepting it where it refused the old one.
+ * Version 2 to 3 (a tenant service token, `api.service`) the same way, from the committed version 2 fixture: a service
+ * token bound to its tenant with no membership is admitted, and an account token still is not.
  *
  * SQLite always; PostgreSQL when TABLEWALK_TEST_PG names a server where the role may create databases.
  */
@@ -85,7 +87,7 @@ const insertChild = (db: MigrationDb, engine: Engine, scope: { name: string | nu
 
 for (const engine of ENGINES)
   test(
-    `${engine}: a version 1 API token store with a token and its OAuth access upgrades in place to version 2, both kept, and provisioning accepts it`,
+    `${engine}: a version 1 API token store with a token and its OAuth access upgrades in place to the current version, both kept, and provisioning accepts it`,
     { skip: engine === 'postgres' ? liveSkip('postgres', LIVE) : false },
     async () => {
       const { token, meta, access } = names(engine);
@@ -98,7 +100,7 @@ for (const engine of ENGINES)
           await seed(db, engine);
           const [status] = await storeStatuses(db, layouts);
           assert.equal(status.found, 1);
-          assert.deepEqual(status.pending, [1]);
+          assert.deepEqual(status.pending, [1, 2]);
         });
         // Provisioning attests an existing store; it refuses version 1 and never upgrades it itself.
         await assert.rejects(PROVISION['api-tokens'][engine]!(where.url));
@@ -107,7 +109,10 @@ for (const engine of ENGINES)
         assert.deepEqual(done.failed, []);
         assert.deepEqual(
           done.applied.map((each) => [each.id, each.from, each.to]),
-          [['api-tokens', 1, 2]],
+          [
+            ['api-tokens', 1, 2],
+            ['api-tokens', 2, 3],
+          ],
         );
         await PROVISION['api-tokens'][engine]!(where.url);
 
@@ -200,3 +205,86 @@ test(
     }
   },
 );
+
+const SERVICE = '8b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e';
+const insertToken = (
+  db: MigrationDb,
+  engine: Engine,
+  id: string,
+  subject: { kind: 'account' | 'service'; id: string; tenant: string | null; membership: string | null },
+) =>
+  db.run(
+    `INSERT INTO ${names(engine).token} (token_id, app_id, subject_kind, subject_id, label, roles_json, created_at, created_by, expires_at, format, digest, version, tenant_id, membership_id, membership_version)
+     VALUES (?, 'layout', ?, ?, 'svc', '["intake_bot"]', 1000, 'acct-1', 2000, 'twa1', ?, '1', ?, ?, ?)`,
+    [id, subject.kind, subject.id, 'c'.repeat(64), subject.tenant, subject.membership, subject.membership === null ? null : '1'],
+  );
+
+for (const engine of ENGINES)
+  test(
+    `${engine}: a version 2 API token store upgrades to version 3, its rows kept, and a tenant service token is bound with no membership`,
+    { skip: engine === 'postgres' ? liveSkip('postgres', LIVE) : false },
+    async () => {
+      const { token, meta, access } = names(engine);
+      const where = await scratch(engine, 'tokens_up3'),
+        fresh = await scratch(engine, 'tokens_fresh3');
+      try {
+        const v2 = fixtureFiles('api-tokens', engine).find((file) => file.version === 2)!;
+        await applyFixture(engine, where.url, readFileSync(v2.path, 'utf8'));
+        await withDb(where.url, async (db) => {
+          await seed(db, engine);
+          await insertChild(db, engine, { name: 'clinic', key: '7', parent: TOKEN });
+          // Version 2 refuses what version 3 is for: a service token with a tenant and no membership, a role with `_`.
+          await assert.rejects(insertToken(db, engine, SERVICE, { kind: 'service', id: 'intake', tenant: 'acme', membership: null }));
+          await assert.rejects(insertToken(db, engine, SERVICE, { kind: 'service', id: 'intake_bot', tenant: null, membership: null }));
+          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [2]);
+        });
+        await assert.rejects(PROVISION['api-tokens'][engine]!(where.url));
+
+        const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
+        assert.deepEqual(done.failed, []);
+        assert.deepEqual(
+          done.applied.map((each) => [each.id, each.from, each.to]),
+          [['api-tokens', 2, 3]],
+        );
+        await PROVISION['api-tokens'][engine]!(where.url);
+        await PROVISION['api-tokens'][engine]!(fresh.url);
+        assert.deepEqual(
+          withoutBeneath('api-tokens', engine, await describeUrl(where.url)),
+          withoutBeneath('api-tokens', engine, await describeUrl(fresh.url)),
+        );
+
+        await withDb(where.url, async (db) => {
+          assert.deepEqual(
+            (
+              await db.all<{ token_id: string; scope_parent_id: string | null }>(
+                `SELECT token_id, scope_parent_id FROM ${token} ORDER BY token_id`,
+              )
+            ).map((row) => [row.token_id, row.scope_parent_id]),
+            [
+              [TOKEN, null],
+              [CHILD, TOKEN],
+            ],
+            'both tokens kept, the scoped one with its parent',
+          );
+          assert.equal((await db.all(`SELECT 1 FROM ${access}`)).length, 1, 'the OAuth access kept');
+          assert.deepEqual(
+            (await db.all<{ version: number }>(`SELECT version FROM ${meta}`)).map((row) => Number(row.version)),
+            [API_TOKEN_STORE_VERSION],
+          );
+          // A service token is bound to its tenant without a membership; an account token never is, and a service
+          // subject stays lowercase.
+          await insertToken(db, engine, SERVICE, { kind: 'service', id: 'intake_bot', tenant: 'acme', membership: null });
+          await assert.rejects(
+            insertToken(db, engine, CLIENT.slice(5), { kind: 'account', id: 'acct-2', tenant: 'acme', membership: null }),
+          );
+          await assert.rejects(
+            insertToken(db, engine, CLIENT.slice(5), { kind: 'service', id: 'Intake', tenant: 'acme', membership: null }),
+          );
+          assert.ok(storeIsCurrent((await storeStatuses(db, layouts))[0]));
+        });
+      } finally {
+        await where.drop();
+        await fresh.drop();
+      }
+    },
+  );

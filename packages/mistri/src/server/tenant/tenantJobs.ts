@@ -25,30 +25,19 @@
  * the attempt with nothing applied, and the next one asks again.
  */
 import { isProxy } from 'node:util/types';
-import type { FlagRequestLifetime } from '../flags/requestRuntime.js';
-import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { flowKindCommands } from '../../shared/appFlows.js';
-import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
-import { appCommandGrants, declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape, type AppDef } from '../../shared/app.js';
+import { appCommandGrants, resolveAppAccess, type AppDef } from '../../shared/app.js';
 import { calendarDay, zonelessInstant } from '../../shared/appStamps.js';
 import { appZone, readerZone, zoneColumn } from '../../shared/appZone.js';
 import { wallClockText } from '../app/wallClock.js';
-import { assertScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
-import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { AppAccessDenied, type ResourceAccess } from '../app/appAccess.js';
-import { appResourceCatalog } from '../app/appResources.js';
-import { compileAppDefinitionValidation } from '../app/appValidation.js';
 import type { StoreTarget } from '../commands/appCommandEvents.js';
-import {
-  registerTenantServiceEventBinding,
-  type AuthorizedBusinessCommand,
-  type BusinessCommandBinding,
-} from '../commands/businessCommandAccess.js';
-import { assertLookupOwners, scopedLookupReader } from '../commands/commandLookup.js';
+import { assertLookupOwners } from '../commands/commandLookup.js';
 import { noteMakerModule } from '../commands/makerWrites.js';
-import { brandTenantJobs } from './tenantJobsBrand.js';
+import { captureTenantServices } from './tenantServiceBrand.js';
+import { ownerFields, type ServiceAnchors, type TenantServices } from './tenantServiceBinding.js';
 import { createBusinessCommandAuthorizer } from '../commands/businessCommandAuthorization.js';
-import { defineCommands, getCommandEvents, type BusinessCommandActor, type BusinessCommandRegistry } from '../commands/businessCommands.js';
+import { getCommandEvents, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
 import { serviceActor } from '../jobs/jobAuthorization.js';
 import type { JobCommandBinding } from '../jobs/jobCommands.js';
@@ -67,6 +56,8 @@ import {
   type JobModule,
   type MachineTimer,
 } from '../jobs/jobModule.js';
+import { inZone, parseEvery, type JobEvery } from '../jobs/jobSchedule.js';
+import { columnKind, tableNamed } from '@mistriwork/engine/shared/schema.js';
 import { isWorkflowJob, WORKFLOW_JOB_VERSION, workflowJobId } from '../workflows/workflowKeys.js';
 import { flowRunnersOf, tenantFlowChangeReader } from '../workflows/flowChanges.js';
 import { flowCommandId, flowCommandProblems, withFlowCommands } from '../workflows/flowCommand.js';
@@ -80,22 +71,13 @@ import {
 } from '../integrations/integrationChecks.js';
 import type { JobAuthorizationRequest } from '../jobs/jobRunner.js';
 import type { JobContext } from '../jobs/jobs.js';
-import { runTenantCommandTransaction, type TenantCommandRecords } from './tenantCommandTransaction.js';
-import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions } from '@mistriwork/engine/server/evidence.js';
+import { captureTenantData, denyTenant, tenantOptions } from '@mistriwork/engine/server/evidence.js';
 import { parseTenantSelector } from './tenantMembership.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
-import { captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
-import { commandZone } from '../app/readerZone.js';
 import { DUE_TIMER_PAGE, type DueTimer } from './tenantDueTimers.js';
 import { sandboxSkew } from './tenantSandboxClock.js';
-import { captureServiceEvidence, type TenantServiceEvidence } from './tenantServiceModel.js';
-import type { CommandFlags } from '../commands/commandFlags.js';
-import { commandFlagsOnce } from '../commands/commandFlagCapture.js';
-import { assertTenantSourcePair } from './tenantSourceIdentity.js';
 import { binding as storeBinding, type TenantStoreBinding } from './tenantStoreContract.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
-import { captureTenantWriteSource, TenantWriteFailure, type TenantWriteSource } from './tenantWriteSource.js';
-import { tenantCommandReadAudit } from './tenantReadAudit.js';
 
 const refuse = (message: string): never => {
   throw new JobDeclarationError(`Jobs: ${message}`);
@@ -104,8 +86,6 @@ const deny = (): never => {
   throw new AppAccessDenied();
 };
 const noReferences = (): readonly CommandResultReference[] => [];
-const ownerFields = (owned: TenantOwnershipSnapshot): Record<string, string> =>
-  Object.fromEntries(Object.entries(owned.ownership).flatMap(([id, rule]) => (rule.kind === 'tenant' ? [[id, rule.column]] : [])));
 
 /** The deployment a module implies on a tenant App: jobDeployment's, over the
  * tenant event store (bound as the tenant store is) with every tenant's route.
@@ -278,10 +258,40 @@ function mailCommands(module: CapturedJobModule): Array<{ what: string; id: stri
   ];
 }
 
+/** Why a job's `every.column` is no tenant's schedule, else undefined: a shared column of the tenant's profile
+ * (`tenant.<column>`), or a text column of a table each tenant owns its rows of, which its members may then edit. */
+function scheduleColumnProblem(named: string, app: AppDef, owned: TenantOwnershipSnapshot): string | undefined {
+  const dot = named.indexOf('.'),
+    resource = named.slice(0, dot),
+    column = named.slice(dot + 1);
+  const tenancy = app.auth?.tenancy;
+  let table: string;
+  if (resource === 'tenant') {
+    if (tenancy?.profile === undefined) return 'and the App keeps no tenant profile (auth.tenancy.profile)';
+    if (!tenancy.shared?.includes(column)) return `and auth.tenancy.shared does not list "${column}"`;
+    table = tenancy.profile;
+  } else {
+    if (tenancy?.profile !== undefined && resource === tenancy.profile)
+      return `the tenant profile: name it "tenant.${column}" and list "${column}" in auth.tenancy.shared`;
+    const rule = Object.hasOwn(owned.ownership, resource) ? owned.ownership[resource] : undefined;
+    if (rule?.kind !== 'tenant') return `and "${resource}" is not a table each tenant owns its rows of`;
+    table = resource;
+  }
+  const found = tableNamed(owned.schema, table)?.columns.find((candidate) => candidate.name === column);
+  if (!found) return `and "${resource}" has no column "${column}"`;
+  if (columnKind(found.type) !== 'text') return `which is ${found.type}; a schedule is cron text like "0 6 * * *"`;
+  return undefined;
+}
+
 /** Why the App cannot run each job as its service principal: jobGrantProblems'
  * grants, and every role in its command's realm — tenant roles for a tenant
  * command, platform roles for a platform one, never a union of the two. */
-function tenantJobProblems(module: CapturedJobModule, app: AppDef, registry: BusinessCommandRegistry): string[] {
+function tenantJobProblems(
+  module: CapturedJobModule,
+  app: AppDef,
+  registry: BusinessCommandRegistry,
+  owned: TenantOwnershipSnapshot,
+): string[] {
   const problems = jobGrantProblems(module, app),
     roles = app.auth?.roles ?? {};
   for (const job of module.jobs.values()) {
@@ -296,6 +306,10 @@ function tenantJobProblems(module: CapturedJobModule, app: AppDef, registry: Bus
       problems.push(
         `principal "${job.runAs}" runs ${realm} command "${job.command.id}", so every role it holds must be a ${realm}-realm role.`,
       );
+    }
+    if (job.every?.column !== undefined) {
+      const problem = scheduleColumnProblem(job.every.column, app, owned);
+      if (problem) problems.push(`job "${job.id}" reads each tenant's every from "${job.every.column}", ${problem} [job-every-column].`);
     }
     // Each tenant's zone is the one its profile names: the App says which shared column holds it.
     if (job.every?.tenantZone && zoneColumn(app.ui)?.resource !== 'tenant')
@@ -349,7 +363,7 @@ export function assertTenantJobs(
   owned: TenantOwnershipSnapshot,
   connection: string,
 ): void {
-  const [problem] = [...tenantJobProblems(module, app, registry), ...timerProblems(module, registry, owned)];
+  const [problem] = [...tenantJobProblems(module, app, registry, owned), ...timerProblems(module, registry, owned)];
   if (problem) refuse(problem);
   const authorizer = createBusinessCommandAuthorizer({
     app,
@@ -456,29 +470,22 @@ function assertTenantFlows(
 }
 
 interface TenantJobsOptions {
-  readonly captureFlags?: (
-    principal: TenantServiceEvidence,
-    lifetime: FlagRequestLifetime,
-  ) => CommandFlags | undefined | Promise<CommandFlags | undefined>;
-  readonly app: AppDef;
-  readonly reader: TenantReadSource;
-  readonly writer: TenantWriteSource;
-  readonly deployment: string;
-  readonly registry: BusinessCommandRegistry;
+  /** The deployment's service bindings (tenantServiceBinding.ts): its App, sources, commands and clock. */
+  readonly services: TenantServices;
   readonly resultReferences: Readonly<Record<string, (result: unknown) => readonly CommandResultReference[]>>;
   readonly module: CapturedJobModule;
   /** Where the stores live: the tenant source's own file or database. */
   readonly target: StoreTarget;
   /** A direct PostgreSQL URL for the jobs host's `LISTEN` when `target` goes through a transaction-mode pooler. */
   readonly listen?: string;
-  /** The deployment's clock, which its writer checks every evidence against. */
-  readonly now: () => number;
 }
-type Anchors = Readonly<{ tenantVersion: string | null; platformVersion: string }>;
+type Anchors = ServiceAnchors;
 /** Why a platform job's command may not record events or look up: the tenant's store and rows are not its. */
 const PLATFORM_PLACE = 'platform jobs run outside any tenant; events and lookups need one';
 /** Attempts admitted and not yet run: at most the runner's claims, whose ceiling is one. */
 const ADMITTED = 16;
+/** The most tenant schedules kept read, and tenants' unreadable ones kept said: past it, both start again. */
+const SCHEDULES = 4096;
 
 /**
  * The jobs runtime over a tenant deployment's genuine sources: the host's
@@ -487,41 +494,9 @@ const ADMITTED = 16;
  * openTenantJobHost. Nothing runs until a host claims a job.
  */
 export function bindTenantJobs(options: TenantJobsOptions) {
-  const raw = tenantOptions(options, [
-    'app',
-    'reader',
-    'writer',
-    'deployment',
-    'registry',
-    'resultReferences',
-    'module',
-    'target',
-    'now',
-    'captureFlags',
-    'listen',
-  ]);
-  if (raw.captureFlags !== undefined && (typeof raw.captureFlags !== 'function' || isProxy(raw.captureFlags))) return denyTenant();
-  const captureFlags = raw.captureFlags as TenantJobsOptions['captureFlags'];
-  const reader = captureTenantReadSource(raw.reader as TenantReadSource),
-    writer = captureTenantWriteSource(raw.writer as TenantWriteSource);
-  const identity = assertTenantSourcePair(reader, writer),
-    ownership = writer.ownership;
-  const app = captureTenantData(raw.app as AppDef);
-  if (!app || !tenantAppShape(app, ownership)) return denyTenant();
-  const catalog = appResourceCatalog(
-    ownership.physicalSchema,
-    physicalBindings(app, ownership.source.id),
-    declaredReferences(app, ownership.source.id),
-  );
-  assertScopeCatalog(ownership.schema, catalog.schema);
-  const deploymentId = raw.deployment as string;
-  tenantIdentifier(deploymentId);
-  if (typeof raw.now !== 'function' || isProxy(raw.now)) return denyTenant();
-  const now = raw.now as () => number;
-  if (!raw.registry || typeof raw.registry !== 'object' || isProxy(raw.registry)) return denyTenant();
-  const registry = defineCommands(
-    tenantOptions(raw.registry, Object.keys(Object.getOwnPropertyDescriptors(raw.registry))) as BusinessCommandRegistry,
-  );
+  const raw = tenantOptions(options, ['services', 'resultReferences', 'module', 'target', 'listen']);
+  const services = captureTenantServices(raw.services as TenantServices);
+  const { app, reader, identity, ownership, registry, validation } = services;
   const module = pinJobs(capturedJobModule(raw.module), registry);
   // What a maker can write, known before the tenant App serves (makerWrites.ts).
   noteMakerModule(app.id, module);
@@ -551,16 +526,8 @@ export function bindTenantJobs(options: TenantJobsOptions) {
   const listen = raw.listen;
   if (listen !== undefined && (typeof listen !== 'string' || !('postgres' in target) || !/^postgres(ql)?:\/\//i.test(listen)))
     return denyTenant();
-  const authorizer = createBusinessCommandAuthorizer({
-    app,
-    registry: commands,
-    schema: ownership.schema,
-    connectionFor: (resource) => (Object.hasOwn(ownership.resources, resource) ? identity.source.connection : deny()),
-    writableConnection: (connection) => connection === identity.source.connection,
-    transactionalConnection: (connection) => connection === identity.source.connection,
-    managedOwnership: ownerFields(ownership),
-  });
-  const validation = compileAppDefinitionValidation(ownership.schema, app);
+  // Built here, after the module's own refusals, as it always was: a binding asks for this one again.
+  services.authorizerFor(commands);
   const declarations = tenantOptions(raw.resultReferences, Object.keys(registry));
   // Each job's place, principal and visible fields, fixed for the deployment's life.
   const places = new Map<
@@ -621,8 +588,6 @@ export function bindTenantJobs(options: TenantJobsOptions) {
       return deny();
     return extract as (result: unknown) => readonly CommandResultReference[];
   };
-  // The runtime this function returns, for the event owner registration: set once it is built, before any attempt binds.
-  let self: object | undefined;
   const lifetimeMs = Math.min(deployment.attemptTimeoutMs, 300_000);
   let retired = false;
   const pending = new Set<Promise<void>>();
@@ -750,13 +715,7 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     return true;
   };
 
-  /** The zone a tenant's command counts its day in, where `ui.timezone` names a column its profile shares
-   * (`tenant.<column>`): the tenant's own, as a member's command is given (tenantCommands.ts), so a job's
-   * `today()` and `timezone` agree with the zone its slot was kept in (`timezone: 'tenant'`). Undefined, the App's. */
-  const zoneOf = async (tenantId: string | null): Promise<string | undefined> => {
-    if (tenantId === null || zoneColumn(app.ui)?.resource !== 'tenant') return undefined;
-    return commandZone(app.ui, () => deny(), await readSharedProfile(reader, app, tenantId));
-  };
+  const zoneOf = services.zoneOf;
 
   /** One attempt's binding: the evidence of what its admission read, and the
    * one command the job runs, as its principal, in the writer's fenced
@@ -787,176 +746,12 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     });
   };
 
-  /** A service's binding over anchors read for one tenant (or the platform): the evidence, the
-   * fenced writer transaction, and the commands `extract` admits. What bind and deliver share. */
-  const bindService = (options: {
-    runAs: string;
-    place: 'tenant' | 'platform';
-    roles: readonly string[];
-    grants: ResourceAccess;
-    tenantId: string | null;
-    /** The tenant's own zone for its command's day (zoneOf), where the App keeps one. */
-    zone?: string | undefined;
-    anchors: Anchors;
-    aborted: () => boolean;
-    extract: (id: string) => (result: unknown) => readonly CommandResultReference[];
-  }): JobCommandBinding => {
-    const { runAs, place, roles, grants, tenantId, anchors } = options;
-    const verifiedAt = now();
-    const evidence = captureServiceEvidence(
-      {
-        realm: 'service',
-        appId: app.id,
-        source: identity.source,
-        deployment: deploymentId,
-        principal: runAs,
-        place,
-        tenantId,
-        tenantVersion: anchors.tenantVersion,
-        platformVersion: anchors.platformVersion,
-        roles: [...roles],
-        verifiedAt,
-        validUntil: verifiedAt + lifetimeMs,
-      },
-      ownership,
-    );
-    let lastTime = verifiedAt,
-      live = true;
-    const active = () => {
-      if (!live || retired || options.aborted()) return denyTenant();
-      const instant = now();
-      if (!Number.isSafeInteger(instant) || instant < lastTime || instant >= evidence.validUntil) return denyTenant();
-      lastTime = instant;
-    };
-    const scope = Object.freeze({ principal: evidence, grants, session: async () => active() });
-    const actorId = `service:${runAs}`;
-    const principal = (actor: BusinessCommandActor) =>
-      !!actor &&
-      typeof actor === 'object' &&
-      !isProxy(actor) &&
-      actor.id === actorId &&
-      actor.kind === 'service' &&
-      actor.appId === app.id &&
-      Array.isArray(actor.roles) &&
-      actor.roles.length === roles.length &&
-      actor.roles.every((role) => roles.includes(role));
-    /* What a command's lookup may read as this service: its declared sources' tables and, when it names a record, that
-       record's table (the lookup reads the target before the transaction). Never wider; the read source composes the
-       scope itself from the evidence, within the tenant, and fences it on the anchors as the writer does. */
-    const lookupFootprint = (authorization: ReturnType<typeof authorizer.authorize>): RowScope => {
-      const tables = authorization.lookupTables!;
-      const allowed = new Set<string>();
-      for (const [source, catalog] of Object.entries(tables.catalogs))
-        for (const local of Object.keys(catalog)) allowed.add(tables.logical(source, local));
-      if (authorization.command.targets !== 'none') allowed.add(authorization.resource);
-      return Object.freeze(Object.fromEntries(Object.keys(ownership.ownership).map((table) => [table, allowed.has(table)])));
-    };
-    const binding = Object.freeze<BusinessCommandBinding>({
-      scoped: true,
-      // A command at times names no record (`targets: 'none'`): its envelope's key is empty, as on a single App.
-      creates: (id: string): boolean => authorizer.creates(id),
-      authorize: (id, actor) => {
-        if (!principal(actor)) return deny();
-        const extract = options.extract(id);
-        const authorization = authorizer.authorize(id, actor);
-        // The footprint as a scope of trues: the writer composes the service's scope over it.
-        const footprint = Object.freeze(
-          Object.fromEntries(Object.keys(ownership.ownership).map((table) => [table, authorization.read.includes(table)])),
-        );
-        const contexts = new WeakMap<WriteTransaction, TenantCommandRecords>();
-        return Object.freeze<AuthorizedBusinessCommand>({
-          ...authorization,
-          ...(options.zone === undefined ? {} : { timezone: options.zone }),
-          transaction: deny,
-          /* No plain transaction: a decision's reads (its record, its choices) run in this command's own fenced
-             transaction, scoped to the tenant's rows, and write nothing (decideReads.ts). Without it every tenant
-             decision failed at its first read, as `deny` above, and no customer was ever asked about. */
-          readsInCommand: true,
-          // Before the transaction, as a member's lookup is; the anchor fence inside it still holds.
-          ...(place === 'tenant' && authorization.lookupTables
-            ? { lookup: scopedLookupReader(authorization, () => reader.bindServiceReads(evidence, lookupFootprint(authorization))) }
-            : {}),
-          ...(place === 'tenant'
-            ? { receiptOwner: captureTenantData({ storeId: identity.storeId, sourceId: identity.source.id, tenantId: tenantId! }) }
-            : {}),
-          ...tenantCommandReadAudit(
-            authorization,
-            { app: app.id, tenant: place === 'tenant' ? tenantId! : '', actor: actorId },
-            identity.source.connection,
-            (row) => writer.appendReadAudit(row),
-          ),
-          assertTarget: (records: WriteTransaction, target: Readonly<Record<string, string | number>>) =>
-            contexts.get(records)?.target(target) ?? deny(),
-          assertResult: (records: WriteTransaction, target: Readonly<Record<string, string | number>>, result: unknown) =>
-            contexts.get(records)?.result(target, result) ?? deny(),
-          commandTransaction: async (run) => {
-            let workFailure: { error: unknown } | undefined;
-            try {
-              return await writer.serviceCommandTransaction(
-                evidence,
-                footprint,
-                (records, journal) =>
-                  runTenantCommandTransaction(ownership, scope, authorization, records, journal, extract, async (tx) => {
-                    contexts.set(tx.records, tx);
-                    try {
-                      return await run(tx.records, tx.journal!);
-                    } catch (error) {
-                      workFailure = { error };
-                      throw error;
-                    } finally {
-                      contexts.delete(tx.records);
-                    }
-                  }),
-                active,
-              );
-            } catch (error) {
-              // The source's confirmed or unknown outcome, around the handler's own refusal.
-              throw new CommandTransactionFailure(
-                workFailure?.error ?? error,
-                error instanceof TenantWriteFailure ? error.outcome : 'unknown',
-              );
-            }
-          },
-        });
-      },
-    });
-    // The jobs runtime's own binding records events in the tenant's store, as a member's does (a tenant's place only).
-    if (place === 'tenant') registerTenantServiceEventBinding(self!, evidence, binding);
-    let finish!: () => void;
-    const held = new Promise<void>((resolve) => {
-      finish = resolve;
-    });
-    pending.add(held);
-    const lifetime: FlagRequestLifetime = {
-      generation: Object.freeze({}),
-      assertCurrent: active,
-      async current() {
-        active();
-        const fresh = await reader.readServiceAnchors(tenantId);
-        active();
-        if (
-          fresh.platformVersion !== evidence.platformVersion ||
-          (evidence.place === 'tenant' && fresh.tenantVersion !== evidence.tenantVersion)
-        )
-          return denyTenant();
-      },
-    };
-    const flags = commandFlagsOnce(async () => {
-      active();
-      const reader = await captureFlags?.(evidence, lifetime);
-      active();
-      return reader;
-    });
-    return Object.freeze({
-      binding,
-      captureFlags: flags,
-      release: () => {
-        live = false;
-        pending.delete(held);
-        finish();
-      },
-    });
-  };
+  /** A service's binding over anchors read for one tenant (or the platform), as the deployment's service
+   * bindings make one (tenantServiceBinding.ts): within this runtime's attempt window and its commands, and
+   * held until released, so retiring the runtime waits for it. What bind, deliver and serve share. */
+  const bindService = (
+    options: Omit<Parameters<TenantServices['bindService']>[0], 'lifetimeMs' | 'commands' | 'pending'>,
+  ): JobCommandBinding => services.bindService({ ...options, lifetimeMs, commands, pending, aborted: () => retired || options.aborted() });
 
   /* A mail part's principal, its tenant roles and their visible fields, and the commands it may run. */
   const mailParts = new Map<
@@ -1056,6 +851,43 @@ export function bindTenantJobs(options: TenantJobsOptions) {
     });
   };
 
+  /* A tenant's schedule is a value it edits, so one that does not parse is said once, not each pass, and runs the
+     job's default rather than stalling it or another tenant. Each pair read is kept, as the zones' formats are. */
+  const schedules = new Map<string, JobEvery | undefined>(),
+    unreadable = new Set<string>();
+  const tenantSchedules = async (job: Pick<CapturedJob, 'id' | 'every'>) => {
+    const every = job.every!,
+      named = every.tenantZone ? zoneColumn(app.ui)?.column : undefined,
+      fallback = appZone(app.ui) ?? 'UTC';
+    const tenants = await reader.readActiveTenants({ ...(named === undefined ? {} : { zone: named }), schedule: every.column! });
+    return tenants.map((tenant) => {
+      const zone = every.tenantZone ? (readerZone(tenant.zone) ?? fallback) : every.timezone,
+        text = typeof tenant.schedule === 'string' ? tenant.schedule.trim() : '';
+      let own: JobEvery | undefined;
+      if (text) {
+        const pair = `${zone}\u0000${text}`;
+        if (!schedules.has(pair)) {
+          if (schedules.size >= SCHEDULES) schedules.clear();
+          try {
+            schedules.set(pair, parseEvery(text, zone));
+          } catch {
+            schedules.set(pair, undefined);
+          }
+        }
+        own = schedules.get(pair);
+        const said = `${job.id}\u0000${tenant.id}\u0000${text}`;
+        if (!own && !unreadable.has(said)) {
+          if (unreadable.size >= SCHEDULES) unreadable.clear();
+          unreadable.add(said);
+          console.warn(
+            `mistri: job "${job.id}": tenant "${tenant.id}" has every "${text}" in ${every.column}, which is not five cron fields; it runs at "${every.text}".`,
+          );
+        }
+      }
+      return Object.freeze({ id: tenant.id, every: own ?? inZone(every, zone) });
+    });
+  };
+
   const runtime = Object.freeze({
     app,
     module,
@@ -1077,6 +909,8 @@ export function bindTenantJobs(options: TenantJobsOptions) {
         zone: readerZone(tenant.zone) ?? fallback,
       }));
     },
+    /** The same, each with its own `every` off the job's column (`every: { column, default }`), in its zone. */
+    tenantSchedules,
     /** The records a machine timer is due on, each with its row's tenant; undefined when the module has no timer. */
     sweep: [...module.jobs.values()].some((job) => job.timer) ? sweep : undefined,
     /** What a workflow's steps run by name; each is bound and refused as stepExtract says. */
@@ -1099,8 +933,6 @@ export function bindTenantJobs(options: TenantJobsOptions) {
       return Promise.allSettled([...pending]).then(() => {});
     },
   });
-  brandTenantJobs(runtime);
-  self = runtime;
   return runtime;
 }
 type TenantJobs = ReturnType<typeof bindTenantJobs>;
@@ -1253,6 +1085,7 @@ export async function openTenantJobHost(
       admit: jobs.admit,
       tenants: jobs.tenants,
       ...([...jobs.module.jobs.values()].some((job) => job.every?.tenantZone) ? { tenantZones: jobs.tenantZones } : {}),
+      ...([...jobs.module.jobs.values()].some((job) => job.every?.column !== undefined) ? { tenantSchedules: jobs.tenantSchedules } : {}),
       commands: jobs.commands,
       ...(jobs.sweep ? { sweep: jobs.sweep } : {}),
       ...(jobs.flowChanges ? { flowChanges: jobs.flowChanges } : {}),

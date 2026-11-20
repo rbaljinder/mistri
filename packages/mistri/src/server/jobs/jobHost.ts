@@ -116,6 +116,9 @@ interface JobHostOptions {
   /** The same tenants, each with its zone (the App's own where its profile names none it knows): whom a job on
    * each tenant's zone (`timezone: 'tenant'`) runs for, grouped by zone. */
   readonly tenantZones?: () => Promise<readonly Readonly<{ id: string; zone: string }>[]>;
+  /** The same tenants, each with its own `every` for a job that reads one per tenant (`every: { column, default }`):
+   * already in the tenant's zone, and the job's default where its value does not parse. */
+  readonly tenantSchedules?: (job: Pick<CapturedJob, 'id' | 'every'>) => Promise<readonly Readonly<{ id: string; every: JobEvery }>[]>;
   /** The new history rows of the resources whose flows a runner of this module runs (workflows/flowTail.ts). */
   readonly flowChanges?: FlowChangeReader;
   /** The records a machine timer is due on: in its state since at or before `cutoff` (appMachine.ts `after`).
@@ -671,33 +674,37 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
      own key, the gate: the soonest zone's next slot, or ZONE_READ_MS on, so a tenant that joins or moves is seen. On
      the process's first pass each zone catches up its latest missed slot (none on a fresh store); a zone first seen
      later starts at its next slot. A tenant that moves zone keeps its new zone's slots from then: that day it may run
-     twice, or not at all. */
+     twice, or not at all. A job whose `every` is each tenant's own (`every: { column }`) groups by zone and
+     expression together (`job@zone|every`), and a tenant that moves its schedule is the same as one that moves zone. */
   async function enqueueZoneSlots(job: TimedJob, at: number): Promise<boolean> {
-    const gate = slotDue.get(job.id);
-    if ((gate !== undefined && at < gate) || !options.tenantZones) return false;
-    let tenants: readonly Readonly<{ id: string; zone: string }>[];
+    const gate = slotDue.get(job.id),
+      own = job.every!.column !== undefined;
+    if ((gate !== undefined && at < gate) || !(own ? options.tenantSchedules : options.tenantZones)) return false;
+    let tenants: readonly Readonly<{ id: string; every: JobEvery }>[];
     try {
-      tenants = await options.tenantZones();
+      tenants = own
+        ? await options.tenantSchedules!(job)
+        : (await options.tenantZones!()).map((tenant) => ({ id: tenant.id, every: inZone(job.every!, tenant.zone) }));
     } catch {
       return false; // Unavailable now: the next cycle asks again.
     }
     const first = gate === undefined;
     const fresh = first ? await freshJob(job) : false;
     if (fresh === undefined) return false;
-    const zones = new Map<string, string[]>();
+    const groups = new Map<string, { every: JobEvery; ids: string[] }>();
     for (const tenant of tenants) {
-      let ids = zones.get(tenant.zone);
-      if (!ids) zones.set(tenant.zone, (ids = []));
-      ids.push(tenant.id);
+      const group = own ? `${tenant.every.timezone}|${tenant.every.text}` : tenant.every.timezone;
+      let held = groups.get(group);
+      if (!held) groups.set(group, (held = { every: tenant.every, ids: [] }));
+      held.ids.push(tenant.id);
     }
     for (const key of [...slotDue.keys()])
-      if (key.startsWith(`${job.id}@`) && !zones.has(key.slice(job.id.length + 1))) slotDue.delete(key);
+      if (key.startsWith(`${job.id}@`) && !groups.has(key.slice(job.id.length + 1))) slotDue.delete(key);
     let enqueued = false,
       failed = false,
       soonest = at + ZONE_READ_MS;
-    for (const [zone, ids] of zones) {
-      const every = inZone(job.every!, zone),
-        key = `${job.id}@${zone}`;
+    for (const [group, { every, ids }] of groups) {
+      const key = `${job.id}@${group}`;
       let next = slotDue.get(key);
       if (next === undefined && (fresh || !first)) slotDue.set(key, (next = nextSlot(every, at)));
       else if (next === undefined || at >= next) {
@@ -722,7 +729,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     let enqueued = await sweepTimers();
     for (const job of timed) {
       const at = now();
-      if (job.every!.tenantZone) {
+      if (job.every!.tenantZone || job.every!.column !== undefined) {
         enqueued = (await enqueueZoneSlots(job, at)) || enqueued;
         continue;
       }

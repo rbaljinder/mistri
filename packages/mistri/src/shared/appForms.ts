@@ -35,6 +35,7 @@ export const FORM_VIEW_KEYS = [
   'done',
   'public',
   'prefillable',
+  'given',
   'resume',
   'draft',
   'abandoned',
@@ -100,13 +101,22 @@ export function parseFormView(e: Record<string, unknown>, at: string): AppFormVi
   if (e.done !== undefined) {
     if (!e.done || typeof e.done !== 'object' || Array.isArray(e.done)) throw new Error(`${at} has a "done" that is not an object.`);
     const d = e.done as Record<string, unknown>;
-    allowKeys(d, ['title', 'description'], `${at}, "done"`, { message: 'is now "description": the sentence under the title' });
+    allowKeys(d, ['title', 'description', 'reference', 'home'], `${at}, "done"`, {
+      message: 'is now "description": the sentence under the title',
+    });
     for (const k of ['title', 'description'] as const) {
       if (d[k] !== undefined && !isText(d[k], k === 'title' ? 120 : 2000)) throw new Error(`${at}, "done" has a "${k}" that is not text.`);
+    }
+    // Both are shown by default; a form whose next step is elsewhere (a kiosk, a page that reloads) leaves them out.
+    for (const k of ['reference', 'home'] as const) {
+      if (d[k] !== undefined && d[k] !== false)
+        throw new Error(`${at}, "done" has a "${k}" that is not false: it is shown unless it says false.`);
     }
     done = {
       ...(d.title === undefined ? {} : { title: (d.title as string).trim() }),
       ...(d.description === undefined ? {} : { description: (d.description as string).trim() }),
+      ...(d.reference === false ? { reference: false as const } : {}),
+      ...(d.home === false ? { home: false as const } : {}),
     };
   }
   /* A form is saved on every step when its steps say so: a step that runs a
@@ -131,6 +141,26 @@ export function parseFormView(e: Record<string, unknown>, at: string): AppFormVi
   const command = parseFormCommandReference(e.command, `${at}, "command"`, isPublic);
   // A saved form's own command is the final submit, over what the steps saved: it may ask nothing more.
   if (!command.input.length && !saved) throw new Error(`${at}: the command takes no input; a form asks for something.`);
+  /* The inputs the link supplies (`?unit=12`): filled from the address, never
+     drawn and never on a step or the review, and judged by the command like
+     anything typed: hidden is not trusted. A link that leaves one out meets
+     the command's own refusal, on the form's line. */
+  let given: string[] | undefined;
+  if (e.given !== undefined) {
+    if (saved) throw new Error(`${at} saves each step, and takes no "given": it starts blank.`);
+    if (!Array.isArray(e.given) || !e.given.length) throw new Error(`${at} has a "given" that is not a list of the command's input names.`);
+    given = e.given.map((name) => {
+      const field = typeof name === 'string' ? command.input.find((input) => input.name === name) : undefined;
+      if (!field) throw new Error(`${at}, "given": ${JSON.stringify(name)} is not one of the command's inputs.`);
+      if (field.type === 'group' || field.type === 'lines' || field.type === 'boolean')
+        throw new Error(
+          `${at}, "given": "${field.name}" is ${field.type === 'lines' ? 'lines' : `a ${field.type}`}; an address fills a text, number, date or choice.`,
+        );
+      return field.name;
+    });
+    if (new Set(given).size !== given.length) throw new Error(`${at} has a "given" that names one input twice.`);
+    if (given.length === command.input.length) throw new Error(`${at} is given every input the command takes; a form asks for something.`);
+  }
   let steps: AppFormView['steps'];
   if (saved) {
     if (e.steps === undefined) throw new Error(`${at} saves each step and names none: steps: [step('About you', 'startApplication'), …].`);
@@ -162,11 +192,13 @@ export function parseFormView(e: Record<string, unknown>, at: string): AppFormVi
     for (const step of parsed) {
       for (const field of step.fields) {
         if (!inputs.has(field)) throw new Error(`${at}: step "${step.label}" names "${field}", which the command does not take.`);
+        if (given?.includes(field))
+          throw new Error(`${at}: step "${step.label}" names "${field}", which the form is given and never asks.`);
       }
     }
     const owned = new Set(parsed.flatMap((step) => step.fields));
     for (const field of command.input) {
-      if (!owned.has(field.name))
+      if (!owned.has(field.name) && !given?.includes(field.name))
         throw new Error(`${at}: the command input "${field.name}" belongs to no step. Every input is asked on exactly one step.`);
     }
     steps = parsed.map((step) => ({ ...step, fields: [...step.fields] }));
@@ -187,6 +219,8 @@ export function parseFormView(e: Record<string, unknown>, at: string): AppFormVi
       return field.name;
     });
     if (new Set(prefillable).size !== prefillable.length) throw new Error(`${at} has a "prefillable" that names one input twice.`);
+    const both = prefillable.find((name) => given?.includes(name));
+    if (both) throw new Error(`${at} names "${both}" both prefillable (shown) and given (hidden); it is one or the other.`);
   }
   const statusCheck = save && e.statusCheck !== undefined ? parseStatusCheck(e.statusCheck, `${at}, "statusCheck"`, save) : undefined;
   if (statusCheck) {
@@ -231,6 +265,7 @@ export function parseFormView(e: Record<string, unknown>, at: string): AppFormVi
     ...(inputs ? { inputs } : {}),
     ...(path === undefined ? {} : { path }),
     ...(prefillable ? { prefillable } : {}),
+    ...(given ? { given } : {}),
     ...(icon === undefined ? {} : { icon }),
     ...(e.realm === undefined ? {} : { realm: parseRealm(e.realm, at) }),
     ...(steps === undefined ? {} : { steps }),

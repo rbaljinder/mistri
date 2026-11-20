@@ -17,6 +17,8 @@ export type ReadContext = Pick<TenantReadContext, 'schema' | 'data'> & {
   readonly together?: TenantReadContext['together'];
   /** A member's context: the columns of the tenant's profile `auth.tenancy.shared` lists, read for this request. */
   readonly tenant?: TenantReadContext['tenant'];
+  /** A member's bounded request: asked just before its last wave of reads (tenantReadRuntime.ts). */
+  readonly lastWave?: TenantReadContext['lastWave'];
 };
 /** `work` with its reads on one snapshot of `context`, where the context can share one; else as it is. */
 export const together = <T>(context: ReadContext, work: () => Promise<T>): Promise<T> =>

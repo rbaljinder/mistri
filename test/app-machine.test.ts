@@ -15,6 +15,7 @@ import { validatePage, type PageDef } from '../packages/engine/src/shared/page.j
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { catalogOf } from './support/commandCatalog.js';
 import { machineChecks, machineCommandWarnings } from '../packages/mistri/src/server/app/appMachineChecks.js';
+import { machineTimers } from '../packages/mistri/src/server/jobs/jobLoader.js';
 
 /* An application: submitted, reviewed (perhaps after documents), decided; withdrawn from any open state. */
 const withdraw = { to: 'withdrawn', label: 'Withdraw', reason: 'note' } as const;
@@ -473,9 +474,64 @@ test('a resource runs a command at an instant the record keeps, and a state take
     );
   assert.throws(resourceAt({ moved_at: 'expier' }), /"at" "moved_at" runs "expier", which is not one of the App's commands/);
   assert.throws(resourceAt({ 'moved at': 'expire' }), /"moved at": name a date or timestamp column/);
-  assert.throws(resourceAt({ moved_at: { command: 'expire', every: 'day' } }), /has no "every". A timer takes command and when/);
+  assert.throws(
+    resourceAt({ moved_at: { command: 'expire', every: 'day' } }),
+    /has no "every". A timer takes command, when, and before or after/,
+  );
   assert.throws(resourceAt({ moved_at: { command: 'expire', when: ' ' } }), /has a "when" that is not conditions/);
   assert.throws(resourceAt({}), /"at" is not \{ due_at: 'aCommand' \}/);
+  // A timer may come due a while before or after its instant, and a column with several takes a list.
+  const offsets = parseAppConfig(
+    {
+      name: 'Lending',
+      resources: {
+        application: {
+          access: 'write',
+          at: {
+            moved_at: [
+              { command: 'expire', before: '24 hours', when: "status = 'open'" },
+              { command: 'expire', before: '2 hours' },
+            ],
+            closed_at: { command: 'expire', after: '2 days' },
+          },
+        },
+      },
+      views: { applications: { kind: 'list', from: 'application' } },
+      home: 'applications',
+    },
+    'app.ts',
+    { commands: checked },
+  );
+  assert.deepEqual(offsets.resources!.application!.at, [
+    { column: 'moved_at', command: 'expire', when: "status = 'open'", before: '24 hours' },
+    { column: 'moved_at', command: 'expire', before: '2 hours' },
+    { column: 'closed_at', command: 'expire', after: '2 days' },
+  ]);
+  assert.deepEqual(
+    machineTimers(offsets).map(({ ms, after }) => ({ ms, after })),
+    [
+      { ms: -86_400_000, after: '24 hours before the time in moved_at' },
+      { ms: -7_200_000, after: '2 hours before the time in moved_at' },
+      { ms: 172_800_000, after: '2 days after the time in closed_at' },
+    ],
+  );
+  assert.throws(
+    resourceAt({ moved_at: { command: 'expire', before: '1 day', after: '1 day' } }),
+    /both before and after "moved_at" \[at-offset\]/,
+  );
+  assert.throws(resourceAt({ moved_at: { command: 'expire', before: 'a day' } }), /before "a day": say how long as .* \[at-offset\]/);
+  assert.throws(resourceAt({ moved_at: { command: 'expire', after: '0 hours' } }), /after "0 hours": say how long/);
+  assert.throws(
+    resourceAt({
+      moved_at: [
+        { command: 'expire', before: '1 day' },
+        { command: 'expire', before: '24 hours' },
+      ],
+    }),
+    /has two timers before it by the same time \[at-offset\]/,
+  );
+  assert.throws(resourceAt({ moved_at: ['expire', { command: 'expire' }] }), /has two timers at the instant itself \[at-offset\]/);
+  assert.throws(resourceAt({ moved_at: [] }), /"moved_at" is an empty list/);
 });
 
 test('check names unreachable states and dead ends', () => {
@@ -547,6 +603,9 @@ test('typed machines: a verb to a state the machine lacks, and a timer naming no
     const app: App = { name: 'Loans', views: { loans: listView('Loan', 'loan') }, home: 'loans', resources: { loan: { access: 'write', machine: good } } };
     defineApp({ name: 'Loans', resources: { loan: { machine: good } }, views: { loans: listView('Loan', 'loan', { presentation: queue('id'), actions: ['assign', 'drop'] }) }, home: 'loans' });
     defineApp({ name: 'Loans', resources: { loan: { machine: good, at: { due_at: 'expire', warned_at: { command: 'expire', when: "status = 'open'" } } } }, views: { loans: listView('Loan', 'loan') }, home: 'loans' });
+    defineApp({ name: 'Loans', resources: { loan: { at: { due_at: [{ command: 'expire', before: '24 hours' }, { command: 'expire', after: '2 days', when: "status = 'open'" }] } } }, views: { loans: listView('Loan', 'loan') }, home: 'loans' });
+    // @ts-expect-error An offset is a duration: a whole number and a unit.
+    defineApp({ name: 'Loans', resources: { loan: { at: { due_at: { command: 'expire', before: 'a day' } } } }, views: { loans: listView('Loan', 'loan') }, home: 'loans' });
     // @ts-expect-error A resource's timer runs one of the App's commands, by name.
     defineApp({ name: 'Loans', resources: { loan: { at: { due_at: 'expier' } } }, views: { loans: listView('Loan', 'loan') }, home: 'loans' });
     // @ts-expect-error Selectors use the machine verb key, not its display label.

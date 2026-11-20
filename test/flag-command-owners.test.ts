@@ -33,6 +33,7 @@ import { bindTenantCommands } from '../packages/mistri/src/server/tenant/tenantC
 import { bindPlatformCommands, bindPlatformRequestRuntime } from '../packages/mistri/src/server/tenant/tenantPlatformCommands.js';
 import { bindTenantIntake } from '../packages/mistri/src/server/tenant/tenantIntake.js';
 import { bindTenantJobs } from '../packages/mistri/src/server/tenant/tenantJobs.js';
+import { bindTenantServices } from '../packages/mistri/src/server/tenant/tenantServiceBinding.js';
 import { defineEvent, defineEventProjection } from '../packages/mistri/src/server/commands/businessEvents.js';
 import { dispatchSavedFormHttp, type SavedForm } from '../packages/mistri/src/server/forms/savedFormHttp.js';
 
@@ -875,15 +876,12 @@ test('tenant job attempts capture after real anchor admission with service roles
       { principals: { 'tenant-clock': { roles: ['staff'] }, 'platform-clock': { roles: ['manager'] } }, store: { namespace: 'flag-jobs' } },
     ),
   );
-  const jobs = bindTenantJobs({
+  const services = bindTenantServices({
     app: f.app,
     reader: f.sourceReader,
     writer: f.writer,
     deployment: 'flags-generation',
     registry,
-    resultReferences: { ...f.config.resultReferences, emit: () => [] },
-    module,
-    target: { sqlite: f.engine.path! },
     now: () => 1000,
     captureFlags(principal) {
       assert.equal(principal.realm, 'service');
@@ -892,7 +890,13 @@ test('tenant job attempts capture after real anchor admission with service roles
       return f.captureFlags(principal);
     },
   });
-  f.retire.unshift(jobs.retire);
+  const jobs = bindTenantJobs({
+    services,
+    resultReferences: { ...f.config.resultReferences, emit: () => [] },
+    module,
+    target: { sqlite: f.engine.path! },
+  });
+  f.retire.unshift(jobs.retire, services.retire);
   const handlers = jobHandlers({ module: jobs.module, appId: f.app.id, bind: jobs.bind });
   for (const job of ['tenantJob', 'platformJob']) {
     const context = (attempt: number): JobContext => ({

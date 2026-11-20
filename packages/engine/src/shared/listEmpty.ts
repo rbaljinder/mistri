@@ -5,7 +5,7 @@
  * the resulting AppListEmpty shape for list and related-list rendering.
  */
 import { allowKeys, isRecord } from './model.js';
-import type { AppListEmpty } from './listPresentations.js';
+import type { AppListEmpty, AppListLink } from './listPresentations.js';
 import { parseCaption } from './appMessages.js';
 import { parseLinkTo } from './appLinks.js';
 
@@ -18,14 +18,20 @@ export function parseListEmpty(raw: unknown, at: string): AppListEmpty {
   const description = raw.description === undefined ? undefined : parseCaption(raw.description, `${here}, "description"`);
   const result: AppListEmpty = { title, ...(description === undefined ? {} : { description }) };
   if (raw.action === undefined) return result;
-  if (!isRecord(raw.action)) throw new Error(`${here}, "action" must be an object with "label" and "to".`);
-  const actionAt = `${here}, "action"`;
-  allowKeys(raw.action, ['label', 'to'], actionAt);
-  const label = parseCaption(raw.action.label, `${actionAt} needs a non-empty "label"`);
-  const to = typeof raw.action.to === 'string' || isRecord(raw.action.to) ? parseLinkTo(raw.action.to, `${actionAt}, "to"`) : undefined;
+  return { ...result, action: parseListLink(raw.action, `${here}, "action"`) };
+}
+
+/** A list's `{ label, to }` to another room: its empty state's action, and the link at its head (a list view's
+    `link`). One shape, so the two read as one thing; where `to` may go is judged where the App is whole
+    (appDestinations.ts). */
+export function parseListLink(raw: unknown, at: string): AppListLink {
+  if (!isRecord(raw)) throw new Error(`${at} must be an object with "label" and "to".`);
+  allowKeys(raw, ['label', 'to'], at);
+  const label = parseCaption(raw.label, `${at} needs a non-empty "label"`);
+  const to = typeof raw.to === 'string' || isRecord(raw.to) ? parseLinkTo(raw.to, `${at}, "to"`) : undefined;
   if (!to || !('view' in to))
-    throw new Error(`${actionAt} needs a "to": the key of a list, a dashboard or a signed-in form view, or { view, tab }.`);
-  return { ...result, action: { label, ...to } };
+    throw new Error(`${at} needs a "to": the key of a list, a dashboard or a signed-in form view, or { view, tab }.`);
+  return { label, ...to };
 }
 
 /** The authored shape again, for a definition written back out. */

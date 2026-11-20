@@ -20,6 +20,7 @@ import { stateStampColumn, type TableMeta } from '@mistriwork/engine/shared/sche
 import type { Options } from '@mistriwork/engine/server/cli/args.js';
 import { appEntries } from '@mistriwork/engine/server/config/profile.js';
 import { appBinding } from './appBinding.js';
+import { deploymentAuthOf } from './apps.js';
 import { isTenantApp } from '../../shared/appModel.js';
 import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import type { MigrateApp, MigrateHost } from '@mistriwork/engine/server/migrate/cli.js';
@@ -43,11 +44,14 @@ const shown = (path: string) => {
  * the rest. Throws with the sentence to print when it does not load at all.
  */
 async function loadTargetApp(appDir: string, opts: Options, config: StartupConfig, commands?: string): Promise<LoadedApp> {
+  const deploymentAuth = deploymentAuthOf(config);
   try {
     return await loadApp(appDir, {
       lock: 'report',
       ...(opts.appEntry !== undefined ? { entry: opts.appEntry } : {}),
       ...(config.appEnv[appDir] ? { env: config.appEnv[appDir] } : {}),
+      // `migrate stores up` makes the sign-in store the start will open: the deployment's, where its config names one.
+      ...(deploymentAuth ? { deploymentAuth } : {}),
       ...(commands !== undefined ? { commands } : {}),
     });
   } catch (error) {

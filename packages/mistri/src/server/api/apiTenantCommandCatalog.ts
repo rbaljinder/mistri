@@ -10,6 +10,7 @@ import { defineCommands, type BusinessCommandRegistry } from '../commands/busine
 import type { TenantOwnershipSnapshot } from '../tenant/tenantOwnership.js';
 import { tenantAuthoringSchema } from '../tenant/tenantVisibleFields.js';
 import { publicFormOf, scopedCommandCatalog } from './apiCommandCatalog.js';
+import { apiTokenRoles } from '../../shared/appApi.js';
 
 /** The operations a tenant token's scope is drawn from: reads, and commands
  * when the App exposes them. Only identity and eligibility — never grants. */
@@ -52,9 +53,10 @@ export function checkApiTenantCommandCatalog(app: AppDef, owned: TenantOwnership
   const api = app.api;
   if (!api || !isTenantApp(app) || !tenantAppShape(app) || owned.appId !== app.id)
     return fail('api', 'a tenant catalog needs a tenant App and its attested ownership');
-  for (const role of api.roles) {
+  for (const role of apiTokenRoles(api)) {
     const grant = app.auth?.roles?.[role] as { realm?: string } | undefined;
-    if (!grant || grant.realm === 'platform') fail('api.roles', `"${role}" is not a tenant role`);
+    if (!grant || grant.realm === 'platform')
+      fail(api.roles.includes(role) ? 'api.roles' : 'api.service.roles', `"${role}" is not a tenant role`);
   }
   const registry = defineCommands(declared),
     visible = tenantAuthoringSchema(owned);

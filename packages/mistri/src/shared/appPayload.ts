@@ -391,9 +391,14 @@ export function withAvailableEmptyActions<A extends Pick<AppPayloadApp, 'views'>
         const aside = view.aside?.map(actionsAvailable);
         return [key, { ...view, sections, ...(aside === undefined ? {} : { aside }) }];
       }
-      if ('command' in view || !view.empty?.action || available.has(view.empty.action.view)) return [key, view];
-      const { action: _action, ...empty } = view.empty;
-      return [key, { ...view, empty }];
+      if ('command' in view) return [key, view];
+      // A list's head link answers to the same rule as its empty state's action: drawn only where it leads somewhere.
+      const lostLink = view.link !== undefined && !available.has(view.link.view);
+      const lostAction = view.empty?.action !== undefined && !available.has(view.empty.action.view);
+      if (!lostLink && !lostAction) return [key, view];
+      const { link: _link, ...list } = view;
+      const { action: _action, ...empty } = view.empty ?? {};
+      return [key, { ...(lostLink ? list : view), ...(lostAction ? { empty } : {}) }];
     }),
   ) as A['views'];
   return { ...app, views };

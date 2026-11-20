@@ -29,6 +29,8 @@ import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions, tenantR
 import { createTenantDeployment } from './tenantDeployment.js';
 import type { TenantEnrollmentAttestation, TenantEnrollmentDeclaration } from './tenantFeatureContract.js';
 import { TENANT_ENROLLMENT_HOOKS } from './tenantFeatures.js';
+import { bindTenantServices, type TenantServices } from './tenantServiceBinding.js';
+import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
 import { bindTenantJobs, registerTenantJobs, tenantJobDeployment, withTenantMachineTimers } from './tenantJobs.js';
 import { withFillsKeys } from '../../shared/appKeyFill.js';
 import { captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
@@ -111,6 +113,7 @@ export interface TenantEnrollmentOptions<Request> {
 }
 export type TenantEnrollment<Request> = Awaited<ReturnType<typeof createTenantEnrollment<Request>>>;
 type TenantEnrollmentLoadOptions<Request> = Omit<TenantEnrollmentOptions<Request>, 'policy'> & { readonly policyFile: string };
+type ServiceResultReferences = Readonly<Record<string, (result: unknown) => readonly CommandResultReference[]>>;
 const enrollments = new WeakMap<
   object,
   {
@@ -127,6 +130,10 @@ const enrollments = new WeakMap<
     /** The attested store and source the deployment's command events are recorded under, for its effects (tenantIntegrations.ts). */
     events: Readonly<{ storeId: string; sourceId: string }>;
     assistant?: AppTenantPolicy['assistant'];
+    /** The deployment's service bindings, for a tenant service token's reads and commands (tenantApiReadOwner.ts). */
+    services: TenantServices;
+    /** Each command's result references, as its jobs take them, for the same token's commands. */
+    resultReferences?: ServiceResultReferences;
   }
 >();
 type TenantAdministrationEnrollmentOptions = Readonly<
@@ -161,6 +168,8 @@ export function captureTenantEnrollment<Request>(value: TenantEnrollment<Request
   source: { readonly path: string } | { readonly url: string };
   events: Readonly<{ storeId: string; sourceId: string }>;
   assistant?: AppTenantPolicy['assistant'];
+  services: TenantServices;
+  resultReferences?: ServiceResultReferences;
 } {
   const captured = enrollments.get(value);
   if (!captured) return denyTenant();
@@ -431,39 +440,46 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
         outside.map((opened) => opened.location),
       );
     }
-    /* The jobs runtime over the same genuine sources, drained before the
-       deployment's own. It re-derives its own catalog, so it takes the App as
-       its own source sees it, exactly as the declarations do above: a
-       platform-only source's tables are deliberately absent from that catalog,
-       and demanding them of it refused every App that paired one with --jobs. */
+    /* The deployment's service bindings over the same genuine sources,
+       whether or not it runs jobs, drained before the deployment's own. They
+       re-derive their own catalog, so they take the App as their own source
+       sees it, exactly as the declarations do above: a platform-only
+       source's tables are deliberately absent from that catalog, and
+       demanding them of it refused every App that paired one with --jobs.
+       Binding them opens nothing: only a job host listens or works. */
+    const services = bindTenantServices({
+      app: tenantBusinessApp(app),
+      reader,
+      writer,
+      deployment,
+      registry: registry ?? {},
+      captureFlags: async (principal, lifetime) => {
+        if (!flagRuntime) return undefined;
+        const actor = {
+          id: `service:${principal.principal}`,
+          appId: principal.appId,
+          kind: 'service' as const,
+          roles: principal.roles,
+        };
+        const captured = await flagRuntime.attempt(principal, {
+          ...lifetime,
+          actor,
+          realm: principal.place,
+          tenantId: principal.place === 'tenant' ? principal.tenantId : null,
+        });
+        return captured.captureFlags(actor);
+      },
+      now,
+    });
+    drains.push(services.retire);
+    // The jobs runtime binds its services through them, and is drained beside them.
     const jobRuntime = jobs
       ? bindTenantJobs({
-          app: tenantBusinessApp(app),
-          reader,
-          writer,
-          deployment,
-          registry: registry!,
-          captureFlags: async (principal, lifetime) => {
-            if (!flagRuntime) return undefined;
-            const actor = {
-              id: `service:${principal.principal}`,
-              appId: principal.appId,
-              kind: 'service' as const,
-              roles: principal.roles,
-            };
-            const captured = await flagRuntime.attempt(principal, {
-              ...lifetime,
-              actor,
-              realm: principal.place,
-              tenantId: principal.place === 'tenant' ? principal.tenantId : null,
-            });
-            return captured.captureFlags(actor);
-          },
+          services,
           resultReferences: policy.resultReferences!,
           module: jobs,
           target: path === undefined ? { postgres: source.url! } : { sqlite: path },
           ...(path === undefined && source.listen ? { listen: source.listen } : {}),
-          now,
         })
       : undefined;
     if (jobRuntime) drains.push(jobRuntime.retire);
@@ -567,6 +583,8 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
       source: Object.freeze(path === undefined ? { url: source.url! } : { path }),
       events: Object.freeze({ storeId: binding.storeId, sourceId: binding.source.id }),
       ...(policy.assistant === undefined ? {} : { assistant: policy.assistant }),
+      services,
+      ...(policy.resultReferences === undefined ? {} : { resultReferences: policy.resultReferences }),
     });
     if (jobRuntime) registerTenantJobs(enrollment, jobRuntime);
     administrationEnrollments.set(

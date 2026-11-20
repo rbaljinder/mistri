@@ -52,6 +52,7 @@ import {
 } from './context.js';
 import type { ResolvedBranding } from '../../../shared/branding.js';
 import { createTeamAccess } from '../../teamAccess.js';
+import { createReadAuditAccess } from '../../readAuditAccess.js';
 import { rowsByPath } from './rows.js';
 import { sayAppMessage } from './appMessage.js';
 import { publicMessages } from './publicMessages.js';
@@ -351,6 +352,7 @@ const pageHost: UiHost = {
   deployment,
   branding,
   team: createTeamAccess(),
+  reads: createReadAuditAccess(),
   token: (name) => getComputedStyle(root()).getPropertyValue(name).trim(),
   subscribeLook(listener) {
     const observer = new MutationObserver(listener);

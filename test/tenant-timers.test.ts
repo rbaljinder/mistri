@@ -461,6 +461,34 @@ for (const { dialect, skip } of ENGINES)
       assert.deepEqual(await tickets(lab), { 'north/1': 'open:1' });
     });
 
+    test('a timer a day before its instant falls due a day ahead of it, not sooner, and once', async (t) => {
+      // The warning comes due a day before warn_at: a ticket 23 hours out is due now, one 25 hours out in two hours.
+      const ahead = parseTestApp(
+        (() => {
+          const base = manifest();
+          const ticketAt = { ...base.resources.ticket.at, warn_at: { command: 'warn', before: '1 day', when: "status = 'open'" } };
+          return { ...base, resources: { ...base.resources, ticket: { ...base.resources.ticket, at: ticketAt } } };
+        })(),
+        'tenant-timers-ahead.ts',
+        contracts,
+      );
+      const clock = { now: Date.now() };
+      const at = (hours: number) => new Date(clock.now + hours * 3_600_000).toISOString().replace('T', ' ').slice(0, 19);
+      const lab = await openLab(t, dialect, seedTickets(ticket('north', 1, at(23)), ticket('north', 2, at(25))));
+      const host = await hostOf(t, await enroll(t, lab, ahead), clock);
+      await until(host, clock, async () => (await receipts(lab, 'warn')).length === 1);
+      assert.deepEqual(await tickets(lab), { 'north/1': 'open:1', 'north/2': 'open:0' });
+      assert.deepEqual(
+        (await jobs(lab)).map((row) => [row.job, row.key]),
+        [['at-ticket-warn_at-before-1-day', { tenant_id: 'north', number: 1 }]],
+      );
+      // Two hours on, the second is a day out too: it falls due, and the first runs no more.
+      clock.now += 2 * 3_600_000;
+      await nextSweep(host, clock, lab);
+      await until(host, clock, async () => (await receipts(lab, 'warn')).length === 2);
+      assert.deepEqual(await tickets(lab), { 'north/1': 'open:1', 'north/2': 'open:1' });
+    });
+
     test('a timer runs only while its when holds, and a new instant arms it again (G127)', async (t) => {
       const clock = { now: Date.now() };
       const minuteAgo = new Date(clock.now - 60_000).toISOString().replace('T', ' ').slice(0, 19);

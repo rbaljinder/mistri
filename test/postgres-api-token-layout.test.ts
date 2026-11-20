@@ -36,7 +36,7 @@ test('the OAuth rows sit beside the token table, spelled as the token table was 
       'auth_oauth_refresh',
     ],
   );
-  assert.ok(catalog[1].constraints.includes('CHECK ((version = 2))'));
+  assert.ok(catalog[1].constraints.includes('CHECK ((version = 3))'));
   // The OAuth rows are written in the deparsed spelling, not captured: the helper reproduces the captured text checks.
   // The OAuth rows are written in the deparsed spelling, not captured: the helper reproduces v2's captured text checks.
   const captured = catalog[0].constraints.map(foldConstraint);
@@ -76,7 +76,7 @@ test('fixed API token extension matches pinned native PostgreSQL catalog', { ski
     const id = randomUUID();
     await database.query(
       `INSERT INTO mistri.auth_api_token_meta(singleton,version,app_id,store_id,format)
-      VALUES (1,2,'app',$1,'twa1')`,
+      VALUES (1,3,'app',$1,'twa1')`,
       [randomUUID()],
     );
     const insert = `INSERT INTO mistri.auth_api_token(token_id,app_id,subject_kind,subject_id,label,

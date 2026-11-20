@@ -382,21 +382,87 @@ export function tenantProfileQuery(owned: TenantOwnershipSnapshot, columns: read
   if (dot < 1) return denyTenant();
   return `SELECT ${list} FROM ${quoted(physical.slice(0, dot))}.${quoted(physical.slice(dot + 1))} WHERE ${quoted(key)} = $1 LIMIT 2`;
 }
-/** Whom a job at times runs for (readActiveTenants): `zone`, a shared profile column, asks each tenant's value of it. */
+/** Whom a job at times runs for (readActiveTenants): `zone`, a shared profile column, asks each tenant's value of it;
+ * `schedule`, a job's `every.column` (`tenant.<column>` or `<resource>.<column>`), each tenant's cron text. */
 export interface ActiveTenantsQuery {
   readonly zone?: string;
+  readonly schedule?: string;
 }
-export type ActiveTenant = Readonly<{ id: string; zone?: TenantValue }>;
+export type ActiveTenant = Readonly<{ id: string; zone?: TenantValue; schedule?: TenantValue }>;
 /** The column asked, if any: a shared column of the profile, as readTenantProfile's are. */
-export function activeTenantsZone(owned: TenantOwnershipSnapshot, query: unknown): string | undefined {
-  tenantRecord(query, ['zone']);
+function activeTenantsZone(owned: TenantOwnershipSnapshot, query: unknown): string | undefined {
+  tenantRecord(query, ['zone', 'schedule']);
   if (query.zone === undefined) return undefined;
   assertProfileColumn(owned, query.zone as string);
   return query.zone as string;
 }
+/**
+ * Each active tenant, with the profile column `zone` and the schedule column `schedule` asked of it. `all` runs one
+ * statement of no parameter as the owner. A schedule on a tenant-owned table is the first row by key each tenant
+ * holds there (as `ui.timezone`'s column is a reader's first row), read across tenants by the server: a plan, never
+ * authority, since each run is admitted on its own tenant's row. A value that is not text is no one's schedule.
+ */
+export async function readActiveWith(
+  owned: TenantOwnershipSnapshot,
+  query: unknown,
+  active: readonly string[],
+  all: (sql: string) => readonly Record<string, unknown>[] | Promise<readonly Record<string, unknown>[]>,
+): Promise<readonly ActiveTenant[]> {
+  const zone = activeTenantsZone(owned, query),
+    asked = (query as ActiveTenantsQuery).schedule;
+  if (asked !== undefined) tenantIdentifier(asked, 256);
+  const dot = asked === undefined ? -1 : asked.indexOf('.');
+  if (asked !== undefined && dot < 1) return denyTenant();
+  const profileSchedule = asked !== undefined && asked.slice(0, dot) === 'tenant' ? asked.slice(dot + 1) : undefined;
+  const zones = zone === undefined ? undefined : activeWithColumn(owned, zone, active, await all(tenantProfileColumnQuery(owned, zone)));
+  let schedules: ReadonlyMap<string, TenantValue> | undefined;
+  if (profileSchedule !== undefined) {
+    const rows = await all(tenantProfileColumnQuery(owned, profileSchedule));
+    schedules = new Map(activeWithColumn(owned, profileSchedule, active, rows).map((tenant) => [tenant.id, tenant.zone]));
+  } else if (asked !== undefined) {
+    const held = new Map<string, TenantValue>();
+    for (const row of await all(tenantScheduleQuery(owned, asked.slice(0, dot), asked.slice(dot + 1))))
+      held.set(String(row.k), typeof row.c0 === 'string' ? row.c0 : null);
+    schedules = held;
+  }
+  return Object.freeze(
+    active.map((id, at) =>
+      Object.freeze({
+        id,
+        ...(zones ? { zone: zones[at].zone } : {}),
+        ...(schedules ? { schedule: schedules.get(id) ?? null } : {}),
+      }),
+    ),
+  );
+}
+/** One column of a tenant-owned table, off the first row by key of each tenant, with the tenant its owner column
+ * names. Anything not of this App's catalog, or a table no tenant owns, is refused. */
+function tenantScheduleQuery(owned: TenantOwnershipSnapshot, resource: string, column: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) return denyTenant();
+  const rule = Object.hasOwn(owned.ownership, resource) ? owned.ownership[resource] : undefined;
+  const physical = Object.hasOwn(owned.resources, resource) ? owned.resources[resource] : undefined;
+  const table = owned.schema.tables.find((candidate) => candidate.id === resource);
+  if (rule?.kind !== 'tenant' || !physical || !table) return denyTenant();
+  const keys = table.columns.filter((candidate) => candidate.primaryKey).map((candidate) => quoted(candidate.name));
+  if (!keys.length || !table.columns.some((candidate) => candidate.name === column)) return denyTenant();
+  if (!table.columns.some((candidate) => candidate.name === rule.column)) return denyTenant();
+  const postgres = owned.schema.dialect === 'postgres',
+    owner = quoted(rule.column);
+  let from: string;
+  if (postgres) {
+    const dot = physical.indexOf('.');
+    if (dot < 1) return denyTenant();
+    from = `${quoted(physical.slice(0, dot))}.${quoted(physical.slice(dot + 1))}`;
+  } else from = `main.${quoted(physical)}`;
+  return `SELECT k, c0 FROM (
+      SELECT ${owner}${postgres ? '::text' : ''} AS k, ${quoted(column)} AS c0,
+        ROW_NUMBER() OVER (PARTITION BY ${owner} ORDER BY ${keys.join(', ')}) AS r
+      FROM ${from} WHERE ${owner} IS NOT NULL
+    ) AS held WHERE r = 1`;
+}
 /** One shared column off every profile row, with its tenant key: the zone each tenant's job at times keeps
  * (`timezone: 'tenant'`). No parameter; the caller keeps the active tenants' rows. */
-export function tenantProfileColumnQuery(owned: TenantOwnershipSnapshot, column: string): string {
+function tenantProfileColumnQuery(owned: TenantOwnershipSnapshot, column: string): string {
   assertProfileColumn(owned, column);
   const key = intakeProfileKey(owned),
     physical = owned.resources[owned.profile ?? denyTenant()] ?? denyTenant();
@@ -407,7 +473,7 @@ export function tenantProfileColumnQuery(owned: TenantOwnershipSnapshot, column:
   return `SELECT ${list} FROM ${quoted(physical.slice(0, dot))}.${quoted(physical.slice(dot + 1))}`;
 }
 /** Each active tenant with that column's value off its own row: null where it has none, or its key is doubled. */
-export function activeWithColumn(
+function activeWithColumn(
   owned: TenantOwnershipSnapshot,
   column: string,
   active: readonly string[],

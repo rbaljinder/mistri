@@ -9,7 +9,7 @@ import type { PostgresRelationDescription } from '../commands/postgresCommandJou
 /* Both dialects' token stores are at this version. It is said here rather than in sqliteApiTokenLayout.ts because the
    PostgreSQL auth store loads this module on every startup path, `--mcp` included, and SQLite's layout need not come
    with it. */
-export const API_TOKEN_STORE_VERSION = 2;
+export const API_TOKEN_STORE_VERSION = 3;
 
 /* The tables sit in the runtime schema beside the sign-in store's, under the same `auth_` prefix
    (postgresAuthStore.ts), so the one attestation of `auth_` relations covers both. */
@@ -36,6 +36,13 @@ const tenantColumns = `${text('tenant_id', 128, true)} CHECK (tenant_id IS NULL 
   ${text('membership_id', 3072, true)},
   ${text('membership_version', 128, true)} CHECK (membership_version IS NULL OR membership_version ~ '^[1-9][0-9]{0,127}$')`;
 const tenantBound = 'CHECK ((tenant_id IS NULL) = (membership_id IS NULL) AND (tenant_id IS NULL) = (membership_version IS NULL))';
+/* The token table's binding (version 3): an account token is bound to a tenant through its membership or not at all, and
+   a tenant service token (api.service) is bound to its tenant with no membership, because no person stands behind it.
+   The OAuth rows keep the plain binding: only an account consents. */
+const tokenTenantBound =
+  "CHECK (((tenant_id IS NULL) = (membership_id IS NULL) AND (tenant_id IS NULL) = (membership_version IS NULL)) OR (subject_kind = 'service' AND tenant_id IS NOT NULL AND membership_id IS NULL AND membership_version IS NULL))";
+/** A service subject is a role name (version 3 admits `_`, as the role grammar does) or a jobs principal. */
+const serviceSubject = "CHECK (subject_kind <> 'service' OR subject_id ~ '^[a-z][a-z0-9_-]{0,62}$')";
 
 /** A row-scoped token's scope (version 2): a declared scope's name, its key, and a `$scope` child's parent token. */
 const scopeColumns = [
@@ -64,6 +71,25 @@ END $drop$`,
     `UPDATE ${t('auth_api_token_meta')} SET version = 2`,
     `ALTER TABLE ${t('auth_api_token_meta')} ADD CONSTRAINT auth_api_token_meta_version_check CHECK (version = 2)`,
     scopeParentIndex,
+  ]);
+}
+
+/** Version 2 to 3, in the store upgrade's one transaction: a tenant service token's binding, and a service subject with
+   `_` (the role grammar's). Both checks were created unnamed, so they are found by what they check; the new ones are
+   named, so a later move can say so. Every row a version 2 store holds passes the wider checks. */
+export function postgresApiTokenUpgradeFrom2(): readonly string[] {
+  return Object.freeze([
+    `DO $drop$ DECLARE c record; BEGIN
+  FOR c IN SELECT conname FROM pg_constraint WHERE conrelid = '${t('auth_api_token')}'::regclass AND contype = 'c'
+    AND (strpos(pg_get_constraintdef(oid), '(tenant_id IS NULL) = (membership_id IS NULL)') > 0 OR strpos(pg_get_constraintdef(oid), 'subject_kind <> ''service''') > 0) LOOP
+    EXECUTE format('ALTER TABLE ${t('auth_api_token')} DROP CONSTRAINT %I', c.conname);
+  END LOOP;
+END $drop$`,
+    `ALTER TABLE ${t('auth_api_token')} ADD CONSTRAINT auth_api_token_tenant_bound ${tokenTenantBound}`,
+    `ALTER TABLE ${t('auth_api_token')} ADD CONSTRAINT auth_api_token_service_subject ${serviceSubject}`,
+    `ALTER TABLE ${t('auth_api_token_meta')} DROP CONSTRAINT auth_api_token_meta_version_check`,
+    `UPDATE ${t('auth_api_token_meta')} SET version = 3`,
+    `ALTER TABLE ${t('auth_api_token_meta')} ADD CONSTRAINT auth_api_token_meta_version_check CHECK (version = 3)`,
   ]);
 }
 
@@ -161,12 +187,12 @@ export function postgresApiTokenDdl(): readonly string[] {
   ${text('membership_id', 3072, true)},
   ${text('membership_version', 128, true)} CHECK (membership_version IS NULL OR membership_version ~ '^[1-9][0-9]{0,127}$'),
   ${scopeColumns.join(',\n  ')},
-  CHECK ((tenant_id IS NULL) = (membership_id IS NULL) AND (tenant_id IS NULL) = (membership_version IS NULL)),
+  ${tokenTenantBound},
   CHECK (expires_at > created_at),
   CHECK ((revoked_at IS NULL) = (revoked_by IS NULL)),
   CHECK (revoked_at IS NULL OR revoked_at >= created_at),
   CHECK (last_used_at IS NULL OR last_used_at >= created_at),
-  CHECK (subject_kind <> 'service' OR subject_id ~ '^[a-z][a-z0-9-]{0,62}$'),
+  ${serviceSubject},
   ${scopeBound}
 )`,
     scopeParentIndex,
@@ -343,7 +369,7 @@ const pinned = (): readonly PostgresRelationDescription[] => [
       "CHECK ((((octet_length(subject_kind) >= 1) AND (octet_length(subject_kind) <= 7)) AND (subject_kind = btrim(subject_kind, ((((((((((((((((((((((((chr(9) || chr(10)) || chr(11)) || chr(12)) || chr(13)) || chr(32)) || chr(160)) || chr(5760)) || chr(8192)) || chr(8193)) || chr(8194)) || chr(8195)) || chr(8196)) || chr(8197)) || chr(8198)) || chr(8199)) || chr(8200)) || chr(8201)) || chr(8202)) || chr(8232)) || chr(8233)) || chr(8239)) || chr(8287)) || chr(12288)) || chr(65279)))) AND (subject_kind !~ ((((((('['::text || chr(1)) || '-'::text) || chr(31)) || chr(127)) || '-'::text) || chr(159)) || ']'::text))))",
       "CHECK ((((octet_length(token_id) >= 1) AND (octet_length(token_id) <= 36)) AND (token_id = btrim(token_id, ((((((((((((((((((((((((chr(9) || chr(10)) || chr(11)) || chr(12)) || chr(13)) || chr(32)) || chr(160)) || chr(5760)) || chr(8192)) || chr(8193)) || chr(8194)) || chr(8195)) || chr(8196)) || chr(8197)) || chr(8198)) || chr(8199)) || chr(8200)) || chr(8201)) || chr(8202)) || chr(8232)) || chr(8233)) || chr(8239)) || chr(8287)) || chr(12288)) || chr(65279)))) AND (token_id !~ ((((((('['::text || chr(1)) || '-'::text) || chr(31)) || chr(127)) || '-'::text) || chr(159)) || ']'::text))))",
       "CHECK ((((octet_length(version) >= 1) AND (octet_length(version) <= 128)) AND (version = btrim(version, ((((((((((((((((((((((((chr(9) || chr(10)) || chr(11)) || chr(12)) || chr(13)) || chr(32)) || chr(160)) || chr(5760)) || chr(8192)) || chr(8193)) || chr(8194)) || chr(8195)) || chr(8196)) || chr(8197)) || chr(8198)) || chr(8199)) || chr(8200)) || chr(8201)) || chr(8202)) || chr(8232)) || chr(8233)) || chr(8239)) || chr(8287)) || chr(12288)) || chr(65279)))) AND (version !~ ((((((('['::text || chr(1)) || '-'::text) || chr(31)) || chr(127)) || '-'::text) || chr(159)) || ']'::text))))",
-      'CHECK ((((tenant_id IS NULL) = (membership_id IS NULL)) AND ((tenant_id IS NULL) = (membership_version IS NULL))))',
+      "CHECK (((((tenant_id IS NULL) = (membership_id IS NULL)) AND ((tenant_id IS NULL) = (membership_version IS NULL))) OR ((subject_kind = 'service'::text) AND (tenant_id IS NOT NULL) AND (membership_id IS NULL) AND (membership_version IS NULL))))",
       "CHECK (((created_at >= 0) AND (created_at <= '8640000000000000'::bigint)))",
       "CHECK (((expires_at >= 0) AND (expires_at <= '8640000000000000'::bigint)))",
       "CHECK (((jsonb_typeof((roles_json)::jsonb) = 'array'::text) AND ((jsonb_array_length((roles_json)::jsonb) >= 1) AND (jsonb_array_length((roles_json)::jsonb) <= 128))))",
@@ -358,7 +384,7 @@ const pinned = (): readonly PostgresRelationDescription[] => [
       "CHECK (((revoked_at IS NULL) OR ((revoked_at >= 0) AND (revoked_at <= '8640000000000000'::bigint))))",
       'CHECK (((revoked_at IS NULL) OR (revoked_at >= created_at)))',
       "CHECK (((revoked_by IS NULL) OR (((octet_length(revoked_by) >= 1) AND (octet_length(revoked_by) <= 3072)) AND (revoked_by = btrim(revoked_by, ((((((((((((((((((((((((chr(9) || chr(10)) || chr(11)) || chr(12)) || chr(13)) || chr(32)) || chr(160)) || chr(5760)) || chr(8192)) || chr(8193)) || chr(8194)) || chr(8195)) || chr(8196)) || chr(8197)) || chr(8198)) || chr(8199)) || chr(8200)) || chr(8201)) || chr(8202)) || chr(8232)) || chr(8233)) || chr(8239)) || chr(8287)) || chr(12288)) || chr(65279)))) AND (revoked_by !~ ((((((('['::text || chr(1)) || '-'::text) || chr(31)) || chr(127)) || '-'::text) || chr(159)) || ']'::text)))))",
-      "CHECK (((subject_kind <> 'service'::text) OR (subject_id ~ '^[a-z][a-z0-9-]{0,62}$'::text)))",
+      "CHECK (((subject_kind <> 'service'::text) OR (subject_id ~ '^[a-z][a-z0-9_-]{0,62}$'::text)))",
       "CHECK (((tenant_id IS NULL) OR (((octet_length(tenant_id) >= 1) AND (octet_length(tenant_id) <= 128)) AND (tenant_id = btrim(tenant_id, ((((((((((((((((((((((((chr(9) || chr(10)) || chr(11)) || chr(12)) || chr(13)) || chr(32)) || chr(160)) || chr(5760)) || chr(8192)) || chr(8193)) || chr(8194)) || chr(8195)) || chr(8196)) || chr(8197)) || chr(8198)) || chr(8199)) || chr(8200)) || chr(8201)) || chr(8202)) || chr(8232)) || chr(8233)) || chr(8239)) || chr(8287)) || chr(12288)) || chr(65279)))) AND (tenant_id !~ ((((((('['::text || chr(1)) || '-'::text) || chr(31)) || chr(127)) || '-'::text) || chr(159)) || ']'::text)))))",
       "CHECK (((tenant_id IS NULL) OR (tenant_id ~ '^[a-z0-9][a-z0-9_-]{0,127}$'::text)))",
       "CHECK ((digest ~ '^[0-9a-f]{64}$'::text))",

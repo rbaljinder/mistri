@@ -93,8 +93,13 @@ export function tenantReadsRoute(reads: TenantReadsService) {
               at: row.at,
               actor: row.actor,
               ...(who?.name || who?.email ? { person: (who.name || who.email)! } : {}),
+              /* What the read was granted under, beside the name: the roles, and the membership that holds a token.
+                 Not `visit` (this is never served on one) nor `scope` (it names a row's key). */
+              ...(row.roles === undefined ? {} : { roles: row.roles }),
+              ...(row.membership === undefined ? {} : { membership: row.membership }),
               resource: row.resource,
               route: row.route,
+              ...(row.command === undefined ? {} : { command: row.command }),
               ...(row.record === undefined ? { kind: 'listed', count: row.count } : { kind: 'opened', record: row.record }),
             };
           }),

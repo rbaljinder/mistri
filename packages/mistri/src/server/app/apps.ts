@@ -97,6 +97,7 @@ import type { AppEnvName } from '../../shared/appAuthority.js';
 import { assertAppApiContext, readApiApp } from '../api/appApiValidation.js';
 import { BUILD_MANIFEST, loadBuiltApp, type AppBuildInfo } from './appBuild.js';
 import { overlayPresentation, type AppPresentation } from './appPresentation.js';
+import { overlayAuthStore, type DeploymentAuth } from './deploymentAuth.js';
 import { iconGlyphsIn } from './iconPayload.js';
 import { accessibleSchema } from './appAccess.js';
 import { crossSourceReferences, isTenantApp, type AppRealm } from '../../shared/appModel.js';
@@ -283,6 +284,9 @@ export interface LoadedApp {
   env?: readonly AppEnvName[];
   /** The deployment's presentation of its Apps, by App id, and the config file it was read from (appPresentation.ts): what a reload passes again. */
   presentation?: { file?: string; apps: Readonly<Record<string, AppPresentation>> };
+  /** Where the deployment keeps its Apps' sign-ins, by App id, and the config file it was read from (deploymentAuth.ts):
+      what a reload passes again, and what says the store in effect is the deployment's rather than the App's. */
+  deploymentAuth?: { file?: string; apps: Readonly<Record<string, DeploymentAuth>> };
   /** Its commands module, when it has one: `--commands`, or commands.ts beside the manifest. Each command at the
       version its contract holds in authority.lock; the App's command names were resolved from it. */
   commands?: { file: string; registry: BusinessCommandRegistry };
@@ -326,6 +330,7 @@ export const LOADED_APP_KEYS = [
   'entry',
   'env',
   'presentation',
+  'deploymentAuth',
   'commands',
   'loaders',
   'challenges',
@@ -457,6 +462,8 @@ export async function loadApp(
     definition?: (input: DefinitionInput) => void;
     /** The deployment's name, logo, theme and locale for this App, by App id (appPresentation.ts): laid over the definition before it is parsed. */
     presentation?: LoadedApp['presentation'];
+    /** The deployment's sign-in store for this App, by App id (deploymentAuth.ts): laid over its `auth.store` before it is parsed. */
+    deploymentAuth?: LoadedApp['deploymentAuth'];
   } = {},
 ): Promise<LoadedApp> {
   let path = target;
@@ -566,6 +573,13 @@ export async function loadApp(
       ...(options.presentation?.file === undefined ? {} : { file: options.presentation.file }),
       id: String((raw as { id?: unknown }).id),
       ...(dir ? { dir } : {}),
+    });
+  /* The deployment's sign-in store wins over the App's own `auth.store`, laid over it before anything reads it. */
+  const kept = options.deploymentAuth?.apps[String((raw as { id?: unknown }).id)];
+  if (kept)
+    raw = overlayAuthStore(raw as Record<string, unknown>, kept, {
+      ...(options.deploymentAuth?.file === undefined ? {} : { file: options.deploymentAuth.file }),
+      id: String((raw as { id?: unknown }).id),
     });
   /* Its free-form pages, each read from its file under stand-ins and written
      into the definition as the view it is (appPages.ts), so everything after
@@ -708,6 +722,7 @@ export async function loadApp(
     ...(options.entry !== undefined ? { entry: path } : {}),
     ...(options.env?.length ? { env: options.env } : {}),
     ...(options.presentation ? { presentation: options.presentation } : {}),
+    ...(options.deploymentAuth ? { deploymentAuth: options.deploymentAuth } : {}),
     ...(commands ? { commands } : {}),
     ...(loaders ? { loaders } : {}),
     ...(challenges ? { challenges } : {}),
@@ -2076,6 +2091,7 @@ export async function reloadApp(host: AppHost, target: string, configPages: Page
       entry: host.app.entry,
       env: host.app.env,
       ...(host.app.presentation ? { presentation: host.app.presentation } : {}),
+      ...(host.app.deploymentAuth ? { deploymentAuth: host.app.deploymentAuth } : {}),
       ...(host.app.commands ? { commands: host.app.commands.file || host.app.commands.registry } : {}),
     });
     /* What a running server grants, and who may sign in to it, are what it

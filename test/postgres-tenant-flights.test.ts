@@ -253,14 +253,15 @@ function listsOf(app: any): Array<{ table: string; show: string[]; tabs: string[
  */
 const BUDGETS: Record<string, number> = {
   /* A list, its counts, a record, a search, a pool: one snapshot for the request (withBoundedReads) — BEGIN with the
-     membership and every read behind it — then its COMMIT with the release fence's own snapshot in one message. */
-  'run (list)': 2,
-  counts: 2,
-  'run (record)': 2,
-  'run (search)': 2,
-  'run (pool)': 2,
-  // the same snapshot with the page and the unread count behind its BEGIN; the visibility read of their records; COMMIT and fence
-  inbox: 3,
+     membership and every read behind it — and, its reads being one wave, its COMMIT with the release fence's own
+     snapshot right behind them in the same flight (TenantReadSource.lastWave). */
+  'run (list)': 1,
+  counts: 1,
+  'run (record)': 1,
+  'run (search)': 1,
+  'run (pool)': 1,
+  // the same snapshot with the page and the unread count behind its BEGIN; the visibility read of their records, with COMMIT and fence behind it
+  inbox: 2,
   // the release fence alone: BEGIN, the LOCK, the membership and COMMIT in one message (no suggestions read)
   'record-decisions': 1,
   // BEGIN, locks, the tenant and membership, the row; COMMIT

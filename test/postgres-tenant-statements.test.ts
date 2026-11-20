@@ -190,11 +190,14 @@ async function deploy(t: TestContext, relay?: LatencyProxy) {
   return { counter, enter, own, call };
 }
 
-/** Hold the first scoped read of `loan_application` on a tenant reader until released. */
+/** Hold the first scoped read of `loan_application` on a tenant reader until released. Its connection is held with
+    it: a statement asked behind the held one on that connection waits for it, as on the wire, where the server runs a
+    connection's statements in order — a release fence pipelined behind the list (the last wave) runs after it. */
 function holdFirstList(t: TestContext) {
   const reached = deferred(),
     release = deferred();
   let held = false;
+  let busy: PgQuery | undefined;
   const original = PgConnectionManager.prototype.withReadClient;
   const mock = t.mock.method(PgConnectionManager.prototype, 'withReadClient', function <
     T,
@@ -209,6 +212,7 @@ function holdFirstList(t: TestContext) {
         run(
           Object.freeze({
             query: ((text: string, values?: unknown[]) => {
+              if (busy === client) return release.promise.then(() => client.query(text, values));
               if (
                 held ||
                 typeof text !== 'string' ||
@@ -218,6 +222,7 @@ function holdFirstList(t: TestContext) {
                 return client.query(text, values);
               }
               held = true;
+              busy = client;
               reached.resolve();
               return release.promise.then(() => client.query(text, values));
             }) as PgQuery['query'],

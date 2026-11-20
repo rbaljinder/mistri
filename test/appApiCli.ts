@@ -289,6 +289,10 @@ export function writeDepotApp(
     commands?: boolean;
     /** The physical name of the note table (DEPOT_NOTE_TABLE): adds the `note` resource and its `annotate` command. */
     notes?: string;
+    /** More App roles beside `member`, such as a `service: true` role a tenant service token carries. */
+    roles?: Record<string, unknown>;
+    /** Ask for live sync (`live: true`); the business database must hold its store. */
+    live?: boolean;
   },
 ) {
   const appDir = join(directory, 'depot');
@@ -310,7 +314,7 @@ export function writeDepotApp(
         providers: ['email'],
         store: options.authStore,
         rows: 'tenant',
-        roles: { member: { read: true, ...(running ? { commands: names } : {}) } },
+        roles: { member: { read: true, ...(running ? { commands: names } : {}) }, ...options.roles },
       },
       sources: { business: { connection: 'data' } },
       // A command cannot yet run on a resource with field rules, so the command
@@ -327,6 +331,7 @@ export function writeDepotApp(
       },
       home: 'items',
       ...(running ? { nav: ['items', 'stock-item', ...(notes ? ['annotate-item'] : [])] } : {}),
+      ...(options.live ? { live: true } : {}),
       api: options.api ?? {
         version: 1,
         roles: ['member'],

@@ -101,6 +101,9 @@ export interface TenantReadContext {
   /** `work`, its reads of this context on one snapshot (tenantReadSource.ts `together`): for a request that asks
       many at once — a composed record page, a page's boot, a post-write refresh. */
   readonly together?: <T>(work: () => Promise<T>) => Promise<T>;
+  /** Internal, for a bounded request (`withBoundedReads`): asked just before its last wave of reads, so the release
+      fence leaves with that wave rather than after it (TenantReadSource.lastWave). Elsewhere, nothing. */
+  readonly lastWave?: () => void;
 }
 export interface TenantReadRuntimeOptions<Request> {
   readonly app: AppDef;
@@ -539,6 +542,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                  reads the other's answer, so both are asked at once, and both are settled before either failure
                  is told: no read of this context is left running behind it. */
               const together = <R>(work: () => Promise<R>): Promise<R> => source.together(principal, work);
+              const lastWave = () => source.lastWave();
               let output: T | undefined,
                 callbackFailed = false,
                 fault: TenantRequestFault | undefined;
@@ -567,6 +571,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                   schema,
                   data,
                   together,
+                  lastWave,
                   tenant,
                   ...(capabilities === undefined ? {} : { capabilities }),
                   ...(zone === undefined ? {} : { zone }),

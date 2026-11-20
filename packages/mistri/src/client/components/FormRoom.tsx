@@ -93,6 +93,7 @@ export function formPresentation(form: ServedForm): FormPresentation {
     ...(form.done === undefined ? {} : { done: form.done }),
     // What an address (or `openForm(view, prefill)`) may start filled: without it a signed-in form starts blank whatever it is given.
     ...((form as { prefillable?: string[] }).prefillable ? { prefillable: (form as { prefillable?: string[] }).prefillable } : {}),
+    ...((form as { given?: string[] }).given ? { given: (form as { given?: string[] }).given } : {}),
     ...((form as { inputs?: FormPresentation['inputs'] }).inputs
       ? { inputs: (form as { inputs?: FormPresentation['inputs'] }).inputs }
       : {}),
@@ -226,6 +227,8 @@ export function FormBody({
       connection={connection ?? undefined}
       held={{ command: form.command.id, ...(connection ? { connection } : {}) }}
       identityEpoch={identity.epoch}
+      // Its submission names no record (submitSignedInForm), so a refusal reads for the answers.
+      recordless
       {...(prepared.data || initial ? { initial: { ...prepared.data?.initial, ...initial } } : {})}
       {...(prepared.data?.questions ? { questions: prepared.data.questions } : {})}
       {...(prefill === undefined ? {} : { prefill })}

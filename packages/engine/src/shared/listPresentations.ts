@@ -217,7 +217,15 @@ export type AppListPresentation =
 export interface AppListEmpty {
   title: string;
   description?: string;
-  action?: { label: string; view: string; /** The tab of a list it opens on, by its address word. */ tab?: string };
+  action?: AppListLink;
+}
+
+/** A list's way to another room: its empty state's action, and the link at its head (a list view's `link`). */
+export interface AppListLink {
+  label: string;
+  view: string;
+  /** The tab of a list it opens on, by its address word. */
+  tab?: string;
 }
 
 /** Whether the Export menu is offered for a table, here and not beside the payload that sets `exportableTables`, since a list's first paint asks it and appPayload.ts imports the manifest parser: `ui.export` is the App's switch, and `exportableTables` (present in an App that grants by role) the person's. */

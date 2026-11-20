@@ -83,8 +83,8 @@ export function encodeApiTokenSqlRow(raw: unknown) {
     digest: token.digest,
     version: token.version,
     tenant_id: row.tenant?.tenantId ?? null,
-    membership_id: row.tenant?.membershipId ?? null,
-    membership_version: row.tenant?.membershipVersion ?? null,
+    membership_id: row.tenant && 'membershipId' in row.tenant ? row.tenant.membershipId : null,
+    membership_version: row.tenant && 'membershipVersion' in row.tenant ? row.tenant.membershipVersion : null,
     scope_name: row.rowScope?.name ?? null,
     scope_key: row.rowScope?.key ?? null,
     scope_parent_id: row.rowScope?.parentId ?? null,
@@ -97,9 +97,12 @@ export function decodeApiTokenSqlRow(raw: unknown) {
     if (typeof row.roles_json !== 'string' || (row.operations_json !== null && typeof row.operations_json !== 'string')) return refuse();
     const roles: unknown = JSON.parse(row.roles_json);
     const operations: unknown = row.operations_json === null ? undefined : JSON.parse(row.operations_json as string);
-    // All three or none: a partial binding is not a weaker one, it is corrupt.
+    // All three or none: a partial binding is not a weaker one, it is corrupt. A service token's is the tenant
+    // alone (the record's own capture refuses that shape for an account).
     const bound = [row.tenant_id, row.membership_id, row.membership_version];
-    if (bound.some((value) => value !== null) && bound.some((value) => typeof value !== 'string')) return refuse();
+    const serviceBound =
+      row.subject_kind === 'service' && typeof row.tenant_id === 'string' && row.membership_id === null && row.membership_version === null;
+    if (!serviceBound && bound.some((value) => value !== null) && bound.some((value) => typeof value !== 'string')) return refuse();
     // A scope is its name and key together; a parent without them is corrupt.
     if ((row.scope_name === null) !== (row.scope_key === null) || (row.scope_name === null && row.scope_parent_id !== null))
       return refuse();
@@ -119,7 +122,9 @@ export function decodeApiTokenSqlRow(raw: unknown) {
         expiresAt: row.expires_at,
         ...(row.tenant_id === null
           ? {}
-          : { tenant: { tenantId: row.tenant_id, membershipId: row.membership_id, membershipVersion: row.membership_version } }),
+          : serviceBound
+            ? { tenant: { tenantId: row.tenant_id } }
+            : { tenant: { tenantId: row.tenant_id, membershipId: row.membership_id, membershipVersion: row.membership_version } }),
         ...(row.scope_name === null
           ? {}
           : {

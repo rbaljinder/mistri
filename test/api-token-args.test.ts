@@ -67,7 +67,7 @@ test('issue preserves absent operations versus explicit deny-all and exact repea
   assert.ok(Object.isFrozen(empty.operations));
   const selected = parseApiTokenArgs([...issue, '--role', 'reviewer', '--operation', 'list:person', '--operation', 'item:person']);
   assert.equal(selected.verb, 'issue');
-  if (selected.verb !== 'issue') return;
+  if (selected.verb !== 'issue' || 'service' in selected) return;
   assert.deepEqual(selected.roles, ['reader', 'reviewer']);
   assert.deepEqual(selected.operations, ['list:person', 'item:person']);
   assert.ok(Object.isFrozen(selected.roles));
@@ -140,11 +140,47 @@ test('hostile argv, sparse arrays and excessive values refuse before coercion or
 
 test('issue takes one --scope as a declared name and a key, split at the first colon', () => {
   const scoped = parseApiTokenArgs([...issue, '--scope', 'clinic:7:a']);
-  assert.ok(scoped.verb === 'issue');
+  assert.ok(scoped.verb === 'issue' && !('service' in scoped));
   assert.deepEqual(scoped.scope, { name: 'clinic', key: '7:a' });
   assert.equal(Object.hasOwn(parseApiTokenArgs(issue), 'scope'), false);
   for (const bad of ['clinic', 'clinic:', ':7', '1clinic:7', 'bad name:7', `${'a'.repeat(65)}:7`, `clinic:${'k'.repeat(1025)}`])
     denied([...issue, '--scope', bad]);
   denied([...issue, '--scope', 'clinic:7', '--scope', 'clinic:8']);
   denied(['inspect', ...common, '--token-id', id, '--scope', 'clinic:7']);
+});
+
+test('issue --service names a tenant service role in place of --subject and --role, and needs --tenant and --policy', () => {
+  const service = [
+    'issue',
+    ...common,
+    '--service',
+    'sync',
+    '--actor',
+    'operator',
+    '--label',
+    'Sync',
+    '--expires-at',
+    '2030-01-01T00:00:00Z',
+    '--tenant',
+    'north',
+    '--policy',
+    './policy.mts',
+  ];
+  const parsed = parseApiTokenArgs(service);
+  assert.ok(parsed.verb === 'issue' && 'service' in parsed);
+  assert.equal(parsed.service, 'sync');
+  assert.equal(parsed.tenant, 'north');
+  assert.equal(Object.hasOwn(parsed, 'roles'), false);
+  for (const extra of [
+    ['--subject', 'native'],
+    ['--role', 'reader'],
+    ['--scope', 'clinic:7'],
+  ])
+    denied([...service, ...extra]);
+  for (const flag of ['--tenant', '--policy', '--actor']) {
+    const at = service.indexOf(flag);
+    denied([...service.slice(0, at), ...service.slice(at + 2)]);
+  }
+  // The subject grammar: a lowercase name of at most 63 characters.
+  for (const bad of ['Sync', '1sync', 'sync.bot', 'a'.repeat(64), '']) denied(service.map((arg) => (arg === 'sync' ? bad : arg)));
 });

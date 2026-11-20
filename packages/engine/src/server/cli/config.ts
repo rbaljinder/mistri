@@ -82,6 +82,9 @@ export interface StartupConfig {
   /** `"presentation": { "<app>": { name, logo, theme, locale } }`, as written: one deployment's name, logo, theme and
       locale for an App, which the App framework checks and applies (mistri app/appPresentation.ts). Never read by the browser. */
   presentation?: unknown;
+  /** `"auth": { "<app>": { "store": "…" } }`, as written: where one deployment keeps an App's accounts and sessions,
+      which wins over the App's own `auth.store` (mistri app/deploymentAuth.ts). Never read by the browser. */
+  auth?: unknown;
 }
 
 /**
@@ -224,12 +227,14 @@ export async function readStartupConfig(
       }
       /* Where the Apps are served, beside which Apps: a deployment's fact,
          checked with the flags' own rule once the Apps are loaded (main). */
-      const { mount, basePath, presentation } = JSON.parse(await readFile(config.path, 'utf8')) as {
+      const { mount, basePath, presentation, auth } = JSON.parse(await readFile(config.path, 'utf8')) as {
         mount?: unknown;
         basePath?: unknown;
         presentation?: unknown;
+        auth?: unknown;
       };
       if (presentation !== undefined) read.presentation = presentation;
+      if (auth !== undefined) read.auth = auth;
       if (mount !== undefined) {
         if (!mount || typeof mount !== 'object' || Array.isArray(mount) || Object.values(mount).some((at) => typeof at !== 'string')) {
           throw new Error(`${config.path}: "mount" must name each App's place by its id, like { "main": "/", "billing": "/billing" }.`);

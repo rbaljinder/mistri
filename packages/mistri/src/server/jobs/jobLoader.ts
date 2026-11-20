@@ -23,6 +23,7 @@ import type { CommandEventStoreBinding } from '../../adapters/events/commandEven
 import { captureEventDeliveryPolicy, type EventDeliveryPolicy } from '../../adapters/events/eventDeliveryTypes.js';
 import { captureJobPolicy, JOB_ID, type JobPolicy } from '../../adapters/jobs/jobStoreTypes.js';
 import { appCommandGrants, grantsByRole, logicalResource, type AppDef } from '../../shared/app.js';
+import { atOffsetMs } from '../../shared/appAt.js';
 import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import { appCommandEventStore, storeTargetOf, type StoreTarget } from '../commands/appCommandEvents.js';
 import type { BusinessCommandBinding } from '../commands/businessCommandAccess.js';
@@ -61,12 +62,23 @@ export function machineTimers(app: AppDef): (MachineTimer & { command: string })
   return Object.entries(app.resources ?? {}).flatMap(([resource, def]) => {
     const machine = def.machine;
     /* An `at` timer is one whose stay is the instant itself: due once it has come, and once per instant the column holds. */
+    /* An offset moves only the cutoff: `before` is a negative wait, so the stay is due that long ahead of the instant. */
     const at = (def.at ?? []).map((timer) => ({
       resource,
       since: timer.column,
-      ms: 0,
-      after: `the time in ${timer.column}`,
+      ms: atOffsetMs(timer),
+      after:
+        timer.before !== undefined
+          ? `${timer.before} before the time in ${timer.column}`
+          : timer.after !== undefined
+            ? `${timer.after} after the time in ${timer.column}`
+            : `the time in ${timer.column}`,
       at: timer.column,
+      ...(timer.before !== undefined
+        ? { offset: `before-${timer.before}` }
+        : timer.after !== undefined
+          ? { offset: `after-${timer.after}` }
+          : {}),
       ...(timer.when === undefined ? {} : { when: timer.when }),
       command: timer.command,
     }));
@@ -593,9 +605,9 @@ export function describeJobs(module: CapturedJobModule): string[] {
   return [
     ...[...module.jobs.values()].map((job) =>
       job.timer
-        ? `jobs: ${job.id}@${job.version} ${job.timer.at ? `at ${job.timer.at} in ${job.timer.resource}${job.timer.when === undefined ? '' : ` when ${job.timer.when}`}` : `after ${job.timer.after} in ${job.timer.resource} "${job.timer.state}"`} → ${pinned(job.command)} as ${job.runAs}`
+        ? `jobs: ${job.id}@${job.version} ${job.timer.at ? `${job.timer.ms ? job.timer.after : `at ${job.timer.at}`} in ${job.timer.resource}${job.timer.when === undefined ? '' : ` when ${job.timer.when}`}` : `after ${job.timer.after} in ${job.timer.resource} "${job.timer.state}"`} → ${pinned(job.command)} as ${job.runAs}`
         : job.every
-          ? `jobs: ${job.id}@${job.version} every "${job.every.text}" (${job.every.tenantZone ? "each tenant's zone" : job.every.timezone})${job.realm === 'tenant' ? ' per tenant' : job.realm === 'platform' ? ' on the platform' : ''} → ${pinned(job.command)} as ${job.runAs}`
+          ? `jobs: ${job.id}@${job.version} every ${job.every.column === undefined ? '' : `${job.every.column}, else `}"${job.every.text}" (${job.every.tenantZone ? "each tenant's zone" : job.every.timezone})${job.realm === 'tenant' ? ' per tenant' : job.realm === 'platform' ? ' on the platform' : ''} → ${pinned(job.command)} as ${job.runAs}`
           : `jobs: ${job.id}@${job.version} on ${job.event!.name}@${job.event!.version} (${pinned(job.from!)}) → ${pinned(job.command)} as ${job.runAs}`,
     ),
     ...workflows,

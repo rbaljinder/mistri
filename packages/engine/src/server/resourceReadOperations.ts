@@ -315,6 +315,8 @@ export async function readCounts(
   schema: DatabaseSchema,
   inputs: ReadonlyArray<{ table: string; filter?: Filter }>,
   countLimit?: unknown,
+  /* Asked just before the last wave of counts (resourceReadHttp.ts `lastWave`): the one statement, or the last window. */
+  lastWave?: () => void,
 ): Promise<CountResult[]> {
   const given = snapshotScopedData(inputs);
   const bound = countLimitOf(countLimit) ?? DEFAULT_COUNT_LIMIT;
@@ -330,6 +332,7 @@ export async function readCounts(
   const said = (n: number): CountResult => (n > bound ? { count: bound, exact: true, capped: true } : { count: n, exact: true });
   const each = rest.length > 1 ? capture(reader, { countEach: true }).countEach : undefined;
   if (each) {
+    lastWave?.();
     const counts = await each(
       rest.map(({ item }) => item),
       bound + 1,
@@ -340,9 +343,13 @@ export async function readCounts(
   } else if (rest.length) {
     const { count } = capture(reader, { count: true });
     if (!count) throw new ResourceReadError(501, 'This connection cannot count records.');
-    await inWindows(rest, async ({ item, i }) => {
-      results[i] = said(await count(item.table, item.filter, bound + 1));
-    });
+    await inWindows(
+      rest,
+      async ({ item, i }) => {
+        results[i] = said(await count(item.table, item.filter, bound + 1));
+      },
+      lastWave,
+    );
   }
   return results as CountResult[];
 }
@@ -354,8 +361,9 @@ export async function readCounts(
    whole before a failure is thrown, so no count is still running when the
    request answers, and no further window starts after one. */
 const COUNT_WINDOW = 4;
-async function inWindows<T>(items: readonly T[], run: (item: T) => Promise<void>): Promise<void> {
+async function inWindows<T>(items: readonly T[], run: (item: T) => Promise<void>, last?: () => void): Promise<void> {
   for (let at = 0; at < items.length; at += COUNT_WINDOW) {
+    if (at + COUNT_WINDOW >= items.length) last?.();
     const settled = await Promise.allSettled(items.slice(at, at + COUNT_WINDOW).map(run));
     const failed = settled.find((result): result is PromiseRejectedResult => result.status === 'rejected');
     if (failed) throw failed.reason;

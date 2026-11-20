@@ -30,7 +30,7 @@ import { readAuditStoreOf } from '../readAuditStore.js';
 import { databaseOf } from '../app/appRuntimeResources.js';
 import { keyFilter, type CommandCatalog } from './commandDb.js';
 import type { CommandLookupReader } from './commandLookup.js';
-import { captureTenantJobs } from '../tenant/tenantJobsBrand.js';
+import { captureTenantServices } from '../tenant/tenantServiceBrand.js';
 import { captureTenantRequestRuntime, type TenantRequestRuntime } from '../tenant/tenantRequestRuntime.js';
 import { appResourceVerifiedCommandRunner } from '../app/appResources.js';
 import { appSourceVerifiedCommandRunner } from '../app/appSourceAdapter.js';
@@ -131,15 +131,15 @@ export function registerTenantCommandEventBinding<Request>(
   eventOwners.add(binding);
   return binding;
 }
-/** A tenant job's, mail's or flow step's command emits through the jobs runtime's own service binding: issued only
- * for a genuinely bound jobs runtime (by its brand, not its shape) and for evidence in a tenant's place, since a
+/** A tenant job's, mail's or flow step's command emits through the deployment's own service binding: issued only
+ * for a genuinely bound one (by its brand, not its shape) and for evidence in a tenant's place, since a
  * platform job runs outside any tenant and has no tenant event store to write to. */
 export function registerTenantServiceEventBinding(
-  jobs: object,
+  services: object,
   evidence: Readonly<{ place: 'tenant' | 'platform' }>,
   binding: BusinessCommandBinding,
 ): BusinessCommandBinding {
-  captureTenantJobs(jobs);
+  captureTenantServices(services);
   if (evidence.place !== 'tenant') throw new AppAccessDenied();
   eventOwners.add(binding);
   return binding;

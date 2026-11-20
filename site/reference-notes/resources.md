@@ -304,3 +304,12 @@ query and ids) is not written twice, while a new query, another page or
 another door always is. A second process writes its own row.
 `mistri audit reads` prints the log as JSON lines, and the test kit's
 `host.readAudit()` returns it.
+
+On a tenant App the organization's admins read the log in Settings, in the
+Reads room: by person, resource, record and dates, newest first. A page
+component reads the same lines with `useReadAudit({ resource: 'patient',
+record: String(patient.id) })` from `@mistriwork/mistri/ui`, behind the
+same gate (anyone else gets the refusal as `error` and no lines; see
+[Custom components](/docs/custom-components/#who-read-a-record)). Each line
+there carries `roles`, `membership` and, on the `command` route, the
+command's id; never a support visit's id or a row's key.

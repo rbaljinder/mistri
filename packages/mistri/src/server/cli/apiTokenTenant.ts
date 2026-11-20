@@ -4,7 +4,13 @@
  * authority, and not one transaction with the auth store that issues: the token
  * binds the membership version read here, so any change after it leaves the
  * token without authority rather than with more. The policy file is trusted
- * operator code; it supplies the store ID and ownership, as serving does. */
+ * operator code; it supplies the store ID and ownership, as serving does.
+ *
+ * `api-token issue --service` reads the same catalog, but no person holds a
+ * service role, so there is no membership to read: the tenant itself must be
+ * active in that snapshot, and the token is observed against it on every request.
+ * So must `@platform`: a service acts only while the platform row is active, as
+ * a tenant job does, and a token issued without one would never act at all. */
 import { realpathSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { PostgresAdapter } from '@mistriwork/engine/adapters/postgres.js';
@@ -23,8 +29,10 @@ import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { captureTenantData } from '@mistriwork/engine/server/evidence.js';
 import { captureTenantOwnership } from '../tenant/tenantOwnership.js';
 import type { TenantMembershipRecord } from '../tenant/tenantMembership.js';
-import { readSqliteTenantMembershipSnapshot } from '../tenant/tenantStore.js';
-import { readPostgresTenantMembership } from '../tenant/tenantStorePostgres.js';
+import { readSqliteActiveTenants, readSqliteIntakeAnchor, readSqliteTenantMembershipSnapshot } from '../tenant/tenantStore.js';
+import { readPostgresActiveTenants, readPostgresIntakeAnchor, readPostgresTenantMembership } from '../tenant/tenantStorePostgres.js';
+import { PLATFORM_TENANT_ID } from '../tenant/tenantPlatform.js';
+import { MaintenanceRefusal } from './apiTokenRefusal.js';
 import { tenantAuthoringProblems } from '../tenant/tenantAuthoring.js';
 
 const refuse = (): never => {
@@ -36,6 +44,29 @@ export async function readTenantIssuance(
   configured: readonly ConnectionConfig[],
   input: { policyFile: string; tenantId: string; accountId: string },
   /** The App's command registry: required exactly when it exposes commands. */
+  commands?: BusinessCommandRegistry,
+) {
+  const read = await readIssuance(loaded, configured, input, commands);
+  return read.tenant ? Object.freeze({ catalog: read.catalog, tenant: read.tenant }) : refuse();
+}
+
+/** The catalog a tenant service token is drawn from, read while its tenant is active. */
+export async function readTenantServiceIssuance(
+  loaded: LoadedApp,
+  configured: readonly ConnectionConfig[],
+  input: { policyFile: string; tenantId: string },
+  commands?: BusinessCommandRegistry,
+) {
+  const read = await readIssuance(loaded, configured, input, commands);
+  // Said in setPlatformStatus's own words (tenantMaintenance.ts): the operator's next step is named.
+  if (!read.platform) throw new MaintenanceRefusal('The platform row (@platform) must exist and be active: setPlatformStatus creates it.');
+  return Object.freeze({ catalog: read.catalog, tenantId: read.tenantId });
+}
+
+async function readIssuance(
+  loaded: LoadedApp,
+  configured: readonly ConnectionConfig[],
+  input: { policyFile: string; tenantId: string; accountId?: string },
   commands?: BusinessCommandRegistry,
 ) {
   try {
@@ -64,20 +95,29 @@ export async function readTenantIssuance(
       if (rule.kind === 'platform' && app.resources?.[name]?.owner !== 'platform') return refuse();
     }
     const binding = { appId: app.id, source: { id: source, connection: named }, storeId: policy.storeId };
-    const lookup = { appId: app.id, accountId, tenantId, source: binding.source, deployment: 'api-token-issuance' };
+    const lookup =
+      accountId === undefined
+        ? undefined
+        : { appId: app.id, accountId, tenantId, source: binding.source, deployment: 'api-token-issuance' };
     const resolved = await resolveConnection(matches[0].name, matches[0].url);
     const postgres = /^postgres(ql)?:\/\//i.test(resolved.url);
     /* Maintenance dispatches on the auth store's engine, where the token is
        kept; the membership is read here, natively, in the business source's
        own. The two may differ: PostgreSQL data beside local SQLite sign-ins. */
     let physical: DatabaseSchema | undefined,
-      record: TenantMembershipRecord | null = null;
+      record: TenantMembershipRecord | null = null,
+      active = false,
+      platform = false;
     if (postgres) {
       const adapter = new PostgresAdapter(resolved.url, 'API token issuance');
       try {
         await adapter.readSnapshot(async (snapshot) => {
           physical = await snapshot.describe();
-          record = await readPostgresTenantMembership(snapshot.client, binding, lookup);
+          if (lookup) record = await readPostgresTenantMembership(snapshot.client, binding, lookup);
+          else {
+            active = (await readPostgresActiveTenants(snapshot.client, binding)).includes(tenantId);
+            platform = (await readPostgresIntakeAnchor(snapshot.client, binding, PLATFORM_TENANT_ID)) !== null;
+          }
         });
       } finally {
         await adapter.close();
@@ -89,7 +129,11 @@ export async function readTenantIssuance(
       try {
         db.exec('BEGIN');
         physical = readSqliteReadCatalog(db).schema;
-        record = readSqliteTenantMembershipSnapshot(db, binding, lookup);
+        if (lookup) record = readSqliteTenantMembershipSnapshot(db, binding, lookup);
+        else {
+          active = readSqliteActiveTenants(db, binding).includes(tenantId);
+          platform = readSqliteIntakeAnchor(db, binding, PLATFORM_TENANT_ID) !== null;
+        }
         db.exec('COMMIT');
       } finally {
         if (db.isTransaction) db.exec('ROLLBACK');
@@ -97,7 +141,8 @@ export async function readTenantIssuance(
       }
     }
     const current = record as TenantMembershipRecord | null;
-    if (!physical || !current || current.status !== 'active' || current.tenantStatus !== 'active' || current.validUntil <= Date.now())
+    if (!physical) return refuse();
+    if (lookup ? !current || current.status !== 'active' || current.tenantStatus !== 'active' || current.validUntil <= Date.now() : !active)
       return refuse();
     const catalog = appResourceCatalog(physical, physicalBindings(app, source), declaredReferences(app, source));
     const owned = captureTenantOwnership({
@@ -128,6 +173,7 @@ export async function readTenantIssuance(
           operations: Object.freeze([...reads.operations, ...checkApiTenantCommandCatalog(app, owned, commands).operations]),
         })
       : reads;
+    if (!current) return Object.freeze({ catalog: apiCatalog, tenantId, tenant: undefined, platform });
     // Only the tenant realm's roles: the platform realm is never a tenant token's.
     const roles = current.roles.filter((role) => {
       const grant = app.auth?.roles?.[role] as { realm?: string } | undefined;
@@ -135,6 +181,8 @@ export async function readTenantIssuance(
     });
     return Object.freeze({
       catalog: apiCatalog,
+      tenantId,
+      platform,
       tenant: Object.freeze({
         tenantId,
         membershipId: current.membershipId,

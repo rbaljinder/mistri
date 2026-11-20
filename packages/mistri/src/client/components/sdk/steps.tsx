@@ -207,6 +207,7 @@ export function Steps({ command, param, steps, record, done, onDone }: StepsProp
         headingLevel={2}
         {...(state.activeConnection ? { connection: state.activeConnection } : {})}
         submit={submit}
+        recordless={record === undefined}
         checkStep={async (_step, input, names) => handle.check?.(input as Readonly<Record<string, unknown>>, names)}
         cursor={{
           step: shown,

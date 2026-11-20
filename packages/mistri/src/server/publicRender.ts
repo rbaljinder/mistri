@@ -91,16 +91,21 @@ export function publicPane(
   path: string,
   room: PublicRoom | undefined,
   mount: { base: string; json: string },
+  /** The name the page's public branding wears (a tenant's saved name), which the client says over the App's. */
+  worn?: string,
 ): ((answers: Readonly<Record<string, { body: unknown }>> | undefined) => Promise<DrawnPane | undefined>) | undefined {
   if (room) return () => draw({ kind: 'room', mount: mount.json, room }, mount.base);
   const welcome = WELCOME.exec(path);
   if (welcome) {
     const app = decoded(welcome[1]);
     return async (answers) => {
-      const found = answers?.[readKey('GET', '/api/landing')]?.body as { app?: { id?: unknown }; landing?: unknown } | undefined;
+      const found = answers?.[readKey('GET', '/api/landing')]?.body as
+        | { app?: { id?: unknown; name?: unknown }; landing?: unknown }
+        | undefined;
       // As the client checks it (publicSurface.js): this App's landing, or the client draws something else.
       if (!found?.landing || found.app?.id !== app) return undefined;
-      return draw({ kind: 'landing', mount: mount.json, app: found.app, landing: found.landing }, mount.base);
+      const named = typeof found.app?.name === 'string' ? { ...found.app, name: worn ?? found.app.name } : found.app;
+      return draw({ kind: 'landing', mount: mount.json, app: named, landing: found.landing }, mount.base);
     };
   }
   const form = FORM.exec(path);
@@ -113,7 +118,9 @@ export function publicPane(
       /* Only the form the plain surface draws (client publicForm.js): a form saved on every step, or one placed, draws its own. */
       if (!found?.form || found.form.id !== id || found.app?.id !== app || typeof found.app?.name !== 'string') return undefined;
       if ('placement' in found || (found.form.save && found.form.steps)) return undefined;
-      return draw({ kind: 'form', mount: mount.json, app: found.app, form: found.form }, mount.base);
+      /* In the name the client draws it in (publicForm.js), or the page it takes over says another. */
+      const named = { ...found.app, name: worn ?? found.app.name };
+      return draw({ kind: 'form', mount: mount.json, app: named, form: found.form }, mount.base);
     };
   }
   return undefined;

@@ -45,15 +45,16 @@ A command a person runs from a record opens its form over the record: a short on
 
 ## Options
 
-| Key                                  | What it does                                                                                                                              | Default       | Status |
-| ------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------- | ------ |
-| `steps` (third argument)             | `step(title, inputs)`: each input in exactly one step                                                                                     | one page      | Stable |
-| `style`                              | `'intake'` (with steps): one question at a time under a progress bar, a sticky action bar, an editable review, and `note` under the title | `'stepper'`   | Stable |
-| `done`                               | The screen after submitting: `{ title, message }`                                                                                         | a generic one | Stable |
-| `submitLabel`, `description`, `icon` | The button's words, the words under the heading, the menu's mark (signed in only)                                                         | none          | Stable |
-| `public`                             | Serve it signed out at `/form/<key>`, running a `public: true` command; a signed-out visitor who opens `/<key>` is sent there             | `false`       | Stable |
-| `prefillable`                        | Inputs a page's link may fill in                                                                                                          | none          | Stable |
-| `resume`, `draft`                    | Save every step into your tables as the visitor goes                                                                                      | none          | Stable |
+| Key                                  | What it does                                                                                                                               | Default       | Status |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | ------------- | ------ |
+| `steps` (third argument)             | `step(title, inputs)`: each input in exactly one step                                                                                      | one page      | Stable |
+| `style`                              | `'intake'` (with steps): one question at a time under a progress bar, a sticky action bar, an editable review, and `note` under the title  | `'stepper'`   | Stable |
+| `done`                               | The screen after submitting: `{ title, description }`; `reference: false` and `home: false` leave out the reference and the "Back to" link | a generic one | Stable |
+| `submitLabel`, `description`, `icon` | The button's words, the words under the heading, the menu's mark (signed in only)                                                          | none          | Stable |
+| `public`                             | Serve it signed out at `/form/<key>`, running a `public: true` command; a signed-out visitor who opens `/<key>` is sent there              | `false`       | Stable |
+| `prefillable`                        | Inputs a page's link may fill in                                                                                                           | none          | Stable |
+| `given`                              | Inputs the link supplies, never drawn: `given: ['unit']` with `?unit=12`. The command still judges them; a link without one is refused     | none          | Stable |
+| `resume`, `draft`                    | Save every step into your tables as the visitor goes                                                                                       | none          | Stable |
 
 All keys: [the generated reference](/docs/dsl-views/).
 
@@ -95,6 +96,59 @@ The server holds a public form to these rules:
 - It never appears in `nav`; a [landing page](/docs/landing-pages/) or a signed-out `home` rule links to it. In a tenant App, the link's `?via=` address places it with one tenant ([tenant Apps](/docs/tenant-apps/#public-intake)).
 
 Hold nothing scarce on an unverified submission: write a request that staff act on.
+
+### Count wrong tries
+
+A public form that asks a second detail, such as a birth date behind a
+visit's link, must stop a visitor guessing it. A refusal rolls back
+everything the handler wrote, so count each wrong try in `refuse`'s `keep`:
+it writes, in a transaction of its own, only the tables `refused: { writes }`
+lists. On a signed-out form a keep inserts only, so a count is rows with a
+time, read over a window.
+
+```ts
+import { count, defineCommand, field, refuse } from '@mistriwork/mistri/commands';
+
+export const confirmVisit = defineCommand({
+  source: clinic,
+  target: 'visit',
+  public: true,
+  read: ['visit'],
+  write: ['visit', 'visit_try'],
+  refused: { writes: ['visit_try'] },
+  input: { visit: field.text(), birth_date: field.date() }, // the form's `given: ['visit']` fills visit from its link
+  /* output: shape({ reference, message }) … */
+  async handle({ db }, input) {
+    const anHourAgo = new Date(Date.now() - 3_600_000).toISOString();
+    const { tries } = await db.visit_try
+      .where`visit_id = ${input.visit} and tried_at > ${anHourAgo}`
+      .aggregate({ tries: count() });
+    if (tries >= 5) refuse('Too many tries. Ask the office for a new link.');
+    const visit = await db.visit.find({ id: input.visit });
+    if (visit?.birth_date !== input.birth_date)
+      refuse('That does not match our records.', {
+        keep: (db) => db.visit_try.insert({ visit_id: input.visit, tried_at: new Date().toISOString() }),
+      });
+    /* … confirm the visit and answer its reference */
+  },
+});
+```
+
+The refusal is answered only once the keep has committed, so a visitor who
+hangs up still spends a try. A retry under the same submission key runs the
+command again and counts again. On a tenant App the keep writes in the place
+the link's address names, the tenant's or the platform's triage, never another
+tenant's. A try that finds its tenant suspended since is counted in the
+platform's triage instead, and the visitor reads the same refusal.
+
+The other shape is a [capability link](/docs/commands/#a-link-to-one-record)
+with `confirm`. The door asks the detail before the page draws and keeps the
+lockout itself: five wrong tries an hour per link, with no table, no command
+and nothing to count.
+
+- Choose `confirm` when the detail only proves that the visitor holds the record, to see it or run its commands.
+- Choose a counted `keep` when the check is part of a command's own rules, or when staff must see the tries, clear them, or set the limit and the window.
+
 
 ### The intake style
 
@@ -205,8 +259,8 @@ fixed [action](/docs/actions/) with `bulk: true`, which writes each on its own.
 ## Common mistakes
 
 - `[public-form-reference]`: a public form's command answers no `reference` → `output: shape({ reference: text({ pattern: publicReferencePattern('…') }), message: literal('…') })`.
-- "A public command runs from a public form and names no record: drop its targets." → delete `targets`; `public: true` implies `'none'`.
-- `[restated]` on `targets: 'none'` beside `public: true` → delete it.
+- "A public command runs from a public form and names no record: drop its targets.", or `[restated]` on `targets: 'none'` beside `public: true` → delete `targets`; `public: true` implies `'none'`.
+- A wrong try is never counted, or `[refused-writes]` → write the count in `refuse`'s `keep`, not before `refuse` (the refusal rolls that back), and list its table in both `write` and `refused: { writes }`.
 - The form is missing for a role → grant that role the form's command; a signed-in form opens only to roles granted it.
 
 ## Related

@@ -2046,13 +2046,15 @@ body.app-mode th .pk { display: none; }
 /* A list's summary (`summary` on its view): a dashboard's strip of figures between the list's name and its tabs, on
    the room's own edge. */
 .applist-host > .list-summary { margin: var(--space-3) var(--room-inset) 0; }
-/* A page's verbs are one family at the head's end, in one order: Views, Export, Import, then New (AppList.tsx).
+/* A page's verbs are one family at the head's end, in one order: the list's link to another room (its view's `link`,
+   a quiet link, not a verb), Views, Export, Import, then New (AppList.tsx).
    Each of the first three is a mark and its word; on a phone the mark stands for the word (structure.css). Under a
    bar the rows draw Export after the others, so the order is said here. */
 .applist-head-slot { display: contents; }
 .crumb-tools > :is(.applist-import, .applist-new) { order: 1; }
 .app-mode :is(.crumb-tools, .applist-head-tools) :is(.export-summary, .applist-import) { display: inline-flex; align-items: center; gap: var(--space-2h); }
 :is(.applist-verb-mark, .applist-import-mark) { flex: none; }
+:is(.crumb-tools, .applist-head-tools) .applist-link { font-size: var(--text-sm); white-space: nowrap; }
 .applist-count {
   padding: 1px var(--space-3); border-radius: 999px; background: var(--raised);
   font: 500 var(--text-sm)/1.5 var(--sans); color: var(--ink-muted); font-variant-numeric: tabular-nums;

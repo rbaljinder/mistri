@@ -24,7 +24,7 @@ import type { AppAction, AppFormCommandReference } from './command.js';
 import type { AppIconName } from '@mistriwork/engine/shared/appIcons.js';
 import type { SaidCaptions } from '@mistriwork/engine/shared/appMessages.js';
 import { CHART_SHAPES, type AppNoun, type FigureFormat } from '@mistriwork/engine/shared/model.js';
-import type { AppListEmpty, AppListPresentation, AppListTab, FilterBar } from '@mistriwork/engine/shared/listPresentations.js';
+import type { AppListEmpty, AppListLink, AppListPresentation, AppListTab, FilterBar } from '@mistriwork/engine/shared/listPresentations.js';
 import type { FunnelStage } from '@mistriwork/engine/shared/funnel.js';
 export type { FormScalar, FormCondition, FormRule, FormChildGroup, FormStep, AppFormField } from './formRules.js';
 export type {
@@ -119,6 +119,9 @@ export interface AppListView {
   /** Copy for the list as it opens (its first tab) with no rows; a tab says its own (`tabs[].empty`), and a search or
       filter past the tab keeps the no-matches message. */
   empty?: AppListEmpty;
+  /** A link at the list's head to another room, with rows or without: `{ label: 'Plan the week', to: 'planner' }`.
+      Served only to a reader the room is served to (appPayload.ts `withAvailableEmptyActions`). */
+  link?: AppListLink;
   /** Filter tabs across the top of the list. Absent means one unfiltered list. */
   tabs?: AppListTab[];
   /**
@@ -476,11 +479,14 @@ export interface AppFormView<Field extends string = string> extends ServedFormVi
   note?: { icon?: AppIconName; text: string };
   /** Intake: whether the last page reviews every answer. Present only as `false`; absent, an intake form reviews. */
   review?: false;
-  /** The screen after the receipt, beside the reference the handler returned when it returned one. */
-  done?: { title?: string; description?: string };
+  /** The screen after the receipt, beside the reference the handler returned when it returned one; `reference: false`
+      and `home: false` leave out the reference and the link back to the App. */
+  done?: { title?: string; description?: string; reference?: false; home?: false };
   public?: true;
   /** The inputs a link's address may start filled (`?stock_ref=FC-1049`): shown, editable, checked like anything typed. */
   prefillable?: string[];
+  /** The inputs the link supplies (`?unit=12`): filled from the address, never drawn, judged by the command like the rest. */
+  given?: string[];
   /** Command input → the App's own input component, drawn in place of the platform's control. Never on a public form. */
   inputs?: Record<string, import('@mistriwork/engine/shared/appComponents.js').ComponentDecl>;
   /** Saved on every step into the App's real tables (appSavedForms.ts): a public form only. */

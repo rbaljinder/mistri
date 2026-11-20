@@ -213,10 +213,14 @@ function upFlags(opts: Options, jobs: string | undefined) {
 
 async function signInPhase(loaded: LoadedApp, mode: 'plan' | 'up', wait: boolean, before: boolean | undefined): Promise<PlanPhase> {
   if (!loaded.app.auth) return { phase: 'sign-in store', status: '—', detail: 'the App has no sign-in', items: [] };
-  const [{ localAuthStore }, { isPostgresAuthStore }] = await Promise.all([import('../auth/auth.js'), import('../auth/authStore.js')]);
+  const [{ localAuthStore }, { isPostgresAuthStore }, { authStoreFrom }] = await Promise.all([
+    import('../auth/auth.js'),
+    import('../auth/authStore.js'),
+    import('../app/deploymentAuth.js'),
+  ]);
   const { store, kept } = localAuthStore(loaded);
   if (!isPostgresAuthStore(store)) {
-    const where = `${shown(store)}${kept === 'dev' ? ', under mistri dev' : kept === 'named' ? ', auth.store' : ''}`;
+    const where = `${shown(store)}${kept === 'dev' ? ', under mistri dev' : kept === 'named' ? `, ${authStoreFrom(loaded) ?? 'auth.store'}` : ''}`;
     return existsSync(store)
       ? { phase: 'sign-in store', status: 'done', detail: `SQLite, ${where}`, items: [] }
       : { phase: 'sign-in store', status: 'at start', detail: `a SQLite file the first start makes (${where})`, items: [] };
@@ -224,6 +228,8 @@ async function signInPhase(loaded: LoadedApp, mode: 'plan' | 'up', wait: boolean
   /* A PostgreSQL auth.store: its URL is a secret and never said. The stores step makes it (provisionSignInStore),
      so `migrate stores up` and a deploy's migrate step make it too; read again here, after that step. */
   const { signInStorePresent, provisionSignInStore } = await import('./storesCli.js');
+  // The deployment's own store is named as such, never its URL: the plan says whose choice it ran against.
+  const from = loaded.deploymentAuth?.apps[loaded.app.id] ? ` (${authStoreFrom(loaded)})` : '';
   let present: boolean | undefined;
   try {
     present = await signInStorePresent(loaded);
@@ -239,9 +245,9 @@ async function signInPhase(loaded: LoadedApp, mode: 'plan' | 'up', wait: boolean
   if (present)
     return before === false && mode === 'up'
       ? { phase: 'sign-in store', status: 'applied', detail: 'auth.store on PostgreSQL: its tables are made', items: ['auth'] }
-      : { phase: 'sign-in store', status: 'done', detail: 'auth.store on PostgreSQL', items: [] };
+      : { phase: 'sign-in store', status: 'done', detail: `auth.store on PostgreSQL${from}`, items: [] };
   if (mode === 'plan')
-    return { phase: 'sign-in store', status: 'pending', detail: 'auth.store on PostgreSQL: up makes its tables', items: ['auth'] };
+    return { phase: 'sign-in store', status: 'pending', detail: `auth.store on PostgreSQL${from}: up makes its tables`, items: ['auth'] };
   if (wait) return { phase: 'sign-in store', status: 'waiting', detail: 'runs after 1 and 2', items: [] };
   const lines: string[] = [];
   const code = await provisionSignInStore(loaded, (line) => lines.push(line.trim()));

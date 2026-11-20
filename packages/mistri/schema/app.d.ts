@@ -85,10 +85,13 @@ export interface MachineState<State extends string = string, Column extends stri
       once it is there, and its page draws read-only. */
   final?: true | { readonly freeze: true };
 }
-/** A timer at an instant (`AppResource.at`): the command it runs, and the conditions the record must meet then. */
+/** A timer at an instant (`AppResource.at`): the command it runs, the conditions the record must meet then, and how
+    long `before` or `after` the instant it comes due (one of them; the instant itself when neither). */
 export interface AppAtTimer {
   command: CommandName;
   when?: string;
+  before?: Duration;
+  after?: Duration;
 }
 /** A record's state machine over one column. `since` names a timestamp column the server stamps whenever the state
     changes, which `after` timers count from. */
@@ -896,8 +899,10 @@ export interface AppResource<Column extends string = string, Page extends string
   /** Timers at an instant the record keeps: `at: { due_at: 'markSla', warn_at: { command: 'warnSla', when: "state =
       'running'" } }`. Each runs its command through the jobs once the date or timestamp column's time has passed
       and the record matches `when` (query-language conditions over the record's own columns; a machine state is
-      `"status = 'open'"`), once for each instant the column holds: writing a new instant arms it again. */
-  at?: { readonly [C in Column]?: CommandName | AppAtTimer };
+      `"status = 'open'"`), once for each instant the column holds: writing a new instant arms it again. A timer may
+      come due `before` or `after` the instant (`{ command: 'remind', before: '24 hours' }`), and a column with several
+      timers takes a list of them. */
+  at?: { readonly [C in Column]?: CommandName | AppAtTimer | readonly (CommandName | AppAtTimer)[] };
   /** Column ceiling for signed-in roles: needs `auth` with `auth.roles`; `write` needs access 'write'. To keep a
       column from every reader, signed in or not, use `hidden` (`mistri docs secrets`). */
   fields?: AppFieldAccess<Column>;
@@ -1238,7 +1243,8 @@ export interface AppRoleGrant<Resource extends string = string, Role extends str
       through any other never reads the rule. An App with one identity provider may leave it out; with several,
       loading refuses a rule that does not say (`claim-any-provider`). */
   claims?: AppRoleClaims;
-  /** A role only a service principal holds (a jobs module's `principals`, an App API token), never a person:
+  /** A role only a service principal holds (a jobs module's `principals`, an App API token, a tenant's
+      service token through `api.service`), never a person:
       `{ integration: { service: true, read: true, commands: ['recordCreditResult'] } }`. A free-form page is offered
       to it only where the page names it; it is never `defaultRole` and has no `claims`. */
   service?: true;
@@ -1641,6 +1647,9 @@ export interface AppListView<Table extends string = string, Column extends strin
   /** Shown when the list as it opens (its first tab) has no rows; a tab says its own with its `empty`, and a search or
       filter past the tab keeps its ordinary no-matches message. */
   empty?: AppListEmpty;
+  /** A link at the list's head to another room, with rows or without: `{ label: 'Plan the week', to: 'planner' }`. The
+      same `{ label, to }` as `empty.action`; a reader the room is not served to sees no link. */
+  link?: { label: string | AppMessageRef; to: ViewTo };
   /** Tabs over the rows: a segment of the table by name, a segment with its own sort, or every row (`{ label }`). A
       word that is no segment names the resource's machine state or group (its label is the state's) or a yes/no
       column, stored or computed (its label is the column's); a word two of these claim is refused with the readings to choose between. */
@@ -2324,7 +2333,15 @@ export type LandingSection<Form extends string = string> =
 /* ---------- content: command forms ---------- */
 
 /** The screen after a submission, beside the reference the handler returned when it returned one. */
-export interface AppFormDone { title?: string | AppMessageRef; /** A sentence under the title. */ description?: string | AppMessageRef }
+export interface AppFormDone {
+  title?: string | AppMessageRef;
+  /** A sentence under the title. */
+  description?: string | AppMessageRef;
+  /** `false` leaves the handler's reference off the screen (and the line asking to keep it). */
+  reference?: false;
+  /** `false` leaves out the "Back to <App>" link under a public form's receipt. */
+  home?: false;
+}
 
 /**
  * A command form: one form running one command that creates records. Its
@@ -2382,6 +2399,11 @@ export interface AppFormView<Field extends string = string> {
       shown, editable and checked like anything typed. A form that names none fills none. On a public form, a page's
       headline may fill them only from fields the public grant opens. */
   prefillable?: readonly Field[];
+  /** The inputs the link supplies (`?unit=12`), filled from the address and never drawn: not on a step, not on the
+      review, never on the done screen. Hidden is not trusted: the command judges them like anything typed, and a link
+      that leaves a required one out gets its refusal on the form's line. Text, number, date or choice inputs, never
+      also `prefillable`, never on a form saved each step. */
+  given?: readonly Field[];
   /** A form's input drawn by the App's own input component, in place of the platform's control; a public form's page loads
       it too, and the value is still the field's kind's to judge on the server. An input in a group is named by its path (`trade.vin`), and in a repeating group stands in every row; `check` refuses a
       path the command does not take. */
@@ -3832,7 +3854,7 @@ type FeatureRefs<C, F> = {
   flags?: FlagRefs<F>;
   audiences?: AudienceRefs<C, F>;
   experiments?: ExperimentRefs<C, F>;
-  api?: ApiRefs<C, F> & { version?: never; roles?: never; publicSpec?: never; network?: never; description?: never };
+  api?: ApiRefs<C, F> & { version?: never; roles?: never; publicSpec?: never; network?: never; description?: never; service?: never };
   views?: { [I in Keys<ViewsOf<F>>]: ViewRefs<C, ViewsOf<F>[I]> };
   pages?: { [I in Keys<PagesOf<F>>]: PageRefs<C, PagesOf<F>[I]> };
   auth?: { roles?: { [R in Keys<RolesOf<F>>]: RoleRefs<C, RolesOf<F>[R]> } };
@@ -3894,7 +3916,7 @@ export declare function defineApp<const C extends AppConfig>(app: C & AppRefs<C>
 /* What a feature can check alone: its fragment, and that it says nothing that is the App's. Its
    embeds, selectors, calls to action, pages and home are checked by defineApp, where every feature is known. */
 type FeatureLocalRefs<F> = {
-  api?: { version?: never; roles?: never; publicSpec?: never; network?: never; description?: never };
+  api?: { version?: never; roles?: never; publicSpec?: never; network?: never; description?: never; service?: never };
   /* Its resources' conditions are read against their tables here, where the feature is whole; the App's check does not read them again. */
   resources?: { [T in Keys<ResourcesOf<F>>]?: ResourceGuard<T, ResourcesOf<F>[T]> };
   nav?: FragmentRefs<F>;
@@ -3937,6 +3959,9 @@ export interface DraftApiConfig {
   /** The commands' events the event feed (`…/v{n}/$events`) serves, each its own token operation
       (`event:<name>`); a token sees an event only about a record its roles read. Absent: no feed. */
   events?: readonly string[];
+  /** Tenant Apps only: the service roles (`service: true`) a tenant's administrator may hand to a program in a tenant
+      service token, and the name the tenant's audit shows for its writes. */
+  service?: { roles: readonly string[]; label: string };
 }
 /** Active contract: ordinary single-source SQL read metadata, plus commands
  * served beside their `--commands` registry: one on a record at

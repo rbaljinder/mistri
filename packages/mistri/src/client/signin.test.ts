@@ -125,6 +125,32 @@ test('public names are literal text and do not supply private branding or markup
   expect(fetch).not.toHaveBeenCalled();
 });
 
+test("a tenant's saved name, carried in its public head, is the door's and the tab's; a private head's is not", async () => {
+  // A field report: the tab wore the tenant's icon and the App's name.
+  const head = (branding: object) => {
+    const script = document.createElement('script');
+    script.id = 'mistri-branding';
+    script.type = 'application/json';
+    script.textContent = JSON.stringify(branding);
+    document.body.append(script);
+    return script;
+  };
+  const saved = head({ private: false, value: { content: { name: 'North Clinic' } } });
+  await act(async () => {
+    showSignIn({ app: 'Chairside', providers: ['email'], signUp: 'invite' });
+  });
+  expect(document.querySelector('.brand-name')).toHaveTextContent('North Clinic');
+  expect(document.title).toBe('Sign in · North Clinic');
+  expect(screen.getByRole('heading', { name: 'North Clinic' })).toBeVisible();
+  saved.remove();
+  head({ private: true, value: { content: { name: 'Members only' } } });
+  await act(async () => {
+    showSignIn({ app: 'Chairside', providers: ['email'], signUp: 'invite' });
+  });
+  expect(document.querySelector('.brand-name')).toHaveTextContent('Chairside');
+  expect(document.title).toBe('Sign in · Chairside');
+});
+
 test.each(['', 'app-mode', 'app-mode app-topnav'])('ordinary shell %j retains its controls', (mode) => {
   document.body.className = mode;
   document.getElementById('topnav')!.hidden = false;

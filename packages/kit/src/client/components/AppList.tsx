@@ -89,6 +89,7 @@ import { TableRoom } from './TableRoom.js';
 import { RowOpensContext } from './rowOpens.js';
 import { RowTitleContext } from './rowTitle.js';
 import { ListEmpty } from './ListEmpty.js';
+import { useListNavigation } from './listNavigation.js';
 import { Empty } from './Notes.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { SortMenu } from './SortMenu.js';
@@ -287,6 +288,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   const filter = useRef<HTMLInputElement>(null);
   const head = useRef<HTMLDivElement>(null);
   const crumbs = useCrumbSlots();
+  const openLink = useListNavigation();
   const ownList = !embedded && !inDashboard;
   /* The page's own list names itself in the crumb bar where one is drawn over it; where none is (a room reached
      from the menu, `shell.breadcrumbs`), in its own heading row, whose end holds the same verbs. Either way its
@@ -994,6 +996,15 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
       </DropMenu>
     ) : null;
   const pageVerbs = !spec.quickAdd && newButton;
+  /* The list's way to another room (its view's `link`), first among the head's verbs and there with rows or without:
+     the server serves it only to a reader who may open the room (appPayload.ts), as an empty state's action. */
+  const headTo = ownList && spec.link ? openLink?.(spec.link.view, 'reset', { tab: spec.link.tab }) : undefined;
+  const headLink =
+    headTo && spec.link ? (
+      <a className="applist-link" {...headTo}>
+        {spec.link.label}
+      </a>
+    ) : null;
   return (
     <>
       {boundNames.map((name) => (
@@ -1009,6 +1020,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
       {inBar &&
         createPortal(
           <>
+            {headLink}
             {viewsMenu}
             {pageVerbs}
           </>,
@@ -1022,6 +1034,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
                 Import, and New last, where the primary action is looked for. */}
             {ownList ? (
               <div className="applist-head-tools">
+                {headLink}
                 {viewsMenu}
                 <span className="applist-head-slot" ref={listHeadRef} />
                 {pageVerbs}

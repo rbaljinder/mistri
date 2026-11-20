@@ -225,6 +225,27 @@
     }
   },
   "$defs": {
+    "atTimer": {
+      "anyOf": [
+        { "$ref": "#/$defs/commandName" },
+        {
+          "type": "object",
+          "required": ["command"],
+          "additionalProperties": false,
+          "not": { "required": ["before", "after"] },
+          "properties": {
+            "command": { "$ref": "#/$defs/commandName" },
+            "when": {
+              "type": "string",
+              "pattern": "\\S",
+              "description": "Query-language conditions over the record's own columns the record must meet then: \"status = 'open'\"."
+            },
+            "before": { "$ref": "#/$defs/duration", "description": "Come due this long ahead of the instant: '24 hours'." },
+            "after": { "$ref": "#/$defs/duration", "description": "Come due this long past the instant: '2 days'." }
+          }
+        }
+      ]
+    },
     "duration": { "type": "string", "pattern": "^\\s*\\d{1,9}\\s+(second|minute|hour|day|week)s?\\s*$", "description": "A whole number and a unit: '30 seconds', '5 minutes', '12 hours', '3 days', '2 weeks'." },
     "flagName": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$", "not": { "enum": ["__proto__", "prototype", "constructor"] } },
     "flagNames": { "type": "array", "minItems": 1, "maxItems": 256, "uniqueItems": true, "items": { "$ref": "#/$defs/flagName" } },
@@ -723,6 +744,29 @@
         },
         "events": {
           "$ref": "#/$defs/apiEvents"
+        },
+        "service": {
+          "description": "Tenant Apps only: the service roles (each auth.roles entry with service: true) a tenant's administrator may hand to a program in a tenant service token, and the name the tenant's audit shows for its writes.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "roles",
+            "label"
+          ],
+          "properties": {
+            "roles": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 64,
+              "uniqueItems": true,
+              "items": {
+                "type": "string"
+              }
+            },
+            "label": {
+              "$ref": "#/$defs/apiText"
+            }
+          }
         }
       }
     },
@@ -2109,23 +2153,11 @@
           },
           "additionalProperties": {
             "anyOf": [
-              { "$ref": "#/$defs/commandName" },
-              {
-                "type": "object",
-                "required": ["command"],
-                "additionalProperties": false,
-                "properties": {
-                  "command": { "$ref": "#/$defs/commandName" },
-                  "when": {
-                    "type": "string",
-                    "pattern": "\\S",
-                    "description": "Query-language conditions over the record's own columns the record must meet then: \"status = 'open'\"."
-                  }
-                }
-              }
+              { "$ref": "#/$defs/atTimer" },
+              { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/atTimer" } }
             ]
           },
-          "description": "Timers at an instant the record keeps: a date or timestamp column, and the command run through the jobs once its time has passed and the record matches when, once for each instant the column holds; a new time arms it again."
+          "description": "Timers at an instant the record keeps: a date or timestamp column, and the command run through the jobs once its time has passed (or a while before or after it) and the record matches when, once for each instant the column holds; a new time arms it again. A column with several timers takes a list."
         },
         "page": {
           "type": "string",
@@ -2750,7 +2782,7 @@
         },
         "service": {
           "const": true,
-          "description": "A role only a service principal holds (a jobs module's principals, an App API token), never a person: a free-form page is offered to it only where the page names it; it is never defaultRole and has no claims."
+          "description": "A role only a service principal holds (a jobs module's principals, an App API token, a tenant's service token through api.service), never a person: a free-form page is offered to it only where the page names it; it is never defaultRole and has no claims."
         },
         "portal": {
           "const": true,
@@ -3881,6 +3913,10 @@
             }
           },
           "description": "Copy for an empty list, with an optional link to another App list, dashboard or signed-in form. The first tab says it too unless the tab has its own; a search or filter past the tab keeps the ordinary no-matches message."
+        },
+        "link": {
+          "$ref": "#/$defs/listView/properties/empty/properties/action",
+          "description": "A link at the list's head to another App list, dashboard or signed-in form, with rows or without: { label: 'Plan the week', to: 'planner' }. The same { label, to } as empty.action; a reader the room is not served to sees no link."
         },
         "tabs": {
           "type": "array",
@@ -6127,6 +6163,14 @@
               "pattern": "\\S",
               "maxLength": 2000,
               "description": "A sentence under the title."
+            },
+            "reference": {
+              "const": false,
+              "description": "false leaves the handler's reference off the screen, and the line asking to keep it."
+            },
+            "home": {
+              "const": false,
+              "description": "false leaves out the \"Back to <App>\" link under a public form's receipt."
             }
           }
         },
@@ -6143,6 +6187,16 @@
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
           },
           "description": "The command's inputs a link's address may start filled (?stock_ref=FC-1049): text, number, date or choice inputs, shown, editable and checked like anything typed. A form that names none fills none."
+        },
+        "given": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "description": "The command's inputs the link supplies (?unit=12): filled from the address, never drawn, on a step, on the review or on the done screen, and judged by the command like anything typed. Text, number, date or choice inputs, never also prefillable, never on a form saved each step."
         },
         "resume": {
           "type": "object",

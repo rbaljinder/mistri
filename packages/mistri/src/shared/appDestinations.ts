@@ -1,7 +1,7 @@
 /**
  * Where an App's own buttons go, judged once. A destination inside the App is a room: a list, a dashboard or a
  * signed-in form view. A dashboard's note and banner action, a record page's note, a list's and a related list's
- * empty action and nav all name one by its view key, and all are judged here, so a form one of them may open is a
+ * empty action, a list's head link and nav all name one by its view key, and all are judged here, so a form one of them may open is a
  * form each of them may open (a field report: a banner refused the signed-in form the App's own `openForm` opened).
  *
  * A public form and the landing are served outside the App, at their own addresses: the landing's call to action

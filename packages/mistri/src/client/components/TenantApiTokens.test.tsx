@@ -85,3 +85,46 @@ test("a refusal is said in the route's own words, and nothing is listed", async 
   expect(screen.queryByRole('table')).toBeNull();
   expect(screen.queryByRole('button', { name: 'Make token' })).toBeNull();
 });
+
+test('an administrator makes a service token with its role alone, and it is listed as a service', async () => {
+  let issued = false;
+  const offered = { ...choices, service: { roles: ['ledger_sync', 'mailer'], label: 'Integrations' } };
+  api.mockImplementation(async (path: string) => {
+    if (path === '/api/tokens/issue') return ((issued = true), { token: 'twk_service', id: 's1', expiresAt: '2027-01-01T00:00:00.000Z' });
+    return {
+      tokens: issued ? [token({ id: 's1', label: 'Ledger', roles: ['mailer'], service: 'mailer', mine: false })] : [],
+      choices: offered,
+    };
+  });
+  render(<TenantApiTokens onClose={() => {}} />);
+  await userEvent.click(await screen.findByRole('radio', { name: 'A service, not a person' }));
+  expect(screen.getByText(/its changes are recorded as Integrations/)).toBeTruthy();
+  // A member's roles are not asked for: the service role is the whole of what it holds.
+  expect(screen.queryByRole('checkbox')).toBeNull();
+  await userEvent.click(screen.getByRole('radio', { name: 'Mailer' }));
+  await userEvent.type(screen.getByRole('textbox', { name: /Label/ }), 'Ledger');
+  await userEvent.click(screen.getByRole('button', { name: 'Make token' }));
+  expect(api).toHaveBeenCalledWith('/api/tokens/issue', { label: 'Ledger', service: 'mailer', days: 90 });
+  expect(await screen.findByDisplayValue('twk_service')).toBeTruthy();
+  const row = screen.getByText('Ledger').closest('tr')!;
+  expect(row).toHaveTextContent('service');
+  expect(row).toHaveTextContent('Mailer');
+  // Another administrator's service token is the tenant's, not "another member's".
+  expect(row).not.toHaveTextContent('another member’s');
+});
+
+test('a member who is not the administrator is offered no service token, and one who holds no API role but administers starts there', async () => {
+  api.mockResolvedValue({ tokens: [], choices });
+  render(<TenantApiTokens onClose={() => {}} />);
+  await screen.findByText('No tokens yet.');
+  expect(screen.queryByRole('radio')).toBeNull();
+  cleanup();
+  api.mockResolvedValue({ tokens: [], choices: { ...choices, roles: [], service: { roles: ['ledger_sync'], label: 'Integrations' } } });
+  render(<TenantApiTokens onClose={() => {}} />);
+  expect((await screen.findByRole('radio', { name: 'A service, not a person' })) as HTMLInputElement).toBeChecked();
+  expect(screen.queryByRole('radio', { name: 'You, with your roles' })).toBeNull();
+  expect(screen.queryByText('You hold no role the App’s API allows, so there is no token to make.')).toBeNull();
+  await userEvent.type(screen.getByRole('textbox', { name: /Label/ }), 'Sync');
+  await userEvent.click(screen.getByRole('button', { name: 'Make token' }));
+  expect(api).toHaveBeenCalledWith('/api/tokens/issue', { label: 'Sync', service: 'ledger_sync', days: 90 });
+});

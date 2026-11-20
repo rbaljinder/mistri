@@ -28,6 +28,7 @@ import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
 export const CHECK_BUILD_OF = 'MISTRI_CHECK_BUILD_OF';
 import type { AppEnvName } from '../../shared/appAuthority.js';
 import { parsePresentation } from '../app/appPresentation.js';
+import { parseDeploymentAuth } from '../app/deploymentAuth.js';
 
 /* A built App is started with the entries it was built with: the manifest's
    own where no flag names one (docs/bootstrap-plan.md D9), never a module
@@ -111,6 +112,24 @@ export function assertPresentationNamesApps(presentation: LoadedApp['presentatio
     );
 }
 
+/** The config's `"auth"` as the loader takes it; undefined when the file has none. */
+export function deploymentAuthOf(config: Pick<StartupConfig, 'auth' | 'configPath'>): LoadedApp['deploymentAuth'] | undefined {
+  if (config.auth === undefined) return undefined;
+  const file = config.configPath ?? 'the config file';
+  return { ...(config.configPath === undefined ? {} : { file: config.configPath }), apps: parseDeploymentAuth(config.auth, file) };
+}
+
+/** A sign-in store for an App this server does not serve is a typo or a stale config, as a stray presentation is. */
+export function assertDeploymentAuthNamesApps(auth: LoadedApp['deploymentAuth'] | undefined, loadedApps: readonly LoadedApp[]): void {
+  if (!auth) return;
+  const ids = loadedApps.map((loaded) => loaded.app.id);
+  const stray = Object.keys(auth.apps).filter((id) => !ids.includes(id));
+  if (stray.length)
+    throw new Error(
+      `${auth.file ?? 'the config file'}: "auth.${stray[0]}" names no App this server serves (${ids.map((id) => `"${id}"`).join(', ') || 'none'}). Key each sign-in store by the App's id.`,
+    );
+}
+
 /** Refuses a non-tenant App bound to a connection under the row-security backstop (tenantBackstopOwner.ts). */
 export function assertAppsOffBackstop(loadedApps: readonly LoadedApp[], registry: Pick<Registry, 'configs' | 'list' | 'active'>): void {
   for (const loaded of loadedApps) {
@@ -138,8 +157,11 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
   }
   /* The deployment's name, logo, theme and locale for its Apps (config "presentation"), checked before any App loads. */
   let presentation: LoadedApp['presentation'] | undefined;
+  /* Where this deployment keeps its Apps' sign-ins (config "auth"), over each App's own auth.store: checked here too. */
+  let deploymentAuth: LoadedApp['deploymentAuth'] | undefined;
   try {
     presentation = presentationOf(config);
+    deploymentAuth = deploymentAuthOf(config);
   } catch (err) {
     console.error(`Config error: ${startupReport(err)}`);
     if (opts.embedded) throw err;
@@ -163,6 +185,7 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
           ...loadOptions,
           ...more,
           ...(presentation ? { presentation } : {}),
+          ...(deploymentAuth ? { deploymentAuth } : {}),
           ...(own ? { commands: opts.commands } : {}),
         });
         /* A build is served with the entries it was built with (decision D9 of docs/bootstrap-plan.md): the build is
@@ -188,6 +211,7 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
       }
       assertBuildEntries(opts, loadedApps);
       assertPresentationNamesApps(presentation, loadedApps);
+      assertDeploymentAuthNamesApps(deploymentAuth, loadedApps);
       assertAppScopes(loadedApps, (scope) => registry.list().find((c) => c.id === scope || c.name === scope)?.id ?? scope);
       /* Only a tenant App reads through the row-security backstop; any other would see none of its tenant rows. */
       assertAppsOffBackstop(loadedApps, registry);

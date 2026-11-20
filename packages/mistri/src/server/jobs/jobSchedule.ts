@@ -17,6 +17,11 @@
  * tenant App's job per tenant): the zone its profile names through
  * `ui.timezone`, so `0 6 * * *` is six in the morning at each tenant. The
  * host groups the tenants by zone and keeps each zone's slots apart.
+ *
+ * `every: { column, default }` reads the expression itself per tenant, off a
+ * column of a tenant-owned table or the tenant's profile: each tenant's slots
+ * are its own value's, and a value that does not parse is the default's. The
+ * host groups the tenants by zone and expression together.
  */
 const WORDS: Record<string, string> = { '@hourly': '0 * * * *', '@daily': '0 0 * * *', '@weekly': '0 0 * * 0', '@monthly': '0 0 1 * *' };
 const BOUNDS: Array<[number, number]> = [
@@ -38,6 +43,9 @@ export interface JobEvery {
   readonly eitherDay: boolean;
   /** Read on each tenant's zone (`timezone: 'tenant'`): `timezone` is then a placeholder that `inZone` replaces. */
   readonly tenantZone?: true;
+  /** Each tenant's own expression, off this column (`every: { column, default }`): `'tenant.<column>'` or
+   * `'<resource>.<column>'`. The fields are then the default's, kept for a tenant whose value does not parse. */
+  readonly column?: string;
 }
 
 /** The same `every`, read on one zone's wall clock: a tenant-zone job's slots for the tenants in that zone. */

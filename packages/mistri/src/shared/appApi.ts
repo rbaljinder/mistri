@@ -1,7 +1,7 @@
 /** Draft integration exposure parser. Not activated by the App parse front yet.
  * Exposure narrows existing authority; catalog and command-registration checks
  * are separate and must pass before any operation becomes publishable. */
-import { homeSourceOf, ownSourceNames, type AppDef } from './appModel.js';
+import { homeSourceOf, ownSourceNames, type AppDef, type AppRoleGrant } from './appModel.js';
 import { RESERVED_NAMES, VIEW_KEY } from '@mistriwork/engine/shared/model.js';
 import { parseExposedCommandReference, type AppCommandReference, type AppFormCommandReference } from './command.js';
 import { sameData } from './authoredData.js';
@@ -48,6 +48,14 @@ export interface AppApiDef {
    * `fk.column` path) holding that key, or `true` for a resource the scope
    * leaves as the grants have it. A resource left out reads nothing. */
   scopes?: Record<string, ApiScopeDef>;
+  /** The service roles a tenant's administrator may hand to a program in a
+   * tenant service token (tenant Apps only), and the name its writes are
+   * attributed to. A role here is `service: true`: no person holds it. */
+  service?: ApiServiceDef;
+}
+interface ApiServiceDef {
+  roles: string[];
+  label: string;
 }
 export interface ApiScopeDef {
   key: string;
@@ -89,7 +97,7 @@ export function composeAppApi(
         at = `${where}, ${by}`;
       const raw = record(feature.api, at);
       for (const key of Object.keys(raw)) {
-        if (['version', 'roles', 'description', 'publicSpec', 'network', 'scopes'].includes(key))
+        if (['version', 'roles', 'description', 'publicSpec', 'network', 'scopes', 'service'].includes(key))
           fail(at, `"${key}" belongs to the root App only, even when identical`);
         if (!['resources', 'views', 'commands', 'events'].includes(key)) fail(at, `unknown property "${key}"`);
       }
@@ -104,6 +112,7 @@ export function composeAppApi(
   credit(apiAuthorityKey('publicSpec'), 'the App');
   if (rootApi.network) credit(apiAuthorityKey('network'), 'the App');
   rootApi.roles.forEach((role) => credit(apiAuthorityKey('role', role), 'the App'));
+  rootApi.service?.roles.forEach((role) => credit(apiAuthorityKey('serviceRole', role), 'the App'));
   const resources: Record<string, ApiResourceExposure> = {};
   const views = new Map<string, ApiViewExposure>(),
     commands = new Map<string, ApiCommandExposure>();
@@ -189,7 +198,19 @@ const MAX_NAME = 128,
   MAX_PATH = 512,
   MAX_TEXT = 2000;
 const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const ROOT_KEYS = ['version', 'roles', 'publicSpec', 'network', 'description', 'resources', 'views', 'commands', 'events', 'scopes'];
+const ROOT_KEYS = [
+  'version',
+  'roles',
+  'publicSpec',
+  'network',
+  'description',
+  'resources',
+  'views',
+  'commands',
+  'events',
+  'scopes',
+  'service',
+];
 const MAX_SCOPES = 16;
 const EXPOSURE_KEYS = ['fields', 'filters', 'sorts', 'description', 'create', 'update', 'delete'];
 const WRITE_KEYS = new Set(['actions']);
@@ -327,6 +348,7 @@ export function parseAppApi(raw: unknown, declaredRoles: readonly string[], wher
           return name;
         });
   const scopes = input.scopes === undefined ? undefined : parseScopes(input.scopes, `${where}.scopes`);
+  const service = input.service === undefined ? undefined : parseService(input.service, declaredRoles, `${where}.service`);
   if (new Set(views.map((view) => view.view)).size !== views.length) return fail(where, 'duplicate view exposure');
   if (new Set(commands.map((entry) => entry.command.id)).size !== commands.length) return fail(where, 'duplicate command exposure');
   return {
@@ -340,7 +362,74 @@ export function parseAppApi(raw: unknown, declaredRoles: readonly string[], wher
     events,
     ...(input.description === undefined ? {} : { description: prose(input.description, `${where}.description`) }),
     ...(scopes ? { scopes } : {}),
+    ...(service ? { service } : {}),
   };
+}
+
+/* Shape only: whether each role is `service: true` and whether the App is a
+   tenant App are the role definitions' question (apiServiceProblems). */
+function parseService(raw: unknown, declaredRoles: readonly string[], where: string): ApiServiceDef {
+  const entry = record(raw, where, ['roles', 'label']);
+  const roles = strings(entry.roles, `${where}.roles`, MAX_ROLES, (role, at) => {
+    if (typeof role !== 'string' || !declaredRoles.includes(role)) return fail(at, 'role is not declared by the App');
+    return role;
+  });
+  if (!roles.length) return fail(where, 'roles must not be empty');
+  // Required: it is the name a tenant's audit shows for every write the token makes.
+  if (entry.label === undefined) return fail(where, 'label names the program in the audit; give one, such as "Device bridge"');
+  return { roles, label: prose(entry.label, `${where}.label`) };
+}
+
+/** The grammar of a service token's subject, which is its role (apiTokenScope.ts). */
+const SERVICE_SUBJECT = /^[a-z][a-z0-9_-]{0,62}$/;
+
+/** Every role an App API token can carry: a member's (`api.roles`) and a
+ * tenant service token's (`api.service.roles`). Which of them a given token
+ * may hold is the scope's question (apiTokenScope.ts); a catalog lists each. */
+export function apiTokenRoles(api: Pick<AppApiDef, 'roles' | 'service'>): string[] {
+  return [...new Set([...api.roles, ...(api.service?.roles ?? [])])];
+}
+
+/** What is wrong with the App's `api.service`, each with its check code. A
+ * service token is bound to one tenant, so only a tenant App can issue one;
+ * its roles are ones no person holds, so a token can never carry a member's. */
+export function apiServiceProblems(
+  api: AppApiDef | undefined,
+  auth: { rows?: string; roles?: Readonly<Record<string, Pick<AppRoleGrant, 'read' | 'service' | 'commands'>>> } | undefined,
+  where = 'api',
+): string[] {
+  if (!api?.service) return [];
+  if (auth?.rows !== 'tenant')
+    return [
+      `${where}.service: a service token is bound to one tenant, and this App has no tenants [api-service-tenant]. Give the program an App API token of a role in api.roles instead.`,
+    ];
+  const exposed = new Set(api.commands.map((entry) => entry.command.id));
+  const problems: string[] = [];
+  for (const role of api.service.roles) {
+    const grant = auth.roles?.[role];
+    /* The role is the token's subject, which the token store holds to a lowercase grammar: a role it cannot name would
+       be declared, checked and offered in Settings, then refused when an administrator tried to issue it. */
+    if (!SERVICE_SUBJECT.test(role)) {
+      problems.push(
+        `${where}.service.roles: "${role}" cannot name a service token's subject, which is a lowercase letter then up to 62 lowercase letters, digits, "_" or "-" [api-service-role]. Rename the role, such as "${role.toLowerCase().replace(/[^a-z0-9_-]/g, '_')}".`,
+      );
+      continue;
+    }
+    if (grant?.service !== true) {
+      problems.push(
+        `${where}.service.roles: "${role}" is not a service role, so a person could hold what the token holds [api-service-role]. Declare auth.roles.${role}.service: true, or name a service role.`,
+      );
+      continue;
+    }
+    /* A token whose role reads nothing and runs no exposed command would be issued, held and audited for nothing: the
+       first request it made would be refused, which reads as a broken token rather than a role with no grants. */
+    const reads = grant.read === true || (Array.isArray(grant.read) && grant.read.length > 0);
+    if (!reads && !(grant.commands ?? []).some((command) => exposed.has(command)))
+      problems.push(
+        `${where}.service.roles: "${role}" reads no table and runs no command in api.commands, so its token could do nothing [api-service-unreachable]. Grant the role a read, or expose one of its commands in api.commands.`,
+      );
+  }
+  return problems;
 }
 
 /* Shape only: whether the resources, columns and types line up is the checked

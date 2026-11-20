@@ -8,7 +8,11 @@
  * - A callback that fails lets the snapshot go unfenced and is denied; a database that fails inside the fence's
  *   message is the database's fault (503), never an answer.
  * - A membership revoked while the request reads — the inbox's store read on the shared snapshot included — denies
- *   the request at the fence.
+ *   the request at the fence, the fence that left with a declared last wave (`lastWave`) while that wave was still
+ *   blocked included: its snapshot begins after the wave's reads have finished.
+ * - After the last wave, a read asked is refused and the request denied, even where its work caught the refusal; a
+ *   read that fails in the last wave is denied unfenced; and a fence that left on an attestation replaced since is
+ *   no fence, so the request is fenced again (assertCurrent).
  * - A context opened inside a bounded one is refused: its own fence would wait on a second reader beside the one
  *   the first snapshot holds.
  * - A whole snapshot begun on an attestation another snapshot replaced since is asked again with the catalog
@@ -33,7 +37,7 @@ import { createTenantReadRuntime, withBoundedReads } from '../packages/mistri/sr
 import type { TenantReadSource } from '../packages/mistri/src/server/tenant/tenantReadSource.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { liveSkip } from './live.js';
-import { dropDedicatedPostgresDatabase, openTenantEngine, type TenantEngine } from './support/tenantDialects.js';
+import { dropDedicatedPostgresDatabase, openTenantEngine, pgClient, type TenantEngine } from './support/tenantDialects.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 const DATABASE = `bounded_reads_${randomUUID().replaceAll('-', '')}`;
@@ -106,6 +110,15 @@ function wire(
     },
   );
   return sent;
+}
+/* The pid of the one backend waiting on a lock in the fixture's database, once it is waiting. */
+async function blockedOnLock(engine: TenantEngine): Promise<number> {
+  for (let i = 0; i < 500; i++) {
+    const waiting = await engine.all(`SELECT pid FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`);
+    if (waiting.length) return waiting[0]!.pid as number;
+    await delay(10);
+  }
+  throw new Error('no read waited on the lock');
 }
 const finishes = (sent: readonly Sent[]) => sent.filter((statement) => statement.text.startsWith('COMMIT; BEGIN'));
 /* The lease the context's reads ran on: its first read of the table, never a snapshot's LOCK of it. */
@@ -374,6 +387,155 @@ describe('bounded tenant reads on PostgreSQL', { skip: liveSkip('postgres', LIVE
     const notices = sent.find((statement) => /inbox_notice/.test(statement.text) && /ORDER BY id DESC/.test(statement.text))!;
     assert.equal(notices.lease, shared, 'the inbox read joined the request snapshot');
     assert.equal(finishes(sent).length, 1, 'the fence rode the snapshot end, and refused');
+  });
+
+  test('a membership revoked while the last wave is blocked is denied by the fence that left behind it', async (t) => {
+    const f = await fixture(t);
+    await f.runtime.withContext(request, ['north'], ({ data }) => data.query(items));
+    await f.source.readInbox(f.inbox); // the store attested: its read is one statement now
+    const sent = wire(t);
+    // The store read waits on a lock another connection holds, so the fence is sent before the revocation commits.
+    const holder = await pgClient(f.engine.url);
+    t.after(() => holder.end().catch(() => {}));
+    await holder.query('BEGIN');
+    await holder.query('LOCK TABLE mistri.inbox_notice IN ACCESS EXCLUSIVE MODE');
+    const pending = withBoundedReads(() =>
+      f.runtime.withContext(request, ['north'], async ({ data, lastWave }) => {
+        const listed = await data.query(items);
+        lastWave!();
+        return { names: f.names(listed), notices: await f.source.readInbox(f.inbox) };
+      }),
+    );
+    void pending.catch(() => {});
+    await blockedOnLock(f.engine);
+    await delay(20);
+    assert.equal(finishes(sent).length, 1, 'the fence left while the read it follows was still blocked');
+    await f.revoke();
+    await holder.query('COMMIT');
+    await assert.rejects(pending, denied);
+    const shared = readLease(sent);
+    const notices = sent.findIndex((statement) => /inbox_notice/.test(statement.text) && /ORDER BY id DESC/.test(statement.text));
+    const fence = sent.findIndex((statement) => statement.text.startsWith('COMMIT; BEGIN'));
+    assert.equal(sent[notices]!.lease, shared, 'the store read joined the request snapshot');
+    assert.equal(sent[fence]!.lease, shared, 'the fence ends that snapshot');
+    assert.ok(fence > notices, 'the fence was sent behind the read');
+  });
+
+  test('a bounded read asked after the last wave is refused, and the request with it', async (t) => {
+    const f = await fixture(t);
+    await f.runtime.withContext(request, ['north'], ({ data }) => data.query(items));
+    await f.source.readInbox(f.inbox);
+    const sent = wire(t);
+    let late: unknown;
+    let reads = 0;
+    /* The work catches the refusal and answers anyway: an answer built past what the fence proved still fails closed.
+       A store read (the inbox's) asks the source directly, beside the context's own reads, so the source refuses it. */
+    await assert.rejects(
+      withBoundedReads(() =>
+        f.runtime.withContext(request, ['north'], async ({ data, lastWave }) => {
+          lastWave!();
+          const listed = await data.query(items);
+          reads = sent.length;
+          try {
+            await f.source.readInbox(f.inbox);
+          } catch (error) {
+            late = error;
+          }
+          return f.names(listed);
+        }),
+      ),
+      denied,
+    );
+    assert.ok(late instanceof TenantContextError, String(late));
+    assert.equal(finishes(sent).length, 1, 'the fence left with the one wave');
+    assert.ok(!sent.slice(reads).some((statement) => /inbox_notice/.test(statement.text)), 'the late read asked the database nothing');
+    // A route that keeps to its last wave is answered, on one snapshot ended by its fence.
+    sent.length = 0;
+    const kept = await withBoundedReads(() =>
+      f.runtime.withContext(request, ['north'], async ({ data, lastWave }) => {
+        lastWave!();
+        const [listed, counted] = await Promise.all([data.query(items), data.count('item')]);
+        return { names: f.names(listed), counted };
+      }),
+    );
+    assert.deepEqual({ ...kept }, { names: ['One', 'Three'], counted: 2 });
+    assert.equal(finishes(sent).length, 1);
+    assert.equal(finishes(sent)[0]!.lease, readLease(sent));
+  });
+
+  test('a read that fails in the last wave is denied unfenced, the fence behind it notwithstanding', async (t) => {
+    const f = await fixture(t);
+    await f.runtime.withContext(request, ['north'], ({ data }) => data.query(items));
+    await f.source.readInbox(f.inbox);
+    const sent = wire(t);
+    const holder = await pgClient(f.engine.url);
+    t.after(() => holder.end().catch(() => {}));
+    await holder.query('BEGIN');
+    await holder.query('LOCK TABLE mistri.inbox_notice IN ACCESS EXCLUSIVE MODE');
+    const pending = withBoundedReads(() =>
+      f.runtime.withContext(request, ['north'], async ({ data, lastWave }) => {
+        const listed = await data.query(items);
+        lastWave!();
+        return { names: f.names(listed), notices: await f.source.readInbox(f.inbox) };
+      }),
+    );
+    void pending.catch(() => {});
+    // The read fails on the server: its transaction aborts, and the fence's COMMIT behind it rolls back.
+    const pid = await blockedOnLock(f.engine);
+    await delay(20);
+    assert.equal(finishes(sent).length, 1, 'the fence was already on its way');
+    await f.engine.exec('SELECT pg_cancel_backend(?)', [pid]);
+    await holder.query('COMMIT');
+    await assert.rejects(pending, (error: unknown) => {
+      assert.ok(error instanceof TenantContextError || error instanceof TenantUnavailableError, String(error));
+      return true;
+    });
+    // Its connection was left clean: the next bounded request is answered.
+    assert.deepEqual(
+      await withBoundedReads(() =>
+        f.runtime.withContext(request, ['north'], async ({ data, lastWave }) => {
+          lastWave!();
+          return f.names(await data.query(items));
+        }),
+      ),
+      ['One', 'Three'],
+    );
+  });
+
+  test('a fence that left on an attestation replaced since falls back to assertCurrent', async (t) => {
+    const trustFor = 1500;
+    const f = await fixture(t, trustFor);
+    await f.runtime.withContext(request, ['north'], ({ data }) => data.query(items));
+    const sent = wire(t);
+    const read = gate(),
+      replaced = gate();
+    // Outside the bounded request's async context: the attestation lapses, the catalog moves, another context
+    // attests it anew, and the member is revoked — all after the riding fence answered that the membership held.
+    const meanwhile = (async () => {
+      await read.promise;
+      await delay(trustFor + 100);
+      await f.moveCatalog();
+      assert.deepEqual(await f.runtime.withContext(request, ['north'], async ({ data }) => f.names(await data.query(items))), [
+        'One',
+        'Three',
+      ]);
+      await f.revoke();
+      replaced.release();
+    })();
+    await assert.rejects(
+      withBoundedReads(() =>
+        f.runtime.withContext(request, ['north'], async ({ data, lastWave }) => {
+          lastWave!();
+          const listed = await data.query(items);
+          read.release();
+          await replaced.promise;
+          return f.names(listed);
+        }),
+      ),
+      denied,
+    );
+    await meanwhile;
+    assert.equal(finishes(sent).length, 1, 'the fence rode the last wave, and was not heard as one');
   });
 
   test('a context opened inside a bounded one is refused; one after it is not', async (t) => {

@@ -129,7 +129,7 @@ export function postgresAppMcpCommands(owner: Awaited<ReturnType<typeof createPo
 /** A tenant App's one owner, for reads and commands alike: it hands its
  * answer over through `send`, after its own final token check, on either
  * engine (SQLite on its stack, PostgreSQL inside the native handoff). */
-export function tenantAppMcpReads(owner: Awaited<ReturnType<typeof createTenantApiOwner>>): Deliver {
+export function tenantAppMcpReads(owner: Omit<Awaited<ReturnType<typeof createTenantApiOwner>>, 'serviceLive'>): Deliver {
   return (credential, request, _signal, write) =>
     withReadRoute('mcp', async () => {
       const send = (answer: Answer) => write(answer);
@@ -141,7 +141,7 @@ export function tenantAppMcpReads(owner: Awaited<ReturnType<typeof createTenantA
     });
 }
 
-export function tenantAppMcpCommands(owner: Awaited<ReturnType<typeof createTenantApiOwner>>): CommandDeliver {
+export function tenantAppMcpCommands(owner: Omit<Awaited<ReturnType<typeof createTenantApiOwner>>, 'serviceLive'>): CommandDeliver {
   /* A command's own reads of an audited resource come by the same door as the transport (server/readAudit.ts). */
   return (credential, request, signal, write) =>
     withReadRoute('mcp', async () => {

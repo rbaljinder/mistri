@@ -28,7 +28,7 @@ import { existsSync } from 'node:fs';
 import { readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { Registry, redact } from '@mistriwork/engine/server/connections.js';
-import { presentationOf } from '../cli/apps.js';
+import { deploymentAuthOf, presentationOf } from '../cli/apps.js';
 import { appRoutes, appThemeProblems, besideCommands, loadApp, loadAppCommands, saidByMessage, type LoadedApp } from '../app/apps.js';
 import { BUILD_MANIFEST } from '../app/appBuild.js';
 import { authorityLockProblem } from '../app/authorityLock.js';
@@ -1166,12 +1166,20 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     } catch {
       presentation = undefined;
     }
+    // The deployment's sign-in store, likewise: `--deploy` judges the store this deployment opens, not the App's fallback.
+    let deploymentAuth: ReturnType<typeof deploymentAuthOf>;
+    try {
+      deploymentAuth = deploymentAuthOf(config);
+    } catch {
+      deploymentAuth = undefined;
+    }
     const load = async () => {
       loaded = partial = undefined;
       try {
         loaded = await loadApp(appDir, {
           lock: 'report',
           ...(presentation ? { presentation } : {}),
+          ...(deploymentAuth ? { deploymentAuth } : {}),
           // Its own components step names each finding, coded and placed; a refused load would say them once, unplaced.
           componentLint: false,
           ...(opts.appEntry !== undefined ? { entry: opts.appEntry } : {}),
@@ -1291,6 +1299,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     const presented = loaded && presentation?.apps[loaded.app.id];
     if (loaded && presentation && presented)
       write(`  presentation: ${Object.keys(presented).join(', ')} from ${shown(presentation.file ?? 'the config file')}`);
+    // Where it came from, never the store itself: a URL carries a password.
+    if (loaded && deploymentAuth?.apps[loaded.app.id]) write(`  auth.store: from ${shown(deploymentAuth.file ?? 'the config file')}`);
     let routeTableSaid: Array<{ path: string; what: string }> | undefined;
     const steps: Step[] = copy ? [{ name: copy.name ?? 'pending', status: copy.status, detail: copy.detail, lines: copy.lines }] : [];
     if (fixStep) steps.push(fixStep);

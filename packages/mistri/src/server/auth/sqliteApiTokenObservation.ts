@@ -11,6 +11,7 @@ import { apiTokenSecretId, matchesApiTokenSecret } from '../api/apiTokenSecret.j
 import {
   narrowApiTokenScope,
   narrowTenantApiTokenScope,
+  narrowTenantServiceTokenScope,
   observedRowScope,
   scopeOperation,
   type TokenRecord,
@@ -104,11 +105,18 @@ function observeAccountToken(
     const store = createSqliteApiTokenStore(db, { appId: app.id, storeId }, active);
     const stored = store.lookup(id);
     active();
-    if (!stored || stored.record.subject.kind !== 'account' || !matchesApiTokenSecret(app.id, id, rawCredential, stored.digest))
+    /* A service token is a tenant App's alone (api.service): it has no account to read, and its authority is the
+       App's declaration, read now, and the tenant's state, which the tenant runtime reads in the business store. */
+    const service = tenant !== undefined && stored?.record.subject.kind === 'service';
+    if (
+      !stored ||
+      (stored.record.subject.kind !== 'account' && !service) ||
+      !matchesApiTokenSecret(app.id, id, rawCredential, stored.digest)
+    )
       return refuse();
-    const account = readSqliteEligibleAccountRoles(db, stored.record.subject.id);
+    const account = service ? undefined : readSqliteEligibleAccountRoles(db, stored.record.subject.id);
     active();
-    if (!account) return refuse();
+    if (!service && !account) return refuse();
     const record = oauthRecord(db, stored.record, app, input.oauth, now);
     active();
     // A `$scope` token stands while its parent does: read in this transaction, so revoking the parent ends it here.
@@ -117,9 +125,11 @@ function observeAccountToken(
     active();
     const rowScope = observedRowScope(stored.record, app, parent?.record, now);
     const operations = catalog.operations.map((operation) => scopeOperation(operation));
-    const bound = tenant
-      ? narrowTenantApiTokenScope(record, app, { appId: app.id, subject: stored.record.subject, eligible: true }, operations, now)
-      : undefined;
+    const bound = service
+      ? narrowTenantServiceTokenScope(record, app, { appId: app.id, subject: stored.record.subject }, operations, now)
+      : tenant
+        ? narrowTenantApiTokenScope(record, app, { appId: app.id, subject: stored.record.subject, eligible: true }, operations, now)
+        : undefined;
     const scope =
       bound ??
       narrowApiTokenScope(
@@ -129,7 +139,7 @@ function observeAccountToken(
           appId: app.id,
           subject: stored.record.subject,
           eligible: true,
-          roles: account.roles,
+          roles: account!.roles,
         },
         operations,
         now,

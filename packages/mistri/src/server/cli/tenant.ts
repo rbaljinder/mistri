@@ -127,6 +127,7 @@ export async function startTenantServing(
         ...loadOptions,
         ...(loaded.entry ? { entry: loaded.entry } : {}),
         ...(loaded.presentation ? { presentation: loaded.presentation } : {}),
+        ...(loaded.deploymentAuth ? { deploymentAuth: loaded.deploymentAuth } : {}),
         ...(opts.commands ? { commands: opts.commands } : {}),
       });
       if (changed || JSON.stringify(observed) !== JSON.stringify(loaded))
@@ -322,6 +323,7 @@ export async function startTenantServing(
         ...loadOptions,
         ...(loaded.entry ? { entry: loaded.entry } : {}),
         ...(loaded.presentation ? { presentation: loaded.presentation } : {}),
+        ...(loaded.deploymentAuth ? { deploymentAuth: loaded.deploymentAuth } : {}),
         ...(opts.commands ? { commands: opts.commands } : {}),
       });
       const look = lookOnlyChange(current, next, touched);

@@ -15,6 +15,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { LiveKey } from '../../adapters/live/liveChange.js';
 import type { AppDef } from '../../shared/app.js';
+import type { ResourceAccess } from '../app/appAccess.js';
 import { primaryKey } from '@mistriwork/engine/shared/schema.js';
 import type { RowScopeFilter } from '@mistriwork/engine/shared/rowScope.js';
 import { scopeFingerprint, viaClosure, type LiveAuthority, type LiveGrant } from '../live/liveFilter.js';
@@ -24,9 +25,10 @@ import { openLiveStream } from '../live/liveStream.js';
 import { tenantServedSchema } from './tenantServedSchema.js';
 import { tenantLiveRowsOf, type TenantReadContext } from './tenantReadRuntime.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
+import { tenantVisibleFields } from './tenantVisibleFields.js';
 
 /** What leaves a member's context: data only, never a function or the context. */
-interface TenantLiveGrants {
+export interface TenantLiveGrants {
   readonly tenantId: string;
   readonly accountId: string;
   readonly tables: ReadonlyArray<{
@@ -77,6 +79,36 @@ export function tenantLiveGrants(
     });
   }
   return { tenantId, accountId: context.principal.accountId, tables };
+}
+
+/**
+ * A tenant service token's grants (tenantServiceLive.ts): each table its role reads, every row of its tenant in it.
+ * The App's row policies take a member's evidence and do not narrow a service (composeServiceScope), and the hub
+ * already keeps a subscriber to its own tenant's entries, so no scope is left and no probe ever runs. `account` is
+ * what the per-account stream cap counts against: the token, never the role, so each token has its own eight.
+ */
+export function tenantServiceLiveGrants(
+  app: AppDef,
+  ownership: TenantOwnershipSnapshot,
+  access: ResourceAccess,
+  tenantId: string,
+  account: string,
+): TenantLiveGrants {
+  const visible = tenantVisibleFields(ownership, access);
+  const tables: Array<TenantLiveGrants['tables'][number]> = [];
+  for (const table of ownership.schema.tables) {
+    if (!visible.readable.has(table.id) || app.resources?.[table.id]?.live === false) continue;
+    const physical = ownership.resources[table.id];
+    if (physical === undefined || ownership.ownership[table.id] === undefined) continue;
+    tables.push({
+      id: table.id,
+      physical,
+      key: primaryKey(table),
+      columns: [...(visible.fields?.get(table.id)?.read ?? [])],
+      scope: true,
+    });
+  }
+  return { tenantId, accountId: account, tables };
 }
 
 /** A member's authority on the writer's hub, from their grants and a probe on their lease. */

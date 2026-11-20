@@ -21,6 +21,15 @@
  * one atomic observation. The last membership check follows all business
  * work; the token's follows it.
  *
+ * A tenant service token (api.service) binds a tenant and one service role,
+ * not a membership. In step 3 it reads that tenant's anchors instead — an
+ * active tenant on an active platform, read now — and runs through the
+ * deployment's service binding (tenantServiceBinding.ts): its role's grants,
+ * every row of its tenant in each granted table, the anchors fenced to the
+ * reads and to a command's COMMIT, attributed to `service:<role>`. The
+ * tenant is the token's, never the request's. It has no public-form verb, no
+ * prepare and no `$scope`.
+ *
  * A command's answer says only what is known. Refused by the tenant runtime
  * before any work — a revoked, changed or suspended membership — is 403, not
  * applied. A database that could not answer, or a failure whose cause cannot
@@ -33,7 +42,14 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import { isAsyncFunction, isGeneratorFunction, isPromise, isProxy } from 'node:util/types';
 import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
-import { isTenantApp } from '../../shared/app.js';
+import { isTenantApp, resolveAppAccess } from '../../shared/app.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
+import type { ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
+import { AppAccessDenied } from '../app/appAccess.js';
+import { executeBusinessCommand } from '../commands/businessCommandExecution.js';
+import { commandFlagsOnce } from '../commands/commandFlagCapture.js';
+import { serviceActor } from '../jobs/jobAuthorization.js';
+import { parseTenantSelector } from '../tenant/tenantMembership.js';
 import { commandKeyText } from '../../shared/command.js';
 import {
   captureAppAuthRuntime,
@@ -45,10 +61,11 @@ import {
 import { BusinessCommandExecutionError, isBusinessCommandExecutionError } from '../commands/commandErrors.js';
 import { captureTenantEnrollment, type TenantEnrollment } from '../tenant/tenantEnrollment.js';
 import { createTenantApiRequest } from '../tenant/tenantApiRequest.js';
-import { denyTenant, recordRefusalCause, TenantUnavailableError } from '@mistriwork/engine/server/evidence.js';
+import { captureTenantData, denyTenant, recordRefusalCause, TenantUnavailableError } from '@mistriwork/engine/server/evidence.js';
 import { bindTenantDeploymentContext } from '../tenant/tenantDeployment.js';
 import type { TenantMembershipEvidence } from '../tenant/tenantMembership.js';
 import { tenantAuthoringSchema } from '../tenant/tenantVisibleFields.js';
+import { tenantServiceLiveGrants, type TenantLiveGrants } from '../tenant/tenantLiveRoute.js';
 import { readApiApp } from './appApiValidation.js';
 import { checkApiTenantReadCatalog } from './apiTenantReadCatalog.js';
 import type { ReadOperation } from './apiReadCatalog.js';
@@ -75,6 +92,7 @@ type Answer = Readonly<{ status: 200 | 404; body: string }>;
 type Send = (answer: Answer) => void;
 type CommandAnswer = Readonly<{ status: number; headers: Readonly<Record<string, string>>; body: string }>;
 type CommandSend = (answer: CommandAnswer) => void;
+type Outcome = { status: number; headers?: Readonly<Record<string, string>>; value: unknown };
 type Input = { key: string } | { query: string } | { spec: true } | { tools: true };
 const refuse = (code: ConstructorParameters<typeof ApiReadFailure>[0] = 'temporarily_unavailable'): never => {
   throw new ApiReadFailure(code);
@@ -88,6 +106,8 @@ const unserved = (cause: unknown): never => {
 const unknown = (): never => {
   throw new BusinessCommandExecutionError('temporarily_unavailable', 'unknown');
 };
+/** How long a service token's binding holds within one request: its reads or its command, never longer. */
+const SERVICE_LIFETIME_MS = 60_000;
 const callable = (send: unknown) => typeof send === 'function' && !isProxy(send) && !isAsyncFunction(send) && !isGeneratorFunction(send);
 /** The targets a command request named, as the executor spells them. */
 function requestedKeys(captured: object): Set<string> {
@@ -119,7 +139,7 @@ export async function createTenantApiOwner(input: {
 }) {
   let capability: { retire(): unknown } | undefined;
   try {
-    const { enrollment, app: enrolled, ownership, registry } = captureTenantEnrollment(input.enrollment);
+    const { enrollment, app: enrolled, ownership, registry, services, resultReferences } = captureTenantEnrollment(input.enrollment);
     const integers = input.integers;
     if (!['decimal-string', 'number'].includes(integers)) return unserved(`--api-integers must be decimal-string or number.`);
     if (!enrolled.api || !isTenantApp(enrolled)) return unserved('The App declares no api, or is not a tenant App.');
@@ -157,11 +177,35 @@ export async function createTenantApiOwner(input: {
     };
     // The membership the runtime admitted is the one the token binds, at the
     // version it was issued against — not a later one.
-    const bindsTo = (principal: TenantMembershipEvidence, observed: Observation) =>
-      principal.accountId === observed.subject.id &&
-      principal.tenantId === observed.tenant!.tenantId &&
-      principal.membershipId === observed.tenant!.membershipId &&
-      principal.membershipVersion === observed.tenant!.membershipVersion;
+    const bindsTo = (principal: TenantMembershipEvidence, observed: Observation) => {
+      // A service token's binding names no membership, so it binds none.
+      const bound = observed.tenant as Readonly<{ tenantId: string; membershipId?: string; membershipVersion?: string }>;
+      return (
+        bound.membershipId !== undefined &&
+        observed.subject.kind === 'account' &&
+        principal.accountId === observed.subject.id &&
+        principal.tenantId === bound.tenantId &&
+        principal.membershipId === bound.membershipId &&
+        principal.membershipVersion === bound.membershipVersion
+      );
+    };
+    /** A service token (api.service) has no membership to admit: its one role, in its one tenant, read now. The
+     * tenant's anchors are read on every request, so a suspended or deleted tenant (or a retired platform) admits
+     * nothing, and the writer and read source fence those versions as a job's attempt does. */
+    const serviceOf = (observed: Observation) => (observed.subject.kind === 'service' ? observed.subject.id : undefined);
+    const serviceAdmission = async (observed: Observation) => {
+      const role = observed.subject.id;
+      const tenant = parseTenantSelector([observed.tenant!.tenantId]);
+      const anchors = captureTenantData(await services.reader.readServiceAnchors(tenant));
+      if (retired || anchors.platformVersion === null || anchors.tenantVersion === null) return denyTenant();
+      return Object.freeze({
+        role,
+        tenant,
+        roles: Object.freeze([role]),
+        access: resolveAppAccess(enrolled, ownership.schema, [role]),
+        anchors: Object.freeze({ tenantVersion: anchors.tenantVersion, platformVersion: anchors.platformVersion }),
+      });
+    };
     // The token, re-observed each time the tenant runtime asks who is calling:
     // any change to it — revocation, expiry, scope — ends the request there.
     const requestFor = (credential: unknown, observed: Observation) =>
@@ -276,76 +320,100 @@ export async function createTenantApiOwner(input: {
           } catch {
             return refuse('invalid_request');
           }
+          /** The answer over the reads this caller was admitted to; `reader` is who the read audit names. */
+          const answerWith = async (
+            data: Readonly<{ runView?: ScopedReads['runView']; countView?: ScopedReads['countView'] }>,
+            reader: string,
+          ): Promise<Answer> => {
+            if (spec) {
+              // With commands, the composed document; either way narrowed to
+              // what this token may call now, never to request roles.
+              const document = commands
+                ? narrowApiOpenApi(
+                    renderApiOpenApi(enrolled, schema, registry!, evidence, { integers }, { reads: catalog, commands }).document,
+                    observed.operations,
+                  )
+                : narrowApiReadOpenApi(renderApiReadOpenApi(app, schema, { integers }, catalog).document, observed.operations);
+              return { status: 200 as const, body: JSON.stringify(document) };
+            }
+            if (tools) {
+              const roles = [...observed.roles];
+              const listed = previewApiMcpReadTools(
+                app,
+                schema,
+                { integers },
+                { operations: observed.operations.filter((id) => /^(?:item|list|view):/.test(id)), roles },
+                'owner',
+                catalog,
+              ).tools;
+              const runs = commands
+                ? projectApiMcpCommandTools(
+                    enrolled,
+                    schema,
+                    registry!,
+                    evidence,
+                    { integers },
+                    { operations: observed.operations.filter((id) => id.startsWith('command:')), roles },
+                    commands,
+                  ).tools
+                : [];
+              return { status: 200 as const, body: JSON.stringify({ tools: [...listed, ...runs] }) };
+            }
+            const { checked, cursor } = planned!;
+            if (!data.runView) return refuse();
+            const runView = data.runView;
+            /* The reader the read audit names, under the door its transport set (server/readAudit.ts). */
+            const rows = await withReadRoute(currentReadRoute() === 'mcp' ? 'mcp' : 'api', () => runView(checked.view), reader);
+            let count: number | undefined;
+            if (cursor?.plan.count) {
+              if (!data.countView) return refuse();
+              // Bounded in the statement, as on the ordinary owners: past
+              // 10,000 the answer says "more", so no count reads further.
+              count = Math.min(await data.countView(cursor.count, 10001), 10001);
+            }
+            const wire = materializeApiReadResult(checked, rows, count);
+            const status = wire.stage === 'item-read-result' && wire.status === 'not-found' ? (404 as const) : (200 as const);
+            const body = JSON.stringify(
+              wire.stage === 'item-read-result'
+                ? wire.status === 'not-found'
+                  ? { error: { code: 'not_found', message: 'The API request could not be completed.' } }
+                  : wire.item
+                : {
+                    items: wire.items,
+                    next: wire.more ? cursor!.sealNext(wire.boundary) : null,
+                    ...(wire.count ? { count: wire.count } : {}),
+                  },
+            );
+            if (Buffer.byteLength(body) > 8 * 1024 * 1024) return refuse();
+            return { status, body };
+          };
           let answer: Answer;
           try {
-            answer = await deployment.withContext(requestFor(credential, observed), [binding.tenantId], async (context) => {
-              if (!bindsTo(context.principal, observed)) return refuse('forbidden');
-              if (spec) {
-                // With commands, the composed document; either way narrowed to
-                // what this token may call now, never to request roles.
-                const document = commands
-                  ? narrowApiOpenApi(
-                      renderApiOpenApi(enrolled, schema, registry!, evidence, { integers }, { reads: catalog, commands }).document,
-                      observed.operations,
-                    )
-                  : narrowApiReadOpenApi(renderApiReadOpenApi(app, schema, { integers }, catalog).document, observed.operations);
-                return { status: 200 as const, body: JSON.stringify(document) };
+            const service = serviceOf(observed);
+            if (service !== undefined) {
+              // The service's role in its token's tenant, never one the URL names: its grants, every row of that
+              // tenant in each granted table, audited as `service:<role>`.
+              const admitted = await serviceAdmission(observed);
+              const bound = services.bindServiceReads({
+                runAs: service,
+                roles: admitted.roles,
+                grants: admitted.access,
+                tenantId: admitted.tenant,
+                anchors: admitted.anchors,
+                lifetimeMs: SERVICE_LIFETIME_MS,
+                aborted: () => retired,
+              });
+              try {
+                answer = await answerWith(bound.data, `service:${service}`);
+              } finally {
+                bound.release();
               }
-              if (tools) {
-                const roles = [...observed.roles];
-                const listed = previewApiMcpReadTools(
-                  app,
-                  schema,
-                  { integers },
-                  { operations: observed.operations.filter((id) => /^(?:item|list|view):/.test(id)), roles },
-                  'owner',
-                  catalog,
-                ).tools;
-                const runs = commands
-                  ? projectApiMcpCommandTools(
-                      enrolled,
-                      schema,
-                      registry!,
-                      evidence,
-                      { integers },
-                      { operations: observed.operations.filter((id) => id.startsWith('command:')), roles },
-                      commands,
-                    ).tools
-                  : [];
-                return { status: 200 as const, body: JSON.stringify({ tools: [...listed, ...runs] }) };
-              }
-              const { checked, cursor } = planned!;
-              if (!context.data.runView) return refuse();
-              const runView = context.data.runView;
-              /* The token is the reader the read audit names, under the door its transport set (server/readAudit.ts). */
-              const rows = await withReadRoute(
-                currentReadRoute() === 'mcp' ? 'mcp' : 'api',
-                () => runView(checked.view),
-                `api-token:${observed.tokenId}`,
-              );
-              let count: number | undefined;
-              if (cursor?.plan.count) {
-                if (!context.data.countView) return refuse();
-                // Bounded in the statement, as on the ordinary owners: past
-                // 10,000 the answer says "more", so no count reads further.
-                count = Math.min(await context.data.countView(cursor.count, 10001), 10001);
-              }
-              const wire = materializeApiReadResult(checked, rows, count);
-              const status = wire.stage === 'item-read-result' && wire.status === 'not-found' ? (404 as const) : (200 as const);
-              const body = JSON.stringify(
-                wire.stage === 'item-read-result'
-                  ? wire.status === 'not-found'
-                    ? { error: { code: 'not_found', message: 'The API request could not be completed.' } }
-                    : wire.item
-                  : {
-                      items: wire.items,
-                      next: wire.more ? cursor!.sealNext(wire.boundary) : null,
-                      ...(wire.count ? { count: wire.count } : {}),
-                    },
-              );
-              if (Buffer.byteLength(body) > 8 * 1024 * 1024) return refuse();
-              return { status, body };
-            });
+            } else
+              answer = await deployment.withContext(requestFor(credential, observed), [binding.tenantId], async (context) => {
+                if (!bindsTo(context.principal, observed)) return refuse('forbidden');
+                /* The token is the reader the read audit names. */
+                return answerWith(context.data, `api-token:${observed.tokenId}`);
+              });
           } catch (error) {
             // A token that no longer observes is unauthenticated; anything the
             // tenant runtime refused — the membership revoked, suspended,
@@ -466,7 +534,81 @@ export async function createTenantApiOwner(input: {
               };
             }
           };
-          let outcome: { status: number; headers?: Readonly<Record<string, string>>; value: unknown };
+          /** A service token's command: its role in its token's tenant, bound as a job's delivery is — the tenant's
+           * anchors read now and fenced to COMMIT, the role's grant — and attributed to `service:<role>`. */
+          const serviceRun = async (service: string): Promise<Outcome> => {
+            // A public form's verb is the door's, for someone signed out; preparing is a person's screen. Neither is a program's.
+            if (publicForm !== undefined) return { status: 403, value: commandProblem('forbidden', 'not_applied') };
+            if (mode === 'prepare') return { status: REFUSAL_STATUS.invalid_input!, value: commandProblem('invalid_input', 'not_applied') };
+            const admit = async () => {
+              const admitted = await serviceAdmission(observed);
+              return services.bindService({
+                runAs: service,
+                place: 'tenant',
+                roles: admitted.roles,
+                grants: services.validation ? { ...admitted.access, validation: services.validation } : admitted.access,
+                tenantId: admitted.tenant,
+                zone: await services.zoneOf(admitted.tenant),
+                anchors: admitted.anchors,
+                lifetimeMs: SERVICE_LIFETIME_MS,
+                commands: services.registry,
+                aborted: () => retired || signal?.aborted === true,
+                // The one command this request names, with the result references the deployment declares for it.
+                extract: (id) => {
+                  const extract =
+                    id === named && resultReferences && Object.hasOwn(resultReferences, id) ? resultReferences[id] : undefined;
+                  if (typeof extract !== 'function' || isProxy(extract)) return denyTenant();
+                  return extract;
+                },
+              });
+            };
+            let bound: Awaited<ReturnType<typeof admit>>;
+            try {
+              bound = await admit();
+            } catch (error) {
+              // Nothing has run: a tenant that admits nothing is forbidden; a database that could not answer is not.
+              return error instanceof TenantUnavailableError
+                ? { status: 503, value: commandProblem('temporarily_unavailable', 'unknown') }
+                : { status: 403, value: commandProblem('forbidden', 'not_applied') };
+            }
+            const actor = serviceActor(enrolled.id, service, [service]);
+            try {
+              bound.binding.authorize(named, actor);
+              const flags = await commandFlagsOnce(() => bound.captureFlags?.(actor))();
+              const result = await executeBusinessCommand(bound.binding, actor, captured, {
+                ...(signal ? { signal } : {}),
+                entry: door,
+                flags,
+                now: () => appTime(Date.now()),
+              });
+              return projectApiCommandAnswer('execute', input.renderLinks ? await input.renderLinks(result, binding.tenantId) : result);
+            } catch (error) {
+              if (error instanceof AppAccessDenied) return { status: 403, value: commandProblem('forbidden', 'not_applied') };
+              const code = isBusinessCommandExecutionError(error) ? error.code : undefined;
+              if (code && code !== 'temporarily_unavailable' && Object.hasOwn(REFUSAL_STATUS, code)) {
+                const refusal = error as BusinessCommandExecutionError;
+                const key = refusal.key && requestedKeys(captured as object).has(commandKeyText(refusal.key)) ? refusal.key : undefined;
+                return {
+                  status: REFUSAL_STATUS[code]!,
+                  value: commandProblem(code, refusal.outcome, refusal.field, key),
+                  headers: refusalHeaders(code),
+                };
+              }
+              // As for a member: whether the tenant still admits this service says refusal from fault; what ran,
+              // only the runtime's outcome says, and it is never upgraded.
+              const ran = isBusinessCommandExecutionError(error) ? error.outcome : 'unknown';
+              const still = await serviceAdmission(observed).then(
+                () => 'admitted' as const,
+                (failure: unknown) => (failure instanceof TenantUnavailableError ? ('unavailable' as const) : ('refused' as const)),
+              );
+              return still === 'refused'
+                ? { status: 403, value: commandProblem('forbidden', ran) }
+                : { status: 503, value: commandProblem('temporarily_unavailable', 'unknown') };
+            } finally {
+              bound.release();
+            }
+          };
+          let outcome: Outcome;
           // A public form's command, named by this token, takes the door's lane (apiPublicLane.ts).
           const publicForm = apiPublicForm(enrolled, registry!, named);
           if (!observed.operations.includes(`command:${named}`)) {
@@ -478,6 +620,8 @@ export async function createTenantApiOwner(input: {
           } else if (mode === 'recover') {
             // Never the earlier request's outcome: this route cannot see it.
             outcome = { status: 422, value: commandProblem('invalid_input', 'unknown') };
+          } else if (serviceOf(observed) !== undefined) {
+            outcome = await serviceRun(serviceOf(observed)!);
           } else {
             const before = await admission();
             if (before === 'unauthenticated') throw new ApiCommandUnauthenticated();
@@ -559,11 +703,47 @@ export async function createTenantApiOwner(input: {
 
     const readItem = (credential: unknown, operationId: string, key: string, send: Send) => read(credential, operationId, { key }, send);
     // The key is proven readable through this owner's own item read, as the parent token.
-    const mintScope = enrolled.api!.scopes ? createApiScopeMint({ app: enrolled, auth: input.auth, observe, readItem }) : undefined;
+    // A service token is never a parent: a row scope narrows a member's tenant rows, and its child would be no one's.
+    const mintScope = enrolled.api!.scopes
+      ? createApiScopeMint({
+          app: enrolled,
+          auth: input.auth,
+          observe: async (credential) => {
+            const observed = await observe(credential);
+            return serviceOf(observed.observed) === undefined ? observed : refuse('forbidden');
+          },
+          readItem,
+        })
+      : undefined;
+
+    /** A service token's change stream (`/api/live`): its role's grants in its one tenant, as the first answer and
+     * as every 30 s re-check reads them again. A member token has a person's stream on their lease instead. */
+    const serviceLive = (credential: unknown) =>
+      track(
+        (async (): Promise<Readonly<{ actor: string; grants: TenantLiveGrants }>> => {
+          if (retired) return refuse();
+          const { observed } = await observe(credential);
+          const role = serviceOf(observed);
+          if (role === undefined) return refuse('forbidden');
+          let admitted: Awaited<ReturnType<typeof serviceAdmission>>;
+          try {
+            admitted = await serviceAdmission(observed);
+          } catch (error) {
+            return refuse(error instanceof TenantUnavailableError ? 'temporarily_unavailable' : 'forbidden');
+          }
+          // The token is the stream's account: each one holds its own eight streams.
+          const account = `api-token:${observed.tokenId}`;
+          return Object.freeze({
+            actor: `service:${role}`,
+            grants: tenantServiceLiveGrants(enrolled, ownership, admitted.access, admitted.tenant, account),
+          });
+        })(),
+      );
 
     return Object.freeze({
       readItem,
       ...(mintScope ? { mintScope } : {}),
+      serviceLive,
       readList: (credential: unknown, operationId: string, query: string, send: Send) => read(credential, operationId, { query }, send),
       /** The `$openapi` document — composed when the App exposes commands — narrowed per token. */
       readSpec: (credential: unknown, send: Send) => read(credential, '$openapi', { spec: true }, send),

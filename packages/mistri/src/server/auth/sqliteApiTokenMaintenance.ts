@@ -12,7 +12,7 @@ import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { assertSqliteAuthTokenLayout } from '../../adapters/auth/sqliteAuthStoreLayout.js';
 import { assertApiTokenAppId, assertApiTokenSecretId } from '../api/apiTokenSecret.js';
-import { issueAccountToken, type IssueCatalog } from './apiTokenIssuance.js';
+import { issueAccountToken, issueServiceToken, type IssueCatalog } from './apiTokenIssuance.js';
 import { apiReadTokenCatalog } from '../api/apiEventOperations.js';
 import { assertAuthStoreSeparation, type AuthStoreExclusion } from './authStoreSeparation.js';
 import { readSqliteEligibleAccountRoles } from './nativeAccountObservation.js';
@@ -165,6 +165,69 @@ export function issueSqliteApiCommandToken(
  * after this read leaves the token without authority, never with more. */
 export function issueSqliteApiTenantToken(existingPath: string, app: AppDef, catalog: IssueCatalog, rawOptions: IssueOptions, now: number) {
   return issueSqliteAccountToken(existingPath, app, undefined, rawOptions, now, catalog);
+}
+
+interface ServiceIssueOptions {
+  storeId: string;
+  exclusions: readonly AuthStoreExclusion[];
+  /** An `api.service.roles` entry: the token's subject and its one role. */
+  role: string;
+  tenantId: string;
+  actorId: string;
+  label: string;
+  expiresAt: number;
+  operations?: readonly string[];
+  tokenId?: string;
+}
+
+/** A tenant service token. The caller read the tenant active in the business
+ * store and supplies the tenant catalog; only the actor's account is judged
+ * here, since no account holds a service role. */
+export function issueSqliteApiServiceToken(
+  existingPath: string,
+  app: AppDef,
+  catalog: IssueCatalog,
+  rawOptions: ServiceIssueOptions,
+  now: number,
+) {
+  try {
+    const options = exact(
+      snapshot(rawOptions, 131072).value,
+      ['storeId', 'exclusions', 'role', 'tenantId', 'actorId', 'label', 'expiresAt'],
+      ['operations', 'tokenId'],
+    );
+    const binding = owner({ appId: app.id, storeId: options.storeId, exclusions: options.exclusions });
+    const clock = instant(now);
+    const issue = issueServiceToken({
+      app,
+      appId: binding.appId,
+      catalog,
+      tokenId: Object.hasOwn(options, 'tokenId') ? (options.tokenId as string) : randomUUID(),
+      role: options.role as string,
+      tenantId: options.tenantId as string,
+      actorId: options.actorId as string,
+      label: options.label as string,
+      expiresAt: options.expiresAt as number,
+      createdAt: clock,
+      ...(Object.hasOwn(options, 'operations') ? { operations: options.operations as string[] } : {}),
+    });
+    const { record } = issue;
+    return transaction(existingPath, binding, (db, store, current) => {
+      const eligible = () => {
+        current();
+        const actor = readSqliteEligibleAccountRoles(db, record.createdBy);
+        current();
+        issue.admit(actor, clock);
+      };
+      eligible();
+      const minted = issue.mint();
+      store.insert(minted.stored);
+      eligible();
+      return minted.result;
+    });
+  } catch {
+    return refuse();
+  }
 }
 
 function issueSqliteAccountToken(

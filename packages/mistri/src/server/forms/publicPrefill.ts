@@ -5,7 +5,7 @@
  * sent as a referrer and shared by hand. So a public form is prefilled only
  * from what the public grant already opens to everyone — a car's stock
  * number, a post's id — and only into the inputs the form names
- * `prefillable`; anything else is refused at load, by name. The form still
+ * `prefillable` or `given`; anything else is refused at load, by name. The form still
  * treats what it is given as typed: seen, changeable, checked by the command.
  *
  * A custom component's `openForm(view, prefill)` is runtime and escapes this
@@ -45,8 +45,8 @@ export function publicPrefillProblems(
         const form = view as AppFormView;
         for (const [input, path] of Object.entries(action.prefill)) {
           const said = `the headline's "${action.label}" fills "${input}" of the public form "${action.view}"`;
-          if (!form.prefillable?.includes(input)) {
-            found.push({ page, problem: `${said}, which the form does not name prefillable.` });
+          if (!form.prefillable?.includes(input) && !form.given?.includes(input)) {
+            found.push({ page, problem: `${said}, which the form does not name prefillable or given.` });
             continue;
           }
           // Each hop of the path, from the page's table: every column read must be one the public reads.

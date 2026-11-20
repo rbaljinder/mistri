@@ -162,6 +162,7 @@ const view = {
 const spec = { id: 'tasks', ...view };
 
 const { AppList } = await import('./AppList.js');
+const { ListNavigationProvider } = await import('./listNavigation.js');
 const { installShell } = await import('../shellMode.js');
 const { PHONE_QUERY, RAIL_QUERY, RECORDS_QUERY } = await import('./useMediaQuery.js');
 const { appListQuery, appCrumbLabel, appListFor, currentNavIndex, defaultListShow, litTabFor, visibleQuestion, wholeQuery } =
@@ -446,6 +447,35 @@ describe('the page', () => {
     expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Filter Tasks')).not.toBeVisible();
     expect(screen.getByRole('searchbox', { name: 'Filter by Title' })).toBeVisible();
+  });
+
+  /* A list's head link (a field report): drawn in the head beside the views menu, with rows or without. The server
+     leaves it out for a reader the target is not served to (appPayload.ts), and then the head draws nothing. */
+  test("a list's head link is drawn where the server served it, and not where it did not", () => {
+    const navigate = vi.fn(() => ({ href: '/tasks/planner?tab=week' }));
+    const at = (link?: { label: string; view: string; tab?: string }) => {
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      return render(
+        <QueryClientProvider client={client}>
+          <ListNavigationProvider navigate={navigate}>
+            <AppList
+              entry={{ table: 'task', query: `task ${PLUMBING}` }}
+              spec={{ ...spec, ...(link ? { link } : {}) }}
+              navigate={vi.fn()}
+            />
+          </ListNavigationProvider>
+        </QueryClientProvider>,
+      );
+    };
+    at({ label: 'Plan the week', view: 'planner', tab: 'week' });
+    const link = screen.getByRole('link', { name: 'Plan the week' });
+    expect(link).toHaveAttribute('href', '/tasks/planner?tab=week');
+    expect(link.closest('.applist-head-tools')).not.toBeNull();
+    expect(navigate).toHaveBeenCalledWith('planner', 'reset', { tab: 'week' });
+    cleanup();
+    at();
+    expect(screen.queryByRole('link', { name: 'Plan the week' })).not.toBeInTheDocument();
+    expect(document.querySelector('.applist-link')).toBeNull();
   });
 
   test('a record named by a template is searched by its Name, never by $label', () => {

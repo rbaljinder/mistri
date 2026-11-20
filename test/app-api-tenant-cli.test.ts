@@ -21,6 +21,9 @@ import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
 import { migratePostgresAuthStore } from '../packages/mistri/src/adapters/auth/postgresAuthStore.js';
 import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { migratePostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
+import { COMMAND_JOURNAL_TABLES } from '../packages/mistri/src/adapters/commands/commandJournalSchema.js';
+import { provisionPostgresLiveChange } from '../packages/mistri/src/adapters/live/postgresLiveChange.js';
+import { provisionSqliteLiveChange } from '../packages/mistri/src/adapters/live/sqliteLiveChange.js';
 import { buildApp } from '../packages/mistri/src/server/build/build.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth } from '../packages/mistri/src/server/auth/auth.js';
@@ -53,6 +56,7 @@ import {
   writeDepotApp,
 } from './appApiCli.js';
 import { liveSkip } from './live.js';
+import { postgresRuntimeSql } from './support/runtimeSql.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 interface Client extends PgQuery {
@@ -66,7 +70,15 @@ interface Client extends PgQuery {
 async function depot(
   t: TestContext,
   dialect: 'sqlite' | 'postgres',
-  options: { tokens?: boolean; commands?: boolean; notes?: boolean; api?: Record<string, unknown> } = {},
+  options: {
+    tokens?: boolean;
+    commands?: boolean;
+    notes?: boolean;
+    api?: Record<string, unknown>;
+    roles?: Record<string, unknown>;
+    /** Ask for live sync, and provision its store in the business database. */
+    live?: boolean;
+  } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), `tw-tenant-cli-${dialect}-`));
   const cleanup: Array<() => unknown> = [() => rmSync(directory, { recursive: true, force: true })];
@@ -82,6 +94,10 @@ async function depot(
   let accounts: (ids: string[]) => Promise<void>;
   let outage: (down: boolean) => Promise<void>;
   let version: (id: string) => Promise<number>;
+  // Each receipt's tenant, actor kind and actor, by idempotency key: a service token's writes are `service:<role>`'s.
+  let actors: () => Promise<string[]>;
+  const ACTORS = `SELECT tenant_id, actor_kind, actor_id FROM "${COMMAND_JOURNAL_TABLES.receipt}" ORDER BY idempotency_key`;
+  const actor = (row: Record<string, unknown>) => `${String(row.tenant_id)} ${String(row.actor_kind)} ${String(row.actor_id)}`;
   if (dialect === 'sqlite') {
     business = join(directory, 'business.db');
     authStore = join(directory, 'auth.db');
@@ -93,6 +109,8 @@ async function depot(
     if (options.notes) db.exec(DEPOT_NOTE_TABLE((notes = 'physical_note'), physical));
     migrateSqliteCommandJournal(business);
     provisionSqliteTenantStore(business, store);
+    if (options.live) provisionSqliteLiveChange(business);
+    actors = async () => db.prepare(ACTORS).all().map(actor);
     maintenance = async (run) => {
       const operations = new TransactionOperations();
       db.exec('BEGIN IMMEDIATE');
@@ -158,6 +176,8 @@ async function depot(
     }
     await migratePostgresCommandJournal(business);
     await migratePostgresTenantStore(business, store);
+    if (options.live) await provisionPostgresLiveChange(business);
+    actors = async () => (await client.query(postgresRuntimeSql(ACTORS))).rows.map(actor);
     maintenance = async (run) => {
       const operations = new TransactionOperations();
       await client.query('BEGIN');
@@ -202,6 +222,8 @@ async function depot(
     };
   }
   await maintenance(async (admin) => {
+    // An active platform row, as a service's anchors (a service token's, a job's) require.
+    await admin.putPlatform({ status: 'active', expectedVersion: null });
     for (const tenantId of ['north', 'south']) await admin.putTenant({ tenantId, status: 'active', expectedVersion: null });
     for (const [account, tenantId] of [
       ['alice', 'north'],
@@ -225,6 +247,8 @@ async function depot(
     commands: options.commands !== false,
     ...(notes ? { notes } : {}),
     ...(options.api ? { api: options.api } : {}),
+    ...(options.roles ? { roles: options.roles } : {}),
+    ...(options.live ? { live: true } : {}),
   });
   writeFileSync(join(written.appDir, 'authority.lock'), (await loadApp(written.appDir, { lock: 'report' })).authority!.report);
   if (dialect === 'sqlite') {
@@ -275,7 +299,26 @@ async function depot(
     const revoked = await tokenCli(['revoke', ...common, '--token-id', tokenId, '--expected-version', '1', '--actor', 'operator']);
     assert.equal(revoked.code, 0, revoked.err);
   };
-  return { ...written, commands: written.commands!, issue, revoke, maintenance, outage, version };
+  /** `issue --service`: a tenant service token of `role` in `tenant`, the CLI's answer as it gave it. */
+  const service = (role: string, tenant: string) =>
+    tokenCli([
+      'issue',
+      ...common,
+      '--service',
+      role,
+      '--tenant',
+      tenant,
+      '--policy',
+      written.policy,
+      ...(written.commands ? ['--commands', written.commands] : []),
+      '--actor',
+      'operator',
+      '--label',
+      'Ledger sync',
+      '--expires-at',
+      new Date(Date.now() + 600000).toISOString(),
+    ]);
+  return { ...written, commands: written.commands!, issue, revoke, service, maintenance, outage, version, actors };
 }
 
 for (const { dialect, skip } of [
@@ -801,6 +844,171 @@ for (const { dialect, skip } of [
       assert.equal((await annotate(alice.token, 'n-4', 'north-2')).status, 200);
       assert.deepEqual(await notes(alice.token), ['n-1', 'n-4']);
       assert.deepEqual(await notes(child), ['n-1']);
+    },
+  );
+}
+
+// A tenant service token (`api.service`): a program's credential, bound to one tenant and one service role, issued with
+// the CLI. It reads every row of its tenant in the tables its role grants and none of another's, runs the role's
+// commands as `service:<role>`, follows the tenant's changes on `/api/live`, and is observed again on every request.
+const SERVICE_API = {
+  version: 1,
+  roles: ['member'],
+  resources: {
+    item: { fields: ['id', 'version', 'name'], sorts: ['id'] },
+    note: { fields: ['id', 'item_id', 'body'], sorts: ['id'] },
+  },
+  commands: ['touch', 'stock', 'annotate'],
+  service: { roles: ['sync'], label: 'Ledger sync' },
+};
+for (const { dialect, skip } of [
+  { dialect: 'sqlite' as const, skip: false as const },
+  { dialect: 'postgres' as const, skip: liveSkip('postgres', LIVE) },
+]) {
+  test(
+    `a tenant service token on ${dialect}: its tenant's rows and granted commands as service:<role>, its live stream, and refused once suspended or revoked`,
+    { skip, timeout: 600000 },
+    async (t) => {
+      const f = await depot(t, dialect, {
+        notes: true,
+        live: true,
+        api: SERVICE_API,
+        roles: { sync: { service: true, read: ['item'], commands: ['touch'] } },
+      });
+      // Only a role `api.service` lists is a service's: a member's role is refused, and no token is issued.
+      const member = await f.service('member', 'north');
+      assert.notEqual(member.code, 0);
+      assert.match(member.err, /api\.service\.roles/);
+      // Nor while @platform is not active: such a token would be refused on every request with nothing saying why.
+      await f.maintenance((admin) => admin.putPlatform({ status: 'suspended', expectedVersion: '1' }));
+      const platformless = await f.service('sync', 'north');
+      assert.notEqual(platformless.code, 0);
+      assert.match(platformless.err, /The platform row \(@platform\) must exist and be active: setPlatformStatus creates it\./);
+      await f.maintenance((admin) => admin.putPlatform({ status: 'active', expectedVersion: '2' }));
+      const issued = await f.service('sync', 'north');
+      assert.equal(issued.code, 0, issued.err);
+      const sync = (JSON.parse(issued.out) as { result: { token: string; tokenId: string } }).result;
+      const alice = await f.issue('alice', 'north'),
+        bob = await f.issue('bob', 'south');
+      const s = await serveApi(t, { config: f.config, appDir: f.appDir, commands: f.commands }, 'depot', ['--policy', f.policy]);
+      await s.started;
+      const origin = s.base.slice(0, s.base.indexOf('/api/apps/'));
+      const as = (token: string) => ({ authorization: `Bearer ${token}` });
+      const status = async (token: string, path: string) => {
+        const response = await fetch(`${s.base}${path}`, { headers: as(token) });
+        await response.body?.cancel();
+        return response.status;
+      };
+      let counter = 0;
+      const run = async (token: string, path: string, body: object, version?: number) => {
+        const response = await fetch(`${s.base}${path}`, {
+          method: 'POST',
+          headers: {
+            ...as(token),
+            ...(version === undefined ? {} : { 'if-match': `"${version}"` }),
+            'idempotency-key': `tenant-service-${dialect}-${String(++counter).padStart(8, '0')}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        });
+        return { status: response.status, body: await response.text() };
+      };
+      const follow = async (token: string) => {
+        const controller = new AbortController();
+        const response = await fetch(`${origin}/api/live`, { headers: as(token), signal: controller.signal });
+        let text = '';
+        const done = (async () => {
+          if (response.status !== 200 || !response.body) return;
+          const decoder = new TextDecoder();
+          try {
+            for await (const chunk of response.body) text += decoder.decode(chunk as Uint8Array, { stream: true });
+          } catch {
+            /* aborted */
+          }
+        })();
+        const stop = async () => {
+          controller.abort();
+          await done;
+        };
+        t.after(stop);
+        if (response.status !== 200) text = await response.text();
+        const events = () =>
+          text
+            .split('\n\n')
+            .filter((block) => block.startsWith('event: '))
+            .map((block) => ({ event: block.slice(7, block.indexOf('\n')), data: block.slice(block.indexOf('data: ') + 6) }));
+        const until = async (seen: () => boolean) => {
+          const deadline = Date.now() + 5000;
+          while (!seen() && Date.now() < deadline) await new Promise((wait) => setTimeout(wait, 20));
+          assert.ok(seen(), `timed out; the stream said: ${text}`);
+        };
+        if (response.status === 200) await until(() => events().some((event) => event.event === 'hello'));
+        return {
+          status: response.status,
+          headers: response.headers,
+          text: () => text,
+          changes: () => events().filter((event) => event.event === 'change'),
+          until,
+          stop,
+        };
+      };
+
+      // Reads: every row of its tenant in a granted table, none of another tenant's, and an ungranted table refused.
+      assert.deepEqual(
+        (await allPages(s.base, as(sync.token), 'limit=1&sort=id')).map((row) => row.id),
+        ['north-1', 'north-2'],
+      );
+      assert.equal(await status(sync.token, '/item/north-2'), 200);
+      assert.equal(await status(sync.token, '/item/south-1'), 404);
+      assert.equal(await status(sync.token, '/note'), 403);
+
+      // The stream: the service's tenant's changes reach it, another tenant's do not, and a member's bearer is not admitted.
+      const stream = await follow(sync.token);
+      assert.equal(stream.status, 200);
+      // A member's token is a good credential of the wrong kind: refused in JSON with a bearer challenge, never a 500.
+      const refused = await follow(alice.token);
+      assert.equal(refused.status, 403, refused.text());
+      assert.match(refused.headers.get('content-type') ?? '', /^application\/json/);
+      assert.equal((JSON.parse(refused.text()) as { error: { code: string } }).error.code, 'forbidden');
+      assert.match(refused.headers.get('www-authenticate') ?? '', /^Bearer.*error="insufficient_scope"/);
+
+      // Commands: its role's, as service:sync in its tenant; another tenant's row and an ungranted command refused.
+      const touched = await run(sync.token, '/item/north-1/commands/touch/v1', {}, 0);
+      assert.equal(touched.status, 200, touched.body);
+      assert.equal(await f.version('north-1'), 1);
+      assert.deepEqual(await f.actors(), [`north service service:sync`]);
+      await stream.until(() => stream.changes().length === 1);
+      assert.match(stream.changes()[0].data, /north-1/);
+      const crossed = await run(sync.token, '/item/south-1/commands/touch/v1', {}, 0);
+      assert.equal(crossed.status, 403, crossed.body);
+      assert.equal(await f.version('south-1'), 0);
+      const stocked = await run(sync.token, '/item/commands/stock/v1', { id: 'north-9', name: 'North nine' });
+      assert.equal(stocked.status, 403, stocked.body);
+      assert.equal(await status(alice.token, '/item/north-9'), 404);
+      // A member's write in another tenant is not this stream's to hear.
+      assert.equal((await run(bob.token, '/item/south-2/commands/touch/v1', {}, 0)).status, 200);
+      await new Promise((wait) => setTimeout(wait, 900));
+      assert.equal(stream.changes().length, 1, stream.text());
+      assert.doesNotMatch(stream.text(), /south/);
+
+      // Observed on every request: a suspended tenant refuses it, and an active one answers again.
+      await f.maintenance((admin) => admin.putTenant({ tenantId: 'north', status: 'suspended', expectedVersion: '1' }));
+      assert.equal(await status(sync.token, '/item/north-1'), 403);
+      assert.equal((await run(sync.token, '/item/north-1/commands/touch/v1', {}, 1)).status, 403);
+      assert.equal(await f.version('north-1'), 1);
+      await f.maintenance((admin) => admin.putTenant({ tenantId: 'north', status: 'active', expectedVersion: '2' }));
+      assert.equal(await status(sync.token, '/item/north-1'), 200);
+
+      // Revoked: the next request and a new stream are unauthenticated.
+      await f.revoke(sync.tokenId);
+      assert.equal(await status(sync.token, '/item/north-1'), 401);
+      assert.equal((await follow(sync.token)).status, 401);
+      await stream.stop();
+
+      s.child.kill('SIGTERM');
+      assert.equal(await s.closed, 0);
+      for (const token of [sync.token, alice.token, bob.token]) assert.equal(s.output().includes(token), false);
+      assert.equal(issued.err.includes(sync.token), false);
     },
   );
 }

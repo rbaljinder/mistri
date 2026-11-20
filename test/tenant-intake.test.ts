@@ -26,6 +26,8 @@ import { auditRows } from './support/commandTargets.js';
 import { appResourceCatalog } from '../packages/mistri/src/server/app/appResources.js';
 import { AUDIT_REDACTED, defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { BusinessCommandExecutionError } from '../packages/mistri/src/server/commands/businessCommandExecution.js';
+import type { UntypedRow, WriteTable } from '../packages/mistri/src/server/commands/commandDb.js';
+import { refuse, type RefusalKeepDb } from '../packages/mistri/src/server/commands/commandErrors.js';
 import { AppTenantPolicyDefinitionError, defineAppTenantPolicy } from '../packages/mistri/src/server/policy/appTenantPolicy.js';
 import { refusalReasons, TenantContextError } from '../packages/engine/src/server/evidence.js';
 import { createTenantEnrollment, type TenantEnrollment } from '../packages/mistri/src/server/tenant/tenantEnrollment.js';
@@ -113,9 +115,11 @@ const manifest = () => ({
 
 /* What the handler does, set per test: place the row where it is told, the
    other place, with an owner of its choosing, an update of its own dealer's
-   lead or another dealer's, or a removal. */
-let mode: 'place' | 'misplace' | 'owner' | 'update' | 'cross' | 'remove' = 'place';
+   lead or another dealer's, a removal, or a wrong try counted by refuse's keep. */
+let mode: 'place' | 'misplace' | 'owner' | 'update' | 'cross' | 'remove' | 'wrong' = 'place';
 const told: string[] = [];
+/* What a wrong try does once its own row is written, before it refuses: a change committed against its placement. */
+let beforeRefusing: (() => Promise<void>) | undefined;
 const zones: (string | undefined)[] = [];
 const registry = defineCommands({
   apply: defineCommand({
@@ -123,6 +127,8 @@ const registry = defineCommands({
     source: 'business',
     target: 'lead',
     write: ['intake_submission'],
+    // A wrong try is counted where the submission would have landed, in a transaction of its own (refuse's keep).
+    refused: { writes: ['intake_submission', 'lead'] },
     public: true,
     input,
     output: shape({ reference: text(), message: literal('Application received.') }),
@@ -131,6 +137,20 @@ const registry = defineCommands({
       zones.push(timezone);
       // The same reference in every dealer, and with the lender: equal business ids, and equal answers.
       const reference = `IGN-${value.name}`;
+      if (mode === 'wrong') {
+        const place = (intake === 'tenant' ? db.lead : db.intake_submission) as unknown as WriteTable<UntypedRow>;
+        // The handler's own row, which its refusal rolls back.
+        await place.insert({ id: randomUUID(), reference, name: value.name });
+        if ((await place.count({ name: 'TRY' })) >= 2) refuse('Too many tries; ask the dealer.');
+        await beforeRefusing?.();
+        refuse('That code is not right.', {
+          keep: async (kept: RefusalKeepDb) => {
+            const counted = (intake === 'tenant' ? kept.lead : kept.intake_submission) as unknown as WriteTable<UntypedRow>;
+            // A dealer's references are unique, so each try is a row of its own, named for what it counts.
+            await counted.insert({ id: randomUUID(), reference: `TRY-${randomUUID()}`, name: 'TRY' });
+          },
+        });
+      }
       if (mode === 'owner')
         await tx.insert({ table: 'lead', values: { id: randomUUID(), reference, name: value.name, tenant_id: 'south' } });
       else if (mode === 'update') await tx.update({ table: 'lead', key: { id: 'seeded' }, values: { name: 'Renamed by the public' } });
@@ -715,6 +735,104 @@ for (const { dialect, skip } of TENANT_DIALECTS)
           (error: unknown) => error instanceof BusinessCommandExecutionError && error.code === 'invalid_input' && error.field === 'name',
         );
       }
+    });
+
+    test("a wrong try is counted by refuse's keep in the place its address names, the rest rolls back, and the count locks", async (t) => {
+      told.length = 0;
+      const f = await enrolled(t, dialect);
+      /* PostgreSQL's writer locks the anchors resolution read (the dealer's row and the lender's) FOR SHARE in each
+         transaction: the handler's, then the keep's, opened apart from it once the handler's has rolled back. */
+      const anchors = f.engine.intercept(t, {
+        match: (statement) => statement.writer && statement.sql.endsWith('WHERE id = $1 AND kind = $2 FOR SHARE'),
+      });
+      const wrong = (address: string) =>
+        f.submit(address, 'Wrong').then(
+          () => assert.fail('a wrong try applied'),
+          (error: unknown) => {
+            assert.ok(error instanceof BusinessCommandExecutionError, String(error));
+            return { code: error.code, outcome: error.outcome, message: error.message };
+          },
+        );
+      const said = { code: 'ineligible_state', outcome: 'not_applied', message: 'That code is not right.' };
+      mode = 'wrong';
+      try {
+        assert.deepEqual(await wrong(NORTH), said);
+        if (dialect === 'postgres') assert.equal(anchors.calls, 4);
+        assert.deepEqual(await wrong(NORTH), said);
+        // The handler's row rolled back with its refusal; the keep's stayed, the owner injected from the address.
+        assert.deepEqual(await f.rows("SELECT tenant_id, name FROM lead WHERE name <> 'Seeded lead' ORDER BY id"), [
+          { tenant_id: 'north', name: 'TRY' },
+          { tenant_id: 'north', name: 'TRY' },
+        ]);
+        // The third try reads the two kept and is refused without keeping more.
+        assert.deepEqual(await wrong(NORTH), { ...said, message: 'Too many tries; ask the dealer.' });
+        // A locked try keeps nothing, so it opens no transaction for a keep.
+        if (dialect === 'postgres') assert.equal(anchors.calls, 10);
+        assert.deepEqual(await f.rows("SELECT CAST(count(*) AS INTEGER) AS n FROM lead WHERE name = 'TRY'"), [{ n: 2 }]);
+        // Another dealer's count is its own, and an address that places no dealer counts in the lender's triage.
+        assert.deepEqual(await wrong(SOUTH), said);
+        assert.deepEqual(await wrong(UNKNOWN), said);
+      } finally {
+        mode = 'place';
+      }
+      assert.deepEqual(await f.rows("SELECT tenant_id, name FROM lead WHERE tenant_id = 'south'"), [{ tenant_id: 'south', name: 'TRY' }]);
+      assert.deepEqual(await f.rows('SELECT name FROM intake_submission'), [{ name: 'TRY' }]);
+      assert.deepEqual(await f.rows("SELECT CAST(count(*) AS INTEGER) AS n FROM lead WHERE name = 'Wrong'"), [{ n: 0 }]);
+      assert.deepEqual(told, ['tenant', 'tenant', 'tenant', 'tenant', 'platform']);
+      // A refusal lands no receipt, kept or not: the visitor may try again.
+      assert.deepEqual(await f.rows(counted(journal.receipt)), [{ n: 0 }]);
+    });
+
+    test('a keep whose dealer was suspended since the try writes nothing there: the try is resolved again, counted with the lender, and refused alike', async (t) => {
+      told.length = 0;
+      const f = await enrolled(t, dialect);
+      const suspend = `UPDATE "${TENANT_TABLES.tenant}" SET status = 'suspended', version = '2' WHERE id = 'north'`;
+      let changing: Promise<unknown> | undefined;
+      let suspended = false;
+      if (dialect === 'postgres') {
+        // Sent while the handler's transaction holds the dealer FOR SHARE: it waits, and commits the moment that rolls back.
+        const session = await f.engine.session();
+        beforeRefusing = async () => {
+          beforeRefusing = undefined;
+          changing = session.query(suspend).then(() => (suspended = true));
+          assert.equal(await settles(changing, 150), false, 'the suspension waits for the try');
+        };
+      } else {
+        // The file's own connection, the moment the handler's transaction has rolled back and before the keep's begins.
+        beforeRefusing = undefined;
+        f.engine.intercept(t, {
+          match: (statement) => statement.writer && /^ROLLBACK/i.test(statement.sql),
+          after: () => {
+            if (suspended || mode !== 'wrong') return;
+            suspended = true;
+            f.engine.sqlite().prepare(suspend).run();
+          },
+        });
+      }
+      mode = 'wrong';
+      try {
+        // The keep's fence sees the dealer moved (TenantIntakeMoved), so the submission is resolved once more, as any
+        // whose placement moved is: now with the lender, where the try is counted and refused as before.
+        await assert.rejects(
+          f.submit(NORTH, 'Wrong'),
+          (error: unknown) =>
+            error instanceof BusinessCommandExecutionError &&
+            error.code === 'ineligible_state' &&
+            error.outcome === 'not_applied' &&
+            error.message === 'That code is not right.',
+        );
+      } finally {
+        mode = 'place';
+        beforeRefusing = undefined;
+      }
+      await changing;
+      assert.equal(suspended, true);
+      assert.deepEqual(told, ['tenant', 'platform']);
+      assert.deepEqual(await f.rows("SELECT CAST(count(*) AS INTEGER) AS n FROM lead WHERE tenant_id = 'north' AND id <> 'seeded'"), [
+        { n: 0 },
+      ]);
+      assert.deepEqual(await f.rows('SELECT name FROM intake_submission'), [{ name: 'TRY' }]);
+      assert.deepEqual(await f.rows(counted(journal.receipt)), [{ n: 0 }]);
     });
 
     test("a public submission placed with a dealer updates that dealer's row its command declares, and lands one receipt", async (t) => {
