@@ -66,6 +66,7 @@ import {
   postgresTenantMembershipsRows,
   postgresTenantMembershipsStatement,
   postgresTenantStoreUpgradeFrom1,
+  postgresTenantStoreUpgradeFrom2,
   readPostgresTenantMembership,
   readPostgresTenantMemberships,
   TenantStoreUnavailable,
@@ -259,12 +260,12 @@ describe('the tenant store on PostgreSQL, against a real server', { skip: liveSk
   });
 
   test('migration creates the store once, idempotently, bound to one App, source and store', async () => {
-    assert.deepEqual(await migratePostgresTenantStore(url, owner()), { version: 2, migrated: true });
+    assert.deepEqual(await migratePostgresTenantStore(url, owner()), { version: 3, migrated: true });
     const created = await described();
-    assert.deepEqual(await migratePostgresTenantStore(url, owner()), { version: 2, migrated: false });
+    assert.deepEqual(await migratePostgresTenantStore(url, owner()), { version: 3, migrated: false });
     // The connection id is a transient alias, not stored identity, as on SQLite.
     assert.deepEqual(await migratePostgresTenantStore(url, { ...owner(), source: { id: 'business', connection: 'renamed' } }), {
-      version: 2,
+      version: 3,
       migrated: false,
     });
     for (const other of [
@@ -287,7 +288,7 @@ describe('the tenant store on PostgreSQL, against a real server', { skip: liveSk
     }
     assert.equal(await described(), created, 'a refused migration changes nothing');
     assert.deepEqual((await control.query(`SELECT * FROM ${meta}`)).rows, [
-      { singleton: 1, version: 2, app_id: 'app', source_id: 'business', store_id: 'store-1' },
+      { singleton: 1, version: 3, app_id: 'app', source_id: 'business', store_id: 'store-1' },
     ]);
     await transaction(control, () => assertPostgresTenantStore(control, owner()));
     await assert.rejects(assertPostgresTenantStore(control, owner()), denied, 'attestation outside a transaction refuses');
@@ -295,13 +296,14 @@ describe('the tenant store on PostgreSQL, against a real server', { skip: liveSk
     await assert.rejects(migratePostgresTenantStore(url, { appId: 'app' } as never), Refusal);
   });
 
-  test('a version 1 store is refused as it is, and the 1 to 2 step brings it to what a new one is', async () => {
+  test('a version 1 store is refused as it is, and the 1 to 2 to 3 steps bring it to what a new one is', async () => {
     await migratePostgresTenantStore(url, owner());
     const created = await described();
-    // Version 1: no host table, and the meta row (and the CHECK that names it) at 1.
+    // Version 1: no host table, no member_account index, and the meta row (and the CHECK that names it) at 1.
     const check = `"${runtimeName('postgres', tables.meta)}_version_check"`;
     for (const step of [
       `DROP TABLE ${runtimeTable('postgres', tables.host)}`,
+      `DROP INDEX ${runtimeSchema('postgres')}."__mistri_tenant_member_account"`,
       `ALTER TABLE ${meta} DROP CONSTRAINT ${check}`,
       `UPDATE ${meta} SET version = 1`,
       `ALTER TABLE ${meta} ADD CONSTRAINT ${check} CHECK (version = 1)`,
@@ -313,10 +315,11 @@ describe('the tenant store on PostgreSQL, against a real server', { skip: liveSk
     // What `mistri migrate stores up` runs: the steps, in one transaction.
     await transaction(control, async () => {
       for (const sql of postgresTenantStoreUpgradeFrom1()) await control.query(sql);
+      for (const sql of postgresTenantStoreUpgradeFrom2()) await control.query(sql);
     });
     assert.equal(await described(), created, 'the upgraded store is the one a new store is');
-    assert.deepEqual((await control.query(`SELECT version FROM ${meta}`)).rows, [{ version: 2 }]);
-    assert.deepEqual(await migratePostgresTenantStore(url, owner()), { version: 2, migrated: false });
+    assert.deepEqual((await control.query(`SELECT version FROM ${meta}`)).rows, [{ version: 3 }]);
+    assert.deepEqual(await migratePostgresTenantStore(url, owner()), { version: 3, migrated: false });
     await seed();
   });
 
@@ -367,8 +370,8 @@ describe('the tenant store on PostgreSQL, against a real server', { skip: liveSk
       [
         'migrate',
         `ALTER TABLE ${meta} DROP CONSTRAINT "${runtimeName('postgres', tables.meta)}_version_check"`,
-        `UPDATE ${meta} SET version = 3`,
-        `ALTER TABLE ${meta} ADD CHECK (version = 3)`,
+        `UPDATE ${meta} SET version = 99`,
+        `ALTER TABLE ${meta} ADD CHECK (version = 99)`,
       ],
     ],
   ] as const) {

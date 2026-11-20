@@ -32,7 +32,7 @@ export const q = (name: string) => runtimeTable('postgres', name);
    kind and proposal and the proposal and provenance tables (see the SQLite
    journal). A link's, a proposal's and a mark's times are epoch milliseconds
    in both engines. */
-export const JOURNAL_VERSION = 5;
+export const JOURNAL_VERSION = 6;
 const B = COMMAND_TARGET_BOUNDS;
 const COMPLETED_INDEX = `${tables.receipt}_completed`;
 const XACT_INDEX = `${tables.receipt}_xact`;
@@ -123,6 +123,11 @@ const proposalDdl = (): readonly string[] => [
 )`,
   `CREATE INDEX "${PROVENANCE_INDEX}" ON ${q(tables.provenance)} (app_id, tenant_id, resource, row_key)`,
 ];
+const LINK_EXPIRES_INDEX = `${tables.link}_expires`;
+const LINK_EXPIRES_INDEX_DDL = `CREATE INDEX "${LINK_EXPIRES_INDEX}" ON ${q(tables.link)} (expires_at)`;
+const PROPOSAL_CREATED_INDEX = `${tables.proposal}_created`;
+const PROPOSAL_CREATED_INDEX_DDL = `CREATE INDEX "${PROPOSAL_CREATED_INDEX}" ON ${q(tables.proposal)} (created_at)`;
+
 export const definitions: readonly string[] = [
   `CREATE TABLE ${q(tables.meta)} (
   singleton integer PRIMARY KEY CHECK (singleton = 1),
@@ -166,7 +171,9 @@ export const definitions: readonly string[] = [
   `CREATE INDEX "${XACT_INDEX}" ON ${q(tables.receipt)} (xact_id) WHERE xact_id IS NOT NULL`,
   AUDIT_PART_DDL,
   ...linkDdl(4),
+  LINK_EXPIRES_INDEX_DDL,
   ...proposalDdl(),
+  PROPOSAL_CREATED_INDEX_DDL,
 ];
 
 /** What the upgrade from version 1 runs (storeLayouts.ts, in its one transaction under the store's lock): the new
@@ -205,6 +212,14 @@ export const postgresJournalUpgradeFrom4 = (): readonly string[] => [
   `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT ${tables.meta}_version_check`,
   `UPDATE ${q(tables.meta)} SET version = 5`,
   `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${tables.meta}_version_check CHECK (version = 5)`,
+];
+/** What the upgrade from version 5 runs: adds link expiry and proposal creation indexes for daily pruning and moves version to 6. */
+export const postgresJournalUpgradeFrom5 = (): readonly string[] => [
+  LINK_EXPIRES_INDEX_DDL,
+  PROPOSAL_CREATED_INDEX_DDL,
+  `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT ${tables.meta}_version_check`,
+  `UPDATE ${q(tables.meta)} SET version = 6`,
+  `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${tables.meta}_version_check CHECK (version = 6)`,
 ];
 
 /* ---------- catalog description ---------- */
@@ -299,6 +314,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       `PRIMARY KEY (id)`,
     ],
     [
+      on(`CREATE INDEX ${LINK_EXPIRES_INDEX} ON ${tables.link} USING btree (expires_at)`),
       on(`CREATE INDEX ${LINK_INDEX} ON ${tables.link} USING btree (app_id, resource, row_key)`),
       on(`CREATE UNIQUE INDEX ${tables.link}_pkey ON ${tables.link} USING btree (id)`),
     ],
@@ -344,6 +360,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       `PRIMARY KEY (id)`,
     ],
     [
+      on(`CREATE INDEX ${PROPOSAL_CREATED_INDEX} ON ${tables.proposal} USING btree (created_at)`),
       on(`CREATE INDEX ${PROPOSAL_INDEX} ON ${tables.proposal} USING btree (app_id, tenant_id, state, created_at)`),
       on(`CREATE UNIQUE INDEX ${tables.proposal}_pkey ON ${tables.proposal} USING btree (id)`),
     ],

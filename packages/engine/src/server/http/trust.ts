@@ -329,11 +329,19 @@ function forwardedHops(raw: string | string[] | undefined): string[] | undefined
  * one that is misconfigured — and is refused with the header named. So is
  * a request that carries it from a peer that is not the proxy: the header
  * is only a name anyone can type, so a value from an address neither on
- * loopback nor in `--auth-proxy-from` is a forgery, not a sign-in. Loopback is
- * exempt: the container's own health check, a curl on the box, the
- * operator's terminal. Nothing here is authentication; it is the proxy's
- * decision, carried to the journal.
+ * loopback nor in `--auth-proxy-from` is a forgery, not a sign-in.
+ *
+ * A request from a loopback peer with no identity is the local operator
+ * (`who: 'local'`: the container's health check, a curl on the box, the
+ * operator's terminal) only when nothing says it was proxied. It is
+ * refused like any other when the listener has `--trust-proxy` addresses,
+ * the request carries a Forwarded or X-Forwarded-* header, or its Host is
+ * not a loopback name: a reverse proxy on the same host that dropped the
+ * identity header must not be mistaken for the operator. Nothing here is
+ * authentication; it is the proxy's decision, carried to the journal.
  */
+const PROXIED_HEADERS = ['forwarded', 'x-forwarded-for', 'x-forwarded-host', 'x-forwarded-proto'] as const;
+
 export function identityFor(
   req: { headers: Record<string, string | string[] | undefined>; socket?: { remoteAddress?: string } },
   bound: Bound,
@@ -343,7 +351,17 @@ export function identityFor(
   const who = (Array.isArray(raw) ? raw[0] : raw)?.trim();
   const peer = req.socket?.remoteAddress;
   if (who && trustedProxyPeer(peer, bound.identityProxies)) return { who };
-  if (loopbackPeer(peer)) return { who: 'local' };
+  /* A request arriving over loopback from a reverse proxy (nginx/Caddy on the
+     same host) carries forwarded headers or a non-loopback Host, or arrives on
+     a listener configured with --trust-proxy. Never silently treat a proxied
+     request that dropped the identity header as the local operator. */
+  const rawHost = req.headers.host;
+  const host = (Array.isArray(rawHost) ? rawHost[0] : rawHost)?.trim();
+  const proxied =
+    Boolean(bound.trustedProxies?.length) ||
+    PROXIED_HEADERS.some((header) => req.headers[header] !== undefined) ||
+    Boolean(host && !LOOPBACK.test(host));
+  if (loopbackPeer(peer) && !proxied) return { who: 'local' };
   return {
     refusal: who
       ? `This server expects ${bound.identityHeader} only from its proxy, and this request did not come from the trusted proxy. ` +
@@ -388,10 +406,10 @@ export function untrustedTargetRefusal(target: string): string | null {
       'reference environment variables. Put it in the config file on the server, or type the password.'
     );
   }
-  if (!/^[a-z][\w+.-]*:\/\//i.test(target) || /^sqlite:/i.test(target)) {
+  if (!/^postgres(ql)?:\/\//i.test(target)) {
     return (
-      'This server is reachable beyond this machine, so the browser cannot open a SQLite file by ' +
-      'path. Name the file in the config file or on the command line.'
+      'This server is reachable beyond this machine, so the browser can only add a PostgreSQL connection ' +
+      '(postgres://…), never a SQLite file or other scheme. Name a SQLite file in the config file or on the command line.'
     );
   }
   return untrustedDatabaseRefusal(target);

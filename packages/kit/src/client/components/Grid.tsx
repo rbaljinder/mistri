@@ -810,7 +810,7 @@ function PlatformCell({
     );
   const cell = clampCell(raw);
   return (
-    <td className={`${classes.join(' ')}${pinClass}`} title={cell.title} {...pinAttrs}>
+    <td className={`${classes.join(' ')}${pinClass}`} title={cell.title} data-copy={cell.title ? raw : undefined} {...pinAttrs}>
       {cell.text}
     </td>
   );
@@ -1490,7 +1490,7 @@ export function Grid({
     if (actual && Math.abs(actual - rowHeight) >= 0.5) setRowHeight(actual);
     const top = tableRef.current.offsetTop;
     if (top !== margin) setMargin(top);
-  });
+  }, [virtual, scroller, rows.length, rowHeight, margin, sizing]);
   useEffect(() => {
     if (virtual) virtualizer.measure();
   }, [rowHeight, virtual]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -1500,7 +1500,7 @@ export function Grid({
   const padBottom = virtual && items.length ? Math.max(0, rows.length - items[items.length - 1].index - 1) * rowHeight : 0;
 
   /* ---------- pins and the keyboard ---------- */
-  const lefts = usePins(wrap, ordered, pinned, shift, `${shown.join(',')}:${sizing}:${fit.columns.join(',')}`);
+  const lefts = usePins(wrap, ordered, pinned, shift, `${rows.length > 0}:${sizing}:${fit.columns.join(',')}`);
   useStickyHead(wrap, `${ordered.join(',')}:${sizing}:${rows.length > 0}`);
   const lastPinned = pinned.length ? ordered.filter((n) => pinned.includes(n)).pop() : undefined;
   /* Read on every paint, as the cells always read them — an App's display
@@ -1520,13 +1520,16 @@ export function Grid({
     );
     return words.reduce((best, name) => (width(name) > width(best) ? name : best), named);
   })();
+  const columnValuesKey = `${ordered.join(',')}\u0000${folded.join(',')}`;
+  const columnValues = useMemo(
+    () => new Map([...ordered, ...folded].map((name) => [name, rows.map((row) => row[name])])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, columnValuesKey],
+  );
   const cellColumns = useKeptColumns(
     ordered.map((name) => {
       /* A column of relative dates is said one way down its length (datesAmong). */
-      const display = datesAmong(
-        displayOf(name),
-        rows.map((row) => row[name]),
-      );
+      const display = datesAmong(displayOf(name), columnValues.get(name) ?? []);
       return {
         name,
         meta: byName.get(name),
@@ -1553,10 +1556,7 @@ export function Grid({
                 head: String(labels?.[other] ?? columnLabel(table?.id, other) ?? other),
                 meta: byName.get(other),
                 plan: plans.get(other)!,
-                display: datesAmong(
-                  columnDisplay(table?.id, other) as DisplayRule | null,
-                  rows.map((row) => row[other]),
-                ),
+                display: datesAmong(columnDisplay(table?.id, other) as DisplayRule | null, columnValues.get(other) ?? []),
                 label: referenceLabels?.[other],
               })),
             }

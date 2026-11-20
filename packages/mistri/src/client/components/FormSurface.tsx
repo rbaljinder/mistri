@@ -465,8 +465,10 @@ export function FormSurface({
           ? invalid
           : invalid?.querySelector<HTMLElement>(controls);
     // Off-step server errors still have a reachable summary; the stepper owns its own validation focus.
-    // preventScroll: the focus must not move the page on its inline axis (rule 10); a step arrives at its top by its own scroll.
-    (target ?? root?.querySelector<HTMLElement>('.form-page-failure:not([hidden])'))?.focus({ preventScroll: true });
+    // Focus never moves the page on its inline axis (rule 10); an invalid field is then brought into view vertically only.
+    const destination = target ?? root?.querySelector<HTMLElement>('.form-page-failure:not([hidden])');
+    destination?.focus({ preventScroll: true });
+    if (intent === 'invalid') destination?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }, [focusRequest, receipt, pending, Boolean(attempt?.recovery)]);
   /* One key for one filling-in. A second click after a lost answer carries
      the same key, so the server answers with the same receipt instead of a

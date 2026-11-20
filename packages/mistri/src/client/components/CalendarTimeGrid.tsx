@@ -175,7 +175,7 @@ export function CalendarTimeGrid({
       setActive(pieceKey(piece!));
       button.focus();
     }
-  });
+  }, [order]);
 
   const hourWords = new Intl.DateTimeFormat(locale, { hour: 'numeric', timeZone: 'UTC' });
   const clock = new Intl.DateTimeFormat(locale, { hour: 'numeric', minute: '2-digit', timeZone: 'UTC' });

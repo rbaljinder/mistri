@@ -44,7 +44,7 @@ async function withStore(work: (db: DatabaseSync) => Promise<void> | void) {
   const db = new DatabaseSync(path);
   try {
     db.exec('PRAGMA foreign_keys = ON; CREATE TABLE business_record (id TEXT PRIMARY KEY)');
-    assert.deepEqual(provisionSqliteTenantStore(path, binding()), { version: 2, provisioned: true });
+    assert.deepEqual(provisionSqliteTenantStore(path, binding()), { version: 3, provisioned: true });
     await work(db);
   } finally {
     db.close();

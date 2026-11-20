@@ -126,7 +126,7 @@ describe('the job store on PostgreSQL', { skip: liveSkip('postgres', LIVE) }, ()
   test('two migrations racing each other serialise: one provisions, the other attests the same layout', async () => {
     const results = await Promise.all([migratePostgresJobStore(url, policy()), migratePostgresJobStore(url, policy())]);
     assert.deepEqual(results.map((result) => result.migrated).sort(), [false, true]);
-    assert.deepEqual(await migratePostgresJobStore(url, policy()), { version: 1, migrated: false });
+    assert.deepEqual(await migratePostgresJobStore(url, policy()), { version: 2, migrated: false });
     await host();
     // The same namespace with other bounds is refused, racing or not; nothing is changed.
     await assert.rejects(

@@ -21,6 +21,7 @@ import {
   askedFields,
   servedWithheldOptions,
   commandInput,
+  commandProblems,
   prefilledCommandValues,
   type CommandQuestions,
   type CommandValues,
@@ -36,6 +37,7 @@ import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { CommandOutcome } from './CommandOutcome.js';
 import { fieldWord, outcomeOfOperation } from './outcomeModel.js';
 import { dismissLabel, recordNounOf, repeatsTitle, theRecord } from './verbDialog.js';
+import { armUnloadGuard } from './formLeaveGuard.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 
 const LiveEditNotice = onDemand(() => import('@mistriwork/kit/client/components/LiveNotices.js'), 'LiveEditNotice', { quiet: true });
@@ -174,6 +176,7 @@ export function CommandForm({
      so neither the edits nor the starting values are lost (a box that starts
      checked stayed unchecked because one other field had been typed in). */
   const touched = useRef(new Set<string>());
+  const [dirty, setDirty] = useState(false);
   const [problem, setProblem] = useState('');
   /* A refusal that names one of the inputs — `refuse('Only $12.00 is left to refund', { field: 'amount' })` — is said
      beside that input, and the form lets go of the attempt so the answer can be changed and sent again: nothing ran. */
@@ -188,7 +191,11 @@ export function CommandForm({
     if (!refusedField || !operation || !current()) return;
     setBeside({ [refusedField]: operation.message });
     commandOperations.forget(owner);
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refusedField, operation]);
+  // Only the browser's own prompt (reload, closed tab): in-App Back and navigation stay free, and the guard drops
+  // once the command has been sent (an operation exists) and when the form closes or starts over.
+  useEffect(() => (dirty && !operation ? armUnloadGuard() : undefined), [dirty, operation]);
   // The selection the form opened with is what it prepares; deselecting
   // narrows the request without asking the server again.
   const [preparedKeys] = useState(() => owner.keys?.map((key) => ({ ...key })));
@@ -382,6 +389,7 @@ export function CommandForm({
     const live = commandOperations.get(owner);
     if (!current() || live !== operation || live?.phase === 'pending' || (live?.phase === 'unknown' && !untracked)) return;
     closed.current = true;
+    setDirty(false);
     commandOperations.forget(owner);
     onClose(live);
     if (success && current()) onDone();
@@ -392,6 +400,7 @@ export function CommandForm({
     commandOperations.forget(owner);
     setProblem('');
     touched.current = new Set();
+    setDirty(false);
     void prepared.refetch();
     void client.invalidateQueries({ predicate: (query) => query.queryKey[0] !== 'command-prepare' });
   };
@@ -486,6 +495,14 @@ export function CommandForm({
       onSubmit={(event) => {
         event.preventDefault();
         if (!current() || operation || !ready || prepared.isFetching) return;
+        const found = commandProblems(fields, values, record?.questions);
+        if (Object.keys(found).length > 0) {
+          setBeside(found);
+          setProblem(Object.values(found)[0] ?? '');
+          const formEl = event.currentTarget;
+          requestAnimationFrame(() => formEl.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus());
+          return;
+        }
         try {
           const input = commandInput(fields, values, record?.questions);
           setProblem('');
@@ -517,7 +534,12 @@ export function CommandForm({
           onChange={(next, path) => {
             for (const field of action.command.input)
               if (JSON.stringify(next[field.name]) !== JSON.stringify(values[field.name])) touched.current.add(field.name);
-            if (beside && path !== undefined && Object.hasOwn(beside, path)) setBeside(undefined);
+            if (touched.current.size > 0 && !dirty) setDirty(true);
+            if (beside && path !== undefined && Object.hasOwn(beside, path)) {
+              const remaining = { ...beside };
+              delete remaining[path];
+              setBeside(Object.keys(remaining).length ? remaining : undefined);
+            }
             setValues(next);
           }}
         />

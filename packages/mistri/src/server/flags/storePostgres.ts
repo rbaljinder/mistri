@@ -2,7 +2,7 @@
  * database and its `flag_*` tables in the runtime schema; opening never
  * repairs/migrates them. Only URL-owned connections are accepted, so a
  * caller's transaction cannot be committed, rolled back or closed by this
- * store. No connections survive an operation. */
+ * store. Each opened store owns a bounded connection pool, closed on `close()`. */
 import { RUNTIME_SCHEMA } from '@mistriwork/engine/shared/runtimeTables.js';
 import { createHash } from 'node:crypto';
 import { pgConnectionOptions } from '@mistriwork/engine/adapters/postgresValues.js';
@@ -33,6 +33,14 @@ interface Client {
   connect(): Promise<void>;
   end(): Promise<void>;
   query(sql: string, values?: readonly unknown[]): Promise<{ rows: Record<string, unknown>[]; rowCount: number | null }>;
+}
+interface PoolClient extends Client {
+  release(destroy?: boolean | Error): void;
+}
+interface Pool {
+  connect(): Promise<PoolClient>;
+  end(): Promise<void>;
+  on(event: 'error', listener: (error: Error) => void): void;
 }
 export interface PostgresFlagStoreOptions {
   readonly url: string;
@@ -80,15 +88,17 @@ function optionsOf(input: unknown): PostgresFlagStoreOptions {
   if (typeof value.url !== 'string' || !/^postgres(ql)?:\/\//.test(value.url)) throw new FlagStoreUnavailable();
   return Object.freeze({ url: value.url, binding: normalizeFlagStoreBinding(value.binding) });
 }
+const FLAG_POOL_MAX = 4;
+const connectionSettings = (url: string) => ({
+  ...pgConnectionOptions(url),
+  connectionTimeoutMillis: 5000,
+  application_name: 'mistri-flags',
+  query_timeout: 15000,
+});
 async function withClient<T>(options: PostgresFlagStoreOptions, work: (client: Client) => Promise<T>): Promise<T> {
   const module = 'pg';
   const pg = (await import(module)) as { Client: new (options: unknown) => Client };
-  const client = new pg.Client({
-    ...pgConnectionOptions(options.url),
-    connectionTimeoutMillis: 5000,
-    application_name: 'mistri-flags',
-    query_timeout: 15000,
-  });
+  const client = new pg.Client(connectionSettings(options.url));
   try {
     await client.connect();
     return await work(client);
@@ -96,23 +106,51 @@ async function withClient<T>(options: PostgresFlagStoreOptions, work: (client: C
     await client.end();
   }
 }
+async function openPool(options: PostgresFlagStoreOptions): Promise<Pool> {
+  const module = 'pg';
+  const pg = (await import(module)) as { Pool: new (options: unknown) => Pool };
+  const pool = new pg.Pool({
+    ...connectionSettings(options.url),
+    max: FLAG_POOL_MAX,
+    idleTimeoutMillis: 10_000,
+    allowExitOnIdle: true,
+  });
+  pool.on('error', () => {});
+  return pool;
+}
+async function withPool<T>(pool: Pool, work: (client: Client, markBroken: () => void) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  let broken = false;
+  try {
+    return await work(client, () => {
+      broken = true;
+    });
+  } finally {
+    client.release(broken);
+  }
+}
 async function transaction<T>(
   client: Client,
   readOnly: boolean,
   work: () => Promise<T>,
   beforeCommit?: () => void | Promise<void>,
+  markBroken?: () => void,
 ): Promise<T> {
-  // This client was just created here. No public function accepts a client,
-  // connection factory or an existing transaction to take ownership of.
+  // This client belongs solely to this store's private pool/connection. No public
+  // function accepts a caller's client, connection factory or transaction.
   await client.query(readOnly ? 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY' : 'BEGIN ISOLATION LEVEL READ COMMITTED');
   try {
-    await client.query("SET LOCAL search_path=pg_catalog; SET LOCAL lock_timeout='5s'; SET LOCAL statement_timeout='10s'");
+    await client.query('SET LOCAL search_path=pg_catalog');
+    await client.query("SET LOCAL lock_timeout='5s'");
+    await client.query("SET LOCAL statement_timeout='10s'");
     const result = await work();
     if (beforeCommit) await beforeCommit();
     await client.query('COMMIT');
     return result;
   } catch (error) {
-    await client.query('ROLLBACK').catch(() => {});
+    await client.query('ROLLBACK').catch(() => {
+      markBroken?.();
+    });
     throw error;
   }
 }
@@ -437,12 +475,21 @@ function entryOf(row: Record<string, unknown>, scope: FlagScope, catalog: FlagCa
 
 export async function openPostgresFlagStore(input: PostgresFlagStoreOptions): Promise<FlagStore> {
   const options = optionsOf(input);
-  await withClient(options, (client) => transaction(client, true, () => attestSaying(client, options.binding)));
+  const pool = await openPool(options);
+  try {
+    await withPool(pool, (client, markBroken) =>
+      transaction(client, true, () => attestSaying(client, options.binding), undefined, markBroken),
+    );
+  } catch (error) {
+    await pool.end().catch(() => {});
+    throw error;
+  }
   let closed = false;
+  let ending: Promise<void> | undefined;
   const active = new Set<Promise<unknown>>();
   const run = <T>(readOnly: boolean, work: (client: Client) => Promise<T>, guard?: () => void | Promise<void>): Promise<T> => {
     if (closed) return Promise.reject(new FlagStoreUnavailable());
-    const result = withClient(options, (client) =>
+    const result = withPool(pool, (client, markBroken) =>
       transaction(
         client,
         readOnly,
@@ -451,6 +498,7 @@ export async function openPostgresFlagStore(input: PostgresFlagStoreOptions): Pr
           return work(client);
         },
         guard,
+        markBroken,
       ),
     );
     active.add(result);
@@ -581,7 +629,8 @@ export async function openPostgresFlagStore(input: PostgresFlagStoreOptions): Pr
     },
     async close() {
       closed = true;
-      await Promise.allSettled([...active]);
+      ending ??= Promise.allSettled([...active]).then(() => pool.end());
+      await ending;
     },
   } satisfies FlagStore);
 }

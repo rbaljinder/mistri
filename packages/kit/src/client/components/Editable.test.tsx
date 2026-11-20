@@ -112,6 +112,32 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('the editor', () => {
+  test('a value that already has a newline opens as a textarea', () => {
+    render(<Editable table={customer} row={{ ...row, name: 'one\ntwo' }} column={customer.columns[1]} recordKey={key} />);
+    expect(screen.getByRole('textbox', { name: 'name (TEXT)' }).tagName).toBe('TEXTAREA');
+  });
+
+  test('typing a newline into a multi-line edit keeps the same focused element', async () => {
+    const user = userEvent.setup();
+    render(<Editable table={customer} row={{ ...row, name: 'one\ntwo' }} column={customer.columns[1]} recordKey={key} />);
+    const box = screen.getByRole('textbox', { name: 'name (TEXT)' });
+    await user.click(box);
+    await user.type(box, '{Enter}three');
+    const after = screen.getByRole('textbox', { name: 'name (TEXT)' });
+    expect(after).toBe(box);
+    expect(after).toHaveFocus();
+    expect((after as HTMLTextAreaElement).value).toBe('one\ntwo\nthree');
+  });
+
+  test('a single-line edit stays one input for the whole edit', async () => {
+    const user = userEvent.setup();
+    render(<Editable table={customer} row={row} column={customer.columns[1]} recordKey={key} />);
+    const box = screen.getByRole('textbox', { name: 'name (TEXT)' });
+    await user.type(box, ' more');
+    expect(screen.getByRole('textbox', { name: 'name (TEXT)' })).toBe(box);
+    expect(box.tagName).toBe('INPUT');
+  });
+
   test.each([false, true])('a forbidden field has no inline or input affordance in app mode %s', (app) => {
     render(
       <Editable

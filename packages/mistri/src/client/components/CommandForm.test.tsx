@@ -35,8 +35,9 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   toast: vi.fn(),
   viewportSize: () => ({ width: 1024, height: 768 }),
   viewportBox: (element: Element) => element.getBoundingClientRect(),
-  // Read as live sync's modules load (liveInvalidate.ts, write.js).
+  // Read as live sync's modules load (liveInvalidate.ts, write.js) and by formLeaveGuard.ts.
   setRecordMutationPendingProbe: () => {},
+  registerSurfaceMutationPendingProbe: () => () => {},
 }));
 vi.mock('../../../../kit/src/client/components/Value.js', () => ({ Value: () => null }));
 

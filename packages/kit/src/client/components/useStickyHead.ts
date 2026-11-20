@@ -23,19 +23,32 @@ export function useStickyHead(wrapRef: RefObject<HTMLElement | null>, repaintKey
     if (!wrap || !table || !scroller) return;
     const trail = [...scroller.querySelectorAll<HTMLElement>('.crumbs')].find((el) => getComputedStyle(el).position === 'sticky');
     const head = table.querySelector('thead');
+    const raf = (fn: () => void) => {
+      let id = 0;
+      const run = () => {
+        if (!id)
+          id = requestAnimationFrame(() => {
+            id = 0;
+            fn();
+          });
+      };
+      return [run, () => id && cancelAnimationFrame(id)] as const;
+    };
     const fit = () => {
       /* The table's own width against the wrap's, which holds whichever way the wrap overflows. */
       const fits = table.scrollWidth <= wrap.clientWidth + 1;
+      const top = trail?.offsetHeight ?? 0;
       wrap.toggleAttribute('data-fits', fits);
-      wrap.style.setProperty('--head-top', `${trail?.offsetHeight ?? 0}px`);
+      wrap.style.setProperty('--head-top', `${top}px`);
       more();
       stuck();
     };
     const more = () => {
       const past = wrap.scrollWidth - wrap.clientWidth - wrap.scrollLeft;
       const sides = [wrap.scrollLeft > 1 ? 'start' : '', past > 1 ? 'end' : ''].filter(Boolean).join(' ');
-      if (sides) wrap.dataset.more = sides;
-      else delete wrap.dataset.more;
+      if (sides) {
+        if (wrap.dataset.more !== sides) wrap.dataset.more = sides;
+      } else if (wrap.dataset.more !== undefined) delete wrap.dataset.more;
     };
     const stuck = () => {
       if (!head || !wrap.hasAttribute('data-fits')) return wrap.removeAttribute('data-stuck');
@@ -44,18 +57,22 @@ export function useStickyHead(wrapRef: RefObject<HTMLElement | null>, repaintKey
       const box = table.getBoundingClientRect();
       wrap.toggleAttribute('data-stuck', box.top < top - 0.5 && box.bottom > top + head.getBoundingClientRect().height);
     };
+    const [onStuck, stopStuck] = raf(stuck);
+    const [onMore, stopMore] = raf(more);
     const size = new ResizeObserver(fit);
     size.observe(wrap);
     size.observe(table);
     if (trail) size.observe(trail);
-    scroller.addEventListener('scroll', stuck, { passive: true });
-    wrap.addEventListener('scroll', more, { passive: true });
+    scroller.addEventListener('scroll', onStuck, { passive: true });
+    wrap.addEventListener('scroll', onMore, { passive: true });
     fit();
     return () => {
+      stopStuck();
+      stopMore();
       size.disconnect();
-      wrap.removeEventListener('scroll', more);
+      wrap.removeEventListener('scroll', onMore);
       delete wrap.dataset.more;
-      scroller.removeEventListener('scroll', stuck);
+      scroller.removeEventListener('scroll', onStuck);
     };
   }, [wrapRef, repaintKey]);
 }

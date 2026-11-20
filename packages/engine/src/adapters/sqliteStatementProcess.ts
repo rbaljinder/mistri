@@ -46,6 +46,47 @@ interface ProcessAnswer {
 
 /* How long the child may take to start before the statement's own cap. */
 const STARTUP_MS = 10_000;
+/* Bound concurrent child Node processes so a burst of slow SQLite reads cannot
+   fork-bomb the host; extra requests wait briefly in a bounded queue. */
+const MAX_CONCURRENT_PROCESSES = 4;
+const MAX_QUEUED_PROCESSES = 32;
+
+let activeProcesses = 0;
+const processQueue: Array<() => void> = [];
+
+function acquireProcessSlot(signal: AbortSignal, capMs: number): Promise<() => void> {
+  if (signal.aborted) return Promise.reject(new StatementStopped('cancelled'));
+  const release = () => {
+    activeProcesses -= 1;
+    const next = processQueue.shift();
+    if (next) next();
+  };
+  if (activeProcesses < MAX_CONCURRENT_PROCESSES) {
+    activeProcesses += 1;
+    return Promise.resolve(release);
+  }
+  if (processQueue.length >= MAX_QUEUED_PROCESSES) {
+    return Promise.reject(new StatementStopped('timeout', capMs));
+  }
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const wake = () => {
+      if (settled) return;
+      settled = true;
+      disarm();
+      activeProcesses += 1;
+      resolve(release);
+    };
+    const disarm = onCancel(signal, () => {
+      if (settled) return;
+      settled = true;
+      const idx = processQueue.indexOf(wake);
+      if (idx !== -1) processQueue.splice(idx, 1);
+      reject(new StatementStopped('cancelled'));
+    });
+    processQueue.push(wake);
+  });
+}
 
 /* The child. SQLITE_OK and SQLITE_READ are the C API's authorizer codes. The
    rows stop one past the limit, so an unwrapped statement is not read whole
@@ -102,63 +143,68 @@ process.send({ ready: true });
  * `signal` aborts. The engine's own errors come back as errors with the
  * engine's words, as they would in-process.
  */
-export function runInStatementProcess(job: ProcessStatement, capMs: number, signal: AbortSignal): Promise<ProcessAnswer> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new StatementStopped('cancelled'));
-      return;
-    }
-    const child = spawn(process.execPath, ['-e', CHILD], {
-      stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
-      serialization: 'advanced',
-      /* Electron's binary is Node only when told so; plain Node ignores it. */
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
-      windowsHide: true,
-    });
-    let stderr = '';
-    child.stderr?.on('data', (chunk: Buffer) => {
-      stderr = (stderr + chunk.toString()).slice(-2_000);
-    });
-    let settled = false;
-    let timer: NodeJS.Timeout | undefined;
-    let disarm = () => {};
-    const settle = (outcome: () => void) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      disarm();
-      outcome();
-    };
-    const stop = (reason: 'cancelled' | 'timeout') =>
-      settle(() => {
-        child.kill('SIGKILL');
-        reject(new StatementStopped(reason, capMs));
-      });
-    timer = setTimeout(() => stop('timeout'), STARTUP_MS + capMs);
-    disarm = onCancel(signal, () => stop('cancelled'));
-    child.on('message', (message: Partial<ProcessAnswer> & { ready?: true; error?: string }) => {
-      if (message.ready) {
-        /* The cap is the statement's, not the process start's. */
-        clearTimeout(timer);
-        timer = setTimeout(() => stop('timeout'), capMs);
-        child.send({ ...job, prefixes: RUNTIME_TABLE_PREFIXES });
+export async function runInStatementProcess(job: ProcessStatement, capMs: number, signal: AbortSignal): Promise<ProcessAnswer> {
+  const releaseSlot = await acquireProcessSlot(signal, capMs);
+  try {
+    return await new Promise((resolve, reject) => {
+      if (signal.aborted) {
+        reject(new StatementStopped('cancelled'));
         return;
       }
-      settle(() => {
-        if (message.error !== undefined) reject(new Error(message.error));
-        else resolve(message as ProcessAnswer);
+      const child = spawn(process.execPath, ['-e', CHILD], {
+        stdio: ['ignore', 'ignore', 'pipe', 'ipc'],
+        serialization: 'advanced',
+        /* Electron's binary is Node only when told so; plain Node ignores it. */
+        env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+        windowsHide: true,
       });
-    });
-    child.once('error', (error) => settle(() => reject(error)));
-    child.once('exit', (code, killedBy) =>
-      settle(() =>
-        reject(
-          new Error(
-            `The SQLite statement process ended without an answer (${killedBy ?? `exit ${code}`}).` +
-              (stderr.trim() ? ` ${stderr.trim()}` : ''),
+      let stderr = '';
+      child.stderr?.on('data', (chunk: Buffer) => {
+        stderr = (stderr + chunk.toString()).slice(-2_000);
+      });
+      let settled = false;
+      let timer: NodeJS.Timeout | undefined;
+      let disarm = () => {};
+      const settle = (outcome: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        disarm();
+        outcome();
+      };
+      const stop = (reason: 'cancelled' | 'timeout') =>
+        settle(() => {
+          child.kill('SIGKILL');
+          reject(new StatementStopped(reason, capMs));
+        });
+      timer = setTimeout(() => stop('timeout'), STARTUP_MS + capMs);
+      disarm = onCancel(signal, () => stop('cancelled'));
+      child.on('message', (message: Partial<ProcessAnswer> & { ready?: true; error?: string }) => {
+        if (message.ready) {
+          /* The cap is the statement's, not the process start's. */
+          clearTimeout(timer);
+          timer = setTimeout(() => stop('timeout'), capMs);
+          child.send({ ...job, prefixes: RUNTIME_TABLE_PREFIXES });
+          return;
+        }
+        settle(() => {
+          if (message.error !== undefined) reject(new Error(message.error));
+          else resolve(message as ProcessAnswer);
+        });
+      });
+      child.once('error', (error) => settle(() => reject(error)));
+      child.once('exit', (code, killedBy) =>
+        settle(() =>
+          reject(
+            new Error(
+              `The SQLite statement process ended without an answer (${killedBy ?? `exit ${code}`}).` +
+                (stderr.trim() ? ` ${stderr.trim()}` : ''),
+            ),
           ),
         ),
-      ),
-    );
-  });
+      );
+    });
+  } finally {
+    releaseSlot();
+  }
 }

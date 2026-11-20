@@ -26,10 +26,17 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { AppProvider } from '../../shared/appModel.js';
 import { expandEnvReferences } from '@mistriwork/engine/server/auth/credentials.js';
+import {
+  DEFAULT_POLICY,
+  request as egressRequest,
+  send as egressSend,
+  type EgressPolicy,
+} from '@mistriwork/engine/adapters/http/egress.js';
 import type { FederatedProviderConfig, IdentityProviderConfig } from './identityConfig.js';
 
-/** The slice of jose this reads: a remote key set, and verification against it. */
+/** The slice of jose this reads: a key set (local over egress, or remote fallback), and verification against it. */
 export interface Jose {
+  createLocalJWKSet?(jwks: { keys: unknown[] }): (protectedHeader?: Record<string, unknown>, token?: unknown) => Promise<unknown>;
   createRemoteJWKSet(url: URL, options?: { timeoutDuration?: number; cooldownDuration?: number }): unknown;
   jwtVerify(
     token: string,
@@ -170,6 +177,51 @@ export function oidcProvider(config: IdentityProviderConfig, options: ProviderOp
       throw new Error(`${said}: its discovery document gives an ${url.protocol}// ${key}.`);
     return url.href;
   };
+  const egressPolicy = (): EgressPolicy => ({
+    ...DEFAULT_POLICY,
+    /* Tenant-configured OIDC providers must not reach private/internal networks
+       unless explicitly marked insecure (tests); link-local/metadata is always blocked. */
+    allowPrivate: config.tenant === undefined || Boolean(config.insecure),
+    allowLinkLocal: false,
+    insecure: Boolean(config.insecure),
+    timeoutMs: FETCH_MS,
+  });
+  const egressJwks = (jwksUrl: URL) => {
+    if (!jose.createLocalJWKSet) return jose.createRemoteJWKSet(jwksUrl, { timeoutDuration: FETCH_MS });
+    const createLocal = jose.createLocalJWKSet;
+    let cached: { local: (header?: Record<string, unknown>, token?: unknown) => Promise<unknown>; at: number } | undefined;
+    let inflight: Promise<{ local: (header?: Record<string, unknown>, token?: unknown) => Promise<unknown>; at: number }> | undefined;
+    const load = () => {
+      if (inflight) return inflight;
+      const run = (inflight = (async () => {
+        const reply = await egressSend(jwksUrl, { accept: 'application/json' }, egressPolicy());
+        const keys = reply.json && typeof reply.json === 'object' ? (reply.json as { keys?: unknown }).keys : undefined;
+        if (reply.status < 200 || reply.status > 299 || !Array.isArray(keys)) {
+          throw new Error(`${said}: its JWKS (${jwksUrl.href}) answered ${reply.status} without a key set.`);
+        }
+        const loaded = { local: createLocal({ keys }), at: Date.now() };
+        cached = loaded;
+        return loaded;
+      })());
+      run.finally(() => {
+        if (inflight === run) inflight = undefined;
+      });
+      return run;
+    };
+    return async (protectedHeader?: Record<string, unknown>, token?: unknown) => {
+      const now = Date.now();
+      const entry = cached && now - cached.at < 10 * 60_000 ? cached : await load();
+      try {
+        return await entry.local(protectedHeader, token);
+      } catch (error) {
+        if ((error as { code?: string })?.code === 'ERR_JWKS_NO_MATCHING_KEY' && Date.now() - entry.at >= 30_000) {
+          const refreshed = await load();
+          return refreshed.local(protectedHeader, token);
+        }
+        throw error;
+      }
+    };
+  };
   let discovered: Promise<Discovered> | undefined;
   const discover = (): Promise<Discovered> => {
     const cached = discovered;
@@ -179,9 +231,11 @@ export function oidcProvider(config: IdentityProviderConfig, options: ProviderOp
       const url = config.discovery
         ? expandEnvReferences(config.discovery, options.environment)
         : `${iss.replace(/\/+$/, '')}/.well-known/openid-configuration`;
-      const res = await fetch(url, { headers: { accept: 'application/json' }, redirect: 'error', signal: AbortSignal.timeout(FETCH_MS) });
-      if (!res.ok) throw new Error(`${said}: its discovery document (${url}) answered ${res.status}.`);
-      const doc = (await res.json()) as Record<string, unknown>;
+      const reply = await egressSend(new URL(url), { accept: 'application/json' }, egressPolicy());
+      if (reply.status < 200 || reply.status > 299 || !reply.json || typeof reply.json !== 'object' || Array.isArray(reply.json)) {
+        throw new Error(`${said}: its discovery document (${url}) answered ${reply.status}.`);
+      }
+      const doc = reply.json as Record<string, unknown>;
       /* The issuer the document names is the one every token must carry,
          exactly: a document that names another describes another provider. */
       if (doc.issuer !== iss)
@@ -203,7 +257,7 @@ export function oidcProvider(config: IdentityProviderConfig, options: ProviderOp
       return {
         authorization: scheme(doc.authorization_endpoint as string, 'authorization_endpoint'),
         token: scheme(doc.token_endpoint as string, 'token_endpoint'),
-        jwks: jose.createRemoteJWKSet(new URL(scheme(doc.jwks_uri as string, 'jwks_uri')), { timeoutDuration: FETCH_MS }),
+        jwks: egressJwks(new URL(scheme(doc.jwks_uri as string, 'jwks_uri'))),
         algorithms,
         basic: methods.includes('client_secret_basic') || !methods.includes('client_secret_post'),
         at: Date.now(),
@@ -333,7 +387,7 @@ export function oidcProvider(config: IdentityProviderConfig, options: ProviderOp
         redirect_uri: data.redirectURI,
         code_verifier: data.codeVerifier,
       });
-      const headers: Record<string, string> = { 'content-type': 'application/x-www-form-urlencoded', accept: 'application/json' };
+      const headers: Record<string, string> = { accept: 'application/json' };
       const key = secret();
       if (key && found.basic)
         headers.authorization = `Basic ${Buffer.from(`${encodeURIComponent(clientId())}:${encodeURIComponent(key)}`).toString('base64')}`;
@@ -341,11 +395,20 @@ export function oidcProvider(config: IdentityProviderConfig, options: ProviderOp
         body.set('client_id', clientId());
         if (key) body.set('client_secret', key);
       }
-      const res = await fetch(found.token, { method: 'POST', headers, body, redirect: 'error', signal: AbortSignal.timeout(FETCH_MS) });
-      const answer = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-      if (!res.ok || typeof answer?.id_token !== 'string') {
+      const reply = await egressRequest(
+        new URL(found.token),
+        {
+          method: 'POST',
+          headers,
+          text: { type: 'application/x-www-form-urlencoded', body: body.toString() },
+        },
+        egressPolicy(),
+      );
+      const answer =
+        reply.json && typeof reply.json === 'object' && !Array.isArray(reply.json) ? (reply.json as Record<string, unknown>) : null;
+      if (reply.status < 200 || reply.status > 299 || typeof answer?.id_token !== 'string') {
         throw new Error(
-          `${said}: its token endpoint answered ${res.status}${typeof answer?.error === 'string' ? ` (${answer.error})` : ''} and no ID token.`,
+          `${said}: its token endpoint answered ${reply.status}${typeof answer?.error === 'string' ? ` (${answer.error})` : ''} and no ID token.`,
         );
       }
       // Only the ID token: nothing calls the provider afterwards, so no access or refresh token is kept.

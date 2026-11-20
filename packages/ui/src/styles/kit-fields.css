@@ -74,8 +74,10 @@
       background-color var(--m-fast),
       border-color var(--m-fast);
 
-    &:hover {
-      background: var(--m-raised);
+    @media (hover: hover) {
+      &:hover {
+        background: var(--m-raised);
+      }
     }
 
     &:focus-visible {

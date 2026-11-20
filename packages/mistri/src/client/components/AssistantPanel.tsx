@@ -346,7 +346,9 @@ function RecordCard({ block, onFollow }: { block: Extract<AssistantBlock, { kind
 function Steps({ steps, running }: { steps: Extract<PanelItem, { type: 'step' }>[]; running?: string }) {
   return (
     <details className="assistant-steps">
-      <summary>{running ?? say('steps', { count: steps.length })}</summary>
+      <summary aria-live={running ? 'polite' : undefined} aria-atomic={running ? true : undefined}>
+        {running ?? say('steps', { count: steps.length })}
+      </summary>
       <ol>
         {steps.map((step) => (
           <li key={step.id} className={step.failed ? 'assistant-step-failed' : undefined}>
@@ -781,7 +783,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
   }, [opened.isError, room]);
   useEffect(() => () => stop.current?.abort(), []);
   useEffect(() => {
-    box.current?.focus();
+    if (!listing) box.current?.focus();
   }, [conversation, listing]);
   // The newest words stay in view while they arrive, unless the person has scrolled up to read.
   const pinned = useRef(true);
@@ -1204,7 +1206,6 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
             <div
               className="assistant-body"
               ref={body}
-              aria-live="polite"
               aria-busy={busy}
               onScroll={(event) => {
                 const view = event.currentTarget;
@@ -1290,7 +1291,9 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
                 return null;
               })}
               {busy && (drawn.length === 0 || drawn[drawn.length - 1].type !== 'steps') && running && (
-                <p className="assistant-working">{running}</p>
+                <p className="assistant-working" role="status" aria-live="polite" aria-atomic="true">
+                  {running}
+                </p>
               )}
               {problem && (
                 <div className="assistant-problem" role="alert">

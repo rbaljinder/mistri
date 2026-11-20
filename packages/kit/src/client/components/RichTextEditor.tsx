@@ -153,6 +153,7 @@ export function RichTextEditor({
   const latest = useLatest({ onChange, mentions, pictures, onKey, onProblem, suggesting });
   /* The last query whose people came back, and how many: a space is let into the query only while it still names someone. */
   const answered = useRef<{ query: string; count: number }>({ query: '', count: 1 });
+  const root = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   /* The editor, for the paste and drop handlers it is configured with before it exists. */
   const editorRef = useRef<Editor | null>(null);
@@ -378,7 +379,7 @@ export function RichTextEditor({
   };
 
   return (
-    <div className={`rich-editor${disabled ? ' is-disabled' : ''}`} data-invalid={invalid ? '' : undefined}>
+    <div ref={root} className={`rich-editor${disabled ? ' is-disabled' : ''}`} data-invalid={invalid ? '' : undefined}>
       <div className="rich-toolbar" role="toolbar" aria-label={say('formatting', { label })}>
         <ToolButton label={say('bold')} active={editor.isActive('bold')} disabled={disabled} onClick={run((c) => c.toggleBold())}>
           <strong>{say('boldMark')}</strong>
@@ -395,6 +396,7 @@ export function RichTextEditor({
           triggerClassName="rich-tool rich-tool-wide"
           triggerTitle={say('textStyle')}
           triggerLabel={`${say('textStyle')}: ${style}`}
+          disabled={disabled}
           label={
             <>
               {style}
@@ -458,6 +460,7 @@ export function RichTextEditor({
           triggerClassName="rich-tool"
           triggerTitle={say('table')}
           triggerLabel={say('table')}
+          disabled={disabled}
           label="⊞"
           popupClassName="page-actions-popup rich-menu"
           align="start"
@@ -567,13 +570,27 @@ export function RichTextEditor({
           }
         }}
       />
-      {suggesting && <MentionList suggesting={suggesting} onPick={(person) => suggesting.pick(person)} />}
+      {suggesting && (
+        <MentionList
+          suggesting={suggesting}
+          container={root.current?.closest<HTMLElement>('dialog, [role="dialog"]') ?? popupContainer() ?? null}
+          onPick={(person) => suggesting.pick(person)}
+        />
+      )}
     </div>
   );
 }
 
 /* The people an @ may name, under the @: a listbox the editor drives by key (the focus stays in the text). */
-function MentionList({ suggesting, onPick }: { suggesting: Suggesting; onPick: (person: MentionPerson) => void }) {
+function MentionList({
+  suggesting,
+  container,
+  onPick,
+}: {
+  suggesting: Suggesting;
+  container: HTMLElement | null;
+  onPick: (person: MentionPerson) => void;
+}) {
   /* Where the @ stands, as the window measures it. UI SDK places the list in the same measure and works out the
      density zoom for itself from the list's own box, so nothing is divided out here. */
   const anchor = { getBoundingClientRect: () => suggesting.box() ?? new DOMRect() };
@@ -589,7 +606,7 @@ function MentionList({ suggesting, onPick }: { suggesting: Suggesting; onPick: (
         align="start"
         sideOffset={4}
         collisionPadding={8}
-        container={popupContainer()}
+        container={container}
         initialFocus="none"
         finalFocus="none"
       >

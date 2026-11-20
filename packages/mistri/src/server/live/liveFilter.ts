@@ -31,7 +31,7 @@
 import { createHash } from 'node:crypto';
 import type { Condition } from '@mistriwork/engine/shared/filter.js';
 import type { RowScopeFilter, ViaCondition } from '@mistriwork/engine/shared/rowScope.js';
-import type { LiveEntry, LiveKey, LiveKind, StoredLiveChange } from '../../adapters/live/liveChange.js';
+import { LIVE_CHANGE_LIMITS, type LiveEntry, type LiveKey, type LiveKind, type StoredLiveChange } from '../../adapters/live/liveChange.js';
 
 /** One table a subscriber may be told of, by its physical name in the change store. */
 export interface LiveGrant {
@@ -211,7 +211,15 @@ export async function deliverChange(
       if (!table) into.tables.set(id, (table = { keys: new Map(), kinds: new Set() }));
       table.kinds.add(entry.kind);
       if (told === 'many' || table.keys === 'many') table.keys = 'many';
-      else for (const key of told) table.keys.set(keyText(key), key);
+      else {
+        for (const key of told) {
+          table.keys.set(keyText(key), key);
+          if (table.keys.size > LIVE_CHANGE_LIMITS.keys) {
+            table.keys = 'many';
+            break;
+          }
+        }
+      }
     };
     tell(grant.id, grant.keyless ? 'many' : keys);
     for (const alias of grant.aliases ?? []) tell(alias, 'many');

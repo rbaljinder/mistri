@@ -186,6 +186,7 @@ function requestUntraced(url: URL, asked: EgressRequest, policy: EgressPolicy): 
         method: asked.method,
         headers,
         lookup: checkedLookup(policy, refused) as never,
+        ...(policy.resolver ? { agent: false } : {}),
         timeout: policy.connectTimeoutMs,
       },
       (response: IncomingMessage) => {

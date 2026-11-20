@@ -6,9 +6,10 @@
   [data-slot='tooltip-trigger'][data-kind='help-tip'] {
     display: inline-grid;
     place-items: center;
-    width: 1.125rem;
-    height: 1.125rem;
-    min-width: 0;
+    width: 1.5rem;
+    height: 1.5rem;
+    min-width: 1.5rem;
+    min-height: 1.5rem;
     padding: 0;
     border: 1px solid var(--m-line-control);
     border-radius: 999px;
@@ -25,10 +26,16 @@
       height: 0.6875rem;
     }
 
-    &:hover,
     &[aria-expanded='true'] {
       background: var(--m-accent-soft);
       color: var(--m-accent-ink);
+    }
+
+    @media (hover: hover) {
+      &:hover {
+        background: var(--m-accent-soft);
+        color: var(--m-accent-ink);
+      }
     }
   }
 
@@ -82,9 +89,11 @@
       color: var(--m-ink-muted);
       cursor: pointer;
 
-      &:hover:not(:disabled) {
-        background: var(--m-raised);
-        color: var(--m-ink);
+      @media (hover: hover) {
+        &:hover:not(:disabled) {
+          background: var(--m-raised);
+          color: var(--m-ink);
+        }
       }
 
       &:disabled {

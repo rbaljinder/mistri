@@ -35,6 +35,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   toast: vi.fn(),
   viewportSize: () => ({ width: 1024, height: 768 }),
   viewportBox: (element: Element) => element.getBoundingClientRect(),
+  registerSurfaceMutationPendingProbe: () => () => {},
 }));
 vi.mock('../../../../kit/src/client/components/Value.js', () => ({ Value: () => null }));
 /* An App's own input, standing in a field: says which component, for which field, with which value. */

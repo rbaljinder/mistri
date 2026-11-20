@@ -20,6 +20,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   viewportSize: () => ({ width: 1024, height: 768 }),
   viewportBox: (element: Element) => element.getBoundingClientRect(),
   setRecordMutationPendingProbe: () => {},
+  registerSurfaceMutationPendingProbe: () => () => {},
 }));
 vi.mock('../../../../kit/src/client/components/Value.js', () => ({ Value: () => null }));
 

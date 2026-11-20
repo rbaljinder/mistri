@@ -685,7 +685,11 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     const fresh = first ? await freshJob(job) : false;
     if (fresh === undefined) return false;
     const zones = new Map<string, string[]>();
-    for (const tenant of tenants) zones.set(tenant.zone, [...(zones.get(tenant.zone) ?? []), tenant.id]);
+    for (const tenant of tenants) {
+      let ids = zones.get(tenant.zone);
+      if (!ids) zones.set(tenant.zone, (ids = []));
+      ids.push(tenant.id);
+    }
     for (const key of [...slotDue.keys()])
       if (key.startsWith(`${job.id}@`) && !zones.has(key.slice(job.id.length + 1))) slotDue.delete(key);
     let enqueued = false,

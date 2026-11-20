@@ -125,7 +125,7 @@ function localeDateTime(iso: string, mask: { order: string[]; sep: string }): st
 function readDateTime(text: string, mask: { order: string[] }): string | undefined {
   const typed = text.trim();
   if (isPickerDateTime(text)) return text;
-  const split = typed.match(/^(\S+)[ T](\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)$/);
+  const split = typed.match(/^(.+?)[ T](\d{1,2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?)$/);
   if (!split) return undefined;
   const date = readDate(split[1]!, mask);
   const time = /^\d:/.test(split[2]!) ? `0${split[2]}` : split[2]!;
@@ -136,7 +136,7 @@ function readDateTime(text: string, mask: { order: string[] }): string | undefin
 /** What was typed, read as a whole date in the locale's order (or ISO), else undefined: a draft stays text. */
 function readDate(text: string, mask: { order: string[] }): string | undefined {
   if (isoDate(text)) return text;
-  const numbers = text.trim().match(/^(\d{1,4})\D(\d{1,2})\D(\d{1,4})$/);
+  const numbers = text.trim().match(/^(\d{1,4})\s*\D\s*(\d{1,2})\s*\D\s*(\d{1,4})$/);
   if (!numbers) return undefined;
   const at: Record<string, string> = {};
   mask.order.forEach((type, index) => (at[type] = numbers[index + 1]!));
@@ -416,7 +416,10 @@ function DefaultDateField({
           value={(splitDateTime(value)?.time ?? '').slice(0, 5)}
           onChange={(event) => {
             const clock = event.target.value;
-            if (!clock) return;
+            if (!clock) {
+              onChange(isPickerDate(datePart) ? datePart : '', changeDetails('input-change', event));
+              return;
+            }
             const day = isPickerDate(datePart) ? datePart : today;
             onChange(`${day} ${clock}`, changeDetails('input-change', event));
           }}

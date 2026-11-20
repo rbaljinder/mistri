@@ -479,14 +479,26 @@ test(
       );
     });
 
-    await t.test('owned operation connections are closed and a closed store refuses new work', async () => {
-      const active = (
-        await admin.query("SELECT count(*)::integer AS count FROM pg_stat_activity WHERE usename=$1 AND application_name='mistri-flags'", [
-          role,
-        ])
-      ).rows[0].count;
-      assert.equal(active, 0);
+    await t.test('owned pool connections are bounded while open, closed on close(), and a closed store refuses new work', async () => {
+      const whileOpen = Number(
+        (
+          await admin.query(
+            "SELECT count(*)::integer AS count FROM pg_stat_activity WHERE usename=$1 AND application_name='mistri-flags'",
+            [role],
+          )
+        ).rows[0].count,
+      );
+      assert.ok(whileOpen <= 4, `expected at most 4 pooled flag connections, got ${whileOpen}`);
       await store.close();
+      const afterClose = Number(
+        (
+          await admin.query(
+            "SELECT count(*)::integer AS count FROM pg_stat_activity WHERE usename=$1 AND application_name='mistri-flags'",
+            [role],
+          )
+        ).rows[0].count,
+      );
+      assert.equal(afterClose, 0);
       await assert.rejects(store.read(base, catalog), FlagStoreUnavailable);
     });
   },

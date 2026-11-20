@@ -226,7 +226,7 @@ export function TriageBoard({
   useEffect(() => {
     const present = new Set(cards.map((card) => card.id));
     for (const id of [...cardRefs.current.keys()]) if (!present.has(id)) cardRefs.current.delete(id);
-  });
+  }, [cards]);
   const focusCard = (card: TriageCard | undefined) => {
     if (card) cardRefs.current.get(card.id)?.focus();
     return Boolean(card);
@@ -245,9 +245,14 @@ export function TriageBoard({
       return;
     }
     const laneIndex = lanes.findIndex((lane) => lane.id === card.laneId);
-    const destination = lanes[laneIndex + (direction === 'left' ? -1 : 1)];
-    const destinationCards = destination ? (byCell.get(cellKey(rowOf(card), destination.id)) ?? []) : [];
-    focusCard(destinationCards[direction === 'left' ? destinationCards.length - 1 : 0]);
+    const step = direction === 'left' ? -1 : 1;
+    // Skip folded or empty lanes so keyboard navigation reaches the next lane that holds cards.
+    for (let i = laneIndex + step; i >= 0 && i < lanes.length; i += step) {
+      const destination = lanes[i];
+      if (!destination || (destination.folded && destination.onFold)) continue;
+      const destinationCards = byCell.get(cellKey(rowOf(card), destination.id)) ?? [];
+      if (focusCard(destinationCards[direction === 'left' ? destinationCards.length - 1 : 0])) return;
+    }
   };
   const allowed = (card: TriageCard, laneId: string) =>
     laneId !== card.laneId && (card.targets === undefined || card.targets.includes(laneId));

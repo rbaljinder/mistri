@@ -104,10 +104,14 @@ export function decodeReply(buffer: Buffer, start = 0): { value: RespValue | Res
   }
 }
 
+const MAX_WAITING = 1024;
+
 export class RespClient {
   private socket?: Socket;
+  private connectingSocket?: Socket;
   private opening?: Promise<Socket>;
-  private buffer: Buffer = Buffer.alloc(0);
+  private chunks: Buffer[] = [];
+  private buffered = 0;
   private readonly waiting: Waiting[] = [];
   private quietUntil = 0;
   private lastFailure = '';
@@ -123,12 +127,16 @@ export class RespClient {
   async command(...args: Array<string | number>): Promise<RespValue> {
     if (this.closed) throw new CacheUnavailable('the cache connection is closed.');
     if (Date.now() < this.quietUntil) throw new CacheUnavailable(this.lastFailure);
+    if (this.waiting.length >= MAX_WAITING) throw new CacheUnavailable(`${this.where}: too many commands waiting for a reply.`);
     const socket = await this.connected();
     return this.write(socket, args);
   }
 
   async close(): Promise<void> {
     this.closed = true;
+    const connecting = this.connectingSocket;
+    this.connectingSocket = undefined;
+    connecting?.destroy();
     const socket = this.socket;
     this.socket = undefined;
     if (socket) {
@@ -142,6 +150,9 @@ export class RespClient {
   }
 
   private write(socket: Socket, args: Array<string | number>): Promise<RespValue> {
+    if (this.waiting.length >= MAX_WAITING) {
+      return Promise.reject(new CacheUnavailable(`${this.where}: too many commands waiting for a reply.`));
+    }
     return new Promise<RespValue>((resolve, reject) => {
       const timer = setTimeout(
         () => this.fail(`${this.where} did not answer within ${(this.options.commandTimeoutMs ?? 1_000) / 1000} s.`),
@@ -167,9 +178,13 @@ export class RespClient {
     this.lastFailure = message;
     this.quietUntil = Date.now() + (this.options.retryAfterMs ?? 2_000);
     const socket = this.socket;
+    const connecting = this.connectingSocket;
     this.socket = undefined;
-    this.buffer = Buffer.alloc(0);
+    this.connectingSocket = undefined;
+    this.chunks = [];
+    this.buffered = 0;
     socket?.destroy();
+    if (connecting && connecting !== socket) connecting.destroy();
     for (const waiting of this.waiting.splice(0)) waiting.reject(new CacheUnavailable(message));
   }
 
@@ -215,13 +230,19 @@ export class RespClient {
       this.quietUntil = Date.now() + (this.options.retryAfterMs ?? 2_000);
       throw error;
     });
+    if (this.closed) {
+      socket.destroy();
+      throw new CacheUnavailable('the cache connection is closed.');
+    }
     socket.setNoDelay(true);
     socket.on('data', (chunk: Buffer) => this.read(chunk));
     socket.on('error', (error: NodeJS.ErrnoException) => this.fail(`${this.where}: ${error.code ?? 'the connection failed'}.`));
     socket.on('close', () => {
-      if (this.socket === socket) this.fail(`${this.where} closed the connection.`);
+      if (this.socket === socket || this.connectingSocket === socket) this.fail(`${this.where} closed the connection.`);
     });
-    this.socket = socket;
+    /* Hold the socket privately until AUTH and SELECT finish so concurrent callers
+       await `this.opening` and can never pipeline commands before authentication. */
+    this.connectingSocket = socket;
     try {
       if (this.options.password !== undefined) {
         await this.write(
@@ -238,20 +259,38 @@ export class RespClient {
       this.fail(message);
       throw new CacheUnavailable(message);
     }
+    this.connectingSocket = undefined;
+    if (this.closed) {
+      socket.destroy();
+      throw new CacheUnavailable('the cache connection is closed.');
+    }
+    this.socket = socket;
     return socket;
   }
 
   private read(chunk: Buffer): void {
-    this.buffer = this.buffer.length ? Buffer.concat([this.buffer, chunk]) : chunk;
+    this.chunks.push(chunk);
+    this.buffered += chunk.length;
+    const buffer = this.chunks.length === 1 ? this.chunks[0] : Buffer.concat(this.chunks, this.buffered);
+    let offset = 0;
     for (;;) {
       let reply;
       try {
-        reply = decodeReply(this.buffer);
+        reply = decodeReply(buffer, offset);
       } catch (error) {
         return this.fail((error as Error).message);
       }
-      if (!reply) return;
-      this.buffer = this.buffer.subarray(reply.end);
+      if (!reply) {
+        if (offset > 0) {
+          const rest = buffer.subarray(offset);
+          this.chunks = rest.length ? [rest] : [];
+          this.buffered = rest.length;
+        } else if (this.chunks.length > 1) {
+          this.chunks = [buffer];
+        }
+        return;
+      }
+      offset = reply.end;
       const waiting = this.waiting.shift();
       if (!waiting) continue;
       if (reply.value instanceof RespReplyError) waiting.reject(reply.value);

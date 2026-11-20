@@ -42,6 +42,7 @@ const NEVER = ranges([
 ]);
 const LINK_LOCAL = ranges([
   ['169.254.0.0', 16],
+  ['100.100.100.200', 32],
   ['fe80::', 10],
   ['fd00:ec2::254', 128],
 ]);
@@ -74,17 +75,22 @@ function sixteen(address: string): number[] | undefined {
   return all.flatMap((group) => [parseInt(group, 16) >> 8, parseInt(group, 16) & 255]);
 }
 
-/* The IPv4 address an IPv6 spelling carries inside it, which is the address a gateway or a tunnel then connects to:
-   NAT64 (64:ff9b::/96), 6to4 (2002::/16) and the long-retired IPv4-compatible form (::/96). BlockList already reads the
-   IPv4-mapped spelling (`::ffff:a.b.c.d`) by its IPv4 rules. */
-function embedded(address: string): string | undefined {
+/* The IPv4 addresses an IPv6 spelling carries inside it, which is the address a gateway or a tunnel then connects to:
+   NAT64 (64:ff9b::/96), 6to4 (2002::/16), SIIT (::ffff:0:0/96), Teredo (2001:0000::/32, server + XOR-inverted client),
+   and the long-retired IPv4-compatible form (::/96). BlockList already reads the IPv4-mapped spelling (`::ffff:a.b.c.d`)
+   by its IPv4 rules. */
+function embedded(address: string): string[] {
   const bytes = sixteen(address);
-  if (!bytes) return undefined;
+  if (!bytes) return [];
   const v4 = (at: number) => bytes.slice(at, at + 4).join('.');
-  if (bytes[0] === 0x20 && bytes[1] === 0x02) return v4(2);
-  if (bytes.slice(0, 12).every((byte, index) => byte === [0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0][index])) return v4(12);
-  if (bytes.slice(0, 12).every((byte) => byte === 0)) return v4(12);
-  return undefined;
+  if (bytes[0] === 0x20 && bytes[1] === 0x02) return [v4(2)];
+  if (bytes[0] === 0x20 && bytes[1] === 0x01 && bytes[2] === 0x00 && bytes[3] === 0x00) {
+    return [v4(4), [bytes[12] ^ 0xff, bytes[13] ^ 0xff, bytes[14] ^ 0xff, bytes[15] ^ 0xff].join('.')];
+  }
+  if (bytes.slice(0, 12).every((byte, index) => byte === [0, 0x64, 0xff, 0x9b, 0, 0, 0, 0, 0, 0, 0, 0][index])) return [v4(12)];
+  if (bytes.slice(0, 12).every((byte, index) => byte === [0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff, 0, 0][index])) return [v4(12)];
+  if (bytes.slice(0, 12).every((byte) => byte === 0)) return [v4(12)];
+  return [];
 }
 
 function reachable(address: string, policy: NetworkPolicy): boolean {
@@ -93,8 +99,12 @@ function reachable(address: string, policy: NetworkPolicy): boolean {
   if (!policy.allowLinkLocal && LINK_LOCAL.check(address, type)) return false;
   if (!policy.allowPrivate && PRIVATE.check(address, type)) return false;
   // An address that wraps another is as reachable as the one inside it.
-  const inside = type === 'ipv6' ? embedded(address) : undefined;
-  return inside === undefined || reachable(inside, policy);
+  if (type === 'ipv6') {
+    for (const inside of embedded(address)) {
+      if (!reachable(inside, policy)) return false;
+    }
+  }
+  return true;
 }
 
 /**

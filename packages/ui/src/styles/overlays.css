@@ -11,7 +11,7 @@
   [data-slot='dialog-content'][data-kind='sheet'] {
     width: min(30rem, calc(100% - 2rem));
     max-height: min(44rem, calc(100dvh - 4rem));
-    border-radius: calc(var(--m-radius) + 4px);
+    border-radius: calc(var(--m-radius) + min(4px, var(--m-radius)));
 
     &[data-size='lg'] {
       width: min(42rem, calc(100% - 2rem));
@@ -24,8 +24,15 @@
     height: calc(100dvh - 1rem);
     max-height: none;
     margin-block: var(--m-space-3);
-    margin-inline-end: var(--m-space-3);
-    border-radius: calc(var(--m-radius) + 4px);
+    border-radius: calc(var(--m-radius) + min(4px, var(--m-radius)));
+  }
+
+  [data-slot='drawer-content'][data-kind='sheet'][data-side='right'] {
+    margin-inline-end: calc(var(--m-space-3) + env(safe-area-inset-right, 0px));
+  }
+
+  [data-slot='drawer-content'][data-kind='sheet'][data-side='left'] {
+    margin-inline-start: calc(var(--m-space-3) + env(safe-area-inset-left, 0px));
   }
 
   [data-slot='sheet-head'] {
@@ -56,7 +63,7 @@
   [data-slot='sheet-body'] {
     flex: 1;
     min-height: 0;
-    padding: var(--m-space-2) var(--m-space-5h) var(--m-space-6);
+    padding: var(--m-space-2) var(--m-space-5h) calc(var(--m-space-6) + env(safe-area-inset-bottom, 0px));
     overflow-y: auto;
     overscroll-behavior: contain;
   }
@@ -67,8 +74,10 @@
     background: var(--m-critical);
     color: var(--m-surface);
 
-    &:hover:not([data-disabled]) {
-      background: color-mix(in oklab, var(--m-critical) 88%, var(--m-ink));
+    @media (hover: hover) {
+      &:hover:not([data-disabled]) {
+        background: color-mix(in oklab, var(--m-critical) 88%, var(--m-ink));
+      }
     }
   }
 

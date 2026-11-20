@@ -35,7 +35,6 @@
   "packages/mistri/src/client/components/Document.css": 1,
   "packages/mistri/src/client/components/FormLines.css": 3,
   "packages/mistri/src/client/components/Funnel.css": 1,
-  "packages/mistri/src/client/components/GanttList.css": 1,
   "packages/mistri/src/client/components/ImportDialog.css": 2,
   "packages/mistri/src/client/components/Inbox.css": 2,
   "packages/mistri/src/client/components/NewMenu.css": 2,

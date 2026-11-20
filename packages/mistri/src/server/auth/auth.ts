@@ -1875,12 +1875,12 @@ export async function createAppAuth(
         if (embedExchange && path === `${under}/api/auth/embed/exchange`) return embedExchange.exchange(req, res);
         if (embedExchange && path === `${under}/api/auth/embed/sign-out`) return embedExchange.signOut(req, res);
         /* Better Auth's own admin endpoints judge the role the account has
-           stored. A role the App maps from claims is the provider's, and
-           counts only for its sessions (sessionRoles): a password session of
-           an account whose admin came from claims must not set passwords or
-           roles through them. They answer a session whose App roles hold
-           admin, as the accounts screen in front of them does. */
-        if (federation && nativeAdminPath(path.slice(under.length)) && !rolesOf((await runtime.session(req))?.role).includes(ADMIN_ROLE)) {
+           stored, not the effective role of the current session. A role mapped
+           from claims counts only for federated sessions (sessionRoles), and an
+           embed or surface-token session may be narrowed below the account's
+           stored admin role. Gate every native admin endpoint on the effective
+           session's App roles unconditionally, as the accounts screen does. */
+        if (nativeAdminPath(path.slice(under.length)) && !rolesOf((await runtime.session(req))?.role).includes(ADMIN_ROLE)) {
           res.statusCode = 403;
           res.setHeader('content-type', 'application/json');
           res.setHeader('cache-control', 'no-store');

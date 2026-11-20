@@ -604,7 +604,7 @@ describe('job store on SQLite only', () => {
     `CREATE TABLE __MISTRI_JOB_lookalike (id TEXT)`,
     `CREATE TRIGGER extra AFTER UPDATE ON "${tables.job}" BEGIN SELECT 1; END`,
     `DROP INDEX __mistri_job_due`,
-    `UPDATE "${tables.policy}" SET version=2`,
+    `UPDATE "${tables.policy}" SET version=99`,
     `UPDATE "${tables.policy}" SET policy_json='{}'`,
   ])
     test(`changed reserved schema is refused: ${sql}`, (t) => {

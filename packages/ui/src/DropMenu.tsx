@@ -37,6 +37,7 @@ interface DropMenuProps {
   side?: 'top' | 'bottom';
   align?: 'start' | 'end';
   sideOffset?: number;
+  disabled?: boolean;
   open?: boolean;
   onOpenChange?: (
     open: boolean,
@@ -72,6 +73,7 @@ function DefaultDropMenu({
   side = 'bottom',
   align = 'end',
   sideOffset = 4,
+  disabled,
   open,
   onOpenChange,
   finalFocus,
@@ -114,7 +116,7 @@ function DefaultDropMenu({
      would have been had the item been there: only while it is still where the opening left it, and only for a
      menu that opened empty, so one that opened with its items under a pointer keeps no item lit. */
   const [own, setOwn] = useState(false);
-  const isOpen = open ?? own;
+  const isOpen = disabled ? false : (open ?? own);
   const openedEmpty = useRef(false);
   useEffect(() => {
     if (!isOpen) {
@@ -140,8 +142,9 @@ function DefaultDropMenu({
   return (
     <div className={className || undefined} data-slot="drop-menu" ref={root}>
       <Menu
-        open={open}
+        open={disabled ? false : open}
         onOpenChange={(next, details) => {
+          if (disabled && next) return;
           setOwn(next);
           if (!next && finalFocus !== undefined) {
             const at = document.activeElement;
@@ -158,6 +161,7 @@ function DefaultDropMenu({
           data-own={triggerClassName ? '' : undefined}
           title={triggerTitle}
           aria-label={triggerLabel}
+          disabled={disabled}
         >
           {label}
         </MenuTrigger>

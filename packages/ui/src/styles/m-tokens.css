@@ -170,4 +170,12 @@
     --ui-font-sans: var(--m-sans);
     --ui-font-mono: var(--m-mono);
   }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root,
+    body {
+      --m-fast: 0ms;
+      --m-enter: 0ms;
+    }
+  }
 }

@@ -18,7 +18,7 @@ const spoken = new WeakMap<HTMLElement, ReturnType<typeof setTimeout>>();
    status waited behind whatever was being read. */
 function announce(box: HTMLElement, message: string, urgent: boolean) {
   const id = urgent ? (box.dataset.alert ?? box.dataset.live) : box.dataset.live;
-  const live = id ? box.ownerDocument.getElementById(id) : null;
+  const live = id ? ((box.getRootNode() as Partial<Document>).getElementById?.(id) ?? box.ownerDocument.getElementById(id)) : null;
   if (!live) return;
   clearTimeout(spoken.get(live));
   live.textContent = '';

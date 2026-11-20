@@ -33,9 +33,14 @@ type Dialect = DatabaseSchema['dialect'];
    hides it in a database the browser opens with no App framework installed. */
 export const RESERVED_SCHEMAS: readonly string[] = [RUNTIME_SCHEMA];
 
+/* Postgres planner statistics catalogs can expose most-common-value samples and
+   histograms from reserved runtime/sign-in tables even when those tables are blocked. */
+const STATS_RELATIONS = new Set(['pg_stats', 'pg_statistic', 'pg_statistic_ext_data', 'pg_stats_ext', 'pg_stats_ext_exprs']);
+
 /** Whether a relation, as the engine names it, is tablewalk's own. */
 export function isReservedRelation(schema: string | undefined, name: string): boolean {
-  return isRuntimeTable(name) || (schema !== undefined && RESERVED_SCHEMAS.includes(schema.toLowerCase()));
+  const lower = name.toLowerCase();
+  return isRuntimeTable(name) || STATS_RELATIONS.has(lower) || (schema !== undefined && RESERVED_SCHEMAS.includes(schema.toLowerCase()));
 }
 
 /** The refusal for a statement found to touch `name`, by whichever half found it. */
@@ -66,15 +71,18 @@ function tokenize(sql: string, dialect: Dialect): Token[] | string {
   const n = sql.length;
   let i = 0;
   /* A quoted run with its closing character doubled as the escape. A
-     backslash escape (Postgres's E'…') can only make the run longer when read
-     as one, which the text check still reads. */
-  const quoted = (close: string, backslash: boolean): string => {
+     backslash escape (Postgres's E'…') can encode characters in octal/hex/unicode
+     which this check does not decode; those fail closed. */
+  const quoted = (close: string, backslash: boolean): { value: string; undecodedEscape: boolean } => {
     let value = '';
+    let undecodedEscape = false;
     i += 1;
     while (i < n) {
       const ch = sql[i];
       if (backslash && ch === '\\' && i + 1 < n) {
-        value += sql[i + 1];
+        const nextCh = sql[i + 1];
+        if (/[0-7xuU]/.test(nextCh)) undecodedEscape = true;
+        value += nextCh;
         i += 2;
         continue;
       }
@@ -90,7 +98,7 @@ function tokenize(sql: string, dialect: Dialect): Token[] | string {
       value += ch;
       i += 1;
     }
-    return value;
+    return { value, undecodedEscape };
   };
   while (i < n) {
     const ch = sql[i];
@@ -140,7 +148,7 @@ function tokenize(sql: string, dialect: Dialect): Token[] | string {
          this check does not decode; one without escapes reads as it is. */
       i += 2;
       const close = sql[i];
-      const value = quoted(close, false);
+      const { value } = quoted(close, false);
       if (value.includes('\\') || /^\s*uescape\b/i.test(sql.slice(i))) {
         return (
           'This statement spells a name with Unicode escapes (U&"…"), which the reserved-table check does not decode, ' +
@@ -153,22 +161,29 @@ function tokenize(sql: string, dialect: Dialect): Token[] | string {
     if (ch === "'") {
       /* E'…' is Postgres's backslash-escaped string. */
       const escaped = dialect === 'postgres' && /[eE]$/.test(sql.slice(Math.max(0, i - 1), i));
-      tokens.push({ kind: 'text', value: quoted("'", escaped) });
+      const { value, undecodedEscape } = quoted("'", escaped);
+      if (undecodedEscape) {
+        return (
+          "This statement uses octal, hex or Unicode escapes in E'…', which the reserved-table check does not decode, " +
+          'so it is refused rather than run. Spell the text plainly.'
+        );
+      }
+      tokens.push({ kind: 'text', value });
       continue;
     }
     if (ch === '"') {
-      tokens.push({ kind: 'quoted', value: quoted('"', false) });
+      tokens.push({ kind: 'quoted', value: quoted('"', false).value });
       continue;
     }
     if (ch === '`' && dialect !== 'postgres') {
-      tokens.push({ kind: 'quoted', value: quoted('`', false) });
+      tokens.push({ kind: 'quoted', value: quoted('`', false).value });
       continue;
     }
     if (ch === '[' && dialect === 'sqlite') {
-      tokens.push({ kind: 'quoted', value: quoted(']', false) });
+      tokens.push({ kind: 'quoted', value: quoted(']', false).value });
       continue;
     }
-    const word = /^[A-Za-z_-￿][\w$-￿]*/.exec(sql.slice(i))?.[0];
+    const word = /^[A-Za-z_\u0080-\uffff][\w$\u0080-\uffff]*/.exec(sql.slice(i))?.[0];
     if (word) {
       tokens.push({ kind: 'word', value: word });
       i += word.length;
@@ -182,6 +197,7 @@ function tokenize(sql: string, dialect: Dialect): Token[] | string {
 // A match in text (a comment, a string)
 // takes the rest of the name, so the refusal names the table, not the prefix.
 const RESERVED_TEXT = new RegExp(`(?:${RUNTIME_TABLE_PREFIXES.join('|')})[\\w$]*|\\b(?:${RESERVED_SCHEMAS.join('|')})\\b`, 'i');
+const STATS_TEXT = /\b(?:pg_stats|pg_statistic|pg_statistic_ext_data|pg_stats_ext|pg_stats_ext_exprs)\b/i;
 
 /**
  * Why this statement must not run under the guard, or null when nothing in
@@ -192,12 +208,13 @@ export function reservedInText(sql: string, dialect: Dialect): string | null {
   if (typeof tokens === 'string') return tokens;
   for (const token of tokens) {
     if (token.kind === 'text') {
-      const found = RESERVED_TEXT.exec(token.value);
+      const found = RESERVED_TEXT.exec(token.value) ?? (dialect === 'postgres' ? STATS_TEXT.exec(token.value) : null);
       if (found) return reservedRefusal(found[0]).message;
       continue;
     }
     const name = token.value;
-    if (isRuntimeTable(name) || (dialect === 'postgres' && RESERVED_SCHEMAS.includes(name.toLowerCase()))) {
+    const lower = name.toLowerCase();
+    if (isRuntimeTable(name) || (dialect === 'postgres' && (RESERVED_SCHEMAS.includes(lower) || STATS_RELATIONS.has(lower)))) {
       return reservedRefusal(name).message;
     }
     if (dialect === 'postgres' && COMPUTED_RELATION.test(name)) {
@@ -221,11 +238,22 @@ export function refuseReservedText(sql: string, dialect: Dialect): void {
  * The Postgres check before a statement is given a connection: its text,
  * and for a read, whether the planner can list what it reads — the engine
  * half below needs a plan, so a statement the planner cannot explain is
- * refused rather than run unchecked.
+ * refused rather than run unchecked. For a write, anonymous `DO` blocks are
+ * also refused because they can run dynamic SQL the planner never sees.
  */
 export function refusePostgresReserved(sql: string, write = false): void {
   refuseReservedText(sql, 'postgres');
-  if (!write && !looksWrappable(sql)) {
+  if (write) {
+    const tokens = tokenize(sql, 'postgres');
+    const first = Array.isArray(tokens) ? tokens.find((token) => token.kind !== 'text') : undefined;
+    if (first?.kind === 'word' && /^do$/i.test(first.value)) {
+      throw new Refusal(
+        'The reserved-table check refuses DO blocks because procedural code can execute dynamic SQL that cannot be checked.',
+      );
+    }
+    return;
+  }
+  if (!looksWrappable(sql)) {
     throw new Refusal(
       "The reserved-table check reads the planner's list of what a statement scans, so it " +
         'runs the statements the planner can explain: SELECT, WITH, TABLE and VALUES.',

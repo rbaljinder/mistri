@@ -56,6 +56,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   primaryKey: (t: TableMeta) => t.columns.filter((c) => c.primaryKey).map((c) => c.name),
   quote: (v: unknown) => (/^[\w.-]+$/.test(String(v)) ? String(v) : `"${String(v)}"`),
   keyOf: (_t: TableMeta, row: Record<string, unknown>) => (row.id == null ? null : { id: row.id }),
+  registerSurfaceMutationPendingProbe: () => () => {},
 }));
 vi.mock('../../../../kit/src/client/sessionIdentity.js', () => ({
   sessionIdentity: () => mocks.identity,

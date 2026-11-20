@@ -134,16 +134,34 @@ interface Kept {
   readonly choices: CachedChoices;
 }
 
+/* Bound distinct entry keys (localized/narrowed permutations) so cache memory cannot grow without limit. */
+const ENTRIES_MOST = 500;
+
 /** One database's cache in one registry: its entries, the generation each table is at, and its subscription. */
 interface DatabaseCache {
   readonly entries: Map<string, Kept>;
   readonly generations: Map<string, number>;
+  readonly inflight: Map<string, Promise<CachedChoices>>;
   tap?: LiveTap;
   hub?: LiveHub;
   listening?: Promise<boolean>;
 }
 
 const caches = new WeakMap<Registry, Map<string, DatabaseCache>>();
+
+function readKept(entries: Map<string, Kept>, key: string): CachedChoices | undefined {
+  const kept = entries.get(key);
+  if (!kept) return undefined;
+  entries.delete(key);
+  entries.set(key, kept);
+  return kept.choices;
+}
+
+function storeKept(entries: Map<string, Kept>, key: string, kept: Kept): void {
+  entries.delete(key);
+  entries.set(key, kept);
+  while (entries.size > ENTRIES_MOST) entries.delete(entries.keys().next().value!);
+}
 
 /* The locale only where it names a column, so an unlocalized field keeps one entry for every reader. */
 const localKey = (source: ChoiceEntry) => (source.local ? [source.local.locale, source.local.column] : []);
@@ -177,7 +195,7 @@ function databaseCache(registry: Registry, connection: string): DatabaseCache {
   let connections = caches.get(registry);
   if (!connections) caches.set(registry, (connections = new Map()));
   let cache = connections.get(connection);
-  if (!cache) connections.set(connection, (cache = { entries: new Map(), generations: new Map() }));
+  if (!cache) connections.set(connection, (cache = { entries: new Map(), generations: new Map(), inflight: new Map() }));
   return cache;
 }
 
@@ -193,6 +211,9 @@ function drop(cache: Pick<DatabaseCache, 'entries' | 'generations'>, physical: s
 }
 
 class BareGrants extends Map<string, LiveGrant> {
+  override has(table: string): boolean {
+    return super.has(table) || super.has(bareTable(table));
+  }
   override get(table: string): LiveGrant | undefined {
     return super.get(table) ?? super.get(bareTable(table));
   }
@@ -307,16 +328,25 @@ export async function sharedChoices(options: {
   const { registry, appId, connection, source } = options;
   const cache = databaseCache(registry, connection);
   const key = entryKey(appId, connection, source);
-  const kept = cache.entries.get(key);
-  if (kept) return kept.choices;
-  const hearing = choiceTablesOf(registry, connection).has(bareTable(source.physical)) && (await listen(registry, connection, cache));
+  const kept = readKept(cache.entries, key);
+  if (kept) return kept;
   const physical = bareTable(source.physical);
+  const hearing = choiceTablesOf(registry, connection).has(physical) && (await listen(registry, connection, cache));
   const generation = cache.generations.get(physical) ?? 0;
-  const choices = choicesOf(await options.read(), source);
-  if (hearing && cache.tap && (cache.generations.get(physical) ?? 0) === generation) {
-    cache.entries.set(key, { physical, choices });
-  }
-  return choices;
+  const flightKey = `${generation}\0${key}`;
+  const pending = cache.inflight.get(flightKey);
+  if (pending) return pending;
+  const run = (async () => {
+    const choices = choicesOf(await options.read(), source);
+    if (hearing && cache.tap && (cache.generations.get(physical) ?? 0) === generation) {
+      storeKept(cache.entries, key, { physical, choices });
+    }
+    return choices;
+  })().finally(() => {
+    if (cache.inflight.get(flightKey) === run) cache.inflight.delete(flightKey);
+  });
+  cache.inflight.set(flightKey, run);
+  return run;
 }
 
 /** The choices the cache holds for `source` of the App `appId` on `connection`, or undefined; tests read it. */
@@ -333,6 +363,7 @@ export function clearChoiceCache(registry: Registry): void {
     if (cache.tap) cache.hub?.detach(cache.tap);
     cache.tap = undefined;
     cache.hub = undefined;
+    cache.inflight.clear();
     drop(cache, 'all');
   }
 }
@@ -352,6 +383,7 @@ const TENANTS_MOST = 256;
 interface TenantCache {
   readonly entries: Map<string, Kept>;
   readonly generations: Map<string, number>;
+  readonly inflight: Map<string, Promise<CachedChoices>>;
   tap?: LiveTap;
   listening?: Promise<boolean>;
 }
@@ -376,13 +408,14 @@ function tenantCache(hub: LiveHub, tenant: string): TenantCache {
   if (!tenants) tenantCaches.set(hub, (tenants = new Map()));
   let cache = tenants.get(tenant);
   if (cache) tenants.delete(tenant);
-  else cache = { entries: new Map(), generations: new Map() };
+  else cache = { entries: new Map(), generations: new Map(), inflight: new Map() };
   tenants.set(tenant, cache);
   while (tenants.size > TENANTS_MOST) {
     const [oldest, gone] = tenants.entries().next().value as [string, TenantCache];
     tenants.delete(oldest);
     if (gone.tap) hub.detach(gone.tap);
     gone.tap = undefined;
+    gone.inflight.clear();
     drop(gone, 'all');
   }
   return cache;
@@ -446,13 +479,25 @@ export async function tenantChoices(options: {
   if (!hub || !options.tables.has(physical)) return choicesOf(await options.read(), source);
   const cache = tenantCache(hub, tenant);
   const key = tenantEntryKey(appId, tenant, source);
-  const kept = cache.entries.get(key);
-  if (kept) return kept.choices;
+  const kept = readKept(cache.entries, key);
+  if (kept) return kept;
   const hearing = await listenTenant(hub, tenant, cache, options.tables);
+  if (!hearing) return choicesOf(await options.read(), source);
   const generation = cache.generations.get(physical) ?? 0;
-  const choices = choicesOf(await options.read(), source);
-  if (hearing && cache.tap && (cache.generations.get(physical) ?? 0) === generation) cache.entries.set(key, { physical, choices });
-  return choices;
+  const flightKey = `${generation}\0${key}`;
+  const pending = cache.inflight.get(flightKey);
+  if (pending) return pending;
+  const run = (async () => {
+    const choices = choicesOf(await options.read(), source);
+    if (hearing && cache.tap && (cache.generations.get(physical) ?? 0) === generation) {
+      storeKept(cache.entries, key, { physical, choices });
+    }
+    return choices;
+  })().finally(() => {
+    if (cache.inflight.get(flightKey) === run) cache.inflight.delete(flightKey);
+  });
+  cache.inflight.set(flightKey, run);
+  return run;
 }
 
 /** The choices the cache holds for one tenant's `source` of the App `appId` behind `hub`, or undefined; tests read it. */

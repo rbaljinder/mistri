@@ -43,12 +43,13 @@ const string = (name: string, max: number) =>
   `${name} TEXT COLLATE BINARY NOT NULL CHECK (typeof(${name})='text' AND instr(${name},char(0))=0 AND length(CAST(${name} AS BLOB)) BETWEEN 1 AND ${max})`;
 const integer = (name: string, max = Number.MAX_SAFE_INTEGER) =>
   `${name} INTEGER NOT NULL CHECK (typeof(${name})='integer' AND ${name} BETWEEN 0 AND ${max})`;
+const SQLITE_JOB_STORE_VERSION = 2;
 const definitions = new Map([
   [
     t.policy,
     `CREATE TABLE "${t.policy}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton=1),
-  version INTEGER NOT NULL CHECK (version=1),
+  version INTEGER NOT NULL CHECK (version=${SQLITE_JOB_STORE_VERSION}),
   ${string('policy_json', 4096)},
   ${integer('last_clock')},
   ${integer('next_seq')}
@@ -107,7 +108,19 @@ const definitions = new Map([
 )`,
   ],
   [`${prefix}due`, `CREATE INDEX "${prefix}due" ON "${t.job}" (state,run_at,seq)`],
+  [`${prefix}attempt_finished`, `CREATE INDEX "${prefix}attempt_finished" ON "${t.attempt}" (finished_at)`],
 ]);
+
+/** What the upgrade from version 1 runs: adds the attempt finished_at pruning index and bumps version to 2. */
+export const sqliteJobStoreUpgradeFrom1 = (): readonly string[] => [
+  definitions.get(`${prefix}attempt_finished`)!,
+  `CREATE TABLE "${t.policy}_v1" AS SELECT singleton, policy_json, last_clock, next_seq FROM "${t.policy}"`,
+  `DROP TABLE "${t.policy}"`,
+  definitions.get(t.policy)!,
+  `INSERT INTO "${t.policy}" (singleton, version, policy_json, last_clock, next_seq) SELECT singleton, ${SQLITE_JOB_STORE_VERSION}, policy_json, last_clock, next_seq FROM "${t.policy}_v1"`,
+  `DROP TABLE "${t.policy}_v1"`,
+];
+
 type Catalog = { type: string; name: string; tbl_name: string; sql: string | null };
 function catalog(db: DatabaseSync, schema: 'main' | 'temp'): Catalog[] {
   return db
@@ -118,7 +131,6 @@ function catalog(db: DatabaseSync, schema: 'main' | 'temp'): Catalog[] {
 /** The reserved namespace must be exactly the known objects, and the captured
  * policy must be the one the file was provisioned with. Nothing else in the
  * file is read: business tables are not this store's concern. */
-const SQLITE_JOB_STORE_VERSION = 1;
 export function assertSqliteJobStore(db: DatabaseSync, policy: JobPolicy): void {
   try {
     if (db.prepare('PRAGMA foreign_keys').get()!.foreign_keys !== 1)
@@ -207,7 +219,7 @@ export function openJobStoreFile(existingPath: string): { db: DatabaseSync; veri
 /** Explicit provisioning of an existing file, idempotent for the same policy.
  * A different namespace or bound for the same file is refused: there is no
  * repair, no migration and no startup hook. */
-export function provisionSqliteJobStore(existingPath: string, input: JobPolicyInput): { version: 1; provisioned: boolean } {
+export function provisionSqliteJobStore(existingPath: string, input: JobPolicyInput): { version: 2; provisioned: boolean } {
   const policy = captureJobPolicy(input);
   const file = openJobStoreFile(existingPath),
     db = file.db;
@@ -217,12 +229,12 @@ export function provisionSqliteJobStore(existingPath: string, input: JobPolicyIn
     if (provisioned) {
       for (const ddl of definitions.values())
         db.exec(ddl.replace('CREATE TABLE ', 'CREATE TABLE main.').replace('CREATE INDEX ', 'CREATE INDEX main.'));
-      db.prepare(`INSERT INTO main."${t.policy}" VALUES (1,1,?,0,0)`).run(canonicalCommandJson(policy));
+      db.prepare(`INSERT INTO main."${t.policy}" VALUES (1,${SQLITE_JOB_STORE_VERSION},?,0,0)`).run(canonicalCommandJson(policy));
     }
     assertSqliteJobStore(db, policy);
     file.verifyFile();
     db.exec('COMMIT');
-    return { version: 1, provisioned };
+    return { version: SQLITE_JOB_STORE_VERSION, provisioned };
   } catch {
     try {
       if (db.isTransaction) db.exec('ROLLBACK');

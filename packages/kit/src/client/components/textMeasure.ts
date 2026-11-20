@@ -38,7 +38,11 @@ export function textMeasure(font: string): TextMeasure | undefined {
   const cache = new Map<string, number>();
   const measure: TextMeasure = (text) => {
     const seen = cache.get(text);
-    if (seen !== undefined) return seen;
+    if (seen !== undefined) {
+      cache.delete(text);
+      cache.set(text, seen);
+      return seen;
+    }
     context.font = font;
     /* Cells set their figures tabular (themeFamilies.css), and a canvas cannot: measured proportional,
        "$105,828" came out a few pixels short and its cell cut it to "$105,8…". Every figure is measured as a
@@ -51,6 +55,7 @@ export function textMeasure(font: string): TextMeasure | undefined {
       }
       if (gain.size) for (const mark of text) width += gain.get(mark >= '0' && mark <= '9' ? '0' : mark) ?? 0;
     }
+    if (cache.size >= 5000) cache.delete(cache.keys().next().value!);
     cache.set(text, width);
     return width;
   };

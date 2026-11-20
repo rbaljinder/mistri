@@ -115,6 +115,9 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
         : value === null || value === undefined
           ? null
           : String(value);
+  /* Chosen from the value the edit started from, never the live draft: a newline typed or pasted must not remount the
+     element and take the focus and caret with it. */
+  const multiline = original?.includes('\n') ?? false;
   const pending = sameRow(table.id, recordKey) ? (stagedValue(column.name) as string | null | undefined) : undefined;
   const shown = pending !== undefined ? pending : original;
   const dirty = pending !== undefined;
@@ -123,7 +126,7 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
   const pendingWrite = applyingStaged() || attempt?.phase === 'pending';
   const locked = attempt?.phase === 'uncertain' || draftNeedsReview(table.id, recordKey);
   const applying = pendingWrite || locked;
-  const input = useRef<HTMLInputElement | HTMLSelectElement | HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement | HTMLDivElement>(null);
   const launcher = useRef<HTMLButtonElement>(null);
   const wasOpened = useRef(false);
   const unresolved = useRef(false);
@@ -158,6 +161,9 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
       invalidInput: Boolean(control && (control.validity.badInput || control.validity.customError)),
     };
   };
+  const readStateRef = useRef(readState);
+  readStateRef.current = readState;
+  const keyText = JSON.stringify(recordKey);
   const interaction = useEditInteraction({
     enabled:
       app &&
@@ -191,12 +197,11 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
 
   // Composite controls keep their own ARIA attributes; this field owns one
   // description token, on the actual focusable control, for both renderers.
+  const isField = (node: Element | null): node is HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement =>
+    node instanceof HTMLInputElement || node instanceof HTMLTextAreaElement || node instanceof HTMLSelectElement;
   useLayoutEffect(() => {
     const node = input.current;
-    const control =
-      node instanceof HTMLInputElement || node instanceof HTMLSelectElement
-        ? node
-        : node?.querySelector<HTMLElement>('input, [data-slot="select-trigger"]');
+    const control = isField(node) ? node : node?.querySelector<HTMLElement>('input, textarea, [data-slot="select-trigger"]');
     if (!control || !error) return;
     const described = control.getAttribute('aria-describedby')?.split(/\s+/).filter(Boolean) ?? [];
     const invalid = control.getAttribute('aria-invalid');
@@ -213,24 +218,22 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
       if (invalid !== null) control.setAttribute('aria-invalid', invalid);
       else control.removeAttribute('aria-invalid');
     };
-  });
+  }, [error, errorId, opened, pickerGeneration]);
   /* A refused Save leaves the focus for the first field it marked; this
      editor takes it once it is drawn — a marked field opens to be answered. */
   useLayoutEffect(() => {
     const node = input.current;
     if (!error || !node || !takeFieldFocus(table.id, recordKey, column.name)) return;
-    const control =
-      node instanceof HTMLInputElement || node instanceof HTMLSelectElement
-        ? node
-        : node.querySelector<HTMLElement>('input, [data-slot="select-trigger"]');
+    const control = isField(node) ? node : node.querySelector<HTMLElement>('input, textarea, [data-slot="select-trigger"]');
     control?.focus();
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [error, table.id, keyText, column.name, opened]);
   useLayoutEffect(() => {
     const control = input.current instanceof HTMLDivElement ? input.current.querySelector('input') : null;
     // Read-only keeps a newly focused field in place while another field saves.
     // The picker API stays unchanged; its search and buttons share this boundary.
     if (control) control.readOnly = pendingWrite;
-  });
+  }, [pendingWrite, opened, pickerGeneration]);
 
   /* Kept by the store so a successful write can confirm in place — the saved
      value, in green, on the field you just edited — rather than re-render.
@@ -250,9 +253,10 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
           setCommitted({ source: row, value: next === null || next === undefined ? null : String(next), label });
           setSaved(true);
         },
-        readState,
+        () => readStateRef.current(),
       );
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table, keyText, column.name, opened, row, pickerGeneration, multiline]);
   useEffect(() => {
     if (!saved) return;
     const timer = setTimeout(() => setSaved(false), 2200);
@@ -265,9 +269,11 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
     }
     wasOpened.current = true;
     const node = input.current;
-    if (node instanceof HTMLInputElement || node instanceof HTMLSelectElement) node.focus();
+    if (isField(node)) node.focus();
     /* A rich text field is its text, not its toolbar's first button. */ else
-      (node?.querySelector<HTMLElement>('[contenteditable="true"]') ?? node?.querySelector<HTMLElement>('input, button'))?.focus();
+      (
+        node?.querySelector<HTMLElement>('[contenteditable="true"]') ?? node?.querySelector<HTMLElement>('input, textarea, button')
+      )?.focus();
   }, [opened]);
   useLayoutEffect(() => {
     if (pickerFocusRequested.current && (!display || opened)) input.current?.querySelector<HTMLElement>('input')?.focus();
@@ -600,22 +606,30 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
       </div>,
     );
   }
+  const textValue = shown === null ? '' : String(shown);
+  const textProps = {
+    className: `cell-edit${statusClass}`,
+    disabled: locked,
+    readOnly: pendingWrite,
+    'aria-disabled': applying || undefined,
+    'aria-label': label,
+    value: textValue,
+    'data-null': String(shown === null),
+    /* Where the database pins the vocabulary, say it — but still a text
+       box: a select would silently rewrite a value the check would refuse. */
+    title: column.allowed?.length ? say('one', { allowed: column.allowed.join(', ') }) : undefined,
+    onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => onEdit(e.target.value),
+  };
   return wrap(
-    <input
-      ref={input as React.RefObject<HTMLInputElement>}
-      className={`cell-edit${statusClass}`}
-      disabled={locked}
-      readOnly={pendingWrite}
-      aria-disabled={applying || undefined}
-      aria-label={label}
-      type="text"
-      value={shown === null ? '' : String(shown)}
-      data-null={String(shown === null)}
-      /* Where the database pins the vocabulary, say it — but still a text
-         box: a select would silently rewrite a value the check would refuse. */
-      title={column.allowed?.length ? say('one', { allowed: column.allowed.join(', ') }) : undefined}
-      onChange={(e) => onEdit(e.target.value)}
-    />,
+    multiline ? (
+      <textarea
+        ref={input as React.RefObject<HTMLTextAreaElement>}
+        rows={Math.min(8, Math.max(2, textValue.split('\n').length))}
+        {...textProps}
+      />
+    ) : (
+      <input ref={input as React.RefObject<HTMLInputElement>} type="text" {...textProps} />
+    ),
   );
 }
 

@@ -236,11 +236,11 @@ export function useGridKeyboard(
   }, [tableRef, wrapRef, rowCount, columnCount, offset, onOpen, onPeek, totalRows, firstRow]);
 }
 
-/** Copy one cell: `title` before `textContent`, because a shortened value
-    keeps the whole thing in its tooltip. */
+/** Copy one cell: `data-copy` (full unclamped text) before `title` before `textContent`,
+    because a shortened value keeps the whole thing off-screen. */
 async function copyCell(cell: HTMLElement | null): Promise<void> {
   if (!cell) return;
-  const text = cell.getAttribute('title') ?? cell.textContent ?? '';
+  const text = cell.getAttribute('data-copy') ?? cell.getAttribute('title') ?? cell.textContent ?? '';
   try {
     await navigator.clipboard.writeText(text);
     cell.classList.add('cell-copied');

@@ -41,7 +41,7 @@ import type { SavedFormReply } from './savedFormHttp.js';
 import type { EmailTransport } from '../email/email.js';
 import { applicationsByEmail, linkByEmail, stampVerifiedEmail } from './formLink.js';
 import { CODE_MINUTES, issueCode, spendCode } from './oneTimeCode.js';
-import { draftTokenHash, readDraftToken } from './savedForms.js';
+import { draftTokenHash, hasOpenDraft, readDraftToken } from './savedForms.js';
 
 /** Who is signed in, from the verified session: the id a link writes, and the words a history says.
     `verifiedEmail` is the account's address when its sign-in store says it is verified, and absent otherwise. */
@@ -257,6 +257,11 @@ export async function verifyEmailReply(linking: Linking): Promise<SavedFormReply
   const address = email.trim().toLowerCase();
   const subject = `verify\u0000${key}\u0000${token}`;
   if (code === undefined) {
+    /* Require a real, unexpired draft before spending the code budget or
+       sending email, so random forged cookies cannot turn this endpoint into
+       an email-bombing relay. */
+    const open = form.save ? await reading((records) => hasOpenDraft(records, catalog, roots, form.save!, token, new Date())) : false;
+    if (!open) return { status: 404, body: { code: 'not_found', message: 'Start the application first: the address is proved for it.' } };
     const issued = await issueCode(subject, Date.now(), address);
     if ('limited' in issued) {
       const message = 'Several codes were sent for this application in the last hour. Use the newest one, or try again later.';

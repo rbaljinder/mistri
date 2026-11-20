@@ -414,6 +414,15 @@ test(
       assert.deepEqual(row(planted), { account_id: 'ada', linked_via: 'email' });
       assert.equal((await account.post('/api/forms/apply/found', { reference: planted })).status, 409);
       assert.deepEqual((await account.post('/api/forms/apply/found', {})).body, { linked: [], found: [] });
+
+      // A forged draft cookie that matches no open draft in the database sends no verification email.
+      const beforeMail = f.mail().length;
+      const forger = new Browser(f.base, 'forger');
+      forger.jar.set('mistri_form_apply', 'A'.repeat(43));
+      const forged = await forger.post('/api/forms/apply/verify-email', { email: 'victim@example.test' });
+      assert.equal(forged.status, 404);
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      assert.equal(f.mail().length, beforeMail, 'no email sent for a forged draft cookie');
     });
   },
 );

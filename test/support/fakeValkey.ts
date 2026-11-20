@@ -5,6 +5,7 @@
  * test can assert what reached the server — and that a password never did
  * anything but AUTH.
  */
+import { createHash } from 'node:crypto';
 import { createServer, type Server, type Socket } from 'node:net';
 import { once } from 'node:events';
 import { decodeReply } from '../../packages/engine/src/adapters/cache/resp.js';
@@ -29,6 +30,7 @@ const encode = (value: unknown): string => {
 
 export async function startFakeValkey(options: { password?: string; port?: number } = {}): Promise<FakeValkey> {
   const store = new Map<string, { value: string; expires: number }>();
+  const scripts = new Set<string>();
   const commands: string[][] = [];
   const sockets = new Set<Socket>();
   const live = (key: string) => {
@@ -68,7 +70,19 @@ export async function startFakeValkey(options: { password?: string; port?: numbe
       case 'DEL':
         return encode(rest.filter((key) => store.delete(key)).length);
       case 'EVAL': {
-        const [, , key, ttl, by = '1'] = rest;
+        const [script, , key, ttl, by = '1'] = rest;
+        const sha = createHash('sha1').update(script).digest('hex');
+        scripts.add(sha);
+        const entry = live(key);
+        const next = entry
+          ? { value: String(Number(entry.value) + Number(by)), expires: entry.expires }
+          : { value: by, expires: Date.now() + Number(ttl) };
+        store.set(key, next);
+        return encode([Number(next.value), next.expires - Date.now()]);
+      }
+      case 'EVALSHA': {
+        const [sha, , key, ttl, by = '1'] = rest;
+        if (!scripts.has(sha)) return '-NOSCRIPT No matching script. Please use EVAL.\r\n';
         const entry = live(key);
         const next = entry
           ? { value: String(Number(entry.value) + Number(by)), expires: entry.expires }

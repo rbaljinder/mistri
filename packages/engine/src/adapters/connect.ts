@@ -39,12 +39,15 @@ export function connect(target: string, options: ConnectOptions = {}): Adapter {
       replicas || options.network ? { ...options.postgres, ...(replicas ? { replicas } : {}), network: options.network } : options.postgres;
     return new PostgresAdapter(target, options.label, options.schemas ?? [], undefined, pool);
   }
+  if (options.network) {
+    throw new Error('Untrusted connections may only use PostgreSQL (postgres://…).');
+  }
   /* Said by name rather than as an unknown scheme: MySQL and MariaDB were never in 1.0, and a config that
      still names one should hear that, not "don't know how to open". */
   if (/^(mysql|mariadb):\/\//i.test(target)) throw new Error(MYSQL_REFUSAL);
   /* Said before the file is opened: a SQLite file is read where it lies,
      and a copy of it elsewhere would be another database, not a replica. */
-  if (replicas && (/^sqlite:/i.test(target) || /\.(db|sqlite|sqlite3)$/i.test(target) || !target.includes('://')))
+  if (replicas && (/^sqlite:/i.test(target) || !target.includes('://')))
     throw new Error('SQLite has no replicas: a file is read where it is. Remove "replicas".');
   if (/^sqlite:/i.test(target)) {
     const file = target.replace(/^sqlite:(\/\/)?/i, '');
@@ -52,7 +55,7 @@ export function connect(target: string, options: ConnectOptions = {}): Adapter {
   }
   // A bare path is a SQLite file. This is the common case for the demo and
   // for anyone poking at an app's local database, so it needs no scheme.
-  if (/\.(db|sqlite|sqlite3)$/i.test(target) || !target.includes('://')) {
+  if (!target.includes('://')) {
     return new SqliteAdapter(target, options.label ?? target);
   }
   /* The scheme, not the target.

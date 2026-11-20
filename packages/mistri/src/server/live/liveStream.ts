@@ -23,7 +23,7 @@
  * Retry-After, and the page keeps its focus refresh.
  */
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { LiveKey } from '../../adapters/live/liveChange.js';
+import { LIVE_CHANGE_LIMITS, type LiveKey } from '../../adapters/live/liveChange.js';
 import type { LiveAuthority, LiveDelivery } from './liveFilter.js';
 import { guard, type LiveHub, type LiveTap } from './liveHub.js';
 import type { LivePosition } from './liveStore.js';
@@ -230,7 +230,15 @@ class LiveStream {
       }
       for (const kind of table.kinds) known.kinds.add(kind);
       if (table.keys === 'many' || known.keys === 'many') known.keys = 'many';
-      else for (const [text, key] of table.keys) known.keys.set(text, key);
+      else {
+        for (const [text, key] of table.keys) {
+          known.keys.set(text, key);
+          if (known.keys.size > LIVE_CHANGE_LIMITS.keys) {
+            known.keys = 'many';
+            break;
+          }
+        }
+      }
     }
     pending.self &&= delivery.self;
     pending.primary ||= primary;

@@ -325,7 +325,15 @@ function defer(hold: Hold, query: Query, batch: LiveBatch): void {
   for (const [table, change] of batch.tables) {
     if (table !== hold.table && !(queryReads(query.queryHash) ?? []).includes(table)) continue;
     if (batch.reset || change.keys === 'many') hold.keys = 'many';
-    else if (hold.keys !== 'many') for (const text of change.keys.keys()) hold.keys.add(text);
+    else if (hold.keys !== 'many') {
+      for (const text of change.keys.keys()) {
+        hold.keys.add(text);
+        if (hold.keys.size > 200) {
+          hold.keys = 'many';
+          break;
+        }
+      }
+    }
   }
   if (batch.reset) hold.keys = 'many';
   heldChanged();

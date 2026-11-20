@@ -67,6 +67,8 @@ export function ValueControl(props: {
   valueLabel?: string;
   /** A reference's search text is not a value until one is chosen. */
   onPickerState?: (state: { unresolvedReference: boolean; open: boolean }) => void;
+  /** The editor's own popup element (picker list, dropdown listbox, calendar), so blur checks only this control's popup. */
+  popupRef?: (node: HTMLElement | null) => void;
   describedBy?: string;
   invalid?: boolean;
 }) {
@@ -102,6 +104,7 @@ function PlatformControl({
   id,
   row,
   onPickerState,
+  popupRef,
   describedBy,
   invalid,
   valueLabel,
@@ -120,7 +123,7 @@ function PlatformControl({
         ariaLabel={label}
         app
         {...(valueLabel && value ? { known: { value, label: valueLabel } } : {})}
-        editing={{ onStateChange: (next) => onPickerState?.(next) }}
+        editing={{ onStateChange: (next) => onPickerState?.(next), popupRef }}
       />
     );
   }
@@ -141,6 +144,7 @@ function PlatformControl({
         value={value ?? ''}
         ariaInvalid={invalid}
         ariaDescribedBy={describedBy}
+        popupRef={popupRef}
         items={[...(column.nullable ? [{ value: '', label: say('common.noValue') }] : []), ...items]}
         onChange={change}
       />
@@ -158,6 +162,7 @@ function PlatformControl({
         locale={formatLocale()}
         timezone={formatTimezone()}
         now={appNow()}
+        popupRef={popupRef}
       />
     );
   }
@@ -245,6 +250,7 @@ export function GridCellEdit({
   const [shown, setShown] = useState<(Shown & { from: unknown }) | null>(null);
   const surface = useRef<HTMLDivElement>(null);
   const launcher = useRef<HTMLButtonElement>(null);
+  const popupNode = useRef<HTMLElement | null>(null);
   const unresolved = useRef(false);
   const pickerOpen = useRef(false);
   /* Where focus goes once the editor closes: back to the cell, unless Tab sent it on. */
@@ -390,9 +396,8 @@ export function GridCellEdit({
       if (
         active &&
         (node.contains(active) ||
-          active.closest(
-            '[role="listbox"], [role="dialog"], [data-slot="select-content"], [data-slot="popover-content"][data-kind="calendar"]',
-          ))
+          popupNode.current?.contains(active) ||
+          active.closest('[role="listbox"], [data-slot="select-content"], [data-slot="popover-content"][data-kind="calendar"]'))
       )
         return;
       void commit(draft, false, pickedLabel());
@@ -462,6 +467,9 @@ export function GridCellEdit({
         valueLabel={shown ? (typeof shown.label === 'string' ? shown.label : undefined) : valueLabel}
         describedBy={problem ? errorId : undefined}
         invalid={Boolean(problem)}
+        popupRef={(node) => {
+          popupNode.current = node;
+        }}
         onPickerState={(next) => {
           unresolved.current = next.unresolvedReference;
           pickerOpen.current = next.open;

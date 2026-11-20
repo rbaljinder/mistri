@@ -94,7 +94,7 @@ const OPEN = list(EVENT_DELIVERY_OPEN);
    binding and its own clock floor. A destination's policy names its App's
    source, discovery reads only that App's batches, and the sixteen
    destinations are per App. SQLite keeps one App per file. */
-const POSTGRES_EVENT_DELIVERY_STORE_VERSION = 1;
+const POSTGRES_EVENT_DELIVERY_STORE_VERSION = 2;
 const VERSION = POSTGRES_EVENT_DELIVERY_STORE_VERSION;
 const META_DDL = `CREATE TABLE ${q(t.meta)} (
   app_id text COLLATE "C" PRIMARY KEY CHECK (octet_length(app_id) BETWEEN 1 AND 128),
@@ -102,6 +102,9 @@ const META_DDL = `CREATE TABLE ${q(t.meta)} (
   binding_json text COLLATE "C" NOT NULL CHECK (octet_length(binding_json) BETWEEN 1 AND 2048),
   last_clock bigint NOT NULL CHECK (last_clock >= 0)
 )`;
+const RECEIPT_RECEIPT_INDEX_DDL = `CREATE INDEX "${PG_PREFIX}receipt_receipt" ON ${q(t.receipt)} (receipt_id)`;
+const DELIVERY_RECEIPT_INDEX_DDL = `CREATE INDEX "${PG_PREFIX}delivery_receipt" ON ${q(t.delivery)} (receipt_id)`;
+const ATTEMPT_FINISHED_INDEX_DDL = `CREATE INDEX "${PG_PREFIX}attempt_finished" ON ${q(t.attempt)} (finished_at)`;
 const EVENT_DELIVERY_POSTGRES_DEFINITIONS: readonly string[] = [
   META_DDL,
   `CREATE TABLE ${q(t.destination)} (
@@ -159,6 +162,19 @@ const EVENT_DELIVERY_POSTGRES_DEFINITIONS: readonly string[] = [
 )`,
   `CREATE INDEX "${PG_PREFIX}ready" ON ${q(t.delivery)} (destination_id, state, next_at)`,
   `CREATE INDEX "${PG_PREFIX}live" ON ${q(t.receipt)} (destination_id) WHERE pruned_at IS NULL AND event_count > 0`,
+  RECEIPT_RECEIPT_INDEX_DDL,
+  DELIVERY_RECEIPT_INDEX_DDL,
+  ATTEMPT_FINISHED_INDEX_DDL,
+];
+
+/** What the upgrade from version 1 runs: adds receipt_id and finished_at pruning indexes and bumps version to 2. */
+export const postgresEventDeliveryUpgradeFrom1 = (): readonly string[] => [
+  RECEIPT_RECEIPT_INDEX_DDL,
+  DELIVERY_RECEIPT_INDEX_DDL,
+  ATTEMPT_FINISHED_INDEX_DDL,
+  `ALTER TABLE ${q(t.meta)} DROP CONSTRAINT ${runtimeName('postgres', t.meta)}_version_check`,
+  `UPDATE ${q(t.meta)} SET version = ${VERSION}`,
+  `ALTER TABLE ${q(t.meta)} ADD CONSTRAINT ${runtimeName('postgres', t.meta)}_version_check CHECK (version = ${VERSION})`,
 ];
 
 const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -217,6 +233,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       'UNIQUE (token)',
     ],
     [
+      `CREATE INDEX delivery_attempt_finished ON ${runtimeSchema('postgres')}.delivery_attempt USING btree (finished_at)`,
       `CREATE UNIQUE INDEX delivery_attempt_pkey ON ${runtimeSchema('postgres')}.delivery_attempt USING btree (destination_id, event_id, attempt)`,
       `CREATE UNIQUE INDEX delivery_attempt_token_key ON ${runtimeSchema('postgres')}.delivery_attempt USING btree (token)`,
     ],
@@ -255,6 +272,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       'UNIQUE (destination_id, receipt_id, ordinal)',
     ],
     [
+      `CREATE INDEX delivery_delivery_receipt ON ${runtimeSchema('postgres')}.delivery_delivery USING btree (receipt_id)`,
       `CREATE INDEX delivery_ready ON ${runtimeSchema('postgres')}.delivery_delivery USING btree (destination_id, state, next_at)`,
       `CREATE UNIQUE INDEX delivery_delivery_destination_id_receipt_id_ord_key ON ${runtimeSchema('postgres')}.delivery_delivery USING btree (destination_id, receipt_id, ordinal)`,
       `CREATE UNIQUE INDEX delivery_delivery_pkey ON ${runtimeSchema('postgres')}.delivery_delivery USING btree (destination_id, event_id)`,
@@ -288,7 +306,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       'CHECK (((octet_length(app_id) >= 1) AND (octet_length(app_id) <= 128)))',
       'CHECK (((octet_length(binding_json) >= 1) AND (octet_length(binding_json) <= 2048)))',
       'CHECK ((last_clock >= 0))',
-      'CHECK ((version = 1))',
+      `CHECK ((version = ${VERSION}))`,
       'PRIMARY KEY (app_id)',
     ],
     [`CREATE UNIQUE INDEX delivery_meta_pkey ON ${runtimeSchema('postgres')}.delivery_meta USING btree (app_id)`],
@@ -310,6 +328,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
     ],
     [
       `CREATE INDEX delivery_live ON ${runtimeSchema('postgres')}.delivery_receipt USING btree (destination_id) WHERE ((pruned_at IS NULL) AND (event_count > 0))`,
+      `CREATE INDEX delivery_receipt_receipt ON ${runtimeSchema('postgres')}.delivery_receipt USING btree (receipt_id)`,
       `CREATE UNIQUE INDEX delivery_receipt_pkey ON ${runtimeSchema('postgres')}.delivery_receipt USING btree (destination_id, receipt_id)`,
     ],
   ),
@@ -468,7 +487,7 @@ export async function provisionPostgresEventDeliveryStore(
   url: string,
   input: EventDeliveryPolicy,
   options: EventDeliveryProvisionOptions = {},
-): Promise<{ version: 1; provisioned: boolean; destinationAdded: boolean; destinationReplaced: boolean; retired: readonly string[] }> {
+): Promise<{ version: 2; provisioned: boolean; destinationAdded: boolean; destinationReplaced: boolean; retired: readonly string[] }> {
   const policy = captureEventDeliveryPolicy(input);
   try {
     return await withPostgresMaintenanceTransaction(url, async (client) => {
@@ -506,7 +525,7 @@ export async function provisionPostgresEventDeliveryStore(
         ]);
       }
       await assertPostgresEventDeliveryStore(client, policy);
-      return { version: VERSION as 1, provisioned, destinationAdded: !present, destinationReplaced, retired };
+      return { version: VERSION as 2, provisioned, destinationAdded: !present, destinationReplaced, retired };
     });
   } catch (error) {
     /* The one refusal that names its cause: the others stay as unreadable as they were. */

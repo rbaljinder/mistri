@@ -130,7 +130,7 @@ describe('business commands on PostgreSQL, against a real server', { skip: liveS
   const loan = async () => (await control.query('SELECT version, assignee, confidential_note FROM public.loans WHERE id = 1')).rows[0];
   const reset = async (migrate = true) => {
     for (const statement of [...RESET, ...SETUP]) await control.query(statement);
-    if (migrate) assert.deepEqual(await migratePostgresCommandJournal(url), { version: 5, migrated: true });
+    if (migrate) assert.deepEqual(await migratePostgresCommandJournal(url), { version: 6, migrated: true });
   };
 
   before(async () => {
@@ -251,8 +251,8 @@ describe('business commands on PostgreSQL, against a real server', { skip: liveS
       (await control.query(`SELECT count(*) AS n FROM pg_class WHERE relname LIKE '\\_\\_mistri\\_command\\_%'`)).rows[0].n,
       '0',
     );
-    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 5, migrated: true });
-    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 5, migrated: false });
+    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 6, migrated: true });
+    assert.deepEqual(await migratePostgresCommandJournal(url), { version: 6, migrated: false });
     await assertPostgresCommandJournal(control);
     assert.equal(await count(tables.meta), 1);
     await assert.rejects(migratePostgresCommandJournal('sqlite:./loans.db'), /postgres:\/\/ URL/);

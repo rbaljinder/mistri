@@ -62,8 +62,7 @@
       "@mistriwork/mistri/jobs": ["./packages/mistri/src/server/jobs.ts"],
       "@mistriwork/mistri/workflows": ["./packages/mistri/src/server/workflows.ts"],
       "@mistriwork/mistri/integration": ["./packages/mistri/src/server/integration.ts"],
-      "@mistriwork/mistri/openfeature": ["./packages/mistri/src/server/openfeature.ts"],
-      "@mistriwork/mistri/handler": ["./packages/mistri/src/server/handler.ts"]
+      "@mistriwork/mistri/openfeature": ["./packages/mistri/src/server/openfeature.ts"]
     }
   },
   "include": ["packages/*/src", "test", "packs"],

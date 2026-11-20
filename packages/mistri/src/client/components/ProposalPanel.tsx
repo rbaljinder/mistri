@@ -33,13 +33,17 @@ export function proposalKey(proposal: Pick<CommandProposal, 'target'>): Record<s
  * this reader's offers the command, so there is no form to draw it in.
  */
 export function openProposal(proposal: CommandProposal, connection: string | null): Promise<UiCommandOutcome> | undefined {
+  let closeDrawer: (() => void) | undefined;
   const opened = openProposalForm(proposal.command, proposalKey(proposal), {
     proposal: {
       id: proposal.id,
       input: proposal.input,
       onDismiss: () => dismissProposal(connection, { id: proposal.id, command: proposal.command }),
     },
-    aside: <ProposalEvidenceList proposal={proposal} />,
+    aside: <ProposalEvidenceList proposal={proposal} onNavigate={() => closeDrawer?.()} />,
+    onOpen: (close) => {
+      closeDrawer = close;
+    },
   });
   if (!opened) {
     toast(say('couldNotOpen'), 'error');
@@ -50,7 +54,13 @@ export function openProposal(proposal: CommandProposal, connection: string | nul
 }
 
 /** The panel's Evidence column: who proposed it and why, then what it read. */
-export function ProposalEvidenceList({ proposal }: { proposal: Pick<CommandProposal, 'evidence' | 'reason'> }) {
+export function ProposalEvidenceList({
+  proposal,
+  onNavigate,
+}: {
+  proposal: Pick<CommandProposal, 'evidence' | 'reason'>;
+  onNavigate?: () => void;
+}) {
   return (
     <div className="proposal-evidence">
       <h3 className="proposal-evidence-head">
@@ -61,7 +71,7 @@ export function ProposalEvidenceList({ proposal }: { proposal: Pick<CommandPropo
       {proposal.evidence.length ? (
         <ul className="proposal-evidence-list">
           {proposal.evidence.map((each, index) => (
-            <EvidenceItem key={`${each.kind}:${each.ref}:${index}`} evidence={each} />
+            <EvidenceItem key={`${each.kind}:${each.ref}:${index}`} evidence={each} onNavigate={onNavigate} />
           ))}
         </ul>
       ) : (

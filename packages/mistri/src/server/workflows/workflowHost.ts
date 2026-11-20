@@ -228,20 +228,36 @@ export interface WorkflowHandlerOptions {
 /* The steps waiting in this process on a proposal, by its id: what an approval wakes (onProposalApproved). Listening
    only while one waits, so a host that proposes nothing holds no listener. Lost on a restart, which loses only the
    haste: the step's own poll (proposalPollMs) still finds the decision. */
+/* Evicted or aged entries only lose instant wake-up haste: the step's own poll still finds the decision. */
+const PROPOSAL_WAIT_TTL_MS = 24 * 3_600_000;
+const PROPOSAL_WAITS_MAX = 5_000;
+
 interface ProposalWait {
   readonly workflow: CapturedWorkflow;
   readonly tenantId: string | undefined;
   readonly instance: string;
 }
 function proposalWaits(options: WorkflowHandlerOptions) {
-  const waits = new Map<string, ProposalWait>();
+  const waits = new Map<string, ProposalWait & { readonly addedAt: number }>();
   let stop: (() => void) | undefined;
+  const trim = (now: number) => {
+    const cutoff = now - PROPOSAL_WAIT_TTL_MS;
+    for (const [id, entry] of waits) {
+      if (entry.addedAt <= cutoff) waits.delete(id);
+      else break; // Map preserves insertion order, so remaining entries are newer.
+    }
+    while (waits.size > PROPOSAL_WAITS_MAX) waits.delete(waits.keys().next().value!);
+  };
   return (id: string, wait: ProposalWait) => {
-    waits.set(id, wait);
+    const now = options.now();
+    waits.delete(id);
+    waits.set(id, { ...wait, addedAt: now });
+    trim(now);
     stop ??= onProposalApproved(options.appId, ({ id: approved }) => {
       const woken = waits.get(approved);
       if (!woken) return;
       waits.delete(approved);
+      trim(options.now());
       if (!waits.size) {
         stop?.();
         stop = undefined;
