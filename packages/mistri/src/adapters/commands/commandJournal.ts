@@ -224,7 +224,7 @@ function validateTenant(input: CommandJournalTenant): void {
   const service =
     input.membershipVersion === '0' &&
     typeof input.actorId === 'string' &&
-    /^service:[a-z][a-z0-9-]{0,62}$/.test(input.actorId) &&
+    /^service:[a-z][a-z0-9_-]{0,62}$/.test(input.actorId) &&
     input.membershipId === input.actorId &&
     Array.isArray(input.roles) &&
     input.roles.length > 0;

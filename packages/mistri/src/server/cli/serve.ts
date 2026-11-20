@@ -45,6 +45,7 @@ import { diagnosticsFromEnvironment } from '@mistriwork/engine/server/operations
 import { collectCapacity } from '../operations/capacity.js';
 import { apiReadLifetimes, commandOperations, createApp } from '../http/server.js';
 import type { StartupApps } from './apps.js';
+import { authStoreFrom } from '../app/deploymentAuth.js';
 import { unsweptBuckets } from '../files/fileStorage.js';
 import { openBrowser } from '@mistriwork/engine/server/cli/browser.js';
 import { DEV_CHANGED_EXIT, DEV_SUPERVISED_ENV } from './devSupervisor.js';
@@ -531,7 +532,11 @@ export async function startServing(
           }),
         );
         if (stopping) return undefined;
-        console.log(`mistri: "${host.app.app.name}" signs people in (${auth.spec.providers.join(', ')}; sessions in ${auth.store})`);
+        /* Which store, and who chose it: the deployment's config file wins over the App's own auth.store (deploymentAuth.ts). */
+        const chosen = authStoreFrom(host.app);
+        console.log(
+          `mistri: "${host.app.app.name}" signs people in (${auth.spec.providers.join(', ')}; sessions in ${auth.store}${chosen ? `, from ${chosen}` : ''})`,
+        );
       } catch (err) {
         console.error(`App error: ${startupReport(err)}`);
         throw err;

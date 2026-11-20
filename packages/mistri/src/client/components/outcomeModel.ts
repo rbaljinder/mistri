@@ -48,8 +48,8 @@ const inSentence = ({ label, derived }: FieldWord) =>
 
 /**
  * What to do after a refusal, by its code: the words of the refusal are the App's, the way on is the platform's.
- * A submission (a public form) changes no record the person can refresh to see, so a refusal of its state or of
- * something it names says to look at the answers instead.
+ * A submission (a public form, or a signed-in form over no record) changes no record the person can refresh to see,
+ * so a refusal of its state or of something it names says to look at the answers instead.
  */
 export function refusalNext(code: string | undefined, field?: string | FieldWord, submission = false): string {
   if (field) return say('nextField', { field: inSentence(typeof field === 'string' ? { label: field, derived: false } : field) });

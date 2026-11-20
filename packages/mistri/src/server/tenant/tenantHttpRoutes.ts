@@ -119,7 +119,7 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/inbox/read': ['ids', 'all'],
   '/api/inbox/email': ['email'],
   '/api/tokens': [],
-  '/api/tokens/issue': ['label', 'roles', 'operations', 'days'],
+  '/api/tokens/issue': ['label', 'roles', 'operations', 'days', 'service'],
   '/api/tokens/revoke': ['id'],
   '/api/branding': [],
   '/api/branding/save': ['branding', 'logo', 'darkLogo', 'favicon'],

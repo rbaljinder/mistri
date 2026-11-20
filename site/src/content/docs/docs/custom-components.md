@@ -384,6 +384,25 @@ function Team() {
 }
 ```
 
+### Who read a record
+
+`useReadAudit(filters)` is the organization's read audit (`audit: { reads: true }` on a resource): `{ reads, next, more, loading, error }`, newest first. A line is `{ id, at, actor, person, roles, membership, resource, route, command, kind, record, count }`; `filters` are `actor`, `resource`, `record`, `since`, `until` and `before` (a line's id). `more()` reads the page below onto the end of `reads`, and `next` is absent once the last line is read. It reads the route the Settings Reads room reads, so its gate is that room's: the tenant's admins, the tenant from the session. Anyone else gets the route's refusal as `error` and no lines, so check `error` before drawing an empty list as "nobody". Outside a tenant App it is empty.
+
+```tsx
+function SeenBy({ patient }: { patient: { id: number } }) {
+  const audit = useReadAudit({ resource: 'patient', record: String(patient.id) });
+  if (audit.error) return null;
+  return (
+    <Stack>
+      {audit.reads.map((read) => (
+        <Text key={read.id}>{read.person ?? read.actor} · {read.route} · {read.at}</Text>
+      ))}
+      {audit.next !== undefined && <Button onClick={audit.more}>Older</Button>}
+    </Stack>
+  );
+}
+```
+
 ### Controls bound to a param
 
 `<Choose>`, `<Search>` and `<DateRange>` are controls whose state is a param of the page, so the address is the state: a change replaces the entry (Back leaves the page, not the last choice), a pasted link opens with it set, and the control keeps nothing of its own. They are built from the kit's segmented row, listbox, text box and calendar, so every look dresses them, and the space they take is held while their options load.

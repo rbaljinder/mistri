@@ -36,7 +36,7 @@ import { segmentBookOf, unfoldSegments } from './appSegments.js';
 import { PREVIOUS_PERIOD } from './dashWindow.js';
 import { WIDTHS, type SectionWidth } from '@mistriwork/engine/shared/page.js';
 import { parseTableSizing } from '@mistriwork/engine/shared/tableSizing.js';
-import { parseListEmpty } from '@mistriwork/engine/shared/listEmpty.js';
+import { parseListEmpty, parseListLink } from '@mistriwork/engine/shared/listEmpty.js';
 import { ASSISTANT_ROOM, parseRoutePath } from './appAddress.js';
 import { destinationProblem, destinationTabProblem, type DestinationKind } from './appDestinations.js';
 import { parseAppLinkAction } from '@mistriwork/engine/shared/appLinks.js';
@@ -203,6 +203,7 @@ export const LIST_VIEW_KEYS = [
   'board',
   'split',
   'empty',
+  'link',
   'tabs',
   'filters',
   'filterBar',
@@ -374,6 +375,7 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
   for (const source of ofKind('list')) {
     const said = [
       { at: `${source.at}, "empty.action.view"`, action: source.view.empty?.action },
+      { at: `${source.at}, "link.to"`, action: source.view.link },
       ...(source.view.tabs ?? []).map((tab, i) => ({ at: `${source.at}, tab ${i + 1}, "empty.action.view"`, action: tab.empty?.action })),
     ];
     for (const { at, action } of said) {
@@ -818,6 +820,7 @@ function parseListView(v: Record<string, unknown>, at: string, data: ParsedData)
       checkDeclaredResource(span.from, here, data);
     }
   const empty = v.empty === undefined ? undefined : parseListEmpty(v.empty, at);
+  const link = v.link === undefined ? undefined : parseListLink(v.link, `${at}, "link"`);
   if (empty && (presentation?.kind === 'calendar' || presentation?.kind === 'tree' || presentation?.kind === 'gantt')) {
     throw new Error(
       `${at} has "empty" and a ${presentation.kind} presentation. A ${presentation.kind} reads its own rows, so use its ordinary empty state.`,
@@ -1050,6 +1053,7 @@ function parseListView(v: Record<string, unknown>, at: string, data: ParsedData)
     ...(v.show === undefined ? {} : { show: parseShow(v.show, at) }),
     ...(presentation ? { presentation } : {}),
     ...(empty ? { empty } : {}),
+    ...(link ? { link } : {}),
     ...(v.tabs === undefined ? {} : { tabs: parseTabs(v.tabs, at) }),
     ...(filters === undefined ? {} : { filters }),
     ...(v.filterBar === undefined ? {} : { filterBar: v.filterBar as FilterBar }),

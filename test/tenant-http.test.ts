@@ -3702,11 +3702,23 @@ function readsStub(seen: string[] = [], editors: readonly string[] = ['operator'
     ...extra,
   });
   const log = [
-    row(1, 'north', 'alice', { record: 'north-item' }),
-    row(2, 'south', 'bob', { record: 'south-item' }),
+    row(1, 'north', 'alice', { record: 'north-item', roles: ['viewer'], membership: 'north-alice' }),
+    row(2, 'south', 'bob', { record: 'south-item', roles: ['viewer'], membership: 'south-bob' }),
     row(3, 'north', 'public', { query: '{}', count: 2, ids: '["north-item","alias-item"]' }),
-    row(4, 'south', 'support:ops', { query: '{}', count: 1, ids: '["south-item"]' }),
+    row(4, 'south', 'support:ops', { query: '{}', count: 1, ids: '["south-item"]', visit: 'visit-1' }),
     row(5, 'north', 'assistant:alice', { record: 'north-item' }),
+    // A row-scoped API token's list, and a command's read: a token's roles are its own, its membership its holder's.
+    row(6, 'north', 'api-token:tok-1', {
+      route: 'api',
+      query: '{}',
+      count: 1,
+      ids: '["north-item"]',
+      roles: ['viewer'],
+      membership: 'north-alice',
+      scope: 'item:north-item',
+    }),
+    row(7, 'north', 'alice', { route: 'command', command: 'close', record: 'north-item', roles: ['viewer'], membership: 'north-alice' }),
+    row(8, 'south', 'bob', { route: 'command', command: 'close', record: 'south-item', roles: ['viewer'], membership: 'south-bob' }),
   ];
   return {
     editors,
@@ -4194,12 +4206,13 @@ test("a tenant's reads are its own: each tenant's admins read their rows alone, 
   const reads = page.body.reads as Record<string, unknown>[];
   assert.deepEqual(
     reads.map((read) => read.id),
-    [5, 3, 1],
+    [7, 6, 5, 3, 1],
   );
   assert.doesNotMatch(page.text, /south|bob|Bob/);
-  assert.deepEqual(reads[0], {
+  const line = (id: number) => reads.find((read) => read.id === id)!;
+  assert.deepEqual(line(5), {
     id: 5,
-    at: reads[0]!.at,
+    at: line(5).at,
     actor: 'assistant:alice',
     person: 'Alice North',
     resource: 'item',
@@ -4207,7 +4220,46 @@ test("a tenant's reads are its own: each tenant's admins read their rows alone, 
     kind: 'opened',
     record: 'north-item',
   });
-  assert.deepEqual(reads[1], { id: 3, at: reads[1]!.at, actor: 'public', resource: 'item', route: 'page', kind: 'listed', count: 2 });
+  assert.deepEqual(line(3), { id: 3, at: line(3).at, actor: 'public', resource: 'item', route: 'page', kind: 'listed', count: 2 });
+  // Each line says what it was granted under: a person's roles and membership, a token's own roles and its holder's
+  // membership (never the row its scope names), and the command whose read it was.
+  assert.deepEqual(line(1), {
+    id: 1,
+    at: line(1).at,
+    actor: 'alice',
+    person: 'Alice North',
+    roles: ['viewer'],
+    membership: 'north-alice',
+    resource: 'item',
+    route: 'page',
+    kind: 'opened',
+    record: 'north-item',
+  });
+  assert.deepEqual(line(6), {
+    id: 6,
+    at: line(6).at,
+    actor: 'api-token:tok-1',
+    roles: ['viewer'],
+    membership: 'north-alice',
+    resource: 'item',
+    route: 'api',
+    kind: 'listed',
+    count: 1,
+  });
+  assert.deepEqual(line(7), {
+    id: 7,
+    at: line(7).at,
+    actor: 'alice',
+    person: 'Alice North',
+    roles: ['viewer'],
+    membership: 'north-alice',
+    resource: 'item',
+    route: 'command',
+    command: 'close',
+    kind: 'opened',
+    record: 'north-item',
+  });
+  assert.doesNotMatch(page.text, /scope|visit/);
   assert.deepEqual(page.body.resources, ['item']);
   // A record is matched where it was opened and in the lists that showed it; paging continues below a row's id.
   assert.deepEqual(
@@ -4218,8 +4270,8 @@ test("a tenant's reads are its own: each tenant's admins read their rows alone, 
     ((await f.data('/api/reads', admin, { before: 3 })).body.reads as { id: number }[]).map((read) => read.id),
     [1],
   );
-  // The other tenant's record and actor read as ones nobody holds.
-  for (const filter of [{ record: 'south-item' }, { actor: 'bob' }])
+  // The other tenant's record and actor read as ones nobody holds, its commands' lines among them.
+  for (const filter of [{ record: 'south-item' }, { actor: 'bob' }, { record: 'south-item', actor: 'bob' }])
     assert.deepEqual((await f.data('/api/reads', admin, filter)).body.reads, [], JSON.stringify(filter));
   // A filter not audited, or of the wrong shape, is refused in the route's words.
   for (const bad of [{ resource: 'task' }, { before: 'x' }, { since: 'yesterday' }]) {
@@ -4722,6 +4774,7 @@ test("every method of the tenant read and write sources is answered by a cross-t
         'postgres-bounded-reads.test.ts',
         'withBoundedReads reads a context on one snapshot and rides its fence on the message that ends it',
       ],
+      lastWave: ['postgres-bounded-reads.test.ts', 'a bounded read asked after the last wave is refused, and the request with it'],
       readPlatformMembership: platformRead,
       assertPlatformCurrent: platformFence,
       scopePlatformReads: platformRead,

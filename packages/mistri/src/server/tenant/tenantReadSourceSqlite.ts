@@ -58,12 +58,10 @@ import {
   type TenantAddressesLookup,
   type TenantProfileLookup,
   captureProfileLookup,
-  activeTenantsZone,
-  activeWithColumn,
   heldProfile,
   type ActiveTenant,
   type ActiveTenantsQuery,
-  tenantProfileColumnQuery,
+  readActiveWith,
   tenantProfileQuery,
   type TenantIntakeEvidence,
   type TenantIntakeLookup,
@@ -437,6 +435,8 @@ export function openSqliteTenantReadSource(
         active();
         return { value: await work(), fenced: false };
       },
+      // Nothing is fenced here, so nothing rides a wave.
+      lastWave: () => {},
       readPlatformMembership: (lookup: PlatformMembershipLookup) =>
         invoke(lookup, (query) => readSqlitePlatformMembershipSnapshot(db, owner, query)),
       assertPlatformCurrent: (evidence: PlatformMembershipEvidence) => invoke(evidence, currentPlatform),
@@ -559,13 +559,9 @@ export function openSqliteTenantReadSource(
           }),
         ),
       readActiveTenants: (options?: ActiveTenantsQuery) =>
-        invoke(options ?? {}, (query): readonly ActiveTenant[] => {
-          const zone = activeTenantsZone(owned, query);
-          const active = readSqliteActiveTenants(db, owner);
-          if (zone === undefined) return Object.freeze(active.map((id) => Object.freeze({ id })));
-          const rows = db.prepare(tenantProfileColumnQuery(owned, zone)).all() as Record<string, unknown>[];
-          return activeWithColumn(owned, zone, active, rows);
-        }),
+        invoke(options ?? {}, (query): Promise<readonly ActiveTenant[]> =>
+          readActiveWith(owned, query, readSqliteActiveTenants(db, owner), (sql) => db.prepare(sql).all() as Record<string, unknown>[]),
+        ),
       readHosts: () => invoke(null, () => sqliteTenantHostOps(db, () => {}).list()),
       readSandboxClocks: () =>
         invoke(null, async () => {

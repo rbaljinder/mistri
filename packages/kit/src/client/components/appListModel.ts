@@ -55,6 +55,8 @@ export interface ListSpec {
   /** How the rows are drawn; a `split` is the list/detail workspace. */
   presentation?: AppListPresentation;
   empty?: import('@mistriwork/engine/shared/listPresentations.js').AppListEmpty;
+  /** A link at the list's head to another room, served only where the reader may open it. */
+  link?: import('@mistriwork/engine/shared/listPresentations.js').AppListLink;
   quickAdd?: true;
   /** The view carries a Favorites star. */
   favorite?: true;

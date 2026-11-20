@@ -5,6 +5,10 @@
  * member's own tokens, and for the tenant's administrator the others' that are
  * no wider than theirs — and refuses anything wider. A new token's secret is
  * shown once, when it is made, and never again.
+ *
+ * An administrator is also offered a service token (`api.service`): it acts
+ * for the tenant under a service role no person holds, so it is made with that
+ * role alone, and outlives the member who made it.
  */
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { api } from '@mistriwork/kit/client/core.js';
@@ -24,10 +28,13 @@ interface Token {
   expiresAt: string;
   revokedAt: string | null;
   mine: boolean;
+  /** A service token's role; absent for a member's token. */
+  service?: string;
 }
 interface Listing {
   tokens: Token[];
-  choices: { roles: string[]; maxDays: number };
+  /** `service` is offered to the tenant's administrator alone. */
+  choices: { roles: string[]; maxDays: number; service?: { roles: string[]; label: string } };
 }
 type Reply = Record<string, unknown> & { error?: string };
 
@@ -43,6 +50,8 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | undefined>();
   const [label, setLabel] = useState('');
   const [roles, setRoles] = useState<string[] | null>(null);
+  const [kind, setKind] = useState<'member' | 'service' | null>(null);
+  const [serviceRole, setServiceRole] = useState<string | null>(null);
   const [days, setDays] = useState('90');
   const [busy, setBusy] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
@@ -61,13 +70,22 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
     void load();
   }, [load]);
   const chosen = roles ?? listing?.choices.roles ?? [];
+  const service = listing?.choices.service;
+  // An administrator who holds no API role can still make a service token, so that is where the form starts for them.
+  const making = kind ?? (service && !listing?.choices.roles.length ? 'service' : 'member');
+  const role = serviceRole ?? service?.roles[0];
+  const ready = making === 'service' ? Boolean(role) : chosen.length > 0;
   const make = async (event: FormEvent) => {
     event.preventDefault();
-    if (busy || !label.trim() || !chosen.length) return;
+    if (busy || !label.trim() || !ready) return;
     setBusy('make');
     setSecret(null);
     try {
-      const got = (await api('/api/tokens/issue', { label: label.trim(), roles: chosen, days: Number(days) })) as Reply;
+      const body =
+        making === 'service'
+          ? { label: label.trim(), service: role, days: Number(days) }
+          : { label: label.trim(), roles: chosen, days: Number(days) };
+      const got = (await api('/api/tokens/issue', body)) as Reply;
       if (got.error) setError(got.error);
       else {
         setSecret(String(got.token));
@@ -141,9 +159,13 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
                 <tr key={token.id}>
                   <td>
                     <bdi>{token.label}</bdi>
-                    {!token.mine && <span className="api-tokens-dim"> · {say('someoneElse')}</span>}
+                    {token.service !== undefined ? (
+                      <span className="api-tokens-dim"> · {say('serviceKind')}</span>
+                    ) : (
+                      !token.mine && <span className="api-tokens-dim"> · {say('someoneElse')}</span>
+                    )}
                   </td>
-                  <td>{token.roles.map(roleName).join(', ')}</td>
+                  <td>{token.service !== undefined ? roleName(token.service) : token.roles.map(roleName).join(', ')}</td>
                   <td className="api-tokens-dim">{when(token.expiresAt)}</td>
                   <td>{stateOf(token)}</td>
                   <td>
@@ -168,14 +190,47 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
       {listing && (
         <form className="api-tokens-make" onSubmit={(event) => void make(event)}>
           <h3>{say('make')}</h3>
-          {!listing.choices.roles.length ? (
+          {!listing.choices.roles.length && !service ? (
             <p className="note">{say('noRoles')}</p>
           ) : (
             <>
+              {service && (
+                <Field label={say('kind')} size="compact" group>
+                  {(control) => (
+                    <div className="api-tokens-roles" {...control} role="radiogroup">
+                      {listing.choices.roles.length > 0 && (
+                        <label>
+                          <input type="radio" name="api-token-kind" checked={making === 'member'} onChange={() => setKind('member')} />
+                          {say('asMember')}
+                        </label>
+                      )}
+                      <label>
+                        <input type="radio" name="api-token-kind" checked={making === 'service'} onChange={() => setKind('service')} />
+                        {say('asService')}
+                      </label>
+                    </div>
+                  )}
+                </Field>
+              )}
+              {service && making === 'service' && <p className="note">{say('serviceNote', { name: service.label })}</p>}
               <Field label={say('label')} hint={say('labelHint')} size="compact" required>
                 <input data-slot="input" value={label} maxLength={200} onChange={(event) => setLabel(event.target.value)} />
               </Field>
-              {listing.choices.roles.length > 1 && (
+              {service && making === 'service' && service.roles.length > 1 && (
+                <Field label={say('serviceRole')} size="compact" group>
+                  {(control) => (
+                    <div className="api-tokens-roles" {...control} role="radiogroup">
+                      {service.roles.map((each) => (
+                        <label key={each}>
+                          <input type="radio" name="api-token-service-role" checked={role === each} onChange={() => setServiceRole(each)} />
+                          {roleName(each)}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </Field>
+              )}
+              {making === 'member' && listing.choices.roles.length > 1 && (
                 <Field label={say('roles')} size="compact" group>
                   {(control) => (
                     <div className="api-tokens-roles" {...control} role="group">
@@ -213,7 +268,7 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
                   type="submit"
                   busy={busy === 'make'}
                   busyLabel={say('creating')}
-                  disabled={!label.trim() || !chosen.length}
+                  disabled={!label.trim() || !ready}
                 >
                   {say('create')}
                 </Button>

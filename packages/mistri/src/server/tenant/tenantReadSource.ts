@@ -63,7 +63,7 @@ import {
 import { postgresCatalogDigestStatement } from '@mistriwork/engine/adapters/postgresCatalogDigest.js';
 import { schemaMoved } from '@mistriwork/engine/adapters/postgresSchemaEpoch.js';
 import { SYSTEM_SCHEMAS } from '@mistriwork/engine/adapters/postgresCatalog.js';
-import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
+import { pipelinesAs, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { suspectsStores } from '@mistriwork/engine/adapters/postgresTransactionHandle.js';
 import {
   captureAddressesLookup,
@@ -81,12 +81,10 @@ import {
   type TenantAddressesLookup,
   type TenantProfileLookup,
   captureProfileLookup,
-  activeTenantsZone,
-  activeWithColumn,
   heldProfile,
   type ActiveTenant,
   type ActiveTenantsQuery,
-  tenantProfileColumnQuery,
+  readActiveWith,
   tenantProfileQuery,
   type TenantIntakeEvidence,
   type TenantIntakeLookup,
@@ -873,6 +871,15 @@ export async function openPostgresTenantReadSource(
       fence: boolean;
       /* Settled once the snapshot is let go: whether the release fence rode its end, and held. */
       closed?: Promise<boolean>;
+      /* `togetherFenced`'s alone: its fence may leave with the work's last wave of reads (`lastWave`). */
+      readonly closable: boolean;
+      /* Asked by `lastWave`: the fence leaves behind the next statement sent on the snapshot. */
+      closing?: boolean;
+      /* The fence, once it has left: the attestation it was sent under, and its answers. A read asked from then on
+         is refused, and the request with it. */
+      finishing?: { readonly standing: string; readonly answers: ReturnType<NonNullable<Snapshot['finish']>> };
+      /* A read was asked after the fence left: the request is denied even where its work caught the refusal. */
+      overrun?: boolean;
     }
     const sharing = new AsyncLocalStorage<Shared>();
     /* The release fence in the message that ends the shared snapshot (PostgresReadSnapshot.finish): its COMMIT, then
@@ -880,15 +887,23 @@ export async function openPostgresTenantReadSource(
        this one has settled. Only on an attestation that stands, as a whole snapshot is (`on`), and heard as one: a
        membership that no longer holds refuses here. Where it cannot ride, the snapshot ends with a bare COMMIT and
        the caller fences as before. */
-    const releaseFence = async (lease: Snapshot, evidence: TenantMembershipEvidence): Promise<boolean> => {
-      const standing = trusted(primary);
-      if (standing === undefined || primary.attested !== standing || !lease.finish) return false;
-      const answers = await lease.finish(`${pin}; ${postgresTenantMembershipStatement(owner, evidence)}`);
+    const fenceStatement = (evidence: TenantMembershipEvidence) => `${pin}; ${postgresTenantMembershipStatement(owner, evidence)}`;
+    /* The fence's answers, heard: an attestation replaced while it was out is no fence (the caller fences again). */
+    const fenceHeld = (
+      answers: Awaited<ReturnType<NonNullable<Snapshot['finish']>>>,
+      standing: string,
+      evidence: TenantMembershipEvidence,
+    ): boolean => {
       if (answers.length !== 2) return denyTenant();
       if (primary.attested !== standing) return false;
       assertPostgresTenantMembershipRows(owner, evidence, answers[1]!.rows, clock);
       active();
       return true;
+    };
+    const releaseFence = async (lease: Snapshot, evidence: TenantMembershipEvidence): Promise<boolean> => {
+      const standing = trusted(primary);
+      if (standing === undefined || primary.attested !== standing || !lease.finish) return false;
+      return fenceHeld(await lease.finish(fenceStatement(evidence)), standing, evidence);
     };
     /* The shared snapshot, on the primary: begun as any member's read begins (its membership in the BEGIN's flight
        where the attestation stands), proved once, and each read's rows held for that proof as `bind` holds them. */
@@ -900,11 +915,58 @@ export async function openPostgresTenantReadSource(
             async (evidence, lease): Promise<boolean> => {
               /* What the reads on it are handed: never the snapshot's end, which is its owner's. */
               const { finish: _finish, behind: _behind, ...readable } = lease;
+              /* After `lastWave`, the fence leaves behind the wave's statements: scheduled once the first of them is
+                 sent, for when the turn that sent them is done, so the rest of the wave, asked in that same turn,
+                 is sent before it. Pipelined, the fence then shares their flight; it is still run after them. Only
+                 on an attestation that stands, as `releaseFence` is; where it cannot ride, nothing leaves here and
+                 the snapshot ends as before. */
+              let due: NodeJS.Immediate | undefined;
+              let settledFence = false;
+              const ride = () => {
+                if (!shared.closing || shared.finishing || due || settledFence) return;
+                due = setImmediate(() => {
+                  due = undefined;
+                  const standing = trusted(primary);
+                  if (settledFence || standing === undefined || primary.attested !== standing || !lease.finish) return;
+                  const answers = lease.finish(fenceStatement(evidence));
+                  void answers.catch(() => {});
+                  shared.finishing = { standing, answers };
+                });
+              };
+              const sending =
+                <A extends unknown[], R>(send: (...args: A) => Promise<R>) =>
+                (...args: A): Promise<R> => {
+                  const asked = send(...args);
+                  ride();
+                  return asked;
+                };
+              /* The snapshot's end: the fence that left with the last wave, heard once the snapshot is let go, or the
+                 one `releaseFence` sends now. A failed read is no fence either way: its request is denied. */
+              const release = async (): Promise<boolean> => {
+                settledFence = true;
+                if (due) clearImmediate(due);
+                const left = shared.finishing;
+                if (!left) return shared.fence && (await releaseFence(lease, evidence));
+                const answers = await left.answers;
+                return shared.fence && fenceHeld(answers, left.standing, evidence);
+              };
               if (!lease.fenced?.ahead) {
                 await current(lease, evidence);
-                resolve(Object.freeze(readable));
+                const client: PgQuery = Object.freeze({
+                  query: sending((...args: unknown[]) =>
+                    (lease.client.query as (...values: unknown[]) => Promise<unknown>)(...args),
+                  ) as PgQuery['query'],
+                });
+                pipelinesAs(client, lease.client);
+                resolve(
+                  Object.freeze({
+                    ...readable,
+                    client,
+                    execute: sending(lease.execute as (...values: unknown[]) => Promise<unknown>) as Snapshot['execute'],
+                  }),
+                );
                 await shared.ended;
-                return shared.fence && (await releaseFence(lease, evidence));
+                return release();
               }
               const proved = current(lease, evidence);
               void proved.catch(() => {});
@@ -914,24 +976,27 @@ export async function openPostgresTenantReadSource(
                 if (read.status === 'rejected') throw read.reason;
                 return read.value;
               };
+              const query = sending((...args: unknown[]) =>
+                ((lease.behind ?? lease.client).query as (...values: unknown[]) => Promise<unknown>)(...args),
+              );
+              const execute = sending(lease.execute as (...values: unknown[]) => Promise<unknown>);
               resolve(
                 Object.freeze({
                   ...readable,
                   /* A store's read (the inbox's) asks the client: sent behind the BEGIN, and held for the proof as
                      every read is. */
                   client: Object.freeze({
-                    query: ((...args: unknown[]) =>
-                      gated(
-                        ((lease.behind ?? lease.client).query as (...values: unknown[]) => Promise<unknown>)(...args),
-                      )) as PgQuery['query'],
+                    query: ((...args: unknown[]) => gated(query(...args))) as PgQuery['query'],
                   }),
-                  execute: ((...args: unknown[]) =>
-                    gated((lease.execute as (...values: unknown[]) => Promise<unknown>)(...args))) as Snapshot['execute'],
+                  execute: ((...args: unknown[]) => gated(execute(...args))) as Snapshot['execute'],
                 }),
               );
               await shared.ended;
+              /* A fence that already left is heard before the proof's refusal is, so no answer is left unheard. */
+              const fencing = release();
+              void fencing.catch(() => {});
               await proved;
-              return shared.fence && (await releaseFence(lease, evidence));
+              return fencing;
             },
             (evidence) => evidence,
             undefined,
@@ -948,6 +1013,12 @@ export async function openPostgresTenantReadSource(
       let value: A;
       try {
         active();
+        /* The fence left with what was asked as the last wave: a read asked after it would read past the state the
+           fence proved, so the request is refused rather than answered from it. */
+        if (shared.finishing) {
+          shared.overrun = true;
+          throw new TenantContextError();
+        }
         value = captureTenantData(input);
       } catch (error) {
         return refusedBefore(error);
@@ -1188,6 +1259,7 @@ export async function openPostgresTenantReadSource(
           key: JSON.stringify(fence),
           open: true,
           fence: false,
+          closable: false,
           running: new Set(),
           ended: new Promise<void>((resolve) => {
             end = resolve;
@@ -1219,6 +1291,7 @@ export async function openPostgresTenantReadSource(
           key: JSON.stringify(fence),
           open: true,
           fence: false,
+          closable: true,
           running: new Set(),
           ended: new Promise<void>((resolve) => {
             end = resolve;
@@ -1237,7 +1310,14 @@ export async function openPostgresTenantReadSource(
         /* Never opened (nothing read), or let go without the fence: the caller fences as before. A refused
            membership, or a database that failed to answer it, is the answer. */
         const fenced = shared.lease === undefined ? false : await shared.closed!;
+        /* It asked more than it said its last wave was: an answer built past what the fence proved fails closed. */
+        if (shared.overrun) return denyTenant();
         return { value, fenced };
+      },
+      lastWave: () => {
+        /* Only the fenced snapshot this context began, while its work runs: a nested `together`'s owner fences. */
+        const shared = sharing.getStore();
+        if (shared?.closable && shared.open) shared.closing = true;
       },
       withReads: <T>(evidence: TenantMembershipEvidence, rows: RowScope, work: (reads: ScopedReads) => T | Promise<T>) =>
         batch(
@@ -1514,11 +1594,8 @@ export async function openPostgresTenantReadSource(
         invoke(
           options ?? {},
           async (query, lease): Promise<readonly ActiveTenant[]> => {
-            const zone = activeTenantsZone(owned, query);
             const active = await readPostgresActiveTenants(lease.client, owner);
-            if (zone === undefined) return Object.freeze(active.map((id) => Object.freeze({ id })));
-            const rows = (await lease.client.query(tenantProfileColumnQuery(owned, zone))).rows as Record<string, unknown>[];
-            return activeWithColumn(owned, zone, active, rows);
+            return readActiveWith(owned, query, active, async (sql) => (await lease.client.query(sql)).rows as Record<string, unknown>[]);
           },
           undefined,
           undefined,

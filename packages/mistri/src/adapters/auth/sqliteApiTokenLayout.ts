@@ -43,6 +43,10 @@ const tenantColumns = [
   `${text('membership_version', 128, true)} CHECK (membership_version IS NULL OR (membership_version GLOB '[1-9]*' AND membership_version NOT GLOB '*[^0-9]*'))`,
 ];
 const tenantBound = 'CHECK ((tenant_id IS NULL) = (membership_id IS NULL) AND (tenant_id IS NULL) = (membership_version IS NULL))';
+/* The token table's binding from version 3: a tenant service token (api.service) is bound to its tenant with no
+   membership, because no person stands behind it. The OAuth rows keep the plain binding: only an account consents. */
+const tokenTenantBound =
+  "CHECK (((tenant_id IS NULL) = (membership_id IS NULL) AND (tenant_id IS NULL) = (membership_version IS NULL)) OR (subject_kind = 'service' AND tenant_id IS NOT NULL AND membership_id IS NULL AND membership_version IS NULL))";
 /** A row-scoped token's scope (version 2): a declared scope's name, its key, and a `$scope` child's parent token. */
 const scopeColumns = [
   `${text('scope_name', 64, true)} CHECK (scope_name IS NULL OR (scope_name GLOB '[A-Za-z_]*' AND scope_name NOT GLOB '*[^A-Za-z0-9_]*'))`,
@@ -78,12 +82,12 @@ const tokenDdl = (version: number) => `CREATE TABLE "${tables.token}" (
   ${text('tenant_id', 128, true)} CHECK (tenant_id IS NULL OR (tenant_id GLOB '[a-z0-9]*' AND tenant_id NOT GLOB '*[^a-z0-9_-]*')),
   ${text('membership_id', 3072, true)},
   ${text('membership_version', 128, true)} CHECK (membership_version IS NULL OR (membership_version GLOB '[1-9]*' AND membership_version NOT GLOB '*[^0-9]*')),${version >= 2 ? `\n  ${scopeColumns.join(',\n  ')},` : ''}
-  CHECK ((tenant_id IS NULL) = (membership_id IS NULL) AND (tenant_id IS NULL) = (membership_version IS NULL)),
+  ${version >= 3 ? tokenTenantBound : tenantBound},
   CHECK (expires_at > created_at),
   CHECK ((revoked_at IS NULL) = (revoked_by IS NULL)),
   CHECK (revoked_at IS NULL OR revoked_at >= created_at),
   CHECK (last_used_at IS NULL OR last_used_at >= created_at),
-  CHECK (subject_kind <> 'service' OR (length(subject_id) BETWEEN 1 AND 63 AND subject_id GLOB '[a-z]*' AND subject_id NOT GLOB '*[^a-z0-9-]*'))${version >= 2 ? `,\n  ${scopeBound}` : ''}
+  CHECK (subject_kind <> 'service' OR (length(subject_id) BETWEEN 1 AND 63 AND subject_id GLOB '[a-z]*' AND subject_id NOT GLOB '*[^a-z0-9${version >= 3 ? '_' : ''}-]*'))${version >= 2 ? `,\n  ${scopeBound}` : ''}
 )`;
 /** The OAuth rows (v3), in the order their references need. Clients are
  * public (no secret): `twc1.` and a UUID. Every secret is a digest. */
@@ -180,6 +184,35 @@ export function sqliteApiTokenUpgradeFrom1(): readonly string[] {
     accessIndex,
     metaDdl(2),
     `INSERT INTO "${tables.meta}" (singleton, version, app_id, store_id, format) SELECT singleton, 2, app_id, store_id, format FROM "${parked(tables.meta)}"`,
+    `DROP TABLE "${parked(tables.meta)}"`,
+  ]);
+}
+
+const V2_TOKEN_COLUMNS = `${V1_TOKEN_COLUMNS}, scope_name, scope_key, scope_parent_id`;
+
+/* Version 2 to 3: a tenant service token's binding, and a service subject with `_` (the role grammar's). The token
+   table is rebuilt as version 1 to 2 rebuilt it, and for the same reasons; its scope index goes with the parked copy
+   and is made again on the new one. Every row a version 2 store holds passes the wider checks. */
+export function sqliteApiTokenUpgradeFrom2(): readonly string[] {
+  const parked = (name: string) => `${name}_v2`;
+  const access = SQLITE_API_TOKEN_OAUTH_DDL.find((sql) => sql.startsWith(`CREATE TABLE "${tables.access}"`))!;
+  const accessIndex = SQLITE_API_TOKEN_OAUTH_DDL.find((sql) => sql.startsWith(`CREATE INDEX "${tables.access}_grant"`))!;
+  return Object.freeze([
+    `DROP INDEX "${tables.access}_grant"`,
+    `DROP INDEX "${tables.token}_scope_parent"`,
+    `ALTER TABLE "${tables.access}" RENAME TO "${parked(tables.access)}"`,
+    `ALTER TABLE "${tables.token}" RENAME TO "${parked(tables.token)}"`,
+    `ALTER TABLE "${tables.meta}" RENAME TO "${parked(tables.meta)}"`,
+    tokenDdl(3),
+    `INSERT INTO "${tables.token}" (${V2_TOKEN_COLUMNS}) SELECT ${V2_TOKEN_COLUMNS} FROM "${parked(tables.token)}"`,
+    access,
+    `INSERT INTO "${tables.access}" (token_id, grant_id, app_id, version) SELECT token_id, grant_id, app_id, version FROM "${parked(tables.access)}"`,
+    `DROP TABLE "${parked(tables.access)}"`,
+    `DROP TABLE "${parked(tables.token)}"`,
+    SCOPE_PARENT_INDEX,
+    accessIndex,
+    metaDdl(3),
+    `INSERT INTO "${tables.meta}" (singleton, version, app_id, store_id, format) SELECT singleton, 3, app_id, store_id, format FROM "${parked(tables.meta)}"`,
     `DROP TABLE "${parked(tables.meta)}"`,
   ]);
 }

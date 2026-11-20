@@ -136,7 +136,7 @@ export type { ServedFlowDiagram, ServedMachine, ServedResource } from '@mistriwo
 /** Addresses the server answers itself, before any App; `_mistri` and the rest of shared/mount.ts SERVER_SEGMENTS are refused as mounts there. */
 const RESERVED_IDS = new Set(['api', 'healthz', 'readyz']);
 import { keyHomesFor } from './appKeyHomes.js';
-import { apiCrossConnectionProblems, parseAppApi, type AppApiDef } from './appApi.js';
+import { apiCrossConnectionProblems, apiServiceProblems, parseAppApi, type AppApiDef } from './appApi.js';
 import { parseAppAssistant } from './appAssistant.js';
 import { actionStamps, checkStamps } from './appStamps.js';
 import { checkMe, checkedPerson, personTable, tenantPersonColumnProblem } from './appMe.js';
@@ -363,6 +363,8 @@ function parseRoot(raw: unknown, where: string, problems: string[], composed?: A
       if (api) {
         const crossing = apiCrossConnectionProblems({ sources: data.sources, resources: data.resources, views: {}, api }, `${where}: api`);
         if (crossing.length) throw new Error(crossing[0]);
+        const service = apiServiceProblems(api, auth, `${where}: api`);
+        if (service.length) throw new Error(service.join(' '));
       }
       const content = parseContent(a, where, {
         data,

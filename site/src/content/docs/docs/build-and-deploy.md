@@ -172,6 +172,18 @@ It is applied before sign-in as well as after, so the sign-in screen, public pag
 
 `mistri check --config northside.json` judges the App as that config presents it and refuses what a start would: the same message for an unknown theme, a missing logo, a bad locale or an id the App does not have, and a line in its report when a presentation applies. `mistri shot` reads it the same way.
 
+### Each deployment's sign-in store
+
+Two deployments of one App keep their accounts apart when each config names its own sign-in store, keyed by the App's id as a presentation is:
+
+```json
+{
+  "auth": { "bank": { "store": "${MISTRI_AUTH_STORE}" } }
+}
+```
+
+It wins over the App's `auth.store`, which stays the fallback for a config that says nothing, and the default file the fallback after that. `store` takes what `auth.store` does: a `postgres://` URL, a `${NAME}` the environment holds, or a SQLite file, read from the config file's directory when the path is relative. The startup line, `migrate stores up` and `mistri check` say where the store came from, never the URL. A key other than `store`, an empty store, an id the server does not serve, or an App that declares no `auth` stops the start and names the entry.
+
 ## On a custom domain
 
 Serve an App, or one tenant of a tenant App, at an address of your own (`https://desk.example.com`) by pointing the name at a TLS proxy and telling the server what that proxy is.

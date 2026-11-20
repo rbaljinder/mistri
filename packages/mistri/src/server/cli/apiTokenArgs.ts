@@ -31,6 +31,21 @@ type Parsed =
         /** `--scope name:key`: a declared `api.scopes` entry and the key row it reads. */
         scope?: Readonly<{ name: string; key: string }>;
       }
+    >
+  /* `--service <role>`: a tenant service token. The role is its subject and its one role, so there is no
+     --subject or --role; the tenant is bound alone, so no --scope. */
+  | Readonly<
+      Common & {
+        verb: 'issue';
+        service: string;
+        actorId: string;
+        label: string;
+        expiresAt: number;
+        operations?: readonly string[];
+        commands?: string;
+        tenant: string;
+        policy: string;
+      }
     >;
 const refuse = (): never => {
   throw new TypeError('Invalid api-token arguments.');
@@ -94,6 +109,7 @@ export function parseApiTokenArgs(raw: unknown): Parsed {
         '--tenant',
         '--policy',
         '--scope',
+        '--service',
       ],
     };
     const allowed = new Set(['--app', '--config', '--store-id', ...extras[verb as string]]);
@@ -120,6 +136,29 @@ export function parseApiTokenArgs(raw: unknown): Parsed {
     if (verb === 'provision') return Object.freeze({ ...common, verb });
     if (verb === 'issue') {
       if (values.has('--operation') && values.has('--deny-all-operations')) return refuse();
+      const operations = values.has('--deny-all-operations')
+        ? { operations: Object.freeze([]) }
+        : values.has('--operation')
+          ? { operations: names(values.get('--operation'), 1024) }
+          : {};
+      if (values.has('--service')) {
+        if (['--subject', '--role', '--scope'].some((flag) => values.has(flag))) return refuse();
+        const service = one('--service');
+        // The subject grammar a service token's role must meet (apiTokenScope.ts).
+        if (!/^[a-z][a-z0-9_-]{0,62}(?![\s\S])/.test(service)) return refuse();
+        return Object.freeze({
+          ...common,
+          verb,
+          service,
+          actorId: nativeId(one('--actor')),
+          label: text(one('--label'), 512),
+          expiresAt: expiry(one('--expires-at')),
+          ...operations,
+          ...(values.has('--commands') ? { commands: one('--commands') } : {}),
+          tenant: tenantSelector(one('--tenant')),
+          policy: one('--policy'),
+        });
+      }
       return Object.freeze({
         ...common,
         verb,
@@ -128,11 +167,7 @@ export function parseApiTokenArgs(raw: unknown): Parsed {
         roles: names(values.get('--role'), 128),
         label: text(one('--label'), 512),
         expiresAt: expiry(one('--expires-at')),
-        ...(values.has('--deny-all-operations')
-          ? { operations: Object.freeze([]) }
-          : values.has('--operation')
-            ? { operations: names(values.get('--operation'), 1024) }
-            : {}),
+        ...operations,
         ...(values.has('--commands') ? { commands: one('--commands') } : {}),
         ...(values.has('--tenant') ? { tenant: tenantSelector(one('--tenant')) } : {}),
         ...(values.has('--policy') ? { policy: one('--policy') } : {}),

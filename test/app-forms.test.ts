@@ -244,7 +244,7 @@ describe('every form', () => {
     const { label, ...rest } = finance();
     assert.throws(
       () => withViews({ finance: { ...rest, title: label } }),
-      /views "finance" has no "title"\. It takes: kind, label, path, icon, description, command, steps, style, note, review, submitLabel, done, public, prefillable, resume, draft, abandoned, owner, statusCheck, link, inputs\./,
+      /views "finance" has no "title"\. It takes: kind, label, path, icon, description, command, steps, style, note, review, submitLabel, done, public, prefillable, given, resume, draft, abandoned, owner, statusCheck, link, inputs\./,
     );
     assert.throws(() => parseTestApp({ ...base, intake: [] }, 'f'), /has no "intake"\. It takes:/);
     assert.throws(() => withViews({ finance: { ...finance(), sidebar: true } }), /has no "sidebar"/);
@@ -326,5 +326,51 @@ describe('the intake style', () => {
       () => withViews({ apply: intake({}, [step('One', [['applicant_name', 'dealer_code', 'requested_amount', 'applicant_name']])]) }),
       /at most 3|invalid form declaration/,
     );
+  });
+});
+
+/* A field report: a public form opened from a unit's page carries the unit in its link, and the visitor is never shown it. */
+describe('a form given inputs by its link', () => {
+  const given = (opts: Record<string, unknown> = {}, steps?: ReturnType<typeof step>[]) =>
+    commandForm('Apply', command, steps ?? [step('About you', ['applicant_name']), step('The loan', ['requested_amount'])], {
+      public: true,
+      given: ['dealer_code'],
+      ...opts,
+    } as never);
+
+  test('takes them off every step and still runs the command over them', () => {
+    const view = form(withViews({ apply: given() }), 'apply');
+    assert.deepEqual(view.given, ['dealer_code']);
+    assert.deepEqual(view.command.input.map((field) => field.name).sort(), ['applicant_name', 'dealer_code', 'requested_amount']);
+    // Without `given`, the input no step asks is refused, as before.
+    const { given: _, ...asked } = given() as Record<string, unknown>;
+    assert.throws(() => withViews({ apply: asked }), /the command input "dealer_code" belongs to no step/);
+  });
+
+  test('refuses what an address cannot fill, a step that asks it, a name shown too, and a form asking nothing', () => {
+    assert.throws(() => withViews({ apply: given({ given: ['nope'] }) }), /"given": "nope" is not one of the command's inputs/);
+    assert.throws(() => withViews({ apply: given({ given: [] }) }), /"given" that is not a list/);
+    assert.throws(() => withViews({ apply: given({ given: ['dealer_code', 'dealer_code'] }) }), /names one input twice/);
+    assert.throws(
+      () => withViews({ apply: given({}, [step('All', ['applicant_name', 'dealer_code', 'requested_amount'])]) }),
+      /step "All" names "dealer_code", which the form is given and never asks/,
+    );
+    assert.throws(
+      () => withViews({ apply: given({ prefillable: ['dealer_code'] }) }),
+      /names "dealer_code" both prefillable \(shown\) and given \(hidden\)/,
+    );
+    assert.throws(
+      () =>
+        withViews({
+          apply: commandForm('Apply', command, { public: true, given: ['applicant_name', 'dealer_code', 'requested_amount'] } as never),
+        }),
+      /is given every input the command takes/,
+    );
+  });
+
+  test('a done screen may leave out the reference and the way back, and says nothing else but false', () => {
+    const view = form(withViews({ apply: given({ done: { title: 'Thanks', reference: false, home: false } }) }), 'apply');
+    assert.deepEqual(view.done, { title: 'Thanks', reference: false, home: false });
+    assert.throws(() => withViews({ apply: given({ done: { reference: true } }) }), /"done" has a "reference" that is not false/);
   });
 });

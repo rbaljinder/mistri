@@ -15,6 +15,11 @@
  *   of this tenant) — also sees the others', each no wider than their own
  *   roles. Nobody sees another tenant's.
  * - **revoke** ends one of those, under the same rule.
+ * - A **service token** (`api.service`) is the administrator's alone to
+ *   issue, see and end: its subject is a service role no person holds, bound
+ *   to the tenant rather than to a membership, so it outlives whoever made it.
+ *   The record keeps that administrator as its issuer and its revoker, which
+ *   is the audit of both.
  *
  * The records are written by the operator CLI's own maintenance functions
  * (sqlite/postgresApiTokenMaintenance.ts) against the native auth store, each
@@ -34,8 +39,18 @@ import { isPostgresAuthStore } from '../auth/authStore.js';
 import { SQLITE_API_TOKEN_TABLES } from '../../adapters/auth/sqliteApiTokenLayout.js';
 import { runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import { withPostgresMaintenanceTransaction } from '../../adapters/commands/postgresCommandJournal.js';
-import { inspectSqliteApiToken, issueSqliteApiTenantToken, revokeSqliteApiToken } from '../auth/sqliteApiTokenMaintenance.js';
-import { inspectPostgresApiToken, issuePostgresApiTenantToken, revokePostgresApiToken } from '../auth/postgresApiTokenMaintenance.js';
+import {
+  inspectSqliteApiToken,
+  issueSqliteApiServiceToken,
+  issueSqliteApiTenantToken,
+  revokeSqliteApiToken,
+} from '../auth/sqliteApiTokenMaintenance.js';
+import {
+  inspectPostgresApiToken,
+  issuePostgresApiServiceToken,
+  issuePostgresApiTenantToken,
+  revokePostgresApiToken,
+} from '../auth/postgresApiTokenMaintenance.js';
 import { assertApiTokenSecretId } from '../api/apiTokenSecret.js';
 import type { TenantMembershipEvidence } from './tenantMembership.js';
 import type { AdministrationPolicy } from './tenantAdministrationModel.js';
@@ -53,6 +68,8 @@ interface TenantTokenSummary {
   readonly revokedAt: string | null;
   /** True when the token's subject is the member asking. */
   readonly mine: boolean;
+  /** A service token's role (`api.service.roles`); absent for a member's token. */
+  readonly service?: string;
 }
 
 /** A request the service will not carry out: the status and a stable code, never a store's detail. */
@@ -83,7 +100,14 @@ function names(value: unknown, what: string): string[] | undefined {
 }
 
 export function createTenantTokenService(
-  input: Readonly<{ loaded: LoadedApp; catalog: Catalog; now?: () => number; administration?: AdministrationPolicy }>,
+  input: Readonly<{
+    loaded: LoadedApp;
+    catalog: Catalog;
+    now?: () => number;
+    administration?: AdministrationPolicy;
+    /** Whether `@platform` is active now: a service token acts only while it is, so none is issued without it. */
+    platformActive?: () => Promise<boolean>;
+  }>,
 ) {
   const app = input.loaded.app;
   const api = app.api;
@@ -169,9 +193,10 @@ export function createTenantTokenService(
           operatorReaches(operator.tenants, principal.tenantId),
       ));
   /** A token this member may see and end: their own, or, for the tenant's
-   * administrator, anyone's no wider than they are. */
-  const reaches = (principal: TenantMembershipEvidence, token: { roles: readonly string[]; mine: boolean }) =>
-    within(principal, token.roles) && (token.mine || administers(principal));
+   * administrator, anyone's no wider than they are, and the tenant's service
+   * tokens, whose role no person holds and so none could be "as wide as". */
+  const reaches = (principal: TenantMembershipEvidence, token: { roles: readonly string[]; mine: boolean; service?: string }) =>
+    token.service !== undefined ? administers(principal) : within(principal, token.roles) && (token.mine || administers(principal));
 
   function summary(principal: TenantMembershipEvidence, row: Record<string, unknown>): TenantTokenSummary {
     return Object.freeze({
@@ -183,6 +208,7 @@ export function createTenantTokenService(
       expiresAt: instant(row.expires_at),
       revokedAt: row.revoked_at == null ? null : instant(row.revoked_at),
       mine: row.subject_kind === 'account' && row.subject_id === principal.accountId,
+      ...(row.subject_kind === 'service' ? { service: String(row.subject_id) } : {}),
     });
   }
 
@@ -193,6 +219,51 @@ export function createTenantTokenService(
       membershipVersion: principal.membershipVersion,
       roles: [...principal.roles],
     });
+
+  /* A service token: the administrator asks, the tenant is their lease's, and
+     the role is one the App lists in `api.service.roles`. Its operations are
+     the role's own, never a public door's: a program has no visitor to stand for. */
+  async function issueService(principal: TenantMembershipEvidence, raw: Record<string, unknown>, label: string, days: number) {
+    if (!administers(principal)) return refusal(403, 'not_administrator', "Only this tenant's administrator makes a service token.");
+    /* Said up front, in setPlatformStatus's words: a token issued now would be
+       refused on every request (tenantServiceBinding.ts), with nothing saying why. */
+    let platform: boolean;
+    try {
+      platform = input.platformActive ? await input.platformActive() : true;
+    } catch {
+      return refusal(503, 'tokens_unavailable', 'The token could not be issued; nothing was kept.');
+    }
+    if (!platform)
+      return refusal(409, 'platform_inactive', 'The platform row (@platform) must exist and be active: setPlatformStatus creates it.');
+    if (raw.roles !== undefined) return refusal(400, 'invalid_input', 'A service token carries its service role alone.');
+    const role = raw.service;
+    if (typeof role !== 'string' || !api!.service?.roles.includes(role))
+      return refusal(400, 'invalid_input', '"service" names one of the App\'s service roles.');
+    const operations = names(raw.operations, 'operations');
+    if (
+      operations?.some((id) => !input.catalog.operations.some((operation) => operation.id === id && operation.eligibleRoles.includes(role)))
+    )
+      return refusal(400, 'invalid_input', 'An operation is not one this service role can use.');
+    const id = await storeOf();
+    const options = {
+      storeId: id,
+      role,
+      tenantId: principal.tenantId,
+      actorId: principal.accountId,
+      label,
+      expiresAt: now() + days * DAY,
+      ...(operations === undefined ? {} : { operations }),
+    };
+    let issued: Readonly<{ token: string; tokenId: string }>;
+    try {
+      issued = postgres
+        ? await issuePostgresApiServiceToken(store, app, input.catalog, { ...options, excludeConnections: [] }, now)
+        : issueSqliteApiServiceToken(path, app, input.catalog, { ...options, exclusions: [] }, now());
+    } catch {
+      return refusal(503, 'tokens_unavailable', 'The token could not be issued; nothing was kept.');
+    }
+    return Object.freeze({ token: issued.token, id: issued.tokenId, expiresAt: new Date(options.expiresAt).toISOString() });
+  }
 
   return Object.freeze({
     /** What this member may put in a token: the API's roles they hold, and the operations those reach. */
@@ -205,6 +276,8 @@ export function createTenantTokenService(
           .filter((operation) => operation.door === 'public' || operation.eligibleRoles.some((role) => roles.includes(role)))
           .map((o) => o.id),
         maxDays: TENANT_TOKEN_MAX_DAYS,
+        // Only an administrator is offered a service role; the label is the name its writes carry.
+        ...(api.service && administers(principal) ? { service: { roles: [...api.service.roles], label: api.service.label } } : {}),
       });
     },
 
@@ -219,6 +292,7 @@ export function createTenantTokenService(
       const days = raw.days === undefined ? 90 : raw.days;
       if (typeof days !== 'number' || !Number.isSafeInteger(days) || days < 1 || days > TENANT_TOKEN_MAX_DAYS)
         return refusal(400, 'invalid_input', `"days" is a whole number from 1 to ${TENANT_TOKEN_MAX_DAYS}.`);
+      if (raw.service !== undefined) return issueService(principal, raw, label, days);
       const offered = this.choices(principal);
       const roles = names(raw.roles, 'roles') ?? offered.roles;
       const operations = names(raw.operations, 'operations');
@@ -283,7 +357,12 @@ export function createTenantTokenService(
       // Another tenant's token, another member's (to anyone but the tenant's
       // administrator), or one wider than the member, is answered as no token at all.
       const mine = found?.record.subject.kind === 'account' && found.record.subject.id === principal.accountId;
-      if (!found || found.record.tenant?.tenantId !== principal.tenantId || !reaches(principal, { roles: found.record.roles, mine }))
+      const service = found?.record.subject.kind === 'service' ? found.record.subject.id : undefined;
+      if (
+        !found ||
+        found.record.tenant?.tenantId !== principal.tenantId ||
+        !reaches(principal, { roles: found.record.roles, mine, ...(service === undefined ? {} : { service }) })
+      )
         return refusal(404, 'not_found', 'No such token.');
       if (found.record.revokedAt !== undefined) return;
       const revoke = { ...owner, expectedVersion: found.version, actorId: principal.accountId };

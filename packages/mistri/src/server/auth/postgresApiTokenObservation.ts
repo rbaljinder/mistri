@@ -12,7 +12,13 @@ import { assertAppApiContext } from '../api/appApiValidation.js';
 import { apiReadTokenCatalog } from '../api/apiEventOperations.js';
 import type { ApiTenantCatalog } from '../api/apiTenantCommandCatalog.js';
 import { apiTokenSecretId, matchesApiTokenSecret } from '../api/apiTokenSecret.js';
-import { narrowApiTokenScope, narrowTenantApiTokenScope, observedRowScope, scopeOperation } from '../api/apiTokenScope.js';
+import {
+  narrowApiTokenScope,
+  narrowTenantApiTokenScope,
+  narrowTenantServiceTokenScope,
+  observedRowScope,
+  scopeOperation,
+} from '../api/apiTokenScope.js';
 import { createPostgresApiTokenStore } from './postgresApiTokenStore.js';
 import { readPostgresEligibleAccountRoles } from './nativeAccountObservation.js';
 import { ApiTokenStoreUnavailable, throughApiTokenStoreAsync } from './apiTokenStoreFailure.js';
@@ -66,7 +72,15 @@ export async function observePostgresAccountToken(
     const scopeOperations = Object.freeze(catalog.operations.map((operation) => Object.freeze(scopeOperation(operation))));
     // Only the facts narrowApiTokenScope reads are retained across awaits.
     // The complete parsed App remains the trusted catalog construction input.
-    const scopedApp = { ...app, api: { ...app.api, roles: [...app.api.roles] }, auth: { ...app.auth!, roles: { ...app.auth!.roles } } };
+    const scopedApp = {
+      ...app,
+      api: {
+        ...app.api,
+        roles: [...app.api.roles],
+        ...(app.api.service ? { service: { ...app.api.service, roles: [...app.api.service.roles] } } : {}),
+      },
+      auth: { ...app.auth!, roles: { ...app.auth!.roles } },
+    };
     let previous = -1;
     const now = () => {
       const value: unknown = clock();
@@ -112,17 +126,24 @@ export async function observePostgresAccountToken(
         // terminated store actually shows itself.
         const initial = await store.lookup(id);
         current();
+        /* A service token is a tenant App's alone (api.service): it has no account to lock or read, and its
+           authority is the App's declaration, read now, and the tenant's state, which the tenant runtime reads in
+           the business store. */
+        const service = tenant !== undefined && initial?.record.subject.kind === 'service';
         if (
           !initial ||
-          initial.record.subject.kind !== 'account' ||
+          (initial.record.subject.kind !== 'account' && !service) ||
           !matchesApiTokenSecret(scopedApp.id, id, rawCredential, initial.digest)
         )
           return refuse();
         // Discovery is not the result. Lock account before token, matching
         // maintenance revoke when audit actor and token subject are identical.
-        const subjectId = initial.record.subject.id;
-        const accountLock = (await query(`SELECT id FROM ${accounts} WHERE id=$1 COLLATE "C" FOR SHARE`, [subjectId])).rows;
-        if (accountLock.length !== 1 || accountLock[0].id !== subjectId) return refuse();
+        const subjectId = initial.record.subject.id,
+          subjectKind = initial.record.subject.kind;
+        if (!service) {
+          const accountLock = (await query(`SELECT id FROM ${accounts} WHERE id=$1 COLLATE "C" FOR SHARE`, [subjectId])).rows;
+          if (accountLock.length !== 1 || accountLock[0].id !== subjectId) return refuse();
+        }
         const tokenLock = (
           await query(`SELECT token_id FROM ${tokens} WHERE token_id=$1 COLLATE "C" AND app_id=$2 COLLATE "C" FOR SHARE`, [
             id,
@@ -138,14 +159,14 @@ export async function observePostgresAccountToken(
           parent = found?.parent;
         if (
           !stored ||
-          stored.record.subject.kind !== 'account' ||
+          stored.record.subject.kind !== subjectKind ||
           stored.record.subject.id !== subjectId ||
           !matchesApiTokenSecret(scopedApp.id, id, rawCredential, stored.digest)
         )
           return refuse();
-        const account = await readPostgresEligibleAccountRoles(guarded, subjectId);
+        const account = service ? undefined : await readPostgresEligibleAccountRoles(guarded, subjectId);
         current();
-        if (!account) return refuse();
+        if (!service && !account) return refuse();
         /* A token the OAuth authorization server issued is honoured only where
            that server is configured, while its grant stands, and for the API
            it was issued for; the operator's ceiling narrows its roles first.
@@ -178,15 +199,23 @@ export async function observePostgresAccountToken(
           const ceiling = input.oauth.roles;
           record = { ...record, roles: record.roles.filter((role) => ceiling.includes(role)) };
         }
-        const bound = tenant
-          ? narrowTenantApiTokenScope(
+        const bound = service
+          ? narrowTenantServiceTokenScope(
               record,
               scopedApp,
-              { appId: scopedApp.id, subject: stored.record.subject, eligible: true },
+              { appId: scopedApp.id, subject: stored.record.subject },
               scopeOperations,
               instant,
             )
-          : undefined;
+          : tenant
+            ? narrowTenantApiTokenScope(
+                record,
+                scopedApp,
+                { appId: scopedApp.id, subject: stored.record.subject, eligible: true },
+                scopeOperations,
+                instant,
+              )
+            : undefined;
         const rowScope = observedRowScope(stored.record, scopedApp, parent?.record, instant);
         const scope =
           bound ??
@@ -197,7 +226,7 @@ export async function observePostgresAccountToken(
               appId: scopedApp.id,
               subject: stored.record.subject,
               eligible: true,
-              roles: account.roles,
+              roles: account!.roles,
             },
             scopeOperations,
             instant,

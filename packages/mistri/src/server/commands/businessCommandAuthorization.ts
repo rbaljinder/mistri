@@ -177,7 +177,7 @@ const invalid = (message: string): never => {
 };
 
 /** A service principal's id: `service:` and the name its jobs module declares. */
-const SERVICE_ID = /^service:[a-z][a-z0-9-]{0,62}$/;
+const SERVICE_ID = /^service:[a-z][a-z0-9_-]{0,62}$/;
 
 /**
  * Why these roles cannot be a service principal's in this App, or undefined

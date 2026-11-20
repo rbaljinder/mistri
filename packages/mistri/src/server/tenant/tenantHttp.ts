@@ -1216,6 +1216,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 schema,
                 who: session?.identity.who,
                 registry: { store: enrollment.deployment.inbox, namespace: leaseInbox(app.id, tenantId as string | undefined) },
+                lastWave: context.lastWave,
               };
               return reply(
                 path === '/api/inbox'
@@ -1577,6 +1578,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               now: () => zonedNow(appZone(app.ui, context.zone), appNow()),
               weekStart: localeWeekStart(app.ui.locale),
               me: () => tenantPerson(context, schema),
+              lastWave: context.lastWave, // a bounded request's fenced snapshot only (tenantReadSource.ts)
             });
           const result = await (toleratesLag(path, input) ? lagTolerantReads(dispatch) : dispatch());
           if (!result) return denyTenant();

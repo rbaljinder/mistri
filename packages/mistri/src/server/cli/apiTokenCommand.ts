@@ -12,6 +12,10 @@ const API_TOKEN_USAGE = `mistri api-token <provision|issue|inspect|revoke> --app
            [--tenant <id> --policy <file>]  required exactly for a tenant App: binds the
              token to the subject's active membership in that tenant, read natively
            [--scope <name>:<key>]  narrows the token to one key row of a declared api.scopes entry
+  issue --service <role> --tenant <id> --policy <file> --actor <native-account-id>
+           --label <label> --expires-at <UTC-instant> [--operation ... | --deny-all-operations]
+           [--commands <file>]  a tenant service token: one api.service role in one active
+             tenant, no --subject, --role or --scope; --actor is the issuing account
   inspect: --token-id <uuid>
   revoke:  --token-id <uuid> --expected-version <revision> --actor <native-account-id>
 Local operator maintenance of an existing, separate SQLite or PostgreSQL auth store.

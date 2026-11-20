@@ -151,6 +151,10 @@ export const VALIDATION_CODES: ReadonlyArray<{ code: string; pattern: RegExp }> 
   { code: 'new-key-unfilled', pattern: /has no way to fill its key/ },
   { code: 'form-lines', pattern: /\bform\.lines\b/ },
   { code: 'form-live', pattern: /\bform\.live\b/ },
+  /* Said in brackets by the App's `api.service` check (shared/appApi.ts apiServiceProblems), for the same reason. */
+  { code: 'api-service-role', pattern: /\bapi\.service\.roles: "[^"]+" is not a service role/ },
+  { code: 'api-service-tenant', pattern: /\bapi\.service: a service token is bound to one tenant/ },
+  { code: 'api-service-unreachable', pattern: /\bapi\.service\.roles: "[^"]+" reads no table and runs no command/ },
   /* A warning about the connection, not the App's declaration: it was reported as `invalid-app`, which reads as an error. */
   { code: 'superuser-connection', pattern: /is read-only here, but its database role can do more/ },
 ];

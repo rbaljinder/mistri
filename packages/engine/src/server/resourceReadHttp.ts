@@ -133,6 +133,13 @@ interface ResourceReadHttpOptions {
    * by another name.
    */
   rowsMost?: (table: string) => number | undefined;
+  /**
+   * Asked just before a route's last wave of reads, where the routes below
+   * can say which that is: every read after it leaves in that one wave. A
+   * tenant App's bounded request lets its release fence leave with it
+   * (TenantReadContext.lastWave). Internal; absent, nothing.
+   */
+  lastWave?: () => void;
 }
 
 interface ResourceReadHttpReply {
@@ -192,6 +199,7 @@ export async function dispatchResourceReadHttp(
     if (refused) return refused;
   }
   if (path === '/api/query') {
+    options.lastWave?.();
     const { result, order } = await readRecords(adapter, schema, {
       table: String(body.table ?? ''),
       filter: body.filter as Filter | undefined,
@@ -225,6 +233,8 @@ export async function dispatchResourceReadHttp(
     if (lanes === 'invalid') return refusal(400, [`lanes is { by: a column, limit: 1 to ${LANE_MOST} }.`]);
     const text = String(body.q ?? '');
     const person = await personFor(text);
+    /* Every branch below reads in one wave, rows beside their count (readRecords, readView), or not at all. */
+    options.lastWave?.();
     const parsed = parseQuery(text, { schema, now: options.now(), ...person });
 
     /* A view is a superset of a query, so the bar can take one.
@@ -397,8 +407,9 @@ export async function dispatchResourceReadHttp(
       }
       results[at] = { errors: parsed.errors.length ? parsed.errors : [{ message: 'That question does not read as a count.' }] };
     }
+    /* The plain counts are the last wave only where no view's count is still reading beside them. */
     const batch = plain.length
-      ? readCounts(adapter, schema, plain, body.countLimit).then((counts) => {
+      ? readCounts(adapter, schema, plain, body.countLimit, views.length ? undefined : options.lastWave).then((counts) => {
           plain.forEach(({ at }, i) => {
             results[at] = {
               total: counts[i].count,
@@ -591,6 +602,8 @@ export async function dispatchResourceReadHttp(
     let view = normaliseView(body.view);
     let merged = view;
     const person = await personFor(body.text, body.query);
+    // One wave from here: the view's rows beside its count (readView).
+    options.lastWave?.();
     const errors: Array<{ message: string; at?: number }> = [];
     if (!view.base && typeof body.text !== 'string') {
       return refusal(400, ['A view needs a base table.']);
@@ -671,6 +684,7 @@ export async function dispatchResourceReadHttp(
      most that many rows are counted, and past it the answer is the bound with
      `capped`. Absent, the count is the one these routes always gave. */
   if (path === '/api/count') {
+    options.lastWave?.();
     const result = await readCount(adapter, schema, {
       table: String(body.table ?? ''),
       filter: body.filter as Filter | undefined,

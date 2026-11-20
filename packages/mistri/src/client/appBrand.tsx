@@ -40,20 +40,32 @@ export function applyBrandLogo(host: Element | null, logo?: unknown, app?: strin
   mount(host, createElement(BrandGlyph, { host, name: named, initial, image }));
 }
 
-/** The tenant's logo a public page's head carries (a mapped host's sign-in page, its forms), when it carries one. */
-export function headBrandingMark(): { src: string; dark?: string; aspect?: number } | undefined {
+/** A public page's head branding (a mapped host's sign-in page, its forms); never a member's private one. */
+function publicHeadBranding(): { mark?: { src?: unknown; dark?: unknown; aspect?: unknown }; content?: { name?: unknown } } | undefined {
   try {
     const head = JSON.parse(shellById('mistri-branding')?.textContent || 'null') as {
       private?: boolean;
-      value?: { mark?: { src?: unknown; dark?: unknown; aspect?: unknown } };
+      value?: { mark?: { src?: unknown; dark?: unknown; aspect?: unknown }; content?: { name?: unknown } };
     } | null;
-    const mark = head && !head.private ? head.value?.mark : undefined;
-    return typeof mark?.src === 'string'
-      ? { src: mark.src, ...(typeof mark.dark === 'string' ? { dark: mark.dark } : {}), ...aspectOf(mark.aspect) }
-      : undefined;
+    return head && !head.private ? head.value : undefined;
   } catch {
     return undefined;
   }
+}
+
+/** The tenant's logo a public page's head carries (a mapped host's sign-in page, its forms), when it carries one. */
+export function headBrandingMark(): { src: string; dark?: string; aspect?: number } | undefined {
+  const mark = publicHeadBranding()?.mark;
+  return typeof mark?.src === 'string'
+    ? { src: mark.src, ...(typeof mark.dark === 'string' ? { dark: mark.dark } : {}), ...aspectOf(mark.aspect) }
+    : undefined;
+}
+
+/** The tenant's saved name, read where its logo and tab icon are: the page says it, not the App's own name
+    the sign-in answer and a form's payload carry (a field report: the tab wore the tenant's icon and the App's name). */
+export function headBrandingName(): string | undefined {
+  const name = publicHeadBranding()?.content?.name;
+  return typeof name === 'string' && name.trim() ? name : undefined;
 }
 
 /** A tenant's own logo (server tenantBranding.ts): only the App's own logo address, by content hash, is drawn. */

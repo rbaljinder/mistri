@@ -100,6 +100,16 @@ its profile names through `ui.timezone` (the App's default where it names none):
 `morningDigest: defineJob({ every: '0 6 * * *', timezone: 'tenant', realm: 'tenant', runAs: 'clock', command: 'sendDigest' })`
 is six in the morning at every tenant.
 
+`every: { column, default }` runs a tenant job at the schedule each tenant keeps
+for itself, cron text in a column of its profile (`'tenant.<column>'`, listed in
+`auth.tenancy.shared`) or of a table it owns its rows of (`'<resource>.<column>'`,
+its first row by key):
+`weeklyReport: defineJob({ every: { column: 'tenant.report_cron', default: '0 7 * * 1' }, timezone: 'tenant', realm: 'tenant', runAs: 'clock', command: 'sendReport' })`.
+A tenant that keeps none runs at `default`; one whose value is not a schedule
+runs there too, and the server says so once rather than stalling any tenant. A
+tenant that moves its schedule during the day may run once more, or once less,
+that day.
+
 `mistri jobs run nightlyClose --app . --jobs jobs.ts` runs it now, once, as the
 job's principal, journaled as a slot's run is. It waits while the schedule's
 run holds its lease ([command line](/docs/cli/#running-a-job-now)).
@@ -123,6 +133,22 @@ ticket: {
 
 // The command that resumes the clock counts open hours on the desk's own calendar:
 await db.ticket.update(record, { status: 'open', due_at: addBusinessMinutes(now(), minutesLeft, deskHours) });
+```
+
+A timer may come due `before` or `after` its instant, and a column with
+several timers takes a list. Each comes due once per instant, so a moved
+appointment is reminded again:
+
+```ts
+appointment: {
+  at: {
+    starts_at: [
+      { command: 'sendReminder', before: '24 hours', when: "status = 'booked'" },
+      { command: 'sendReminder', before: '2 hours', when: "status = 'booked'" },
+    ],
+    ended_at: { command: 'askForReview', after: '2 days', when: "status = 'completed'" },
+  },
+},
 ```
 
 ### A signed callback: inbound
@@ -334,9 +360,9 @@ A tenant App's jobs module also declares its email: `mail: { receive, send, link
 
 ## Common mistakes
 
+- `[job-every-column]`: a job's `every.column` is not a text column the tenant keeps, or the job is not `realm: 'tenant'` → name `'tenant.<column>'` from `auth.tenancy.shared`, or `'<resource>.<column>'` of a tenant-owned table, and say `realm: 'tenant'`.
 - A job's `runAs` principal is not granted its command → grant the command to one of the principal's roles; startup and `mistri check` refuse the pair.
 - An inbound secret variable is not set → set it in the server's environment; startup refuses, and `mistri check` warns.
-- `[api-event-unknown]`: `api.events` names an event no command records → name the command's event, or declare it in the command's `events`.
 - A workflow stops as `diverged` → a step's kind or target changed at the same `version`; raise `version` and branch on `w.version`.
 
 ## Related

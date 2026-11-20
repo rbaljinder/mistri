@@ -6,7 +6,7 @@
  * for anyone, so staff can see what an applicant sees.
  */
 import { createElement } from 'react';
-import { applyBrandLogo, headBrandingMark } from './appBrand.js';
+import { applyBrandLogo, headBrandingMark, headBrandingName } from './appBrand.js';
 import { $ } from '@mistriwork/kit/client/core.js';
 import { isMounted, mount } from '@mistriwork/kit/client/components/mount.js';
 import { takeServerDrawing } from './serverDrawing.js';
@@ -49,6 +49,8 @@ export async function loadLanding() {
  */
 export function showLanding(app, landing) {
   shellBody().classList.add('app-mode', 'landing-mode');
+  /* A tenant's saved name, as a public form and the sign-in page wear it (publicForm.js), and as the server drew it. */
+  app = { ...app, name: /** @type {any} */ (app).theme?.branding?.content?.name ?? headBrandingName() ?? app.name };
   const brand = shellQuery('.brand-name');
   if (brand) brand.textContent = app.name;
   applyBrandLogo(

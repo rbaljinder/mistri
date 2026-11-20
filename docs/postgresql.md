@@ -557,6 +557,22 @@ administration writer.
   snapshot, attested from a digest of its own catalog the same way. The
   session is resolved from its cookie once per request, and its row is
   observed in the auth store at every step.
+- **A bounded route's fence leaves with its last wave of reads.** A list,
+  its counts, a record, a search, a pool and the inbox read on one snapshot
+  for the request (`withBoundedReads`), and its release fence ends that
+  snapshot: `COMMIT`, then the locks and the membership in a fresh snapshot
+  of their own. Each of those routes declares its last wave of reads, and
+  the fence is sent right behind them, in their flight, without waiting for
+  their answers, so a warm list with its count is one round trip. The server
+  runs one connection's statements in order, so the fence's snapshot still
+  begins after every read has finished, and a membership revoked while a
+  read runs is refused there. A read asked after the fence has left is
+  refused and the request denied, a read that fails is denied without a
+  fence, and a fence sent under an attestation replaced since is not counted:
+  the membership is asked again. What moves is the order on the server:
+  shaping the rows into the answer (a few milliseconds of CPU) now happens
+  after the fence's snapshot was taken rather than before it, and nothing
+  leaves before the fence has answered.
 - **Admission is kept between one login's requests; its fences are not.**
   Admission verifies the session and reads the membership in a snapshot of
   its own to mint the evidence the fences compare against. The first request

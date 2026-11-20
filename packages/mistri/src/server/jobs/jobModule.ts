@@ -50,7 +50,10 @@ export interface JobSchedule {
  * never overlap; `mistri jobs run <name>` runs it now, once.
  */
 interface EveryJobDeclaration {
-  readonly every: string;
+  /** Cron text; or, on a job per tenant, `{ column, default }`: each tenant's own cron text off a column of a
+   * tenant-owned table (its first row by key) or of its profile (`'tenant.<column>'`, a shared one), and the
+   * default for a tenant whose value is empty or does not parse. */
+  readonly every: string | Readonly<{ column: string; default: string }>;
   /** An IANA zone name, or `'tenant'`: each tenant's own zone, the one its
    * profile names through `ui.timezone: { column: 'tenant.<column>' }`, read
    * per tenant (`realm: 'tenant'` only). */
@@ -105,6 +108,8 @@ export interface MachineTimer {
   readonly at?: string;
   /** An `at` timer's condition, in the query language over the record's own columns. */
   readonly when?: string;
+  /** An `at` timer's distance from the instant, as authored (`before-24 hours`): it names the job, so two timers on one column stay two. */
+  readonly offset?: string;
 }
 
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -112,7 +117,7 @@ const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 export function saidTimer(timer: MachineTimer, command: string): string {
   return timer.at === undefined
     ? `the machine of "${timer.resource}" runs "${command}" after ${timer.after} in "${timer.state}"`
-    : `"${timer.resource}" runs "${command}" at ${timer.at}${timer.when === undefined ? '' : ` when ${timer.when}`}`;
+    : `"${timer.resource}" runs "${command}" ${timer.ms ? timer.after : `at ${timer.at}`}${timer.when === undefined ? '' : ` when ${timer.when}`}`;
 }
 
 /** A service principal: the App roles it holds, by name. */
@@ -499,11 +504,28 @@ export function defineJob<Payload extends BusinessEventPayload<Payload>>(declara
 function defineEveryJob(value: Record<string, unknown>): Job {
   exactly(value, ['every', 'runAs', 'command'], 'Job', ['timezone', 'input', 'realm']);
   if (Object.hasOwn(value, 'realm') && value.realm !== 'tenant' && value.realm !== 'platform') fail("Job realm is 'tenant' or 'platform'.");
-  let every: JobEvery;
+  let every: JobEvery,
+    text = value.every,
+    column: string | undefined;
+  /* Each tenant's own schedule: the default is read now, so a tenant whose value is unreadable still has one. */
+  if (text !== null && typeof text === 'object' && !Array.isArray(text)) {
+    const per = text as Record<string, unknown>;
+    exactly(per, ['column', 'default'], 'Job every');
+    if (typeof per.column !== 'string' || !SCHEDULE_COLUMN.test(per.column))
+      fail("Job every.column names a column as '<resource>.<column>', or 'tenant.<column>' for the tenant's profile [job-every-column].");
+    column = per.column as string;
+    text = per.default;
+  }
   try {
-    every = parseEvery(value.every, value.timezone ?? 'UTC', true);
+    every = parseEvery(text, value.timezone ?? 'UTC', true);
   } catch (error) {
-    return fail(`Job ${(error as Error).message}`);
+    return fail(`Job ${column === undefined ? '' : 'every.default: '}${(error as Error).message}`);
+  }
+  /* A schedule per tenant is a tenant's: a job run once has no one tenant's value to read. */
+  if (column !== undefined) {
+    if (value.realm !== 'tenant')
+      fail("Job every: { column } reads each tenant's own schedule, so it runs per tenant: say realm: 'tenant' [job-every-column].");
+    every = Object.freeze({ ...every, column });
   }
   /* Each tenant's zone is a tenant App's, read per tenant: a job run once has no one tenant's clock to keep. */
   if (every.tenantZone && value.realm !== 'tenant')
@@ -535,6 +557,8 @@ function defineEveryJob(value: Record<string, unknown>): Job {
   return job;
 }
 
+/* `<resource>.<column>` or `tenant.<column>`: plain identifiers, as the catalog names them. */
+const SCHEDULE_COLUMN = /^[A-Za-z_][A-Za-z0-9_]{0,127}\.[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 const INBOUND_NAME = /^[A-Za-z][A-Za-z0-9_-]{0,63}$/;
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,127}$/;
 /* RFC 9110's token: what a header name may be. */
@@ -850,7 +874,11 @@ export function withMachineTimers(
       fail(
         `${capital(saidTimer(timer, timer.command))}, and no principal of the jobs module is granted it. Grant it to a principal's role.`,
       );
-    const id = (timer.at ? `at-${timer.resource}-${timer.at}` : `after-${timer.resource}-${timer.state}-${index + 1}`)
+    const id = (
+      timer.at
+        ? `at-${timer.resource}-${timer.at}${timer.offset ? `-${timer.offset}` : ''}`
+        : `after-${timer.resource}-${timer.state}-${index + 1}`
+    )
       .replace(/[^A-Za-z0-9_-]/g, '-')
       .slice(0, 64);
     const { command, ...rest } = timer;

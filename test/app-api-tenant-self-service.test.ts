@@ -9,7 +9,7 @@
  * its own tenant's rows, by a guessed key, a list, the document and MCP; a
  * lead, who administers their tenant's members, may see and revoke a member's
  * token in their own tenant, never the other way and never across tenants; a revoked token is refused on the next
- * request. Live and opt-in: TABLEWALK_TEST_PG names a server, and this file
+ * request. A lead, as the tenant's administrator, alone makes, sees and ends its service tokens. Live and opt-in: TABLEWALK_TEST_PG names a server, and this file
  * makes and drops its own database there. */
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
@@ -20,6 +20,7 @@ import { pathToFileURL } from 'node:url';
 import { test } from 'node:test';
 import { TransactionOperations } from '../packages/engine/src/adapters/adapter.js';
 import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
+import { provisionPostgresLiveChange } from '../packages/mistri/src/adapters/live/postgresLiveChange.js';
 import { migratePostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth } from '../packages/mistri/src/server/auth/auth.js';
@@ -71,6 +72,8 @@ test(
     await migratePostgresTenantStore(business, store);
     // The policy below names an administration (a lead revokes a member), so its journal is provisioned too.
     await migratePostgresTenantAdministrationJournal(business, store);
+    // Live sync, so a member's cookie stream is seen to open beside a service's bearer one.
+    await provisionPostgresLiveChange(business);
     const administer = async (run: (admin: TenantStoreAdministration) => Promise<void>) => {
       const operations = new TransactionOperations();
       await client.query('BEGIN');
@@ -85,6 +88,8 @@ test(
       }
     };
     await administer(async (admin) => {
+      // The platform row a service token's anchors read.
+      await admin.putPlatform({ status: 'active', expectedVersion: null });
       for (const tenantId of ['north', 'south']) await admin.putTenant({ tenantId, status: 'active', expectedVersion: null });
     });
     const version = async (id: string) =>
@@ -104,17 +109,24 @@ test(
           signUp: 'open',
           store: authStore,
           rows: 'tenant',
-          roles: { member: { read: true }, lead: { read: true, commands: ['touch'] } },
+          roles: {
+            member: { read: true },
+            lead: { read: true, commands: ['touch'] },
+            // A program's role, held by no person: a service token carries it.
+            sync: { service: true, read: ['item'], commands: ['touch'] },
+          },
         },
         sources: { business: { connection: 'data' } },
         resources: { item: { physical: 'public.physical_item', owner: 'tenant', access: 'write' } },
         views: { items: { kind: 'list', from: 'item' } },
         home: 'items',
+        live: true,
         api: {
           version: 1,
           roles: ['member', 'lead'],
           resources: { item: { fields: ['id', 'version', 'name'], sorts: ['id'] } },
           commands: ['touch'],
+          service: { roles: ['sync'], label: 'Ledger sync' },
         },
       }),
     );
@@ -218,7 +230,7 @@ export default defineCommands({ touch: defineCommand({ source: 'business', targe
         'x-mistri-context': String(opened.body.context),
         'x-mistri-lease-revision': String(opened.body.revision),
       };
-      return (path: string, body: unknown = {}) => call(`${path}?app=depot&tenant=${tenant}`, body, headers);
+      return Object.assign((path: string, body: unknown = {}) => call(`${path}?app=depot&tenant=${tenant}`, body, headers), { headers });
     };
     const asAlice = await lease(alice, 'north'),
       asCarol = await lease(carol, 'north'),
@@ -334,8 +346,75 @@ export default defineCommands({ touch: defineCommand({ source: 'business', targe
     assert.notEqual((await mcp(aliceToken.token, { id: 7, method: 'tools/list' })).body?.error, undefined);
     assert.equal((await get(carolToken.token, '/item/north-1')).status, 200);
 
+    // A service token: offered to and made by the tenant's administrator alone, bound to its tenant, seen and ended
+    // by that tenant's administrators, never by a member or another tenant's lead, and listed without its secret.
+    assert.equal((offered.body.choices as { service?: unknown }).service, undefined);
+    const choices = (await asCarol('/api/tokens')).body.choices as { service?: { roles: string[]; label: string } };
+    assert.deepEqual(choices.service, { roles: ['sync'], label: 'Ledger sync' });
+    const refused = await asAlice('/api/tokens/issue', { label: 'Sync', service: 'sync', days: 30 });
+    assert.deepEqual([refused.status, refused.body.code], [403, 'not_administrator']);
+    // A service token's lifetime is a member token's: at most 366 days.
+    const tooLong = await asCarol('/api/tokens/issue', { label: 'Sync', service: 'sync', days: 367 });
+    assert.deepEqual([tooLong.status, tooLong.body.code], [400, 'invalid_input']);
+    // None is issued while @platform is not active: it would be refused on every request with nothing saying why.
+    await administer((admin) => admin.putPlatform({ status: 'suspended', expectedVersion: '1' }));
+    const platformless = await asCarol('/api/tokens/issue', { label: 'Sync', service: 'sync', days: 30 });
+    assert.deepEqual(
+      [platformless.status, platformless.body.code, platformless.body.error],
+      [409, 'platform_inactive', 'The platform row (@platform) must exist and be active: setPlatformStatus creates it.'],
+    );
+    await administer((admin) => admin.putPlatform({ status: 'active', expectedVersion: '2' }));
+    const syncToken = await issue(asCarol, { label: 'Ledger sync', service: 'sync', days: 30 });
+    assert.deepEqual(
+      ((await get(syncToken.token, '/item?sort=id')).body.items as { id: string }[]).map((row) => row.id),
+      ['north-1', 'north-2'],
+    );
+    assert.equal((await get(syncToken.token, '/item/south-1')).status, 404);
+    assert.equal((await touch(syncToken.token, 'north-1', 1)).status, 200);
+    assert.equal(await version('north-1'), 2);
+    const serviceList = await asCarol('/api/tokens');
+    const entry = (serviceList.body.tokens as { id: string; service?: string }[]).find((token) => token.id === syncToken.id);
+    assert.equal(entry?.service, 'sync');
+    assert.equal(JSON.stringify(serviceList.body).includes(syncToken.token), false);
+    assert.equal((await ids(asAlice)).includes(syncToken.id), false);
+    assert.equal((await ids(asBob)).includes(syncToken.id), false);
+    assert.equal((await asBob('/api/tokens/revoke', { id: syncToken.id })).status, 404);
+    assert.equal((await asAlice('/api/tokens/revoke', { id: syncToken.id })).status, 404);
+    assert.equal((await get(syncToken.token, '/item/north-1')).status, 200);
+    assert.equal((await asCarol('/api/tokens/revoke', { id: syncToken.id })).status, 200);
+    assert.equal((await get(syncToken.token, '/item/north-1')).status, 401);
+
+    // A member's stream on its cookie lease, with no Authorization header, still opens through the member route: the
+    // service's stream answers only a presented credential.
+    const controller = new AbortController();
+    cleanup.push(() => controller.abort());
+    const stream = await fetch(`${origin}/api/live?app=depot&tenant=north`, {
+      headers: { origin, ...asCarol.headers },
+      signal: controller.signal,
+    });
+    assert.equal(stream.status, 200, await (stream.status === 200 ? Promise.resolve('') : stream.text()));
+    let said = '';
+    const decoder = new TextDecoder();
+    const reader = stream.body!.getReader();
+    // Stalled is a failure, not a hang: the read ends when the deadline aborts the stream.
+    const deadline = setTimeout(() => controller.abort(), 5000);
+    try {
+      while (!said.includes('event: hello')) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        said += decoder.decode(value, { stream: true });
+      }
+    } catch {
+      /* aborted at the deadline */
+    } finally {
+      clearTimeout(deadline);
+    }
+    assert.match(said, /event: hello/);
+    controller.abort();
+
     s.child.kill('SIGTERM');
     assert.equal(await s.closed, 0);
-    for (const token of [aliceToken.token, carolToken.token, bobToken.token]) assert.equal(s.output().includes(token), false);
+    for (const token of [aliceToken.token, carolToken.token, bobToken.token, syncToken.token])
+      assert.equal(s.output().includes(token), false);
   },
 );

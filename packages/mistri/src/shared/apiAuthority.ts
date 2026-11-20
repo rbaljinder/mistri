@@ -15,6 +15,8 @@ export function apiAuthorityFacts(api: AppApiDef | undefined, views: AppDef['vie
   // an App that never asked for it keeps the lock it had.
   if (api.network) add('api network', 'network');
   for (const role of [...api.roles].sort()) add(`api role ${role}`, 'role', role);
+  // A role a tenant's administrator may hand to a program is authority the lock names, like an API role.
+  for (const role of [...(api.service?.roles ?? [])].sort()) add(`api service role ${role}`, 'serviceRole', role);
   for (const name of Object.keys(api.resources).sort()) {
     const resource = api.resources[name];
     for (const [kind, values] of [

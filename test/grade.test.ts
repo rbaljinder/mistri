@@ -633,6 +633,8 @@ describe('grade when the App does not start', () => {
       );
       assert.equal(code, 1);
       assert.match(heard.join('\n'), /the App did not start within 0\.001 seconds .*its server was stopped/);
+      // How to give it longer is said, by the variable's name.
+      assert.match(heard.join('\n'), /MISTRI_SHOT_START_SECONDS=1\b/);
     } finally {
       if (before === undefined) delete process.env.MISTRI_SHOT_START_SECONDS;
       else process.env.MISTRI_SHOT_START_SECONDS = before;

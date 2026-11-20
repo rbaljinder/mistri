@@ -645,7 +645,8 @@ async function serveShell(ctx: RequestContext): Promise<void> {
   const placedFormPage = placedPublicFormPage(ctx.path, ctx.policy?.publicPlacement?.isPlacedForm);
   const mount = { base: ctx.mount.base, json: mountJson(ctx.mount) };
   /* A public page's content pane drawn on the server (publicRender.ts); a placed form owns a fresh token and never is. */
-  const pane = placedFormPage ? undefined : publicPane(ctx.path, head?.page?.room, mount);
+  const worn = branding && !branding.private ? branding.value.content.name : undefined;
+  const pane = placedFormPage ? undefined : publicPane(ctx.path, head?.page?.room, mount, worn);
   const { page: _page, site: _site, headline: _headline, ...shellHead } = head ?? {};
   /* `?embed=frame`: an App's page in a host's iframe (clientHttp.ts withFrameAncestors), framed only by the origins listed for it. */
   const framed =

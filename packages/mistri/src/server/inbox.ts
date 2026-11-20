@@ -476,6 +476,8 @@ export async function readInboxFor(
     limit?: unknown;
     before?: unknown;
     unread?: unknown;
+    /** Asked before the last wave of reads, whether each notice is still the reader's (TenantReadContext.lastWave). */
+    lastWave?: () => void;
   },
 ): Promise<InboxReply> {
   const limit = options.limit === undefined ? 20 : options.limit;
@@ -499,6 +501,7 @@ export async function readInboxFor(
     unreadOf(store, recipient, namespace),
     appRulesEmail(options.app) && emailSwitchOf(store) ? emailSwitchOf(store)!(namespace, recipient).then((off) => ({ email: !off })) : {},
   ]);
+  options.lastWave?.();
   const visible = await visibleTo(options.reader, options.schema, [...new Map([...rows, ...unread].map((row) => [row.id, row])).values()]);
   const notices = rows
     .filter((row) => visible.has(row.id))

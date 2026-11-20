@@ -123,6 +123,10 @@ test.describe('A free-form page and what it draws around itself', () => {
     const root = await page.locator('.c-page-wall').boundingBox();
     expect(root).toMatchObject({ x: 0, y: 0, width: viewport.width });
     expect(root!.height).toBeGreaterThanOrEqual(viewport.height);
+    // A look's phone gutter stood a 4px inset round it (visualThemes.css); a bare page keeps no gutter there either.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await settled(page);
+    expect(await page.locator('.c-page-wall').boundingBox()).toMatchObject({ x: 0, y: 0, width: 390 });
   });
 
   /* A field report: a param set with `push` made a second step of the walk, and the shell's sticky bar came over the bare page. */

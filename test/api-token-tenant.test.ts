@@ -1,5 +1,5 @@
 /** S1 of the API tenant bridge on SQLite: a token record's tenant membership
- * binding through the codec and the v2 layout, an `all` App refusing a bound
+ * binding through the codec and the current layout, an `all` App refusing a bound
  * token, and `api-token issue --tenant` through the real CLI against a tenant
  * App with two tenants — issued only for an active membership of the named
  * tenant, bound to that membership's current version. */
@@ -38,7 +38,7 @@ const stored = (tenant?: typeof binding) => ({
   },
 });
 
-test('the codec and the v2 layout keep a tenant binding whole, and refuse a partial one', () => {
+test('the codec and the current layout keep a tenant binding whole, and refuse a partial one', () => {
   const row = encodeApiTokenSqlRow(stored(binding));
   assert.deepEqual([row.tenant_id, row.membership_id, row.membership_version], ['north', 'm-alice-north', '1']);
   assert.deepEqual(decodeApiTokenSqlRow(row).record.tenant, binding);
@@ -74,7 +74,7 @@ test('the codec and the v2 layout keep a tenant binding whole, and refuse a part
     for (const change of [{ membership_version: null }, { tenant_id: null }, { tenant_id: 'North' }, { membership_version: '01' }]) {
       assert.throws(() => insert({ ...row, ...change }));
     }
-    assert.throws(() => db.prepare(`INSERT INTO "${SQLITE_API_TOKEN_TABLES.meta}" VALUES(1,3,'depot',?,'twa1')`).run(tokenId));
+    assert.throws(() => db.prepare(`INSERT INTO "${SQLITE_API_TOKEN_TABLES.meta}" VALUES(1,4,'depot',?,'twa1')`).run(tokenId));
   } finally {
     db.close();
   }

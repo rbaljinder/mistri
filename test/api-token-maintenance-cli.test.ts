@@ -42,7 +42,7 @@ function fixture() {
     },
     provision(path, owner) {
       calls.push(['provision', path, owner]);
-      return Object.freeze({ migrated: false, version: 2, appId: owner.appId, storeId: owner.storeId });
+      return Object.freeze({ migrated: false, version: 3, appId: owner.appId, storeId: owner.storeId });
     },
     inspect(path, owner) {
       calls.push(['inspect', path, owner]);
@@ -71,7 +71,7 @@ function fixture() {
     },
     async pgProvision(url, owner) {
       calls.push(['pgProvision', url, owner]);
-      return { migrated: false, version: 2, appId: owner.appId, storeId: owner.storeId };
+      return { migrated: false, version: 3, appId: owner.appId, storeId: owner.storeId };
     },
     async pgInspect(url, owner) {
       calls.push(['pgInspect', url, owner]);
@@ -120,6 +120,21 @@ function fixture() {
     },
     async pgTenantIssue(url, _app, _catalog, options, clock) {
       calls.push(['pgTenantIssue', url, options, clock()]);
+      return { token: 'synthetic-secret', tokenId: options.tokenId!, version: '1' as const };
+    },
+    async serviceTenant(_app, _config, input, commands) {
+      calls.push(['serviceTenant', input, ...(commands ? [commands] : [])]);
+      return Object.freeze({
+        catalog: Object.freeze({ stage: 'read-validation-foundation' as const, operations: Object.freeze([]) }),
+        tenantId: input.tenantId,
+      });
+    },
+    serviceIssue(path, _app, _catalog, options, now) {
+      calls.push(['serviceIssue', path, options, now]);
+      return Object.freeze({ token: 'synthetic-secret', tokenId: options.tokenId!, version: '1' as const });
+    },
+    async pgServiceIssue(url, _app, _catalog, options, clock) {
+      calls.push(['pgServiceIssue', url, options, clock()]);
       return { token: 'synthetic-secret', tokenId: options.tokenId!, version: '1' as const };
     },
   };
@@ -454,6 +469,70 @@ test('issue binds a tenant App token through --tenant and --policy only, and an 
     assert.deepEqual(
       f.calls.map((call) => call[0]),
       ['config', 'app', 'pgContext', 'tenant', 'pgContext', 'clock', 'pgTenantIssue'],
+    );
+  }
+});
+
+test('issue --service binds a tenant and an api.service role, reading no membership', async () => {
+  const serviceApp = () => {
+    const f = fixture();
+    const app = f.app.app as unknown as Record<string, unknown> & { auth: Record<string, unknown> };
+    app.auth.rows = 'tenant';
+    app.auth.roles = { reader: {}, sync: { service: true } };
+    app.api = { version: 1, roles: ['reader'], publicSpec: false, resources: {}, views: [], commands: [], service: { roles: ['sync'] } };
+    return f;
+  };
+  const service = [
+    'issue',
+    ...common,
+    '--service',
+    'sync',
+    '--actor',
+    'operator',
+    '--label',
+    'Sync',
+    '--expires-at',
+    '2030-01-01T00:00:00Z',
+    '--tenant',
+    'north',
+    '--policy',
+    '/operator/policy.mts',
+  ];
+  {
+    const f = serviceApp();
+    const result = await runApiTokenMaintenance(service, f.dependencies, () => {
+      f.calls.push(['locator']);
+    });
+    assert.equal(result.verb, 'issue');
+    assert.deepEqual(
+      f.calls.map((call) => call[0]),
+      ['config', 'app', 'context', 'serviceTenant', 'context', 'locator', 'clock', 'serviceIssue'],
+    );
+    assert.deepEqual(f.calls[3], ['serviceTenant', { policyFile: '/operator/policy.mts', tenantId: 'north' }]);
+    const options = f.calls.at(-1)![2] as Record<string, unknown>;
+    assert.equal(options.role, 'sync');
+    assert.equal(options.tenantId, 'north');
+    assert.equal(options.actorId, 'operator');
+    assert.equal(Object.hasOwn(options, 'subjectId'), false);
+  }
+  {
+    const f = serviceApp();
+    f.app.app.auth!.store = 'postgres://user:password@localhost:5432/auth';
+    await runApiTokenMaintenance(service, f.dependencies);
+    assert.deepEqual(
+      f.calls.map((call) => call[0]),
+      ['config', 'app', 'pgContext', 'serviceTenant', 'pgContext', 'clock', 'pgServiceIssue'],
+    );
+  }
+  // A role the App does not list in api.service, and an App that is not a tenant App, refuse before any read.
+  for (const [f, argv, reason] of [
+    [serviceApp(), service.map((arg) => (arg === 'sync' ? 'reader' : arg)), /api\.service\.roles/],
+    [fixture(), service, /only a tenant App/],
+  ] as const) {
+    await assert.rejects(runApiTokenMaintenance(argv, f.dependencies), { message: reason });
+    assert.deepEqual(
+      f.calls.map((call) => call[0]),
+      ['config', 'app'],
     );
   }
 });

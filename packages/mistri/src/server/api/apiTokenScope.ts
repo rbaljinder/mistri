@@ -1,12 +1,17 @@
 /** Private record/scope data only: not credential verification or admission. */
 import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import type { AppDef } from '../../shared/appModel.js';
+import { apiTokenRoles } from '../../shared/appApi.js';
 
 type Subject = Readonly<{ kind: 'account' | 'service'; id: string }>;
 /** A tenant App's token names the one tenant membership it acts through, at the
  * version it was issued against: any later change to that membership (roles,
  * status, a reissue) leaves the token without authority rather than following it. */
 type TokenTenantBinding = Readonly<{ tenantId: string; membershipId: string; membershipVersion: string }>;
+/** A tenant service token's binding: the tenant alone. No person holds its
+ * role, so there is no membership to follow; the tenant's own state (active,
+ * suspended, deleted) is observed on every request instead. */
+type TokenServiceBinding = Readonly<{ tenantId: string }>;
 /** A row-scoped token (api.scopes): the declared scope's name, its key as text,
  * and — for a child minted by `$scope` — the token it was minted from, whose
  * revocation or expiry ends the child with it. */
@@ -26,7 +31,7 @@ export interface TokenRecord {
   label: string;
   roles: readonly string[];
   operations?: readonly string[];
-  tenant?: TokenTenantBinding;
+  tenant?: TokenTenantBinding | TokenServiceBinding;
   rowScope?: TokenRowScope;
   createdAt: number;
   createdBy: string;
@@ -74,17 +79,21 @@ const subject = (raw: unknown): Subject => {
     id = value.kind === 'account' ? accountId(value.id) : text(value.id);
   if (!['account', 'service'].includes(String(value.kind))) return refuse();
   // Same service-name grammar as existing command service principals.
-  if (value.kind === 'service' && !/^[a-z][a-z0-9-]{0,62}(?![\s\S])/.test(id)) return refuse();
+  if (value.kind === 'service' && !/^[a-z][a-z0-9_-]{0,62}(?![\s\S])/.test(id)) return refuse();
   return Object.freeze({ kind: value.kind as Subject['kind'], id });
 };
 /** The tenant store's own grammars: its selector, a membership ID of at most
  * 1024 units and a canonical positive revision. Never normalized to fit. */
+const tenantSelector = (value: unknown): string =>
+  typeof value === 'string' && /^[a-z0-9][a-z0-9_-]{0,127}(?![\s\S])/.test(value) ? value : refuse();
+const serviceBinding = (raw: unknown): TokenServiceBinding =>
+  Object.freeze({ tenantId: tenantSelector(record(raw, ['tenantId']).tenantId) });
 const tenantBinding = (raw: unknown): TokenTenantBinding => {
   const value = record(raw, ['tenantId', 'membershipId', 'membershipVersion']);
-  if (typeof value.tenantId !== 'string' || !/^[a-z0-9][a-z0-9_-]{0,127}(?![\s\S])/.test(value.tenantId)) return refuse();
+  tenantSelector(value.tenantId);
   if (typeof value.membershipVersion !== 'string' || !/^[1-9][0-9]{0,127}(?![\s\S])/.test(value.membershipVersion)) return refuse();
   return Object.freeze({
-    tenantId: value.tenantId,
+    tenantId: value.tenantId as string,
     membershipId: accountId(value.membershipId),
     membershipVersion: value.membershipVersion,
   });
@@ -125,17 +134,27 @@ export function captureApiTokenRecord(raw: unknown): Readonly<TokenRecord> {
   const revokedAt = Object.hasOwn(value, 'revokedAt') ? instant(value.revokedAt) : undefined;
   const lastUsedAt = Object.hasOwn(value, 'lastUsedAt') ? instant(value.lastUsedAt) : undefined;
   if ((revokedAt !== undefined && revokedAt < createdAt) || (lastUsedAt !== undefined && lastUsedAt < createdAt)) return refuse();
+  const owner = subject(value.subject);
+  /* A service token exists only bound to one tenant, and only by that tenant: its role is the subject, it carries
+     no other, and nothing narrows it by row (a scope's key is a member's grant, not a program's). */
+  if (
+    owner.kind === 'service' &&
+    (!Object.hasOwn(value, 'tenant') || Object.hasOwn(value, 'rowScope') || roles.length !== 1 || roles[0] !== owner.id)
+  )
+    return refuse();
   return Object.freeze({
     id: text(value.id),
     appId: text(value.appId),
-    subject: subject(value.subject),
+    subject: owner,
     label: text(value.label, 512),
     roles,
     createdAt,
     createdBy: accountId(value.createdBy),
     expiresAt,
     ...(Object.hasOwn(value, 'operations') ? { operations: names(value.operations, 1024) } : {}),
-    ...(Object.hasOwn(value, 'tenant') ? { tenant: tenantBinding(value.tenant) } : {}),
+    ...(Object.hasOwn(value, 'tenant')
+      ? { tenant: owner.kind === 'service' ? serviceBinding(value.tenant) : tenantBinding(value.tenant) }
+      : {}),
     ...(Object.hasOwn(value, 'rowScope') ? { rowScope: rowScope(value.rowScope) } : {}),
     ...(revokedAt === undefined ? {} : { revokedAt, revokedBy: accountId(value.revokedBy) }),
     ...(lastUsedAt === undefined ? {} : { lastUsedAt }),
@@ -177,8 +196,8 @@ export function observedRowScope(
 
 /** All inputs must be freshly observed by a trusted host per request. This
  * cannot prove observation freshness, credential validity, account state or
- * checked-catalog provenance. Service scope evaluation remains unsupported
- * until a current service-subject policy source is established. */
+ * checked-catalog provenance. A service subject is scoped only by a tenant App
+ * (narrowTenantServiceTokenScope), whose `api.service` is its policy source. */
 /**
  * The account roles a token may carry. A role the App maps from an identity
  * provider's claims (`claims`) is the provider's, and counts only for a session
@@ -266,20 +285,72 @@ export function narrowTenantApiTokenScope(
       Object.hasOwn(app.auth?.roles ?? {}, role) &&
       (app.auth!.roles![role] as { realm?: string }).realm !== 'platform',
   );
-  if (!roles.length) return refuse();
+  if (!roles.length || !('membershipId' in token.tenant)) return refuse();
   return Object.freeze({ ...scopeOf(token, app, roles, currentOperations), tenant: token.tenant });
+}
+
+/** A role a tenant service token may carry: listed in `api.service.roles`, declared `service: true`, of the tenant realm. */
+export function isTenantServiceRole(app: AppDef, role: string): boolean {
+  const grant = Object.hasOwn(app.auth?.roles ?? {}, role) ? (app.auth!.roles![role] as { realm?: string; service?: boolean }) : undefined;
+  return app.auth?.rows === 'tenant' && !!app.api?.service?.roles.includes(role) && grant?.service === true && grant.realm !== 'platform';
+}
+
+/**
+ * A tenant service token's scope. Its one role is its subject, and stands
+ * only while the App still lists it in `api.service.roles` as a tenant-realm
+ * `service: true` role: dropping it from the declaration ends every token of
+ * it at the next request. The binding is the tenant alone; the tenant runtime
+ * reads that tenant's state on every request and refuses a suspended or
+ * deleted one.
+ */
+export function narrowTenantServiceTokenScope(
+  raw: unknown,
+  app: AppDef,
+  observation: unknown,
+  currentOperations: readonly ApiScopeOperation[],
+  now: number,
+) {
+  const token = captureApiTokenRecord(raw),
+    clock = instant(now);
+  const current = record(snapshot(observation, 65536).value, ['appId', 'subject']);
+  const observedSubject = subject(current.subject);
+  const role = token.subject.id,
+    grant = Object.hasOwn(app.auth?.roles ?? {}, role) ? (app.auth!.roles![role] as { realm?: string; service?: boolean }) : undefined;
+  if (
+    !app.api?.service ||
+    app.auth?.rows !== 'tenant' ||
+    token.subject.kind !== 'service' ||
+    token.tenant === undefined ||
+    'membershipId' in token.tenant ||
+    token.rowScope !== undefined ||
+    current.appId !== app.id ||
+    token.appId !== app.id ||
+    observedSubject.kind !== 'service' ||
+    token.subject.id !== observedSubject.id ||
+    !app.api.service.roles.includes(role) ||
+    grant?.service !== true ||
+    grant.realm === 'platform' ||
+    token.roles.length !== 1 ||
+    token.roles[0] !== role ||
+    clock < token.createdAt ||
+    clock >= token.expiresAt ||
+    token.revokedAt !== undefined
+  )
+    return refuse();
+  return Object.freeze({ ...scopeOf(token, app, [role], currentOperations), tenant: Object.freeze({ tenantId: token.tenant.tenantId }) });
 }
 
 function scopeOf(token: Readonly<TokenRecord>, app: AppDef, roles: readonly string[], currentOperations: readonly ApiScopeOperation[]) {
   const captured = snapshot(currentOperations, 262144).value;
   if (!Array.isArray(captured) || captured.length > 1024) return refuse();
   const ids = new Set<string>(),
-    operations: string[] = [];
+    operations: string[] = [],
+    tokenRoles = apiTokenRoles(app.api!);
   for (const rawOperation of captured) {
     const operation = record(rawOperation, ['id', 'eligibleRoles'], ['door']),
       id = text(operation.id);
     const eligibleRoles = names(operation.eligibleRoles, 128);
-    if (ids.has(id) || eligibleRoles.some((role) => !app.api!.roles.includes(role))) return refuse();
+    if (ids.has(id) || eligibleRoles.some((role) => !tokenRoles.includes(role))) return refuse();
     ids.add(id);
     if (operation.door !== undefined) {
       // A public door's verb is granted by naming it, never by a role: a token

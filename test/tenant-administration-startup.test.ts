@@ -246,6 +246,7 @@ test('only genuine active enrollment supplies frozen source-derived options and 
     'events',
     'ownership',
     'pages',
+    'services',
     'source',
   ]);
   // Where its command events are recorded, for its effects (tenantIntegrations.ts): the attested binding's, never the request's.

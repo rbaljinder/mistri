@@ -447,7 +447,7 @@ export function createFlagRequestRuntime(options: FlagRequestRuntimeOptions) {
         typeof generation !== 'object' ||
         actor.appId !== fixed.appId ||
         actor.kind !== 'service' ||
-        !/^service:[a-z][a-z0-9-]{0,62}$/.test(actor.id) ||
+        !/^service:[a-z][a-z0-9_-]{0,62}$/.test(actor.id) ||
         !['app', 'tenant', 'platform'].includes(realm) ||
         (app.auth?.rows === 'tenant') !== (realm !== 'app') ||
         (realm === 'tenant' && tenantId === null) ||

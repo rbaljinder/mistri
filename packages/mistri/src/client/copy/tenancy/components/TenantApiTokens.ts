@@ -28,4 +28,11 @@ export const say = defineMessages({
   copy: 'Copy',
   copied: 'Copied',
   noRoles: 'You hold no role the App’s API allows, so there is no token to make.',
+  kind: 'Acts as',
+  asMember: 'You, with your roles',
+  asService: 'A service, not a person',
+  serviceKind: 'service',
+  serviceRole: 'Service role',
+  serviceNote:
+    'A service token acts for this tenant, not for you: it keeps working if you leave, any administrator can revoke it, and its changes are recorded as {name}.',
 });

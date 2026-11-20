@@ -1,7 +1,7 @@
 /** Inactive read-catalog foundation. No transport, wire schema, command
  * registry, policy principal or publication authority is constructed here. */
 import { hasFilterOf } from '@mistriwork/engine/shared/listFilters.js';
-import type { parseAppApi } from '../../shared/appApi.js';
+import { apiTokenRoles, type parseAppApi } from '../../shared/appApi.js';
 import { resolveAppAccess } from '../../shared/appAccess.js';
 import { defaultSourceOf, type AppDef, type AppListView } from '../../shared/appModel.js';
 import { andQuery, expandSegments } from '@mistriwork/engine/shared/query.js';
@@ -94,9 +94,13 @@ export function scopedReadCatalog(
   checkApiScopes(api, schema);
   if (!api.roles.length || api.roles.some((role) => !Object.hasOwn(app.auth?.roles ?? {}, role)))
     fail('api.roles', 'every role must be declared by this App');
+  if ((api.service?.roles ?? []).some((role) => !Object.hasOwn(app.auth?.roles ?? {}, role)))
+    fail('api.service.roles', 'every role must be declared by this App');
   // Resolve all policies eagerly: malformed inactive grants must not be
   // mistaken for an ordinary role that simply cannot call an operation.
-  const grants = new Map(api.roles.map((role) => [role, grant(role)]));
+  // A service role is listed too: a tenant service token carries one, and the
+  // operations it may call are judged as a member's are.
+  const grants = new Map(apiTokenRoles(api).map((role) => [role, grant(role)]));
   const operations: ReadOperation[] = [];
   const construct = (kind: ReadOperation['kind'], name: string, base: string, list?: AppListView) => {
     const at = `api.${kind === 'view' ? 'views' : 'resources'}.${name}`;
@@ -241,8 +245,8 @@ export function scopedReadCatalog(
     if (!eligibleRoles.length)
       fail(
         at,
-        list?.roles && !api.roles.some((role) => list.roles!.includes(role))
-          ? `the view names roles (${list.roles.join(', ')}) none of which api.roles lists`
+        list?.roles && !apiTokenRoles(api).some((role) => list.roles!.includes(role))
+          ? `the view names roles (${list.roles.join(', ')}) none of which api.roles or api.service.roles lists`
           : 'no declared API role reads the complete operation shape and dependencies',
       );
     /* A segment the API offers reads the list's own exposed fields and nothing else: no reference, no

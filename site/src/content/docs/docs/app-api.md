@@ -313,6 +313,53 @@ its member's wider ones. Nobody sees another tenant's. The operator provisions t
 (`mistri api-token provision`); until then the routes answer
 `tokens_unprovisioned`.
 
+### A tenant service token
+
+A program that works for one tenant — a device bridge, a nightly sync — holds a
+service token, not a person's. The App names the roles a tenant may hand to one;
+each is an `auth.roles` entry with `service: true`, which no person holds:
+
+```ts
+api: {
+  version: 1,
+  roles: ['operator'],
+  commands: ['recordReading'],
+  service: { roles: ['device_bridge'], label: 'Device bridge' },
+},
+```
+
+A tenant's administrator makes one in **API tokens**: `/api/tokens/issue`
+takes `{ service: 'device_bridge', label, operations?, days? }` (at most 366
+days) and answers the secret once. The administrator sees every service token
+of their tenant, never its secret, and any of them ends it with
+`/api/tokens/revoke`. A member who is not an administrator is refused `403`
+and is not shown them. The operator issues one with
+`mistri api-token issue --service device_bridge --tenant north --policy ./policy.mjs --actor <operator> ...`;
+it reads no membership, only that the tenant is active. Neither issues one
+while the platform row is missing or inactive, since such a token could never
+act: both refuse with "The platform row (@platform) must exist and be active:
+setPlatformStatus creates it."
+
+The token is bound to its tenant and its one role. The tenant comes from that
+binding, never from the URL or the body, so another tenant's record is not
+found and its lists are empty. Its reads are the role's grants over every one
+of its tenant's rows in a granted table: a row policy takes a member's
+evidence, and a service has none, so a table the role may read is read whole,
+in that tenant only. A table the role is not granted is refused. Its writes are
+attributed to the service (`service:device_bridge`), so history shows the
+program rather than whoever issued it. The token's record keeps who issued and
+who revoked it, beside the times. Every request checks it again: a revoked
+token, a suspended or deleted tenant, or a role taken out of `api.service`
+leaves it with no authority on the next call. As a tenant job does, it acts
+only while the platform row (`@platform`) is active.
+
+`GET /api/live` with the token streams the changes to records the role may
+read in its tenant, with a member stream's limits, 30-second re-check and
+replay from `?after=`; a revocation ends it at the next re-check. The stream
+carries no values, so the program reads a changed record through the API. A
+member's token is refused there (`403`, with an `insufficient_scope` bearer
+challenge): a member's stream rides their sign-in.
+
 ## Not yet
 
 On the MCP surface (`$mcp`) only: several sources, form commands (the HTTP API above exposes a signed-in form's command), and an event stream.

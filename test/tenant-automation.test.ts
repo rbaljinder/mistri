@@ -20,6 +20,10 @@
  *    principal holding a platform role; a retry that does not name the
  *    instance's tenant; a job on each tenant's zone that is not per tenant, or
  *    on an App whose zone is no tenant column.
+ * 6. A job on each tenant's every (`every: { column, default }`) runs at the
+ *    schedule each tenant keeps, in its profile or a row it owns; one that
+ *    cannot be read runs at the default and is said once, and stalls no other
+ *    tenant. A column that is not the tenant's own text is refused.
  */
 import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
@@ -90,6 +94,8 @@ const manifest = () => ({
   sources: { business: { connection: binding.source.connection } },
   resources: {
     dealer: { owner: 'platform' },
+    // Each dealer's own settings row: a schedule its members could edit.
+    setting: { owner: 'tenant' },
     task: {
       access: 'write',
       owner: 'tenant',
@@ -140,11 +146,25 @@ const zonedApp = (() => {
   );
 })();
 
+/* The same App, each dealer's sweep at the cadence it keeps: its profile's shared cadence column, or its settings row. */
+const cadenceApp = (() => {
+  const base = manifest();
+  return parseTestApp(
+    { ...base, auth: { ...base.auth, tenancy: { ...base.auth.tenancy, shared: ['cadence'] } } },
+    'tenant-automation-cadence.ts',
+  );
+})();
+
 const policy = defineAppTenantPolicy({
   kind: 'tenant',
   appId: binding.appId,
   storeId: binding.storeId,
-  ownership: { dealer: { kind: 'platform' }, task: { kind: 'tenant', column: 'tenant_id' }, review: { kind: 'platform' } },
+  ownership: {
+    dealer: { kind: 'platform' },
+    setting: { kind: 'tenant', column: 'tenant_id' },
+    task: { kind: 'tenant', column: 'tenant_id' },
+    review: { kind: 'platform' },
+  },
   resolveMembershipRows: () => ({ task: true }),
   resolveRows: () => ({ task: true }),
   resolvePlatformRows: () => ({ dealer: true, task: true, review: true }),
@@ -278,16 +298,33 @@ const zoned = defineJobs(
   { principals, store },
 );
 
+// Each dealer's sweep at the hour it keeps in `column`, seven in the morning where it keeps none it can read.
+const cadenced = (column: string) =>
+  defineJobs(
+    {
+      ownSweep: defineJob({
+        every: { column, default: '0 7 * * *' },
+        timezone: 'UTC',
+        realm: 'tenant',
+        runAs: 'tenant-clock',
+        command: 'sweep',
+      }),
+    },
+    { principals, store },
+  );
+
 /* ---------- the engines ---------- */
 
 const SCHEMA = {
   sqlite: `PRAGMA journal_mode=WAL; PRAGMA foreign_keys = ON;
-    CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, timezone TEXT);
+    CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, timezone TEXT, cadence TEXT);
+    CREATE TABLE setting (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), cadence TEXT);
     CREATE TABLE task (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), ref TEXT NOT NULL,
       version INTEGER NOT NULL DEFAULT 0, flagged INTEGER NOT NULL DEFAULT 0);
     CREATE TABLE review (id TEXT PRIMARY KEY NOT NULL, note TEXT NOT NULL);`,
   postgres: `
-    CREATE TABLE public.dealer (id text PRIMARY KEY, name text NOT NULL, timezone text);
+    CREATE TABLE public.dealer (id text PRIMARY KEY, name text NOT NULL, timezone text, cadence text);
+    CREATE TABLE public.setting (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.dealer(id), cadence text);
     CREATE TABLE public.task (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.dealer(id), ref text NOT NULL,
       version integer NOT NULL DEFAULT 0, flagged integer NOT NULL DEFAULT 0);
     CREATE TABLE public.review (id text PRIMARY KEY, note text NOT NULL);`,
@@ -550,6 +587,60 @@ for (const { dialect, skip } of ENGINES)
       assert.deepEqual(Object.fromEntries(sweepZones), { ...ZONES });
     });
 
+    for (const kept of [
+      {
+        column: 'tenant.cadence',
+        // South keeps one that is no schedule; west keeps none.
+        keep: [`UPDATE dealer SET cadence = '0 6 * * *' WHERE id = 'north'`, `UPDATE dealer SET cadence = 'soon' WHERE id = 'south'`],
+      },
+      {
+        column: 'setting.cadence',
+        // North's first row by key is the one read; west has a row with no value.
+        keep: [
+          `INSERT INTO setting (id, tenant_id, cadence) VALUES ('n-b', 'north', '0 9 * * *'), ('n-a', 'north', '0 6 * * *'),
+            ('s-a', 'south', 'soon'), ('w-a', 'west', NULL)`,
+        ],
+      },
+    ])
+      test(`a job on each tenant's every (${kept.column}) runs at the hour each keeps; one that cannot be read runs at the default, said once`, async (t) => {
+        const warn = t.mock.method(console, 'warn', () => {});
+        const module = cadenced(kept.column),
+          lab = await openLab(t, dialect, module);
+        for (const statement of kept.keep) await lab.rows(statement);
+        const enrollment = await enroll(t, lab, module, cadenceApp);
+        const clock = { now: Math.floor((Date.now() - 72 * HOUR) / 60_000) * 60_000 - 1_000 },
+          host = await hostOf(t, enrollment, clock);
+        const six = nextSlot(parseEvery('0 6 * * *', 'UTC'), clock.now)!,
+          seven = nextSlot(parseEvery('0 7 * * *', 'UTC'), clock.now)!;
+        const runs = async () =>
+          (await lab.rows(`SELECT provenance_json, state, run_at FROM "${JOB_TABLES.job}" WHERE job = 'ownSweep'`)).map((row) => ({
+            tenant: String(JSON.parse(String(row.provenance_json)).tenantId),
+            state: String(row.state),
+            runAt: Number(row.run_at),
+          }));
+        await host.tick();
+        assert.deepEqual(await runs(), []);
+        // At six, north alone: the others' default is an hour on.
+        clock.now = six;
+        await until(host, clock, async () => (await runs()).some((run) => run.tenant === 'north' && run.state === 'succeeded'));
+        assert.deepEqual(
+          (await runs()).map((run) => run.tenant),
+          ['north'],
+        );
+        clock.now = seven;
+        await until(host, clock, async () => (await runs()).filter((run) => run.state === 'succeeded').length === 3);
+        assert.deepEqual((await runs()).map((run) => [run.tenant, run.runAt]).sort(), [
+          ['north', six],
+          ['south', seven],
+          ['west', seven],
+        ]);
+        // South's unreadable value was said once across every pass, naming the job, the tenant and the column.
+        const said = warn.mock.calls.map((call) => String(call.arguments[0])).filter((message) => message.includes('"ownSweep"'));
+        assert.deepEqual(said, [
+          `mistri: job "ownSweep": tenant "south" has every "soon" in ${kept.column}, which is not five cron fields; it runs at "0 7 * * *".`,
+        ]);
+      });
+
     test("a job per tenant run now (a test's host.runJob) runs for the tenant named alone; without one, or on the platform's, it is refused", async (t) => {
       const lab = await openLab(t, dialect, timed);
       const enrollment = await enroll(t, lab, timed),
@@ -809,5 +900,40 @@ describe("what a tenant App's automation refuses", () => {
       /job "morningSweep" runs on each tenant's zone \(timezone: 'tenant'\), and the App's ui\.timezone names no tenant column.*\[job-tenant-zone\]/,
     );
     assertTenantJobs(capturedJobModule(zoned), zonedApp, commands, owned, binding.source.connection);
+  });
+
+  test("a job on each tenant's every runs per tenant, and reads a text column the tenant keeps", (t) => {
+    const job = (every: unknown, realm?: 'tenant' | 'platform') =>
+      defineJob({ every, ...(realm ? { realm } : {}), runAs: 'tenant-clock', command: 'sweep' } as never);
+    for (const realm of [undefined, 'platform'] as const)
+      assert.throws(
+        () => job({ column: 'tenant.cadence', default: '0 7 * * *' }, realm),
+        /runs per tenant: say realm: 'tenant' \[job-every-column\]/,
+      );
+    assert.throws(
+      () => job({ column: 'cadence', default: '0 7 * * *' }, 'tenant'),
+      /names a column as '<resource>\.<column>'.*\[job-every-column\]/,
+    );
+    assert.throws(() => job({ column: 'tenant.cadence', default: 'soon' }, 'tenant'), /^.*Job every\.default: /);
+    assert.throws(() => job({ column: 'tenant.cadence' }, 'tenant'), JobDeclarationError);
+    assert.throws(() => job({ column: 'tenant.cadence', default: '0 7 * * *', zone: 'UTC' }, 'tenant'), JobDeclarationError);
+
+    const owned = ownedOf(t);
+    const refused = (column: string, which: typeof app, reason: RegExp) =>
+      assert.throws(
+        () => assertTenantJobs(capturedJobModule(cadenced(column)), which, commands, owned, binding.source.connection),
+        (error: unknown) =>
+          error instanceof JobDeclarationError &&
+          error.message.includes(`job "ownSweep" reads each tenant's every from "${column}", `) &&
+          reason.test(error.message) &&
+          error.message.includes('[job-every-column]'),
+      );
+    refused('tenant.cadence', app, /auth\.tenancy\.shared does not list "cadence"/);
+    refused('dealer.cadence', cadenceApp, /the tenant profile: name it "tenant\.cadence"/);
+    refused('review.note', cadenceApp, /"review" is not a table each tenant owns its rows of/);
+    refused('setting.hour', cadenceApp, /"setting" has no column "hour"/);
+    refused('task.flagged', cadenceApp, /which is INTEGER; a schedule is cron text/);
+    assertTenantJobs(capturedJobModule(cadenced('tenant.cadence')), cadenceApp, commands, owned, binding.source.connection);
+    assertTenantJobs(capturedJobModule(cadenced('setting.cadence')), cadenceApp, commands, owned, binding.source.connection);
   });
 });

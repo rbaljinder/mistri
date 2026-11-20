@@ -2401,9 +2401,11 @@
     }
   }
   /* An article: one column at a reading measure, the head's words on the same measure and the same content edge
-   as the crumb, not centred. A band header (`data-look-header`) still paints the pane's width behind it. */
+   as the crumb, not centred. The head itself takes the measure, not only each of its parts: a record's head is a grid
+   of the name and its verbs, and with only the parts held the verbs' column ran on to the pane's edge, past the
+   fields' card. A band header (`data-look-header`) still paints the pane's width behind it: its band is an outset. */
   .page-body[data-layout='article'],
-  .page-head[data-layout='article'] > * {
+  .page-head[data-layout='article'] {
     max-width: var(--page-measure);
   }
 

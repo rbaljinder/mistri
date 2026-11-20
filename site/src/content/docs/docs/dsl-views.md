@@ -459,6 +459,8 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=form].done` | object | Stable | The screen after a submission, beside the reference the handler returned when it returned one. Used in `examples/apps/tick/app.ts`. |
 | `views.*[kind=form].done.description` | string | Stable | A sentence under the title. Used in `examples/apps/lintel/app.ts`. |
+| `views.*[kind=form].done.home` |  | Stable | false leaves out the "Back to &lt;App>" link under a public form's receipt. One of `false`. Used in `examples/apps/tick/app.ts`. |
+| `views.*[kind=form].done.reference` |  | Stable | false leaves the handler's reference off the screen, and the line asking to keep it. One of `false`. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=form].done.title` | string | Stable |  |
 
 ## `views.*[kind=form].draft`
@@ -466,6 +468,12 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=form].draft` | object | Stable | The one root column and the value an unfinished application holds until submit: { status: 'in_progress' }. Staff lists hide it by default. Used in `examples/apps/lintel/resources.ts`. |
+
+## `views.*[kind=form].given`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=form].given` | array | Stable | The command's inputs the link supplies (?unit=12): filled from the address, never drawn, on a step, on the review or on the done screen, and judged by the command like anything typed. Text, number, date or choice inputs, never also prefillable, never on a form saved each step. |
 
 ## `views.*[kind=form].icon`
 
@@ -877,6 +885,16 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=list].label` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
+
+## `views.*[kind=list].link`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=list].link` | object | Stable | A link at the list's head to another App list, dashboard or signed-in form, with rows or without: { label: 'Plan the week', to: 'planner' }. The same { label, to } as empty.action; a reader the room is not served to sees no link. |
+| `views.*[kind=list].link.label` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
+| `views.*[kind=list].link.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). Used in `examples/apps/lintel/dashboards.ts`. |
+| `views.*[kind=list].link.to.tab` | string | Stable |  |
+| `views.*[kind=list].link.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 
 ## `views.*[kind=list].open`
 

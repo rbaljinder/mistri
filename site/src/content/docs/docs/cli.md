@@ -309,6 +309,8 @@ A public form's page, /{app}/form/{view}, is opened signed out, as a visitor see
 Needs Playwright's Chromium: install the playwright package where you run it,
 then install its headless Chromium (shot prints the exact command when it is
 missing); the machine's Chrome serves when Playwright's browser is missing.
+The App is given 90 seconds to start (shot and grade alike); set
+MISTRI_SHOT_START_SECONDS to give a slow start longer.
 Exit codes: 1 could not shoot, 2 a page threw or a
 section could not be drawn.
 ```

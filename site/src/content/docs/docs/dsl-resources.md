@@ -314,6 +314,15 @@ another door always is. A second process writes its own row.
 `mistri audit reads` prints the log as JSON lines, and the test kit's
 `host.readAudit()` returns it.
 
+On a tenant App the organization's admins read the log in Settings, in the
+Reads room: by person, resource, record and dates, newest first. A page
+component reads the same lines with `useReadAudit({ resource: 'patient',
+record: String(patient.id) })` from `@mistriwork/mistri/ui`, behind the
+same gate (anyone else gets the refusal as `error` and no lines; see
+[Custom components](/docs/custom-components/#who-read-a-record)). Each line
+there carries `roles`, `membership` and, on the `command` route, the
+command's id; never a support visit's id or a row's key.
+
 ## `resources`
 
 | Key | Type | Status | What it does |
@@ -357,9 +366,15 @@ another door always is. A second process writes its own row.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `resources.*.at` | object | Stable | Timers at an instant the record keeps: a date or timestamp column, and the command run through the jobs once its time has passed and the record matches when, once for each instant the column holds; a new time arms it again. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.at` | object | Stable | Timers at an instant the record keeps: a date or timestamp column, and the command run through the jobs once its time has passed (or a while before or after it) and the record matches when, once for each instant the column holds; a new time arms it again. A column with several timers takes a list. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.at.*.after` | string | Stable | Come due this long past the instant: '2 days'. |
+| `resources.*.at.*.before` | string | Stable | Come due this long ahead of the instant: '24 hours'. |
 | `resources.*.at.*.command` | string | Stable | A command, by its name in the App's commands module (defineCommands). The server fills in its input, target and version from the registration; mistri-commands.d.ts types the names. Used in `examples/apps/lintel/app.ts`. |
 | `resources.*.at.*.when` | string | Stable | Query-language conditions over the record's own columns the record must meet then: "status = 'open'". Used in `examples/apps/tick/app.ts`. |
+| `resources.*.at.*[].after` | string | Stable | Come due this long past the instant: '2 days'. |
+| `resources.*.at.*[].before` | string | Stable | Come due this long ahead of the instant: '24 hours'. |
+| `resources.*.at.*[].command` | string | Stable | A command, by its name in the App's commands module (defineCommands). The server fills in its input, target and version from the registration; mistri-commands.d.ts types the names. Used in `examples/apps/lintel/app.ts`. |
+| `resources.*.at.*[].when` | string | Stable | Query-language conditions over the record's own columns the record must meet then: "status = 'open'". Used in `examples/apps/tick/app.ts`. |
 
 ## `resources.*.audit`
 

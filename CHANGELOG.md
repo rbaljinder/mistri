@@ -5,6 +5,41 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.73
+
+A program can work for one tenant, schedules follow each tenant, each deployment keeps its own sign-in store, and a
+handful of small words for forms, lists and boards (field report).
+
+- Tenant service tokens: an App lists the service roles a tenant may hand to a program (`api.service: { roles, label }`).
+  A tenant administrator issues one from Settings → API tokens, or with
+  `mistri api-token issue --service <role> --tenant <id>`; it lasts at most 366 days and any administrator can revoke
+  it. The token reads and runs the App API's commands as that role in that tenant alone, and may hold the tenant's
+  `/api/live` stream with a bearer header. The tenant comes from the token, never from the address. Suspending the
+  tenant or taking the role out of `api.service` ends it on its next request. Issuing refuses while the platform realm
+  is not active (409 `platform_inactive`, 503 `tokens_unavailable`). Row policies do not narrow a service token (they
+  take a member's evidence): grant a service role only the tables it should see whole. New check codes:
+  `api-service-role`, `api-service-tenant`, `api-service-unreachable`. A WebSocket route is not part of this.
+- Per-tenant schedules: an `at` timer may run `before` or `after` its column
+  (`{ command: 'sendReminder', before: '24 hours', when: "status = 'booked'" }`), and a `realm: 'tenant'` job may read
+  its cron from a tenant column (`every: { column: 'tenant.report_cron', default: '0 7 * * 1' }`, check code
+  `job-every-column`).
+- Sign-in store per deployment: the server config may name the store for an App (`auth: { <app>: { store } }`, a
+  `postgres://` URL, a `${NAME}` or a SQLite file). It wins over the App's `auth.store`, which stays the fallback.
+- Forms: a form view's `given: ['unit']` names inputs the link supplies and never draws; a command action's
+  `given: ['step']` does the same, opened with `useCommand(...).open(record, { step })`. `done.reference: false` and
+  `done.home: false` leave out the done screen's reference and its way back.
+- Lists: `link: { label, to }` puts a link in the list's head, shown only to readers who may open it; `empty.action.to`
+  may name a free-form page.
+- Boards: a line or footer fact may read one hop through a reference (`footer: ['owner_id.name']`).
+- Tenant Apps: the public form, sign-in and landing wear the tenant's name (`Sign in · North Clinic`).
+- Read audit: `useReadAudit` in the UI SDK, and each `/api/reads` row carries its roles, membership and command.
+- Public commands: a tenant intake's `keep` counts wrong tries, a suspended tenant's included (tested on Postgres); a
+  "Count wrong tries" recipe in the command forms page.
+- Tenant read routes: the release fence rides the last wave of reads, one round trip fewer per bounded request.
+- A signed-in form that changes no record says "Review your answers and send again" after a refusal.
+- `shot --phone` emulates touch, as `grade` does (44 px fields); a start timeout names `MISTRI_SHOT_START_SECONDS`.
+- Pages: an article's head is held to the measure, and a bare page runs edge to edge with no look gutters.
+
 ## 1.0.0-rc.72
 
 Reads over a remote database: fewer round trips per page, warm connections, and store upgrades that do not lock a

@@ -126,8 +126,15 @@ export async function readSnapshotOn<T>(
     const finish = async (next: string): Promise<readonly PgResult<Record<string, unknown>>[]> => {
       if (ended || typeof next !== 'string' || !next.trim()) throw new Refusal('The read snapshot is unavailable.');
       ended = true;
-      if (ahead) await begun;
-      const closed = (await client.query(`COMMIT; ${BEGIN_SNAPSHOT}${session}; ${next}; COMMIT`)) as unknown;
+      /* Sent at once, not after the BEGIN's answer: an owner may end the snapshot while its last reads are still in
+         flight, and on a reader that pipelines the end then leaves behind them, in their flight. The server runs a
+         connection's statements in order, so the fresh snapshot `next` reads in still begins after every read on
+         this one has finished. A BEGIN that failed is heard first, as before. */
+      const sent = client.query(`COMMIT; ${BEGIN_SNAPSHOT}${session}; ${next}; COMMIT`) as Promise<unknown>;
+      const [opened, ending] = await Promise.allSettled([ahead ? begun : undefined, sent]);
+      if (opened.status === 'rejected') throw opened.reason;
+      if (ending.status === 'rejected') throw ending.reason;
+      const closed = ending.value;
       return Object.freeze((Array.isArray(closed) ? closed : [closed]).slice(2 + set, -1) as PgResult<Record<string, unknown>>[]);
     };
     try {

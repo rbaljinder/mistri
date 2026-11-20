@@ -86,6 +86,8 @@ export {
   useVisitor,
 } from './hooks.js';
 export { useTeam } from './team.js';
+/* The tenant's read audit, as the Settings Reads room reads it (its own module: readAudit.ts). */
+export { useReadAudit } from './readAudit.js';
 /* Opening a tenant in one request from a platform App's own screen (its own module: openTenant.ts). */
 export { useOpenTenant } from './openTenant.js';
 /* What the deployment presents the App as (its own module: deployment.ts). */

@@ -43,6 +43,7 @@ See it in the sample (`examples/apps/tick/app.ts:42`).
 | `bulk` | Offer it on a queue's selection, written record by record | `false` | Stable |
 | `header` | `false` keeps it out of the record's action bar and menu; still granted, and run from a queue, a board or `useCommand` | `true` | Stable |
 | `command` | Run a [command](/docs/commands/) instead; it takes no `set` or `reason`. One that asks nothing runs on one click, or asks first with `confirm: true`; one with inputs asks them in its form | none | Stable |
+| `given` | A command action's inputs its page supplies, `given: ['step']` with `useCommand('checkStep').open(record, { step })`: its form does not draw them and sends what the page gave. A required one with no default needs `header: false` and no `bulk` (`[action-given]`) | none | Stable |
 
 All keys: [the generated reference](/docs/dsl-resources/).
 

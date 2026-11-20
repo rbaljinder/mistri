@@ -61,7 +61,7 @@ export const SERVICE_EVIDENCE_KEYS: readonly string[] = Object.freeze([
   'validUntil',
 ]);
 /** A jobs module's principal name, as defineJobs admits it. */
-export const SERVICE_PRINCIPAL = /^[a-z][a-z0-9-]{0,62}$/;
+export const SERVICE_PRINCIPAL = /^[a-z][a-z0-9_-]{0,62}$/;
 
 /** Validate evidence against the ownership it runs on; anything else is refused. */
 export function captureServiceEvidence(value: unknown, owned: Pick<TenantOwnershipSnapshot, 'appId' | 'source'>): TenantServiceEvidence {

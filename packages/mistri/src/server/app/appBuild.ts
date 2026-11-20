@@ -29,6 +29,7 @@ import type { CompiledComponents } from './appComponents.js';
 import { readBuiltFonts } from './appFonts.js';
 import { readBuiltBrand } from './appBrand.js';
 import { overlayPresentation, presentServed, type AppPresentation } from './appPresentation.js';
+import { overlayAuthStore } from './deploymentAuth.js';
 import { resolveMistriFromBuild } from './buildResolution.js';
 import { assertAppApiContext, readApiApp } from '../api/appApiValidation.js';
 
@@ -371,7 +372,7 @@ async function verifyBuildFiles(dir: string, manifest: BuildManifest): Promise<v
  */
 export async function loadBuiltApp(
   dir: string,
-  options: { lock?: 'enforce' | 'report'; presentation?: LoadedApp['presentation'] } = {},
+  options: { lock?: 'enforce' | 'report'; presentation?: LoadedApp['presentation']; deploymentAuth?: LoadedApp['deploymentAuth'] } = {},
 ): Promise<LoadedApp> {
   const manifest = await readBuildManifest(dir);
   await verifyBuildFiles(dir, manifest);
@@ -382,12 +383,21 @@ export async function loadBuiltApp(
      locale (a build's logo is its own). A reader's language is parsed again from the build's definition, so that gets
      the same overlay. */
   const presented = options.presentation?.apps[decoded.app.id];
-  const app = presented
+  const shown = presented
     ? presentServed(decoded.app, presented, {
         ...(options.presentation?.file === undefined ? {} : { file: options.presentation.file }),
         id: decoded.app.id,
       })
     : decoded.app;
+  /* A build is the production case the deployment's own sign-in store is for (deploymentAuth.ts): it wins over the store
+     the build was made with, as on a source App. */
+  const kept = options.deploymentAuth?.apps[decoded.app.id];
+  const app = kept
+    ? overlayAuthStore(shown, kept, {
+        ...(options.deploymentAuth?.file === undefined ? {} : { file: options.deploymentAuth.file }),
+        id: decoded.app.id,
+      })
+    : shown;
   const drift = themeDriftWarning(manifest.theme?.preset, typeof app.ui?.theme?.preset === 'string' ? app.ui.theme.preset : undefined);
   if (drift) console.error(`mistri: warning: ${dir}: ${drift}`);
   const lockPath = join(dir, AUTHORITY_LOCK);
@@ -459,6 +469,7 @@ export async function loadBuiltApp(
     origins,
     build: { dir: resolve(dir), mistri: manifest.mistri, node: manifest.node, entries, id: manifest.id },
     ...(options.presentation ? { presentation: options.presentation } : {}),
+    ...(options.deploymentAuth ? { deploymentAuth: options.deploymentAuth } : {}),
     ...(manifest.outputs.components ? { components: await readBuiltComponents(dir, manifest.outputs.components) } : {}),
     ...(await builtFonts(app, dir)),
     ...(loaders ? { loaders } : {}),

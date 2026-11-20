@@ -468,7 +468,8 @@ Where the App lets tenants name themselves (`branding.allow: ['name']`), a publi
 form reached through a tenant's intake address (`?via=`) wears that tenant's saved
 name, as one on its mapped host does. The sign-in page and every other page wear
 it only when the host names the tenant; an address that places nobody leaves the
-App's own name.
+App's own name. Worn, the name is the page's throughout, beside the tenant's logo
+and tab icon: the bar, the tab's title and the page's own words (`Sign in · North Clinic`).
 
 Where the App names a human check (`auth.challenge`), every tenant's public
 forms ask it, on the shared host and on a mapped one, in the order an ordinary
@@ -523,6 +524,19 @@ or the effect delivered: the tenant's mapped host, else the shared one, and
 for a public form, its public address for a page or list), so an address rotated
 after the command ran is never sent. A tenant that holds no such address gets the
 reference back in an answer, and its effect is not delivered.
+
+### A program working for a tenant
+
+A tenant's administrator can hand a program one of the App's service roles
+(`api.service.roles`) in a tenant service token
+([App API](/docs/app-api/#a-tenant-service-token)). The program reads and runs
+commands as that role in that tenant alone. The App's row policies are not
+consulted for it, as for a tenant job: they take a member's evidence, which a
+service does not have, so a table the role may read is read whole, within the
+tenant, and a table it is not granted is refused. Grant a service role only the
+tables it should see in full. Its writes are the service's in a record's
+history (`service:<role>`). Suspending or deleting the tenant, or taking the
+role out of `api.service`, ends the token's authority on its next request.
 
 ### What a tenant keeps
 

@@ -446,6 +446,14 @@ test('a queue can name one referenced record label, which resolves and is remove
     .find((table) => table.id === 'employee')!
     .columns.filter((column) => column.name !== 'name');
   assert.equal(Object.hasOwn(fieldAccessibleApp(app, restricted).views.tasks, 'presentation'), false);
+  // A board's line and footer take the same one-hop path (a field report), read and granted as the queue's are.
+  const boardApp = parse({
+    presentation: { ...board, lines: ['employee_id.name'], footer: [{ column: 'employee_id.name', icon: 'user' }] },
+  });
+  const boardView = boardApp.views.tasks as AppListView;
+  assert.deepEqual(listPresentationColumns(boardView.presentation!), ['state', 'title', 'employee_id.name', 'employee_id.name']);
+  assert.equal((resolveViews(boardApp, joined).tasks as { error?: string }).error, undefined);
+  assert.equal(Object.hasOwn(fieldAccessibleApp(boardApp, restricted).views.tasks, 'presentation'), false);
 });
 
 test('field projection drops a queue or board whole when a column it reads is hidden, and never grants a write', () => {

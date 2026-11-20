@@ -44,6 +44,7 @@ import { heldReview, holdReview, reviewFresh, reviewOwner, staleReview } from '.
 import { captureAppFlagValues, type AppFlagValue } from '../../../shared/appFlagValues.js';
 import { registerPageBlocks } from './pageBlocks.js';
 import { noTeamAccess } from '../../teamTypes.js';
+import { noReadAuditAccess } from '../../readAuditTypes.js';
 import { sayAppMessage } from './appMessage.js';
 import { totalFigure, totalGroups } from '../../../shared/customTotals.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
@@ -124,6 +125,8 @@ export interface RenderOptions {
   locale?: string;
   /** The team `useTeam()` reads in a test (empty and managing nothing when absent). */
   team?: import('../../teamTypes.js').TeamAccess;
+  /** The read audit `useReadAudit()` reads in a test (empty when absent). */
+  reads?: import('../../readAuditTypes.js').ReadAuditAccess;
   currency?: string;
   timezone?: string;
   /** Token values `useToken` answers, by name. */
@@ -651,6 +654,7 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     deployment: () => ({ name: 'Fixture App', mark: null, theme: look.look, locale: options.locale ?? null, basePath: '' }),
     branding: () => ({ name: 'Fixture App', logo: null, accent: null }),
     team: options.team ?? noTeamAccess,
+    reads: options.reads ?? noReadAuditAccess,
     token: (name) => options.tokens?.[name] ?? '',
     subscribeLook: () => () => {},
     app: true,

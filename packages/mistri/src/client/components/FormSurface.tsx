@@ -111,9 +111,12 @@ export interface FormPresentation {
   /** Intake: `false` leaves the review out; absent, the last page reviews every answer, editable. */
   review?: false;
   submitLabel?: string;
-  done?: { title?: string; description?: string };
+  /** The receipt's words; `reference: false` and `home: false` leave out the reference and the way back to the App. */
+  done?: { title?: string; description?: string; reference?: false; home?: false };
   /** The inputs a link's address may start filled. */
   prefillable?: string[];
+  /** The inputs the link supplies: read from the address like `prefillable`, never drawn, sent and judged by the command. */
+  given?: string[];
   /** The inputs drawn by the App's own input components, by the form (`inputs`); a field may name its own (`input`). */
   inputs?: Readonly<Record<string, { id: string }>>;
   /** A public form: where each input component it draws is served (http/formRoutes.ts), loaded as it is drawn. */
@@ -266,8 +269,9 @@ export function formRefusal(failure: Failure, fields: readonly AppCommandField[]
 /**
  * A failed send as the outcome view reads it (outcomeModel.ts): no answer, or a server fault with no refusal code,
  * is unknown — the submission key makes a second send a read of what was kept, never a second record; anything
- * else is a refusal in its own words, with the way on by its code. Only a public door (`submission`) changes no record
- * to refresh; a signed-in command form keeps the record's wording.
+ * else is a refusal in its own words, with the way on by its code. A form that names no record (`submission`: a public
+ * door, or a signed-in form over no record) has nothing to refresh, so its way on reads for the answers; a form over a
+ * record keeps the record's wording.
  */
 export function formFailureOutcome(failure: Failure, said: string, fieldLabel?: FieldWord, submission = false): Outcome {
   if (failure.status === undefined || (failure.status >= 500 && !failure.code)) return { state: 'unknown', said, next: unknownNext() };
@@ -343,6 +347,7 @@ export function FormSurface({
   checkStep,
   cursor,
   draft,
+  recordless = false,
 }: {
   form: FormPresentation;
   appName: string;
@@ -374,6 +379,9 @@ export function FormSurface({
   /** What was typed, kept by the host while the form is away (a page's `<Steps>`, in memory): where the form starts,
       and each change as it is made. */
   draft?: { values?: CommandValues; keep(values: CommandValues): void };
+  /** Signed in, its command names no record (a form's own page, a page's `<Steps>` over none): a refusal has no record
+      to refresh to, so its way on reads for the answers, as a public form's does. */
+  recordless?: boolean;
   /** Where the form starts, as a query string. The form's own page reads the
       address it was opened at; a form drawn over a record (FormDialog) is
       handed the same string instead, so both routes start the same way. */
@@ -403,7 +411,16 @@ export function FormSurface({
   useArrived(draftLogic, !!form.rules?.length);
   const byName = useMemo(() => new Map(fields.map((field) => [field.name, field])), [fields]);
   const [values, setValues] = useState<CommandValues>(
-    () => attempt?.values ?? draft?.values ?? startingValues(fields, form.prefillable, attempt?.locked ? '' : prefill, initial),
+    () =>
+      attempt?.values ??
+      draft?.values ??
+      startingValues(fields, [...(form.prefillable ?? []), ...(form.given ?? [])], attempt?.locked ? '' : prefill, initial),
+  );
+  /* What the form asks: every input but those the link supplies, which are sent as they came and judged by the command
+     alone. A link that left one out is refused on the form's own line, as no field on screen holds it. */
+  const drawn = useMemo(
+    () => (form.given?.length ? fields.filter((field) => !form.given!.includes(field.name)) : fields),
+    [fields, form.given],
   );
   useEffect(() => draft?.keep(values), [values]);
   const [problems, setProblems] = useState<Record<string, string>>({});
@@ -565,7 +582,7 @@ export function FormSurface({
          so a step opened to fix it shows it there. */
       const shown = drawsField(
         // An editable review draws every step's fields again, so a refusal is beside its field wherever the field is.
-        steps && !(intake && reviewing) ? stepFields(steps[steps.length - 1]) : fields,
+        steps && !(intake && reviewing) ? stepFields(steps[steps.length - 1]) : drawn,
         refusal.field,
       );
       if (refusal.field) setProblems((before) => ({ ...before, [refusal.field!]: refusal.beside }));
@@ -587,7 +604,7 @@ export function FormSurface({
             error as Failure,
             refusal.alone,
             refusal.field ? refusedWord(fields, refusal.field) : undefined,
-            visitor !== undefined,
+            visitor !== undefined || recordless,
           ),
         );
       }
@@ -613,21 +630,23 @@ export function FormSurface({
 
   if (receipt) {
     const DoneHeading = headingLevel === 1 ? 'h1' : 'h2';
+    // A form that says `reference: false` keeps the reference off its screen, and the line that asks to keep it.
+    const reference = form.done?.reference === false ? undefined : receipt.reference;
     const message =
       receipt.message ??
       form.done?.description ??
-      (receipt.reference ? appWord('mistri.receipt.keepReference', say('keepThisReference')) : undefined);
+      (reference ? appWord('mistri.receipt.keepReference', say('keepThisReference')) : undefined);
     return (
       <section ref={surface} className="form-page form-page-done" aria-labelledby={`${id}-done`}>
         {!intake && <p className="eyebrow">{appName}</p>}
         <DoneHeading id={`${id}-done`} tabIndex={-1}>
           {form.done?.title ?? appWord('mistri.receipt.received', say('received'))}
         </DoneHeading>
-        {receipt.reference && (
+        {reference && (
           <>
             <p className="form-page-reference-label">{appWord('mistri.form.reference', say('yourReference'))}</p>
             <p className="form-page-reference">
-              <strong>{receipt.reference}</strong>
+              <strong>{reference}</strong>
             </p>
           </>
         )}
@@ -647,7 +666,7 @@ export function FormSurface({
           </div>
         )}
         {/* A page has nowhere to be dismissed to: the receipt ends in a quiet way back, never a dead end. */}
-        {!onDismiss && home && (
+        {!onDismiss && home && form.done?.home !== false && (
           <p className="form-page-done-home">
             <a href={home}>{appWord('mistri.receipt.backTo', say('backToApp', { name: appName }), { name: appName })}</a>
           </p>
@@ -849,7 +868,7 @@ export function FormSurface({
   /** A step is left when the page's own check of it passes and, where the host asks the server, the server's too. On the
       editable review every step's fields are judged again, wherever they were typed. */
   const validateStep = async (step: FormStep): Promise<boolean> => {
-    if (step.id === REVIEW) return !intake || check(fields);
+    if (step.id === REVIEW) return !intake || check(drawn);
     if (!check(stepFields(step))) return false;
     // A public form asks its own step check (formRoutes.ts) unless the host gives another way to ask.
     const ask =
@@ -909,7 +928,7 @@ export function FormSurface({
       {attempt?.recovery ? (
         <>
           <fieldset className="command-fields" disabled>
-            {controls(fields)}
+            {controls(drawn)}
           </fieldset>
           {attempt.recovery}
         </>
@@ -918,7 +937,7 @@ export function FormSurface({
           noValidate
           onSubmit={(event) => {
             event.preventDefault();
-            if (!pending && !attempt?.locked && !form.steps && check(fields)) void complete();
+            if (!pending && !attempt?.locked && !form.steps && check(drawn)) void complete();
           }}
         >
           {steps ? (
@@ -971,8 +990,8 @@ export function FormSurface({
           ) : (
             <>
               <fieldset className="command-fields" disabled={pending}>
-                {problemsOver(fields)}
-                {controls(fields)}
+                {problemsOver(drawn)}
+                {controls(drawn)}
               </fieldset>
               {guard}
               {said}

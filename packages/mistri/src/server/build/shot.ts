@@ -28,7 +28,7 @@ import { pathToFileURL } from 'node:url';
 import type { Browser, BrowserContext, BrowserType, Page } from 'playwright-core';
 import { settled, watchRequests } from '../testing/settled.js';
 import { Registry, redact } from '@mistriwork/engine/server/connections.js';
-import { assertPresentationNamesApps, presentationOf } from '../cli/apps.js';
+import { assertDeploymentAuthNamesApps, assertPresentationNamesApps, deploymentAuthOf, presentationOf } from '../cli/apps.js';
 import { appRoutes, loadApp, type LoadedApp } from '../app/apps.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { homeSourceOf, isTenantApp } from '../../shared/app.js';
@@ -728,7 +728,8 @@ async function serve(args: string[], env: Record<string, string>): Promise<{ ori
     env: { ...process.env, ...env },
   });
   let said = '';
-  /* MISTRI_SHOT_START_SECONDS: how long a busy machine is given (a test sets it small). */
+  /* MISTRI_SHOT_START_SECONDS: how long a busy machine is given (a test sets it small). A slow start is told the
+     variable by name, so a longer wait is one rerun away rather than a read of this file. */
   const seconds = Number(process.env.MISTRI_SHOT_START_SECONDS) > 0 ? Number(process.env.MISTRI_SHOT_START_SECONDS) : 90;
   const origin = await new Promise<string>((done, fail) => {
     const timer = setTimeout(() => {
@@ -737,7 +738,7 @@ async function serve(args: string[], env: Record<string, string>): Promise<{ ori
       child.kill('SIGKILL');
       fail(
         new Refusal(
-          `the App did not start within ${seconds} seconds (a busy machine is the usual reason; its server was stopped). Run it again, or mistri check --app says whether the App itself is at fault.`,
+          `the App did not start within ${seconds} seconds (a busy machine is the usual reason; its server was stopped). Run it again, giving it longer with MISTRI_SHOT_START_SECONDS=${Math.ceil(seconds * 2)}, or mistri check --app says whether the App itself is at fault.`,
         ),
       );
     }, seconds * 1000);
@@ -934,7 +935,8 @@ async function capture(
   let taken: Buffer | undefined;
   /* A public form is a visitor's page: no session, and no tenant to choose. */
   if (shot.signedOut) [session, choice] = [undefined, undefined];
-  const context = await shotContext(browser, origin, { viewport, scale, dark, look, pick: reader?.pick, session });
+  /* A phone is held as one, as grade holds it: a finger, so a form's fields stand at the 44px a touch screen draws them. */
+  const context = await shotContext(browser, origin, { viewport, scale, dark, look, pick: reader?.pick, session, touch: size === 'phone' });
   const errors: string[] = [];
   const pieces: string[] = [];
   let text: string | undefined;
@@ -1532,15 +1534,18 @@ class ShotRun {
       const env = config.appEnv[appDir];
       /* The deployment's presentation, as the server below reads it: its refusals are the serve messages. */
       const presentation = refused(() => presentationOf(config));
+      const deploymentAuth = refused(() => deploymentAuthOf(config));
       const loaded = await loadApp(appDir, {
         lock: 'report',
         ...(presentation ? { presentation } : {}),
+        ...(deploymentAuth ? { deploymentAuth } : {}),
         ...(opts.appEntry !== undefined ? { entry: opts.appEntry } : {}),
         ...(env ? { env } : {}),
       }).catch((error) => {
         throw new Refusal(`the App did not load: ${(error as Error).message.split('\n')[0]} mistri check --app says more.`);
       });
       refused(() => assertPresentationNamesApps(presentation, [loaded]));
+      refused(() => assertDeploymentAuthNamesApps(deploymentAuth, [loaded]));
       const bound = loaded.app.connection ?? (loaded.app.sources ? loaded.app.sources[homeSourceOf(loaded.app)!]?.connection : undefined);
       const connection = bound
         ? this.registry.list().find((c) => c.id === bound || c.name === bound)

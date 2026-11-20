@@ -660,6 +660,8 @@ export function appDestinationWarnings(loaded: LoadedApp, schema: DatabaseSchema
       for (const { at, empty } of said)
         if (empty?.action)
           destinations.push({ at: `${at}, empty action "${empty.action.label}"`, source: view, table: view.table, to: empty.action.view });
+      if (view.link)
+        destinations.push({ at: `views "${key}", link "${view.link.label}"`, source: view, table: view.table, to: view.link.view });
     }
   }
   for (const page of loaded.pages) {

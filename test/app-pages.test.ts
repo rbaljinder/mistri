@@ -30,6 +30,7 @@ import { loadHttpAppPolicy, type HttpAppPolicy } from '../packages/mistri/src/se
 import { commandTypes } from '../packages/mistri/src/server/typegen.js';
 import { authorityReport } from '../packages/mistri/src/shared/appAuthority.js';
 import { appForRoles } from '../packages/mistri/src/shared/appViewRoles.js';
+import { withAvailableEmptyActions } from '../packages/mistri/src/shared/appPayload.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
 import { parseTestApp } from './support/commandCatalog.js';
 import { uiViewRunBody } from '../packages/mistri/src/shared/uiSdk.js';
@@ -527,6 +528,37 @@ export default definePage({ label: String(typeof process === 'object' && process
 
   test('home may name a page, as it names a view', () => {
     assert.deepEqual(parse({ ...APP, home: [{ view: 'lobby', signedOut: true }, { view: 'board' }] }).home.at(-1), { view: 'board' });
+  });
+
+  /* A field report: an empty list's way on is a free-form page as often as a list. A page is a room, judged and
+     withheld from a reader it is not served to by the one destination rule (appDestinations.ts). */
+  test("a list's empty action may open a page, and is drawn only for a reader the page is served to", () => {
+    const empty = { title: 'No notes yet', action: { label: 'Open the board', to: 'notes' } };
+    const app = parse(views({ tickets: { ...APP.views.tickets, empty } }));
+    assert.deepEqual((app.views.tickets as { empty?: unknown }).empty, {
+      title: 'No notes yet',
+      action: { label: 'Open the board', view: 'notes' },
+    });
+    const emptyFor = (role: string) =>
+      (withAvailableEmptyActions(appForRoles(app, [role]) as never) as typeof app).views.tickets as { empty?: { action?: unknown } };
+    assert.deepEqual(emptyFor('clerk').empty?.action, { label: 'Open the board', view: 'notes' });
+    // The reader does not read notes, so is not served the page, and the list says its empty state without the link.
+    assert.equal(emptyFor('reader').empty?.action, undefined);
+  });
+
+  /* A field report: a list's head wants a standing way on to another room, with rows or without. It is the empty
+     action's shape and rule: one destination check, withheld from a reader the target is not served to. */
+  test("a list's head link opens another view, and is drawn only for a reader the target is served to", () => {
+    const link = { label: 'Open the board', to: 'notes' };
+    const app = parse(views({ tickets: { ...APP.views.tickets, link } }));
+    assert.deepEqual((app.views.tickets as { link?: unknown }).link, { label: 'Open the board', view: 'notes' });
+    const linkFor = (role: string) =>
+      ((withAvailableEmptyActions(appForRoles(app, [role]) as never) as typeof app).views.tickets as { link?: unknown }).link;
+    assert.deepEqual(linkFor('clerk'), { label: 'Open the board', view: 'notes' });
+    assert.equal(linkFor('reader'), undefined);
+    assert.throws(() => parse(views({ tickets: { ...APP.views.tickets, link: { label: 'Nowhere', to: 'nowhere' } } })), /"link\.to"/);
+    assert.throws(() => parse(views({ tickets: { ...APP.views.tickets, link: { label: 'Open' } } })), /needs a "to"/);
+    assert.throws(() => parse(views({ tickets: { ...APP.views.tickets, link: 'notes' } })), /must be an object/);
   });
 
   test("a service role is offered no page unless the page names it, and is never a person's", () => {

@@ -562,6 +562,45 @@ export declare function useTeam(): {
   reissue(invitationId: string): Promise<{ token?: string }>;
   cancel(invitationId: string): Promise<void>;
 };
+/** The organization's read audit, as the Settings Reads room reads it: who opened or listed which of an audited resource's
+    rows, newest first, a page at a time (`more()` reads the page below; `next` is absent on the last). The same gate as the
+    room: the tenant's admins, the tenant from the lease. A reader outside it gets the route's refusal as `error` and no
+    lines. Empty outside a tenant App. `useReadAudit({ resource: 'patient', record: String(patient.id) })`. */
+export declare function useReadAudit(filters?: {
+  /** An account id, or `api-token:<id>`, `assistant:<account>`, `public`. */
+  actor?: string;
+  resource?: string;
+  /** A record's id: matched where it was opened and in every list that showed it. */
+  record?: string;
+  /** ISO instants, inclusive. */
+  since?: string;
+  until?: string;
+  /** A line's id: read the lines below it. */
+  before?: number;
+}): {
+  reads: readonly {
+    id: number;
+    at: string;
+    actor: string;
+    /** The account's name, where the actor names a person the sign-in store knows. */
+    person?: string;
+    /** The roles the read was granted under; an API token's are its own. */
+    roles?: readonly string[];
+    /** The membership read through: the person's own, or the one that holds the API token. */
+    membership?: string;
+    resource: string;
+    route: 'page' | 'api' | 'mcp' | 'assistant' | 'export' | 'picker' | 'custom-page' | 'related' | 'command';
+    /** The command whose handler or lookup read it, where the route is `command`. */
+    command?: string;
+    kind: 'opened' | 'listed';
+    record?: string;
+    count?: number;
+  }[];
+  next: number | undefined;
+  more(): void;
+  loading: boolean;
+  error: Error | null;
+};
 /** Open a tenant in one request from a platform App's own screen: `useOpenTenant('createClinicProfile')`. `open` runs that
     platform command under a key derived from `key`, then creates the tenant and issues its first invitation under `key`.
     The command's step is not atomic with the other two: when `open` resolves null (`error` says why), send it again with

@@ -6,7 +6,7 @@
  * never sent to sign in, and someone signed in submits it as the public too.
  */
 import { createElement } from 'react';
-import { applyBrandLogo, headBrandingMark } from './appBrand.js';
+import { applyBrandLogo, headBrandingMark, headBrandingName } from './appBrand.js';
 import { $ } from '@mistriwork/kit/client/core.js';
 import { isMounted, mount } from '@mistriwork/kit/client/components/mount.js';
 import { takeServerDrawing } from './serverDrawing.js';
@@ -150,16 +150,18 @@ export function showPublicForm(prepared, page, options = {}) {
   if (page === 'status' && !saved.save?.statusCheck) return false;
   if (page === 'claim' && !saved.save?.link?.sameDevice) return false;
   shellBody().classList.add('app-mode', 'public-form-mode');
+  /* A tenant's saved name, where its look dresses the page, as its logo and tab icon already do. */
+  const name = /** @type {any} */ (app).theme?.branding?.content?.name ?? headBrandingName() ?? app.name;
   const brand = shellQuery('.brand-name');
-  if (brand) brand.textContent = app.name;
+  if (brand) brand.textContent = name;
   applyBrandLogo(
     shellQuery('.brand-mark'),
     /** @type {any} */ (app).theme?.branding?.mark ?? headBrandingMark() ?? app.logo,
-    app.name,
+    name,
     app.icons,
   );
   // An intake form's page has no heading: its label is the tab's title (docs/design.md).
-  setTabTitle(form.style === 'intake' ? form.label : `${form.label} · ${app.name}`);
+  setTabTitle(form.style === 'intake' ? form.label : `${form.label} · ${name}`);
   const home = $('home-button');
   if (home instanceof HTMLButtonElement) {
     home.disabled = true;
@@ -181,12 +183,12 @@ export function showPublicForm(prepared, page, options = {}) {
     return true;
   }
   if (page === 'status') {
-    setTabTitle(say('checkYourApplicationName', { name: app.name }));
+    setTabTitle(say('checkYourApplicationName', { name }));
     mount(
       host,
       createElement(FormStatusSurface, {
         form: saved,
-        appName: app.name,
+        appName: name,
         appId: app.id,
         onSignIn: () => void signInHere(`${base}/status`, { lead: say('signInToAddYourApplication') }),
       }),
@@ -194,13 +196,13 @@ export function showPublicForm(prepared, page, options = {}) {
     return true;
   }
   if (page === 'claim') {
-    setTabTitle(say('addYourApplication', { name: app.name }));
+    setTabTitle(say('addYourApplication', { name }));
     const start = new URLSearchParams(window.location.search).get('account') === 'new' ? 'up' : undefined;
     mount(
       host,
       createElement(FormClaimSurface, {
         form,
-        appName: app.name,
+        appName: name,
         ...(saved.save?.statusCheck ? { statusHref: `${base}/status` } : {}),
         onSignIn: () => void signInHere(base, { ...(start ? { start } : {}), lead: say('signInToAddTheApplication') }),
       }),
@@ -213,7 +215,7 @@ export function showPublicForm(prepared, page, options = {}) {
       host,
       createElement(SavedFormSurface, {
         form: /** @type {import('./components/SavedFormSurface.js').SavedFormPresentation} */ (form),
-        appName: app.name,
+        appName: name,
         base,
         appId: app.id,
         // A step and the submit name the visitor's pick as the read does: the pick made since the page arrived.
@@ -227,7 +229,7 @@ export function showPublicForm(prepared, page, options = {}) {
     host,
     createElement(FormSurface, {
       form,
-      appName: app.name,
+      appName: name,
       review: Boolean(form.steps?.length),
       // A reference input's choices: what the App opens to a signed-out visitor, read as one.
       visitor: { app: app.id, ...(via ? { via } : {}) },

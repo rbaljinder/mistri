@@ -43,6 +43,22 @@ test("a form served as the App's home offers staff a quiet Sign in at the top ba
   expect(document.querySelectorAll('.account-sign-in')).toHaveLength(1);
 });
 
+test("a tenant's saved name, carried in its public head, is the form's bar, tab and eyebrow, not the App's", async () => {
+  // A field report: the tab wore the tenant's icon and the App's name.
+  const head = document.createElement('script');
+  head.id = 'mistri-branding';
+  head.type = 'application/json';
+  head.textContent = JSON.stringify({ private: false, value: { content: { name: 'North Clinic' } } });
+  document.body.append(head);
+  await act(async () => {
+    showPublicForm({ app, form });
+  });
+  expect(document.querySelector('.brand-name')).toHaveTextContent('North Clinic');
+  expect(document.title).toBe('Join the workshop · North Clinic');
+  expect(document.querySelector('.eyebrow')).toHaveTextContent('North Clinic');
+  expect(document.body.textContent).not.toContain('Workshop');
+});
+
 test("the form's own address, a link handed to applicants, draws no Sign in", async () => {
   await act(async () => {
     showPublicForm({ app, form });

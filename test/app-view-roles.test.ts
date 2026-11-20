@@ -283,7 +283,7 @@ test("the API serves a view's operation to the roles it names alone", () => {
   const none = withApi(['employee']);
   assert.throws(
     () => checkApiReadCatalog(none.api!, none, schema),
-    /api\.views\.queue: the view names roles \(agent, lead\) none of which api\.roles lists/,
+    /api\.views\.queue: the view names roles \(agent, lead\) none of which api\.roles or api\.service\.roles lists/,
   );
 });
 

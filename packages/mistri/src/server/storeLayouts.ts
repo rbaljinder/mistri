@@ -180,7 +180,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'api-tokens',
     title: 'API tokens, beside the accounts',
     tables: { prefix: '__mistri_auth_', own: true },
-    current: both(2),
+    current: both(3),
     read: marked({ sqlite: { table: '__mistri_api_token_meta' }, postgres: { table: 'auth_api_token_meta' } }),
     upgrades: {
       sqlite: {
@@ -190,12 +190,25 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
             for (const sql of (await import('../adapters/auth/sqliteApiTokenLayout.js')).sqliteApiTokenUpgradeFrom1()) await db.run(sql);
           },
         },
+        2: {
+          says: 'binds a tenant service token (api.service) to its tenant with no membership, and admits a role name with _ as a service subject',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/auth/sqliteApiTokenLayout.js')).sqliteApiTokenUpgradeFrom2()) await db.run(sql);
+          },
+        },
       },
       postgres: {
         1: {
           says: "adds a token's row scope (api.scopes): its scope's name and key, and a $scope token's parent",
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/auth/postgresApiTokenLayout.js')).postgresApiTokenUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+        2: {
+          says: 'binds a tenant service token (api.service) to its tenant with no membership, and admits a role name with _ as a service subject',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/auth/postgresApiTokenLayout.js')).postgresApiTokenUpgradeFrom2())
               await db.run(sql);
           },
         },

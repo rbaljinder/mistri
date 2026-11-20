@@ -783,7 +783,10 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.66: a `ui.shell.new` line's `when`, as a nav entry's (one entry; the name was a key already): 1776/526.
     // 1.0.0-rc.69: a page custom component read's `same`, as a related list's (one entry; the name was a key already): 1777/526.
     // 1.0.0-rc.69: a link's `related` lists (`related`, `by`, `show`, `sort`, `most`, `says`: six entries, and two new names): 1783/528.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1783, names: 528 });
+    // 1.0.0-rc.73: the App API's `service`, with its `roles` and `label` (three entries; every name was a key already): 1786/528.
+    // 1.0.0-rc.73: a form view's `given`, and its done screen's `reference` and `home` (three entries, one new name): 1789/529.
+    // 1.0.0-rc.73: a list view's head `link` (one entry; the name was a key already): 1790/529.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1792, names: 529 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

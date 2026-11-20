@@ -165,9 +165,9 @@
 :root[data-visual-theme] .tn-popitem { min-height: 34px; font-family: var(--sans); }
 
 :root[data-visual-theme] .app-mode .content { background: var(--surface); }
-/* The look's roomier pane, unless the App set its own gutter; a content-width
+/* The look's roomier pane, unless the App set its own gutter or the page is bare (features.css); a content-width
    header is told, so its brand still lines up with the content edge. */
-:root[data-visual-theme] body.app-topnav:not(.app-custom-gutter) .content { padding-inline: var(--space-6); }
+:root[data-visual-theme] body.app-topnav:not(.app-custom-gutter, .page-bare) .content { padding-inline: var(--space-6); }
 :root[data-visual-theme] body.app-topnav:not(.app-custom-gutter) .topbar[data-header-width="content"] { --app-shell-outer-gutter: 24px; }
 /* Sticky chrome must paint the page ground: transparency lets scrolled filters
    and rows show through. Keep it above the list's sticky headers and facets.
@@ -354,8 +354,8 @@
 @media (max-width: 700px) {
   /* One phone gutter for every App, whichever menu it wears: beside the
      room's own inset, a side-menu App's 22px left Thread 40px short of each
-     edge where Compass lost 20. */
-  :root[data-visual-theme] body.app-mode:not(.app-custom-gutter) .content { padding-inline: var(--space-2); }
+     edge where Compass lost 20. A bare page keeps none: it owns the window (features.css). */
+  :root[data-visual-theme] body.app-mode:not(.app-custom-gutter, .page-bare) .content { padding-inline: var(--space-2); }
   :root[data-visual-theme] body.app-topnav:not(.app-custom-gutter) .topbar[data-header-width="content"] { --app-shell-outer-gutter: 4px; }
   :root[data-visual-theme] body.app-topnav .topbar { padding-block: var(--space-2); }
   :root[data-visual-theme] body.app-topnav .topbar:not([data-header-width="content"]) { padding-inline: var(--space-5); }

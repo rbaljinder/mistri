@@ -107,6 +107,13 @@ export interface TenantReadSource {
    * whether it rode; where it did not — nothing was read, the attestation was due, `work` failed, SQLite — the
    * caller fences as before. */
   togetherFenced<T>(evidence: TenantMembershipEvidence, work: () => Promise<T>): Promise<{ value: T; fenced: boolean }>;
+  /** Asked inside `togetherFenced`'s `work`, just before its last wave of reads: the release fence leaves with that
+   * wave, pipelined behind its last statement, rather than in a round trip of its own once the reads have settled.
+   * The fence's snapshot still begins after every read on the shared one has finished (the server runs a
+   * connection's statements in order), and a read asked after the fence has left is refused, which denies the
+   * request. A read that fails is answered as before: no fence, and the caller denies. Anywhere else, and on
+   * SQLite, nothing. Internal: the bounded read routes ask it (tenantHttp.ts). */
+  lastWave(): void;
   /** The platform realm's twins: its membership, its revalidation, and reads
    * under the platform scope (across tenants, unnamed tables denied). */
   readPlatformMembership(lookup: PlatformMembershipLookup): Promise<PlatformMembershipRecord | null>;

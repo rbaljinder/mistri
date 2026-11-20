@@ -11,6 +11,7 @@
  * is imported, at run time or for its types' sake, so the headless chunk stays the size of what it does.
  */
 import { noTeamAccess } from '../client/teamTypes.js';
+import { noReadAuditAccess } from '../client/readAuditTypes.js';
 import type {
   UiAddress,
   UiCommandHandle,
@@ -463,8 +464,9 @@ export function embedHost({ surface, endpoint, authorization, navigator, basePat
     look: () => ({ look: 'workshop', preset: 'workshop', mode: 'light', density: 'comfortable' }),
     deployment: () => ({ name: surface.label, mark: null, theme: null, locale: null, basePath: base }),
     branding: () => ({ name: surface.label, logo: null, accent: null }),
-    /* A headless surface has no tenant lease: an empty team that manages nothing. */
+    /* A headless surface has no tenant lease: an empty team that manages nothing, and no read audit to read. */
     team: noTeamAccess,
+    reads: noReadAuditAccess,
     token: () => '',
     subscribeLook: () => () => {},
     app: true,

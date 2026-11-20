@@ -70,6 +70,14 @@ The App-shaped HTTP API an App can opt into. Every key here is stable ([status](
 | --- | --- | --- | --- |
 | `api.roles` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
 
+## `api.service`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `api.service` | object | Stable | Tenant Apps only: the service roles (each auth.roles entry with service: true) a tenant's administrator may hand to a program in a tenant service token, and the name the tenant's audit shows for its writes. Used in `examples/apps/lintel/app.ts`. |
+| `api.service.label` | string | Stable |  |
+| `api.service.roles` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
+
 ## `api.version`
 
 | Key | Type | Status | What it does |

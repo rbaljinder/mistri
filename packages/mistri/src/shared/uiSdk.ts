@@ -109,6 +109,7 @@ export const UI_EXPORTS = [
   'useDeployment',
   'useBranding',
   'useTeam',
+  'useReadAudit',
   'useOpenTenant',
   'useField',
   'parseMoney',

@@ -317,7 +317,7 @@ const insert = (tenant = 'north') => ({
   values: { id: `${tenant}-created`, business_id: 'created-business', name: 'Created' },
 });
 
-test('flat frozen deployment exposes only existing operations and a six-method read context, never sibling retirement or source handles', async (t) => {
+test('flat frozen deployment exposes only existing operations and a seven-method read context, never sibling retirement or source handles', async (t) => {
   const f = await fixture(t),
     deployment = f.create();
   let retained: TenantReadContext | undefined;
@@ -372,7 +372,7 @@ test('flat frozen deployment exposes only existing operations and a six-method r
     retained = context;
     return context.data.query({ table: 'item', limit: 10, offset: 0 });
   });
-  assert.deepEqual(Object.keys(retained!).sort(), ['capabilities', 'data', 'principal', 'schema', 'tenant', 'together']);
+  assert.deepEqual(Object.keys(retained!).sort(), ['capabilities', 'data', 'lastWave', 'principal', 'schema', 'tenant', 'together']);
   assert.ok(Object.isFrozen(retained!.capabilities));
   assert.deepEqual(Object.keys(retained!.capabilities!).sort(), ['grantedCommands', 'resources', 'writable']);
   assert.deepEqual(Object.keys(retained!.data).sort(), [
