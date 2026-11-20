@@ -24,7 +24,7 @@ export const VISUAL_THEME_EVENT = 'mistri:visual-theme-change';
 export const VISUAL_THEME_REGISTRY_EVENT = 'mistri:visual-theme-registry-change';
 /** The look inside an App when neither the reader nor the App names one.
     Workbench instead defaults to its native tokens in style.css. */
-export const DEFAULT_VISUAL_THEME = 'workshop';
+export const DEFAULT_VISUAL_THEME = 'lumen';
 const SANS = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
 /** The reader's own pick, kept only while it names a theme this screen offers. */
 let preferred: unknown = null;
@@ -129,7 +129,7 @@ function storedWorkbenchLook(): string | undefined {
 const offered = (value: unknown): value is string =>
   typeof value === 'string' && visualThemeOptions().some((theme) => theme.value === value);
 
-/** The look in force: the reader's pick, else the App's preset, else Workshop. */
+/** The look in force: the reader's pick, else the App's preset, else Lumen. */
 export function visualThemeChoice(): string {
   if (!inApp) return workbenchPreferred ?? 'default';
   if (locked && offered(authoredPreset)) return authoredPreset;

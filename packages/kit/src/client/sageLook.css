@@ -204,7 +204,11 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
   }
-  :root[data-look-stat='panel'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field:not(.page-field-prose) > dd {
+  :root[data-look-stat='panel']
+    body.app-mode:not(.public-visitor)
+    .page-field-summary
+    > .page-field:not(.page-field-prose)
+    > dd:has(.num-value, .tone-figure) {
     font-size: var(--text-xl);
     font-weight: 600;
     letter-spacing: -0.012em;

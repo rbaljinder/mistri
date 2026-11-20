@@ -118,12 +118,12 @@ export interface Audience {
 }
 
 /** The theme an App's page is guessed to wear: its audience's (themeResolve.ts) without a reader's pick, which the
-    server cannot see, else the App's own look, else Workshop's. */
+    server cannot see, else the App's own look, else Lumen's. */
 function wornTheme(ui: LookChoice | undefined, audience: Audience = {}) {
   if (!ui) return undefined;
   const offered = (id: string) => Boolean(ui.customThemes?.some((item) => item.id === id) ?? false) || Boolean(themePreset(id));
   const { id } = resolveTheme({ ...audience, for: ui.theme?.for, preset: ui.theme?.preset, offered });
-  return ui.customThemes?.find((item) => item.id === id) ?? themePreset(id) ?? themePreset('workshop');
+  return ui.customThemes?.find((item) => item.id === id) ?? themePreset(id) ?? themePreset('lumen');
 }
 
 /** The faces each sheet declares, by the families a stack begins with to be set in them (interFace.css, barlowFace.css,

@@ -30,9 +30,9 @@ function StoryQueries({ children }: { children: ReactNode }) {
 /* Dressed the way an App is: the look's name on the root, then its palette,
    fonts and radii as the same inline tokens the App writes. */
 const dressed: Decorator = (Story, context) => {
-  const { look = 'workshop', mode = 'light' } = context.globals as { look?: string; mode?: 'light' | 'dark' };
+  const { look = 'lumen', mode = 'light' } = context.globals as { look?: string; mode?: 'light' | 'dark' };
   const root = document.documentElement;
-  configureVisualThemes([], 'workshop', true);
+  configureVisualThemes([], 'lumen', true);
   setVisualTheme(look);
   root.dataset.theme = mode;
   const tokens = customThemeTokens(mode === 'dark');
@@ -84,8 +84,8 @@ const preview: Preview = {
       },
     },
   },
-  // Workshop, as an App that names no look wears it.
-  initialGlobals: { look: 'workshop', mode: 'light' },
+  // Lumen, as an App that names no look wears it.
+  initialGlobals: { look: 'lumen', mode: 'light' },
   parameters: {
     layout: 'fullscreen',
     controls: { expanded: true },

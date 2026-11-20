@@ -835,24 +835,19 @@ body.app-mode.page-bare .content { padding-inline: 0; }
 .dash-target { display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2h); font: var(--text-sm) var(--mono); color: var(--ink-muted); }
 
 /* A percent drawn as well as said. The bar leads, the number settles it. */
-.pct-wrap { display: inline-flex; align-items: center; gap: var(--space-3); }
-.pct-bar {
-  width: 52px; height: 5px; border-radius: 999px;
-  background: var(--raised); overflow: hidden; flex: none;
-}
-.pct-fill { display: block; height: 100%; background: var(--accent); border-radius: 999px; }
-/* A meter: a number against its max, the bar coloured by the rule's tone. */
-.meter-wrap { display: inline-flex; align-items: center; gap: var(--space-3); }
+:is(.pct-wrap, .meter-wrap, .pct-ring-wrap) { display: inline-flex; align-items: center; gap: var(--space-3); }
+:is(.pct-good, .meter-good) { --pct: var(--status-good); }
+:is(.pct-warn, .meter-warn) { --pct: var(--status-warning); }
+:is(.pct-bad, .meter-bad) { --pct: var(--status-critical); }
+.pct-info { --pct: var(--status-info); }
+.pct-neutral { --pct: var(--ink-muted); }
+.pct-bar { width: 52px; height: 5px; border-radius: 999px; background: var(--raised); overflow: hidden; flex: none; }
 .meter-wrap .pct-bar { width: 64px; }
-.meter-good .pct-fill { background: var(--status-good); }
-.meter-warn .pct-fill { background: var(--status-warning); }
-.meter-bad .pct-fill { background: var(--status-critical); }
-/* A percent as a ring, for a progress a glance takes in: the track in the raised ground, the fill in the accent. */
-.pct-ring-wrap { display: inline-flex; align-items: center; gap: var(--space-3); }
+.pct-fill { display: block; height: 100%; background: var(--pct, var(--accent)); border-radius: 999px; }
 .pct-ring { width: 16px; height: 16px; flex: none; }
 .pct-ring circle { fill: none; stroke-width: 2.5; }
 .pct-ring-track { stroke: var(--raised); }
-.pct-ring-fill { stroke: var(--accent); stroke-linecap: round; }
+.pct-ring-fill { stroke: var(--pct, var(--accent)); stroke-linecap: round; }
 /* Stars: the filled ones in the warning's amber unless a tone says otherwise, the rest a quiet outline's ink. */
 .rating-value { display: inline-flex; gap: 1px; font: var(--text-md)/1 var(--sans); letter-spacing: 0; }
 .rating-star { color: color-mix(in srgb, var(--ink) 18%, var(--surface)); }

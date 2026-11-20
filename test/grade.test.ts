@@ -324,6 +324,29 @@ describe('the role grade signs in as without --as', () => {
       'a',
     );
   });
+  test('ties on reads break toward reachable views, fuller grants, unrestricted fields, and admin', () => {
+    const roles = {
+      support: {
+        read: true,
+        write: ['work_order'],
+        fields: { part: { read: ['id'] } },
+      },
+      finance: {
+        read: true,
+        write: ['part'],
+      },
+      admin: {
+        read: true,
+        write: true,
+        commands: ['approveQuote'],
+      },
+    };
+    const views = {
+      orders: { source: 'work_order' },
+      revenue: { source: 'part', roles: ['admin', 'finance'] },
+    };
+    assert.equal(widestRole({ resources, views, auth: { roles } } as never), 'admin');
+  });
   test('no roles: the bootstrapped administrator', () => {
     assert.equal(widestRole({ resources, auth: {} } as never), 'admin');
   });

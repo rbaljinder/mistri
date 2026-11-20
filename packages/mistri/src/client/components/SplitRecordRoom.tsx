@@ -8,7 +8,15 @@ import { allowMutationExit, currentEntry, findTable, go, pageSize, state, tableV
 import type { RecordTrail } from '@mistriwork/kit/client/recordTrail.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { headingOf } from '@mistriwork/engine/shared/appNoun.js';
-import { appListQuery, newRecordNoun, splitListSpec, splitOf, type ListSpec } from '@mistriwork/kit/client/components/appListModel.js';
+import {
+  appListFor,
+  appListQuery,
+  newRecordNoun,
+  splitListSpec,
+  splitOf,
+  type ListEntry,
+  type ListSpec,
+} from '@mistriwork/kit/client/components/appListModel.js';
 import type { RowEntry } from '@mistriwork/kit/client/components/Record.js';
 import { RecordKeys } from '@mistriwork/kit/client/components/recordKeys.js';
 import { AppListRoom } from '@mistriwork/kit/client/components/Rooms.js';
@@ -19,6 +27,21 @@ import { say } from '../copy/shell/components/SplitRecordRoom.js';
 function splitListQuery(spec: ListSpec): string {
   // The list's authored limit rides its spec, so the list reads it as the view's own.
   return appListQuery(splitListSpec(spec));
+}
+
+export function SplitListRoom({ entry, spec: given }: { entry: ListEntry; spec: ListSpec }) {
+  const spec =
+    entry.view && given.id !== entry.view ? ((appListFor(entry.table, entry.query, entry.view) as ListSpec | null) ?? given) : given;
+  const listSpec = splitListSpec(spec);
+  return (
+    <RecordKeys.Provider value={spec.keys ?? noKeys}>
+      <SplitListDetail
+        list={<AppListRoom entry={entry} spec={listSpec} />}
+        listLabel={say('list', { label: spec.label })}
+        detailLabel={say('details', { label: spec.label })}
+      />
+    </RecordKeys.Provider>
+  );
 }
 
 /**

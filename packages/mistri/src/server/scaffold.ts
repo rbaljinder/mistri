@@ -1653,9 +1653,9 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
      a budget"). The menu is folded short above, so it fits a bar. */
   const ui = {
     logo: opts.brief?.logo ?? (hero ? (hero.icon === 'table' ? 'stack' : hero.icon) : 'stack'),
-    /* Lumen is a new App's look, and one of its palettes over it, both written out so each is the author's to
-       see and change: an App left in a look's own colour is every App on that look (`unbranded`, designLint.ts).
-       The framework's built-in default stays Workshop for an App that names no look; only a draft starts here. */
+    /* Lumen is the built-in default look, and a new App writes it out with one of its palettes over it so each is
+       the author's to see and change: an App left in a look's own colour is every App on that look (`unbranded`,
+       designLint.ts). */
     theme: { preset: opts.brief?.theme ?? 'lumen', palette: draftPalette(name) },
     shell: { placement: 'top' },
   };

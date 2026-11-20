@@ -283,10 +283,18 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
           }));
         }),
       );
+      const toEpoch = (when: string): number => {
+        const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(when) ? `${when.replace(' ', 'T')}Z` : when;
+        const ms = Date.parse(normalized);
+        return Number.isNaN(ms) ? 0 : ms;
+      };
       const merged = answers
         .flat()
         .filter((r) => r.when)
-        .sort((a, b) => (a.when < b.when ? 1 : a.when > b.when ? -1 : 0));
+        .sort((a, b) => {
+          const diff = toEpoch(b.when) - toEpoch(a.when);
+          return diff !== 0 ? diff : a.when < b.when ? 1 : a.when > b.when ? -1 : 0;
+        });
       return { rows: merged.slice(0, step * pages), more: streamMore || merged.length > step * pages };
     },
     staleTime: 0,

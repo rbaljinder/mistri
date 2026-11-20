@@ -72,8 +72,8 @@ const cardPath = (html: string) => {
 };
 
 test('a card is drawn from words and the look: the App accent, a plain colour only, the mark only from an icon', () => {
-  // An App that names no look is drawn in Workshop's.
-  const look = themePreset('workshop')!.light;
+  // An App that names no look is drawn in Lumen's.
+  const look = themePreset('lumen')!.light;
   const plain = shareCard({ site: 'Lot', title: '  Toyota \n Corolla ', ui: {} })!;
   assert.deepEqual(plain, {
     site: 'Lot',

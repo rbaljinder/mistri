@@ -6926,7 +6926,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": ["preset"],
-          "properties": { "preset": { "enum": ["workshop", "lumen", "mono", "sage", "ledger", "atelier", "graphite", "bloom"] } }
+          "properties": { "preset": { "enum": ["lumen", "workshop", "mono", "sage", "ledger", "atelier", "graphite", "bloom"] } }
         },
         "fields": {
           "type": "object",

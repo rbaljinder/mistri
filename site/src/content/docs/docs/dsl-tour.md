@@ -224,7 +224,7 @@ lease, so it is a command rather than a plain `set` action like Tick's:
 
 ## 6. A look
 
-Lintel wears a look of its own, Lumen with one recipe changed; an App that names none wears Workshop. To try another, change its `ui` and save:
+Lintel wears a look of its own, Lumen with one recipe changed; an App that names none wears Lumen. To try another, change its `ui` and save:
 
 ```ts
   ui: { theme: { preset: 'sage' } },

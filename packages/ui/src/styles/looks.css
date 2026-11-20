@@ -152,22 +152,23 @@
      where it names none. A rule here that filled it in the accent gave a look whose primary is its ink (Atelier,
      Graphite) two leading buttons, the list's New in the ink and a record's and a form's in the hue. */
   @scope ([data-look-buttons='raised']) to ([data-custom-theme], [data-look-buttons]) {
-    [data-slot='button']:not([data-variant='quiet'], [data-variant='bare']) {
+    :is([data-slot='button']:not([data-variant='quiet'], [data-variant='bare']), [data-slot='menu-trigger']:not([data-own], [data-kind])) {
       box-shadow:
         0 1px 0 light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.06)) inset,
         0 1px 2px light-dark(rgb(23 23 26 / 0.12), rgb(0 0 0 / 0.5));
     }
   }
 
-  /* A key: a hard edge under it, which goes when it is pressed. */
+  /* A key: a hard edge under it, which goes when it is pressed. By night the ink is light cream, so the ledge drops to
+     the dark ground rather than drawing a bright white shelf under every button. */
   @scope ([data-look-buttons='keyed']) to ([data-custom-theme], [data-look-buttons]) {
-    [data-slot='button']:not([data-variant='quiet'], [data-variant='bare']) {
+    :is([data-slot='button']:not([data-variant='quiet'], [data-variant='bare']), [data-slot='menu-trigger']:not([data-own], [data-kind])) {
       border-radius: calc(var(--m-radius) - 2px);
-      box-shadow: 0 2px 0 var(--m-ink);
+      box-shadow: 0 2px 0 light-dark(var(--m-ink), var(--m-ground));
       translate: 0 -1px;
 
       &:active {
-        box-shadow: 0 0 0 var(--m-ink);
+        box-shadow: none;
         translate: 0 1px;
       }
     }
@@ -186,7 +187,7 @@
   @scope ([data-look-filters='solid']) to ([data-custom-theme], [data-look-filters]) {
     [data-kind='filter-chip'] {
       border-style: solid;
-      border-color: var(--m-ink);
+      border-color: light-dark(var(--m-ink), var(--m-line-control));
       color: var(--m-ink);
     }
   }

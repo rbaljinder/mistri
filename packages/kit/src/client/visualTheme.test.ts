@@ -149,21 +149,21 @@ test('flipping between an App and its Workbench tells the picker', () => {
   }
 });
 
-test('inside an App, Workshop is the look when nobody picks one', () => {
+test('inside an App, Lumen is the look when nobody picks one', () => {
   app();
-  expect(DEFAULT_VISUAL_THEME).toBe('workshop');
-  expect(visualThemeChoice()).toBe('workshop');
-  expect(root()).toHaveAttribute('data-visual-theme', 'workshop');
-  expect(root()).toHaveAttribute('data-theme-style', 'workshop');
-  expect(visualThemeOverrides().font).toBe(themePreset('workshop')!.fonts!.data);
-  expect(validVisualTheme(null)).toBe('workshop');
+  expect(DEFAULT_VISUAL_THEME).toBe('lumen');
+  expect(visualThemeChoice()).toBe('lumen');
+  expect(root()).toHaveAttribute('data-visual-theme', 'lumen');
+  expect(root()).toHaveAttribute('data-theme-style', 'lumen');
+  expect(visualThemeOverrides().font).toBe(themePreset('lumen')!.fonts!.data);
+  expect(validVisualTheme(null)).toBe('lumen');
 });
 
 test("the picker offers the built-in looks, then the App's own themes", () => {
   expect(visualThemeOptions().map((theme) => theme.value)).toEqual([
     'default',
-    'workshop',
     'lumen',
+    'workshop',
     'mono',
     'sage',
     'ledger',
@@ -173,8 +173,8 @@ test("the picker offers the built-in looks, then the App's own themes", () => {
   ]);
   app([CUSTOM]);
   expect(visualThemeOptions().map((theme) => theme.value)).toEqual([
-    'workshop',
     'lumen',
+    'workshop',
     'mono',
     'sage',
     'ledger',
@@ -185,11 +185,11 @@ test("the picker offers the built-in looks, then the App's own themes", () => {
   ]);
 });
 
-test("a retired or unknown stored theme falls back to the App's preset, then Workshop", () => {
+test("a retired or unknown stored theme falls back to the App's preset, then Lumen", () => {
   window.localStorage.setItem(VISUAL_THEME_KEY, 'dispatch');
   initVisualTheme();
   app();
-  expect(visualThemeChoice()).toBe('workshop');
+  expect(visualThemeChoice()).toBe('lumen');
   app([], 'mono');
   expect(visualThemeChoice()).toBe('mono');
 });
@@ -210,12 +210,12 @@ test('a stored custom preference resolves after the registry loads and survives 
   window.localStorage.setItem(VISUAL_THEME_KEY, 'custom');
   initVisualTheme();
   app();
-  expect(visualThemeChoice()).toBe('workshop');
+  expect(visualThemeChoice()).toBe('lumen');
   app([CUSTOM]);
   expect(visualThemeChoice()).toBe('custom');
   expect(root()).toHaveAttribute('data-theme-style', 'lumen');
   app([]);
-  expect(visualThemeChoice()).toBe('workshop');
+  expect(visualThemeChoice()).toBe('lumen');
   expect(window.localStorage.getItem(VISUAL_THEME_KEY)).toBe('custom');
   app([CUSTOM]);
   expect(visualThemeChoice()).toBe('custom');
@@ -316,7 +316,7 @@ test('unavailable preference storage falls back at boot but still allows tab-loc
   vi.spyOn(window, 'localStorage', 'get').mockReturnValue({ getItem, setItem } as unknown as Storage);
   initVisualTheme();
   app();
-  expect(visualThemeChoice()).toBe('workshop');
+  expect(visualThemeChoice()).toBe('lumen');
   setVisualTheme('mono');
   expect(visualThemeChoice()).toBe('mono');
   expect(root()).toHaveAttribute('data-visual-theme', 'mono');

@@ -92,6 +92,7 @@ import { useChangedRows } from '../liveState.js';
 import { fontLoaded, textMeasure } from './textMeasure.js';
 import { presentationColumns } from './columnPresentation.js';
 import { usePins } from './usePins.js';
+import { useMediaQuery } from './useMediaQuery.js';
 import { useStickyHead } from './useStickyHead.js';
 import type { TableSizing } from '@mistriwork/engine/shared/tableSizing.js';
 import {
@@ -1230,10 +1231,11 @@ export function Grid({
     [cellFonts, faceEpoch], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const measureAsked = useMemo(() => measureIn(asked), [measureIn, asked]);
-  /* An App's own list folds the columns its room cannot hold under the row's name, as a detail line, once its
-     secondary text has given way to its floor (gridSizing.ts): they are moved, not lost, and the list does not scroll
-     sideways. An embedded grid leaves them out, as it did. */
-  const folds = !dropColumns && sizing === 'fit' && shell().inApp();
+  /* An App's own list folds the columns its room cannot hold under the row's name on tablet and phone widths, as a
+     detail line, once its secondary text has given way to its floor (gridSizing.ts): on a desk (> 960px) every column
+     stays in its own lane on one crisp row and .table-wrap scrolls horizontally if needed. */
+  const foldsNarrow = useMediaQuery('(max-width: 960px)');
+  const folds = !dropColumns && sizing === 'fit' && shell().inApp() && foldsNarrow;
   /* What folded, and the width it folded at (gridSizing.ts holdFold): a fold changes the rows' height, and the
      scrollbar that brings or takes away must not unfold it again. */
   const foldHeld = useRef<FoldHeld | null>(null);
@@ -1844,7 +1846,11 @@ export function Grid({
 
   const colSpan = ordered.length + shift + (trailing ? 1 : 0);
   return (
-    <div className={`table-wrap${compact ? ' grid-compact' : ''}${density === 'compact' ? ' grid-dense' : ''}`} ref={wrap}>
+    <div
+      className={`table-wrap${compact ? ' grid-compact' : ''}${density === 'compact' ? ' grid-dense' : ''}`}
+      data-scrolls={!folds && !dropColumns ? '' : undefined}
+      ref={wrap}
+    >
       <table
         ref={tableRef}
         onMouseOver={onMouseOver}

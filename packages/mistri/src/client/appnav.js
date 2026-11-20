@@ -20,7 +20,7 @@ import { AppTargetAction } from './components/AppTargetAction.js';
 import { bulkCommands, recordCommand } from './components/sdk/commands.js';
 import { useAppTargetLinks } from './appTargetLinks.js';
 import { navTargets } from './appNavTargets.js';
-import { SplitRecordRoom } from './components/SplitRecordRoom.js';
+import { SplitListRoom, SplitRecordRoom } from './components/SplitRecordRoom.js';
 
 /* A view that says `open: "modal"` opens its record in the App's own dialog (peekpanel.js), fetched the first time one does. */
 setRecordDialog(onDemand(() => import('./components/RecordModal.js'), 'RecordModal', { quiet: true }));
@@ -92,6 +92,7 @@ export const appChrome = {
       Page: onDemand(() => import('./components/FreePage.js'), 'FreePage'),
       /* A free-form page that is a record's tab: drawn by the record page's tab strip (PageSections.tsx). */
       RecordTab: onDemand(() => import('./components/RecordTabPage.js'), 'RecordTabPage'),
+      SplitList: SplitListRoom,
       SplitRecord: SplitRecordRoom,
       /* A record put on paper: its own part, so no first page carries the sheet. */
       Document: onDemand(() => import('./components/Document.js'), 'DocumentRoom'),

@@ -67,7 +67,7 @@ const DRAWING_REVISION = 1;
 const TITLE_MOST = 110;
 const SUMMARY_MOST = 180;
 
-/* A colour satori and resvg both read. A look may say `color-mix(…)`, which neither does: that role is the default look's (Workshop's) then. */
+/* A colour satori and resvg both read. A look may say `color-mix(…)`, which neither does: that role is the default look's (Lumen's) then. */
 const PLAIN_COLOUR = /^(?:#[0-9a-f]{3,8}|(?:rgb|rgba|hsl|hsla)\(\s*[0-9.,%\s/]+\))$/i;
 
 const words = (text: string | undefined, most: number) => {
@@ -75,11 +75,11 @@ const words = (text: string | undefined, most: number) => {
   return flat.length <= most ? flat : `${flat.slice(0, most - 1).trimEnd()}…`;
 };
 
-/** The look a page is drawn in: the request's branding where it has one, else the App's own look, else Workshop. */
+/** The look a page is drawn in: the request's branding where it has one, else the App's own look, else Lumen. */
 function palette(ui: AppUi, branding: BrandingPresentation | undefined): ThemePalette {
   if (branding) return inheritThemePreset(branding.value.theme as ThemeDefinition).light;
   const theme = (ui.theme ?? {}) as { preset?: string; palette?: string; accent?: string | { light: string; dark: string } };
-  const worn = ui.customThemes?.find((item) => item.id === theme.preset) ?? themePreset(theme.preset) ?? themePreset('workshop')!;
+  const worn = ui.customThemes?.find((item) => item.id === theme.preset) ?? themePreset(theme.preset) ?? themePreset('lumen')!;
   const effective = effectiveThemeDefinition(worn as ThemeDefinition, theme.palette);
   return effectiveThemePalette(effective.light, false, { ...(theme.accent ? { accent: theme.accent } : {}) });
 }
@@ -101,7 +101,7 @@ export function shareCard(input: {
   const site = words(input.site, 80);
   const summary = words(input.summary, SUMMARY_MOST);
   const own = palette(input.ui, input.branding);
-  const fallback = themePreset('workshop')!.light;
+  const fallback = themePreset('lumen')!.light;
   const colour = (value: string | undefined, otherwise: string) => (value && PLAIN_COLOUR.test(value.trim()) ? value.trim() : otherwise);
   const logo = input.ui.logo;
   const branded = input.branding && (input.branding.value.mark || input.branding.value.images.logo);

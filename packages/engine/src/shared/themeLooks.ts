@@ -118,7 +118,7 @@ function withPalettes({ tinted, ...look }: HouseLook): ThemeSpec {
   } as ThemeSpec;
 }
 
-/** The built-in looks: Workshop, the default an App wears, then Lumen, Mono, Sage, Ledger, Atelier, Graphite and Bloom.
+/** The built-in looks: Lumen, the default an App wears, then Workshop, Mono, Sage, Ledger, Atelier, Graphite and Bloom.
     Each is written as an App would write its own (`defineTheme`,
     packages/engine/schema/theme.d.ts): colours by purpose, a shape, a type and a pick from the
     recipe menu (themeBuild.ts), and built by the same `buildTheme` an App's
@@ -135,15 +135,128 @@ function withPalettes({ tinted, ...look }: HouseLook): ThemeSpec {
 
     The title weight (`type.roles.title.weight`) is never past 700: a heavier
     ask resolved a book face to its Black cut, a masthead where a title was
-    meant, and broke the record's head. Mono titles at 700; Lumen's and Sage's
-    softer titles at 600; Workshop's condensed bold at 700.
+    meant, and broke the record's head. Mono titles at 700; Sage's
+    softer titles at 600; Lumen's Manrope and Workshop's condensed bold at 700.
 
     Each wears every palette in lookPalettes.ts; its own colors are its
-    default palette's (Workshop's Safety orange, Lumen's Cobalt, Mono's and
+    default palette's (Lumen's Cobalt, Workshop's Safety orange, Mono's and
     Sage's Ink, which is each one's own ink, Ledger's Emerald, drawn in the
     book's own deep green, Atelier's Safety orange at its rust depth,
     Graphite's Teal), but Bloom, which is written in Violet and worn in Slate (`tinted`, below). */
 const WRITTEN: readonly (HouseLook | VariantLook)[] = [
+  {
+    // Flat, calm and modern, with character in its details: a warm, faintly
+    // tinted shell around white working surfaces, elevation only on what
+    // floats, one confident accent for the primary action, the current room,
+    // selection, focus, the main chart series and the current step; metrics
+    // in a divided strip, fields in a property rail, tables on hairlines
+    // anchored on the record's name, statuses as a dot and their word, a
+    // workflow as a track of segments, charts as a line in one hue's steps
+    // (lumenLook.css; docs/design.md, Lumen, for its exceptions). The chart
+    // palette keeps blue, violet, green, amber and pink at steps the dataviz
+    // checks pass, light and dark. Inter, shipped with the look. Its own
+    // blue is Cobalt; every other palette changes the accent family only —
+    // grounds, ink and structure stay Lumen's.
+    id: 'lumen',
+    label: 'Lumen',
+    defaultPalette: 'cobalt',
+    colors: {
+      light: {
+        ground: '#ffffff',
+        surface: '#ffffff',
+        raised: '#f5f4f2',
+        ink: '#1c1a17',
+        inkMuted: '#5c5852',
+        inkSubtle: '#726c64',
+        line: '#ebe8e4',
+        lineStrong: '#8f8a83',
+        lineControl: '#8f8a83',
+        primary: '#1c1a17',
+        onPrimary: '#ffffff',
+        status: {
+          good: '#127a40',
+          warning: '#a65308',
+          critical: '#c52a2a',
+          info: '#2d4fd6',
+        },
+        nav: {
+          ground: '#fbfaf9',
+          ink: '#1c1a17',
+          muted: '#5c5852',
+          line: '#ebe8e4',
+        },
+        rules: {
+          section: '#ebe8e4',
+          head: '#ebe8e4',
+        },
+        chart: ['#2557e0', '#9a6cf7', '#0e9a6c', '#d97706', '#e0428a', '#0e8fb0', '#a3510b', '#94a3b8'],
+      },
+      dark: {
+        ground: '#121110',
+        surface: '#161514',
+        raised: '#201f1d',
+        ink: '#eeece8',
+        inkMuted: '#b8b3ab',
+        inkSubtle: '#9f9a92',
+        line: '#2d2b27',
+        lineStrong: '#726d65',
+        lineControl: '#726d65',
+        primary: '#eeece8',
+        onPrimary: '#121110',
+        status: {
+          good: '#4ade80',
+          warning: '#fbbf24',
+          critical: '#f87171',
+          info: '#91a8ff',
+        },
+        nav: {
+          ground: '#141312',
+          ink: '#eeece8',
+          muted: '#aaa59d',
+          line: '#262422',
+        },
+        rules: {
+          section: '#2d2b27',
+          head: '#2d2b27',
+        },
+        chart: ['#3559e6', '#9a78ec', '#12a678', '#c88317', '#e0559b', '#1597b9', '#d26b3b', '#6b7694'],
+      },
+    },
+    /* `pill` is said in every look: an App's stylesheet may read var(--pill-radius) (check accepts it), and a look that left it
+       unsaid gave that rule no value and square corners. Round is what the sheets draw a tag as already. */
+    shape: { radius: { control: '8px', field: '8px', pill: 'round' }, elevation: 'raised', border: { rule: '1px' } },
+    /* The page's name anchors it: 28px, tight; a list's name a step under, and a section's heading 16px, so the
+       page reads title, section, row at a glance. On a flat page the type is the hierarchy the boxes used to be. */
+    type: {
+      font: { ui: INTER, data: INTER, heading: MANROPE, figures: FIGURES },
+      roles: {
+        /* Manrope draws lighter than Inter at a given weight: a title at 600 read as a line of text, so the heading
+           roles stand a step heavier than they did in Inter, to the presence they had. */
+        title: { size: '28px', weight: 700, tracking: '-0.02em' },
+        heading: { size: '24px', weight: 700, tracking: '-0.018em' },
+        section: { size: '16px', weight: 600, tracking: '-0.01em' },
+      },
+    },
+    density: 'compact',
+    recipes: {
+      // Open on the white surface, with two of its own: a record's fields in a property rail, a table of quiet rows.
+      blocks: 'open',
+      fields: 'rail',
+      table: 'quiet',
+      // Pills in the menu and a raised key on the windows' tray; a record's tabs apart, underlined on a hairline.
+      current: 'pill',
+      tabs: 'underline',
+      bar: 'airy',
+      status: 'quiet',
+      board: 'strip',
+      chart: 'line',
+      buttons: 'raised',
+      filters: 'quiet',
+      rules: 'hairline',
+      avatar: 'round',
+      banner: 'plain',
+    },
+  },
   {
     // The desk as a workbench, ported from a field report's theme, and
     // refreshed in rc.18 so the work sits on white: the warm paper and its
@@ -273,119 +386,6 @@ const WRITTEN: readonly (HouseLook | VariantLook)[] = [
       lanes: 'tag',
       // The paper under a page's head: the frame reaches the title, tabs and filters, and the rows start on white.
       header: 'band',
-    },
-  },
-  {
-    // Flat, calm and modern, with character in its details: a warm, faintly
-    // tinted shell around white working surfaces, elevation only on what
-    // floats, one confident accent for the primary action, the current room,
-    // selection, focus, the main chart series and the current step; metrics
-    // in a divided strip, fields in a property rail, tables on hairlines
-    // anchored on the record's name, statuses as a dot and their word, a
-    // workflow as a track of segments, charts as a line in one hue's steps
-    // (lumenLook.css; docs/design.md, Lumen, for its exceptions). The chart
-    // palette keeps blue, violet, green, amber and pink at steps the dataviz
-    // checks pass, light and dark. Inter, shipped with the look. Its own
-    // blue is Cobalt; every other palette changes the accent family only —
-    // grounds, ink and structure stay Lumen's.
-    id: 'lumen',
-    label: 'Lumen',
-    defaultPalette: 'cobalt',
-    colors: {
-      light: {
-        ground: '#ffffff',
-        surface: '#ffffff',
-        raised: '#f5f4f2',
-        ink: '#1c1a17',
-        inkMuted: '#5c5852',
-        inkSubtle: '#726c64',
-        line: '#ebe8e4',
-        lineStrong: '#8f8a83',
-        lineControl: '#8f8a83',
-        primary: '#1c1a17',
-        onPrimary: '#ffffff',
-        status: {
-          good: '#127a40',
-          warning: '#a65308',
-          critical: '#c52a2a',
-          info: '#2d4fd6',
-        },
-        nav: {
-          ground: '#fbfaf9',
-          ink: '#1c1a17',
-          muted: '#5c5852',
-          line: '#ebe8e4',
-        },
-        rules: {
-          section: '#ebe8e4',
-          head: '#ebe8e4',
-        },
-        chart: ['#2557e0', '#9a6cf7', '#0e9a6c', '#d97706', '#e0428a', '#0e8fb0', '#a3510b', '#94a3b8'],
-      },
-      dark: {
-        ground: '#121110',
-        surface: '#161514',
-        raised: '#201f1d',
-        ink: '#eeece8',
-        inkMuted: '#b8b3ab',
-        inkSubtle: '#9f9a92',
-        line: '#2d2b27',
-        lineStrong: '#726d65',
-        lineControl: '#726d65',
-        primary: '#eeece8',
-        onPrimary: '#121110',
-        status: {
-          good: '#4ade80',
-          warning: '#fbbf24',
-          critical: '#f87171',
-          info: '#91a8ff',
-        },
-        nav: {
-          ground: '#141312',
-          ink: '#eeece8',
-          muted: '#aaa59d',
-          line: '#262422',
-        },
-        rules: {
-          section: '#2d2b27',
-          head: '#2d2b27',
-        },
-        chart: ['#3559e6', '#9a78ec', '#12a678', '#c88317', '#e0559b', '#1597b9', '#d26b3b', '#6b7694'],
-      },
-    },
-    /* `pill` is said in every look: an App's stylesheet may read var(--pill-radius) (check accepts it), and a look that left it
-       unsaid gave that rule no value and square corners. Round is what the sheets draw a tag as already. */
-    shape: { radius: { control: '8px', field: '8px', pill: 'round' }, elevation: 'raised', border: { rule: '1px' } },
-    /* The page's name anchors it: 28px, tight; a list's name a step under, and a section's heading 16px, so the
-       page reads title, section, row at a glance. On a flat page the type is the hierarchy the boxes used to be. */
-    type: {
-      font: { ui: INTER, data: INTER, heading: MANROPE, figures: FIGURES },
-      roles: {
-        /* Manrope draws lighter than Inter at a given weight: a title at 600 read as a line of text, so the heading
-           roles stand a step heavier than they did in Inter, to the presence they had. */
-        title: { size: '28px', weight: 700, tracking: '-0.02em' },
-        heading: { size: '24px', weight: 700, tracking: '-0.018em' },
-        section: { size: '16px', weight: 600, tracking: '-0.01em' },
-      },
-    },
-    density: 'compact',
-    recipes: {
-      // Open on the white surface, with two of its own: a record's fields in a property rail, a table of quiet rows.
-      blocks: 'open',
-      fields: 'rail',
-      table: 'quiet',
-      // Pills in the menu and a raised key on the windows' tray; a record's tabs apart, underlined on a hairline.
-      current: 'pill',
-      tabs: 'underline',
-      bar: 'airy',
-      status: 'quiet',
-      board: 'strip',
-      chart: 'line',
-      buttons: 'raised',
-      filters: 'quiet',
-      rules: 'hairline',
-      avatar: 'round',
-      banner: 'plain',
     },
   },
   {

@@ -79,7 +79,7 @@ stable.
 
 | Feature | Status |
 | --- | --- |
-| The eight built-in looks: Workshop (the default, set in Barlow), Lumen (set in Inter, its headings in Manrope), Mono, Sage, Ledger (figures in IBM Plex Mono), Atelier (titles in the machine's book serif), Graphite and Bloom; `defineTheme`, `ui.theme` and `customThemes`; the twelve palettes every look offers; the theme validator in `mistri check` | Stable |
+| The eight built-in looks: Lumen (the default, set in Inter, its headings in Manrope), Workshop (set in Barlow), Mono, Sage, Ledger (figures in IBM Plex Mono), Atelier (titles in the machine's book serif), Graphite and Bloom; `defineTheme`, `ui.theme` and `customThemes`; the twelve palettes every look offers; the theme validator in `mistri check` | Stable |
 | Tenant branding (`branding`, `brandingForm()`, the `branding` store) | Stable |
 
 ### Access, commands and data

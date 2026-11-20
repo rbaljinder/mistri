@@ -18,8 +18,8 @@
       "not": {
         "enum": [
           "default",
-          "workshop",
           "lumen",
+          "workshop",
           "mono",
           "sage",
           "ledger",
@@ -38,8 +38,8 @@
       "anyOf": [
         {
           "enum": [
-            "workshop",
             "lumen",
+            "workshop",
             "mono",
             "sage",
             "ledger",

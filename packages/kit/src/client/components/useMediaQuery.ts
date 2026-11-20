@@ -19,10 +19,10 @@ function watch(query: string) {
       if (!media) return () => {};
       media.addEventListener?.('change', listener);
       /* Older WebKit has the deprecated listener pair but no addEventListener. */
-      if (!media.addEventListener) media.addListener(listener);
+      if (!media.addEventListener) media.addListener?.(listener);
       return () => {
         media.removeEventListener?.('change', listener);
-        if (!media.removeEventListener) media.removeListener(listener);
+        if (!media.removeEventListener) media.removeListener?.(listener);
       };
     },
   };

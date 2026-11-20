@@ -489,13 +489,13 @@
   :root[data-look-table='rows'] .app-mode .page-list-body .result-table > .table-wrap thead th:first-child {
     padding-inline-start: var(--space-4h);
   }
-  :root[data-look-stat='bento'] .app-mode .page-field-summary > .page-field > dd {
+  :root[data-look-stat='bento'] .app-mode .page-field-summary > .page-field > dd:has(.num-value, .tone-figure) {
     font-size: var(--text-xl);
     font-weight: var(--type-figure-weight, 700);
     letter-spacing: -0.02em;
     line-height: 1.2;
   }
-  :root[data-look-stat='bento'] .app-mode .page-field-summary > .page-field > dd :is(.num-value, .date-value, .tone) {
+  :root[data-look-stat='bento'] .app-mode .page-field-summary > .page-field > dd:has(.num-value, .tone-figure) :is(.num-value, .date-value, .tone) {
     font: inherit;
     letter-spacing: inherit;
   }

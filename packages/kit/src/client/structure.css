@@ -900,9 +900,9 @@
     .pbd-drill {
       min-height: 44px;
     }
-    /* The command form's line pickers draw at the row's 30px. */
+    /* The command form's line pickers draw at 44px on a coarse pointer. */
     .form-lines-grid .lines-ref:not(.has-sub) .picker-input {
-      height: 40px;
+      height: 44px;
     }
     /* The chrome's own controls the same way, on ::before, since a tab's underline and a field's pencil are
      already their ::after: the brand, the header's icon buttons, a view's tabs, the buttons and a checklist
@@ -938,6 +938,7 @@
       .tn-mobile-menu,
       .tn-search,
       .presentation-seg,
+      .timeline-mode,
       .page-metric-value,
       .dashboard-note-action,
       .peekpanel-close,
@@ -972,6 +973,7 @@
       .tn-mobile-menu,
       .tn-search,
       .presentation-seg,
+      .timeline-mode,
       .page-metric-value,
       .dashboard-note-action,:is([data-slot='date-field'] > [data-slot='popover-trigger']),
       .peekpanel-close,

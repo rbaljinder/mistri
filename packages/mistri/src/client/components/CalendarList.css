@@ -223,9 +223,34 @@
     outline-offset: -2px;
   }
   .calendar-note {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
     margin: var(--space-3h) 0;
     color: var(--ink-muted);
     font-size: var(--text-base);
+  }
+  .calendar-note-jump {
+    padding: var(--space-1) var(--space-3);
+    min-height: 28px;
+    border: 1px solid var(--line-control, var(--line-strong));
+    border-radius: var(--control-radius, var(--radius));
+    background: var(--surface);
+    color: var(--ink);
+    font: 500 var(--text-sm) var(--sans);
+    cursor: pointer;
+  }
+  @media (hover: hover) {
+    .calendar-note-jump:hover {
+      border-color: var(--ink);
+      background: var(--raised);
+    }
+  }
+  @media (pointer: coarse), (max-width: 40rem) {
+    .calendar-note-jump {
+      min-height: 44px;
+    }
   }
   /* A phone reads the month as an agenda: only the days that have something. */
   .calendar-agenda {

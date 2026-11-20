@@ -274,7 +274,7 @@ export type Dress =
   | { kind: 'mark'; icon: string; text: string; label: string }
   | { kind: 'word'; text: string; label: string }
   | { kind: 'money'; text: string; title: string }
-  | { kind: 'percent'; text: string; bar?: number; ring?: number }
+  | { kind: 'percent'; text: string; bar?: number; ring?: number; tone?: string }
   /* Stars: `value` whole ones of `outOf`, toned where the rule says; `text` says it in words. */
   | { kind: 'rating'; value: number; outOf: number; tone: string | null; text: string }
   | { kind: 'color'; hex: string; text: string }
@@ -448,6 +448,14 @@ export function dressFor(rule: DisplayRule | null | undefined, value: unknown): 
      said as the vocabulary says it. */
   /* A figure is a figure: its tone is the ink it is set in, nothing before it, so a column of amounts keeps one left
      edge. A neutral one is no tone at all ("$0" with a grey dot said nothing, and moved the figure off its label's edge). */
+  if (rule.format === 'percent' && (rule.bar || rule.ring) && safe && text.trim() !== '') {
+    const named = figureWord(rule, n);
+    if (named !== undefined) return { kind: 'word', text, label: named };
+    const said = formatPercent(n);
+    const fill = Math.max(0, Math.min(100, n));
+    const toned = tone && tone !== 'neutral' ? { tone } : {};
+    return rule.bar ? { kind: 'percent', text: said, bar: fill, ...toned } : { kind: 'percent', text: said, ring: fill, ...toned };
+  }
   const figured = tone
     ? !safe || text.trim() === ''
       ? false
@@ -491,12 +499,7 @@ export function dressFor(rule: DisplayRule | null | undefined, value: unknown): 
     return { kind: 'money', text: withUnit(moneyText(rule, typeof value === 'string' ? text : n), rule.unit), title: text };
   if (rule.format === 'percent' && safe) {
     const said = formatPercent(n);
-    const fill = Math.max(0, Math.min(100, n));
-    return rule.bar
-      ? { kind: 'percent', text: said, bar: fill }
-      : rule.ring
-        ? { kind: 'percent', text: said, ring: fill }
-        : { kind: 'percent', text: said };
+    return { kind: 'percent', text: said };
   }
   /* A unit with no format is a number's: a numeric value says "85,780 mi", and a text one stays itself. */
   if ((rule.format === 'number' || (rule.format === undefined && rule.unit)) && safe && text.trim() !== '')

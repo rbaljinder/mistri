@@ -217,9 +217,15 @@ export function TreeList({ table, spec, entry, interactive = true, label, refere
               aria-expanded={branch ? opened.has(node.id) : undefined}
               aria-selected={node === current}
               tabIndex={node === current ? 0 : -1}
-              className="tree-item"
-              style={{ paddingInlineStart: `${(node.depth - 1) * 20 + 4}px` }}
+              className={`tree-item${node.depth > 1 ? ' is-nested' : ''}`}
+              style={
+                {
+                  paddingInlineStart: `${(node.depth - 1) * 20 + 8}px`,
+                  '--tree-depth': node.depth - 1,
+                } as Record<string, string | number>
+              }
               onFocus={() => setActive(node.id)}
+              onClick={() => openIt(node)}
               data-key={bulkKey(table, node.key)}
             >
               <span
@@ -232,9 +238,7 @@ export function TreeList({ table, spec, entry, interactive = true, label, refere
               >
                 {branch && <Icon name={opened.has(node.id) ? 'caret-down' : 'caret-right'} size={12} />}
               </span>
-              <span className="tree-title" onClick={() => openIt(node)}>
-                {node.title}
-              </span>
+              <span className="tree-title">{node.title}</span>
               {said && said.value !== null && said.value !== undefined && said.value !== '' && (
                 <span className="tree-line">
                   <Value col={said.column} value={said.value} tableId={table.id} compact />

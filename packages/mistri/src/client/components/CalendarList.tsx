@@ -913,6 +913,45 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
     </table>
   );
 
+  const emptyPeriod = Boolean(answer.data && !answer.data.rows.length);
+  const baseFilter = splitQuery(entry.query).filter;
+  const nearest = useQuery({
+    queryKey: ['run', connection ?? '', 'calendar-nearest', table.id, baseFilter, spec.date, first],
+    enabled: emptyPeriod,
+    queryFn: async () => {
+      const forward = `${table.id} ${andQuery(baseFilter, `${spec.date} >= ${next}`)} sort ${spec.date} show ${spec.date}`;
+      const ahead = (await api('/api/run', {
+        q: forward,
+        limit: 1,
+        offset: 0,
+        count: 'none',
+        ...(connection ? ownedBy(connection) : {}),
+      })) as { rows?: Array<Record<string, unknown>> };
+      const aheadDay = ahead.rows?.[0]?.[spec.date];
+      if (aheadDay != null && String(aheadDay).slice(0, 10)) return String(aheadDay).slice(0, 10);
+      const backward = `${table.id} ${andQuery(baseFilter, `${spec.date} < ${first}`)} sort -${spec.date} show ${spec.date}`;
+      const behind = (await api('/api/run', {
+        q: backward,
+        limit: 1,
+        offset: 0,
+        count: 'none',
+        ...(connection ? ownedBy(connection) : {}),
+      })) as { rows?: Array<Record<string, unknown>> };
+      const behindDay = behind.rows?.[0]?.[spec.date];
+      return behindDay != null && String(behindDay).slice(0, 10) ? String(behindDay).slice(0, 10) : null;
+    },
+    staleTime: 30_000,
+  });
+  const jumpDay = emptyPeriod && nearest.data && /^\d{4}-\d{2}-\d{2}$/.test(nearest.data) ? nearest.data : null;
+  const jumpLabel = useMemo(() => {
+    if (!jumpDay) return null;
+    const target = at(jumpDay);
+    if (Number.isNaN(target.getTime())) return null;
+    return span === 'month'
+      ? new Intl.DateTimeFormat(locale, { month: 'long', year: 'numeric' }).format(target)
+      : new Intl.DateTimeFormat(locale, { month: 'short', day: 'numeric', year: 'numeric' }).format(target);
+  }, [jumpDay, locale, span]);
+
   /* A step back or on: a month, a week or a day. */
   const step = (way: -1 | 1) =>
     timed ? setPeriodDay((day) => addDays(day, way * (span === 'week' ? 7 : 1))) : setMonth((current) => addMonths(current, way));
@@ -944,14 +983,25 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
           </button>
         </div>
       </div>
-      {body}
       {answer.data && !answer.data.rows.length && (
         <p className="calendar-note">
-          {sayCopy(
-            span === 'week' ? 'nothingOnTheCalendarThisWeek' : span === 'day' ? 'nothingOnTheCalendarThisDay' : 'nothingOnTheCalendar',
+          <span>
+            {sayCopy(
+              span === 'week' ? 'nothingOnTheCalendarThisWeek' : span === 'day' ? 'nothingOnTheCalendarThisDay' : 'nothingOnTheCalendar',
+            )}
+          </span>
+          {jumpDay && jumpLabel && (
+            <button
+              type="button"
+              className="calendar-note-jump"
+              onClick={() => (timed ? setPeriodDay(jumpDay) : setMonth(monthStart(at(jumpDay))))}
+            >
+              {sayCopy('jumpToPeriod', { period: jumpLabel })}
+            </button>
           )}
         </p>
       )}
+      {body}
       {answer.data?.more && (
         <p className="calendar-note">
           {sayCopy(span === 'week' ? 'showingTheFirstThisWeek' : span === 'day' ? 'showingTheFirstThisDay' : 'showingTheFirstThisMonth', {

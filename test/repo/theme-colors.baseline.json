@@ -1247,7 +1247,7 @@
   },
   {
     "file": "packages/ui/src/styles/looks.css",
-    "context": "@scope ([data-look-buttons='raised']) to ([data-custom-theme], [data-look-buttons]) > [data-slot='button']:not([data-variant='quiet'], [data-variant='bare'])",
+    "context": "@scope ([data-look-buttons='raised']) to ([data-custom-theme], [data-look-buttons]) > :is([data-slot='button']:not([data-variant='quiet'], [data-variant='bare']), [data-slot='menu-trigger']:not([data-own], [data-kind]))",
     "property": "box-shadow",
     "value": "0 1px 0 light-dark(rgb(255 255 255 / 0.5), rgb(255 255 255 / 0.06)) inset,\n        0 1px 2px light-dark(rgb(23 23 26 / 0.12), rgb(0 0 0 / 0.5))",
     "reason": "shadow"

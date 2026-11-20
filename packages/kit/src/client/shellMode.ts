@@ -209,6 +209,8 @@ interface AppRoomSlots {
   Review: ComponentType<Record<string, never>> | null;
   /** A free-form page (FreePage.tsx), where a dashboard entry names one. */
   Page: ComponentType<{ entry?: PageEntry; dashboard: DashboardDef; page: NonNullable<DashboardDef['page']> }> | null;
+  /** A split's list before a record is picked: the list beside its empty detail pane (SplitRecordRoom.tsx). */
+  SplitList?: ComponentType<{ entry: { table: string; query: string; tab?: string; view?: string }; spec: ListSpec }> | null;
   /** A split's pick: its list kept beside the record (SplitRecordRoom.tsx). */
   SplitRecord: ComponentType<{ entry: RowEntry & { view?: string }; spec: ListSpec }> | null;
   /** A record put on paper (Document.tsx), where its address names one of its documents. */

@@ -14,11 +14,11 @@
   position: absolute; top: 16px; height: 24px; min-width: 6px; margin: 0; padding: 0 var(--space-2h); transform: translateY(-50%);
   display: flex; align-items: center; overflow: hidden; border-radius: min(4px, var(--radius)); cursor: pointer;
   /* Tinted rather than solid, so a group's bar can carry its title in the ink on any look; the done share the deeper tint. */
-  background: linear-gradient(to right, color-mix(in srgb, var(--chart-1, var(--accent)) 55%, var(--surface)) var(--done, 100%), color-mix(in srgb, var(--chart-1, var(--accent)) 22%, var(--surface)) var(--done, 100%));
-  border: 1px solid color-mix(in srgb, var(--chart-1, var(--accent)) 60%, transparent);
+  background: linear-gradient(to right, color-mix(in srgb, var(--gantt-color, var(--chart-1, var(--accent))) 55%, var(--surface)) var(--done, 100%), color-mix(in srgb, var(--gantt-color, var(--chart-1, var(--accent))) 22%, var(--surface)) var(--done, 100%));
+  border: 1px solid color-mix(in srgb, var(--gantt-color, var(--chart-1, var(--accent))) 60%, transparent);
 }
 @media (hover: hover) {
-  .gantt-bar:hover { border-color: var(--chart-1, var(--accent)); }
+  .gantt-bar:hover { border-color: var(--gantt-color, var(--chart-1, var(--accent))); }
 }
 .gantt-bar:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .gantt-bar:disabled { cursor: default; }
@@ -27,8 +27,13 @@
 .gantt-year { position: absolute; top: 2px; padding-inline-start: var(--space-2); font: 600 var(--text-xs) var(--sans); color: var(--ink); font-variant-numeric: tabular-nums; }
 /* A group is a band over its homes; the band holds the top of the room while its rows pass beneath it. */
 .gantt-band {
+  display: flex; align-items: center; gap: var(--space-2);
   position: sticky; top: var(--sticky-top, 0); z-index: 2; padding: var(--space-2h) var(--space-4) var(--space-2); background: var(--surface);
   border-bottom: 1px solid var(--line); font: 600 var(--text-sm)/1.3 var(--sans); color: var(--ink-muted);
+}
+.gantt-band::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%; flex: none;
+  background: var(--gantt-color, var(--chart-1, var(--accent)));
 }
 @media (max-width: 720px) {
   .gantt-name { white-space: normal; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: var(--text-sm); line-height: 1.25; padding-inline-start: var(--space-3); }

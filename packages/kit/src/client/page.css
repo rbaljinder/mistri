@@ -190,7 +190,9 @@
       border-left: 0;
       padding-left: 0;
     }
-    :where(.page-layout[data-layout], .dashboard-layout) > .page-aside > .page-section:first-child:not(:has(.page-headline, > .page-facts), .page-card-section) {
+    :where(.page-layout[data-layout], .dashboard-layout)
+      > .page-aside
+      > .page-section:first-child:not(:has(.page-headline, > .page-facts), .page-card-section) {
       border-top-style: solid;
       padding-top: var(--space-3h);
     }
@@ -757,7 +759,8 @@
   /* The record's toolbar: its usual next step filled, a few more quiet, and
    the rest — Delete last — in More. One height, so filled and quiet sit on
    one line. */
-  .page-action {
+  .page-action,
+  .page-actions-menu > [data-slot='menu-trigger'] {
     font-size: var(--text-sm);
     padding: var(--space-2) var(--space-4);
     min-height: var(--control-h-sm);
@@ -860,6 +863,7 @@
     }
     .page-head.has-record > .page-head-actions {
       margin-left: 0;
+      margin-top: var(--space-3);
       justify-content: flex-start;
     }
   }
@@ -972,10 +976,14 @@
    (style.css), and the pending dock, when it is up, stands over the bar. */
   @media (max-width: 600px) {
     /* The bar's height with its safe-area inset, one number for the bar and for the room's clearance under it. */
-    body.app-mode { --record-bar-h: calc(64px + env(safe-area-inset-bottom, 0px)); }
+    body.app-mode {
+      --record-bar-h: calc(64px + env(safe-area-inset-bottom, 0px));
+    }
     /* A record laid out in a grid (.page-layout) is not the sibling the dock's clearance (style.css) is set on, so
        its last section stood under the bar. */
-    body.app-mode .page-head.has-record.is-room:has(> .page-head-actions) + .page-layout { padding-bottom: var(--record-bar-h); }
+    body.app-mode .page-head.has-record.is-room:has(> .page-head-actions) + .page-layout {
+      padding-bottom: var(--record-bar-h);
+    }
     body.app-mode .page-head.has-record.is-room > .page-head-actions {
       position: fixed;
       z-index: 40;
@@ -1392,7 +1400,7 @@
     font: var(--text-base) var(--sans);
     border-radius: 0;
   }
-  .page-field .cell-edit-control :is([data-slot='select-trigger'],:is([data-slot='date-field'] > [data-slot='input'])) {
+  .page-field .cell-edit-control :is([data-slot='select-trigger'], :is([data-slot='date-field'] > [data-slot='input'])) {
     font: var(--text-base) var(--sans);
   }
   .pb-advanced {
@@ -1914,6 +1922,13 @@
   .timeline-scroll {
     max-height: min(60vh, 30rem);
     overflow-y: auto;
+  }
+  .timeline-scroll .timeline-day-label {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding-block: var(--space-1);
+    background: var(--surface);
   }
   /* A tinted message (an internal note) is a card in its column: its tone's wash, and an edge that says what it is. */
   .timeline-row.is-tinted {
@@ -2646,11 +2661,13 @@
     }
   }
   @media (prefers-reduced-motion: no-preference) {
-    .lightbox,[data-slot='dialog-backdrop'][data-for='lightbox'] {
+    .lightbox,
+    [data-slot='dialog-backdrop'][data-for='lightbox'] {
       transition: opacity var(--t-popover) var(--ease-out);
     }
     @starting-style {
-      .lightbox,[data-slot='dialog-backdrop'][data-for='lightbox'] {
+      .lightbox,
+      [data-slot='dialog-backdrop'][data-for='lightbox'] {
         opacity: 0;
       }
     }
@@ -3397,16 +3414,13 @@
     color: var(--ink-muted);
     font: var(--text-base)/1.45 var(--sans);
   }
-  .cards-summary-item + .cards-summary-item {
-    margin-inline-start: var(--space-5);
-  }
-  .cards-summary-item::before {
-    content: '·';
-    display: inline-block;
-    width: 15px;
-    margin-inline-start: -15px;
-    text-align: center;
+  .cards-summary-item + .cards-summary-item::before {
+    content: ' · ' / '';
     color: var(--ink-subtle);
+  }
+  .cards-summary .tone {
+    max-width: 100%;
+    vertical-align: bottom;
   }
   .cards-summary .num-value {
     font: inherit;
@@ -3817,7 +3831,7 @@
 }
 /* On a filled verb the faint ink is near the fill, unseen: the hint takes the button's own ink, whatever the look
    fills it with, and stays quieter than the verb by its size and face, never by opacity. */
-:is([data-slot='button'][data-variant='solid'],[data-slot='button'][data-variant='destructive']) .key-hint {
+:is([data-slot='button'][data-variant='solid'], [data-slot='button'][data-variant='destructive']) .key-hint {
   color: inherit;
   opacity: 1;
 }

@@ -222,7 +222,7 @@ export const Dressed = memo(function Dressed({ dress, compact = false }: { dress
     case 'percent':
       if (dress.ring !== undefined)
         return (
-          <span className="pct-ring-wrap" title={dress.text}>
+          <span className={`pct-ring-wrap${dress.tone ? ` pct-${dress.tone}` : ''}`} title={dress.text}>
             <svg className="pct-ring" viewBox="0 0 16 16" aria-hidden="true">
               <circle className="pct-ring-track" cx="8" cy="8" r="6" />
               <circle
@@ -239,7 +239,7 @@ export const Dressed = memo(function Dressed({ dress, compact = false }: { dress
         );
       if (dress.bar === undefined) return <span className="num-value">{dress.text}</span>;
       return (
-        <span className="pct-wrap" title={dress.text}>
+        <span className={`pct-wrap${dress.tone ? ` pct-${dress.tone}` : ''}`} title={dress.text}>
           <span className="pct-bar">
             <span className="pct-fill" style={{ width: `${dress.bar}%` }} />
           </span>

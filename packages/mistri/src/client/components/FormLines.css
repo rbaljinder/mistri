@@ -156,7 +156,7 @@
   }
 
   /* Narrower than a grid fits, the summary takes the width under Add line. */
-  @container (max-width: 34rem) {
+  @container (max-width: 40rem) {
     .form-lines-foot {
       flex-direction: column;
       align-items: stretch;
@@ -176,9 +176,7 @@
 /* A cell's box against the looks: every look dresses each input in a form as
    a 36px field with its edge, and a line's cells are a table's, so what they
    are is said in this layer, which a look does not reach — travelling with
-   the grid rather than in every first page. The box shows its edge where its
-   row is under the pointer and wears the house ring where it has the focus;
-   on a touch screen, with no pointer to show it, the edge is always there. */
+   the grid rather than in every first page. */
 @layer structure {
   /* The grid itself: the kit and every look pad and dress a table's cells, and these are a ledger's. */
   .form-lines-grid {
@@ -195,10 +193,10 @@
     width: 4.5rem;
   }
   .form-lines-grid :is(col.lines-col-money, col.lines-col-figure) {
-    width: var(--lines-figure);
+    width: 6.25rem;
   }
   .form-lines-grid col.lines-col-control {
-    width: 10rem;
+    width: 8.75rem;
   }
   .form-lines-grid col.lines-col-menu {
     width: var(--lines-menu);
@@ -218,7 +216,7 @@
     text-align: right;
   }
   .form-lines-grid td {
-    padding: var(--space-2) 0;
+    padding: var(--space-2) var(--space-1);
     vertical-align: middle;
     border-bottom: 1px solid var(--line);
   }
@@ -233,6 +231,7 @@
   }
   .form-lines-grid td.lines-handle,
   .form-lines-grid td.lines-menu {
+    padding-inline: 0;
     text-align: center;
   }
   .form-lines-grid .insert-missing {
@@ -248,7 +247,7 @@
   /* Narrower than a grid fits — a drawer, a phone — each line is a block of
      its own under a hairline: what it is and its menu across the top, its
      figures in a row under them, each with its column's name. */
-  @container (max-width: 34rem) {
+  @container (max-width: 40rem) {
     .form-lines-grid,
     .form-lines-grid tbody {
       display: block;
@@ -279,7 +278,7 @@
     .form-lines-grid td.lines-handle {
       position: absolute;
       left: 0;
-      top: 10px;
+      top: var(--space-2h);
     }
     /* What the line is takes the top row whole, beside its menu; the figures wrap under it. */
     .form-lines-grid td.lines-lead {
@@ -291,14 +290,18 @@
       order: 2;
       flex: none;
       width: 32px;
-      padding-top: var(--space-2);
+      padding-top: calc(15px + var(--space-1) + 2px);
     }
-    .form-lines-grid td:not(.lines-handle, .lines-lead, .lines-menu) {
+    .form-lines-grid td:not(.lines-handle, .lines-menu) {
       order: 3;
       flex: 1 1 0;
       min-width: 4.5rem;
     }
-    .form-lines-grid td:not(.lines-handle, .lines-lead, .lines-menu)::before {
+    .form-lines-grid td.lines-lead {
+      order: 1;
+      flex: 1 1 calc(100% - 44px);
+    }
+    .form-lines-grid td:not(.lines-handle, .lines-menu)::before {
       content: attr(data-label);
       display: block;
       margin: 0 9px var(--space-1);
@@ -326,9 +329,9 @@
     min-width: 0;
     min-height: 32px;
     box-sizing: border-box;
-    border: 1px solid transparent;
+    border: 1px solid var(--field-edge, var(--line-control));
     border-radius: var(--radius);
-    background: transparent;
+    background: var(--field, var(--surface));
   }
   .form-lines-grid .lines-box.lines-ref {
     gap: var(--space-3);
@@ -340,7 +343,7 @@
   }
   .form-lines-grid tr:hover .lines-box,
   .form-lines-grid .lines-box:focus-within {
-    border-color: var(--line-control);
+    border-color: color-mix(in oklab, var(--line-control) 70%, var(--ink));
   }
   .form-lines-grid .lines-box:focus-within {
     outline: var(--focus-width) solid var(--focus);
@@ -355,7 +358,7 @@
       border-color: var(--line-control);
     }
   }
-  .form-lines-grid .lines-box :is(.lines-input, .picker, .picker-input,[data-slot='select-trigger'], input) {
+  .form-lines-grid .lines-box :is(.lines-input, .picker, .picker-input, [data-slot='select-trigger'], input) {
     min-height: 0;
     margin: 0;
     border: 0;
@@ -366,14 +369,34 @@
     font: var(--text-base) var(--sans);
     line-height: 20px;
   }
-  .form-lines-grid .lines-box :is(.lines-input, .picker, .picker-input,[data-slot='select-trigger'], input):focus-visible,
+  .form-lines-grid .lines-box :is(.lines-input, .picker, .picker-input, [data-slot='select-trigger'], input):focus-visible,
   .form-lines-grid .lines-box .picker:focus-within {
     outline: none;
   }
-  .form-lines-grid .lines-box :is(.lines-input, .lines-control input,[data-slot='select-trigger']) {
+  .form-lines-grid .lines-box :is(.lines-input, .lines-control input, [data-slot='select-trigger']) {
     width: 100%;
     height: 30px;
     padding: 0 var(--space-3);
+  }
+  @media (pointer: coarse) {
+    .lines-grip {
+      position: relative;
+    }
+    .lines-grip::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+    .form-lines-grid .lines-box {
+      min-height: 44px;
+    }
+    .form-lines-grid .lines-box :is(.lines-input, .lines-control input, [data-slot='select-trigger'], .picker-input) {
+      height: 44px;
+    }
   }
   .form-lines-grid .lines-input.is-figure {
     text-align: right;

@@ -151,7 +151,7 @@ function look(): UiLook {
   const attribute = root().dataset.theme;
   const dark = attribute === 'dark' || (!attribute && window.matchMedia?.('(prefers-color-scheme: dark)').matches);
   const density = densityChoice() as UiLook['density'];
-  const id = root().dataset.visualTheme ?? 'workshop';
+  const id = root().dataset.visualTheme ?? 'lumen';
   return { look: id, preset: root().dataset.themePreset ?? id, mode: dark ? 'dark' : 'light', density };
 }
 

@@ -213,6 +213,23 @@
 .triage-card-foot > * { pointer-events: auto; }
 .triage-card.has-menu > .triage-card-foot { margin-inline-end: calc(var(--card-pad, var(--space-3)) - var(--space-7)); }
 .triage-card-next { max-width: 100%; }
+.triage-card .triage-card-next:not([data-variant='solid']) {
+  min-height: 24px;
+  padding: var(--space-1) var(--space-2h);
+  border-color: var(--line);
+  background: var(--raised);
+  color: var(--ink-muted);
+  font-size: var(--text-xs);
+  box-shadow: none;
+  translate: none;
+}
+@media (hover: hover) {
+  .triage-card .triage-card-next:not([data-variant='solid']):hover:not(:disabled) {
+    border-color: var(--line-strong);
+    background: var(--surface);
+    color: var(--ink);
+  }
+}
 .triage-card-fact.is-person { display: inline-flex; align-items: center; margin-inline-start: auto; }
 .triage-card-fact.is-person .avatar-text { display: none; }
 /* A New record in a lane: a quiet "+" at the head's end, the size a finger is promised. */

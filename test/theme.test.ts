@@ -350,9 +350,9 @@ test('contrast warnings also check colors inherited from a new theme base', () =
 test('the four built-in looks read as a sans interface with AA accents, and every one is an inheritable base', () => {
   assert.deepEqual(
     THEME_PRESETS.map((preset) => preset.id),
-    ['workshop', 'lumen', 'mono', 'sage', 'ledger', 'atelier', 'graphite', 'bloom'],
+    ['lumen', 'workshop', 'mono', 'sage', 'ledger', 'atelier', 'graphite', 'bloom'],
   );
-  assert.deepEqual([...THEME_BASES], ['workshop', 'lumen', 'mono', 'sage', 'ledger', 'atelier', 'graphite', 'bloom']);
+  assert.deepEqual([...THEME_BASES], ['lumen', 'workshop', 'mono', 'sage', 'ledger', 'atelier', 'graphite', 'bloom']);
   assert.equal(parseAppConfig({ name: 'Unchanged default', ...HOME }, 'app').ui.theme, undefined);
   for (const preset of THEME_PRESETS) {
     // The interface and its data are one sans, except Ledger's, whose data is a monospace (its figures line up down a
@@ -385,7 +385,7 @@ test('the four built-in looks read as a sans interface with AA accents, and ever
   assert.equal(inherited.light.accent, authored.light.accent);
   assert.throws(
     () => parseThemes([{ ...sample(), base: 'studio' as never }], 'app'),
-    /base must be one of workshop, lumen, mono, sage, ledger, atelier, graphite, bloom/,
+    /base must be one of lumen, workshop, mono, sage, ledger, atelier, graphite, bloom/,
   );
 });
 

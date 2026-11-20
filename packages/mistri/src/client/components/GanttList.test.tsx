@@ -25,6 +25,7 @@ const table: TableMeta = {
 };
 vi.mock('../../../../kit/src/client/core.js', () => ({
   api: mocks.api,
+  columnDisplay: () => null,
   openRecord: mocks.open,
   state: mocks.state,
   primaryKey,

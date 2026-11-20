@@ -784,7 +784,7 @@ export declare function useFormat(): {
   /** "in 3 days", "yesterday"; undefined for a value that is not a date. */
   relative(value: string): string | undefined;
 };
-/** The look the App wears for this reader, light or dark, and the density; redraws when any changes. `look` is `'tenant'` where a tenant's branding dresses the page; `preset` is then the App's theme it started from (`'workshop'`), and the look itself otherwise. */
+/** The look the App wears for this reader, light or dark, and the density; redraws when any changes. `look` is `'tenant'` where a tenant's branding dresses the page; `preset` is then the App's theme it started from (`'lumen'`), and the look itself otherwise. */
 export declare function useLook(): { look: string; preset: string; mode: 'light' | 'dark'; density: 'compact' | 'comfortable' | 'spacious' };
 /** Every design token a component may read — colors, faces, corners, type, motion — as `var(--accent)` in CSS or `useToken('--accent')` in script. `mistri check` warns about any other `var(--…)` a component does not declare itself. */
 export type Token =

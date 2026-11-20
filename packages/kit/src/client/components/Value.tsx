@@ -274,7 +274,7 @@ function PlatformValue({ col, value, tableId, compact = false, links = !compact,
   const link = tableId === undefined || !links ? null : linkFor(col?.name, value, rule, shellBody().classList.contains('app-mode'));
   if (link) return <ValueLink link={link} />;
   const dress = tableId === undefined ? null : dressFor(rule, value);
-  if (dress) return <Dressed dress={dress} compact={compact && !(wholeText && dress.kind === 'richText')} />;
+  if (dress) return <Dressed dress={dress} compact={compact && !(wholeText && (dress.kind === 'richText' || dress.kind === 'json'))} />;
   /* In an App a vocabulary's value is a word, as its chip says it ("On hold"
      for `on_hold`); the Workbench shows the data exactly. */
   return <Said col={col} value={value} compact={compact} app={shellBody().classList.contains('app-mode')} />;

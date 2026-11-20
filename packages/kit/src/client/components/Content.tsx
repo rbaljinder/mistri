@@ -23,7 +23,7 @@ import { Fragment, useLayoutEffect } from 'react';
 import { currentEntry, paintVersion, renderCrumbs, roomVersion } from '../core.js';
 import { shell } from '../shellMode.js';
 import { syncHash } from '../url.js';
-import { appListFor, type ListSpec } from './appListModel.js';
+import { appListFor, splitOf, type ListSpec } from './appListModel.js';
 import {
   ASSISTANT_PAGE,
   DIRECTORY_PAGE,
@@ -200,13 +200,16 @@ function ContentBody({ onHome }: { onHome: () => void }) {
 
 function Room({ entry }: { entry: (TableEntry | BreakdownEntry | PageEntry | RowEntry) & { kind: string } }) {
   if (entry.kind === 'table') {
-    const table = entry as TableEntry;
+    const table = entry as TableEntry & { view?: string };
     /* In app mode every table renders as an app list page — one of the
        App's views when it has one, a synthesized one (humanized name,
        derived filters) when a drill from a page lands outside them. Same
        entry, same URL; which room you are in decides the dress. */
-    const appList = shell().inApp() ? (appListFor(table.table, table.query) as ListSpec | null) : null;
-    if (appList) return <AppListRoom entry={table} spec={appList} />;
+    const appList = shell().inApp() ? (appListFor(table.table, table.query, table.view) as ListSpec | null) : null;
+    if (appList) {
+      const SplitList = splitOf(appList) ? shell().rooms.SplitList : null;
+      return SplitList ? <SplitList entry={table} spec={appList} /> : <AppListRoom entry={table} spec={appList} />;
+    }
     /* Saved filters sit above the view tabs and below the trail: they are a
        property of the table you are on, not of the walk that got you here. */
     return (

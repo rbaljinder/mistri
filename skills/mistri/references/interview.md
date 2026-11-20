@@ -52,7 +52,7 @@ Take a topic only when something in it is still open. Each bullet is one questio
 - A reader of the data outside the App (API, reports, exports)? (default: CSV export only)
 
 **6. Look and feel**
-- A built-in look, one of eight: Workshop (default, paper and ink, condensed capitals), Lumen (soft and modern), Mono (black and white, dense), Sage (warm, soft cards), Ledger (ruled columns of figures), Atelier (editorial, read more than worked), Graphite (a dense console) or Bloom (a friendly product)? And one of the twelve palettes, or a brand color? ([design-language.md](design-language.md) says which suits what.)
+- A built-in look, one of eight: Lumen (default, soft and modern), Workshop (paper and ink, condensed titles), Mono (black and white, dense), Sage (warm, soft cards), Ledger (ruled columns of figures), Atelier (editorial, read more than worked), Graphite (a dense console) or Bloom (a friendly product)? And one of the twelve palettes, or a brand color? ([design-language.md](design-language.md) says which suits what.)
 - A product or screenshot to echo? (default: none; a screenshot beats adjectives)
 - Density, brand color, logo? (default: comfortable, the look's own color, an icon from the App icons)
 - Dark mode, and phone use? (default: both work; say so only if phone is the main device)

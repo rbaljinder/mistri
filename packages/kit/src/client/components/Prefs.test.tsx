@@ -137,7 +137,7 @@ test('color mode applies each explicit choice once without changing other prefer
     expect(control).toHaveTextContent(label);
   }
   expect(set.colorMode.mock.calls).toEqual([['dark'], ['light'], ['system']]);
-  expect(screen.getByRole('button', { name: /^Visual theme\b/ })).toHaveTextContent('Workshop');
+  expect(screen.getByRole('button', { name: /^Visual theme\b/ })).toHaveTextContent('Lumen');
   expect(localStorage.getItem(VISUAL_THEME_KEY)).toBeNull();
   expect(set.density).not.toHaveBeenCalled();
   expect(set.typography).not.toHaveBeenCalled();
@@ -148,7 +148,7 @@ test('visual presets show swatches, persist immediately, and leave the other pre
   inApp();
   const user = userEvent.setup();
   render(<PrefsDialog onClose={() => {}} />);
-  expect(screen.getByRole('button', { name: /^Visual theme\b/ })).toHaveTextContent('Workshop');
+  expect(screen.getByRole('button', { name: /^Visual theme\b/ })).toHaveTextContent('Lumen');
   await user.click(screen.getByRole('button', { name: /^Visual theme\b/ }));
   const option = screen.getByRole('option', { name: 'Mono' });
   expect(option.querySelectorAll('[data-slot="swatches"] > span')).toHaveLength(3);

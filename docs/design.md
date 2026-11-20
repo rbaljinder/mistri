@@ -24,9 +24,9 @@ a pointer into it.
    exceptions).
 3. **Tokens only.** Every colour, radius, face, duration, space and text
    size is a custom property; a literal outside the tokens (`tokens.css`) and the looks'
-   presets is a bug (Tokens; Space and text). Eight looks dress Apps; the database browser wears none of them, only its own (Two dresses). Workshop is
-   the default, and draws paper on its frame only: its working surfaces are white, and capitals are for the
-   brand, not for headings and labels (Workshop's exceptions). Twelve palettes are the same twelve in every look
+   presets is a bug (Tokens; Space and text). Eight looks dress Apps; the database browser wears none of them, only its own (Two dresses). Lumen is
+   the default, with Inter and Manrope over a clean white surface; Workshop draws paper on its frame only, with white working surfaces and capitals for the
+   brand, not for headings and labels (Lumen's exceptions, Workshop's exceptions). Twelve palettes are the same twelve in every look
    (Palettes).
 4. **The cascade is layered.** A later layer wins by order, never by
    specificity; layout no look may move lives in `structure.css` (The cascade).
@@ -139,8 +139,8 @@ root with no kit look (`:root:not([data-visual-theme])`) and it stands in
 stylesheet and in no App's. It replaced the old native dress (warm paper, the
 green accent, the code face in chrome and data alike, tracked capitals on
 labels), which the reader of a database found louder than the values it
-named. The eight looks (Workshop, the default an App wears when neither it nor
-its reader names one, then Lumen, Mono, Sage, Ledger, Atelier, Graphite and Bloom, which an App opts into; an App
+named. The eight looks (Lumen, the default an App wears when neither it nor
+its reader names one, then Workshop, Mono, Sage, Ledger, Atelier, Graphite and Bloom, which an App opts into; an App
 may also define its own with `defineTheme`; `visualThemes.css`,
 `themeFamilies.css`) dress Apps only: every one of
 their rules keys on `data-visual-theme`, which the browser carries only

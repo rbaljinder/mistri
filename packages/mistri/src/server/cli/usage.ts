@@ -429,7 +429,7 @@ Looking at an App — its pages as PNG files, for the agent that built it:
   A record under any list over its table opens at the table's canonical address
   (the resource's view, else the first plain list in menu order); a note says which.
   A public form's page, /{app}/form/{view}, is opened signed out, as a visitor sees it.
-      --theme <id|all>  with shot or grade: a built-in look (workshop, lumen,
+      --theme <id|all>  with shot or grade: a built-in look (lumen, workshop,
                       mono, sage, ledger) or one of the App's own themes instead of the
                       one it wears; with shot, all shoots every built-in
                       look, then the App's. The menu stands where that
@@ -579,7 +579,7 @@ A theme as it is worn — every color, recipe, type and shape after extends:
 
   mistri theme show <look|theme-id|.> [--app <dir>] [--diff <look|theme-id>] [--json]
 
-  A built-in look (workshop, lumen, mono, sage, ledger, atelier, graphite,
+  A built-in look (lumen, workshop, mono, sage, ledger, atelier, graphite,
   bloom), or a theme of the App in --app (else
   the current directory); . is the one the App wears. Every color in light
   and dark and each palette's changes, every recipe, the type and the shape,

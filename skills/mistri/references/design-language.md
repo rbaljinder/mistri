@@ -12,8 +12,8 @@ Write `ui.theme` with the look and a palette, an accent or a theme with `brand`:
 
 | The App is | Look | Example |
 | --- | --- | --- |
-| Operations, field work, a desk, anything run from a dashboard home | `preset: 'workshop'` (the default) | `mistri docs looks` |
-| A polished workspace product: sales, a client-facing desk | `preset: 'lumen'` | [lintel/app.ts:177](../../../examples/apps/lintel/app.ts#L177) |
+| A polished workspace product: SaaS, sales, support, a client-facing desk | `preset: 'lumen'` (the default) | [lintel/app.ts:177](../../../examples/apps/lintel/app.ts#L177) |
+| Field work, physical dispatch, trade operations | `preset: 'workshop'` | `mistri docs looks` |
 | Dense back office: ledgers, admin tables, read in rows all day | `preset: 'mono'` | `mistri docs looks` |
 | People, care, scheduling: soft cards, a calmer page | `preset: 'sage'` | `mistri docs looks` |
 | Books and figures kept in ruled columns | `preset: 'ledger'` | `mistri docs looks` |

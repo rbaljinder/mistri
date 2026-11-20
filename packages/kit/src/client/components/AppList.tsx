@@ -19,6 +19,7 @@
  * the list's question as text, so opening one is the ordinary list address.
  */
 import { filterLabel } from '@mistriwork/engine/shared/listFilters.js';
+import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
 import { BoardNewForm, BoardTotal } from './boardNew.js';
 import { useMessageLanguage } from './useMessageLanguage.js';
 import { createPortal } from 'react-dom';
@@ -28,7 +29,6 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, columnLabel, labelPath, pageSize, recordLabel, state as walk, toast } from '../core.js';
 import { say } from '../copy/lists/components/AppList.js';
-import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
 
 /* The walk's state, with the field core.js's JSDoc does not declare. */
 const state = walk as typeof walk & { activeConnection?: string | null };

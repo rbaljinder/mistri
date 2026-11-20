@@ -726,10 +726,11 @@ function DateFacet({ box, tail, table, set, onEnter, more }: FacetProps) {
 }
 
 /** The shape a plain column's facet takes, judged once from its values over the view's standing rows. */
-function useFacetShape(table: TableMeta, column: string, standing: string, numeric: boolean, bare = false) {
+function useFacetShape(table: TableMeta, column: string, standing: string, numeric: boolean, bare = false, enabled = true) {
   const text = facetShapeText(table.id, column, standing);
   return useQuery<AutoShape>({
     queryKey: ['run', state.activeConnection ?? '', 'facet-shape', text, bare],
+    enabled,
     queryFn: async () => {
       const data = (await batchedBreakdown({ text, limit: MOST + 1 })) as { rows?: unknown[]; errors?: unknown[] };
       if (data.errors?.length) throw new Error(say('couldNotCountTheValues'));
@@ -743,10 +744,20 @@ function useFacetShape(table: TableMeta, column: string, standing: string, numer
   });
 }
 
+function continuousNumericColumn(table: TableMeta, box: Box, unit?: FacetUnit): boolean {
+  if (!numericColumn(box)) return false;
+  const rule = columnDisplay(table.id, box.column) as DisplayRule | null;
+  if (rule?.format === 'money' || rule?.format === 'percent' || Boolean(rule?.unit)) return true;
+  if (unit?.currency || unit?.unit) return true;
+  return /^(?:real|float|double|numeric|decimal)\b/i.test(box.meta?.type ?? '');
+}
+
 function AutoFacet(props: FacetProps & { unit?: FacetUnit; bare?: boolean }) {
-  const { box, tail, table, standing, set, more, bare } = props;
+  const { box, tail, table, standing, set, more, bare, unit } = props;
   const numeric = numericColumn(box);
-  const shape = useFacetShape(table, box.column, standing, numeric, bare);
+  const continuous = continuousNumericColumn(table, box, unit);
+  const shape = useFacetShape(table, box.column, standing, numeric, bare, !continuous);
+  if (continuous) return <RangeFacet {...props} />;
   const settled = shape.isError ? (numeric ? 'range' : 'text') : shape.data;
   /* Until the shape is known the facet is its name alone — never a box that
      turns into a list under the reader's pointer. */

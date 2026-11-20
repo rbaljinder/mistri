@@ -24,4 +24,5 @@ export const say = defineMessages({
   nothingOnTheCalendarThisDay: 'Nothing on the calendar this day.',
   showingTheFirstThisWeek: 'Showing the first {max} this week; narrow the list to see the rest.',
   showingTheFirstThisDay: 'Showing the first {max} this day; narrow the list to see the rest.',
+  jumpToPeriod: 'Jump to {period}',
 });

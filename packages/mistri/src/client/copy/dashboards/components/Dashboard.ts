@@ -14,7 +14,6 @@ export const say = defineMessages({
   ofWholeSaid: '{figure} of {whole}, {percent} percent',
   theTimeWindowAbove: 'The time window above does not change this figure.',
   fixedWindow: 'Right now',
-  allTime: 'All time',
   noToCount: 'No {table} to count.',
   openTableWhereBy: 'Open {table} where {by} = {key}',
   noToDraw: 'No {table} to draw.',

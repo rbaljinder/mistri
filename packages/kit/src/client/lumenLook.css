@@ -208,10 +208,11 @@
      tint; the eyebrow is a word in the accent, not a chip. A tinted, ruled card at the head of the page was the
      loudest thing on it, louder than the figures it introduced. A picture keeps its corner. */
   :root[data-look-banner='plain'] .page-section.dash-banner {
-    padding: 0 0 var(--space-2);
+    padding: var(--space-3h) var(--space-4h);
     border: 0;
-    border-radius: 0;
-    background: none;
+    border-inline-start: 3px solid var(--accent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--raised) 65%, transparent);
   }
   :root[data-look-banner='plain'] .dashboard-note-picture {
     overflow: hidden;
@@ -1471,7 +1472,7 @@
     font: 500 var(--text-sm)/1.4 var(--sans);
     color: var(--ink-muted);
   }
-  :root[data-look-stat='divided'] .page-field-summary .page-field > dd {
+  :root[data-look-stat='divided'] .page-field-summary .page-field > dd:has(.num-value, .tone-figure) {
     font-size: var(--text-xl);
     font-weight: 600;
     letter-spacing: -0.012em;
@@ -1510,6 +1511,14 @@
       border-radius: var(--radius-lg, var(--radius));
       box-shadow: none;
       background: var(--surface);
+    }
+  }
+  @media (max-width: 380px) {
+    :root[data-look-stat='divided'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field {
+      padding-inline: var(--space-3h);
+    }
+    :root[data-look-stat='divided'] .page-field-summary .page-field > dd:has(.num-value, .tone-figure) {
+      font-size: var(--text-lg);
     }
   }
   @container record-host (max-width: 600px) {
@@ -1967,7 +1976,7 @@
   }
   /* A strip's figure and a record's leading figures are in the heading's face (Manrope, manropeFace.css): the
      figure is the page's largest word after its title, and the two read as one hand. A table's figures keep theirs. */
-  :root[data-look-stat='divided'] :is(.dash-strip .home-card-value, .page-field-summary .page-field > dd) {
+  :root[data-look-stat='divided'] :is(.dash-strip .home-card-value, .page-field-summary .page-field > dd:has(.num-value, .tone-figure)) {
     font-family: var(--heading-font, var(--sans));
     font-weight: 700;
     letter-spacing: -0.02em;

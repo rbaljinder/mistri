@@ -543,7 +543,7 @@ html:root[data-theme-style] .record-presentation { margin-inline-start: auto; }
     border-radius: var(--radius-lg);
     background: var(--surface);
   }
-  :root[data-look-stat='framed'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field:not(.page-field-prose) > dd {
+  :root[data-look-stat='framed'] body.app-mode:not(.public-visitor) .page-field-summary > .page-field > dd:has(.num-value, .tone-figure) {
     font-size: var(--text-xl);
     font-weight: 600;
     letter-spacing: -0.012em;

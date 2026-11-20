@@ -490,7 +490,6 @@ export function ActionBar({
       {!menuOnly && (folded.length > 0 || menuTail || revoking.item) && (
         <DropMenu
           className="page-actions-menu"
-          triggerClassName="ghost page-action"
           triggerTitle={say('moreActionsForThisRecord')}
           // "More" alone is the app menu's name; this one says whose it is.
           triggerLabel={say('moreActions')}

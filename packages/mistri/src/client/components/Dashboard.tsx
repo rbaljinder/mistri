@@ -352,9 +352,6 @@ interface MetricProps {
   period?: ReactNode;
   /** The reader has picked a window on this dashboard: a card it does not move says so. */
   windowed?: boolean;
-  /** A card beside it in the row says the window it is over: a card with none says it is the present, so
-      the row reads evenly rather than one figure standing with nothing under it. */
-  dated?: boolean;
   /** Home keeps its own click and its own way of saying what went wrong. */
   onOpen?: () => void;
   onErrorClick?: () => void;
@@ -365,14 +362,7 @@ interface MetricProps {
  * given. The app home's cards and a dashboard's metrics are this same
  * card. A card carrying a resolution `error` shows the honest dash.
  */
-export const Metric = memo(function Metric({
-  section,
-  windowed: offered = false,
-  dated = false,
-  period,
-  onOpen,
-  onErrorClick,
-}: MetricProps) {
+export const Metric = memo(function Metric({ section, windowed: offered = false, period, onOpen, onErrorClick }: MetricProps) {
   const label = section.title ?? untitled(section);
   const windowNote = section.windowNote;
   const live = !section.error;
@@ -589,10 +579,6 @@ export const Metric = memo(function Metric({
         <span className="dash-fixed" title={sayCopy('theTimeWindowAbove')}>
           {sayCopy('fixedWindow')}
         </span>
-      )}
-      {/* A card over a clock with no window counts every time; one with no clock counts what stands now. */}
-      {dated && !offered && !windowNote && !section.error && !metered && !(saysOwnTime(section.query) && !section.over) && (
-        <span className="dash-fixed">{sayCopy(section.over ? 'allTime' : 'fixedWindow')}</span>
       )}
       {/* The window the author set, said under the figure rather than wrapped into its label (metricWindow). */}
       {windowNote && !section.error && <span className="dash-fixed dash-window">{windowNote}</span>}
@@ -838,9 +824,9 @@ const StepCards = memo(function StepCards({ section }: { section: Section }) {
   const steps = closed.length < all.length ? all.filter((key) => !finals.has(String(key))) : all;
   const ended = steps === all ? [] : closed;
   if (data.data && !steps.length) return section.emptyMode === 'hide' ? <LeaveOut /> : <Nothing text={sayCopy('nothingToCountYet')} />;
-  // Rows of four or fewer, as even as the count allows (eight steps are two rows of four, not six and two): the
-  // columns are named here so a step that starts a row is known to the looks that part the cells with hairlines.
-  const cols = steps.length <= 4 ? Math.max(steps.length, 1) : Math.ceil(steps.length / Math.ceil(steps.length / 4));
+  // Rows of six or fewer, as even as the count allows (eight steps are two rows of four, five or six stay on one row):
+  // the columns are named here so a step that starts a row is known to the looks that part the cells with hairlines.
+  const cols = steps.length <= 6 ? Math.max(steps.length, 1) : Math.ceil(steps.length / Math.ceil(steps.length / 6));
   return (
     <>
       <ol
@@ -1045,7 +1031,7 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
             ? (key) => ruleSays(columnDisplay(section.table ?? '', firstKey) as DisplayRule | null, key).tone
             : undefined
         }
-        sayLegend={stacked ? (totals) => legendSayer(section, totals) : undefined}
+        sayLegend={stacked || donut ? (totals) => legendSayer(section, totals) : undefined}
         timed={
           stacked &&
           (/\s/.test(firstKey) ||
@@ -1827,15 +1813,6 @@ const Sections = memo(function Sections({
         k++;
       }
     }
-    /* The rows of metrics in which some card is over a time (see MetricProps.dated), by each card's index. */
-    const dated = new Set<number>();
-    for (let start = 0; start < there.length; start++) {
-      if (there[start]!.kind !== 'metric') continue;
-      let end = start;
-      while (end < there.length && there[end]!.kind === 'metric') end++;
-      if (there.slice(start, end).some((card) => card.windowNote)) for (let k = start; k < end; k++) dated.add(indices[k]!);
-      start = end;
-    }
     indices.forEach((i) => {
       const section = resolved[i]!;
       const current = sectionPeriod(section, periods);
@@ -1859,7 +1836,6 @@ const Sections = memo(function Sections({
               section={section}
               period={period}
               windowed={Boolean(dashboard.windows?.length) && windowNow !== null && !section.windows}
-              dated={dated.has(i)}
             />
           </ErrorBoundary>,
         );
@@ -2153,6 +2129,19 @@ export function Dashboard({
   }
   const lead = firstRun && run.stage === 'started' ? <FirstRun section={firstRun} done={run.done} fresh={false} /> : null;
   dashboard = firstRun ? { ...dashboard, sections: dashboard.sections.filter((section) => section !== firstRun) } : dashboard;
+  const [first, ...rest] = dashboard.sections;
+  const top = first?.kind === 'note' && first.variant === 'banner' ? first : undefined;
+  const areaLead = Boolean(
+    top?.area &&
+    dashboard.areas?.[0]
+      ?.trim()
+      .split(/\s+/)
+      .every((c) => c === top.area) &&
+    dashboard.areas.slice(1).every((r) => !r.trim().split(/\s+/).includes(top.area!)) &&
+    rest.every((s) => s.area !== top.area),
+  );
+  const bannerLead = top && (!dashboard.areas?.length || areaLead) ? top : undefined;
+  if (bannerLead) dashboard = { ...dashboard, sections: rest, ...(areaLead ? { areas: dashboard.areas!.slice(1) } : {}) };
   const onAllTime = () => {
     setWindow(null);
     onWindow?.(null);
@@ -2165,6 +2154,20 @@ export function Dashboard({
     <ProblemScopeProvider>
       <div>
         {lead && <div className="page-body dash-body">{lead}</div>}
+        {bannerLead && (
+          <div className="page-body dash-body">
+            <Sections
+              dashboard={{ ...dashboard, areas: undefined }}
+              sections={[bannerLead]}
+              windowNow={windowNow}
+              picks={picks}
+              periods={periods}
+              onPeriod={onPeriod}
+              onAllTime={onAllTime}
+              served={served}
+            />
+          </div>
+        )}
         {controls && (
           <div className="dash-controls">
             {windowMoves && dashboard.windows?.length ? (

@@ -20,8 +20,11 @@ const h = vi.hoisted(() => ({
   actions: {} as Record<string, { label: string; bulk?: boolean }>,
 }));
 vi.mock('../../../../kit/src/client/core.js', () => ({
+  api: vi.fn(),
   findTable: () => undefined,
   go: h.go,
+  labelPath: () => undefined,
+  rowLabel: () => '',
   rowView: (table: string, key: unknown, label: string) => ({ table, key, label }),
   state: { activeConnection: 'demo' },
   toast: h.toast,
@@ -34,7 +37,12 @@ vi.mock('../../../../kit/src/client/components/Notes.js', () => ({
   ),
 }));
 vi.mock('../../../../kit/src/client/components/crumbSlot.js', () => ({ useCrumbSlots: () => ({}) }));
-vi.mock('../../../../kit/src/client/locale.js', () => ({ formatDateTime: (at: string) => at }));
+vi.mock('../../../../kit/src/client/locale.js', () => ({
+  defaultCurrency: () => 'USD',
+  formatDateTime: (at: string) => at,
+  formatMoney: (v: unknown) => `$${v}`,
+  formatNumber: (v: unknown) => String(v),
+}));
 vi.mock('../appState.js', () => ({ activeApp: () => ({ review: true }) }));
 vi.mock('./sdk/commands.js', () => ({
   actionOf: (command: string) => h.actions[command],

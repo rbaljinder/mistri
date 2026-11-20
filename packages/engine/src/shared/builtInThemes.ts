@@ -15,6 +15,147 @@ function p(values: string): ThemePalette {
 
 export const THEME_PRESETS: readonly ThemeDefinition[] = [
   {
+    "id": "lumen",
+    "label": "Lumen",
+    "light": p("#ffffff #ffffff #f5f4f2 #ebe8e4 #8f8a83 #8f8a83 #1c1a17 #5c5852 #726c64 #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - #127a40 #a65308 #c52a2a #1c6c7d #fbfaf9 #1c1a17 #5c5852 #ebe8e4 #2d4fd6 - - #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0 #a3510b #94a3b8 #ebe8e4 #ebe8e4 1px - #1c1a17 #ffffff"),
+    "dark": p("#121110 #161514 #201f1d #2d2b27 #726d65 #726d65 #eeece8 #b8b3ab #9f9a92 #8aa1ff #1d2547 #91a8ff #5a73d6 - - #4ade80 #fbbf24 #f87171 #1cc2e0 #141312 #eeece8 #aaa59d #262422 #91a8ff - - #4369f0 #12a678 #9a78ec #c88317 #e0559b #1597b9 #d26b3b #6b7694 #2d2b27 #2d2b27 1px - #eeece8 #121110"),
+    "palettes": [
+      {
+        "id": "crimson",
+        "label": "Crimson",
+        "light": p("- - - - - - - - - #b42318 #fdecea #b42318 #d9534a - - - - - #2d4fd6 - - - - #b42318 - - #d63a32 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0"),
+        "dark": p("- - - - - - - - - #ff8f85 #3d1715 #ffaca5 #e06158 - - - - - #91a8ff - - - - #ffaca5 - - #e5534b #3559e6 - #12a678 #1597b9 #e0559b #c88317")
+      },
+      {
+        "id": "safety",
+        "label": "Safety orange",
+        "light": p("- - - - - - - - - #b33d0b #fdeee4 #aa3600 #d4612a - - - - - #2d4fd6 - - - - #aa3600 - - #e8691f #2557e0 #9a6cf7 #0e9a6c #0e8fb0 #e0428a"),
+        "dark": p("- - - - - - - - - #ff9d66 #3b2112 #ffb88f #d8743a - - - - - #91a8ff - - - - #ffb88f - - #f07a32 #3559e6 - #12a678 #1597b9 #e0559b #c88317")
+      },
+      {
+        "id": "amber",
+        "label": "Amber",
+        "light": p("- - - - - - - - - #875a00 #fbf2dc #875a00 #b57a33 - - - - - #2d4fd6 - - - - #875a00 - - #d97706 #2557e0 #9a6cf7 #0e9a6c #0e8fb0 #e0428a"),
+        "dark": p("- - - - - - - - - #f4b24a #3a2a10 #fbcf86 #b07d2d - - - - - #91a8ff - - - - #fbcf86 - - #c88317 #3559e6 - #12a678 #1597b9 #e0559b")
+      },
+      {
+        "id": "moss",
+        "label": "Moss",
+        "light": p("- - - - - - - - - #436e10 #eef4e2 #436e10 #638f2a - - - - - #2d4fd6 - - - - #436e10 - - #6b9e1f #2557e0 #9a6cf7"),
+        "dark": p("- - - - - - - - - #a6d468 #232f15 #bfe28f #7aa743 - - - - - #91a8ff - - - - #bfe28f - - #8cbf45 #3559e6")
+      },
+      {
+        "id": "emerald",
+        "label": "Emerald",
+        "light": p("- - - - - - - - - #08734f #e4f6ed #08734f #36966f - - - - - #2d4fd6 - - - - #08734f - - #0e9a6c #2557e0 #9a6cf7"),
+        "dark": p("- - - - - - - - - #4ad6a0 #0f3529 #7ee6bd #279771 - - - - - #91a8ff - - - - #7ee6bd - - #12a678 #3559e6")
+      },
+      {
+        "id": "teal",
+        "label": "Teal",
+        "light": p("- - - - - - - - - #0b6f86 #e3f5f8 #00687e #3c90a4 - - - - - #684fa2 - - - - #00687e - - #0e8fb0 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
+        "dark": p("- - - - - - - - - #4cc6db #0f3540 #79d6e6 #2a8a9c - - - - - #91a8ff - - - - #79d6e6 - - #0c8ab0 #3559e6 - #12a678 #c88317 #e0559b")
+      },
+      {
+        "id": "cobalt",
+        "label": "Cobalt",
+        "light": p("-"),
+        "dark": p("-")
+      },
+      {
+        "id": "violet",
+        "label": "Violet",
+        "light": p("- - - - - - - - - #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - #00728f - - - - #6534d8 - - #9a6cf7 #2557e0"),
+        "dark": p("- - - - - - - - - #ad91ff #2a2154 #bea8ff #7c63cf - - - - - - - - - - #bea8ff - - #9a78ec #3559e6 #12a678")
+      },
+      {
+        "id": "plum",
+        "label": "Plum",
+        "light": p("- - - - - - - - - #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - #2d4fd6 - - - - #8a1f8f - - #b847c0 #0e9a6c #2557e0"),
+        "dark": p("- - - - - - - - - #e28cea #3a1840 #edaef2 #b366bb - - - - - #91a8ff - - - - #edaef2 - - #d062d8 #3559e6 - #12a678 #c88317")
+      },
+      {
+        "id": "rose",
+        "label": "Rose",
+        "light": p("- - - - - - - - - #b4185a #fdebf2 #b4185a #d0608f - - - - - #2d4fd6 - - - - #b4185a - - #e0428a #2557e0 #9a6cf7 #0e9a6c #d97706"),
+        "dark": p("- - - - - - - - - #f57ab9 #3e1631 #f9a6cf #bd5a8f - - - - - #91a8ff - - - - #f9a6cf - - #e0559b #3559e6 - #12a678 #c88317")
+      },
+      {
+        "id": "slate",
+        "label": "Slate",
+        "light": p("- - - - - - - - - #3f5670 #ebeff4 #3f5670 #6e8399 - - - - - #00776b - - - - #3f5670 - - #5f7690 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
+        "dark": p("- - - - - - - - - #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - - - - #1bc8b8 - - - - #c2d0e1 - - #8a9fba #3559e6 - #12a678 #c88317 #e0559b")
+      },
+      {
+        "id": "ink",
+        "label": "Ink",
+        "light": p("- - - - - - - - - #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - #2d4fd6 - - - - #1c1a17 - - #2b2620 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0"),
+        "dark": p("- - - - - - - - - #eeece8 #2a2826 #eeece8 #9f9a92 - - - - - #91a8ff - - - - #eeece8 - - #d9d0c0 #3559e6 - #12a678 #1597b9 #e0559b")
+      }
+    ],
+    "defaultPalette": "cobalt",
+    "fonts": {
+      "ui": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "data": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "heading": "Manrope, \"Manrope Fallback\", Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
+    },
+    "radius": {
+      "control": "8px",
+      "field": "8px",
+      "pill": "999px"
+    },
+    "recipes": {
+      "nav": "pill",
+      "bar": "airy",
+      "tabs": "underline",
+      "windows": "lifted",
+      "stat": "divided",
+      "section": "open",
+      "fields": "rail",
+      "table": "quiet",
+      "status": "quiet",
+      "board": "strip",
+      "chart": "line",
+      "buttons": "raised",
+      "links": "plain",
+      "rules": "hairline",
+      "avatar": "round",
+      "workflow": "markers",
+      "banner": "plain",
+      "steps": "strip",
+      "lanes": "tint",
+      "header": "plain",
+      "pane": "inset",
+      "filters": "quiet",
+      "required": "star",
+      "formStep": "plain",
+      "actionBar": "plain"
+    },
+    "elevation": "raised",
+    "type": {
+      "roles": {
+        "title": {
+          "size": "28px",
+          "weight": 700,
+          "tracking": "-0.02em"
+        },
+        "heading": {
+          "size": "24px",
+          "weight": 700,
+          "tracking": "-0.018em"
+        },
+        "section": {
+          "size": "16px",
+          "weight": 600,
+          "tracking": "-0.01em"
+        }
+      }
+    },
+    "density": "compact",
+    "base": "lumen"
+  },
+  {
     "id": "workshop",
     "label": "Workshop",
     "light": p("#fbfaf7 #ffffff #f2ede3 #e6e1d8 #8b8274 #7d7466 #1b1813 #4f483d #5f574b #f26a1b #e7dfd0 #aa3600 #c9530b #1b1813 #1b1813 #106b38 #934a06 #c52a2a #2f5578 #f2ede3 #1b1813 #4f483d #d8cfbe #aa3600 #e3ded4 #1b1813 #e8691f #2b2620 #9a6cf7 #0e9a6c #0e8fb0 #e0428a #a3510b #94a3b8 #e6e1d8 #e6e1d8 1px - #f26a1b #1b1813 #3a3020"),
@@ -196,147 +337,6 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       }
     },
     "base": "workshop"
-  },
-  {
-    "id": "lumen",
-    "label": "Lumen",
-    "light": p("#ffffff #ffffff #f5f4f2 #ebe8e4 #8f8a83 #8f8a83 #1c1a17 #5c5852 #726c64 #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - #127a40 #a65308 #c52a2a #1c6c7d #fbfaf9 #1c1a17 #5c5852 #ebe8e4 #2d4fd6 - - #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0 #a3510b #94a3b8 #ebe8e4 #ebe8e4 1px - #1c1a17 #ffffff"),
-    "dark": p("#121110 #161514 #201f1d #2d2b27 #726d65 #726d65 #eeece8 #b8b3ab #9f9a92 #8aa1ff #1d2547 #91a8ff #5a73d6 - - #4ade80 #fbbf24 #f87171 #1cc2e0 #141312 #eeece8 #aaa59d #262422 #91a8ff - - #4369f0 #12a678 #9a78ec #c88317 #e0559b #1597b9 #d26b3b #6b7694 #2d2b27 #2d2b27 1px - #eeece8 #121110"),
-    "palettes": [
-      {
-        "id": "crimson",
-        "label": "Crimson",
-        "light": p("- - - - - - - - - #b42318 #fdecea #b42318 #d9534a - - - - - #2d4fd6 - - - - #b42318 - - #d63a32 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0"),
-        "dark": p("- - - - - - - - - #ff8f85 #3d1715 #ffaca5 #e06158 - - - - - #91a8ff - - - - #ffaca5 - - #e5534b #3559e6 - #12a678 #1597b9 #e0559b #c88317")
-      },
-      {
-        "id": "safety",
-        "label": "Safety orange",
-        "light": p("- - - - - - - - - #b33d0b #fdeee4 #aa3600 #d4612a - - - - - #2d4fd6 - - - - #aa3600 - - #e8691f #2557e0 #9a6cf7 #0e9a6c #0e8fb0 #e0428a"),
-        "dark": p("- - - - - - - - - #ff9d66 #3b2112 #ffb88f #d8743a - - - - - #91a8ff - - - - #ffb88f - - #f07a32 #3559e6 - #12a678 #1597b9 #e0559b #c88317")
-      },
-      {
-        "id": "amber",
-        "label": "Amber",
-        "light": p("- - - - - - - - - #875a00 #fbf2dc #875a00 #b57a33 - - - - - #2d4fd6 - - - - #875a00 - - #d97706 #2557e0 #9a6cf7 #0e9a6c #0e8fb0 #e0428a"),
-        "dark": p("- - - - - - - - - #f4b24a #3a2a10 #fbcf86 #b07d2d - - - - - #91a8ff - - - - #fbcf86 - - #c88317 #3559e6 - #12a678 #1597b9 #e0559b")
-      },
-      {
-        "id": "moss",
-        "label": "Moss",
-        "light": p("- - - - - - - - - #436e10 #eef4e2 #436e10 #638f2a - - - - - #2d4fd6 - - - - #436e10 - - #6b9e1f #2557e0 #9a6cf7"),
-        "dark": p("- - - - - - - - - #a6d468 #232f15 #bfe28f #7aa743 - - - - - #91a8ff - - - - #bfe28f - - #8cbf45 #3559e6")
-      },
-      {
-        "id": "emerald",
-        "label": "Emerald",
-        "light": p("- - - - - - - - - #08734f #e4f6ed #08734f #36966f - - - - - #2d4fd6 - - - - #08734f - - #0e9a6c #2557e0 #9a6cf7"),
-        "dark": p("- - - - - - - - - #4ad6a0 #0f3529 #7ee6bd #279771 - - - - - #91a8ff - - - - #7ee6bd - - #12a678 #3559e6")
-      },
-      {
-        "id": "teal",
-        "label": "Teal",
-        "light": p("- - - - - - - - - #0b6f86 #e3f5f8 #00687e #3c90a4 - - - - - #684fa2 - - - - #00687e - - #0e8fb0 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
-        "dark": p("- - - - - - - - - #4cc6db #0f3540 #79d6e6 #2a8a9c - - - - - #91a8ff - - - - #79d6e6 - - #0c8ab0 #3559e6 - #12a678 #c88317 #e0559b")
-      },
-      {
-        "id": "cobalt",
-        "label": "Cobalt",
-        "light": p("-"),
-        "dark": p("-")
-      },
-      {
-        "id": "violet",
-        "label": "Violet",
-        "light": p("- - - - - - - - - #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - #00728f - - - - #6534d8 - - #9a6cf7 #2557e0"),
-        "dark": p("- - - - - - - - - #ad91ff #2a2154 #bea8ff #7c63cf - - - - - - - - - - #bea8ff - - #9a78ec #3559e6 #12a678")
-      },
-      {
-        "id": "plum",
-        "label": "Plum",
-        "light": p("- - - - - - - - - #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - #2d4fd6 - - - - #8a1f8f - - #b847c0 #0e9a6c #2557e0"),
-        "dark": p("- - - - - - - - - #e28cea #3a1840 #edaef2 #b366bb - - - - - #91a8ff - - - - #edaef2 - - #d062d8 #3559e6 - #12a678 #c88317")
-      },
-      {
-        "id": "rose",
-        "label": "Rose",
-        "light": p("- - - - - - - - - #b4185a #fdebf2 #b4185a #d0608f - - - - - #2d4fd6 - - - - #b4185a - - #e0428a #2557e0 #9a6cf7 #0e9a6c #d97706"),
-        "dark": p("- - - - - - - - - #f57ab9 #3e1631 #f9a6cf #bd5a8f - - - - - #91a8ff - - - - #f9a6cf - - #e0559b #3559e6 - #12a678 #c88317")
-      },
-      {
-        "id": "slate",
-        "label": "Slate",
-        "light": p("- - - - - - - - - #3f5670 #ebeff4 #3f5670 #6e8399 - - - - - #00776b - - - - #3f5670 - - #5f7690 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a"),
-        "dark": p("- - - - - - - - - #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - - - - #1bc8b8 - - - - #c2d0e1 - - #8a9fba #3559e6 - #12a678 #c88317 #e0559b")
-      },
-      {
-        "id": "ink",
-        "label": "Ink",
-        "light": p("- - - - - - - - - #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - #2d4fd6 - - - - #1c1a17 - - #2b2620 #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0"),
-        "dark": p("- - - - - - - - - #eeece8 #2a2826 #eeece8 #9f9a92 - - - - - #91a8ff - - - - #eeece8 - - #d9d0c0 #3559e6 - #12a678 #1597b9 #e0559b")
-      }
-    ],
-    "defaultPalette": "cobalt",
-    "fonts": {
-      "ui": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
-      "data": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
-      "heading": "Manrope, \"Manrope Fallback\", Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
-      "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
-    },
-    "radius": {
-      "control": "8px",
-      "field": "8px",
-      "pill": "999px"
-    },
-    "recipes": {
-      "nav": "pill",
-      "bar": "airy",
-      "tabs": "underline",
-      "windows": "lifted",
-      "stat": "divided",
-      "section": "open",
-      "fields": "rail",
-      "table": "quiet",
-      "status": "quiet",
-      "board": "strip",
-      "chart": "line",
-      "buttons": "raised",
-      "links": "plain",
-      "rules": "hairline",
-      "avatar": "round",
-      "workflow": "markers",
-      "banner": "plain",
-      "steps": "strip",
-      "lanes": "tint",
-      "header": "plain",
-      "pane": "inset",
-      "filters": "quiet",
-      "required": "star",
-      "formStep": "plain",
-      "actionBar": "plain"
-    },
-    "elevation": "raised",
-    "type": {
-      "roles": {
-        "title": {
-          "size": "28px",
-          "weight": 700,
-          "tracking": "-0.02em"
-        },
-        "heading": {
-          "size": "24px",
-          "weight": 700,
-          "tracking": "-0.018em"
-        },
-        "section": {
-          "size": "16px",
-          "weight": 600,
-          "tracking": "-0.01em"
-        }
-      }
-    },
-    "density": "compact",
-    "base": "lumen"
   },
   {
     "id": "mono",

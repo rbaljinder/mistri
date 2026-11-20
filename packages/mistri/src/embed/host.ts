@@ -460,7 +460,7 @@ export function embedHost({ surface, endpoint, authorization, navigator, basePat
       const meta = table?.columns.find((each) => each.name === column);
       return meta ? { meta, label: column } : undefined;
     },
-    look: () => ({ look: 'workshop', preset: 'workshop', mode: 'light', density: 'comfortable' }),
+    look: () => ({ look: 'lumen', preset: 'lumen', mode: 'light', density: 'comfortable' }),
     deployment: () => ({ name: surface.label, mark: null, theme: null, locale: null, basePath: base }),
     branding: () => ({ name: surface.label, logo: null, accent: null }),
     /* A headless surface has no tenant lease: an empty team that manages nothing. */

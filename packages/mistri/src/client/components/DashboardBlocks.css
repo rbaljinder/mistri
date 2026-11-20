@@ -55,7 +55,7 @@
    when they do. The look's `steps` recipe dresses the cards; this is the flat one, on the surface with a hairline. */
 .dash-steps {
   list-style: none; margin: 0; padding: 0;
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(max(8.5rem, 100% / var(--cols, 4)), 1fr));
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(max(7.25rem, 100% / var(--cols, 6)), 1fr));
 }
 /* Every card as tall as the tallest, its words from the top: a step with a longer note must not drop the others. */
 .dash-step { display: flex; align-items: stretch; min-width: 0; }

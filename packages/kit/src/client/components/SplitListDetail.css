@@ -46,6 +46,9 @@
     border-left: 0; padding-left: 0; margin-left: 0;
     border-bottom: 1px solid var(--line); margin-bottom: var(--space-6); padding-bottom: var(--space-4h);
   }
+  .split-list-detail[data-selected="false"] > .split-list-detail-pane {
+    display: none;
+  }
 }
 
 /* One head for the pane: the kind of record, its place in the list, the way
@@ -98,14 +101,19 @@
 .split-detail-pictures:empty { display: none; }
 .split-detail-pictures > .split-detail-body { background: var(--surface); }
 
-/* Nothing picked yet: a sentence at the body's size where the record will
-   start, not a caption in the code face floating in the middle of the pane. */
+/* Nothing picked yet: a quiet framed placeholder in the detail pane, centered
+   lightly so the workspace reads as two balanced columns from first paint. */
 .split-list-detail-empty {
-  min-height: 16rem;
-  margin: 0;
-  padding: var(--space-3h) 0 0;
+  display: grid;
+  place-items: center;
+  min-height: 18rem;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-6);
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
   color: var(--ink-muted);
   font: var(--text-md)/1.5 var(--sans);
+  text-align: center;
 }
 
 .split-list-detail-modal {

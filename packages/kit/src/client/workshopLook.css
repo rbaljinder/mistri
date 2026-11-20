@@ -1,11 +1,12 @@
-/* Workshop, the look an App wears when it names none (themeLooks.ts): fetched
-   when a worn theme picks one of its recipes (keyed buttons, the slot menu, solid filters), as Lumen's sheet
-   is, and so not in the first stylesheet the Workbench and every other look
-   share. Its other recipes are in Lumen's, the brand sheet and the surfaces'. Its face (Barlow) is a sheet of its own,
-   barlowFace.css. */
+/* Workshop (themeLooks.ts): fetched when a worn theme picks one of its recipes
+   (keyed buttons, the slot menu, solid filters), as Lumen's sheet is, and so
+   not in the first stylesheet the Workbench and every other look share. Its
+   other recipes are in Lumen's, the brand sheet and the surfaces'. Its face
+   (Barlow) is a sheet of its own, barlowFace.css. */
 @layer look {
-  /* Keyed buttons: the primary verb is a hazard key, the accent edged in the ink; a secondary key is edged in the
-     ink too, so every key on a page reads as hardware.
+  /* Keyed buttons: the primary verb is a hazard key, the accent edged in the ink by day and a dark rim by night; a
+     secondary key is edged in the ink by day and the control border by night, so every key on a page reads as hardware
+     without glowing white in dark mode.
      The key is the look's primary-action color and its words (`--primary`, the palette's hue with the ink on it), as
      a list's New and a dashboard's action are, re-pointed as a form's one action is (features.css): a button reads
      `--accent`, which an App's own `ui.theme.accent` is worn over, so a record's first action was the App's blue
@@ -13,10 +14,12 @@
   :root[data-look-buttons='keyed'] .app-mode [data-slot='button'][data-variant='solid'] {
     --accent: var(--primary);
     --on-accent: var(--on-primary);
-    border: 1px solid var(--ink);
+    border: 1px solid light-dark(var(--ink), color-mix(in srgb, var(--primary) 65%, var(--ground)));
   }
-  :root[data-look-buttons='keyed'] .app-mode [data-slot='button']:not([data-variant]) {
-    border-color: var(--ink);
+  :root[data-look-buttons='keyed']
+    .app-mode
+    :is([data-slot='button']:not([data-variant]), [data-slot='menu-trigger']:not([data-own], [data-kind])) {
+    border-color: light-dark(var(--ink), var(--line-control));
   }
   /* The slot menu: the current entry is a block, and beside it a 3px marker of the menu's accent — under it in the top
      bar, at its leading edge in the side menu — parted from the block by 2px of the menu's ground, so the marker

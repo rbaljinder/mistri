@@ -2,25 +2,153 @@
    inbox room's measure (Inbox.css): a group is a quiet heading over ruled rows, the row's verbs at its end; on a
    phone they wrap under the text rather than push the row sideways. */
 @layer components {
-.review-room { padding-bottom: var(--space-7); }
-.review-room-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: var(--space-4); padding: var(--space-4h) var(--room-inset) 0; }
-.review-room > .empty-note, .review-room > .note, .review-room > .loading { margin: var(--space-5) var(--room-inset); }
-.review-group { margin-top: var(--space-5); }
-.review-group-head { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2h); padding: 0 var(--room-inset) var(--space-2); border-bottom: 1px solid var(--line); }
-.review-group-title { margin: 0; font: 600 var(--text-sm) var(--sans); color: var(--ink); }
-.review-group-count { color: var(--ink-muted); font: var(--text-sm) var(--sans); font-variant-numeric: tabular-nums; }
-.review-group-tools { display: flex; gap: var(--space-2); margin-inline-start: auto; }
-.review-group-note { margin: var(--space-2) var(--room-inset) 0; color: var(--ink-muted); font: var(--text-sm) var(--sans); }
-.review-list { list-style: none; margin: 0; padding: 0; }
-.review-row { display: flex; align-items: flex-start; flex-wrap: wrap; gap: var(--space-3); padding: var(--space-3) var(--room-inset); border-bottom: 1px solid var(--line); }
-.review-mark, .review-maker { flex: none; margin-top: var(--space-1); }
-.review-maker { color: var(--ink-muted); font: var(--text-sm) var(--sans); }
-.review-text { display: grid; gap: var(--space-1); flex: 1 1 16rem; min-width: 0; font: var(--text-base)/1.45 var(--sans); }
-.review-record { justify-self: start; color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
-.review-record-link { padding: 0; border: 0; background: none; color: var(--link); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
-@media (hover: hover) { .review-record-link:hover { text-decoration: underline; } }
-.review-record-noun { color: var(--ink-muted); font-weight: 400; }
-.review-reason { color: var(--ink); overflow-wrap: anywhere; }
-.review-meta { color: var(--ink-muted); font: var(--text-sm) var(--sans); }
-.review-tools { display: flex; flex-wrap: wrap; gap: var(--space-2); flex: none; }
+  .review-room {
+    padding-bottom: var(--space-7);
+  }
+  .review-room-head {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    gap: var(--space-4);
+    padding: var(--space-4h) var(--room-inset) 0;
+  }
+  .review-room > .empty-note,
+  .review-room > .note,
+  .review-room > .loading {
+    margin: var(--space-5) var(--room-inset);
+  }
+  .review-group {
+    margin-top: var(--space-5);
+  }
+  .review-group-head {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2h);
+    padding: 0 var(--room-inset) var(--space-2);
+    border-bottom: 1px solid var(--line);
+  }
+  .review-group-title {
+    margin: 0;
+    font: 600 var(--text-sm) var(--sans);
+    color: var(--ink);
+  }
+  .review-group-count {
+    color: var(--ink-muted);
+    font: var(--text-sm) var(--sans);
+    font-variant-numeric: tabular-nums;
+  }
+  .review-group-tools {
+    display: flex;
+    gap: var(--space-2);
+    margin-inline-start: auto;
+  }
+  .review-group-note {
+    margin: var(--space-2) var(--room-inset) 0;
+    color: var(--ink-muted);
+    font: var(--text-sm) var(--sans);
+  }
+  .review-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+  .review-row {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--room-inset);
+    border-bottom: 1px solid var(--line);
+  }
+  .review-mark,
+  .review-maker {
+    flex: none;
+    margin-top: var(--space-1);
+  }
+  .review-maker {
+    color: var(--ink-muted);
+    font: var(--text-sm) var(--sans);
+  }
+  .review-text {
+    display: grid;
+    gap: var(--space-1);
+    flex: 1 1 16rem;
+    min-width: 0;
+    font: var(--text-base)/1.45 var(--sans);
+  }
+  .review-record {
+    justify-self: start;
+    color: var(--ink);
+    font-weight: 600;
+    overflow-wrap: anywhere;
+  }
+  .review-record-link {
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--link);
+    font: inherit;
+    font-weight: 600;
+    text-align: left;
+    cursor: pointer;
+  }
+  @media (hover: hover) {
+    .review-record-link:hover {
+      text-decoration: underline;
+    }
+  }
+  @media (pointer: coarse) {
+    .review-record-link {
+      position: relative;
+    }
+    .review-record-link::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+  }
+  .review-record-noun {
+    color: var(--ink-muted);
+    font-weight: 400;
+  }
+  .review-reason {
+    color: var(--ink);
+    overflow-wrap: anywhere;
+  }
+  .review-inputs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1h);
+    margin-top: var(--space-0h, 2px);
+  }
+  .review-input-chip {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--space-1);
+    padding: 1px var(--space-2);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-sm, 6px);
+    background: var(--surface-subtle, var(--surface));
+    font: var(--text-xs)/18px var(--sans);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink);
+  }
+  .review-input-label {
+    color: var(--ink-muted);
+  }
+  .review-meta {
+    color: var(--ink-muted);
+    font: var(--text-sm) var(--sans);
+  }
+  .review-tools {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    flex: none;
+  }
 }

@@ -61,15 +61,27 @@ const settled = () =>
 
 afterEach(() => cleanup());
 
-test('a checklist of rents names each as the cards do, and ticking one asks for the stored value', async () => {
+test('a choice-constrained rent checklist names each as the cards do, while an unconstrained money column offers a Min/Max range even with few rows', async () => {
   rows = [179500, 225000];
   const user = userEvent.setup();
-  const { onChange } = draw();
+  const onChoiceChange = vi.fn();
+  const choiceBox = { ...boxesFor(unit, ['rent'], () => 'Asking rent')[0]!, kind: 'enum' as const };
+  render(
+    <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <FilterRail table={unit} boxes={[choiceBox]} refinement="" unitOf={() => ({ currency: 'USD' })} onChange={onChoiceChange} />
+    </QueryClientProvider>,
+  );
   const group = await settled();
   const box = await within(group).findByRole('checkbox', { name: '$1,795.00 1' });
   expect(within(group).getByRole('checkbox', { name: '$2,250.00 1' })).toBeInTheDocument();
   await user.click(box);
-  expect(onChange).toHaveBeenLastCalledWith('rent = 179500');
+  expect(onChoiceChange).toHaveBeenLastCalledWith('rent = 179500');
+  cleanup();
+
+  draw();
+  const autoGroup = await settled();
+  expect(within(autoGroup).getByLabelText('Min')).toBeInTheDocument();
+  expect(within(autoGroup).getByLabelText('Max')).toBeInTheDocument();
 });
 
 test('a range reads its ends in the major unit and takes them in it, the question staying in minor units', async () => {

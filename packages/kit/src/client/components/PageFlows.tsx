@@ -18,6 +18,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatDateTime } from '../locale.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { Empty } from './Notes.js';
+import { Button } from '@mistriwork/ui/Button.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { say } from '../copy/record/components/PageFlows.js';
 import './PageFlows.css';
@@ -133,7 +134,6 @@ export function RecordFlows({ base, recordKey, api, preview, frame, loading }: F
           {manual.length > 2 ? (
             <DropMenu
               className="page-actions-menu"
-              triggerClassName="ghost page-action"
               label={start.isPending ? say('starting') : say('startAFlow')}
               popupClassName="page-actions-popup"
               align="start"
@@ -146,15 +146,9 @@ export function RecordFlows({ base, recordKey, api, preview, frame, loading }: F
             </DropMenu>
           ) : (
             manual.map((flow) => (
-              <button
-                key={flow.id}
-                type="button"
-                className="ghost page-action"
-                disabled={start.isPending}
-                onClick={() => start.mutate(flow)}
-              >
+              <Button key={flow.id} className="page-action" disabled={start.isPending} onClick={() => start.mutate(flow)}>
                 {pending === flow.id ? say('starting') : say('start', { name: flow.name })}
-              </button>
+              </Button>
             ))
           )}
           {refusal && (

@@ -10,7 +10,7 @@ const ask = (more: Partial<ThemeAsk>): ThemeAsk => ({
   ...more,
 });
 
-test('resolveTheme ranks public, then the reader, then the role, the tenant, the App and Workshop', () => {
+test('resolveTheme ranks public, then the reader, then the role, the tenant, the App and Lumen', () => {
   const rows: Array<[string, Partial<ThemeAsk>, string, string]> = [
     // A public surface wears for.public, a reader's pick included: the page is the same for everyone.
     ['public page, reader picked mono', { public: true, pick: 'mono' }, 'cadence', 'public'],
@@ -29,7 +29,7 @@ test('resolveTheme ranks public, then the reader, then the role, the tenant, the
     ['manager', { roles: ['manager'] }, 'sage', 'app'],
     // An id the App no longer offers falls through to the next rank.
     ['a retired pick', { roles: ['manager'], pick: 'harbor' }, 'sage', 'app'],
-    ['nothing at all', { preset: undefined, for: undefined }, 'workshop', 'default'],
+    ['nothing at all', { preset: undefined, for: undefined }, 'lumen', 'default'],
   ];
   for (const [name, more, id, source] of rows) {
     const worn = resolveTheme(ask(more));

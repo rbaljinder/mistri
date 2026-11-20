@@ -9,7 +9,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { effectiveThemeDefinition, effectiveThemePalette, THEME_PRESETS } from '../packages/engine/src/shared/themePresets.js';
+import { effectiveThemeDefinition, effectiveThemePalette, THEME_PRESETS, themePreset } from '../packages/engine/src/shared/themePresets.js';
 import { INFO_APART, LOOK_PALETTES, hueGap } from '../packages/engine/src/shared/lookPalettes.js';
 import { chartPairFailure } from '../packages/mistri/src/shared/themeCheck.js';
 import type { ThemePalette } from '../packages/engine/schema/theme.js';
@@ -211,9 +211,10 @@ test('every built-in look offers the same palettes, its own colors are one of th
   assert.deepEqual(failures, []);
 });
 
-test('Workshop is the look an App wears by default, and its palette marks the brand signals but tints nothing', () => {
-  assert.equal(THEME_PRESETS[0]!.id, 'workshop');
-  const workshop = THEME_PRESETS[0]!;
+test('Lumen is the look an App wears by default, and Workshop marks the brand signals without tinting paper', () => {
+  assert.equal(THEME_PRESETS[0]!.id, 'lumen');
+  assert.equal(THEME_PRESETS[0]!.defaultPalette, 'cobalt');
+  const workshop = themePreset('workshop')!;
   assert.equal(workshop.defaultPalette, 'safety');
   for (const palette of LOOK_PALETTES)
     for (const mode of ['light', 'dark'] as const) {

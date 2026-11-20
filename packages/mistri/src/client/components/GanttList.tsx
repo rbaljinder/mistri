@@ -14,7 +14,7 @@
 import './GanttList.css';
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { api, keyOf, openRecord, state } from '@mistriwork/kit/client/core.js';
+import { api, columnDisplay, keyOf, openRecord, state } from '@mistriwork/kit/client/core.js';
 import { appNow, formatLocale, formatNumber } from '@mistriwork/kit/client/locale.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { splitQuery } from '@mistriwork/kit/client/clauses.js';
@@ -22,6 +22,7 @@ import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js'
 import type { AppGanttList } from '@mistriwork/engine/shared/listPresentations.js';
 import { listPresentationColumns } from '@mistriwork/engine/shared/appListColumns.js';
 import { namedCell } from '@mistriwork/kit/client/components/listColumn.js';
+import { choiceWord, ruleSays, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import type { ModalRecord } from './RecordModal.js';
 import type { TableEntry } from '@mistriwork/kit/client/components/TableView.js';
 import { say as sayCopy } from '../copy/lists/components/GanttList.js';
@@ -55,6 +56,8 @@ interface GanttRow {
   name: string;
   /** The group this row stands under, drawn once as a band over its rows; unset where the list is not grouped. */
   band?: string;
+  /** Raw group value for color/tone lookup. */
+  rawGroup?: string;
   bars: Array<GanttBar & { lane: number }>;
   /** How many lanes the row stacks its bars in, so two that overlap never cover each other. */
   lanes: number;
@@ -66,14 +69,14 @@ interface GanttRow {
  * lane free by their start (a bar's last day and the next one's first may not share a lane), so a row is as tall
  * as the most that overlap at once.
  */
-export function rowsOf(bars: Array<GanttBar & { group?: string }>, grouped: boolean): GanttRow[] {
+export function rowsOf(bars: Array<GanttBar & { group?: string; rawGroup?: string }>, grouped: boolean): GanttRow[] {
   const sorted = [...bars].sort((a, b) => a.first - b.first || a.last - b.last || a.title.localeCompare(b.title));
   if (!grouped) return sorted.map((bar) => ({ name: bar.title, bars: [{ ...bar, lane: 0 }], lanes: 1 }));
   const groups = new Map<string, Map<string, GanttRow & { ends: number[] }>>();
   for (const bar of sorted) {
     const band = bar.group ?? '';
     const rows = groups.get(band) ?? new Map<string, GanttRow & { ends: number[] }>();
-    const row = rows.get(bar.title) ?? { name: bar.title, band, bars: [], lanes: 0, ends: [] };
+    const row = rows.get(bar.title) ?? { name: bar.title, band, rawGroup: bar.rawGroup, bars: [], lanes: 0, ends: [] };
     let lane = row.ends.findIndex((end) => end < bar.first);
     if (lane < 0) lane = row.ends.length;
     row.ends[lane] = bar.last;
@@ -136,6 +139,13 @@ export function windowOf(first: number, last: number, today: number): { from: nu
   return { from: monday(lo), to: monday(hi + 6) };
 }
 
+const TONE_COLOR: Record<string, string> = {
+  good: 'var(--status-good)',
+  warn: 'var(--status-warning)',
+  bad: 'var(--status-critical)',
+  info: 'var(--status-info)',
+};
+
 interface GanttListProps {
   table: TableMeta;
   spec: AppGanttList;
@@ -152,6 +162,8 @@ export function GanttList({ table, spec, entry, interactive = true, label, refer
   const columns = [...new Set([...primaryKey(table), ...listPresentationColumns(spec), ...Object.values(referenceLabels ?? {})])];
   const filter = splitQuery(entry.query).filter;
   const text = `${table.id}${filter ? ` ${filter}` : ''} sort ${spec.start} show ${columns.join(', ')}`;
+  const byColumn = spec.by === undefined ? undefined : table.columns.find((col) => col.name === spec.by);
+  const byRule = spec.by !== undefined ? (columnDisplay(table.id, spec.by) as DisplayRule | null) : null;
   const answer = useQuery({
     queryKey: ['run', connection ?? '', 'gantt', text],
     queryFn: async () => {
@@ -171,7 +183,7 @@ export function GanttList({ table, spec, entry, interactive = true, label, refer
     },
   });
   const rows = useMemo(() => {
-    const bars: Array<GanttBar & { group?: string }> = [];
+    const bars: Array<GanttBar & { group?: string; rawGroup?: string }> = [];
     for (const row of answer.data?.rows ?? []) {
       const first = dayOf(row[spec.start]);
       const key = keyOf(table, row) as Record<string, unknown> | null;
@@ -183,7 +195,17 @@ export function GanttList({ table, spec, entry, interactive = true, label, refer
         raw === null || raw === undefined || raw === '' || !Number.isFinite(Number(raw))
           ? undefined
           : Math.min(100, Math.max(0, Number(raw)));
-      const named = spec.by === undefined ? undefined : namedCell(table, spec.by, row, referenceLabels).value;
+      const cell = spec.by === undefined ? undefined : namedCell(table, spec.by, row, referenceLabels);
+      const named = cell?.value;
+      const rawText = named === null || named === undefined || named === '' ? '' : String(named);
+      const formattedGroup =
+        spec.by === undefined
+          ? undefined
+          : !rawText
+            ? sayCopy('noGroup')
+            : byRule || byColumn?.allowed?.length
+              ? choiceWord(byRule, rawText)
+              : rawText;
       bars.push({
         id: JSON.stringify(key),
         key,
@@ -192,24 +214,27 @@ export function GanttList({ table, spec, entry, interactive = true, label, refer
         last,
         mark: end === null,
         ...(done === undefined ? {} : { done }),
-        ...(spec.by === undefined
-          ? {}
-          : { group: named === null || named === undefined || named === '' ? sayCopy('noGroup') : String(named) }),
+        ...(spec.by === undefined ? {} : { group: formattedGroup, rawGroup: rawText }),
       });
     }
     return rowsOf(bars, spec.by !== undefined);
-  }, [answer.data, spec, table, referenceLabels]);
+  }, [answer.data, spec, table, referenceLabels, byColumn, byRule]);
   const bars = rows.flatMap((row) => row.bars);
   /* A band over its rows, each group its own block so the band holds the top only while its rows are in view. */
   const groups = useMemo(() => {
-    const out: Array<{ band?: string; rows: GanttRow[] }> = [];
+    const out: Array<{ band?: string; color?: string; rows: GanttRow[] }> = [];
     for (const row of rows) {
       const last = out[out.length - 1];
       if (last && last.band === row.band && row.band !== undefined) last.rows.push(row);
-      else out.push({ band: row.band, rows: [row] });
+      else {
+        const idx = out.length;
+        const tone = row.rawGroup ? ruleSays(byRule, row.rawGroup).tone : undefined;
+        const color = row.band !== undefined ? ((tone && TONE_COLOR[tone]) ?? `var(--chart-${(idx % 8) + 1}, var(--accent))`) : undefined;
+        out.push({ band: row.band, ...(color ? { color } : {}), rows: [row] });
+      }
     }
     return out;
-  }, [rows]);
+  }, [rows, byRule]);
   const now = today ?? Math.floor(appNow().getTime() / DAY);
   const { from, to } = bars.length
     ? windowOf(Math.min(...bars.map((bar) => bar.first)), Math.max(...bars.map((bar) => bar.last)), now)
@@ -291,7 +316,11 @@ export function GanttList({ table, spec, entry, interactive = true, label, refer
           </span>
         </div>
         {groups.map((group) => (
-          <div key={group.band ?? group.rows[0].bars[0].id} className="gantt-group">
+          <div
+            key={group.band ?? group.rows[0].bars[0].id}
+            className="gantt-group"
+            style={group.color ? ({ '--gantt-color': group.color } as Record<string, string>) : undefined}
+          >
             {group.band !== undefined && (
               <div className="gantt-band" role="presentation">
                 {group.band}

@@ -169,7 +169,7 @@ export function audienceBranding(
 /** The App's look as one theme: its preset or its own theme, with its accent laid over as a tenant's would be. */
 function ownLook(ui: AppUi): ThemeDefinition {
   const preset = ui.theme?.preset;
-  const base = ui.customThemes?.find((theme) => theme.id === preset) ?? themePreset(preset) ?? themePreset('workshop')!;
+  const base = ui.customThemes?.find((theme) => theme.id === preset) ?? themePreset(preset) ?? themePreset('lumen')!;
   const accent = ui.theme?.accent;
   const value: TenantBrandingValue = {
     ...(ui.theme?.palette && ui.theme.palette !== 'default' ? { palette: ui.theme.palette } : {}),

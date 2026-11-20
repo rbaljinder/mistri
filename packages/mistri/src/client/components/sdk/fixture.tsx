@@ -432,8 +432,8 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     if (status) throw Object.assign(new Error(say('fixtureRefused', { resource })), { status });
   };
   const look: UiLook = {
-    look: options.look ?? 'workshop',
-    preset: options.preset ?? options.look ?? 'workshop',
+    look: options.look ?? 'lumen',
+    preset: options.preset ?? options.look ?? 'lumen',
     mode: options.mode ?? 'light',
     density: 'comfortable',
   };

@@ -19,7 +19,7 @@ ui: {
 ```
 
 `logo` is an App icon, never an image URL. `theme.preset` is one of the
-built-in looks (`workshop` by default, `lumen`, `mono`, `sage`, `ledger`, `atelier`, `graphite`, `bloom`) or one registered with
+built-in looks (`lumen` by default, `workshop`, `mono`, `sage`, `ledger`, `atelier`, `graphite`, `bloom`) or one registered with
 `defineTheme`; `accent`, `radius` and `font`
 adjust it. `currency` is US dollars unless the App says otherwise, and a money
 rule names its own only for a column in another. See [Looks](/docs/looks/)
@@ -685,7 +685,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | --- | --- | --- | --- |
 | `ui.theme[kind=fromRecord].by` | `"host"` · `"tenant"` | Stable |  One of `host`, `tenant`. Used in `examples/apps/lintel/pages/resident.ts`. |
 | `ui.theme[kind=fromRecord].fallback` | object | Stable |  |
-| `ui.theme[kind=fromRecord].fallback.preset` | `"workshop"` · `"lumen"` · `"mono"` · `"sage"` · `"ledger"` · `"atelier"` · `"graphite"` · `"bloom"` | Stable |  One of `atelier`, `bloom`, `graphite`, `ledger`, `lumen`, `mono`, `sage`, `workshop`. Used in `examples/apps/tick/app.ts`. |
+| `ui.theme[kind=fromRecord].fallback.preset` | `"lumen"` · `"workshop"` · `"mono"` · `"sage"` · `"ledger"` · `"atelier"` · `"graphite"` · `"bloom"` | Stable |  One of `atelier`, `bloom`, `graphite`, `ledger`, `lumen`, `mono`, `sage`, `workshop`. Used in `examples/apps/tick/app.ts`. |
 | `ui.theme[kind=fromRecord].fields` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `ui.theme[kind=fromRecord].fields.about` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `ui.theme[kind=fromRecord].fields.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
