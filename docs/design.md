@@ -1708,6 +1708,10 @@ every look, so the picture it keeps reads on whatever page shows it.
   the page sideways at 768px. What does not fit stands on a second line at the
   right, and the name gives way first, to an ellipsis. A bar that fits is one
   row as it was.
+- At a desk a top bar's tenant control gives way before its tabs: a long
+  tenant name is cut to an ellipsis at a width that grows with the window
+  (16-24rem), its whole in the button's title and name, so a workspace's tabs
+  stand in the bar rather than folding into its menu (`e2e/tenant-shell-fit.spec.ts`).
 - A phone's App bar is one row in every App, whichever shell it has on a
   desk: the menu's mark, the brand, then search as its magnifier, the
   settings, the bell where there is an inbox, and the account. The list's own search is the one box on a

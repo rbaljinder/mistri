@@ -124,6 +124,30 @@ describe('a refinement keeps the table room', () => {
     expect(room()).toHaveAttribute('data-query', 'invoice paid = true');
     expect(mounts).toEqual(['table']);
   });
+
+  /* Drawn inside the click, a sort on Compass's leads un-lit the tab, put back the column it pinned and re-measured
+     every column before the press's frame could paint: 160 ms against a 100 ms budget (test/built-client-vitals.mjs). */
+  test("with the shell's hold up, a header sort is the walk's at once and drawn after the press's frame, room kept", async () => {
+    const before = vi.fn();
+    core.setPaintHold({ before, after: () => {}, yields: () => false });
+    try {
+      draw();
+      act(() => sortBy('id'));
+      expect(core.currentEntry()).toMatchObject({ query: 'invoice sort id' });
+      expect(room()).not.toHaveAttribute('data-query', 'invoice sort id');
+      await act(() => new Promise((done) => requestAnimationFrame(() => setTimeout(done, 0))));
+      expect(room()).toHaveAttribute('data-query', 'invoice sort id');
+      expect(before).toHaveBeenLastCalledWith(false);
+      // A paint asked for while one waits is drawn at once, still a refinement.
+      act(() => sortBy('id'));
+      act(() => core.refine(() => core.render()));
+      expect(room()).toHaveAttribute('data-query', 'invoice sort id desc');
+      expect(before).toHaveBeenLastCalledWith(false);
+      expect(mounts).toEqual(['table']);
+    } finally {
+      core.setPaintHold(null);
+    }
+  });
 });
 
 describe('everything else starts the room over', () => {

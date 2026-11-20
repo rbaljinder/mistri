@@ -145,7 +145,13 @@ function* spellings(dir) {
     if (!entry.name.endsWith('.ts') || /\.d\.ts$|\.test\./.test(entry.name)) continue;
     const source = readFileSync(path, 'utf8');
     const names = [...source.matchAll(/(?:^|[\s{,(])([A-Za-z_][A-Za-z0-9_]*)\??\s*:/g)].map((match) => match[1]);
-    yield { path, names, dsl: /from\s+['"]@mistriwork\/mistri\/app['"]/.test(source) };
+    yield {
+      path,
+      names,
+      dsl: /from\s+['"]@mistriwork\/mistri\/app['"]/.test(source),
+      // A theme module spells color and type names that collide with unrelated keys (`kind`, `type`, `weight`).
+      theme: /\bdefineTheme\(/.test(source),
+    };
   }
 }
 
@@ -157,12 +163,14 @@ export function spelledIn(app) {
 }
 
 /** Where each property name is first spelled as one in a sample App. */
-function usageIndex() {
+function usageIndex(themes = false) {
   const index = new Map();
   for (const app of APPS) {
     const dir = join(ROOT, 'examples/apps', app);
     if (!existsSync(dir)) continue;
-    for (const { path, names, dsl } of spellings(dir)) {
+    for (const { path, names, dsl, theme } of spellings(dir)) {
+      // A theme module is cited only for a theme's own keys, never for a name it merely shares with another key.
+      if (theme !== themes) continue;
       const file = relative(join(ROOT, 'examples/apps'), path).replaceAll('\\', '/');
       for (const name of names) {
         const seen = index.get(name) ?? { first: undefined, files: new Set() };
@@ -219,6 +227,7 @@ function describe(file, prefix) {
 
 export function build() {
   const used = usageIndex();
+  const usedByThemes = usageIndex(true);
   const inventories = { app: inventoryPaths('app'), page: inventoryPaths('page'), theme: inventoryPaths('theme') };
   const described = {
     app: describe('app.schema.json', ''),
@@ -323,7 +332,7 @@ export function build() {
         }
         const node = row.node;
         const key = lastKey(row.path);
-        const sample = used.get(key);
+        const sample = (row.path.includes('themes[') ? usedByThemes : used).get(key);
         const type = node.enum
           ? node.enum.map((value) => `\`${cell(JSON.stringify(value))}\``).join(' · ')
           : cell(node.type ?? node.name ?? '');

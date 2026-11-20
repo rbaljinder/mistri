@@ -13,6 +13,7 @@ export const FRAMEWORK_WORDS = {
   'mistri.form.step': 'Step {step} of {count}',
   'mistri.form.stepNamed': 'Step {step} of {count}: {label}',
   'mistri.form.back': 'Back',
+  'mistri.form.continue': 'Continue',
   'mistri.form.optional': '(optional)',
   'mistri.form.required': '(required)',
   'mistri.form.reference': 'Your reference',

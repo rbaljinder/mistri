@@ -5,6 +5,23 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.71
+
+Follow-ups: a quicker header sort, a tenant name that leaves the tabs their room, and the last words of a stepped form.
+
+- Lists: sorting by a column header answers within the interaction budget again. The order and the address change at
+  once and the list is redrawn after the click's frame (Compass at 1280: about 165 ms to about 32 ms). A list whose
+  record is named by a template searches by "Name", never by `$label`.
+- App shell: beside a top bar's tabs, a long tenant name gives way (cut with an ellipsis, whole in its title and
+  accessible name) before the tabs fold into the menu, at 1280, 1440 and 1600.
+- Languages: a stepped form's Continue is an App word (`mistri.form.continue`, Spanish "Continuar"), and the languages
+  page lists every built-in `mistri.*` word, generated from the catalog and checked against it.
+- Jobs: a `jobs run` beside a running worker waits for the worker's write instead of refusing the SQLite job store
+  as unverifiable; the store now waits for a lock as long as the other SQLite stores do.
+- Reference: the DSL reference no longer cites a theme file as the example for keys that only share a name with one.
+- Tests: a `me` condition on a lookup hold, the public language switch across a reload, and the flag store's close
+  waits for its connections to leave before counting them.
+
 ## 1.0.0-rc.70
 
 Assessment hardening: a sweep of fixes from an outside review of the server, the stores and the client.

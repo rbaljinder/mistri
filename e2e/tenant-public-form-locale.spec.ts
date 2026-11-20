@@ -69,7 +69,7 @@ test.describe("a tenant App's public form in the reader's language", () => {
     });
     await page.goto(`${app!.origin}/yard/form/draft${via(NORTH)}`);
     await page.getByRole('textbox', { name: /^Name/ }).fill('Ada');
-    await page.getByRole('button', { name: 'Continue' }).click();
+    await page.getByRole('button', { name: 'Continuar' }).click();
     await expect(page.locator('.multi-step-count')).toHaveText('Paso 2 de 2');
     await page.getByRole('button', { name: /^Enviar/ }).click();
     // The step ran in Spanish and so did the submit: the draft's reference says the first, the receipt's the second.
@@ -102,7 +102,7 @@ test.describe("a tenant App's public form in the reader's language", () => {
       await expect(page.locator('.multi-step-count')).toHaveText('Paso 1 de 2');
       await expect(page.getByRole('button', { name: 'Atrás' })).toHaveCount(0);
       await page.getByRole('textbox', { name: /^Name/ }).fill('Ada');
-      await page.getByRole('button', { name: 'Continue' }).click();
+      await page.getByRole('button', { name: 'Continuar' }).click();
       await expect(page.locator('.multi-step-count')).toHaveText('Paso 2 de 2');
       await expect(page.getByRole('button', { name: 'Atrás' })).toBeVisible();
       await expect(page.getByRole('button', { name: 'Back', exact: true })).toHaveCount(0);

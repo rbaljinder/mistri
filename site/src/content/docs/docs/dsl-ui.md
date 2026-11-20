@@ -93,7 +93,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | --- | --- | --- | --- |
 | `branding.themes[][kind=theme].colors` | object | Stable | Required, with ground, surface, ink and accent in both modes, unless the theme extends a built-in; then partial. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.dark` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].colors.dark.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
+| `branding.themes[][kind=theme].colors.dark.accent` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.dark.accentInk` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].colors.dark.accentSoft` | string | Stable |  |
 | `branding.themes[][kind=theme].colors.dark.ai` | string | Stable | The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the platform's violet (--ai), apart from every look's accent and info. Checked at 3:1 on the page, as a mark is. |
@@ -109,9 +109,9 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].colors.dark.lineControl` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.dark.lineStrong` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
 | `branding.themes[][kind=theme].colors.dark.link` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].colors.dark.nav` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `branding.themes[][kind=theme].colors.dark.nav.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `branding.themes[][kind=theme].colors.dark.nav.current` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
+| `branding.themes[][kind=theme].colors.dark.nav` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].colors.dark.nav.accent` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].colors.dark.nav.current` | string | Stable |  |
 | `branding.themes[][kind=theme].colors.dark.nav.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.dark.nav.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.dark.nav.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
@@ -125,14 +125,14 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].colors.dark.rules.head` | string | Stable |  |
 | `branding.themes[][kind=theme].colors.dark.rules.section` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.dark.shadow` | string | Stable | The ink every lift is mixed from: a card's, a menu's, a dialog's shadow. Omitted, the look's (its ink by day, its ground by night). Never lighter than ground (theme-shadow). |
-| `branding.themes[][kind=theme].colors.dark.status` | object | Stable |  |
+| `branding.themes[][kind=theme].colors.dark.status` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.dark.status.critical` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.dark.status.good` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.dark.status.info` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].colors.dark.status.warning` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].colors.dark.surface` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.light` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].colors.light.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
+| `branding.themes[][kind=theme].colors.light.accent` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.light.accentInk` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].colors.light.accentSoft` | string | Stable |  |
 | `branding.themes[][kind=theme].colors.light.ai` | string | Stable | The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the platform's violet (--ai), apart from every look's accent and info. Checked at 3:1 on the page, as a mark is. |
@@ -148,9 +148,9 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].colors.light.lineControl` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.light.lineStrong` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
 | `branding.themes[][kind=theme].colors.light.link` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].colors.light.nav` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `branding.themes[][kind=theme].colors.light.nav.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `branding.themes[][kind=theme].colors.light.nav.current` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
+| `branding.themes[][kind=theme].colors.light.nav` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].colors.light.nav.accent` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].colors.light.nav.current` | string | Stable |  |
 | `branding.themes[][kind=theme].colors.light.nav.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.light.nav.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.light.nav.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
@@ -164,7 +164,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].colors.light.rules.head` | string | Stable |  |
 | `branding.themes[][kind=theme].colors.light.rules.section` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.light.shadow` | string | Stable | The ink every lift is mixed from: a card's, a menu's, a dialog's shadow. Omitted, the look's (its ink by day, its ground by night). Never lighter than ground (theme-shadow). |
-| `branding.themes[][kind=theme].colors.light.status` | object | Stable |  |
+| `branding.themes[][kind=theme].colors.light.status` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.light.status.critical` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.light.status.good` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].colors.light.status.info` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
@@ -193,7 +193,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `branding.themes[][kind=theme].extends` | object | Stable | Start from a built-in look, or from a theme, and say only what differs. Without it, colors names ground, surface, ink and accent in both modes and the rest is derived. One of `atelier`, `bloom`, `graphite`, `ledger`, `lumen`, `mono`, `sage`, `workshop`. Used in `examples/apps/lintel/app.ts`. |
+| `branding.themes[][kind=theme].extends` | object | Stable | Start from a built-in look, or from a theme, and say only what differs. Without it, colors names ground, surface, ink and accent in both modes and the rest is derived. One of `atelier`, `bloom`, `graphite`, `ledger`, `lumen`, `mono`, `sage`, `workshop`. Used in `examples/apps/lintel/hearth.ts`. |
 
 ## `branding.themes[][kind=theme].extends[kind=theme]`
 
@@ -205,13 +205,13 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `branding.themes[][kind=theme].from` | string | Stable | A published look's import.meta.url, so its faces and stylesheet are read from the package that holds them, never from the App that installs it. Requires contract. Used in `examples/apps/lintel/app.ts`. |
+| `branding.themes[][kind=theme].from` | string | Stable | A published look's import.meta.url, so its faces and stylesheet are read from the package that holds them, never from the App that installs it. Requires contract. |
 
 ## `branding.themes[][kind=theme].id`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `branding.themes[][kind=theme].id` | string | Stable |  |
+| `branding.themes[][kind=theme].id` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 
 ## `branding.themes[][kind=theme].kind`
 
@@ -223,7 +223,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `branding.themes[][kind=theme].label` | string | Stable |  |
+| `branding.themes[][kind=theme].label` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 
 ## `branding.themes[][kind=theme].motion`
 
@@ -242,7 +242,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `branding.themes[][kind=theme].palettes[].dark` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].palettes[].dark.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
+| `branding.themes[][kind=theme].palettes[].dark.accent` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.accentInk` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.accentSoft` | string | Stable |  |
 | `branding.themes[][kind=theme].palettes[].dark.ai` | string | Stable | The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the platform's violet (--ai), apart from every look's accent and info. Checked at 3:1 on the page, as a mark is. |
@@ -258,9 +258,9 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].palettes[].dark.lineControl` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.lineStrong` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.link` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].palettes[].dark.nav` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `branding.themes[][kind=theme].palettes[].dark.nav.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `branding.themes[][kind=theme].palettes[].dark.nav.current` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
+| `branding.themes[][kind=theme].palettes[].dark.nav` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].palettes[].dark.nav.accent` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].palettes[].dark.nav.current` | string | Stable |  |
 | `branding.themes[][kind=theme].palettes[].dark.nav.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.nav.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.nav.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
@@ -274,16 +274,16 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].palettes[].dark.rules.head` | string | Stable |  |
 | `branding.themes[][kind=theme].palettes[].dark.rules.section` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.shadow` | string | Stable | The ink every lift is mixed from: a card's, a menu's, a dialog's shadow. Omitted, the look's (its ink by day, its ground by night). Never lighter than ground (theme-shadow). |
-| `branding.themes[][kind=theme].palettes[].dark.status` | object | Stable |  |
+| `branding.themes[][kind=theme].palettes[].dark.status` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.status.critical` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.status.good` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.status.info` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.status.warning` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].palettes[].dark.surface` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].palettes[].id` | string | Stable |  |
-| `branding.themes[][kind=theme].palettes[].label` | string | Stable |  |
+| `branding.themes[][kind=theme].palettes[].id` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].palettes[].label` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].light` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].palettes[].light.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
+| `branding.themes[][kind=theme].palettes[].light.accent` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].light.accentInk` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].palettes[].light.accentSoft` | string | Stable |  |
 | `branding.themes[][kind=theme].palettes[].light.ai` | string | Stable | The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the platform's violet (--ai), apart from every look's accent and info. Checked at 3:1 on the page, as a mark is. |
@@ -299,9 +299,9 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].palettes[].light.lineControl` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].light.lineStrong` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
 | `branding.themes[][kind=theme].palettes[].light.link` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].palettes[].light.nav` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `branding.themes[][kind=theme].palettes[].light.nav.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `branding.themes[][kind=theme].palettes[].light.nav.current` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
+| `branding.themes[][kind=theme].palettes[].light.nav` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].palettes[].light.nav.accent` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].palettes[].light.nav.current` | string | Stable |  |
 | `branding.themes[][kind=theme].palettes[].light.nav.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].light.nav.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].light.nav.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
@@ -315,7 +315,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].palettes[].light.rules.head` | string | Stable |  |
 | `branding.themes[][kind=theme].palettes[].light.rules.section` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].light.shadow` | string | Stable | The ink every lift is mixed from: a card's, a menu's, a dialog's shadow. Omitted, the look's (its ink by day, its ground by night). Never lighter than ground (theme-shadow). |
-| `branding.themes[][kind=theme].palettes[].light.status` | object | Stable |  |
+| `branding.themes[][kind=theme].palettes[].light.status` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].light.status.critical` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].light.status.good` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].palettes[].light.status.info` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
@@ -342,31 +342,31 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | --- | --- | --- | --- |
 | `branding.themes[][kind=theme].recipes` | object | Stable | Each part's treatment, from the closed menu the built-in looks wear. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].recipes.actionBar` | `"plain"` · `"raised"` | Stable | `plain`: A form’s sticky action bar stands on a hairline over the page. `raised`: A form’s sticky action bar is raised on the surface with a soft lift, in place of the hairline. One of `plain`, `raised`. |
-| `branding.themes[][kind=theme].recipes.avatar` | `"plain"` · `"large"` · `"round"` | Stable | `plain`: A record’s avatar is its initials in a small square. `large`: A record’s avatar is 44px, in the look’s corners. `round`: A record’s avatar is 44px and round, and the menu’s and the account’s marks are round too. One of `large`, `plain`, `round`. Used in `examples/apps/lintel/resources.ts`. |
+| `branding.themes[][kind=theme].recipes.avatar` | `"plain"` · `"large"` · `"round"` | Stable | `plain`: A record’s avatar is its initials in a small square. `large`: A record’s avatar is 44px, in the look’s corners. `round`: A record’s avatar is 44px and round, and the menu’s and the account’s marks are round too. One of `large`, `plain`, `round`. |
 | `branding.themes[][kind=theme].recipes.banner` | `"tint"` · `"gradient"` · `"plain"` | Stable | `tint`: A dashboard’s banner note is a box tinted with the accent. `gradient`: A dashboard’s banner note is a soft gradient from the accent to the second chart color. `plain`: A dashboard’s banner note stands on the page with no box, its eyebrow in the link color. One of `gradient`, `plain`, `tint`. |
 | `branding.themes[][kind=theme].recipes.bar` | `"plain"` · `"ruled"` · `"dark"` · `"airy"` · `"soft"` | Stable | `plain`: The top bar is the menu’s ground with a hairline under it. `ruled`: The top bar ends in a 2px rule instead of a hairline, and casts no shadow. `dark`: The top bar takes the menu’s ground and inks, so a dark or brand-colored menu runs across the top too. `airy`: The top bar is taller, with a large bold brand name and a wide, raised search box. `soft`: The top bar is a panel in the surface color with a hairline under it, apart from the menu beside it. One of `airy`, `dark`, `plain`, `ruled`, `soft`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].recipes.blocks` | `"open"` · `"ruled"` · `"card"` · `"panel"` · `"tile"` | Stable | A family: one word that sets the default of section, fields, stat, table, steps; a part said itself still wins. `open`: Every block stands open on the page: sections and tables under a rule, and the stats in one ruled strip, the only box. `ruled`: A printed page: blocks open under rules, each stat under a rule of its own, a record’s side groups captioned between hairlines. `card`: Every block is a card with a hairline and the card shadow: sections, field groups, stats and tables. `panel`: Every block is a panel on the surface with a hairline: sections, field groups and stats; a table stays open inside its panel. `tile`: Every block is a soft tile: stats as tiles with a large figure, a list as one tile with its rows ruled apart, steps tinted with their tone. One of `card`, `open`, `panel`, `ruled`, `tile`. |
-| `branding.themes[][kind=theme].recipes.board` | `"ruled"` · `"soft"` · `"strip"` | Stable | `ruled`: A board’s lanes are outlined by a hairline; its cards lie flat on them. `soft`: Each lane is a quiet tray that holds its head and its cards, each card a sheet on it under the look’s card shadow. `strip`: Each lane is headed by a strip tinted with its tone, its cards white under it; a card with a category wears its color as a stripe. One of `ruled`, `soft`, `strip`. Used in `examples/apps/lintel/views.ts`. |
+| `branding.themes[][kind=theme].recipes.board` | `"ruled"` · `"soft"` · `"strip"` | Stable | `ruled`: A board’s lanes are outlined by a hairline; its cards lie flat on them. `soft`: Each lane is a quiet tray that holds its head and its cards, each card a sheet on it under the look’s card shadow. `strip`: Each lane is headed by a strip tinted with its tone, its cards white under it; a card with a category wears its color as a stripe. One of `ruled`, `soft`, `strip`. |
 | `branding.themes[][kind=theme].recipes.buttons` | `"accent"` · `"raised"` · `"keyed"` | Stable | `accent`: The primary button is filled in the accent; the rest are quiet. `raised`: Secondary buttons are white keys with a hairline and a small shadow, raised off the page. `keyed`: Buttons are hard-edged keys: the primary one filled in the accent with an ink edge, like a hazard tag, the rest edged in the ink. One of `accent`, `keyed`, `raised`. Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].recipes.chart` | `"plain"` · `"wash"` · `"gradient"` · `"line"` | Stable | `plain`: A chart is its lines or bars on a light grid. `wash`: An area under a line is washed in the first chart color. `gradient`: An area fades from the line down to nothing, the line heavier and the grid dashed. `line`: Only the lines: no areas, a fine solid grid and small ticks. One of `gradient`, `line`, `plain`, `wash`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].recipes.current` | `"tint"` · `"inverted"` · `"underline"` · `"pill"` · `"lifted"` | Stable | A family: one word that sets the default of nav, tabs, windows; a part said itself still wins. `tint`: The current entry, tab and window each sit on a soft tint of the accent. `inverted`: The current entry and tab are inverted to the ink, and the chosen window is a filled segment: square, high-contrast. `underline`: The current tab, and the current entry in a top bar, are underlined in the accent with no fill; a chosen window sits on a tint. `pill`: The current entry and tab are pills, and the chosen window is a raised key on a tray. `lifted`: The tabs and the windows stand in sunken tracks, the chosen one a raised key lifted out; the menu’s entry sits on a tint. One of `inverted`, `lifted`, `pill`, `tint`, `underline`. Used in `examples/apps/lintel/resources.ts`. |
-| `branding.themes[][kind=theme].recipes.fields` | `"open"` · `"panel"` · `"card"` · `"rail"` | Stable | `open`: A record’s field groups and forms stand open on the page. `panel`: Each field group and form is a panel on the surface with a hairline; its labels stay as the look draws them. `card`: Each field group and form is a card with a hairline and the card shadow, its labels muted and the values in the interface face. `rail`: Field groups stand open, and the side column’s cards become captioned groups between hairlines. One of `card`, `open`, `panel`, `rail`. Used in `examples/apps/lintel/app.ts`. |
+| `branding.themes[][kind=theme].recipes.current` | `"tint"` · `"inverted"` · `"underline"` · `"pill"` · `"lifted"` | Stable | A family: one word that sets the default of nav, tabs, windows; a part said itself still wins. `tint`: The current entry, tab and window each sit on a soft tint of the accent. `inverted`: The current entry and tab are inverted to the ink, and the chosen window is a filled segment: square, high-contrast. `underline`: The current tab, and the current entry in a top bar, are underlined in the accent with no fill; a chosen window sits on a tint. `pill`: The current entry and tab are pills, and the chosen window is a raised key on a tray. `lifted`: The tabs and the windows stand in sunken tracks, the chosen one a raised key lifted out; the menu’s entry sits on a tint. One of `inverted`, `lifted`, `pill`, `tint`, `underline`. |
+| `branding.themes[][kind=theme].recipes.fields` | `"open"` · `"panel"` · `"card"` · `"rail"` | Stable | `open`: A record’s field groups and forms stand open on the page. `panel`: Each field group and form is a panel on the surface with a hairline; its labels stay as the look draws them. `card`: Each field group and form is a card with a hairline and the card shadow, its labels muted and the values in the interface face. `rail`: Field groups stand open, and the side column’s cards become captioned groups between hairlines. One of `card`, `open`, `panel`, `rail`. Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].recipes.filters` | `"solid"` · `"dashed"` · `"quiet"` | Stable | `solid`: A list’s filter not yet asked for is its name before a caret on a solid edge: a key, as the search beside it is. `dashed`: The same key on a dashed hairline. No built-in look wears it: to people meeting a list it read as a place left empty. `quiet`: A list’s filter not yet asked for has no edge, its name in the muted ink, until a pointer is over it: then it sits on the raised ground. One of `dashed`, `quiet`, `solid`. Used in `examples/apps/lintel/theme.ts`. |
 | `branding.themes[][kind=theme].recipes.formStep` | `"plain"` · `"ruled"` | Stable | `plain`: A multi-step form’s step header is its title over its lead, with nothing between it and the fields. `ruled`: A multi-step form’s step header ends in a hairline, which parts it from the fields under it. One of `plain`, `ruled`. |
 | `branding.themes[][kind=theme].recipes.header` | `"plain"` · `"band"` · `"hero"` | Stable | `plain`: A record’s head and a list’s stand on the page’s ground, under the trail’s hairline. `band`: A record’s head and a list’s are one band of the raised ground from edge to edge: the trail, the title, its status, facts and verbs, a list’s tabs and filters; the contents keep their edge. `hero`: A band, with the record’s avatar large beside its title (above it on a phone); a record without one, and a list, draw the band. One of `band`, `hero`, `plain`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].recipes.lanes` | `"tint"` · `"tag"` · `"plain"` | Stable | `tint`: A board lane’s value in its head is on its tone’s tint. `tag`: A board lane’s value is a solid tag in its tone, in white capitals. `plain`: A board lane’s value is its name in plain ink. One of `plain`, `tag`, `tint`. |
-| `branding.themes[][kind=theme].recipes.links` | `"plain"` · `"underline"` · `"name"` | Stable | `plain`: A link to another record is in the link color without an underline. `underline`: A link to another record is underlined, so it reads as one without color. `name`: A row’s name is underlined, as an index’s entry is, and what the row or a record’s facts refer to reads as text; the line that goes on to another record keeps its underline. One of `name`, `plain`, `underline`. Used in `examples/apps/lintel/pages/unit.ts`. |
-| `branding.themes[][kind=theme].recipes.nav` | `"tint"` · `"inverted"` · `"wash"` · `"underline"` · `"pill"` · `"quiet"` · `"slot"` · `"float"` | Stable | `tint`: The current entry sits on a soft tint of the accent; the other rows stay plain. `inverted`: The current entry is inverted, the menu’s ink as its ground: the boldest mark, square and high-contrast. `wash`: The current entry sits on a wash of the menu’s own accent, stronger than tint, for a menu in a brand color. `underline`: The current entry in the top bar is marked by a 3px rule of the menu’s accent under it, with no fill. `pill`: Every row is a rounded pill with room around it; the current one is filled in the accent’s tint, its word in the accent. `quiet`: The current entry is barely shaded in the menu’s ink, with no accent at all: the calmest mark. `slot`: The current entry is an ink block, as inverted, with a 3px marker of the menu’s accent beside it, like a tool’s slot on a pegboard. `float`: The side menu is a card of its own, standing off the window’s edge with rounded corners; the current entry is a pill in the accent’s tint. One of `float`, `inverted`, `pill`, `quiet`, `slot`, `tint`, `underline`, `wash`. Used in `examples/apps/lintel/app.ts`. |
+| `branding.themes[][kind=theme].recipes.links` | `"plain"` · `"underline"` · `"name"` | Stable | `plain`: A link to another record is in the link color without an underline. `underline`: A link to another record is underlined, so it reads as one without color. `name`: A row’s name is underlined, as an index’s entry is, and what the row or a record’s facts refer to reads as text; the line that goes on to another record keeps its underline. One of `name`, `plain`, `underline`. |
+| `branding.themes[][kind=theme].recipes.nav` | `"tint"` · `"inverted"` · `"wash"` · `"underline"` · `"pill"` · `"quiet"` · `"slot"` · `"float"` | Stable | `tint`: The current entry sits on a soft tint of the accent; the other rows stay plain. `inverted`: The current entry is inverted, the menu’s ink as its ground: the boldest mark, square and high-contrast. `wash`: The current entry sits on a wash of the menu’s own accent, stronger than tint, for a menu in a brand color. `underline`: The current entry in the top bar is marked by a 3px rule of the menu’s accent under it, with no fill. `pill`: Every row is a rounded pill with room around it; the current one is filled in the accent’s tint, its word in the accent. `quiet`: The current entry is barely shaded in the menu’s ink, with no accent at all: the calmest mark. `slot`: The current entry is an ink block, as inverted, with a 3px marker of the menu’s accent beside it, like a tool’s slot on a pegboard. `float`: The side menu is a card of its own, standing off the window’s edge with rounded corners; the current entry is a pill in the accent’s tint. One of `float`, `inverted`, `pill`, `quiet`, `slot`, `tint`, `underline`, `wash`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].recipes.pane` | `"inset"` · `"edge"` | Stable | `inset`: A side-placed App’s room is a pane on the menu’s ground: inset from the window’s edge on the three sides the menu is not, a hairline round it and its corners rounded. `edge`: A side-placed App’s room runs to the window’s right and bottom edges, square, with one hairline between it and the menu. One of `edge`, `inset`. |
 | `branding.themes[][kind=theme].recipes.required` | `"star"` · `"optional-word"` | Stable | `star`: A required field wears a red star after its label; an optional one wears nothing. `optional-word`: A required field wears nothing and an optional one says “(optional)” after its label, quietly; the form’s own words, in the reader’s language. One of `optional-word`, `star`. Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].recipes.rules` | `"ink"` · `"hairline"` · `"double"` | Stable | `ink`: A record’s sections are announced by a 2px rule in the ink. `hairline`: A record’s sections are announced by a 1px hairline instead. `double`: A 1px hairline announces a record’s sections as in hairline, a box is ruled in the strong line, and a table’s heads close with a double rule. One of `double`, `hairline`, `ink`. |
 | `branding.themes[][kind=theme].recipes.section` | `"open"` · `"card"` · `"panel"` | Stable | `open`: A dashboard section stands open on the page under its rule. `card`: Each dashboard section is a card with a hairline and the card shadow, its table drawn to the card’s edges. `panel`: Each dashboard section is a panel like card, but a section in the side column stays open on the page. One of `card`, `open`, `panel`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].recipes.stat` | `"plain"` · `"framed"` · `"topline"` · `"ruled"` · `"icon"` · `"panel"` · `"divided"` · `"bento"` | Stable | `plain`: A stat is a figure and its label with no frame. `framed`: Each stat is a card framed by a line in the ink: square and stark. `topline`: Each stat card has a 3px rule in the first chart color along its top. `ruled`: Each stat stands open under a 2px rule in the ink, with no card or shadow, like a printed page. `icon`: Each stat is a card with its icon in a round tint of a chart color above the label, and a large bold figure. `panel`: Each stat is a panel on the surface with a hairline and the look’s card shadow. `divided`: The stats share one strip, a hairline round it and one between its figures, with no card to each: the quietest arrangement. `bento`: Each stat is a soft tile of its own in the raised ground, with no edge and a large figure: the roundest arrangement. One of `bento`, `divided`, `framed`, `icon`, `panel`, `plain`, `ruled`, `topline`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].recipes.status` | `"dot"` · `"pill"` · `"pill-dot"` · `"quiet"` | Stable | `dot`: A status word in its tone with a dot before it. `pill`: A status word on a pill tinted with its tone, without a dot. `pill-dot`: A status word on a pill tinted with its tone, with a small dot inside it. `quiet`: A status word in the ink with a dot in its tone: the color is only the dot. One of `dot`, `pill`, `pill-dot`, `quiet`. |
+| `branding.themes[][kind=theme].recipes.status` | `"dot"` · `"pill"` · `"pill-dot"` · `"quiet"` | Stable | `dot`: A status word in its tone with a dot before it. `pill`: A status word on a pill tinted with its tone, without a dot. `pill-dot`: A status word on a pill tinted with its tone, with a small dot inside it. `quiet`: A status word in the ink with a dot in its tone: the color is only the dot. One of `dot`, `pill`, `pill-dot`, `quiet`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].recipes.steps` | `"flat"` · `"tinted"` · `"strip"` | Stable | `flat`: A breakdown drawn as steps is a row of cards on the surface with a hairline. `tinted`: Each step’s card is tinted with its tone: good, warning, critical or the accent. `strip`: The steps are one strip of figures parted by hairlines, with no cards or marks. One of `flat`, `strip`, `tinted`. |
 | `branding.themes[][kind=theme].recipes.table` | `"open"` · `"tinted"` · `"hairline"` · `"card"` · `"quiet"` · `"banded"` · `"rows"` | Stable | `open`: Rows stand on the page under a rule, the head as the look draws it. `tinted`: As open, but a hovered row takes a tint of the accent and its check boxes the accent: the same until a pointer moves. `hairline`: The head sits on a hairline in 12.5px semibold, the rows in 13.5px: open, a little roomier. `card`: The table is a card: muted 12px heads on a hairline, faint row rules and taller rows. `quiet`: The table is a card of quiet rows, a work queue’s open button folded to a chevron at the row’s end. `banded`: As open, but every other row lies on the band color (colors.band, or the raised ground), each ink measured on it. `rows`: The list is one soft tile on the page’s ground: rows ruled apart by hairlines, the head plain words inside it, the tile’s corners its own. One of `banded`, `card`, `hairline`, `open`, `quiet`, `rows`, `tinted`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].recipes.tabs` | `"pill"` · `"inverted"` · `"underline"` · `"rule"` · `"tint"` · `"lifted"` | Stable | `pill`: The chosen tab is a soft pill in the ink with an edge of its own; the others are plain words. `inverted`: The chosen tab is inverted, the ink as its ground: square, high-contrast. `underline`: The tabs stand on a hairline, wide apart, the chosen one underlined in the accent with no fill. `rule`: The chosen tab is underlined by a 2px rule in the link color with no fill, the tabs packed as written. `tint`: The chosen tab sits on a soft tint of the accent in the ink, wider apart, with no underline. `lifted`: The tabs stand in a sunken track; the chosen one is a raised key lifted out of it, with no underline. One of `inverted`, `lifted`, `pill`, `rule`, `tint`, `underline`. Used in `examples/apps/tick/app.ts`. |
-| `branding.themes[][kind=theme].recipes.windows` | `"segmented"` · `"lifted"` · `"tint"` | Stable | `segmented`: The period picker is a segmented control, the chosen period filled. `lifted`: The period picker is a sunken tray, the chosen period a raised white key on it. `tint`: The period picker has no tray; the chosen period sits on a soft tint of the accent. One of `lifted`, `segmented`, `tint`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `branding.themes[][kind=theme].recipes.tabs` | `"pill"` · `"inverted"` · `"underline"` · `"rule"` · `"tint"` · `"lifted"` | Stable | `pill`: The chosen tab is a soft pill in the ink with an edge of its own; the others are plain words. `inverted`: The chosen tab is inverted, the ink as its ground: square, high-contrast. `underline`: The tabs stand on a hairline, wide apart, the chosen one underlined in the accent with no fill. `rule`: The chosen tab is underlined by a 2px rule in the link color with no fill, the tabs packed as written. `tint`: The chosen tab sits on a soft tint of the accent in the ink, wider apart, with no underline. `lifted`: The tabs stand in a sunken track; the chosen one is a raised key lifted out of it, with no underline. One of `inverted`, `lifted`, `pill`, `rule`, `tint`, `underline`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].recipes.windows` | `"segmented"` · `"lifted"` · `"tint"` | Stable | `segmented`: The period picker is a segmented control, the chosen period filled. `lifted`: The period picker is a sunken tray, the chosen period a raised white key on it. `tint`: The period picker has no tray; the chosen period sits on a soft tint of the accent. One of `lifted`, `segmented`, `tint`. |
 | `branding.themes[][kind=theme].recipes.workflow` | `"markers"` · `"pills"` · `"segments"` | Stable | `markers`: A workflow whose steps are an order is numbered marks joined by a rule, the label under each; a set of states with no order is a track of thin segments. `pills`: A workflow is a row of pills with a dot each: a step walked in the good tint, the current one in the accent’s. `segments`: A workflow is one bar cut into segments, a word in each: the steps walked on a tint in the ink, the current one on the accent’s tint, those ahead muted. One of `markers`, `pills`, `segments`. |
 
 ## `branding.themes[][kind=theme].rhythm`
@@ -406,8 +406,8 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `branding.themes[][kind=theme].shell` | object | Stable | Where the menu is drawn, as a suggestion: it holds when this theme is the App's own (ui.theme.preset) and ui.shell.placement says nothing. Used in `examples/apps/tick/app.ts`. |
-| `branding.themes[][kind=theme].shell.placement` | `"side"` · `"top"` | Stable |  One of `side`, `top`. Used in `examples/apps/tick/app.ts`. |
+| `branding.themes[][kind=theme].shell` | object | Stable | Where the menu is drawn, as a suggestion: it holds when this theme is the App's own (ui.theme.preset) and ui.shell.placement says nothing. |
+| `branding.themes[][kind=theme].shell.placement` | `"side"` · `"top"` | Stable |  One of `side`, `top`. |
 
 ## `branding.themes[][kind=theme].stylesheet`
 
@@ -423,7 +423,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].surface.ground` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].surface.ground.kind` | `"paper"` · `"grain"` · `"grid"` · `"dots"` · `"lines"` · `"scanlines"` | Stable | paper and grain a fine speckle, grid squares, dots a dot grid, lines ruled lines, scanlines a screen’s. One of `dots`, `grain`, `grid`, `lines`, `paper`, `scanlines`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].surface.ground.strength` | `1` · `2` · `3` | Stable | How much of the line color it is drawn in: 1 (omitted) 40%, 2 70%, 3 all of it. check measures the words over its darkest point (theme-contrast). One of `1`, `2`, `3`. |
-| `branding.themes[][kind=theme].surface.nav` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
+| `branding.themes[][kind=theme].surface.nav` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].surface.nav.kind` | `"paper"` · `"grain"` · `"grid"` · `"dots"` · `"lines"` · `"scanlines"` | Stable | paper and grain a fine speckle, grid squares, dots a dot grid, lines ruled lines, scanlines a screen’s. One of `dots`, `grain`, `grid`, `lines`, `paper`, `scanlines`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].surface.nav.strength` | `1` · `2` · `3` | Stable | How much of the line color it is drawn in: 1 (omitted) 40%, 2 70%, 3 all of it. check measures the words over its darkest point (theme-contrast). One of `1`, `2`, `3`. |
 
@@ -436,17 +436,17 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].type.faces` | array | Stable | Font files from the App's directory, each one @font-face served from the App's own origin. The heading's face is preloaded on first paint. Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].type.faces[].family` | string | Stable | The family name a type.font stack names it by. Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].type.faces[].src` | string | Stable | A .woff2 or .woff file inside the App's directory, relative to it: ./fonts/workshop-mono.woff2. Used in `examples/apps/lintel/hearth.ts`. |
-| `branding.themes[][kind=theme].type.faces[].style` | `"normal"` · `"italic"` | Stable |  One of `italic`, `normal`. Used in `examples/apps/lintel/views.ts`. |
+| `branding.themes[][kind=theme].type.faces[].style` | `"normal"` · `"italic"` | Stable |  One of `italic`, `normal`. |
 | `branding.themes[][kind=theme].type.faces[].subset` |  | Stable | Omitted, the file is cut to Latin when the App loads; false ships it whole, for an App written in another script. One of `false`. |
 | `branding.themes[][kind=theme].type.faces[].weight` | integer \| string | Stable | 100 to 900, or a variable file's range as "100 900". Omitted, 400. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.font` | string \| object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.font.code` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.font.data` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `branding.themes[][kind=theme].type.font.figures` | string | Stable | The face of the ids, codes, numbers and dates a table's cells and a record's fields set apart. Omitted, it follows data when the theme names one, and is the platform's Plex Mono when it names neither. Used in `examples/apps/lintel/dashboards.ts`. |
-| `branding.themes[][kind=theme].type.font.heading` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `branding.themes[][kind=theme].type.font.ui` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `branding.themes[][kind=theme].type.icons` | `"regular"` · `"light"` · `"bold"` · `"fill"` | Stable | The icons’ weight, from Phosphor’s: regular (omitted), light, bold or fill. Thin and duotone are refused: a 1px stroke fades at an icon’s 16px, and a second tone is a color no role says. One of `bold`, `fill`, `light`, `regular`. Used in `examples/apps/lintel/resources.ts`. |
-| `branding.themes[][kind=theme].type.roles` | object | Stable | Each kind of text by what it is for, saying only what differs from the look. Body, data and nav text has no size of its own: it follows type.base; a label’s may be set a step either side of it. |
+| `branding.themes[][kind=theme].type.font.figures` | string | Stable | The face of the ids, codes, numbers and dates a table's cells and a record's fields set apart. Omitted, it follows data when the theme names one, and is the platform's Plex Mono when it names neither. |
+| `branding.themes[][kind=theme].type.font.heading` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `branding.themes[][kind=theme].type.font.ui` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
+| `branding.themes[][kind=theme].type.icons` | `"regular"` · `"light"` · `"bold"` · `"fill"` | Stable | The icons’ weight, from Phosphor’s: regular (omitted), light, bold or fill. Thin and duotone are refused: a 1px stroke fades at an icon’s 16px, and a second tone is a color no role says. One of `bold`, `fill`, `light`, `regular`. |
+| `branding.themes[][kind=theme].type.roles` | object | Stable | Each kind of text by what it is for, saying only what differs from the look. Body, data and nav text has no size of its own: it follows type.base; a label’s may be set a step either side of it. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.body` | object | Stable | Prose, fields and the interface, at the base size: its leading (1.35 to 1.8) and features. Used in `examples/apps/lintel/hearth.ts`. |
 | `branding.themes[][kind=theme].type.roles.body.features` | array | Stable |  |
 | `branding.themes[][kind=theme].type.roles.body.leading` | number | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
@@ -466,7 +466,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].type.roles.figure.size` | string | Stable | 18px to 40px, at the 13px base. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.figure.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.figure.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].type.roles.heading` | object | Stable | A list naming itself over its rows: its face, size (16px to 28px), leading, tracking, weight (omitted, the title’s), case and features. Used in `examples/apps/tick/app.ts`. |
+| `branding.themes[][kind=theme].type.roles.heading` | object | Stable | A list naming itself over its rows: its face, size (16px to 28px), leading, tracking, weight (omitted, the title’s), case and features. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.heading.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.heading.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.heading.features` | array | Stable |  |
@@ -474,14 +474,14 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].type.roles.heading.size` | string | Stable | 16px to 28px, at the 13px base. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.heading.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.heading.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].type.roles.label` | object | Stable | A column’s head, a stat’s label and a record’s tabs, at the base size: their face, size (11px to 14px), tracking, weight (400 to 700), case and features; upper sets them a step smaller unless a size is said. |
+| `branding.themes[][kind=theme].type.roles.label` | object | Stable | A column’s head, a stat’s label and a record’s tabs, at the base size: their face, size (11px to 14px), tracking, weight (400 to 700), case and features; upper sets them a step smaller unless a size is said. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.label.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.label.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.label.features` | array | Stable |  |
 | `branding.themes[][kind=theme].type.roles.label.size` | string | Stable | 11px to 14px, at the 13px base. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.label.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.label.weight` | `400` · `500` · `600` · `700` | Stable |  One of `400`, `500`, `600`, `700`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].type.roles.nav` | object | Stable | The menu’s entries in the bar, at the base size: their face, tracking, weight (400 to 600) and case; upper sets them a step smaller. Used in `examples/apps/lintel/app.ts`. |
+| `branding.themes[][kind=theme].type.roles.nav` | object | Stable | The menu’s entries in the bar, at the base size: their face, tracking, weight (400 to 600) and case; upper sets them a step smaller. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.nav.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.nav.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.nav.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
@@ -493,7 +493,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `branding.themes[][kind=theme].type.roles.section.size` | string | Stable | 12px to 20px, at the 13px base. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.section.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.section.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `branding.themes[][kind=theme].type.roles.title` | object | Stable | A record’s and a dashboard’s name: its face, size (20px to 36px), leading, tracking, weight, case and features; its weight is every heading’s. |
+| `branding.themes[][kind=theme].type.roles.title` | object | Stable | A record’s and a dashboard’s name: its face, size (20px to 36px), leading, tracking, weight, case and features; its weight is every heading’s. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.title.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.title.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
 | `branding.themes[][kind=theme].type.roles.title.features` | array | Stable |  |
@@ -596,9 +596,9 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `ui.logo` | appIcon \| object | Stable | A decorative brand mark beside the App name: a curated App icon, or the App's own picture, a file in its directory served from its own origin, never a URL. One of `&lt;appIcon>`. Used in `examples/apps/tick/app.ts`. |
-| `ui.logo.dark` | string | Stable | The picture drawn on a dark bar: in dark mode, and by day under a theme whose bar is dark. Used in `examples/apps/lintel/blueprint.ts`. |
+| `ui.logo.dark` | string | Stable | The picture drawn on a dark bar: in dark mode, and by day under a theme whose bar is dark. |
 | `ui.logo.mark` | string | Stable | A square picture for the browser tab; omitted, the tab shows src. |
-| `ui.logo.src` | string | Stable | The picture the bar draws, in a 96 by 24 box. Used in `examples/apps/lintel/hearth.ts`. |
+| `ui.logo.src` | string | Stable | The picture the bar draws, in a 96 by 24 box. |
 
 ## `ui.messages`
 
@@ -611,7 +611,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `ui.messages.fields.locale` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `ui.messages.fields.text` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `ui.messages.from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `ui.messages.kind` |  | Stable |  One of `fromRecord`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `ui.messages.kind` |  | Stable |  One of `fromRecord`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `ui.messages.tenantField` | string | Stable |  |
 
 ## `ui.microphone`
@@ -636,7 +636,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `ui.shell.breadcrumbs.top` | boolean | Preview | Draw the bar above a room reached straight from the menu (a list, a dashboard, a form, a page) too. Default `false`. |
 | `ui.shell.counts` | boolean | Stable | Show live row counts beside the App menu's lists of work: a list whose condition picks its machine's unfinished states, a date at or before today (said in the danger's ink), or the reader (me). A list's own count: true or false says otherwise. Defaults to false; Workbench estimates remain. Default `false`. Used in `examples/apps/lintel/app.ts`. |
 | `ui.shell.gutter` | `"none"` · `"compact"` · `"normal"` · `"comfortable"` | Stable |  One of `comfortable`, `compact`, `none`, `normal`. Used in `examples/apps/tick/app.ts`. |
-| `ui.shell.header` | `"bar"` · `"sidebar"` | Stable | With the side placement, where the bar's furniture stands on a signed-in screen at a desk: beside the sidebar ('sidebar', the default): the sidebar runs the window's height with the App's mark and New at its head and Collapse at its foot, and the room is a pane beside it whose own bar holds the trail, the search, the bell and the account; or across the top of the window ('bar'). A phone, the top placement, public pages and sign-in keep the bar; with rail: false and no header, the bar. One of `bar`, `sidebar`. Default `"sidebar"`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `ui.shell.header` | `"bar"` · `"sidebar"` | Stable | With the side placement, where the bar's furniture stands on a signed-in screen at a desk: beside the sidebar ('sidebar', the default): the sidebar runs the window's height with the App's mark and New at its head and Collapse at its foot, and the room is a pane beside it whose own bar holds the trail, the search, the bell and the account; or across the top of the window ('bar'). A phone, the top placement, public pages and sign-in keep the bar; with rail: false and no header, the bar. One of `bar`, `sidebar`. Default `"sidebar"`. |
 | `ui.shell.headerWidth` | `"full"` · `"content"` | Stable | content aligns header contents to shell width and gutter while its background and border remain full width. Omit or use full to keep the existing header. One of `content`, `full`. Used in `examples/apps/tick/app.ts`. |
 | `ui.shell.heading` | boolean | Stable | false keeps each room's heading for a screen reader only, and drops a list's empty chip row and count. Default `true`. Used in `examples/apps/tick/app.ts`. |
 | `ui.shell.menuSearch` | boolean | Stable | Show the sidebar menu filter. Hidden by default in App mode; Workbench is unchanged. Default `false`. |
@@ -657,7 +657,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `ui.shell.rail` | boolean | Stable | With the side placement: folding the sidebar leaves a rail of the entries' icons by default. Set false to hide it completely. An App with no nav has no menu. Default `true`. Used in `examples/apps/lintel/app.ts`. |
 | `ui.shell.search` |  | Stable | The header's search: its box and its button, on a phone too. 'members' (the default) shows it to a member and not to a signed-out visitor; 'everyone' offers it to a visitor as well, and false hides it from everyone. One of `everyone`, `members`, `false`. Default `"members"`. Used in `examples/apps/tick/app.ts`. |
 | `ui.shell.sidebar` | object | Stable | Sidebar-specific presentation. Its footer is static workspace identity, never a tenant or account switcher. Used in `examples/apps/lintel/app.ts`. |
-| `ui.shell.sidebar.density` | `"compact"` · `"comfortable"` | Stable | Menu row spacing. Omit for the existing rhythm. One of `comfortable`, `compact`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `ui.shell.sidebar.density` | `"compact"` · `"comfortable"` | Stable | Menu row spacing. Omit for the existing rhythm. One of `comfortable`, `compact`. |
 | `ui.shell.sidebar.footer` | object | Stable | Static workspace identity at the bottom of the sidebar. Used in `examples/apps/lintel/app.ts`. |
 | `ui.shell.sidebar.footer.description` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `ui.shell.sidebar.footer.title` | string | Stable | A non-blank workspace name. |
@@ -669,15 +669,15 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | --- | --- | --- | --- |
 | `ui.theme` | object | Stable | The App's look: a built-in or one of customThemes by name ({ preset }), with the App's accent, or one read from a record (fromRecord). Used in `examples/apps/tick/app.ts`. |
 | `ui.theme.accent` | string \| object | Stable | The App's own color: one, authored for the light ground and mixed toward white on the dark one, or { light, dark }, one for each, worn as written. The soft tint of a selected item derives from it. Used in `examples/apps/tick/app.ts`. |
-| `ui.theme.accent.dark` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `ui.theme.accent.light` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `ui.theme.font` | string | Stable | A CSS font stack for the data face. Code surfaces keep the code face. Used in `examples/apps/lintel/blueprint.ts`. |
+| `ui.theme.accent.dark` | string | Stable |  |
+| `ui.theme.accent.light` | string | Stable |  |
+| `ui.theme.font` | string | Stable | A CSS font stack for the data face. Code surfaces keep the code face. |
 | `ui.theme.for` | object | Stable | A theme per audience: public for every page a signed-out visitor sees, worn whatever a reader picked; and one per role, the first entry in written order the account holds, over a tenant's saved theme. A reader's own pick still wins in the shell. Each names a built-in or one of customThemes; each role is one of auth.roles. |
 | `ui.theme.for.public` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `ui.theme.for.roles` | object | Stable |  |
+| `ui.theme.for.roles` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `ui.theme.palette` | string | Stable | A palette of the selected preset, or default for its original colors. Requires preset; references are checked by the App parser. |
 | `ui.theme.preset` | string | Stable | A built-in theme, or one of customThemes, used by the Default preference. Used in `examples/apps/tick/app.ts`. |
-| `ui.theme.radius` | string | Stable | A CSS length: "0", "10px". Used in `examples/apps/lintel/blueprint.ts`. |
+| `ui.theme.radius` | string | Stable | A CSS length: "0", "10px". |
 
 ## `ui.theme[kind=fromRecord]`
 
@@ -705,7 +705,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `ui.theme[kind=fromRecord].fields.preset` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `ui.theme[kind=fromRecord].fields.tagline` | string | Stable |  |
 | `ui.theme[kind=fromRecord].from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `ui.theme[kind=fromRecord].kind` |  | Stable |  One of `fromRecord`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `ui.theme[kind=fromRecord].kind` |  | Stable |  One of `fromRecord`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `ui.theme[kind=fromRecord].publishedField` | string | Stable |  |
 | `ui.theme[kind=fromRecord].tenantField` | string | Stable |  |
 
@@ -721,101 +721,101 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.brand` | string | Stable | The App's own color, said once, over the look the theme extends: the accent, links, the focus ring, the menu's mark and the first chart series, and over Lumen, Sage and Bloom the hue of the shell's neutrals. A color named under colors wins. Used in `examples/apps/lintel/theme.ts`. |
+| `theme.brand` | string | Stable | The App's own color, said once, over the look the theme extends: the accent, links, the focus ring, the menu's mark and the first chart series, and over Lumen, Sage and Bloom the hue of the shell's neutrals. A color named under colors wins. |
 
 ## `theme file: theme.colors`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.colors` | object | Stable | Required, with ground, surface, ink and accent in both modes, unless the theme extends a built-in; then partial. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors` | object | Stable | Required, with ground, surface, ink and accent in both modes, unless the theme extends a built-in; then partial. |
 
 ## `theme file: theme.colors.dark`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.colors.dark` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors.dark` | object | Stable |  |
 | `theme.colors.dark.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `theme.colors.dark.accentInk` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.colors.dark.accentInk` | string | Stable |  |
 | `theme.colors.dark.accentSoft` | string | Stable |  |
 | `theme.colors.dark.ai` | string | Stable | The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the platform's violet (--ai), apart from every look's accent and info. Checked at 3:1 on the page, as a mark is. |
 | `theme.colors.dark.band` | string | Stable | Every other row of a banded table (recipes.table). Omitted, raised. Each ink is checked on it as on the page. |
-| `theme.colors.dark.chart` | array | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.field` | string | Stable | A field's fill (text boxes, selects, pickers); the ink is checked at 4.5:1 on it. Omitted, `surface`. With `shape.border.control: '0px'` it must stand apart from the ground and the surface by 1.08:1. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.focus` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.dark.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.inkMuted` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.dark.inkSubtle` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.dark.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.lineControl` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.lineStrong` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.colors.dark.link` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors.dark.chart` | array | Stable |  |
+| `theme.colors.dark.field` | string | Stable | A field's fill (text boxes, selects, pickers); the ink is checked at 4.5:1 on it. Omitted, `surface`. With `shape.border.control: '0px'` it must stand apart from the ground and the surface by 1.08:1. |
+| `theme.colors.dark.focus` | string | Stable |  |
+| `theme.colors.dark.ground` | string | Stable |  |
+| `theme.colors.dark.ink` | string | Stable |  |
+| `theme.colors.dark.inkMuted` | string | Stable |  |
+| `theme.colors.dark.inkSubtle` | string | Stable |  |
+| `theme.colors.dark.line` | string | Stable |  |
+| `theme.colors.dark.lineControl` | string | Stable |  |
+| `theme.colors.dark.lineStrong` | string | Stable |  |
+| `theme.colors.dark.link` | string | Stable |  |
 | `theme.colors.dark.nav` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `theme.colors.dark.nav.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `theme.colors.dark.nav.current` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
-| `theme.colors.dark.nav.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.nav.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.nav.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.nav.muted` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
+| `theme.colors.dark.nav.ground` | string | Stable |  |
+| `theme.colors.dark.nav.ink` | string | Stable |  |
+| `theme.colors.dark.nav.line` | string | Stable |  |
+| `theme.colors.dark.nav.muted` | string | Stable |  |
 | `theme.colors.dark.nav.onCurrent` | string | Stable |  |
-| `theme.colors.dark.onAccent` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.dark.onPrimary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.colors.dark.primary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.colors.dark.raised` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors.dark.onAccent` | string | Stable |  |
+| `theme.colors.dark.onPrimary` | string | Stable |  |
+| `theme.colors.dark.primary` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
+| `theme.colors.dark.raised` | string | Stable |  |
 | `theme.colors.dark.rules` | object | Stable |  |
 | `theme.colors.dark.rules.head` | string | Stable |  |
-| `theme.colors.dark.rules.section` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors.dark.rules.section` | string | Stable |  |
 | `theme.colors.dark.shadow` | string | Stable | The ink every lift is mixed from: a card's, a menu's, a dialog's shadow. Omitted, the look's (its ink by day, its ground by night). Never lighter than ground (theme-shadow). |
 | `theme.colors.dark.status` | object | Stable |  |
-| `theme.colors.dark.status.critical` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.status.good` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.dark.status.info` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.dark.status.warning` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.dark.surface` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors.dark.status.critical` | string | Stable |  |
+| `theme.colors.dark.status.good` | string | Stable |  |
+| `theme.colors.dark.status.info` | string | Stable |  |
+| `theme.colors.dark.status.warning` | string | Stable |  |
+| `theme.colors.dark.surface` | string | Stable |  |
 
 ## `theme file: theme.colors.light`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.colors.light` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors.light` | object | Stable |  |
 | `theme.colors.light.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `theme.colors.light.accentInk` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.colors.light.accentInk` | string | Stable |  |
 | `theme.colors.light.accentSoft` | string | Stable |  |
 | `theme.colors.light.ai` | string | Stable | The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the platform's violet (--ai), apart from every look's accent and info. Checked at 3:1 on the page, as a mark is. |
 | `theme.colors.light.band` | string | Stable | Every other row of a banded table (recipes.table). Omitted, raised. Each ink is checked on it as on the page. |
-| `theme.colors.light.chart` | array | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.field` | string | Stable | A field's fill (text boxes, selects, pickers); the ink is checked at 4.5:1 on it. Omitted, `surface`. With `shape.border.control: '0px'` it must stand apart from the ground and the surface by 1.08:1. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.focus` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.light.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.inkMuted` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.light.inkSubtle` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.light.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.lineControl` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.lineStrong` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.colors.light.link` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors.light.chart` | array | Stable |  |
+| `theme.colors.light.field` | string | Stable | A field's fill (text boxes, selects, pickers); the ink is checked at 4.5:1 on it. Omitted, `surface`. With `shape.border.control: '0px'` it must stand apart from the ground and the surface by 1.08:1. |
+| `theme.colors.light.focus` | string | Stable |  |
+| `theme.colors.light.ground` | string | Stable |  |
+| `theme.colors.light.ink` | string | Stable |  |
+| `theme.colors.light.inkMuted` | string | Stable |  |
+| `theme.colors.light.inkSubtle` | string | Stable |  |
+| `theme.colors.light.line` | string | Stable |  |
+| `theme.colors.light.lineControl` | string | Stable |  |
+| `theme.colors.light.lineStrong` | string | Stable |  |
+| `theme.colors.light.link` | string | Stable |  |
 | `theme.colors.light.nav` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `theme.colors.light.nav.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `theme.colors.light.nav.current` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
-| `theme.colors.light.nav.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.nav.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.nav.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.nav.muted` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
+| `theme.colors.light.nav.ground` | string | Stable |  |
+| `theme.colors.light.nav.ink` | string | Stable |  |
+| `theme.colors.light.nav.line` | string | Stable |  |
+| `theme.colors.light.nav.muted` | string | Stable |  |
 | `theme.colors.light.nav.onCurrent` | string | Stable |  |
-| `theme.colors.light.onAccent` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.light.onPrimary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.colors.light.primary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.colors.light.raised` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors.light.onAccent` | string | Stable |  |
+| `theme.colors.light.onPrimary` | string | Stable |  |
+| `theme.colors.light.primary` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
+| `theme.colors.light.raised` | string | Stable |  |
 | `theme.colors.light.rules` | object | Stable |  |
 | `theme.colors.light.rules.head` | string | Stable |  |
-| `theme.colors.light.rules.section` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors.light.rules.section` | string | Stable |  |
 | `theme.colors.light.shadow` | string | Stable | The ink every lift is mixed from: a card's, a menu's, a dialog's shadow. Omitted, the look's (its ink by day, its ground by night). Never lighter than ground (theme-shadow). |
 | `theme.colors.light.status` | object | Stable |  |
-| `theme.colors.light.status.critical` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.status.good` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.colors.light.status.info` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.light.status.warning` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.colors.light.surface` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.colors.light.status.critical` | string | Stable |  |
+| `theme.colors.light.status.good` | string | Stable |  |
+| `theme.colors.light.status.info` | string | Stable |  |
+| `theme.colors.light.status.warning` | string | Stable |  |
+| `theme.colors.light.surface` | string | Stable |  |
 
 ## `theme file: theme.contract`
 
@@ -833,7 +833,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.density` | `"compact"` · `"comfortable"` · `"spacious"` | Stable |  One of `comfortable`, `compact`, `spacious`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.density` | `"compact"` · `"comfortable"` · `"spacious"` | Stable |  One of `comfortable`, `compact`, `spacious`. |
 
 ## `theme file: theme.extends`
 
@@ -845,7 +845,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.extends[kind=theme].kind` |  | Stable |  One of `theme`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.extends[kind=theme].kind` |  | Stable |  One of `theme`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `theme file: theme.from`
 
@@ -857,13 +857,13 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.id` | string | Stable |  |
+| `theme.id` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 
 ## `theme file: theme.kind`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.kind` |  | Stable |  One of `theme`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.kind` |  | Stable |  One of `theme`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `theme file: theme.label`
 
@@ -887,51 +887,51 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.palettes[].dark` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.palettes[].dark` | object | Stable |  |
 | `theme.palettes[].dark.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `theme.palettes[].dark.accentInk` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.palettes[].dark.accentInk` | string | Stable |  |
 | `theme.palettes[].dark.accentSoft` | string | Stable |  |
 | `theme.palettes[].dark.ai` | string | Stable | The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the platform's violet (--ai), apart from every look's accent and info. Checked at 3:1 on the page, as a mark is. |
 | `theme.palettes[].dark.band` | string | Stable | Every other row of a banded table (recipes.table). Omitted, raised. Each ink is checked on it as on the page. |
-| `theme.palettes[].dark.chart` | array | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.field` | string | Stable | A field's fill (text boxes, selects, pickers); the ink is checked at 4.5:1 on it. Omitted, `surface`. With `shape.border.control: '0px'` it must stand apart from the ground and the surface by 1.08:1. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.focus` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].dark.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.inkMuted` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].dark.inkSubtle` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].dark.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.lineControl` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.lineStrong` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.palettes[].dark.link` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.palettes[].dark.chart` | array | Stable |  |
+| `theme.palettes[].dark.field` | string | Stable | A field's fill (text boxes, selects, pickers); the ink is checked at 4.5:1 on it. Omitted, `surface`. With `shape.border.control: '0px'` it must stand apart from the ground and the surface by 1.08:1. |
+| `theme.palettes[].dark.focus` | string | Stable |  |
+| `theme.palettes[].dark.ground` | string | Stable |  |
+| `theme.palettes[].dark.ink` | string | Stable |  |
+| `theme.palettes[].dark.inkMuted` | string | Stable |  |
+| `theme.palettes[].dark.inkSubtle` | string | Stable |  |
+| `theme.palettes[].dark.line` | string | Stable |  |
+| `theme.palettes[].dark.lineControl` | string | Stable |  |
+| `theme.palettes[].dark.lineStrong` | string | Stable |  |
+| `theme.palettes[].dark.link` | string | Stable |  |
 | `theme.palettes[].dark.nav` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `theme.palettes[].dark.nav.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `theme.palettes[].dark.nav.current` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
-| `theme.palettes[].dark.nav.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.nav.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.nav.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.nav.muted` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
+| `theme.palettes[].dark.nav.ground` | string | Stable |  |
+| `theme.palettes[].dark.nav.ink` | string | Stable |  |
+| `theme.palettes[].dark.nav.line` | string | Stable |  |
+| `theme.palettes[].dark.nav.muted` | string | Stable |  |
 | `theme.palettes[].dark.nav.onCurrent` | string | Stable |  |
-| `theme.palettes[].dark.onAccent` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].dark.onPrimary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.palettes[].dark.primary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.palettes[].dark.raised` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.palettes[].dark.onAccent` | string | Stable |  |
+| `theme.palettes[].dark.onPrimary` | string | Stable |  |
+| `theme.palettes[].dark.primary` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
+| `theme.palettes[].dark.raised` | string | Stable |  |
 | `theme.palettes[].dark.rules` | object | Stable |  |
 | `theme.palettes[].dark.rules.head` | string | Stable |  |
-| `theme.palettes[].dark.rules.section` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.palettes[].dark.rules.section` | string | Stable |  |
 | `theme.palettes[].dark.shadow` | string | Stable | The ink every lift is mixed from: a card's, a menu's, a dialog's shadow. Omitted, the look's (its ink by day, its ground by night). Never lighter than ground (theme-shadow). |
 | `theme.palettes[].dark.status` | object | Stable |  |
-| `theme.palettes[].dark.status.critical` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.status.good` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].dark.status.info` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].dark.status.warning` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].dark.surface` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.palettes[].dark.status.critical` | string | Stable |  |
+| `theme.palettes[].dark.status.good` | string | Stable |  |
+| `theme.palettes[].dark.status.info` | string | Stable |  |
+| `theme.palettes[].dark.status.warning` | string | Stable |  |
+| `theme.palettes[].dark.surface` | string | Stable |  |
 
 ## `theme file: theme.palettes[].id`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.palettes[].id` | string | Stable |  |
+| `theme.palettes[].id` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 
 ## `theme file: theme.palettes[].label`
 
@@ -943,89 +943,89 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.palettes[].light` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.palettes[].light` | object | Stable |  |
 | `theme.palettes[].light.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `theme.palettes[].light.accentInk` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.palettes[].light.accentInk` | string | Stable |  |
 | `theme.palettes[].light.accentSoft` | string | Stable |  |
 | `theme.palettes[].light.ai` | string | Stable | The mark of what an AI made: a generated draft's badge, a suggestion's edge, the assistant's avatar. Omitted, the platform's violet (--ai), apart from every look's accent and info. Checked at 3:1 on the page, as a mark is. |
 | `theme.palettes[].light.band` | string | Stable | Every other row of a banded table (recipes.table). Omitted, raised. Each ink is checked on it as on the page. |
-| `theme.palettes[].light.chart` | array | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.field` | string | Stable | A field's fill (text boxes, selects, pickers); the ink is checked at 4.5:1 on it. Omitted, `surface`. With `shape.border.control: '0px'` it must stand apart from the ground and the surface by 1.08:1. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.focus` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].light.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.inkMuted` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].light.inkSubtle` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].light.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.lineControl` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.lineStrong` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.palettes[].light.link` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.palettes[].light.chart` | array | Stable |  |
+| `theme.palettes[].light.field` | string | Stable | A field's fill (text boxes, selects, pickers); the ink is checked at 4.5:1 on it. Omitted, `surface`. With `shape.border.control: '0px'` it must stand apart from the ground and the surface by 1.08:1. |
+| `theme.palettes[].light.focus` | string | Stable |  |
+| `theme.palettes[].light.ground` | string | Stable |  |
+| `theme.palettes[].light.ink` | string | Stable |  |
+| `theme.palettes[].light.inkMuted` | string | Stable |  |
+| `theme.palettes[].light.inkSubtle` | string | Stable |  |
+| `theme.palettes[].light.line` | string | Stable |  |
+| `theme.palettes[].light.lineControl` | string | Stable |  |
+| `theme.palettes[].light.lineStrong` | string | Stable |  |
+| `theme.palettes[].light.link` | string | Stable |  |
 | `theme.palettes[].light.nav` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `theme.palettes[].light.nav.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `theme.palettes[].light.nav.current` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
-| `theme.palettes[].light.nav.ground` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.nav.ink` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.nav.line` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.nav.muted` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
+| `theme.palettes[].light.nav.ground` | string | Stable |  |
+| `theme.palettes[].light.nav.ink` | string | Stable |  |
+| `theme.palettes[].light.nav.line` | string | Stable |  |
+| `theme.palettes[].light.nav.muted` | string | Stable |  |
 | `theme.palettes[].light.nav.onCurrent` | string | Stable |  |
-| `theme.palettes[].light.onAccent` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].light.onPrimary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.palettes[].light.primary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
-| `theme.palettes[].light.raised` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.palettes[].light.onAccent` | string | Stable |  |
+| `theme.palettes[].light.onPrimary` | string | Stable |  |
+| `theme.palettes[].light.primary` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
+| `theme.palettes[].light.raised` | string | Stable |  |
 | `theme.palettes[].light.rules` | object | Stable |  |
 | `theme.palettes[].light.rules.head` | string | Stable |  |
-| `theme.palettes[].light.rules.section` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.palettes[].light.rules.section` | string | Stable |  |
 | `theme.palettes[].light.shadow` | string | Stable | The ink every lift is mixed from: a card's, a menu's, a dialog's shadow. Omitted, the look's (its ink by day, its ground by night). Never lighter than ground (theme-shadow). |
 | `theme.palettes[].light.status` | object | Stable |  |
-| `theme.palettes[].light.status.critical` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.status.good` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.palettes[].light.status.info` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].light.status.warning` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.palettes[].light.surface` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.palettes[].light.status.critical` | string | Stable |  |
+| `theme.palettes[].light.status.good` | string | Stable |  |
+| `theme.palettes[].light.status.info` | string | Stable |  |
+| `theme.palettes[].light.status.warning` | string | Stable |  |
+| `theme.palettes[].light.surface` | string | Stable |  |
 
 ## `theme file: theme.parts`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.parts` | object | Stable | Each published part’s own style, by its name: ground, bar, bar.search, nav, nav.item, nav.current, nav.group, logo, page.title, tabs, tab.current, section, section.title, stat, stat.figure, fields, field.label, table, table.head, table.row, status, tag, button.primary, button.secondary, button.quiet, link, board.lane, board.card, workflow.step, banner, steps.step, avatar, identityMark, menu, dialog, chart, kicker. Contract 1: a 1.x release may publish another part and withdraws none. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.parts.*.case` | `"none"` · `"upper"` · `"small-caps"` | Stable | Capitals: upper or small-caps, tracked as the theme’s labels are; none undoes the look’s. One of `none`, `small-caps`, `upper`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.parts.*.edge` | `"ground"` · `"surface"` · `"raised"` · `"line"` · `"lineStrong"` · `"lineControl"` · `"ink"` · `"inkMuted"` · `"inkSubtle"` · `"accent"` · `"onAccent"` · `"accentInk"` · `"focus"` · `"accentSoft"` · `"link"` · `"status.good"` · `"status.warning"` · `"status.critical"` · `"status.info"` · `"nav.ground"` · `"nav.ink"` · `"nav.muted"` · `"nav.line"` · `"nav.accent"` · `"nav.current"` · `"nav.onCurrent"` · `"rules.section"` · `"rules.head"` · `"band"` · `"ai"` · `"chart[0]"` · `"chart[1]"` · `"chart[2]"` · `"chart[3]"` · `"chart[4]"` · `"chart[5]"` · `"chart[6]"` · `"chart[7]"` | Stable | Its border’s color, where it has one. One of `accent`, `accentInk`, `accentSoft`, `ai`, `band`, `chart[0]`, `chart[1]`, `chart[2]`, `chart[3]`, `chart[4]`, `chart[5]`, `chart[6]`, `chart[7]`, `focus`, `ground`, `ink`, `inkMuted`, `inkSubtle`, `line`, `lineControl`, `lineStrong`, `link`, `nav.accent`, `nav.current`, `nav.ground`, `nav.ink`, `nav.line`, `nav.muted`, `nav.onCurrent`, `onAccent`, `raised`, `rules.head`, `rules.section`, `status.critical`, `status.good`, `status.info`, `status.warning`, `surface`. Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.parts.*.face` | `"ui"` · `"heading"` · `"data"` | Stable | One of the theme’s faces. One of `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.parts.*.ground` | `"ground"` · `"surface"` · `"raised"` · `"line"` · `"lineStrong"` · `"lineControl"` · `"ink"` · `"inkMuted"` · `"inkSubtle"` · `"accent"` · `"onAccent"` · `"accentInk"` · `"focus"` · `"accentSoft"` · `"link"` · `"status.good"` · `"status.warning"` · `"status.critical"` · `"status.info"` · `"nav.ground"` · `"nav.ink"` · `"nav.muted"` · `"nav.line"` · `"nav.accent"` · `"nav.current"` · `"nav.onCurrent"` · `"rules.section"` · `"rules.head"` · `"band"` · `"ai"` · `"chart[0]"` · `"chart[1]"` · `"chart[2]"` · `"chart[3]"` · `"chart[4]"` · `"chart[5]"` · `"chart[6]"` · `"chart[7]"` | Stable | What it is drawn on. One of `accent`, `accentInk`, `accentSoft`, `ai`, `band`, `chart[0]`, `chart[1]`, `chart[2]`, `chart[3]`, `chart[4]`, `chart[5]`, `chart[6]`, `chart[7]`, `focus`, `ground`, `ink`, `inkMuted`, `inkSubtle`, `line`, `lineControl`, `lineStrong`, `link`, `nav.accent`, `nav.current`, `nav.ground`, `nav.ink`, `nav.line`, `nav.muted`, `nav.onCurrent`, `onAccent`, `raised`, `rules.head`, `rules.section`, `status.critical`, `status.good`, `status.info`, `status.warning`, `surface`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.parts.*.ink` | `"ground"` · `"surface"` · `"raised"` · `"line"` · `"lineStrong"` · `"lineControl"` · `"ink"` · `"inkMuted"` · `"inkSubtle"` · `"accent"` · `"onAccent"` · `"accentInk"` · `"focus"` · `"accentSoft"` · `"link"` · `"status.good"` · `"status.warning"` · `"status.critical"` · `"status.info"` · `"nav.ground"` · `"nav.ink"` · `"nav.muted"` · `"nav.line"` · `"nav.accent"` · `"nav.current"` · `"nav.onCurrent"` · `"rules.section"` · `"rules.head"` · `"band"` · `"ai"` · `"chart[0]"` · `"chart[1]"` · `"chart[2]"` · `"chart[3]"` · `"chart[4]"` · `"chart[5]"` · `"chart[6]"` · `"chart[7]"` | Stable | Its words; check measures them on its ground. One of `accent`, `accentInk`, `accentSoft`, `ai`, `band`, `chart[0]`, `chart[1]`, `chart[2]`, `chart[3]`, `chart[4]`, `chart[5]`, `chart[6]`, `chart[7]`, `focus`, `ground`, `ink`, `inkMuted`, `inkSubtle`, `line`, `lineControl`, `lineStrong`, `link`, `nav.accent`, `nav.current`, `nav.ground`, `nav.ink`, `nav.line`, `nav.muted`, `nav.onCurrent`, `onAccent`, `raised`, `rules.head`, `rules.section`, `status.critical`, `status.good`, `status.info`, `status.warning`, `surface`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.parts` | object | Stable | Each published part’s own style, by its name: ground, bar, bar.search, nav, nav.item, nav.current, nav.group, logo, page.title, tabs, tab.current, section, section.title, stat, stat.figure, fields, field.label, table, table.head, table.row, status, tag, button.primary, button.secondary, button.quiet, link, board.lane, board.card, workflow.step, banner, steps.step, avatar, identityMark, menu, dialog, chart, kicker. Contract 1: a 1.x release may publish another part and withdraws none. Used in `examples/apps/lintel/views.ts`. |
+| `theme.parts.*.case` | `"none"` · `"upper"` · `"small-caps"` | Stable | Capitals: upper or small-caps, tracked as the theme’s labels are; none undoes the look’s. One of `none`, `small-caps`, `upper`. |
+| `theme.parts.*.edge` | `"ground"` · `"surface"` · `"raised"` · `"line"` · `"lineStrong"` · `"lineControl"` · `"ink"` · `"inkMuted"` · `"inkSubtle"` · `"accent"` · `"onAccent"` · `"accentInk"` · `"focus"` · `"accentSoft"` · `"link"` · `"status.good"` · `"status.warning"` · `"status.critical"` · `"status.info"` · `"nav.ground"` · `"nav.ink"` · `"nav.muted"` · `"nav.line"` · `"nav.accent"` · `"nav.current"` · `"nav.onCurrent"` · `"rules.section"` · `"rules.head"` · `"band"` · `"ai"` · `"chart[0]"` · `"chart[1]"` · `"chart[2]"` · `"chart[3]"` · `"chart[4]"` · `"chart[5]"` · `"chart[6]"` · `"chart[7]"` | Stable | Its border’s color, where it has one. One of `accent`, `accentInk`, `accentSoft`, `ai`, `band`, `chart[0]`, `chart[1]`, `chart[2]`, `chart[3]`, `chart[4]`, `chart[5]`, `chart[6]`, `chart[7]`, `focus`, `ground`, `ink`, `inkMuted`, `inkSubtle`, `line`, `lineControl`, `lineStrong`, `link`, `nav.accent`, `nav.current`, `nav.ground`, `nav.ink`, `nav.line`, `nav.muted`, `nav.onCurrent`, `onAccent`, `raised`, `rules.head`, `rules.section`, `status.critical`, `status.good`, `status.info`, `status.warning`, `surface`. |
+| `theme.parts.*.face` | `"ui"` · `"heading"` · `"data"` | Stable | One of the theme’s faces. One of `data`, `heading`, `ui`. |
+| `theme.parts.*.ground` | `"ground"` · `"surface"` · `"raised"` · `"line"` · `"lineStrong"` · `"lineControl"` · `"ink"` · `"inkMuted"` · `"inkSubtle"` · `"accent"` · `"onAccent"` · `"accentInk"` · `"focus"` · `"accentSoft"` · `"link"` · `"status.good"` · `"status.warning"` · `"status.critical"` · `"status.info"` · `"nav.ground"` · `"nav.ink"` · `"nav.muted"` · `"nav.line"` · `"nav.accent"` · `"nav.current"` · `"nav.onCurrent"` · `"rules.section"` · `"rules.head"` · `"band"` · `"ai"` · `"chart[0]"` · `"chart[1]"` · `"chart[2]"` · `"chart[3]"` · `"chart[4]"` · `"chart[5]"` · `"chart[6]"` · `"chart[7]"` | Stable | What it is drawn on. One of `accent`, `accentInk`, `accentSoft`, `ai`, `band`, `chart[0]`, `chart[1]`, `chart[2]`, `chart[3]`, `chart[4]`, `chart[5]`, `chart[6]`, `chart[7]`, `focus`, `ground`, `ink`, `inkMuted`, `inkSubtle`, `line`, `lineControl`, `lineStrong`, `link`, `nav.accent`, `nav.current`, `nav.ground`, `nav.ink`, `nav.line`, `nav.muted`, `nav.onCurrent`, `onAccent`, `raised`, `rules.head`, `rules.section`, `status.critical`, `status.good`, `status.info`, `status.warning`, `surface`. |
+| `theme.parts.*.ink` | `"ground"` · `"surface"` · `"raised"` · `"line"` · `"lineStrong"` · `"lineControl"` · `"ink"` · `"inkMuted"` · `"inkSubtle"` · `"accent"` · `"onAccent"` · `"accentInk"` · `"focus"` · `"accentSoft"` · `"link"` · `"status.good"` · `"status.warning"` · `"status.critical"` · `"status.info"` · `"nav.ground"` · `"nav.ink"` · `"nav.muted"` · `"nav.line"` · `"nav.accent"` · `"nav.current"` · `"nav.onCurrent"` · `"rules.section"` · `"rules.head"` · `"band"` · `"ai"` · `"chart[0]"` · `"chart[1]"` · `"chart[2]"` · `"chart[3]"` · `"chart[4]"` · `"chart[5]"` · `"chart[6]"` · `"chart[7]"` | Stable | Its words; check measures them on its ground. One of `accent`, `accentInk`, `accentSoft`, `ai`, `band`, `chart[0]`, `chart[1]`, `chart[2]`, `chart[3]`, `chart[4]`, `chart[5]`, `chart[6]`, `chart[7]`, `focus`, `ground`, `ink`, `inkMuted`, `inkSubtle`, `line`, `lineControl`, `lineStrong`, `link`, `nav.accent`, `nav.current`, `nav.ground`, `nav.ink`, `nav.line`, `nav.muted`, `nav.onCurrent`, `onAccent`, `raised`, `rules.head`, `rules.section`, `status.critical`, `status.good`, `status.info`, `status.warning`, `surface`. |
 | `theme.parts.*.lift` | `"none"` · `"hairline"` · `"low"` · `"mid"` · `"high"` | Stable | A lift from the theme’s steps, in its shadow ink. One of `hairline`, `high`, `low`, `mid`, `none`. |
-| `theme.parts.*.radius` | `"control"` · `"field"` · `"pill"` · `"panel"` · `"square"` | Stable | One of the theme’s own corners, or square. One of `control`, `field`, `panel`, `pill`, `square`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.parts.*.weight` | `400` · `500` · `600` · `700` | Stable |  One of `400`, `500`, `600`, `700`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.parts.*.radius` | `"control"` · `"field"` · `"pill"` · `"panel"` · `"square"` | Stable | One of the theme’s own corners, or square. One of `control`, `field`, `panel`, `pill`, `square`. |
+| `theme.parts.*.weight` | `400` · `500` · `600` · `700` | Stable |  One of `400`, `500`, `600`, `700`. |
 
 ## `theme file: theme.recipes`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.recipes` | object | Stable | Each part's treatment, from the closed menu the built-in looks wear. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.recipes` | object | Stable | Each part's treatment, from the closed menu the built-in looks wear. |
 | `theme.recipes.actionBar` | `"plain"` · `"raised"` | Stable | `plain`: A form’s sticky action bar stands on a hairline over the page. `raised`: A form’s sticky action bar is raised on the surface with a soft lift, in place of the hairline. One of `plain`, `raised`. |
 | `theme.recipes.avatar` | `"plain"` · `"large"` · `"round"` | Stable | `plain`: A record’s avatar is its initials in a small square. `large`: A record’s avatar is 44px, in the look’s corners. `round`: A record’s avatar is 44px and round, and the menu’s and the account’s marks are round too. One of `large`, `plain`, `round`. Used in `examples/apps/lintel/resources.ts`. |
 | `theme.recipes.banner` | `"tint"` · `"gradient"` · `"plain"` | Stable | `tint`: A dashboard’s banner note is a box tinted with the accent. `gradient`: A dashboard’s banner note is a soft gradient from the accent to the second chart color. `plain`: A dashboard’s banner note stands on the page with no box, its eyebrow in the link color. One of `gradient`, `plain`, `tint`. |
-| `theme.recipes.bar` | `"plain"` · `"ruled"` · `"dark"` · `"airy"` · `"soft"` | Stable | `plain`: The top bar is the menu’s ground with a hairline under it. `ruled`: The top bar ends in a 2px rule instead of a hairline, and casts no shadow. `dark`: The top bar takes the menu’s ground and inks, so a dark or brand-colored menu runs across the top too. `airy`: The top bar is taller, with a large bold brand name and a wide, raised search box. `soft`: The top bar is a panel in the surface color with a hairline under it, apart from the menu beside it. One of `airy`, `dark`, `plain`, `ruled`, `soft`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.recipes.bar` | `"plain"` · `"ruled"` · `"dark"` · `"airy"` · `"soft"` | Stable | `plain`: The top bar is the menu’s ground with a hairline under it. `ruled`: The top bar ends in a 2px rule instead of a hairline, and casts no shadow. `dark`: The top bar takes the menu’s ground and inks, so a dark or brand-colored menu runs across the top too. `airy`: The top bar is taller, with a large bold brand name and a wide, raised search box. `soft`: The top bar is a panel in the surface color with a hairline under it, apart from the menu beside it. One of `airy`, `dark`, `plain`, `ruled`, `soft`. |
 | `theme.recipes.blocks` | `"open"` · `"ruled"` · `"card"` · `"panel"` · `"tile"` | Stable | A family: one word that sets the default of section, fields, stat, table, steps; a part said itself still wins. `open`: Every block stands open on the page: sections and tables under a rule, and the stats in one ruled strip, the only box. `ruled`: A printed page: blocks open under rules, each stat under a rule of its own, a record’s side groups captioned between hairlines. `card`: Every block is a card with a hairline and the card shadow: sections, field groups, stats and tables. `panel`: Every block is a panel on the surface with a hairline: sections, field groups and stats; a table stays open inside its panel. `tile`: Every block is a soft tile: stats as tiles with a large figure, a list as one tile with its rows ruled apart, steps tinted with their tone. One of `card`, `open`, `panel`, `ruled`, `tile`. |
 | `theme.recipes.board` | `"ruled"` · `"soft"` · `"strip"` | Stable | `ruled`: A board’s lanes are outlined by a hairline; its cards lie flat on them. `soft`: Each lane is a quiet tray that holds its head and its cards, each card a sheet on it under the look’s card shadow. `strip`: Each lane is headed by a strip tinted with its tone, its cards white under it; a card with a category wears its color as a stripe. One of `ruled`, `soft`, `strip`. Used in `examples/apps/lintel/views.ts`. |
-| `theme.recipes.buttons` | `"accent"` · `"raised"` · `"keyed"` | Stable | `accent`: The primary button is filled in the accent; the rest are quiet. `raised`: Secondary buttons are white keys with a hairline and a small shadow, raised off the page. `keyed`: Buttons are hard-edged keys: the primary one filled in the accent with an ink edge, like a hazard tag, the rest edged in the ink. One of `accent`, `keyed`, `raised`. Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.recipes.chart` | `"plain"` · `"wash"` · `"gradient"` · `"line"` | Stable | `plain`: A chart is its lines or bars on a light grid. `wash`: An area under a line is washed in the first chart color. `gradient`: An area fades from the line down to nothing, the line heavier and the grid dashed. `line`: Only the lines: no areas, a fine solid grid and small ticks. One of `gradient`, `line`, `plain`, `wash`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.recipes.buttons` | `"accent"` · `"raised"` · `"keyed"` | Stable | `accent`: The primary button is filled in the accent; the rest are quiet. `raised`: Secondary buttons are white keys with a hairline and a small shadow, raised off the page. `keyed`: Buttons are hard-edged keys: the primary one filled in the accent with an ink edge, like a hazard tag, the rest edged in the ink. One of `accent`, `keyed`, `raised`. |
+| `theme.recipes.chart` | `"plain"` · `"wash"` · `"gradient"` · `"line"` | Stable | `plain`: A chart is its lines or bars on a light grid. `wash`: An area under a line is washed in the first chart color. `gradient`: An area fades from the line down to nothing, the line heavier and the grid dashed. `line`: Only the lines: no areas, a fine solid grid and small ticks. One of `gradient`, `line`, `plain`, `wash`. |
 | `theme.recipes.current` | `"tint"` · `"inverted"` · `"underline"` · `"pill"` · `"lifted"` | Stable | A family: one word that sets the default of nav, tabs, windows; a part said itself still wins. `tint`: The current entry, tab and window each sit on a soft tint of the accent. `inverted`: The current entry and tab are inverted to the ink, and the chosen window is a filled segment: square, high-contrast. `underline`: The current tab, and the current entry in a top bar, are underlined in the accent with no fill; a chosen window sits on a tint. `pill`: The current entry and tab are pills, and the chosen window is a raised key on a tray. `lifted`: The tabs and the windows stand in sunken tracks, the chosen one a raised key lifted out; the menu’s entry sits on a tint. One of `inverted`, `lifted`, `pill`, `tint`, `underline`. Used in `examples/apps/lintel/resources.ts`. |
 | `theme.recipes.fields` | `"open"` · `"panel"` · `"card"` · `"rail"` | Stable | `open`: A record’s field groups and forms stand open on the page. `panel`: Each field group and form is a panel on the surface with a hairline; its labels stay as the look draws them. `card`: Each field group and form is a card with a hairline and the card shadow, its labels muted and the values in the interface face. `rail`: Field groups stand open, and the side column’s cards become captioned groups between hairlines. One of `card`, `open`, `panel`, `rail`. Used in `examples/apps/lintel/app.ts`. |
-| `theme.recipes.filters` | `"solid"` · `"dashed"` · `"quiet"` | Stable | `solid`: A list’s filter not yet asked for is its name before a caret on a solid edge: a key, as the search beside it is. `dashed`: The same key on a dashed hairline. No built-in look wears it: to people meeting a list it read as a place left empty. `quiet`: A list’s filter not yet asked for has no edge, its name in the muted ink, until a pointer is over it: then it sits on the raised ground. One of `dashed`, `quiet`, `solid`. Used in `examples/apps/lintel/theme.ts`. |
+| `theme.recipes.filters` | `"solid"` · `"dashed"` · `"quiet"` | Stable | `solid`: A list’s filter not yet asked for is its name before a caret on a solid edge: a key, as the search beside it is. `dashed`: The same key on a dashed hairline. No built-in look wears it: to people meeting a list it read as a place left empty. `quiet`: A list’s filter not yet asked for has no edge, its name in the muted ink, until a pointer is over it: then it sits on the raised ground. One of `dashed`, `quiet`, `solid`. Used in `examples/apps/lintel/views.ts`. |
 | `theme.recipes.formStep` | `"plain"` · `"ruled"` | Stable | `plain`: A multi-step form’s step header is its title over its lead, with nothing between it and the fields. `ruled`: A multi-step form’s step header ends in a hairline, which parts it from the fields under it. One of `plain`, `ruled`. |
-| `theme.recipes.header` | `"plain"` · `"band"` · `"hero"` | Stable | `plain`: A record’s head and a list’s stand on the page’s ground, under the trail’s hairline. `band`: A record’s head and a list’s are one band of the raised ground from edge to edge: the trail, the title, its status, facts and verbs, a list’s tabs and filters; the contents keep their edge. `hero`: A band, with the record’s avatar large beside its title (above it on a phone); a record without one, and a list, draw the band. One of `band`, `hero`, `plain`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.recipes.header` | `"plain"` · `"band"` · `"hero"` | Stable | `plain`: A record’s head and a list’s stand on the page’s ground, under the trail’s hairline. `band`: A record’s head and a list’s are one band of the raised ground from edge to edge: the trail, the title, its status, facts and verbs, a list’s tabs and filters; the contents keep their edge. `hero`: A band, with the record’s avatar large beside its title (above it on a phone); a record without one, and a list, draw the band. One of `band`, `hero`, `plain`. |
 | `theme.recipes.lanes` | `"tint"` · `"tag"` · `"plain"` | Stable | `tint`: A board lane’s value in its head is on its tone’s tint. `tag`: A board lane’s value is a solid tag in its tone, in white capitals. `plain`: A board lane’s value is its name in plain ink. One of `plain`, `tag`, `tint`. |
 | `theme.recipes.links` | `"plain"` · `"underline"` · `"name"` | Stable | `plain`: A link to another record is in the link color without an underline. `underline`: A link to another record is underlined, so it reads as one without color. `name`: A row’s name is underlined, as an index’s entry is, and what the row or a record’s facts refer to reads as text; the line that goes on to another record keeps its underline. One of `name`, `plain`, `underline`. Used in `examples/apps/lintel/pages/unit.ts`. |
 | `theme.recipes.nav` | `"tint"` · `"inverted"` · `"wash"` · `"underline"` · `"pill"` · `"quiet"` · `"slot"` · `"float"` | Stable | `tint`: The current entry sits on a soft tint of the accent; the other rows stay plain. `inverted`: The current entry is inverted, the menu’s ink as its ground: the boldest mark, square and high-contrast. `wash`: The current entry sits on a wash of the menu’s own accent, stronger than tint, for a menu in a brand color. `underline`: The current entry in the top bar is marked by a 3px rule of the menu’s accent under it, with no fill. `pill`: Every row is a rounded pill with room around it; the current one is filled in the accent’s tint, its word in the accent. `quiet`: The current entry is barely shaded in the menu’s ink, with no accent at all: the calmest mark. `slot`: The current entry is an ink block, as inverted, with a 3px marker of the menu’s accent beside it, like a tool’s slot on a pegboard. `float`: The side menu is a card of its own, standing off the window’s edge with rounded corners; the current entry is a pill in the accent’s tint. One of `float`, `inverted`, `pill`, `quiet`, `slot`, `tint`, `underline`, `wash`. Used in `examples/apps/lintel/app.ts`. |
 | `theme.recipes.pane` | `"inset"` · `"edge"` | Stable | `inset`: A side-placed App’s room is a pane on the menu’s ground: inset from the window’s edge on the three sides the menu is not, a hairline round it and its corners rounded. `edge`: A side-placed App’s room runs to the window’s right and bottom edges, square, with one hairline between it and the menu. One of `edge`, `inset`. |
-| `theme.recipes.required` | `"star"` · `"optional-word"` | Stable | `star`: A required field wears a red star after its label; an optional one wears nothing. `optional-word`: A required field wears nothing and an optional one says “(optional)” after its label, quietly; the form’s own words, in the reader’s language. One of `optional-word`, `star`. Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.recipes.required` | `"star"` · `"optional-word"` | Stable | `star`: A required field wears a red star after its label; an optional one wears nothing. `optional-word`: A required field wears nothing and an optional one says “(optional)” after its label, quietly; the form’s own words, in the reader’s language. One of `optional-word`, `star`. |
 | `theme.recipes.rules` | `"ink"` · `"hairline"` · `"double"` | Stable | `ink`: A record’s sections are announced by a 2px rule in the ink. `hairline`: A record’s sections are announced by a 1px hairline instead. `double`: A 1px hairline announces a record’s sections as in hairline, a box is ruled in the strong line, and a table’s heads close with a double rule. One of `double`, `hairline`, `ink`. |
-| `theme.recipes.section` | `"open"` · `"card"` · `"panel"` | Stable | `open`: A dashboard section stands open on the page under its rule. `card`: Each dashboard section is a card with a hairline and the card shadow, its table drawn to the card’s edges. `panel`: Each dashboard section is a panel like card, but a section in the side column stays open on the page. One of `card`, `open`, `panel`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.recipes.stat` | `"plain"` · `"framed"` · `"topline"` · `"ruled"` · `"icon"` · `"panel"` · `"divided"` · `"bento"` | Stable | `plain`: A stat is a figure and its label with no frame. `framed`: Each stat is a card framed by a line in the ink: square and stark. `topline`: Each stat card has a 3px rule in the first chart color along its top. `ruled`: Each stat stands open under a 2px rule in the ink, with no card or shadow, like a printed page. `icon`: Each stat is a card with its icon in a round tint of a chart color above the label, and a large bold figure. `panel`: Each stat is a panel on the surface with a hairline and the look’s card shadow. `divided`: The stats share one strip, a hairline round it and one between its figures, with no card to each: the quietest arrangement. `bento`: Each stat is a soft tile of its own in the raised ground, with no edge and a large figure: the roundest arrangement. One of `bento`, `divided`, `framed`, `icon`, `panel`, `plain`, `ruled`, `topline`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.recipes.section` | `"open"` · `"card"` · `"panel"` | Stable | `open`: A dashboard section stands open on the page under its rule. `card`: Each dashboard section is a card with a hairline and the card shadow, its table drawn to the card’s edges. `panel`: Each dashboard section is a panel like card, but a section in the side column stays open on the page. One of `card`, `open`, `panel`. |
+| `theme.recipes.stat` | `"plain"` · `"framed"` · `"topline"` · `"ruled"` · `"icon"` · `"panel"` · `"divided"` · `"bento"` | Stable | `plain`: A stat is a figure and its label with no frame. `framed`: Each stat is a card framed by a line in the ink: square and stark. `topline`: Each stat card has a 3px rule in the first chart color along its top. `ruled`: Each stat stands open under a 2px rule in the ink, with no card or shadow, like a printed page. `icon`: Each stat is a card with its icon in a round tint of a chart color above the label, and a large bold figure. `panel`: Each stat is a panel on the surface with a hairline and the look’s card shadow. `divided`: The stats share one strip, a hairline round it and one between its figures, with no card to each: the quietest arrangement. `bento`: Each stat is a soft tile of its own in the raised ground, with no edge and a large figure: the roundest arrangement. One of `bento`, `divided`, `framed`, `icon`, `panel`, `plain`, `ruled`, `topline`. |
 | `theme.recipes.status` | `"dot"` · `"pill"` · `"pill-dot"` · `"quiet"` | Stable | `dot`: A status word in its tone with a dot before it. `pill`: A status word on a pill tinted with its tone, without a dot. `pill-dot`: A status word on a pill tinted with its tone, with a small dot inside it. `quiet`: A status word in the ink with a dot in its tone: the color is only the dot. One of `dot`, `pill`, `pill-dot`, `quiet`. |
 | `theme.recipes.steps` | `"flat"` · `"tinted"` · `"strip"` | Stable | `flat`: A breakdown drawn as steps is a row of cards on the surface with a hairline. `tinted`: Each step’s card is tinted with its tone: good, warning, critical or the accent. `strip`: The steps are one strip of figures parted by hairlines, with no cards or marks. One of `flat`, `strip`, `tinted`. |
-| `theme.recipes.table` | `"open"` · `"tinted"` · `"hairline"` · `"card"` · `"quiet"` · `"banded"` · `"rows"` | Stable | `open`: Rows stand on the page under a rule, the head as the look draws it. `tinted`: As open, but a hovered row takes a tint of the accent and its check boxes the accent: the same until a pointer moves. `hairline`: The head sits on a hairline in 12.5px semibold, the rows in 13.5px: open, a little roomier. `card`: The table is a card: muted 12px heads on a hairline, faint row rules and taller rows. `quiet`: The table is a card of quiet rows, a work queue’s open button folded to a chevron at the row’s end. `banded`: As open, but every other row lies on the band color (colors.band, or the raised ground), each ink measured on it. `rows`: The list is one soft tile on the page’s ground: rows ruled apart by hairlines, the head plain words inside it, the tile’s corners its own. One of `banded`, `card`, `hairline`, `open`, `quiet`, `rows`, `tinted`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.recipes.table` | `"open"` · `"tinted"` · `"hairline"` · `"card"` · `"quiet"` · `"banded"` · `"rows"` | Stable | `open`: Rows stand on the page under a rule, the head as the look draws it. `tinted`: As open, but a hovered row takes a tint of the accent and its check boxes the accent: the same until a pointer moves. `hairline`: The head sits on a hairline in 12.5px semibold, the rows in 13.5px: open, a little roomier. `card`: The table is a card: muted 12px heads on a hairline, faint row rules and taller rows. `quiet`: The table is a card of quiet rows, a work queue’s open button folded to a chevron at the row’s end. `banded`: As open, but every other row lies on the band color (colors.band, or the raised ground), each ink measured on it. `rows`: The list is one soft tile on the page’s ground: rows ruled apart by hairlines, the head plain words inside it, the tile’s corners its own. One of `banded`, `card`, `hairline`, `open`, `quiet`, `rows`, `tinted`. |
 | `theme.recipes.tabs` | `"pill"` · `"inverted"` · `"underline"` · `"rule"` · `"tint"` · `"lifted"` | Stable | `pill`: The chosen tab is a soft pill in the ink with an edge of its own; the others are plain words. `inverted`: The chosen tab is inverted, the ink as its ground: square, high-contrast. `underline`: The tabs stand on a hairline, wide apart, the chosen one underlined in the accent with no fill. `rule`: The chosen tab is underlined by a 2px rule in the link color with no fill, the tabs packed as written. `tint`: The chosen tab sits on a soft tint of the accent in the ink, wider apart, with no underline. `lifted`: The tabs stand in a sunken track; the chosen one is a raised key lifted out of it, with no underline. One of `inverted`, `lifted`, `pill`, `rule`, `tint`, `underline`. Used in `examples/apps/tick/app.ts`. |
 | `theme.recipes.windows` | `"segmented"` · `"lifted"` · `"tint"` | Stable | `segmented`: The period picker is a segmented control, the chosen period filled. `lifted`: The period picker is a sunken tray, the chosen period a raised white key on it. `tint`: The period picker has no tray; the chosen period sits on a soft tint of the accent. One of `lifted`, `segmented`, `tint`. Used in `examples/apps/lintel/dashboards.ts`. |
 | `theme.recipes.workflow` | `"markers"` · `"pills"` · `"segments"` | Stable | `markers`: A workflow whose steps are an order is numbered marks joined by a rule, the label under each; a set of states with no order is a track of thin segments. `pills`: A workflow is a row of pills with a dot each: a step walked in the good tint, the current one in the accent’s. `segments`: A workflow is one bar cut into segments, a word in each: the steps walked on a tint in the ink, the current one on the accent’s tint, those ahead muted. One of `markers`, `pills`, `segments`. |
@@ -1034,7 +1034,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.rhythm` | `"tight"` · `"house"` · `"airy"` | Stable | How far apart things stand: house (omitted) as the platform spaces a page, tight its layout steps (16px and up, and the section seam) a quarter closer, airy a quarter wider. A control's own padding never moves. One of `airy`, `house`, `tight`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.rhythm` | `"tight"` · `"house"` · `"airy"` | Stable | How far apart things stand: house (omitted) as the platform spaces a page, tight its layout steps (16px and up, and the section seam) a quarter closer, airy a quarter wider. A control's own padding never moves. One of `airy`, `house`, `tight`. |
 
 ## `theme file: theme.scheme`
 
@@ -1046,22 +1046,22 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.shape` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.shape.border` | object | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.shape.border.control` | `"0px"` · `"1px"` · `"2px"` | Stable | A field's and a select's edge; omitted, 1px. `0px` draws none, and `check` refuses it unless `colors.field` stands apart from the ground and the surface (1.08:1); the focus ring is then the edge. One of `0px`, `1px`, `2px`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.shape.border.focus` | `"2px"` · `"3px"` | Stable | The focus ring; omitted, 2px. One of `2px`, `3px`. Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.shape.border.panel` | `"0px"` · `"1px"` · `"2px"` | Stable | A card's and a section's edge where the look draws one; 0px draws none. Omitted, 1px. One of `0px`, `1px`, `2px`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.shape` | object | Stable |  Used in `examples/apps/lintel/dashboards.ts`. |
+| `theme.shape.border` | object | Stable |  |
+| `theme.shape.border.control` | `"0px"` · `"1px"` · `"2px"` | Stable | A field's and a select's edge; omitted, 1px. `0px` draws none, and `check` refuses it unless `colors.field` stands apart from the ground and the surface (1.08:1); the focus ring is then the edge. One of `0px`, `1px`, `2px`. |
+| `theme.shape.border.focus` | `"2px"` · `"3px"` | Stable | The focus ring; omitted, 2px. One of `2px`, `3px`. |
+| `theme.shape.border.panel` | `"0px"` · `"1px"` · `"2px"` | Stable | A card's and a section's edge where the look draws one; 0px draws none. Omitted, 1px. One of `0px`, `1px`, `2px`. |
 | `theme.shape.border.rule` | `"1px"` · `"2px"` · `"3px"` | Stable | The rules over a section and a board's lanes and under a table's heads; omitted, the look's (2px, Lumen 1px). One of `1px`, `2px`, `3px`. |
-| `theme.shape.elevation` | object | Stable | A preset as its look draws it (flat: Mono, no lift; hairline: the platform's; soft: Sage; raised: Lumen), or a step for cards and one for what floats over the base's, each none, hairline, low (the platform's popups), mid (Sage's) or high (Lumen's). One of `flat`, `hairline`, `raised`, `soft`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.shape.elevation` | object | Stable | A preset as its look draws it (flat: Mono, no lift; hairline: the platform's; soft: Sage; raised: Lumen), or a step for cards and one for what floats over the base's, each none, hairline, low (the platform's popups), mid (Sage's) or high (Lumen's). One of `flat`, `hairline`, `raised`, `soft`. |
 | `theme.shape.elevation.card` | `"none"` · `"hairline"` · `"low"` · `"mid"` · `"high"` | Stable | The cards a recipe draws: a section, a field group or a stat boxed by section, fields or stat. One of `hairline`, `high`, `low`, `mid`, `none`. |
 | `theme.shape.elevation.float` | `"none"` · `"hairline"` · `"low"` · `"mid"` · `"high"` | Stable | What floats: a menu, a popover, a drawer; a dialog a step above. One of `hairline`, `high`, `low`, `mid`, `none`. |
 | `theme.shape.height` | object | Stable |  |
-| `theme.shape.height.control` | string | Stable | A field's, a select's and a button's height, 32px to 56px; omitted, 34px. A touch screen keeps a 44px floor. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.shape.radius` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.shape.radius.control` | string | Stable | A button's, an input's and a select's corner, 0px to 16px, or `round`: a pill (every other box that follows it takes 8px). One of `round`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.shape.radius.field` | string | Stable | A form field's corner, 0px to 12px. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.shape.radius.panel` | string | Stable | A card's, a section's and a dialog's corner, 0px to 20px; omitted, one and a half controls', at most 20px. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.shape.radius.pill` | string | Stable | A status pill's, a tag's and a chip's corner, 0px to 12px or `round`; omitted, round. One of `round`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.shape.height.control` | string | Stable | A field's, a select's and a button's height, 32px to 56px; omitted, 34px. A touch screen keeps a 44px floor. |
+| `theme.shape.radius` | object | Stable |  |
+| `theme.shape.radius.control` | string | Stable | A button's, an input's and a select's corner, 0px to 16px, or `round`: a pill (every other box that follows it takes 8px). One of `round`. |
+| `theme.shape.radius.field` | string | Stable | A form field's corner, 0px to 12px. |
+| `theme.shape.radius.panel` | string | Stable | A card's, a section's and a dialog's corner, 0px to 20px; omitted, one and a half controls', at most 20px. |
+| `theme.shape.radius.pill` | string | Stable | A status pill's, a tag's and a chip's corner, 0px to 12px or `round`; omitted, round. One of `round`. |
 
 ## `theme file: theme.shell`
 
@@ -1080,49 +1080,49 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.surface` | object | Stable | A pattern behind the page (ground) and one behind the navigation (nav), drawn in the theme’s line color; never behind a panel or a field. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.surface.ground` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.surface.ground.kind` | `"paper"` · `"grain"` · `"grid"` · `"dots"` · `"lines"` · `"scanlines"` | Stable | paper and grain a fine speckle, grid squares, dots a dot grid, lines ruled lines, scanlines a screen’s. One of `dots`, `grain`, `grid`, `lines`, `paper`, `scanlines`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.surface` | object | Stable | A pattern behind the page (ground) and one behind the navigation (nav), drawn in the theme’s line color; never behind a panel or a field. |
+| `theme.surface.ground` | object | Stable |  |
+| `theme.surface.ground.kind` | `"paper"` · `"grain"` · `"grid"` · `"dots"` · `"lines"` · `"scanlines"` | Stable | paper and grain a fine speckle, grid squares, dots a dot grid, lines ruled lines, scanlines a screen’s. One of `dots`, `grain`, `grid`, `lines`, `paper`, `scanlines`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `theme.surface.ground.strength` | `1` · `2` · `3` | Stable | How much of the line color it is drawn in: 1 (omitted) 40%, 2 70%, 3 all of it. check measures the words over its darkest point (theme-contrast). One of `1`, `2`, `3`. |
 | `theme.surface.nav` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `theme.surface.nav.kind` | `"paper"` · `"grain"` · `"grid"` · `"dots"` · `"lines"` · `"scanlines"` | Stable | paper and grain a fine speckle, grid squares, dots a dot grid, lines ruled lines, scanlines a screen’s. One of `dots`, `grain`, `grid`, `lines`, `paper`, `scanlines`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.surface.nav.kind` | `"paper"` · `"grain"` · `"grid"` · `"dots"` · `"lines"` · `"scanlines"` | Stable | paper and grain a fine speckle, grid squares, dots a dot grid, lines ruled lines, scanlines a screen’s. One of `dots`, `grain`, `grid`, `lines`, `paper`, `scanlines`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `theme.surface.nav.strength` | `1` · `2` · `3` | Stable | How much of the line color it is drawn in: 1 (omitted) 40%, 2 70%, 3 all of it. check measures the words over its darkest point (theme-contrast). One of `1`, `2`, `3`. |
 
 ## `theme file: theme.type`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.type` | object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type` | object | Stable |  Used in `examples/apps/lintel/resources.ts`. |
 
 ## `theme file: theme.type.base`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.type.base` | `"13px"` · `"14px"` · `"15px"` · `"16px"` | Stable | The size an App’s text is drawn at; every size grows with it, the roles’ too. Omitted, 13px. One of `13px`, `14px`, `15px`, `16px`. Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.type.base` | `"13px"` · `"14px"` · `"15px"` · `"16px"` | Stable | The size an App’s text is drawn at; every size grows with it, the roles’ too. Omitted, 13px. One of `13px`, `14px`, `15px`, `16px`. |
 
 ## `theme file: theme.type.faces`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.type.faces` | array | Stable | Font files from the App's directory, each one @font-face served from the App's own origin. The heading's face is preloaded on first paint. Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.type.faces` | array | Stable | Font files from the App's directory, each one @font-face served from the App's own origin. The heading's face is preloaded on first paint. |
 
 ## `theme file: theme.type.faces[]`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.type.faces[].family` | string | Stable | The family name a type.font stack names it by. Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.type.faces[].src` | string | Stable | A .woff2 or .woff file inside the App's directory, relative to it: ./fonts/workshop-mono.woff2. Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.type.faces[].family` | string | Stable | The family name a type.font stack names it by. |
+| `theme.type.faces[].src` | string | Stable | A .woff2 or .woff file inside the App's directory, relative to it: ./fonts/workshop-mono.woff2. |
 | `theme.type.faces[].style` | `"normal"` · `"italic"` | Stable |  One of `italic`, `normal`. Used in `examples/apps/lintel/views.ts`. |
 | `theme.type.faces[].subset` |  | Stable | Omitted, the file is cut to Latin when the App loads; false ships it whole, for an App written in another script. One of `false`. |
-| `theme.type.faces[].weight` | integer \| string | Stable | 100 to 900, or a variable file's range as "100 900". Omitted, 400. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.faces[].weight` | integer \| string | Stable | 100 to 900, or a variable file's range as "100 900". Omitted, 400. |
 
 ## `theme file: theme.type.font`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.type.font` | string \| object | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.font.code` | string | Stable |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.font.data` | string | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.type.font` | string \| object | Stable |  |
+| `theme.type.font.code` | string | Stable |  Used in `examples/apps/lintel/pages/unit.ts`. |
+| `theme.type.font.data` | string | Stable |  |
 | `theme.type.font.figures` | string | Stable | The face of the ids, codes, numbers and dates a table's cells and a record's fields set apart. Omitted, it follows data when the theme names one, and is the platform's Plex Mono when it names neither. Used in `examples/apps/lintel/dashboards.ts`. |
 | `theme.type.font.heading` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `theme.type.font.ui` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
@@ -1137,58 +1137,58 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.type.roles` | object | Stable | Each kind of text by what it is for, saying only what differs from the look. Body, data and nav text has no size of its own: it follows type.base; a label’s may be set a step either side of it. |
-| `theme.type.roles.body` | object | Stable | Prose, fields and the interface, at the base size: its leading (1.35 to 1.8) and features. Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.type.roles` | object | Stable | Each kind of text by what it is for, saying only what differs from the look. Body, data and nav text has no size of its own: it follows type.base; a label’s may be set a step either side of it. Used in `examples/apps/lintel/app.ts`. |
+| `theme.type.roles.body` | object | Stable | Prose, fields and the interface, at the base size: its leading (1.35 to 1.8) and features. |
 | `theme.type.roles.body.features` | array | Stable |  |
-| `theme.type.roles.body.leading` | number | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.type.roles.data` | object | Stable | A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates). A record header’s facts keep the head’s face, their figures tabular. Used in `examples/apps/lintel/hearth.ts`. |
+| `theme.type.roles.body.leading` | number | Stable |  |
+| `theme.type.roles.data` | object | Stable | A table’s cells and a record’s values, in the data face at the base size: their features, tabular figures kept, and its reach: every value, or figures only (figures, keys and dates). A record header’s facts keep the head’s face, their figures tabular. |
 | `theme.type.roles.data.features` | array | Stable |  |
 | `theme.type.roles.data.reach` | `"values"` · `"figures"` | Stable | values (omitted): every value in the data face; figures: only figures, keys and dates, names in the interface face. One of `figures`, `values`. |
-| `theme.type.roles.display` | object | Stable | A landing’s headline: its face, size (28px to 56px), leading, tracking, weight and features. Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.type.roles.display.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.display` | object | Stable | A landing’s headline: its face, size (28px to 56px), leading, tracking, weight and features. Used in `examples/apps/lintel/resources.ts`. |
+| `theme.type.roles.display.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. |
 | `theme.type.roles.display.features` | array | Stable |  |
-| `theme.type.roles.display.leading` | number | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.type.roles.display.size` | string | Stable | 28px to 56px, at the 13px base. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.display.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.display.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.figure` | object | Stable | A stat’s figure: its face, size (18px to 40px), tracking, weight and features, tabular figures kept. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.figure.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.display.leading` | number | Stable |  |
+| `theme.type.roles.display.size` | string | Stable | 28px to 56px, at the 13px base. Used in `examples/apps/lintel/resources.ts`. |
+| `theme.type.roles.display.tracking` | string | Stable | -0.03em to 0.15em. |
+| `theme.type.roles.display.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. |
+| `theme.type.roles.figure` | object | Stable | A stat’s figure: its face, size (18px to 40px), tracking, weight and features, tabular figures kept. Used in `examples/apps/lintel/views.ts`. |
+| `theme.type.roles.figure.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. |
 | `theme.type.roles.figure.features` | array | Stable |  |
-| `theme.type.roles.figure.size` | string | Stable | 18px to 40px, at the 13px base. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.figure.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.figure.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.figure.size` | string | Stable | 18px to 40px, at the 13px base. Used in `examples/apps/lintel/resources.ts`. |
+| `theme.type.roles.figure.tracking` | string | Stable | -0.03em to 0.15em. |
+| `theme.type.roles.figure.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. |
 | `theme.type.roles.heading` | object | Stable | A list naming itself over its rows: its face, size (16px to 28px), leading, tracking, weight (omitted, the title’s), case and features. Used in `examples/apps/tick/app.ts`. |
-| `theme.type.roles.heading.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.heading.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.heading.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. |
+| `theme.type.roles.heading.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. |
 | `theme.type.roles.heading.features` | array | Stable |  |
-| `theme.type.roles.heading.leading` | number | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.type.roles.heading.size` | string | Stable | 16px to 28px, at the 13px base. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.heading.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.heading.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.heading.leading` | number | Stable |  |
+| `theme.type.roles.heading.size` | string | Stable | 16px to 28px, at the 13px base. Used in `examples/apps/lintel/resources.ts`. |
+| `theme.type.roles.heading.tracking` | string | Stable | -0.03em to 0.15em. |
+| `theme.type.roles.heading.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. |
 | `theme.type.roles.label` | object | Stable | A column’s head, a stat’s label and a record’s tabs, at the base size: their face, size (11px to 14px), tracking, weight (400 to 700), case and features; upper sets them a step smaller unless a size is said. |
-| `theme.type.roles.label.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.label.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.label.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. |
+| `theme.type.roles.label.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. |
 | `theme.type.roles.label.features` | array | Stable |  |
-| `theme.type.roles.label.size` | string | Stable | 11px to 14px, at the 13px base. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.label.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.label.weight` | `400` · `500` · `600` · `700` | Stable |  One of `400`, `500`, `600`, `700`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.label.size` | string | Stable | 11px to 14px, at the 13px base. Used in `examples/apps/lintel/resources.ts`. |
+| `theme.type.roles.label.tracking` | string | Stable | -0.03em to 0.15em. |
+| `theme.type.roles.label.weight` | `400` · `500` · `600` · `700` | Stable |  One of `400`, `500`, `600`, `700`. |
 | `theme.type.roles.nav` | object | Stable | The menu’s entries in the bar, at the base size: their face, tracking, weight (400 to 600) and case; upper sets them a step smaller. Used in `examples/apps/lintel/app.ts`. |
-| `theme.type.roles.nav.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.nav.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.nav.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.nav.weight` | `400` · `500` · `600` | Stable |  One of `400`, `500`, `600`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.section` | object | Stable | A section’s title on a record and a dashboard: its face, case and features; a dashboard’s section title also takes a size (12px to 20px), tracking and weight. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.section.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.section.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.nav.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. |
+| `theme.type.roles.nav.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. |
+| `theme.type.roles.nav.tracking` | string | Stable | -0.03em to 0.15em. |
+| `theme.type.roles.nav.weight` | `400` · `500` · `600` | Stable |  One of `400`, `500`, `600`. |
+| `theme.type.roles.section` | object | Stable | A section’s title on a record and a dashboard: its face, case and features; a dashboard’s section title also takes a size (12px to 20px), tracking and weight. |
+| `theme.type.roles.section.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. |
+| `theme.type.roles.section.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. |
 | `theme.type.roles.section.features` | array | Stable |  |
-| `theme.type.roles.section.size` | string | Stable | 12px to 20px, at the 13px base. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.section.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.section.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.section.size` | string | Stable | 12px to 20px, at the 13px base. Used in `examples/apps/lintel/resources.ts`. |
+| `theme.type.roles.section.tracking` | string | Stable | -0.03em to 0.15em. |
+| `theme.type.roles.section.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. |
 | `theme.type.roles.title` | object | Stable | A record’s and a dashboard’s name: its face, size (20px to 36px), leading, tracking, weight, case and features; its weight is every heading’s. |
-| `theme.type.roles.title.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.title.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.title.case` | `"none"` · `"upper"` · `"small-caps"` | Stable |  One of `none`, `small-caps`, `upper`. |
+| `theme.type.roles.title.face` | `"ui"` · `"heading"` · `"data"` · `"code"` | Stable |  One of `code`, `data`, `heading`, `ui`. |
 | `theme.type.roles.title.features` | array | Stable |  |
-| `theme.type.roles.title.leading` | number | Stable |  Used in `examples/apps/lintel/hearth.ts`. |
-| `theme.type.roles.title.size` | string | Stable | 20px to 36px, at the 13px base. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.title.tracking` | string | Stable | -0.03em to 0.15em. Used in `examples/apps/lintel/blueprint.ts`. |
-| `theme.type.roles.title.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `theme.type.roles.title.leading` | number | Stable |  |
+| `theme.type.roles.title.size` | string | Stable | 20px to 36px, at the 13px base. Used in `examples/apps/lintel/resources.ts`. |
+| `theme.type.roles.title.tracking` | string | Stable | -0.03em to 0.15em. |
+| `theme.type.roles.title.weight` | `400` · `500` · `600` · `700` · `800` · `900` | Stable |  One of `400`, `500`, `600`, `700`, `800`, `900`. |

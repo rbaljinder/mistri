@@ -110,7 +110,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=dashboard].filters` | array | Stable | Pick-filters: column names offered as selectors in the control row. A pick narrows every section whose table has the column; a vocabulary column offers its values, a whole single-column reference offers the records it points at, by name. Used in `examples/apps/lintel/theme.ts`. |
+| `views.*[kind=dashboard].filters` | array | Stable | Pick-filters: column names offered as selectors in the control row. A pick narrows every section whose table has the column; a vocabulary column offers its values, a whole single-column reference offers the records it points at, by name. Used in `examples/apps/lintel/views.ts`. |
 
 ## `views.*[kind=dashboard].from`
 
@@ -140,7 +140,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=dashboard].kind` |  | Stable |  One of `dashboard`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].kind` |  | Stable |  One of `dashboard`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=dashboard].label`
 
@@ -164,7 +164,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=dashboard].roles` | array | Stable | The roles that may open it: a signed-in reader holding none of them is not served it (not in the menu, ⌘K or search, and its address answers as one that does not exist). Table grants still apply; this only narrows. Each must be declared in auth.roles. |
+| `views.*[kind=dashboard].roles` | array | Stable | The roles that may open it: a signed-in reader holding none of them is not served it (not in the menu, ⌘K or search, and its address answers as one that does not exist). Table grants still apply; this only narrows. Each must be declared in auth.roles. Used in `examples/apps/lintel/app.ts`. |
 
 ## `views.*[kind=dashboard].sections`
 
@@ -193,7 +193,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=dashboard].sections[][kind=activity].kind` |  | Stable |  One of `activity`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=activity].kind` |  | Stable |  One of `activity`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=activity].limit` | integer | Stable | Changes drawn before "Show more". Default 8. |
 | `views.*[kind=dashboard].sections[][kind=activity].resources` | object | Stable | The resources whose changes the feed lists, each with its mark and its word in the feed where not its noun: { pick_list: { icon: 'truck' } }. Used in `examples/apps/tick/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=activity].resources.*.icon` | `"house"` · `"tray"` · `"list"` · `"list-checks"` · `"kanban"` · `"table"` · `"calendar"` · `"calendar-check"` · `"clock"` · `"chart-bar"` · `"chart-line"` · `"chart-pie"` · `"gauge"` · `"target"` · `"flag"` · `"user"` · `"users"` · `"user-circle"` · `"address-book"` · `"handshake"` · `"buildings"` · `"storefront"` · `"briefcase"` · `"package"` · `"truck"` · `"car"` · `"shopping-cart"` · `"receipt"` · `"currency-dollar"` · `"credit-card"` · `"wallet"` · `"bank"` · `"file"` · `"file-text"` · `"folder"` · `"clipboard-text"` · `"note"` · `"archive"` · `"tag"` · `"ticket"` · `"star"` · `"bookmark-simple"` · `"bell"` · `"envelope"` · `"chat-circle"` · `"phone"` · `"headset"` · `"megaphone"` · `"globe"` · `"map-pin"` · `"magnifying-glass"` · `"gear"` · `"sliders"` · `"wrench"` · `"bug"` · `"shield-check"` · `"lock"` · `"key"` · `"database"` · `"stack"` · `"lightning"` · `"check-circle"` · `"warning"` · `"info"` · `"cell-signal-low"` · `"cell-signal-medium"` · `"cell-signal-high"` · `"cell-signal-full"` · `"fire"` · `"hourglass"` · `"circle-dashed"` · `"x-circle"` · `"plus-circle"` · `"pencil-simple"` · `"paper-plane-tilt"` · `"arrows-left-right"` · `"arrow-circle-down"` · `"arrow-circle-up"` · `"laptop"` · `"monitor"` · `"device-mobile"` · `"printer"` · `"stethoscope"` · `"heartbeat"` · `"heart"` · `"pill"` · `"syringe"` · `"first-aid-kit"` · `"thermometer"` · `"flask"` · `"test-tube"` · `"microscope"` · `"bed"` · `"hospital"` · `"ambulance"` · `"tooth"` · `"eyeglasses"` · `"wheelchair"` · `"baby"` · `"dna"` · `"brain"` · `"bandaids"` · `"hand-heart"` · `"graduation-cap"` · `"book-open"` · `"student"` · `"chalkboard-teacher"` · `"factory"` · `"warehouse"` · `"house-line"` · `"plant"` · `"leaf"` · `"sun"` · `"cloud"` · `"drop"` · `"airplane"` · `"bicycle"` · `"bus"` · `"train"` · `"boat"` · `"hammer"` · `"toolbox"` · `"plug"` · `"lightbulb"` · `"cube"` · `"camera"` · `"image"` · `"trophy"` · `"gift"` · `"coffee"` · `"fork-knife"` · `"shopping-bag"` · `"basket"` · `"barcode"` · `"qr-code"` · `"scales"` · `"gavel"` · `"certificate"` · `"identification-card"` · `"fingerprint"` · `"eye"` · `"link"` · `"paperclip"` · `"scissors"` · `"palette"` · `"code"` · `"terminal"` · `"users-three"` · `"user-plus"` · `"caret-left"` · `"caret-right"` · `"caret-up"` · `"caret-down"` · `"arrow-left"` · `"arrow-right"` · `"x"` · `"plus"` · `"dots-three"` | Stable | The mark each of its changes wears. One of `&lt;appIcon>`. Used in `examples/apps/lintel/app.ts`. |
@@ -213,7 +213,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=dashboard].sections[][kind=banner].image.alt` | string | Stable |  Used in `examples/apps/lintel/landing.ts`. |
 | `views.*[kind=dashboard].sections[][kind=banner].image.from` | string | Stable | A resource whose rows are files. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=banner].image.key` | string \| number | Stable |  Used in `examples/apps/lintel/landing.ts`. |
-| `views.*[kind=dashboard].sections[][kind=banner].kind` |  | Stable |  One of `banner`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=banner].kind` |  | Stable |  One of `banner`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=banner].text` | string | Stable | The words. Plain text; blank lines separate paragraphs. Used in `examples/apps/lintel/views.ts`. |
 
 ## `views.*[kind=dashboard].sections[][kind=board]`
@@ -221,18 +221,18 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=board].by` | string | Stable | The bare column of the table whose values are its lanes. Used in `examples/apps/lintel/pages/resident.ts`. |
-| `views.*[kind=dashboard].sections[][kind=board].kind` |  | Stable |  One of `board`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=board].kind` |  | Stable |  One of `board`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=board].lanes` | array | Stable |  |
 | `views.*[kind=dashboard].sections[][kind=board].limit` | integer | Stable |  |
 | `views.*[kind=dashboard].sections[][kind=board].lines` | array | Stable | Lines beneath the primary, label paths welcome. Needs primary. Used in `examples/apps/tick/app.ts`. |
-| `views.*[kind=dashboard].sections[][kind=board].primary` | string | Stable | The card's first line, a column or label path. Absent: the table's label column, alone. Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=dashboard].sections[][kind=board].primary` | string | Stable | The card's first line, a column or label path. Absent: the table's label column, alone. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=dashboard].sections[][kind=board].sort` | string | Stable | Written like the query bar. |
 
 ## `views.*[kind=dashboard].sections[][kind=branding]`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=dashboard].sections[][kind=branding].kind` |  | Stable |  One of `branding`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=branding].kind` |  | Stable |  One of `branding`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=dashboard].sections[][kind=breakdown]`
 
@@ -240,12 +240,12 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=breakdown].by` | string | Stable | What to group by — "status", or "month opened_on". Used in `examples/apps/lintel/pages/resident.ts`. |
 | `views.*[kind=dashboard].sections[][kind=breakdown].format` | `"percent"` · `"number"` · `"money"` · `"duration"` | Stable | How each figure is said where its measure is not one column's, as a metric's: percent (the figure is 0–100, said with %), number, money in the App's currency, or duration (the figure is seconds, said as "10h 2m"). One of `duration`, `money`, `number`, `percent`. Used in `examples/apps/lintel/resources.ts`. |
-| `views.*[kind=dashboard].sections[][kind=breakdown].kind` |  | Stable |  One of `breakdown`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=breakdown].kind` |  | Stable |  One of `breakdown`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=breakdown].limit` | integer | Stable |  |
 | `views.*[kind=dashboard].sections[][kind=breakdown].measure` | string | Stable | "count" (default), "sum amount as pipeline". Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=breakdown].minor` |  | Stable | The measure counts a currency's minor units (cents), said in its major unit: money where format is unsaid. For a measure whose column has no money rule to say so, such as one drawn by a component. One of `true`. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=dashboard].sections[][kind=breakdown].notes` | object | Stable | Steps: a line under a step, by the value it counts. Used in `examples/apps/lintel/dashboards.ts`. |
-| `views.*[kind=dashboard].sections[][kind=breakdown].shape` | `"bars"` · `"steps"` | Stable | bars (default): a row per group. steps: a card per value of one column, in its order, joined by arrows. One of `bars`, `steps`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=breakdown].shape` | `"bars"` · `"steps"` | Stable | bars (default): a row per group. steps: a card per value of one column, in its order, joined by arrows. One of `bars`, `steps`. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=breakdown].target` | object | Stable | A goal per group, read from another table: each bar is the share of its group's goal reached, full at the goal, and says it ("60% of $20,000 target"); a group with a goal and nothing measured is at 0%. |
 | `views.*[kind=dashboard].sections[][kind=breakdown].target.by` | string | Stable | The goal table's column whose value matches each group's key: a quota's owner. Used in `examples/apps/lintel/pages/resident.ts`. |
 | `views.*[kind=dashboard].sections[][kind=breakdown].target.from` | string | Stable | The resource the goals are read from. Absent means the section's. Used in `examples/apps/lintel/app.ts`. |
@@ -263,11 +263,11 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=dashboard].sections[][kind=chart].curve` | `"smooth"` · `"straight"` | Stable | A line's curve: smooth draws a monotone curve through the points. One of `smooth`, `straight`. |
 | `views.*[kind=dashboard].sections[][kind=chart].format` | `"percent"` · `"number"` · `"money"` · `"duration"` | Stable | How each figure is said where its measure is not one column's, as a metric's: percent (the figure is 0–100, said with %), number, money in the App's currency, or duration (the figure is seconds, said as "10h 2m"). One of `duration`, `money`, `number`, `percent`. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=dashboard].sections[][kind=chart].height` | number | Stable | The drawing’s height in CSS pixels. Absent means a third of the width, capped. |
-| `views.*[kind=dashboard].sections[][kind=chart].kind` |  | Stable |  One of `chart`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=chart].kind` |  | Stable |  One of `chart`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=chart].limit` | integer | Stable |  |
 | `views.*[kind=dashboard].sections[][kind=chart].measure` | string | Stable | "count" (default), "sum amount as pipeline". Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=chart].minor` |  | Stable | The measure counts a currency's minor units (cents), said in its major unit: money where format is unsaid. For a measure whose column has no money rule to say so, such as one drawn by a component. One of `true`. Used in `examples/apps/lintel/resources.ts`. |
-| `views.*[kind=dashboard].sections[][kind=chart].shape` | `"line"` · `"bar"` · `"donut"` · `"stacked"` · `"scatter"` · `"heatmap"` · `"waterfall"` · `"treemap"` | Stable | How it draws. A line wants a bucketed by; bars, a bucketed by or categories, one series with the current bar marked; a donut, categories; stacked, a two-key by — a bar for each group of the first key, divided by the second. Further shapes: scatter (one key, x across and measure up), heatmap (a two-key by as shaded cells), waterfall (one key's rises and falls to a total), treemap (one key's groups as tiles by size). Default line. One of `bar`, `donut`, `heatmap`, `line`, `scatter`, `stacked`, `treemap`, `waterfall`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=chart].shape` | `"line"` · `"bar"` · `"donut"` · `"stacked"` · `"scatter"` · `"heatmap"` · `"waterfall"` · `"treemap"` | Stable | How it draws. A line wants a bucketed by; bars, a bucketed by or categories, one series with the current bar marked; a donut, categories; stacked, a two-key by — a bar for each group of the first key, divided by the second. Further shapes: scatter (one key, x across and measure up), heatmap (a two-key by as shaded cells), waterfall (one key's rises and falls to a total), treemap (one key's groups as tiles by size). Default line. One of `bar`, `donut`, `heatmap`, `line`, `scatter`, `stacked`, `treemap`, `waterfall`. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=chart].sort` | `"value"` · `"category"` | Stable | The order of a bar chart's or donut's categories: value (largest first) or category (the key's own order). Absent, a category with an order of its own keeps it and any other goes largest first. One of `category`, `value`. |
 | `views.*[kind=dashboard].sections[][kind=chart].target` | number | Stable | A goal drawn as a rule in the ink on a line or stacked chart, and said beside it; not on a donut. |
 | `views.*[kind=dashboard].sections[][kind=chart].to` | string | Stable | The list view each group opens, narrowed to the group; false keeps the groups text. Absent, the one list view over the table that the reader is served. One of `false`. Used in `examples/apps/lintel/dashboards.ts`. |
@@ -289,7 +289,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=dashboard].sections[][kind=custom].figures.*.measure` | string | Stable | count, count distinct and a column (count distinct patient_id), or an aggregate and a column: sum amount, avg amount, min due_on, max due_on. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=custom].figures.*.over` | string | Stable | The date column the dashboard's time window narrows this figure by. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=custom].figures.*.query` | string | Stable | The query language, without the leading table name. |
-| `views.*[kind=dashboard].sections[][kind=custom].kind` |  | Stable |  One of `custom`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=custom].kind` |  | Stable |  One of `custom`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=custom].props` | object | Stable | The component's declared props; each checked against its declaration, defaults filled. |
 | `views.*[kind=dashboard].sections[][kind=custom].rows` | object | Stable | Named reads of rows, at most eight; the component receives each as rows.&lt;name>. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=custom].rows.*.from` | string | Stable | The resource its rows come from. Used in `examples/apps/lintel/app.ts`. |
@@ -303,7 +303,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=dashboard].sections[][kind=find].kind` |  | Stable |  One of `find`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=find].kind` |  | Stable |  One of `find`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=find].placeholder` | string | Stable | The box's words before anything is typed. |
 | `views.*[kind=dashboard].sections[][kind=find].resources` | array | Stable | The resources whose records it finds: ['article', 'catalog_item']. Used in `examples/apps/tick/app.ts`. |
 
@@ -312,7 +312,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=firstRun].description` | string | Stable | A sentence under the title. Used in `examples/apps/lintel/app.ts`. |
-| `views.*[kind=dashboard].sections[][kind=firstRun].kind` |  | Stable |  One of `firstRun`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=firstRun].kind` |  | Stable |  One of `firstRun`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=firstRun].steps` | array | Stable |  |
 | `views.*[kind=dashboard].sections[][kind=firstRun].steps[].description` | string | Stable | A line under the label. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=firstRun].steps[].label` | string | Stable | The next action: "Add your first customer". |
@@ -322,7 +322,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=dashboard].sections[][kind=funnel].kind` |  | Stable |  One of `funnel`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=funnel].kind` |  | Stable |  One of `funnel`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=funnel].stages` | array | Stable | The stages a row passes in order. A row reaches a stage when it holds the section's query, every required stage before it and the stage's own conditions; an optional stage is a side road, counted against the stage before it and not required by the ones after. |
 | `views.*[kind=dashboard].sections[][kind=funnel].stages[].label` | string \| object | Stable | The stage as a reader says it ("Submitted"), or a message of the App's catalogs. Each stage's label is its own. |
 | `views.*[kind=dashboard].sections[][kind=funnel].stages[].label.args` | object | Stable | Each ICU argument's column path: { "title": "thread_id.title" }. |
@@ -336,7 +336,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=integrations].integrations` | array | Stable | The integrations this form shows, by name, in this order; each one the jobs module lists. Without it, every one. |
-| `views.*[kind=dashboard].sections[][kind=integrations].kind` |  | Stable |  One of `integrations`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=integrations].kind` |  | Stable |  One of `integrations`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=dashboard].sections[][kind=matrix]`
 
@@ -344,7 +344,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=matrix].by` | string | Stable | Two keys — "stage, month close_date": rows by the first, columns by the second. Used in `examples/apps/lintel/pages/resident.ts`. |
 | `views.*[kind=dashboard].sections[][kind=matrix].format` | `"percent"` · `"number"` · `"money"` · `"duration"` | Stable | How each figure is said where its measure is not one column's, as a metric's: percent (the figure is 0–100, said with %), number, money in the App's currency, or duration (the figure is seconds, said as "10h 2m"). One of `duration`, `money`, `number`, `percent`. Used in `examples/apps/lintel/resources.ts`. |
-| `views.*[kind=dashboard].sections[][kind=matrix].kind` |  | Stable |  One of `matrix`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=matrix].kind` |  | Stable |  One of `matrix`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=matrix].measure` | string | Stable | "count" (default), "sum amount as pipeline". Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=matrix].minor` |  | Stable | The measure counts a currency's minor units (cents), said in its major unit: money where format is unsaid. For a measure whose column has no money rule to say so, such as one drawn by a component. One of `true`. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=dashboard].sections[][kind=matrix].to` | string | Stable | The list view each group opens, narrowed to the group; false keeps the groups text. Absent, the one list view over the table that the reader is served. One of `false`. Used in `examples/apps/lintel/dashboards.ts`. |
@@ -356,9 +356,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=dashboard].sections[][kind=metric].better` | `"up"` · `"down"` | Stable | Which way is good news, so the delta wears good/bad. Absent means neutral. Without "compare" or "over" there is no delta to color. One of `down`, `up`. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=metric].compare` | string | Stable | A second query for the same measure; the card shows the delta. The phrase "previous period" derives it from the query's one "last N days/weeks/months/years" window; with no window in the query and an "over", it is the period before the window the reader picks. Unsaid on a metric with an "over", it is "previous period"; with neither an "over" nor a window in the query, "previous period" is refused. |
-| `views.*[kind=dashboard].sections[][kind=metric].figure` | `"exact"` · `"compact"` · `"whole"` | Preview | How money is said on the card: exact (the default), to the currency's minor digits at any size ("$28,123.45", a balance read to the cent), compact from a thousand ("$28.1K"), or whole, rounded to the currency's major unit at any size ("$28,123"). Its change and goal follow it; the card's title and what a screen reader hears are exact either way. One of `compact`, `exact`, `whole`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=metric].figure` | `"exact"` · `"compact"` · `"whole"` | Preview | How money is said on the card: exact (the default), to the currency's minor digits at any size ("$28,123.45", a balance read to the cent), compact from a thousand ("$28.1K"), or whole, rounded to the currency's major unit at any size ("$28,123"). Its change and goal follow it; the card's title and what a screen reader hears are exact either way. One of `compact`, `exact`, `whole`. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=dashboard].sections[][kind=metric].format` | `"percent"` · `"number"` · `"money"` · `"duration"` | Stable | metric: how the figure is said where its measure is not one column's: percent (the figure is 0–100, said with %), number, money in the App's currency, or duration (the figure is seconds, said as "10h 2m"). One of `duration`, `money`, `number`, `percent`. Used in `examples/apps/lintel/resources.ts`. |
-| `views.*[kind=dashboard].sections[][kind=metric].kind` |  | Stable |  One of `metric`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=metric].kind` |  | Stable |  One of `metric`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=metric].measure` | string | Stable | "count" (default), "sum amount as pipeline", "median amount" (PostgreSQL only), or a computed measure: aggregates and numbers joined by + - * /, "sum won / sum amount as win_rate". Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=metric].minor` |  | Stable | The measure counts a currency's minor units (cents), said in its major unit: money where format is unsaid. For a measure whose column has no money rule to say so, such as one drawn by a component. One of `true`. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=dashboard].sections[][kind=metric].spark` | boolean | Stable | Draw the measure’s monthly trend (last 12 months of "over") inside the card while no window stands; a windowed metric draws its trend across the window unless this is false. Composes with the card’s own query — best on cards whose query carries no time clause, and whose clock points backward (an opened_on, not an open deal’s close_date). |
@@ -378,7 +378,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=dashboard].sections[][kind=note].action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). One of `&lt;appTarget>`. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=dashboard].sections[][kind=note].action.to.tab` | string | Stable |  |
 | `views.*[kind=dashboard].sections[][kind=note].action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `views.*[kind=dashboard].sections[][kind=note].kind` |  | Stable |  One of `note`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=note].kind` |  | Stable |  One of `note`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=note].text` | string | Stable | The words. Plain text; blank lines separate paragraphs. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=dashboard].sections[][kind=note].variant` | `"quiet"` · `"callout"` | Stable | quiet: small print, no mark. callout: a ground of its own. Absent: the plain note. One of `callout`, `quiet`. |
 
@@ -393,9 +393,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=dashboard].sections[][kind=rows].empty.action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=rows].empty.description` | string \| object | Stable | A sentence under the title. One of `&lt;presentationCopy>`. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=rows].empty.title` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
-| `views.*[kind=dashboard].sections[][kind=rows].kind` |  | Stable |  One of `rows`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=rows].kind` |  | Stable |  One of `rows`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=rows].limit` | integer | Stable |  |
-| `views.*[kind=dashboard].sections[][kind=rows].primary` | string | Stable | The shown column a row is titled by in this section alone, as on a list view; the rows then lead with it. Absent, the first column shown. Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=dashboard].sections[][kind=rows].primary` | string | Stable | The shown column a row is titled by in this section alone, as on a list view; the rows then lead with it. Absent, the first column shown. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=dashboard].sections[][kind=rows].show` | array | Stable | In the dashboard's aside the rows draw as a list, not a table: the first column names each row, the second is a quiet line under it and the third a value at its end — at most three. |
 | `views.*[kind=dashboard].sections[][kind=rows].sizing` | `"fit"` · `"scroll"` | Stable | Fit available width (default), or preserve content widths with horizontal scrolling. One of `fit`, `scroll`. |
 | `views.*[kind=dashboard].sections[][kind=rows].sort` | string | Stable | Written like the query bar. |
@@ -412,7 +412,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=dashboard].sections[][kind=view].empty.description` | string \| object | Stable | A sentence under the title. One of `&lt;presentationCopy>`. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=view].empty.title` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
 | `views.*[kind=dashboard].sections[][kind=view].interactive` | boolean | Stable | The list works as its room does: its search, its filters and, for a reader offered one, its selection with bulk actions. Not in the aside, a board or a calendar. |
-| `views.*[kind=dashboard].sections[][kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=dashboard].sections[][kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=dashboard].sections[][kind=view].limit` | integer | Stable | Rows; per lane for a board. |
 | `views.*[kind=dashboard].sections[][kind=view].listTab` | string | Stable | One of the view's tabs by its address word, as its URL carries it; a label is refused. Default: its first tab. |
 | `views.*[kind=dashboard].sections[][kind=view].view` | string | Stable | A list view's key. Used in `examples/apps/lintel/app.ts`. |
@@ -478,13 +478,13 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=form].inputs` | object | Stable | A form's input drawn by the App's own input component (kind 'input'), a public form's too, whose page loads it. An input in a group is named by its path (trade.vin), and in a repeating group stands in every row. |
-| `views.*[kind=form].inputs.*.kind` |  | Stable |  One of `input`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=form].inputs.*.kind` |  | Stable |  One of `input`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=form].kind`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=form].kind` |  | Stable |  One of `form`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=form].kind` |  | Stable |  One of `form`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=form].label`
 
@@ -496,7 +496,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=form].link` | object | Stable | Adding a submitted application to an account on proven control: sameDevice (the browser's 30-minute claim, spent by a signed-in Yes), statusCheck (a signed-in status check) and/or email (an account's verified email offers the applications that captured it, each added by a Yes). Needs the form's statusCheck. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=form].link` | object | Stable | Adding a submitted application to an account on proven control: sameDevice (the browser's 30-minute claim, spent by a signed-in Yes), statusCheck (a signed-in status check) and/or email (an account's verified email offers the applications that captured it, each added by a Yes). Needs the form's statusCheck. |
 | `views.*[kind=form].link.at` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=form].link.email` | string \| object | Stable | The root's email column (a step's input), or { column, verified }: verified is the text column the server stamps with the address the applicant proved with a code in the form, which links without asking. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=form].link.email.column` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
@@ -566,7 +566,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=form].roles` | array | Stable | A signed-in form's: the roles that may open it, within those granted its command. Never on a public form. Each must be declared in auth.roles. |
+| `views.*[kind=form].roles` | array | Stable | A signed-in form's: the roles that may open it, within those granted its command. Never on a public form. Each must be declared in auth.roles. Used in `examples/apps/lintel/app.ts`. |
 
 ## `views.*[kind=form].statusCheck`
 
@@ -596,7 +596,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=form].steps[].command` | string | Stable | A command, by its name in the App's commands module (defineCommands). The server fills in its input, target and version from the registration; mistri-commands.d.ts types the names. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=form].steps[].fields` | array | Stable | The fields in order. An inner list is a row, drawn side by side: [["first_name", "last_name"], "dob"]. At most 3 to a row. Used in `examples/apps/lintel/app.ts`. |
-| `views.*[kind=form].steps[].id` | string | Stable | Unique within the form. Absent, the label's slug, as step() makes it. |
+| `views.*[kind=form].steps[].id` | string | Stable | Unique within the form. Absent, the label's slug, as step() makes it. Used in `examples/apps/tick/app.ts`. |
 | `views.*[kind=form].steps[].label` | string | Stable | Static plain text. No row-value interpolation. |
 | `views.*[kind=form].steps[].lead` | string | Stable | One sentence under the title. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=form].steps[].next` | string | Stable | The primary button's words on this step; absent, Continue. Used in `examples/apps/lintel/views.ts`. |
@@ -640,7 +640,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=landing].hero.points[].icon` | `"house"` · `"tray"` · `"list"` · `"list-checks"` · `"kanban"` · `"table"` · `"calendar"` · `"calendar-check"` · `"clock"` · `"chart-bar"` · `"chart-line"` · `"chart-pie"` · `"gauge"` · `"target"` · `"flag"` · `"user"` · `"users"` · `"user-circle"` · `"address-book"` · `"handshake"` · `"buildings"` · `"storefront"` · `"briefcase"` · `"package"` · `"truck"` · `"car"` · `"shopping-cart"` · `"receipt"` · `"currency-dollar"` · `"credit-card"` · `"wallet"` · `"bank"` · `"file"` · `"file-text"` · `"folder"` · `"clipboard-text"` · `"note"` · `"archive"` · `"tag"` · `"ticket"` · `"star"` · `"bookmark-simple"` · `"bell"` · `"envelope"` · `"chat-circle"` · `"phone"` · `"headset"` · `"megaphone"` · `"globe"` · `"map-pin"` · `"magnifying-glass"` · `"gear"` · `"sliders"` · `"wrench"` · `"bug"` · `"shield-check"` · `"lock"` · `"key"` · `"database"` · `"stack"` · `"lightning"` · `"check-circle"` · `"warning"` · `"info"` · `"cell-signal-low"` · `"cell-signal-medium"` · `"cell-signal-high"` · `"cell-signal-full"` · `"fire"` · `"hourglass"` · `"circle-dashed"` · `"x-circle"` · `"plus-circle"` · `"pencil-simple"` · `"paper-plane-tilt"` · `"arrows-left-right"` · `"arrow-circle-down"` · `"arrow-circle-up"` · `"laptop"` · `"monitor"` · `"device-mobile"` · `"printer"` · `"stethoscope"` · `"heartbeat"` · `"heart"` · `"pill"` · `"syringe"` · `"first-aid-kit"` · `"thermometer"` · `"flask"` · `"test-tube"` · `"microscope"` · `"bed"` · `"hospital"` · `"ambulance"` · `"tooth"` · `"eyeglasses"` · `"wheelchair"` · `"baby"` · `"dna"` · `"brain"` · `"bandaids"` · `"hand-heart"` · `"graduation-cap"` · `"book-open"` · `"student"` · `"chalkboard-teacher"` · `"factory"` · `"warehouse"` · `"house-line"` · `"plant"` · `"leaf"` · `"sun"` · `"cloud"` · `"drop"` · `"airplane"` · `"bicycle"` · `"bus"` · `"train"` · `"boat"` · `"hammer"` · `"toolbox"` · `"plug"` · `"lightbulb"` · `"cube"` · `"camera"` · `"image"` · `"trophy"` · `"gift"` · `"coffee"` · `"fork-knife"` · `"shopping-bag"` · `"basket"` · `"barcode"` · `"qr-code"` · `"scales"` · `"gavel"` · `"certificate"` · `"identification-card"` · `"fingerprint"` · `"eye"` · `"link"` · `"paperclip"` · `"scissors"` · `"palette"` · `"code"` · `"terminal"` · `"users-three"` · `"user-plus"` · `"caret-left"` · `"caret-right"` · `"caret-up"` · `"caret-down"` · `"arrow-left"` · `"arrow-right"` · `"x"` · `"plus"` · `"dots-three"` | Stable | A menu mark: one of Phosphor's icons by its own name (phosphoricons.com, MIT), from the curated set in packages/engine/src/shared/appIcons.ts. One of `&lt;appIcon>`. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=landing].hero.points[].text` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=landing].hero.search` | object | Stable | The search panel inside the hero: the search section's keys without its title. Used in `examples/apps/tick/app.ts`. |
-| `views.*[kind=landing].hero.search.filters` | array | Stable |  Used in `examples/apps/lintel/theme.ts`. |
+| `views.*[kind=landing].hero.search.filters` | array | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=landing].hero.search.submitLabel` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=landing].hero.search.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=landing].hero.tiles` | array | Stable | Two to four photos as tiles beside the words, in place of image: each a row of a file resource that auth.public reads. |
@@ -652,7 +652,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=landing].kind` |  | Stable |  One of `landing`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=landing].kind` |  | Stable |  One of `landing`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=landing].label`
 
@@ -682,7 +682,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=landing].sections[][kind=callToAction].actions[].signIn` |  | Stable |  One of `true`. |
 | `views.*[kind=landing].sections[][kind=callToAction].actions[].to` | string | Stable | The key of a public form view this App declares, or of a list or dashboard view whose every table auth.public reads. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=landing].sections[][kind=callToAction].description` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `views.*[kind=landing].sections[][kind=callToAction].kind` |  | Stable |  One of `callToAction`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=landing].sections[][kind=callToAction].kind` |  | Stable |  One of `callToAction`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=landing].sections[][kind=contact]`
 
@@ -691,7 +691,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=landing].sections[][kind=contact].items` | array | Stable |  |
 | `views.*[kind=landing].sections[][kind=contact].items[].href` | string | Stable | https://, mailto: or tel: only — never a relative path, http:, javascript: or data:. Checked at load. |
 | `views.*[kind=landing].sections[][kind=contact].items[].label` | string | Stable |  |
-| `views.*[kind=landing].sections[][kind=contact].kind` |  | Stable |  One of `contact`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=landing].sections[][kind=contact].kind` |  | Stable |  One of `contact`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=landing].sections[][kind=faq]`
 
@@ -700,7 +700,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=landing].sections[][kind=faq].items` | array | Stable |  |
 | `views.*[kind=landing].sections[][kind=faq].items[].answer` | string | Stable |  Used in `examples/apps/lintel/landing.ts`. |
 | `views.*[kind=landing].sections[][kind=faq].items[].question` | string | Stable |  Used in `examples/apps/lintel/landing.ts`. |
-| `views.*[kind=landing].sections[][kind=faq].kind` |  | Stable |  One of `faq`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=landing].sections[][kind=faq].kind` |  | Stable |  One of `faq`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=landing].sections[][kind=features]`
 
@@ -709,14 +709,14 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=landing].sections[][kind=features].items` | array | Stable |  |
 | `views.*[kind=landing].sections[][kind=features].items[].description` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=landing].sections[][kind=features].items[].title` | string | Stable |  |
-| `views.*[kind=landing].sections[][kind=features].kind` |  | Stable |  One of `features`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=landing].sections[][kind=features].kind` |  | Stable |  One of `features`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=landing].sections[][kind=search]`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=landing].sections[][kind=search].filters` | array | Stable | Columns from the view's filters. Used in `examples/apps/lintel/theme.ts`. |
-| `views.*[kind=landing].sections[][kind=search].kind` |  | Stable |  One of `search`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=landing].sections[][kind=search].filters` | array | Stable | Columns from the view's filters. Used in `examples/apps/lintel/views.ts`. |
+| `views.*[kind=landing].sections[][kind=search].kind` |  | Stable |  One of `search`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=landing].sections[][kind=search].submitLabel` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=landing].sections[][kind=search].view` | string | Stable | A list view over a resource auth.public reads. Used in `examples/apps/lintel/app.ts`. |
 
@@ -727,20 +727,20 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=landing].sections[][kind=steps].items` | array | Stable |  |
 | `views.*[kind=landing].sections[][kind=steps].items[].description` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=landing].sections[][kind=steps].items[].title` | string | Stable |  |
-| `views.*[kind=landing].sections[][kind=steps].kind` |  | Stable |  One of `steps`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=landing].sections[][kind=steps].kind` |  | Stable |  One of `steps`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=landing].sections[][kind=text]`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=landing].sections[][kind=text].kind` |  | Stable |  One of `text`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=landing].sections[][kind=text].kind` |  | Stable |  One of `text`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=landing].sections[][kind=text].text` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 
 ## `views.*[kind=landing].sections[][kind=view]`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=landing].sections[][kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=landing].sections[][kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=landing].sections[][kind=view].limit` | integer | Stable |  |
 | `views.*[kind=landing].sections[][kind=view].sort` | string | Stable | One column and a direction, like "listed_on desc". |
 | `views.*[kind=landing].sections[][kind=view].view` | string | Stable | A list view with a cards presentation, over a resource auth.public reads. Used in `examples/apps/lintel/app.ts`. |
@@ -772,7 +772,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=list].board.limits` | object | Stable | A lane's work-in-progress limit by lane value: its head says count / limit and warns past it. Shown, never enforced. |
 | `views.*[kind=list].board.lines` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `views.*[kind=list].board.order` | string | Stable | A numeric column holding each card's place in its lane; the lanes read in its order, and a reader who may edit it drags a card into place. Used in `examples/apps/tick/app.ts`. |
-| `views.*[kind=list].board.primary` | string | Stable | The card's title: a text column, a reference, which says the record it names (sales_order_id titles a parcel by its order), or a one-hop label path like "patient_id.name". A reference in lines or footer says its record's name too. Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].board.primary` | string | Stable | The card's title: a text column, a reference, which says the record it names (sales_order_id titles a parcel by its order), or a one-hop label path like "patient_id.name". A reference in lines or footer says its record's name too. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].board.sum` | string | Stable | A numeric column summed in each lane's head beside its count. Absent, the first money column the card shows is summed; money is said short ($240K), whole in the title. |
 | `views.*[kind=list].board.swimlanes` | string | Stable | A column whose values are rows across the lanes, one per value plus one for none; a card changes row by an ordinary update where the reader may edit the column, and keeps its row, told why, where not. |
 
@@ -786,7 +786,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=list].density` | `"comfortable"` · `"compact"` | Stable | Row height: 'comfortable' (default) or 'compact', for a list read as a ledger. A reader's zoom still applies. One of `comfortable`, `compact`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].density` | `"comfortable"` · `"compact"` | Stable | Row height: 'comfortable' (default) or 'compact', for a list read as a ledger. A reader's zoom still applies. One of `comfortable`, `compact`. |
 
 ## `views.*[kind=list].editable`
 
@@ -823,7 +823,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=list].filters` | array | Stable | Columns offered as quick filter boxes — a rollup or computed column too, a number's Min and Max (spent). A path up a reference (account_id.industry_id) filters by the record it names, and { has } by the rows that point at it. Empty means none, on purpose. Used in `examples/apps/lintel/theme.ts`. |
+| `views.*[kind=list].filters` | array | Stable | Columns offered as quick filter boxes — a rollup or computed column too, a number's Min and Max (spent). A path up a reference (account_id.industry_id) filters by the record it names, and { has } by the rows that point at it. Empty means none, on purpose. Used in `examples/apps/lintel/views.ts`. |
 
 ## `views.*[kind=list].filters[]`
 
@@ -870,7 +870,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=list].kind` |  | Stable |  One of `list`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].kind` |  | Stable |  One of `list`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `views.*[kind=list].label`
 
@@ -926,9 +926,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=list].presentation[kind=calendar].badge` | string | Stable | A status said as its tone (a dot and its word) from the column's display map: a local column or one-hop label path. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].presentation[kind=calendar].date` | string | Stable | The date (or timestamp) column a record sits on, or starts on when it has an end. |
 | `views.*[kind=list].presentation[kind=calendar].end` | string | Stable | A date column holding the record's last day: the record is drawn across every day from date to end, continuing across week rows. A move shifts both. In a week or a day, the timestamp the record ends at. |
-| `views.*[kind=list].presentation[kind=calendar].kind` |  | Stable |  One of `calendar`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].presentation[kind=calendar].kind` |  | Stable |  One of `calendar`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].presentation[kind=calendar].lines` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `views.*[kind=list].presentation[kind=calendar].primary` | string | Stable | A local text column or one-hop reference label path like "employee_id.name". Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].presentation[kind=calendar].primary` | string | Stable | A local text column or one-hop reference label path like "employee_id.name". Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].presentation[kind=calendar].span` | `"month"` · `"week"` · `"day"` | Preview | What one page shows: 'month' (the default), the days of a month; 'week' or 'day', a time grid with the hours down the side and each record placed by its start and end, read by timestamp columns. A phone reads a week or a day as an agenda. One of `day`, `month`, `week`. |
 
 ## `views.*[kind=list].presentation[kind=cards]`
@@ -955,9 +955,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=list].presentation[kind=cards].image.from` | string | Stable | A resource whose rows are files. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=list].presentation[kind=cards].image.sort` | string | Stable | Which file leads: one column and an optional direction, like "position". |
 | `views.*[kind=list].presentation[kind=cards].image.whose` | string | Stable | The column of from that names the card's record. Used in `examples/apps/lintel/resources.ts`. |
-| `views.*[kind=list].presentation[kind=cards].kind` |  | Stable |  One of `cards`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].presentation[kind=cards].kind` |  | Stable |  One of `cards`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].presentation[kind=cards].media` | `"cover"` · `"avatar"` · `"icon"` | Stable | How the image is framed. Omit or use cover for the existing picture; avatar makes it a circular portrait and falls back to initials from primary. One of `avatar`, `cover`, `icon`. |
-| `views.*[kind=list].presentation[kind=cards].primary` | string | Stable | The card's title: a text column, or one a reference names ("vehicle_id.title"). Omitted, the record's name (the resource's recordLabel). Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].presentation[kind=cards].primary` | string | Stable | The card's title: a text column, or one a reference names ("vehicle_id.title"). Omitted, the record's name (the resource's recordLabel). Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].presentation[kind=cards].properties` | array | Stable | Up to four values under the title, each under its caption: a local column or a one-hop label path ("dealer_id.name"). Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].presentation[kind=cards].value` | string | Stable | One prominent figure, the row's own or one a reference names ("vehicle_id.price"), read through that table's grants. Used in `examples/apps/lintel/views.ts`. |
 
@@ -966,17 +966,17 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=list].presentation[kind=checklist].checked` | string | Stable | The column a tick toggles: a local, readable boolean column of the list's table (declare it BOOLEAN in SQLite, where an INTEGER is a number), not a reference path. Anything else is refused at check. |
-| `views.*[kind=list].presentation[kind=checklist].kind` |  | Stable |  One of `checklist`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].presentation[kind=checklist].kind` |  | Stable |  One of `checklist`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].presentation[kind=checklist].lines` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `views.*[kind=list].presentation[kind=checklist].primary` | string | Stable | The card's title: a local text column. Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].presentation[kind=checklist].primary` | string | Stable | The card's title: a local text column. Used in `examples/apps/lintel/views.ts`. |
 
 ## `views.*[kind=list].presentation[kind=custom]`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=list].presentation[kind=custom].component` |  | Stable |  One of `&lt;component>`. |
-| `views.*[kind=list].presentation[kind=custom].component.kind` |  | Stable |  One of `list`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `views.*[kind=list].presentation[kind=custom].kind` |  | Stable |  One of `custom`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].presentation[kind=custom].component.kind` |  | Stable |  One of `list`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
+| `views.*[kind=list].presentation[kind=custom].kind` |  | Stable |  One of `custom`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].presentation[kind=custom].props` | object | Stable | The component's props, checked against its declaration. |
 | `views.*[kind=list].presentation[kind=custom].show` | array | Stable | The columns the component reads, label paths welcome. |
 
@@ -986,8 +986,8 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=list].presentation[kind=gantt].by` | string | Preview |  Used in `examples/apps/lintel/pages/resident.ts`. |
 | `views.*[kind=list].presentation[kind=gantt].end` | string | Preview |  |
-| `views.*[kind=list].presentation[kind=gantt].kind` |  | Preview |  One of `gantt`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `views.*[kind=list].presentation[kind=gantt].primary` | string | Preview |  Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].presentation[kind=gantt].kind` |  | Preview |  One of `gantt`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
+| `views.*[kind=list].presentation[kind=gantt].primary` | string | Preview |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].presentation[kind=gantt].progress` | string | Preview |  |
 | `views.*[kind=list].presentation[kind=gantt].start` | string | Preview |  Used in `examples/apps/lintel/resources.ts`. |
 
@@ -996,26 +996,26 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=list].presentation[kind=queue].badge` | string | Stable | An optional status cue, dressed by the column's display tones. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
-| `views.*[kind=list].presentation[kind=queue].kind` |  | Stable |  One of `queue`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].presentation[kind=queue].kind` |  | Stable |  One of `queue`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].presentation[kind=queue].lines` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `views.*[kind=list].presentation[kind=queue].openLabel` | string | Stable | The row-opening call to action; omitted uses Open. Used in `examples/apps/lintel/views.ts`. |
-| `views.*[kind=list].presentation[kind=queue].primary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].presentation[kind=queue].primary` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].presentation[kind=queue].properties` | array | Stable | Up to six captioned values under the title: local columns or one-hop label paths. Used in `examples/apps/lintel/views.ts`. |
 
 ## `views.*[kind=list].presentation[kind=tree]`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=list].presentation[kind=tree].kind` |  | Stable |  One of `tree`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].presentation[kind=tree].kind` |  | Stable |  One of `tree`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].presentation[kind=tree].lines` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `views.*[kind=list].presentation[kind=tree].parent` | string | Stable |  |
-| `views.*[kind=list].presentation[kind=tree].primary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].presentation[kind=tree].primary` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 
 ## `views.*[kind=list].primary`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=list].primary` | string | Stable | The shown column a row is titled by in this list alone, where it is read as records (a phone, a related list); a reference says the record it names. Absent, the record's name (recordLabel). Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].primary` | string | Stable | The shown column a row is titled by in this list alone, where it is read as records (a phone, a related list); a reference says the record it names. Absent, the record's name (recordLabel). Used in `examples/apps/lintel/views.ts`. |
 
 ## `views.*[kind=list].query`
 
@@ -1039,7 +1039,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=list].roles` | array | Stable | The roles that may open it: a signed-in reader holding none of them is not served it (not in the menu, ⌘K or search, and its address answers as one that does not exist). Table grants still apply; this only narrows. Each must be declared in auth.roles. |
+| `views.*[kind=list].roles` | array | Stable | The roles that may open it: a signed-in reader holding none of them is not served it (not in the menu, ⌘K or search, and its address answers as one that does not exist). Table grants still apply; this only narrows. Each must be declared in auth.roles. Used in `examples/apps/lintel/app.ts`. |
 
 ## `views.*[kind=list].rowActions`
 
@@ -1095,7 +1095,7 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=list].split.row.avatar` | string | Stable | A name or person drawn as an avatar of initials before the row. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=list].split.row.badge` | string | Stable | A status said as its tone, from the column's display map. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].split.row.lines` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
-| `views.*[kind=list].split.row.primary` | string | Stable | A local column or a one-hop reference label path. Used in `examples/apps/lintel/tidelight.ts`. |
+| `views.*[kind=list].split.row.primary` | string | Stable | A local column or a one-hop reference label path. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].split.row.properties` | array | Stable |  Used in `examples/apps/lintel/views.ts`. |
 
 ## `views.*[kind=list].suggest`
@@ -1117,11 +1117,11 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=list].summary[].area` | string | Preview | The area of the dashboard's areas this section is placed in. Sections in one area stack in source order. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=list].summary[].better` | `"up"` · `"down"` | Preview | Which way is good news, so the delta wears good/bad. Absent means neutral. Without "compare" or "over" there is no delta to color. One of `down`, `up`. Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=list].summary[].compare` | string | Preview | A second query for the same measure; the card shows the delta. The phrase "previous period" derives it from the query's one "last N days/weeks/months/years" window; with no window in the query and an "over", it is the period before the window the reader picks. Unsaid on a metric with an "over", it is "previous period"; with neither an "over" nor a window in the query, "previous period" is refused. |
-| `views.*[kind=list].summary[].figure` | `"exact"` · `"compact"` · `"whole"` | Preview | How money is said on the card: exact (the default), to the currency's minor digits at any size ("$28,123.45", a balance read to the cent), compact from a thousand ("$28.1K"), or whole, rounded to the currency's major unit at any size ("$28,123"). Its change and goal follow it; the card's title and what a screen reader hears are exact either way. One of `compact`, `exact`, `whole`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].summary[].figure` | `"exact"` · `"compact"` · `"whole"` | Preview | How money is said on the card: exact (the default), to the currency's minor digits at any size ("$28,123.45", a balance read to the cent), compact from a thousand ("$28.1K"), or whole, rounded to the currency's major unit at any size ("$28,123"). Its change and goal follow it; the card's title and what a screen reader hears are exact either way. One of `compact`, `exact`, `whole`. Used in `examples/apps/lintel/views.ts`. |
 | `views.*[kind=list].summary[].format` | `"percent"` · `"number"` · `"money"` · `"duration"` | Preview | metric: how the figure is said where its measure is not one column's: percent (the figure is 0–100, said with %), number, money in the App's currency, or duration (the figure is seconds, said as "10h 2m"). One of `duration`, `money`, `number`, `percent`. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=list].summary[].from` | string | Preview | The table the section reads. Absent means the dashboard-level table. Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=list].summary[].icon` | `"house"` · `"tray"` · `"list"` · `"list-checks"` · `"kanban"` · `"table"` · `"calendar"` · `"calendar-check"` · `"clock"` · `"chart-bar"` · `"chart-line"` · `"chart-pie"` · `"gauge"` · `"target"` · `"flag"` · `"user"` · `"users"` · `"user-circle"` · `"address-book"` · `"handshake"` · `"buildings"` · `"storefront"` · `"briefcase"` · `"package"` · `"truck"` · `"car"` · `"shopping-cart"` · `"receipt"` · `"currency-dollar"` · `"credit-card"` · `"wallet"` · `"bank"` · `"file"` · `"file-text"` · `"folder"` · `"clipboard-text"` · `"note"` · `"archive"` · `"tag"` · `"ticket"` · `"star"` · `"bookmark-simple"` · `"bell"` · `"envelope"` · `"chat-circle"` · `"phone"` · `"headset"` · `"megaphone"` · `"globe"` · `"map-pin"` · `"magnifying-glass"` · `"gear"` · `"sliders"` · `"wrench"` · `"bug"` · `"shield-check"` · `"lock"` · `"key"` · `"database"` · `"stack"` · `"lightning"` · `"check-circle"` · `"warning"` · `"info"` · `"cell-signal-low"` · `"cell-signal-medium"` · `"cell-signal-high"` · `"cell-signal-full"` · `"fire"` · `"hourglass"` · `"circle-dashed"` · `"x-circle"` · `"plus-circle"` · `"pencil-simple"` · `"paper-plane-tilt"` · `"arrows-left-right"` · `"arrow-circle-down"` · `"arrow-circle-up"` · `"laptop"` · `"monitor"` · `"device-mobile"` · `"printer"` · `"stethoscope"` · `"heartbeat"` · `"heart"` · `"pill"` · `"syringe"` · `"first-aid-kit"` · `"thermometer"` · `"flask"` · `"test-tube"` · `"microscope"` · `"bed"` · `"hospital"` · `"ambulance"` · `"tooth"` · `"eyeglasses"` · `"wheelchair"` · `"baby"` · `"dna"` · `"brain"` · `"bandaids"` · `"hand-heart"` · `"graduation-cap"` · `"book-open"` · `"student"` · `"chalkboard-teacher"` · `"factory"` · `"warehouse"` · `"house-line"` · `"plant"` · `"leaf"` · `"sun"` · `"cloud"` · `"drop"` · `"airplane"` · `"bicycle"` · `"bus"` · `"train"` · `"boat"` · `"hammer"` · `"toolbox"` · `"plug"` · `"lightbulb"` · `"cube"` · `"camera"` · `"image"` · `"trophy"` · `"gift"` · `"coffee"` · `"fork-knife"` · `"shopping-bag"` · `"basket"` · `"barcode"` · `"qr-code"` · `"scales"` · `"gavel"` · `"certificate"` · `"identification-card"` · `"fingerprint"` · `"eye"` · `"link"` · `"paperclip"` · `"scissors"` · `"palette"` · `"code"` · `"terminal"` · `"users-three"` · `"user-plus"` · `"caret-left"` · `"caret-right"` · `"caret-up"` · `"caret-down"` · `"arrow-left"` · `"arrow-right"` · `"x"` · `"plus"` · `"dots-three"` | Preview | A curated mark in the section’s heading row. One of `&lt;appIcon>`. Used in `examples/apps/lintel/app.ts`. |
-| `views.*[kind=list].summary[].kind` |  | Preview |  One of `metric`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `views.*[kind=list].summary[].kind` |  | Preview |  One of `metric`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=list].summary[].measure` | string | Preview | "count" (default), "sum amount as pipeline", "median amount" (PostgreSQL only), or a computed measure: aggregates and numbers joined by + - * /, "sum won / sum amount as win_rate". Used in `examples/apps/lintel/dashboards.ts`. |
 | `views.*[kind=list].summary[].minor` |  | Preview | The measure counts a currency's minor units (cents), said in its major unit: money where format is unsaid. For a measure whose column has no money rule to say so, such as one drawn by a component. One of `true`. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=list].summary[].over` | string | Preview | The date column the dashboard’s time window narrows this section by, stored or computed. Absent means the window passes this section over. Used in `examples/apps/lintel/dashboards.ts`. |

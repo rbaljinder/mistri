@@ -28,6 +28,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, columnLabel, labelPath, pageSize, recordLabel, state as walk, toast } from '../core.js';
 import { say } from '../copy/lists/components/AppList.js';
+import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
 
 /* The walk's state, with the field core.js's JSDoc does not declare. */
 const state = walk as typeof walk & { activeConnection?: string | null };
@@ -277,8 +278,9 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   const [definedBoxes, setDefinedBoxes] = useState<Record<string, Box[]>>({});
   const onDefinedBoxes = useCallback((column: string, next: Box[]) => setDefinedBoxes((previous) => ({ ...previous, [column]: next })), []);
   const names = declared.flatMap((name) => (boundNames.includes(name) ? (definedBoxes[name] ?? []).map((box) => box.column) : [name]));
-  /* The resource's caption, through the label source every surface reads (appLabels.ts). */
-  const captionOf = (name: string) => columnLabel(spec.table, name) ?? humanName(name);
+  /* The resource's caption, through the label source every surface reads (appLabels.ts). A name the catalog
+     computes from a template (`$label`, the search box's column for such a table) is the record's name. */
+  const captionOf = (name: string) => columnLabel(spec.table, name) ?? (name === LABEL_SEGMENT ? say('common.name') : humanName(name));
   const near = [...declared, ...(table?.columns.map((column) => column.name) ?? [])];
   const labelOf = (name: string) => filterLabel(name, captionOf, near);
   const form = useRef<HTMLFormElement>(null);

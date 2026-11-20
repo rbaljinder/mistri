@@ -96,6 +96,7 @@ export default defineMessages<typeof en>('es', {
 | `mistri.form.step` | Step {step} of {count} | `{step}`, `{count}` |
 | `mistri.form.stepNamed` | Step {step} of {count}: {label} | `{step}`, `{count}`, `{label}` |
 | `mistri.form.back` | Back | |
+| `mistri.form.continue` | Continue | |
 | `mistri.form.optional` | (optional) | |
 | `mistri.form.required` | (required) | |
 | `mistri.form.reference` | Your reference | |
@@ -138,6 +139,68 @@ export default defineMessages<typeof en>('es', {
 | `mistri.status.sentText` | We sent a code by text message. | |
 | `mistri.status.codeEmail` | Code from the email | |
 | `mistri.status.codeText` | Code from the message | |
+| `mistri.status.sendAnother` | Send another code | |
+| `mistri.status.signIn` | Sign in | |
+| `mistri.status.moreDetails` | More details | |
+| `mistri.status.showDetails` | Show details | |
+| `mistri.status.confirmAccountEmail` | Confirm your account’s email with the link we sent you, and applications submitted with it are found here. | |
+| `mistri.status.added` | Added to your account, submitted with your email: {linked}. | `{linked}` |
+| `mistri.status.foundOne` | We found 1 application submitted with this email — is this yours? | |
+| `mistri.status.foundMany` | We found {openCount} applications submitted with this email — are these yours? | `{openCount}` |
+| `mistri.status.sayYesToOne` | Say yes only to one you made: it is added to your account, where its status is shown. | |
+| `mistri.status.mine` | Yes, it’s mine | |
+| `mistri.status.reference` | Reference | |
+| `mistri.status.enter` | Enter your {label}. | `{label}` |
+| `mistri.status.nowInAccount` | {reference} is now in your account. | `{reference}` |
+| `mistri.status.title` | Check your application | |
+| `mistri.status.lead` | {label}: enter the reference you were given and the details below. Only its status is shown. | `{label}` |
+| `mistri.status.yours` | Your applications | |
+| `mistri.status.check` | Check status | |
+| `mistri.status.signInToFollow` | Sign in to add it to your account and follow it there. | |
+| `mistri.status.addToAccount` | Add to my account | |
+| `mistri.saved.notShown` | Saved — not shown for your privacy | |
+| `mistri.saved.restarted` | This application can no longer be continued, so it has been started again from the first step. | |
+| `mistri.saved.confirmEmail` | Confirm your email | |
+| `mistri.saved.emailConfirmed` | {email} is confirmed. An account with this email will find your application. | `{email}` |
+| `mistri.saved.confirmEmailOffer` | Optional. We email a code to your address; confirming it lets an account with this email find the application straight away. | |
+| `mistri.saved.confirm` | Confirm | |
+| `mistri.saved.saveStepFirst` | Save this step before you submit. | |
+| `mistri.saved.follow` | Follow it in an account | |
+| `mistri.saved.claimClosed` | This browser can no longer add the application to an account. | |
+| `mistri.saved.claimWindow` | For the next 30 minutes, this browser can add the application to an account, where its status is shown. | |
+| `mistri.saved.createAccount` | Create an account to track this | |
+| `mistri.saved.signInToAdd` | Sign in to add it | |
+| `mistri.saved.sharedDevice` | This is a shared device | |
+| `mistri.saved.checkStatus` | Check its status | |
+| `mistri.saved.anyTime` | any time with your reference. | |
+| `mistri.saved.notSaved` | Not saved yet | |
+| `mistri.saved.resumed` | Your application is saved. Carry on where you left off; what you saved is not shown again. | |
+| `mistri.saved.eachStep` | Each step is saved as you go. We don’t show your details back to you; keep this tab open to review them before you submit. | |
+| `mistri.saved.startOver` | Start over | |
+| `mistri.saved.notSettled` | Your submission was sent and its result is not known yet. Submit again to find out how it ended. | |
+| `mistri.saved.draftShort` | Your draft is saved. | |
+| `mistri.saved.draft` | Your draft is saved. Carry on where you left off, or start over. | |
+| `mistri.saved.earlier` | Saved earlier | |
+| `mistri.saved.changedElsewhere` | This draft changed somewhere else. Review it again before you submit. | |
+| `mistri.saved.reviewNotRead` | Your answers could not be read back for review. Submit again in a moment. | |
+| `mistri.saved.reviewNotReady` | Your answers are still being read back for review. Submit again in a moment. | |
+| `mistri.saved.checking` | Checking for an application in progress… | |
+| `mistri.link.miss` | This link opens nothing. | |
+| `mistri.link.confirmLead` | To see this, first confirm a detail only you would know. | |
+| `mistri.link.continue` | Continue | |
+| `mistri.link.offerEmail` | To see this, we email a code to the address on file. | |
+| `mistri.link.offerText` | To see this, we send a code to the number on file. | |
+| `mistri.link.askEmail` | Email me a code | |
+| `mistri.link.askText` | Send me a code | |
+| `mistri.link.sentEmail` | If the address on file takes mail, a code is on its way. It works for ten minutes. | |
+| `mistri.link.sentText` | If the number on file takes messages, a code is on its way. It works for ten minutes. | |
+| `mistri.link.code` | Code | |
+| `mistri.link.choose` | Choose… | |
+| `mistri.link.failed` | That did not work. Try again. | |
+| `mistri.link.notNow` | This cannot be done now. | |
+| `mistri.link.loading` | This page is still loading. Try again in a moment. | |
+| `mistri.link.done` | Done. | |
+| `mistri.language` | Language | |
 
 Every sentence a public page says is one of these keys, the capability link's page (`mistri.link.*`) and the switch's name (`mistri.language`) included, and the platform ships Spanish for all of them: an App with a Spanish catalog shows a Spanish visitor the whole page in Spanish without writing one. The only exceptions are the two counted lines ("2 answers need another look"), which a single sentence cannot carry.
 

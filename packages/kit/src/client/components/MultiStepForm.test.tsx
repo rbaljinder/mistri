@@ -47,6 +47,17 @@ describe('MultiStepForm', () => {
     }
   });
 
+  it("says the App's own word for Continue, where the App's catalog has it", () => {
+    holdAppWords({ 'mistri.form.continue': 'Continuar' });
+    try {
+      view({ validateStep: () => true });
+      expect(screen.getByRole('button', { name: 'Continuar' })).toBeTruthy();
+      expect(screen.queryByRole('button', { name: 'Continue' })).toBeNull();
+    } finally {
+      holdAppWords(undefined);
+    }
+  });
+
   it('presses the primary on Enter in a typed answer, and leaves Enter to a checkbox, a box of lines and an open list', async () => {
     const validate = vi.fn(() => true);
     const completed = vi.fn();
