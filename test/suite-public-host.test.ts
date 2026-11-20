@@ -385,7 +385,10 @@ async function fixture(t: TestContext, policy: boolean | 'placement' = false) {
 for (const policy of [false, true])
   test(`mapped ordinary host ignores valid suite cookies and trusted proxy identity (${policy ? 'row policy' : 'role grant'})`, async (t) => {
     const f = await fixture(t, policy);
-    const staff = await call(f.port, 'staff.example', '/api/whoami', { cookie: f.cookie });
+    const staff = await call(f.port, 'staff.example', '/api/whoami', {
+      cookie: f.cookie,
+      headers: { 'x-forwarded-user': 'staff@example.test' },
+    });
     assert.equal(staff.body.signedIn, true);
     assert.equal(staff.body.accountId, f.subjectId);
     const query = (host: string, q: string, cookie = f.cookie) =>
@@ -429,6 +432,7 @@ for (const policy of [false, true])
     }
     const update = await call(f.port, 'staff.example', '/api/update', {
       cookie: f.cookie,
+      headers: { 'x-forwarded-user': 'staff@example.test' },
       body: { app: 'store', table: 'item', key: { id: 1 }, values: { name: 'Staff edit' } },
     });
     assert.equal(update.status, 200, update.text);
@@ -474,12 +478,14 @@ test('two storefront hosts scope fetched and first-paint rows independently of s
     assert.deepEqual(page.cookies, []);
   }
   const neutral = await call(f.port, 'staff.example', '/api/run', {
+    headers: { 'x-forwarded-user': 'staff@example.test' },
     body: { app: 'store', q: 'item show id, name', limit: 10, offset: 0 },
   });
   assert.equal(neutral.status, 200, neutral.text);
   assert.deepEqual(neutral.body.rows, []);
   const privateRows = await call(f.port, 'staff.example', '/api/run', {
     cookie: f.cookie,
+    headers: { 'x-forwarded-user': 'staff@example.test' },
     body: { app: 'store', q: 'item show id, secret', limit: 10, offset: 0 },
   });
   assert.equal(privateRows.status, 200, privateRows.text);

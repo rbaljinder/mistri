@@ -583,6 +583,7 @@ const JOURNAL = {
   store: 'command-journal',
   only: /^(\w+\.)?(__mistri_)?command_(meta|receipt|audit_part|link|proposal|provenance)$/,
 } as const;
+const JOBS = { store: 'jobs', only: /^(\w+\.)?(__mistri_)?job_(policy|job|attempt)$/ } as const;
 const BENEATH: Readonly<Record<string, readonly { readonly store: string; readonly only?: RegExp }[]>> = {
   'api-tokens': [{ store: 'auth' }],
   // Provisioning a journal also leaves its sequences and its held files, which have versions of their own; the
@@ -596,10 +597,11 @@ const BENEATH: Readonly<Record<string, readonly { readonly store: string; readon
   'event-delivery': [EVENTS, JOURNAL, SEQUENCES, STAGING],
   'command-sequences': [JOURNAL, STAGING],
   'command-staging': [JOURNAL],
-  // These stand on the tenant store, whose layout moved on (the host table, version 2) with fixtures of its own.
+  // These stand on the tenant store, whose layout moved on (host table v2, account index v3) with fixtures of its own.
   'tenant-administration': [{ store: 'tenant-store' }],
   'tenant-invitations': [{ store: 'tenant-store' }],
   'tenant-support-audit': [{ store: 'tenant-store' }],
+  workflows: [JOBS],
 };
 
 /** The tables a fixture creates, as the lines of `describeLayout` name them: bare on SQLite, schema-qualified on PostgreSQL. */

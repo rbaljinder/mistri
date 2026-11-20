@@ -194,6 +194,7 @@ test(
       assert.equal(complete.delivery.pending, 0);
       assert.equal(complete.delivery.incomplete, 0);
       assert.equal(complete.input.arms[0].exposed, 1);
+      await reopened.close();
     });
 
     await t.test('URL-only lifecycle cannot take over a caller transaction', async () => {

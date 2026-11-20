@@ -709,6 +709,44 @@ export function isDraftGone(error: unknown): boolean {
 }
 
 /**
+ * Whether an unexpired draft exists for this resume cookie hash. Used before
+ * sending email verification codes so forged random cookies cannot trigger
+ * outbound mail.
+ */
+export async function hasOpenDraft(
+  records: Pick<WriteTransaction, 'query'>,
+  catalog: CommandCatalog,
+  roots: readonly string[],
+  save: AppFormSave,
+  token: string,
+  now: Date,
+): Promise<boolean> {
+  if (!HASH.test(token)) return false;
+  const found: Record<string, unknown>[] = [];
+  for (const table of roots) {
+    if (!Object.hasOwn(catalog, table)) continue;
+    const result = await records.query({
+      table,
+      limit: 2,
+      offset: 0,
+      columns: [save.resume.expires],
+      filter: {
+        groups: [
+          [
+            { column: save.resume.token, op: '=', value: token },
+            { column: save.draft.column, op: '=', value: save.draft.value },
+          ],
+        ],
+      },
+    });
+    found.push(...result.rows);
+  }
+  if (found.length !== 1) return false;
+  const expires = instant(found[0][save.resume.expires]);
+  return Number.isFinite(expires) && expires > now.getTime();
+}
+
+/**
  * The resume: which steps of the applicant's draft are saved, by id — never
  * what was typed in them. Empty for no draft, a forged cookie, an expired or
  * a submitted one, alike.

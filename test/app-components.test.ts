@@ -296,6 +296,27 @@ describe("mistri check's lints", () => {
     assert.doesNotMatch(said(warnings), /loud\.css:3/);
   });
 
+  test('a string literal containing comment openers cannot hide disallowed DOM sinks from the linter', async () => {
+    const at = dir('comment-trick', {
+      'widgets/Tricky.jsx': [
+        'export default function Tricky({ html }) {',
+        '  const marker = "/*";',
+        '  const end = "*/";',
+        '  return <div data-m={marker + end} dangerouslySetInnerHTML={{ __html: html }} />;',
+        '}',
+      ].join('\n'),
+    });
+    const compiled = (await compileComponents(
+      at,
+      new Map([['tricky', { id: 'tricky', module: './widgets/Tricky.jsx', kind: 'section' }]]),
+    ))!;
+    const { problems } = await lintComponents(at, compiled);
+    assert.ok(
+      problems.some((finding) => finding.file.endsWith('Tricky.jsx') && finding.line === 4 && /dangerouslySetInnerHTML/.test(finding.text)),
+      'expected dangerouslySetInnerHTML finding despite "/*" string literal',
+    );
+  });
+
   test("warns on a widget's role written by hand, naming the primitive that keeps its keys", async () => {
     const at = dir('roles', {
       'widgets/Picker.jsx': [

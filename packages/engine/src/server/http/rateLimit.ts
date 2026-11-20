@@ -285,10 +285,12 @@ export class SharedWindowLimiter implements WindowLimiter {
   }
 
   private async count(windows: readonly RateWindow[], key: string, weight: number): Promise<{ wait: number; remaining: number }> {
+    const replies = await Promise.all(windows.map((window, i) => this.cache.incr(`${key}:${i}`, window.ms, weight)));
     let wait = 0;
     let remaining = Infinity;
-    for (const [i, window] of windows.entries()) {
-      const { count, ttlMs } = await this.cache.incr(`${key}:${i}`, window.ms, weight);
+    for (let i = 0; i < windows.length; i++) {
+      const { count, ttlMs } = replies[i];
+      const window = windows[i];
       if (count > window.limit) wait = Math.max(wait, Math.max(1, Math.ceil(ttlMs / 1000)));
       else remaining = Math.min(remaining, window.limit - count);
     }

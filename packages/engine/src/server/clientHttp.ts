@@ -76,6 +76,7 @@ export function shellPolicy(html: string, { fromSource = false, socket }: { from
        origin, typed by the page, never a URL a column names. */
     "frame-src 'self' blob:",
     "base-uri 'none'",
+    "form-action 'self'",
     "frame-ancestors 'self'",
     /* From source only: Vite's client, when its hot-reload socket drops,
        waits for the server in a shared worker it makes from a blob. The
@@ -640,18 +641,18 @@ export async function serveClient(files: ClientFiles, req: IncomingMessage, res:
               const raw = await readFile(join(files.source, 'index.html'), 'utf8');
               const data = await pageData(shell, head);
               const pane = head ? undefined : await drawnPane(shell, data);
+              /* Hash only the static template's inline scripts before dynamic
+                 head, pane or data blocks are spliced in. */
+              const template = await vite.transformIndexHtml(sourceURL, raw);
               /* No built files to preload from source; an App theme's own faces are the App's, and are said as in a build. */
-              const html = withData(
-                withPane(withHead(withLooks(await vite.transformIndexHtml(sourceURL, raw), shell, []), shell), pane),
-                data,
-              );
+              const html = withData(withPane(withHead(withLooks(template, shell, []), shell), pane), data);
               if (res.destroyed || res.writableEnded) return;
               res.writeHead(200, {
                 'content-type': MIME['.html'],
                 'cache-control': pageCache(data, shell),
                 ...(data || shell?.branding?.private ? { vary: 'Cookie' } : {}),
                 'x-content-type-options': 'nosniff',
-                'content-security-policy': pagePolicy(shellPolicy(html, { fromSource: true, socket: vite.socket }), shell),
+                'content-security-policy': pagePolicy(shellPolicy(template, { fromSource: true, socket: vite.socket }), shell),
                 ...pagePermissions(shell),
               });
               res.end(head ? undefined : html);
@@ -840,7 +841,7 @@ export function builtClient(dir: string): (req: IncomingMessage, res: ServerResp
         vary: asset.variants.length > 1 ? 'Accept-Encoding, Cookie' : 'Cookie',
         ...(asset.policy
           ? {
-              'content-security-policy': pagePolicy(shell.mount?.base ? shellPolicy(text) : asset.policy, shell),
+              'content-security-policy': pagePolicy(asset.policy, shell),
               ...pagePermissions(shell),
             }
           : {}),
@@ -868,7 +869,7 @@ export function builtClient(dir: string): (req: IncomingMessage, res: ServerResp
         'x-content-type-options': 'nosniff',
         ...(asset.policy
           ? {
-              'content-security-policy': pagePolicy(shell?.mount?.base ? shellPolicy(text) : asset.policy, shell),
+              'content-security-policy': pagePolicy(asset.policy, shell),
               ...pagePermissions(shell),
             }
           : {}),

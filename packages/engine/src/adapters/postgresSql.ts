@@ -81,6 +81,12 @@ export async function runPostgresSql(connections: PgConnectionManager, writes: W
     return writes.run('all', () =>
       connections.withWriteClient(async (write) => {
         const started = performance.now();
+        /* When the reserved-table guard is active, check the planner's relation
+           list for explainable DML before executing, so views or search_path
+           aliases pointing at runtime tables are caught before any write lands. */
+        if (request.refuseReserved && /^\s*(?:with|insert|update|delete|merge|select|values|table)\b/i.test(text)) {
+          await refuseReservedPlan(write, request.text, []);
+        }
         // Extended protocol: one statement, as on the read path below.
         const result = await write.query({ text, values: [], rowMode: 'array', queryMode: 'extended' });
         return {

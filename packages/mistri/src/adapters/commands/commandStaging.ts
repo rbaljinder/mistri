@@ -25,7 +25,7 @@ import { registerPrune } from '../retention/pruner.js';
 export const COMMAND_STAGED_TABLE = '__mistri_staged_file';
 /** The store's version row. */
 export const COMMAND_STAGED_META_TABLE = '__mistri_staged_meta';
-export const COMMAND_STAGED_VERSION = 1;
+export const COMMAND_STAGED_VERSION = 2;
 
 /* Rows past their time, every day, whatever the App keeps of anything else: a held file is never history. */
 registerPrune({ id: 'staged-files', window: 'expired', table: COMMAND_STAGED_TABLE, time: 'expires_at', clock: 'epoch-ms' });
@@ -163,13 +163,22 @@ const SQLITE_STAGED_DDL = `CREATE TABLE "${COMMAND_STAGED_TABLE}" (
 )`;
 
 const SQLITE_STAGED_INDEX_DDL = `CREATE INDEX "${COMMAND_STAGED_TABLE}_owner" ON "${COMMAND_STAGED_TABLE}" (app_id, owner, expires_at)`;
+const SQLITE_STAGED_EXPIRES_INDEX_DDL = `CREATE INDEX "${COMMAND_STAGED_TABLE}_expires" ON "${COMMAND_STAGED_TABLE}" (expires_at)`;
 
 const SQLITE_STAGED_META_DDL = `CREATE TABLE "${COMMAND_STAGED_META_TABLE}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   version INTEGER NOT NULL CHECK (version = ${COMMAND_STAGED_VERSION})
 )`;
 
-/** Exactly the two tables and the one index this version creates, no trigger, and the one version row. */
+/** What the upgrade from version 1 runs: adds the retention expiry index and bumps version to 2. */
+export const sqliteCommandStagingUpgradeFrom1 = (): readonly string[] => [
+  SQLITE_STAGED_EXPIRES_INDEX_DDL,
+  `DROP TABLE "${COMMAND_STAGED_META_TABLE}"`,
+  SQLITE_STAGED_META_DDL,
+  `INSERT INTO "${COMMAND_STAGED_META_TABLE}" (singleton, version) VALUES (1, ${COMMAND_STAGED_VERSION})`,
+];
+
+/** Exactly the two tables and two indexes this version creates, no trigger, and the one version row. */
 function assertSqliteCommandStaging(db: DatabaseSync): void {
   const names = [COMMAND_STAGED_TABLE, COMMAND_STAGED_META_TABLE];
   const entries = db
@@ -182,6 +191,7 @@ function assertSqliteCommandStaging(db: DatabaseSync): void {
     [COMMAND_STAGED_TABLE, SQLITE_STAGED_DDL],
     [COMMAND_STAGED_META_TABLE, SQLITE_STAGED_META_DDL],
     [`${COMMAND_STAGED_TABLE}_owner`, SQLITE_STAGED_INDEX_DDL],
+    [`${COMMAND_STAGED_TABLE}_expires`, SQLITE_STAGED_EXPIRES_INDEX_DDL],
   ]);
   const made = entries.filter((entry) => entry.sql !== null);
   const rows = made.some((entry) => entry.name === COMMAND_STAGED_META_TABLE)
@@ -217,6 +227,7 @@ export function provisionSqliteCommandStaging(db: DatabaseSync): boolean {
   if (!present) {
     db.exec(SQLITE_STAGED_DDL.replace('CREATE TABLE ', 'CREATE TABLE main.'));
     db.exec(SQLITE_STAGED_INDEX_DDL.replace('CREATE INDEX ', 'CREATE INDEX main.'));
+    db.exec(SQLITE_STAGED_EXPIRES_INDEX_DDL.replace('CREATE INDEX ', 'CREATE INDEX main.'));
     db.exec(SQLITE_STAGED_META_DDL.replace('CREATE TABLE ', 'CREATE TABLE main.'));
     db.prepare(`INSERT INTO main."${COMMAND_STAGED_META_TABLE}" (singleton, version) VALUES (1, ?)`).run(COMMAND_STAGED_VERSION);
   }

@@ -1,7 +1,9 @@
 /** No diagnostic-code exceptions: every client compiler error fails the gate. */
 import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 
-const result = spawnSync('npx', ['tsc', '-p', 'config/tsconfig.client.json'], {
+const tsc = join(process.cwd(), 'node_modules', 'typescript', 'bin', 'tsc');
+const result = spawnSync(process.execPath, [tsc, '-p', 'config/tsconfig.client.json'], {
   encoding: 'utf8',
   shell: false,
 });

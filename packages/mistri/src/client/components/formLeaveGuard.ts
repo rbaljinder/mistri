@@ -14,6 +14,20 @@ import { registerSurfaceMutationPendingProbe } from '@mistriwork/kit/client/core
 import { addHostListener, removeHostListener } from '@mistriwork/kit/client/shellHost.js';
 
 /**
+ * Arm only the browser's `beforeunload` prompt (a reload, a closed tab): for a
+ * form whose in-App exits must stay free, such as a dialog or a panel. The
+ * returned function disarms it.
+ */
+export function armUnloadGuard(): () => void {
+  const beforeUnload = (event: BeforeUnloadEvent) => {
+    event.preventDefault();
+    event.returnValue = '';
+  };
+  addHostListener(window, 'beforeunload', beforeUnload);
+  return () => removeHostListener(window, 'beforeunload', beforeUnload);
+}
+
+/**
  * Arm the leave guard: every in-App exit is refused and the browser asks
  * before the page unloads. `onHide` runs on `pagehide`. The returned function
  * disarms it — on submit, and when the surface goes.

@@ -75,7 +75,7 @@ export const AUDIT_TARGET_ENTRIES = 4096;
    non-person maker prepared for a person to approve, and the provenance table,
    a mark on a row or field a non-person write made, until a person confirms
    it. Both sit beside the receipts they lead to, in the same tenant fence. */
-export const JOURNAL_VERSION = 5;
+export const JOURNAL_VERSION = 6;
 const meta = (version: number) => `CREATE TABLE "${COMMAND_JOURNAL_TABLES.meta}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   version INTEGER NOT NULL CHECK (version = ${version})
@@ -303,6 +303,23 @@ export const sqliteJournalUpgradeFrom4 = (): readonly string[] => {
   ];
 };
 
+const LINK_EXPIRES_INDEX = `${COMMAND_JOURNAL_TABLES.link}_expires`;
+const LINK_EXPIRES_INDEX_DDL = `CREATE INDEX "${LINK_EXPIRES_INDEX}" ON "${COMMAND_JOURNAL_TABLES.link}" (expires_at)`;
+const PROPOSAL_CREATED_INDEX = `${COMMAND_JOURNAL_TABLES.proposal}_created`;
+const PROPOSAL_CREATED_INDEX_DDL = `CREATE INDEX "${PROPOSAL_CREATED_INDEX}" ON "${COMMAND_JOURNAL_TABLES.proposal}" (created_at)`;
+
+/** What the upgrade from version 5 runs: adds link expiry and proposal creation indexes for daily pruning and moves version to 6. */
+export const sqliteJournalUpgradeFrom5 = (): readonly string[] => {
+  const { meta: metaTable } = COMMAND_JOURNAL_TABLES;
+  return [
+    LINK_EXPIRES_INDEX_DDL,
+    PROPOSAL_CREATED_INDEX_DDL,
+    `DROP TABLE "${metaTable}"`,
+    meta(6),
+    `INSERT INTO "${metaTable}" (singleton, version) VALUES (1, 6)`,
+  ];
+};
+
 /* Old receipts are forgotten under the App's `commands` window
    (server/retention.ts). A receipt exists only once its command committed, so
    none is pending; one that carries an event batch stays while its events do,
@@ -340,8 +357,10 @@ export const definitions = new Map<string, string>([
   [COMMAND_JOURNAL_TABLES.auditPart, AUDIT_PART_DDL],
   [COMMAND_JOURNAL_TABLES.link, linkDdl(4)],
   [LINK_INDEX, LINK_INDEX_DDL],
+  [LINK_EXPIRES_INDEX, LINK_EXPIRES_INDEX_DDL],
   [COMMAND_JOURNAL_TABLES.proposal, PROPOSAL_DDL],
   [PROPOSAL_INDEX, PROPOSAL_INDEX_DDL],
+  [PROPOSAL_CREATED_INDEX, PROPOSAL_CREATED_INDEX_DDL],
   [COMMAND_JOURNAL_TABLES.provenance, PROVENANCE_DDL],
   [PROVENANCE_INDEX, PROVENANCE_INDEX_DDL],
 ]);

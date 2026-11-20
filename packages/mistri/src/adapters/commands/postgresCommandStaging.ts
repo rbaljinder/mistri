@@ -51,12 +51,21 @@ const POSTGRES_STAGED_DDL = `CREATE TABLE ${q} (
   expires_at bigint NOT NULL
 )`;
 const POSTGRES_STAGED_INDEX_DDL = `CREATE INDEX ${COMMAND_STAGED_TABLE}_owner ON ${q} (app_id, owner, expires_at)`;
+const POSTGRES_STAGED_EXPIRES_INDEX_DDL = `CREATE INDEX ${COMMAND_STAGED_TABLE}_expires ON ${q} (expires_at)`;
 
 const qMeta = runtimeTable('postgres', COMMAND_STAGED_META_TABLE);
 const POSTGRES_STAGED_META_DDL = `CREATE TABLE ${qMeta} (
   singleton integer PRIMARY KEY CHECK (singleton = 1),
   version integer NOT NULL CHECK (version = ${COMMAND_STAGED_VERSION})
 )`;
+
+/** What the upgrade from version 1 runs: adds the retention expiry index and bumps version to 2. */
+export const postgresCommandStagingUpgradeFrom1 = (): readonly string[] => [
+  POSTGRES_STAGED_EXPIRES_INDEX_DDL,
+  `ALTER TABLE ${qMeta} DROP CONSTRAINT ${COMMAND_STAGED_META_TABLE}_version_check`,
+  `UPDATE ${qMeta} SET version = ${COMMAND_STAGED_VERSION}`,
+  `ALTER TABLE ${qMeta} ADD CONSTRAINT ${COMMAND_STAGED_META_TABLE}_version_check CHECK (version = ${COMMAND_STAGED_VERSION})`,
+];
 
 const column = (name: string, type: string, collation: string | null = null) => ({ name, type, notnull: true, collation, default: null });
 const id = (name: string) => column(name, 'text', 'C');
@@ -89,6 +98,7 @@ const FILE_LAYOUT: PostgresRelationDescription = {
     'PRIMARY KEY (id_hash)',
   ],
   indexes: [
+    `CREATE INDEX ${COMMAND_STAGED_TABLE}_expires ON ${schema}.${COMMAND_STAGED_TABLE} USING btree (expires_at)`,
     `CREATE INDEX ${COMMAND_STAGED_TABLE}_owner ON ${schema}.${COMMAND_STAGED_TABLE} USING btree (app_id, owner, expires_at)`,
     `CREATE UNIQUE INDEX ${COMMAND_STAGED_TABLE}_pkey ON ${schema}.${COMMAND_STAGED_TABLE} USING btree (id_hash)`,
   ],
@@ -132,6 +142,7 @@ export async function provisionPostgresCommandStaging(client: PgQuery): Promise<
   if (!present) {
     await client.query(POSTGRES_STAGED_DDL);
     await client.query(POSTGRES_STAGED_INDEX_DDL);
+    await client.query(POSTGRES_STAGED_EXPIRES_INDEX_DDL);
     await client.query(POSTGRES_STAGED_META_DDL);
     await client.query(`INSERT INTO ${qMeta} (singleton, version) VALUES (1, $1)`, [COMMAND_STAGED_VERSION]);
   }

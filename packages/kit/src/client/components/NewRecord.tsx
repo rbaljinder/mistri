@@ -585,6 +585,13 @@ function NewRecordFormBody({
                             ? serverError.message
                             : '');
                       const errorId = `${errorPrefix}-${index}-error`;
+                      const isRadioControl =
+                        (app &&
+                          (own?.as === 'cards' || own?.as === 'buttons') &&
+                          (Boolean((column as ColumnMeta & { allowed?: string[] }).allowed?.length) || isFlagColumn(column))) ||
+                        (((kind === 'radios' && own?.as !== 'select') || (own?.as === 'radios' && app)) &&
+                          Boolean((column as ColumnMeta & { allowed?: string[] }).allowed?.length));
+                      const fieldId = isRadioControl ? undefined : `${errorPrefix}-${index}-input`;
                       const help = [own?.help, waitingOn ? say('chooseFirst', { waitingOn }) : ''].filter(Boolean).join(' ') || undefined;
                       const helpId = help ? `${errorPrefix}-${index}-help` : undefined;
                       return (
@@ -602,7 +609,9 @@ function NewRecordFormBody({
                             /* A record's form asks as a command form does: an answer that may be left empty says so
                                in a word beside its label, and a needed one is simply asked (docs/design.md, Access). */
                             <div data-slot="field-head">
-                              <label data-slot="field-label">{label(column)}</label>
+                              <label htmlFor={fieldId} data-slot="field-label">
+                                {label(column)}
+                              </label>
                               {/* The space is in the markup: the stylesheet that once put it in a ::before is the
                                  forms room's, which a New drawer does not load ("Phone(optional)"). */}
                               {!required(column) && (
@@ -613,7 +622,7 @@ function NewRecordFormBody({
                               )}
                             </div>
                           ) : (
-                            <label>
+                            <label htmlFor={fieldId}>
                               {label(column)}
                               <span className="type">{column.type.toLowerCase()}</span>
                               {column.primaryKey && <span className="pk">{say('common.key')}</span>}
@@ -625,6 +634,7 @@ function NewRecordFormBody({
                             </label>
                           )}
                           <Control
+                            id={fieldId}
                             column={column}
                             app={app}
                             input={app ? columnInput(table.id, column.name) : undefined}
@@ -908,7 +918,7 @@ function Control(
       fallback={<PlatformControl {...rest} />}
       value={rest.value}
       onChange={(next) => rest.onChange(next === null ? '' : String(next))}
-      id={`new-${id}`}
+      id={rest.id ?? `new-${id}`}
       describedBy={rest.errorId}
       invalid={Boolean(rest.errorId)}
       disabled={false}
@@ -939,6 +949,7 @@ function useControlsStyle(wanted: boolean): boolean {
 }
 
 export function PlatformControl({
+  id,
   column,
   app,
   required,
@@ -959,6 +970,7 @@ export function PlatformControl({
   tree,
   helpId,
 }: {
+  id?: string;
   column: ColumnMeta;
   app: boolean;
   /** Said to assistive technology as well as starred: the star is outside the control's name. */
@@ -1011,6 +1023,7 @@ export function PlatformControl({
       }
       validation.current = null;
     }
+    if (node && id && !node.id) node.id = id;
     if (node && (errorId || helpId)) {
       validation.current = {
         node,
@@ -1129,6 +1142,7 @@ export function PlatformControl({
   if (allowed?.length) {
     return (
       <Dropdown
+        id={id}
         items={[{ value: '', label: unchosen }, ...allowed.map((v) => ({ value: v, label: word(v) }))]}
         value={value}
         valueClassName={quietWhenEmpty}
@@ -1143,6 +1157,7 @@ export function PlatformControl({
     return (
       <label className="insert-switch">
         <input
+          id={id}
           ref={setControl}
           type="checkbox"
           role="switch"
@@ -1157,6 +1172,7 @@ export function PlatformControl({
   if (isFlagColumn(column)) {
     return (
       <Dropdown
+        id={id}
         items={[
           { value: '', label: unchosen },
           { value: '1', label: app ? say('common.yes') : 'yes' },
@@ -1214,7 +1230,7 @@ export function PlatformControl({
   if (dateOnly(column) || kind === 'datetime') {
     return (
       <DateField
-        id={dateId}
+        id={id ?? dateId}
         inputRef={setControl}
         className="insert-input"
         value={value}
@@ -1238,6 +1254,7 @@ export function PlatformControl({
   if (kind === 'richText') {
     return (
       <RichTextField
+        id={id}
         label={spoken}
         value={value}
         onChange={onChange}
@@ -1249,6 +1266,7 @@ export function PlatformControl({
   if (kind === 'textarea') {
     return (
       <textarea
+        id={id}
         ref={setControl}
         className="insert-input"
         rows={4}
@@ -1261,6 +1279,7 @@ export function PlatformControl({
   }
   const box = (style?: CSSProperties, shown = value, change = onChange) => (
     <input
+      id={id}
       ref={setControl}
       style={style}
       type="text"

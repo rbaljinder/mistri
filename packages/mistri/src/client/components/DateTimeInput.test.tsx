@@ -16,6 +16,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   toast: vi.fn(),
   viewportSize: () => ({ width: 1024, height: 768 }),
   viewportBox: (element: Element) => element.getBoundingClientRect(),
+  registerSurfaceMutationPendingProbe: () => () => {},
 }));
 
 const { FormSurface } = await import('./FormSurface.js');

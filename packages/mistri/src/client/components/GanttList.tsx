@@ -211,7 +211,9 @@ export function GanttList({ table, spec, entry, interactive = true, label, refer
     return out;
   }, [rows]);
   const now = today ?? Math.floor(appNow().getTime() / DAY);
-  const { from, to } = windowOf(Math.min(...bars.map((bar) => bar.first)), Math.max(...bars.map((bar) => bar.last)), now);
+  const { from, to } = bars.length
+    ? windowOf(Math.min(...bars.map((bar) => bar.first)), Math.max(...bars.map((bar) => bar.last)), now)
+    : { from: now, to: now + 7 };
   const span = Math.max(1, to - from);
   const at = (day: number) => `${(((day - from) / span) * 100).toFixed(3)}%`;
   const locale = formatLocale();
@@ -323,7 +325,7 @@ export function GanttList({ table, spec, entry, interactive = true, label, refer
                       className={`gantt-bar${bar.mark ? ' is-mark' : ''}`}
                       style={{
                         insetInlineStart: at(bar.first),
-                        top: `${bar.lane * 26 + 16}px`,
+                        top: `${bar.lane * 28 + 16}px`,
                         ...(bar.mark ? {} : { width: at(bar.last + 1 - bar.first + from) }),
                         ...(bar.done === undefined ? {} : ({ '--done': `${bar.done}%` } as Record<string, string>)),
                       }}

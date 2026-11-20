@@ -59,12 +59,21 @@ test('an IPv6 spelling of a refused IPv4 address is refused: NAT64, 6to4 and the
     '2002:a9fe:a9fe::1',
     '::a9fe:a9fe',
     '::169.254.169.254',
+    '::ffff:0:a9fe:a9fe',
+    '2001:0:a9fe:a9fe::1',
+    '2001:0:0808:0808::5601:5601',
     '64:ff9b:1::a9fe:a9fe',
     'fe80::1',
   ]) {
     await assert.rejects(send(metadata, {}, policy({ resolver: resolvingTo(spelled) })), reason('refused'), spelled);
     await assert.rejects(send(new URL(`http://[${spelled}]/latest/meta-data/`), {}, policy()), reason('refused'), spelled);
   }
+  await assert.rejects(send(metadata, {}, policy({ resolver: resolvingTo('100.100.100.200') })), reason('refused'), 'alibaba metadata');
+  await assert.rejects(
+    send(new URL('http://100.100.100.200/latest/meta-data/'), {}, policy()),
+    reason('refused'),
+    'alibaba metadata literal',
+  );
   // The same spellings of loopback are private, so refused where private networks are closed, and reached where they are not.
   await assert.rejects(send(metadata, {}, policy({ allowPrivate: false, resolver: resolvingTo('64:ff9b::7f00:1') })), reason('refused'));
   // A public address inside a wrapper is not refused for being wrapped: the refusal is for the destination, not the form.

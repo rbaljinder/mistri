@@ -127,7 +127,7 @@ test('job maintenance inspects, redrives and prunes a SQLite job store', async (
     path = join(directory, 'jobs.db');
   new DatabaseSync(path).close();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  assert.deepEqual(provisionSqliteJobStore(path, policy), { version: 1, provisioned: true });
+  assert.deepEqual(provisionSqliteJobStore(path, policy), { version: 2, provisioned: true });
   const store = openSqliteJobStore(path, policy);
   const failing = await store.enqueue(job('failing'), 1_000),
     done = await store.enqueue(job('done'), 1_000);
@@ -192,7 +192,7 @@ describe('maintenance on PostgreSQL', { skip: liveSkip('postgres', LIVE_PG) }, (
     const control = await pgControl(url);
     t.after(() => control.end());
     await resetPostgresJobs(control);
-    assert.deepEqual(await migratePostgresJobStore(url, policy), { version: 1, migrated: true });
+    assert.deepEqual(await migratePostgresJobStore(url, policy), { version: 2, migrated: true });
     const manager = new PgConnectionManager(url);
     t.after(() => manager.close());
     const store = await openPostgresJobStore(manager, policy);

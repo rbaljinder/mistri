@@ -61,6 +61,7 @@ import { readRecords, readView } from '../resourceReadOperations.js';
 import { recordsPaging, settlePage, viewPaging } from '../keysetReadHttp.js';
 import { acceptedEncoding, httpRead, policyResponses, send } from './reply.js';
 import type { PostContext } from './context.js';
+import { forwardedClient, type ProxyRange } from './trust.js';
 import { rollupReads } from '../../shared/rollups.js';
 
 const EXPORT_PATH = '/api/export';
@@ -113,6 +114,8 @@ interface ExportAsked {
   answer?: (status: number, body: unknown) => void;
   /** Who is exporting, counted against `EXPORTS_IN_FLIGHT`; the client's address where no one is named. */
   who?: string;
+  /** `--trust-proxy` ranges, for resolving the client address behind a reverse proxy when `who` is unset. */
+  trustedProxies?: readonly ProxyRange[];
 }
 
 export async function exportRoute(post: PostContext, hooks: ExportHooks): Promise<boolean> {
@@ -126,6 +129,7 @@ export async function exportRoute(post: PostContext, hooks: ExportHooks): Promis
     now: post.appNow,
     may: hooks.may(post),
     ...(post.who ? { who: post.who } : {}),
+    ...(post.trustedProxies ? { trustedProxies: post.trustedProxies } : {}),
     ...(person ? { person: (text: string) => person(post, text) } : {}),
     ...(amounts ? { amounts: (tableId: string) => amounts(post, tableId) } : {}),
   });
@@ -152,7 +156,7 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
     return undefined;
   }
   /* Counted until the response closes, whichever way it ends: a refusal, the file, or a client that left. */
-  const who = asked.who ?? `address:${res.req?.socket?.remoteAddress ?? ''}`;
+  const who = asked.who ?? `address:${res.req ? forwardedClient(res.req, asked.trustedProxies) : ''}`;
   const running = inFlight.get(who) ?? 0;
   if (running >= EXPORTS_IN_FLIGHT) {
     answer(429, { code: 'too_many_exports', error: `At most ${EXPORTS_IN_FLIGHT} exports run at once. Wait for one to finish.` });

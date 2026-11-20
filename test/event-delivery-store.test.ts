@@ -349,7 +349,7 @@ describe('event delivery store on SQLite only', () => {
     `CREATE TRIGGER extra AFTER UPDATE ON "${delivery.delivery}" BEGIN SELECT 1; END`,
     `DROP INDEX __mistri_delivery_ready`,
     `DROP TABLE "${delivery.attempt}"`,
-    `UPDATE "${delivery.meta}" SET version=2`,
+    `UPDATE "${delivery.meta}" SET version=99`,
   ])
     test(`changed delivery schema is refused: ${sql}`, (t) => {
       const f = eventDeliveryFixture(t);

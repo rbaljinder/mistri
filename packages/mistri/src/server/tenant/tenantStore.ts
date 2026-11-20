@@ -82,14 +82,15 @@ export type {
    slice creates none — the columns exist now so the store is reseeded once —
    and every member read (admission, discovery, rosters) takes `member` rows
    only, so a support row can never admit through `?tenant=`. */
+const SQLITE_TENANT_STORE_VERSION = 3;
 const prefix = TENANT_STORE_PREFIX;
 const liveIndex = `${prefix}live_membership`;
 const liveSupportIndex = `${prefix}live_support`;
+const memberAccountIndex = `${prefix}member_account`;
 const platformIndex = `${prefix}platform`;
-const SQLITE_TENANT_STORE_VERSION = 2;
-const metaDefinition = (name: string) => `CREATE TABLE "${name}" (
+const metaDefinition = (name: string, version: number = SQLITE_TENANT_STORE_VERSION) => `CREATE TABLE "${name}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  version INTEGER NOT NULL CHECK (version = ${SQLITE_TENANT_STORE_VERSION}),
+  version INTEGER NOT NULL CHECK (version = ${version}),
   app_id TEXT COLLATE BINARY NOT NULL,
   source_id TEXT COLLATE BINARY NOT NULL,
   store_id TEXT COLLATE BINARY NOT NULL
@@ -118,9 +119,9 @@ export function sqliteTenantStoreUpgradeFrom1(): readonly string[] {
   return [
     hostDefinition,
     `ALTER TABLE "${TENANT_TABLES.meta}" RENAME TO "${old}"`,
-    metaDefinition(TENANT_TABLES.meta),
+    metaDefinition(TENANT_TABLES.meta, 2),
     `INSERT INTO "${TENANT_TABLES.meta}" (singleton, version, app_id, source_id, store_id)
-      SELECT singleton, ${SQLITE_TENANT_STORE_VERSION}, app_id, source_id, store_id FROM "${old}"`,
+      SELECT singleton, 2, app_id, source_id, store_id FROM "${old}"`,
     `DROP TABLE "${old}"`,
   ];
 }
@@ -163,8 +164,22 @@ const definitions = new Map<string, string>([
     liveSupportIndex,
     `CREATE UNIQUE INDEX "${liveSupportIndex}" ON "${TENANT_TABLES.membership}" (account_id) WHERE kind = 'support' AND status = 'active'`,
   ],
+  [memberAccountIndex, `CREATE INDEX "${memberAccountIndex}" ON "${TENANT_TABLES.membership}" (account_id) WHERE kind = 'member'`],
   [platformIndex, `CREATE UNIQUE INDEX "${platformIndex}" ON "${TENANT_TABLES.tenant}" (kind) WHERE kind = 'platform'`],
 ]);
+
+/** Version 2 to 3, as storeLayouts.ts runs it: adds the account_id lookup index for member discovery and bumps version to 3. */
+export function sqliteTenantStoreUpgradeFrom2(): readonly string[] {
+  const old = `${TENANT_TABLES.meta}_v2`;
+  return [
+    definitions.get(memberAccountIndex)!,
+    `ALTER TABLE "${TENANT_TABLES.meta}" RENAME TO "${old}"`,
+    metaDefinition(TENANT_TABLES.meta, SQLITE_TENANT_STORE_VERSION),
+    `INSERT INTO "${TENANT_TABLES.meta}" (singleton, version, app_id, source_id, store_id)
+      SELECT singleton, ${SQLITE_TENANT_STORE_VERSION}, app_id, source_id, store_id FROM "${old}"`,
+    `DROP TABLE "${old}"`,
+  ];
+}
 
 interface CatalogEntry {
   type: string;
@@ -245,7 +260,9 @@ export function provisionSqliteTenantStore(
         db.exec(
           ddl.startsWith('CREATE TABLE ')
             ? ddl.replace('CREATE TABLE ', 'CREATE TABLE main.')
-            : ddl.replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX main.'),
+            : ddl.startsWith('CREATE UNIQUE INDEX ')
+              ? ddl.replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX main.')
+              : ddl.replace('CREATE INDEX ', 'CREATE INDEX main.'),
         );
       db.prepare(`INSERT INTO main."${TENANT_TABLES.meta}" VALUES (1, ${SQLITE_TENANT_STORE_VERSION}, ?, ?, ?)`).run(
         owner.appId,

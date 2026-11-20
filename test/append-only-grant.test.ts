@@ -7,6 +7,8 @@ import {
   AppAccessDenied,
   authorizeColumnWrites,
   captureGrant,
+  resourceChecks,
+  validateResourceView,
   type ColumnGrant,
 } from '../packages/engine/src/server/columnGrants.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
@@ -153,4 +155,44 @@ test('a write reply carries no column the role cannot read, even one the server 
   assert.deepEqual(made.row, { id: 1, body: 'hello' });
   const changed = await tx.update({ table: 'note', key, values: { body: 'edited' } });
   assert.deepEqual(changed.applied, { body: 'edited' });
+});
+
+test('lanes.by on a column the role cannot read is refused by queryFor and viewFor', () => {
+  const grant: ColumnGrant = {
+    readable: new Set(['note']),
+    writable: new Set(),
+    fields: new Map([['note', { read: new Set(['id', 'body']), write: new Set() }]]),
+  };
+  const checks = resourceChecks(schema, grant);
+  assert.throws(
+    () =>
+      checks.queryFor({
+        table: 'note',
+        columns: ['id', 'body'],
+        limit: 10,
+        offset: 0,
+        lanes: { by: 'secret', limit: 5 },
+      }),
+    AppAccessDenied,
+  );
+  assert.throws(
+    () =>
+      validateResourceView(schema, grant, {
+        kind: 'list',
+        table: 'note',
+        columns: ['id', 'body'],
+        lanes: { by: 'secret', limit: 5 },
+      } as never),
+    AppAccessDenied,
+  );
+  // Allowed column passes.
+  assert.doesNotThrow(() =>
+    checks.queryFor({
+      table: 'note',
+      columns: ['id', 'body'],
+      limit: 10,
+      offset: 0,
+      lanes: { by: 'body', limit: 5 },
+    }),
+  );
 });

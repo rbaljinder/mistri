@@ -124,9 +124,9 @@ test('fresh explicit migration creates the current version only, is idempotent, 
     missing = join(f.directory, 'missing.db');
   assert.throws(() => migrateSqliteCommandJournal(missing));
   assert.equal(existsSync(missing), false);
-  assert.deepEqual(migrateSqliteCommandJournal(f.path), { version: 5, migrated: true });
-  assert.deepEqual(migrateSqliteCommandJournal(f.path), { version: 5, migrated: false });
-  assert.equal(f.db.prepare(`SELECT version FROM "${tables.meta}"`).get()!.version, 5);
+  assert.deepEqual(migrateSqliteCommandJournal(f.path), { version: 6, migrated: true });
+  assert.deepEqual(migrateSqliteCommandJournal(f.path), { version: 6, migrated: false });
+  assert.equal(f.db.prepare(`SELECT version FROM "${tables.meta}"`).get()!.version, 6);
   assertSqliteCommandJournal(f.db);
   f.unchanged();
 });

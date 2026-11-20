@@ -29,6 +29,7 @@ import {
   type Ref,
   type RefObject,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { Autocomplete, AutocompleteContent, AutocompleteInput, AutocompleteItem, AutocompleteList } from '@ui-sdk/react/autocomplete';
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
@@ -171,7 +172,7 @@ function DefaultTypeahead<T>({
       .filter(Boolean)
       .join(' ');
     setLabelWords(words || inputProps.title || undefined);
-  });
+  }, [named, inputProps.title]);
   // The text is the caller's `text` and nothing else: an input's own value or change handler would be a second one.
   const { value: _value, defaultValue: _defaultValue, onChange: _onChange, onKeyDown, onClick, onBlur, ...input } = inputProps;
   /* Open with nothing to list: the caller still holds the list open (a search that found no one, with or without a
@@ -204,6 +205,20 @@ function DefaultTypeahead<T>({
   );
   const popup: CSSProperties =
     fit === 'width' ? { width: '100%' } : { minWidth: 'var(--anchor-width)', maxWidth: 'var(--available-width)' };
+  const targetContainer = (portal === 'body' ? null : dialog) ?? popupContainer();
+  const emptyOverlay = nothing ? (
+    <div ref={emptyBox} data-slot="autocomplete-content" data-kind="empty" data-fit={fit} style={under}>
+      {/* The list's class is the popup's surface (ground, edge, shadow) to a caller, so while there is no list
+          the message's box takes it: a message on a see-through popup over the form is unreadable. */}
+      <div ref={setPopup} className={popupClassName} data-slot="autocomplete-popup" data-open="" style={popup}>
+        <div className={listClassName}>
+          <div className={emptyClassName} data-slot="autocomplete-empty" role="status">
+            {empty}
+          </div>
+        </div>
+      </div>
+    </div>
+  ) : null;
   return (
     <Autocomplete
       value={text}
@@ -280,7 +295,7 @@ function DefaultTypeahead<T>({
         data-fit={fit}
         style={fit === 'width' ? { width: 'var(--anchor-width)', maxWidth: 'var(--available-width)' } : undefined}
         anchor={anchorRef ? { getBoundingClientRect: () => (anchorRef.current ?? box.current)!.getBoundingClientRect() } : undefined}
-        container={(portal === 'body' ? null : dialog) ?? popupContainer()}
+        container={targetContainer}
       >
         {/* The caller's popup says it is open itself: its class is what a caller's stylesheet and tests know, and
             they ask it, not the placed element round it, whether the list is up. */}
@@ -306,19 +321,7 @@ function DefaultTypeahead<T>({
           ) : null}
         </div>
       </AutocompleteContent>
-      {nothing ? (
-        <div ref={emptyBox} data-slot="autocomplete-content" data-kind="empty" data-fit={fit} style={under}>
-          {/* The list's class is the popup's surface (ground, edge, shadow) to a caller, so while there is no list
-              the message's box takes it: a message on a see-through popup over the form is unreadable. */}
-          <div ref={setPopup} className={popupClassName} data-slot="autocomplete-popup" data-open="" style={popup}>
-            <div className={listClassName}>
-              <div className={emptyClassName} data-slot="autocomplete-empty" role="status">
-                {empty}
-              </div>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {emptyOverlay && (targetContainer ? createPortal(emptyOverlay, targetContainer) : emptyOverlay)}
     </Autocomplete>
   );
 }

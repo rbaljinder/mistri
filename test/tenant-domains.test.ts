@@ -248,7 +248,7 @@ test('the store holds hosts: a tenant claims its subdomain as it is made, and ev
 
 for (const engine of ENGINES)
   test(
-    `a version 1 tenant store upgrades in place to version 2 and reads as a fresh one does, on ${engine}`,
+    `a version 1 tenant store upgrades in place to the current layout and reads as a fresh one does, on ${engine}`,
     { skip: engine === 'postgres' ? liveSkip('postgres', LIVE) : false },
     async () => {
       const where = await scratch(engine, 'tenant_up'),
@@ -265,7 +265,10 @@ for (const engine of ENGINES)
           assert.deepEqual(done.failed, []);
           assert.deepEqual(
             done.applied.map((each) => [each.id, each.from, each.to]),
-            [['tenant-store', 1, 2]],
+            [
+              ['tenant-store', 1, 2],
+              ['tenant-store', 2, 3],
+            ],
           );
         } finally {
           await db.close();

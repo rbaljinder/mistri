@@ -60,7 +60,13 @@
      enlarges (1, 1.12, 1.24), so a flat 16px is at least 16px drawn. Not verified on WebKit: it is not installed
      where this was written, so a real iPhone is the test of this rule. */
   @media (pointer: coarse) {
-    :is([data-slot='input'], [data-slot='textarea'], [data-slot='select-trigger'], [data-slot='autocomplete-input']) {
+    :is(
+      [data-slot='input'],
+      [data-slot='textarea'],
+      [data-slot='select-trigger'],
+      [data-slot='autocomplete-input'],
+      [data-slot='date-field-time']
+    ) {
       font-size: max(16px, var(--m-text));
     }
   }

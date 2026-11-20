@@ -299,7 +299,18 @@ test.describe('Atelier back office', () => {
 
       // The rooms around them paint: the fulfillment board, the lookbook's photos and a product's gallery.
       await page.goto(`${sample.origin}/fulfillment`);
-      await expect(page.getByText(`#${order} ·`).first()).toBeVisible();
+      /* The shipped order joins the end of its lane, and a lane draws its first page: how many shipped orders
+         come before it depends on the day the shop is seeded for (seed.mjs), so read the lane on until it is there. */
+      const shipped = page.getByRole('region', { name: 'Shipped' });
+      const card = shipped.getByText(`#${order} ·`).first();
+      await expect(shipped.getByRole('button', { name: /^#\d+ · / }).first()).toBeVisible();
+      for (let read = 0; read < 10 && !(await card.isVisible()); read++) {
+        const more = shipped.getByRole('button', { name: /^Show \d+ more$/ });
+        if (!(await more.isVisible())) break;
+        await more.click();
+        await expect(card.or(more)).toBeVisible();
+      }
+      await expect(card).toBeVisible();
       await page.goto(`${sample.origin}/lookbook`);
       await expect(page.locator('main img').first()).toBeVisible();
       const product = Number(scalar(sample.db, `SELECT product_id FROM product_image ORDER BY id LIMIT 1`));

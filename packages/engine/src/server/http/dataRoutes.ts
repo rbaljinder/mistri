@@ -141,6 +141,7 @@ export async function postData(ctx: RequestContext, hooks: DataHooks): Promise<v
         rowPolicy: Boolean(ctx.policyContext),
         appConfigured,
         appNow: clockNow,
+        ...(ctx.bound.trustedProxies ? { trustedProxies: ctx.bound.trustedProxies } : {}),
         ...hooks.extras?.(ctx, source, reads),
       },
       hooks,

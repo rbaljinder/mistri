@@ -272,26 +272,29 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
     onClose();
     item.run();
   };
+  const keyLatest = useRef({ current, choose, onClose });
+  keyLatest.current = { current, choose, onClose };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      const latest = keyLatest.current;
       switch (e.key) {
         case 'Escape':
           /* Stopped as well as prevented: a modal takes the key it handles. */
           e.preventDefault();
           e.stopPropagation();
-          onClose();
+          latest.onClose();
           return;
         case 'ArrowDown':
           e.preventDefault();
-          setActive(current + 1);
+          setActive(latest.current + 1);
           return;
         case 'ArrowUp':
           e.preventDefault();
-          setActive(current - 1);
+          setActive(latest.current - 1);
           return;
         case 'Enter':
           e.preventDefault();
-          choose(current);
+          latest.choose(latest.current);
           return;
         /* The results are reached with the arrows, so the box is the only
            stop: Tab used to leave it for the page under the scrim, a focus
@@ -304,7 +307,7 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
     };
     addHostListener(document, 'keydown', onKey, true);
     return () => removeHostListener(document, 'keydown', onKey, true);
-  });
+  }, []);
   useEffect(() => {
     const row = list.current?.querySelector(`#palette-o${current}`);
     /* The first row of a group brings its heading with it, so a list scrolled up by the arrows does not leave the
@@ -336,8 +339,8 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
           spellCheck={false}
           role="combobox"
           aria-autocomplete="list"
-          aria-expanded="true"
-          aria-controls="palette-list"
+          aria-expanded={shown.length > 0}
+          aria-controls={shown.length ? 'palette-list' : undefined}
           aria-activedescendant={shown.length ? `palette-o${current}` : undefined}
           value={query}
           onChange={(e) => {
@@ -345,9 +348,19 @@ export function Palette({ prefill = '', onClose }: { prefill?: string; onClose: 
             setActive(0);
           }}
         />
-        <div ref={list} className="palette-list" id="palette-list" role="listbox" aria-label={say('navigation.search')}>
+        <div
+          ref={list}
+          className="palette-list"
+          id="palette-list"
+          role={shown.length ? 'listbox' : undefined}
+          aria-label={shown.length ? say('navigation.search') : undefined}
+        >
           {!shown.length
-            ? settled && <p className="palette-empty">{term ? say('nothingMatches', { term }) : say('nothingToGo')}</p>
+            ? settled && (
+                <p className="palette-empty" role="status">
+                  {term ? say('nothingMatches', { term }) : say('nothingToGo')}
+                </p>
+              )
             : inApp
               ? grouped.map(({ group, items, from: first }) => {
                   return (

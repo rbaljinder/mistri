@@ -295,9 +295,18 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'live-change',
     title: 'live sync: what each write transaction changed, kept fifteen minutes',
     tables: { prefix: '__mistri_live_' },
-    current: both(1),
+    current: { sqlite: 1, postgres: 2 },
     read: marked(everywhere('__mistri_live_meta')),
-    upgrades: {},
+    upgrades: {
+      postgres: {
+        1: {
+          says: 'adds the retention timestamp index on the live change table',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/live/postgresLiveChange.js')).postgresLiveChangeUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+    },
     provision: {
       sqlite: async (path) => (await import('../adapters/live/sqliteLiveChange.js')).provisionSqliteLiveChange(path),
       postgres: async (url) => (await import('../adapters/live/postgresLiveChange.js')).provisionPostgresLiveChange(url),
@@ -420,7 +429,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'command-journal',
     title: 'command receipts, audit, links, proposals and provenance',
     tables: { prefix: '__mistri_command_' },
-    current: both(5),
+    current: both(6),
     read: marked({ sqlite: { table: '__mistri_command_meta' }, postgres: { table: '__mistri_command_meta' } }),
     upgrades: {
       sqlite: {
@@ -454,6 +463,12 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
             for (const sql of (await import('../adapters/commands/commandJournalSchema.js')).sqliteJournalUpgradeFrom4()) await db.run(sql);
           },
         },
+        5: {
+          says: 'adds link expiry and proposal creation indexes for daily pruning',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/commands/commandJournalSchema.js')).sqliteJournalUpgradeFrom5()) await db.run(sql);
+          },
+        },
       },
       postgres: {
         1: {
@@ -484,6 +499,13 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
               await db.run(sql);
           },
         },
+        5: {
+          says: 'adds link expiry and proposal creation indexes for daily pruning',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/commands/postgresCommandJournalSchema.js')).postgresJournalUpgradeFrom5())
+              await db.run(sql);
+          },
+        },
       },
     },
   },
@@ -499,9 +521,28 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'command-staging',
     title: 'files a form holds for its command',
     tables: { prefix: '__mistri_staged_' },
-    current: both(1),
+    current: both(2),
     read: marked({ sqlite: { table: '__mistri_staged_meta' }, postgres: { table: '__mistri_staged_meta' } }),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: 'adds the retention expiry index on staged files',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/commands/commandStaging.js')).sqliteCommandStagingUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: 'adds the retention expiry index on staged files',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/commands/postgresCommandStaging.js')).postgresCommandStagingUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+    },
   },
   {
     id: 'public-placement',
@@ -545,17 +586,53 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'event-delivery',
     title: 'event deliveries and attempts',
     tables: { prefix: '__mistri_delivery_' },
-    current: both(1),
+    current: both(2),
     read: marked({ sqlite: { table: '__mistri_delivery_meta' }, postgres: { table: '__mistri_delivery_meta' } }),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: 'adds receipt_id foreign-key and attempt finished_at pruning indexes',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/events/eventDeliverySchema.js')).sqliteEventDeliveryUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: 'adds receipt_id foreign-key and attempt finished_at pruning indexes',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/events/postgresEventDeliveryStore.js')).postgresEventDeliveryUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+      },
+    },
   },
   {
     id: 'jobs',
     title: 'durable jobs',
     tables: { prefix: '__mistri_job_' },
-    current: both(1),
+    current: both(2),
     read: marked({ sqlite: { table: '__mistri_job_policy' }, postgres: { table: '__mistri_job_policy' } }),
-    upgrades: {},
+    upgrades: {
+      sqlite: {
+        1: {
+          says: 'adds the attempt finished_at pruning index',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/jobs/jobStoreSchema.js')).sqliteJobStoreUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+      postgres: {
+        1: {
+          says: 'adds the attempt finished_at pruning index',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/jobs/postgresJobStore.js')).postgresJobStoreUpgradeFrom1()) await db.run(sql);
+          },
+        },
+      },
+    },
   },
   {
     id: 'workflows',
@@ -608,7 +685,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'tenant-store',
     title: 'tenants and memberships',
     tables: { prefix: '__mistri_tenant_' },
-    current: both(2),
+    current: both(3),
     read: marked({ sqlite: { table: '__mistri_tenant_meta' }, postgres: { table: '__mistri_tenant_meta' } }),
     upgrades: {
       sqlite: {
@@ -618,12 +695,24 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
             for (const sql of (await import('./tenant/tenantStore.js')).sqliteTenantStoreUpgradeFrom1()) await db.run(sql);
           },
         },
+        2: {
+          says: 'adds the account_id index for member discovery',
+          run: async ({ db }) => {
+            for (const sql of (await import('./tenant/tenantStore.js')).sqliteTenantStoreUpgradeFrom2()) await db.run(sql);
+          },
+        },
       },
       postgres: {
         1: {
           says: "adds the host table: the subdomains and domains that show a tenant's public pages",
           run: async ({ db }) => {
             for (const sql of (await import('./tenant/tenantStorePostgres.js')).postgresTenantStoreUpgradeFrom1()) await db.run(sql);
+          },
+        },
+        2: {
+          says: 'adds the account_id index for member discovery',
+          run: async ({ db }) => {
+            for (const sql of (await import('./tenant/tenantStorePostgres.js')).postgresTenantStoreUpgradeFrom2()) await db.run(sql);
           },
         },
       },

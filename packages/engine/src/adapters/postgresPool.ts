@@ -276,6 +276,10 @@ export class PgConnectionManager {
   private readonly limitSaid: Partial<Record<OwnRole, number>> = {};
   /** Gives back what this manager told the connection budget it may hold (connectionBudget.ts). */
   private readonly releaseBudget: () => void;
+  /** Bounded concurrency for best-effort pg_cancel_backend helper connections. */
+  private cancelsInFlight = 0;
+  private readonly cancelQueue: number[] = [];
+  private readonly pendingCancels = new Set<number>();
 
   constructor(
     private readonly connectionString: string,
@@ -613,7 +617,11 @@ export class PgConnectionManager {
       if (bounded) {
         const deadline = performance.now() + this.queueWaitMs;
         place = await this.admissions[role].enter(this.queueWaitMs);
-        client = await this.connectWithin(pool, role, Math.max(1, deadline - performance.now()));
+        client = await this.connectWithin(pool, role, Math.max(1, deadline - performance.now()), () => {
+          const held = place;
+          place = undefined;
+          return held;
+        });
       } else client = await this.connectHeld(pool, role);
       had?.();
     } catch (error) {
@@ -785,25 +793,40 @@ export class PgConnectionManager {
   /**
    * A connection, or PoolBusy once what is left of the queue-wait budget, `waitMs`, is spent. The driver
    * cannot withdraw a request it has queued, so one that arrives late is given
-   * straight back to the pool rather than leaked.
+   * straight back to the pool rather than leaked — and its admission slot stays
+   * held until that late connect settles so concurrent timeouts cannot pile
+   * phantom waiters onto pg-pool.
    */
-  private connectWithin(pool: PgPool, role: 'read' | 'write', waitMs: number): Promise<PgClient> {
+  private connectWithin(
+    pool: PgPool,
+    role: 'read' | 'write',
+    waitMs: number,
+    claimPlace?: () => (() => void) | undefined,
+  ): Promise<PgClient> {
     const connecting = this.connectHeld(pool, role);
     return new Promise<PgClient>((resolve, reject) => {
       let over = false;
+      let latePlace: (() => void) | undefined;
       const timer = setTimeout(() => {
         over = true;
+        latePlace = claimPlace?.();
         reject(new PoolBusy(role, 'queue_timeout'));
       }, waitMs);
       connecting.then(
         (client) => {
           clearTimeout(timer);
-          if (over) client.release();
-          else resolve(client);
+          if (over) {
+            try {
+              client.release();
+            } finally {
+              latePlace?.();
+            }
+          } else resolve(client);
         },
         (error) => {
           clearTimeout(timer);
-          if (!over) reject(error);
+          if (over) latePlace?.();
+          else reject(error);
         },
       );
     });
@@ -872,11 +895,25 @@ export class PgConnectionManager {
   /**
    * Stop what backend `pid` is running, with pg_cancel_backend from a
    * connection of its own: the pool's may all be busy, one of them with the
-   * statement being stopped. Best effort — a cancel that cannot connect
-   * leaves the statement to its cap.
+   * statement being stopped. Best effort — bounded to at most two concurrent
+   * helper connections so a cancel burst cannot exhaust the database's
+   * connection slots; anything beyond the cap leaves the statement to its
+   * statement_timeout.
    */
   private async cancel(pid: number | null | undefined): Promise<void> {
-    if (!pid) return;
+    if (!pid || this.closed || this.pendingCancels.has(pid)) return;
+    if (this.cancelsInFlight >= 2) {
+      if (this.cancelQueue.length >= 8) return;
+      this.pendingCancels.add(pid);
+      this.cancelQueue.push(pid);
+      return;
+    }
+    this.pendingCancels.add(pid);
+    await this.runCancel(pid);
+  }
+
+  private async runCancel(pid: number): Promise<void> {
+    this.cancelsInFlight += 1;
     try {
       const pg = (await this.load()) as {
         Client?: PgClientClass;
@@ -897,6 +934,11 @@ export class PgConnectionManager {
       }
     } catch {
       /* The statement's cap still stops it. */
+    } finally {
+      this.pendingCancels.delete(pid);
+      this.cancelsInFlight -= 1;
+      const next = this.cancelQueue.shift();
+      if (next !== undefined && !this.closed) void this.runCancel(next);
     }
   }
 

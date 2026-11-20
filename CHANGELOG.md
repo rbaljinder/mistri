@@ -5,6 +5,36 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.70
+
+Assessment hardening: a sweep of fixes from an outside review of the server, the stores and the client.
+
+- Network and connections: the egress policy resolves each outside request once and blocks more ways to name an internal
+  address (Teredo and SIIT IPv6 spellings, Alibaba's metadata address). The cache client's reply parser and the
+  Postgres and SQLite statement paths are bounded and stricter, and reserved SQL names are refused in more places.
+- Stores: the command journal, command staging, event delivery, jobs, live change, tenant store, flags and experiments
+  carry new layout versions with indexes and constraints; each upgrade is covered by a fixture of the previous layout.
+- Live updates and the client: live invalidation filters and paces more carefully, the inbox, triage board, Gantt list
+  and proposal and assistant panels are tightened, and a command form holding unsaved edits now asks before the tab is
+  reloaded or closed (in-App navigation stays free).
+- Editing: an inline editor opens a value that already has line breaks as a multi-line box.
+- Sign-in: OIDC discovery, token and JWKS requests go through the egress policy.
+
+### Upgrade notes
+
+- With `--auth-proxy-header` or trusted proxies, a loopback request that arrives without the proxy's identity (a local
+  `curl`, MCP over HTTP, a sidecar) is no longer treated as the local operator and gets 401. Send the identity header,
+  or use the stdio MCP. Health and readiness probes (`/healthz`, `/readyz`) are answered before this check and are
+  unaffected.
+- OIDC discovery, token and JWKS requests for a tenant-scoped provider now go through the egress policy: a private
+  address is refused, and link-local and metadata addresses are always refused. The only way to allow an identity
+  provider on a private network is the provider's `insecure` setting, which also permits plain `http`, so use it only
+  for a provider you reach over a trusted network. A discovery, token or JWKS answer that is 2xx but not JSON is refused.
+- The Postgres store upgrade adds indexes with a plain `CREATE INDEX` inside the upgrade transaction. On a large table
+  it blocks writes to that table while it runs, so upgrade in a quiet window.
+- `mysql://` targets in untrusted (tenant) connections are refused, and a `scheme://...x.db` path now errors instead of
+  being read as a file.
+
 ## 1.0.0-rc.69
 
 - A command's lookup reads a file a record already keeps: `sources.<source>.<table>.readFile(row)`, by the row or its

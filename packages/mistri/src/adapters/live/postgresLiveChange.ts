@@ -36,7 +36,6 @@ import {
   LIVE_CHANGE_LIMITS,
   LIVE_CHANGE_PREFIX,
   LIVE_CHANGE_TABLES,
-  LIVE_CHANGE_VERSION,
   LiveChangeUnavailable,
   NOTIFY_LIVE,
   assertLiveChangeRow,
@@ -47,14 +46,16 @@ import {
 import { postgresRuntimeNames, runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 
 const { meta, change } = postgresRuntimeNames(LIVE_CHANGE_TABLES);
+const POSTGRES_LIVE_CHANGE_VERSION = 2;
+const LIVE_CHANGE_AT_INDEX = `${LIVE_CHANGE_PREFIX}change_at`;
 const q = (name: string) => runtimeTable('postgres', name);
 const layoutMessage = async (client: PgQuery) =>
-  layoutRefusal('The live sync store', await postgresLayoutVersion(client, q(meta)), LIVE_CHANGE_VERSION);
+  layoutRefusal('The live sync store', await postgresLayoutVersion(client, q(meta)), POSTGRES_LIVE_CHANGE_VERSION);
 
 const definitions: readonly string[] = [
   `CREATE TABLE ${q(meta)} (
   singleton integer PRIMARY KEY CHECK (singleton = 1),
-  version integer NOT NULL CHECK (version = ${LIVE_CHANGE_VERSION})
+  version integer NOT NULL CHECK (version = ${POSTGRES_LIVE_CHANGE_VERSION})
 )`,
   `CREATE UNLOGGED TABLE ${q(change)} (
   id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -65,6 +66,15 @@ const definitions: readonly string[] = [
   entries jsonb NOT NULL CHECK (octet_length(entries::text) <= ${LIVE_CHANGE_LIMITS.entries})
 )`,
   `CREATE INDEX "${LIVE_CHANGE_INDEX}" ON ${q(change)} (xact, id)`,
+  `CREATE INDEX "${LIVE_CHANGE_AT_INDEX}" ON ${q(change)} (at)`,
+];
+
+/** What the upgrade from version 1 runs: adds the retention timestamp index and moves the version row to 2. */
+export const postgresLiveChangeUpgradeFrom1 = (): readonly string[] => [
+  `CREATE INDEX "${LIVE_CHANGE_AT_INDEX}" ON ${q(change)} (at)`,
+  `ALTER TABLE ${q(meta)} DROP CONSTRAINT ${meta}_version_check`,
+  `UPDATE ${q(meta)} SET version = ${POSTGRES_LIVE_CHANGE_VERSION}`,
+  `ALTER TABLE ${q(meta)} ADD CONSTRAINT ${meta}_version_check CHECK (version = ${POSTGRES_LIVE_CHANGE_VERSION})`,
 ];
 
 const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -118,6 +128,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       'PRIMARY KEY (id)',
     ],
     [
+      `CREATE INDEX ${LIVE_CHANGE_AT_INDEX} ON ${runtimeSchema('postgres')}.${change} USING btree (at)`,
       `CREATE INDEX ${LIVE_CHANGE_INDEX} ON ${runtimeSchema('postgres')}.${change} USING btree (xact, id)`,
       `CREATE UNIQUE INDEX ${change}_pkey ON ${runtimeSchema('postgres')}.${change} USING btree (id)`,
     ],
@@ -125,7 +136,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
   table(
     meta,
     [column('singleton', 'integer'), column('version', 'integer')],
-    ['CHECK ((singleton = 1))', `CHECK ((version = ${LIVE_CHANGE_VERSION}))`, 'PRIMARY KEY (singleton)'],
+    ['CHECK ((singleton = 1))', `CHECK ((version = ${POSTGRES_LIVE_CHANGE_VERSION}))`, 'PRIMARY KEY (singleton)'],
     [`CREATE UNIQUE INDEX ${meta}_pkey ON ${runtimeSchema('postgres')}.${meta} USING btree (singleton)`],
   ),
 ];
@@ -148,7 +159,7 @@ export async function postgresLiveChangeReady(client: PgQuery): Promise<boolean>
     ).rows;
     if (persistence.length !== 1 || persistence[0].persistence !== 'u') return false;
     const rows = (await client.query(`SELECT singleton, version FROM ${q(meta)}`)).rows;
-    return rows.length === 1 && rows[0].singleton === 1 && rows[0].version === LIVE_CHANGE_VERSION;
+    return rows.length === 1 && rows[0].singleton === 1 && rows[0].version === POSTGRES_LIVE_CHANGE_VERSION;
   } catch {
     return false;
   }
@@ -156,17 +167,19 @@ export async function postgresLiveChangeReady(client: PgQuery): Promise<boolean>
 
 /** Explicit maintenance, under the shared migration lock: creates this version
  * where no store exists, changes nothing where it does, refuses anything else. */
-export async function provisionPostgresLiveChange(url: string): Promise<{ version: typeof LIVE_CHANGE_VERSION; provisioned: boolean }> {
+export async function provisionPostgresLiveChange(
+  url: string,
+): Promise<{ version: typeof POSTGRES_LIVE_CHANGE_VERSION; provisioned: boolean }> {
   if (typeof url !== 'string' || !/^postgres(ql)?:\/\//i.test(url)) throw new Refusal('Live sync provisioning requires a postgres:// URL.');
   return withPostgresMaintenanceTransaction(url, async (client) => {
     let provisioned = false;
     if (!(await describePostgresRelations(client, LIVE_CHANGE_PREFIX)).length) {
       for (const ddl of definitions) await client.query(ddl);
-      await client.query(`INSERT INTO ${q(meta)} (singleton, version) VALUES (1, $1)`, [LIVE_CHANGE_VERSION]);
+      await client.query(`INSERT INTO ${q(meta)} (singleton, version) VALUES (1, $1)`, [POSTGRES_LIVE_CHANGE_VERSION]);
       provisioned = true;
     }
     if (!(await postgresLiveChangeReady(client))) throw new LiveChangeUnavailable(await layoutMessage(client));
-    return { version: LIVE_CHANGE_VERSION, provisioned };
+    return { version: POSTGRES_LIVE_CHANGE_VERSION, provisioned };
   });
 }
 

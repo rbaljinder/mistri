@@ -20,6 +20,7 @@ export interface SensitiveFieldProps extends FieldFrame {
   value: string;
   onChange: (raw: string, details: ChangeDetails<'input-change'>) => void;
   mask: Mask;
+  disabled?: boolean;
   valid?: boolean;
   validIcon?: ReactNode;
   onBlur?: () => void;
@@ -35,11 +36,33 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
   const [shown, setShown] = useState(false);
   const formatted = props.mask.format(props.value);
   const display = shown ? formatted : '•'.repeat(formatted.length);
-  const change = (typed: string, details: ChangeDetails<'input-change'>): void => {
+  const change = (typed: string, caret: number | null, details: ChangeDetails<'input-change'>): void => {
     if (shown) return props.onChange(props.mask.parse(typed), details);
-    // Hidden: what is left of the dots keeps that many characters of the number; a digit typed is added at the end.
-    const kept = formatted.slice(0, typed.replace(/[^•]/g, '').length);
-    props.onChange(props.mask.parse(digits(kept) + digits(typed)), details);
+    // Hidden: preserve unchanged leading and trailing dots around the edited span so mid-string edits do not corrupt later digits.
+    if (/^•*$/.test(typed)) {
+      if (typed.length >= formatted.length) return;
+      const at = caret !== null && caret <= typed.length ? caret : typed.length;
+      const removed = formatted.length - typed.length;
+      const prefix = formatted.slice(0, at);
+      const suffix = formatted.slice(at + removed);
+      let nextDigits = digits(prefix) + digits(suffix);
+      if (nextDigits === digits(formatted)) {
+        const pre = digits(prefix);
+        const post = digits(suffix);
+        nextDigits = pre.length > 0 ? pre.slice(0, -1) + post : post.slice(1);
+      }
+      return props.onChange(props.mask.parse(nextDigits), details);
+    }
+    let lead = 0;
+    while (lead < typed.length && lead < formatted.length && typed[lead] === '•') lead++;
+    let trail = 0;
+    while (trail < typed.length - lead && trail < formatted.length - lead && typed[typed.length - 1 - trail] === '•') {
+      trail++;
+    }
+    const prefix = formatted.slice(0, lead);
+    const inserted = typed.slice(lead, typed.length - trail);
+    const suffix = trail > 0 ? formatted.slice(formatted.length - trail) : '';
+    props.onChange(props.mask.parse(digits(prefix) + digits(inserted) + digits(suffix)), details);
   };
   return (
     <Frame {...props}>
@@ -49,6 +72,7 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
             id={props.id}
             data-hidden={shown ? undefined : ''}
             value={display}
+            disabled={props.disabled}
             inputMode={props.mask.inputMode ?? 'numeric'}
             autoComplete="off"
             autoCorrect="off"
@@ -58,12 +82,12 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
             data-lpignore="true"
             aria-required={props.required || undefined}
             // React's own change, as the text box hears it (TextField.tsx says why).
-            onChange={(event) => change(event.target.value, changeDetails('input-change', event))}
+            onChange={(event) => change(event.target.value, event.target.selectionStart, changeDetails('input-change', event))}
             onBlur={props.onBlur}
           />
           {props.valid ? <ValidMark icon={props.validIcon} /> : null}
         </div>
-        <Button intent="quiet" onClick={() => setShown(!shown)}>
+        <Button intent="quiet" disabled={props.disabled} aria-pressed={shown} aria-controls={props.id} onClick={() => setShown(!shown)}>
           {shown ? props.hideLabel : props.showLabel}
         </Button>
       </div>

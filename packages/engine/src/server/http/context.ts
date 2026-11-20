@@ -17,7 +17,7 @@ import type { DatabaseSchema } from '../../shared/schema.js';
 import type { QueryPerson } from '../../shared/query.js';
 import type { ColumnGrant } from '../columnGrants.js';
 import type { RequestDiagnostics } from '../operations/diagnostics.js';
-import type { Bound } from './trust.js';
+import type { Bound, ProxyRange } from './trust.js';
 
 /**
  * The App framework's types for what a request carries on its behalf: the
@@ -184,4 +184,6 @@ export interface PostContext {
   readonly appHost?: HostedApp;
   /** Who `me` is in an App's conditions, read through this request's reader (server/app/appMe.ts). */
   readonly me?: () => Promise<QueryPerson>;
+  /** `--trust-proxy` ranges, for keying anonymous exports by forwarded client address. */
+  readonly trustedProxies?: readonly ProxyRange[];
 }

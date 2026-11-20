@@ -57,11 +57,100 @@ interface ComponentMessages {
 /** Comments blanked to spaces, newlines kept, so a finding's line is the source's. */
 function withoutComments(source: string, css: boolean): string {
   const blank = (match: string) => match.replace(/[^\n]/g, ' ');
-  return css
-    ? source.replace(/\/\*[\s\S]*?\*\//g, blank)
-    : source
-        .replace(/\/\*[\s\S]*?\*\//g, blank)
-        .replace(/(^|[^:'"`\\])\/\/[^\n]*/g, (match, lead: string) => lead + blank(match.slice(lead.length)));
+  if (css) return source.replace(/\/\*[\s\S]*?\*\//g, blank);
+  /* Scan JS/TS strings and template literals explicitly so `"/*"` or `'//'`
+     never starts a fake comment that blanks out subsequent code. */
+  const out: string[] = [];
+  const n = source.length;
+  let i = 0;
+  let quote: "'" | '"' | null = null;
+  const templateDepths: number[] = [];
+  let inTemplateText = false;
+  while (i < n) {
+    const ch = source[i]!;
+    const next = source[i + 1];
+    if (quote) {
+      out.push(ch);
+      if (ch === '\\' && i + 1 < n) {
+        out.push(next!);
+        i += 2;
+        continue;
+      }
+      if (ch === quote || ch === '\n') quote = null;
+      i += 1;
+      continue;
+    }
+    if (inTemplateText) {
+      out.push(ch);
+      if (ch === '\\' && i + 1 < n) {
+        out.push(next!);
+        i += 2;
+        continue;
+      }
+      if (ch === '`') {
+        inTemplateText = false;
+        i += 1;
+        continue;
+      }
+      if (ch === '$' && next === '{') {
+        out.push('{');
+        templateDepths.push(0);
+        inTemplateText = false;
+        i += 2;
+        continue;
+      }
+      i += 1;
+      continue;
+    }
+    if (ch === '/' && next === '/') {
+      while (i < n && source[i] !== '\n') {
+        out.push(' ');
+        i += 1;
+      }
+      continue;
+    }
+    if (ch === '/' && next === '*') {
+      out.push(' ', ' ');
+      i += 2;
+      while (i < n) {
+        if (source[i] === '*' && source[i + 1] === '/') {
+          out.push(' ', ' ');
+          i += 2;
+          break;
+        }
+        out.push(source[i] === '\n' ? '\n' : ' ');
+        i += 1;
+      }
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      out.push(ch);
+      i += 1;
+      continue;
+    }
+    if (ch === '`') {
+      inTemplateText = true;
+      out.push(ch);
+      i += 1;
+      continue;
+    }
+    if (templateDepths.length) {
+      if (ch === '{') {
+        templateDepths[templateDepths.length - 1] += 1;
+      } else if (ch === '}') {
+        if (templateDepths[templateDepths.length - 1] === 0) {
+          templateDepths.pop();
+          inTemplateText = true;
+        } else {
+          templateDepths[templateDepths.length - 1] -= 1;
+        }
+      }
+    }
+    out.push(ch);
+    i += 1;
+  }
+  return out.join('');
 }
 
 /**

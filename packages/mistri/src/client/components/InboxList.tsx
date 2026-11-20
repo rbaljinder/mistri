@@ -10,7 +10,7 @@
  * "Mark all read" is the reader's own notices, all of them.
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { api, go, rowView } from '@mistriwork/kit/client/core.js';
 import { formatDateTime } from '@mistriwork/kit/client/locale.js';
@@ -181,6 +181,9 @@ function EmailChoice({ on }: { on: boolean }) {
 /** The room: every notice, newest first, All or Unread, a page at a time. */
 export function InboxRoom() {
   const [unreadOnly, setUnreadOnly] = useState(false);
+  const tabsId = useId();
+  const allTabRef = useRef<HTMLButtonElement>(null);
+  const unreadTabRef = useRef<HTMLButtonElement>(null);
   const pages = useInfiniteQuery({
     queryKey: [INBOX_QUERY, 'room', unreadOnly],
     initialPageParam: undefined as number | undefined,
@@ -206,6 +209,22 @@ export function InboxRoom() {
       setMarking(false);
     }
   };
+  const selectTab = (nextUnread: boolean) => {
+    setUnreadOnly(nextUnread);
+    (nextUnread ? unreadTabRef : allTabRef).current?.focus();
+  };
+  const onTabKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>) => {
+    if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+      event.preventDefault();
+      selectTab(!unreadOnly);
+    } else if (event.key === 'Home') {
+      event.preventDefault();
+      selectTab(false);
+    } else if (event.key === 'End') {
+      event.preventDefault();
+      selectTab(true);
+    }
+  };
   /* The room names itself in the crumb bar, as a list does (docs/design.md):
      its title and count after the trail, Mark all read at the bar's end. */
   const crumbs = useCrumbSlots();
@@ -223,6 +242,9 @@ export function InboxRoom() {
         {say('markAllRead')}
       </Button>
     ) : null;
+  const allTabId = `${tabsId}-tab-all`;
+  const unreadTabId = `${tabsId}-tab-unread`;
+  const panelId = `${tabsId}-panel`;
   return (
     <section className="inbox-room" aria-labelledby="inbox-room-title">
       {crumbs.note ? (
@@ -237,55 +259,79 @@ export function InboxRoom() {
         </div>
       )}
       <div className="tabs" data-scrolls="" role="tablist" aria-label={say('whichNotifications')}>
-        <button type="button" role="tab" className="tab" aria-selected={!unreadOnly} onClick={() => setUnreadOnly(false)}>
+        <button
+          ref={allTabRef}
+          id={allTabId}
+          type="button"
+          role="tab"
+          className="tab"
+          aria-selected={!unreadOnly}
+          aria-controls={panelId}
+          tabIndex={!unreadOnly ? 0 : -1}
+          onKeyDown={onTabKeyDown}
+          onClick={() => setUnreadOnly(false)}
+        >
           <span>{say('common.all')}</span>
         </button>
-        <button type="button" role="tab" className="tab" aria-selected={unreadOnly} onClick={() => setUnreadOnly(true)}>
+        <button
+          ref={unreadTabRef}
+          id={unreadTabId}
+          type="button"
+          role="tab"
+          className="tab"
+          aria-selected={unreadOnly}
+          aria-controls={panelId}
+          tabIndex={unreadOnly ? 0 : -1}
+          onKeyDown={onTabKeyDown}
+          onClick={() => setUnreadOnly(true)}
+        >
           <span>{say('unreadTab')}</span>
         </button>
       </div>
-      {typeof pages.data?.pages[0]?.email === 'boolean' && <EmailChoice on={pages.data.pages[0].email} />}
-      {pages.isPending ? (
-        <p className="loading" role="status">
-          {say('common.loading')}
-        </p>
-      ) : pages.isError ? (
-        <Problem text={(pages.error as Error).message} />
-      ) : !notices.length ? (
-        <Empty
-          text={unreadOnly ? say('nothingUnread') : say('noNotificationsYet')}
-          detail={unreadOnly ? undefined : say('whenSomeoneRepliesToYouAssigns')}
-        />
-      ) : (
-        <ol className="inbox-list">
-          {notices.map((notice) => (
-            <li key={notice.id} className={`inbox-row${notice.read ? '' : ' unread'}`}>
-              <button type="button" className="inbox-open" onClick={() => open(notice)}>
-                <NoticeText notice={notice} />
-              </button>
-              {!notice.read && (
-                <Button intent="quiet" size="compact" className="inbox-mark" onClick={() => void mark({ ids: [notice.id] })}>
-                  {say('markRead')}
-                  <span className="visually-hidden">: {notice.title}</span>
-                </Button>
-              )}
-            </li>
-          ))}
-        </ol>
-      )}
-      {pages.hasNextPage && (
-        <div className="inbox-more">
-          <Button
-            intent="secondary"
-            size="compact"
-            busy={pages.isFetchingNextPage}
-            busyLabel={say('common.loading')}
-            onClick={() => void pages.fetchNextPage()}
-          >
-            {say('showOlder')}
-          </Button>
-        </div>
-      )}
+      <div id={panelId} role="tabpanel" aria-labelledby={unreadOnly ? unreadTabId : allTabId}>
+        {typeof pages.data?.pages[0]?.email === 'boolean' && <EmailChoice on={pages.data.pages[0].email} />}
+        {pages.isPending ? (
+          <p className="loading" role="status">
+            {say('common.loading')}
+          </p>
+        ) : pages.isError ? (
+          <Problem text={(pages.error as Error).message} />
+        ) : !notices.length ? (
+          <Empty
+            text={unreadOnly ? say('nothingUnread') : say('noNotificationsYet')}
+            detail={unreadOnly ? undefined : say('whenSomeoneRepliesToYouAssigns')}
+          />
+        ) : (
+          <ol className="inbox-list">
+            {notices.map((notice) => (
+              <li key={notice.id} className={`inbox-row${notice.read ? '' : ' unread'}`}>
+                <button type="button" className="inbox-open" onClick={() => open(notice)}>
+                  <NoticeText notice={notice} />
+                </button>
+                {!notice.read && (
+                  <Button intent="quiet" size="compact" className="inbox-mark" onClick={() => void mark({ ids: [notice.id] })}>
+                    {say('markRead')}
+                    <span className="visually-hidden">: {notice.title}</span>
+                  </Button>
+                )}
+              </li>
+            ))}
+          </ol>
+        )}
+        {pages.hasNextPage && (
+          <div className="inbox-more">
+            <Button
+              intent="secondary"
+              size="compact"
+              busy={pages.isFetchingNextPage}
+              busyLabel={say('common.loading')}
+              onClick={() => void pages.fetchNextPage()}
+            >
+              {say('showOlder')}
+            </Button>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

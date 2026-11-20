@@ -490,6 +490,7 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
     if (!columns.length) throw new AppAccessDenied();
     assertFields(request.table, columns, 'read', server);
     for (const order of request.orderBy ?? []) assertFields(request.table, [order.column], 'read', server);
+    if (request.lanes) assertFields(request.table, [request.lanes.by], 'read', server);
     return { ...request, columns, filter: filterFor(request.table, request.filter, server) };
   };
   /* An aggregate reads the columns it keys and measures by, and its where's, as a query reads its own. */
@@ -593,6 +594,7 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
     assertExpressions(view.base, view.expressions, view.computed);
     assertTags(view.tagged);
     assertAnyRows(view.filter);
+    if (view.lanes) assertFields(view.base, [view.lanes.by]);
     // Validate against the pruned graph before the underlying full catalog can
     // resolve a forbidden forward path, filter, sort or reverse aggregate.
     const compiled = compileView(schema, view, ANSI_STYLE);

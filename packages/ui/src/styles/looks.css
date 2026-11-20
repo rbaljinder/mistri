@@ -35,8 +35,10 @@
     [data-slot='tabs-tab'] {
       border-radius: var(--m-radius-pill, 999px);
 
-      &:hover {
-        background: var(--m-raised);
+      @media (hover: hover) {
+        &:hover {
+          background: var(--m-raised);
+        }
       }
 
       &[data-selected] {

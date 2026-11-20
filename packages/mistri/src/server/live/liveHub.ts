@@ -334,7 +334,7 @@ export class LiveHub {
       this.counters.rows += rows.length;
       const primary = await this.replicasBehind();
       if (stopped()) return;
-      const memo: ProbeMemo = new Map();
+      const memo = this.countedMemo();
       const live = [...this.attached].filter((entry) => entry.at);
       const authorities = new Map<Attached, LiveAuthority>();
       await Promise.all(
@@ -346,17 +346,55 @@ export class LiveHub {
           }
         }),
       );
+      /* Index which tables and tenants appear in this batch so subscribers that
+         cannot read any changed table skip inner filtering altogether. */
+      const changedTables = new Set<string>();
+      for (const { change } of rows) for (const item of change.entries) changedTables.add(item.table);
       const deliveries = new Map<Attached, LiveDelivery>();
-      for (const { change, position } of rows) {
-        for (const entry of live) {
-          const authority = authorities.get(entry);
-          if (!authority || !entry.at || !livePast(position, entry.at)) continue;
-          let delivery = deliveries.get(entry);
-          if (!delivery) deliveries.set(entry, (delivery = emptyDelivery()));
-          await deliverChange(change, authority, delivery, this.counted(memo));
-          entry.at = position;
+      const tasks: Array<Promise<void>> = [];
+      for (const entry of live) {
+        const authority = authorities.get(entry);
+        const startAt = entry.at;
+        if (!authority || !startAt) continue;
+        let readsAny = false;
+        for (const table of changedTables) {
+          if (authority.tables.get(table) !== undefined) {
+            readsAny = true;
+            break;
+          }
         }
+        let lastPos: LivePosition | undefined;
+        let relevant = false;
+        for (const { change, position } of rows) {
+          if (!livePast(position, startAt)) continue;
+          lastPos = position;
+          if (readsAny && !relevant) {
+            for (const item of change.entries) {
+              if (authority.tables.get(item.table) === undefined) continue;
+              if (authority.tenant !== undefined && item.tenant !== authority.tenant) continue;
+              relevant = true;
+              break;
+            }
+          }
+        }
+        if (!lastPos) continue;
+        const delivery = emptyDelivery();
+        deliveries.set(entry, delivery);
+        if (!relevant) {
+          entry.at = lastPos;
+          continue;
+        }
+        tasks.push(
+          (async () => {
+            for (const { change, position } of rows) {
+              if (!entry.at || !livePast(position, entry.at)) continue;
+              await deliverChange(change, authority, delivery, memo);
+              entry.at = position;
+            }
+          })(),
+        );
       }
+      if (tasks.length) await Promise.all(tasks);
       if (stopped()) return;
       from = this.position = rows[rows.length - 1].position;
       this.unsettledMs = UNSETTLED_MS;
@@ -381,20 +419,16 @@ export class LiveHub {
     } else this.unsettledMs = UNSETTLED_MS;
   }
 
-  /* Probes, counted as they are first asked: the memo shares one between subscribers of one scope. */
-  private counted(memo: ProbeMemo): ProbeMemo {
+  /* Probes, counted as they are first asked: one Map per pass/join instead of a Proxy per row×subscriber. */
+  private countedMemo(): ProbeMemo {
     const counters = this.counters;
-    return new Proxy(memo, {
-      get(target, property) {
-        if (property === 'set')
-          return (key: string, value: Promise<ReadonlySet<string>>) => {
-            counters.probes += 1;
-            return target.set(key, value);
-          };
-        const value = Reflect.get(target, property, target);
-        return typeof value === 'function' ? value.bind(target) : value;
-      },
-    });
+    const memo: ProbeMemo = new Map();
+    const baseSet = memo.set.bind(memo);
+    memo.set = (key, value) => {
+      counters.probes += 1;
+      return baseSet(key, value);
+    };
+    return memo;
   }
 
   /* A subscriber placed at the head, or replayed from its cursor up to the hub's position. */
@@ -416,7 +450,7 @@ export class LiveHub {
     }
     const authority = await entry.tap.authority();
     const delivery = emptyDelivery();
-    const memo: ProbeMemo = new Map();
+    const memo = this.countedMemo();
     let from = located,
       read = 0;
     for (;;) {
@@ -428,7 +462,7 @@ export class LiveHub {
         entry.tap.reset(position);
         return;
       }
-      for (const { change } of rows) await deliverChange(change, authority, delivery, this.counted(memo));
+      for (const { change } of rows) await deliverChange(change, authority, delivery, memo);
       from = rows[rows.length - 1].position;
       if (!livePast(position, from)) break;
     }

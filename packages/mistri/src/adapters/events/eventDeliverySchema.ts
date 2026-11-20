@@ -51,12 +51,13 @@ const integer = (name: string, max = Number.MAX_SAFE_INTEGER) =>
    pruned receipt is never taken up again; `pruned_at` says its delivery
    rows are gone. A redrive is a history row of its own, with an operator
    and no lease. */
+const SQLITE_EVENT_DELIVERY_VERSION = 2;
 const definitions = new Map([
   [
     t.meta,
     `CREATE TABLE "${t.meta}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton=1),
-  version INTEGER NOT NULL CHECK (version=1),
+  version INTEGER NOT NULL CHECK (version=${SQLITE_EVENT_DELIVERY_VERSION}),
   ${string('binding_json', 2048)},
   ${integer('last_clock')}
 )`,
@@ -125,7 +126,23 @@ const definitions = new Map([
 )`,
   ],
   [`${prefix}ready`, `CREATE INDEX "${prefix}ready" ON "${t.delivery}" (destination_id,state,next_at)`],
+  [`${prefix}receipt_receipt`, `CREATE INDEX "${prefix}receipt_receipt" ON "${t.receipt}" (receipt_id)`],
+  [`${prefix}delivery_receipt`, `CREATE INDEX "${prefix}delivery_receipt" ON "${t.delivery}" (receipt_id)`],
+  [`${prefix}attempt_finished`, `CREATE INDEX "${prefix}attempt_finished" ON "${t.attempt}" (finished_at)`],
 ]);
+
+/** What the upgrade from version 1 runs: adds receipt_id and finished_at pruning indexes and bumps version to 2. */
+export const sqliteEventDeliveryUpgradeFrom1 = (): readonly string[] => [
+  definitions.get(`${prefix}receipt_receipt`)!,
+  definitions.get(`${prefix}delivery_receipt`)!,
+  definitions.get(`${prefix}attempt_finished`)!,
+  `CREATE TABLE "${t.meta}_v1" AS SELECT singleton, binding_json, last_clock FROM "${t.meta}"`,
+  `DROP TABLE "${t.meta}"`,
+  definitions.get(t.meta)!,
+  `INSERT INTO "${t.meta}" (singleton, version, binding_json, last_clock) SELECT singleton, ${SQLITE_EVENT_DELIVERY_VERSION}, binding_json, last_clock FROM "${t.meta}_v1"`,
+  `DROP TABLE "${t.meta}_v1"`,
+];
+
 type Catalog = { type: string; name: string; tbl_name: string; sql: string | null };
 function catalog(db: DatabaseSync, schema: 'main' | 'temp'): Catalog[] {
   return db
@@ -133,7 +150,6 @@ function catalog(db: DatabaseSync, schema: 'main' | 'temp'): Catalog[] {
     WHERE substr(name,1,?)=? COLLATE NOCASE OR substr(tbl_name,1,?)=? COLLATE NOCASE`)
     .all(prefix.length, prefix, prefix.length, prefix) as unknown as Catalog[];
 }
-const SQLITE_EVENT_DELIVERY_VERSION = 1;
 /** Rows of a destination still to deliver, or awaiting an operator's redrive: everything but `delivered`. */
 const undelivered = (db: DatabaseSync, id: string): number =>
   Number(db.prepare(`SELECT count(*) AS n FROM main."${t.delivery}" WHERE destination_id=? AND state<>'delivered'`).get(id)!.n);
@@ -300,7 +316,7 @@ export function provisionSqliteEventDeliveryStore(
   input: EventDeliveryPolicy,
   maintenance: { readonly stopped: true },
   options: EventDeliveryProvisionOptions = {},
-): { version: 1; provisioned: boolean; destinationAdded: boolean; destinationReplaced: boolean; retired: readonly string[] } {
+): { version: 2; provisioned: boolean; destinationAdded: boolean; destinationReplaced: boolean; retired: readonly string[] } {
   const policy = captureEventDeliveryPolicy(input);
   if (canonicalCommandJson(maintenance) !== '{"stopped":true}') return deliveryFail();
   const file = openEventDeliveryFile(existingPath),
@@ -312,7 +328,7 @@ export function provisionSqliteEventDeliveryStore(
     if (provisioned) {
       for (const ddl of definitions.values())
         db.exec(ddl.replace('CREATE TABLE ', 'CREATE TABLE main.').replace('CREATE INDEX ', 'CREATE INDEX main.'));
-      db.prepare(`INSERT INTO main."${t.meta}" VALUES (1,1,?,0)`).run(canonicalCommandJson(policy.source));
+      db.prepare(`INSERT INTO main."${t.meta}" VALUES (1,${SQLITE_EVENT_DELIVERY_VERSION},?,0)`).run(canonicalCommandJson(policy.source));
     }
     let destinationReplaced = false;
     const retired: string[] = [];
@@ -332,7 +348,7 @@ export function provisionSqliteEventDeliveryStore(
     assertSqliteEventDeliveryStore(db, policy);
     file.verifyFile();
     db.exec('COMMIT');
-    return { version: 1, provisioned, destinationAdded: !present, destinationReplaced, retired };
+    return { version: SQLITE_EVENT_DELIVERY_VERSION, provisioned, destinationAdded: !present, destinationReplaced, retired };
   } catch (error) {
     try {
       if (db.isTransaction) db.exec('ROLLBACK');

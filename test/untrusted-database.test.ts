@@ -133,14 +133,23 @@ test('an untrusted URL names its host and user and carries no parameter that rea
     'postgres://u@attacker.example/db?host=/var/run/postgresql',
     'postgres://u@attacker.example/db?sslrootcert=/etc/passwd',
     'postgres://u@attacker.example/db?sslmode=bogus',
+    'file:///tmp/secret.db',
+    'file:///etc/passwd?x=.db',
+    'sqlite:///tmp/secret.db',
+    '/tmp/local.sqlite',
+    'mysql://u@db.example.com/app',
   ]) {
     assert.ok(untrustedTargetRefusal(url), url);
   }
   for (const url of [
     'postgres://u@db.example.com/app',
+    'postgresql://u@db.example.com/app',
     'postgres://u:p@db.example.com:5433/app?sslmode=require',
     'postgres://u@db.example.com/app?sslrootcert=system',
   ]) {
     assert.equal(untrustedTargetRefusal(url), null, url);
+  }
+  for (const nonPg of ['file:///tmp/x.db', 'sqlite:///tmp/x.db', '/tmp/x.db']) {
+    assert.throws(() => connect(nonPg, { network: UNTRUSTED_NETWORK }), /PostgreSQL/);
   }
 });

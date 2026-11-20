@@ -472,3 +472,31 @@ describe('the startup lines name who may set --auth-proxy-header', () => {
     assert.deepEqual(proxyIdentityLines('0.0.0.0', undefined, ranges('10.0.0.0/8')), []);
   });
 });
+
+describe('identityFor refuses proxied loopback requests missing the identity header', () => {
+  const baseBound = { host: '127.0.0.1', port: 4111, identityHeader: 'X-Forwarded-User' };
+
+  test('direct unproxied loopback request still gets local operator identity', () => {
+    const out = identityFor({ headers: { host: '127.0.0.1:4111' }, socket: { remoteAddress: '127.0.0.1' } }, baseBound);
+    assert.deepEqual(out, { who: 'local' });
+  });
+
+  test('loopback request carrying forwarded headers, non-loopback Host, or trustedProxies without identity header is refused', () => {
+    for (const headers of [
+      { host: '127.0.0.1:4111', 'x-forwarded-for': '203.0.113.7' },
+      { host: '127.0.0.1:4111', forwarded: 'for=203.0.113.7' },
+      { host: '127.0.0.1:4111', 'x-forwarded-proto': 'https' },
+      { host: '127.0.0.1:4111', 'x-forwarded-host': 'app.example' },
+      { host: 'app.example' },
+    ]) {
+      const out = identityFor({ headers, socket: { remoteAddress: '127.0.0.1' } }, baseBound);
+      assert.ok(out.refusal, JSON.stringify(headers));
+      assert.equal(out.who, undefined);
+    }
+    const withTrusted = identityFor(
+      { headers: { host: '127.0.0.1:4111' }, socket: { remoteAddress: '127.0.0.1' } },
+      { ...baseBound, trustedProxies: ranges('10.0.0.0/8') },
+    );
+    assert.ok(withTrusted.refusal);
+  });
+});

@@ -105,10 +105,10 @@ test('public forms count in this process unless the deployment names a shared ca
   assert.ok(publicFormLimiter('read') instanceof SharedWindowLimiter);
   await publicFormLimiter('read').take('192.0.2.50');
   assert.ok(fake.commands.some((command) => command[0] === 'EVAL' && command[3] === 'mistri:crm:form:read:192.0.2.50:0'));
-  // Invitation claims count in the same cache under a key prefix of their own.
+  // Invitation claims count in the same cache under a key prefix of their own, reusing the cached script via EVALSHA.
   assert.ok(invitationClaimLimiter() instanceof SharedWindowLimiter);
   await invitationClaimLimiter().take('192.0.2.51');
-  assert.ok(fake.commands.some((command) => command[0] === 'EVAL' && command[3] === 'mistri:crm:form:claim:192.0.2.51:0'));
+  assert.ok(fake.commands.some((command) => command[0] === 'EVALSHA' && command[3] === 'mistri:crm:form:claim:192.0.2.51:0'));
   configurePublicFormLimits(undefined, 'crm');
   assert.ok(publicFormLimiter('submit') instanceof FixedWindowLimiter);
   assert.ok(invitationClaimLimiter() instanceof FixedWindowLimiter);

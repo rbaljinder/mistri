@@ -223,6 +223,7 @@ function outcomeOf(operation: CommandOperation | undefined, fields?: Readonly<Re
 export interface ProposalFormProps {
   proposal?: { id: string; input: Readonly<Record<string, unknown>>; onDismiss: () => Promise<unknown> };
   aside?: ReactNode;
+  onOpen?: (close: () => void) => void;
 }
 
 /** The platform's own form over the page, resolved when it closes. */
@@ -257,6 +258,8 @@ export function openForm(
         toast(say('notConfirmed', { label: options.label || action.label }), 'error');
       close();
     });
+    const { onOpen, ...restExtra } = extra;
+    onOpen?.(() => close());
     take = mount(
       host,
       createElement(CommandForm, {
@@ -265,7 +268,7 @@ export function openForm(
         label: options.label ?? '',
         initial: input,
         headless: true,
-        ...extra,
+        ...restExtra,
         onClose: close,
         onDone: () => {
           void queryClient.invalidateQueries();

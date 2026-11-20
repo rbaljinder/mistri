@@ -168,7 +168,7 @@ test('store layouts report each database by name, never its address', async (t) 
   assert.equal(stores.response.status, 200, stores.text);
   const rows = stores.json().stores as { database: string; id: string; found: number | null; pending: number[] }[];
   assert.ok(
-    rows.some((row) => row.database === 'jobs' && row.id === 'jobs' && row.found === 1 && !row.pending.length),
+    rows.some((row) => row.database === 'jobs' && row.id === 'jobs' && row.found === 2 && !row.pending.length),
     stores.text,
   );
   assert.ok(

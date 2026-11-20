@@ -10,6 +10,7 @@
  * caller that must know the difference, the rate limiter, is told through
  * `incr`, which throws `CacheUnavailable` rather than inventing a count.
  */
+import { createHash } from 'node:crypto';
 import { CacheUnavailable, RespReplyError, type RespClient } from './resp.js';
 
 export { CacheUnavailable } from './resp.js';
@@ -117,6 +118,7 @@ if n == tonumber(ARGV[2]) then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end
 local t = redis.call('PTTL', KEYS[1])
 if t < 0 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) t = tonumber(ARGV[1]) end
 return {n, t}`;
+const COUNT_IN_WINDOW_SHA = createHash('sha1').update(COUNT_IN_WINDOW).digest('hex');
 
 /**
  * A Valkey cache shared by every instance. `onUnavailable` hears each
@@ -124,6 +126,7 @@ return {n, t}`;
  */
 export class ValkeyCacheStore implements CacheStore {
   readonly kind = 'valkey' as const;
+  private scriptLoaded = false;
 
   constructor(
     private readonly client: RespClient,
@@ -162,7 +165,23 @@ export class ValkeyCacheStore implements CacheStore {
     assertBy(by);
     let reply;
     try {
-      reply = await this.client.command('EVAL', COUNT_IN_WINDOW, 1, key, ttlMs, by);
+      if (this.scriptLoaded) {
+        try {
+          reply = await this.client.command('EVALSHA', COUNT_IN_WINDOW_SHA, 1, key, ttlMs, by);
+        } catch (error) {
+          /* Valkey restarts clear its script cache; fall back to EVAL once to reload it. */
+          if (error instanceof RespReplyError && /NOSCRIPT/i.test(error.message)) {
+            this.scriptLoaded = false;
+            reply = await this.client.command('EVAL', COUNT_IN_WINDOW, 1, key, ttlMs, by);
+            this.scriptLoaded = true;
+          } else {
+            throw error;
+          }
+        }
+      } else {
+        reply = await this.client.command('EVAL', COUNT_IN_WINDOW, 1, key, ttlMs, by);
+        this.scriptLoaded = true;
+      }
     } catch (error) {
       this.unavailable(error);
       throw error instanceof CacheUnavailable ? error : new CacheUnavailable('the cache refused a count.');

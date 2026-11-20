@@ -24,7 +24,7 @@ function recordOf(ref: string): { table: string; key: Record<string, unknown> } 
   }
 }
 
-export function EvidenceItem({ evidence }: { evidence: ProposalEvidence }) {
+export function EvidenceItem({ evidence, onNavigate }: { evidence: ProposalEvidence; onNavigate?: () => void }) {
   if (evidence.kind === 'text')
     return (
       <li className="proposal-evidence-item">
@@ -40,7 +40,10 @@ export function EvidenceItem({ evidence }: { evidence: ProposalEvidence }) {
           <button
             type="button"
             className="proposal-evidence-link"
-            onClick={() => go(rowView(record.table, record.key, evidence.label), 'push')}
+            onClick={() => {
+              onNavigate?.();
+              go(rowView(record.table, record.key, evidence.label), 'push');
+            }}
           >
             {evidence.label}
           </button>

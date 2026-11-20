@@ -108,7 +108,7 @@ export function ListFilterBar(props: ListFilterBarProps) {
   const [folded, setFolded] = useState(0);
   /* A new width is measured afresh even where nothing was folded: the fold
      below runs after a render, and unfolding nothing renders nothing. */
-  const [, remeasure] = useState(0);
+  const [measureTick, remeasure] = useState(0);
   const mark = useRef<HTMLSpanElement>(null);
   const width = useRef(0);
   useLayoutEffect(() => {
@@ -133,7 +133,8 @@ export function ListFilterBar(props: ListFilterBarProps) {
     const end = (node?: Node | null) => (node ? (node as HTMLElement).offsetLeft + (node as HTMLElement).offsetWidth : 0);
     const limit = end(slots.at(-1)) - over;
     setFolded(folded + 1 + slots.filter((slot) => end(slot.previousSibling) > limit).length);
-  });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone, folded, idle.length, refinement, tabQuery, boxes.length, measureTick]);
   useEffect(() => {
     const row = mark.current?.closest<HTMLElement>('.applist-controls');
     if (phone || !row || typeof ResizeObserver === 'undefined') return undefined;

@@ -104,7 +104,7 @@ for (const engine of ENGINES)
           await insertReceipt(db, receipt, RECEIPT.id);
           const [status] = await storeStatuses(db, layouts);
           assert.equal(status.found, 1);
-          assert.deepEqual(status.pending, [1, 2, 3, 4]);
+          assert.deepEqual(status.pending, [1, 2, 3, 4, 5]);
         });
         // A start refuses version 1 and says how to bring it forward; it never upgrades it itself.
         await assert.rejects(attest(engine, where.url), (error: unknown) => {
@@ -122,6 +122,7 @@ for (const engine of ENGINES)
             ['command-journal', 2, 3],
             ['command-journal', 3, 4],
             ['command-journal', 4, 5],
+            ['command-journal', 5, 6],
           ],
         );
         await attest(engine, where.url);
@@ -187,7 +188,7 @@ for (const engine of ENGINES)
         await applyFixture(engine, where.url, readFileSync(v2.path, 'utf8'));
         await withDb(where.url, async (db) => {
           await insertReceipt(db, receipt, RECEIPT.id);
-          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [2, 3, 4]);
+          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [2, 3, 4, 5]);
         });
         await assert.rejects(attest(engine, where.url), CommandJournalUnavailable);
         const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
@@ -198,6 +199,7 @@ for (const engine of ENGINES)
             ['command-journal', 2, 3],
             ['command-journal', 3, 4],
             ['command-journal', 4, 5],
+            ['command-journal', 5, 6],
           ],
         );
         await attest(engine, where.url);
@@ -262,7 +264,7 @@ for (const engine of ENGINES)
               ['0'.repeat(64), RECEIPT.id],
             ),
           );
-          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [3, 4]);
+          assert.deepEqual((await storeStatuses(db, layouts))[0].pending, [3, 4, 5]);
         });
         await assert.rejects(attest(engine, where.url), CommandJournalUnavailable);
         const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
@@ -272,6 +274,7 @@ for (const engine of ENGINES)
           [
             ['command-journal', 3, 4],
             ['command-journal', 4, 5],
+            ['command-journal', 5, 6],
           ],
         );
         await attest(engine, where.url);

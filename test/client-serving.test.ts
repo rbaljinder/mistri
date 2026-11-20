@@ -317,6 +317,7 @@ test('the page carries its Content-Security-Policy, its inline script pinned by 
     "object-src 'none'",
     "frame-src 'self' blob:",
     "base-uri 'none'",
+    "form-action 'self'",
     "frame-ancestors 'self'",
   ]) {
     assert.ok(policy.split('; ').includes(directive), directive);

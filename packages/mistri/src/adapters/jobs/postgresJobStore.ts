@@ -96,7 +96,7 @@ const list = (values: readonly string[]) => values.map((value) => `'${value}'`).
    own store (an App's namespace defaults to its id, jobLoader.ts). Every
    read, claim and settlement is of this namespace's rows only. SQLite keeps
    one namespace per file. */
-const POSTGRES_JOB_STORE_VERSION = 1;
+const POSTGRES_JOB_STORE_VERSION = 2;
 const VERSION = POSTGRES_JOB_STORE_VERSION;
 const POLICY_DDL = `CREATE TABLE ${q(t.policy)} (
   namespace text COLLATE "C" PRIMARY KEY CHECK (octet_length(namespace) BETWEEN 1 AND 128),
@@ -105,6 +105,8 @@ const POLICY_DDL = `CREATE TABLE ${q(t.policy)} (
   last_clock bigint NOT NULL CHECK (last_clock >= 0)
 )`;
 const DUE_DDL = `CREATE INDEX "${runtimeName('postgres', `${JOB_PREFIX}due`)}" ON ${q(t.job)} (namespace, state, run_at, seq)`;
+const ATTEMPT_FINISHED_INDEX = runtimeName('postgres', `${JOB_PREFIX}attempt_finished`);
+const ATTEMPT_FINISHED_DDL = `CREATE INDEX "${ATTEMPT_FINISHED_INDEX}" ON ${q(t.attempt)} (finished_at)`;
 const JOB_POSTGRES_DEFINITIONS: readonly string[] = [
   POLICY_DDL,
   `CREATE SEQUENCE ${q(SEQUENCE)} AS bigint MINVALUE 0 START WITH 0 NO CYCLE`,
@@ -157,6 +159,15 @@ const JOB_POSTGRES_DEFINITIONS: readonly string[] = [
         OR (outcome <> 'leased' AND code IS NOT NULL AND code <> 'redriven' AND finished_at IS NOT NULL AND finished_at >= started_at))))
 )`,
   DUE_DDL,
+  ATTEMPT_FINISHED_DDL,
+];
+
+/** What the upgrade from version 1 runs: adds the attempt finished_at pruning index and bumps version to 2. */
+export const postgresJobStoreUpgradeFrom1 = (): readonly string[] => [
+  ATTEMPT_FINISHED_DDL,
+  `ALTER TABLE ${q(t.policy)} DROP CONSTRAINT ${runtimeName('postgres', t.policy)}_version_check`,
+  `UPDATE ${q(t.policy)} SET version = ${VERSION}`,
+  `ALTER TABLE ${q(t.policy)} ADD CONSTRAINT ${runtimeName('postgres', t.policy)}_version_check CHECK (version = ${VERSION})`,
 ];
 
 const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -214,6 +225,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       'UNIQUE (fence)',
     ],
     [
+      `CREATE INDEX ${ATTEMPT_FINISHED_INDEX} ON ${SCHEMA}.job_attempt USING btree (finished_at)`,
       `CREATE UNIQUE INDEX job_attempt_fence_key ON ${SCHEMA}.job_attempt USING btree (fence)`,
       `CREATE UNIQUE INDEX job_attempt_pkey ON ${SCHEMA}.job_attempt USING btree (job_id, attempt)`,
     ],
@@ -292,7 +304,7 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
       'CHECK (((octet_length(namespace) >= 1) AND (octet_length(namespace) <= 128)))',
       'CHECK (((octet_length(policy_json) >= 1) AND (octet_length(policy_json) <= 4096)))',
       'CHECK ((last_clock >= 0))',
-      'CHECK ((version = 1))',
+      `CHECK ((version = ${VERSION}))`,
       'PRIMARY KEY (namespace)',
     ],
     [`CREATE UNIQUE INDEX job_policy_pkey ON ${SCHEMA}.job_policy USING btree (namespace)`],
@@ -374,7 +386,7 @@ export async function assertPostgresJobStore(client: PgQuery, policy: JobPolicy,
  * migration lock. A database without the store gets its tables, a namespace
  * without a row gets one; the same policy is left alone; a namespace held
  * with other bounds is refused unchanged. */
-export async function migratePostgresJobStore(url: string, input: JobPolicyInput): Promise<{ version: 1; migrated: boolean }> {
+export async function migratePostgresJobStore(url: string, input: JobPolicyInput): Promise<{ version: 2; migrated: boolean }> {
   const policy = captureJobPolicy(input);
   try {
     return await withPostgresMaintenanceTransaction(url, async (client) => {
@@ -389,7 +401,7 @@ export async function migratePostgresJobStore(url: string, input: JobPolicyInput
           )
         ).rowCount === 1;
       await assertPostgresJobStore(client, policy);
-      return { version: VERSION as 1, migrated };
+      return { version: VERSION as 2, migrated };
     });
   } catch {
     return jobFail();

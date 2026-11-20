@@ -8,7 +8,7 @@
  */
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { isReservedRelation, reservedInPlan, reservedInText } from '../packages/engine/src/adapters/reservedSql.js';
+import { isReservedRelation, refusePostgresReserved, reservedInPlan, reservedInText } from '../packages/engine/src/adapters/reservedSql.js';
 
 type Dialect = 'sqlite' | 'postgres';
 const DIALECTS: Dialect[] = ['sqlite', 'postgres'];
@@ -66,6 +66,10 @@ describe('reserved relations in raw SQL, read as text', () => {
   test('an escape the check does not decode is refused rather than read', () => {
     refused('select * from U&"\\005f\\005ftablewalk_x"', 'postgres');
     refused('select * from u&"!005F!005Ftablewalk_x" uescape \'!\'', 'postgres');
+    refused("select E'\\x5f\\x5fmistri_x'", 'postgres');
+    refused('select * from pg_catalog.pg_stats', 'postgres');
+    refused('select * from pg_statistic', 'postgres');
+    assert.throws(() => refusePostgresReserved('DO $$ BEGIN PERFORM 1; END $$', true), /anonymous code block|reserved/i);
     allowed('select * from U&"invoice"', 'postgres');
   });
 

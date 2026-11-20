@@ -12,6 +12,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
     if (Object.hasOwn(answers, path)) return answers[path];
     throw Object.assign(new Error('Not found.'), { status: 404 });
   },
+  registerSurfaceMutationPendingProbe: () => () => {},
 }));
 vi.mock('../../../../kit/src/client/components/Landing.js', () => ({
   LoadErrorNote: ({ error }: { error: string }) => (error ? <p>{error}</p> : null),

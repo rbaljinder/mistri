@@ -103,10 +103,11 @@ import {
    membership says its kind, with the support columns the support owner fills
    (tenantSupportTransaction.ts).
    Every member read takes tenant rows and member rows only. */
-const POSTGRES_TENANT_STORE_VERSION = 2;
+const POSTGRES_TENANT_STORE_VERSION = 3;
 const tables = postgresRuntimeNames(TENANT_TABLES);
 const LIVE_INDEX = `${TENANT_STORE_PREFIX}live_membership`;
 const LIVE_SUPPORT_INDEX = `${TENANT_STORE_PREFIX}live_support`;
+const MEMBER_ACCOUNT_INDEX = `${TENANT_STORE_PREFIX}member_account`;
 const PLATFORM_INDEX = `${TENANT_STORE_PREFIX}platform`;
 const q = (name: string) => runtimeTable('postgres', name);
 const SCHEMA = runtimeSchema('postgres');
@@ -148,8 +149,8 @@ export function postgresTenantStoreUpgradeFrom1(): readonly string[] {
     hostDefinition(),
     `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT "${check}"`,
     // The row moves before the new CHECK is added: ADD CONSTRAINT validates the rows already there, and version 1 fails it.
-    `UPDATE ${q(tables.meta)} SET version = ${POSTGRES_TENANT_STORE_VERSION}`,
-    `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT "${check}" CHECK (version = ${POSTGRES_TENANT_STORE_VERSION})`,
+    `UPDATE ${q(tables.meta)} SET version = 2`,
+    `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT "${check}" CHECK (version = 2)`,
   ];
 }
 
@@ -186,8 +187,20 @@ const definitions: readonly string[] = [
 )`,
   `CREATE UNIQUE INDEX "${LIVE_INDEX}" ON ${q(tables.membership)} (tenant_id, account_id) WHERE status <> 'revoked' AND kind = 'member'`,
   `CREATE UNIQUE INDEX "${LIVE_SUPPORT_INDEX}" ON ${q(tables.membership)} (account_id) WHERE kind = 'support' AND status = 'active'`,
+  `CREATE INDEX "${MEMBER_ACCOUNT_INDEX}" ON ${q(tables.membership)} (account_id) WHERE kind = 'member'`,
   `CREATE UNIQUE INDEX "${PLATFORM_INDEX}" ON ${q(tables.tenant)} (kind) WHERE kind = 'platform'`,
 ];
+
+/** Version 2 to 3, as storeLayouts.ts runs it: adds the account_id lookup index for member discovery and bumps version to 3. */
+export function postgresTenantStoreUpgradeFrom2(): readonly string[] {
+  const check = `${tables.meta}_version_check`;
+  return [
+    `CREATE INDEX "${MEMBER_ACCOUNT_INDEX}" ON ${q(tables.membership)} (account_id) WHERE kind = 'member'`,
+    `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT "${check}"`,
+    `UPDATE ${q(tables.meta)} SET version = ${POSTGRES_TENANT_STORE_VERSION}`,
+    `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT "${check}" CHECK (version = ${POSTGRES_TENANT_STORE_VERSION})`,
+  ];
+}
 
 /* ---------- catalog description ---------- */
 
@@ -270,6 +283,7 @@ const layout: readonly PostgresRelationDescription[] = [
       pkey(tables.membership, 'id'),
       `CREATE UNIQUE INDEX ${LIVE_INDEX} ON ${SCHEMA}.${tables.membership} USING btree (tenant_id, account_id) WHERE ((status <> 'revoked'::text) AND (kind = 'member'::text))`,
       `CREATE UNIQUE INDEX ${LIVE_SUPPORT_INDEX} ON ${SCHEMA}.${tables.membership} USING btree (account_id) WHERE ((kind = 'support'::text) AND (status = 'active'::text))`,
+      `CREATE INDEX ${MEMBER_ACCOUNT_INDEX} ON ${SCHEMA}.${tables.membership} USING btree (account_id) WHERE (kind = 'member'::text)`,
     ],
   ),
   table(
