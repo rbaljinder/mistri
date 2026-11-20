@@ -71,6 +71,51 @@ test.describe('A free-form page and what it draws around itself', () => {
     await expect(strip.getByRole('tab')).toHaveText([/Parts/, /Notes/, /Chart/]);
   });
 
+  /* A field report: on a record page whose related lists are tabs (`listTabs: true`), a tab whose list is empty drew its
+     empty state over the strip. At a desk a list's Add stands on the strip's own line, pulled up by a fixed amount that
+     drags the list after it up too; where the Add is shorter than that pull nothing held the list below the strip. A
+     layout is not a thing a component test can see, so it is measured: a list's first thing starts at or below the
+     strip's foot, with the look's own Add and with one as short as a look may make it. */
+  test.describe('related lists as tabs, writable', () => {
+    let own: Fixture;
+    test.beforeAll(async () => {
+      own = await startLayersApp('listtabs', { writable: true });
+    });
+    test.afterAll(async () => {
+      await own?.stop();
+    });
+    for (const [record, what] of [
+      [2, 'an empty list'],
+      [1, 'a list with rows'],
+    ] as const)
+      for (const short of [false, true])
+        test(`a tab with ${what} draws it under the strip, never over it${short ? ', beside a short Add' : ''}`, async ({ page }) => {
+          await page.setViewportSize({ width: 1280, height: 900 });
+          await page.goto(`${own.origin}/things/${record}`);
+          await settled(page);
+          // A look's Add may be shorter than the pull the strip's line makes room for (the raised buttons are).
+          if (short)
+            await page.addStyleTag({
+              content:
+                '.page-related-create button { min-height: 16px !important; padding-block: 0 !important; line-height: 1 !important; } .page-related-create { padding-block: 0 !important; }',
+            });
+          await page.getByRole('tab', { name: /Parts/ }).click();
+          const open = page.locator('.page-tabpanel:not([hidden])');
+          await expect(open.locator('.page-section-bar')).toBeVisible();
+          const strip = (await page
+            .locator('.page-tabstrip')
+            .filter({ has: page.getByRole('tab', { name: /Parts/ }) })
+            .boundingBox())!;
+          // What the open panel draws under the bar of verbs: the table, or the empty note that stands for it.
+          const drawn = await open
+            .locator('.page-list-body > *')
+            .evaluateAll((nodes) => nodes.map((node) => ({ cls: (node as HTMLElement).className, top: node.getBoundingClientRect().top })));
+          expect(drawn.length, 'the panel draws something to measure').toBeGreaterThan(0);
+          for (const box of drawn)
+            expect(box.top, `${box.cls} starts at or below the strip's foot`).toBeGreaterThanOrEqual(strip.y + strip.height - 1);
+        });
+  });
+
   test('a bare page’s root is the window', async ({ page }) => {
     await page.goto(`${app.origin}/wall`);
     await settled(page);

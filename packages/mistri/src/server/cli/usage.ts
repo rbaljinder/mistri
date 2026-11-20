@@ -124,7 +124,7 @@ Options:
                       MISTRI_AUTH_PROXY_FROM=10.0.0.7
       --schema <name> Postgres only; repeatable. Defaults to all user schemas.
       --read-pool <n> PostgreSQL connections that may read at once, per
-                      database (default 4; an App's follows its writers, at most 64). A connection's
+                      database (default 4; an App's at least 10 and its writers, at most 64). A connection's
                       "pool": { "read": n } in mistri.json wins.
                       Or set MISTRI_READ_POOL.
       --write-pool <n>

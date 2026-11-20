@@ -13,7 +13,7 @@ Size PostgreSQL pools for a deployment, read the meters when it is slow, and run
 
 ## What you'll see
 
-- At most `read + write + 1` connections per process to each PostgreSQL database for the App's requests, five more for its jobs and other server stores, opened when first needed; idle ones close after 30 seconds.
+- At most `read + write + 1` connections per process to each PostgreSQL database for the App's requests, five more for its jobs and other server stores, opened when first needed; idle ones close after five minutes, except two readers and one writer, which stay open so the first request after a quiet spell does not reconnect.
 - People arriving at a tenant App at once (`/api/tenant/enter`, `/api/tenant/bootstrap`) are let in half as many at a time as there are readers, in order; one that has waited 20 seconds is answered 503, `Retry-After: 1`, code `tenant_temporarily_unavailable`.
 - A write that waits more than five seconds for a lock is refused with nothing applied: 503, `Retry-After: 1`, code `row_locked`.
 - A request that finds every reader or writer busy queues for at most two seconds, and at most sixty-four per connection may queue. Past either it is refused at once: 503, `Retry-After: 1`, code `server_busy`, with nothing run (a write says `not_applied`). The page asks a busy read again a few times and shows a write's refusal.
@@ -31,7 +31,7 @@ Size PostgreSQL pools for a deployment, read the meters when it is slow, and run
 
 | Setting                             | Readers                                                                                        | Writers                                                                                            | Background writer |
 | ----------------------------------- | ---------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ----------------- |
-| Connections                         | The database browser: 4; an App: as many as its writers; `pool.read` or `--read-pool`, 1 to 64 | An App: twice the cores, 4 to 16; `pool.write` or `--write-pool`, 1 to 64. The database browser: 1 | 1                 |
+| Connections                         | The database browser: 4; an App: as many as its writers, at least 10; `pool.read` or `--read-pool`, 1 to 64 | An App: twice the cores, 4 to 16; `pool.write` or `--write-pool`, 1 to 64. The database browser: 1 | 1                 |
 | Queue wait (then 503 `server_busy`) | 2 s; 64 queued per connection                                                                  | 2 s; 64 queued per connection                                                                      | —                 |
 | Acquisition timeout                 | 10 s                                                                                           | 10 s                                                                                               | 10 s              |
 | Statement timeout                   | 30 s                                                                                           | 30 s                                                                                               | 30 s              |

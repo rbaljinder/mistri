@@ -7,8 +7,8 @@
  * from the command line:
  *
  * - How many readers the pool may hold: for an App as many as its writers
- *   (at least balancedPoolSize), four for the database browser, unless told
- *   otherwise; one to sixty-four.
+ *   (at least balancedPoolSize and APP_READER_FLOOR, ten), four for the
+ *   database browser, unless told otherwise; one to sixty-four.
  * - How many writers: balancedPoolSize for a process serving Apps unless told otherwise
  *   (`pool.write`, `--write-pool`; writeLanes.ts), one to sixty-four, each running one
  *   transaction beside the others (writeLanes.ts orders writes of one
@@ -135,10 +135,17 @@ const loadPg: PgPoolLoader = async () => {
  * An App's is balanced against its writers (appReaders). */
 export const DEFAULT_READERS = 4;
 /** Readers kept connected through an idle spell. Without them the first read
- * after thirty quiet seconds paid a new connection and its two SETs — and a
+ * after a quiet spell paid a new connection and its two SETs — and a
  * dashboard's fan-out paid it several times at once. Two, not the whole pool:
  * a warm connection is a server backend held for nothing most of the day. */
 const WARM_READERS = 2;
+/** Writers kept connected through an idle spell: one, for the same reason, so the first command after a quiet
+ * spell does not reconnect (a field report: about 230 ms on a hosted database). One is enough: a burst of commands
+ * opens the rest as it asks, and a backend held warm per writer would cost most when the pool is widest. */
+const WARM_WRITERS = 1;
+/** How long an idle connection stays open: five minutes, past a lunch-hour lull but well inside what a
+ * hosted database or its pooler lets a connection sit. The extra ones (beyond the warm minimum) close then. */
+const IDLE_TIMEOUT_MS = 300_000;
 /** The most readers one database's pool may hold. Past this, a pooler in front of the server is the tool. */
 export const MAX_READERS = 64;
 
@@ -202,10 +209,16 @@ function defaultReaders(writers: number): number {
   return writeOrder() === 'keyed' ? appReaders(writers) : DEFAULT_READERS;
 }
 
+/** The fewest readers an App's pool holds where none was chosen, whatever the cores. A page's reads leave at once,
+ * each on a reader of its own where they do not share a snapshot, and on a database a round trip away a page that
+ * waited for one of four readers paid its round trips in turns (a profile: one or two cores, 30 ms away). Readers
+ * are opened as they are asked and all but WARM_READERS let go idle, so the floor costs connections only under load. */
+export const APP_READER_FLOOR = 10;
+
 /** An App's reader pool where none was chosen: as wide as its writers, at least the balanced size for `cores`
- * (this machine's, unless a deployment check asks for another's). */
+ * (this machine's, unless a deployment check asks for another's) and APP_READER_FLOOR. */
 export function appReaders(writers: number, cores?: number): number {
-  return Math.min(MAX_READERS, Math.max(balancedPoolSize(cores), writers));
+  return Math.min(MAX_READERS, Math.max(APP_READER_FLOOR, balancedPoolSize(cores), writers));
 }
 
 /**
@@ -500,16 +513,14 @@ export class PgConnectionManager {
       ...this.dialOptions(),
       max: this.meters[role].size,
       connectionTimeoutMillis: 10_000,
-      idleTimeoutMillis: 30_000,
-      /* Readers only: a writer is opened for a write and may go. The idle
-         ones never keep the process alive by themselves, so a one-shot mode
-         that forgets to close still exits. */
-      ...(write
-        ? {}
-        : {
-            min: Math.min(WARM_READERS, this.meters[role].size),
-            allowExitOnIdle: true,
-          }),
+      idleTimeoutMillis: IDLE_TIMEOUT_MS,
+      /* Readers and the foreground writers keep a few connections warm
+         (the background writer, which runs jobs that are not waited on, keeps none). The
+         idle ones never keep the process alive by themselves, so a one-shot
+         mode that forgets to close still exits: that is why the writer
+         sets this too, now that it holds a connection through idle. */
+      allowExitOnIdle: true,
+      ...(role === 'background' ? {} : { min: Math.min(role === 'read' ? WARM_READERS : WARM_WRITERS, this.meters[role].size) }),
       /* A writer sends each statement as it is asked, not after the one
          before it is answered: a transaction that asks several at once
          (pipelined, postgresTransactionHandle.ts) pays one round trip for

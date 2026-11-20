@@ -237,4 +237,13 @@ test("an App's pools are sized from the cores, readers never fewer than writers;
     [1, 2, 4, 8, 32].map((cores) => balancedPoolSize(cores)),
     [4, 4, 8, 16, 16],
   );
+  /* Readers keep a floor of ten whatever the cores: a page's reads leave at once, and four readers made a one-core
+     App's page wait its turn for each on a database a round trip away. Writers keep the balanced size. */
+  const { appReaders, APP_READER_FLOOR } = await import('../packages/engine/src/adapters/postgresPool.js');
+  assert.equal(APP_READER_FLOOR, 10);
+  assert.deepEqual(
+    [1, 2, 4, 8, 32].map((cores) => appReaders(balancedPoolSize(cores), cores)),
+    [10, 10, 10, 16, 16],
+  );
+  assert.equal(appReaders(24, 2), 24, 'never fewer readers than writers');
 });

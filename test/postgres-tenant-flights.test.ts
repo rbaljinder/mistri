@@ -60,7 +60,7 @@ function flightsOf(header: string | null): Record<string, number> {
 }
 
 /* A request that read its session from the sign-in store: the store's reads are kept for a window
-   (MISTRI_AUTH_SESSION_CACHE, authStoreReads.ts), and the first request past it reads them again, two `auth` flights
+   (MISTRI_AUTH_SESSION_CACHE, authStoreReads.ts), and the first request past it reads them again, one `auth` flight
    paid once a window and not by that request. On a loaded machine a measurement lands on it, as on the catalog's
    digest. Statements are the window's, any request's, so the request's own header says whether it paid. */
 /** A read of the session table, whichever way it is spelled: Better Auth's `from "auth_session"`, and the tenant

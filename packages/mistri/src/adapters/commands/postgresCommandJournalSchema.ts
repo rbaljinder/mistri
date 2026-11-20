@@ -15,6 +15,7 @@ import {
   RECEIPT_ACTOR_KINDS,
 } from './commandJournalSchema.js';
 import { postgresRuntimeNames, runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
+import type { ConcurrentIndex } from '../postgresConcurrentIndex.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 
 export const PREFIX = '__mistri_command_';
@@ -213,10 +214,14 @@ export const postgresJournalUpgradeFrom4 = (): readonly string[] => [
   `UPDATE ${q(tables.meta)} SET version = 5`,
   `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${tables.meta}_version_check CHECK (version = 5)`,
 ];
-/** What the upgrade from version 5 runs: adds link expiry and proposal creation indexes for daily pruning and moves version to 6. */
+/** What the upgrade from version 5 builds first, concurrently: the link expiry and proposal creation indexes for daily pruning. */
+export const postgresJournalUpgradeIndexes: readonly ConcurrentIndex[] = [
+  { name: LINK_EXPIRES_INDEX, table: q(tables.link), create: LINK_EXPIRES_INDEX_DDL },
+  { name: PROPOSAL_CREATED_INDEX, table: q(tables.proposal), create: PROPOSAL_CREATED_INDEX_DDL },
+];
+
+/** What the upgrade from version 5 runs after its indexes: moves version to 6. */
 export const postgresJournalUpgradeFrom5 = (): readonly string[] => [
-  LINK_EXPIRES_INDEX_DDL,
-  PROPOSAL_CREATED_INDEX_DDL,
   `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT ${tables.meta}_version_check`,
   `UPDATE ${q(tables.meta)} SET version = 6`,
   `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT ${tables.meta}_version_check CHECK (version = 6)`,

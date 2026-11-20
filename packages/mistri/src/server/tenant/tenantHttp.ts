@@ -1022,17 +1022,23 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                  with its time and its result bounded. A support operator reads as the dealer it entered, ledgered
                  as the one read the request is, and is no account of the dealer's. */
               const account = (context.principal as { accountId?: unknown }).accountId;
-              const loaded = await pageLoad({
-                app: appSurfaceForRealm(app, pages, platform ? 'platform' : 'tenant').app,
-                roles: context.principal.roles,
-                signedIn: true,
-                ...(onSupport || typeof account !== 'string' ? {} : { account }),
-                loaders,
-                body: input,
-                reader: readAdapter(context),
-                schema,
-                ...(context.zone === undefined ? {} : { zone: context.zone }),
-              });
+              /* Its reads on one snapshot, as a record page's are: each on one of its own took a reader, a BEGIN with
+                 the LOCK and the membership, a COMMIT and a fence apiece (a profile: a loader's twenty reads were
+                 twenty snapshots on a database 30 ms away). The loader's timeout bounds how long the one is held,
+                 and a read its loader asks once that timeout has passed is refused before it reaches the snapshot. */
+              const loaded = await together(context, () =>
+                pageLoad({
+                  app: appSurfaceForRealm(app, pages, platform ? 'platform' : 'tenant').app,
+                  roles: context.principal.roles,
+                  signedIn: true,
+                  ...(onSupport || typeof account !== 'string' ? {} : { account }),
+                  loaders,
+                  body: input,
+                  reader: readAdapter(context),
+                  schema,
+                  ...(context.zone === undefined ? {} : { zone: context.zone }),
+                }),
+              );
               return { status: loaded.status, body: loaded.body };
             }
             // These replies consume the fresh lease context and its projected

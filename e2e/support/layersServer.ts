@@ -6,12 +6,13 @@ import { execFileSync } from 'node:child_process';
 import { withFreePort } from './freePort';
 import { spawn } from './spawned';
 import { once } from 'node:events';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
-/** A fixture App of this shape (a local App with free-form pages over a SQLite seed): Layers unless another is named. */
-export async function startLayersApp(fixture = 'layers') {
+/** A fixture App of this shape (a local App with free-form pages over a SQLite seed): Layers unless another is named.
+ * `writable` opens its connection to writes, which is what gives a related list its Add. */
+export async function startLayersApp(fixture = 'layers', options: { writable?: boolean } = {}) {
   const FIXTURE = resolve('test/fixtures/apps', fixture);
   const directory = mkdtempSync(join(tmpdir(), 'mistri-layers-'));
   let child: ReturnType<typeof spawn> | undefined;
@@ -31,6 +32,11 @@ export async function startLayersApp(fixture = 'layers') {
   try {
     const database = join(directory, `${fixture}.db`);
     execFileSync(process.execPath, ['--import', 'tsx', join(FIXTURE, 'seed.mjs'), database], { stdio: 'pipe' });
+    if (options.writable) {
+      const config = JSON.parse(readFileSync(`${database}.json`, 'utf8')) as { connections: Array<Record<string, unknown>> };
+      for (const connection of config.connections) connection.writable = true;
+      writeFileSync(`${database}.json`, JSON.stringify(config, null, 2));
+    }
     let log = '';
     const port = await withFreePort(async (port) => {
       child = spawn(

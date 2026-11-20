@@ -55,6 +55,7 @@ import {
 import { EVENT_DELIVERY_PREFIX, EVENT_DELIVERY_TABLES as t, type EventDeliveryProvisionOptions } from './eventDeliverySchema.js';
 import { layoutRefusal, postgresLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
 import { EVENT_DELIVERY_RECEIPT_BOUNDS, eventDeliveryReceiptContext, eventDeliveryRouteFor, firstTargetOf } from './eventDeliverySource.js';
+import type { ConcurrentIndex } from '../postgresConcurrentIndex.js';
 import { COMPLETED_AT } from '../commands/postgresCommandJournalSchema.js';
 import {
   captureEventDeliveryPolicy,
@@ -167,11 +168,15 @@ const EVENT_DELIVERY_POSTGRES_DEFINITIONS: readonly string[] = [
   ATTEMPT_FINISHED_INDEX_DDL,
 ];
 
-/** What the upgrade from version 1 runs: adds receipt_id and finished_at pruning indexes and bumps version to 2. */
+/** What the upgrade from version 1 builds first, concurrently: the receipt_id and finished_at pruning indexes. */
+export const postgresEventDeliveryUpgradeIndexes: readonly ConcurrentIndex[] = [
+  { name: `${PG_PREFIX}receipt_receipt`, table: q(t.receipt), create: RECEIPT_RECEIPT_INDEX_DDL },
+  { name: `${PG_PREFIX}delivery_receipt`, table: q(t.delivery), create: DELIVERY_RECEIPT_INDEX_DDL },
+  { name: `${PG_PREFIX}attempt_finished`, table: q(t.attempt), create: ATTEMPT_FINISHED_INDEX_DDL },
+];
+
+/** What the upgrade from version 1 runs after its indexes: bumps version to 2. */
 export const postgresEventDeliveryUpgradeFrom1 = (): readonly string[] => [
-  RECEIPT_RECEIPT_INDEX_DDL,
-  DELIVERY_RECEIPT_INDEX_DDL,
-  ATTEMPT_FINISHED_INDEX_DDL,
   `ALTER TABLE ${q(t.meta)} DROP CONSTRAINT ${runtimeName('postgres', t.meta)}_version_check`,
   `UPDATE ${q(t.meta)} SET version = ${VERSION}`,
   `ALTER TABLE ${q(t.meta)} ADD CONSTRAINT ${runtimeName('postgres', t.meta)}_version_check CHECK (version = ${VERSION})`,

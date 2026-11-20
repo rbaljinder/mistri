@@ -1386,6 +1386,10 @@ export async function createAppAuth(
            believed a client's single X-Forwarded-For — a new address per
            guess was a new budget — and without one put everyone in one. */
         ipAddress: { ipAddressHeaders: [CLIENT_ADDRESS_HEADER] },
+        /* A session is read with its user in one statement, a join, where it was the session row and then the user
+           row: every request that read its session paid two round trips to the sign-in store for it (a profile: the
+           request at each cache window's turn, on a store 30 ms away). The same expiry, ban and refusal follow it. */
+        database: { joins: true },
       },
       secret,
       trustedOrigins: [...opts.trustedOrigins],

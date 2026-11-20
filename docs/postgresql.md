@@ -7,10 +7,10 @@ Each configured PostgreSQL database opens up to three pools lazily, on first use
 
 | Setting                       | Readers                                                                                                  | Writers                                                                                                        | Background writer |
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------- |
-| Maximum connections           | The database browser 4, an App as many as its writers, by default; `pool.read` or `--read-pool`, 1 to 64 | An App: twice the cores, 4 to 16, by default; `pool.write` or `--write-pool`, 1 to 64. The database browser: 1 | 1                 |
+| Maximum connections           | The database browser 4, an App as many as its writers and at least 10, by default; `pool.read` or `--read-pool`, 1 to 64 | An App: twice the cores, 4 to 16, by default; `pool.write` or `--write-pool`, 1 to 64. The database browser: 1 | 1                 |
 | Queue wait                    | 2 seconds, 64 queued per connection                                                                      | 2 seconds, 64 queued per connection                                                                            | —                 |
 | Connect/acquisition timeout   | 10 seconds                                                                                               | 10 seconds                                                                                                     | 10 seconds        |
-| Idle expiry                   | 30 seconds                                                                                               | 30 seconds                                                                                                     | 30 seconds        |
+| Idle expiry                   | 5 minutes; two connections stay open through idle | 5 minutes; one connection stays open through idle | 5 minutes |
 | Statement timeout             | 30 seconds                                                                                               | 30 seconds                                                                                                     | 30 seconds        |
 | Lock timeout                  | —                                                                                                        | 5 seconds; `--lock-timeout`                                                                                    | 5 seconds         |
 | Default transaction read-only | On                                                                                                       | Database default                                                                                               | Database default  |
@@ -214,7 +214,7 @@ small `max_connections` is enough.
 **Per database, per process.** What one process may hold against a database
 is summed over everything that points at it. With `R` readers and `W` writers
 (`--read-pool`, `--write-pool`, a connection's `pool`; by default `W` is twice
-the cores, 4 to 16, and `R` is as many as `W`):
+the cores, 4 to 16, and `R` is as many as `W` and at least 10):
 
 | Holder | When a served App builds it | At most |
 | --- | --- | --- |
@@ -260,7 +260,7 @@ and a `postgres://` sign-in store on the same database adds its own pool
 `MISTRI_AUTH_POOL=2` to make it `... + sign-in store 2 = 18`, which fits. A
 connection's `"pool"` sizes a tenant App's request pool as it sizes any App's,
 and the count follows it. Pools open as
-they are used and writers close after 30 idle seconds, so fewer are held than
+they are used and idle ones close after five minutes (two readers and one writer stay open), so fewer are held than
 the sum. When the database refuses another connection (53300, "too many
 connections for role"), the pool goes on with the connections it holds and a
 checkout waits for one of them; holding none, it is answered busy (503).
