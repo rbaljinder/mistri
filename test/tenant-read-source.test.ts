@@ -745,6 +745,31 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         await denied(() => source.assertCurrent(member));
       });
 
+      /* The first snapshot after the window reads the digest again; the reads asked beside it wait for that one
+         rather than each reading their own (a page's reads asked at once, at the window's turn). */
+      test('after the trust window reads asked at once share one digest', async (t) => {
+        const f = await fixture(t, dialect),
+          source = await f.open(undefined, undefined, 150),
+          member = await f.evidence();
+        const reads = await source.scopeReads(member, allow);
+        assert.equal(await reads.count('item'), 3, 'attested once');
+        await new Promise((done) => setTimeout(done, 200));
+        const seen: string[] = [];
+        const watch = f.engine.intercept(t, {
+          match: (statement) => {
+            seen.push(statement.sql);
+            return false;
+          },
+        });
+        try {
+          assert.deepEqual(await Promise.all(Array.from({ length: 6 }, () => reads.count('item'))), [3, 3, 3, 3, 3, 3]);
+          t.diagnostic(`6 reads at the window's turn: ${seen.filter(readsCatalog).length} catalog statements`);
+          assert.equal(seen.filter(readsCatalog).length, 1, 'one digest, read by the first snapshot');
+        } finally {
+          watch.restore();
+        }
+      });
+
       test('a read that fails on a column that moved forgets the attestation at once, within the window', async (t) => {
         const f = await fixture(t, dialect),
           source = await f.open(undefined, undefined, 60_000),

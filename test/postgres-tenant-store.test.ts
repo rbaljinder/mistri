@@ -67,6 +67,7 @@ import {
   postgresTenantMembershipsStatement,
   postgresTenantStoreUpgradeFrom1,
   postgresTenantStoreUpgradeFrom2,
+  postgresTenantStoreUpgradeIndexes,
   readPostgresTenantMembership,
   readPostgresTenantMemberships,
   TenantStoreUnavailable,
@@ -315,6 +316,7 @@ describe('the tenant store on PostgreSQL, against a real server', { skip: liveSk
     // What `mistri migrate stores up` runs: the steps, in one transaction.
     await transaction(control, async () => {
       for (const sql of postgresTenantStoreUpgradeFrom1()) await control.query(sql);
+      for (const index of postgresTenantStoreUpgradeIndexes) await control.query(index.create);
       for (const sql of postgresTenantStoreUpgradeFrom2()) await control.query(sql);
     });
     assert.equal(await described(), created, 'the upgraded store is the one a new store is');

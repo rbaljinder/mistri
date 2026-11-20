@@ -30,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.71; the
+These App features ship in mistri 1.0.0-rc.72; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -215,7 +215,7 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
   -p, --port <n>              default 4111
       --schema <name>         Postgres only; repeatable. Defaults to all user schemas.
       --read-pool <n>         PostgreSQL connections that may read at once, per
-                              database (default 4; an App's follows its writers, at most 64); a connection's
+                              database (default 4; an App's at least 10 and its writers, at most 64); a connection's
                               "pool": { "read": n } wins. Or set
                               MISTRI_READ_POOL
       --write-pool <n>        connections an App may write through at once,

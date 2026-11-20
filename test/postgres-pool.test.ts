@@ -110,8 +110,8 @@ test('Postgres pool creation is lazy, coalesced by role, and bounded', async () 
       idle: pool.options.idleTimeoutMillis,
     })),
     [
-      { max: 4, connect: 10_000, idle: 30_000 },
-      { max: 1, connect: 10_000, idle: 30_000 },
+      { max: 4, connect: 10_000, idle: 300_000 },
+      { max: 1, connect: 10_000, idle: 300_000 },
     ],
   );
   for (const client of pools[0].clients) {

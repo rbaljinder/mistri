@@ -31,6 +31,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { quoteIdent, type Dialect, type MigrationDb } from '@mistriwork/engine/server/migrate/database.js';
 import { runtimeRelation } from '@mistriwork/engine/shared/runtimeTables.js';
 import { postgresPoolDefaults, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
+import { buildIndexesConcurrently, type ConcurrentIndex } from '../adapters/postgresConcurrentIndex.js';
 import type { TenantStoreBinding } from './tenant/tenantStoreContract.js';
 
 /** What a step is given. `url` is the database's own address, for the
@@ -46,6 +47,11 @@ interface StoreStep {
   /** Opens its own connection and transaction (flags, experiments), so the runner does not wrap it in its
    * transaction; it still runs under the store's lock, held by the runner's connection for the step's length. */
   readonly own?: boolean;
+  /** PostgreSQL indexes on tables that already exist, built first by `CREATE INDEX CONCURRENTLY` outside any
+   * transaction so the build blocks no write (adapters/postgresConcurrentIndex.ts). The step's `run` and the
+   * version bump then follow in the usual short transaction. Needs the session lock `own` takes, so a
+   * transaction-mode pooler refuses it the same way. */
+  indexes?(): Promise<readonly ConcurrentIndex[]>;
   run(context: StepContext): Promise<void>;
 }
 
@@ -301,6 +307,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
       postgres: {
         1: {
           says: 'adds the retention timestamp index on the live change table',
+          indexes: async () => (await import('../adapters/live/postgresLiveChange.js')).postgresLiveChangeUpgradeIndexes,
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/live/postgresLiveChange.js')).postgresLiveChangeUpgradeFrom1()) await db.run(sql);
           },
@@ -501,6 +508,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
         },
         5: {
           says: 'adds link expiry and proposal creation indexes for daily pruning',
+          indexes: async () => (await import('../adapters/commands/postgresCommandJournalSchema.js')).postgresJournalUpgradeIndexes,
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/commands/postgresCommandJournalSchema.js')).postgresJournalUpgradeFrom5())
               await db.run(sql);
@@ -536,6 +544,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
       postgres: {
         1: {
           says: 'adds the retention expiry index on staged files',
+          indexes: async () => (await import('../adapters/commands/postgresCommandStaging.js')).postgresCommandStagingUpgradeIndexes,
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/commands/postgresCommandStaging.js')).postgresCommandStagingUpgradeFrom1())
               await db.run(sql);
@@ -601,6 +610,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
       postgres: {
         1: {
           says: 'adds receipt_id foreign-key and attempt finished_at pruning indexes',
+          indexes: async () => (await import('../adapters/events/postgresEventDeliveryStore.js')).postgresEventDeliveryUpgradeIndexes,
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/events/postgresEventDeliveryStore.js')).postgresEventDeliveryUpgradeFrom1())
               await db.run(sql);
@@ -711,6 +721,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
         },
         2: {
           says: 'adds the account_id index for member discovery',
+          indexes: async () => (await import('./tenant/tenantStorePostgres.js')).postgresTenantStoreUpgradeIndexes,
           run: async ({ db }) => {
             for (const sql of (await import('./tenant/tenantStorePostgres.js')).postgresTenantStoreUpgradeFrom2()) await db.run(sql);
           },
@@ -1038,6 +1049,17 @@ export async function upgradeStores(
         if (step.own)
           await underLock(db, layout.id, async () => {
             ran = await run();
+          });
+        else if (step.indexes)
+          /* The indexes first, under the session lock and outside any transaction; the rest of the step and the
+             version bump then run in their own, which takes the transaction-scoped locks (the tenant stores' maintenance
+             lock too) on the same connection, where the session lock already stands. */
+          await underLock(db, layout.id, async () => {
+            if ((await layout.read(db)) !== from) return;
+            await buildIndexesConcurrently(db, await step.indexes!());
+            await inTransaction(db, layout.id, async () => {
+              ran = await run();
+            });
           });
         else
           await inTransaction(db, layout.id, async () => {

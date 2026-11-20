@@ -1392,8 +1392,14 @@
    room for it, so a long run of tabs folds before it and never runs under it. */
 @media (min-width: 761px) {
   .page-tabpanel > .page-section > .page-section-bar {
+    --bar-pull: calc(var(--control-h) + var(--space-3) + var(--space-2) + var(--space-2));
     width: fit-content;
-    margin-block-start: calc(-1 * (var(--control-h) + var(--space-3) + var(--space-2) + var(--space-2)));
+    margin-block-start: calc(-1 * var(--bar-pull));
+    /* The pull above drags whatever follows the bar up with it, so the bar must be as tall as the pull (less the
+       3px the table's own head-room gives back, which is what the keyed look's 47px bar is). A look whose Add is
+       shorter (Lumen's raised buttons make a 38px bar) otherwise left the list under it starting above the strip's
+       foot, and an empty list's note, with no header row to hide behind, drew over the tabs. */
+    min-height: calc(var(--bar-pull) - var(--space-1h));
     margin-inline-start: auto;
     /* Drawn over the strip it is pulled into: the strip is positioned (its fold and marker), so a static bar under
        it painted below it and the strip took the click. */

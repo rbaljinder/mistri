@@ -29,6 +29,7 @@ import { layoutRefusal, postgresLayoutVersion } from '@mistriwork/engine/adapter
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { beforeCommit } from '@mistriwork/engine/adapters/postgresTransactionHandle.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
+import type { ConcurrentIndex } from '../postgresConcurrentIndex.js';
 import { describePostgresRelations, type PostgresRelationDescription } from '../commands/postgresRelations.js';
 import { withPostgresMaintenanceTransaction } from '@mistriwork/engine/adapters/postgresMaintenance.js';
 import {
@@ -69,9 +70,13 @@ const definitions: readonly string[] = [
   `CREATE INDEX "${LIVE_CHANGE_AT_INDEX}" ON ${q(change)} (at)`,
 ];
 
-/** What the upgrade from version 1 runs: adds the retention timestamp index and moves the version row to 2. */
+/** What the upgrade from version 1 builds first, concurrently: the retention timestamp index on the change table. */
+export const postgresLiveChangeUpgradeIndexes: readonly ConcurrentIndex[] = [
+  { name: LIVE_CHANGE_AT_INDEX, table: q(change), create: `CREATE INDEX "${LIVE_CHANGE_AT_INDEX}" ON ${q(change)} (at)` },
+];
+
+/** What the upgrade from version 1 runs after its index: moves the version row to 2. */
 export const postgresLiveChangeUpgradeFrom1 = (): readonly string[] => [
-  `CREATE INDEX "${LIVE_CHANGE_AT_INDEX}" ON ${q(change)} (at)`,
   `ALTER TABLE ${q(meta)} DROP CONSTRAINT ${meta}_version_check`,
   `UPDATE ${q(meta)} SET version = ${POSTGRES_LIVE_CHANGE_VERSION}`,
   `ALTER TABLE ${q(meta)} ADD CONSTRAINT ${meta}_version_check CHECK (version = ${POSTGRES_LIVE_CHANGE_VERSION})`,

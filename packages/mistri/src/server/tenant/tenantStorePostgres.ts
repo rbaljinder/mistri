@@ -53,6 +53,7 @@ import {
   type PostgresRelationDescription,
 } from '../../adapters/commands/postgresCommandJournal.js';
 import { canonicalCommandJson } from '../commands/commandPayload.js';
+import type { ConcurrentIndex } from '../../adapters/postgresConcurrentIndex.js';
 import { attestOnce } from './postgresStoreFence.js';
 import { captureTenantData, denyTenant, denyTenantFor, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import {
@@ -191,11 +192,19 @@ const definitions: readonly string[] = [
   `CREATE UNIQUE INDEX "${PLATFORM_INDEX}" ON ${q(tables.tenant)} (kind) WHERE kind = 'platform'`,
 ];
 
-/** Version 2 to 3, as storeLayouts.ts runs it: adds the account_id lookup index for member discovery and bumps version to 3. */
+/** Version 2 to 3, built first and concurrently: the account_id lookup index for member discovery, on the membership table. */
+export const postgresTenantStoreUpgradeIndexes: readonly ConcurrentIndex[] = [
+  {
+    name: MEMBER_ACCOUNT_INDEX,
+    table: q(tables.membership),
+    create: `CREATE INDEX "${MEMBER_ACCOUNT_INDEX}" ON ${q(tables.membership)} (account_id) WHERE kind = 'member'`,
+  },
+];
+
+/** Version 2 to 3, as storeLayouts.ts runs it after the index: bumps version to 3. */
 export function postgresTenantStoreUpgradeFrom2(): readonly string[] {
   const check = `${tables.meta}_version_check`;
   return [
-    `CREATE INDEX "${MEMBER_ACCOUNT_INDEX}" ON ${q(tables.membership)} (account_id) WHERE kind = 'member'`,
     `ALTER TABLE ${q(tables.meta)} DROP CONSTRAINT "${check}"`,
     `UPDATE ${q(tables.meta)} SET version = ${POSTGRES_TENANT_STORE_VERSION}`,
     `ALTER TABLE ${q(tables.meta)} ADD CONSTRAINT "${check}" CHECK (version = ${POSTGRES_TENANT_STORE_VERSION})`,

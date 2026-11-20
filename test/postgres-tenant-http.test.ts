@@ -56,6 +56,8 @@ import { laneWindow } from '../packages/engine/src/shared/boardLanes.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
 const appId = 'pg-tenant-http';
+/* How many reads the `fan` page's loader asks at once. */
+const FAN = 6;
 const password = 'Disposable-local-password-123!';
 const binding = { appId, source: { id: 'business', connection: 'pg-business' }, storeId: 'pg-tenant-http-store' };
 type Owner = Awaited<ReturnType<typeof createTenantAuthenticatedHttpServer>>;
@@ -176,10 +178,10 @@ const manifest = (store: string, mentions: boolean | 'email' = false, pages = fa
   views: {
     items: { kind: 'list', from: 'item' },
     tasks: { kind: 'list', from: 'task' },
-    ...(pages ? { board: pageView('board'), scribble: pageView('scribble') } : {}),
+    ...(pages ? { board: pageView('board'), scribble: pageView('scribble'), fan: pageView('fan') } : {}),
   },
   home: 'items',
-  nav: ['items', 'tasks', ...(pages ? ['board', 'scribble'] : [])],
+  nav: ['items', 'tasks', ...(pages ? ['board', 'scribble', 'fan'] : [])],
 });
 const policyModule = (extra = '', mentions: boolean | 'email' = false) => `export default {
   kind: 'tenant', appId: ${JSON.stringify(appId)}, storeId: ${JSON.stringify(binding.storeId)},
@@ -198,6 +200,9 @@ ${
 export const loaders = defineLoaders({
   board: defineLoader({ reads: ['item'], load: async ({ db }) => ({ items: (await db.item.where({}).orderBy('id')).map((row) => row.name) }) }),
   scribble: defineLoader({ reads: ['item'], load: async ({ db }) => db.item.update({ id: 'north-item' }, { name: 'WRITTEN' }) }),
+  fan: defineLoader({ reads: ['item'], load: async ({ db }) => ({
+    names: (await Promise.all(Array.from({ length: ${FAN} }, () => db.item.where({}).orderBy('id')))).map((rows) => rows.map((row) => row.name).join()),
+  }) }),
 });`
     : ''
 }
@@ -238,7 +243,26 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     JOIN ${postgresAuditRows} a ON a.receipt_id = r.id ORDER BY r.tenant_id`)
     ).rows;
 
+  /* Every statement the server sends from here to the test's end, the test's own control connection's aside. */
+  const tapStatements = (t: TestContext): string[] => {
+    const sent: string[] = [];
+    const prototype = (pgModule.Client ?? pgModule.default!.Client).prototype;
+    const query = prototype.query as (...args: unknown[]) => unknown;
+    prototype.query = function (this: unknown, ...args: unknown[]) {
+      const config = args[0] as string | { text?: string } | undefined;
+      if (this !== control) sent.push(typeof config === 'string' ? config : String(config?.text ?? ''));
+      return query.apply(this, args);
+    };
+    t.after(() => {
+      prototype.query = query;
+    });
+    return sent;
+  };
+  let pgModule: { Client?: { prototype: Record<string, unknown> }; default?: { Client: { prototype: Record<string, unknown> } } };
+
   before(async () => {
+    const specifier = 'pg';
+    pgModule = await import(specifier);
     url = await dedicatedPostgresUrl('tenant_http');
     control = await client(url);
   });
@@ -876,6 +900,24 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     assert.equal(wrote.body.code, 'loader_refused');
     assert.deepEqual(await items(), before);
     refused(await f.data('/api/pages/load', { ...south, ...f.signedIn(ada) }, { page: 'board' }));
+  });
+
+  test("a page's loader reads on one snapshot of its tenant, however many reads it asks at once", async (t) => {
+    const f = await fixture(t, { pages: true }),
+      ada = await f.signup('Ada');
+    await f.grant(ada, 'north');
+    const north = await f.open(ada, 'north');
+    const sent = tapStatements(t);
+    const loaded = await f.data('/api/pages/load', north, { page: 'fan' });
+    assert.equal(loaded.status, 200, loaded.text);
+    assert.deepEqual(loaded.body, { data: { names: Array.from({ length: FAN }, () => 'North item') } });
+    /* Each read on one of its own was a snapshot apiece — a BEGIN, the LOCK and the membership — and the release
+       fence's after: FAN + 1. On one, the loader's snapshot proves the membership once and the fence runs once. */
+    const begun = sent.filter((text) => text.includes('REPEATABLE READ READ ONLY')).length;
+    const proved = sent.filter((text) => /\bLOCK TABLE\b/.test(text)).length;
+    t.diagnostic(`${FAN} reads: ${begun} snapshots, ${proved} membership proofs`);
+    assert.ok(begun <= 2, `${begun} snapshots for ${FAN} reads:\n${sent.join('\n')}`);
+    assert.ok(proved <= 2, `${proved} membership proofs for ${FAN} reads`);
   });
 
   test('forged ownership on insert and update refuses; the managed column keeps business IDs tenant-local', async (t) => {

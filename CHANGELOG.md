@@ -5,6 +5,26 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.72
+
+Reads over a remote database: fewer round trips per page, warm connections, and store upgrades that do not lock a
+live table (field report).
+
+- Tenant pages: a page's loader reads on one snapshot instead of one per read (a 20-read page opens 2 snapshots, not
+  21: about 391 ms to about 77 ms at a 30 ms round trip). A tenant read pool keeps at least 10 readers on a small
+  container, so a page's reads no longer queue in waves of four.
+- Catalog check: when many reads find the catalog digest stale at once, one of them asks and the rest wait on its
+  answer; a failed check sends each waiter back to its own.
+- Sign-in: revalidating a session reads the session and its person in one statement (Better Auth `database.joins`).
+- Postgres pools: an idle connection is kept for 5 minutes instead of 30 seconds; a read pool keeps 2 connections
+  warm and a write pool 1, and an idle pool still lets the process exit.
+- Store upgrades on Postgres: an index added to a table that already holds rows (command journal, command staging,
+  event delivery, live change, tenant store) is built with `CREATE INDEX CONCURRENTLY` under the store's session lock,
+  outside the upgrade's transaction, so reads and writes go on while it builds. An index left invalid by an
+  interrupted build is dropped and built again on the next start. A transaction-mode pooler is still refused for
+  upgrades.
+- Pages: on a desk, a list tab's empty state keeps clear of the tab strip's Add bar.
+
 ## 1.0.0-rc.71
 
 Follow-ups: a quicker header sort, a tenant name that leaves the tabs their room, and the last words of a stepped form.

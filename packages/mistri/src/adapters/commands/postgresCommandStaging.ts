@@ -24,6 +24,7 @@ import {
   type TakenFile,
 } from './commandStaging.js';
 import { layoutRefusal, postgresLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
+import type { ConcurrentIndex } from '../postgresConcurrentIndex.js';
 import { describePostgresRelations, type PostgresRelationDescription } from './postgresRelations.js';
 import { runtimeName, runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 
@@ -59,9 +60,13 @@ const POSTGRES_STAGED_META_DDL = `CREATE TABLE ${qMeta} (
   version integer NOT NULL CHECK (version = ${COMMAND_STAGED_VERSION})
 )`;
 
-/** What the upgrade from version 1 runs: adds the retention expiry index and bumps version to 2. */
+/** What the upgrade from version 1 builds first, concurrently: the retention expiry index, on a table that may be large. */
+export const postgresCommandStagingUpgradeIndexes: readonly ConcurrentIndex[] = [
+  { name: `${COMMAND_STAGED_TABLE}_expires`, table: q, create: POSTGRES_STAGED_EXPIRES_INDEX_DDL },
+];
+
+/** What the upgrade from version 1 runs after its index: bumps version to 2. */
 export const postgresCommandStagingUpgradeFrom1 = (): readonly string[] => [
-  POSTGRES_STAGED_EXPIRES_INDEX_DDL,
   `ALTER TABLE ${qMeta} DROP CONSTRAINT ${COMMAND_STAGED_META_TABLE}_version_check`,
   `UPDATE ${qMeta} SET version = ${COMMAND_STAGED_VERSION}`,
   `ALTER TABLE ${qMeta} ADD CONSTRAINT ${COMMAND_STAGED_META_TABLE}_version_check CHECK (version = ${COMMAND_STAGED_VERSION})`,

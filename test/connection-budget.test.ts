@@ -82,7 +82,7 @@ describe('the sum check --deploy prints', () => {
     const bare = [{ id: 'main', name: 'main', url: business.url }];
     const small = connectionBudgets(input({ connections: bare, cpus: 1 })).rows[0];
     const large = connectionBudgets(input({ connections: bare, cpus: 16 })).rows[0];
-    assert.equal(small.perProcess, 4 + 4 + 1 + 1, '1 cpu: four writers, four readers');
+    assert.equal(small.perProcess, 4 + 10 + 1 + 1, '1 cpu: four writers, ten readers (APP_READER_FLOOR)');
     assert.equal(large.perProcess, 16 + 16 + 1 + 1, '16 cpus: sixteen of each');
     assert.match(sayBudget(small), /\(at 1 cpus; pass --cpus for the deployment's\)/);
     // Sizes the operator gave do not depend on the cores, so the line does not claim a count.

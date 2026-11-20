@@ -250,7 +250,23 @@ export async function openPostgresTenantReadSource(
        the digest of its catalog as the last full attestation that passed
        there saw it, read in that attestation's own snapshot
        (adapters/postgresCatalogDigest.ts). Nothing a request says reaches it. */
-    type Target = { readonly url: string; reader: PostgresAdapter; attested?: string; checked?: number; readonly owner?: true };
+    type Target = {
+      readonly url: string;
+      reader: PostgresAdapter;
+      attested?: string;
+      checked?: number;
+      readonly owner?: true;
+      /* The snapshot reading the digest again now that the window has passed, on `pool`: settled once its
+         attestation lands, or once that snapshot ends without one. */
+      attesting?: Attesting;
+    };
+    type Attesting = { readonly pool: PostgresAdapter; readonly done: Promise<void>; readonly settle: () => void };
+    /* Lets every snapshot waiting on `target`'s attestation go: the one in flight has landed or ended. */
+    const settled = (target: Target, flight: Attesting | undefined = target.attesting) => {
+      if (flight === undefined) return;
+      if (target.attesting === flight) target.attesting = undefined;
+      flight.settle();
+    };
     /* The digest walks every catalog row of the database, and read in every
        snapshot it was most of the database's time under a tenant App (a field report,
        on a remote PostgreSQL: three quarters of all statement time, 27,458
@@ -319,7 +335,10 @@ export async function openPostgresTenantReadSource(
            new one, which attests in full. */
         if (target.reader === pool) target.attested = fingerprint;
       }
-      if (target.reader === pool) target.checked = Date.now();
+      if (target.reader === pool) {
+        target.checked = Date.now();
+        if (target.attesting?.pool === pool) settled(target);
+      }
       return attestedPostgresTenantStore(snapshot.client);
     };
 
@@ -439,6 +458,13 @@ export async function openPostgresTenantReadSource(
          where it reads no tenant's rows. Without a backstop nothing is sent for it. */
       tenant?: string | null,
     ): Promise<T> => {
+      /* Once the window has passed, the first snapshot reads the digest again and the reads asked meanwhile wait for
+         it, holding no connection, and begin on the attestation it leaves: a page's reads asked at once each read the
+         digest — and, holding it ahead of their own statements, each paid a round trip more (a profile: every read
+         of a page at the window's turn). What a snapshot begun after it may trust is what it was: an attestation made
+         within the window, read in a snapshot of its own. One that ends without one leaves each to read its own. */
+      const due = target.attesting;
+      if (due !== undefined && due.pool === target.reader && trusted(target) === undefined) await due.done;
       const pool = target.reader;
       const standing = trusted(target);
       /* Where the snapshot is a member's read, its membership rides in the
@@ -453,7 +479,15 @@ export async function openPostgresTenantReadSource(
          `bind`). */
       const membership = fence === undefined ? undefined : postgresTenantMembershipStatement(owner, fence);
       lent.set(pool, (lent.get(pool) ?? 0) + 1);
+      let flight: Attesting | undefined;
       try {
+        if (standing === undefined && target.attesting === undefined) {
+          let settle!: () => void;
+          const done = new Promise<void>((resolve) => {
+            settle = resolve;
+          });
+          flight = target.attesting = { pool, done, settle };
+        }
         /* A membership that is the snapshot's whole question — an admission's, a release fence's — on an attestation
            that stands: BEGIN, the LOCK, the membership and the COMMIT in one message (readSnapshot `whole`), one
            round trip where they were two. Its rows reach the work only once the BEGIN's answer has said the LOCK
@@ -506,7 +540,9 @@ export async function openPostgresTenantReadSource(
                 );
                 return { store, rows: results[begun]!.rows };
               });
-              void opened.catch(() => {});
+              /* The work runs before this attestation lands: one that fails lets its waiters go at once rather
+                 than when the work ends, which a work that waits on one of them would never do. */
+              void opened.catch(() => settled(target, flight));
               const client: PgQuery = Object.freeze({
                 query: ((...args: unknown[]) =>
                   opened.then(({ store }) => (store.query as (...values: unknown[]) => unknown)(...args))) as PgQuery['query'],
@@ -640,6 +676,7 @@ export async function openPostgresTenantReadSource(
         if (error instanceof TransactionOutcomeUnknown) renew(target, pool);
         throw error;
       } finally {
+        settled(target, flight);
         const left = lent.get(pool)! - 1;
         if (left) lent.set(pool, left);
         else {

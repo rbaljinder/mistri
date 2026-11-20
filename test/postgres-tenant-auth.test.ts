@@ -1042,7 +1042,7 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
     };
   }
 
-  test('a signed-in read costs the auth store at most two statements cold and none warm, and a page-like burst of sixteen no more', async (t) => {
+  test('a signed-in read costs the auth store one statement cold and none warm, and a page-like burst of sixteen no more', async (t) => {
     const f = await fixture(t, { keptSessions: '3' });
     await f.grant(f.member);
     const context = await f.open(f.member);
@@ -1051,12 +1051,14 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
       const reply = await f.data('/api/query', context, { table: 'item' });
       assert.equal(reply.status, 200, reply.text);
     };
-    // Cold: Better Auth reads the session by its token and then its account; every observation after it is that read.
+    /* Cold: Better Auth reads the session by its token with its account, one statement (a join: the two were two round
+       trips); every observation after it is that read. */
     await sleep(3_100);
     sent.take();
     await read();
     const cold = sent.take();
-    assert.ok(cold.length <= 2, `cold: ${cold.length}\n${cold.join('\n')}`);
+    assert.equal(cold.length, 1, `cold: ${cold.length}\n${cold.join('\n')}`);
+    assert.match(cold[0]!, /\bjoin\b[^]*"auth_user"/i, 'the session and its account in one statement');
     // Warm: nothing at all.
     await read();
     await read();
@@ -1066,7 +1068,7 @@ describe('the tenant host on a PostgreSQL authentication store, against a real s
     sent.take();
     await Promise.all(Array.from({ length: 16 }, read));
     const burst = sent.take();
-    assert.ok(burst.length <= 2, `burst: ${burst.length}\n${burst.join('\n')}`);
+    assert.equal(burst.length, 1, `burst: ${burst.length}\n${burst.join('\n')}`);
   });
 
   test('with nothing kept, a signed-in read observes the store at every fence, as before the cache', async (t) => {

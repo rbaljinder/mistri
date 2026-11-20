@@ -953,9 +953,9 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         };
         const connect = pg.Pool.prototype.connect;
         let refused = 0;
-        // The writer's pools keep no idle minimum (postgresPool.ts); the readers keep two.
+        // The writers keep one connection warm or none (postgresPool.ts WARM_WRITERS); the readers keep two.
         t.mock.method(pg.Pool.prototype, 'connect', function (this: { options: { min?: number } }) {
-          if (this.options.min === 0 && refused === 0) {
+          if ((this.options.min ?? 0) < 2 && refused === 0) {
             refused++;
             return Promise.reject(Object.assign(new Error('too many connections for role "app"'), { code: '53300', severity: 'FATAL' }));
           }
