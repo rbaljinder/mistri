@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/engine",
-  "version": "1.0.0-rc.68",
+  "version": "1.0.0-rc.69",
   "description": "The engine both products stand on: the adapters (SQLite, Postgres), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -687,6 +687,10 @@
     "./shared/frameworkWords.js": {
       "mistri-built": "./dist/shared/frameworkWords.js",
       "default": "./src/shared/frameworkWords.ts"
+    },
+    "./shared/frameworkWordsEs.js": {
+      "mistri-built": "./dist/shared/frameworkWordsEs.js",
+      "default": "./src/shared/frameworkWordsEs.ts"
     },
     "./shared/funnel.js": {
       "mistri-built": "./dist/shared/funnel.js",

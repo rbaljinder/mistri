@@ -91,7 +91,8 @@ export function captureLinkEvidence(value: unknown, owned: Pick<TenantOwnershipS
 }
 
 /**
- * The link's scope: its one record, within its tenant, and only where the footprint asks for its resource. Every
+ * The link's scope: its one record, within its tenant, and only where the footprint asks for its resource. A child
+ * the footprint asks for reads its rows in that tenant that point at the record (a link's `related` list); every
  * other table reads nothing, as a link's holder in an App without tenants sees nothing else (api/apiRowScope.ts
  * linkRowScope). No row policy is asked: a policy written for people would widen a key to one row by accident.
  */
@@ -113,6 +114,33 @@ export function composeLinkScope(owned: TenantOwnershipSnapshot, evidence: Tenan
     let scope: RowScope = snapshotRowScope(owned.schema, result);
     for (const [column, part] of Object.entries(key))
       scope = narrowRowsToApiScope(scope, { key: value.resource, rows: { [value.resource]: column } }, part, owned.schema);
+    /* A link's related list (shared/appLinks.ts `related`) reads one hop down: a child's rows in the link's tenant
+       whose foreign key names the link's record, and no other row of it. The source draws that line, not the door,
+       so a footprint that asks for a child can never be read as the whole child table. */
+    const children: Record<string, RowScopeFilter> = Object.create(null);
+    for (const [child, asked] of Object.entries(rows)) {
+      const owner = owned.ownership[child];
+      if (child === value.resource || asked !== true || owner?.kind !== 'tenant') continue;
+      const tenant: RowScopeFilter = {
+        groups: [[{ column: owner.column, op: '=', value: value.tenantId }]],
+        ...(owned.schema.dialect === 'sqlite' ? { binary: [owner.column] } : {}),
+      };
+      const groups: RowScopeFilter['groups'] = [];
+      for (const fk of owned.schema.foreignKeys) {
+        if (fk.from.table !== child || fk.to.table !== value.resource || fk.from.columns.length !== 1) continue;
+        const target = fk.to.columns[0];
+        if (!Object.hasOwn(key, target)) continue;
+        const narrowed = narrowRowsToApiScope(
+          { [child]: tenant },
+          { key: value.resource, rows: { [value.resource]: target, [child]: fk.from.columns[0] } },
+          String(key[target]),
+          owned.schema,
+        )[child];
+        if (narrowed && narrowed !== true) groups.push(...narrowed.groups);
+      }
+      if (groups.length) children[child] = { ...tenant, groups };
+    }
+    if (Object.keys(children).length) scope = { ...scope, ...children };
     return snapshotRowScope(owned.schema, scope);
   } catch {
     return denyTenant();

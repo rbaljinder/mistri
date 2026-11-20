@@ -31,6 +31,7 @@ import { CAPTION_KEYS, isMessageRef, parseCaption } from '../packages/engine/src
 import { canonicalLocale, negotiateLocale, resolveLocale } from '../packages/engine/src/shared/appLocale.js';
 import { appAdvisories, appProblems, loadApp, localizedApp, type AppHost, type LoadedApp } from '../packages/mistri/src/server/app/apps.js';
 import { appCatalogs, componentMessages, frameworkWords, MessageSayer } from '../packages/mistri/src/server/app/appMessages.js';
+import { FRAMEWORK_WORDS_ES } from '../packages/engine/src/shared/frameworkWordsEs.js';
 import {
   localeRow,
   pickedLocale,
@@ -47,6 +48,7 @@ import { messageOf } from '../packages/mistri/src/server/email/outbox.js';
 import { literalCaptions, runMessagesCommand } from '../packages/mistri/src/server/cli/messagesCommand.js';
 import type { AppDef } from '../packages/mistri/src/shared/appModel.js';
 import { checkTenantMessages, messageRowProblem } from '../packages/mistri/src/server/app/recordMessages.js';
+import { publicLanguages } from '../packages/mistri/src/server/commands/formHttp.js';
 import { noticeWords } from '../packages/mistri/src/server/app/noticeWords.js';
 import { compileAppDefinitionValidation, validateStoredPostImage } from '../packages/mistri/src/server/app/appValidation.js';
 import { buildApp } from '../packages/mistri/src/server/build/build.js';
@@ -274,6 +276,14 @@ describe('loading', () => {
     const values = (app: Pick<LoadedApp, 'app'>) => app.app.resources!.ticket.display!.status.values;
     assert.deepEqual({ ...values(loaded) }, { open: 'Open', done: 'Done' });
     assert.deepEqual({ ...values(localizedApp(loaded, 'es-MX')) }, { open: 'Abiertas', done: 'Done' });
+  });
+
+  test('the language switch of a public page marks the catalog a regional tag is read from', async () => {
+    const loaded = await words();
+    // The App's `ui.locale` is en-US and its catalogs en and es: a read said in en-US marks en, es-MX marks es.
+    assert.deepEqual(publicLanguages(loaded.app, 'en-US'), { offered: ['en', 'es'], locale: 'en' });
+    assert.deepEqual(publicLanguages(loaded.app, 'es-MX'), { offered: ['en', 'es'], locale: 'es' });
+    assert.deepEqual(publicLanguages(loaded.app, undefined), { offered: ['en', 'es'], locale: 'en' });
   });
 
   test("the load reads the catalogs and is said in the App's own words; a reader's in theirs, addresses kept", async () => {
@@ -623,7 +633,9 @@ describe("the platform's words", () => {
 
   test("a catalog says them in the reader's language only, as templates the browser fills", async () => {
     const loaded = await loadApp(appDir('platform-words', definition(), WORDS), { lock: 'report' });
+    // The catalog's own words, and the platform's Spanish under every word it leaves out.
     assert.deepEqual(frameworkWords(loaded.app, 'es-MX'), {
+      ...FRAMEWORK_WORDS_ES,
       'mistri.form.stepNamed': "Paso {step} de {count}: '{label}'",
       'mistri.form.back': 'Atrás',
       'mistri.status.sentText': 'Le enviamos un código por mensaje de texto.',
@@ -890,7 +902,11 @@ async function exerciseHttp(connection: Parameters<typeof served>[0]) {
     assert.match(String(visitorEs.reply.headers.vary), /Accept-Language/);
     assert.equal(visitorEs.app.views.tickets.label, 'Incidencias');
     assert.equal(visitorEs.app.ui.messages, undefined, 'the binding is never served');
-    assert.deepEqual(visitorEs.app.words, { 'mistri.form.back': 'Atrás' }, "the platform's words the catalog says in Spanish");
+    assert.deepEqual(
+      visitorEs.app.words,
+      { ...FRAMEWORK_WORDS_ES, 'mistri.form.back': 'Atrás' },
+      "the platform's words the catalog says in Spanish, over the platform's own",
+    );
     const visitorEn = await payload('/api/app', { 'accept-language': 'de' });
     assert.equal(visitorEn.app.views.tickets.label, 'Tickets');
     assert.equal(visitorEn.app.ui.locale, 'en-US');

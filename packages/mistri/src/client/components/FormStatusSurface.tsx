@@ -35,6 +35,7 @@ import {
 } from './savedFormApi.js';
 import './FormSurface.css';
 import { appWord } from '@mistriwork/kit/client/messages.js';
+import { LanguageSwitch } from './LanguageSwitch.js';
 import { say } from '../copy/public/components/FormStatusSurface.js';
 
 /** A form with a status check: the details it asks, and whether a signed-in check may add the application to the account. */
@@ -110,7 +111,7 @@ function StepUp({
   };
   return (
     <section aria-labelledby={`${id}-more`} className="form-status-more">
-      <h2 id={`${id}-more`}>{say('moreDetails')}</h2>
+      <h2 id={`${id}-more`}>{appWord('mistri.status.moreDetails', say('moreDetails'))}</h2>
       {shown ? (
         <Status status={shown} />
       ) : !sent ? (
@@ -153,10 +154,10 @@ function StepUp({
           </Field>
           <div className="form-claim-actions">
             <Button intent="primary" type="submit" busy={pending}>
-              {say('showDetails')}
+              {appWord('mistri.status.showDetails', say('showDetails'))}
             </Button>
             <Button intent="quiet" size="compact" onClick={() => void ask()}>
-              {say('sendAnotherCode')}
+              {appWord('mistri.status.sendAnother', say('sendAnotherCode'))}
             </Button>
           </div>
         </form>
@@ -190,7 +191,8 @@ function FoundByEmail({ form, onAdded }: { form: string; onAdded: () => void }) 
     };
   }, [form]);
   if (!found) return null;
-  if (found.verify) return <p className="form-page-done-message">{say('confirmYourAccountsEmail')}</p>;
+  if (found.verify)
+    return <p className="form-page-done-message">{appWord('mistri.status.confirmAccountEmail', say('confirmYourAccountsEmail'))}</p>;
   const open = found.found.filter((reference) => !declined.includes(reference));
   const yes = async (reference: string) => {
     setPending(reference);
@@ -212,22 +214,28 @@ function FoundByEmail({ form, onAdded }: { form: string; onAdded: () => void }) 
     <>
       {found.linked.length > 0 && (
         <p className="form-page-done-message" role="status">
-          {say('addedToYourAccount', { linked: found.linked.join(', ') })}
+          {appWord('mistri.status.added', say('addedToYourAccount', { linked: found.linked.join(', ') }), {
+            linked: found.linked.join(', '),
+          })}
         </p>
       )}
       {open.length > 0 && (
         <section className="form-account" aria-labelledby={`${id}-found`}>
           <h2 id={`${id}-found`}>
-            {open.length === 1 ? say('weFound1Application') : say('weFoundApplicationsSubmitted', { openCount: open.length })}
+            {open.length === 1
+              ? appWord('mistri.status.foundOne', say('weFound1Application'))
+              : appWord('mistri.status.foundMany', say('weFoundApplicationsSubmitted', { openCount: open.length }), {
+                  openCount: open.length,
+                })}
           </h2>
-          <p className="form-page-done-message">{say('sayYesOnlyToOne')}</p>
+          <p className="form-page-done-message">{appWord('mistri.status.sayYesToOne', say('sayYesOnlyToOne'))}</p>
           <ul>
             {open.map((reference) => (
               <li key={reference}>
                 <strong>{reference}</strong>
                 <span className="form-claim-actions">
                   <Button intent="secondary" size="compact" busy={pending === reference} onClick={() => void yes(reference)}>
-                    {say('yesItsMine')}
+                    {appWord('mistri.status.mine', say('yesItsMine'))}
                   </Button>
                   <Button intent="quiet" size="compact" onClick={() => setDeclined((before) => [...before, reference])}>
                     {say('common.no')}
@@ -249,14 +257,17 @@ export function FormStatusSurface({
   form,
   appName,
   onSignIn,
+  appId,
 }: {
   form: StatusFormPresentation;
   appName: string;
+  /** The page's App, for the language switch at its foot (LanguageSwitch.tsx). */
+  appId?: string;
   /** Draw the App's sign-in here; after it the page comes back to this check. */
   onSignIn?: () => void;
 }) {
   const id = useId();
-  const asked = [{ name: RECEIPT, label: say('reference') }, ...form.save.statusCheck.confirm];
+  const asked = [{ name: RECEIPT, label: appWord('mistri.status.reference', say('reference')) }, ...form.save.statusCheck.confirm];
   const [values, setValues] = useState<Record<string, string>>({});
   const [blank, setBlank] = useState<Record<string, string>>({});
   const [failure, setFailure] = useState('');
@@ -298,7 +309,10 @@ export function FormStatusSurface({
     const missing = Object.fromEntries(
       asked
         .filter((item) => !(values[item.name] ?? '').trim())
-        .map((item) => [item.name, say('enter', { label: item.label.toLowerCase() })]),
+        .map((item) => [
+          item.name,
+          appWord('mistri.status.enter', say('enter', { label: item.label.toLowerCase() }), { label: item.label.toLowerCase() }),
+        ]),
     );
     setBlank(missing);
     if (Object.keys(missing).length) return;
@@ -323,7 +337,7 @@ export function FormStatusSurface({
     setFailure('');
     try {
       const reference = await addByStatus(form.id, details());
-      setAdded(say('isNowInYourAccount', { reference }));
+      setAdded(appWord('mistri.status.nowInAccount', say('isNowInYourAccount', { reference }), { reference }));
       setMine(await myApplications(form.id).catch(() => mine ?? null));
     } catch (error) {
       setFailure((error as SavedFormFailure).message);
@@ -335,8 +349,10 @@ export function FormStatusSurface({
   return (
     <section className="form-page" aria-labelledby={`${id}-title`}>
       <p className="eyebrow">{appName}</p>
-      <h1 id={`${id}-title`}>{say('checkYourApplication')}</h1>
-      <p className="form-page-description">{say('enterTheReferenceYouWereGiven', { label: form.label })}</p>
+      <h1 id={`${id}-title`}>{appWord('mistri.status.title', say('checkYourApplication'))}</h1>
+      <p className="form-page-description">
+        {appWord('mistri.status.lead', say('enterTheReferenceYouWereGiven', { label: form.label }), { label: form.label })}
+      </p>
       {form.save.link?.email && mine !== null && (
         <FoundByEmail
           form={form.id}
@@ -347,7 +363,7 @@ export function FormStatusSurface({
       )}
       {mine && mine.length > 0 && (
         <section className="form-account" aria-labelledby={`${id}-mine`}>
-          <h2 id={`${id}-mine`}>{say('yourApplications')}</h2>
+          <h2 id={`${id}-mine`}>{appWord('mistri.status.yours', say('yourApplications'))}</h2>
           <ul>
             {mine.map((item) => (
               <li key={item.reference}>
@@ -380,7 +396,7 @@ export function FormStatusSurface({
         ))}
         <div>
           <Button intent="primary" type="submit" busy={pending && !answer}>
-            {say('checkStatus')}
+            {appWord('mistri.status.check', say('checkStatus'))}
           </Button>
         </div>
       </form>
@@ -397,16 +413,16 @@ export function FormStatusSurface({
             (mine === null
               ? onSignIn && (
                   <p className="form-page-done-message">
-                    {say('signInToAdd')}{' '}
+                    {appWord('mistri.status.signInToFollow', say('signInToAdd'))}{' '}
                     <Button intent="quiet" size="compact" onClick={onSignIn}>
-                      {say('signIn')}
+                      {appWord('mistri.status.signIn', say('signIn'))}
                     </Button>
                   </p>
                 )
               : mine !== undefined && (
                   <div>
                     <Button intent="secondary" onClick={add} busy={pending}>
-                      {say('addToMyAccount')}
+                      {appWord('mistri.status.addToAccount', say('addToMyAccount'))}
                     </Button>
                   </div>
                 ))}
@@ -418,6 +434,7 @@ export function FormStatusSurface({
         </section>
       )}
       {answer && form.save.statusCheck.stepUp && <StepUp form={form.id} channel={form.save.statusCheck.stepUp} details={details} />}
+      <LanguageSwitch appId={appId} languages={form.languages} />
     </section>
   );
 }

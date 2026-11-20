@@ -53,7 +53,7 @@ task needs with `npx @mistriwork/mistri docs <topic>` (`app-dsl` indexes every k
 
 - Public entry points only: `@mistriwork/mistri/app` in the App; `@mistriwork/mistri/commands` and `@mistriwork/mistri/policy`
   in server-only modules (`commands.ts`, `--jobs`, `--policy`), loaded, never imported. Never
-  import or patch mistri's `src/`; report a missing capability instead.
+  import or patch mistri's `src/`; report a missing capability instead. No `import.meta.glob`: list feature folders one line a module in `modules/index.ts`, tested against `readdirSync('modules')` (`docs dsl-tour`).
 - Type the definition `satisfies App` from the generated
   `mistri-schema.d.ts`; never edit it, never cast a name (`as never`).
   Change the schema only by migration: `npx @mistriwork/mistri migrate new <name> --app .`,

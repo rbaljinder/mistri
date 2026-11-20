@@ -27,6 +27,7 @@ import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { FRAMEWORK_ARGS, isMessageRef, MESSAGE_KEY, type AppMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { FRAMEWORK_WORDS, frameworkWordArgs, isFrameworkWordKey, type FrameworkWordKey } from '@mistriwork/engine/shared/frameworkWords.js';
+import { FRAMEWORK_WORDS_ES } from '@mistriwork/engine/shared/frameworkWordsEs.js';
 import { nearest } from '@mistriwork/engine/shared/suggest.js';
 import { zonedNow } from '../../shared/appZone.js';
 import type IntlMessageFormatClass from 'intl-messageformat';
@@ -448,8 +449,9 @@ const saidCatalogs = new WeakMap<Localizer, Map<string, Readonly<Record<string, 
  * The platform's words (FRAMEWORK_WORDS) the App's catalog says in one reader's language, as `{name}` templates the
  * browser fills (appPayload `words`, kit `appWord`). A word is served only in the language it is written in: where the
  * reader's language has none, the platform says its own, which the chrome speaks in more than English, rather than
- * the App's source word in another language. Kept per reader as `componentMessages` is; undefined where the App
- * says none of them.
+ * the App's source word in another language. In Spanish the platform's own Spanish (FRAMEWORK_WORDS_ES) fills each
+ * word the catalog leaves out, so an App with an `es` catalog is said wholly in Spanish without writing a `mistri.*`
+ * key; the App's word still wins. Kept per reader as `componentMessages` is; undefined where the App says none of them.
  */
 export function frameworkWords(
   app: { id: string },
@@ -467,9 +469,10 @@ export function frameworkWords(
   if (!byReader) saidWords.set(localizer, (byReader = new Map()));
   if (byReader.has(key)) return byReader.get(key);
   const sayer = new MessageSayer(catalogs, tag, overrides?.words, kind);
+  const spanish = /^es(?:-|$)/i.test(tag);
   const words: Record<string, string> = {};
   for (const name of Object.keys(FRAMEWORK_WORDS)) {
-    const word = sayer.word(name);
+    const word = sayer.word(name) ?? (spanish ? FRAMEWORK_WORDS_ES[name as FrameworkWordKey] : undefined);
     if (word !== undefined) words[name] = word;
   }
   const said = Object.keys(words).length ? Object.freeze(words) : undefined;

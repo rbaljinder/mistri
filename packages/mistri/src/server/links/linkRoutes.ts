@@ -13,7 +13,7 @@ import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { emailOf } from '../serviceConnections.js';
 import { requestLocale } from '../app/readerLocale.js';
 import { lookUpLink, servesLinks } from './linkLookup.js';
-import { LINK_PATH, linkDoor, type FoundLink, type LinkBackend, type LinkStep } from './linkDoor.js';
+import { LINK_PATH, linkDoor, relatedQuery, type FoundLink, type LinkBackend, type LinkStep } from './linkDoor.js';
 
 type Host = NonNullable<RequestContext['appHosts']>[number] & { app: { app: AppDef } };
 type JournalFound = FoundLink & { journal: NonNullable<Awaited<ReturnType<typeof lookUpLink>>>['journal'] };
@@ -68,6 +68,15 @@ export async function linkRoutes(ctx: RequestContext): Promise<boolean> {
       const reader = loadedResources.forConnection(loadedResources.connectionFor(found.row.resource));
       const read = await reader.query({ table: found.row.resource, columns: [...columns], filter: keyFilter(key), limit: 2, offset: 0 });
       return read.rows as Record<string, unknown>[];
+    },
+    async readRelated(found, key, child, list) {
+      const loadedResources = await resources();
+      const query = relatedQuery(loadedResources.schema, found.row.resource, child, list, key);
+      if (!query) return undefined;
+      const read = await loadedResources.forConnection(loadedResources.connectionFor(child)).query(query);
+      /* A link revoked or spent out while the page was drawn draws no rows (tenantLinks.ts found.active, after its reads). */
+      const still = await found.journal((journal) => journal.readLink?.(appId, found.row.id, Date.now()) ?? Promise.resolve(undefined));
+      return still ? (read.rows as Record<string, unknown>[]) : undefined;
     },
     revoke: (found, now) =>
       found.journal((journal) => journal.revokeLinks?.(appId, found.row.resource, found.row.rowKey, undefined, now) ?? Promise.resolve(0)),

@@ -761,6 +761,24 @@ export interface AppResourceLink<Column extends string = string> {
   /** A one-time code sent to a column of the record and typed back before anything is shown: an email column, or
       `{ sms: 'mobile' }` for a phone column and a channel an integration declares. */
   stepUp?: Column | Readonly<Record<string, Column>>;
+  /** Read-only lists of the rows that point at the record, by the child resource's name: one hop, at most four
+      lists, each read with its foreign key equal to the record's key and nothing from the request. Only beside a
+      `stepUp` or a `confirm`. In a tenant App the child is `owner: 'tenant'`. */
+  related?: Readonly<Record<string, AppResourceLinkRelated>>;
+}
+
+/** One list a link page shows of the rows that point at its record (`links.<link>.related.<resource>`). */
+export interface AppResourceLinkRelated {
+  /** The child's foreign key column to the link's resource; left out, its one foreign key there. */
+  by?: string;
+  /** The child's columns the list shows, one to twelve; none hidden, outside its readable fields, or a file's bytes. */
+  show: readonly string[];
+  /** The one column the list is ordered by, `'-date'` for newest first; left out, the child's key. */
+  sort?: string;
+  /** How many rows the list shows at most, 1 to 50; there is no paging. */
+  most: number;
+  /** Words for a shown column's stored values, as the link's own `says`. */
+  says?: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
 /**

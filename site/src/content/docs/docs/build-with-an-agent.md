@@ -346,7 +346,10 @@ codes are on [design checks](/docs/design-lint/#measured-in-a-browser-mistri-gra
 The skill sends the agent to [Choose a building block](/docs/choose/) for
 which view, section or command a need calls for; `npx @mistriwork/mistri docs choose`
 prints it offline. Tenant Apps have their own startup contract: do not fake
-tenancy with a `tenant_id` filter. MCP can inspect a development database but
+tenancy with a `tenant_id` filter. An App split into one folder a feature lists
+its modules in an index file, kept honest by a test
+([Organizing a larger App](/docs/dsl-tour/#organizing-a-larger-app)); there is
+no `import.meta.glob`. MCP can inspect a development database but
 does not act as an App user, so test authorization over HTTP.
 
 ## Definition of done

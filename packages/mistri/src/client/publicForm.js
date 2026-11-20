@@ -67,6 +67,19 @@ function offerSignIn(appId) {
 }
 
 /**
+ * Whether a form the page arrived with is in the language its address asks (`?locale=`). The page's own read is
+ * asked with its cookie and its browser's languages, not its address, so a shared link that names a language its
+ * reader never picked is read again, naming it; an address that names none takes what it arrived with.
+ * @param {any} carried
+ */
+function saysAsked(carried) {
+  const asked = new URLSearchParams(window.location.search).get('locale');
+  if (!asked) return true;
+  const said = carried?.form?.languages?.locale;
+  return typeof said === 'string' && said.toLowerCase() === asked.toLowerCase();
+}
+
+/**
  * Fetch one public form's presentation. `undefined` when the server has no
  * public forms at all, so this address is not one and boot carries on; a
  * throw, with the sentence to show, for a form this App does not serve to
@@ -81,7 +94,7 @@ export async function loadPublicForm(id, options = {}) {
   if (retained) return retained;
   /* The page arrived with it (firstPaint.ts): a form's page asks nothing. */
   const carried = options.fresh ? undefined : firstPaintRead('GET', `/api/forms/${encodeURIComponent(id)}`)?.body;
-  if (carried && typeof carried === 'object' && 'form' in carried && !('placement' in carried)) {
+  if (carried && typeof carried === 'object' && 'form' in carried && !('placement' in carried) && saysAsked(carried)) {
     // What the form asks beyond its fields — the stepper and its sheets, the draft's logic, live lines — comes with
     // it, so its first frame is whole, and a form that asks none of it fetches nothing (FormSurface.tsx formArrives).
     await formArrives(/** @type {any} */ (carried).form);
@@ -174,6 +187,7 @@ export function showPublicForm(prepared, page, options = {}) {
       createElement(FormStatusSurface, {
         form: saved,
         appName: app.name,
+        appId: app.id,
         onSignIn: () => void signInHere(`${base}/status`, { lead: say('signInToAddYourApplication') }),
       }),
     );
@@ -201,6 +215,7 @@ export function showPublicForm(prepared, page, options = {}) {
         form: /** @type {import('./components/SavedFormSurface.js').SavedFormPresentation} */ (form),
         appName: app.name,
         base,
+        appId: app.id,
         // A step and the submit name the visitor's pick as the read does: the pick made since the page arrived.
         language: () => pickedLanguage(app.id),
       }),

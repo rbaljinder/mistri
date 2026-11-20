@@ -15,6 +15,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { after, describe, test } from 'node:test';
 import { dropDedicatedPostgresDatabase, TENANT_DIALECTS } from './support/tenantDialects.js';
+import { FRAMEWORK_WORDS_ES } from '../packages/engine/src/shared/frameworkWordsEs.js';
 import { cachedTenantChoices } from '../packages/mistri/src/server/forms/choiceCache.js';
 import { tenantLiveHub } from '../packages/mistri/src/server/tenant/tenantLive.js';
 import {
@@ -58,8 +59,19 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       assert.equal(await label(f, { 'accept-language': 'fr' }), 'Apply for financing', 'no French: the App’s own');
       // The platform's words the Spanish catalog says ride with a Spanish form only.
       const spanish = await read(f, { cookie: 'mistri-locale-yard=es' });
-      assert.deepEqual(spanish.body.form.words, { 'mistri.form.step': 'Paso {step} de {count}', 'mistri.form.back': 'Atrás' });
+      assert.deepEqual(spanish.body.form.words, {
+        ...FRAMEWORK_WORDS_ES,
+        'mistri.form.step': 'Paso {step} de {count}',
+        'mistri.form.back': 'Atrás',
+      });
       assert.equal(english.body.form.words, undefined);
+      // Every sentence of the page is Spanish though the App's catalog names two: the review, and a refusal the browser
+      // says when the server turns an answer away.
+      assert.equal(spanish.body.form.words['mistri.form.reviewTitle'], 'Revisa tus respuestas');
+      assert.equal(spanish.body.form.words['mistri.refusal.invalidInput'], 'Algunas respuestas necesitan otra revisión.');
+      // Two catalogs: the page offers both, and says which one it is in, for the footer's switch.
+      assert.deepEqual(spanish.body.form.languages, { offered: ['en', 'es'], locale: 'es' });
+      assert.equal(english.body.form.languages.locale, 'en');
 
       // The list names no address (a `?via=` on it is refused): it is the App's, said in the visitor's language too.
       const list = await f.call('/api/forms', { headers: { 'accept-language': 'es' } });

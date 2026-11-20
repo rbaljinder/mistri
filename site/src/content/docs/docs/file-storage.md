@@ -121,7 +121,9 @@ the old object is deleted once the command commits; a rolled-back move keeps it.
 A command's [lookup](/docs/commands/#starting-values-other-sources-webhooks)
 reads a file its own form attached with `files.read(id)`, before the
 transaction opens: only a file still held for that submission, which stays
-held for the handler to file.
+held for the handler to file. A file a record already keeps is read there with
+`sources.<source>.<table>.readFile(row)`, through the same scope as the
+lookup's other reads, audited under the command and inside its one 50 MB.
 
 Files reach a command from outside through an inbound endpoint's
 [`files`](/docs/events-and-jobs/#a-signed-callback-inbound) or a tenant's

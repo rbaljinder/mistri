@@ -35,7 +35,7 @@ import type { CommandJournal } from '../../adapters/commands/commandJournalTypes
 import type { AppCommandField } from '../../shared/command.js';
 import type { AuthorizedBusinessCommand, BusinessCommandBinding } from './businessCommandAccess.js';
 import { BusinessCommandExecutionError } from './commandErrors.js';
-import { COMMAND_FILE_READ_MOST } from './commandDb.js';
+import { COMMAND_FILE_READ_MOST, type FileReadBudget } from './commandDb.js';
 import { authorFault } from '@mistriwork/engine/shared/refusal.js';
 import type { BusinessCommandActor, BusinessCommandRegistry, CommandFile } from './businessCommands.js';
 
@@ -283,28 +283,29 @@ export function deliveredFiles(
 }
 
 /**
- * What a lookup reads of the files its form attached: `files` is the lookup's `files`, and `read()` the bytes taken so
- * far, where the handler's `readFile` starts its budget, so the two share one bound. A lookup reading the same id over
- * and over is refused rather than filling memory, and what it read the handler cannot read again.
+ * What a lookup reads of the files its form attached: `files` is the lookup's `files`, and `budget` the bytes taken so
+ * far — by `files.read` and by a source's `readFile`, which counts into the same budget — where the handler's
+ * `readFile` starts its own, so the three share one bound. A lookup reading the same id over and over is refused
+ * rather than filling memory, and what it read the handler cannot read again.
  */
 export function lookupFileReader(
   fields: readonly AppCommandField[],
   input: unknown,
   transaction: AuthorizedBusinessCommand['commandTransaction'],
   scope: { appId: string; command: string; owner: string | undefined; now: () => number },
-): { files: { read: (id: string) => Promise<CommandFile> }; read: () => number } {
-  let total = 0;
+): { files: { read: (id: string) => Promise<CommandFile> }; budget: FileReadBudget } {
+  const budget: FileReadBudget = { read: 0 };
   return {
-    read: () => total,
+    budget,
     files: Object.freeze({
       read: async (id: string) => {
         const file = await readHeldFile(fields, input, id, transaction, { ...scope, now: scope.now() });
-        if (total + file.size > COMMAND_FILE_READ_MOST)
+        if (budget.read + file.size > COMMAND_FILE_READ_MOST)
           throw authorFault(
             new BusinessCommandExecutionError('invalid_result'),
             `lookup: one command reads at most ${COMMAND_FILE_READ_MOST / 1024 / 1024} MB of files; read fewer, or move the rest to a job.`,
           );
-        total += file.size;
+        budget.read += file.size;
         return file;
       },
     }),

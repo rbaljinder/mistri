@@ -35,6 +35,12 @@ import { provisionSqliteCommandEventStore } from '../packages/mistri/src/adapter
 import { provisionPostgresCommandEventStore } from '../packages/mistri/src/adapters/events/postgresCommandEventStore.js';
 import { provisionPostgresRecordHistory } from '../packages/mistri/src/adapters/history/postgresRecordHistory.js';
 import { provisionSqliteRecordHistory } from '../packages/mistri/src/adapters/history/sqliteRecordHistory.js';
+import {
+  provisionPostgresIntegrations,
+  provisionSqliteIntegrations,
+} from '../packages/mistri/src/adapters/integrations/integrationStore.js';
+import { defineJobs } from '../packages/mistri/src/server/jobs/jobModule.js';
+import { fakepay, provider, resetProvider } from './fixtures/integrations/fakepay/index.js';
 import type { TenantContextReply } from '../packages/mistri/src/shared/tenantContext.js';
 import { parseTestApp } from './support/commandCatalog.js';
 import { appId as supportApp, tenantSupportFixture } from './support/tenantSupportFixture.js';
@@ -55,15 +61,23 @@ const KEY = 'k'.repeat(40);
 const SQLITE = `PRAGMA foreign_keys = ON;
   CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL);
   CREATE TABLE lead (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id), name TEXT NOT NULL,
-    status TEXT NOT NULL);
+    status TEXT NOT NULL, file_name TEXT, data BLOB);
   INSERT INTO dealer VALUES ('north', 'North Motors'), ('south', 'South Wheels');
-  INSERT INTO lead VALUES ('n-1', 'north', 'Ada', 'open'), ('n-2', 'north', 'Grace', 'open'), ('s-1', 'south', 'Hedy', 'open');`;
+  INSERT INTO lead VALUES ('n-1', 'north', 'Ada', 'open', 'ada.txt', X'616461'), ('n-2', 'north', 'Grace', 'open', 'grace.txt', X'6772616365'),
+    ('s-1', 'south', 'Hedy', 'open', NULL, NULL);`;
 const POSTGRES = `
   CREATE TABLE public.dealer (id text PRIMARY KEY, name text NOT NULL);
   CREATE TABLE public.lead (id text PRIMARY KEY, tenant_id text NOT NULL REFERENCES public.dealer(id), name text NOT NULL,
-    status text NOT NULL);
+    status text NOT NULL, file_name text, data bytea);
   INSERT INTO public.dealer VALUES ('north', 'North Motors'), ('south', 'South Wheels');
-  INSERT INTO public.lead VALUES ('n-1', 'north', 'Ada', 'open'), ('n-2', 'north', 'Grace', 'open'), ('s-1', 'south', 'Hedy', 'open');`;
+  INSERT INTO public.lead VALUES ('n-1', 'north', 'Ada', 'open', 'ada.txt', '\\x616461'::bytea),
+    ('n-2', 'north', 'Grace', 'open', 'grace.txt', '\\x6772616365'::bytea), ('s-1', 'south', 'Hedy', 'open', NULL, NULL);`;
+/* A lead's notes, for a link's related list. One row says north's lead under south's tenant: a list that read the
+   foreign key alone would show it, so it is the row the tenant's scope must keep out. */
+const NOTES = `CREATE TABLE note (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES dealer(id),
+    lead_id TEXT NOT NULL REFERENCES lead(id), body TEXT NOT NULL);
+  INSERT INTO note VALUES ('a', 'north', 'n-1', 'Called'), ('b', 'north', 'n-1', 'Emailed'), ('c', 'north', 'n-1', 'Visited'),
+    ('d', 'north', 'n-2', 'Grace only'), ('z', 'south', 'n-1', 'South wrote this');`;
 
 interface Answer {
   readonly status: number;
@@ -88,7 +102,7 @@ interface Fixture {
    * without a body is a GET. */
   member(tenant: 'north' | 'south', roles?: readonly string[]): Promise<(path: string, body: unknown) => Promise<Answer>>;
   /** A member's command on one lead: `invite` mints a link and answers its URL; `revoke` revokes the lead's links. */
-  mint(post: (path: string, body: unknown) => Promise<Answer>, lead: string): Promise<string>;
+  mint(post: (path: string, body: unknown) => Promise<Answer>, lead: string, name?: string): Promise<string>;
   /** Opens a link's URL as its holder does, on `host` (the URL's own unless named): the cookie and the page's session. */
   land(url: string, host?: string): Promise<Landed>;
   /** The link's row in the journal. */
@@ -105,15 +119,23 @@ async function listenFirst(server: ReturnType<typeof createServer>) {
   return address.port;
 }
 
-/** `eventful`: the command a link runs emits an event, which a link's request has no event runtime to commit. */
+/** `eventful`: the command a link runs emits an event, which a link's request has no event runtime to commit.
+ * `integrated`: its `withdraw` charges FakePay from its lookup, with the integrations a jobs module lists. */
 async function openFixture(
   t: TestContext,
   dialect: TenantDialect,
   database: string,
-  variant: { readonly eventful?: boolean } = {},
+  variant: { readonly eventful?: boolean; readonly related?: boolean; readonly integrated?: boolean } = {},
 ): Promise<Fixture> {
   resetPublicFormLimits();
-  const engine = await openTenantEngine(dialect, { sqlite: SQLITE, postgres: POSTGRES, tables: ['lead', 'dealer'], database });
+  const notes = variant.related ? NOTES : '';
+  const engine = await openTenantEngine(dialect, {
+    sqlite: `${SQLITE}\n${notes}`,
+    postgres: `${POSTGRES}\n${notes.replaceAll('TABLE note', 'TABLE public.note').replaceAll('REFERENCES ', 'REFERENCES public.').replaceAll('INTO note', 'INTO public.note')}`,
+    // Always `note`: a variant without it must not find the last one's table, which would join its catalog ownerless.
+    tables: ['note', 'lead', 'dealer'],
+    database,
+  });
   const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-links-'));
   const disposeKey = configureFormKey(APP_ID, { MISTRI_FORM_KEY: KEY });
   let auth: AppAuthRuntime | undefined;
@@ -140,6 +162,13 @@ async function openFixture(
     if (dialect === 'postgres') await provisionPostgresCommandEventStore(engine.url, events);
     else provisionSqliteCommandEventStore(engine.path, events);
   }
+  if (variant.integrated) {
+    // What an operator provisions once for a jobs module that lists integrations: their store, beside the tenant's.
+    if (dialect === 'postgres') await provisionPostgresIntegrations(engine.url);
+    else provisionSqliteIntegrations(engine.path);
+    process.env.MISTRI_SECRETS_KEY ??= 'a-secrets-key-for-tests-that-is-long-enough';
+    resetProvider();
+  }
   // The lead's page keeps history, which is provisioned once and never at startup.
   if (dialect === 'postgres') await provisionPostgresRecordHistory(engine.url);
   else provisionSqliteRecordHistory(engine.path);
@@ -165,8 +194,17 @@ async function openFixture(
             access: 'write',
             owner: 'tenant',
             actions: { invite: { label: 'Invite', command: 'invite' }, revoke: { label: 'Revoke', command: 'revoke' } },
-            links: { status: { show: ['name', 'status'], commands: ['withdraw', 'drop'] } },
+            file: { content: 'data', name: 'file_name' },
+            links: {
+              status: { show: ['name', 'status'], commands: ['withdraw', 'drop', 'peek'] },
+              ...(variant.related
+                ? {
+                    dossier: { show: ['name'], confirm: { status: 'Status' }, related: { note: { show: ['body'], sort: '-id', most: 2 } } },
+                  }
+                : {}),
+            },
           },
+          ...(variant.related ? { note: { owner: 'tenant' } } : {}),
         },
         auth: {
           store: join(directory, 'auth.db'),
@@ -190,6 +228,7 @@ async function openFixture(
         revoke: { target: 'lead' },
         withdraw: { target: 'lead' },
         drop: { target: 'lead' },
+        peek: { target: 'lead' },
       },
     ),
   };
@@ -211,34 +250,64 @@ async function openFixture(
         return { link: String(await revokeLinks()) };
       },
     }),
-    withdraw: variant.eventful
+    withdraw: variant.integrated
       ? defineCommand({
           source: 'business',
           target: 'lead',
-          output: shape({ id: text() }),
-          events: {
-            withdrawn: defineEventProjection<{ id: string }, { id: string }>(
-              defineEvent('lead.withdrawn', shape({ id: text() })),
-              (output) => ({ id: output.id }),
-            ),
+          integrations: { fakepay: ['charge'] },
+          // The withdrawal fee, charged before the transaction: the holder's run calls the provider as a member's would.
+          async lookup({ record, integrations }) {
+            return integrations.fakepay.charge({ amount: 500, customer: String(record!.name) });
           },
           async handle({ tx, record }) {
             await tx.update({ table: 'lead', key: { id: String(record.id) }, values: { status: 'withdrawn' } });
-            return { id: String(record.id) };
           },
         })
-      : defineCommand({
-          source: 'business',
-          target: 'lead',
-          async handle({ tx, record }) {
-            await tx.update({ table: 'lead', key: { id: String(record.id) }, values: { status: 'withdrawn' } });
-          },
-        }),
+      : variant.eventful
+        ? defineCommand({
+            source: 'business',
+            target: 'lead',
+            output: shape({ id: text() }),
+            events: {
+              withdrawn: defineEventProjection<{ id: string }, { id: string }>(
+                defineEvent('lead.withdrawn', shape({ id: text() })),
+                (output) => ({ id: output.id }),
+              ),
+            },
+            async handle({ tx, record }) {
+              await tx.update({ table: 'lead', key: { id: String(record.id) }, values: { status: 'withdrawn' } });
+              return { id: String(record.id) };
+            },
+          })
+        : defineCommand({
+            source: 'business',
+            target: 'lead',
+            async handle({ tx, record }) {
+              await tx.update({ table: 'lead', key: { id: String(record.id) }, values: { status: 'withdrawn' } });
+            },
+          }),
     drop: defineCommand({
       source: 'business',
       target: 'lead',
       async handle({ tx, record }) {
         await tx.remove({ table: 'lead', key: { id: String(record.id) } });
+      },
+    }),
+    // Reads a kept file before the transaction: the link's own lead's, and its neighbor's, and notes what each gave.
+    peek: defineCommand({
+      source: 'business',
+      target: 'lead',
+      sources: { business: ['lead'] },
+      async lookup({ sources }) {
+        const read = (id: string) =>
+          sources.business.lead.readFile(id).then(
+            (file) => `${file.name} ${file.size}`,
+            (error: { code?: string }) => String(error.code),
+          );
+        return { own: await read('n-1'), neighbor: await read('n-2') };
+      },
+      async handle({ tx, record, lookup }) {
+        await tx.update({ table: 'lead', key: { id: String(record.id) }, values: { status: `${lookup.own} / ${lookup.neighbor}` } });
       },
     }),
   });
@@ -255,7 +324,7 @@ async function openFixture(
       else process.env[name] = saved[i];
     });
   }
-  const everything = { dealer: true, lead: true };
+  const everything = { dealer: true, lead: true, ...(variant.related ? { note: true } : {}) };
   const hosts = [{ host: NORTH_HOST, app: APP_ID, tenant: 'north' }];
   owner = await createTenantAuthenticatedHttpServer({
     loaded,
@@ -269,17 +338,24 @@ async function openFixture(
         kind: 'tenant',
         appId: APP_ID,
         storeId: binding.storeId,
-        ownership: { dealer: { kind: 'platform' }, lead: { kind: 'tenant', column: 'tenant_id' } },
+        ownership: {
+          dealer: { kind: 'platform' },
+          lead: { kind: 'tenant', column: 'tenant_id' },
+          ...(variant.related ? { note: { kind: 'tenant' as const, column: 'tenant_id' } } : {}),
+        },
         resolveMembershipRows: () => everything,
         resolveRows: () => everything,
         resolvePlatformRows: () => everything,
-        resultReferences: { invite: () => [], revoke: () => [], withdraw: () => [], drop: () => [] },
+        resultReferences: { invite: () => [], revoke: () => [], withdraw: () => [], drop: () => [], peek: () => [] },
       }),
       source: engine.dialect === 'sqlite' ? { ...binding.source, existingPath: engine.path } : { ...binding.source, url: engine.url },
       deployment: 'links-generation',
       roles: ['staff', 'clerk'],
       maxLifetimeMs: 60000,
       commands: { registry },
+      ...(variant.integrated
+        ? { jobs: { module: defineJobs({}, { principals: {}, integrations: { use: [fakepay()], editors: ['staff'] } }) } }
+        : {}),
     },
   });
   const router = createTenantHostRouter(hosts);
@@ -383,8 +459,8 @@ async function openFixture(
     port,
     call,
     member,
-    async mint(post, lead) {
-      const minted = await run(post, 'invite', lead, { link: 'status' });
+    async mint(post, lead, name = 'status') {
+      const minted = await run(post, 'invite', lead, { link: name });
       const url = /http:\/\/[^"]+\/l\/mstl1\.[A-Za-z0-9_.-]+/.exec(minted.text)?.[0];
       assert.ok(url, `the minting answer says the URL: ${minted.text}`);
       return url;
@@ -637,6 +713,18 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       assert.equal((await f.call(`/${APP_ID}/l/${landed.id}`, { host: landed.host, headers: { cookie: landed.cookie } })).status, 404);
     });
 
+    test('a lookup a link runs reads its own row’s file and no other', async (t) => {
+      const f = await openFixture(t, dialect, database);
+      const north = await f.member('north');
+      const landed = await f.land(await f.mint(north, 'n-1'));
+      const prepared = await prepare(f, landed);
+      assert.equal(prepared.status, 200, prepared.text);
+      const ran = await runLink(f, landed, 'peek', prepared.body.commands.peek.expectedVersion);
+      assert.equal(ran.status, 200, ran.text);
+      // The neighbor is in the same tenant, and still not the link's: not found, as a row of another tenant is.
+      assert.deepEqual(await f.leads(), ['n-1:ada.txt 3 / not_found', 'n-2:open', 's-1:open']);
+    });
+
     test('a revoke from the page racing a link’s run leaves the run after it, or a miss that ran nothing', async (t) => {
       const f = await openFixture(t, dialect, database);
       const clerk = await f.member('north', ['staff', 'clerk']);
@@ -660,6 +748,55 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
         assert.deepEqual(await f.leads(), ['n-1:open', 'n-2:open', 's-1:open']);
       }
       assert.equal((await f.call(`/${APP_ID}/l/${landed.id}`, { host: landed.host, headers: { cookie: landed.cookie } })).status, 404);
+    });
+
+    test('a related list shows only its tenant’s rows that point at the record, no more than its most', async (t) => {
+      const f = await openFixture(t, dialect, database, { related: true });
+      const north = await f.member('north');
+      const landed = await f.land(await f.mint(north, 'n-1', 'dossier'));
+      const confirmed = await f.call(`/${APP_ID}/l/${landed.id}/confirm`, {
+        body: { confirm: { status: 'open' } },
+        host: landed.host,
+        headers: sessionHeaders(landed),
+      });
+      assert.equal(confirmed.status, 200, confirmed.text);
+      const cookie = String([confirmed.headers['set-cookie']].flat()[0]).split(';')[0];
+      const page = await f.call(`/${APP_ID}/l/${landed.id}`, { host: landed.host, headers: { cookie } });
+      assert.equal(page.status, 200, page.text);
+      // North's two newest notes on this lead; never south's row that names it, another lead's, or a third.
+      assert.match(page.text, /<td>Visited<\/td><\/tr><tr><td>Emailed<\/td>/);
+      for (const absent of ['South wrote this', 'Grace only', 'Called']) assert.doesNotMatch(page.text, new RegExp(absent));
+    });
+
+    test('a link command’s lookup calls its declared integration once, under its tenant’s key, and a replay calls nothing', async (t) => {
+      const f = await openFixture(t, dialect, database, { integrated: true });
+      const north = await f.member('north');
+      const saved = await north('/api/integrations/save', {
+        integration: 'fakepay',
+        secrets: { apiKey: 'north-key', webhookSecret: 'north-webhook-signing-secret-01' },
+      });
+      assert.equal(saved.status, 200, saved.text);
+      const landed = await f.land(await f.mint(north, 'n-1'));
+      const prepared = await prepare(f, landed);
+      assert.equal(prepared.status, 200, prepared.text);
+      const body = {
+        command: 'withdraw',
+        expectedVersion: prepared.body.commands.withdraw.expectedVersion,
+        idempotencyKey: `withdraw-${randomUUID()}`,
+        input: {},
+      };
+      const run = () => f.call(`/${APP_ID}/l/${landed.id}/run`, { body, host: landed.host, headers: sessionHeaders(landed) });
+      const ran = await run();
+      assert.equal(ran.status, 200, ran.text);
+      assert.deepEqual(await f.leads(), ['n-1:withdrawn', 'n-2:open', 's-1:open']);
+      assert.equal(provider.charges.length, 1);
+      assert.equal(provider.charges[0]!.customer, 'Ada');
+      assert.equal(provider.charges[0]!.apiKey, 'north-key');
+      // The same run again is answered from what the first recorded: no second call reaches the provider.
+      const again = await run();
+      assert.equal(again.status, 200, again.text);
+      assert.equal(provider.calls, 1);
+      assert.equal(provider.charges.length, 1);
     });
 
     test('a command a link runs that emits an event is refused when the deployment starts, by name', async (t) => {

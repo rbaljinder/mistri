@@ -8,6 +8,7 @@ import {
 } from '@mistriwork/engine/adapters/adapter.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournal.js';
 import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
+import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
 import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
 import { captureCommandEventStoreBinding, type CommandEventStoreBinding } from '../../adapters/events/commandEventSchema.js';
 import type { AppDef } from '../../shared/app.js';
@@ -325,16 +326,21 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
           ? {
               lookup: Object.freeze<CommandLookupReader>({
                 catalogs: binding.lookupTables.catalogs,
+                ...(binding.lookupTables.files ? { files: binding.lookupTables.files } : {}),
                 // An App source adapter resolves App resource names itself, as the
                 // command's own reads rely on; a physical name is unknown to it.
                 async query(sourceName, local, request) {
                   const logical = binding.lookupTables!.logical(sourceName, local);
-                  return resources.forConnection(resources.connectionFor(logical)).query({ ...request, table: logical });
+                  // A file's row is read as the server's request (readKeptFile), and stays one through the rename.
+                  return resources
+                    .forConnection(resources.connectionFor(logical))
+                    .query(carryServerRequest(request, { ...request, table: logical }));
                 },
                 async target(key) {
                   const found = await source.query({ table: binding.resource, filter: keyFilter(key), limit: 2, offset: 0 });
                   return found.rows.length === 1 ? (found.rows[0] as Readonly<Record<string, unknown>>) : undefined;
                 },
+                own: (request) => source.query({ ...request, table: table(request.table) }),
               }),
             }
           : {}),

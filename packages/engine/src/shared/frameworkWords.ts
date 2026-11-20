@@ -1,11 +1,13 @@
 /**
- * The fixed words the platform says on an App's command and public forms, which the App's own catalog may say instead
+ * The fixed words the platform says on an App's command and public forms, its status check and a capability link's
+ * page, which the App's own catalog may say instead
  * (`messages/<locale>.ts`, a `mistri.*` key). Without them an App translated into Spanish still said "Step 2 of 3",
  * "Back" and "(optional)" in English around its own words. Each key's English is what the platform says when the
  * App's catalog has no word for it in the reader's language, so a key is opt-in and an App without one changes
  * nothing. The server checks an App's `mistri.*` keys against this table (server/app/appMessages.ts readCatalogs)
  * and serves the ones it has, in the reader's words, as plain `{name}` templates (`words`); the client says them in
- * place of its own (`appWord`, kit client/messages.ts).
+ * place of its own (`appWord`, kit client/messages.ts); the link page is drawn on the server from the same words.
+ * The platform says each in Spanish too (frameworkWordsEs.ts).
  */
 export const FRAMEWORK_WORDS = {
   'mistri.form.step': 'Step {step} of {count}',
@@ -53,6 +55,71 @@ export const FRAMEWORK_WORDS = {
   'mistri.status.sentText': 'We sent a code by text message.',
   'mistri.status.codeEmail': 'Code from the email',
   'mistri.status.codeText': 'Code from the message',
+  'mistri.status.sendAnother': 'Send another code',
+  'mistri.status.signIn': 'Sign in',
+  'mistri.status.moreDetails': 'More details',
+  'mistri.status.showDetails': 'Show details',
+  'mistri.status.confirmAccountEmail':
+    'Confirm your account’s email with the link we sent you, and applications submitted with it are found here.',
+  'mistri.status.added': 'Added to your account, submitted with your email: {linked}.',
+  'mistri.status.foundOne': 'We found 1 application submitted with this email — is this yours?',
+  'mistri.status.foundMany': 'We found {openCount} applications submitted with this email — are these yours?',
+  'mistri.status.sayYesToOne': 'Say yes only to one you made: it is added to your account, where its status is shown.',
+  'mistri.status.mine': 'Yes, it’s mine',
+  'mistri.status.reference': 'Reference',
+  'mistri.status.enter': 'Enter your {label}.',
+  'mistri.status.nowInAccount': '{reference} is now in your account.',
+  'mistri.status.title': 'Check your application',
+  'mistri.status.lead': '{label}: enter the reference you were given and the details below. Only its status is shown.',
+  'mistri.status.yours': 'Your applications',
+  'mistri.status.check': 'Check status',
+  'mistri.status.signInToFollow': 'Sign in to add it to your account and follow it there.',
+  'mistri.status.addToAccount': 'Add to my account',
+  'mistri.saved.notShown': 'Saved — not shown for your privacy',
+  'mistri.saved.restarted': 'This application can no longer be continued, so it has been started again from the first step.',
+  'mistri.saved.confirmEmail': 'Confirm your email',
+  'mistri.saved.emailConfirmed': '{email} is confirmed. An account with this email will find your application.',
+  'mistri.saved.confirmEmailOffer':
+    'Optional. We email a code to your address; confirming it lets an account with this email find the application straight away.',
+  'mistri.saved.confirm': 'Confirm',
+  'mistri.saved.saveStepFirst': 'Save this step before you submit.',
+  'mistri.saved.follow': 'Follow it in an account',
+  'mistri.saved.claimClosed': 'This browser can no longer add the application to an account.',
+  'mistri.saved.claimWindow': 'For the next 30 minutes, this browser can add the application to an account, where its status is shown.',
+  'mistri.saved.createAccount': 'Create an account to track this',
+  'mistri.saved.signInToAdd': 'Sign in to add it',
+  'mistri.saved.sharedDevice': 'This is a shared device',
+  'mistri.saved.checkStatus': 'Check its status',
+  'mistri.saved.anyTime': 'any time with your reference.',
+  'mistri.saved.notSaved': 'Not saved yet',
+  'mistri.saved.resumed': 'Your application is saved. Carry on where you left off; what you saved is not shown again.',
+  'mistri.saved.eachStep':
+    'Each step is saved as you go. We don’t show your details back to you; keep this tab open to review them before you submit.',
+  'mistri.saved.startOver': 'Start over',
+  'mistri.saved.notSettled': 'Your submission was sent and its result is not known yet. Submit again to find out how it ended.',
+  'mistri.saved.draftShort': 'Your draft is saved.',
+  'mistri.saved.draft': 'Your draft is saved. Carry on where you left off, or start over.',
+  'mistri.saved.earlier': 'Saved earlier',
+  'mistri.saved.changedElsewhere': 'This draft changed somewhere else. Review it again before you submit.',
+  'mistri.saved.reviewNotRead': 'Your answers could not be read back for review. Submit again in a moment.',
+  'mistri.saved.reviewNotReady': 'Your answers are still being read back for review. Submit again in a moment.',
+  'mistri.saved.checking': 'Checking for an application in progress…',
+  'mistri.link.miss': 'This link opens nothing.',
+  'mistri.link.confirmLead': 'To see this, first confirm a detail only you would know.',
+  'mistri.link.continue': 'Continue',
+  'mistri.link.offerEmail': 'To see this, we email a code to the address on file.',
+  'mistri.link.offerText': 'To see this, we send a code to the number on file.',
+  'mistri.link.askEmail': 'Email me a code',
+  'mistri.link.askText': 'Send me a code',
+  'mistri.link.sentEmail': 'If the address on file takes mail, a code is on its way. It works for ten minutes.',
+  'mistri.link.sentText': 'If the number on file takes messages, a code is on its way. It works for ten minutes.',
+  'mistri.link.code': 'Code',
+  'mistri.link.choose': 'Choose…',
+  'mistri.link.failed': 'That did not work. Try again.',
+  'mistri.link.notNow': 'This cannot be done now.',
+  'mistri.link.loading': 'This page is still loading. Try again in a moment.',
+  'mistri.link.done': 'Done.',
+  'mistri.language': 'Language',
 } as const;
 
 export type FrameworkWordKey = keyof typeof FRAMEWORK_WORDS;

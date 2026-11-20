@@ -26,6 +26,11 @@
 /* The way back after a receipt: a quiet link in the link ink, a step below the message, never a second button. */
 .form-page-done-home { margin: var(--space-6) 0 0; font-size: var(--text-md); }
 .form-page-done-home a { color: var(--accent-ink, var(--accent)); text-underline-offset: 3px; }
+/* The language switch at a public page's foot (LanguageSwitch.tsx): quiet text links, the current one in ink, wrapping before it ever scrolls. */
+.form-page-languages { margin-top: var(--space-6); padding-top: var(--space-3); border-top: 1px solid var(--line); }
+.form-page-languages nav { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-4); font-size: var(--text-sm); }
+.form-page-languages a { color: var(--ink-muted); text-underline-offset: 3px; }
+.form-page-languages a[aria-current] { color: var(--ink); text-decoration: none; font-weight: 500; }
 /* A public form's review, drawn from the page's memory, and a saved form's note before its first step. */
 .form-note { margin: 0; padding: var(--space-3h) var(--space-4); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink-muted); font-size: var(--text-base); line-height: 1.5; }
 /* A saved draft's note on a phone (SavedFormSurface.tsx): one line, the sentence clipped before Start over is pushed off. */
