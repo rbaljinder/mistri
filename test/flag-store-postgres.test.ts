@@ -490,14 +490,22 @@ test(
       );
       assert.ok(whileOpen <= 4, `expected at most 4 pooled flag connections, got ${whileOpen}`);
       await store.close();
-      const afterClose = Number(
-        (
-          await admin.query(
-            "SELECT count(*)::integer AS count FROM pg_stat_activity WHERE usename=$1 AND application_name='mistri-flags'",
-            [role],
-          )
-        ).rows[0].count,
-      );
+      // A backend leaves pg_stat_activity only once it has finished exiting,
+      // which is after the client's Terminate has been sent and close()
+      // resolved, so read the count until it reaches zero or the deadline.
+      let afterClose = -1;
+      for (const deadline = Date.now() + 5_000; ;) {
+        afterClose = Number(
+          (
+            await admin.query(
+              "SELECT count(*)::integer AS count FROM pg_stat_activity WHERE usename=$1 AND application_name='mistri-flags'",
+              [role],
+            )
+          ).rows[0].count,
+        );
+        if (afterClose === 0 || Date.now() > deadline) break;
+        await new Promise((resolve) => setTimeout(resolve, 25));
+      }
       assert.equal(afterClose, 0);
       await assert.rejects(store.read(base, catalog), FlagStoreUnavailable);
     });

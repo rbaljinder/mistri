@@ -85,7 +85,7 @@ tenant App refuses one at startup ([Tenant Apps](/docs/tenant-apps/)).
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `auth.roles` | object | Stable | Grants within the resource ceilings. Needs at least one resources.&lt;r>.access; omitted grants deny. |
+| `auth.roles` | object | Stable | Grants within the resource ceilings. Needs at least one resources.&lt;r>.access; omitted grants deny. Used in `examples/apps/lintel/app.ts`. |
 | `auth.roles.*.actions` | object | Stable | Fixed actions the role runs without write, by resource and action id: { pay_run: ['submit'] }. Each resource is one the role reads, with access 'write', and does not write; each id is one of its fixed (set) actions. The server admits the update only as that action: its set, its reason column, its when on the stored row. Judged by the writer of whichever rows the App serves: all of them, a row policy's, or a tenant member's own tenant. Used in `examples/apps/tick/app.ts`. |
 | `auth.roles.*.claims` | object | Stable | The identity provider's claims that give this role: { &lt;claim, or a dotted path into one>: [values] }, and provider, the provider (or list of them) they are read from. Re-read at every sign-in; not in a tenant App. |
 | `auth.roles.*.claims.provider` | string \| array | Stable | The named identity provider whose claims these are, oidc('workforce') or saml('corp'), or a list of them where the same role comes from several: a sign-in through any other never reads the rule. An App with one identity provider may leave it out and the rule is that one's; with several, loading refuses a rule that does not say [claim-any-provider]. |

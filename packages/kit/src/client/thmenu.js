@@ -93,11 +93,15 @@ export function sortBy(column, direction, append = false) {
      cost the header its second click. `addSort` has no cycle to skip, so it
      takes a direction. */
   /* A refinement: the same table room re-asks in place (core.js `refine`),
-     so the header that was clicked, the rows' decorations and the focus stay. */
-  refine(() =>
-    go(
-      tableView(entry.table, append ? addSort(entry.query, column, direction ?? 'asc') : nextSort(entry.query, column, direction)),
-      'replace',
-    ),
+     so the header that was clicked, the rows' decorations and the focus stay.
+     It is drawn after the press's frame: the walk and the address are the
+     sort's at once. */
+  refine(
+    () =>
+      go(
+        tableView(entry.table, append ? addSort(entry.query, column, direction ?? 'asc') : nextSort(entry.query, column, direction)),
+        'replace',
+      ),
+    { yields: true },
   );
 }

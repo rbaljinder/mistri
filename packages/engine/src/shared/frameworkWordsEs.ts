@@ -11,6 +11,7 @@ export const FRAMEWORK_WORDS_ES: Readonly<Record<FrameworkWordKey, string>> = Ob
   'mistri.form.step': 'Paso {step} de {count}',
   'mistri.form.stepNamed': 'Paso {step} de {count}: {label}',
   'mistri.form.back': 'Atrás',
+  'mistri.form.continue': 'Continuar',
   'mistri.form.optional': '(opcional)',
   'mistri.form.required': '(obligatorio)',
   'mistri.form.reference': 'Tu referencia',

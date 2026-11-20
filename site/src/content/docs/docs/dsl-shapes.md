@@ -24,7 +24,7 @@ Shapes that many keys take, listed once here: a message that may be translated, 
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;appTarget>.kind` | `"home"` · `"view"` · `"record"` | Stable |  One of `home`, `record`, `view`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>.kind` | `"home"` · `"view"` · `"record"` | Stable |  One of `home`, `record`, `view`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `<appTarget>.resource`
 
@@ -37,15 +37,15 @@ Shapes that many keys take, listed once here: a message that may be translated, 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `&lt;appTarget>.tenant` | object | Stable |  |
-| `&lt;appTarget>.tenant.kind` | `"choose"` · `"platform"` | Stable |  One of `choose`, `platform`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>.tenant.kind` | `"choose"` · `"platform"` | Stable |  One of `choose`, `platform`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `<appTarget>.tenant[kind=tenant]`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;appTarget>.tenant[kind=tenant].id` | string \| integer \| object | Stable |  |
+| `&lt;appTarget>.tenant[kind=tenant].id` | string \| integer \| object | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `&lt;appTarget>.tenant[kind=tenant].id.column` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `&lt;appTarget>.tenant[kind=tenant].kind` |  | Stable |  One of `tenant`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>.tenant[kind=tenant].kind` |  | Stable |  One of `tenant`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `<appTarget>.view`
 
@@ -63,7 +63,7 @@ Shapes that many keys take, listed once here: a message that may be translated, 
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;appTarget>[kind=home].kind` |  | Stable |  One of `home`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>[kind=home].kind` |  | Stable |  One of `home`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `<appTarget>[kind=home].resource`
 
@@ -81,7 +81,7 @@ Shapes that many keys take, listed once here: a message that may be translated, 
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;appTarget>[kind=record].kind` |  | Stable |  One of `record`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>[kind=record].kind` |  | Stable |  One of `record`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `<appTarget>[kind=record].view`
 
@@ -99,7 +99,7 @@ Shapes that many keys take, listed once here: a message that may be translated, 
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;appTarget>[kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>[kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `<appTarget>[kind=view].resource`
 
@@ -111,13 +111,13 @@ Shapes that many keys take, listed once here: a message that may be translated, 
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;component>.id` | string | Stable |  |
+| `&lt;component>.id` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 
 ## `<component>.kind`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;component>.kind` | `"section"` · `"value"` · `"input"` · `"list"` · `"page"` | Stable | section (default): a custom section. value: a value renderer. input: a form field's control. list: a list view's rows. A free-form page is a file of its own (pages/&lt;path>.page.tsx, definePage), not a component. One of `input`, `list`, `page`, `section`, `value`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;component>.kind` | `"section"` · `"value"` · `"input"` · `"list"` · `"page"` | Stable | section (default): a custom section. value: a value renderer. input: a form field's control. list: a list view's rows. A free-form page is a file of its own (pages/&lt;path>.page.tsx, definePage), not a component. One of `input`, `list`, `page`, `section`, `value`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `<component>.module`
 
@@ -131,17 +131,17 @@ Shapes that many keys take, listed once here: a message that may be translated, 
 | --- | --- | --- | --- |
 | `&lt;component>.props` | object | Stable |  |
 | `&lt;component>.props.*[type=boolean].default` | boolean | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `&lt;component>.props.*[type=boolean].type` |  | Stable |  One of `boolean`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;component>.props.*[type=boolean].type` |  | Stable |  One of `boolean`. Used in `examples/apps/lintel/resources.ts`. |
 | `&lt;component>.props.*[type=choice].default` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=choice].options` | array | Stable |  |
-| `&lt;component>.props.*[type=choice].type` |  | Stable |  One of `choice`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;component>.props.*[type=choice].type` |  | Stable |  One of `choice`. Used in `examples/apps/lintel/resources.ts`. |
 | `&lt;component>.props.*[type=number].default` | number | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=number].max` | number | Stable |  |
 | `&lt;component>.props.*[type=number].min` | number | Stable |  |
-| `&lt;component>.props.*[type=number].type` |  | Stable |  One of `number`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;component>.props.*[type=number].type` |  | Stable |  One of `number`. Used in `examples/apps/lintel/resources.ts`. |
 | `&lt;component>.props.*[type=text].default` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=text].max` | integer | Stable |  |
-| `&lt;component>.props.*[type=text].type` |  | Stable |  One of `text`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;component>.props.*[type=text].type` |  | Stable |  One of `text`. Used in `examples/apps/lintel/resources.ts`. |
 
 ## `<presentationCopy>.args`
 

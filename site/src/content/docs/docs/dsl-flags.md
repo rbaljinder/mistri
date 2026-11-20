@@ -101,7 +101,7 @@ neither lists roles or tenants itself.
 | `audiences.*.attributes` | object | Preview |  |
 | `audiences.*.attributes.emailDomain` | array | Preview |  |
 | `audiences.*.deny` | array | Preview |  |
-| `audiences.*.roles` | array | Preview |  |
+| `audiences.*.roles` | array | Preview |  Used in `examples/apps/lintel/app.ts`. |
 | `audiences.*.rollout` | number | Preview |  |
 | `audiences.*.tenants` |  | Preview |  |
 
@@ -117,8 +117,8 @@ neither lists roles or tenants itself.
 | --- | --- | --- | --- |
 | `experiments.*.allocation` | array | Preview |  |
 | `experiments.*.allocation[].value` | flagValue | Preview |  Used in `examples/apps/lintel/views.ts`. |
-| `experiments.*.allocation[].weight` | number | Preview |  Used in `examples/apps/lintel/blueprint.ts`. |
-| `experiments.*.control` | flagValue | Preview |  Used in `examples/apps/lintel/blueprint.ts`. |
+| `experiments.*.allocation[].weight` | number | Preview |  |
+| `experiments.*.control` | flagValue | Preview |  |
 | `experiments.*.conversionWindow` | string | Preview | A whole number and a unit: '30 seconds', '5 minutes', '12 hours', '3 days', '2 weeks'. |
 | `experiments.*.deliveryGrace` | string | Preview | A whole number and a unit: '30 seconds', '5 minutes', '12 hours', '3 days', '2 weeks'. |
 | `experiments.*.eligibility` | object | Preview |  |
@@ -128,7 +128,7 @@ neither lists roles or tenants itself.
 | `experiments.*.guardrails` | array | Preview |  |
 | `experiments.*.guardrails[].conversion` | string | Preview |  |
 | `experiments.*.guardrails[].maxIncrease` | number | Preview |  |
-| `experiments.*.primary` | object | Preview |  Used in `examples/apps/lintel/tidelight.ts`. |
+| `experiments.*.primary` | object | Preview |  Used in `examples/apps/lintel/views.ts`. |
 | `experiments.*.primary.conversion` | string | Preview |  |
 | `experiments.*.startsAt` | string | Preview |  |
 | `experiments.*.unit` | `"subject"` · `"visitor"` | Preview |  One of `subject`, `visitor`. Used in `examples/apps/lintel/app.ts`. |
@@ -149,7 +149,7 @@ neither lists roles or tenants itself.
 | `flags.*.owner` | string | Preview |  |
 | `flags.*.safeValue` | flagValue | Preview |  One of `false`. |
 | `flags.*.tenantManaged` | boolean | Preview |  |
-| `flags.*.type` | `"boolean"` · `"string"` · `"number"` · `"object"` | Preview |  One of `boolean`, `number`, `object`, `string`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `flags.*.type` | `"boolean"` · `"string"` · `"number"` · `"object"` | Preview |  One of `boolean`, `number`, `object`, `string`. Used in `examples/apps/lintel/resources.ts`. |
 | `flags.*.variants` | array | Preview |  |
 
 ## `track`

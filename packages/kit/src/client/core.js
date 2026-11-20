@@ -581,6 +581,7 @@ export const paintVersion = () => paintTick;
 let roomTick = 0;
 let roomOnScreen = null;
 let refining = false;
+let refiningYields = false;
 export const roomVersion = () => roomTick;
 
 /** A table view's identity as a room, or null for anything else. */
@@ -594,14 +595,23 @@ function tableRoomShape() {
  * Paint a refinement of the table room on screen: a page, a page size, a
  * header's sort or filter. The address bar and the trail are written as for
  * any paint; the room is kept when it is still the same table room.
+ *
+ * `yields` lets the paint wait for the frame the press is in, as a room
+ * started over by a press does (`render`): a header's sort on an App's list
+ * redraws more than its rows inside the click — the tab it un-lights, the
+ * column that tab had pinned, the chip that says the order, every column's
+ * width — and drawn inside the click that held the press's own frame past
+ * the interaction budget (`compass sort`, test/built-client-vitals.mjs). The
+ * walk and the address are the sort's at once; only the drawing waits.
  */
-export function refine(fn) {
-  const was = refining;
+export function refine(fn, { yields = false } = {}) {
+  const was = [refining, refiningYields];
   refining = true;
+  refiningYields = yields;
   try {
     return fn();
   } finally {
-    refining = was;
+    [refining, refiningYields] = was;
   }
 }
 
@@ -622,8 +632,10 @@ export function setPaintHold(hold) {
    interaction budget (a cards list's open, test/built-client-vitals.mjs).
    What is on show is the same either way. A paint asked for while one waits
    is the same navigation going on (a redirect, a label): it is drawn at
-   once, as a room started over. */
+   once, as a room started over when the one waiting was. A refinement that
+   yields (`refine`) waits the same way, keeping its room. */
 let waiting = null;
+let waitingRoom = false;
 
 export function render() {
   if (sessionIdentity().mode === 'locked') return;
@@ -635,11 +647,13 @@ export function render() {
   if (waiting) {
     waiting();
     waiting = null;
-    roomChanged = true;
-  } else if (roomChanged && paintHold?.yields?.()) {
+    roomChanged ||= waitingRoom;
+  } else if (roomChanged ? paintHold?.yields?.() : refiningYields && paintHold) {
+    const room = roomChanged;
+    waitingRoom = room;
     waiting = afterThisFrame(() => {
       waiting = null;
-      if (sessionIdentity().mode !== 'locked') paint(true);
+      if (sessionIdentity().mode !== 'locked') paint(room);
     });
     return;
   }

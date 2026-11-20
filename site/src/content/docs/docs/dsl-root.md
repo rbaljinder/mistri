@@ -143,7 +143,7 @@ redrive is never forgotten, however old.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `home[].roles` | array | Stable |  |
+| `home[].roles` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
 
 ## `home[].signedOut`
 
@@ -161,7 +161,7 @@ redrive is never forgotten, however old.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `id` | string | Stable | Absent, it derives from the name. |
+| `id` | string | Stable | Absent, it derives from the name. Used in `examples/apps/tick/app.ts`. |
 
 ## `live`
 
@@ -215,7 +215,7 @@ redrive is never forgotten, however old.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `nav[].id` | string | Stable | Stable group ID, unique across the navigation tree. |
+| `nav[].id` | string | Stable | Stable group ID, unique across the navigation tree. Used in `examples/apps/tick/app.ts`. |
 
 ## `nav[].inline`
 
@@ -245,7 +245,7 @@ redrive is never forgotten, however old.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `nav[].roles` | array | Stable | The roles the menu offers the entry to, each declared in auth.roles. Arrangement only: grants alone decide who may open anything. |
+| `nav[].roles` | array | Stable | The roles the menu offers the entry to, each declared in auth.roles. Arrangement only: grants alone decide who may open anything. Used in `examples/apps/lintel/app.ts`. |
 
 ## `nav[].to`
 

@@ -122,6 +122,7 @@
  "e2e/presentation.spec.ts": 9.2,
  "e2e/preview-blocks.spec.ts": 7.3,
  "e2e/public-door.spec.ts": 18,
+ "e2e/public-language-switch.spec.ts": 3.5,
  "e2e/public-pages.spec.ts": 28,
  "e2e/public-visitor.spec.ts": 14,
  "e2e/recipe-alike.spec.ts": 26.6,

@@ -128,7 +128,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `pages.*.base` | string | Stable | The table a root record is chosen from. Every whose starts here. Used in `examples/apps/lintel/hearth.ts`. |
+| `pages.*.base` | string | Stable | The table a root record is chosen from. Every whose starts here. |
 
 ## `pages.*.document`
 
@@ -138,7 +138,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.document.description` | string | Stable | The sender's lines under the letterhead's logo and name: an address, a registration. Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.document.label` | string | Stable | What it is, "Invoice": the verb on the record and the sheet's heading. |
 | `pages.*.document.number` | string | Stable | A field of the record whose value is the document's number. Absent: the record's own name. Used in `examples/apps/lintel/resources.ts`. |
-| `pages.*.document.size` | `"a4"` · `"letter"` | Stable | The sheet. Absent: the paper of the App's locale, Letter in North America. One of `a4`, `letter`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.document.size` | `"a4"` · `"letter"` | Stable | The sheet. Absent: the paper of the App's locale, Letter in North America. One of `a4`, `letter`. Used in `examples/apps/lintel/resources.ts`. |
 
 ## `pages.*.empty`
 
@@ -174,7 +174,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `pages.*.roles` | array | Stable | The roles that may open the page: a reader holding none is not served it, so a record of its base opens on another page and its own address answers as one that does not exist. Each must be declared in auth.roles. |
+| `pages.*.roles` | array | Stable | The roles that may open the page: a reader holding none is not served it, so a record of its base opens on another page and its own address answers as one that does not exist. Each must be declared in auth.roles. Used in `examples/apps/lintel/app.ts`. |
 
 ## `pages.*.sections`
 
@@ -205,7 +205,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=breakdown].empty` |  | Stable | hide leaves the breakdown out of the page while it has nothing to count. One of `hide`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=breakdown].format` | `"percent"` · `"number"` · `"money"` · `"duration"` | Stable | How the figure is said, as a dashboard metric's: percent (the figure is 0–100, said with %: "avg won_flag * 100" reads "53.8%"), number, money in the App's currency, or duration (the figure is seconds, said as "10h 2m"). Absent, a measure of one column takes that column's display rule. One of `duration`, `money`, `number`, `percent`. Used in `examples/apps/lintel/resources.ts`. |
 | `pages.*.sections[][kind=breakdown].from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `pages.*.sections[][kind=breakdown].kind` |  | Stable |  One of `breakdown`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=breakdown].kind` |  | Stable |  One of `breakdown`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=breakdown].limit` | integer | Stable | Groups shown, biggest first. |
 | `pages.*.sections[][kind=breakdown].measure` | string | Stable | What each bar measures, the dashboard’s words: "count" (the default), "sum open_value". Everything but a count names a column of from, or one of its rollups. Used in `examples/apps/lintel/dashboards.ts`. |
 | `pages.*.sections[][kind=breakdown].query` | string | Stable | Extra narrowing, in the query language. |
@@ -217,7 +217,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `pages.*.sections[][kind=card].kind` |  | Stable |  One of `card`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=card].kind` |  | Stable |  One of `card`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=card].show` | array | Stable | The reference column first, then label paths through it (dealer_id, dealer_id.rating). |
 
 ## `pages.*.sections[][kind=chart]`
@@ -231,12 +231,12 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=chart].format` | `"percent"` · `"number"` · `"money"` · `"duration"` | Stable | How the figure is said, as a dashboard metric's: percent (the figure is 0–100, said with %: "avg won_flag * 100" reads "53.8%"), number, money in the App's currency, or duration (the figure is seconds, said as "10h 2m"). Absent, a measure of one column takes that column's display rule. One of `duration`, `money`, `number`, `percent`. Used in `examples/apps/lintel/resources.ts`. |
 | `pages.*.sections[][kind=chart].from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=chart].height` | number | Stable | The drawing's height in CSS pixels. |
-| `pages.*.sections[][kind=chart].kind` |  | Stable |  One of `chart`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=chart].kind` |  | Stable |  One of `chart`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=chart].limit` | integer | Stable | A donut's slices or a stacked chart's bars, largest kept. |
 | `pages.*.sections[][kind=chart].measure` | string | Stable | The dashboard’s words: "count" (the default), "sum amount", "avg total as mean". Everything but a count names a column. Used in `examples/apps/lintel/dashboards.ts`. |
 | `pages.*.sections[][kind=chart].query` | string | Stable | Extra narrowing, in the query language. |
 | `pages.*.sections[][kind=chart].segment` | string | Stable | One of the table's segments (resources.&lt;table>.segments), its conditions ANDed with query. Used in `examples/apps/tick/app.ts`. |
-| `pages.*.sections[][kind=chart].shape` | `"line"` · `"bar"` · `"donut"` · `"stacked"` | Stable | "line" (default), "bar" (one series, the current bar marked), "donut", or "stacked" over a two-key by. One of `bar`, `donut`, `line`, `stacked`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=chart].shape` | `"line"` · `"bar"` · `"donut"` · `"stacked"` | Stable | "line" (default), "bar" (one series, the current bar marked), "donut", or "stacked" over a two-key by. One of `bar`, `donut`, `line`, `stacked`. Used in `examples/apps/lintel/dashboards.ts`. |
 | `pages.*.sections[][kind=chart].sort` | string | Stable | The order of a bar chart's or donut's categories: "value" (largest first), "category" (the key's own order), or one column of from as a list sorts ("starts_on", "ended_on desc"). Absent, a category with an order of its own keeps it (a date, a step, allowed values in their order, or the rows' own label in the order the rows were made) and any other goes largest first. |
 | `pages.*.sections[][kind=chart].target` | number | Stable | A goal ruled across a line or stacked bars; not on a donut. |
 | `pages.*.sections[][kind=chart].total` | string \| object | Stable | A donut's words for the figure in its middle ("Total visitors"), said under it. At most 40 characters. |
@@ -258,7 +258,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=current].empty.description` | string \| object | Stable | A sentence under the title. One of `&lt;presentationCopy>`. Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=current].empty.title` | string \| object | Stable |  One of `&lt;presentationCopy>`. |
 | `pages.*.sections[][kind=current].from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `pages.*.sections[][kind=current].kind` |  | Stable |  One of `current`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=current].kind` |  | Stable |  One of `current`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=current].opens` | string | Preview | The reference column of from whose record the card opens, named by that record: for a link (join) table, the far side. Absent, a table that is only two references (and keys and dates) opens the one whose does not name; any other opens its own row. |
 | `pages.*.sections[][kind=current].query` | string | Stable | Extra narrowing, in the query language. |
 | `pages.*.sections[][kind=current].show` | array | Stable | Columns of from to show — a path, or { column, label } to say it in the app's words. Absent means a sensible default. |
@@ -279,7 +279,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=custom].figures.*.measure` | string | Stable | count, count distinct and a column (count distinct patient_id), or an aggregate and a column: sum amount, avg amount, min due_on, max due_on. Used in `examples/apps/lintel/dashboards.ts`. |
 | `pages.*.sections[][kind=custom].figures.*.query` | string | Stable | The query language, without the leading table name. |
 | `pages.*.sections[][kind=custom].figures.*.whose` | string | Stable | The from rows whose named column is this record. Absent, the figure is over the resource's own rows, narrowed by query. Used in `examples/apps/lintel/resources.ts`. |
-| `pages.*.sections[][kind=custom].kind` |  | Stable |  One of `custom`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=custom].kind` |  | Stable |  One of `custom`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=custom].props` | object | Stable | The component's declared props; each checked against its declaration, defaults filled. |
 | `pages.*.sections[][kind=custom].record` | array | Stable | The record's own fields the component reads, label paths welcome. |
 | `pages.*.sections[][kind=custom].rows` | object | Stable | Named reads of rows, at most eight; the component receives each as rows.&lt;name>. Used in `examples/apps/lintel/app.ts`. |
@@ -295,7 +295,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `pages.*.sections[][kind=diagram].kind` |  | Stable |  One of `diagram`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=diagram].kind` |  | Stable |  One of `diagram`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `pages.*.sections[][kind=fields]`
 
@@ -304,7 +304,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=fields].columns` | `1` · `2` · `3` | Stable | How many columns the group lays out in. Absent fits the width. One of `1`, `2`, `3`. Used in `examples/apps/tick/app.ts`. |
 | `pages.*.sections[][kind=fields].editable` |  | Stable | true edits the properties in place: a choice is a picker, the rest an input, written through the resource's write grant or, where the reader has none for a column, through an action that sets just that column. The server judges every write as it always does; a reader who may do neither sees the values. For a summary, an accordion or a property rail. One of `true`. Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=fields].empty` | `"hide"` · `"show"` | Preview | What a block of fields does with the values the record does not have: hide leaves them out (and the block, when none is left), show says each as a dash. Default: hide for a property rail, show otherwise. A field the reader may fill in place stays. One of `hide`, `show`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
-| `pages.*.sections[][kind=fields].kind` |  | Stable |  One of `fields`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=fields].kind` |  | Stable |  One of `fields`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=fields].names` |  | Stable | false keeps a reference's bare id. Absent, an App shows the record it names; the Workbench always keeps ids. One of `false`. |
 | `pages.*.sections[][kind=fields].notes` | object | Stable | A summary's lines under its figures, by the field each stands under: what the figure counts. For a field the block shows. Used in `examples/apps/lintel/dashboards.ts`. |
 | `pages.*.sections[][kind=fields].presentation` | `"summary"` · `"facts"` · `"table"` · `"properties"` | Stable | Default: properties in the aside, summary in the main region (a call that says the default is told so by mistri check). summary: compact properties. facts: the values alone in one line, a dot between. table: a sheet of caption and value rows in `columns` columns, empty values left out. properties: a property rail, caption beside value with a hairline between rows, every field kept and editable in place where the record may change. A box for another record is kind card, a figure with buttons kind headline; the record's head is kind header. One of `facts`, `properties`, `summary`, `table`. Used in `examples/apps/tick/app.ts`. |
@@ -314,7 +314,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `pages.*.sections[][kind=flows].kind` |  | Stable |  One of `flows`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=flows].kind` |  | Stable |  One of `flows`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `pages.*.sections[][kind=header]`
 
@@ -328,15 +328,15 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=header].facts[].after.one` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
 | `pages.*.sections[][kind=header].facts[].before` | string | Stable |  |
 | `pages.*.sections[][kind=header].facts[].column` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `pages.*.sections[][kind=header].kind` |  | Stable |  One of `header`. Used in `examples/apps/lintel/blueprint.ts`. |
-| `pages.*.sections[][kind=header].primary` | string | Stable | The filled action, by its id in the resource's actions ('renew'). Otherwise the first action that is not destructive is filled; a record whose only verbs are destructive gets none. Used in `examples/apps/lintel/tidelight.ts`. |
+| `pages.*.sections[][kind=header].kind` |  | Stable |  One of `header`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
+| `pages.*.sections[][kind=header].primary` | string | Stable | The filled action, by its id in the resource's actions ('renew'). Otherwise the first action that is not destructive is filled; a record whose only verbs are destructive gets none. Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=header].status` | string | Stable | One of the record's own columns, its display tone drawn as a chip beside the name. |
 
 ## `pages.*.sections[][kind=headline]`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `pages.*.sections[][kind=headline].kind` |  | Stable |  One of `headline`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=headline].kind` |  | Stable |  One of `headline`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=headline].links` | array | Stable | One or two calls to action, each opening one of the App's views by key. Used in `examples/apps/lintel/pages/unit.ts`. |
 | `pages.*.sections[][kind=headline].links[].defaults` | object | Stable | A public form's inputs filled with your words: form input → text of at most 500 characters. Used in `examples/apps/tick/app.ts`. |
 | `pages.*.sections[][kind=headline].links[].intent` | `"primary"` · `"secondary"` | Stable |  One of `primary`, `secondary`. |
@@ -356,7 +356,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `pages.*.sections[][kind=history].kind` |  | Stable |  One of `history`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=history].kind` |  | Stable |  One of `history`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=history].limit` | integer | Stable | Writes shown before "Show earlier changes". Default 20. |
 
 ## `pages.*.sections[][kind=list]`
@@ -388,7 +388,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=list].group.show` | array | Stable | Columns of the grouped record, said after its name in the header. Only where by ends at a reference. |
 | `pages.*.sections[][kind=list].group.sort` | string | Stable | The groups' order, on one column of the grouped record: "created_on desc". Absent, the largest group first. |
 | `pages.*.sections[][kind=list].group.sum` | string \| array | Stable | One or two numeric columns, rollups or computed numbers of the listed rows, summed over every row of each group and said in its header after the count. Unlike totals it works beside a query. |
-| `pages.*.sections[][kind=list].kind` |  | Stable |  One of `list`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=list].kind` |  | Stable |  One of `list`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=list].limit` | integer | Stable | Rows to a page; with group, the rows to a group (at most 50). |
 | `pages.*.sections[][kind=list].near` | object | Stable | Number columns kept within ± this fraction of the record's value (0.25 is ±25%); the first is also the order, closest first. |
 | `pages.*.sections[][kind=list].opens` | string | Stable | On a current() card only: the reference column of from whose record the card opens, named by that record (a link table's far side). A plain list has none. |
@@ -413,12 +413,12 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=list].presentation[kind=cards].image.from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=list].presentation[kind=cards].image.sort` | string | Stable |  |
 | `pages.*.sections[][kind=list].presentation[kind=cards].image.whose` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
-| `pages.*.sections[][kind=list].presentation[kind=cards].kind` |  | Stable |  One of `cards`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=list].presentation[kind=cards].kind` |  | Stable |  One of `cards`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=list].presentation[kind=cards].media` | `"cover"` · `"avatar"` · `"icon"` | Stable | How the image is framed. Omit or use cover for the existing picture; avatar makes it a circular portrait and falls back to initials from primary. One of `avatar`, `cover`, `icon`. |
-| `pages.*.sections[][kind=list].presentation[kind=cards].primary` | string | Stable |  Used in `examples/apps/lintel/tidelight.ts`. |
+| `pages.*.sections[][kind=list].presentation[kind=cards].primary` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=list].presentation[kind=cards].properties` | array | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=list].presentation[kind=cards].value` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
-| `pages.*.sections[][kind=list].primary` | string | Stable | The shown column a row is titled by in this list alone, where it is read as records (a phone), as on a list view. Absent, the record's name. Used in `examples/apps/lintel/tidelight.ts`. |
+| `pages.*.sections[][kind=list].primary` | string | Stable | The shown column a row is titled by in this list alone, where it is read as records (a phone), as on a list view. Absent, the record's name. Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=list].query` | string | Stable | Extra narrowing, in the query language. |
 | `pages.*.sections[][kind=list].rowActions` | boolean | Stable | true puts a ⋯ menu at the end of each row with that row's own actions and machine verbs, as its page offers them. Not with a presentation. Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=list].same` | array | Stable | Instead of whose, rows that share a key with the record: columns a listed row shares with the page's own record, each a column of both tables; over the page's own table the record itself is left out. A record with no value there lists nothing. Used in `examples/apps/lintel/pages/unit.ts`. |
@@ -438,7 +438,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=metric].about` | string | Stable | The record this section is about, when it is not the root: a reference column of the base, like "site_id". whose then ends at that table. Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=metric].format` | `"percent"` · `"number"` · `"money"` · `"duration"` | Stable | How the figure is said, as a dashboard metric's: percent (the figure is 0–100, said with %: "avg won_flag * 100" reads "53.8%"), number, money in the App's currency, or duration (the figure is seconds, said as "10h 2m"). Absent, a measure of one column takes that column's display rule. One of `duration`, `money`, `number`, `percent`. Used in `examples/apps/lintel/resources.ts`. |
 | `pages.*.sections[][kind=metric].from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `pages.*.sections[][kind=metric].kind` |  | Stable |  One of `metric`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=metric].kind` |  | Stable |  One of `metric`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=metric].measure` | string | Stable | The dashboard’s words: "count" (the default), "sum amount", "avg total as mean". Everything but a count names a column. Used in `examples/apps/lintel/dashboards.ts`. |
 | `pages.*.sections[][kind=metric].query` | string | Stable | Extra narrowing, in the query language. |
 | `pages.*.sections[][kind=metric].segment` | string | Stable | One of the table's segments (resources.&lt;table>.segments), its conditions ANDed with query. Used in `examples/apps/tick/app.ts`. |
@@ -454,7 +454,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=note].action.to` | string \| object | Stable | One of this App's views by key, or { view, tab }: a list opened on one of its tabs, the tab named by its address word (?tab=). One of `&lt;appTarget>`. Used in `examples/apps/lintel/dashboards.ts`. |
 | `pages.*.sections[][kind=note].action.to.tab` | string | Stable |  |
 | `pages.*.sections[][kind=note].action.to.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `pages.*.sections[][kind=note].kind` |  | Stable |  One of `note`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=note].kind` |  | Stable |  One of `note`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=note].text` | string | Stable | The words. Plain text; blank lines separate paragraphs. Used in `examples/apps/lintel/views.ts`. |
 | `pages.*.sections[][kind=note].variant` | `"quiet"` · `"callout"` | Stable | quiet: small print, no mark. callout: a ground of its own, for what must be seen. Absent: the plain note. One of `callout`, `quiet`. |
 
@@ -476,7 +476,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=timeline].create.defaults.*.auto` | `"today"` · `"now"` · `"me"` | Stable |  One of `me`, `now`, `today`. |
 | `pages.*.sections[][kind=timeline].create.label` | string | Stable |  |
 | `pages.*.sections[][kind=timeline].create.show` | array | Stable |  |
-| `pages.*.sections[][kind=timeline].kind` |  | Stable |  One of `timeline`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=timeline].kind` |  | Stable |  One of `timeline`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=timeline].limit` | integer | Stable | Per stream, before the merge. |
 | `pages.*.sections[][kind=timeline].newest` | `"first"` · `"last"` | Stable | Where the newest row sits. 'last' reads the section as a conversation: oldest first, the newest at the foot, scrolled to on arrival. Absent or 'first', newest first. One of `first`, `last`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=timeline].reactions` | object | Preview | Reactions under each entry: counted by kind in one read per page, the reader's own pressed (read as &lt;by> = me), pressing one running the App's command on the entry. Without the command's grant, the counts alone. |
@@ -506,7 +506,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `pages.*.sections[][kind=view].about` | string | Stable | The record this section is about, when it is not the root: a reference column of the base, like "site_id". whose then ends at that table. Used in `examples/apps/lintel/views.ts`. |
-| `pages.*.sections[][kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `pages.*.sections[][kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=view].limit` | integer | Stable | Rows per page. |
 | `pages.*.sections[][kind=view].view` | string | Stable | A list view's key. Used in `examples/apps/lintel/app.ts`. |
 | `pages.*.sections[][kind=view].whose` | string | Stable | The view's rows *whose* named column is this record. Used in `examples/apps/lintel/resources.ts`. |
@@ -528,7 +528,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;appTarget>.kind` | `"home"` · `"view"` · `"record"` | Stable |  One of `home`, `record`, `view`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>.kind` | `"home"` · `"view"` · `"record"` | Stable |  One of `home`, `record`, `view`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `page file: <appTarget>.resource`
 
@@ -541,15 +541,15 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `&lt;appTarget>.tenant` | object | Stable |  |
-| `&lt;appTarget>.tenant.kind` | `"choose"` · `"platform"` | Stable |  One of `choose`, `platform`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>.tenant.kind` | `"choose"` · `"platform"` | Stable |  One of `choose`, `platform`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `page file: <appTarget>.tenant[kind=tenant]`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;appTarget>.tenant[kind=tenant].id` | string \| integer \| object | Stable |  |
+| `&lt;appTarget>.tenant[kind=tenant].id` | string \| integer \| object | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `&lt;appTarget>.tenant[kind=tenant].id.column` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `&lt;appTarget>.tenant[kind=tenant].kind` |  | Stable |  One of `tenant`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>.tenant[kind=tenant].kind` |  | Stable |  One of `tenant`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `page file: <appTarget>.view`
 
@@ -567,7 +567,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;appTarget>[kind=home].kind` |  | Stable |  One of `home`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>[kind=home].kind` |  | Stable |  One of `home`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `page file: <appTarget>[kind=home].resource`
 
@@ -585,7 +585,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;appTarget>[kind=record].kind` |  | Stable |  One of `record`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>[kind=record].kind` |  | Stable |  One of `record`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `page file: <appTarget>[kind=record].view`
 
@@ -603,7 +603,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;appTarget>[kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;appTarget>[kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `page file: <appTarget>[kind=view].resource`
 
@@ -615,13 +615,13 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;component>.id` | string | Stable |  |
+| `&lt;component>.id` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
 
 ## `page file: <component>.kind`
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `&lt;component>.kind` | `"section"` · `"value"` · `"input"` · `"list"` · `"page"` | Stable | section (default): a custom section. value: a value renderer. input: a form field's control. list: a list view's rows. A free-form page is a file of its own (pages/&lt;path>.page.tsx, definePage), not a component. One of `input`, `list`, `page`, `section`, `value`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;component>.kind` | `"section"` · `"value"` · `"input"` · `"list"` · `"page"` | Stable | section (default): a custom section. value: a value renderer. input: a form field's control. list: a list view's rows. A free-form page is a file of its own (pages/&lt;path>.page.tsx, definePage), not a component. One of `input`, `list`, `page`, `section`, `value`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 
 ## `page file: <component>.module`
 
@@ -635,17 +635,17 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | --- | --- | --- | --- |
 | `&lt;component>.props` | object | Stable |  |
 | `&lt;component>.props.*[type=boolean].default` | boolean | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `&lt;component>.props.*[type=boolean].type` |  | Stable |  One of `boolean`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;component>.props.*[type=boolean].type` |  | Stable |  One of `boolean`. Used in `examples/apps/lintel/resources.ts`. |
 | `&lt;component>.props.*[type=choice].default` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=choice].options` | array | Stable |  |
-| `&lt;component>.props.*[type=choice].type` |  | Stable |  One of `choice`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;component>.props.*[type=choice].type` |  | Stable |  One of `choice`. Used in `examples/apps/lintel/resources.ts`. |
 | `&lt;component>.props.*[type=number].default` | number | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=number].max` | number | Stable |  |
 | `&lt;component>.props.*[type=number].min` | number | Stable |  |
-| `&lt;component>.props.*[type=number].type` |  | Stable |  One of `number`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;component>.props.*[type=number].type` |  | Stable |  One of `number`. Used in `examples/apps/lintel/resources.ts`. |
 | `&lt;component>.props.*[type=text].default` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `&lt;component>.props.*[type=text].max` | integer | Stable |  |
-| `&lt;component>.props.*[type=text].type` |  | Stable |  One of `text`. Used in `examples/apps/lintel/blueprint.ts`. |
+| `&lt;component>.props.*[type=text].type` |  | Stable |  One of `text`. Used in `examples/apps/lintel/resources.ts`. |
 
 ## `page file: <presentationCopy>.args`
 

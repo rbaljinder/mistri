@@ -3333,12 +3333,17 @@ tr.expanded > td { border-bottom-color: transparent; background: var(--accent-so
 .tenant-chooser-choice[aria-current="true"] { border-color: var(--accent); }
 .tenant-chooser-retry { margin-top: 20px; }
 .tenant-chooser button:disabled, .tenant-chooser-actions button:disabled, .tenant-control-trigger:disabled { cursor: default; opacity: 0.6; }
-.tenant-control { display: inline-flex; min-width: 0; }
+/* A length, not a percentage, caps the control: the trigger's min(24rem, 100%) is circular while the host sizes to
+   its content, so a long name's whole width was held empty beside the cut label (147px at 1280). */
+.tenant-control { display: inline-flex; min-width: 0; max-width: 24rem; }
 /* A long name is cut to the bar's room, not to a fixed 16rem that cut
    ordinary ones; its whole is the button's title. */
 .tenant-control-trigger { display: inline-flex; align-items: center; gap: var(--space-2h); max-width: min(24rem, 100%); min-width: 0; }
 .tenant-control-trigger > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tenant-control-trigger > :last-child { flex: none; }
+/* Beside a top bar's tabs the name gives way before they fold into the menu: at 1280 a long name's 24rem folded a
+   dealer's five tabs. It still grows with the window, and an ordinary name is whole at a desk. */
+body.app-topnav .topbar .tenant-control { max-width: clamp(16rem, 22vw, 24rem); }
 /* The names scroll and the foot stays: a list of many tenants carried the
    foot off the bottom of the dialog. */
 .tenant-chooser-dialog {

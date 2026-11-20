@@ -20,6 +20,9 @@ import type { TenantAccount } from './tenantServer.js';
  * Alice is north's own staff; the visitor holds nothing. The audit key is a
  * synthetic one for this child only.
  */
+const WORKSPACE_TABS = ['Pipeline', 'Follow-ups', 'Appraisals', 'Financing'];
+const tabId = (label: string) => label.toLowerCase().replace(/\W+/g, '-');
+
 export async function serveSupportFixture({ directory, appId, port }: { directory: string; appId: string; port: number }) {
   const database = join(directory, 'business.db'),
     origin = `http://127.0.0.1:${port}`;
@@ -47,6 +50,9 @@ export async function serveSupportFixture({ directory, appId, port }: { director
         version INTEGER NOT NULL DEFAULT 0);
       INSERT INTO dealer VALUES ('north', 'North Motors'), ('south', 'South Auto');
       INSERT INTO lead (id, tenant_id, name) VALUES ('north-1', 'north', 'North lead'), ('south-1', 'south', 'South lead');`);
+    // The tenant name a shell-fit spec stretches (tenant-shell-fit.spec.ts): the chooser's label beside the tabs.
+    if (process.env.MISTRI_E2E_DEALER_NAME)
+      writer.prepare("UPDATE dealer SET name = ? WHERE id = 'north'").run(process.env.MISTRI_E2E_DEALER_NAME);
     // Explicit fresh-fixture provisioning, never enrollment-time migration.
     provisionSqliteTenantStore(database, binding);
     provisionSqliteTenantAdministrationJournal(database, binding);
@@ -74,11 +80,20 @@ export async function serveSupportFixture({ directory, appId, port }: { director
           views: {
             leads: { kind: 'list', from: 'lead', label: 'Leads', show: ['id', 'name'] },
             dealers: { kind: 'list', from: 'dealer', label: 'Dealers', show: ['id', 'name'] },
+            ...(process.env.MISTRI_E2E_DEALER_NAME
+              ? Object.fromEntries(
+                  WORKSPACE_TABS.map((label) => [`${tabId(label)}-leads`, { kind: 'list', from: 'lead', label, show: ['id', 'name'] }]),
+                )
+              : {}),
           },
           home: 'leads',
           nav: [
             { id: 'desk', label: 'Desk', realm: 'tenant', children: ['leads'] },
             { id: 'underwriting', label: 'Underwriting', realm: 'platform', children: ['dealers'] },
+            // A dealer's bar with a workspace's worth of tabs, for the shell-fit spec's long tenant name.
+            ...(process.env.MISTRI_E2E_DEALER_NAME
+              ? WORKSPACE_TABS.map((label) => ({ id: tabId(label), label, realm: 'tenant' as const, children: [`${tabId(label)}-leads`] }))
+              : []),
           ],
           // A side menu is the other shell whose foot holds the tenant control (the shell-fit spec reads it).
           ui: { shell: { placement: process.env.MISTRI_E2E_SHELL === 'side' ? 'side' : 'top' } },

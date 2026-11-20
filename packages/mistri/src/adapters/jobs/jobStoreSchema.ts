@@ -203,7 +203,10 @@ export function openJobStoreFile(existingPath: string): { db: DatabaseSync; veri
     };
     db = new DatabaseSync(path, { enableForeignKeyConstraints: true });
     verifyFile();
-    db.exec('PRAGMA busy_timeout=50');
+    // A worker and a CLI `jobs run` share this file; 50 ms refused the CLI as
+    // an unverifiable store whenever the worker held the write lock on a slow
+    // runner. Wait as long as every other SQLite store does.
+    db.exec('PRAGMA busy_timeout=5000');
     return { db, verifyFile };
   } catch (error) {
     try {

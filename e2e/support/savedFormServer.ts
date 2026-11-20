@@ -9,7 +9,7 @@ import { spawn } from './spawned';
 import { once } from 'node:events';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 export const SAVED_APP_ID = 'saved-application';
@@ -20,11 +20,15 @@ export const SAVED_DRAFT = { directory: resolve('test/fixtures/apps/saved-draft'
 
 /**
  * `flags`: more of the server's own, such as where the App is mounted (`--mount`, `--base-path`).
- * `fixture`: another App served the same way; the saved application's by default.
+ * `fixture`: another App served the same way; the saved application's by default. `files` are written beside the
+ * served app.ts (a `messages/es.ts`), by path from the App's directory.
  */
 export async function startSavedFormApp(
   flags: readonly string[] = [],
-  fixture: { directory: string; database: string } = { directory: FIXTURE, database: 'lending.db' },
+  fixture: { directory: string; database: string; files?: Readonly<Record<string, string>> } = {
+    directory: FIXTURE,
+    database: 'lending.db',
+  },
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-saved-form-'));
   let child: ReturnType<typeof spawn> | undefined;
@@ -52,6 +56,10 @@ export async function startSavedFormApp(
       `import app from ${JSON.stringify(pathToFileURL(join(fixture.directory, 'app.ts')).href)};
       export default { ...app, auth: { ...app.auth, store: ${JSON.stringify(join(directory, 'sessions.db'))} } };`,
     );
+    for (const [path, text] of Object.entries(fixture.files ?? {})) {
+      mkdirSync(dirname(join(authoring, path)), { recursive: true });
+      writeFileSync(join(authoring, path), text);
+    }
     const port = await withFreePort(async (port) => {
       child = spawn(
         process.execPath,
@@ -62,7 +70,8 @@ export async function startSavedFormApp(
           '--config',
           `${database}.json`,
           '--app',
-          app,
+          // An App with files beside its manifest (messages/) is served as a directory, which is what reads them.
+          fixture.files ? authoring : app,
           '--commands',
           join(fixture.directory, 'commands.ts'),
           '--port',

@@ -225,7 +225,8 @@ export function MultiStepForm<Field extends string = string>({
      step's own `next`, else Continue, in either style. A host may still name its own. */
   const primaryWords = last
     ? completeLabel
-    : (nextLabel ?? (intake && active.skip && isStepEmpty?.(active) ? active.skip : (active.next ?? say('continue'))));
+    : (nextLabel ??
+      (intake && active.skip && isStepEmpty?.(active) ? active.skip : (active.next ?? appWord('mistri.form.continue', say('continue')))));
   const heading = active.title ?? active.label;
   /* Enter in a typed answer presses the primary, as it would submit a one-page form: the step is no <form>, so nothing
      else does. A list that is open (a combobox), a box of lines, a composition in progress and a modified key keep it. */

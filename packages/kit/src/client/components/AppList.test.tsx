@@ -51,7 +51,8 @@ vi.mock('../core.js', async (importOriginal) => {
   return {
     ...real,
     // An App registers its words for every column (appnav's label source, which this suite stands in for).
-    columnLabel: (_table: string, column: string) => humanName(column),
+    // It has no word for `$label`, the name a template computes: that is the list's to say.
+    columnLabel: (_table: string, column: string) => (column === '$label' ? null : humanName(column)),
     state: { activeConnection: 'demo', page: 3, schema: { tables: [task], foreignKeys: [] } },
     findTable: (id: string) => (id === 'task' ? task : undefined),
     toast: (message: string) => toasts.push(message),
@@ -445,6 +446,18 @@ describe('the page', () => {
     expect(screen.queryByRole('button', { name: 'Advanced' })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Filter Tasks')).not.toBeVisible();
     expect(screen.getByRole('searchbox', { name: 'Filter by Title' })).toBeVisible();
+  });
+
+  test('a record named by a template is searched by its Name, never by $label', () => {
+    task.labelTemplate = '{title} · {status}';
+    installShell({ writeScope: () => true, recordLabel: (id: string) => (id === 'task' ? task.labelTemplate : undefined) });
+    try {
+      draw(`task ${PLUMBING}`);
+      expect(screen.getByRole('searchbox', { name: 'Filter by Name' })).toBeVisible();
+      expect(screen.queryByText(/\$label/)).not.toBeInTheDocument();
+    } finally {
+      delete task.labelTemplate;
+    }
   });
 
   test("filterBar 'none' removes the form without removing tabs or active-query chips", async () => {

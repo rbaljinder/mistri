@@ -78,7 +78,7 @@ rewrite the lock.
 | `features[].api.resources.*.delete` |  | Stable |  One of `true`. Used in `examples/apps/tick/app.ts`. |
 | `features[].api.resources.*.description` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `features[].api.resources.*.fields` | array | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `features[].api.resources.*.filters` | array | Stable |  Used in `examples/apps/lintel/theme.ts`. |
+| `features[].api.resources.*.filters` | array | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `features[].api.resources.*.sorts` | array | Stable |  |
 | `features[].api.resources.*.update` |  | Stable |  One of `true`. |
 | `features[].api.views` | array | Stable |  Used in `examples/apps/tick/app.ts`. |
@@ -97,7 +97,7 @@ rewrite the lock.
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `features[].auth` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
-| `features[].auth.roles` | object | Stable | Grants to roles the App declares in auth.roles; a feature never creates a role. |
+| `features[].auth.roles` | object | Stable | Grants to roles the App declares in auth.roles; a feature never creates a role. Used in `examples/apps/lintel/app.ts`. |
 | `features[].auth.roles.*.actions` | object | Stable | Fixed actions the role runs without write, by resource and action id: { pay_run: ['submit'] }. Each resource is one the role reads, with access 'write', and does not write; each id is one of its fixed (set) actions. The server admits the update only as that action: its set, its reason column, its when on the stored row. Judged by the writer of whichever rows the App serves: all of them, a row policy's, or a tenant member's own tenant. Used in `examples/apps/tick/app.ts`. |
 | `features[].auth.roles.*.commands` | array | Stable | Explicit server command identifiers only. No wildcard grants or implied CRUD access. Used in `examples/apps/lintel/app.ts`. |
 | `features[].auth.roles.*.experiments` | array | Preview |  |
@@ -140,7 +140,7 @@ rewrite the lock.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `features[].id` | string | Stable | Unique in the App. Names the feature in refusals, the authority report and a nav placement; never part of an address. |
+| `features[].id` | string | Stable | Unique in the App. Names the feature in refusals, the authority report and a nav placement; never part of an address. Used in `examples/apps/tick/app.ts`. |
 
 ## `features[].nav`
 
