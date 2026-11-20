@@ -64,7 +64,7 @@ const said = (code: string, message?: RegExp) => (error: unknown) => {
 /* The commands every fixture runs: file a photo and read it back in one run, read one by the key the caller names,
    and read the same one again and again, to meet the per-command bound. */
 const read = { output: { parse: (value: unknown) => value } } as const;
-const commands = (source: string) =>
+const commands = (source: string, lookups = true) =>
   defineCommands({
     fileAndRead: defineCommand({
       source,
@@ -106,8 +106,26 @@ const commands = (source: string) =>
         return { total };
       },
     }),
+    // The same read in its lookup, before the transaction: through the lookup's reader, the run's place and budget.
+    ...(lookups ? { lookPhoto: lookPhoto(source) } : {}),
   });
-const IDS = ['fileAndRead', 'readPhoto', 'readOften'];
+const lookPhoto = (source: string) =>
+  defineCommand({
+    source,
+    target: 'read_photo',
+    targets: 'none',
+    input: { photo: field.text() },
+    sources: { [source]: ['read_photo'] },
+    ...read,
+    async lookup({ sources }, input) {
+      const file = await sources[source]!.read_photo!.readFile(input.photo);
+      return { size: file.size, hex: hex(file.data) };
+    },
+    async handle({ lookup }) {
+      return lookup;
+    },
+  });
+const IDS = ['fileAndRead', 'readPhoto', 'readOften', 'lookPhoto'];
 
 const appConfig = (connection: string, file: object, extra: object = {}) => ({
   id: 'readings',
@@ -373,14 +391,22 @@ test("under a row policy, a file on a row outside the member's rows is not_found
   };
   const config = appConfig('desk-db', { maxBytes: 4096 });
   const app = parseTestApp(
-    { ...config, sources: { desk: { connection: 'desk-db', default: true } }, auth: { rows: 'policy', roles: config.auth.roles } },
+    {
+      ...config,
+      sources: { desk: { connection: 'desk-db', default: true } },
+      auth: {
+        rows: 'policy',
+        roles: { clerk: { read: true, commands: IDS.filter((id) => id !== 'lookPhoto') } },
+      },
+    },
     'file read row policy fixture',
   );
   const deskOne: Filter = { groups: [[{ column: 'desk', op: '=', value: 1 }]] };
   const binding = bindScopedBusinessCommands({
     app,
     resources,
-    registry: commands('desk'),
+    // A row-policy App does not look up yet (CommandLookupRefusal), so this registry leaves the lookup out.
+    registry: commands('desk', false),
     writableConnection: () => true,
     resultReferences: { fileAndRead: () => [], readPhoto: () => [], readOften: () => [] },
   }).withScope({ read_photo: deskOne }, () => {});
@@ -510,6 +536,11 @@ describe('readFile from a bucket', () => {
     await assert.rejects(run('readPhoto', { photo: south }), said('not_found'));
     const app = await plantObject('reads/readings/-/read_photo/', PNG);
     await assert.rejects(run('readPhoto', { photo: app }), said('not_found'), "the App's own objects are not a tenant's");
+    // A lookup's readFile is held to the same place, and refuses before it asks the bucket for anything.
+    assert.equal((await run('lookPhoto', { photo: id })).hex, hex(PNG));
+    const asked = s3.seen.length;
+    await assert.rejects(run('lookPhoto', { photo: south }), said('not_found'));
+    assert.equal(s3.seen.length, asked, "another tenant's object is never opened");
     await assert.rejects(runner(binding)('readPhoto', { photo: id }), said('not_found'), "and a tenant's are not the App's");
   });
 });

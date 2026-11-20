@@ -32,7 +32,9 @@ import { randomBytes } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AppDef } from '../../shared/app.js';
 import { fieldLabel } from '../../shared/command.js';
-import { linkRowKey, type AppLinkDef } from '../../shared/appLinks.js';
+import { linkRowKey, linkTable, relatedForeignKey, type AppLinkDef, type AppLinkRelated } from '../../shared/appLinks.js';
+import { primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import type { QueryRequest } from '@mistriwork/engine/adapters/adapter.js';
 import type { BusinessCommandActor, BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { businessCommandHttpError, CommandBodyTooLarge, commandBody } from '../commands/businessCommandHttp.js';
 import type { CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
@@ -57,8 +59,11 @@ import {
   linkTokenMatches,
   readLinkSession,
 } from './linkToken.js';
-import { LINK_MISS, LINK_SESSION_HEADER, linkPage, linkPagePolicy, type LinkPageCommand } from './linkPage.js';
-import { requestLocale } from '../app/readerLocale.js';
+import { LINK_MISS, LINK_SESSION_HEADER, linkPage, linkPagePolicy, type LinkPageCommand, type LinkPageRelated } from './linkPage.js';
+import { publicLanguages } from '../commands/formHttp.js';
+import { askedLocale, requestLocale } from '../app/readerLocale.js';
+import { frameworkWords } from '../app/appMessages.js';
+import { localeCookieName } from '@mistriwork/engine/shared/appLocale.js';
 
 export const LINK_PATH = /^\/([^/]+)\/l\/([^/]+)(?:\/(prepare|run|confirm|stepup))?$/;
 /* Five wrong confirmations in an hour lock the link's confirmation for the rest of it: the columns it asks are
@@ -89,6 +94,14 @@ export interface LinkBackend<F extends FoundLink = FoundLink> {
     key: Readonly<Record<string, string | number>>,
     columns: readonly string[],
   ): Promise<readonly Record<string, unknown>[]>;
+  /** One of the link's `related` lists: the child's rows that point at the record, at most `most` of them, or
+   * undefined where the database no longer holds the one foreign key the App was checked against. */
+  readRelated(
+    found: F,
+    key: Readonly<Record<string, string | number>>,
+    child: string,
+    list: AppLinkRelated,
+  ): Promise<readonly Record<string, unknown>[] | undefined>;
   /** Revokes every link on the found link's row, which is gone. */
   revoke(found: F, now: number): Promise<unknown>;
   /** One command route as the link's principal, through the executor that reads the link again. */
@@ -156,11 +169,24 @@ export async function linkDoor<F extends FoundLink>(door: LinkDoorRequest, backe
     return true;
   }
 
+  /* The page is said in the holder's language, read as a visitor's: an address's `?locale=` (the switch), else their
+     pick in this browser, else the browser's. Read only for a page; a POST's answers stay as they are. */
+  const said = () => {
+    const lang = requestLocale(app, { visitor: true, req, res, asked: askedLocale(req) });
+    /* The language the read was said in, matched as a public form's switch matches it (en-US marks en). */
+    const switchable = publicLanguages(app, lang);
+    return {
+      words: frameworkWords(app, lang),
+      ...(lang ? { lang } : {}),
+      ...(switchable ? { languages: { offered: switchable.offered, current: switchable.locale, cookie: localeCookieName(appId) } } : {}),
+    };
+  };
+
   const miss = async (): Promise<true> => {
     await settle(started);
     if (res.headersSent) return true;
     if (posting) send(res, 404, { code: 'not_found', error: LINK_MISS });
-    else page(res, 404, req.method === 'HEAD', (nonce) => linkPage({ app: app.name ?? app.id, nonce, state: 'miss' }));
+    else page(res, 404, req.method === 'HEAD', (nonce) => linkPage({ app: app.name ?? app.id, nonce, state: 'miss', ...said() }));
     return true;
   };
 
@@ -259,7 +285,7 @@ export async function linkDoor<F extends FoundLink>(door: LinkDoorRequest, backe
       const label = (col: string) => app.resources?.[row.resource]?.labels?.[col] ?? fieldLabel(col);
       if (def.confirm?.length && !passed(GATE_CONFIRMED)) {
         page(res, 200, req.method === 'HEAD', (nonce) =>
-          linkPage({ app: appName, nonce, state: 'confirm', base, session: next, title, confirm: def.confirm }),
+          linkPage({ app: appName, nonce, state: 'confirm', base, session: next, title, confirm: def.confirm, ...said() }),
         );
         return true;
       }
@@ -274,20 +300,33 @@ export async function linkDoor<F extends FoundLink>(door: LinkDoorRequest, backe
             session: next,
             title,
             ...(channel ? { channel } : {}),
+            ...said(),
           }),
         );
         return true;
       }
       const record = await readRecord(def.show);
       if (!record) return await miss();
-      const shown = def.show.map((col) => ({ label: label(col), value: shownValue(def, col, record[col]) }));
+      const shown = def.show.map((col) => ({ label: label(col), value: shownValue(def.says, col, record[col]) }));
+      /* Read after the record, so a record that is gone answers the one miss before any of its children is read. */
+      const related: LinkPageRelated[] = [];
+      for (const [child, list] of Object.entries(def.related ?? {})) {
+        const rows = await backend.readRelated(found, key, child, list);
+        if (!rows) continue;
+        const childLabel = (col: string) => app.resources?.[child]?.labels?.[col] ?? fieldLabel(col);
+        related.push({
+          title: pluralNoun(app.resources?.[child]?.noun) ?? fieldLabel(child),
+          columns: list.show.map(childLabel),
+          rows: rows.map((one) => list.show.map((col) => shownValue(list.says, col, one[col]))),
+        });
+      }
       const pageCommands: LinkPageCommand[] = (def.commands ?? []).flatMap((command) => {
         const registered = commands[command];
         if (!registered) return [];
         return [{ id: command, label: registered.label ?? fieldLabel(command), fields: registered.fields }];
       });
       page(res, 200, req.method === 'HEAD', (nonce) =>
-        linkPage({ app: appName, nonce, state: 'record', base, session: next, title, shown, commands: pageCommands }),
+        linkPage({ app: appName, nonce, state: 'record', base, session: next, title, shown, related, commands: pageCommands, ...said() }),
       );
       return true;
     }
@@ -460,6 +499,44 @@ export async function linkDoor<F extends FoundLink>(door: LinkDoorRequest, backe
   }
 }
 
+/**
+ * A related list's one read, the same for every backend: the child's rows whose foreign key holds the record's key,
+ * its declared columns, its declared order and its cap. Nothing in it comes from the request, so a query string, a
+ * header or a body can neither widen the rows nor page past the cap. Undefined where the schema no longer holds the
+ * one single-column foreign key the App was checked against (appLinkProblems): the list is left out, not guessed.
+ */
+export function relatedQuery(
+  schema: DatabaseSchema,
+  parent: string,
+  child: string,
+  list: AppLinkRelated,
+  key: Readonly<Record<string, string | number>>,
+): QueryRequest | undefined {
+  const parentTable = linkTable(schema, parent);
+  const childTable = linkTable(schema, child);
+  if (!parentTable || !childTable) return undefined;
+  const fk = relatedForeignKey(schema, childTable, parentTable, list.by);
+  if (typeof fk === 'string' || !Object.hasOwn(key, fk.key)) return undefined;
+  return {
+    table: child,
+    columns: [...list.show],
+    filter: { groups: [[{ column: fk.by, op: '=', value: key[fk.key] }]] },
+    /* No sort is the child's key, ascending (AppLinkRelated.sort): the same rows in the same order at each open. */
+    orderBy: list.sort
+      ? [{ column: list.sort.column, direction: list.sort.descending ? 'desc' : 'asc' }]
+      : primaryKey(childTable).map((column) => ({ column, direction: 'asc' as const })),
+    limit: list.most,
+    offset: 0,
+  };
+}
+
+/* A resource's plural where it names one in plain words; a message reference is the App's catalog's, not the door's. */
+function pluralNoun(noun: unknown): string | undefined {
+  if (!noun || typeof noun !== 'object' || !('many' in noun)) return undefined;
+  const many = (noun as { many?: unknown }).many;
+  return typeof many === 'string' && many ? many : undefined;
+}
+
 /* The declaration the row was minted under, as the App says it now: one dropped since opens nothing. */
 function linkDef(app: AppDef, row: CommandLinkRow): AppLinkDef | undefined {
   const links = app.resources?.[row.resource]?.links;
@@ -467,9 +544,9 @@ function linkDef(app: AppDef, row: CommandLinkRow): AppLinkDef | undefined {
 }
 
 /* A shown value in the author's words where they gave some, else as stored. */
-function shownValue(def: AppLinkDef, column: string, value: unknown): string {
+function shownValue(says: AppLinkDef['says'], column: string, value: unknown): string {
   if (value === null || value === undefined || value === '') return '—';
-  const said = def.says?.[column]?.[String(value)];
+  const said = says?.[column]?.[String(value)];
   if (said) return said;
   if (value instanceof Date) return value.toISOString();
   return typeof value === 'object' ? JSON.stringify(value) : String(value);

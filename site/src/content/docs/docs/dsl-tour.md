@@ -38,6 +38,34 @@ snippet below is cut from those files ([run it](#run-it)). Tick
 - The file ends `satisfies App`. `App` is generated from the database by
   `mistri check`, so a misspelled table or column is an editor error.
 
+## Organizing a larger App
+
+An App with one folder per feature lists its modules in an index file, one
+line a module. There is no `import.meta.glob`: the App's loader, its build and
+TypeScript would each read it differently, so the list is written out and a
+test keeps it honest.
+
+```ts title="modules/index.ts"
+// One line a module; test/modules.test.ts fails when a folder is missing here.
+export { default as billing } from './billing/module.js';
+export { default as recalls } from './recalls/module.js';
+```
+
+```ts title="test/modules.test.ts"
+import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
+import { test } from 'node:test';
+
+test('every module folder is listed in modules/index.ts', async () => {
+  const dirs = readdirSync('modules', { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+  const listed = Object.keys(await import('../modules/index.js'));
+  assert.deepEqual(listed.sort(), dirs.sort());
+});
+```
+
+The folders the platform finds by itself stay as they are: `pages/`,
+`surfaces/` and `messages/`.
+
 ## 1. A resource: the table, said once
 
 ```ts title="examples/apps/lintel/resources.ts"

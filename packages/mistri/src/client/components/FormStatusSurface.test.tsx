@@ -214,3 +214,17 @@ test('signed in with a verified email, an application found by it is offered and
     fetchMock.mock.calls.some(([url, init]) => String(url).endsWith('/found') && JSON.parse(String(init.body)).reference === 'APP-1'),
   ).toBe(true);
 });
+
+test("an App with two catalogs: the check is said in the App's words and ends in the language switch", () => {
+  server(false);
+  holdAppWords({ 'mistri.status.title': 'Consulta tu solicitud', 'mistri.language': 'Idioma' });
+  try {
+    render(
+      <FormStatusSurface form={{ ...form(), languages: { offered: ['en', 'es'], locale: 'es' } }} appName="Ignition" appId="ignition" />,
+    );
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Consulta tu solicitud');
+    expect(screen.getByRole('navigation', { name: 'Idioma' }).querySelector('[aria-current]')?.textContent).toBe('Español');
+  } finally {
+    holdAppWords(undefined);
+  }
+});

@@ -52,6 +52,7 @@ import type { DraftTransport } from './draftFormApi.js';
 import { Field } from '@mistriwork/ui/Field.js';
 import { IntakeNote } from './IntakeNote.js';
 import { appWord } from '@mistriwork/kit/client/messages.js';
+import { LanguageSwitch } from './LanguageSwitch.js';
 import { say } from '../copy/forms/components/SavedFormSurface.js';
 
 export { sayInput } from './reviewValues.js';
@@ -65,8 +66,9 @@ export type SavedFormPresentation = FormPresentation & {
 };
 
 const REVIEW = '#review';
-const PRIVATE = say('savedNotShownForYourPrivacy');
-const GONE = say('thisApplicationCanNoLonger');
+// Said when drawn, not at import: an App's words arrive with its form, after this module loads.
+const privately = () => appWord('mistri.saved.notShown', say('savedNotShownForYourPrivacy'));
+const gone = () => appWord('mistri.saved.restarted', say('thisApplicationCanNoLonger'));
 
 /** Whether the step's answers are all still blank: a saved step left as it is keeps what the server has. */
 function untouched(fields: readonly AppCommandField[], values: CommandValues): boolean {
@@ -104,12 +106,14 @@ function EmailProof({ form, typed }: { form: string; typed: string }) {
   };
   return (
     <section className="form-proof" aria-labelledby={`${id}-proof`}>
-      <h3 id={`${id}-proof`}>{say('confirmYourEmail')}</h3>
+      <h3 id={`${id}-proof`}>{appWord('mistri.saved.confirmEmail', say('confirmYourEmail'))}</h3>
       {done ? (
-        <p role="status">{say('isConfirmedAnAccount', { email: email.trim() })}</p>
+        <p role="status">
+          {appWord('mistri.saved.emailConfirmed', say('isConfirmedAnAccount', { email: email.trim() }), { email: email.trim() })}
+        </p>
       ) : (
         <>
-          <p>{say('optionalWeEmailACode')}</p>
+          <p>{appWord('mistri.saved.confirmEmailOffer', say('optionalWeEmailACode'))}</p>
           <Field label={say('common.email')}>
             <input
               data-slot="input"
@@ -123,7 +127,7 @@ function EmailProof({ form, typed }: { form: string; typed: string }) {
             />
           </Field>
           {sent && (
-            <Field label={say('codeFromTheEmail')}>
+            <Field label={appWord('mistri.status.codeEmail', say('codeFromTheEmail'))}>
               <input
                 data-slot="input"
                 inputMode="numeric"
@@ -147,7 +151,7 @@ function EmailProof({ form, typed }: { form: string; typed: string }) {
                   })
                 }
               >
-                {say('confirm')}
+                {appWord('mistri.saved.confirm', say('confirm'))}
               </Button>
             )}
             <Button
@@ -162,7 +166,7 @@ function EmailProof({ form, typed }: { form: string; typed: string }) {
                 })
               }
             >
-              {sent ? say('sendAnotherCode') : say('emailMeACode')}
+              {sent ? appWord('mistri.status.sendAnother', say('sendAnotherCode')) : appWord('mistri.status.askEmail', say('emailMeACode'))}
             </Button>
           </div>
         </>
@@ -182,8 +186,11 @@ export function SavedFormSurface({
   onDismiss,
   at,
   language,
+  appId,
 }: {
   form: SavedFormPresentation;
+  /** A public page's App, for the language switch at its foot (LanguageSwitch.tsx); absent in a dialog. */
+  appId?: string;
   /** The step a page asked to open at (`useForm(...).goTo`): honored only up to the first step not yet saved, so no step is skipped. */
   at?: string;
   /** Opened in a dialog (FormRoom): Cancel beside the steps and Done on the receipt close it, as FormSurface's do. */
@@ -207,8 +214,14 @@ export function SavedFormSurface({
     () => [
       ...form.steps,
       form.style === 'intake'
-        ? { id: REVIEW, label: say('review'), fields: form.save.submit, title: say('reviewTitle'), lead: say('reviewLead') }
-        : { id: REVIEW, label: say('review'), fields: form.save.submit },
+        ? {
+            id: REVIEW,
+            label: appWord('mistri.form.review', say('review')),
+            fields: form.save.submit,
+            title: appWord('mistri.form.reviewTitle', say('reviewTitle')),
+            lead: appWord('mistri.form.reviewLead', say('reviewLead')),
+          }
+        : { id: REVIEW, label: appWord('mistri.form.review', say('review')), fields: form.save.submit },
     ],
     [form.steps, form.save.submit, form.style],
   );
@@ -318,7 +331,7 @@ export function SavedFormSurface({
         if (!live) return;
         // Gone is said as gone; anything else leaves Submit with no version to carry, and the person is told so.
         if ((error as SavedFormFailure).status === 404) refused(error, []);
-        else setFailure(say('reviewNotRead'));
+        else setFailure(appWord('mistri.saved.reviewNotRead', say('reviewNotRead')));
       },
     );
     return () => {
@@ -364,12 +377,12 @@ export function SavedFormSurface({
       forget();
       setSaved([]);
       setCurrent(0);
-      setFailure(GONE);
+      setFailure(gone());
       return;
     }
     if (draft && failed.code === 'stale_record') {
       // Changed on another tab or device since the review: nothing was submitted, and the review is read again.
-      setFailure(say('draftChangedElsewhere'));
+      setFailure(appWord('mistri.saved.changedElsewhere', say('draftChangedElsewhere')));
       setReviewed((before) => before + 1);
       setRefusedAt((before) => before + 1);
       return;
@@ -418,7 +431,7 @@ export function SavedFormSurface({
     const missing = form.steps.findIndex((step) => !saved?.includes(step.id));
     if (missing >= 0) {
       setCurrent(missing);
-      setFailure(say('saveThisStepBefore'));
+      setFailure(appWord('mistri.saved.saveStepFirst', say('saveThisStepBefore')));
       return;
     }
     if (!check(submitFields)) {
@@ -432,7 +445,7 @@ export function SavedFormSurface({
         /* The review has not answered yet: there is no version to carry, so nothing is sent on a guess. The person is
            told, and the review is asked again, so the next Submit has one. */
         if (version === null) {
-          setFailure(say('reviewNotReady'));
+          setFailure(appWord('mistri.saved.reviewNotReady', say('reviewNotReady')));
           setReviewed((before) => before + 1);
           return;
         }
@@ -457,12 +470,15 @@ export function SavedFormSurface({
 
   if (receipt) {
     // The receipt and fixed words: nothing typed is shown back, here either.
-    const message = receipt.message ?? form.done?.description ?? (receipt.reference ? say('keepThisReference') : undefined);
+    const message =
+      receipt.message ??
+      form.done?.description ??
+      (receipt.reference ? appWord('mistri.receipt.keepReference', say('keepThisReference')) : undefined);
     return (
       <section className="form-page form-page-done" aria-labelledby={`${id}-done`}>
         <p className="eyebrow">{appName}</p>
         <h1 id={`${id}-done`} tabIndex={-1} ref={(node) => node?.focus()}>
-          {form.done?.title ?? say('received')}
+          {form.done?.title ?? appWord('mistri.receipt.received', say('received'))}
         </h1>
         {receipt.reference && (
           <>
@@ -475,20 +491,20 @@ export function SavedFormSurface({
         {message && <p className="form-page-done-message">{message}</p>}
         {base && form.save.link?.sameDevice && (
           <section className="form-claim" aria-labelledby={`${id}-claim`}>
-            <h2 id={`${id}-claim`}>{say('followItInAnAccount')}</h2>
+            <h2 id={`${id}-claim`}>{appWord('mistri.saved.follow', say('followItInAnAccount'))}</h2>
             {shared === 'burned' ? (
               <p className="form-page-done-message" role="status">
-                {say('thisBrowserCanNoLonger')}
+                {appWord('mistri.saved.claimClosed', say('thisBrowserCanNoLonger'))}
               </p>
             ) : (
               <>
-                <p className="form-page-done-message">{say('claimWindow')}</p>
+                <p className="form-page-done-message">{appWord('mistri.saved.claimWindow', say('claimWindow'))}</p>
                 <div className="form-claim-actions">
                   <ButtonLink intent="primary" href={`${base}/claim?account=new`}>
-                    {say('createAnAccountToTrack')}
+                    {appWord('mistri.saved.createAccount', say('createAnAccountToTrack'))}
                   </ButtonLink>
                   <ButtonLink intent="secondary" href={`${base}/claim`}>
-                    {say('signInToAdd')}
+                    {appWord('mistri.saved.signInToAdd', say('signInToAdd'))}
                   </ButtonLink>
                 </div>
                 <Button
@@ -501,7 +517,7 @@ export function SavedFormSurface({
                     answerClaim(form.id, 'no').finally(() => setShared('burned'));
                   }}
                 >
-                  {say('thisIsAShared')}
+                  {appWord('mistri.saved.sharedDevice', say('thisIsAShared'))}
                 </Button>
               </>
             )}
@@ -509,7 +525,8 @@ export function SavedFormSurface({
         )}
         {base && form.save.statusCheck !== undefined && (
           <p className="form-page-done-message">
-            <a href={`${base}/status`}>{say('checkItsStatus')}</a> {say('anyTimeWithYourReference')}
+            <a href={`${base}/status`}>{appWord('mistri.saved.checkStatus', say('checkItsStatus'))}</a>{' '}
+            {appWord('mistri.saved.anyTime', say('anyTimeWithYourReference'))}
           </p>
         )}
         {onDismiss && (
@@ -519,6 +536,7 @@ export function SavedFormSurface({
             </Button>
           </div>
         )}
+        {!onDismiss && <LanguageSwitch appId={appId} languages={form.languages} />}
       </section>
     );
   }
@@ -552,9 +570,9 @@ export function SavedFormSurface({
                   setChanging(true);
                   setCurrent(index);
                 }}
-                aria-label={say('change', { label: step.label })}
+                aria-label={appWord('mistri.form.changeNamed', say('change', { label: step.label }), { label: step.label })}
               >
-                {say('changeStep')}
+                {appWord('mistri.form.change', say('changeStep'))}
               </Button>
             </div>
             {answers ? (
@@ -571,7 +589,13 @@ export function SavedFormSurface({
                   ))}
               </dl>
             ) : (
-              <p>{saved?.includes(step.id) ? (draft ? say('savedEarlier') : PRIVATE) : say('notSavedYet')}</p>
+              <p>
+                {saved?.includes(step.id)
+                  ? draft
+                    ? appWord('mistri.saved.earlier', say('savedEarlier'))
+                    : privately()
+                  : appWord('mistri.saved.notSaved', say('notSavedYet'))}
+              </p>
             )}
           </section>
         );
@@ -605,14 +629,14 @@ export function SavedFormSurface({
         <p className={draft && phone ? 'form-note form-note-compact' : 'form-note'}>
           {draft ? (
             phone ? (
-              <span className="form-note-text">{say('yourDraftIsSavedShort')}</span>
+              <span className="form-note-text">{appWord('mistri.saved.draftShort', say('yourDraftIsSavedShort'))}</span>
             ) : (
-              say('yourDraftIsSaved')
+              appWord('mistri.saved.draft', say('yourDraftIsSaved'))
             )
           ) : resumed ? (
-            say('yourApplicationIsSaved')
+            appWord('mistri.saved.resumed', say('yourApplicationIsSaved'))
           ) : (
-            say('eachStepIsSaved')
+            appWord('mistri.saved.eachStep', say('eachStepIsSaved'))
           )}
           {draft && (
             <>
@@ -624,7 +648,7 @@ export function SavedFormSurface({
                   /* A submit sent and not yet known to have landed keeps its draft: discarding it could lose what the
                      server has already taken. Submit again (the same key) to learn how it ended. */
                   if (draft.holds(REVIEW)) {
-                    setFailure(say('submitNotSettled'));
+                    setFailure(appWord('mistri.saved.notSettled', say('submitNotSettled')));
                     return;
                   }
                   // One click, and the draft and its rows are gone: the first step again, blank.
@@ -641,7 +665,7 @@ export function SavedFormSurface({
                   );
                 }}
               >
-                {say('startOver')}
+                {appWord('mistri.saved.startOver', say('startOver'))}
               </Button>
             </>
           )}
@@ -649,7 +673,7 @@ export function SavedFormSurface({
       )}
       {saved === null ? (
         <p className="form-page-description" role="status">
-          {say('checkingForAnApplication')}
+          {appWord('mistri.saved.checking', say('checkingForAnApplication'))}
         </p>
       ) : (
         <form noValidate onSubmit={(event) => event.preventDefault()}>
@@ -664,7 +688,7 @@ export function SavedFormSurface({
               setFailure('');
               setCurrent(back ? steps.length - 1 : index);
             }}
-            completeLabel={form.submitLabel ?? say('submit')}
+            completeLabel={form.submitLabel ?? appWord('mistri.form.submit', say('submit'))}
             validateStep={(step) => leave(step)}
             onComplete={complete}
             {...(intake ? { style: 'intake' as const, note: <IntakeNote note={form.note} /> } : {})}
@@ -695,6 +719,7 @@ export function SavedFormSurface({
           </Button>
         </div>
       )}
+      {!onDismiss && <LanguageSwitch appId={appId} languages={form.languages} />}
     </section>
   );
 }

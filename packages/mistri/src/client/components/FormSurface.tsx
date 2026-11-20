@@ -49,6 +49,7 @@ import { say } from '../copy/forms/components/FormSurface.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
 import { shellById } from '@mistriwork/kit/client/shellHost.js';
 import { appWord, holdAppWords } from '@mistriwork/kit/client/messages.js';
+import { LanguageSwitch, type PublicLanguages } from './LanguageSwitch.js';
 import type { ChallengeWidget, FormGuard, GuardHandle } from './PublicGuard.js';
 
 /* The stepper, its parts and the intake style's sheets are a chunk fetched for a form with steps, never by a public
@@ -121,6 +122,8 @@ export interface FormPresentation {
   messages?: Readonly<Record<string, readonly unknown[]>>;
   /** The platform's form words the App's catalog says in the visitor's language (`mistri.*`, kit `appWord`). */
   words?: Readonly<Record<string, string>>;
+  /** A public form of an App with two catalogs or more: its languages, for the switch at the page's foot (LanguageSwitch.tsx). */
+  languages?: PublicLanguages;
   /** Saved on every step (SavedFormSurface.tsx): the inputs the submit itself asks, on the review. */
   save?: { submit: string[] };
   /** The command's rules over the draft: each is said at its field on the step that asks the last field it names. */
@@ -647,6 +650,7 @@ export function FormSurface({
             <a href={home}>{appWord('mistri.receipt.backTo', say('backToApp', { name: appName }), { name: appName })}</a>
           </p>
         )}
+        {!onDismiss && <LanguageSwitch appId={visitor?.app} languages={form.languages} />}
       </section>
     );
   }
@@ -985,6 +989,7 @@ export function FormSurface({
           {steps && guard}
         </form>
       )}
+      {!onDismiss && <LanguageSwitch appId={visitor?.app} languages={form.languages} />}
     </section>
   );
 }

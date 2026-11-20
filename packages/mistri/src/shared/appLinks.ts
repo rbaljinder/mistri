@@ -41,13 +41,36 @@ export interface AppLinkDef {
    * bare column is email; `{ sms: 'mobile' }` a channel an integration declares (appStepUp.ts).
    */
   stepUp?: StepUpTarget;
+  /**
+   * Read-only lists of the rows that point at the record, by the child resource's logical name: one hop, one
+   * foreign key, at most `most` rows, no paging. Only beside a `stepUp` or a `confirm`: more data behind one token
+   * takes a second factor.
+   */
+  related?: Record<string, AppLinkRelated>;
+}
+
+/** One list a link page shows of the rows that point at its record. */
+export interface AppLinkRelated {
+  /** The child's foreign key column to the link's resource; absent, its one foreign key there. */
+  by?: string;
+  /** The child's columns the list shows, in order. */
+  show: string[];
+  /** The one column the list is ordered by, and which way; absent, the child's key. */
+  sort?: { column: string; descending: boolean };
+  /** How many rows the list shows at most, 1 to 50. */
+  most: number;
+  /** Words for a shown column's stored values, as the link's own `says`. */
+  says?: Record<string, Record<string, string>>;
 }
 
 const LINK_EXPIRES_DEFAULT = 7 * 86_400_000;
 const LINK_EXPIRES_MAX = 90 * 86_400_000;
 const NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 const COLUMN = /^[A-Za-z_][A-Za-z0-9_]{0,62}$/;
-const KEYS = ['show', 'says', 'commands', 'expires', 'uses', 'confirm', 'stepUp'] as const;
+const KEYS = ['show', 'says', 'commands', 'expires', 'uses', 'confirm', 'stepUp', 'related'] as const;
+const RELATED_KEYS = ['by', 'show', 'sort', 'most', 'says'] as const;
+const RELATED_MAX = 4;
+const RELATED_MOST_MAX = 50;
 /** The command fields a link page draws (server/links/linkPage.ts). */
 const LINK_INPUT_TYPES = ['text', 'textarea', 'number', 'boolean', 'date', 'choice'] as const;
 
@@ -59,6 +82,57 @@ const words = (value: unknown, at: string, max: number): string => {
   if (typeof value !== 'string' || !value.trim() || value.length > max) throw new Error(`${at} must be text of at most ${max} characters.`);
   return value.trim();
 };
+/** One to twelve distinct columns a link page shows. */
+const shownColumns = (value: unknown, where: string, what: string): string[] => {
+  if (!Array.isArray(value) || !value.length || value.length > 12)
+    throw new Error(`${where} needs "show": one to twelve columns of ${what}. A link that shows nothing opens nothing.`);
+  const show = value.map((item) => column(item, `${where}, "show"`));
+  if (new Set(show).size !== show.length) throw new Error(`${where}, "show" names one column twice.`);
+  return show;
+};
+const saysOf = (value: unknown, where: string, show: readonly string[]): Record<string, Record<string, string>> => {
+  if (!isRecord(value)) throw new Error(`${where}, "says" is { column: { value: 'Words' } }.`);
+  return Object.fromEntries(
+    Object.entries(value).map(([shown, map]) => {
+      if (!show.includes(shown)) throw new Error(`${where}, "says" has words for "${shown}", which "show" does not name.`);
+      if (!isRecord(map) || !Object.keys(map).length) throw new Error(`${where}, "says.${shown}" is { value: 'Words' }.`);
+      return [
+        shown,
+        Object.fromEntries(Object.entries(map).map(([stored, text]) => [stored, words(text, `${where}, "says.${shown}.${stored}"`, 60)])),
+      ];
+    }),
+  );
+};
+
+/** A link's `related` block: its shape here, its tables and keys against the database in appLinkProblems. */
+function parseLinkRelated(raw: unknown, where: string): Record<string, AppLinkRelated> {
+  const block = plainRecord(raw, `${where}, "related"`, '{ resource: { by?, show, sort?, most, says? } }');
+  const entries = Object.entries(block);
+  if (!entries.length || entries.length > RELATED_MAX)
+    throw new Error(`${where}, "related" names one to ${RELATED_MAX} resources whose rows point at the record.`);
+  const related: Record<string, AppLinkRelated> = {};
+  for (const [child, value] of entries) {
+    const at = `${where}, "related.${child}"`;
+    if (!NAME.test(child)) throw new Error(`${at} names a resource of the App.`);
+    const spec = plainRecord(value, at, '{ by?, show, sort?, most, says? }');
+    allowKeys(spec, RELATED_KEYS, at);
+    const show = shownColumns(spec.show, at, 'each row the list shows');
+    /* No paging and no request parameter: the cap is the whole of what a holder can be shown, so it is said. */
+    if (!Number.isSafeInteger(spec.most) || (spec.most as number) < 1 || (spec.most as number) > RELATED_MOST_MAX)
+      throw new Error(`${at} needs "most": how many rows the list shows, a whole number from 1 to ${RELATED_MOST_MAX}.`);
+    const list: AppLinkRelated = { show, most: spec.most as number };
+    if (spec.by !== undefined) list.by = column(spec.by, `${at}, "by"`);
+    if (spec.sort !== undefined) {
+      if (typeof spec.sort !== 'string') throw new Error(`${at}, "sort" is one column, '-' first for newest or largest first.`);
+      const descending = spec.sort.startsWith('-');
+      list.sort = { column: column(descending ? spec.sort.slice(1) : spec.sort, `${at}, "sort"`), descending };
+    }
+    if (spec.says !== undefined) list.says = saysOf(spec.says, at, show);
+    related[child] = list;
+  }
+  return related;
+}
+
 /* 'confirm: ["zip_code"]' asks "Zip code"; the record form says the label. */
 const labelOf = (name: string) => {
   const spaced = name.replace(/_/g, ' ').trim();
@@ -67,35 +141,16 @@ const labelOf = (name: string) => {
 
 /** A resource's `links` block, by name. `resource` is the block's logical name, which each command must target. */
 export function parseResourceLinks(raw: unknown, at: string, resource: string): Record<string, AppLinkDef> {
-  const block = plainRecord(raw, at, '{ name: { show, says?, commands?, expires?, uses?, confirm?, stepUp? } }');
+  const block = plainRecord(raw, at, '{ name: { show, says?, commands?, expires?, uses?, confirm?, stepUp?, related? } }');
   const links: Record<string, AppLinkDef> = {};
   for (const [name, value] of Object.entries(block)) {
     const where = `${at}, "${name}"`;
     if (!NAME.test(name)) throw new Error(`${where} needs a name: a letter, then letters, digits or underscores.`);
-    const spec = plainRecord(value, where, '{ show, says?, commands?, expires?, uses?, confirm?, stepUp? }');
+    const spec = plainRecord(value, where, '{ show, says?, commands?, expires?, uses?, confirm?, stepUp?, related? }');
     allowKeys(spec, KEYS, where);
-    if (!Array.isArray(spec.show) || !spec.show.length || spec.show.length > 12)
-      throw new Error(
-        `${where} needs "show": one to twelve columns of the record its holder sees. A link that shows nothing opens nothing.`,
-      );
-    const show = spec.show.map((item) => column(item, `${where}, "show"`));
-    if (new Set(show).size !== show.length) throw new Error(`${where}, "show" names one column twice.`);
+    const show = shownColumns(spec.show, where, 'the record its holder sees');
     const link: AppLinkDef = { show, expires: LINK_EXPIRES_DEFAULT };
-    if (spec.says !== undefined) {
-      if (!isRecord(spec.says)) throw new Error(`${where}, "says" is { column: { value: 'Words' } }.`);
-      link.says = Object.fromEntries(
-        Object.entries(spec.says).map(([shown, map]) => {
-          if (!show.includes(shown)) throw new Error(`${where}, "says" has words for "${shown}", which "show" does not name.`);
-          if (!isRecord(map) || !Object.keys(map).length) throw new Error(`${where}, "says.${shown}" is { value: 'Words' }.`);
-          return [
-            shown,
-            Object.fromEntries(
-              Object.entries(map).map(([stored, text]) => [stored, words(text, `${where}, "says.${shown}.${stored}"`, 60)]),
-            ),
-          ];
-        }),
-      );
-    }
+    if (spec.says !== undefined) link.says = saysOf(spec.says, where, show);
     if (spec.commands !== undefined) {
       if (!Array.isArray(spec.commands) || spec.commands.length > 8)
         throw new Error(`${where}, "commands" must be a list of at most eight commands the holder may run on the record.`);
@@ -161,6 +216,14 @@ export function parseResourceLinks(raw: unknown, at: string, resource: string): 
           throw new Error(`${where}, "confirm" asks for "${item.column}", which "show" names: a link never shows what it asks.`);
     }
     if (spec.stepUp !== undefined) link.stepUp = parseLinkStepUp(spec.stepUp, `${where}, "stepUp"`);
+    if (spec.related !== undefined) {
+      /* Lists of a record's children are more behind one token than the record: whoever holds it proves it twice. */
+      if (!link.stepUp && !link.confirm)
+        throw new Error(
+          `${where} has "related" without a "stepUp" or a "confirm": a link that shows a record's related rows asks its holder for a second factor.`,
+        );
+      link.related = parseLinkRelated(spec.related, where);
+    }
     links[name] = link;
   }
   return links;
@@ -175,6 +238,34 @@ export function linkRowKey(rowKey: string): Record<string, string> | undefined {
   } catch {
     return undefined;
   }
+}
+
+/**
+ * The one foreign key column of `child` that points at `parent`'s key, and the key column it names: `by` when said,
+ * else the child's only key to the parent. A string is why there is none. One column each side, since the link's
+ * key is one value per column and a list is read by `by = <that value>` alone.
+ */
+export function relatedForeignKey(
+  schema: DatabaseSchema,
+  child: { id: string; name: string },
+  parent: { id: string; name: string; columns: readonly { name: string; primaryKey?: boolean }[] },
+  by: string | undefined,
+): { by: string; key: string } | string {
+  const at = (ref: string, table: { id: string; name: string }) => ref === table.id || ref === table.name;
+  const keys = schema.foreignKeys.filter(
+    (fk) =>
+      at(fk.from.table, child) &&
+      at(fk.to.table, parent) &&
+      fk.from.columns.length === 1 &&
+      (by === undefined || fk.from.columns[0] === by),
+  );
+  if (keys.length === 0)
+    return by === undefined ? `has no foreign key to ${parent.name}` : `has no single-column foreign key "${by}" to ${parent.name}`;
+  if (keys.length > 1) return `has ${keys.length} foreign keys to ${parent.name}; "by" names the one the list follows`;
+  const key = keys[0].to.columns[0];
+  const primary = parent.columns.filter((col) => col.primaryKey).map((col) => col.name);
+  if (primary.length !== 1 || primary[0] !== key) return `points at ${parent.name}.${key}, which is not its one key column`;
+  return { by: keys[0].from.columns[0], key };
 }
 
 /**
@@ -229,7 +320,66 @@ export function appLinkProblems(
         const unfit = stepUpAddressProblem(link.stepUp, table, resource.display);
         if (unfit) problems.push(`${at}, "stepUp" ${unfit}`);
       }
+      for (const [childName, list] of Object.entries(link.related ?? {}))
+        problems.push(...relatedProblems(app, schema, `${at}, "related.${childName}"`, childName, list, table));
     }
+  }
+  return problems;
+}
+
+/** A resource's table as links read it: by its id, else by its name. One rule for the check and the door's query. */
+export function linkTable(schema: DatabaseSchema, resource: string): DatabaseSchema['tables'][number] | undefined {
+  return schema.tables.find((each) => each.id === resource) ?? tableNamed(schema, resource);
+}
+
+/** One `related` list against the App and the database: a resource whose rows point at the record, and columns anyone may read. */
+function relatedProblems(
+  app: Pick<AppDef, 'resources' | 'auth'>,
+  schema: DatabaseSchema,
+  at: string,
+  childName: string,
+  list: AppLinkRelated,
+  parent: DatabaseSchema['tables'][number],
+): string[] {
+  const child = app.resources?.[childName];
+  if (!child) return [`${at} names "${childName}", which is not a resource of the App.`];
+  /* The list is read through the link's tenant-bound reads, which hold only a tenant's own rows. */
+  if (isTenantApp(app) && child.owner !== 'tenant')
+    return [`${at}: in an App whose rows are scoped by tenant, a link lists only a tenant's own rows (owner: 'tenant').`];
+  const table = linkTable(schema, childName);
+  if (!table) return [`${at}: the resource names no table here.`];
+  const problems: string[] = [];
+  /* The list is not written to the read audit: the link's page draws it outside any command. */
+  if (child.audit?.reads)
+    problems.push(
+      `${at}: "${childName}" audits its reads (audit.reads), and a link's related list is not audited yet; show it through a command, or drop the audit.`,
+    );
+  const fk = relatedForeignKey(schema, table, parent, list.by);
+  if (typeof fk === 'string') problems.push(`${at}: ${table.name} ${fk}.`);
+  const hidden = new Set(child.hidden ?? []);
+  const readable = child.fields ? new Set(child.fields.read) : undefined;
+  /* A file's bytes are served by their own door under the App's grants; a link page draws text. */
+  const bytes = new Set([child.file?.content, child.file?.thumbnail].filter((col): col is string => col !== undefined));
+  /* The columns that say where the server keeps the bytes, and what they hash to: the server's, never a page's. */
+  const kept = new Map<string, string>();
+  if (child.file?.object !== undefined) kept.set(child.file.object, 'object');
+  if (child.file?.hash !== undefined) kept.set(child.file.hash, 'hash');
+  const named: [string, string][] = [
+    ...list.show.map((col): [string, string] => ['show', col]),
+    ...(list.sort ? [['sort', list.sort.column] as [string, string]] : []),
+  ];
+  for (const [key, col] of named) {
+    if (!table.columns.some((c) => c.name === col))
+      problems.push(`${at}, "${key}" names "${col}", which is not a column of ${table.name}.`);
+    else if (hidden.has(col) || (readable && !readable.has(col)))
+      problems.push(
+        `${at}, "${key}" names "${col}", which the resource ${hidden.has(col) ? 'hides' : 'does not let anyone read'}; a link adds no read.`,
+      );
+    else if (bytes.has(col)) problems.push(`${at}, "${key}" names "${col}", the file's bytes; a link lists text, not files.`);
+    else if (kept.has(col))
+      problems.push(
+        `${at}, "${key}" names "${col}", the file's ${kept.get(col)} column, which only the server reads; a link lists text, not files.`,
+      );
   }
   return problems;
 }

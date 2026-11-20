@@ -412,7 +412,8 @@ read them: their role's row filter and column rule apply, and another tenant's
 rows are never there. A resource's `hidden` columns are there, as they are in
 `record` and the handler's `db`: hidden keeps a column from people, not from
 the App's own server code, so a vendor's reference kept from every reader can
-still go out in the call. A public form's lookup reads none. A consent check reads the tenant's consent table before
+still go out in the call. A file it reads with `readFile` is the file of a row
+it can read, in its own tenant; a link's lookup reads its own row's file alone. A public form's lookup reads none. A consent check reads the tenant's consent table before
 the model is called:
 
 ```ts

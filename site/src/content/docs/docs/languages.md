@@ -36,7 +36,7 @@ The server says each caption before the browser sees it, in the nearest of:
 
 1. the reader's own tag, read from their row: `ui: { locale: { column: 'person.locale', default: 'en-US' } }`;
 2. their tenant's, where the App lets a tenant set it: `branding: { allow: ['locale'] }`;
-3. on a public page or the sign-in screen, what the browser asks for (`Accept-Language`) among the App's catalogs, or a language picked in this browser; a tenant App's visitor too, by its address (`?via=`) or its mapped host;
+3. on a public page or the sign-in screen, what the browser asks for (`Accept-Language`) among the App's catalogs, or a language picked in this browser or named in the address (`?locale=es`); a tenant App's visitor too, by its address (`?via=`) or its mapped host;
 4. the App's own.
 
 The tag is served as `ui.locale`, so numbers, money and dates are written the same way as the words. Addresses stay in the App's own words in every language: a tab is `?tab=overview` in Spanish too.
@@ -44,6 +44,8 @@ The tag is served as `ui.locale`, so numbers, money and dates are written the sa
 ## Picking a language
 
 Where the App has catalogs in more than one language, Preferences offers them. The pick goes to the reader's row when `ui.locale` names a column of the people table `auth.me` names; otherwise it is kept in this browser, per App, and read by the server as the reader's own choice. The framework's own words (menus, dialogs) follow: English is in the first page, and another language's are fetched only by a reader who reads it.
+
+A public page (a form, a saved form, its status check, a capability link) whose App has catalogs in two languages or more draws a quiet switch at its foot, each language named in itself. A pick reloads the page with `?locale=` and keeps it in this browser, so the next visit opens in it too; a link may name the language itself, as `/<app>/forms/<form>?via=<tenant>&locale=es` does for a tenant's intake form. There is no `?lang=`, and nothing to declare: an App with one catalog draws no switch.
 
 ## Arguments
 
@@ -136,6 +138,8 @@ export default defineMessages<typeof en>('es', {
 | `mistri.status.sentText` | We sent a code by text message. | |
 | `mistri.status.codeEmail` | Code from the email | |
 | `mistri.status.codeText` | Code from the message | |
+
+Every sentence a public page says is one of these keys, the capability link's page (`mistri.link.*`) and the switch's name (`mistri.language`) included, and the platform ships Spanish for all of them: an App with a Spanish catalog shows a Spanish visitor the whole page in Spanish without writing one. The only exceptions are the two counted lines ("2 answers need another look"), which a single sentence cannot carry.
 
 A key is chosen by the same reader's language as every caption, and said only where the catalog that has it is in that language; elsewhere the platform says its own word, in English or in the language its menus are fetched in. A key is optional and needs no entry in the source catalog, so an App that writes none changes nothing. Each is said as written: no plural, select, number or date, and only the arguments in its row. A tenant's own words may say them too.
 

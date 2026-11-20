@@ -14,7 +14,7 @@ import type { AppDef, AppFormView } from '../../shared/app.js';
 import { servedFormDress } from '../../shared/appForms.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
-import { askedLocale, requestLocale } from '../app/readerLocale.js';
+import { askedLocale, catalogLocales, requestLocale } from '../app/readerLocale.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { bindHttpBusinessCommands } from './businessCommandLoader.js';
 import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
@@ -98,13 +98,29 @@ export function publicFormComponents(appId: string, compiled: CompiledComponents
     : undefined;
 }
 
+/** The languages a public page may be read in, and the one this read is in, for the switch at its foot
+    (client LanguageSwitch.tsx): only where the App has two catalogs or more, as one has nothing to switch to. The
+    current one is the catalog the read was said from, so a regional tag (`es-MX`) marks its language (`es`). */
+export function publicLanguages(app: AppDef, locale: string | undefined): { offered: string[]; locale: string } | undefined {
+  const offered = catalogLocales(app);
+  if (offered.length < 2) return undefined;
+  const asked = (locale ?? app.ui.locale ?? offered[0]!).toLowerCase();
+  const current =
+    offered.find((tag) => tag.toLowerCase() === asked) ??
+    offered.find((tag) => tag.toLowerCase() === asked.split('-')[0]) ??
+    offered.find((tag) => tag.toLowerCase() === (app.ui.locale ?? '').toLowerCase()) ??
+    offered[0]!;
+  return { offered, locale: current };
+}
+
 /** A public form's input components and, beside them, the App's catalog in the visitor's words: no App payload reaches
     a public form's page, so `useMessage` in a component there says from this. Neither where the form draws no
     component; no catalog for an App without one. With them, or alone, the App's words for the platform's own
     (`mistri.*`: Step 1 of 3, Back) in the same language. `app` is the loaded definition, which holds the catalogs. */
 export function publicFormParts(app: AppDef, compiled: CompiledComponents | undefined, form: AppFormView, locale: string | undefined) {
   const words = frameworkWords(app, locale ?? app.ui.locale);
-  const said = words ? { words } : {};
+  const languages = publicLanguages(app, locale);
+  const said = { ...(words ? { words } : {}), ...(languages ? { languages } : {}) };
   const components = publicFormComponents(app.id, compiled, form);
   if (!components) return said;
   const messages = componentMessages(app, locale ?? app.ui.locale);

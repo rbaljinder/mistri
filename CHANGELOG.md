@@ -5,6 +5,24 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.69
+
+- A command's lookup reads a file a record already keeps: `sources.<source>.<table>.readFile(row)`, by the row or its
+  key, before the transaction opens. It reads through the lookup's own scope: another tenant's row, or one the
+  person's row filter hides, is not found; a file column their role does not read is refused as the handler's
+  `readFile` refuses it; a link's lookup reads its own row's file alone. Each read is audited under the command with
+  the person who ran it, and its bytes count into the one 50 MB a command reads (field report).
+- A `when` that names `me` now holds a command's lookup back as a plain `when` does: the person is read first, through
+  the lookup's scope and only for such a command, so another person's record makes no outside call and is refused in
+  the `when`'s words. A record that becomes theirs between that read and the transaction is refused as stale. A person
+  the lookup cannot read is refused before any outside call, as is a link's holder, who is no one; it never runs on.
+- Docs: "Organizing a larger App" lists one module a line in `modules/index.ts`, kept honest by a test, in place of an
+  `import.meta.glob` no loader reads.
+- A capability link can show `related` lists: read-only rows that point at its record, one hop, at most four lists of at most 50 rows, no paging, in the child's key order unless it sorts. It requires `confirm` or `stepUp`, and in a tenant App each list shows only that tenant's rows. A child that audits its reads, or a file's `object`/`hash` column, is refused at load.
+- A link's command may call the integrations it declares from its `lookup`, under its tenant's keys. A replay of the same run calls nothing.
+- Public pages (a public form, a saved form, its status check, a capability link's page) say every word of their own through a `mistri.*` key, and Spanish ships for all of them. A refusal is said in the visitor's language.
+- A public page whose App has two catalogs or more draws a language switch at its foot. A pick reloads with `?locale=` and is kept in the App's language cookie; a link can name the language itself (`/<app>/forms/<form>?via=<tenant>&locale=es`).
+
 ## 1.0.0-rc.68
 
 - Read audit room: a tenant's admins (the roles that edit its domains or branding) see who opened or listed the

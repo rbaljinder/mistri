@@ -34,12 +34,14 @@ import {
   readLinkSession,
   renderLinkRefs,
 } from '../packages/mistri/src/server/links/linkToken.js';
-import { LINK_MISS } from '../packages/mistri/src/server/links/linkPage.js';
+import { LINK_MISS, linkPage } from '../packages/mistri/src/server/links/linkPage.js';
+import { FRAMEWORK_WORDS_ES } from '../packages/engine/src/shared/frameworkWordsEs.js';
 import { resetPublicFormLimits } from '../packages/engine/src/server/http/rateLimit.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { clearJournal } from '../packages/engine/src/server/journal.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { appLinkAdvisories, appLinkProblems } from '../packages/mistri/src/shared/appLinks.js';
+import { relatedQuery } from '../packages/mistri/src/server/links/linkDoor.js';
 import { linkHistoryWarnings } from '../packages/mistri/src/server/recordHistory.js';
 import type { PageDef } from '../packages/engine/src/shared/pageModel.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
@@ -121,6 +123,24 @@ const RAW = {
   nav: ['applications'],
 };
 
+/* A related list's fixture is its own App: a child table with a foreign key to application changes what the
+   delete-and-revoke tests above may remove, so they keep the plain schema. */
+const DOCUMENTS = `CREATE TABLE document (id INTEGER PRIMARY KEY, application_id INTEGER NOT NULL REFERENCES application(id), title TEXT NOT NULL, secret TEXT);
+  INSERT INTO document VALUES (1, 2, 'Pay stub', 's1'), (2, 2, 'Bank statement', 's2'), (3, 2, 'Lease', 's3');`;
+const RELATED_RAW = {
+  ...RAW,
+  resources: {
+    application: {
+      ...RAW.resources.application,
+      links: {
+        ...RAW.resources.application.links,
+        dossier: { show: ['applicant'], confirm: { zip: 'ZIP code' }, related: { document: { show: ['title'], sort: '-id', most: 2 } } },
+      },
+    },
+    document: { hidden: ['secret'] },
+  },
+};
+
 const parse = (raw: unknown = RAW) => parseAppConfig(raw as typeof RAW, 'links', { commands: catalogOf(CONTRACTS) });
 
 interface Answer {
@@ -143,17 +163,41 @@ async function fixture(
     /** Signs the next requests in as this role (`clerk` until said). */
     as: (role: string) => void;
   }) => Promise<void>,
-  options: { history?: boolean } = {},
+  options: {
+    history?: boolean;
+    related?: boolean;
+    /** Runs after the adapter has answered a read of this table: where a test acts mid-render. */
+    afterRead?: (table: string, sql: DatabaseSync) => void;
+  } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-links-'));
   const file = join(directory, 'intake.db');
   const setup = new DatabaseSync(file);
-  setup.exec(SCHEMA);
+  setup.exec(options.related ? `${SCHEMA}\n${DOCUMENTS}` : SCHEMA);
   setup.close();
   migrateSqliteCommandJournal(file);
   if (options.history) provisionSqliteRecordHistory(file);
   const registry = new Registry();
   registry.add({ id: 'intake-db', name: 'Intake', url: file, writable: true, source: 'config' });
+  const actOn = options.afterRead && new DatabaseSync(file);
+  if (options.afterRead) {
+    const open = registry.open.bind(registry);
+    registry.open = (async (id: string) => {
+      const opened = await open(id);
+      // The adapter's identity keys its command journal, so it is wrapped in place, once, and not proxied.
+      const adapter = opened.adapter as any;
+      if (!adapter.watched) {
+        const query = adapter.query.bind(adapter);
+        adapter.query = async (request: { table: string }) => {
+          const result = await query(request);
+          options.afterRead!(request.table, actOn!);
+          return result;
+        };
+        adapter.watched = true;
+      }
+      return opened;
+    }) as typeof registry.open;
+  }
   const mail: EmailMessage[] = [];
   const transport: EmailTransport = { name: 'capture', send: async (message) => void mail.push(message) };
   registry.addService({ kind: 'email', name: transport.name, url: 'log:', from: 'Intake <no-reply@example.test>' });
@@ -223,7 +267,7 @@ async function fixture(
       },
     }),
   });
-  const app = parse();
+  const app = parse(options.related ? RELATED_RAW : RAW);
   const clerk: Identity = { id: 'account-clerk', who: 'clerk@example.test', role: 'clerk' };
   let role = 'clerk';
   const pages: PageDef[] = options.history
@@ -320,6 +364,7 @@ async function fixture(
     });
   } finally {
     sql.close();
+    actOn?.close();
     for (const dispose of disposers) dispose();
     const closed = new Promise<void>((resolve) => server.close(() => resolve()));
     server.closeAllConnections();
@@ -443,9 +488,58 @@ test('a declaration is judged as the App is parsed, and its columns once the cat
           primaryKey: name === 'id',
         })),
       },
+      {
+        id: 'document',
+        name: 'document',
+        columns: ['id', 'application_id', 'title', 'secret'].map((name) => ({
+          name,
+          type: name.endsWith('id') ? 'INTEGER' : 'TEXT',
+          nullable: name !== 'id',
+          primaryKey: name === 'id',
+        })),
+      },
     ],
+    foreignKeys: [{ from: { table: 'document', columns: ['application_id'] }, to: { table: 'application', columns: ['id'] } }],
   } as unknown as DatabaseSchema;
   assert.deepEqual(appLinkProblems(parse(), schema), []);
+  // A related list: one hop to rows that point at the record, a said cap, and only behind a second factor.
+  const related = (list: unknown, link: Record<string, unknown> = { confirm: { zip: 'ZIP code' } }) => ({
+    ...RAW,
+    resources: {
+      ...RAW.resources,
+      application: { ...RAW.resources.application, links: { x: { show: ['applicant'], ...link, related: list } } },
+      document: { hidden: ['secret'] },
+    },
+  });
+  const listed = { document: { show: ['title'], most: 5 } };
+  assert.throws(() => parse(related(listed, {})), /"related" without a "stepUp" or a "confirm"/);
+  assert.throws(() => parse(related(listed, { uses: 1 })), /"related" without a "stepUp" or a "confirm"/);
+  assert.doesNotThrow(() => parse(related(listed, { stepUp: 'email' })));
+  assert.throws(() => parse(related({})), /one to 4 resources/);
+  const five = Object.fromEntries(['a', 'b', 'c', 'd', 'e'].map((name) => [name, { show: ['title'], most: 1 }]));
+  assert.throws(() => parse(related(five)), /one to 4 resources/);
+  assert.throws(() => parse(related({ document: { show: ['title'] } })), /needs "most"/);
+  assert.throws(() => parse(related({ document: { show: ['title'], most: 51 } })), /from 1 to 50/);
+  assert.throws(() => parse(related({ document: { show: ['title'], most: 5, page: 2 } })), /page/);
+  assert.deepEqual(appLinkProblems(parse(related(listed)), schema), []);
+  assert.deepEqual(appLinkProblems(parse(related({ nope: { show: ['title'], most: 5 } })), schema), [
+    'resources "application", links "x", "related.nope" names "nope", which is not a resource of the App.',
+  ]);
+  assert.match(
+    appLinkProblems(parse(related({ document: { show: ['secret'], most: 5 } })), schema)[0]!,
+    /"show" names "secret", which the resource hides; a link adds no read/,
+  );
+  assert.match(
+    appLinkProblems(parse(related({ document: { show: ['title'], sort: 'missing', most: 5 } })), schema)[0]!,
+    /"sort" names "missing", which is not a column of document/,
+  );
+  assert.match(
+    appLinkProblems(parse(related({ document: { show: ['title'], by: 'title', most: 5 } })), schema)[0]!,
+    /has no single-column foreign key "title" to application/,
+  );
+  const bytes = related({ document: { show: ['title', 'secret'], most: 5 } });
+  const filed = parse({ ...bytes, resources: { ...bytes.resources, document: { file: { name: 'title', content: 'secret' } } } });
+  assert.match(appLinkProblems(filed, schema)[0]!, /the file's bytes; a link lists text, not files/);
   assert.match(appLinkProblems(parse(withLink({ show: ['missing'] })), schema)[0], /"missing", which is not a column/);
   const hidden = parse({
     ...RAW,
@@ -938,6 +1032,71 @@ test('a confirmation is typed before anything shows, and five wrong ones lock it
     assert.equal((await post(`/l/${burst.id}/confirm`, { confirm: { zip: '10001' } }, { 'x-mistri-link': burst.session })).status, 429);
   }));
 
+test('a related list shows the record’s own children, its declared columns and no more than its most, behind the gate', () =>
+  fixture(
+    async ({ mint, land, get, post, sql }) => {
+      const { url } = await mint('dossier', 2);
+      const { id, page, session } = await land(url);
+      assert.match(page.text, /data-gate="confirm"/);
+      assert.doesNotMatch(untokened(page.text), /Pay stub|Bank statement|Lease/, 'nothing related shows before the gate');
+      const right = await post(`/l/${id}/confirm`, { confirm: { zip: '10001' } }, { 'x-mistri-link': session });
+      assert.equal(right.status, 200, right.text);
+      const cookie = right.headers.get('set-cookie')!.split(';')[0];
+      const passed = await get(`/l/${id}`, { cookie });
+      // Newest first, two of three: the declared sort and cap, not the visitor's.
+      assert.match(passed.text, /<td>Lease<\/td><\/tr><tr><td>Bank statement<\/td>/);
+      assert.doesNotMatch(passed.text, /Pay stub/);
+      assert.doesNotMatch(untokened(passed.text), /\bs[123]\b/, 'a hidden column is never drawn');
+      // The address carries no paging, sort or filter the server reads.
+      for (const query of ['?page=2', '?most=50', '?sort=id', '?offset=2', '?document.most=3'])
+        assert.doesNotMatch((await get(`/l/${id}${query}`, { cookie })).text, /Pay stub/, query);
+
+      // One hop from this record only: another application's link lists its own documents, here none, and draws no list.
+      sql.exec("INSERT INTO document VALUES (4, 1, 'Ada passport', 's4')");
+      const other = await land((await mint('dossier', 1)).url);
+      const opened = await post(`/l/${other.id}/confirm`, { confirm: { zip: '94110' } }, { 'x-mistri-link': other.session });
+      const own = await get(`/l/${other.id}`, { cookie: opened.headers.get('set-cookie')!.split(';')[0] });
+      assert.match(own.text, /<td>Ada passport<\/td>/);
+      assert.doesNotMatch(own.text, /Lease|Bank statement|Pay stub/);
+      sql.exec('DELETE FROM document WHERE id = 4');
+      const empty = await get(`/l/${other.id}`, { cookie: opened.headers.get('set-cookie')!.split(';')[0] });
+      assert.match(empty.text, /<dd>Ada<\/dd>/);
+      assert.doesNotMatch(empty.text, /<table>/, 'an empty list is not drawn');
+    },
+    { related: true },
+  ));
+
+test('a link page is said in the holder’s language, with a switch only where the App has two catalogs', () => {
+  const page = {
+    app: 'intake',
+    nonce: 'n',
+    state: 'confirm' as const,
+    base: '/l/x',
+    session: 's',
+    title: 'Ada',
+    confirm: [{ column: 'zip', label: 'Código postal' }],
+  };
+  const spanish = linkPage({
+    ...page,
+    words: FRAMEWORK_WORDS_ES,
+    lang: 'es',
+    languages: { offered: ['en', 'es'], current: 'es', cookie: 'mistri_locale_intake' },
+  });
+  assert.match(spanish, /<html lang="es">/);
+  assert.match(spanish, new RegExp(FRAMEWORK_WORDS_ES['mistri.link.continue']));
+  assert.match(spanish, /<nav aria-label="Idioma">/);
+  assert.match(spanish, /<a href="\?locale=en"[^>]*>English<\/a> <a href="\?locale=es"[^>]*aria-current="true">Español<\/a>/);
+  assert.match(spanish, /data-cookie="mistri_locale_intake"/);
+  // One language has nothing to switch to; the miss page is one sentence in each language and still no switch.
+  assert.doesNotMatch(linkPage({ ...page, languages: { offered: ['en'], current: 'en', cookie: 'c' } }), /<nav/);
+  assert.equal(
+    linkPage({ app: 'intake', nonce: 'n', state: 'miss', words: FRAMEWORK_WORDS_ES, lang: 'es' }).includes(
+      FRAMEWORK_WORDS_ES['mistri.link.miss'],
+    ),
+    true,
+  );
+});
+
 test('a step-up mails a code to the record’s address, and the code opens the record once', () =>
   fixture(async ({ mint, land, get, post, mail }) => {
     const { url } = await mint('stepped');
@@ -1020,3 +1179,125 @@ test('a step-up on a channel texts the code to the record’s number under the A
       rmSync(directory, { recursive: true, force: true });
     }
   }));
+
+/* ---------- review fixes: a related list's door ---------- */
+
+test('a link revoked while its related list is read draws no rows', () => {
+  let revoke = false;
+  return fixture(
+    async ({ mint, land, get, post, sql }) => {
+      const { url } = await mint('dossier', 2);
+      const { id, session } = await land(url);
+      const right = await post(`/l/${id}/confirm`, { confirm: { zip: '10001' } }, { 'x-mistri-link': session });
+      const cookie = right.headers.get('set-cookie')!.split(';')[0];
+      assert.match((await get(`/l/${id}`, { cookie })).text, /Lease/, 'live, it lists');
+      revoke = true;
+      const page = await get(`/l/${id}`, { cookie });
+      assert.doesNotMatch(untokened(page.text), /Lease|Bank statement|Pay stub/, 'revoked mid-render, no related rows');
+      assert.ok((sql.prepare(`SELECT revoked_at FROM ${COMMAND_JOURNAL_TABLES.link} WHERE id = ?`).get(id) as any).revoked_at > 0);
+    },
+    {
+      related: true,
+      afterRead(table, sql) {
+        if (revoke && table === 'document') sql.exec(`UPDATE ${COMMAND_JOURNAL_TABLES.link} SET revoked_at = 1`);
+      },
+    },
+  );
+});
+
+test('a related list is read in its child’s key order when it names no sort, and a resource mapped by table name is read', () => {
+  const schema = (id: string) =>
+    ({
+      dialect: 'sqlite',
+      tables: [
+        { id: 'application', name: 'application', columns: [{ name: 'id', type: 'INTEGER', primaryKey: true }] },
+        {
+          id,
+          name: 'document',
+          columns: [
+            { name: 'id', type: 'INTEGER', nullable: false, primaryKey: true },
+            { name: 'application_id', type: 'INTEGER', nullable: false },
+            { name: 'title', type: 'TEXT', nullable: true },
+          ],
+        },
+      ],
+      foreignKeys: [{ from: { table: id, columns: ['application_id'] }, to: { table: 'application', columns: ['id'] } }],
+    }) as unknown as DatabaseSchema;
+  const list = { show: ['title'], most: 3 };
+  for (const id of ['document', 'main.document']) {
+    const query = relatedQuery(schema(id), 'application', 'document', list, { id: 2 });
+    assert.deepEqual(query?.orderBy, [{ column: 'id', direction: 'asc' }], `default order, table ${id}`);
+    assert.equal(query?.table, 'document');
+  }
+  assert.deepEqual(
+    relatedQuery(schema('document'), 'application', 'document', { ...list, sort: { column: 'title', descending: true } }, { id: 2 })
+      ?.orderBy,
+    [{ column: 'title', direction: 'desc' }],
+  );
+});
+
+test('a link’s related list is refused at load where its child audits its reads, in either kind of App', () => {
+  const schema = {
+    dialect: 'sqlite',
+    tables: [
+      {
+        id: 'application',
+        name: 'application',
+        columns: ['id', 'applicant', 'zip'].map((name) => ({ name, type: 'TEXT', primaryKey: name === 'id' })),
+      },
+      {
+        id: 'document',
+        name: 'document',
+        columns: ['id', 'application_id', 'title', 'body', 'obj', 'digest'].map((name) => ({
+          name,
+          type: name.endsWith('id') ? 'INTEGER' : 'TEXT',
+          nullable: name !== 'id',
+          primaryKey: name === 'id',
+        })),
+      },
+    ],
+    foreignKeys: [{ from: { table: 'document', columns: ['application_id'] }, to: { table: 'application', columns: ['id'] } }],
+  } as unknown as DatabaseSchema;
+  const asked =
+    /"document" audits its reads \(audit\.reads\), and a link's related list is not audited yet; show it through a command, or drop the audit\./;
+  const build = (tenant: boolean, document: Record<string, unknown>, parentAudit = false) =>
+    parse({
+      ...RAW,
+      ...(tenant ? { auth: { ...RAW.auth, rows: 'tenant' } } : {}),
+      resources: {
+        application: {
+          ...RAW.resources.application,
+          ...(tenant ? { owner: 'tenant' } : {}),
+          ...(parentAudit ? { audit: { reads: true } } : {}),
+          links: { x: { show: ['applicant'], confirm: { zip: 'ZIP code' }, related: { document: { show: ['title'], most: 5 } } } },
+        },
+        document: { ...(tenant ? { owner: 'tenant' } : {}), ...document },
+      },
+    });
+  for (const tenant of [false, true]) {
+    const kind = tenant ? 'a tenant App' : 'an App without tenants';
+    assert.deepEqual(appLinkProblems(build(tenant, {}), schema), [], kind);
+    assert.match(appLinkProblems(build(tenant, { audit: { reads: true } }), schema).join('\n'), asked, kind);
+    // The parent record is the link's own and is not judged by this rule.
+    assert.deepEqual(appLinkProblems(build(tenant, {}, true), schema), [], `${kind}: the link's own parent may audit its reads`);
+  }
+  // A file's server-only columns are refused as its bytes are, each in its own words.
+  for (const column of ['obj', 'digest']) {
+    const raw = {
+      ...RAW,
+      resources: {
+        application: {
+          ...RAW.resources.application,
+          links: { x: { show: ['applicant'], confirm: { zip: 'ZIP code' }, related: { document: { show: ['title', column], most: 5 } } } },
+        },
+        document: { file: { name: 'title', content: 'body', object: 'obj', hash: 'digest', storage: 'bucket', bucket: { name: 'files' } } },
+      },
+    };
+    const problems = appLinkProblems(parse(raw), schema);
+    assert.match(
+      problems[0] ?? '',
+      new RegExp(`"show" names "${column}", the file's ${column === 'obj' ? 'object' : 'hash'} column, which only the server reads`),
+      column,
+    );
+  }
+});

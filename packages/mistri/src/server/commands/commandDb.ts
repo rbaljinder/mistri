@@ -863,7 +863,7 @@ interface CommandDbOptions {
   readonly stored?: (table: string, data: Uint8Array) => void;
   /** What a constant (`now`, `today`, `me`) writes to a column; absent, a constant is refused. */
   readonly constant?: (table: CommandTable, column: ColumnMeta, word: WriteConstant['auto']) => Promise<Value>;
-  /** The file bytes this run read before its handler (its lookup's `files.read`): readFile's budget starts there. */
+  /** The file bytes this run read before its handler (its lookup's `files.read` and `readFile`): readFile's budget starts there. */
   readonly fileRead?: number;
 }
 
@@ -891,16 +891,90 @@ async function withConstants(
   return out ?? values;
 }
 
-/** The most file bytes one command reads, all its reads together: its lookup's `files.read` and its handler's
-    `readFile` (`fileRead` starts the handler where the lookup stopped). A loop over rows that reads each one's file
+/** The most file bytes one command reads, all its reads together: its lookup's `files.read` and
+    `sources.<source>.<file>.readFile`, and its handler's `readFile` (`fileRead` starts the handler where the lookup
+    stopped). A loop over rows that reads each one's file
     is refused here rather than filling the server's memory. A fixed bound, not a setting. */
 export const COMMAND_FILE_READ_MOST = 50 * 1024 * 1024;
 
 const sizeOf = (bytes: number) => `${Math.ceil((bytes / 1024 / 1024) * 10) / 10} MB`;
 
-/** What one command run has read so far, across all its handles. */
-interface FileReadBudget {
+/** What one command run has read so far, across all its handles: its lookup's and its handler's. */
+export interface FileReadBudget {
   read: number;
+}
+
+/**
+ * One row's kept file (http/fileRows.ts), read through `reader`: the handler's transaction for `db.<file>.readFile`,
+ * the lookup's scoped reader for `sources.<source>.<file>.readFile`, so its grants, row policy and tenant are that
+ * reader's and the row is located there before any object is opened. The object's key is the row's, never the
+ * caller's, and a row naming an object outside this App, tenant and resource reads as no file at all. Held to the
+ * resource's maxBytes and to what this run may still read of its one budget.
+ */
+export async function readKeptFile(
+  reader: Pick<WriteTransaction, 'query'>,
+  options: Readonly<{
+    name: string;
+    verb: string;
+    /** Where a row it takes was read, for the words when it is given neither a row nor a key. */
+    via: string;
+    table: CommandTable;
+    rule: AppFileRule;
+    scope: FileScope | undefined;
+    budget: FileReadBudget;
+  }>,
+  given: unknown,
+) {
+  const { name, verb, table, rule, budget } = options;
+  const keyOf = (row: Record<string, unknown>) => {
+    const key = table.key.length ? canonicalKey(table, row) : undefined;
+    if (!key) throw new Error(`${name}: the row carries no key; pass a row read through ${options.via}.`);
+    return key;
+  };
+  const key =
+    given !== null && typeof given === 'object'
+      ? keyOf(given as Record<string, unknown>)
+      : (typeof given === 'string' || typeof given === 'number') && table.key.length === 1
+        ? (canonicalKey(table, { [table.key[0]]: given }) ?? refuse('not_found'))
+        : authorMistake(`${name}: ${verb} takes a row read through ${options.via}, or its key (${table.key.join(', ')}).`);
+  // Whose objects a row may name is the run's to say; without it, no row's object is anyone's to read.
+  const scope = options.scope;
+  if (!scope) throw new Error(`${name}: ${verb} was asked outside a command run that says whose files it reads.`);
+  const found = await readFileRow(reader, table.meta, rule, key, undefined, scope);
+  if ('error' in found) return found.status === 404 ? refuse('not_found') : authorMistake(`${name}: ${found.error}`);
+  const held = (size: number) => {
+    if (size > rule.maxBytes)
+      authorMistake(`${name}: this file is ${sizeOf(size)}; ${verb} hands over at most the resource's ${sizeOf(rule.maxBytes)}.`);
+    if (budget.read + size > COMMAND_FILE_READ_MOST)
+      authorMistake(
+        `${name}: one command reads at most ${sizeOf(COMMAND_FILE_READ_MOST)} of files; this one has read ${sizeOf(budget.read)} ` +
+          `and this file is ${sizeOf(size)}. Read fewer in one command, or move the rest to a job.`,
+      );
+  };
+  let data: Uint8Array;
+  if ('bytes' in found) data = found.bytes;
+  else {
+    // Refused before the bytes are fetched where the row says how many there are.
+    if (found.size !== undefined) held(found.size);
+    /* And whatever the row says, no more is fetched than this read may hand over: a row with no size column, or
+       one that understates its object, would otherwise pull the whole object into memory before it is refused. */
+    const read =
+      (await found.bucket.bytesAtMost(found.object, Math.min(rule.maxBytes, COMMAND_FILE_READ_MOST - budget.read))) ?? refuse('not_found');
+    if ('over' in read) {
+      held(read.over);
+      throw new Error(`${name}: ${verb} fetched past what it may hand over.`);
+    }
+    data = read.bytes;
+  }
+  held(data.byteLength);
+  budget.read += data.byteLength;
+  const file: CommandFile = Object.freeze({
+    name: found.name,
+    type: found.claimed || 'application/octet-stream',
+    size: data.byteLength,
+    data,
+  });
+  return { file, key, stored: 'object' in found ? { bucket: found.bucket, object: found.object } : undefined };
 }
 
 /** The `db` of one command run: a frozen object of table handles, exactly the footprint's. */
@@ -1129,56 +1203,11 @@ function tableHandle(
     return query;
   };
   /* One row's file, through this command's transaction (http/fileRows.ts): its grants, row policy and tenant are the
-     reader's, and a row naming an object outside this App, tenant and resource reads as no file at all. Held to the
-     resource's maxBytes and to what this run may still read; the row's key and object come back for moveFile. */
+     reader's. The row's key and object come back for moveFile. */
   const fileOf = async (given: unknown, verb: 'readFile' | 'moveFile') => {
     const rule = options.fileReads?.get(name);
     if (!rule) throw new Error(`${name}: ${verb} reads a file resource this command reads, and ${name} is not one here.`);
-    const key =
-      given !== null && typeof given === 'object'
-        ? keyOf(given)
-        : (typeof given === 'string' || typeof given === 'number') && table.key.length === 1
-          ? (canonicalKey(table, { [table.key[0]]: given }) ?? refuse('not_found'))
-          : authorMistake(`${name}: ${verb} takes a row read through db.${name}, or its key (${table.key.join(', ')}).`);
-    // Whose objects a row may name is the run's to say; without it, no row's object is anyone's to read.
-    const scope = options.fileScope;
-    if (!scope) throw new Error(`${name}: ${verb} was asked outside a command run that says whose files it reads.`);
-    const found = await readFileRow(tx, table.meta, rule, key, undefined, scope);
-    if ('error' in found) return found.status === 404 ? refuse('not_found') : authorMistake(`${name}: ${found.error}`);
-    const held = (size: number) => {
-      if (size > rule.maxBytes)
-        authorMistake(`${name}: this file is ${sizeOf(size)}; ${verb} hands over at most the resource's ${sizeOf(rule.maxBytes)}.`);
-      if (budget.read + size > COMMAND_FILE_READ_MOST)
-        authorMistake(
-          `${name}: one command reads at most ${sizeOf(COMMAND_FILE_READ_MOST)} of files; this one has read ${sizeOf(budget.read)} ` +
-            `and this file is ${sizeOf(size)}. Read fewer in one command, or move the rest to a job.`,
-        );
-    };
-    let data: Uint8Array;
-    if ('bytes' in found) data = found.bytes;
-    else {
-      // Refused before the bytes are fetched where the row says how many there are.
-      if (found.size !== undefined) held(found.size);
-      /* And whatever the row says, no more is fetched than this read may hand over: a row with no size column, or
-         one that understates its object, would otherwise pull the whole object into memory before it is refused. */
-      const read =
-        (await found.bucket.bytesAtMost(found.object, Math.min(rule.maxBytes, COMMAND_FILE_READ_MOST - budget.read))) ??
-        refuse('not_found');
-      if ('over' in read) {
-        held(read.over);
-        throw new Error(`${name}: ${verb} fetched past what it may hand over.`);
-      }
-      data = read.bytes;
-    }
-    held(data.byteLength);
-    budget.read += data.byteLength;
-    const file: CommandFile = Object.freeze({
-      name: found.name,
-      type: found.claimed || 'application/octet-stream',
-      size: data.byteLength,
-      data,
-    });
-    return { file, key, stored: 'object' in found ? { bucket: found.bucket, object: found.object } : undefined };
+    return readKeptFile(tx, { name, verb, via: `db.${name}`, table, rule, scope: options.fileScope, budget }, given);
   };
   const read: ReadTable<UntypedRow> = {
     async get(key) {

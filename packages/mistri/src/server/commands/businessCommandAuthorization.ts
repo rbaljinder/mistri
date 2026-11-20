@@ -82,6 +82,8 @@ export interface BusinessCommandAuthorization {
     logical(source: string, local: string): string;
     /** The columns the actor's role reads of a tenant's table it looks up, where a column rule narrows them; undefined reads them all. */
     columns?(source: string, local: string): readonly string[] | undefined;
+    /** A looked-up file resource's rule, for `sources.<source>.<file>.readFile`; undefined for any other table. */
+    files?(source: string, local: string): CommandFileRule | undefined;
   }>;
   /** The machines of the tables it writes, by local name, and when it is a verb of its target's, where that verb leads. */
   readonly machine?: CommandMachine;
@@ -415,6 +417,7 @@ function narrowedLookup(
   const result: LookupReader = Object.freeze({
     catalogs: Object.freeze(catalogs),
     logical: reader.logical,
+    ...(reader.files ? { files: reader.files } : {}),
     columns: (source: string, local: string) => columns.get(`${source}\u0000${local}`),
   });
   byAccess.set(fields, result);
@@ -900,6 +903,8 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         const problem = commandLookupProblem(app, id, command.sources, command.realm);
         if (problem) throw new CommandLookupRefusal(problem);
         const sources = command.sources;
+        /* Each looked-up file resource, the rule the handler's readFile holds it to: one cap whichever phase reads it. */
+        const lookupFiles = new Map<string, CommandFileRule>();
         const catalogs: Record<string, CommandCatalog> = {},
           tables: string[] = [],
           tenantOwned: { source: string; local: string; logical: string }[] = [],
@@ -916,6 +921,19 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
             // own table is read as the person could read it, column rule and all.
             tables.push(looked);
             every.push({ source, local, logical: looked });
+            const file = app.resources?.[looked]?.file;
+            if (file) {
+              const most = file.maxBytes ?? FILE_MAX_BYTES_DEFAULT;
+              lookupFiles.set(
+                `${source}\u0000${local}`,
+                Object.freeze({
+                  ...file,
+                  table: local,
+                  resource: looked,
+                  maxBytes: isTenantApp(app) ? Math.min(most, TENANT_FILE_MOST) : most,
+                }),
+              );
+            }
             if (app.auth?.rows === 'tenant' && app.resources?.[looked]?.owner === 'tenant')
               tenantOwned.push({ source, local, logical: looked });
           }
@@ -934,6 +952,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
               if (!Object.hasOwn(sources, source) || !sources[source].includes(local)) throw new AppAccessDenied();
               return logicalResource(app, source, local);
             },
+            ...(lookupFiles.size ? { files: (source: string, local: string) => lookupFiles.get(`${source}\u0000${local}`) } : {}),
           }),
         });
       }

@@ -9,7 +9,15 @@
  *   },
  *
  * The handles read only: `get`, `find` and `where`, under the same resource
- * ceiling and role grants as the command's own reads. There is no `count`,
+ * ceiling and role grants as the command's own reads, and, on a file
+ * resource, `readFile(row)` — the handler's verb, a row or its key — which
+ * locates the row through this same reader before any object is opened, so a
+ * row the scope hides (another tenant's, one a row filter keeps out, beyond a
+ * link's own record) is not found and its object never read, and a column
+ * rule that keeps the file from the role refuses as the handler's read would.
+ * Its bytes count against the one budget the command's every file read
+ * shares (COMMAND_FILE_READ_MOST), and the row read is audited as the
+ * lookup's others are. There is no `count`,
  * because an API reports no totals and one rule is kept for both kinds of
  * source. What `lookup` returns is JSON, bounded and frozen, and reaches the
  * handler as `lookup`; it is not part of the fingerprint, since it is read,
@@ -28,10 +36,12 @@
  * refuse them.
  */
 import type { QueryRequest, QueryResult, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
+import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
+import type { CommandFile } from '../../../schema/command.js';
 import { logicalResource, type AppDef } from '../../shared/app.js';
 import { canonicalCommandJson } from './commandPayload.js';
 import { refuse } from './commandErrors.js';
-import type { BusinessCommandAuthorization } from './businessCommandAuthorization.js';
+import type { BusinessCommandAuthorization, CommandFileRule } from './businessCommandAuthorization.js';
 import { PLATFORM_RULE, TENANT_RULE, lookupOwners } from './commandLookupRules.js';
 import { CommandLookupRefusal, type BusinessCommandRegistry } from './businessCommands.js';
 import {
@@ -53,8 +63,15 @@ export interface CommandLookupReader {
   /** Each declared source's tables, by local name. */
   readonly catalogs: Readonly<Record<string, CommandCatalog>>;
   readonly query: LookupQuery;
+  /** A looked-up file resource's rule, for `sources.<source>.<file>.readFile`; undefined for any other table. */
+  files?(source: string, local: string): CommandFileRule | undefined;
   /** The target by its canonical key, as it stands before the transaction; undefined when it is not there. */
   target(key: Readonly<Record<string, string | number>>): Promise<Readonly<Record<string, unknown>> | undefined>;
+  /**
+   * A table the command itself reads, by its local name, read as the target is: the person a `when` naming `me`
+   * compares with, found before the transaction so a record that plainly is not theirs holds the lookup back.
+   */
+  own?(request: QueryRequest): Promise<QueryResult>;
 }
 
 /**
@@ -66,7 +83,7 @@ export interface CommandLookupReader {
  * assertLookupOwners.
  */
 export function scopedLookupReader(
-  authorization: Pick<BusinessCommandAuthorization, 'lookupTables' | 'resource'>,
+  authorization: Pick<BusinessCommandAuthorization, 'lookupTables' | 'resource' | 'table'>,
   reads: () => Promise<ScopedReads>,
 ): CommandLookupReader {
   const tables = authorization.lookupTables!;
@@ -74,11 +91,15 @@ export function scopedLookupReader(
   // physical tables themselves (mapAppScopedReads); a physical name is unknown to them.
   return Object.freeze<CommandLookupReader>({
     catalogs: tables.catalogs,
+    ...(tables.files ? { files: tables.files } : {}),
     async query(source, local, request) {
       const columns = tables.columns?.(source, local);
+      // A file's row is read as the server's request (readKeptFile), and stays one through the rename.
       const result = await (
         await reads()
-      ).query({ ...request, table: tables.logical(source, local), ...(columns ? { columns: [...columns] } : {}) });
+      ).query(
+        carryServerRequest(request, { ...request, table: tables.logical(source, local), ...(columns ? { columns: [...columns] } : {}) }),
+      );
       if (!columns) return result;
       /* Asked for by name and cut to them as well: a column the role does not read never reaches the lookup, whatever
          the adapter makes of the request's columns. */
@@ -95,6 +116,9 @@ export function scopedLookupReader(
       const found = await (await reads()).query({ table: authorization.resource, filter: keyFilter(key), limit: 2, offset: 0 });
       return found.rows.length === 1 ? (found.rows[0] as Readonly<Record<string, unknown>>) : undefined;
     },
+    async own(request) {
+      return (await reads()).query({ ...request, table: authorization.table(request.table) });
+    },
   });
 }
 
@@ -107,6 +131,12 @@ export interface LookupTable<Row> {
   find(where: Where<Row> | string): Promise<Row | undefined>;
   where(where?: Where<Row> | string): RowQuery<Row>;
   where(strings: TemplateStringsArray, ...values: readonly unknown[]): RowQuery<Row>;
+  /**
+   * A file resource's kept file, by a row read through this handle or its key, as the handler's
+   * `db.<file>.readFile` reads it: through the lookup's scope, within the resource's cap and the command's one
+   * file budget. On any other table it refuses in words.
+   */
+  readFile(row: Row | string | number): Promise<CommandFile>;
 }
 /** `sources.<source>.<table>`. */
 export type LookupSources = Readonly<Record<string, Readonly<Record<string, LookupTable<UntypedRow>>>>>;
@@ -117,7 +147,13 @@ const LOOKUP_CAP = 1000;
 const LOOKUP_RESULT_BYTES = 65_536;
 
 export function createLookupSources(
-  options: Readonly<{ catalogs: Readonly<Record<string, CommandCatalog>>; query: LookupQuery; now: () => Date }>,
+  options: Readonly<{
+    catalogs: Readonly<Record<string, CommandCatalog>>;
+    query: LookupQuery;
+    now: () => Date;
+    /** A file resource's reader, for its `readFile`; undefined for any other table. */
+    readFile?: (source: string, local: string) => ((given: unknown) => Promise<CommandFile>) | undefined;
+  }>,
 ): LookupSources {
   const sources: Record<string, Readonly<Record<string, LookupTable<UntypedRow>>>> = {};
   for (const [source, catalog] of Object.entries(options.catalogs)) {
@@ -183,6 +219,11 @@ export function createLookupSources(
             then: (resolve, reject) => run().then(resolve, reject),
           };
           return query;
+        },
+        async readFile(given) {
+          const read = options.readFile?.(source, local);
+          if (!read) throw new Error(`${source}.${local}: readFile reads a file resource this command looks up, and ${local} is not one.`);
+          return read(given);
         },
       } as LookupTable<UntypedRow>;
       /* Not in the type, and refused if called anyway (an untyped App, a cast): the lookup runs before the

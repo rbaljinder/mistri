@@ -48,8 +48,7 @@ import {
 import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow, type WriteTable } from './commandDb.js';
 import { auditCommandRead, type CommandReadAudit, type ReadAuditSink } from '../readAudit.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
-import { compileWhen, failingCondition, plainlyFails, recordPartHolds, type DerivedFailure, whenHolds, whenPerson } from './commandWhen.js';
-import { mentionsMe } from '../../shared/appMe.js';
+import { compileWhen, failingCondition, recordPartHolds, type DerivedFailure, whenHolds, whenPerson } from './commandWhen.js';
 import { whenRefusalSentence } from './commandSaying.js';
 import { bindRecord, readsRecord, readsTarget, withheldAnswer, withheldOptions, type BoundCondition } from '../../shared/commandDraft.js';
 import { mayReadTargetColumn } from './commandActorColumns.js';
@@ -59,6 +58,8 @@ import { preparesInitial } from './commandPrepareNeeds.js';
 import { zoneDay } from '../app/appStamps.js';
 import { asMaker, claimProposal, settleProvenance, targetWrites } from './commandProvenance.js';
 import { createLookupSources, lookupResult } from './commandLookup.js';
+import { lookupHeldBy } from './commandLookupHold.js';
+import { lookupSourceFiles } from './commandLookupFiles.js';
 import { immutableCommandResult as immutableResult, validateHistoricalCommandOutput } from './commandHistoricalOutput.js';
 import { COMMAND_INPUT_LIMITS } from '../../shared/command.js';
 import { CommandInputRefusal } from '../../shared/commandInput.js';
@@ -607,21 +608,12 @@ async function executeUntraced(
     /* A record its command's machine or `when` plainly refuses as it stands holds the lookup back, so no outside call
        goes out for a command the transaction then refuses (commandWhen.ts plainlyFails). The transaction judges again
        and says why; one that admits the record after all (it moved between the two reads) is refused as stale, since
-       the handler would run without its lookup. A `when` naming `me` waits for the transaction, which reads the person. */
+       the handler would run without its lookup. A `when` naming `me` reads the person here too, through the lookup's
+       reader (`own`), so another person's record holds the lookup as well; the transaction reads them again. */
     let lookupHeld = false;
-    /* The file bytes lookup read: the handler's readFile starts its budget there, so the two share one bound. */
+    /* The file bytes lookup read (`files.read`, a source's `readFile`): the handler's readFile starts its budget there,
+       so the command's every file read shares one bound. */
     let lookupFiles: ReturnType<typeof lookupFileReader> | undefined;
-    const refusedAsItStands = (table: NonNullable<typeof authorized.catalog>[string], row: UntypedRow): boolean => {
-      const graph = authorized.machine?.verb && authorized.machine.tables.get(command.target);
-      if (graph && !authorized.machine!.verb!.from.has(String(row[graph.column]))) return true;
-      if (command.when === undefined || mentionsMe(command.when)) return false;
-      const me = authorized.tenant ? { email: authorized.actor.email ?? null, tenant: authorized.tenant } : undefined;
-      try {
-        return plainlyFails(table, compileWhen(table, command.when, now(), me), row);
-      } catch {
-        return false;
-      }
-    };
     if (lookupRun) {
       const reader = authorized.lookup;
       const table = authorized.catalog?.[command.target];
@@ -674,7 +666,7 @@ async function executeUntraced(
           owner: stagedOwner(publicActor ? actor : authorized.actor, options.visitor),
           now: () => now().getTime(),
         });
-        lookupHeld = !options.statusOnly && before.some((row) => refusedAsItStands(table, row));
+        lookupHeld = !options.statusOnly && (await lookupHeldBy(authorized, command, table, before, reader.own, now));
         const value = lookupHeld
           ? undefined
           : await lookupRun(
@@ -688,7 +680,12 @@ async function executeUntraced(
                 now,
                 flags,
                 locale,
-                sources: createLookupSources({ catalogs: reader.catalogs, query: lookupQuery, now }),
+                sources: createLookupSources({
+                  catalogs: reader.catalogs,
+                  query: lookupQuery,
+                  now,
+                  readFile: lookupSourceFiles(reader, lookupQuery, fileScope, lookupFiles.budget),
+                }),
                 files: lookupFiles.files,
                 // Each call keyed by this request, so a replay re-running lookup is answered from the call's record.
                 integrations: integrationCalls({
@@ -1565,7 +1562,7 @@ async function executeUntraced(
                 ...(authorized.versionField === undefined ? {} : { versionField: authorized.versionField }),
                 target: command.target,
                 constant: (table, column, word) => commandConstant(authorized, tx, table.meta, column, word, now()),
-                fileRead: lookupFiles?.read() ?? 0,
+                fileRead: lookupFiles?.budget.read ?? 0,
                 ...(authorized.fileReads ? { fileReads: authorized.fileReads, fileScope } : {}),
                 ...(authorized.files
                   ? {

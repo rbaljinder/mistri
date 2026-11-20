@@ -56,7 +56,7 @@ test.describe("a tenant App's public form in the reader's language", () => {
     const sent = page.waitForRequest((request) => request.method() === 'POST' && new URL(request.url()).pathname === '/api/forms/apply');
     await page.goto(`${app!.origin}/yard/form/apply${via(NORTH)}`);
     await page.getByRole('textbox', { name: /^Name/ }).fill('Ada');
-    await page.getByRole('button', { name: /^Submit/ }).click();
+    await page.getByRole('button', { name: /^Enviar/ }).click();
     expect(new URL((await sent).url()).searchParams.get('locale')).toBe('es');
     await expect(page.locator('.form-page-reference strong')).toHaveText('YRD-Ada-es');
   });
@@ -71,7 +71,7 @@ test.describe("a tenant App's public form in the reader's language", () => {
     await page.getByRole('textbox', { name: /^Name/ }).fill('Ada');
     await page.getByRole('button', { name: 'Continue' }).click();
     await expect(page.locator('.multi-step-count')).toHaveText('Paso 2 de 2');
-    await page.getByRole('button', { name: /^Submit/ }).click();
+    await page.getByRole('button', { name: /^Enviar/ }).click();
     // The step ran in Spanish and so did the submit: the draft's reference says the first, the receipt's the second.
     await expect(page.locator('.form-page-reference strong')).toHaveText(/^YRD-D-es-[0-9a-f]{8}\/es$/);
     const named = posted.map((url) => [new URL(url).pathname, new URL(url).searchParams.get('locale')]);

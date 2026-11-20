@@ -47,7 +47,7 @@ import { commandKeyText, parseCommandPrepareRequest } from '../commands/commandP
 import { readPreparedRecord, withPreparedAhead } from '../commands/commandPrepare.js';
 import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
 import type { EmailTransport } from '../email/email.js';
-import type { FoundLink, LinkBackend } from '../links/linkDoor.js';
+import { relatedQuery, type FoundLink, type LinkBackend } from '../links/linkDoor.js';
 import { holdsLinkRef, linkUrl, renderLinkRefs } from '../links/linkToken.js';
 import { tenantCommandDomain } from './tenantCommands.js';
 import { runTenantCommandTransaction, type TenantCommandRecords } from './tenantCommandTransaction.js';
@@ -344,6 +344,18 @@ export function bindTenantLinks(options: TenantLinksOptions) {
         return held(async () => {
           const reads = await reader.bindLinkReads(found.evidence, ownRows(found.row.resource));
           const read = await reads.query({ table: found.row.resource, columns: [...columns], filter: keyFilter(key), limit: 2, offset: 0 });
+          found.active();
+          return read.rows as Record<string, unknown>[];
+        });
+      },
+      async readRelated(found, key, child, list) {
+        return held(async () => {
+          const query = relatedQuery(catalog.schema, found.row.resource, child, list, key);
+          if (!query) return undefined;
+          /* The source narrows the child to the link's tenant and to rows naming its record (tenantLinkModel.ts
+             composeLinkScope); the query's own filter picks the one foreign key the list follows. */
+          const reads = await reader.bindLinkReads(found.evidence, Object.freeze({ ...nothing(), [child]: true }));
+          const read = await reads.query(query);
           found.active();
           return read.rows as Record<string, unknown>[];
         });
