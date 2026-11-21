@@ -32,7 +32,8 @@ import { isLongText } from '@mistriwork/engine/shared/pageAnatomy.js';
 import { declaredDisplayOf, effectiveDisplay, MONEY } from '@mistriwork/engine/shared/displayDefaults.js';
 import type { PageDef, PageFields, PageList, PageSection } from '@mistriwork/engine/shared/pageModel.js';
 import { tryResolvePath } from '@mistriwork/engine/shared/viewPaths.js';
-import { navViewKeys } from '../../shared/appModel.js';
+import { declaredDates, navViewKeys } from '../../shared/appModel.js';
+import { withDeclaredDates } from '../../shared/declaredDates.js';
 import { repeatedQueries } from '../../shared/appSegments.js';
 import { areaBox, layoutGrid, type LayoutGrid } from '@mistriwork/engine/shared/dashLayout.js';
 import { drawnLayout } from '@mistriwork/engine/shared/pageLayouts.js';
@@ -595,23 +596,38 @@ function resourceFindings(catalog: Catalog, shown: Map<string, Set<string>>, pag
       }
     }
 
-    // 15. A template that prints a decimal raw (a date or a timestamp is said as its day by the platform).
+    // 15. A template that prints a value as it is stored: an amount, or a date the platform does not say as its day.
     if (typeof resource.recordLabel === 'string' && resource.recordLabel.includes('{')) {
       const fields = [...resource.recordLabel.matchAll(/\{([^}]+)\}/g)].flatMap((match) => match[1].split(/\s\?\?\s/));
       /* A date or a timestamp is said as its day in a name ("Oct 23, 2026"), by the platform, wherever the template
-         names it (appRecordLabels.ts saysDay), so it is not printed raw and is no smell: only an amount, or a column
-         the App declared a type for, still is. */
-      const raw = fields.filter((path) => {
+         names it, unless the column's display gives it a format of its own (appRecordLabels.ts saysDay): so the lint
+         asks what that asks, and is quiet where the platform formats the day (a field report: a dated label was still
+         warned of) and says so where it does not. An amount is always printed as stored. */
+      const amounts: string[] = [];
+      const formatted: string[] = [];
+      const formats = new Set<string>();
+      for (const path of fields) {
         const landed = catalog.resolve(tableId, path);
-        if (!landed || landed.column.references) return false;
-        if (columnKind(landed.column.type ?? '') === 'date' || momentColumn(landed.column)) return false;
-        return MONEY.test(landed.column.name) || Boolean(resource.types?.[path]);
-      });
-      if (raw.length)
+        if (!landed || landed.column.references) continue;
+        if (columnKind(landed.column.type ?? '') === 'date' || momentColumn(landed.column)) {
+          const format = catalog.byTable.get(landed.table.id)?.resource.display?.[landed.column.name]?.format;
+          if (format) {
+            formatted.push(path);
+            formats.add(format);
+          }
+        } else if (MONEY.test(landed.column.name)) amounts.push(path);
+      }
+      if (amounts.length)
         say(
           'raw-label',
-          `recordLabel ${quote(resource.recordLabel)} names ${list(raw)}, which a template prints raw (1450.5) ` +
-            "→ name the record by words and references: '{…_id} · {kind}'. A date or a timestamp is said as its day, so '{lease_id} · rent due {due_on}' is fine.",
+          `recordLabel ${quote(resource.recordLabel)} names ${list(amounts)}, an amount a template prints as stored (1450.5) ` +
+            "→ name the record by words and references: '{…_id} · {kind}'. A date or a timestamp is said as its day by the platform, so '{lease_id} · rent due {due_on}' is fine.",
+        );
+      if (formatted.length)
+        say(
+          'raw-label',
+          `recordLabel ${quote(resource.recordLabel)} names ${list(formatted)}, a date its display formats (${[...formats].map(quote).join(', ')}), so the platform leaves it to the display and a template prints it as stored (2026-10-23) ` +
+            '→ drop the format from that display rule, or name the record without the date. A date with no format of its own is said as its day.',
         );
     }
 
@@ -1149,7 +1165,9 @@ function workFindings(catalog: Catalog, pages: readonly PageDef[], commands: Com
 type CommandTargets = Readonly<Record<string, { readonly target?: string } | undefined>>;
 
 export function designLint(app: AppDef, pages: readonly PageDef[], schema: DatabaseSchema, commands?: CommandTargets): DesignFinding[] {
-  const catalog = new Catalog(app, schema);
+  /* The catalog the App is served over says its declared dates (`types`, SQLite's TEXT dates) are dates, and so does
+     the lint, whichever catalog it is handed: idempotent where they are already applied. */
+  const catalog = new Catalog(app, app.sources ? schema : withDeclaredDates(schema, declaredDates(app)));
   return [
     ...shellFindings(app),
     ...pages.flatMap((page) => pageFindings(catalog, page)),

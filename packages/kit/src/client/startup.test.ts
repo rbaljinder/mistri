@@ -91,6 +91,42 @@ test("the veil's cached colors are a look's own: switching the Workbench's look,
   }
 });
 
+test("an App whose look changed between starts (read from the environment) never wears the last look's veil", () => {
+  const kept = new Map<string, string>();
+  vi.stubGlobal('sessionStorage', {
+    getItem: (key: string) => kept.get(key) ?? null,
+    setItem: (key: string, value: string) => void kept.set(key, value),
+    removeItem: (key: string) => void kept.delete(key),
+  });
+  const said = (ground: string) => {
+    document.head.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.remove());
+    const meta = document.createElement('meta');
+    meta.name = 'theme-color';
+    meta.content = ground;
+    document.head.append(meta);
+  };
+  const ground = () => document.documentElement.style.getPropertyValue('--startup-ground');
+  try {
+    document.documentElement.removeAttribute('data-starting');
+    said('#fafaf7');
+    document.body.style.backgroundColor = 'rgb(250, 250, 247)';
+    rememberStartupAppearance();
+    document.documentElement.removeAttribute('style');
+    veil();
+    expect(ground()).toBe('rgb(250, 250, 247)');
+    // The same address and reader picks, but the server now says another look: the plain ground, not the old one.
+    said('#0b1020');
+    document.documentElement.removeAttribute('style');
+    veil();
+    expect(ground()).not.toBe('rgb(250, 250, 247)');
+  } finally {
+    document.head.querySelectorAll('meta[name="theme-color"]').forEach((meta) => meta.remove());
+    document.documentElement.removeAttribute('style');
+    document.body.removeAttribute('style');
+    vi.unstubAllGlobals();
+  }
+});
+
 test('unexpected failures stay visible with a reload action and literal error text', () => {
   failStartup(new Error('<strong>Unavailable</strong>'));
   expect(document.querySelector('#startup-status')?.getAttribute('role')).toBe('alert');

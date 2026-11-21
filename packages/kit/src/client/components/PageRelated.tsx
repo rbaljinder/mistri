@@ -929,6 +929,8 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
                         table={table!}
                         rows={groupRows as Array<Record<string, unknown>>}
                         actions={rowVerbs}
+                        /* Named as the list draws the row, references followed: a dialog a row's verb opens said its key (a field report). */
+                        labelOf={(row) => recordForRow(row, data.columns ?? []).label}
                         onDone={() => {
                           refreshLists();
                           onActionDone?.();

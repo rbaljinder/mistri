@@ -13,6 +13,8 @@ import { compileAppDefinitionValidation } from '../app/appValidation.js';
 import type { AuthorizedBusinessCommand, BusinessCommandBinding } from '../commands/businessCommandAccess.js';
 import { createBusinessCommandAuthorizer } from '../commands/businessCommandAuthorization.js';
 import { executeBusinessCommand, BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
+import { PUBLIC_REMOVAL } from '../commands/commandErrors.js';
+import { recordRefusalCause } from '@mistriwork/engine/shared/refusal.js';
 import { validateBusinessCommandReferences } from '../commands/businessCommandLoader.js';
 import { defineCommands, getCommandEvents, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { parseSubmission, publicPrincipal } from '../commands/formHttp.js';
@@ -47,6 +49,12 @@ interface PolicyPublicIntakeOptions {
 const deny = (): never => {
   throw new AppAccessDenied();
 };
+/** A public handler's removal, refused in words that name the delete and the way round it; the table, to the operator. */
+const publicRemoval = (table: string) =>
+  recordRefusalCause(
+    new BusinessCommandExecutionError('forbidden', 'not_applied', undefined, undefined, PUBLIC_REMOVAL),
+    `a public submission removes no ${table} row: it only inserts`,
+  );
 function freeze<T>(value: T): T {
   if (value && typeof value === 'object') {
     for (const child of Object.values(value)) freeze(child);
@@ -177,7 +185,12 @@ export function bindPolicyPublicIntake(options: PolicyPublicIntakeOptions) {
               // Queue refusals too: a handler cannot catch one and commit its
               // earlier insert after attempting a forbidden mutation.
               update: (request) => accept(request, deny),
-              remove: (request) => accept(request, deny),
+              /* Refused as before, but said as the delete it is, with the way round it: a bare denial read "not
+                 available to this account" and sent the author to the grants (a field report). */
+              remove: (request) =>
+                accept(request, (request): never => {
+                  throw publicRemoval(request.table);
+                }),
             });
             const runtimeJournal = Object.freeze<CommandJournal>({
               find: (scope, manifest) => accept({ scope, manifest }, (value) => journal.find(value.scope, value.manifest)),
@@ -217,9 +230,11 @@ export function bindPolicyPublicIntake(options: PolicyPublicIntakeOptions) {
               if (Object.keys(key).length) deny();
             };
             checks.set(records, {
+              /* The key is empty but for a removal of the target's own row, which lands here before the write: said as
+                 the delete it is, as the table's own removal below is, and not as a bare denial. */
               target: (key) =>
                 accept(key, async (key) => {
-                  emptyKey(key);
+                  if (Object.keys(key).length) throw publicRemoval(command.target);
                 }),
               result: (key, result) =>
                 accept({ key, result }, async (value) => {

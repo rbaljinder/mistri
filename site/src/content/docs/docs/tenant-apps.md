@@ -461,7 +461,9 @@ submission and every saved step. An unknown address, no address on the shared
 host, a tenant that holds no address, or a suspended tenant lands with the
 platform for triage. An address is 22 to 128 URL-safe characters (letters, digits, `-` and `_`); a shorter or odder value is no address, and its submission lands in triage too. `mistri tenant init` refuses an `intake.address` column that cannot hold one (`varchar(20)`), `mistri check` says so as `[tenant-intake-address]`, and under `mistri dev` the server logs one line when a submission lands in triage because no tenant matched its address, naming the shape problem and never the address. Placed with a tenant, the form's
 command inserts and may update that tenant's rows of the tables it declares
-under `write`; it never removes one, and triage only inserts. A form saved on
+under `write`; it never removes one, and triage only inserts. A handler that
+calls `db.<table>.remove(…)` is refused with "A public command may not remove
+rows": mark the row instead, and remove it from a signed-in command. A form saved on
 every step keeps its draft in the tenant where its first step landed.
 
 Where the App lets tenants name themselves (`branding.allow: ['name']`), a public

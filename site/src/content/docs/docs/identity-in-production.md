@@ -109,11 +109,14 @@ most removals need no sign-out.
 
 Two limits are worth knowing before you promise anyone "immediately":
 
-- **More than one server.** With a `postgres://` sign-in store, each server
-  keeps what it read about a session for `MISTRI_AUTH_SESSION_CACHE` seconds
-  (default 5, at most 60; `0` reads the store on every request). A change made
-  through this server drops what it kept at once; a change another server or an
-  operator's SQL made is honored here within that time.
+- **More than one server.** Each server keeps what a `postgres://` sign-in store said
+  about a session for `MISTRI_AUTH_SESSION_CACHE` seconds (default 60, at most
+  60; `0` reads the store on every request), never past the session's own
+  expiry. A sign-out, revocation or new password made through this server drops
+  what it kept at once; another instance may honor a revoked session for up to
+  60 seconds, while a removed member or a changed role takes effect on the next
+  request everywhere. A file store keeps nothing: it is read in place on every
+  request.
 - **What the browser already has.** What a page fetched stays in that tab.
   mistri sends a signed-in reader's pictures as `private, no-cache` so a
   withdrawn grant takes effect for them, but it does not reach into a browser
@@ -141,6 +144,6 @@ session that made the request, never ones the request body claims
 - Keep `signUp: 'invite'` unless you run an [email service](/docs/email/); `mistri check` fails open sign-up without one.
 - Put people on a provider and require its multi-factor, with `mfa` listing what counts; keep passwords for a break-glass administrator.
 - Turn on `backchannelLogout` where the provider supports it, and a directory where leavers must lose access the moment they leave.
-- Keep the sign-in store in PostgreSQL when you run more than one instance, and decide whether five seconds of cache is acceptable for revocation.
+- Keep the sign-in store in PostgreSQL when you run more than one instance, and decide whether a minute of cache is acceptable for revocation; `MISTRI_AUTH_SESSION_CACHE` shortens it.
 
 *Proved by:* `test/account-administration.test.ts` (deactivation and a new password end sessions), `test/auth-store-reads.test.ts` (a write this process makes drops what was kept; the cache is bounded), `test/native-sign-in-age.test.ts` and `test/identity-providers.test.ts` (the age of a sign-in; `auth_time` and `mfa`), `test/auth-sign-in-lockout.test.ts` (the lock), `test/backchannel-logout-retry.test.ts` (a logout token), `test/embed-auth.test.ts` (the host-app exchange), `test/job-runner.test.ts` (a revoked grant on a later attempt), `test/business-command-execution.test.ts` (a revoked grant hides a receipt).

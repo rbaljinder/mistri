@@ -1,6 +1,6 @@
 /**
- * What a PostgreSQL authentication store answered about a session, kept for a
- * few seconds (authStoreReads.ts): a field report counted 116 transactions on
+ * What a PostgreSQL authentication store answered about a session, kept for up
+ * to a minute (authStoreReads.ts): a field report counted 116 transactions on
  * the auth store for one list page, a session read and eleven observations of
  * it per API call. These cases hold the rules that make keeping them safe
  * without a server: a write this process sends drops everything kept, before

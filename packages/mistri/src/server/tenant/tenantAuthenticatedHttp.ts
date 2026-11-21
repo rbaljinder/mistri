@@ -415,12 +415,14 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
        kept only as long as that object lives. Every call, first or not,
        observes the session row and its account (`assertSessionCurrent`, and
        `observeSession` on PostgreSQL), which refuses one that ended, was
-       shortened or impersonated, or whose account is banned. The file store
-       is read in place each time; a PostgreSQL store's answer may be one
-       read a few seconds ago, kept until anything in this process writes the
-       store (authStoreReads.ts): a sign-out here is seen by the next
-       observation, one elsewhere within MISTRI_AUTH_SESSION_CACHE. Only a
-       proof is kept, never a signed-out answer. */
+       shortened or impersonated, or whose account is banned. Either store's
+       answer may be one read up to a minute ago, kept until anything in this
+       process writes the store (authStoreReads.ts): a sign-out here is seen by
+       the next observation, and so is any change to the file; one made
+       elsewhere to a PostgreSQL store within MISTRI_AUTH_SESSION_CACHE.
+       Membership and roles are not among it: each snapshot reads them with its
+       own data (tenantReadSource.ts). Only a proof is kept, never a signed-out
+       answer. */
     const resolved = new WeakMap<IncomingMessage, VerifiedSessionInstance>();
     // Both adapters derive from the same captured strong method.
     const verify = async (request: IncomingMessage) => {

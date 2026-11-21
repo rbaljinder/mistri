@@ -501,11 +501,30 @@ test('a commands module loaded as CommonJS is refused as one, with the fix; an E
     writeFileSync(join(directory, 'package.json'), '{ "name": "x" }\n');
     await assert.rejects(loadBusinessCommands(file), (error: Error) => {
       assert.match(error.message, /^The commands module "commands\.ts" was loaded as CommonJS \(.+package\.json has no "type"\)/);
-      assert.match(
+      // The fix names the package.json the key is missing from, by its path.
+      assert.ok(
+        error.message.endsWith(
+          `set "type": "module" in ${join(directory, 'package.json')} (npm pkg set type=module, in ${directory}), or name the file commands.mts.`,
+        ),
         error.message,
-        /set "type": "module" in the App's package\.json \(npm pkg set type=module\), or name the file commands\.mts\.$/,
       );
       assert.doesNotMatch(error.message, /must be created with defineCommand/);
+      return true;
+    });
+    /* A field report: the module lived in a workspace package whose package.json lacked the key, beside an App whose
+       package.json had it, and the fix named the App's. It names the workspace package's now. */
+    const shared = join(directory, 'workspace', 'packages', 'desk-commands');
+    mkdirSync(join(directory, 'workspace', 'apps', 'desk'), { recursive: true });
+    mkdirSync(shared, { recursive: true });
+    writeFileSync(join(directory, 'workspace', 'apps', 'desk', 'package.json'), '{ "type": "module" }\n');
+    writeFileSync(join(shared, 'package.json'), '{ "name": "@acme/desk-commands", "mistri": { "cssPrefix": "acme" } }\n');
+    writeFileSync(join(shared, 'commands.ts'), 'export default { assign: {} };\n');
+    await assert.rejects(loadBusinessCommands(join(shared, 'commands.ts')), (error: Error) => {
+      assert.ok(
+        error.message.includes(`set "type": "module" in ${join(shared, 'package.json')} (npm pkg set type=module, in ${shared})`),
+        error.message,
+      );
+      assert.doesNotMatch(error.message, /the App's package\.json/);
       return true;
     });
     // The same module as an ES module: a plain object is the author's mistake, said as before.

@@ -106,3 +106,10 @@ test("a dashboard's drill opens the list its address would: the view's show and 
   expect(asked.search).toBe('status=open');
   expect(listEntry('nowhere', 'issue')).toBeUndefined();
 });
+
+test('following a signed-in form in place opens its own room, as its link does (a field report)', async () => {
+  const { go } = await import('../core.js');
+  const { pageBridge } = await import('../uiBridge.js');
+  expect(pageBridge.openView?.('write')).toBe(true);
+  expect(go).toHaveBeenLastCalledWith({ kind: 'page', pageId: 'form-write' });
+});

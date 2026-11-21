@@ -219,3 +219,20 @@ test('App page lookup errors propagate and a retry can recover the authored page
   api.mockResolvedValueOnce({ pages: [page('authored')] });
   expect(await resolve('customer')).toBe('authored');
 });
+
+test("a page the App names that the reader's catalog left out opens the record through its table's own page", async () => {
+  /* The server leaves out a page none of whose sections this role reads (readablePage); the record is still theirs
+     (a field report: a role that read the table but not what its page listed could not open the record at all). */
+  served = { resources: {}, pages: [{ id: 'activity-only', base: 'customer' }] } as never;
+  findTable.mockImplementation((id: string) => (id === 'customer' ? { id } : undefined));
+  api.mockResolvedValue({ pages: [page('overview', 'Overview', 'customer')] });
+  expect((await registry.pageById('activity-only', 'customer')).id).toBe('overview');
+  registry.forgetPages();
+  api.mockResolvedValueOnce({ pages: [] }).mockResolvedValueOnce({ page: page('suggested:customer') });
+  expect((await registry.pageById('activity-only', 'customer')).id).toBe('suggested:customer');
+  expect(api).toHaveBeenLastCalledWith('/api/pages/suggested?table=customer');
+  /* An id the App never named, or a table the reader cannot see, is still no page. */
+  await expect(registry.pageById('never-named', 'customer')).rejects.toThrow('There is no page');
+  findTable.mockReturnValue(undefined);
+  await expect(registry.pageById('activity-only', 'customer')).rejects.toThrow('There is no page');
+});

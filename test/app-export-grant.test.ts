@@ -448,3 +448,38 @@ test('an export of a table the App does not serve answers 404, and a question it
     `CREATE TABLE payroll (id INTEGER PRIMARY KEY, amount INTEGER); INSERT INTO payroll VALUES (1, 100);`,
   );
 });
+
+/* A field report: a refused export's body had no code, so a program that branches on the API's snake_case codes read
+   the refusal as an unknown failure. Each answer that is not the file carries one, beside `error` and `errors`. */
+test('a refused export says why in the body the API uses: forbidden 403, not_found 404, invalid_request 400', async () => {
+  await served(
+    async (base) => {
+      const refused = async (q: string, who = 'writer') => {
+        const response = await fetch(`${base}/api/export`, {
+          method: 'POST',
+          signal: AbortSignal.timeout(3_000),
+          headers: { Cookie: `session=${who}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ app: appId, q, format: 'ndjson' }),
+        });
+        assert.equal(response.headers.get('content-disposition'), null, q);
+        const body = (await response.json()) as { code?: string; error?: string; errors?: Array<{ code?: string; message: string }> };
+        return { status: response.status, body };
+      };
+      const forbidden = await refused('service');
+      assert.equal(forbidden.status, 403);
+      assert.equal(forbidden.body.code, 'forbidden');
+      assert.equal(forbidden.body.error, 'Export of "service" is not available to this person.');
+      assert.deepEqual(forbidden.body.errors, [{ code: 'forbidden', message: forbidden.body.error }]);
+      const none = await refused('incident', 'reader');
+      assert.deepEqual([none.status, none.body.code], [403, 'forbidden'], 'a person who exports nothing');
+      const hidden = await refused('payroll');
+      assert.deepEqual([hidden.status, hidden.body.code, hidden.body.errors?.[0]?.code], [404, 'not_found', 'not_found']);
+      assert.match(hidden.body.error ?? '', /No table called "payroll"/);
+      const misread = await refused('incident show nmae');
+      assert.deepEqual([misread.status, misread.body.code], [400, 'invalid_request']);
+      assert.match(misread.body.errors?.[0]?.message ?? '', /"nmae" is not a column on incident/);
+    },
+    app,
+    `CREATE TABLE payroll (id INTEGER PRIMARY KEY, amount INTEGER); INSERT INTO payroll VALUES (1, 100);`,
+  );
+});

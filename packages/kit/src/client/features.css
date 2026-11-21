@@ -713,7 +713,9 @@ body.first-run #db-label {
 .free-page-body { isolation: isolate; }
 /* A bare page (definePage layout: 'bare'): the room owns the window. The sidebar, its reveal, the bars and the menu leave the
    flow; the skip link, the pane and its focus are the shell's still. */
-body.page-bare :is(.topbar, .sidebar, .sidebar-reveal, #topnav, #explain-pane) { display: none; }
+/* The crumb bar too, whatever the walk says (Crumbs.tsx decides the same from the walk): a param set with `push` made a
+   second step, and the sticky bar came over the page's own controls and took their clicks (a field report). */
+body.page-bare :is(.topbar, .sidebar, .sidebar-reveal, #topnav, #explain-pane, .crumbs-host) { display: none; }
 .free-page-body.is-bare { padding: 0; }
 /* The pane's own gutter goes too: a full-bleed root reaches the window's edges. */
 body.app-mode.page-bare .content { padding-inline: 0; }

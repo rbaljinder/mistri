@@ -147,8 +147,11 @@ export const EMBED_BUDGET = {
      shell carries their script and their sheets as scoped text. Measured 762,581 / 102,604, from 657,900 / 93,000.
      Raised at rc.78 (measured 103.5 KB in brotli, over 103.2): the shell's App-wide choice (`choose`: the chooser in the
      top bar, the list's chip, the New form's default from it) and a frozen row's read-only record page, all drawn by the
-     served shell this chunk is. The brotli target is set about 3% above; the raw one held. */
-  shell: { raw: 785_000, br: 109_000 },
+     served shell this chunk is. The brotli target is set about 3% above; the raw one held.
+     Raised at rc.82 (measured about 785,000 raw, at its target): a free-form page's reads batched into one request
+     (the sdk host's read queue) and a refused read named on its own section, both drawn by the served shell. Raw is
+     whitespace a host's minifier removes; the brotli target held. Set about 3% above. */
+  shell: { raw: 810_000, br: 109_000 },
 };
 
 /* The chrome's words in a language besides English (vite.config.ts LOCALE_GROUP, src/client/copy/<lang>.ts), one chunk

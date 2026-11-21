@@ -718,7 +718,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         assert.match(refusalReasons(removal).join(' | '), /a public submission (removes no lead row|names no record)/);
         assert.doesNotMatch((removal as Error).message, /lead/);
         // The visitor's answer names the delete, not the table (a field report: it said the command was unavailable).
-        assert.match((removal as Error).message, /cannot delete a record/);
+        assert.match((removal as Error).message, /may not remove rows .*remove it from a signed-in command/);
       } finally {
         mode = 'place';
       }

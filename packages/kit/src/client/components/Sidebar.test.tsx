@@ -549,6 +549,31 @@ test("the room the walk is on is scrolled clear of the menu's foot fade, so it n
   }
 });
 
+test("a form's row is scrolled clear of the foot's fade as a table's is (no table row is current there)", () => {
+  const scrolled: string[] = [];
+  const was = HTMLElement.prototype.scrollIntoView;
+  HTMLElement.prototype.scrollIntoView = function (this: HTMLElement) {
+    scrolled.push(this.dataset.form ?? this.dataset.table ?? '');
+  };
+  try {
+    walk.stack = [];
+    app = {
+      name: 'Fade',
+      resources: {},
+      home: 'edit',
+      views: { people: { table: 'customer', label: 'People' }, edit: { id: 'entry', label: 'Entry', command: 'submit' } },
+      nav: [
+        { view: 'people', label: 'People' },
+        { view: 'edit', label: 'Entry' },
+      ],
+    };
+    draw();
+    expect(scrolled.filter((word) => word !== 'customer').length).toBe(1);
+  } finally {
+    HTMLElement.prototype.scrollIntoView = was;
+  }
+});
+
 for (const mode of ['workbench', 'app'] as const)
   test(`${mode} omits unknown row counts without hiding a known zero`, async () => {
     const previous = walk.schema;

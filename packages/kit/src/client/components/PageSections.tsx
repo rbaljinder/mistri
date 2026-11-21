@@ -256,8 +256,16 @@ export function TabStrip({
   const id = useId();
   // An address says a tab as its word (appAddress.ts): matched by the token or by it.
   const asked = tabs.findIndex((tab) => tabMatches(tab.token, entry.tab));
-  const [active, setActive] = useState(asked === -1 ? 0 : asked);
-  const [drawn, setDrawn] = useState<Set<number>>(() => new Set([asked === -1 ? 0 : asked, ...eager]));
+  /* The reader's pick is held as the tab's key, not its place: a list's tab comes and goes with its `when` and its rows
+     (ListTabs), and a place held across that named another tab, or none. A pick that has left falls back to the tab the
+     address names, else the first one standing (a field report). */
+  const [chosen, setChosen] = useState<string | number | undefined>(undefined);
+  const picked = tabs.findIndex((tab) => tab.key === chosen);
+  const active = picked !== -1 ? picked : asked === -1 ? 0 : asked;
+  /* The tab the page opened on is seen from the start: left for another, its panel stays drawn and hidden, holding the
+     page's height, so a shorter tab picked at the bottom of a phone's page does not pull the strip up under the reader. */
+  const [seen, setSeen] = useState<Set<string | number>>(() => new Set(tabs[active] ? [tabs[active].key] : []));
+  const drawn = { has: (i: number) => i === active || eager.includes(i) || seen.has(tabs[i]?.key) };
   const buttons = useRef<Array<HTMLButtonElement | null>>([]);
   /* The tabs that do not fit go under More (useTabFold.ts); the chosen one is never among them. */
   const yields = new Set(tabs.flatMap((tab, i) => (tab.yields ? [i] : [])));
@@ -270,8 +278,8 @@ export function TabStrip({
     focusing.current = undefined;
   });
   const show = (i: number) => {
-    setActive(i);
-    setDrawn((s) => new Set(s).add(i));
+    setChosen(tabs[i].key);
+    setSeen((s) => new Set(s).add(tabs[i].key));
     /* Written into the address bar without re-rendering: what you are looking
        at is what a link should carry. The first tab writes nothing. */
     onTab(!scoped && i === 0 ? undefined : tabs[i].token);

@@ -257,6 +257,19 @@ test.describe('The intake form at 411px', () => {
     expect(box!.y + box!.height).toBeLessThanOrEqual(800 + 1);
   });
 
+  test('cards of several are one to a row at a phone, a label no narrower than its words (a field report)', async ({ page }) => {
+    await page.goto(`${app.origin}/form/apply`);
+    await toNameStep(page);
+    await toAccountStep(page);
+    const cards = page.getByRole('group', { name: /^Anything to go with it\?/ }).locator('[data-slot="check-cards-card"]');
+    await expect(cards).toHaveCount(3);
+    const boxes = await cards.evaluateAll((nodes) => nodes.map((node) => node.getBoundingClientRect()));
+    // One column: every card on a row of its own, as wide as the first.
+    expect(new Set(boxes.map((box) => Math.round(box.x))).size).toBe(1);
+    expect(new Set(boxes.map((box) => Math.round(box.width))).size).toBe(1);
+    expect(boxes[0]!.width).toBeGreaterThan(300);
+  });
+
   test('no ancestor of the form scrolls sideways after any Next', async ({ page }) => {
     await page.goto(`${app.origin}/form/apply`);
     const form = page.locator('.multi-step-form');

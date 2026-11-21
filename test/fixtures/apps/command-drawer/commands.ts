@@ -26,6 +26,31 @@ export default defineCommands({
       return { patientId: patient.id, version: patient.version, message: 'Note written.' as const };
     },
   }),
+  /* A short form with the three controls a dialog's layout has been wrong about (e2e/command-drawer.spec.ts): an accept
+     box, a date and a time, and cards. */
+  bookVisit: defineCommand({
+    source: clinic,
+    target: 'patient',
+    input: {
+      at: field.datetime({ label: 'When' }),
+      kind: field.choice(
+        [
+          { value: 'checkup', label: 'Routine checkup', help: 'A short visit to review how things are going' },
+          { value: 'followup', label: 'Follow-up after a procedure', help: 'Review healing and remove any dressings' },
+          { value: 'urgent', label: 'Urgent concern', help: 'Something that cannot wait for the next opening' },
+        ],
+        { label: 'Kind of visit', as: 'cards' },
+      ),
+      agree: field.bool({ label: 'I have checked the patient is who they say they are', accept: true }),
+    },
+    write: ['visit_note'],
+    output,
+    async handle({ db, record }, input) {
+      const patient = await db.patient.update(record, { last_note: String(input.kind) });
+      await db.visit_note.insert({ name: String(input.kind), patient_id: patient.id, body: '' });
+      return { patientId: patient.id, version: patient.version, message: 'Note written.' as const };
+    },
+  }),
   fullNote: defineCommand({
     source: clinic,
     target: 'patient',

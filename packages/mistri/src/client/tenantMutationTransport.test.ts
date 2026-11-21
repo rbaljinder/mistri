@@ -829,6 +829,42 @@ test('a command refused stale before any renewal renews once, then goes under th
   unregister();
 });
 
+/* A field report: a page awaiting run() in a loop, whose execute was refused stale with its outcome unknown, was
+   thought to stall there. The run settles unknown at once (it is never resent, nor renewed for), and the next run
+   waits for the page's own renewal of the lease that refusal suspended, then is sent under it. */
+test('a command refused stale with its outcome unknown settles unknown, and the next run is sent under the renewed lease', async () => {
+  const owner = session.captureSessionIdentity(),
+    lease = session.captureTenantLease()!,
+    renewed = { ...lease, revision: 2 };
+  let renewal: Promise<void> | undefined;
+  const renew = vi.fn(async () => {});
+  const unregister = transport.registerTenantRenewer(owner, { inFlight: () => renewal, renew });
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(response({ code: 'tenant_lease_stale', error: 'Commit not confirmed', outcome: 'unknown' }, null, 409))
+    .mockResolvedValueOnce(response(receipt(), renewed));
+  vi.stubGlobal('fetch', fetcher);
+  await expect(transport.tenantMutationApi('/api/commands/execute', command())).rejects.toMatchObject({ outcome: 'unknown' });
+  expect(fetcher).toHaveBeenCalledOnce();
+  expect(renew).not.toHaveBeenCalled();
+  expect(session.tenantLeaseActive()).toBe(false);
+
+  const renewing = deferred<void>();
+  renewal = renewing.promise;
+  const next = transport.tenantMutationApi('/api/commands/execute', { ...command(), idempotencyKey: 'attempt-exact-002' });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(fetcher).toHaveBeenCalledOnce();
+  session.acceptTenantRenewal(owner, 1, renewed);
+  renewal = undefined;
+  renewing.resolve();
+  expect(await next).toEqual(receipt());
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(JSON.parse(fetcher.mock.calls[1][1].body).idempotencyKey).toBe('attempt-exact-002');
+  expect(new Headers(fetcher.mock.calls[1][1].headers).get(names.revision)).toBe('2');
+  expect(lock).not.toHaveBeenCalled();
+  unregister();
+});
+
 test('a renewal that fails leaves the refused command refused, sent once', async () => {
   const owner = session.captureSessionIdentity();
   const renew = vi.fn(async () => {

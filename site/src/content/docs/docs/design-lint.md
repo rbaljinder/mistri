@@ -54,7 +54,7 @@ makes the picture sharper without changing the layout.
 | `no-forward-verb` | A record's only actions end it (cancel, deactivate, end) | add the verb its work moves on by, or a related `create` |
 | `thin-workflow` | A workflow of 2 steps, or most values outside it; the advisory names which, and the values left out | 3–6 ordered steps; tones for side exits |
 | `undressed-vocabulary` | A status without tones reads as body text | `{ tone: { open: 'info', '*': 'neutral' } }` |
-| `raw-label` | A `recordLabel` template names an amount, which it prints raw (a date or a timestamp is said as its day, so it is no smell) | words and references: `'{lease_id} · {kind}'` |
+| `raw-label` | A `recordLabel` template names an amount, or a date whose display rule gives it a `format`, which it prints as stored (any other date or timestamp is said as its day, so it is no smell) | words and references: `'{lease_id} · {kind}'`; for the date, drop its `format` |
 | `required-unfilled` | A New form or a related `create` leaves a required column empty, or a status unchosen | `show` it, or `defaults: { status: 'new' }` |
 | `long-group` | A New form's group or step asks more than 7 things in one run | groups named by what they hold, none longer than 7; the rest on the record's page |
 | `stuck-state` | A state that is not final and that no verb, timer or service leaves: its records offer no next step, on their page or on a board's card | the verb the work moves on by (`on: { finish: '…' }`), or `final: true` |

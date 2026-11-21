@@ -27,6 +27,7 @@ const gone: unknown[] = [];
 let matches: Record<string, boolean> = {};
 let contextLabel: string | undefined;
 let appMode = false;
+let explicitLabel = false;
 /* Whether the reader may add a row of a related list's table (insert.js canInsert). */
 let insertable = false;
 let editing = false;
@@ -267,7 +268,7 @@ vi.mock('../core.js', () => {
     keyOf: (_t: TableMeta, row: Record<string, unknown>) => (row.id === undefined ? null : { id: row.id }),
     rowLabel: (_t: TableMeta, row: Record<string, unknown>) => String(row.name ?? row.id),
     labelPath: () => labelled,
-    recordLabel: () => undefined,
+    recordLabel: () => (explicitLabel ? 'template' : undefined),
     refsFrom: () => [],
     labelColumn,
     primaryKey,
@@ -749,6 +750,36 @@ describe('related list options', () => {
       plans: [{ index: 0, view, groups } as never],
     });
     await waitFor(() => expect(document.querySelectorAll('.row-actions-trigger')).toHaveLength(1));
+  });
+
+  test("a grouped row's menu names the row by its recordLabel, not by what the raw row says (a field report)", async () => {
+    appMode = true;
+    explicitLabel = true;
+    try {
+      // `name` is a column the row carries but the resource's label does not name: the key is what is left of it.
+      viewRows = [{ id: 1001, total: 627.95, name: 'raw' }];
+      const voidInvoice = { id: 'void', label: 'Void', command: { id: 'voidInvoice', version: 1, target: 'invoice', input: [] } };
+      appResource = { resources: { invoice: { actions: [voidInvoice] } }, grantedCommands: ['voidInvoice'] };
+      const groups = { base: 'invoice', by: [{ path: 'customer_id' }], measures: [{ fn: 'count', alias: 'group_rows' }], limit: 5 };
+      breakdownOverride = {
+        breakdown: { ...groups },
+        resolved: [],
+        ms: 1,
+        offset: 0,
+        columns: ['customer_id', 'group_rows'],
+        rows: [{ customer_id: 4, group_rows: 1 }],
+        total: 1,
+      } as never;
+      draw({
+        page: { ...page, sections: [{ ...invoices, columns: ['id', 'total', 'name'], rowActions: true, group: { by: 'customer_id' } }] },
+        plans: [{ index: 0, view: viewDefinition('page:customer:1', 'invoice', ['id', 'total', 'name']), groups } as never],
+      });
+      await waitFor(() => expect(document.querySelectorAll('.row-actions-trigger')).toHaveLength(1));
+      // The ungrouped list's menu is named through the same reading (PageRelated recordForRow).
+      expect(document.querySelector('.row-actions-trigger')).toHaveAttribute('aria-label', 'Actions for 1001');
+    } finally {
+      explicitLabel = false;
+    }
   });
 
   test("a list of the record's children offers its Add, and the record's verbs it places in its head", async () => {

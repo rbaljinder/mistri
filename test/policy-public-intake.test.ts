@@ -182,6 +182,25 @@ for (const operation of ['update', 'remove'] as const) {
   });
 }
 
+test('a public removal is refused in words that name the delete and the way round it, not the grants', async (t) => {
+  const f = await fixture(t);
+  f.control.handle = async (context) => {
+    await context.tx.remove({ table: 'inbox', key: { id: 1 } });
+  };
+  /* A field report: the author read "not available to this account" and went looking at grants. */
+  const removal = await f
+    .bind()
+    .submit(submission())
+    .then(
+      () => assert.fail('a public removal applied'),
+      (error: unknown) => error,
+    );
+  assert.ok(refusal('forbidden')(removal));
+  assert.match((removal as Error).message, /may not remove rows .*mark the row instead, and remove it from a signed-in command/);
+  assert.doesNotMatch((removal as Error).message, /inbox/);
+  assert.equal(f.db.prepare('SELECT COUNT(*) AS n FROM inbox').get()!.n, 1);
+});
+
 test('public result references are refused before commit and rechecked on replay', async (t) => {
   const f = await fixture(t),
     intake = f.bind();

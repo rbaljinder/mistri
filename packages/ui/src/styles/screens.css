@@ -78,5 +78,12 @@
     [data-slot='radio-group'][data-kind='cards']:not([data-fit='row'], [data-fit='pair'], [data-fit='stack'], [data-shape='pair']) {
       grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr));
     }
+    /* A card with words to read (a line under its title, or a long one) or several of a few (a mark, an icon and their
+       words in half of 354px): one a row, the line under the title. Only a set of short labels, which the form says as
+       `data-fit='short'`, stays two across; two across left a title one word to a line (a field report). */
+    [data-slot='radio-group'][data-kind='cards']:not([data-fit='row'], [data-fit='pair'], [data-fit='short'], [data-shape='pair']),
+    [data-slot='check-cards']:not([data-fit='short']) {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 }

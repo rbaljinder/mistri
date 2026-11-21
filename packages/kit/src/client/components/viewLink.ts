@@ -92,7 +92,7 @@ function openView(key: string, options: { tab?: string; search?: string; filters
   const room = app ? viewRoom(app, key) : undefined;
   if (!room) return false;
   if (!isListRoom(room)) {
-    go(pageView(dashPageId(key)));
+    go(pageView(roomPageId(room) ?? dashPageId(key)));
     return true;
   }
   /* A tab, a search and filters are the words an address says (publicAddress.ts addressQuestion), so a list

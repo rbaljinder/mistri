@@ -71,6 +71,8 @@ async function fixture(run: (f: { call: Call; as: (role: string | null) => void 
           rep: { read: true, write: true, fields: { account: { read: ['id', 'name', 'status', 'tier'], write: ['status'] } } },
           // Reads the deals and nothing of an account: a document of an account is not theirs to read.
           outsider: { read: ['deal'] },
+          // Reads the accounts and nothing they list: an account's page is still theirs, without the lists.
+          seller: { read: ['account'] },
         },
         public: { read: ['account', 'deal'], fields: { account: { read: ['id', 'name', 'status'] } } },
       },
@@ -103,6 +105,12 @@ async function fixture(run: (f: { call: Call; as: (role: string | null) => void 
             { kind: 'fields', show: ['name', 'status'] },
             { kind: 'list', from: 'deal', whose: 'account_id' },
           ],
+        },
+        {
+          id: 'pipeline',
+          label: 'Pipeline',
+          base: 'account',
+          sections: [{ kind: 'list', from: 'deal', whose: 'account_id' }],
         },
         {
           id: 'notes',
@@ -260,6 +268,37 @@ test('a section its reader may not read is left out of the page, and nothing of 
     );
     assert.ok(!composed.text.includes(secret));
     await sameAsAlone(call, composed.body.reads);
+  });
+});
+
+test('a role that reads the record but not the tables its page lists opens the page without those lists', async () => {
+  await fixture(async ({ call, as }) => {
+    as('seller');
+    // A field report: such a role was told the whole page was not theirs. The deals and contacts go; the record stays.
+    const composed = await call('/api/pages/compose', { page: 'account', key: { id: 1 }, rows: 10 });
+    assert.equal(composed.status, 200);
+    assert.equal(composed.body.planned, true);
+    assert.deepEqual(
+      composed.body.page.sections.map((section: { kind: string }) => section.kind),
+      ['fields', 'fields'],
+    );
+    assert.ok(!composed.text.includes('Renewal') && !composed.text.includes('ada@example.test'), 'nothing of a list left out is read');
+    await sameAsAlone(call, composed.body.reads);
+    const plan = await call('/api/pages/plan', { page: 'account', key: { id: 1 } });
+    assert.equal(plan.status, 200);
+    assert.deepEqual(plan.body.page, composed.body.page);
+    // The table's own page reads the same way, so a page with nothing left for this role is left out of their pages
+    // (the browser opens the record through the table's own page, page.js) and the record still opens.
+    const pages = await call('/api/pages');
+    assert.ok(!pages.body.pages.some((page: { id: string }) => page.id === 'pipeline'));
+    assert.ok(pages.body.pages.some((page: { id: string }) => page.id === 'account'));
+    const own = await call('/api/pages/plan', { page: 'suggested:account', key: { id: 1 } });
+    assert.equal(own.status, 200);
+    assert.ok(!JSON.stringify(own.body.page.sections).includes('"deal"'));
+    // The record's own table is the line: a role that cannot read it has no such page at all.
+    as('outsider');
+    assert.equal((await call('/api/pages/plan', { page: 'account', key: { id: 1 } })).status, 404);
+    assert.deepEqual((await call('/api/pages/compose', { page: 'account', key: { id: 1 } })).body, { planned: false });
   });
 });
 

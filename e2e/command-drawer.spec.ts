@@ -76,6 +76,48 @@ test.describe('Command drawer', () => {
     expect(notes(app)).toEqual([]);
   });
 
+  test("a short form's accept box, date and time and cards keep their layout in the dialog (a field report)", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page, app);
+    await page.goto(`${app.origin}/@patient~1`);
+    await page.getByRole('button', { name: 'Book a visit', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Book a visit', exact: true });
+    await expect(dialog).toBeVisible();
+
+    // The accept box is on its label's line, level with the first line of it, and not over it.
+    const row = await dialog.locator('[data-slot="field-check-row"]').evaluate((node) => {
+      const [box, label] = [node.querySelector('input')!, node.querySelector('label')!].map((el) => el.getBoundingClientRect());
+      return { before: box.right <= label.left + 1, offset: Math.abs(box.top + box.height / 2 - (label.top + 10)) };
+    });
+    expect(row.before).toBe(true);
+    expect(row.offset).toBeLessThan(10);
+
+    // The date's text is as wide as a full date in the field's own font, and so is the time.
+    const fits = await dialog.locator('[data-slot="date-field"]').evaluate((field) => {
+      const measure = (input: HTMLInputElement, text: string) => {
+        const span = document.createElement('span');
+        span.textContent = text;
+        span.style.cssText = `position:absolute;visibility:hidden;white-space:pre;font:${getComputedStyle(input).font}`;
+        document.body.append(span);
+        const width = span.getBoundingClientRect().width;
+        span.remove();
+        return input.clientWidth - width;
+      };
+      const date = field.querySelector<HTMLInputElement>('[data-slot="input"]')!;
+      const time = field.querySelector<HTMLInputElement>('[data-slot="date-field-time"]')!;
+      return { date: measure(date, 'MM/DD/YYYY'), time: time.scrollWidth <= time.clientWidth };
+    });
+    expect(fits.date).toBeGreaterThanOrEqual(0);
+    expect(fits.time).toBe(true);
+
+    // A card's line is under its title, not beside it.
+    const first = dialog.locator('[data-slot="choice"]').first();
+    const title = (await first.locator('[data-slot="choice-label"]').boundingBox())!;
+    const help = (await first.locator('.intake-choice-help').boundingBox())!;
+    expect(help.y).toBeGreaterThanOrEqual(title.y + 10);
+    expect(Math.abs(help.x - title.x)).toBeLessThan(2);
+  });
+
   test('the drawer submits and lands on the record; Back closes it and takes the page back', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await login(page, app);

@@ -71,6 +71,16 @@ test(
     assert.equal(jobs.total, 1);
     for (const refused of [ledger, nowhere]) assert.ok(refused.total === undefined && refused.errors?.length, JSON.stringify(refused));
 
+    // A free-form page's batched views (kit breakdownBatch.ts) are refused whole when one asks past the catalog, with
+    // the sign-in its own read meets; the client then asks each alone, so only that read meets it.
+    const view = (table: string) => ({ view: { view: { id: 'v', name: table, base: table, columns: [{ path: 'id' }], limit: 5 } } });
+    const batch = await server.api('breakdowns', { items: [view('job'), view('ledger')] });
+    assert.equal(batch.status, 401, JSON.stringify(batch.body));
+    assert.deepEqual(batch.body, answers['view/run']![0]);
+    const publicBatch = await server.api('breakdowns', { items: [view('job'), view('job')] });
+    assert.equal(publicBatch.status, 200, JSON.stringify(publicBatch.body));
+    assert.deepEqual(publicBatch.body.results[0].body.rows, [{ id: 1 }]);
+
     // A signed-in reader whose role does not read the table is still told as before: the catalog it reads has none.
     const rider = await server.signUp('rider');
     const mine = await server.api('run', { q: 'ledger', limit: 5, offset: 0 }, rider);

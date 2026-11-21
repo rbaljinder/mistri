@@ -220,6 +220,15 @@ test('lists, counts, breakdowns and exports tolerate lag; a one-row read and eve
   assert.equal(toleratesLag('/api/view/run', { view: { base: 'lead', limit: 1 } }), false, 'a record page row');
   assert.equal(toleratesLag('/api/query', { table: 'lead', limit: 1 }), false);
   assert.equal(toleratesLag('/api/view/run', { view: { base: 'lead', limit: 25 } }), true);
+  // A free-form page's batched views go where each would alone: one record's row takes the whole batch to the primary.
+  const list = { view: { view: { base: 'lead', limit: 25 } } };
+  assert.equal(toleratesLag('/api/breakdowns', { items: [list, { text: 'lead count' }] }), true);
+  assert.equal(
+    toleratesLag('/api/breakdowns', { items: [list, { view: { view: { base: 'lead', limit: 1 } } }] }),
+    false,
+    'a batched record row',
+  );
+  assert.equal(toleratesLag('/api/breakdowns', { items: [list, { view: { limit: 1, view: { base: 'lead' } } }] }), false);
   for (const path of [
     '/api/pages/compose',
     '/api/references',

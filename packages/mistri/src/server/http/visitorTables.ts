@@ -35,7 +35,19 @@ function tablesAsked(path: string, body: Record<string, unknown>): string[] {
   return [...new Set(named(body, QUESTIONS.has(path)).filter((name): name is string => typeof name === 'string' && name.length > 0))];
 }
 
+/* A batch's views: a free-form page's rows (the ui-sdk host), each a `/api/view/run` of its own. */
+function batchedViews(path: string, body: Record<string, unknown>): Record<string, unknown>[] {
+  if (path !== '/api/breakdowns' || !Array.isArray(body.items)) return [];
+  return body.items.flatMap((item: unknown) => {
+    const view = item && typeof item === 'object' ? (item as Record<string, unknown>).view : undefined;
+    return view && typeof view === 'object' && !Array.isArray(view) ? [view as Record<string, unknown>] : [];
+  });
+}
 /** Whether a request names a table the visitor's catalog does not hold. */
 export function asksOutside(schema: DatabaseSchema, path: string, body: Record<string, unknown>): boolean {
-  return tablesAsked(path, body).some((name) => !tableNamed(schema, name));
+  /* A batch of views is refused whole when one of them asks past the catalog: unlike a badge beside a public
+     list's, the view asked alone answers the sign-in, and the client asks each alone after a refused batch
+     (breakdownBatch.ts), so that one is the one that meets it. */
+  const views = batchedViews(path, body).flatMap((view) => tablesAsked('/api/view/run', view));
+  return [...tablesAsked(path, body), ...views].some((name) => !tableNamed(schema, name));
 }

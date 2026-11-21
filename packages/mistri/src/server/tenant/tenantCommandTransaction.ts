@@ -13,6 +13,7 @@ import type { CommandAudit, CommandJournal, CommandLinkRow } from '../../adapter
 import { AppAccessDenied, authorizeTransaction, type ResourceAccess } from '../app/appAccess.js';
 import type { BusinessCommandAuthorization } from '../commands/businessCommandAuthorization.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
+import { PUBLIC_REMOVAL } from '../commands/commandErrors.js';
 import { canonicalKey } from '../commands/commandDb.js';
 import { columnKind } from '@mistriwork/engine/shared/schema.js';
 import type { TenantCommandKind } from './tenantCommandKindContract.js';
@@ -33,8 +34,6 @@ const deny = (): never => {
 };
 /** A denial that tells the operator, never the visitor, which write it refused. */
 const refused = (reason: string): AppAccessDenied => recordRefusalCause(new AppAccessDenied(), reason);
-/** What a visitor is told when a public command's handler removes a row. */
-export const PUBLIC_REMOVAL = 'A public submission cannot delete a record: this command removes one, and only a signed-in command may.';
 export interface TenantCommandRecords {
   readonly records: WriteTransaction;
   readonly journal?: CommandJournal;

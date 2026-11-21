@@ -74,7 +74,8 @@ import type { CommandResultReference } from '../commands/scopedBusinessCommandAc
 import { captureTenantCommandExecution, tenantCommandDomain, type TenantCommandExecutionOptions } from './tenantCommands.js';
 import { STAGED_FILE_ID } from '../../shared/command.js';
 import { StageRefusal, stageCommandFile } from '../commands/stagedFiles.js';
-import { PUBLIC_REMOVAL, runTenantCommandTransaction } from './tenantCommandTransaction.js';
+import { runTenantCommandTransaction } from './tenantCommandTransaction.js';
+import { PUBLIC_REMOVAL } from '../commands/commandErrors.js';
 import {
   captureTenantData,
   denyTenant,

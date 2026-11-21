@@ -35,6 +35,14 @@ const LAG_TOLERANT = new Set([
 export function toleratesLag(path: string, body: Readonly<Record<string, unknown>>): boolean {
   if (!LAG_TOLERANT.has(path)) return false;
   const view = body.view && typeof body.view === 'object' ? (body.view as { limit?: unknown }) : undefined;
+  /* A batch carries a free-form page's views (`items[].view`): one that asks for one row goes where it would alone. */
+  if (path === '/api/breakdowns' && Array.isArray(body.items)) {
+    const one = body.items.some((item: unknown) => {
+      const asked = item && typeof item === 'object' ? (item as { view?: unknown }).view : undefined;
+      return !!asked && typeof asked === 'object' && !toleratesLag('/api/view/run', asked as Record<string, unknown>);
+    });
+    if (one) return false;
+  }
   return body.limit !== 1 && view?.limit !== 1;
 }
 
