@@ -271,7 +271,7 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
       'audiences',
       'auth',
       'branding',
-      /* `choose` (1.0.0-rc.78): an App-wide picked row (the current site) the shell shows and pages read as `chosen.<name>`. */
+      /* `choose` (1.0.0-rc.79): an App-wide picked row (the current site) the shell shows and pages read as `chosen.<name>`. */
       'choose',
       'connection',
       'experiments',
@@ -791,8 +791,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.74: a command import's `group`, the inputs that make consecutive rows one run (one entry; the name
     // was a key already): 1793/529.
     // 1.0.0-rc.76: an App's moved addresses, `ui.redirects` (one entry, one new name): 1794/530.
-    // 1.0.0-rc.78: a resource's `frozen` condition (one entry, one new name): 1795/531.
-    // 1.0.0-rc.78: root `choose`, with a choice's `from`, `label` and `required` (four entries; only `choose` is a new
+    // 1.0.0-rc.79: a resource's `frozen` condition (one entry, one new name): 1795/531.
+    // 1.0.0-rc.79: root `choose`, with a choice's `from`, `label` and `required` (four entries; only `choose` is a new
     // name): 1799/532.
     assert.deepEqual({ entries, names: names.size }, { entries: 1799, names: 532 });
   });

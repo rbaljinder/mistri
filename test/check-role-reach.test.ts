@@ -89,6 +89,7 @@ function lender(
     pages?: unknown[];
     roles?: Record<string, unknown>;
     views?: Record<string, unknown>;
+    public?: Record<string, unknown>;
   } = {},
 ) {
   const app = parseTestApp(
@@ -111,6 +112,7 @@ function lender(
           funder: { read: true, fields: { file: { read: WITHOUT_BUREAU } } },
           ...options.roles,
         },
+        ...(options.public ? { public: options.public } : {}),
       },
       views: { applications: { kind: 'list', from: 'application' }, ...options.views },
       home: 'applications',
@@ -237,6 +239,49 @@ describe('a rollup, a record name or a page a role cannot read', () => {
       schema,
     );
     assert.deepEqual(warnings, []);
+  });
+
+  test("a headline's second figure on a derived column a role's grant leaves out is said; on a base column it is not", () => {
+    const withScore = { read: true, fields: { file: { read: ['id', 'application_id', 'score'] } } };
+    const headline = (subfigure: string) =>
+      appRoleReach(
+        lender({
+          admin: withScore,
+          roles: { funder: withScore, auditor: { read: true, fields: { file: { read: ['id', 'application_id', 'score', 'doubled'] } } } },
+          resources: { file: { access: 'write', computed: { doubled: { type: 'number', value: 'score * 2' } } } },
+          pages: [
+            { id: 'file', label: 'File', base: 'file', sections: [{ kind: 'headline', show: ['score'], subfigure, subtitle: 'bureau' }] },
+          ],
+        }),
+        schema,
+      ).warnings;
+    // Admin and funder read the score it is made of, and not the doubled score: forgotten more often than meant.
+    assert.deepEqual(headline('doubled'), [
+      'app.ts: page "File" [role-cannot-read]: its headline\'s second figure names "file.doubled", which roles "admin" and "funder" cannot read, ' +
+        'so the headline goes without it for them. Add "doubled" to fields.file.read in each role\'s grant, or leave it out of the headline.',
+    ]);
+    // The bureau beside it, a base column the same roles do not read, is a grant meant as it is.
+    assert.deepEqual(headline('score'), []);
+  });
+
+  test("a headline's second figure the public grant leaves out is said for the signed-out visitor", () => {
+    const every = { read: true, fields: { file: { read: ['id', 'application_id', 'score', 'bureau', 'doubled'] } } };
+    const visited = (read: string[]) =>
+      appRoleReach(
+        lender({
+          admin: every,
+          roles: { funder: every },
+          public: { read: ['file'], fields: { file: { read } } },
+          resources: { file: { access: 'write', computed: { doubled: { type: 'number', value: 'score * 2' } } } },
+          pages: [{ id: 'file', label: 'File', base: 'file', sections: [{ kind: 'headline', show: ['score'], subfigure: 'doubled' }] }],
+        }),
+        schema,
+      ).warnings;
+    assert.deepEqual(visited(['id', 'application_id', 'score']), [
+      'app.ts: page "File" [role-cannot-read]: its headline\'s second figure names "file.doubled", which the public grant cannot read, ' +
+        'so the headline goes without it for a signed-out visitor. Add "doubled" to auth.public.fields.file.read, or leave it out of the headline.',
+    ]);
+    assert.deepEqual(visited(['id', 'application_id', 'score', 'doubled']), []);
   });
 });
 

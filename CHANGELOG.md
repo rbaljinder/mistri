@@ -5,6 +5,21 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.79
+
+A check for the headline figure a grant forgets, and two flakes fixed at their cause.
+
+- `mistri check` warns (`role-cannot-read`) when a headline's second figure or second line names a rollup or a
+  computed column that a role's grant leaves out, and names the field to add. It also warns for the signed-out
+  visitor's `auth.public` grant. A `read` list is everything a reader reads, derived columns included, so a derived
+  column missing from it is more often forgotten than meant. A base column a grant leaves out stays silent.
+- Lintel: a visitor now sees the rent per ft² beside the asking rent. The public grant had left it out, and the new
+  warning found it.
+- Fix: a card moved on a calendar by keyboard or drag keeps focus on its new day. The refocus is a layout effect now,
+  so a passive effect left over from the drag can no longer spend it on the card's old button.
+- Tests: the reads-together latency test provisions the PostgreSQL schema epoch first, as a provisioned database has
+  it, so a measured transaction no longer looks its tables up again when it starts in a new five-second window.
+
 ## 1.0.0-rc.78
 
 A warm start for tenant Apps, grants in bulk, fewer round trips a save, a dev server that keeps its port, the data and access seams a field report asked for, an outsider who moves a record through a link, rows that freeze, and an App-wide choice that follows the person.
