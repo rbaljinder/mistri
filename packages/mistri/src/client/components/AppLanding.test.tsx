@@ -31,7 +31,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   viewportSize: () => ({ width: 1000, height: 800 }),
 }));
 vi.mock('../../../../kit/src/client/pagemarks.js', () => ({ recentVisits: () => visits }));
-vi.mock('../appState.js', () => ({ activeApp: () => null }));
+vi.mock('../appState.js', () => ({ activeApp: () => null, inAppMode: () => true }));
 /* The kit reads the App through the shell's answers (shellMode.ts), which the mock above gives it. */
 beforeEach(bridgeShell);
 vi.mock('../../../../kit/src/client/url.js', () => ({ syncHash: () => {} }));

@@ -518,7 +518,7 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                 binding,
                 actor,
                 body: captured,
-                execution: { signal: said.signal, requestId: said.requestId, locale: said.locale },
+                execution: { signal: said.signal, requestId: said.requestId, locale: said.locale, chosen: said.chosen },
                 flagsFor: (envelope) => authorizedCommandFlags(binding, actor, envelope, flags),
                 // One transaction per tenant request: the host reads the step's draft back with a resume (tenantHttp.ts).
                 stepSummary: false,
