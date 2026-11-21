@@ -116,6 +116,40 @@ test.describe('A free-form page and what it draws around itself', () => {
         });
   });
 
+  /* The same report's other two readings: a read-only list has no Add bar to pull up into the strip, and a phone pulls
+     nothing (the pull is a desk rule), so an empty list's note has only the strip's own spacing to keep it below. */
+  test.describe('related lists as tabs, read-only', () => {
+    let own: Fixture;
+    test.beforeAll(async () => {
+      own = await startLayersApp('listtabs');
+    });
+    test.afterAll(async () => {
+      await own?.stop();
+    });
+    for (const [width, height, where] of [
+      [1280, 900, 'at a desk'],
+      [390, 844, 'on a phone'],
+    ] as const)
+      test(`an empty list with no Add bar draws its note under the strip ${where}`, async ({ page }) => {
+        await page.setViewportSize({ width, height });
+        await page.goto(`${own.origin}/things/2`);
+        await settled(page);
+        await page.getByRole('tab', { name: /Parts/ }).click();
+        const open = page.locator('.page-tabpanel:not([hidden])');
+        await expect(open.locator('.page-related-create')).toHaveCount(0);
+        const strip = (await page
+          .locator('.page-tabstrip')
+          .filter({ has: page.getByRole('tab', { name: /Parts/ }) })
+          .boundingBox())!;
+        const drawn = await open
+          .locator('.page-list-body > *')
+          .evaluateAll((nodes) => nodes.map((node) => ({ cls: (node as HTMLElement).className, top: node.getBoundingClientRect().top })));
+        expect(drawn.length, 'the panel draws something to measure').toBeGreaterThan(0);
+        for (const box of drawn)
+          expect(box.top, `${box.cls} starts at or below the strip's foot`).toBeGreaterThanOrEqual(strip.y + strip.height - 1);
+      });
+  });
+
   test('a bare page’s root is the window', async ({ page }) => {
     await page.goto(`${app.origin}/wall`);
     await settled(page);

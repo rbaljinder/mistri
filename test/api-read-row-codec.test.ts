@@ -32,7 +32,7 @@ function fixture(dialect: Dialect = 'postgres', valueType = 'text') {
     ],
     foreignKeys: [{ name: 'owner', from: { table: 'item', columns: ['owner_id'] }, to: { table: 'person', columns: ['id'] } }],
   };
-  const fields = ['id', 'name', 'owner_id.name', 'score', ...(dialect === 'postgres' ? ['enabled'] : [])];
+  const fields = ['id', 'name', 'owner_id.name', 'score', 'enabled'];
   const app = parseAppConfig(
     {
       name: 'Rows',
@@ -198,9 +198,6 @@ test('unsupported database representations refuse construction instead of guessi
       // The catalog says it first, at check; the codec says it again to a caller that skipped the check.
       assert.throws(() => fixture(dialect, type), `${dialect} ${type}`);
     }
-  }
-  for (const [dialect, type] of [['sqlite', 'BOOLEAN']] as const) {
-    assert.throws(() => fixture(dialect, type));
   }
   for (const type of ['clob', 'nvarchar', 'nchar']) assert.throws(() => fixture('postgres', type));
 });

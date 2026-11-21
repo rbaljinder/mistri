@@ -1323,3 +1323,29 @@ test('a column whose display words are only display is chosen from them as a voc
   /* The stored word goes to the database, not the one the reader read. */
   expect(insert).toHaveBeenCalledWith(expect.objectContaining({ kind: 'phone', channel: 'fax' }));
 });
+
+test('a form default on a column worded by display values opens in the display word, not the stored one', async () => {
+  /* A field report: a form's `defaults` on a text column dressed with `values` opened showing the stored word. */
+  const table: TableMeta = {
+    ...lead,
+    columns: [
+      col('id', 'INTEGER', { primaryKey: true, nullable: false, identity: 'by-default' }),
+      col('kind', 'TEXT', { nullable: false }),
+      col('channel', 'TEXT', { nullable: false }),
+    ],
+  };
+  const kinds = { values: { walk: 'Walk-in', phone: 'Phone call', web: 'Web form', mail: 'By mail', event: 'At an event' } };
+  const channels = { values: { phone: 'Phone call', web: 'Web form' } };
+  const display = (c: ColumnMeta) => (c.name === 'kind' ? kinds : c.name === 'channel' ? channels : null) as never;
+  const insert = vi.fn().mockResolvedValue({ key: { id: 5 } });
+  const user = userEvent.setup();
+  draw(
+    <NewRecordForm {...props()} table={table} display={display} insert={insert} form={{ defaults: { kind: 'phone', channel: 'web' } }} />,
+  );
+  expect(screen.getByRole('button', { name: /Kind/ })).toHaveTextContent('Phone call');
+  const channel = screen.getByRole('radiogroup', { name: 'Channel' });
+  expect(within(channel).getByRole('radio', { name: 'Web form' })).toBeChecked();
+  expect(document.body.textContent).not.toMatch(/\b(phone|web)\b/);
+  await user.click(screen.getByRole('button', { name: 'Add' }));
+  expect(insert).toHaveBeenCalledWith(expect.objectContaining({ kind: 'phone', channel: 'web' }));
+});

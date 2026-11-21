@@ -146,6 +146,37 @@ const WARM_WRITERS = 1;
 /** How long an idle connection stays open: five minutes, past a lunch-hour lull but well inside what a
  * hosted database or its pooler lets a connection sit. The extra ones (beyond the warm minimum) close then. */
 const IDLE_TIMEOUT_MS = 300_000;
+/** The longest an idle connection may be kept: a day. Past it a forgotten setting holds a server backend for nothing,
+ * and a hosted database or pooler has closed the socket long before. */
+export const MAX_IDLE_SECONDS = 86_400;
+
+/** Whether `value` is an idle window a connection accepts: whole seconds from 1 to a day. */
+export function isIdleSeconds(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= MAX_IDLE_SECONDS;
+}
+/** Whether `value` is a warm-connection count a connection accepts: a whole number from 0 to the pool's largest size. */
+export function isMinIdle(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_READERS;
+}
+
+/**
+ * How long an idle connection stays open and how many stay connected through it, for one pool: the connection's own
+ * `pool` setting, else the server's (`MISTRI_POOL_IDLE`, in seconds), else the built-in five minutes and `warm`. The
+ * connection's wins, as `pool.read` wins over `--read-pool`: the deployment sets a default, one database overrides it.
+ * `minIdle` is capped at the pool's size, which pg would otherwise refuse.
+ */
+export function resolvePoolIdle(
+  options: { readonly idleSeconds?: number; readonly minIdle?: number },
+  server: { readonly idleSeconds?: number },
+  warm: number,
+  size: number,
+): { idleTimeoutMillis: number; min: number } {
+  const seconds = options.idleSeconds ?? server.idleSeconds;
+  return {
+    idleTimeoutMillis: seconds === undefined ? IDLE_TIMEOUT_MS : seconds * 1000,
+    min: Math.min(options.minIdle ?? warm, size),
+  };
+}
 /** The most readers one database's pool may hold. Past this, a pooler in front of the server is the tool. */
 export const MAX_READERS = 64;
 
@@ -169,6 +200,10 @@ export interface PgConnectionOptions {
   readonly readers?: number;
   /** Writer connections held at once, 1–64, where writes are keyed (writeLanes.ts); one where they are serial. */
   readonly writers?: number;
+  /** Seconds an idle connection stays open, 1 to 86400. The process's (`MISTRI_POOL_IDLE`), else five minutes, when absent. */
+  readonly idleSeconds?: number;
+  /** Connections each pool keeps open through an idle spell, 0 to 64 (never more than the pool's size). Two readers and one writer when absent. */
+  readonly minIdle?: number;
   /** How long a writer waits for a lock. The process's (`--lock-timeout`) when absent. */
   readonly lockTimeoutMs?: number;
   /** What sits between this process and the server. The process default when absent. */
@@ -232,13 +267,17 @@ export function appReaders(writers: number, cores?: number): number {
  * reader count stays unset until a manager is made: the write order, which
  * says whether this is an App, is configured after the flags are read.
  */
-export function configurePostgresPools(options: { readers?: number; pooler?: PoolerMode }): void {
+export function configurePostgresPools(options: { readers?: number; pooler?: PoolerMode; idleSeconds?: number }): void {
   const readers = options.readers;
   if (readers !== undefined && !isReaderCount(readers))
     throw new RangeError(`A PostgreSQL read pool holds 1 to ${MAX_READERS} connections; ${String(readers)} is not one of them.`);
   const pooler = options.pooler ?? 'session';
   if (pooler !== 'session' && pooler !== 'transaction') throw new RangeError('The pooler is "session" or "transaction".');
-  configureServerSettings({ readers, pooler });
+  if (options.idleSeconds !== undefined && !isIdleSeconds(options.idleSeconds))
+    throw new RangeError(
+      `A PostgreSQL idle connection stays 1 to ${MAX_IDLE_SECONDS} seconds; ${String(options.idleSeconds)} is not one of them.`,
+    );
+  configureServerSettings({ readers, pooler, idleSeconds: options.idleSeconds });
 }
 
 /** The defaults, as this server's settings leave them. */
@@ -292,6 +331,7 @@ export class PgConnectionManager {
   /** Bounded concurrency for best-effort pg_cancel_backend helper connections. */
   private cancelsInFlight = 0;
   private readonly cancelQueue: number[] = [];
+  private readonly idle: { readonly idleSeconds?: number; readonly minIdle?: number };
   private readonly pendingCancels = new Set<number>();
 
   constructor(
@@ -309,6 +349,13 @@ export class PgConnectionManager {
     if (!isWriterCount(writers))
       throw new RangeError(`A PostgreSQL write pool holds 1 to ${MAX_WRITERS} connections; ${String(writers)} is not one of them.`);
     this.pooler = options.pooler ?? serverSettings().pooler;
+    if (options.idleSeconds !== undefined && !isIdleSeconds(options.idleSeconds))
+      throw new RangeError(
+        `A PostgreSQL idle connection stays 1 to ${MAX_IDLE_SECONDS} seconds; ${String(options.idleSeconds)} is not one of them.`,
+      );
+    if (options.minIdle !== undefined && !isMinIdle(options.minIdle))
+      throw new RangeError(`A PostgreSQL pool keeps 0 to ${MAX_READERS} idle connections; ${String(options.minIdle)} is not one of them.`);
+    this.idle = { idleSeconds: options.idleSeconds, minIdle: options.minIdle };
     this.network = options.network;
     this.pipelineReads = options.pipelineReads === true;
     this.timingLabel = options.timingLabel ?? 'app';
@@ -509,18 +556,19 @@ export class PgConnectionManager {
     if (!Pool) throw new Error('Could not find a Pool export in the "pg" package.');
     const write = role !== 'read';
     const session = this.pooler === 'session';
+    const idle = resolvePoolIdle(this.idle, serverSettings(), role === 'read' ? WARM_READERS : WARM_WRITERS, this.meters[role].size);
     const pool = new Pool({
       ...this.dialOptions(),
       max: this.meters[role].size,
       connectionTimeoutMillis: 10_000,
-      idleTimeoutMillis: IDLE_TIMEOUT_MS,
+      idleTimeoutMillis: idle.idleTimeoutMillis,
       /* Readers and the foreground writers keep a few connections warm
          (the background writer, which runs jobs that are not waited on, keeps none). The
          idle ones never keep the process alive by themselves, so a one-shot
          mode that forgets to close still exits: that is why the writer
          sets this too, now that it holds a connection through idle. */
       allowExitOnIdle: true,
-      ...(role === 'background' ? {} : { min: Math.min(role === 'read' ? WARM_READERS : WARM_WRITERS, this.meters[role].size) }),
+      ...(role === 'background' ? {} : { min: idle.min }),
       /* A writer sends each statement as it is asked, not after the one
          before it is answered: a transaction that asks several at once
          (pipelined, postgresTransactionHandle.ts) pays one round trip for

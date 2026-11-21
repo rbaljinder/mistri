@@ -43,6 +43,13 @@ export function authoringApp(path: string): void {
   authoring.add(path);
 }
 
+/* The test kit's host (mistri/testing, run from source) asks every refusal it answers to carry its cause, so a test
+   reads why a tenant member or a seeded role was refused without opening the host's log. The word alone is not
+   trusted: a process says it is a test (`NODE_ENV=test`) as well, so an environment file that carried the seam into a
+   deployment tells nobody anything. */
+const TEST_REFUSAL_CAUSE = 'MISTRI_TEST_REFUSAL_CAUSE';
+const causeForTests = (env: NodeJS.ProcessEnv = process.env): boolean => env[TEST_REFUSAL_CAUSE] === 'source' && env.NODE_ENV === 'test';
+
 /** Mark this request as the author's own, when it is: see the module comment. */
 export function noteAuthorRequest(
   req: IncomingMessage,
@@ -121,5 +128,5 @@ export function reportRefusal(
     for (const reason of reasons) console.error(`  because: ${reason}`);
   }
   // The innermost reason is the one that names the rule, the table or the column.
-  return authors.has(req) ? reasons.at(-1) : undefined;
+  return authors.has(req) || causeForTests() ? reasons.at(-1) : undefined;
 }

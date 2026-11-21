@@ -87,12 +87,16 @@ function scalar(type: string, dialect: Dialect, integers: 'number' | 'decimal-st
       },
     });
   }
-  if (dialect === 'postgres' && /^(?:boolean|bool)$/.test(normalized))
+  if (/^(?:boolean|bool)$/.test(normalized))
     return Object.freeze({
       kind: 'boolean' as const,
       schema: Object.freeze({ type: 'boolean' }),
       encode(value: unknown): boolean {
-        return typeof value === 'boolean' ? value : fail();
+        if (typeof value === 'boolean') return value;
+        /* SQLite holds a BOOLEAN as 0 and 1 (it has no boolean storage class), and the API says true and false on
+           every engine; anything but those two is not a flag and is refused, never read as truthy. */
+        if (dialect === 'sqlite' && (value === 0 || value === 1)) return value === 1;
+        return fail();
       },
     });
   const textual =

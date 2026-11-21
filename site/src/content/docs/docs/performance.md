@@ -42,6 +42,8 @@ Writes exist only on a `"writable": true` connection. An App's writer pool commi
 
 `--read-pool`, `--write-pool` and `--lock-timeout` (or `MISTRI_READ_POOL`, `MISTRI_WRITE_POOL`, `MISTRI_LOCK_TIMEOUT`) are the defaults for every pool whose connection names none. SQLite and HTTP sources take no `pool`.
 
+How long an idle connection stays open is a fact about what sits between this process and the database: a hosted database or its pooler closes a connection that has been quiet long enough, and the next request pays a new one. `"pool": { "idleSeconds": 900 }` keeps one database's idle connections 15 minutes (1 to 86400; the default is 5 minutes), and `"minIdle": 4` keeps that many open through the spell in each pool (0 to 64, never more than the pool's size; the default is two readers and one writer). `MISTRI_POOL_IDLE` (seconds) sets the idle window for every pool whose connection names none; the connection's own setting wins. A tenant App's request pool takes the variable but not yet the per-connection setting.
+
 ### The sign-in store
 
 A `postgres://` sign-in store (`auth.store`) is read once for a signed-in person every few seconds, not on every request: what it answered about a session is kept in the process for `MISTRI_AUTH_SESSION_CACHE` seconds (default 5, 0 to 60), and a page's burst of calls shares one read. A sign-out, a ban or a role change made through this process is seen by its next request. One made elsewhere — another instance, `mistri` maintenance, SQL — is honored by this process for at most that long; set `0` to read the store on every check. `MISTRI_AUTH_POOL` sets its connections per process (default 4).

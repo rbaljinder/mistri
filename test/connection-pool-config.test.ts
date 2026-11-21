@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { connect } from '../packages/engine/src/adapters/connect.js';
-import type { PgConnectionManager } from '../packages/engine/src/adapters/postgresPool.js';
+import { resolvePoolIdle, type PgConnectionManager } from '../packages/engine/src/adapters/postgresPool.js';
 import { loadConfig, Registry, saveConfig } from '../packages/engine/src/server/connections.js';
 import { parseArgs, postgresPoolFlags } from '../packages/engine/src/server/cli/args.js';
 import { CONFIG_SECTIONS } from '../packages/mistri/src/server/serviceConnections.js';
@@ -67,7 +67,7 @@ test('a pool outside the range, of the wrong shape or on another engine is refus
     [[4], {}, /must be an object/],
     [{ read: 4, write: 0 }, {}, /"write": 0 \}\. It must be a whole number from 1 to 64, without quotes/],
     [{ write: '8' }, {}, /"write": "8" \}.*without quotes/],
-    [{ read: 4, max: 9 }, {}, /"pool\.max"\. A pool takes "read" and "write"/],
+    [{ read: 4, max: 9 }, {}, /"pool\.max"\. A pool takes "read", "write", "idleSeconds" and "minIdle"/],
     [{ read: 4 }, { url: './app.sqlite' }, /is not a PostgreSQL connection/],
     [{ read: 4 }, { kind: 'http', url: 'https://api.example/v1/', description: 'desk.http.json' }, /HTTP connection; "pool" sizes/],
   ];
@@ -246,4 +246,40 @@ test("an App's pools are sized from the cores, readers never fewer than writers;
     [10, 10, 10, 16, 16],
   );
   assert.equal(appReaders(24, 2), 24, 'never fewer readers than writers');
+});
+
+test('a pool names how long an idle connection stays open and how many stay warm, and refuses what is not a count of seconds', async () => {
+  for (const pool of [{ idleSeconds: 30 }, { minIdle: 0 }, { read: 8, idleSeconds: 86_400, minIdle: 4 }]) {
+    const loaded = await withConfig(entry(pool), (path) => loadConfig(path, CONFIG_SECTIONS));
+    assert.deepEqual(loaded?.connections[0].pool, pool);
+  }
+  const refused: Array<[unknown, RegExp]> = [
+    [{ idleSeconds: 0 }, /"idleSeconds": 0 \}\. It must be whole seconds from 1 to 86400, without quotes/],
+    [{ idleSeconds: 86_401 }, /from 1 to 86400/],
+    [{ idleSeconds: 1.5 }, /from 1 to 86400/],
+    [{ idleSeconds: '300' }, /"idleSeconds": "300" \}.*without quotes/],
+    [{ minIdle: -1 }, /"minIdle": -1 \}\. It must be a whole number from 0 to 64, without quotes/],
+    [{ minIdle: 65 }, /from 0 to 64/],
+    [{ minIdle: '2' }, /"minIdle": "2" \}.*without quotes/],
+  ];
+  for (const [pool, message] of refused)
+    await withConfig(entry(pool), (path) => assert.rejects(loadConfig(path, CONFIG_SECTIONS), message));
+});
+
+test("an idle window is the connection's, else MISTRI_POOL_IDLE's, else five minutes; warm connections stay within the pool", () => {
+  const server = { idleSeconds: 90 };
+  assert.deepEqual(resolvePoolIdle({}, {}, 2, 4), { idleTimeoutMillis: 300_000, min: 2 });
+  assert.deepEqual(resolvePoolIdle({}, server, 2, 4), { idleTimeoutMillis: 90_000, min: 2 });
+  assert.deepEqual(resolvePoolIdle({ idleSeconds: 600 }, server, 2, 4), { idleTimeoutMillis: 600_000, min: 2 });
+  assert.equal(resolvePoolIdle({ minIdle: 0 }, {}, 2, 4).min, 0);
+  assert.equal(resolvePoolIdle({ minIdle: 10 }, {}, 2, 4).min, 4);
+  assert.equal(resolvePoolIdle({}, {}, 2, 1).min, 1);
+});
+
+test('MISTRI_POOL_IDLE is whole seconds from 1 to a day, refused in words otherwise', () => {
+  const pools = (idle?: string) => postgresPoolFlags({}, idle === undefined ? {} : { MISTRI_POOL_IDLE: idle });
+  assert.deepEqual(pools(), {});
+  assert.deepEqual(pools(' 120 '), { idleSeconds: 120 });
+  for (const bad of ['0', '86401', '1.5', 'soon', '-5'])
+    assert.match(String(pools(bad)), /MISTRI_POOL_IDLE takes whole seconds from 1 to 86400/, bad);
 });

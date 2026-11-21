@@ -196,6 +196,7 @@ export function placePages(raw: Record<string, unknown>, pages: readonly PageFil
   const views: Record<string, unknown> = { ...(isRecord(raw.views) ? raw.views : {}) };
   let nav = Array.isArray(raw.nav) ? structuredClone(raw.nav as unknown[]) : undefined;
   const named = new Set(navKeys(nav ?? []));
+  const placements = new Map<unknown[], Array<{ key: string; position: number }>>();
   for (const page of pages) {
     const at = `${where}: pages/${page.module.slice('./pages/'.length)}`;
     const { fields } = page;
@@ -271,9 +272,19 @@ export function placePages(raw: Record<string, unknown>, pages: readonly PageFil
     for (const group of groups) {
       const siblings = group === undefined ? nav : groupChildren(nav, group);
       if (!siblings) throw new Error(`[page-nav] ${at}: nav has no group "${String(group)}".`);
-      const position = typeof placing.position === 'number' ? Math.min(placing.position, siblings.length) : siblings.length;
-      siblings.splice(position, 0, page.key);
+      const waiting = placements.get(siblings) ?? [];
+      waiting.push({ key: page.key, position: typeof placing.position === 'number' ? placing.position : Infinity });
+      placements.set(siblings, waiting);
     }
+  }
+  /* A page's `position` counts the App's own entries in its group, never other pages, so the menu does not depend on
+     what the page files are called: pages go in by position (file order breaks a tie), each shifted past the pages
+     already placed in the group, and one with no position goes to the end. */
+  for (const [siblings, waiting] of placements) {
+    const sorted = waiting
+      .map((entry, order) => ({ ...entry, order }))
+      .sort((a, b) => (a.position === b.position ? a.order - b.order : a.position - b.position));
+    sorted.forEach((entry, placed) => siblings.splice(Math.min(entry.position + placed, siblings.length), 0, entry.key));
   }
   return { ...raw, views, ...(nav ? { nav } : {}) };
 }

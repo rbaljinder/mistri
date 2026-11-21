@@ -203,6 +203,7 @@ async function prepare(
       ...(pools.pooler !== undefined ? { pooler: pools.pooler } : {}),
       ...(pools.writers !== undefined ? { writers: pools.writers } : {}),
       ...(pools.lockTimeoutMs !== undefined ? { lockTimeoutMs: pools.lockTimeoutMs } : {}),
+      ...(pools.idleSeconds !== undefined ? { idleSeconds: pools.idleSeconds } : {}),
     },
   };
 }

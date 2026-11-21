@@ -266,8 +266,9 @@ export function CardsList({
             (dressed?.kind === 'tone' || dressed?.kind === 'mark') && dressed.icon
               ? { name: dressed.icon, label: dressed.label, tone: dressed.kind === 'tone' ? dressed.tone : undefined }
               : null;
+          /* A badge on the title's own column (a vocabulary word titling the card) would say the title twice. */
           const badge =
-            spec.badge && row[spec.badge] != null && row[spec.badge] !== '' ? (
+            spec.badge && spec.badge !== spec.primary && row[spec.badge] != null && row[spec.badge] !== '' ? (
               <span className="cards-badge">{said(row, spec.badge)}</span>
             ) : null;
           return (

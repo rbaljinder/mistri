@@ -643,6 +643,8 @@ export class Registry {
                 postgres: {
                   ...(entry.config.pool.read !== undefined ? { readers: entry.config.pool.read } : {}),
                   ...(entry.config.pool.write !== undefined ? { writers: entry.config.pool.write } : {}),
+                  ...(entry.config.pool.idleSeconds !== undefined ? { idleSeconds: entry.config.pool.idleSeconds } : {}),
+                  ...(entry.config.pool.minIdle !== undefined ? { minIdle: entry.config.pool.minIdle } : {}),
                 },
               }
             : {}),
@@ -901,7 +903,7 @@ interface ConfigFile {
     rows?: boolean;
     /** Table → columns never served over the connection (hiddenColumns.ts). */
     hidden?: HiddenColumnRules;
-    /** `{ "read": n, "write": m }`: a PostgreSQL connection's pool sizes, checked by poolOf. */
+    /** `{ "read": n, "write": m, "idleSeconds": s, "minIdle": k }`: a PostgreSQL connection's pool sizes and idle window, checked by poolOf. */
     pool?: unknown;
     /** Read replicas' URLs, checked by replicasOf. */
     replicas?: unknown;

@@ -1,18 +1,25 @@
 /**
  * A connection's `"pool"` and `"replicas"` in tablewalk.json, checked where the file is read:
- * `{ "read": n, "write": m }`, each a whole number from 1 to 64 and either
- * one optional, on a PostgreSQL connection. Apart from the loader because
+ * `{ "read": n, "write": m, "idleSeconds": s, "minIdle": k }`: the sizes each a
+ * whole number from 1 to 64, the idle window whole seconds from 1 to a day, the
+ * warm count 0 to 64, every one optional, on a PostgreSQL connection. Apart from the loader because
  * the rule is the pool's (postgresPool.ts holds the bounds); the loader only
  * asks it, as it asks httpConnection.ts about an API's fields.
  */
-import { isReaderCount, MAX_READERS } from '../adapters/postgresPool.js';
+import { isIdleSeconds, isMinIdle, isReaderCount, MAX_IDLE_SECONDS, MAX_READERS } from '../adapters/postgresPool.js';
 import { isWriterCount, MAX_WRITERS } from '../adapters/writeLanes.js';
 import { MAX_REPLICAS } from '../adapters/replicas.js';
+
+const POOL_KEYS = ['read', 'write', 'idleSeconds', 'minIdle'];
 
 /** A connection's pool as its entry sizes it; what it leaves out is the process default. */
 export interface PoolSize {
   read?: number;
   write?: number;
+  /** Seconds an idle connection stays open; the server's (`MISTRI_POOL_IDLE`), else five minutes, when absent. */
+  idleSeconds?: number;
+  /** Connections each pool keeps open through an idle spell; two readers and one writer when absent. */
+  minIdle?: number;
 }
 
 /**
@@ -33,11 +40,21 @@ export function poolOf(entry: Record<string, unknown>, http: boolean, path: stri
     throw new Error(`${where} has "pool": ${JSON.stringify(written)}. It must be an object such as { "read": 16, "write": 8 }.`);
   }
   const pool = written as Record<string, unknown>;
-  const stray = Object.keys(pool).find((key) => key !== 'read' && key !== 'write');
-  if (stray !== undefined) throw new Error(`${where} has "pool.${stray}". A pool takes "read" and "write".`);
-  if (pool.read === undefined && pool.write === undefined) {
+  const stray = Object.keys(pool).find((key) => !POOL_KEYS.includes(key));
+  if (stray !== undefined) throw new Error(`${where} has "pool.${stray}". A pool takes "read", "write", "idleSeconds" and "minIdle".`);
+  if (!POOL_KEYS.some((key) => pool[key] !== undefined)) {
     throw new Error(
       `${where} has an empty "pool". Say how many connections may read or write at once, such as { "read": 16, "write": 8 }.`,
+    );
+  }
+  if (pool.idleSeconds !== undefined && !isIdleSeconds(pool.idleSeconds)) {
+    throw new Error(
+      `${where} has "pool": { "idleSeconds": ${JSON.stringify(pool.idleSeconds)} }. It must be whole seconds from 1 to ${MAX_IDLE_SECONDS}, without quotes.`,
+    );
+  }
+  if (pool.minIdle !== undefined && !isMinIdle(pool.minIdle)) {
+    throw new Error(
+      `${where} has "pool": { "minIdle": ${JSON.stringify(pool.minIdle)} }. It must be a whole number from 0 to ${MAX_READERS}, without quotes.`,
     );
   }
   if (pool.read !== undefined && !isReaderCount(pool.read)) {
@@ -54,7 +71,12 @@ export function poolOf(entry: Record<string, unknown>, http: boolean, path: stri
   if (!url.includes('$')) {
     if (!/^postgres(ql)?:\/\//i.test(url)) throw new Error(`${where} is not a PostgreSQL connection; SQLite has no pool. Remove "pool".`);
   }
-  return { ...(pool.read !== undefined ? { read: pool.read } : {}), ...(pool.write !== undefined ? { write: pool.write as number } : {}) };
+  return {
+    ...(pool.read !== undefined ? { read: pool.read } : {}),
+    ...(pool.write !== undefined ? { write: pool.write as number } : {}),
+    ...(pool.idleSeconds !== undefined ? { idleSeconds: pool.idleSeconds } : {}),
+    ...(pool.minIdle !== undefined ? { minIdle: pool.minIdle as number } : {}),
+  };
 }
 
 /**
