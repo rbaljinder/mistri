@@ -455,7 +455,7 @@ body.app-mode .page-edit { font-family: var(--sans); }
 :is(.page-tab, .page-section-head) .tab-count::before { content: '00' / ''; visibility: hidden; }
 .page-tab[aria-selected="true"] .tab-count { color: inherit; }
 /* The count takes the tab's ink whole: faded, it was 3.3:1 on a filled tab. */
-.tab[aria-selected="true"] .tab-count { color: inherit; }
+.tab:is([aria-selected="true"], [aria-pressed="true"]) .tab-count { color: inherit; }
 /* Quick filters: the list's key vocabularies as one-click conditions. */
 .applist-quick {
   padding: var(--space-2h) var(--space-3);

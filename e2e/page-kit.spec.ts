@@ -2,7 +2,8 @@
  * The page kit's layout vocabulary, in a browser (test/fixtures/apps/page-kit): a rail beside a column that stacks when
  * the box is narrow, a Card's description, an Item's lead column and tone mark, a button that is a link followed in
  * place, a Skeleton that holds its size, a segmented choice whose chosen count reads, and a file field drawn as a
- * button. It starts its own server over a disposable database (support/layersServer.ts).
+ * button, and parts in Cards lining up with the Card. It starts its own server over a disposable database
+ * (support/layersServer.ts).
  */
 import { settled } from '@mistriwork/mistri/testing';
 import { LONG_MS } from './support/budgets';
@@ -66,6 +67,30 @@ test.describe('The page kit vocabulary', () => {
     /* A field report measured 62px (the head's margin, the body's and the section's); a list's tabs sit about 27px under. */
     expect(gap).toBeGreaterThanOrEqual(0);
     expect(gap).toBeLessThanOrEqual(24);
+  });
+
+  // `head: false` drops the head, not the space above it: the page's first part stands where a head's title would.
+  test("a page that draws its own head keeps the pane's top space above its first part", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${app.origin}/headed`);
+    await settled(page);
+    const { top, token } = await page.evaluate(() => {
+      const body = document.querySelector('.free-page-body')!;
+      const probe = document.createElement('div');
+      probe.style.paddingTop = 'var(--page-top)';
+      body.append(probe);
+      const token = getComputedStyle(probe).paddingTop;
+      probe.remove();
+      return { top: getComputedStyle(body).paddingTop, token };
+    });
+    expect(parseFloat(token)).toBeGreaterThan(0);
+    expect(top).toBe(token);
+    const gap = await page.evaluate(
+      () =>
+        document.querySelector('.free-page-body .dash-head')!.getBoundingClientRect().top -
+        document.querySelector('.free-page-body')!.getBoundingClientRect().top,
+    );
+    expect(gap).toBeGreaterThanOrEqual(parseFloat(token) - 1);
   });
 
   test("a Card says what it holds, in its tone; an Item's lead and tone mark share one column", async ({ page }) => {
@@ -252,6 +277,43 @@ test.describe('The page kit vocabulary', () => {
 
   // A field report: a page that drew its own head (`head: false`) laid its title, intro and picker in one row, so at a
   // desk the intro stood beside the picker, and the head stood a second gutter in from the page's body.
+  test("a chart in a Card with no title of its own heads the Card, in line with a titled Card's head and its parts", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`${app.origin}/cards`);
+    await settled(page);
+    // One title, the Card's: the chart's own section title is not drawn a second time inside it.
+    const head = page.getByRole('heading', { name: 'Things by name' });
+    await expect(head).toHaveCount(1);
+    await expect(head).toHaveClass(/kit-card-title/);
+    await expect(page.locator('.kit-card-part-chart canvas, .kit-card-part-chart svg').first()).toBeVisible();
+    const edges = await page.evaluate(() => {
+      const left = (el: Element | null) => el!.getBoundingClientRect().left;
+      const [titled, untitled] = [...document.querySelectorAll('.kit-card')];
+      const pad = (card: Element) =>
+        card.getBoundingClientRect().left +
+        parseFloat(getComputedStyle(card).borderLeftWidth) +
+        parseFloat(getComputedStyle(card).paddingLeft);
+      const section = (card: Element) => card.querySelector('.kit-card-part > .page-section')!;
+      return {
+        titledInner: pad(titled!),
+        titledHead: left(titled!.querySelector('.kit-card-title')),
+        bars: left(titled!.querySelector('.kit-bars')),
+        untitledInner: pad(untitled!),
+        chartHead: left(untitled!.querySelector('.kit-card-title')),
+        chart: left(section(untitled!)),
+        chartInset: getComputedStyle(section(untitled!)).paddingLeft,
+        chartBorder: getComputedStyle(section(untitled!)).borderLeftWidth,
+      };
+    });
+    // Both heads stand at their Card's padding edge, and what the Card holds starts there too: no box inside the box.
+    expect(Math.abs(edges.titledHead - edges.titledInner)).toBeLessThan(1);
+    expect(Math.abs(edges.bars - edges.titledInner)).toBeLessThan(1);
+    expect(Math.abs(edges.chartHead - edges.untitledInner)).toBeLessThan(1);
+    expect(Math.abs(edges.chart - edges.chartHead)).toBeLessThan(1);
+    expect(edges.chartInset).toBe('0px');
+    expect(edges.chartBorder).toBe('0px');
+  });
+
   test("a page's own head is two regions, words and verbs, side by side at a desk and stacked at a phone, in the body's gutter", async ({
     page,
   }) => {

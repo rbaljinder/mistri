@@ -700,6 +700,8 @@ describe('the screen', () => {
     await waitFor(() => expect(within(card).getByText('↑ 30')).toBeInTheDocument());
     await waitFor(() => expect(card.querySelector('.spark-host svg.spark')).not.toBeNull());
     expect(card.querySelector('.spark-host')).not.toHaveClass('good');
+    // The trend is the figure's picture, not more to read: the figure and its change say it.
+    expect(card.querySelector('.spark-host')).toHaveAttribute('aria-hidden', 'true');
     const said = card.querySelector('svg.spark')!.getAttribute('aria-label')!;
     expect(said.split(', ').length).toBeGreaterThanOrEqual(30);
   });
@@ -820,6 +822,35 @@ describe('the screen', () => {
     expect(lead).toHaveAttribute('href', `/crm/deals?q=${encodeURIComponent('deal stage = lead')}`);
     await user.click(lead);
     expect(gone).toEqual([{ table: 'deal', query: 'deal stage = lead', view: 'deals' }]);
+  });
+
+  test("a breakdown drawn as bars is the kit's Bars: in its column's order, each a meter, its second measure in the records' word", async () => {
+    // Both measures in one line, so the bars cost no request of their own.
+    breakdowns['deal sum amount, count by stage limit 200'] = {
+      columns: ['stage', 'sum', 'count'],
+      rows: [
+        { stage: 'won', sum: 5000, count: 1 },
+        { stage: 'lead', sum: 12000, count: 4 },
+      ],
+    };
+    draw({
+      dashboard: {
+        id: 'pipe',
+        label: 'Pipe',
+        sections: [
+          { kind: 'breakdown', table: 'deal', by: 'stage', measure: 'sum amount', also: 'count', shape: 'bars', title: 'Pipeline' },
+        ],
+      },
+    });
+    const bars = await screen.findByRole('list', { name: 'Pipeline' });
+    expect(bars).toHaveClass('kit-bars');
+    // The stage's declared order, not the answer's.
+    expect([...bars.querySelectorAll('.kit-bars-label')].map((n) => n.textContent)).toEqual(['lead', 'won']);
+    const meters = within(bars).getAllByRole('meter');
+    expect(meters).toHaveLength(2);
+    expect(meters[0].getAttribute('aria-valuetext')).toMatch(/^lead: .*12,000.*, 4 deals$/);
+    expect(meters[1].getAttribute('aria-valuetext')).toMatch(/, 1 deal$/);
+    expect(document.querySelector('.page-breakdown-rows')).toBeNull();
   });
 
   test("a group of a column that colors its values wears the color: its bar is the chip's ink (G209)", async () => {

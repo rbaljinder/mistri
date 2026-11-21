@@ -82,8 +82,8 @@ export function Funnel({
                   {step.title}
                   {step.optional && <span className="dash-funnel-tag">{sayCopy('optional')}</span>}
                 </span>
-                <span className="dash-funnel-track" aria-hidden="true">
-                  <span className="dash-funnel-fill" style={{ width: `${width}%` }} />
+                <span className="pct-bar dash-funnel-track" aria-hidden="true">
+                  <span className="pct-fill dash-funnel-fill" style={{ width: `${width}%` }} />
                 </span>
                 <span className="dash-funnel-value">{step.count === undefined ? ' ' : say(step.count)}</span>
                 <span className="dash-funnel-share">

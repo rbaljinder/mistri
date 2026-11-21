@@ -76,7 +76,7 @@ function oneValue(tail: string): string | undefined {
 }
 import { useConditionWords } from './useConditionWords.js';
 import { message } from '../messages.js';
-import { useTabFold } from './useTabFold.js';
+import { FilterTabs, TabCount, type Counted } from './FilterTabs.js';
 import { DropGroup, DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { FilterRail, FilterSheet, type FacetUnit } from './FilterRail.js';
 import { clearFacets, facetActive } from './filterRailModel.js';
@@ -120,11 +120,6 @@ interface AppListProps {
    from where they were — so the box or tab that spoke is remembered, and
    the next list puts focus back on its twin. */
 let refocus: { column?: string; value?: string; tab?: string } | null = null;
-
-interface Counted {
-  total: number;
-  capped: boolean;
-}
 
 /**
  * Every tab's badge, asked in one request (`/api/counts`) and counted in one
@@ -206,14 +201,6 @@ function knownCounts(client: ReturnType<typeof useQueryClient>): Map<string, Cou
     return last;
   lastKnown = known;
   return known;
-}
-
-/** A tab's badge: its count from the batch, or the grid's own total when the tab is the one on screen. */
-function TabCount({ counted }: { counted?: Counted | null }) {
-  // null is a current result with no count, not permission to show an older one.
-  const said = counted == null ? '' : `${formatNumber(counted.total)}${counted.capped ? '+' : ''}`;
-  /* The number in a box of its own, over the room a tab keeps for it (features.css). */
-  return <span className="tab-count">{said && <span>{said}</span>}</span>;
 }
 
 /* The switch's width where a list has drawn one, by the list's table: a list is made again on a change of tab, and
@@ -357,18 +344,6 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   const store = saved.store;
   const savable = !inDashboard && (store === 'shared' || store === 'account');
   const yourLit = yours.findIndex((f) => canonicalize(f.query) === canonicalize(refinement));
-  /* The strip fits its row (useTabFold.ts): the list's tabs by their place, then the saved views' heading, then each
-     saved view; what does not fit is under More, and the lit one never is. */
-  const savedAt = tabs.length + 1;
-  const { strip: tabStrip, folded } = useTabFold(
-    tabs.length + (yours.length ? yours.length + 1 : 0),
-    yourLit === -1 ? litTab : savedAt + yourLit,
-  );
-  const foldMark = (at: number) => ({
-    'data-fold': at,
-    'data-folded': folded.has(at) ? '' : undefined,
-    'aria-hidden': folded.has(at) || undefined,
-  });
   const writeViews = useMutation({
     mutationFn: (change: (views: SavedView[]) => SavedView[]) => writeSavedViews(client, viewKey, change),
     onError: (err: Error) => toast(err.message, 'error'),
@@ -1053,82 +1028,61 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
       {summary}
       <div className="applist-controls" role="group" aria-label={say('listControls', { caption })}>
         {(tabs.length > 1 || yours.length > 0) && (
-          <div className="tabs folds" ref={tabStrip}>
-            <div className="tabs-row" role="tablist">
-              {tabs.map((tab, i) => (
-                <button
-                  key={tab.label}
-                  type="button"
-                  role="tab"
-                  className="tab"
-                  aria-selected={i === litTab && yourLit === -1}
-                  onClick={() => pickTab(i)}
-                  {...foldMark(i)}
-                >
-                  <span>{tab.label}</span>
-                  <TabCount counted={countOf(i)} />
-                </button>
-              ))}
-              {yours.length > 0 && (
-                <span className="tab-group" {...foldMark(tabs.length)} aria-hidden="true">
-                  {tabs.length > 1 && <span className="tab-divider" />}
-                  <span className="tab-group-label">{store === 'account' ? say('myViews') : say('savedViews')}</span>
-                </span>
-              )}
-              {/* The × is a real button *beside* the tab, not a span inside it:
-              interactive-inside-interactive is invalid ARIA. */}
-              {yours.map((f, i) => (
-                <span key={f.name} className="tab-wrap" role="presentation" {...foldMark(savedAt + i)}>
-                  <button
-                    type="button"
-                    role="tab"
-                    className="tab tab-yours"
-                    aria-selected={i === yourLit}
-                    title={`${viewWords(f.query) || say('everything')} — ${store === 'account' ? say('yourView') : say('aSavedView')}`}
-                    onClick={() => {
-                      if (i !== yourLit) {
-                        state.page = 0;
-                        apply(f.query);
-                      }
-                    }}
-                  >
-                    <span>{f.name}</span>
-                    <TabCount counted={tabCounts?.get(squeeze(`${entry.table} ${f.query}`))} />
-                  </button>
-                  {savable && (
-                    <button
-                      type="button"
-                      className="tab-x"
-                      title={say('common.removeName', { name: f.name })}
-                      aria-label={say('removeTheView', { name: f.name })}
-                      onClick={() => writeViews.mutate((views) => withoutView(views, f.name))}
-                    >
-                      ×
-                    </button>
+          <FilterTabs
+            tabs={tabs.map((tab, i) => ({ key: tab.label, label: tab.label, count: countOf(i) }))}
+            lit={yourLit === -1 ? litTab : -1}
+            onPick={pickTab}
+            extra={{
+              count: yours.length ? yours.length + 1 : 0,
+              lit: yourLit === -1 ? -1 : 1 + yourLit,
+              row: (foldMark) => (
+                <>
+                  {yours.length > 0 && (
+                    <span className="tab-group" {...foldMark(0)} aria-hidden="true">
+                      {tabs.length > 1 && <span className="tab-divider" />}
+                      <span className="tab-group-label">{store === 'account' ? say('myViews') : say('savedViews')}</span>
+                    </span>
                   )}
-                </span>
-              ))}
-            </div>
-            <div className="tab-more" data-fold-more="" data-folded={folded.size ? undefined : ''} aria-hidden={!folded.size || undefined}>
-              <DropMenu
-                className="tab-more-menu"
-                triggerClassName="tab"
-                label={message('common.more')}
-                popupClassName="page-actions-popup"
-                align="end"
-              >
-                {tabs.map((tab, i) =>
-                  folded.has(i) ? (
-                    <DropItem key={tab.label} className="page-actions-item" onClick={() => pickTab(i)}>
-                      <span>{tab.label}</span>
-                      <TabCount counted={countOf(i)} />
-                    </DropItem>
-                  ) : null,
-                )}
-                {yours.some((_, i) => folded.has(savedAt + i)) && (
+                  {/* The × is a real button *beside* the tab, not a span inside it:
+                  interactive-inside-interactive is invalid ARIA. */}
+                  {yours.map((f, i) => (
+                    <span key={f.name} className="tab-wrap" role="presentation" {...foldMark(1 + i)}>
+                      <button
+                        type="button"
+                        role="tab"
+                        className="tab tab-yours"
+                        aria-selected={i === yourLit}
+                        title={`${viewWords(f.query) || say('everything')} — ${store === 'account' ? say('yourView') : say('aSavedView')}`}
+                        onClick={() => {
+                          if (i !== yourLit) {
+                            state.page = 0;
+                            apply(f.query);
+                          }
+                        }}
+                      >
+                        <span>{f.name}</span>
+                        <TabCount counted={tabCounts?.get(squeeze(`${entry.table} ${f.query}`))} />
+                      </button>
+                      {savable && (
+                        <button
+                          type="button"
+                          className="tab-x"
+                          title={say('common.removeName', { name: f.name })}
+                          aria-label={say('removeTheView', { name: f.name })}
+                          onClick={() => writeViews.mutate((views) => withoutView(views, f.name))}
+                        >
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </>
+              ),
+              more: (folded) =>
+                yours.some((_, i) => folded(1 + i)) && (
                   <DropGroup labelClassName="more-group-label" label={store === 'account' ? say('myViews') : say('savedViews')}>
                     {yours.map((f, i) =>
-                      folded.has(savedAt + i) ? (
+                      folded(1 + i) ? (
                         <DropItem
                           key={f.name}
                           className="page-actions-item"
@@ -1142,10 +1096,9 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
                       ) : null,
                     )}
                   </DropGroup>
-                )}
-              </DropMenu>
-            </div>
-          </div>
+                ),
+            }}
+          />
         )}
         {spec.filterBar !== 'none' && (
           <form className="applist-filterbar" ref={form} onSubmit={submit}>

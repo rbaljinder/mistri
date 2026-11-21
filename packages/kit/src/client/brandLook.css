@@ -135,7 +135,7 @@
   :root[data-look-table='banded'] .table-wrap tbody tr:nth-child(even):hover td {
     background: color-mix(in srgb, var(--ink) 6%, var(--band, var(--raised)));
   }
-  :root[data-look-tabs='rule'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true'] {
+  :root[data-look-tabs='rule'] :is(.tab, :where(body.app-mode) .page-tab):is([aria-selected='true'], [aria-pressed='true']) {
     background: none;
     color: var(--ink);
     border-radius: 0;

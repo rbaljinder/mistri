@@ -217,6 +217,33 @@ describe('openPage and pageHref', () => {
   });
 });
 
+describe('useBreakdown rows', () => {
+  /* A field report's `counted()` helpers read the server's keys to find a row's figure; the row carries `value` and
+     `count` under fixed names, a period the fill put back included, so a chart over a quiet week reads zeros, not holes. */
+  test('a filled, empty period comes back typed, with a value and a count of zero', async () => {
+    let rows: ReturnType<typeof useBreakdown>['data'];
+    function Weeks() {
+      rows = useBreakdown('lead', { by: 'day created_on', fill: 'observed' }).data;
+      return null;
+    }
+    const host = fixtureHost(fixtures({ lead: [] }), {}, []);
+    host.breakdown = async () => [
+      { 'day(created_on)': '2026-03-01', count: 2 },
+      { 'day(created_on)': '2026-03-03', count: 1 },
+    ];
+    render(
+      <SectionFrame host={host} id="weeks" width={960}>
+        <Weeks />
+      </SectionFrame>,
+    );
+    await waitFor(() => expect(rows).toHaveLength(3));
+    expect(rows![0]).toMatchObject({ value: 2, count: 2 });
+    expect(rows![1]).toMatchObject({ 'day(created_on)': '2026-03-02', filled: true, value: 0, count: 0 });
+    expect(typeof rows![1]!.value).toBe('number');
+    expect(typeof rows![1]!.count).toBe('number');
+  });
+});
+
 describe('useHref', () => {
   test('hands back strings in the router’s own words', () => {
     let href!: ReturnType<typeof useHref>;
@@ -226,6 +253,8 @@ describe('useHref', () => {
     }
     renderSection(Links, { component: { id: 'links' } });
     expect(href.signIn()).toBe('/sign-in');
+    // The App's root, where a link back to its home goes (a base path or a mount puts its own prefix in front).
+    expect(href.home()).toBe('/');
     expect(href.view('leads', { tab: 'working', search: 'stone' })).toBe('/leads?tab=working&search=stone');
     expect(href.record('leads', { id: 127 })).toBe('/leads/127');
     expect(href.record('leads', { id: 127 }, { tab: 'map' })).toBe('/leads/127/map');

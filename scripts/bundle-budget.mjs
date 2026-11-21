@@ -102,11 +102,15 @@ const EMBED = join(ROOT, 'packages/mistri/dist/embed/react');
    rc.66 moved the stylesheet's targets: one drawing for every two-or-three-way switch (a Segmented, a list's Rows and
    Board, the phone's Records and Table, Tree and Raw) in every look, with its three recipes for the chosen one, the
    toolbar controls' one height and the round controls' popup corner (themeFamilies.css), about 68 lines. Measured
-   505.5 KB raw and 65.3 KB in brotli on the App's, over 502.0 and 65.1; set to the next round steps. */
+   505.5 KB raw and 65.3 KB in brotli on the App's, over 502.0 and 65.1; set to the next round steps.
+
+   rc.76 moved the App's stylesheet raw target alone: the kit parts' rules (bars, person, details, the counted filter and
+   parts that know they are in a Card: kit.css and DashboardBlocks.css, about 180 lines) measured 508.0 KB raw on the
+   App's, 0.2 KB over 507.8; set to the next round step. The brotli targets and the public surface's held. */
 export const BUDGET = {
   mistri: {
     public: { script: { raw: 802_000, br: 224_000 }, style: { raw: 520_000, br: 67_300 } },
-    app: { script: { raw: 1_590_000, br: 437_000 }, style: { raw: 520_000, br: 67_300 } },
+    app: { script: { raw: 1_590_000, br: 437_000 }, style: { raw: 523_000, br: 67_300 } },
   },
 };
 
@@ -133,8 +137,11 @@ export const EMBED_BUDGET = {
   provider: { raw: 15_000, br: 5_300 },
   /* The headless embed entry, new in rc.25: measured 127,890 / 33,995, its ceiling about 10% above.
      Raised at rc.50 (measured about 134,550 / 35,430): the SDK's form hooks now carry the visitor's language on
-     each saved step and submit, and the per-answer choice narrowing the server serves. */
-  headless: { raw: 137_500, br: 36_300 },
+     each saved step and submit, and the per-answer choice narrowing the server serves.
+     Raised at rc.76 (measured about 139,980 / 37,070, 2026-11-20): the kit parts a custom page reaches for without
+     drawing them — Bars, a figure's `delta.against`, and the chart's bucket fill (bucketFill, windowed()) in the SDK.
+     A front end that draws its own pages imports them statically, so they belong in this entry, not on demand. */
+  headless: { raw: 144_000, br: 38_200 },
   adapter: { raw: 3_600, br: 1_400 },
   /* Moved with the first paint's, for the same reason (see BUDGET): the controls are drawn over UI SDK, and the
      shell carries their script and their sheets as scoped text. Measured 762,581 / 102,604, from 657,900 / 93,000. */

@@ -36,8 +36,10 @@
     background: var(--nav-ground);
     color: var(--nav-ink);
   }
+  /* The card's inline padding as one token, so what lines up with its edge (a table's first and last cells) reads it. */
   .kit-card {
-    padding: var(--space-4h) var(--space-5);
+    --kit-card-pad: var(--space-5);
+    padding: var(--space-4h) var(--kit-card-pad);
     border: 1px solid var(--line);
     border-radius: var(--radius-lg, var(--radius));
     background: var(--surface);
@@ -46,6 +48,12 @@
   }
   .kit-group {
     min-width: 0;
+  }
+  /* A Card placed in a Grid has no width of its own, so it shares the row with its neighbours and wraps under a
+     third of a desk's pane. Left to its content, a card whose figures are tiles that grow from nothing (Bloom's
+     bento) had no content width at all and drew 42px wide. */
+  .page-body > .kit-card {
+    flex: 1 1 16rem;
   }
   .kit-card-title {
     margin: 0 0 var(--space-3h);
@@ -293,8 +301,10 @@
         background-color var(--t-hover, 120ms) ease;
     }
   }
-  .kit-segment:hover {
-    color: var(--ink);
+  @media (hover: hover) {
+    .kit-segment:hover {
+      color: var(--ink);
+    }
   }
   .kit-segment[aria-checked='true'] {
     --kit-segment-fill: var(--accent);
@@ -402,6 +412,81 @@
     display: block;
     width: 100%;
     height: 28px;
+  }
+  /* What the change is against ("vs prior 90 days"): the change's own quiet ink, whatever the news's tone. */
+  .kit-stat-against {
+    color: var(--ink-muted);
+  }
+  /* A table in a card: its first and last cells sit on the card's own padding, so the header row lines up with the
+     card's title rather than indenting twice. The table runs to the card's edge for that. */
+  .kit-card > .kit-table {
+    margin-inline: calc(-1 * var(--kit-card-pad));
+  }
+  .kit-card > .kit-table :is(th, td):first-child {
+    padding-inline-start: var(--kit-card-pad);
+  }
+  .kit-card > .kit-table :is(th, td):last-child {
+    padding-inline-end: var(--kit-card-pad);
+  }
+  /* Bars: the label, the bar across what is left, the figure and its note, a row per group. The label's column
+     is as wide as the widest label up to a third of the row; on a phone the label sits above its bar. */
+  .kit-bars {
+    container: kit-bars / inline-size;
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(4rem, 1fr) max-content max-content;
+    gap: var(--space-2h) var(--space-3);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .kit-bars-row {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: subgrid;
+    align-items: center;
+    min-width: 0;
+  }
+  .kit-bars-label {
+    max-width: 33cqi;
+    overflow: hidden;
+    color: var(--ink);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .kit-bars-figure {
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    text-align: end;
+  }
+  .kit-bars-note {
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
+    font-variant-numeric: tabular-nums;
+  }
+  .kit-bars-row .pct-bar {
+    height: 8px;
+  }
+  @container kit-bars (max-width: 28rem) {
+    .kit-bars-row {
+      grid-template-columns: minmax(0, 1fr) max-content max-content;
+      grid-template-areas: 'label label label' 'bar figure note';
+      /* No longer the list's subgrid, so the list's column gap no longer reaches it: the figure kept to the bar. */
+      gap: var(--space-1) var(--space-3);
+    }
+    .kit-bars-row > .meter-wrap {
+      grid-area: bar;
+    }
+    .kit-bars-figure {
+      grid-area: figure;
+    }
+    .kit-bars-note {
+      grid-area: note;
+    }
+    .kit-bars-label {
+      grid-area: label;
+      max-width: none;
+      white-space: normal;
+    }
   }
   /* A Stat that is a link keeps its box and says so only on hover and focus: the figure is the thing to read. */
   a.kit-stat-link {
@@ -693,9 +778,11 @@
     overflow: hidden;
     cursor: pointer;
   }
-  .kit-table-link:hover {
-    color: var(--accent-ink);
-    text-decoration: underline;
+  @media (hover: hover) {
+    .kit-table-link:hover {
+      color: var(--accent-ink);
+      text-decoration: underline;
+    }
   }
   .kit-table-link:focus-visible {
     outline: var(--focus-width, 2px) solid var(--focus);
@@ -715,6 +802,12 @@
     font-weight: 400;
     color: var(--ink-muted);
     overflow-wrap: anywhere;
+  }
+  /* Columns a narrow room cannot hold, said under the first cell (docs/design.md: a grid leaves a column out before
+     it cuts one). The dot is drawn, not read; each value carries its column's name for a screen reader. */
+  .kit-cell-fold + .kit-cell-fold::before {
+    content: '\00b7' / '';
+    padding-inline: 0.4em;
   }
   .kit-table-link:has(.kit-cell-secondary) {
     display: block;
@@ -799,5 +892,87 @@
   }
   .kit-param-dash {
     color: var(--ink-muted);
+  }
+  /* A counted Choose on a phone is the platform's native picker, as wide as a search box beside it. */
+  .kit-param > .kit-param-pick {
+    flex: 1 1 14rem;
+    max-width: 24rem;
+    min-width: 0;
+    min-block-size: var(--control-h);
+  }
+
+  /* ---------- faces: a table's identity cell and Person ---------- */
+  /* The disc stands before the lines and never shrinks; the lines keep the cell's own rules (above). The disc is the
+     platform's Avatar in its own dress, so a look that dresses one face dresses every face. */
+  .kit-cell-identity {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    max-width: 100%;
+    min-width: 0;
+    vertical-align: middle;
+  }
+  .kit-table-link:has(.kit-cell-identity) {
+    display: inline-flex;
+  }
+  .kit-cell-avatar,
+  .kit-person-avatar {
+    flex: none;
+    display: inline-flex;
+  }
+  .kit-cell-lines {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    text-align: start;
+  }
+  .kit-person {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-3);
+    max-width: 100%;
+    min-width: 0;
+  }
+  .kit-person-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .kit-person-name {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--ink);
+    text-decoration: none;
+    overflow-wrap: anywhere;
+  }
+  .kit-person[data-size='lg'] .kit-person-name {
+    font-size: var(--text-md);
+  }
+  @media (hover: hover) {
+    a.kit-person-name:hover {
+      color: var(--accent-ink);
+      text-decoration: underline;
+    }
+  }
+  a.kit-person-name:focus-visible {
+    outline: var(--focus-width, 2px) solid var(--focus);
+    outline-offset: 2px;
+  }
+  .kit-person-secondary {
+    font-size: var(--text-sm);
+    font-weight: 400;
+    color: var(--m-ink-muted, var(--ink-muted));
+    overflow-wrap: anywhere;
+  }
+
+  /* ---------- Details ---------- */
+  /* The record page's field grid (page.css) with one difference: a value wraps where the record page clips it to a
+     line, since facts beside a card have no row of their own to open. Only the kit's own part wraps; the record
+     page's read-only grid shares the class for its dress, not this. */
+  .kit-details-wrap > .page-field > dd {
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
   }
 }

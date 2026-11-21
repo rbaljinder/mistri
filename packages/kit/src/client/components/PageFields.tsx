@@ -639,7 +639,9 @@ export function FieldsSection({
     </dl>
   ) : (
     <dl
-      className={`page-field-grid${presentation === 'summary' ? ' page-field-summary' : ''}`}
+      /* Read-only, it is the kit's `Details` (sdk/kit.tsx) and shares its class, so a look dresses both; a grid with
+         fields open for editing is the form's alone. */
+      className={`page-field-grid${presentation === 'summary' ? ' page-field-summary' : ''}${editing ? '' : ' kit-details'}`}
       data-columns={columns}
       style={columns ? ({ '--page-field-columns': `repeat(${columns}, minmax(0, 1fr))` } as CSSProperties) : undefined}
     >

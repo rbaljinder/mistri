@@ -33,6 +33,7 @@ import { pwaUrls } from '../app/appPwa.js';
 import { uiKitHref } from '../app/appComponents.js';
 import { publicHead, type ShellHead } from './publicHead.js';
 import { personAddress } from './personAddress.js';
+import { redirectedTo } from '../../shared/appRedirects.js';
 import { cardRequest, SHARE_CARD_PATH, sendShareCard, shareCard, shareCardImage } from './shareCard.js';
 import { publicPane } from '../publicRender.js';
 import { requestOrigin } from '@mistriwork/engine/server/http/requestOrigin.js';
@@ -604,11 +605,26 @@ const decodeSegment = (segment: string) => {
   }
 };
 
+/** Where the App has moved this page to (`ui.redirects`, inside the mount), with the request's query; undefined where it has not. */
+function movedAddress(ctx: RequestContext): string | undefined {
+  if (ctx.req.method !== 'GET' && ctx.req.method !== 'HEAD') return undefined;
+  const [, id, ...rest] = ctx.path.split('/');
+  const redirects = (ctx.appHosts ?? []).find((host) => host.app.app.id === decodeSegment(id ?? ''))?.app.app.ui?.redirects;
+  const to = redirectedTo(redirects, rest.filter(Boolean));
+  return to === undefined ? undefined : `/${id}${to}${ctx.url.search}`;
+}
+
 async function serveShell(ctx: RequestContext): Promise<void> {
   const { req, res } = ctx;
   /* The pages as this request arrived with them: the head's source narrows them for its own reader. */
   const pages = ctx.configPages.slice();
   const branding = await requestRecordBranding(ctx, undefined, publicBrandingSurface(ctx.signedIn?.app.app, ctx.path));
+  /* An address the App has moved (`ui.redirects`) is sent on, query kept, before anything is asked of who is reading. */
+  const moved = movedAddress(ctx);
+  if (moved) {
+    res.writeHead(308, { location: outward(ctx.mount, moved), 'cache-control': 'no-cache' }).end();
+    return;
+  }
   /* A record at an address this person is not served is sent on to theirs (personAddress.ts). */
   const theirs = await personAddress(ctx);
   if (res.destroyed || res.writableEnded) return;

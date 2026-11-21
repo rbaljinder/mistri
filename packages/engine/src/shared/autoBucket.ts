@@ -145,12 +145,66 @@ const SPELLED: Record<AutoUnit, RegExp> = {
 /** The local calendar day of a date, as the server spells a day. */
 const localDay = (d: Date): string => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+/** The calendar day an instant falls on in a zone, as the server spells a day; with no zone, its local fields (the wall
+    clock `dateWindow` computes a zoned window in, `zonedNow`). */
+function dayIn(d: Date, timeZone: string | undefined): string {
+  if (!timeZone) return localDay(d);
+  const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/** The label of the period an instant falls in, in a zone. */
+const periodOf = (d: Date, unit: AutoUnit, timeZone: string | undefined, weekStart: number): string =>
+  bucketKey(dayIn(d, timeZone), unit, weekStart);
+
+interface FillOptions {
+  /** The unit the rows are keyed in: their keys are spelled as the server spells it (`2026-03-14`, `2026-03`, `2026-Q1`). */
+  unit: AutoUnit;
+  /** The first instant to fill from, its period included; absent, the first row's. */
+  from?: Date;
+  /** The last instant to fill to, its period included; absent, the last row's. */
+  to?: Date;
+  /** The zone `from` and `to` are read in, the App's: absent, their local fields. */
+  timeZone?: string;
+  /** The field a row's period is under: `key`, or the server's name for it (`day(created_at)`). */
+  key?: string;
+  /** The fields a filled period holds as 0: absent, the first row's numeric ones, else `value`. */
+  zero?: readonly string[];
+  weekStart?: number;
+}
+
 /**
- * A trend's points over its window: the periods that held no rows put back as zero, from the window's first period
- * to today's, and the read periods added up into the unit the span is drawn in. A count of nothing is 0, and a line
- * drawn through only the days that had rows said a quiet week was a steady one; three busy days of a week drew no
- * line at all. Only a count or a sum adds up so: any other measure's points are drawn as read, and labels the read
- * unit does not spell are left as they came.
+ * Rows keyed by period with the periods that held no rows put back as zero, marked `filled: true`, from `from`'s
+ * period to `to`'s (or the rows' own first and last), in order. A count of nothing is 0: a line drawn through only
+ * the days that had rows said a quiet week was a steady one. The periods are the App's calendar's (`timeZone`), so a
+ * moment near midnight falls on the day the people using the App say it did. Rows whose keys the unit does not spell
+ * come back as they came; only a count or a sum is honestly filled with 0, which the caller decides.
+ */
+export function fillBuckets<R extends Record<string, unknown>>(
+  rows: readonly R[],
+  { unit, from, to, timeZone, key = 'key', zero, weekStart = 1 }: FillOptions,
+): Array<R | (Record<string, unknown> & { filled: true })> {
+  const keys = rows.map((row) => String(row[key] ?? ''));
+  if (keys.some((k) => !SPELLED[unit].test(k))) return [...rows];
+  const ends = [from, to].flatMap((d) => (d ? [periodOf(d, unit, timeZone, weekStart)] : []));
+  const sorted = [...keys, ...ends].sort();
+  if (!sorted.length) return [...rows];
+  const numeric = rows.length ? Object.keys(rows[0]).filter((field) => field !== key && typeof rows[0][field] === 'number') : [];
+  const zeros = Object.fromEntries((zero ?? (numeric.length ? numeric : ['value'])).map((field) => [field, 0]));
+  const held = new Map(rows.map((row, i) => [keys[i], row]));
+  const out: Array<R | (Record<string, unknown> & { filled: true })> = [];
+  for (let at = sorted[0], n = 0; at <= sorted[sorted.length - 1] && n < 5000; at = nextKey(at, unit), n++)
+    /* The period first, as the server writes a row: the hook reads a row's measure as the column after its groups. */
+    out.push(held.get(at) ?? { [key]: at, ...zeros, filled: true });
+  return out;
+}
+
+/**
+ * A trend's points over its window: the periods that held no rows put back as zero (`fillBuckets`), from the window's
+ * first period to today's, and the read periods added up into the unit the span is drawn in. Three busy days of a
+ * week drew no line at all before. Only a count or a sum adds up so: any other measure's points are drawn as read,
+ * and labels the read unit does not spell are left as they came.
  */
 export function trendPoints<R extends { key: unknown; value: unknown }>(
   rows: readonly R[],
@@ -161,16 +215,17 @@ export function trendPoints<R extends { key: unknown; value: unknown }>(
   now: Date,
 ): Array<{ key: unknown; value: unknown }> {
   if (!/^(count|sum\s+[\w.$+]+)(\s+as\s+[\w$]+)?$/i.test((measure ?? 'count').trim())) return [...rows];
-  const keys = rows.map((row) => String(row.key ?? ''));
-  if (keys.some((key) => !SPELLED[read].test(key))) return [...rows];
-  const ends = window ? [window.start, new Date(Math.min(window.end.getTime() - 1, now.getTime()))] : [];
-  const sorted = [...keys, ...ends.map((d) => bucketKey(localDay(d), read))].sort();
-  if (!sorted.length) return [...rows];
-  const held = new Map(rows.map((row) => [String(row.key), Number(row.value) || 0]));
+  const keyed = rows.map((row) => ({ key: String(row.key ?? ''), value: Number(row.value) || 0 }));
+  if (keyed.some((row) => !SPELLED[read].test(row.key))) return [...rows];
+  if (!keyed.length && !window) return [...rows];
+  const filled = fillBuckets(keyed, {
+    unit: read,
+    ...(window ? { from: window.start, to: new Date(Math.min(window.end.getTime() - 1, now.getTime())) } : {}),
+  });
   const into = new Map<string, number>();
-  for (let key = sorted[0], n = 0; key <= sorted[sorted.length - 1] && n < 5000; key = nextKey(key, read), n++) {
-    const label = bucketKey(key, unit);
-    into.set(label, (into.get(label) ?? 0) + (held.get(key) ?? 0));
+  for (const row of filled) {
+    const label = bucketKey(String(row.key), unit);
+    into.set(label, (into.get(label) ?? 0) + (Number(row.value) || 0));
   }
   return [...into].map(([key, value]) => ({ key, value }));
 }

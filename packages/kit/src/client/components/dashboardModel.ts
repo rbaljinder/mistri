@@ -87,6 +87,10 @@ export interface Section {
   x?: string;
   /** breakdown, steps: a line under a step, by its value. */
   notes?: Record<string, string>;
+  /** breakdown drawn as bars: a second measure said beside each bar ("4 deals"), asked in the same request. */
+  also?: string;
+  /** chart: whether buckets with no rows stand at zero across the window, across what was observed, or not at all. */
+  fill?: 'window' | 'observed' | false;
   /** chart: a line's curve, and a donut's words for its middle figure. */
   curve?: 'smooth' | 'straight';
   total?: string;

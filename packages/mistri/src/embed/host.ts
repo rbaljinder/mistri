@@ -440,6 +440,8 @@ export function embedHost({ surface, endpoint, authorization, navigator, basePat
       switch (to.kind) {
         case 'signIn':
           return `${base}/sign-in`;
+        case 'home':
+          return base || '/';
         case 'view':
           return withParams(`${base}/${encodeURIComponent(to.view)}`, to.params);
         case 'record': {

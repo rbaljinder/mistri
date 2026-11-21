@@ -383,6 +383,11 @@ export default definePage({ label: String(typeof process === 'object' && process
     const { reads: _reads, ...unread } = APP.views.board;
     assert.throws(() => parse(views({ board: unread })), /\[page-reads\]/);
     assert.throws(() => parse(views({ board: { ...APP.views.board, params: ['period'] } })), /\[page-params\]/);
+    // The refusal says what to use: the page's own window is a param called "window", read by the windowed Metric.
+    assert.throws(
+      () => parse(views({ board: { ...APP.views.board, params: ['period'] } })),
+      /"period" is a dashboard's address word.*named "window".*<Metric window="window"/,
+    );
     assert.throws(() => parse(views({ settle: { ...APP.views.settle, commands: ['refund'] } })), /\[page-commands\].*"refund"/);
     assert.throws(
       () => parse(views({ lobby: { ...APP.views.lobby, reads: ['ticket'] } })),

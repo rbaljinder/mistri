@@ -1,12 +1,17 @@
 /**
  * The parts a field report asked for, each as a page meets it: `Stat`'s delta and link, `Sparkline`, `MiniBars` (with
- * the table a screen reader reads), `Tile`, `DateNav` (its steps, its `T` key and `skip`) and `useNotice`.
+ * the table a screen reader reads), `Tile`, `DateNav` (its steps, its `T` key and `skip`) and `useNotice`; and the
+ * parts a page draws people and facts with: `Person`, `Details`, a table's `avatar` column and a status `Value` under
+ * each of the looks' status recipes.
  */
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { renderPage, renderSection } from './testing.js';
 import { definePage } from './page.js';
-import { MiniBars, Sparkline, Stat, Tile } from './kit.js';
+import { Bars, Details, MiniBars, Person, Sparkline, Stat, Table, Tile, Value } from './kit.js';
+import { UiHostContext, type UiHost } from './context.js';
 import { DateNav, stepDay } from './DateNav.js';
 import { useNotice } from './index.js';
 
@@ -30,6 +35,12 @@ describe('Stat', () => {
       'kit-stat-change kit-stat-bad',
       'kit-stat-change kit-stat-good',
     ]);
+  });
+
+  test('a delta names what it is measured against, after the change', () => {
+    drawn(<Stat label="Revenue" value="$1" delta={{ value: 12, good: 'up', against: 'vs last month' }} />);
+    expect(document.querySelector('.kit-stat-change')!.textContent).toBe('+12 vs last month');
+    expect(document.querySelector('.kit-stat-against')!.textContent).toBe(' vs last month');
   });
 
   test('with href the whole stat is a link', () => {
@@ -139,5 +150,197 @@ describe('useNotice', () => {
     renderPage(definePage({ label: 'Desk', reads: [], commands: [], component: () => <Raise /> }), { announced });
     fireEvent.click(screen.getByRole('button', { name: 'go' }));
     expect(announced).toEqual([{ text: 'Not that day', tone: 'error' }]);
+  });
+});
+
+/* A host that knows the lead's columns as an App says them: a label each, and the status column's tones. */
+const leadHost = {
+  app: true,
+  column: (resource: string, column: string) =>
+    resource !== 'lead'
+      ? undefined
+      : column === 'status'
+        ? { label: 'Stage', rule: { tone: { working: 'warn', won: 'good' } } }
+        : column === 'owner_name'
+          ? { label: 'Owner', rule: null }
+          : undefined,
+} as unknown as UiHost;
+const withLeads = (node: React.ReactNode) => render(<UiHostContext.Provider value={leadHost}>{node}</UiHostContext.Provider>);
+
+/* The phone's width, as the browser answers `(max-width: 600px)`; restored after each test. */
+function onAPhone() {
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) =>
+      ({
+        matches: query.includes('max-width: 600px'),
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+        addListener() {},
+        removeListener() {},
+      }) as never,
+  );
+}
+
+describe('Person', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  test('a disc of initials a reader skips, the name it hears, and one quieter line', async () => {
+    withLeads(<Person name="Ada Stone" secondary="Acme, buyer" />);
+    const disc = document.querySelector('.kit-person-avatar')!;
+    expect(disc).toHaveAttribute('aria-hidden', 'true');
+    expect(await within(disc as HTMLElement).findByText('AS')).toBeInTheDocument();
+    expect(screen.getByText('Ada Stone')).toHaveClass('kit-person-name');
+    expect(screen.getByText('Acme, buyer')).toHaveClass('kit-person-secondary');
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  test('with href the name is the one link, and no second line is drawn for an empty one', () => {
+    withLeads(<Person name="Ada Stone" secondary="" href="/compass/contacts/7" />);
+    const link = screen.getByRole('link', { name: 'Ada Stone' });
+    expect(link).toHaveAttribute('href', '/compass/contacts/7');
+    expect(screen.getAllByRole('link')).toHaveLength(1);
+    expect(document.querySelector('.kit-person-secondary')).toBeNull();
+  });
+
+  test('the size asked for at a desk, the small disc on a phone', () => {
+    const { unmount } = withLeads(<Person name="Ada Stone" size="lg" />);
+    expect(document.querySelector('.kit-person')).toHaveAttribute('data-size', 'lg');
+    unmount();
+    onAPhone();
+    withLeads(<Person name="Ada Stone" size="lg" />);
+    expect(document.querySelector('.kit-person')).toHaveAttribute('data-size', 'sm');
+  });
+});
+
+describe('Details', () => {
+  const lead = { status: 'working', owner_name: 'Ada Stone', note: null };
+
+  test("terms are the App's labels and values are dressed as their columns are, in the record page's grid", () => {
+    withLeads(<Details resource="lead" row={lead} fields={['status', 'owner_name', 'note']} />);
+    const list = document.querySelector('dl')!;
+    expect(list).toHaveClass('page-field-grid', 'kit-details', 'kit-details-wrap');
+    expect([...list.querySelectorAll('dt')].map((term) => term.textContent)).toEqual(['Stage', 'Owner', 'note']);
+    expect(screen.getByText('Working')).toHaveClass('tone', 'tone-warn');
+    expect(screen.getByText('Ada Stone').closest('dd')).not.toBeNull();
+  });
+
+  test('a pair the page worked out is drawn as given, and an empty one says so', () => {
+    withLeads(
+      <Details
+        resource="lead"
+        row={lead}
+        fields={[
+          { label: 'Age', value: '12 days' },
+          { label: 'Next step', value: '' },
+        ]}
+      />,
+    );
+    const values = [...document.querySelectorAll('dd')].map((value) => value.textContent);
+    expect(values).toEqual(['12 days', '—']);
+    expect(document.querySelectorAll('dt')[0]!.textContent).toBe('Age');
+  });
+
+  test('columns fixes the count at a desk', () => {
+    withLeads(<Details resource="lead" row={lead} fields={['status']} columns={2} />);
+    const list = document.querySelector('dl') as HTMLElement;
+    expect(list).toHaveAttribute('data-columns', '2');
+    expect(list.style.getPropertyValue('--page-field-columns')).toBe('repeat(2, minmax(0, 1fr))');
+  });
+});
+
+describe("a table's avatar column", () => {
+  test("a disc before the cell's own name, the picture from the row's field, inside the row's one link", async () => {
+    withLeads(
+      <Table
+        label="Leads"
+        rows={[{ id: 1, owner_name: 'Ada Stone', photo: '' }]}
+        columns={[{ key: 'owner_name', label: 'Owner', avatar: 'photo' }]}
+        onRowClick={() => {}}
+      />,
+    );
+    const cell = screen.getByRole('cell');
+    const disc = cell.querySelector('.kit-cell-avatar')!;
+    expect(disc).toHaveAttribute('aria-hidden', 'true');
+    expect(await within(disc as HTMLElement).findByText('AS')).toBeInTheDocument();
+    expect(within(cell).getByText('Ada Stone')).toBeInTheDocument();
+  });
+
+  test('a function of the row names the face itself', async () => {
+    withLeads(
+      <Table
+        label="Leads"
+        rows={[{ id: 1, owner: 'Grace Hopper' }]}
+        columns={[{ key: 'owner', label: 'Owner', avatar: (row) => ({ name: String(row.owner) }) }]}
+      />,
+    );
+    expect(await within(screen.getByRole('cell')).findByText('GH')).toBeInTheDocument();
+  });
+});
+
+describe("a status value under each of the looks' recipes", () => {
+  afterEach(() => delete document.documentElement.dataset.lookStatus);
+
+  /* The recipes dress `.tone.tone-*` (themeFamilies.css, sageLook.css, lumenLook.css), so a value outside a table must
+     carry those classes whichever recipe the look names, and a display rule's tone names are Tone's own. */
+  test.each(['dot', 'pill', 'pill-dot', 'quiet'])('%s', (recipe) => {
+    document.documentElement.dataset.lookStatus = recipe;
+    withLeads(
+      <>
+        <Value value="working" resource="lead" column="status" />
+        <Value value="won" display={{ tone: { won: 'good' } }} />
+      </>,
+    );
+    const working = screen.getByText('Working');
+    expect(working).toHaveClass('tone', 'tone-warn');
+    expect(working.closest('td, dd')).toBeNull();
+    expect(screen.getByText('Won')).toHaveClass('tone', 'tone-good');
+  });
+});
+
+describe('Bars', () => {
+  test('a list of meters against the largest, each saying its group, its figure and its note', () => {
+    drawn(
+      <Bars
+        label="By stage"
+        format="money"
+        items={[
+          { key: 'lead', label: 'Lead', value: 1200, note: '4 deals' },
+          { key: 'won', label: 'Won', value: 300 },
+        ]}
+      />,
+    );
+    const list = screen.getByRole('list', { name: 'By stage' });
+    const meters = screen.getAllByRole('meter');
+    expect(list.querySelectorAll('li.kit-bars-row')).toHaveLength(2);
+    expect(meters.map((meter) => meter.getAttribute('aria-valuetext'))).toEqual([
+      expect.stringMatching(/^Lead: .*1,200.*, 4 deals$/),
+      expect.stringMatching(/^Won: .*300[^,]*$/),
+    ]);
+    expect(meters[0].getAttribute('aria-valuenow')).toBe('1200');
+    expect(meters[0].getAttribute('aria-valuemax')).toBe('1200');
+  });
+});
+
+/* The parts are token-only: a look dresses them, so a color or a corner written into their stylesheet would be the one
+   place a theme cannot reach. Read as text, so it holds without a browser (e2e/page-parts-themes.spec.ts reads the same
+   rule off what is drawn). */
+describe('the kit parts stylesheets', () => {
+  const sheet = (name: string) => readFileSync(fileURLToPath(new URL(name, import.meta.url)), 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  const sheets = { 'kit.css': sheet('./kit.css'), 'DashboardBlocks.css': sheet('../DashboardBlocks.css') };
+
+  test('no color is written as a literal: each is a token, or a mix of tokens', () => {
+    const literal = /#[0-9a-fA-F]{3,8}\b|\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch)\(/g;
+    for (const [name, css] of Object.entries(sheets)) expect([...css.matchAll(literal)].map((m) => `${name}: ${m[0]}`)).toEqual([]);
+  });
+
+  test("a part's corner is a token, or the pill's and the disc's", () => {
+    const parts = /^[^{}]*\.kit-(?:bars|person|details|cell-|param|card-part|stat-against)[^{}]*\{([^{}]*)\}/gm;
+    const corners: string[] = [];
+    const rules = [...sheets['kit.css'].matchAll(parts)];
+    /* A renamed class would leave nothing to read, and so nothing to refuse. */
+    expect(rules.length).toBeGreaterThan(20);
+    for (const rule of rules) for (const [, value] of rule[1]!.matchAll(/border-radius:\s*([^;]+)/g)) corners.push(value!.trim());
+    expect(corners.filter((value) => !/^(?:var\(|calc\(var\(|0\b|999px|50%|inherit)/.test(value))).toEqual([]);
   });
 });

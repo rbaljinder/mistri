@@ -18,11 +18,13 @@ export { React };
 export { UI_TOKENS as tokens } from '@mistriwork/kit/shared/uiTokens.js';
 export { Fragment, useCallback, useContext, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
 export {
+  Bars,
   Beside,
   Button,
   Card,
   Cluster,
   Columns,
+  Details,
   Dropdown,
   Empty,
   Heading,
@@ -32,6 +34,7 @@ export {
   Loaded,
   Meter,
   MiniBars,
+  Person,
   Row,
   Segmented,
   Skeleton,

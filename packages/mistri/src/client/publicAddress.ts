@@ -619,6 +619,7 @@ export function hrefFor(to: UiAddress): string | undefined {
     return shownUnplaced(query ? `${path}?${query}` : path);
   };
   if (to.kind === 'signIn') return shownUnplaced(`${root}/sign-in`);
+  if (to.kind === 'home') return shownUnplaced(root);
   if (!book) return undefined;
   if (to.kind === 'view' || to.kind === 'page') {
     const segment = book.views.get(to.kind === 'view' ? to.view : to.path);

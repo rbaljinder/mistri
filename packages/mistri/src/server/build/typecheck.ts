@@ -213,6 +213,11 @@ export function hint(
   if (error.code === 'TS2307' && /'@mistriwork\/mistri\/app'/.test(all)) {
     return "mistri is not installed where this App can import it: run npm install in the App's project (its package.json lists @mistriwork/mistri), or keep the App inside a mistri checkout. See `mistri docs getting-started`.";
   }
+  /* The kit is the platform's own plumbing (packages/kit/README.md), and its root exports nothing a page draws with:
+     an App that reaches for it is sent to the one import a page needs. */
+  if (/['"]@mistriwork\/kit(\/[^'"]*)?['"]/.test(all)) {
+    return "@mistriwork/kit is mistri's own plumbing, not an App's: a page draws with @mistriwork/mistri/page (a component with @mistriwork/mistri/ui), which exports every kit part an App may use.";
+  }
   if (error.code === 'TS2307' && /mistri-schema/.test(all)) {
     return "the schema types are missing: mistri check writes mistri-schema.d.ts when it can reach the App's database.";
   }

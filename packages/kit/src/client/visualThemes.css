@@ -190,7 +190,7 @@
 :root[data-visual-theme] .applist-quick-text { min-height: 32px; background: var(--surface); }
 :root[data-visual-theme] .tabs { gap: var(--space-4h); padding-top: var(--space-4); }
 :root[data-visual-theme] .tab { padding: var(--space-3) 0 var(--space-4); font-weight: 550; }
-:root[data-visual-theme] .tab[aria-selected="true"] { border-bottom-width: 3px; }
+:root[data-visual-theme] .tab:is([aria-selected="true"], [aria-pressed="true"]) { border-bottom-width: 3px; }
 :root[data-visual-theme] .app-mode .result-head { padding-top: var(--space-4); padding-bottom: var(--space-4); }
 :root[data-visual-theme] .app-mode table { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 :root[data-visual-theme] .app-mode th { font-family: var(--sans); color: var(--ink-muted); font-weight: 600; }

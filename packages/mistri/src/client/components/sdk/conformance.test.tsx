@@ -15,7 +15,8 @@ import { userEvent } from '@testing-library/user-event';
 import { refreshViewportScale } from '@mistriwork/ui/internal/ruler.js';
 import { React, useCommand, useLook, useSectionSize, useState } from './index.js';
 import type { UiCommandOutcome, UiCommandReview } from './context.js';
-import { definePage, List, Modal, Popover, TextField, Tooltip } from './page.js';
+import { definePage, Details, List, Modal, Person, Popover, TextField, Tooltip } from './page.js';
+import { PAGE_EXPORTS, UI_EXPORTS } from '../../../shared/uiSdk.js';
 import { fixtures, renderPage, renderSection } from './testing.js';
 
 afterEach(() => {
@@ -130,6 +131,26 @@ describe('slots, widths and looks', () => {
     }
     renderSection(Unheaded, { component: { id: 'unheaded' } });
     expect(await screen.findByRole('dialog', { name: 'Adjust balance' })).toBeInTheDocument();
+  });
+
+  test("a person and a record's facts are named in both entries and drawn through the page entry, the disc a reader skips", async () => {
+    for (const name of ['Person', 'Details']) {
+      expect(UI_EXPORTS).toContain(name);
+      expect(PAGE_EXPORTS).toContain(name);
+    }
+    function Facts() {
+      return (
+        <>
+          <Person name="Ada Stone" secondary="Acme" href="/people/7" />
+          <Details resource="lead" row={{ owner: 'Ada' }} fields={[{ label: 'Owner', value: 'Ada' }]} />
+        </>
+      );
+    }
+    renderSection(Facts, { component: { id: 'facts' } });
+    expect(await screen.findByRole('link', { name: 'Ada Stone' })).toBeInTheDocument();
+    expect(document.querySelector('.kit-person-avatar')).toHaveAttribute('aria-hidden', 'true');
+    expect(screen.getByRole('term')).toHaveTextContent('Owner');
+    expect(screen.getByRole('definition')).toHaveTextContent('Ada');
   });
 
   test('a section 320 pixels wide is compact, as on a phone, and one at a desk is not', async () => {

@@ -3,7 +3,8 @@ import { test, vi } from 'vitest';
 
 /* happy-dom lays nothing out; the slots this kit leaves to the platform place their popups on these instead, as in
    packages/ui/src/conformance.test.tsx. */
-vi.mock('../../../../../packages/ui/src/internal/ruler.js', () => ({
+vi.mock('../../../../../packages/ui/src/internal/ruler.js', async (importOriginal) => ({
+  ...(await importOriginal<object>()),
   viewportBox: (element: Element) => element.getBoundingClientRect(),
   viewportSize: () => ({ width: 1000, height: 800 }),
 }));

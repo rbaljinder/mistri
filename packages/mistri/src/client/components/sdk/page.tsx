@@ -60,6 +60,8 @@ export { Button };
 /* A page's place in its address, as written: `page.useParam` reads it through this hook and checks it against the
    param's kind; this one is for a module the page draws that is not the page itself (a widget, the Console's rooms). */
 export { useAddressState };
+/* A breakdown's empty periods put back as zero in the App's calendar, the filler a dashboard's charts use. */
+export { fillBuckets } from '@mistriwork/engine/shared/autoBucket.js';
 /* An App's control kit (Preview): its module imports these from here, so the kit and the page share the one seam,
    and the two hooks a kit's own popups are placed and named by read the page's own contexts. */
 export { defineUiKit, defaultUiKit, dress, extendUiKit, useComponentScope, usePopupHost } from '@mistriwork/ui/UiKit.js';
@@ -339,6 +341,8 @@ interface RowButtonProps {
   size?: ButtonSize;
   done?: string;
   onDone?: (outcome: UiCommandOutcome) => void;
+  /** What a verb the row's state does not allow does: drawn held (`'disable'`, the default) or not drawn (`'hide'`). */
+  unavailable?: 'disable' | 'hide';
 }
 
 /* What a command's and an action's button share: drawn only for a reader granted it, held while the row's state does
@@ -350,12 +354,15 @@ function RowButton({
   label,
   intent = 'secondary',
   size = 'default',
+  unavailable = 'disable',
   run,
 }: Omit<RowButtonProps, 'done' | 'onDone'> & { handle: ReturnType<typeof useCommand>; run: () => void }) {
   const host = useUiHost();
   const scope = useContext(UiScopeContext);
   const listed = useContext(ListResource);
   if (!handle.granted) return null;
+  // A page that would otherwise re-state each verb's `when` to keep a dead button off the row says it here instead.
+  if (unavailable === 'hide' && handle.available(row) === false) return null;
   const said = label ?? handle.label;
   const resource = handle.resource ?? resourceOfRow(row) ?? listed ?? scope?.from;
   const title = resource ? host.rowTitle(resource, row) : undefined;
