@@ -37,6 +37,7 @@ const KEYS: Record<string, string> = {
   features: 'Ordered slices of content merged at load',
   home: 'Where a visitor starts',
   nav: 'The menu: arrangement only',
+  choose: 'The row a person works at is read by every list, dashboard, form and command, so no one view can hold it',
   ui: 'Look, density and components for the whole App',
   uiKit: "The App's own control primitives replace the default ones in every view",
 };

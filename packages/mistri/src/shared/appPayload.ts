@@ -39,7 +39,7 @@ import { appKeepsInbox } from './appNotify.js';
 import { ASSISTANT_ROOM } from './appAddress.js';
 import { mentionsMe } from './appMe.js';
 export { embeddedOnlyViews } from '@mistriwork/engine/shared/appEmbeds.js';
-import type { AppPayloadDocument, AppPayloadNavNode, ServedApp } from '@mistriwork/engine/shared/servedApp.js';
+import type { AppPayloadDocument, AppPayloadNavNode, ServedApp, ServedChoice } from '@mistriwork/engine/shared/servedApp.js';
 import { DIRECTORY_AT, navPlaces } from '@mistriwork/engine/shared/servedApp.js';
 import { appClockOffset } from '@mistriwork/engine/shared/appClock.js';
 export type { AppPayloadDocument, AppPayloadNavNode } from '@mistriwork/engine/shared/servedApp.js';
@@ -256,6 +256,7 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
     name: app.name,
     ...(app.shortName ? { shortName: app.shortName } : {}),
     ...(app.ai ? { ai: app.ai } : {}),
+    ...servedChoose(app, schema),
     ...(app.landing ? { landingView: app.landing.view } : {}),
     views,
     nav,
@@ -276,6 +277,21 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
         }
       : {}),
   };
+}
+
+/**
+ * The App's choices this reader can make: each over a table their catalog has, by its id (what the walk and the
+ * pickers name). A choice over a table they cannot read is left out, so the shell draws no chooser it would refuse.
+ */
+function servedChoose(app: AppDef, schema: DatabaseSchema): { choose?: Record<string, ServedChoice> } {
+  const served: Record<string, ServedChoice> = {};
+  for (const [name, choice] of Object.entries(app.choose ?? {})) {
+    const table = tableNamed(schema, choice.from);
+    if (!table) continue;
+    const label = choice.label && table.columns.some((column) => column.name === choice.label) ? choice.label : undefined;
+    served[name] = { table: table.id, ...(label ? { label } : {}), ...(choice.required ? { required: true as const } : {}) };
+  }
+  return Object.keys(served).length ? { choose: served } : {};
 }
 
 /**

@@ -194,3 +194,25 @@ test('a month field says, shows and reads the reader’s own month order', () =>
   expect(sv.placeholder).toBe('YYYY-MM');
   expect(sv.shown).toBe('2026-10');
 });
+
+test('a choice other inputs start from reads their columns with its rows, and puts a pick’s values to them', async () => {
+  run.mockResolvedValueOnce({ rows: [{ id: 'k', name: 'Kia', usual_fee: 120 }] } as never);
+  const onFill = vi.fn();
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  render(
+    <QueryClientProvider client={client}>
+      <IntakeControl
+        field={make(false, [])}
+        id="make"
+        value="k"
+        onChange={() => {}}
+        source="yard"
+        fill={{ fills: { fee: 'usual_fee' }, onFill }}
+      />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+  expect((run.mock.calls[0] as unknown[])[1]).toMatchObject({ q: 'make show id, name, usual_fee sort name' });
+  // Opened with the pick already made: filled as the form opens, where the input is still empty.
+  await waitFor(() => expect(onFill).toHaveBeenCalledWith({ fee: 120 }, 'open'));
+});

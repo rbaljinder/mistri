@@ -164,7 +164,7 @@ describe('what the App cannot express yet is refused as not supported yet, with 
 
 describe('any other unknown key gets the ordinary refusal: the place, the key, what the place takes', () => {
   const ROOT =
-    'It takes: id, name, shortName, connection, sources, resources, unions, auth, views, pages, features, home, nav, ui, uiKit, branding, api, track, live, flags, audiences, experiments, analytics, assistant, ai, retention\\.';
+    'It takes: id, name, shortName, connection, sources, resources, unions, auth, views, pages, features, home, nav, ui, uiKit, branding, api, track, live, flags, audiences, experiments, analytics, assistant, ai, choose, retention\\.';
   const UNKNOWN: Array<[string, Fragment, RegExp]> = [
     ['a root key', { writable: true }, new RegExp(`^test/app\\.json has no "writable"\\. ${ROOT}$`)],
     [
@@ -308,7 +308,7 @@ describe("a wrong shape gets the shape's refusal", () => {
     [
       'a resource that is a string',
       { resources: { task: 'public.task' } },
-      /resources "task" is not an object\. A resource block is \{ physical\?, query\?, access\?/,
+      /resources "task" is not an object\. A resource block is \{ physical\?, query\?, frozen\?, access\?/,
     ],
     ['pages as a list', { pages: [{ label: 'Task', base: 'task' }] }, /"pages" must be an object of pages keyed by id\./],
     [

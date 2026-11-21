@@ -112,7 +112,7 @@ import { readFreshness } from '@mistriwork/engine/server/http/readRouting.js';
 import { readsAs } from '@mistriwork/engine/adapters/replicas.js';
 import { noteAuthorRequest, reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
 import { administersAccounts } from '../../shared/accountAdministration.js';
-import { recordRefusalCause, refusalCause, refusalSaid } from '@mistriwork/engine/shared/refusal.js';
+import { isFrozenRefusal, recordRefusalCause, refusalCause, refusalSaid } from '@mistriwork/engine/shared/refusal.js';
 import { currentSpan } from '@mistriwork/engine/adapters/telemetry/trace.js';
 import { observerHome, observerMounted } from '../observe/mount.js';
 import type { GatedContext, RequestContext } from '@mistriwork/engine/server/http/context.js';
@@ -527,6 +527,7 @@ async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyCont
         });
       }
       const conflict = error instanceof WriteConflict;
+      const frozen = isFrozenRefusal(error);
       const denied = error instanceof AppAccessDenied;
       const rejected =
         conflict ||
@@ -537,7 +538,7 @@ async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyCont
       const outcome = rejected ? (path === '/api/revert' ? 'not_applied' : 'rejected') : 'unknown';
       const refused = rejected
         ? {
-            code: conflict ? 'record_conflict' : denied ? 'forbidden' : 'validation_failed',
+            code: conflict ? 'record_conflict' : frozen ? 'frozen' : denied ? 'forbidden' : 'validation_failed',
             /* The rule that refused, where the code that refused said it (sayRefusal): the role, a column, the row
                policy. Otherwise the fixed sentence, and the server's log names the cause. */
             message: conflict
@@ -565,7 +566,7 @@ async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyCont
       const failure = said ? { code: said.code, message: said.message, ...(said.fields ? { fields: said.fields } : {}) } : refused;
       // A body past its ceiling is too large, not a refusal of the change: the client can shrink it.
       const tooLarge = error instanceof HttpError && error.status === 413;
-      const status = tooLarge ? 413 : denied ? 403 : conflict ? 409 : (refusedBy ?? (referenced ? 409 : rejected ? 400 : 200));
+      const status = tooLarge ? 413 : denied ? 403 : conflict || frozen ? 409 : (refusedBy ?? (referenced ? 409 : rejected ? 400 : 200));
       const cause = reportRefusal(req, rejected ? status : 503, failure.code, failure.message, error);
       /* One refusal body for every route: the code and message at the top, as a command's say them, and errors[]
          for the readers of a write's per-field list. */

@@ -27,9 +27,10 @@ import { compileView, resolveAggregate, tryResolvePath, type ViewDef } from '../
 import { rollupReads, type Rollup } from '../shared/rollups.js';
 import { compileBreakdown, measureConditions, type BreakdownDef } from '../shared/breakdown.js';
 import { aggregateColumns, type AggregateRequest } from '../shared/aggregate.js';
+import { checkedComputed } from '../shared/computedWhere.js';
 import { textToView } from '../shared/viewtext.js';
 import { textToBreakdown } from '../shared/breakdowntext.js';
-import { isJsonType, type DatabaseSchema, type ForeignKey } from '../shared/schema.js';
+import { GRANTED_DERIVED, isJsonType, type DatabaseSchema, type ForeignKey } from '../shared/schema.js';
 import { impliedEdges } from '../shared/declaredReferences.js';
 import { unformedColumns } from '../shared/form.js';
 import type { RowScope } from '../shared/rowScope.js';
@@ -58,6 +59,9 @@ export interface ColumnGrant {
   appendOnly?: ReadonlySet<string>;
   /** Missing entries retain unrestricted columns within the resource grants. */
   fields?: ReadonlyMap<string, { read: ReadonlySet<string>; write: ReadonlySet<string> }>;
+  /** Of each table's rollups and computed columns, the ones a field grant names to be read, by table id: what the
+      App's catalog keeps of them (GRANTED_DERIVED). A table missing here keeps every one its reader can compute. */
+  derived?: ReadonlyMap<string, ReadonlySet<string>>;
   /** Columns read and written by the server for its own work (a file's object
       and hash): never listed in a served catalog, and refused to every request
       but the server's own (`serverRequest`). */
@@ -82,6 +86,7 @@ export function captureGrant<G extends ColumnGrant>(grant: G): G {
           ),
         }
       : {}),
+    ...(grant.derived ? { derived: new Map([...grant.derived].map(([table, names]) => [table, new Set(names)])) } : {}),
   };
 }
 
@@ -107,7 +112,7 @@ export function markStableGrant<T extends ColumnGrant>(grant: T): T {
    grant is kept per role set and handed each request with that person's own
    scope beside it (tenantReadRuntime.ts), so the scope itself is never the
    key, and never kept here past its request. */
-type PrunedFrom = Pick<ColumnGrant, 'writable' | 'creatable' | 'appendOnly' | 'fields' | 'internal'> & {
+type PrunedFrom = Pick<ColumnGrant, 'writable' | 'creatable' | 'appendOnly' | 'fields' | 'internal' | 'derived'> & {
   scoped: boolean;
   pruned: DatabaseSchema;
 };
@@ -115,7 +120,7 @@ const prunedCatalogs = new WeakMap<DatabaseSchema, WeakMap<object, PrunedFrom>>(
 /* A tenant request resolves its grant afresh each time, so its sets are never
    the same objects twice, and every read in it pruned the catalog again
    (G118). A captured catalog is frozen, and pruning reads nothing of the grant
-   but the six things in this key, so the answer for a catalog and a key is
+   but what this key holds, so the answer for a catalog and a key is
    kept — bounded, oldest out first — and frozen, so no caller can change the
    copy another one is handed. */
 const prunedByContent = new WeakMap<DatabaseSchema, Map<string, DatabaseSchema>>();
@@ -134,6 +139,7 @@ function grantKey(access: ColumnGrant): string {
     access.internal
       ? [...access.internal].map(([table, columns]) => [table, sorted(columns)]).sort((a, b) => (a[0] < b[0] ? -1 : 1))
       : null,
+    access.derived ? [...access.derived].map(([table, names]) => [table, sorted(names)]).sort((a, b) => (a[0] < b[0] ? -1 : 1)) : null,
   ]);
 }
 /** Test-only: how many times a catalog was pruned rather than reused. */
@@ -164,14 +170,15 @@ export function accessibleSchema(schema: DatabaseSchema, access: ColumnGrant): D
     kept.appendOnly === access.appendOnly &&
     kept.fields === access.fields &&
     kept.internal === access.internal &&
+    kept.derived === access.derived &&
     kept.scoped === scoped
   )
     return kept.pruned;
   // Frozen over a captured catalog, as the content path's is: what reads it later (resourceChecks) may then keep by its identity.
   const made = pruneCatalog(schema, access);
   const pruned = isCapturedScopeCatalog(schema) ? freezeDerivedCatalog(made) : made;
-  const { writable, creatable, appendOnly, fields, internal } = access;
-  byGrant.set(access.readable, { writable, creatable, appendOnly, fields, internal, scoped, pruned });
+  const { writable, creatable, appendOnly, fields, internal, derived } = access;
+  byGrant.set(access.readable, { writable, creatable, appendOnly, fields, internal, derived, scoped, pruned });
   return pruned;
 }
 
@@ -267,6 +274,7 @@ function pruneCatalog(schema: DatabaseSchema, access: ColumnGrant): DatabaseSche
            deletable above; the columns stay writable, for the New form. Capability only, never the authority
            (authorizeColumnWrites is). */
           ...(access.appendOnly?.has(table.id) ? { appendOnly: true, deletable: false } : {}),
+          ...(access.derived?.has(table.id) ? { [GRANTED_DERIVED]: Object.freeze([...access.derived.get(table.id)!].sort()) } : {}),
           ...(table.indexed ? { indexed: table.indexed.filter((column) => listed(table.id, column)) } : {}),
           // Like `indexed`: a hidden column is not named, even as unique.
           ...(table.unique ? { unique: table.unique.filter((column) => listed(table.id, column)) } : {}),
@@ -472,11 +480,26 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
     const filter = requestData(input);
     /* An `any`/`no` condition names the rows that point here, not a column of this table: its child, reference and
        conditions are held to the reader as a view's are (assertAnyRows), and its own `column` is never read. */
+    /* A computed column a condition names is no column of the table: the condition is held to what its expression
+       reads (worked out from the expression, never from the request), each one a column this reader is served. */
+    let computed: ReadonlyMap<string, { reads: string[] }> = new Map();
+    if (filter?.computed !== undefined) {
+      const declared = full.tables.find((item) => item.id === table);
+      if (!declared) throw new AppAccessDenied();
+      try {
+        computed = checkedComputed(filter, declared);
+      } catch {
+        throw new AppAccessDenied();
+      }
+      for (const def of computed.values()) assertFields(table, def.reads, 'read', server);
+    }
     if (filter)
       for (const group of filter.groups)
         for (const condition of group)
           if (condition.any) assertAnyRows({ groups: [[{ ...condition, path: condition.column }]] });
-          else {
+          else if (computed.has(condition.column)) {
+            if (condition.within !== undefined || condition.other !== undefined) throw new AppAccessDenied();
+          } else {
             assertFields(table, [condition.column], 'read', server);
             if (condition.within !== undefined) assertWithin(condition.within, server);
           }

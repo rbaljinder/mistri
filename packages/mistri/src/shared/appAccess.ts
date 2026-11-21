@@ -72,6 +72,10 @@ interface ResolvedAccess {
       never edited or removed. Absent where none is. Carried wherever `creatable` is, so no copy can leave a table editable. */
   appendOnly?: ReadonlySet<string>;
   fields?: ReadonlyMap<string, { read: ReadonlySet<string>; write: ReadonlySet<string> }>;
+  /** Of each table's declared rollups and computed columns, the ones its field grants name to be read, by table id
+      (the engine's ColumnGrant.derived): a `read` list is the whole of what a role reads there, derived names
+      included. Present only with field grants, and only for a table that declares any. */
+  derived?: ReadonlyMap<string, ReadonlySet<string>>;
   /** Of each table's grant, the columns `hidden` cut from `fields`, by table id: kept from every person, read by the
       server code an author wrote (a command's lookup, server/commands/businessCommandAuthorization.ts). Absent where
       nothing is hidden. */
@@ -243,6 +247,26 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
   const read = resolve(access.read, unknownResource);
   const write = resolve(access.write, unknownResource);
   type Fields = Map<string, { read: Set<string>; write: Set<string> }>;
+  /* A resource's rollups and computed columns read like its columns, so a `read` list may name them as it names a
+     column, and leaving one out keeps it from the role as it keeps a column. They are resolved with the columns
+     here and split off at the end (splitDerived): the column rules below never see a name that is not a column. */
+  const declared = new Map<string, Set<string>>();
+  for (const [name, resource] of Object.entries(app.resources ?? {})) {
+    const names = [...Object.keys(resource.rollups ?? {}), ...Object.keys(resource.computed ?? {})];
+    const table = findTable(schema, name) ?? tableNamed(schema, name);
+    if (table && names.length) declared.set(table.id, new Set(names));
+  }
+  const splitDerived = (fields: Fields): { fields: Fields; derived?: Map<string, Set<string>> } => {
+    if (!declared.size) return { fields };
+    const derived = new Map<string, Set<string>>();
+    const columns: Fields = new Map();
+    for (const [id, { read, write }] of fields) {
+      const own = declared.get(id);
+      if (own) derived.set(id, new Set([...read].filter((name) => own.has(name))));
+      columns.set(id, own ? { read: new Set([...read].filter((name) => !own.has(name))), write } : { read, write });
+    }
+    return derived.size ? { fields: columns, derived } : { fields: columns };
+  };
   const hasFields =
     access.fields !== undefined ||
     Object.values(access.roles).some((grant) => grant.fields !== undefined) ||
@@ -260,8 +284,10 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
     return new Map(
       [...readable].map((resource) => {
         const table = findTable(schema, resource)!;
-        const all = new Set(table.columns.map((column) => column.name));
-        const cap = ceiling?.get(resource) ?? { read: all, write: all };
+        const derived = declared.get(table.id);
+        const columns = new Set(table.columns.map((column) => column.name));
+        const all = new Set([...columns, ...(derived ?? [])]);
+        const cap = ceiling?.get(resource) ?? { read: all, write: columns };
         const rule = rules && Object.hasOwn(rules, resource) ? rules[resource] : undefined;
         const fieldRead = new Set(rule?.read ?? cap.read);
         const fieldWrite = new Set(rule ? (rule.write ?? []) : writable.has(resource) ? cap.write : []);
@@ -272,7 +298,11 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
             throw new Error(`${at(resource)}: column "${column}" is unknown or outside the read ceiling.`);
           }
         for (const column of fieldWrite)
-          if (!fieldRead.has(column) || !cap.write.has(column)) {
+          if (derived?.has(column)) {
+            throw new Error(
+              `${at(resource)}: "${column}" is a rollup or a computed column. It is read, never written: name it in read alone.`,
+            );
+          } else if (!fieldRead.has(column) || !cap.write.has(column)) {
             throw new Error(`${at(resource)}: column "${column}" is outside the write ceiling.`);
           }
         if (table.columns.some((column) => column.primaryKey && !fieldRead.has(column.name))) {
@@ -302,15 +332,15 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
       writable: none,
       ...(byKey ? { byKey } : {}),
       ...(hasFields
-        ? {
-            fields: resolveFields(
+        ? splitDerived(
+            resolveFields(
               access.public.fields,
               readable,
               none,
               (resource) => `${app.name}: "auth", "public", "fields" for "${resource}"`,
               ceiling,
             ),
-          }
+          )
         : {}),
     };
   }
@@ -385,7 +415,7 @@ function grantedAccess(app: AppDef, schema: DatabaseSchema, roles: readonly stri
     writable,
     ...(creates ? { creatable } : {}),
     ...(appendOnly.size ? { appendOnly } : {}),
-    ...(hasFields ? { fields } : {}),
+    ...(hasFields ? splitDerived(fields) : {}),
   };
 }
 

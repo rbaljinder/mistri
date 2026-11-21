@@ -15,7 +15,7 @@ import { logicalResource, type AppDef } from '../../shared/app.js';
 import { formCommands } from '../../shared/appSavedForms.js';
 import type { AppFormView } from '../../shared/app.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
-import { choiceLabelColumn, choiceWhereColumns } from '../../shared/command.js';
+import { choiceFillColumns, choiceLabelColumn, choiceWhereColumns } from '../../shared/command.js';
 import { choiceColumns, choiceNarrowing, choiceOrder, choiceReadLimit, tenantChoices } from '../forms/choiceCache.js';
 import { tenantChoiceTables, tenantLiveHub } from './tenantLive.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
@@ -80,7 +80,7 @@ export function tenantPublicChoices(options: TenantPublicChoicesOptions) {
           const physical = ownership.resources[resource];
           if (physical === undefined) return none;
           const local = choiceLabelColumn(field.source, locale);
-          const where = choiceWhereColumns(field.source.match);
+          const where = [...new Set([...choiceWhereColumns(field.source.match), ...choiceFillColumns(input, field.name)])].sort();
           const narrowing = choiceNarrowing(field.source.match);
           const read = { by: field.source.by, labelColumn: field.source.labelColumn, sort: field.source.sort, local, where, narrowing };
           const columns = choiceColumns(read);

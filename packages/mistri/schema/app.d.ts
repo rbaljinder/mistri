@@ -829,6 +829,11 @@ export interface AppResource<Column extends string = string, Page extends string
   delete?: boolean;
   /** true puts a star on this resource's records, so a reader can keep them in Favorites. */
   favorite?: boolean;
+  /** Rows that take no change: a condition in the query language, judged against the stored row
+      (`frozen: 'status = closed'`, `frozen: 'status in (closed, void) and locked_at is not empty'`). A row it matches is
+      refused every update, delete and command on every door (409 `frozen`) and drawn read-only; creating rows is
+      unaffected, and a condition that names no column of the table is a definition error. */
+  frozen?: string;
   /** A settings record: the resource holds one row (a company profile, payroll settings), opened from the
       reader's settings — the account menu — under these words, 1 to 60 characters: `settings: 'Company profile'`.
       Its page and its grants are the resource's own; the first row by key is the one opened. */
@@ -3586,6 +3591,16 @@ export interface RetentionDeclaration {
   attempts?: string;
 }
 
+/** One of the App's `choose`: a row of a declared resource the person picks once, and pages read as `chosen.<name>`. */
+export interface AppChoice<Resource extends string = string, Column extends string = string> {
+  /** The resource whose rows are chosen among; it needs one key column, and the reader's grant to read it. */
+  from: Resource;
+  /** The column the chooser shows for a row; absent, the record's own label. */
+  label?: Column;
+  /** true: the shell asks before the first page, as the tenant chooser does, and offers no way to clear it. */
+  required?: boolean;
+}
+
 export interface AppConfig {
   /* A key tagged @preview works as documented and may change in any release, outside the 1.x promise
      (docs/compatibility.md); test/public-surface.test.ts holds these tags to the inventory's preview root keys. */
@@ -3644,6 +3659,14 @@ export interface AppConfig {
       platform's own; the page around the controls stays the platform's. `mistri check` refuses a slot the kit does not
       have. @preview */
   uiKit?: string;
+  /** App-wide choices, at most three: `choose: { site: { from: 'sites', label: 'name', required: true } }` puts a
+      chooser in the bar ("Site: Northside"), and every page reads the picked row's key as `chosen.site` (`site_id =
+      chosen.site` in a view's query, `ctx.chosen.site` in a loader or a handler); a New form's reference to `from`
+      starts at it. Kept for the person (per tenant in a tenant App) in the App's `preferences` store, so it follows them
+      across devices, and read again under the reader's own grants on every request: a filter, never a grant. A tab
+      may pick another for itself. Not in the address. A list a choice narrows says so in a chip. A job, a workflow
+      step and an API or App MCP call run with `ctx.chosen` empty: no person is at a desk. */
+  choose?: Record<string, AppChoice>;
   /** What each tenant may change about how the App looks to its people — `branding: { allow: ['logo', 'name',
       'accent'], editors: ['owner'] }` — saved by those roles in a `brandingForm()` and kept per tenant. A tenant App only. */
   branding?: AppBranding;
@@ -4771,7 +4794,7 @@ interface TypedAppUi<S extends SchemaShape> extends Omit<AppUi, 'theme' | 'messa
 }
 
 export interface TypedAppConfig<S extends SchemaShape, R extends SchemaReferences = never, Connection extends string = string, H extends SchemaHidden = {}>
-  extends Omit<AppConfig, 'resources' | 'views' | 'pages' | 'auth' | 'features' | 'connection' | 'sources' | 'api' | 'ui'> {
+  extends Omit<AppConfig, 'resources' | 'views' | 'pages' | 'auth' | 'features' | 'connection' | 'sources' | 'api' | 'ui' | 'choose'> {
   /** One of the server's configured connections: `--app … --export types` writes them as `Connections`. */
   connection?: Connection;
   sources?: Record<string, AppSource<Connection>>;
@@ -4782,6 +4805,7 @@ export interface TypedAppConfig<S extends SchemaShape, R extends SchemaReference
   pages?: Record<string, TypedPage<S, R>>;
   features?: readonly TypedFeature<S, R, H>[];
   ui?: TypedAppUi<S>;
+  choose?: Record<string, { [T in TableOf<S>]: AppChoice<T, ColumnOf<S, T>> }[TableOf<S>]>;
 }
 
 /** A feature with this schema's own names: `defineFeature({ … } satisfies TypedFeature<Tables, References>)`. */

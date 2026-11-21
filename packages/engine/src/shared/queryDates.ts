@@ -64,6 +64,36 @@ export function shiftedDay(today: string, sign: string, count: number, unit: str
 }
 
 /**
+ * Dates are bound as ISO strings because both target dialects compare them
+ * correctly that way: Postgres casts on the way in, and SQLite's documented
+ * text-date format is exactly ISO-8601. A `Date` object handed to a driver
+ * is at the mercy of whatever it decides to do with the local timezone.
+ */
+export function bindDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  /* A midnight boundary is bound as the bare day. Text comparison sorts
+     '2026-08-30' before '2026-08-30 00:00:00', so appending the zero time
+     made every bare-DATE column compare wrong at the boundary — SQLite
+     counted a task due *today* as `< today`, i.e. overdue. Bare, the bound
+     is right for every storage shape at once: it sorts before any datetime
+     of its day, and a driver casting for a real date/timestamp column reads
+     it as midnight exactly as before. */
+  if (!d.getHours() && !d.getMinutes() && !d.getSeconds()) return day;
+  return `${day} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/**
+ * A window's bounds as a read compares against them (bindDate): `start` is in it, `end` is the first moment after it,
+ * so `last 30 days` on Nov 20 is 2026-10-21 to 2026-11-21. A custom dashboard section is handed these beside the
+ * phrase, to say or draw the span its rows were narrowed to without parsing the grammar itself.
+ */
+export function windowBounds(phrase: string, now: Date): { start: string; end: string } | undefined {
+  const window = dateWindow(phrase, now);
+  return window ? { start: bindDate(window.start), end: bindDate(window.end) } : undefined;
+}
+
+/**
  * `now` is a parameter rather than a call to the clock, so the compiler is a
  * pure function of its inputs. That is what makes the tests below able to
  * assert on an exact timestamp instead of a range.

@@ -32,10 +32,13 @@ import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 import { commandRoutes } from './commandRoutes.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { APP_READS } from '../app/appReads.js';
+import { CHOICE_HEADER, chosenFor, withChosen } from '../app/appChoices.js';
+import { storedForPerson } from '../app/appPreferences.js';
 import type { DataHooks } from '@mistriwork/engine/server/http/dataRoutes.js';
 import { publicReadRoute, signInCard } from './gate.js';
 import { httpOperationRoutes } from '@mistriwork/engine/server/http/httpOperationRoutes.js';
 import { inboxRoutes } from './inboxRoutes.js';
+import { chooseRoutes } from './chooseRoutes.js';
 import { integrationRoutes } from './integrationRoutes.js';
 import { PAGE_HEADER, PAGE_LOAD_PATH, pageLoad, pageManifestRefusal } from './pageLoad.js';
 import { headlessHeld, isSurfaceRefusal, namedSurface, surfaceRefusal } from './surfaceGate.js';
@@ -117,12 +120,18 @@ export const APP_DATA: DataHooks = {
     /* `me` is this session's account; the App says which of its rows is a person (appMe). */
     const app = source.selectedHost?.app.app;
     const who = signedInAs(identity);
+    /* And the App-wide choices, read again under this reader (appChoices.ts): source.person carries them already. */
     const me = app
       ? (reader: Adapter) =>
           source.person?.(reader) ??
-          (identity.emailUnproven
-            ? Promise.resolve(unprovenPerson(app, source.schema))
-            : lookupPerson(app, source.schema, who, reader, undefined, who ? identity.id : undefined))
+          Promise.all([
+            identity.emailUnproven
+              ? Promise.resolve(unprovenPerson(app, source.schema))
+              : lookupPerson(app, source.schema, who, reader, undefined, who ? identity.id : undefined),
+            storedForPerson(ctx.registry, source.selectedHost, who ? identity.id : undefined).then((stored) =>
+              chosenFor(app, source.schema, reader, ctx.req, stored),
+            ),
+          ]).then(([person, chosen]) => withChosen(person, chosen))
       : undefined;
     return {
       appNow: () => appNowFor(registry, appHosts, source.connectionId, source.zone),
@@ -174,6 +183,8 @@ export const APP_DATA: DataHooks = {
         schema: source.schema,
         ...(source.zone === undefined ? {} : { zone: source.zone }),
         ...(surface ? { surface } : {}),
+        chosenHeader: req.headers[CHOICE_HEADER],
+        chosenStored: await storedForPerson(ctx.registry, source.selectedHost, identity.id),
       });
       send(res, reply.status, reply.body);
       return true;
@@ -191,6 +202,7 @@ export const APP_DATA: DataHooks = {
     (await recordLinkRoutes(post)) ||
     (await decisionRoutes(post)) ||
     (await inboxRoutes(post)) ||
+    (await chooseRoutes(post)) ||
     (await integrationRoutes(post)),
   later: async (post) => appWriteRoutes(post),
   /** The ISO weekday the App's weeks start on, from its `ui.locale` (Monday where it names none). */

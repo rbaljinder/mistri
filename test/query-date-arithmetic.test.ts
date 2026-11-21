@@ -9,6 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { describe, test } from 'node:test';
 import { ANSI_STYLE, buildWhere, POSTGRES_STYLE } from '../packages/engine/src/shared/filter.js';
 import { dateWindow, parseQuery } from '../packages/engine/src/shared/query.js';
+import { windowBounds } from '../packages/engine/src/shared/queryDates.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 import { liveSkip } from './live.js';
 
@@ -82,6 +83,15 @@ describe('the words', () => {
     assert.deepEqual(span('next 30 days'), ['2026-03-03', '2026-04-02']);
     assert.equal(dateWindow('today + 2 fortnights', NOW), undefined);
     assert.equal(dateWindow('today + 2', NOW), undefined);
+  });
+
+  test("a window's bounds are said as a condition binds them: a day bare, an hour with its time, the end exclusive", () => {
+    assert.deepEqual(windowBounds('last 30 days', new Date(2026, 10, 20, 12)), { start: '2026-10-21', end: '2026-11-21' });
+    assert.deepEqual(windowBounds('last 3 hours', new Date(2026, 10, 20, 12)), {
+      start: '2026-11-20 09:00:00',
+      end: '2026-11-20 12:00:00',
+    });
+    assert.equal(windowBounds('lately', NOW), undefined);
   });
 
   test('a condition binds the day as every window does, and a bare unit is a mistake that says so', () => {

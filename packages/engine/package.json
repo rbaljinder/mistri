@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/engine",
-  "version": "1.0.0-rc.77",
+  "version": "1.0.0-rc.78",
   "description": "The engine both products stand on: the adapters (SQLite, Postgres), the catalog, the query language, keyset pages, the HTTP kit and the shared rules. No React.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -875,6 +875,10 @@
     "./shared/rollups.js": {
       "mistri-built": "./dist/shared/rollups.js",
       "default": "./src/shared/rollups.ts"
+    },
+    "./shared/rowCondition.js": {
+      "mistri-built": "./dist/shared/rowCondition.js",
+      "default": "./src/shared/rowCondition.ts"
     },
     "./shared/rowScope.js": {
       "mistri-built": "./dist/shared/rowScope.js",

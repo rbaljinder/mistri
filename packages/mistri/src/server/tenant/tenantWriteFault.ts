@@ -11,7 +11,7 @@
  */
 import { POOL_BUSY_MESSAGE, PoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { ReferencedRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
-import { refusalCause } from '@mistriwork/engine/shared/refusal.js';
+import { isFrozenRefusal, refusalCause } from '@mistriwork/engine/shared/refusal.js';
 import { writeRefusalStatus } from '@mistriwork/engine/server/constraints.js';
 import { TenantContextError, TenantUnavailableError } from '@mistriwork/engine/server/evidence.js';
 import { appError, namedRequired } from '../app/appErrors.js';
@@ -76,6 +76,20 @@ export function refusedWrite(
 ): { status: 409 | 422; code: string; body: Record<string, unknown> } | undefined {
   let at: unknown = error;
   for (let depth = 0; at !== null && typeof at === 'object' && depth < 16; depth++) {
+    /* A frozen record (`frozen`): the record's state, answered as a conflict is, by its own code and sentence. */
+    if (isFrozenRefusal(at)) {
+      const failure = appError(at, 'write');
+      return {
+        status: 409,
+        code: failure.code,
+        body: {
+          error: failure.message,
+          errors: [{ code: failure.code, message: failure.message }],
+          outcome: 'rejected',
+          ...(path === '/api/delete' ? { deleted: false } : path === '/api/revert' ? { reverted: false } : {}),
+        },
+      };
+    }
     /* A delete refused while rows still point at it (scopedTransaction.ts ReferencedRefusal): its sentence names
        only the rows this tenant reads, or nothing, so it is said as it stands. */
     const referenced = at instanceof ReferencedRefusal;

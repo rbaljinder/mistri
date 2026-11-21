@@ -41,15 +41,16 @@ interface Budget {
  * Before the unscoped path sent ahead, they were tick 4, thread 6, compass 5, payday 3/12,
  * forecourt 1/10, depot 3/17 and commons 3/7. Before reads asked together left together, a held row
  * was read whole once (`widen`) and history's read after an update rode behind it, they were
- * payday 10, depot 15 and commons 4.
+ * payday 10, depot 15 and commons 4. Before an UPDATE in a transaction returned the row it left,
+ * Compass read that row again for its validation: 4.
  */
 const BUDGETS: Record<string, { write: string; budget: Budget }> = {
   // 3: BEGIN with the row's lock and row behind it, the UPDATE, COMMIT.
   tick: { write: 'update:complete', budget: { execute: 3 } },
   // 3: BEGIN with lock and row (which answers the guard: the record, in the state it moves from), the UPDATE, COMMIT.
   thread: { write: 'update:markReady', budget: { execute: 3 } },
-  // 4: BEGIN with lock and row, the UPDATE, the row read back, COMMIT.
-  compass: { write: 'update:startWorking', budget: { execute: 4 } },
+  // 3: BEGIN with lock and row, the UPDATE with the row it left (RETURNING *, which the lead's validation judges), COMMIT.
+  compass: { write: 'update:startWorking', budget: { execute: 3 } },
   /* prepare 2: BEGIN with the row read behind it, COMMIT. execute 7: BEGIN with lock and row, the handler's balance
      read and its UPDATE (each awaited), the request read whole again once (the balance's write dropped what was kept;
      its lock keeps it from moving, so that one read answers the machine and history's before image), the request's
@@ -164,6 +165,16 @@ describe('a save’s round trips, App by App, on PostgreSQL', { skip: liveSkip('
     show('compass', 'update', measured);
     assert.equal((await db.pg.query('SELECT status FROM lead WHERE id = $1', [fresh[1]!.id])).rows[0].status, 'working');
     within('compass', 'execute', measured);
+    // Validation judges the row the UPDATE returned now, so a save it must refuse is still refused and rolled back.
+    const refused = await server.post('/api/update', {
+      app: 'compass',
+      table: 'lead',
+      key: { id: fresh[1]!.id },
+      values: { status: 'converted' },
+    });
+    assert.ok(refused.status >= 400 && refused.status < 500, JSON.stringify(refused.body));
+    assert.match(JSON.stringify(refused.body), /converted lead names the contact/);
+    assert.equal((await db.pg.query('SELECT status FROM lead WHERE id = $1', [fresh[1]!.id])).rows[0].status, 'working');
   });
   test('Tick: complete a task', async () => {
     const db = await database('tw_flights_tick');

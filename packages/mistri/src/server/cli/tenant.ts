@@ -26,7 +26,7 @@ import { unsweptBuckets } from '../files/fileStorage.js';
 import { embedIssuersOf, identityProvidersOf, oauthServerOf, scimDirectoriesOf } from '../serviceConnections.js';
 import { CONFIG_SECTIONS } from '../serviceConnections.js';
 import { testControlFrom } from '../http/testControl.js';
-import { DEV_CHANGED_EXIT, DEV_SUPERVISED_ENV } from './devSupervisor.js';
+import { DEV_CHANGED_EXIT, DEV_SUPERVISED_ENV, listenForDev, releaseForDev } from './devSupervisor.js';
 
 export async function serveTenantApp(
   opts: Options,
@@ -303,8 +303,9 @@ export async function startTenantServing(
     let stopping: Promise<void> | undefined;
     const stop = (code: number) => {
       stopWatching?.();
-      return (stopping ??= owner
-        .retire()
+      // Under a parent that holds the port, it stops handing this host connections before it closes.
+      return (stopping ??= (releaseForDev() ?? Promise.resolve())
+        .then(() => owner.retire())
         .catch(() => {
           if (code !== DEV_CHANGED_EXIT) code = 1;
         })
@@ -402,7 +403,7 @@ export async function startTenantServing(
     process.on('SIGTERM', () => {
       void stop(0);
     });
-    owner.server.listen(opts.port, opts.host);
+    listenForDev(owner.server, opts.port, opts.host);
     return undefined;
   } catch (error) {
     stopWatching?.();

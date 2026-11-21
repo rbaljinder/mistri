@@ -27,9 +27,24 @@ const managing = [
   'rejectPurchaseOrder',
 ] as const;
 /* A supplier's contact details are edited in place and by the API's update-supplier command, which keeps its
-   revision in `version`: so the role's grant leaves `version` out and only the command moves it. */
+   revision in `version`: so the role's grant leaves `version` out and only the command moves it. A `read` list is the
+   whole of what the role reads, so it names the supplier's rollups too. */
 const supplier = {
-  read: ['id', 'name', 'contact', 'email', 'phone', 'city', 'state', 'lead_time_days', 'terms'],
+  read: [
+    'id',
+    'name',
+    'contact',
+    'email',
+    'phone',
+    'city',
+    'state',
+    'lead_time_days',
+    'terms',
+    'products',
+    'open_orders',
+    'received_recently',
+    'open_value',
+  ],
   write: ['name', 'contact', 'email', 'phone', 'city', 'state', 'lead_time_days', 'terms'],
 } as const;
 /* A pick list moves by its commands alone; the one thing written on it by hand is the receiver's signature, kept as

@@ -53,7 +53,7 @@ const inSentence = ({ label, derived }: FieldWord) =>
  */
 export function refusalNext(code: string | undefined, field?: string | FieldWord, submission = false): string {
   if (field) return say('nextField', { field: inSentence(typeof field === 'string' ? { label: field, derived: false } : field) });
-  if (submission && code === 'ineligible_state') return say('sentIneligible');
+  if (submission && (code === 'ineligible_state' || code === 'frozen')) return say('sentIneligible');
   if (submission && code === 'not_found') return say('sentNotFound');
   switch (code) {
     case 'invalid_input':
@@ -63,6 +63,7 @@ export function refusalNext(code: string | undefined, field?: string | FieldWord
     case 'command_version_mismatch':
       return say('nextStale');
     case 'ineligible_state':
+    case 'frozen':
       return say('nextIneligible');
     case 'forbidden':
       return say('nextForbidden');

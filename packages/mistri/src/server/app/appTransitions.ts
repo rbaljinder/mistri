@@ -31,7 +31,7 @@ import { nowStamp } from './appStamps.js';
 import { stateStampColumn } from '@mistriwork/engine/shared/schema.js';
 import { frozenWords } from '../../shared/appMachine.js';
 import { AppAccessDenied } from './appAccessDenied.js';
-import { recordRefusalCause, sayRefusal } from '@mistriwork/engine/shared/refusal.js';
+import { FrozenRefusal, recordRefusalCause, sayRefusal } from '@mistriwork/engine/shared/refusal.js';
 import type { ColumnMeta, DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 
 export type { AppTransitionRules };
@@ -51,6 +51,17 @@ export class AppFrozenDenied extends AppTransitionDenied {
   constructor(message: string) {
     super(message);
     this.name = 'AppFrozenDenied';
+  }
+}
+
+/**
+ * A write to a record its resource's `frozen` condition matches (appModel.ts). The engine's FrozenRefusal, so every
+ * door says it as 409 `frozen`; a machine's frozen state stays AppFrozenDenied, answered `ineligible_state`.
+ */
+class AppFrozenWhenDenied extends FrozenRefusal {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AppFrozenWhenDenied';
   }
 }
 
@@ -137,9 +148,14 @@ export async function assertNotFrozen(
   rules: AppTransitionRules | undefined,
   request: UpdateRequest,
   stored?: Record<string, unknown>,
+  schema?: DatabaseSchema,
+  me?: () => Promise<QueryPerson>,
 ): Promise<void> {
   const rule = rules?.get(request.table);
-  if (!rule?.frozen.size) return;
+  if (!rule) return;
+  /* The resource's own `frozen` condition, judged of the stored row in this transaction (one read). */
+  if (schema) await assertRowNotFrozen(reader, schema, rules, request.table, request.key, me);
+  if (!rule.frozen.size) return;
   let row = stored;
   if (!row || !Object.hasOwn(row, rule.column)) {
     const read = await reader.query({
@@ -155,6 +171,27 @@ export async function assertNotFrozen(
   const state = row[rule.column];
   const words = state === null || state === undefined ? undefined : rule.frozen.get(String(state));
   if (words !== undefined) throw new AppFrozenDenied(frozenWords(words));
+}
+
+/**
+ * Refuse a write, an update or a delete, to a row the resource's `frozen` condition matches as the row is stored now
+ * (appModel.ts): judged in the write's own transaction, after the row is locked, so the row it judges is the row
+ * being written. The condition reads the stored row, never the incoming values: a save that would set a row into the
+ * condition is allowed, and the next is refused.
+ */
+export async function assertRowNotFrozen(
+  reader: Reader,
+  schema: DatabaseSchema,
+  rules: AppTransitionRules | undefined,
+  table: string,
+  key: Record<string, string | number>,
+  me?: () => Promise<QueryPerson>,
+  now: Date = appTime(),
+): Promise<void> {
+  const rule = rules?.get(table);
+  if (!rule?.frozenWhen) return;
+  if (await holds(reader, schema, table, key, rule.frozenWhen.text, zonedNow(rule.timezone, now), me))
+    throw new AppFrozenWhenDenied(rule.frozenWhen.said);
 }
 
 /**
@@ -175,7 +212,7 @@ export async function assertTransitions(
   const rule = rules?.get(request.table);
   if (!rule) return undefined;
   /* A frozen record takes no write: judged before anything else, on the stored state, for every door and every role. */
-  await assertNotFrozen(reader, rules, request, stored);
+  await assertNotFrozen(reader, rules, request, stored, schema, me);
   if (request.restore === true) return undefined;
   const columns = schema.tables.find((table) => table.id === request.table)?.columns ?? [];
   const touched = [...rule.fields.keys()].filter((column) => Object.hasOwn(request.values, column));
@@ -271,7 +308,8 @@ export function assertTransitionInsert(
   now: Date = appTime(),
 ): InsertRequest['values'] | undefined {
   const rule = rules?.get(request.table);
-  if (!rule) return;
+  // A resource that only freezes rows has no machine to start a record in.
+  if (!rule?.column) return;
   for (const column of rule.fields.keys()) {
     if (!Object.hasOwn(request.values, column)) continue;
     if (rule.starts.has(column) && same(rule.starts.get(column), request.values[column])) continue;

@@ -7,6 +7,7 @@
  * verbatim. That boundary is the design (docs/apps.md): the core stays a
  * database browser, and an app composes it rather than growing into it.
  */
+import { chooseProblems } from './appChoices.js';
 import { zoneColumnProblem } from './readerZone.js';
 import { catalogColumnProblems, menuWhenProblems, sharedProfileProblems } from './appTenantProfile.js';
 import { localeColumnProblem } from './readerLocale.js';
@@ -1173,6 +1174,7 @@ export function appProblems(loaded: LoadedApp, schema: DatabaseSchema): string[]
   if (locale) problems.push(`${manifest}: ${locale}`);
   problems.push(...messageProblems(loaded, schema).map((p) => `${manifest}: ${p}`));
   problems.push(...unionProblems(loaded.app, schema).map((p) => `${manifest}: ${p}`));
+  problems.push(...chooseProblems(loaded.app, schema).map((p) => `${manifest}: ${p}`));
   /* Rollups read like columns wherever a view, a page or a sort names one,
      so everything below is judged against the catalog that serves them. */
   problems.push(...servedCompileProblems(loaded, schema).map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));

@@ -52,6 +52,13 @@ export interface QueryPerson {
    * meant, and `tenant.<column>` is then refused rather than read as text.
    */
   tenant?: Readonly<Record<string, TenantValue>>;
+  /**
+   * `chosen.<name>`: the App-wide choices (an App's `choose`) by name, each the row key the person picked,
+   * re-read and proven readable under their own row policy for this request — null where nothing is chosen
+   * or the pick was not theirs to read. Absent where no App choice is meant, and `chosen.<name>` is then
+   * refused rather than read as text.
+   */
+  chosen?: Readonly<Record<string, string | number | null>>;
 }
 
 /** One column of a tenant's profile row, as a member may read it. */
@@ -59,6 +66,21 @@ export type TenantValue = string | number | boolean | null;
 
 /** `tenant.<column>`, unquoted, on the right of a comparison or in a value list. */
 const TENANT_VALUE = /^tenant\.([A-Za-z_]\w*)$/;
+
+/** `chosen.<name>`, unquoted, on the right of a comparison or in a value list. */
+const CHOSEN_VALUE = /^chosen\.([A-Za-z_]\w*)$/;
+
+/**
+ * The App-wide choices a query's text names (`site_id = chosen.site`), in the order they first appear, so a list can
+ * say which of them narrows it. Quoted text is a value and not a reference, as the compiler reads it.
+ */
+export function choicesNamed(...texts: readonly string[]): string[] {
+  const found = new Set<string>();
+  for (const text of texts)
+    for (const [, name] of text.replace(/"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'/g, '""').matchAll(/(?<![\w.])chosen\.([A-Za-z_]\w*)/g))
+      found.add(name);
+  return [...found];
+}
 
 /** Nobody in particular (`anyone` above): what a check that runs before any request reads `me` as. */
 export const ANYONE: QueryPerson = Object.freeze({ email: null, anyone: true });
@@ -169,6 +191,33 @@ export function tenantOperand(
   if (typeof value === 'boolean' && column && columnKind(column.type) !== 'boolean')
     return { error: `${word} is a flag, and ${column.name} is not.` };
   return { value };
+}
+
+/**
+ * What `chosen.<name>` stands for beside one column: the row key the person picked for this request.
+ * Undefined where the word is not one (quoted, or the table has a `chosen` column of its own, whose path it
+ * then is). Nothing chosen matches no row, as a null tenant value does: a list about the current site shows
+ * no site's rows rather than every site's. A check before any request (ANYONE) reads it as the word; a query
+ * kept for every request refuses it, as it refuses `tenant.<column>`.
+ */
+export function chosenOperand(
+  ctx: CompileContext,
+  word: string,
+  quoted: boolean,
+): { value?: string | number; none?: true; error?: string } | undefined {
+  const match = quoted ? null : CHOSEN_VALUE.exec(word);
+  if (!match || ctx.table?.columns.some((c) => c.name === 'chosen')) return undefined;
+  const me = ctx.me;
+  if (me?.anyone && me.chosen === undefined)
+    return me.once
+      ? { error: `${word} is a choice of one request's person, and this query is read once for every request, so it cannot ask it.` }
+      : { value: word };
+  if (!me?.chosen)
+    return { error: `${word} is the person's App choice, and no App choice is meant here. Quote it ("${word}") to mean the text.` };
+  if (!Object.hasOwn(me.chosen, match[1]))
+    return { error: `${word} names no choice: the App's choose declares ${Object.keys(me.chosen).join(', ') || 'none'}.` };
+  const value = me.chosen[match[1]];
+  return value === null ? { none: true } : { value };
 }
 
 const COMPARISON_OPS = new Set<Op>(['=', '!=', '<', '<=', '>', '>=']);

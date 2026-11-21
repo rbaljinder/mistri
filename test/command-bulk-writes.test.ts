@@ -22,6 +22,7 @@ import { createApp } from './support/createApp.js';
 import { clearJournal } from '../packages/engine/src/server/journal.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { parsePagesConfig } from '../packages/engine/src/shared/page.js';
+import { refusalReasons } from '../packages/engine/src/shared/refusal.js';
 import { catalogOf } from './support/commandCatalog.js';
 import { sqliteAuditRows } from './support/commandTargets.js';
 
@@ -41,9 +42,11 @@ let connections: Registry;
 let server: ReturnType<typeof createApp>;
 let base: string;
 let written: Row[] = [];
+let floodRefusal = '';
 
-const handler = (run: (db: Db, shelf: number) => Promise<Row[]>) =>
+const handler = (run: (db: Db, shelf: number) => Promise<Row[]>, maxChanges?: number) =>
   defineCommand({
+    ...(maxChanges ? { maxChanges } : {}),
     source: 'depot',
     target: 'shelf',
     write: ['bin'],
@@ -75,7 +78,7 @@ before(async () => {
   clearJournal('depot-db');
   connections = new Registry();
   connections.add({ id: 'depot-db', name: 'Depot', url: file, writable: true, source: 'config' });
-  const commands = ['restock', 'recount', 'scribble', 'scribbleOne', 'misstock'];
+  const commands = ['restock', 'recount', 'scribble', 'scribbleOne', 'misstock', 'flood', 'floodRaised'];
   const manifest = parseAppConfig(
     {
       id: 'depot',
@@ -105,6 +108,19 @@ before(async () => {
         { shelf_id: shelf, sku: 'v' },
         { shelf_id: shelf, sku: null },
       ]),
+    ),
+    // The client is told only that the result was invalid, so the author's refusal is kept here to be read.
+    flood: handler(async (db, shelf) => {
+      try {
+        return await db.bin!.insertMany(Array.from({ length: 1001 }, (_, at) => ({ shelf_id: shelf, sku: `f${at}` })));
+      } catch (error) {
+        floodRefusal = refusalReasons(error).join('\n');
+        throw error;
+      }
+    }),
+    floodRaised: handler(
+      (db, shelf) => db.bin!.insertMany(Array.from({ length: 1001 }, (_, at) => ({ shelf_id: shelf, sku: `f${at}` }))),
+      1500,
     ),
     scribbleOne: handler(async (db, shelf) => [
       await (db.bin as unknown as { insert(row: Row): Promise<Row> }).insert({ shelf_id: shelf, sku: 'w', note: 'not granted' }),
@@ -248,4 +264,14 @@ test('a row the database refuses rolls the whole batch back, and keeps no receip
   assert.deepEqual(statements, [{ kind: 'insert', rows: 2 }]);
   assert.deepEqual(bins(), before);
   assert.equal(db.prepare(`SELECT count(*) AS n FROM ${sqliteAuditRows} a`).get()!.n, receipts);
+});
+
+test('a call takes 1,000 rows unless the command declares maxChanges, and the refusal names the option', async () => {
+  const refused = await run('flood');
+  assert.notEqual(refused.status, 200);
+  assert.match(floodRefusal, /at most 1,000 rows in one call; a command may raise that with maxChanges/);
+  assert.equal(bins().filter((row) => String(row.sku).startsWith('f')).length, 0);
+  const raised = await run('floodRaised');
+  assert.equal(raised.status, 200, JSON.stringify(raised.body));
+  assert.equal(bins().filter((row) => String(row.sku).startsWith('f')).length, 1001);
 });

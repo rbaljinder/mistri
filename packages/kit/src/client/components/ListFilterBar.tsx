@@ -60,6 +60,8 @@ interface ListFilterBarProps {
   current: () => string;
   /** A leftover clause no tab explains, said in words with its own way out. */
   residue?: { text: string; remove: () => void };
+  /** The choices that narrow the list (`chosen.site`): standing chips with no x, which open the chooser. */
+  chosen?: ReactNode;
   /** The list's own name, for the search box's words: "Search issues…". */
   listLabel: string;
   phone: boolean;
@@ -176,6 +178,7 @@ export function ListFilterBar(props: ListFilterBarProps) {
           {pickers.map((box) => (
             <FilterSlot key={box.column} {...props} box={box} chipOnly />
           ))}
+          {props.chosen}
           {residueChip}
           {clearAll}
         </div>
@@ -211,6 +214,7 @@ export function ListFilterBar(props: ListFilterBarProps) {
           </button>
         </span>
       )}
+      {props.chosen}
       {residueChip}
       {clearAll}
     </>

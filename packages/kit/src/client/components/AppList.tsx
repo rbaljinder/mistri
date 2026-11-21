@@ -24,10 +24,13 @@ import { useMessageLanguage } from './useMessageLanguage.js';
 import { createPortal } from 'react-dom';
 import { listControlsRef, listHeadRef, useCrumbSlots } from './crumbSlot.js';
 import { FavoriteStar } from './FavoriteStar.js';
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api, columnLabel, labelPath, pageSize, recordLabel, state as walk, toast } from '../core.js';
 import { say } from '../copy/lists/components/AppList.js';
+import { choiceEntries, subscribeChoiceEntries } from '../choiceEntries.js';
+import { choicesNamed } from '@mistriwork/engine/shared/queryOperands.js';
+import { humanName } from '@mistriwork/engine/shared/model.js';
 import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
 
 /* The walk's state, with the field core.js's JSDoc does not declare. */
@@ -38,7 +41,6 @@ import { splitConditions, splitQuery } from '../clauses.js';
 import { promptFor } from '../prompt.js';
 import { canonicalize, conditionTail, deriveFilterNames, mentionsColumn, ownedTails, squeeze, withCondition } from '../filterbar.js';
 import { exportOffered } from '@mistriwork/engine/shared/listPresentations.js';
-import { humanName } from '@mistriwork/engine/shared/model.js';
 import { pluralOf, recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import type { ResourceHttpSuccess } from '@mistriwork/engine/shared/resourceHttp.js';
 import { primaryKey, type TableMeta } from '@mistriwork/engine/shared/schema.js';
@@ -402,14 +404,48 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   }
   if (residueChip) chips.push(residueChip);
 
-  const chipList = chips.map((c) => (
-    <span key={c.text} className="applist-chip" title={c.text}>
-      <span className="applist-chip-text">{c.text}</span>
-      <button type="button" className="applist-chip-x" aria-label={say('common.remove2', { text: c.text })} onClick={c.remove}>
-        ×
-      </button>
-    </span>
-  ));
+  /* A choice that narrows this list (`chosen.site` in its query) is said beside what the reader applied, so a link
+     shared with someone who has picked another site reads as different. It has no x: the way out is another pick,
+     which the chip opens. Drawn from the App's declaration, so the row does not wait on the chooser mounting. */
+  const choosers = useSyncExternalStore(subscribeChoiceEntries, choiceEntries, () => []);
+  const declaredChoices = shell().app()?.choose;
+  const chosenChips = declaredChoices
+    ? choicesNamed(entry.query, appListQuery(spec, 0), ...tabs.map((_, i) => appListQuery(spec, i)))
+        .filter((name) => declaredChoices[name])
+        .map((name) => {
+          const chooser = choosers.find((c) => c.choice === name);
+          const thing = humanName(name);
+          const value = chooser?.picked ?? (chooser ? say('chosenNone') : '');
+          const text = say('chosen', { thing, value });
+          return (
+            <span key={`chosen-${name}`} className="applist-chip applist-chip-chosen" data-choice={name} title={text}>
+              <button
+                type="button"
+                className="applist-chip-text applist-chip-open"
+                aria-haspopup="dialog"
+                aria-label={`${text}. ${say('chosenChange', { thing: thing.toLowerCase() })}`}
+                disabled={!chooser}
+                onClick={chooser?.open}
+              >
+                <span className="applist-chip-label">{`${thing}: `}</span>
+                <span className="applist-chip-value">{value}</span>
+              </button>
+            </span>
+          );
+        })
+    : [];
+
+  const chipList = [
+    ...chosenChips,
+    ...chips.map((c) => (
+      <span key={c.text} className="applist-chip" title={c.text}>
+        <span className="applist-chip-text">{c.text}</span>
+        <button type="button" className="applist-chip-x" aria-label={say('common.remove2', { text: c.text })} onClick={c.remove}>
+          ×
+        </button>
+      </span>
+    )),
+  ];
 
   const isDefault = canonicalize(entry.query) === canonicalize(appListQuery(spec, 0));
   const exactTab = litTab >= 0 && canonicalize(refinement) === canonicalize(tabs[litTab].query ?? '');
@@ -1126,6 +1162,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
                   apply={apply}
                   current={currentText}
                   residue={residueChip}
+                  chosen={chosenChips}
                   listLabel={caption}
                   phone={phone}
                   onSheet={() => setSheet(true)}

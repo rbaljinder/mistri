@@ -24,7 +24,7 @@ import type { RequestDiagnostics } from '../operations/diagnostics.js';
 import { PathError } from '../../shared/view.js';
 import { inward, type AddressMount } from '../../shared/mount.js';
 import { arrivedUrls } from './context.js';
-import { probe } from './probes.js';
+import { probe, type ReadyAnswer } from './probes.js';
 import { reportRefusal } from './refusalReport.js';
 import { HttpError, send, sendBusy } from './reply.js';
 import { routedPath, servedApp, traceRequest } from './traceRequest.js';
@@ -81,7 +81,7 @@ export interface Listening {
   readonly bound: Bound;
   readonly diagnostics?: RequestDiagnostics;
   /** Whether the server should take traffic now: false while it starts, reloads its policy or shuts down (`/readyz`). */
-  readonly ready?: () => boolean;
+  readonly ready?: () => ReadyAnswer;
   /** A suite owns the source client and HMR at its shared listener. */
   readonly sourceClient?: false;
   /** A suite must drain even disconnected form submissions before closing its App registry. */

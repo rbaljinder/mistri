@@ -1,3 +1,4 @@
+import { startTenantWarmup } from './tenantWarmup.js';
 import { dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { namedTenants } from './tenantNames.js';
@@ -97,6 +98,8 @@ import {
 } from '../../shared/tenantAdministration.js';
 import { INVITATION_HTTP_HEADER } from '../../shared/tenantInvitations.js';
 import { createTenantInvitationHttp, isTenantInvitationHttpRequest } from './tenantInvitationHttp.js';
+import { preferencesAt } from '../app/appPreferences.js';
+import { tenantPreferences } from './tenantPreferences.js';
 import { createTenantHttpServer, tenantHttpBinding, tenantHttpHeader } from './tenantHttp.js';
 import { readRouteOf, withReadRoute } from '../readAudit.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
@@ -810,6 +813,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       withPublicUrls(mintedLinks ? await mintedLinks.rendered(value, tenantId, linkBase) : value, loaded.app.id, (view) =>
         publicUrl(view, tenantId),
       );
+    const pickedAt = loaded.app.choose ? captureTenantEnrollment(enrollment).source : undefined;
     data = createTenantHttpServer({
       app: loaded.app,
       look: () => look,
@@ -827,6 +831,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       ...(branding ? { branding } : {}),
       ...(domains ? { domains } : {}),
       ...(reads ? { reads } : {}),
+      /* A member's picks (`choose`), kept beside the tenant source and scoped to the tenant (tenantPreferences.ts). */
+      ...(pickedAt ? { preferences: tenantPreferences(loaded.app, () => preferencesAt(loaded.app, pickedAt)) } : {}),
       ...(integrations?.settings ? { integrations: integrations.settings } : {}),
       renderLinks: renderAnswerLinks,
       // Asked once the assistant below exists; it is made on this server's own listener.
@@ -1860,6 +1866,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     /* Every address read through the mount first, as createApp reads it
        (http/server.ts): the base path off `req.url`, which every route below
        reads, and the page's inside address kept for the shell. */
+    /* Each tenant opened once now, a few at a time, and `/readyz` waits for them (tenantWarmup.ts). */
+    const warmup = startTenantWarmup(captureTenantEnrollment(enrollment).services.reader);
     platformRequests(server, (req, res) => {
       let url: URL;
       try {
@@ -1882,7 +1890,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       insidePaths.set(req, url.pathname);
       /* Bare whatever it is asked: the tenant host carries no first answers, and its shell asks for itself. */
       return (
-        probe(req, res, url.pathname) ||
+        probe(req, res, url.pathname, warmup.answer) ||
         embedBoot(req, res, url.pathname, { origins: auth.embed?.origins }) ||
         observerRoute(req, res, url, mount)
       );
@@ -1901,6 +1909,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     const contacts = contactMail;
     const retire = tenantRetirement(
       [
+        async () => warmup.stop(),
         ...(mailHost ? [() => mailHost.stop()] : []),
         ...(notices ? [() => notices.stop()] : []),
         ...(contacts ? [() => contacts.stop()] : []),

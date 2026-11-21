@@ -343,6 +343,7 @@ const STORE_WORDS: Readonly<Record<string, string>> = {
   'record-history': 'record history',
   'read-audit': 'read audit',
   assistant: 'assistant store',
+  preferences: 'preferences store',
   'live-change': 'live sync',
   'tenant-sandboxes': 'sandbox store',
   'validation-record': 'validation record',
@@ -483,6 +484,8 @@ async function appStoreSteps(
     if (app.branding) add(home, ['branding'], unbound('branding', 'branding store'));
     /* The assistant's conversations, beside the tenant source (tenantAssistant.ts), where its start looks for them. */
     if (app.assistant) add(home, ['assistant'], unbound('assistant', 'assistant store'));
+    /* The picks `choose` keeps per person and tenant, beside the tenant source; a start without it keeps them in the browser. */
+    if (app.choose) add(home, ['preferences'], unbound('preferences', 'preferences store'));
     /* Live sync's change store, where every tenant's writes are told to the pages that show them. */
     add(home, ['live-change'], unbound('live-change', 'live sync store'));
     /* What a production build's start last validated (tenantValidationRecord.ts): PostgreSQL's only, and never
@@ -521,6 +524,8 @@ async function appStoreSteps(
   if (app.branding) add(connectionOf(undefined), ['branding'], unbound('branding', 'branding store'));
   /* The assistant's conversations, on the connection the App's entry point names (assistantStores.ts), where serving looks. */
   if (app.assistant) add(connectionOf(undefined), ['assistant'], unbound('assistant', 'assistant store'));
+  /* The picks `choose` keeps per person, on the connection the App's entry point names; a start without it keeps them in the browser. */
+  if (app.choose) add(connectionOf(undefined), ['preferences'], unbound('preferences', 'preferences store'));
   /* Live sync's change store, on every database a resource is read from: a page showing any of them is told of its writes. */
   for (const connection of new Set(Object.keys(app.resources ?? {}).map((id) => connectionOf(sourceOfResource(id)))))
     add(connection, ['live-change'], unbound('live-change', 'live sync store'));

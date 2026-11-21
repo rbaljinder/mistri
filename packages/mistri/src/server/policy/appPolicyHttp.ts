@@ -258,6 +258,8 @@ const readPosts = new Set([
   '/api/record-decisions/settle',
   '/api/inbox',
   '/api/inbox/read',
+  /* An App-wide pick kept for the person (http/chooseRoutes.ts): validated through this reader, written to a store of its own. */
+  '/api/choose',
 ]);
 const readGets = new Set([
   '/api/runtime',

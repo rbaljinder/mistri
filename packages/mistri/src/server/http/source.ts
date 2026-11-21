@@ -28,6 +28,8 @@ import { compileAppDefinitionValidation } from '../app/appValidation.js';
 import { compileAppTransitions } from '../app/appTransitions.js';
 import { compileAppStamps, signedInAs, stampInsert, stampUpdate, type StampMoment } from '../app/appStamps.js';
 import { lookupPerson, personKey, unprovenPerson } from '../app/appMe.js';
+import { chosenFor, withChosen } from '../app/appChoices.js';
+import { storedForPerson } from '../app/appPreferences.js';
 import { ensurePersonRow, personMatch, personRowSeen } from '../app/appPersonRows.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 import { httpPolicyReads } from '../policy/appPolicyHttp.js';
@@ -411,11 +413,18 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
   /* Who `me` is, judged by the reader's own catalog first, and by the App's
      where that catalog keeps people's emails from this reader. */
   const readerSchema = schema;
+  /* With the App-wide choices the tab sent, each read again under the same reader: one the reader cannot see is
+     dropped (appChoices.ts). */
   const person = whole
     ? (reader: Parameters<typeof lookupPerson>[3]) =>
-        whole!.unproven
-          ? Promise.resolve(unprovenPerson(whole!.app, readerSchema!))
-          : lookupPerson(whole!.app, readerSchema!, whole!.who, reader, whole!.catalog, whole!.account)
+        Promise.all([
+          whole!.unproven
+            ? Promise.resolve(unprovenPerson(whole!.app, readerSchema!))
+            : lookupPerson(whole!.app, readerSchema!, whole!.who, reader, whole!.catalog, whole!.account),
+          storedForPerson(registry, selectedHost, whole!.account).then((stored) =>
+            chosenFor(whole!.app, readerSchema!, reader, ctx.req, stored),
+          ),
+        ]).then(([found, chosen]) => withChosen(found, chosen))
     : undefined;
   return {
     adapter,

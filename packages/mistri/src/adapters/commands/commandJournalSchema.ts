@@ -39,6 +39,9 @@ export const COMMAND_TARGET_BOUNDS = Object.freeze({ owners: 65_536, keys: 2_097
  * AUDIT_PART_ENTRIES each (the audit-part table). The bytes of a target stay bounded by COMMAND_TARGET_BOUNDS. */
 export const AUDIT_PART_ENTRIES = 256;
 export const AUDIT_TARGET_ENTRIES = 4096;
+/** The most a command may raise that to with `maxChanges`: a receipt is read back whole, so the platform keeps a ceiling
+ * of its own however a command asks. The target's 4 MiB (COMMAND_TARGET_BOUNDS) holds whatever the count says. */
+export const AUDIT_TARGET_ENTRIES_MOST = 16_384;
 
 /* One row per command: its receipt, the provenance it ran under, the
    resource it wrote and, per target in request order, the tenant owning the

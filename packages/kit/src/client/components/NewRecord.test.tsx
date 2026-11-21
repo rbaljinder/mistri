@@ -1349,3 +1349,65 @@ test('a form default on a column worded by display values opens in the display w
   await user.click(screen.getByRole('button', { name: 'Add' }));
   expect(insert).toHaveBeenCalledWith(expect.objectContaining({ kind: 'phone', channel: 'web' }));
 });
+
+describe("the App's choice (`choose`)", () => {
+  afterEach(async () => (await import('../shellMode.js')).resetShell());
+  /* The shell as an App with `choose: { owner: { from: 'owner' } }` answers it, its pick held in `chosen`. */
+  async function choosing(picked: { owner?: string }) {
+    const { installShell } = await import('../shellMode.js');
+    installShell({
+      app: () => ({ resources: {}, views: {}, nav: [], choose: { owner: { table: 'owner' } } }) as never,
+      chosen: () => picked as Record<string, string>,
+    });
+  }
+
+  test('a reference to the chosen table starts at the pick, and is sent untouched', async () => {
+    await choosing({ owner: '7' });
+    const user = userEvent.setup();
+    draw(<NewRecordForm {...props()} />);
+    await user.type(screen.getByLabelText('Name'), 'Ada');
+    await user.type(screen.getByLabelText('Company'), 'Acme');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await vi.waitFor(() => expect(calls.at(-1)?.path).toBe('/api/insert'));
+    expect(sent().owner_id).toBe('7');
+  });
+
+  test("the person's own pick is never replaced: not by the choice, nor by a choice changed while the form is open", async () => {
+    const picked: { owner?: string } = { owner: '7' };
+    await choosing(picked);
+    const user = userEvent.setup();
+    const { rerender } = draw(<NewRecordForm {...props()} />);
+    const picker = screen.getByRole('combobox', { name: 'Owner' });
+    await user.clear(picker);
+    await user.type(picker, 'Arjun');
+    await user.click(await screen.findByRole('option', { name: /^Arjun Rao/ }));
+    /* The chooser moves to another row under the open form: what the form holds stays. */
+    picked.owner = '8';
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    rerender(createElement(QueryClientProvider, { client }, <NewRecordForm {...props()} />));
+    await user.type(screen.getByLabelText('Name'), 'Ada');
+    await user.type(screen.getByLabelText('Company'), 'Acme');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await vi.waitFor(() => expect(calls.at(-1)?.path).toBe('/api/insert'));
+    expect(sent().owner_id).toBe('9');
+  });
+
+  test("the form's own default wins over the choice, and nothing chosen starts nothing", async () => {
+    await choosing({ owner: '7' });
+    const user = userEvent.setup();
+    draw(<NewRecordForm {...props()} form={{ show: ['name', 'company', 'owner_id'], defaults: { owner_id: 9 } }} />);
+    await user.type(screen.getByLabelText('Name'), 'Ada');
+    await user.type(screen.getByLabelText('Company'), 'Acme');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await vi.waitFor(() => expect(calls.at(-1)?.path).toBe('/api/insert'));
+    expect(sent().owner_id).toBe(9);
+    cleanup();
+    await choosing({});
+    draw(<NewRecordForm {...props()} />);
+    await user.type(screen.getByLabelText('Name'), 'Bo');
+    await user.type(screen.getByLabelText('Company'), 'Acme');
+    await user.click(screen.getByRole('button', { name: 'Add' }));
+    await vi.waitFor(() => expect((calls.at(-1)?.body as { values?: Record<string, unknown> } | undefined)?.values?.name).toBe('Bo'));
+    expect(sent()).not.toHaveProperty('owner_id');
+  });
+});

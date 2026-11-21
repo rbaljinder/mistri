@@ -1,5 +1,5 @@
 import { Refusal } from './refusal.js';
-import type { ColumnMeta, DatabaseSchema, ForeignKey } from './schema.js';
+import { GRANTED_DERIVED, type ColumnMeta, type DatabaseSchema, type ForeignKey } from './schema.js';
 
 const refuse = (): never => {
   throw new Refusal('The scoped catalog could not be verified. Refresh the catalog and permissions before continuing.');
@@ -67,7 +67,16 @@ function copyData(input: unknown): unknown {
       return Object.fromEntries(
         keys.map((key) => {
           const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
-          if (typeof key !== 'string' || !descriptor.enumerable || !('value' in descriptor)) return refuse();
+          if (!descriptor.enumerable || !('value' in descriptor)) return refuse();
+          /* The one symbol a catalog carries: which of a table's rollups and computed columns its reader's field
+             grant names (columnGrants.ts). It narrows what appRollups.ts serves and grants nothing, so it is
+             carried as a frozen list of names and left out of the fingerprint; any other symbol is refused. */
+          if (key === GRANTED_DERIVED) {
+            const names = descriptor.value as unknown;
+            if (!Array.isArray(names) || names.length > 4_096 || names.some((name) => !identifier(name))) return refuse();
+            return [key, Object.freeze(names.map((name) => copy(name, depth + 1)))];
+          }
+          if (typeof key !== 'string') return refuse();
           if ((characters += key.length) > 16_777_216) return refuse();
           return [key, copy(descriptor.value, depth + 1)];
         }),

@@ -240,6 +240,12 @@ mistri --app ./ledger --config ./mistri.json --commands ./ledger/commands.ts \
 mistri compare-openapi previous-api.json current-api.json
 ```
 
+`mistri check` renders the same document, so what the export refuses, such as
+a sort by a timestamp column (`api-sort-type`), a view that names totals
+(`api-view-totals`), a command that names no record (`api-command-no-record`)
+or one no role holds (`api-command-unheld`), is a check problem with its
+[code](/docs/check-codes/) and not a surprise at the first export.
+
 `compare-openapi` reports changes between two exported files: exit `0` when
 the version requirement is met, `1` when a needed version increase is missing,
 `2` for invalid input. It is a review aid, not a compatibility proof.

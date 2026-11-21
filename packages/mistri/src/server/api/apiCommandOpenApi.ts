@@ -40,15 +40,24 @@ const PROBLEM = {
   },
 };
 
-/* A resource's frozen states (`final: { freeze: true }`): a record in one takes no write, which a caller reads here
-   rather than as a surprise refusal. */
+/* What makes a record take no write, which a caller reads here rather than as a surprise refusal: a resource's frozen
+   states (`final: { freeze: true }`, refused as ineligible_state) and its `frozen` condition (409 `frozen`). */
 function frozenNote(app: AppDef, resource: string): { description: string } | Record<string, never> {
-  const frozen = (app.resources?.[resource]?.machine?.states ?? []).filter((state) => state.freeze).map((state) => `"${state.name}"`);
-  return frozen.length
-    ? {
-        description: `A ${resource} in ${frozen.join(', ')} is frozen: its machine declared the state final with freeze, so this is refused as ineligible_state, whoever asks.`,
-      }
-    : {};
+  const declared = app.resources?.[resource];
+  const states = (declared?.machine?.states ?? []).filter((state) => state.freeze).map((state) => `"${state.name}"`);
+  const notes = [
+    ...(states.length
+      ? [
+          `A ${resource} in ${states.join(', ')} is frozen: its machine declared the state final with freeze, so this is refused as ineligible_state, whoever asks.`,
+        ]
+      : []),
+    ...(declared?.frozen !== undefined
+      ? [
+          `A ${resource} where ${declared.frozen} is frozen: this, and every other update, delete or command on it, is refused with 409 and code "frozen", whoever asks. The condition is judged of the stored row; creating records is not affected.`,
+        ]
+      : []),
+  ];
+  return notes.length ? { description: notes.join(' ') } : {};
 }
 
 export function renderApiCommandOpenApi(

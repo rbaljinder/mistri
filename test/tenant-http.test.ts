@@ -4063,6 +4063,13 @@ function fenceDoors(): Record<string, Door> {
         ),
       },
     },
+    '/api/choose': {
+      lease: {
+        body: { name: 'site', value: null },
+        ok: 404,
+        also: ['tenant-choose.test.ts', 'a tenant member’s pick is kept per tenant, and never read in another tenant or by another member'],
+      },
+    },
     '/api/tokens': { lease: { body: {} } },
     '/api/tokens/issue': { lease: { body: { label: 'Fence', roles: ['operator'], operations: [], days: 1 } } },
     '/api/tokens/revoke': { lease: { body: { id: 'fence-token' } } },

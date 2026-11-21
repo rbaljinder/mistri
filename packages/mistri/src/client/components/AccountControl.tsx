@@ -31,6 +31,7 @@ import { go, pageView } from '@mistriwork/kit/client/core.js';
 import { SETTINGS_PAGE } from '@mistriwork/kit/client/components/appRooms.js';
 import { message } from '@mistriwork/kit/client/messages.js';
 import { subscribeTenantContextEntry, tenantContextEntry } from '../tenantContextEntry.js';
+import { choiceEntries, subscribeChoiceEntries } from '../appChoices.js';
 
 const looksLikeEmail = (value: string) => /^[^\s@]+@[^\s@]+$/.test(value);
 
@@ -174,6 +175,8 @@ export function AccountControl({
   const profileLabel = profileTaken ? say('yourAccount') : say('yourProfile');
   /* The tenant context's control, as this menu's first item: drawn on a phone only, where the bar leaves it out (AccountMenu.css). */
   const context = useSyncExternalStore(subscribeTenantContextEntry, tenantContextEntry, () => undefined);
+  /* The App's choices (`choose`), after it: drawn below the width the bar holds their controls (ChoiceControl.css). */
+  const choices = useSyncExternalStore(subscribeChoiceEntries, choiceEntries, () => []);
   const attempted = useRef(false);
   const signOut = async () => {
     // The lock can synchronously reenter handlers before React removes this menu.
@@ -272,6 +275,13 @@ export function AccountControl({
             </DropItem>
           )}
           {context && <DropSeparator className="account-menu-context-sep" />}
+          {choices.map((choice) => (
+            <DropItem key={choice.word + choice.name} className="account-menu-signout account-menu-choice" onClick={choice.open}>
+              {choice.word && <span className="account-menu-choice-word">{choice.word} </span>}
+              <bdi>{choice.name}</bdi>
+            </DropItem>
+          ))}
+          {choices.length > 0 && <DropSeparator className="account-menu-choice-sep" />}
           {appSwitcher?.placement === 'account' && (
             <SuiteAppSwitcher key={menuGeneration} config={appSwitcher} local={appSwitcherLocal} placement="account" />
           )}

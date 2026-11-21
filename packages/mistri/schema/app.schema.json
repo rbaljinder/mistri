@@ -169,6 +169,23 @@
         }
       }
     },
+    "choose": {
+      "type": "object",
+      "minProperties": 1,
+      "maxProperties": 3,
+      "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+      "description": "App-wide choices: choose: { site: { from: 'sites', label: 'name', required: true } } puts a chooser in the bar, and pages read the picked row's key as chosen.site (a view's query, ctx.chosen.site in a loader or a handler); a New form's reference to from starts at it. Read again under the reader's own grants on every request: a filter, never a grant. Not in the address.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["from"],
+        "properties": {
+          "from": { "type": "string", "minLength": 1, "description": "The declared resource whose rows are chosen among; it needs one key column." },
+          "label": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "The column the chooser shows for a row; absent, the record's own label." },
+          "required": { "type": "boolean", "description": "true: the shell asks before the first page, as the tenant chooser does." }
+        }
+      }
+    },
     "views": {
       "type": "object",
       "description": "Everything a visitor can open, keyed: the key is the view\u2019s address.",
@@ -1713,6 +1730,13 @@
         "favorite": {
           "type": "boolean",
           "description": "Opt-in: a star on the records, so a reader can keep them in Favorites."
+        },
+        "frozen": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "\\S",
+          "description": "Rows that take no change: a condition in the query language, judged against the stored row ('status = closed'). A row it matches is refused every update, delete and command on every door (409 frozen) and drawn read-only; creating rows is unaffected."
         },
         "settings": {
           "type": "string",

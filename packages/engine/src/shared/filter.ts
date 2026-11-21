@@ -4,6 +4,7 @@
  * it lives here rather than with the adapters that run the statements.
  */
 import { LIKE_ESCAPE, likePattern } from './like.js';
+import type { FilterComputed } from './computedWhere.js';
 import { RequestFault } from './refusal.js';
 
 /** One condition in a filter. Values are bound, never interpolated. */
@@ -231,6 +232,10 @@ export const OPS: ReadonlySet<string> = new Set<Op>([
  */
 export interface Filter {
   groups: Condition[][];
+  /** The computed columns its conditions name, each its type and expression with the request's constants folded
+      (computedWhere.ts): a handler's or a loader's own read only, resolved from the reader's catalog by the server.
+      An adapter writes them through `withComputedWhere`; anywhere else one is refused, never dropped. */
+  computed?: FilterComputed;
 }
 
 /* ---------- shared SQL building ----------
@@ -541,6 +546,9 @@ export function buildWhere(
   /** How a `within` condition's subquery is read (`Condition.within`): its relation, scoped where the read is. Absent, one is refused. */
   within?: (rows: WithinRows) => WithinPlan,
 ): SqlFragment {
+  /* Before anything: a computed column read where nobody wrote its expression would be a column by that name, or no
+     condition at all if the groups were empty. Refused, never dropped. */
+  if (filter?.computed !== undefined) throw new RequestFault('This read cannot use a computed column.');
   if (!filter?.groups.length) return { text: '', params: [] };
   const params: unknown[] = [];
   let index = startIndex;

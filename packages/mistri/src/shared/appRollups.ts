@@ -18,6 +18,7 @@ import type { Condition, Filter } from '@mistriwork/engine/shared/filter.js';
 import {
   columnKind,
   findTable,
+  GRANTED_DERIVED,
   tableNamed,
   type DatabaseSchema,
   type MachineStates,
@@ -544,7 +545,13 @@ export function appCatalog(
   const schema = withMachineStates(app, given);
   const { rules } = appRollupRules(app, schema, now, zone);
   const rolled = rules.size
-    ? { ...schema, tables: schema.tables.map((table) => (rules.has(table.id) ? { ...table, rollups: rules.get(table.id)! } : table)) }
+    ? {
+        ...schema,
+        tables: schema.tables.map((table) => {
+          const rollups = rules.has(table.id) ? granted(table, rules.get(table.id)!) : undefined;
+          return rollups ? { ...table, rollups } : table;
+        }),
+      }
     : schema;
   /* A record's tags read as `tags` (tagLists.ts), where this catalog reads the
      link table, the tags and their names: a reader who cannot is served none. */
@@ -560,7 +567,31 @@ export function appCatalog(
         }),
       }
     : rolled;
-  return withUnions(app, withComputed(app, withTags, now, me, zone, symbolic));
+  return withUnions(app, grantedComputed(withComputed(app, withTags, now, me, zone, symbolic)));
+}
+
+/* A reader's field grant may name a table's rollups and computed columns (appAccess.ts); pruning marks the ones it
+   names (GRANTED_DERIVED), and the rest are not served, as a column the list leaves out is not. Leaving one out is
+   not a read boundary: its inputs are. A rollup of a rollup carries the inner one inlined and is judged by the columns
+   both read (rollupReads), so it stays; a computed column that reads a rollup left out goes, as it no longer
+   resolves. Unmarked, every one that resolves is served. */
+function granted<T>(table: TableMeta, entries: Record<string, T>): Record<string, T> | undefined {
+  const named = table[GRANTED_DERIVED];
+  if (!named) return entries;
+  const kept = Object.entries(entries).filter(([key]) => named.includes(key));
+  return kept.length ? Object.fromEntries(kept) : undefined;
+}
+function grantedComputed(schema: DatabaseSchema): DatabaseSchema {
+  if (!schema.tables.some((table) => table[GRANTED_DERIVED] && table.computed)) return schema;
+  return {
+    ...schema,
+    tables: schema.tables.map((table) => {
+      if (!table[GRANTED_DERIVED] || !table.computed) return table;
+      const { computed: _all, ...rest } = table;
+      const computed = granted(table, table.computed);
+      return computed ? { ...rest, computed } : rest;
+    }),
+  };
 }
 
 /**

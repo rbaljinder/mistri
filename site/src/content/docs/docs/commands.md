@@ -98,7 +98,8 @@ reads it, so a row they cannot see opens the field empty. In a tenant App,
 `{ tenant: 'country' }` is a column of the tenant's profile listed in
 `auth.tenancy.shared`. `me`, `{ record }` and `{ tenant }` fill a field of the
 input itself; `{ record }` needs a command that targets one record, and a value
-worked out from several is `initial()`'s.
+worked out from several is `initial()`'s. A pick another input makes can fill
+it too, with `{ answer: 'choice.column' }` ([below](#a-choice-fills-other-inputs)).
 
 A field with `when` is asked only while its condition holds over the draft:
 a bare name is another answer (`nickname: field.text({ when: 'joint = true' })`),
@@ -122,6 +123,39 @@ withheld value sent is refused as no choice. A draft field or `record.` there is
 load error naming the option. A command's `rules`
 (`[{ must: 'confirm_email = email', message: 'The addresses differ.' }]`) are
 checked at each step and again by the run, and may ask a list with `has` too.
+
+### A choice fills other inputs
+
+Picking a preset can put its usual values into the inputs beside it, for the
+person to change. The input says where it starts from, as every starting value
+is said, with `default: { answer: '<choice>.<name>' }`:
+
+```ts
+input: {
+  treatment: field.choice({ from: 'treatment_type', labelColumn: 'name' }),
+  minutes: field.number({ default: { answer: 'treatment.usual_minutes' } }),
+  fee: field.money({ optional: true, default: { answer: 'treatment.usual_fee' } }),
+  plan: field.choice([
+    { value: 'basic', label: 'Basic', values: { seats: 5 } },
+    { value: 'team', label: 'Team', values: { seats: 25 } },
+  ]),
+  seats: field.number({ default: { answer: 'plan.seats' } }),
+},
+```
+
+`<name>` is a column of the table a `field.choice({ from })` reads, or a key of
+the `values` a written option carries (scalars only). A pick fills each input
+that has not been edited, filled by an earlier pick or not; one the person has
+typed in is never written over. A form that opens with a pick already made
+fills only what is still empty, and clearing the choice clears nothing. A row
+that holds nothing in the column fills nothing. The choice is another input of
+the same input, group or line (a line's choice fills that line only), and no
+input filled this way is another's source. The load refuses a source that is
+not such a choice, a column the table lacks, a key no option carries and a
+sensitive input. The form reads the column with the choice's rows, as the
+person reads them; on a public form a column `auth.public` does not open is a
+load error (`[public-form-picker]`), since a visitor is served it with the rows.
+What is sent is checked as typed.
 
 ### Files and a signature
 
@@ -250,8 +284,10 @@ More than 1,000 rows without
 reader may not see (another tenant's, or outside a row scope) alike, in the same
 words; a handler that answers a wrong key with its own refusal should read with
 `where` or `find`, which return nothing for both, so every caller gets one answer.
-A handler's `where` reads that table's own columns, and `any`/`no` over a child table the command declares in `read` or `write` (``db.invoice.where`any line where qty > 5` ``); a reference path, or a child it does not declare, is refused. [Where the query language works](/docs/query/#where-the-query-language-works) lists what each place reads.
-To filter by another table's columns, test a column against that table's rows in the object form: `db.invoice.where({ customer_id: { in: { from: 'customer', where: { region: 'west' } } } })` reads `customer_id IN (SELECT id FROM customer WHERE region = 'west')`. It works in `where`, `find`, `count` and `updateWhere`, in a handler, a policy and a loader. `from` must be a table the command declares in `read` or `write`, and that table must have a key of one column, which is what the subquery selects. Its rows are read as a direct read of that table is, under the same tenant, row policy and grant, so a customer the reader cannot see matches no invoice. Its `where` names that table's own columns, one level deep: an `in` inside it is refused by name. A lookup and an API resource refuse it.
+A handler's `where` reads that table's own columns, and `any`/`no` over a child table the command declares in `read` or `write` (``db.invoice.where`any line where qty > 5` ``); a child it does not declare is refused, and so is a reference path in the language (the object form takes one, below). [Where the query language works](/docs/query/#where-the-query-language-works) lists what each place reads.
+To filter by another table's columns, test a column against that table's rows in the object form: `db.invoice.where({ customer_id: { in: { from: 'customer', where: { region: 'west' } } } })` reads `customer_id IN (SELECT id FROM customer WHERE region = 'west')`, and a path through the reference says the same from the row's side: `db.invoice.where({ 'customer_id.region': 'west' })`. A path crosses one reference, and two paths through one reference are judged on the same row. It works in `where`, `find`, `count` and `updateWhere`, in a handler, a policy and a loader. `from` must be a table the command declares in `read` or `write`, and that table must have a key of one column, which is what the subquery selects. Its rows are read as a direct read of that table is, under the same tenant, row policy and grant, so a customer the reader cannot see matches no invoice. Its `where` names that table's own columns, one level deep: an `in` inside it is refused by name. A lookup and an API resource refuse it.
+
+A handler's or a loader's `where` also names the table's [computed columns](/docs/dsl-resources/#computed-columns), in either form: `db.task.where('is_overdue = true')`, `db.task.count({ days_open: { gt: 30 } })`. It compares what a list shows, with `today` and `now` the read's, and is held to the reader's grant on every column the expression reads. It works in `where`, `find`, `count`, the sums and `updateWhere`. A computed column that reads through a reference, a rollup or `me` is refused by name, and so are a sort by one, one compared with another column, and one inside `any`. A `when` in the object form refuses one, as it refuses a path.
 
 `db.<table>.segment(name)` reads one of the resource's [segments](/docs/query/#where-the-query-language-works) by its name, so a rule said once on the resource (`segments: { open: 'status = open' }`) is not said again in a handler: `await db.ticket.segment('open').where({ owner }).orderBy('due_on').limit(20)`. It is the segment's conditions written out as the language writes them, through the same transaction, grants and row scope as any other read here, and it chains with `.where(…)` (both must hold), `.orderBy`, `.limit`, sums and pages. A segment is read as a `where` is: it may name the table's own columns, other segments and `any`/`no` over a declared child, and one that names a rollup, a computed column, a reference path or `me` is refused at the call, naming the segment. A name the resource does not have is refused with the names it has, and a table the handler does not declare has no handle to ask. A page's [loader](/docs/custom-components/#free-form-pages) reads a segment the same way, so a board's list and a dashboard's figure over it are one rule.
 
@@ -278,9 +314,26 @@ await db.bin.updateWhere({ shelf_id: record.id }, { qty: 0, counted_by: { auto: 
 
 `updateWhere` reads the rows, then updates each one guarded by what it read, so
 a row another writer changed in between refuses the command `stale_record`. A
-`where` here takes no sort and no limit. Either call takes at most 1,000 rows; a
+`where` here takes no sort and no limit. Either call takes at most 1,000 rows
+(more with [`maxChanges`](#how-many-rows-a-command-may-change)); a
 row the database refuses keeps none of them. Rows of one `insertMany` cannot
 point at each other: insert the parent first.
+
+### How many rows a command may change
+
+A command may change 4,096 rows of one target, and one `insertMany` or
+`updateWhere` call takes 1,000. A batch command that needs more declares its own
+ceiling, a whole number from 1 to 16,384:
+
+```ts
+defineCommand({ target: 'shelf', write: ['bin'], maxChanges: 8000, handle: … });
+```
+
+It sets both limits for that command: the most changes the audit keeps for one
+target, and the most rows one call takes. The 4 MiB the audit keeps for one
+target stays whatever the number says, and a command over either is refused with
+the number and, when it has not declared one, `maxChanges`. `mistri check`
+refuses a `maxChanges` outside 1 to 16,384 when the App loads.
 
 Bytes go into a row only through `insertFile`, under the file resource's
 rules: its name, type and size columns are filled, and a file over its
@@ -583,6 +636,18 @@ A public command may mint one too, on the one record it has just inserted, and a
 
 A link's command runs as any command does, so its `lookup` may call the [integrations](/docs/integrations/) it declares, under its tenant's own keys; each call is keyed by the run, and a replay of the same run calls nothing. The anonymous public door still runs no integration of its own.
 
+### A customer accepts a quote
+
+A customer moves a record with a link that names the machine's verb as a command, and no role is granted that command.
+
+```ts
+// resources.quote: the machine's verb is the command; the link names it, no role's `commands` does
+machine: machine('status', { draft: { on: { send: 'sent' } }, sent: { on: { accept: 'accepted' } }, accepted: { final: true } }),
+links: { offer: { show: ['number', 'total', 'status'], commands: ['accept'], expires: '14 days' } },
+```
+
+The machine judges the move as it does for staff: from `sent` the link moves the quote to `accepted`, from `draft` it is refused as not eligible. Staff accept for a customer with a different command, `acceptOnBehalf`, granted to a role and also a verb from `sent`, so the receipt's actor (`link:<id>` or a person) tells the two apart. A public form's command reaches no record but the visitor's own draft: a multistep form's submit may move that draft along the machine (from `draft` to `new`), and nothing else. To let an outsider move any other record, mint a link. A command only a link runs is no fault for `mistri check`, and the App API leaves it out unless `api.commands` names it, which asks a role to hold it.
+
 A person who may edit the record ends its links from its page: **Revoke links** in the record's More menu asks how many still open when its dialog opens, says so when none do, and closes them all. It is offered, from the first paint, on a record of a resource that declares links, to a role that edits the resource in place (one that only creates rows, or only runs commands, ends none). Where the record keeps [history](/docs/dsl-pages/), the revoke is noted there as the person who did it, with no field changed; declaring links does not turn history on, and `mistri check` advises `link-history` where a page could revoke links with nowhere to say who did. A row-policy App ends a record's links in its commands only. In a tenant App each tenant's links are its own: a member revokes them on their own tenant's records, and a link opens only in the tenant it was minted in.
 
 ## A link to a public view
@@ -657,7 +722,7 @@ loopback.
 | `receipts` | a receipt per request                          | replays the first answer; the handler does not run again                |
 | `audit`    | the receipt and every change, before and after | as `receipts`, and the audit keeps the changes (`audit.redact` applies) |
 
-The audit keeps up to 4,096 changes for one target and at most 4 MiB across them: the first 256 sit in the receipt and the rest in continuation parts written in the same transaction, read back in order. A command that makes more refuses with both numbers, and keeps nothing.
+The audit keeps up to 4,096 changes for one target (up to 16,384 with [`maxChanges`](#how-many-rows-a-command-may-change)) and at most 4 MiB across them: the first 256 sit in the receipt and the rest in continuation parts written in the same transaction, read back in order. A command that makes more refuses with both numbers, and keeps nothing.
 
 Without `track`, an action clicked in the browser keeps nothing, a signed-in
 form or a request with an `Idempotency-Key` keeps a receipt, and the App API,

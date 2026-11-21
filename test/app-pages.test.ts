@@ -1021,7 +1021,12 @@ describe('a loader reads as the reader, never writes, and ends', () => {
       loader(async (context) => ({ keys: Object.keys(context).sort(), tables: Object.keys(context.db), sql: 'sql' in context.db.ticket })),
       at,
     );
-    assert.deepEqual(reached, { keys: ['db', 'now', 'params', 'signal', 'timezone', 'today', 'viewer'], tables: ['ticket'], sql: false });
+    /* `chosen` (rc.80): the App's picks, read again under the reader, by name. A value, not a handle: nothing to write through. */
+    assert.deepEqual(reached, {
+      keys: ['chosen', 'db', 'now', 'params', 'signal', 'timezone', 'today', 'viewer'],
+      tables: ['ticket'],
+      sql: false,
+    });
   });
 
   /* A field report: a page handed its program's configuration had to declare a read it never made. */

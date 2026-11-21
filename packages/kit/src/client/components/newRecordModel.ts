@@ -4,10 +4,17 @@
  * start), the control each field gets, how an earlier pick narrows a later one, whether it opens as a drawer or a page,
  * and what is missing or changed before the values are written.
  */
-import { coerceForColumn, columnKind, isFlagColumn, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import {
+  coerceForColumn,
+  columnKind,
+  isFlagColumn,
+  primaryKey,
+  type ColumnMeta,
+  type TableMeta,
+} from '@mistriwork/engine/shared/schema.js';
 import { appNow } from '../locale.js';
 import { autoKey, formShownFields, isRequired } from '@mistriwork/engine/shared/form.js';
-import type { AppForm } from '@mistriwork/engine/shared/servedApp.js';
+import type { AppForm, ServedChoice } from '@mistriwork/engine/shared/servedApp.js';
 import { evaluateFormCondition, typedValue, type FormScalar } from '@mistriwork/engine/shared/formValues.js';
 import { computedColumnMeta, type ComputedNode } from '@mistriwork/engine/shared/computed.js';
 import { evaluateComputed } from '@mistriwork/engine/shared/computedValue.js';
@@ -295,6 +302,32 @@ export function narrowingCondition(
     clauses.push(`${remote} = ${typeof value !== 'string' || /^-?\d+(?:\.\d+)?$/.test(text) ? text : JSON.stringify(text)}`);
   }
   return clauses.join(' and ');
+}
+
+/**
+ * Where a New form's references start from the App's choices (`choose`): a reference to the chosen table, by its key,
+ * starts at the pick, so a visit booked at a site the person works at names that site without being asked. It is a
+ * start like any default, below the form's own (a parent's key, a declared default): the field is the person's to
+ * change, and the form reads this once, so a pick changed while the form is open never replaces what it holds.
+ */
+export function chosenDefaults(
+  columns: readonly ColumnMeta[],
+  choose: Readonly<Record<string, ServedChoice>> | undefined,
+  chosen: Readonly<Record<string, string>>,
+  target: (tableId: string) => TableMeta | undefined,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, choice] of Object.entries(choose ?? {})) {
+    const value = chosen[name];
+    const into = value ? target(choice.table) : undefined;
+    const keys = into ? primaryKey(into) : [];
+    if (keys.length !== 1) continue;
+    for (const column of columns) {
+      const ref = column.references;
+      if (ref?.table === choice.table && ref.column === keys[0] && !Object.hasOwn(out, column.name)) out[column.name] = value;
+    }
+  }
+  return out;
 }
 
 /**

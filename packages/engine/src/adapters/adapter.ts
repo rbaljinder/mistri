@@ -1321,5 +1321,11 @@ export interface UpdateResult {
   affected: number;
   /** Values after coercion to their column types, for the caller to confirm. */
   applied: Record<string, string | number | boolean | null>;
+  /**
+   * The row as the UPDATE left it, where the engine gives it back with the
+   * write (a PostgreSQL transaction's `RETURNING *`); absent elsewhere, and
+   * dropped by any layer that writes again before handing the result on.
+   */
+  row?: Record<string, unknown>;
   sql: { text: string; params: unknown[] };
 }

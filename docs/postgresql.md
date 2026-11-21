@@ -222,7 +222,7 @@ the cores, 4 to 16, and `R` is as many as `W` and at least 10):
 | A tenant App's request pool, in place of the adapter (its reader, discovery, writer, administration and support share it) | `auth.rows: "tenant"` | `R + W + 1` |
 | A tenant App's owner pool ([row-security backstop](#row-security-backstop)), on the owner's URL | `"backstop": "rls"` | 5 |
 | Live sync's LISTEN | always | 1 |
-| The server's stores: jobs, workflows and event deliveries, decisions, effects, the email outbox, integrations and inbound deliveries, the API event feed, the assistant | any of them is declared (the assistant's opens on its first request) | 5 |
+| The server's stores: jobs, workflows and event deliveries, decisions, effects, the email outbox, integrations and inbound deliveries, the API event feed, the assistant, people's preferences (`choose`) | any of them is declared (the assistant's opens on its first request) | 5 |
 | The jobs host's LISTEN | the jobs module declares a job or workflow | 1 |
 | A read replica | the connection names it | `R`, on the replica's host |
 | The sign-in store | `auth.store` is a `postgres://` URL | `MISTRI_AUTH_POOL` (default 4), on its own database |

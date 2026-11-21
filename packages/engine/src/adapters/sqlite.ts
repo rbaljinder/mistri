@@ -21,7 +21,7 @@ import {
 export { cachedStatement, schemaFingerprint } from './sqliteHandles.js';
 import { captureScopeCatalog, mapScopeCatalog } from '../shared/scopeCatalog.js';
 import { inlineRows, inlineWithin } from '../shared/anyRows.js';
-import { asksAboutRows } from '../shared/filter.js';
+import { asksComputed, computedTable, readsCatalog, withComputedWhere } from '../shared/computedWhere.js';
 import { qualifiedTable } from '../shared/sqlRelation.js';
 import type { SqlFragment } from '../shared/filter.js';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
@@ -640,13 +640,28 @@ export class SqliteAdapter implements Adapter {
      (commandDb.ts). The catalog is read only when the filter asks, and a filter that asks of a catalog this handle
      cannot read is refused, as one nothing resolves is. */
   private async whereOf(id: string, relation: string, filter: Filter | undefined): Promise<SqlFragment> {
-    if (!asksAboutRows(filter)) return buildWhere(filter, ANSI_STYLE);
+    if (!readsCatalog(filter)) return buildWhere(filter, ANSI_STYLE);
     const schema = await this.schema().catch(() => undefined);
     const inline =
       schema && inlineRows(schema, id, ANSI_STYLE.quote(relation), ANSI_STYLE, (child) => qualifiedTable(schema, child.id, ANSI_STYLE));
     /* Another table's keys (`in`) are read as this table is, from its own relation: the same bound. */
     const within = schema && inlineWithin(schema, ANSI_STYLE, (other) => qualifiedTable(schema, other.id, ANSI_STYLE));
-    return buildWhere(filter, ANSI_STYLE, 1, undefined, undefined, undefined, undefined, false, undefined, false, inline, within);
+    /* A computed column is written as its expression over this table's own columns (computedWhere.ts). */
+    const own = filter && asksComputed(filter) ? withComputedWhere(filter, computedTable(schema, id), ANSI_STYLE) : undefined;
+    return buildWhere(
+      own?.filter ?? filter,
+      ANSI_STYLE,
+      1,
+      own?.column,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      undefined,
+      false,
+      inline,
+      within,
+    );
   }
 
   private async queryOn(request: QueryRequest, db: DatabaseSync, read = false): Promise<QueryResult> {
@@ -658,7 +673,7 @@ export class SqliteAdapter implements Adapter {
        its operation input, and the schema wait below must not outlive it. */
     const limit = clampLimit(request.limit);
     const offset = clampOffset(request.offset);
-    const where = asksAboutRows(request.filter)
+    const where = readsCatalog(request.filter)
       ? await this.whereOf(request.table, table, request.filter)
       : buildWhere(request.filter, ANSI_STYLE);
     /* A sort by declared vocabulary needs the catalog, but an ordinary read must
@@ -931,7 +946,7 @@ export class SqliteAdapter implements Adapter {
 
   private async countOn(table: string, filter: Filter | undefined, db: DatabaseSync, limit?: number, read = false): Promise<number> {
     const name = read ? this.readTable(table) : this.assertTable(table, db);
-    const where = asksAboutRows(filter) ? await this.whereOf(table, name, filter) : buildWhere(filter, ANSI_STYLE);
+    const where = readsCatalog(filter) ? await this.whereOf(table, name, filter) : buildWhere(filter, ANSI_STYLE);
     const text = countStatement(`${ANSI_STYLE.quote(name)}${where.text}`, limit);
     const [row] = await this.readRows(text, where.params, true, db);
     return Number(row?.n ?? 0);

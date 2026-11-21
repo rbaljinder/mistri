@@ -262,7 +262,7 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
         },
       });
     } else {
-      const configured = tenantOptions(raw.commands, ['registry', 'resultReferences']);
+      const configured = tenantOptions(raw.commands, ['registry', 'resultReferences', 'storedPicks']);
       if (!configured.registry || typeof configured.registry !== 'object' || isProxy(configured.registry)) return denyTenant();
       registry = defineCommands(
         tenantOptions(configured.registry, Object.keys(Object.getOwnPropertyDescriptors(configured.registry))) as BusinessCommandRegistry,
@@ -272,6 +272,9 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
         registry,
         resultReferences,
         captureFlags: captureHttpTenantFlags,
+        ...(configured.storedPicks === undefined
+          ? {}
+          : { storedPicks: configured.storedPicks as TenantCommandOptions<Request>['commands']['storedPicks'] }),
       });
     }
     const history = bindTenantRecordHistory(requests, raw.authorizeDeletedRecord as TenantDeletedRecordPolicy | undefined);

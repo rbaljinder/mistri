@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import {
+  chosenDefaults,
   formColumns,
   hasFormChanges,
   inferredNarrowing,
@@ -327,4 +328,27 @@ test('a column whose display words the database does not constrain is chosen fro
     kind,
   );
   expect(withDisplayChoices(kind, undefined, [])).toBe(kind);
+});
+
+test("a reference to the App's chosen table, by its key, starts at the pick; another table's, or a non-key column's, does not", () => {
+  const site: TableMeta = {
+    id: 'site',
+    name: 'site',
+    schema: '',
+    isView: false,
+    columns: [column('id', { type: 'INTEGER', primaryKey: true, nullable: false }), column('code')],
+  };
+  const columns = [
+    column('site_id', { type: 'INTEGER', references: { table: 'site', column: 'id' } }),
+    column('site_code', { references: { table: 'site', column: 'code' } }),
+    column('owner_id', { type: 'INTEGER', references: { table: 'owner', column: 'id' } }),
+    column('name'),
+  ];
+  const target = (id: string) => (id === 'site' ? site : undefined);
+  const choose = { site: { table: 'site' } };
+  expect(chosenDefaults(columns, choose, { site: '12' }, target)).toEqual({ site_id: '12' });
+  expect(chosenDefaults(columns, choose, {}, target)).toEqual({});
+  expect(chosenDefaults(columns, undefined, { site: '12' }, target)).toEqual({});
+  /* A choice over a table this reader's catalog does not hold starts nothing. */
+  expect(chosenDefaults(columns, choose, { site: '12' }, () => undefined)).toEqual({});
 });

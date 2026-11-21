@@ -8,7 +8,13 @@
  * read (`/api/run`), and its form is served without them.
  */
 import type { AppCommandField } from '../../../schema/command.js';
-import { choiceAnswers, choiceLabelColumn, choiceWhereColumns, type AppFormCommandReference } from '../../shared/command.js';
+import {
+  choiceAnswers,
+  choiceFillColumns,
+  choiceLabelColumn,
+  choiceWhereColumns,
+  type AppFormCommandReference,
+} from '../../shared/command.js';
 import { isRowPolicyApp, isTenantApp, logicalResource, type AppDef } from '../../shared/app.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
@@ -66,7 +72,7 @@ export async function withTableChoices(options: {
           const physical = resources.toPhysical(resource);
           const owner = resources.connectionFor(resource);
           const local = choiceLabelColumn(field.source, options.locale);
-          const where = choiceWhereColumns(field.source.match);
+          const where = [...new Set([...choiceWhereColumns(field.source.match), ...choiceFillColumns(input, field.name)])].sort();
           const narrowing = choiceNarrowing(field.source.match);
           const read = { by: field.source.by, labelColumn: field.source.labelColumn, sort: field.source.sort, local, where, narrowing };
           const choices = await sharedChoices({

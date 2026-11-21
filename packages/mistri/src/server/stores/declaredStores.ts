@@ -3,7 +3,7 @@
  * the App instead of a list someone keeps beside it: a resource that notifies
  * wants the inbox, one with a history page wants the record history, one
  * whose reads are audited wants the read audit, a
- * `branding` or `assistant` declaration wants theirs. `provisionStores` reads
+ * `branding` or `assistant` declaration wants theirs, and a `choose` wants the preferences its picks are kept in. `provisionStores` reads
  * it twice: to derive what to make when it is given the App and no `only`, and
  * to refuse an `only` that names a store the App never declared (a store made
  * for nothing is a store nobody attests, migrates or remembers to drop).
@@ -23,6 +23,7 @@ export const DECLARABLE_STORES: readonly string[] = [
   'decisions',
   'tenant-sandboxes',
   'live-change',
+  'preferences',
 ];
 
 /**
@@ -49,5 +50,7 @@ export async function declaredStores(app: AppDef, pages: readonly PageDef[] = []
   if (resources.some(([, resource]) => resource.clone !== undefined)) declared.add('tenant-sandboxes');
   /* Live sync's change store: a page showing any resource is told of its writes. */
   if (resources.length) declared.add('live-change');
+  /* A person's App-wide picks follow them across devices where the store is; without it they stay in the browser. */
+  if (app.choose) declared.add('preferences');
   return DECLARABLE_STORES.filter((id) => declared.has(id));
 }

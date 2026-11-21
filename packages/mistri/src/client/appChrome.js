@@ -10,7 +10,7 @@
  * every page names the chrome, and a test that reads one part loads no other.
  */
 import { personFacing } from '@mistriwork/kit/client/audience.js';
-import { createElement } from 'react';
+import { Fragment, createElement } from 'react';
 import { PHONE_QUERY, TABLET_QUERY } from '@mistriwork/ui/internal/ruler.js';
 import { AssistantTrigger, registerAskInPalette } from './components/AssistantTrigger.js';
 import { element, mount, queryClient, unmount } from '@mistriwork/kit/client/components/mount.js';
@@ -70,6 +70,7 @@ sayUnknownIcons(() => appFollowsSaves() || /** @type {{ __mistriAuthoring?: bool
    layout. Keep their menus and styles with the control that actually draws. */
 const AccountControl = onDemand(() => import('./components/AccountControl.js'), 'AccountControl', { quiet: true });
 const TopNav = onDemand(() => import('./components/TopNav.js'), 'TopNav', { quiet: true });
+const ChoiceControl = onDemand(() => import('./components/ChoiceControl.js'), 'ChoiceControl', { quiet: true });
 
 /* A tenant App's flows — choosing a tenant, its links, its history, the
    support visit — loaded by boot for a tenant session and for nothing else. */
@@ -549,6 +550,38 @@ function renderNewMenu() {
 }
 
 /**
+ * The App's choices (`choose`: the site this person works at), first among the bar's keys, where the App declares
+ * any. Each control draws nothing until there is a signed-in reader to keep a pick for (ChoiceControl.tsx), and below
+ * the width the bar holds it, it leaves the bar for the account menu (ChoiceControl.css).
+ */
+function renderChoices() {
+  const app = inAppMode() ? activeApp() : null;
+  let host = shellById('choice-host');
+  const names = Object.keys(app?.choose ?? {});
+  if (!app || !names.length) {
+    if (host) {
+      unmount(host);
+      host.remove();
+    }
+    return;
+  }
+  if (!host) {
+    const menuHost = shellById('more-host');
+    if (!menuHost) return;
+    host = el('span', { id: 'choice-host', class: 'host-contents choice-host' });
+    (shellById('new-menu-host') ?? shellById('assistant-host') ?? menuHost).before(host);
+  }
+  mount(
+    host,
+    createElement(
+      Fragment,
+      null,
+      names.map((name) => createElement(ChoiceControl, { key: `${app.id}:${name}`, app: app.id, name, choice: app.choose[name] })),
+    ),
+  );
+}
+
+/**
  * The browser tab names the room, then the App: "Purchase orders · Inventory".
  * One title for every room ("Inventory — tablewalk") left ten tabs of one App
  * indistinguishable, and put the tool's name where the App's reader looks for
@@ -601,6 +634,7 @@ export function brandChrome() {
   watchRoomTitle();
   appIssuesBadge();
   appAsOfChip();
+  renderChoices();
   renderNewMenu();
   renderAssistant();
   /* The New menu's host is made beside the bar's keys, which may stand in the sidebar's foot: dock it again. */

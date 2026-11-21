@@ -183,6 +183,27 @@ function proofs(open: () => Promise<World>, label: string, skip: false | string 
       assert.equal((await db.invoice.where(west).first())?.id !== undefined, true);
     });
 
+    test('a path through a reference reads the row it points at, as the in it means', async () => {
+      assert.deepEqual(await invoices({ 'customer_id.region': 'west' }), [1, 3, 4, 5, 6]);
+      // Two columns of one reference are judged on the same row; a value beside them binds in order.
+      assert.deepEqual(await invoices({ total: { gt: 20 }, 'customer_id.region': 'west', 'customer_id.Tier': 'gold' }), [1, 3, 6]);
+      assert.deepEqual(await invoices({ 'customer_id.region': ['east'] }), [2]);
+      assert.deepEqual(await invoices({ 'customer_id.region': { not: 'west' } }), [2]);
+      const db = await handles(DECLARED);
+      assert.equal(await db.invoice.count({ 'customer_id.region': 'west' }), 5);
+      // The table it points at must be read; a column that is no reference, or two hops, is refused by name.
+      await assert.rejects(
+        async () => invoices({ 'customer_id.region': 'west' }, ['invoice']),
+        /not a reference to a table this handle reads/,
+      );
+      await assert.rejects(async () => invoices({ 'total.region': 'west' }), /follows "total", which is not a reference/);
+      await assert.rejects(async () => invoices({ 'customer_id.tenant_id.x': 1 }), /crosses more than one reference/);
+      await assert.rejects(async () => invoices({ 'customer_id.nope': 1 }), /"nope" is not one of its columns/);
+      // Only a handler's db reads another table's rows: a when judges its target's own.
+      const catalog = commandCatalog(await w.schema(), DECLARED, (local) => w.id(local))!;
+      assert.throws(() => compileWhere(catalog.invoice, { 'customer_id.region': 'west' }, new Date()), /only a handler's db reads/);
+    });
+
     test('values beside and inside the test bind in the order they are written', async () => {
       // total > $1, then the subquery's region = $2 and "Tier" = $3, then total < $4: a misnumbered placeholder reads another value.
       assert.deepEqual(

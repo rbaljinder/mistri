@@ -462,7 +462,7 @@ function dayText(value: string, style: SqlStyle, literal: (text: string) => stri
 }
 
 /* What a stored column is to an expression that reads it: a yes-or-no column native or a 0/1 integer. */
-function columnRead(column: ColumnMeta | undefined): { kind: ValueKind; native?: boolean } | undefined {
+export function columnRead(column: ColumnMeta | undefined): { kind: ValueKind; native?: boolean } | undefined {
   if (!column) return undefined;
   if (isFlagColumn(column)) return { kind: 'boolean', native: columnKind(column.type) === 'boolean' };
   const kind = columnKind(column.type);

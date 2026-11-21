@@ -92,6 +92,7 @@ import {
   resourceCeiling,
   resourceValidation,
   viewOrder,
+  type AppChoice,
   type AppDashSection,
   type DashTarget,
   type AppDashboardView,
@@ -102,6 +103,7 @@ import {
   type AppListView,
   type ResolvedFormView,
   type ResolvedListView,
+  type ResourceDef,
 } from './appModel.js';
 import { allowKeys, humanName, noteRefusedKeys, plainRecord, setKeyHomes, type AppNoun } from '@mistriwork/engine/shared/model.js';
 import type { AppListPresentation } from '@mistriwork/engine/shared/listPresentations.js';
@@ -119,7 +121,7 @@ import { inferredList } from './appInferredList.js';
 import { declaredDisplayOf, effectiveDisplay } from '@mistriwork/engine/shared/displayDefaults.js';
 import { parseAppPages } from './appPages.js';
 import { appRealms, checkTenancy } from './appTenancy.js';
-import { headingOf } from '@mistriwork/engine/shared/appNoun.js';
+import { headingOf, recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import { appZone, parseUi } from './appUi.js';
 import { parseOpenRoles } from './appViewRoles.js';
 import { composeFeatures } from './appFeatures.js';
@@ -210,6 +212,7 @@ export const ROOT_KEYS = [
   'analytics',
   'assistant',
   'ai',
+  'choose',
   'retention',
 ] as const;
 /* The homes a refused key is told it belongs in: a function to call, built on the first refusal (appKeyHomes.ts). */
@@ -299,6 +302,40 @@ function parseAi(raw: unknown, where: string): { label: string } | undefined {
   if (!label || Array.from(label).length > AI_LABEL_MAX)
     throw new Error(`${where}: ai.label is ${AI_LABEL_MAX} characters or fewer of text: the word every AI mark says, "AI" when absent.`);
   return { label };
+}
+
+/** The most App-wide choices an App declares: each is a control in the shell's bar, and the bar has room for few. */
+const CHOOSE_MAX = 3;
+
+/* An App-wide choice is a row of a declared resource (the site a person works at): pages read it as `chosen.<name>`,
+   so its name is a word of the query language, and its `from` a resource this App serves. The label column and the
+   table's key are the catalog's to say, judged where a catalog is (appChecks.ts chooseProblems). */
+function parseChoose(raw: unknown, where: string, resources: Readonly<Record<string, ResourceDef>> | undefined): AppDef['choose'] {
+  if (raw === undefined) return undefined;
+  const at = `${where}: choose`;
+  const choose = plainRecord(raw, at, 'an object of named choices');
+  const names = Object.keys(choose);
+  if (!names.length || names.length > CHOOSE_MAX)
+    throw new Error(`${at} names 1 to ${CHOOSE_MAX} choices: each is a control in the shell's bar, which has room for few.`);
+  const parsed: Record<string, AppChoice> = {};
+  for (const name of names) {
+    if (!/^[A-Za-z_]\w*$/.test(name) || name === 'constructor' || name === '__proto__')
+      throw new Error(`${at}: "${name}" is not a name a page can say as chosen.${name}; use letters, digits and _.`);
+    const entry = plainRecord(choose[name], `${at}.${name}`, 'an object');
+    allowKeys(entry, ['from', 'label', 'required'], `${at}.${name}`);
+    if (typeof entry.from !== 'string' || !resources || !Object.hasOwn(resources, entry.from))
+      throw new Error(`${at}.${name}.from names a declared resource whose rows are chosen among; ${JSON.stringify(entry.from)} is none.`);
+    if (entry.label !== undefined && (typeof entry.label !== 'string' || !/^[A-Za-z_]\w*$/.test(entry.label)))
+      throw new Error(`${at}.${name}.label is the column of ${entry.from} the chooser shows for a row.`);
+    if (entry.required !== undefined && typeof entry.required !== 'boolean')
+      throw new Error(`${at}.${name}.required is true (the shell asks before the first page) or false, the default.`);
+    parsed[name] = {
+      from: entry.from,
+      ...(typeof entry.label === 'string' ? { label: entry.label } : {}),
+      ...(entry.required === true ? { required: true as const } : {}),
+    };
+  }
+  return Object.freeze(parsed);
 }
 
 function parseRoot(raw: unknown, where: string, problems: string[], composed?: AppApiDef, surfaces?: readonly SurfaceFile[]): AppDef {
@@ -496,11 +533,13 @@ function parseRoot(raw: unknown, where: string, problems: string[], composed?: A
       `${where}: uiKit is the path of a module in the App directory, as './ui/kit.tsx': its default export is defineUiKit({ … }).`,
     );
   const pages = parsedPages!.value;
+  const choose = parseChoose(a.choose, where, data.resources);
   const app: AppDef = {
     id,
     name,
     ...(shortName ? { shortName } : {}),
     ...(ai ? { ai } : {}),
+    ...(choose ? { choose } : {}),
     ...(Object.hasOwn(a, 'flags') ? { flags: catalog.flags } : {}),
     ...(Object.hasOwn(a, 'audiences') ? { audiences: catalog.audiences } : {}),
     ...(Object.hasOwn(a, 'experiments') ? { experiments } : {}),
@@ -776,6 +815,14 @@ function computedInputs(value: string, table: TableMeta): string[] {
   }
 }
 
+/** What a write to a row a resource's `frozen` condition matches is told: it names the resource and the condition, never a value. */
+export function frozenWhenWords(
+  resource: Partial<Pick<NonNullable<AppDef['resources']>[string], 'noun' | 'frozen'>>,
+  tableName: string,
+): string {
+  return `This ${recordNoun(resource.noun, tableName)} is frozen (${resource.frozen}); it cannot be changed.`;
+}
+
 /** One resource's machine, as a generic write meets it (appTransitions.ts), resolved against the catalog. */
 interface AppTransitionRule {
   /** The machine's column → the fixed verbs that may move it (none: only its commands do). */
@@ -789,6 +836,9 @@ interface AppTransitionRule {
   since?: string;
   /** The states declared `final: { freeze: true }` → their words: a row in one takes no write at all. */
   frozen: ReadonlyMap<string, string>;
+  /** The resource's `frozen` condition (appModel.ts), judged of the stored row: a row it matches takes no write at all.
+      A resource with this and no machine has a rule of no column, no verbs and no states. */
+  frozenWhen?: { readonly text: string; readonly said: string };
   /** The App's `ui.timezone`, the wall clock a zone-less `since` is written in (UTC when absent). */
   timezone?: string;
 }
@@ -818,7 +868,33 @@ export function appTransitionRules(app: AppDef, schema: DatabaseSchema): { rules
       const when = timer.when === undefined ? undefined : atWhenFilter(schema, table, timer.when);
       if (when?.problem) problems.push(`resources "${name}": at "${timer.column}", when: ${when.problem}`);
     }
-    if (!machine) continue;
+    /* The rows it freezes: a condition over the table's own columns, read as a `when` is, so a column it lacks or a
+       sentence that is no condition is the App's to fix before it starts. */
+    let frozenWhen: { text: string; said: string } | undefined;
+    if (resource.frozen !== undefined) {
+      const parsed = parseQuery(`${table.id} ${resource.frozen}`, { schema, columnValues: true, me: ANYONE });
+      if (parsed.errors.length || !parsed.query || !parsed.query.filter.groups.length) {
+        const error = parsed.errors[0];
+        problems.push(
+          `resources "${name}": frozen "${resource.frozen}": ${error ? saidAt(error, `${table.id} ${resource.frozen}`, table.id.length + 1) : 'it says no conditions.'}`,
+        );
+      } else if (parsed.query.columns.length || parsed.query.orderBy.length || parsed.query.limit !== undefined) {
+        problems.push(`resources "${name}": frozen "${resource.frozen}" says conditions only, with no columns, order or limit.`);
+      } else frozenWhen = { text: resource.frozen, said: frozenWhenWords(resource, table.name) };
+    }
+    if (!machine) {
+      if (frozenWhen !== undefined)
+        rules.set(table.id, {
+          fields: new Map(),
+          starts: new Map(),
+          moves: new Map(),
+          column: '',
+          frozen: new Map(),
+          frozenWhen,
+          ...(appZone(app.ui) ? { timezone: appZone(app.ui) } : {}),
+        });
+      continue;
+    }
     const column = machine.column;
     const meta = table.columns.find((candidate) => candidate.name === column);
     if (!meta) {
@@ -864,6 +940,7 @@ export function appTransitionRules(app: AppDef, schema: DatabaseSchema): { rules
       moves,
       column,
       frozen: new Map(machine.states.filter((state) => state.freeze).map((state) => [state.name, state.label])),
+      ...(frozenWhen === undefined ? {} : { frozenWhen }),
       ...(machine.since === undefined ? {} : { since: machine.since }),
       ...(appZone(app.ui) ? { timezone: appZone(app.ui) } : {}),
     });
@@ -1992,6 +2069,7 @@ export function resolveResources(app: AppDef, schema: DatabaseSchema): { resourc
       ...(resource.file && files.has(table.id) ? { file: browserFile(resource.file) } : {}),
       ...(tagRules.has(table.id) ? { tags: tagRules.get(table.id) } : {}),
       ...(resource.favorite ? { favorite: true as const } : {}),
+      ...(resource.frozen === undefined ? {} : { frozen: resource.frozen }),
       ...(resource.noun ? { noun: resource.noun } : {}),
       ...(resource.settings ? { settings: resource.settings } : {}),
       ...(resource.import && !importIssue

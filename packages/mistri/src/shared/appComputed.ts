@@ -163,24 +163,23 @@ export function appComputedRules(
     }
     if (Object.keys(served).length) rules.set(table.id, served);
     /* Read-only everywhere: a column the statement computes is never a field a
-       form asks for, an action sets or a rule lets anyone write. Its reads say
-       who may see it, so no rule names it to be read either. */
+       form asks for, an action sets or a rule lets anyone write. A `read` list
+       may name it (appAccess.ts), and it is still served only to a reader of
+       every column it reads. */
     const named = (list: readonly string[] | undefined, where: string, verb: string) => {
       for (const column of list ?? []) {
         if (Object.hasOwn(resource.computed!, column))
           problems.push(
-            `${where} ${verb} "${column}", which is computed: it is never written, and it is read wherever every column it reads is.`,
+            `${where} ${verb} "${column}", which is computed: it is never written, and it is read where every column it reads is.`,
           );
       }
     };
     named(resource.fields?.write, `resources "${name}", "fields", write`, 'names');
-    named(resource.fields?.read, `resources "${name}", "fields", read`, 'names');
     named(resource.form?.show, `resources "${name}", "form", show`, 'asks for');
     for (const action of resource.actions ?? []) named(Object.keys(action.set ?? {}), `resources "${name}", action "${action.id}"`, 'sets');
     for (const [role, grant] of Object.entries(app.auth?.roles ?? {})) {
       const rule = grant.fields?.[name];
       named(rule?.write, `auth, role "${role}", "fields", "${name}", write`, 'names');
-      named(rule?.read, `auth, role "${role}", "fields", "${name}", read`, 'names');
     }
   }
   return { rules, problems };

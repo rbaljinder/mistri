@@ -141,9 +141,20 @@ export function chooseColumnReference(candidates: readonly ColumnReferenceCandid
  */
 export const CONNECTION_HIDDEN: unique symbol = Symbol('mistri.connectionHidden');
 
+/**
+ * Of a table's declared rollups and computed columns, the ones a reader's
+ * field grant names (ColumnGrant.derived), set by pruning to that grant. They
+ * are added after pruning (the App's catalog), so pruning cannot cut them;
+ * this says which to keep. Absent, every one whose inputs the reader reads.
+ * A symbol, so it is never written into a JSON answer.
+ */
+export const GRANTED_DERIVED: unique symbol = Symbol('mistri.grantedDerived');
+
 export interface TableMeta {
   /** What the connection hides of this table (CONNECTION_HIDDEN); never serialized. */
   readonly [CONNECTION_HIDDEN]?: readonly string[];
+  /** Of its rollups and computed columns, the ones the reader's field grant names (GRANTED_DERIVED); never serialized. */
+  readonly [GRANTED_DERIVED]?: readonly string[];
   name: string;
   /** Server-projected delete affordance, never authority; may account for hidden columns. */
   deletable?: boolean;

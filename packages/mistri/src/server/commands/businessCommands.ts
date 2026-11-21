@@ -26,6 +26,7 @@ import {
 } from '../../shared/command.js';
 import { parseCommandInput } from '../../shared/commandInputParse.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
+import { AUDIT_TARGET_ENTRIES_MOST } from '../../adapters/commands/commandJournalSchema.js';
 import { COMMAND_FIELD_PATH } from '@mistriwork/engine/shared/commandFieldPath.js';
 import { CommandInputRefusal, readCommandInput } from '../../shared/commandInput.js';
 import {
@@ -186,6 +187,13 @@ export interface BusinessCommandContext extends CommandContextBase {
       visitor's pick or browser, a job's or an inbound message's tenant, else the App's. Resolved by the server,
       never read from the input. `refuse(msg('…'))` is said in it. */
   readonly locale: string;
+  /**
+   * The App's `choose`, by name: the key of the row the person picked in the shell (the site they work at), read
+   * again under their grants for this request; undefined where nothing is chosen. A job, a workflow step and an API
+   * or App MCP call run with nothing chosen (`{}`): no person is at a desk, and the pick is the person's, so a
+   * handler that needs a site takes it as input. A `where` text can say `chosen.<name>` as well.
+   */
+  readonly chosen: Readonly<Record<string, string | number | undefined>>;
   readonly db: Readonly<Record<string, ReadTable<UntypedRow>>>;
   /** The target, read and checked in this transaction: a one-target command that names a record. */
   readonly record?: UntypedRow;
@@ -362,6 +370,7 @@ type CommandHandlerContext<
   readonly today: BusinessCommandContext['today'];
   readonly timezone: BusinessCommandContext['timezone'];
   readonly locale: BusinessCommandContext['locale'];
+  readonly chosen: BusinessCommandContext['chosen'];
   readonly db: CommandTables<Tables<Src, Target>, Reads<Target, Read, Write>, Writes<Target, Write>>;
   readonly tx: WriteTransaction;
   readonly nextNumber: CommandNextNumber;
@@ -534,6 +543,9 @@ export interface CommandDefinition<
       others write (PostgreSQL REPEATABLE READ; SQLite's writer is one snapshot already). A row that moved after the
       snapshot and is then written is refused as `stale_record`, which a job or workflow retries. */
   readonly snapshot?: true;
+  /** The most rows the command may change for one target, and the most `insertMany` or `updateWhere` takes in one call.
+      Absent, 4,096 changes per target and 1,000 rows per call; at most 16,384. The audit's 4 MiB bound stays. */
+  readonly maxChanges?: number;
   /** What the command keeps: `none`, `receipts` or `audit`; overrides the App's `track`. See BusinessCommand. */
   readonly track?: 'none' | 'receipts' | 'audit';
   readonly support?: 'refuse';
@@ -659,6 +671,8 @@ export interface BusinessCommand<Input, Output, I extends CommandInput = Command
   readonly track?: 'none' | 'receipts' | 'audit';
   /** Every read sees one snapshot (CommandDefinition.snapshot, snapshotRead.ts). */
   readonly snapshot?: true;
+  /** CommandDefinition.maxChanges. */
+  readonly maxChanges?: number;
   /**
    * Whether an operator inside a dealer may run this command. Commands are
    * allowed under a support session by default, because a session exists to get
@@ -786,6 +800,7 @@ const definitionKeys = new Set([
   'audit',
   'track',
   'snapshot',
+  'maxChanges',
   'realm',
   'tenant',
   'support',
@@ -1322,6 +1337,13 @@ export function defineCommand<
     fail('Command track must be "none", "receipts" or "audit".');
   if (Object.hasOwn(value, 'snapshot') && value.snapshot !== true)
     fail('Command snapshot is true, or left out: a command reads one snapshot only when it asks to.');
+  if (
+    Object.hasOwn(value, 'maxChanges') &&
+    !(Number.isInteger(value.maxChanges) && (value.maxChanges as number) >= 1 && (value.maxChanges as number) <= AUDIT_TARGET_ENTRIES_MOST)
+  )
+    fail(
+      `Command maxChanges is a whole number from 1 to ${AUDIT_TARGET_ENTRIES_MOST.toLocaleString('en-US')}, the most rows one command may change for a target.`,
+    );
   const when = Object.hasOwn(value, 'when') ? whenOption(value.when) : undefined;
   if (Object.hasOwn(value, 'label') && (typeof value.label !== 'string' || !value.label.trim() || value.label.length > 120))
     fail('Command label is text of 1 to 120 characters: what its form and button are called.');
@@ -1403,6 +1425,7 @@ export function defineCommand<
     ...(audit === undefined ? {} : { audit }),
     ...(value.track === undefined ? {} : { track: value.track as 'none' | 'receipts' | 'audit' }),
     ...(value.snapshot === true ? { snapshot: true as const } : {}),
+    ...(value.maxChanges === undefined ? {} : { maxChanges: value.maxChanges as number }),
     ...(value.support === undefined ? {} : { support: value.support as 'refuse' }),
     ...(value.approval === 'ai' ? { approval: 'ai' as const } : {}),
     ...(value.appendOnly === true ? { appendOnly: true as const } : {}),

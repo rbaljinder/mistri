@@ -30,11 +30,12 @@ import { MAX_LIMIT } from './reads.js';
 import { LIKE_ESCAPE, likePattern } from './like.js';
 import { distance, nearest } from './suggest.js';
 import { columnKind, findTable, type ColumnMeta, type DatabaseSchema, type MachineStates, type TableMeta } from './schema.js';
-import { dateWindow } from './queryDates.js';
+import { bindDate, dateWindow } from './queryDates.js';
 import { maskQuoted } from './maskQuoted.js';
 import {
   ME_SET,
   TENANT_FIELD,
+  chosenOperand,
   columnOperand,
   meOperand,
   meSetOperand,
@@ -594,26 +595,6 @@ function unescapeValue(text: string): string {
   return text.replace(/\\(["'\\])/g, '$1');
 }
 
-/**
- * Dates are bound as ISO strings because both target dialects compare them
- * correctly that way: Postgres casts on the way in, and SQLite's documented
- * text-date format is exactly ISO-8601. A `Date` object handed to a driver
- * is at the mercy of whatever it decides to do with the local timezone.
- */
-function bindDate(d: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const day = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-  /* A midnight boundary is bound as the bare day. Text comparison sorts
-     '2026-08-30' before '2026-08-30 00:00:00', so appending the zero time
-     made every bare-DATE column compare wrong at the boundary — SQLite
-     counted a task due *today* as `< today`, i.e. overdue. Bare, the bound
-     is right for every storage shape at once: it sorts before any datetime
-     of its day, and a driver casting for a real date/timestamp column reads
-     it as midnight exactly as before. */
-  if (!d.getHours() && !d.getMinutes() && !d.getSeconds()) return day;
-  return `${day} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
 function coerce(column: ColumnMeta | undefined, value: string, quoted: boolean, op?: string): string | number | boolean {
   const kind = column ? columnKind(column.type) : 'other';
   if (quoted) return value; // an explicit quote is an explicit "this is text"
@@ -895,6 +876,13 @@ function compileClause(raw: string, ctx: CompileContext): { conditions?: Conditi
         const groups = item.quoted ? undefined : (column?.states ?? ctx.states?.[name])?.groups;
         if (groups && Object.hasOwn(groups, item.value))
           return { error: `"${item.value}" is a group of ${name}'s states; ask it with is: ${name} is ${item.value}.` };
+        const fromChoice = chosenOperand(ctx, item.value, item.quoted);
+        if (fromChoice) {
+          if (fromChoice.error) return { error: fromChoice.error };
+          /* Nothing chosen is in no list: left out, as a null profile value is. */
+          if (fromChoice.value !== undefined) values.push(coerce(column, String(fromChoice.value), false) as string | number);
+          continue;
+        }
         const fromTenant = tenantOperand(ctx, column, item.value, item.quoted);
         if (fromTenant) {
           if (fromTenant.error) return { error: fromTenant.error };
@@ -957,6 +945,13 @@ function compileClause(raw: string, ctx: CompileContext): { conditions?: Conditi
        nobody is signed in says so (`me: null`); a check before any request reads it as anyone's (ANYONE). */
     if (!quoted && value === 'me' && ctx.me === undefined) return { error: NO_ONE_HERE };
     /* The reader's tenant profile (`country = tenant.country`), read once for this request; a null value matches no row. */
+    /* The person's App choice (`site_id = chosen.site`), proven readable for this request; nothing chosen matches no row. */
+    const fromChoice = chosenOperand(ctx, value, quoted);
+    if (fromChoice) {
+      if (fromChoice.error) return { error: fromChoice.error };
+      if (fromChoice.none) return { conditions: [{ column: name, op: 'in', value: [] }] };
+      return { conditions: [{ column: name, op, value: coerce(column, String(fromChoice.value), false) as string | number }] };
+    }
     const fromTenant = tenantOperand(ctx, column, value, quoted);
     if (fromTenant) {
       if (fromTenant.error) return { error: fromTenant.error };

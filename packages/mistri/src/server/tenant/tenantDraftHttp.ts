@@ -77,7 +77,7 @@ export function tenantCommandRoute(
     readonly selectors: readonly string[];
     readonly expected: TenantContextAssertion;
     readonly input: Record<string, unknown>;
-    readonly execution: { readonly signal: AbortSignal; readonly locale?: string };
+    readonly execution: { readonly signal: AbortSignal; readonly locale?: string; readonly chosenHeader?: string };
   },
 ) {
   const { path, platform, req, selectors, expected, input, execution } = route;

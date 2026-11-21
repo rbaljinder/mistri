@@ -48,7 +48,7 @@ import type { StartupApps } from './apps.js';
 import { authStoreFrom } from '../app/deploymentAuth.js';
 import { unsweptBuckets } from '../files/fileStorage.js';
 import { openBrowser } from '@mistriwork/engine/server/cli/browser.js';
-import { DEV_CHANGED_EXIT, DEV_SUPERVISED_ENV } from './devSupervisor.js';
+import { DEV_CHANGED_EXIT, DEV_SUPERVISED_ENV, handedOffPort, listenForDev, releaseForDev } from './devSupervisor.js';
 import { DEFAULT_SHUTDOWN_TIMINGS, shutdownTimings, type Options } from '@mistriwork/engine/server/cli/args.js';
 import type { StartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import { readinessOf, type CommandHost } from './commandHost.js';
@@ -419,8 +419,10 @@ export async function startServing(
           process.off('SIGTERM', shutdown);
           process.exit(exitStatus);
         });
-      // Publish the exit promise before synchronous retirement can reenter.
-      drained = cleanup();
+      // Publish the exit promise before synchronous retirement can reenter. Under a parent that holds the port, it
+      // stops handing this host connections first (devSupervisor.ts).
+      const release = releaseForDev();
+      drained = release ? release.then(cleanup) : cleanup();
     }
     return exitPromise;
   };
@@ -1123,7 +1125,8 @@ export async function startServing(
     activeServer.once('listening', () => {
       if (stopping) return;
       const address = activeServer.address();
-      if (address && typeof address !== 'string') {
+      // Handed sockets arrive on the port the parent holds; the loopback one this host listens on is nobody's address.
+      if (address && typeof address !== 'string' && handedOffPort() === undefined) {
         opts.port = address.port;
         serving.bound.port = address.port;
       }
@@ -1197,7 +1200,7 @@ export async function startServing(
       const wantOpen = envOpen === undefined ? opts.open : !(envOpen === '' || envOpen === '0' || envOpen.toLowerCase() === 'false');
       if (wantOpen) void openBrowser(`http://${shown}:${opts.port}${mount.base || ''}${mount.base ? '/' : ''}`);
     });
-    activeServer.listen(opts.port, opts.host);
+    listenForDev(activeServer, opts.port, opts.host);
     return undefined;
   } catch (error) {
     // An acquisition rejected before readiness, even if a signal also arrived.

@@ -128,6 +128,10 @@ export interface SectionProps<D, R = Record<string, Record<string, unknown>>, Ba
   /** On a dashboard with windows: the reader's window in the query grammar's words (`'last 30 days'`), the one each
       read with an `over` is narrowed by. Absent on a record page, and while the dashboard reads all time. */
   period?: string;
+  /** That window's bounds, as its reads compared against them: `start` is in it and `end` is the first day (or, for a
+      window of hours, the moment) after it, ISO in the App's time zone — `last 30 days` on 2026-11-20 is
+      `{ start: '2026-10-21', end: '2026-11-21' }`. Present with `period`. */
+  window?: { start: string; end: string };
 }
 
 type ShowOf<V> = V extends { presentation: { show: readonly (infer P extends string)[] } } ? P : string;

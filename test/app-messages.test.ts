@@ -465,6 +465,8 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       'model.d.ts ViewTo.tab',
       /* A choice's `where` operand names the form field whose answer it reads, not words. */
       'model.d.ts CommandChoiceOperand.answer',
+      /* An input's default that starts from another input's pick names that input and a column, not words. */
+      'model.d.ts CommandFieldDefault.answer',
       /* The App's name for its AI, a mark's word like `shortName` is the App's: one name, not a sentence to translate. */
       'app.d.ts AppConfig.label',
     ]);

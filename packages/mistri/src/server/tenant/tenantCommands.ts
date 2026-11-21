@@ -5,6 +5,7 @@ import { CommandTransactionFailure } from '../../adapters/commands/commandJourna
 import { AppAccessDenied } from '../app/appAccess.js';
 import { commandZone } from '../app/readerZone.js';
 import { scopedLocale } from '../app/readerLocale.js';
+import { readChosen } from '../app/appChoices.js';
 import { sessionActorWords } from '../app/appStamps.js';
 import {
   registerTenantCommandEventBinding,
@@ -70,6 +71,8 @@ export interface TenantCommandOptions<Request> extends TenantWriteRuntimeOptions
       request: Request,
     ) => CommandFlags | undefined | Promise<CommandFlags | undefined>;
     readonly resultReferences: Readonly<Record<string, (result: unknown) => readonly CommandResultReference[]>>;
+    /** What this member has stored for the App's `choose` in this tenant (app/appPreferences.ts): `ctx.chosen`'s fallback where the tab sends no pick. */
+    readonly storedPicks?: (accountId: string, tenant: string) => Promise<Record<string, string>>;
   };
 }
 export interface TenantCommandExecutionOptions {
@@ -81,6 +84,8 @@ export interface TenantCommandExecutionOptions {
   readonly locale?: string;
   /** The signed-in account's display name, off its verified session (`actor.name`); absent where the store keeps none. */
   readonly name?: string;
+  /** The request's `x-mistri-chosen` (app/appChoices.ts), read again under the member's own reader before a handler sees it. */
+  readonly chosenHeader?: string;
   /**
    * An execute run as a trial (businessCommandExecution.ts trialBusinessCommand): under the same lease, grants and row
    * policy, always rolled back, keeping no receipt. An import's check (tenantImport.ts); a tenant's own command only.
@@ -131,7 +136,7 @@ export const tenantCommandDomain = domain;
 /** Capture host options without accepting replacement getters or a forged signal.
  * Handlers get an independently owned native signal, not the mutable input. */
 export function captureTenantCommandExecution(input: TenantCommandExecutionOptions) {
-  const raw = tenantOptions(input, ['signal', 'requestId', 'entry', 'locale', 'name', 'trial']);
+  const raw = tenantOptions(input, ['signal', 'requestId', 'entry', 'locale', 'name', 'trial', 'chosenHeader']);
   const trial = captureTenantData(raw.trial);
   if (trial !== undefined && trial !== true) throw new CommandInputError('trial');
   const requestId = captureTenantData(raw.requestId);
@@ -142,6 +147,9 @@ export function captureTenantCommandExecution(input: TenantCommandExecutionOptio
   // A tag, never a sentence: the executor clamps it to the App's catalogs.
   const locale = captureTenantData(raw.locale);
   const name = captureTenantData(raw.name);
+  const chosenHeader = captureTenantData(raw.chosenHeader);
+  if (chosenHeader !== undefined && (typeof chosenHeader !== 'string' || chosenHeader.length > 1024))
+    throw new CommandInputError('chosenHeader');
   if (name !== undefined && (typeof name !== 'string' || !name.trim() || name.length > 200 || /\p{Cc}/u.test(name)))
     throw new CommandInputError('name');
   if (locale !== undefined && (typeof locale !== 'string' || !/^[A-Za-z0-9-]{1,64}$/.test(locale))) throw new CommandInputError('locale');
@@ -187,6 +195,7 @@ export function captureTenantCommandExecution(input: TenantCommandExecutionOptio
       ...(entry === undefined ? {} : { entry: entry as 'api' | 'mcp' }),
       ...(locale === undefined ? {} : { locale }),
       ...(name === undefined ? {} : { name }),
+      ...(chosenHeader === undefined ? {} : { chosenHeader }),
       ...(trial === true ? { trial: true as const } : {}),
     },
     close: () => {
@@ -239,8 +248,10 @@ function createCommands<Request>(options: TenantCommandOptions<Request>) {
  * acquisition or retirement is exposed alongside the command methods. */
 export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>, commands: TenantCommandOptions<Request>['commands']) {
   const runtime = captureTenantRequestRuntime(input);
-  const configured = tenantOptions(commands, ['registry', 'resultReferences', 'captureFlags']);
+  const configured = tenantOptions(commands, ['registry', 'resultReferences', 'captureFlags', 'storedPicks']);
   if (configured.captureFlags !== undefined && (typeof configured.captureFlags !== 'function' || isProxy(configured.captureFlags))) deny();
+  if (configured.storedPicks !== undefined && (typeof configured.storedPicks !== 'function' || isProxy(configured.storedPicks))) deny();
+  const storedPicks = configured.storedPicks as TenantCommandOptions<Request>['commands']['storedPicks'];
   const captureFlags = configured.captureFlags as TenantCommandOptions<Request>['commands']['captureFlags'];
   if (!configured.registry || typeof configured.registry !== 'object' || isProxy(configured.registry)) deny();
   const registry = defineCommands(
@@ -330,10 +341,22 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                 scopedLocale(app, scope.principal.accountId, () => scope.reads()),
               ])
             : [undefined, undefined];
-          const { name: _name, trial, ...asked } = context!.options;
+          const { name: _name, chosenHeader, trial, ...asked } = context!.options;
           // Only an execute is tried: every other step either reads or keeps what it does.
           if (trial && mode !== 'execute') throw new AppAccessDenied();
-          const said = person ? { ...asked, locale: person } : asked;
+          /* The App-wide choices, read again under this member's own reader in their tenant (app/appChoices.ts): the tab's
+             header, else what they stored for this tenant; `ctx.chosen` for what runs. */
+          const chosen =
+            acting && app.choose
+              ? await readChosen(
+                  app,
+                  ownership.schema,
+                  await scope.reads(),
+                  chosenHeader,
+                  await storedPicks?.(scope.principal.accountId, scope.principal.tenantId).catch((): Record<string, string> => ({})),
+                )
+              : undefined;
+          const said = { ...asked, ...(person ? { locale: person } : {}), ...(chosen ? { chosen } : {}) };
           const flags = commandFlagsOnce(async () => {
             await scope.session();
             const captured = await captureFlags?.(scope.principal, request);

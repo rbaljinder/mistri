@@ -9,7 +9,7 @@
  */
 import { isProxy } from 'node:util/types';
 import { inlineRows, inlineWithin } from '../shared/anyRows.js';
-import { asksAboutRows } from '../shared/filter.js';
+import { asksComputed, computedTable, readsCatalog, withComputedWhere } from '../shared/computedWhere.js';
 import { qualifiedTable } from '../shared/sqlRelation.js';
 import {
   POSTGRES_STYLE,
@@ -703,18 +703,33 @@ export class PostgresAdapter implements Adapter {
      (commandDb.ts). The catalog is read only when the filter asks, and a filter that asks of a catalog this handle
      cannot read is refused, as one nothing resolves is. */
   private async whereOf(id: string, qualified: string, filter: Filter | undefined): Promise<SqlFragment> {
-    if (!asksAboutRows(filter)) return buildWhere(filter, POSTGRES_STYLE);
+    if (!readsCatalog(filter)) return buildWhere(filter, POSTGRES_STYLE);
     const schema = await this.schema().catch(() => undefined);
     const inline = schema && inlineRows(schema, id, qualified, POSTGRES_STYLE, (child) => qualifiedTable(schema, child.id, POSTGRES_STYLE));
     /* Another table's keys (`in`) are read as this table is, from its own relation: the same bound. */
     const within = schema && inlineWithin(schema, POSTGRES_STYLE, (other) => qualifiedTable(schema, other.id, POSTGRES_STYLE));
-    return buildWhere(filter, POSTGRES_STYLE, 1, undefined, undefined, undefined, undefined, false, undefined, false, inline, within);
+    /* A computed column is written as its expression over this table's own columns (computedWhere.ts). */
+    const own = filter && asksComputed(filter) ? withComputedWhere(filter, computedTable(schema, id), POSTGRES_STYLE) : undefined;
+    return buildWhere(
+      own?.filter ?? filter,
+      POSTGRES_STYLE,
+      1,
+      own?.column,
+      undefined,
+      undefined,
+      undefined,
+      false,
+      undefined,
+      false,
+      inline,
+      within,
+    );
   }
 
   private async queryOn(request: QueryRequest, db: PgQuery, read = false): Promise<QueryResult> {
     const { schema, name } = read ? await this.readTable(request.table) : await this.assertTable(request.table, db);
     const qualified = `${POSTGRES_STYLE.quote(schema)}.${POSTGRES_STYLE.quote(name)}`;
-    const where = asksAboutRows(request.filter)
+    const where = readsCatalog(request.filter)
       ? await this.whereOf(request.table, qualified, request.filter)
       : buildWhere(request.filter, POSTGRES_STYLE);
     const cols = request.columns?.length ? request.columns.map((c) => POSTGRES_STYLE.quote(c)).join(', ') : '*';
@@ -872,7 +887,7 @@ export class PostgresAdapter implements Adapter {
   private async countOn(table: string, filter: Filter | undefined, db: PgQuery, limit?: number, read = false): Promise<number> {
     const { schema, name } = read ? await this.readTable(table) : await this.assertTable(table, db);
     const qualified = `${POSTGRES_STYLE.quote(schema)}.${POSTGRES_STYLE.quote(name)}`;
-    const where = asksAboutRows(filter) ? await this.whereOf(table, qualified, filter) : buildWhere(filter, POSTGRES_STYLE);
+    const where = readsCatalog(filter) ? await this.whereOf(table, qualified, filter) : buildWhere(filter, POSTGRES_STYLE);
     const text = countStatement(`${qualified}${where.text}`, limit);
     const result = await db.query(text, where.params);
     return Number((result.rows[0] as { n?: string })?.n ?? 0);
@@ -983,7 +998,10 @@ export class PostgresAdapter implements Adapter {
       'postgres',
       columns.length + where.params.length + 1,
     );
-    const text = `UPDATE ${qualified(found)} SET ${assignments}${where.text}${guard.text}`;
+    /* Inside a transaction the row comes back with the write, as insert's does: an App that validates the stored
+       row after its save (appValidation.ts validateStoredPostImage) read it again, a round trip of its own between
+       the UPDATE and the COMMIT. Outside one nothing validates after, so nothing comes back. */
+    const text = `UPDATE ${qualified(found)} SET ${assignments}${where.text}${guard.text}${transactional ? ' RETURNING *' : ''}`;
     const params = [...Object.values(applied), ...where.params, ...guard.params];
 
     const result = await write.query(text, params);
@@ -992,7 +1010,8 @@ export class PostgresAdapter implements Adapter {
     /* Postgres counts rows matched, not rows whose bytes changed, so saving a
        cell without changing its value still reports 1 — the editor would
        otherwise tell the user a successful write failed. */
-    return { affected: Number(result.rowCount ?? 0), applied, sql: { text, params } };
+    const row = transactional && result.rows?.length === 1 ? (toJsonSafe(result.rows[0]) as Record<string, unknown>) : undefined;
+    return { affected: Number(result.rowCount ?? 0), applied, ...(row ? { row } : {}), sql: { text, params } };
   }
 
   /**

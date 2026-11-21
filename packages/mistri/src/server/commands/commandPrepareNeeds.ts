@@ -21,7 +21,7 @@ export const preparedStarts = (command: AnyBusinessCommand) =>
     (field) =>
       field.type !== 'group' &&
       typeof field.default === 'object' &&
-      ('record' in field.default || 'tenant' in field.default || field.default.auto === 'me'),
+      ('record' in field.default || 'tenant' in field.default || ('auto' in field.default && field.default.auto === 'me')),
   ) as Array<Exclude<AppCommandField, { type: 'group' }>>;
 
 /* The inputs asked only of some records (`when: 'record.open_children > 0'`): prepare judges the record's part of

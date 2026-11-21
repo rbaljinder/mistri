@@ -1073,7 +1073,9 @@ export function createScopedTransaction(
     shiftedRefusal(table, protectedColumns, before, now);
     await parents(table, now, set);
     await afterward(afterwards, { new: now, old: before });
-    return result;
+    // The row the UPDATE returned was not read through the scope, and what ran after it may have written it again.
+    const { row: _unscoped, ...said } = result;
+    return said;
   };
   /* A batch keeps every rule a row at a time keeps, and pays its flights once: the references it gives checked before
      its one statement, a foreign key a read (combined), then one locked read of the rows it wrote, key IN (…), and

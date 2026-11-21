@@ -3,7 +3,7 @@
  * draws nothing: an author's section for a role the reader does not hold
  * left its heading, rule and margin over an empty gap (G53).
  */
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, expect, onTestFinished, test, vi } from 'vitest';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
@@ -17,10 +17,16 @@ vi.mock('./componentLoader.js', async () => {
     return show ? <p>Draft and questions</p> : null;
   }
   /* A dashboard's component says what it was handed. */
-  function Breaching(props: { period?: string; record?: unknown; section: { region: string; width: string } }) {
+  function Breaching(props: {
+    period?: string;
+    window?: { start: string; end: string };
+    record?: unknown;
+    section: { region: string; width: string };
+  }) {
+    const bounds = props.window ? `${props.window.start}..${props.window.end}` : 'no bounds';
     return (
       <p>
-        {`${props.section.region} ${props.section.width} ${props.period ?? 'no period'} ${props.record === undefined ? 'no record' : 'record'}`}
+        {`${props.section.region} ${props.section.width} ${props.period ?? 'no period'} ${bounds} ${props.record === undefined ? 'no record' : 'record'}`}
       </p>
     );
   }
@@ -92,7 +98,14 @@ test('a custom section whose component draws nothing is hidden, and shown again 
   expect(screen.getByText('Draft and questions')).toBeInTheDocument();
 });
 
-test("a dashboard's custom section is handed the reader's window and its region, with no record", async () => {
+test("a dashboard's custom section is handed the reader's window, its bounds and its region, with no record", async () => {
+  // The clock moves from noon on Nov 20, so the waits below still see time pass.
+  const realNow = Date.now.bind(Date);
+  const shift = new Date(2026, 10, 20, 12).getTime() - realNow();
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + shift);
+  onTestFinished(() => {
+    vi.restoreAllMocks();
+  });
   const section = { kind: 'custom', title: 'Breaching now', width: 'half', component: { id: 'breaching' } };
   const drawOn = (aside: boolean, windowNow: string | null) =>
     render(
@@ -102,10 +115,10 @@ test("a dashboard's custom section is handed the reader's window and its region,
     );
   drawOn(false, 'last 7 days');
   expect(screen.getByRole('heading', { name: 'Breaching now' })).toBeInTheDocument();
-  expect(await screen.findByText('main half last 7 days no record')).toBeInTheDocument();
+  expect(await screen.findByText('main half last 7 days 2026-11-13..2026-11-21 no record')).toBeInTheDocument();
   cleanup();
   drawOn(true, null);
-  expect(await screen.findByText('aside half no period no record')).toBeInTheDocument();
+  expect(await screen.findByText('aside half no period no bounds no record')).toBeInTheDocument();
 });
 
 test("a dashboard's custom section is handed its aggregate reads, measured by the server under the window and the picks", async () => {

@@ -7,7 +7,7 @@
 import { ComputedError, type ComputedFunction, type ComputedNode, type ComputedOp, type ComputedUnit } from './computed.js';
 
 /** The functions an expression may call: each written alike on every engine and worked out alike in JavaScript. */
-const COMPUTED_FUNCTIONS = ['coalesce', 'round', 'min', 'max', 'abs', 'concat'] as const satisfies readonly ComputedFunction[];
+export const COMPUTED_FUNCTIONS = ['coalesce', 'round', 'min', 'max', 'abs', 'concat'] as const satisfies readonly ComputedFunction[];
 const isFunction = (word: string): word is ComputedFunction => (COMPUTED_FUNCTIONS as readonly string[]).includes(word);
 /* The greatest number of places `round` keeps: past it a figure is no longer one an engine says exactly. */
 const ROUND_PLACES = 10;

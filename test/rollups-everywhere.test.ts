@@ -19,7 +19,15 @@ import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
 import { createApp } from './support/createApp.js';
-import { appRollupRules, parseAppConfig, resolveViews, withLabelTemplates, withRollups } from '../packages/mistri/src/shared/app.js';
+import {
+  appRollupRules,
+  parseAppConfig,
+  resolveAppAccess,
+  resolveViews,
+  withLabelTemplates,
+  withRollups,
+} from '../packages/mistri/src/shared/app.js';
+import { accessibleSchema } from '../packages/engine/src/server/columnGrants.js';
 import { compileBreakdown, withBreakdownComputed, type BreakdownDef } from '../packages/engine/src/shared/breakdown.js';
 import { textToBreakdown } from '../packages/engine/src/shared/breakdowntext.js';
 import { commandInputProblem } from '../packages/mistri/src/shared/command.js';
@@ -355,6 +363,48 @@ test("a record named by its key in the App's words is flagged for a grid's key c
 
 const identity = (role: string): Identity => ({ id: `account-${role}`, who: `${role}@example.test`, role });
 const sessions: Record<string, Identity> = { manager: identity('manager'), buyer: identity('buyer') };
+
+test("a field grant names a resource's rollups as it names columns: one named is served, one left out is not, and none is written", () => {
+  const PO_COLUMNS = ['id', 'number', 'status', 'vendor_id'];
+  const granted = app(
+    { lines: { fn: 'sum', from: 'po', column: 'lines' } },
+    {
+      auth: {
+        roles: {
+          buyer: { read: true, fields: { po: { read: [...PO_COLUMNS, 'total'] } } },
+          clerk: { read: true, fields: { po: { read: PO_COLUMNS } } },
+          lister: { read: true },
+        },
+      },
+    },
+  );
+  const rollups = (roles: string[], table = 'po') =>
+    Object.keys(
+      withRollups(granted, accessibleSchema(schema, resolveAppAccess(granted, schema, roles))).tables.find((t) => t.id === table)
+        ?.rollups ?? {},
+    );
+  assert.deepEqual(rollups(['buyer']), ['total']);
+  assert.deepEqual(rollups(['clerk']), []);
+  // A rule that narrows no field reads every rollup, as it reads every column; so does a union with one that does.
+  assert.deepEqual(rollups(['lister']), Object.keys(PO_ROLLUPS));
+  assert.deepEqual(rollups(['clerk', 'buyer']), ['total']);
+  assert.deepEqual(rollups(['clerk', 'lister']), Object.keys(PO_ROLLUPS));
+  /* Leaving a rollup out is not a read boundary — its rows are. The vendor's rollup inlines the po's it sums and is
+     judged by the columns both read, so it is served to a buyer who reads them, whatever the po's list names. */
+  assert.deepEqual(rollups(['buyer'], 'vendor'), ['lines']);
+  // The pruned catalog is cached by grant: two grants alike but for their rollups are two catalogs.
+  assert.notDeepEqual(rollups(['buyer']), rollups(['clerk']));
+  const writer = app(
+    {},
+    {
+      resources: { po: { access: 'write', rollups: PO_ROLLUPS } },
+      auth: {
+        roles: { writer: { read: true, write: true, fields: { po: { read: [...PO_COLUMNS, 'total'], write: ['status', 'total'] } } } },
+      },
+    },
+  );
+  assert.throws(() => resolveAppAccess(writer, schema, ['writer']), /"total" is a rollup or a computed column\. It is read, never written/);
+});
 
 test("served: a breakdown and a two-hop rollup read the rows under the reader's grants, and a request brings no rollup of its own", async () => {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-rollups-everywhere-'));

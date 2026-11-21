@@ -71,6 +71,7 @@ import {
   missingFields,
   narrowingCondition,
   presetValue,
+  chosenDefaults,
   SEGMENTED_WORDS,
   withDisplayChoices,
   type FieldInput,
@@ -211,6 +212,9 @@ function NewRecordFormBody({
           return start === undefined ? [] : [[column.name, start] as const];
         })
     : [];
+  /* A reference to the App's chosen row (`choose`: the site the person works at) starts at it, read once as the form
+     opens: a pick changed while it is open never replaces what the form holds (newRecordModel.ts chosenDefaults). */
+  const [chosen] = useState(() => (app ? chosenDefaults(columns, shell().app()?.choose, shell().chosen(), target) : {}));
   /* A vocabulary opens on the choice the database would write (`default 'booked'`), unless the form says another. */
   const defaults: Record<string, unknown> = {
     ...Object.fromEntries(flags),
@@ -224,6 +228,7 @@ function NewRecordFormBody({
           ]),
         )
       : {}),
+    ...chosen,
     ...(form?.defaults ?? {}),
   };
   const switches = new Set(flags.map(([name]) => name));

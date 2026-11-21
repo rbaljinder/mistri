@@ -189,6 +189,9 @@ button on the payment: it runs where its command is offered. A record that does
 not point at the command's (a purchase order, named by its line's
 `receiveLine`) is the handler's to move; its verb says where it may go.
 
+Someone who signs in to nothing moves a record along a verb through a link that
+names the command; see [a customer accepts a quote](/docs/commands/#a-customer-accepts-a-quote).
+
 ## Common mistakes
 
 - `[machine-dead-end]` or `[machine-unreachable]` → give the state a verb that leaves it or leads to it, or mark it `final: true`.

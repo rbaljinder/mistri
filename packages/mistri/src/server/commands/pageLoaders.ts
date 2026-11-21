@@ -62,6 +62,11 @@ export interface PageLoaderContext<Src = string, R extends string = string> {
   readonly today: () => string;
   /** The zone `today()` reads: an IANA name, `UTC` where none is set. */
   readonly timezone: string;
+  /**
+   * The App's `choose`, by name: the key of the row the person picked (the site they work at), proven for this
+   * request; undefined where nothing is chosen. A `where` text can say `chosen.<name>` as well.
+   */
+  readonly chosen: Readonly<Record<string, string | number | undefined>>;
   /** Aborted when its time is up. */
   readonly signal: AbortSignal;
 }

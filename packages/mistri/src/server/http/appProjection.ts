@@ -40,6 +40,7 @@ import { grantedFormCommands, visibleBusinessCommandActions } from '../commands/
 import { publicPageCommands } from '../commands/commandContracts.js';
 import { withPublicCommandChoices } from '../forms/formChoices.js';
 import { appEntrypoint } from '../app/appEntrypoint.js';
+import { payloadPicks } from '../app/appPreferences.js';
 import { withDraftsHidden } from '../forms/savedFormLists.js';
 import { send, sendRevalidated } from '@mistriwork/engine/server/http/reply.js';
 import { catalogLocales, localeRow } from '../app/readerLocale.js';
@@ -250,13 +251,19 @@ export async function appProjectionRoutes(ctx: RequestContext, source: ResolvedS
         : {};
     const withPublic = (served: AppPayloadApp): AppPayloadApp =>
       Object.keys(publicCommands).length ? { ...served, publicCommands } : served;
+    /* This person's stored picks, proven under this reader, after every per-definition cache (app/appPreferences.ts). */
+    const picks = app ? await payloadPicks(registry, host, identity.id, schema!, source.adapter) : undefined;
     const answer = (served: AppPayloadApp | null): AppPayload => ({
       ...publicPayload,
       ...publicScope,
       app:
         served &&
         greetReader(
-          withPublic(ownRow ? { ...served, ui: { ...served.ui, localeRow: ownRow } } : served),
+          withPublic({
+            ...served,
+            ...(ownRow ? { ui: { ...served.ui, localeRow: ownRow } } : {}),
+            ...(picks ? { picks } : {}),
+          }),
           identity.id ? identity.name : undefined,
         ),
     });

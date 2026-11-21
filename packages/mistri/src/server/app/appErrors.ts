@@ -1,4 +1,5 @@
 import { Refusal, WriteConflict } from '@mistriwork/engine/adapters/adapter.js';
+import { isFrozenRefusal } from '@mistriwork/engine/shared/refusal.js';
 import { PathError } from '@mistriwork/engine/shared/view.js';
 import { referencedBeneath } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
 import { AppAccessDenied } from './appAccess.js';
@@ -10,6 +11,7 @@ interface AppError {
   code:
     | 'validation_failed'
     | 'consumes_refused'
+    | 'frozen'
     | 'record_conflict'
     | 'required_value'
     | 'duplicate_value'
@@ -56,6 +58,8 @@ export function appError(
   if (error instanceof ReadAuditFailed) throw error;
   if (error instanceof AppAccessDenied) return { code: 'forbidden', message: error.message };
   if (error instanceof WriteConflict) return { code: 'record_conflict', message: error.message };
+  /* A frozen record (`frozen`): its own code and the sentence that names the resource and the condition. */
+  if (isFrozenRefusal(error)) return { code: 'frozen', message: error.message };
   /* A delete a row policy refused while rows still point at it: named by what the principal reads of them, or
      by nothing when it reads none (scopedTransaction.ts ReferencedRefusal), so the sentence is said as it stands. */
   const referenced = referencedBeneath(error);

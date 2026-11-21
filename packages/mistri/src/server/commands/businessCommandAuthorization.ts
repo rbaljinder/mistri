@@ -5,6 +5,7 @@ import { personTable } from '../../shared/appMe.js';
 import { ANYONE, type QueryPerson } from '@mistriwork/engine/shared/query.js';
 import {
   appCommandGrants,
+  frozenWhenWords,
   homeSourceOf,
   grantsByRole,
   logicalResource,
@@ -158,6 +159,9 @@ export interface CommandMachine {
       by?: ReadonlyMap<string, ReadonlyMap<string, ReadonlySet<string>>>;
     }>
   >;
+  /** The `frozen` condition of each table it writes and of its target, by local name, and the sentence a refusal says
+      (appModel.ts): a row one matches takes no write, and a command that targets one is refused whatever it does. */
+  readonly frozenWhen?: ReadonlyMap<string, Readonly<{ text: string; said: string }>>;
   /** When the command is a verb of its target's machine: the states it runs from, and the states it may leave the target in. */
   readonly verb?: Readonly<{ from: ReadonlySet<string>; to: ReadonlyMap<string, ReadonlySet<string>> }>;
   /** The machines that move with the command: each table it writes whose machine names it as a verb, the
@@ -276,7 +280,16 @@ function commandMachine(
   /* A timer's command runs from the state that waits on it. */
   const timed = own?.states.filter((state) => (state.after ?? []).some((timer) => timer.command === id)).map((state) => state.name) ?? [];
   const carried = carriedMachines(app, schema, id, command, logical);
-  if (!tables.size && !edges.length && !timed.length) return undefined;
+  const frozenWhen = new Map<string, { text: string; said: string }>();
+  for (const local of new Set([...command.write, command.target])) {
+    const resource = app.resources?.[logical(local)];
+    if (resource?.frozen === undefined) continue;
+    frozenWhen.set(local, {
+      text: resource.frozen,
+      said: frozenWhenWords(resource, schema.tables.find((table) => table.id === logical(local))?.name ?? logical(local)),
+    });
+  }
+  if (!tables.size && !edges.length && !timed.length && !frozenWhen.size) return undefined;
   const destinations = new Map<string, Set<string>>();
   for (const edge of edges) {
     const next = destinations.get(edge.from) ?? new Set<string>();
@@ -285,7 +298,12 @@ function commandMachine(
   }
   const verb =
     edges.length || timed.length ? { from: new Set([...edges.map((edge) => edge.from), ...timed]), to: destinations } : undefined;
-  return Object.freeze({ tables, ...(verb ? { verb } : {}), ...(carried.length ? { carried } : {}) });
+  return Object.freeze({
+    tables,
+    ...(verb ? { verb } : {}),
+    ...(carried.length ? { carried } : {}),
+    ...(frozenWhen.size ? { frozenWhen } : {}),
+  });
 }
 
 /**

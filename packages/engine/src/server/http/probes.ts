@@ -13,6 +13,10 @@
  * in the container's environment on each deploy, and `build` is the id of the
  * build being served. Both are random or a hash, so safe to expose.
  *
+ * While a tenant server is still opening its tenants, `/readyz` also says how far
+ * it has got (`ready`, `opened`, `of`), and afterward which tenant keys failed to
+ * open: counts and keys only, never an error.
+ *
  * The operator reads with more in them (`/api/operations/readiness`) are
  * signed-in and granted; these are not, and so say nothing else.
  */
@@ -25,16 +29,22 @@ export function setBuildIdSource(source: () => string | null): void {
   buildSource = source;
 }
 
-export function probe(req: IncomingMessage, res: ServerResponse, path: string, ready?: () => boolean): boolean {
+/** What a readiness check may say beside yes or no: words for the body (how far a start has got, what failed to open). */
+export type ReadyAnswer = boolean | { readonly ok: boolean; readonly body?: Readonly<Record<string, unknown>> };
+
+export function probe(req: IncomingMessage, res: ServerResponse, path: string, ready?: () => ReadyAnswer): boolean {
   if (path !== '/healthz' && path !== '/readyz') return false;
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     res.writeHead(405, { allow: 'GET, HEAD', 'cache-control': 'no-store' }).end();
     return true;
   }
   let ok = true;
+  let extra: Readonly<Record<string, unknown>> = {};
   if (path === '/readyz') {
     try {
-      ok = ready?.() ?? true;
+      const answer = ready?.() ?? true;
+      ok = typeof answer === 'boolean' ? answer : answer.ok;
+      if (typeof answer === 'object' && answer.body) extra = answer.body;
     } catch {
       ok = false;
     }
@@ -43,7 +53,7 @@ export function probe(req: IncomingMessage, res: ServerResponse, path: string, r
   res.end(
     req.method === 'HEAD'
       ? undefined
-      : JSON.stringify({ status: ok ? 'ok' : 'unavailable', deploy: process.env.MISTRI_DEPLOY_ID || null, build: buildSource() }),
+      : JSON.stringify({ status: ok ? 'ok' : 'unavailable', deploy: process.env.MISTRI_DEPLOY_ID || null, build: buildSource(), ...extra }),
   );
   return true;
 }

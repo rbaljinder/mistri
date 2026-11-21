@@ -469,3 +469,54 @@ export function schemaTriggerWarnings(
   }
   return warnings;
 }
+
+/**
+ * `[trigger-cross-table]`: a table the App writes has a trigger (or a CHECK, default or domain calling a function of the
+ * database's) that reads or writes other tables. It can refuse a write, or change rows beside it, for reasons the App
+ * never reads, and the refusal reaches the person as a database error the App cannot name. Said once, here and not on a
+ * request: from the database check read, and, for a trigger schema.sql declares that the database lacks (a migration not
+ * yet run), from schema.sql. A row-policy or tenant App's command that writes the table has `[command-trigger]`
+ * and `[schema-trigger]` for the same trigger, which say it with the refusal the scope makes; those tables are theirs.
+ * `loaded` is what the scoped check already read, so a scoped App's triggers are not read twice.
+ */
+export async function crossTableTriggerWarnings(
+  app: AppDef,
+  resources: RuntimeResources,
+  commands: BusinessCommandRegistry | undefined,
+  open: (connection: string) => Promise<Adapter>,
+  loaded: ((logical: string) => readonly ScopeTrigger[] | undefined) | undefined,
+  sql: string | undefined,
+): Promise<string[]> {
+  const scoped = commandsRunScoped(app);
+  const byCommand = new Set(
+    Object.values(commands ?? {}).flatMap((command) => command.write.map((table) => logicalResource(app, command.source, table))),
+  );
+  const tables = Object.entries(app.resources ?? {})
+    .filter(([logical, resource]) => (resource.access === 'write' || byCommand.has(logical)) && !(scoped && byCommand.has(logical)))
+    .map(([logical]) => logical);
+  if (!tables.length) return [];
+  const triggersOf = scoped && loaded ? loaded : await triggersAt(resources, tables, open);
+  const declared = sql ? declaredTriggers(sql) : [];
+  const warnings: string[] = [];
+  for (const logical of tables) {
+    const resource = app.resources![logical]!;
+    const physical = sqlName(resource.physical ?? logical);
+    const named = new Set((resource.triggers ?? []).map(sqlName));
+    const found = triggersOf(logical) ?? [];
+    const known = new Set(found.map((trigger) => sqlName(trigger.name)));
+    const crossing = found.filter((trigger) => !trigger.validates && !named.has(sqlName(trigger.name)) && !accepted(app, logical, trigger));
+    if (crossing.length)
+      warnings.push(
+        `table "${logical}" has ${sayTriggers(crossing)} [trigger-cross-table]: it reads or writes other tables, so a write to "${logical}" can be ` +
+          "refused, or change rows beside it, for reasons the App never reads. Move the rule into a command's `rules`, or keep the trigger to checks of NEW and OLD.",
+      );
+    for (const trigger of declared) {
+      if (trigger.table !== physical || known.has(trigger.name) || named.has(trigger.name)) continue;
+      warnings.push(
+        `table "${logical}" has the trigger "${trigger.name}" in schema.sql, which names ${trigger.names.map((name) => `"${name}"`).join(', ')} ` +
+          '[trigger-cross-table]: once migrated in, a write to it can be refused, or change rows beside it, for reasons the App never reads.',
+      );
+    }
+  }
+  return warnings;
+}

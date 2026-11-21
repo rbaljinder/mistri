@@ -141,7 +141,8 @@ column (a number is said to at most two places, its value kept whole), and a rol
 window reads a computed date (`over: 'renews_on'`) when it reads only its
 row's own columns; it is never written, and `fields.write`, `form.show` and an action's
 `set` refuse it. A role is served it only where every column it reads is
-readable to that role. A fixed action's `set` takes the same kind of
+readable to that role, and a role's `fields.read` list that leaves it out keeps it
+from that role. A fixed action's `set` takes the same kind of
 expression for a stamp (`computed.date('today + 14 days')`); anything heavier
 is a [command](/docs/commands/) or a database view.
 
@@ -277,6 +278,21 @@ validation: [
 A rule is a condition the record must meet on every write, optionally under
 `when`, which compares the record's own columns. At most 128 rules per
 resource.
+
+## Frozen records
+
+```ts
+resources: {
+  lead: { access: 'write', delete: true, frozen: 'status in (closed, void) and locked_at is not empty' },
+},
+```
+
+`frozen` is a condition over the resource's own columns, in the same words as a
+list's search. A row that meets it, as it is stored before the change, is
+refused every update, delete and command on every door with `409 frozen`, and
+the record page draws it read-only. New is unaffected, and so is a command that
+names no record. `mistri check` names the resource when a column is unknown or
+the condition does not read.
 
 ## Read audit
 
@@ -581,6 +597,12 @@ command's id; never a support visit's id or a row's key.
 | `resources.*.form.steps[].title` | string | Stable | The intake style's heading for the step; absent, the label. |
 | `resources.*.form.style` | `"stepper"` · `"intake"` | Stable | How the steps are drawn, both under one progress bar: the stepper (default, the step's name over its fields) or the intake style. One of `intake`, `stepper`. Used in `examples/apps/lintel/views.ts`. |
 | `resources.*.form.when` | object | Stable | Each field shown only while the draft matches its condition. Presentation only. Targets must be shown/readable; condition dependencies must be readable local columns. Hiding a field never weakens authoritative resource validation. Used in `examples/apps/tick/app.ts`. |
+
+## `resources.*.frozen`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `resources.*.frozen` | string | Stable | Rows that take no change: a condition in the query language, judged against the stored row ('status = closed'). A row it matches is refused every update, delete and command on every door (409 frozen) and drawn read-only; creating rows is unaffected. |
 
 ## `resources.*.hidden`
 

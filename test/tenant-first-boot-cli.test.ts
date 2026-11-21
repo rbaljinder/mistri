@@ -185,11 +185,12 @@ test('grant makes the first operator account from the environment and grants it,
   );
   const leeId = accounts[0].account;
 
-  // The account a first run made is found again by its address, and the step's own refusal is what is said.
+  // The account a first run made is found again by its address, and a membership it already holds is left as it is.
   const rerun = await f.run('grant', 'lee@lender.example', '--roles', 'manager');
-  assert.equal(rerun.code, 1);
+  assert.equal(rerun.code, 0, rerun.err);
   assert.doesNotMatch(rerun.out, /an account was made/);
-  assert.match(rerun.err, /mistri tenant: /);
+  assert.match(rerun.out, /lee@lender\.example: already holds a membership of the platform realm, left as it is\./);
+  assert.equal(f.memberships().length, 2);
   assert.equal(f.memberships()[0].account, leeId);
   for (const text of [lee.out, lee.err, sam.out, rerun.out, rerun.err]) assert.doesNotMatch(text, /first-boot-password/);
 
@@ -258,12 +259,12 @@ test("init and grant refuse each other's options and a malformed address before 
   for (const [argv, refused] of [
     [['grant', 'not-an-address', '--roles', 'manager'], /grant names an email address/],
     [['grant', 'lee@lender.example'], /grant needs --roles/],
-    [['init', 'north', '--roles', 'manager'], /--roles, --tenant and --days are grant's/],
+    [['init', 'north', '--roles', 'manager'], /--roles, --tenant, --days, --account and --from are grant's/],
     [['init', 'north', '--name', 'North'], /--name is grant's and brand's/],
     [['grant', 'lee@lender.example', '--roles', 'manager', '--preset', 'mono'], /--preset and --file are brand's/],
     [['brand', 'north'], /brand needs --name, --preset or --file/],
     [['grant', 'lee@lender.example', '--roles', 'manager', '--days', '400'], /--days is a whole number of days, 1 to 366/],
-    [['grant', 'lee@lender.example', '--roles', 'manager', '--tenant', 'North!'], /--tenant names a tenant by id/],
+    [['grant', 'lee@lender.example', '--roles', 'manager', '--tenant', 'North!'], /is not a tenant id/],
     [['init', 'North!'], /init names its tenants by id/],
   ] as const) {
     const result = await f.run(...argv);
@@ -298,4 +299,89 @@ test("brand saves a tenant's branding through the checks a tenant admin's save m
   assert.match(refused.err, /north's branding was not saved:\n {2}This App does not let a customer change "preset"\./);
   assert.match((await f.run('brand', 'south', '--name', 'South')).err, /"south" is not a tenant of lending/);
   assert.equal(f.branding().length, 1);
+});
+
+test('grant takes several accounts and tenants, or a CSV: every row is checked first, one transaction per tenant, a rerun changes nothing', async (t) => {
+  const f = await fixture(t);
+  assert.equal((await f.run('init', 'north', 'south')).code, 0);
+  process.env.MISTRI_ACCOUNT_PASSWORD = PASSWORD;
+  // Cross product: two accounts in two tenants, and one bad tenant in the list refuses all of them, in words.
+  const bad = await f.run(
+    'grant',
+    '--account',
+    'a@x.example',
+    '--account',
+    'b@x.example',
+    '--tenant',
+    'north',
+    '--tenant',
+    'west',
+    '--roles',
+    'staff',
+  );
+  assert.equal(bad.code, 1);
+  assert.match(bad.err, /nothing was granted; 2 things are wrong/);
+  assert.match(bad.err, /a@x\.example in west: west is not an active tenant\./);
+  assert.match(bad.err, /b@x\.example in west: west is not an active tenant\./);
+  assert.deepEqual(f.memberships(), []);
+  assert.doesNotMatch(bad.out, /an account was made/);
+
+  const ok = await f.run(
+    'grant',
+    '--account',
+    'a@x.example',
+    '--account',
+    'b@x.example',
+    '--tenant',
+    'north',
+    '--tenant',
+    'south',
+    '--roles',
+    'staff',
+  );
+  assert.equal(ok.code, 0, ok.err);
+  assert.match(ok.out, /north: granted 2, already held 0\./);
+  assert.match(ok.out, /south: granted 2, already held 0\./);
+  assert.equal(f.memberships().length, 4);
+
+  // A CSV with a header; a third account, the platform realm (empty tenant), and the two already held.
+  const csv = join(f.directory, 'grants.csv');
+  writeFileSync(
+    csv,
+    '\uFEFFaccount,tenant,role\r\na@x.example,north,staff\r\n"c@x.example",north,staff\r\nlee@lender.example,,manager\r\nb@x.example,south,staff\r\n',
+  );
+  const first = await f.run('grant', '--from', csv);
+  assert.equal(first.code, 0, first.err);
+  assert.match(first.out, /north: granted 1, already held 1\./);
+  assert.match(first.out, /the platform realm: granted 1, already held 0\./);
+  assert.match(first.out, /south: granted 0, already held 1\./);
+  assert.equal(f.memberships().length, 6);
+  const again = await f.run('grant', '--from', csv);
+  assert.equal(again.code, 0, again.err);
+  assert.doesNotMatch(again.out, /granted [1-9]/);
+  assert.equal(f.memberships().length, 6);
+
+  // Every wrong row is listed, line numbers of the file, and nothing is applied.
+  const wrong = join(f.directory, 'wrong.csv');
+  writeFileSync(
+    wrong,
+    'account,tenant,role\nnew@x.example,north,staff\nnot-an-address,north,staff\nd@x.example,North!,staff\ne@x.example,south,\n',
+  );
+  const refused = await f.run('grant', '--from', wrong);
+  assert.equal(refused.code, 1);
+  for (const line of [/row 3: "not-an-address" is not an email address/, /row 4: "North!" is not a tenant id/, /row 5: no role/])
+    assert.match(refused.err, line);
+  assert.equal(f.memberships().length, 6);
+  // What only the store can say is said whole too: a role of the other realm, a tenant that is not there.
+  const store = join(f.directory, 'store.csv');
+  writeFileSync(store, 'account,tenant,role\nnew@x.example,north,staff\nf@x.example,south,manager\ng@x.example,west,staff\n');
+  const stored = await f.run('grant', '--from', store);
+  assert.equal(stored.code, 1);
+  assert.match(stored.err, /row 3: "manager" is not a tenant-realm role/);
+  assert.match(stored.err, /row 4: west is not an active tenant/);
+  assert.equal(f.memberships().length, 6);
+  const header = join(f.directory, 'noheader.csv');
+  writeFileSync(header, 'a@x.example,north,staff\n');
+  assert.match((await f.run('grant', '--from', header)).err, /has no tenant, role column|has no account, tenant, role column/);
+  assert.match((await f.run('grant', '--from', csv, '--roles', 'staff')).err, /--from carries the accounts/);
 });

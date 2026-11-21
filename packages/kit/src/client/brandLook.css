@@ -40,6 +40,11 @@
        like, on a bar with 4px to spare. */
     padding-block: var(--space-2);
   }
+  /* The App-wide choice's trigger is a tenant-control trigger; its word and pick take the bar's ink, not the page's
+     muted and body ink, which are dark on a dark ground. */
+  :root[data-look-bar='dark'] .app-mode .topbar .choice-control-trigger :is(bdi, .choice-control-word) {
+    color: inherit;
+  }
   :root[data-look-bar='dark'] .app-mode .topbar :is(.new-menu, .tenant-control-host) {
     align-self: center;
   }

@@ -47,6 +47,23 @@ export class RequestFault extends Refusal {
 export const isRequestFault = (error: unknown): error is RequestFault =>
   error instanceof Error && (error as { [REQUEST_FAULT]?: unknown })[REQUEST_FAULT] === true;
 
+/* A write to a record its resource declares frozen (`frozen: 'status = closed'`): the record's state, never the
+   caller's grants, so every door that says a refusal's status and code says this one 409 `frozen`. Branded as
+   RequestFault is, for a handler's second copy of this module. */
+const FROZEN_REFUSAL = Symbol.for('mistri.frozenRefusal');
+export class FrozenRefusal extends Refusal {
+  readonly [FROZEN_REFUSAL] = true;
+  /** The sentence the caller reads: it names the resource and the condition, never a value of the row. */
+  constructor(message: string) {
+    super(message);
+    this.name = 'FrozenRefusal';
+    sayRefusal(this, message);
+  }
+}
+/** Whether a refusal is a frozen record's (`FrozenRefusal`), from any copy of the module. */
+export const isFrozenRefusal = (error: unknown): error is FrozenRefusal =>
+  error instanceof Error && (error as { [FROZEN_REFUSAL]?: unknown })[FROZEN_REFUSAL] === true;
+
 /* Why a refusal happened, kept for the trusted owner that has to diagnose it.
    A caller hears one fixed sentence and must: a driver's error text names
    columns, values and internal tables, and a clash on a hidden unique column

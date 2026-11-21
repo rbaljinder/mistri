@@ -26,6 +26,7 @@ import {
   type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { foldConstants, readsMe, type ComputedColumn, type ComputedNode, type ComputedType } from '@mistriwork/engine/shared/computed.js';
 import { declaredScale, exactAverage, formatDecimal, parseDecimal } from '@mistriwork/engine/shared/decimals.js';
 import { continueGroups, keysetAfter, keysetOrder } from '@mistriwork/engine/shared/keysetPage.js';
 import { FORBIDDEN_ANSWER_NAMES } from '@mistriwork/engine/shared/aggregate.js';
@@ -126,8 +127,17 @@ type Operators<V, R> = {
 /** Every entry must hold: a value, a list meaning one of them, `null` meaning empty, or operators
     (`{ day: { gte: from, lte: to } }`) as a page's `where` says them. */
 export type Where<Row, R = Reads> = {
-  readonly [C in keyof Row]?: Row[C] | readonly Exclude<Row[C], null | undefined>[] | Operators<Exclude<Row[C], null | undefined>, R>;
+  readonly [C in keyof Row | PathKey]?: C extends keyof Row
+    ? Row[C] | readonly Exclude<Row[C], null | undefined>[] | Operators<Exclude<Row[C], null | undefined>, R>
+    : PathValue;
 };
+/** A key with a dot is a column of the row a reference points at (`'customer_id.region': 'west'`): one hop, to a
+    table the handle reads. Typed loosely, since a row type does not say where its references lead; the reference is
+    checked when it runs. The pattern is one more key of the same mapped type, not a second object beside it: an
+    intersection per table of every handle's reads took Ignition's checked types up by about a tenth. */
+type PathKey = `${string}.${string}`;
+type Scalar = string | number | boolean;
+type PathValue = Scalar | null | readonly Scalar[] | Omit<Operators<Scalar, {}>, 'in'>;
 /** A where: an object, or the query language (`'status = new and year >= 2018'`). */
 type WhereInput<Row, R = Reads> = Where<Row, R> | string;
 
@@ -378,7 +388,8 @@ interface CommandTable {
   readonly declared?: { readonly tables: TableMeta[]; readonly foreignKeys: ForeignKey[] };
   /** The engine the table is read from: PostgreSQL's unconstrained numeric sums to exact text, SQLite's is a float. */
   readonly dialect?: string;
-  /** The rollups and computed columns a command's `when` may judge it by (commandWhen.ts); its handler reads columns. */
+  /** The rollups and computed columns a command's `when` may judge it by (commandWhen.ts); its handler's where names
+      the computed columns of the row's own columns too (servedComputed), never a rollup. */
   readonly derived?: CommandDerived;
   /** How the App says this table's columns to a person (commandSaying.ts): a refusal's words, never the handler's `db`. */
   readonly saying?: ColumnSaying;
@@ -436,6 +447,9 @@ export function commandCatalog(
 /* ---------- wheres ---------- */
 
 const DEFAULT_CAP = 1000;
+/** Said with a call's refusal so the author finds the one way to raise it (up to the platform's most). */
+const raised = (options: { readonly changeCap?: number }): string =>
+  options.changeCap === undefined ? '; a command may raise that with maxChanges' : '';
 /** What a handle's own wheres are compiled with (see compileWhere). */
 const HANDLE = Object.freeze({ anyRows: true });
 interface Compiled {
@@ -444,6 +458,49 @@ interface Compiled {
   readonly orderBy: { column: string; direction: 'asc' | 'desc' }[];
   readonly limit?: number;
 }
+/* ---------- computed columns in a handler's where ---------- */
+
+/** A computed column read as its column would be, so an operator object over it compiles as one over a column. */
+const COMPUTED_COLUMN_TYPE: Readonly<Record<ComputedType, string>> = { boolean: 'boolean', number: 'numeric', date: 'date', text: 'text' };
+
+/** The computed columns the table is served to this reader, where it is read through a command's catalog: none elsewhere. */
+function computedOf(table: CommandTable): Readonly<Record<string, ComputedColumn>> | undefined {
+  return table.derived?.parse.tables[0]?.computed ?? table.meta.computed;
+}
+
+/* A name said as a word of its own: never part of a longer word or a path. */
+const nameIn = (text: string, name: string): boolean => new RegExp(`(?<![\\w.])${name}(?![\\w.])`).test(text);
+
+/** Whether a where in the query language names one of the table's computed columns. */
+function namesComputed(table: CommandTable, text: string): boolean {
+  const declared = computedOf(table);
+  return !!declared && Object.keys(declared).some((name) => !Object.hasOwn(table.kinds, name) && nameIn(text, name));
+}
+
+/**
+ * The computed column as a handler's where writes it (`Filter.computed`): its expression with `today` and `now` this
+ * read's, so the statement compares what a list shows. Only one of the row's own stored columns may be read, since
+ * the statement writes the expression over this table and nothing joined; a column reading through a reference, a
+ * rollup or `me` (which a handler is handed no one for) is refused by name, so the where never quietly reads less.
+ */
+function servedComputed(table: CommandTable, name: string, column: ComputedColumn, now: Date): { type: ComputedType; expr: ComputedNode } {
+  for (const read of column.reads) {
+    if (read.includes('.'))
+      throw new Error(
+        `${table.name}: "${name}" reads "${read}" through a reference, and a where reads a computed column of the row's own columns.`,
+      );
+    if (!Object.hasOwn(table.kinds, read))
+      throw new Error(
+        `${table.name}: "${name}" reads "${read}", which is not one of ${table.name}'s columns, and a where reads a computed column of them.`,
+      );
+  }
+  if (readsMe(column.expr))
+    throw new Error(`${table.name}: "${name}" says "me", and a handler's where is handed no one; write actor.email.`);
+  const wall = zonedNow(table.zone, now);
+  const today = `${wall.getFullYear()}-${String(wall.getMonth() + 1).padStart(2, '0')}-${String(wall.getDate()).padStart(2, '0')}`;
+  return { type: column.type, expr: foldConstants(column.expr, { today, now: now.toISOString(), me: null }) };
+}
+
 const isTemplate = (value: unknown): value is TemplateStringsArray =>
   Array.isArray(value) && Array.isArray((value as { raw?: unknown }).raw);
 
@@ -478,7 +535,8 @@ export function compileWhere(
       typeof where === 'string'
         ? where
         : where.reduce((out, part, index) => out + part + (index < values.length ? quoted(values[index]) : ''), '');
-    if (options.anyRows && anyConditions(splitClauseTail(text).head).length) return compileAnyWhere(table, text, now);
+    if (options.anyRows && (anyConditions(splitClauseTail(text).head).length || namesComputed(table, text)))
+      return compileAnyWhere(table, text, now);
     const schema: DatabaseSchema = { label: table.name, dialect: 'sqlite', tables: [table.meta], foreignKeys: [], readAt: '' };
     const { query, errors } = parseQuery(`${table.name} ${text}`, {
       schema,
@@ -493,40 +551,63 @@ export function compileWhere(
   }
   if (!where || typeof where !== 'object' || Array.isArray(where))
     throw new TypeError(`${table.name}: a where is an object or the query language.`);
+  /* A computed column is no column of the row: a handler's db reads it as its expression (servedComputed); a `when`
+     and every other where are judged by the row's stored columns, so one named there is refused, as a path is. */
+  const declared = computedOf(table);
+  const computedKeys = declared ? Object.keys(where).filter((key) => Object.hasOwn(declared, key) && !Object.hasOwn(table.kinds, key)) : [];
+  if (computedKeys.length && !options.anyRows)
+    throw new Error(`${table.name}: "${computedKeys[0]}" is a computed column, which a where names only in a handler's db.`);
   /* A column tested against another table's rows (`customer_id: { in: { from: 'customer', where } }`) is carried as a
-     condition of its own (`Condition.within`); the rest of the where is read as it would be without it. */
-  const within = Object.entries(where).filter(([, value]) => isInRows(value));
-  if (within.length) {
+     condition of its own (`Condition.within`); the rest of the where is read as it would be without it. A path through
+     a reference (`'customer_id.region': 'west'`) is that same test, written from the row's side. */
+  const within: [string, InRowsValue][] = Object.entries(where).filter((entry): entry is [string, InRowsValue] => isInRows(entry[1]));
+  const paths = Object.keys(where).filter((key) => key.includes('.'));
+  if (within.length || paths.length) {
     if (!options.anyRows) {
-      const [column] = within[0];
-      throw new Error(`${table.name}: "${column}: { in: … }" reads another table's rows, which only a handler's db reads.`);
+      const said = within.length ? `"${within[0][0]}: { in: … }"` : `"${paths[0]}"`;
+      throw new Error(`${table.name}: ${said} reads another table's rows, which only a handler's db reads.`);
     }
+    within.push(...referencePaths(table, where as Record<string, unknown>, paths));
     const rest = compileWhere(
       table,
-      Object.fromEntries(Object.entries(where).filter(([, value]) => !isInRows(value))),
+      Object.fromEntries(Object.entries(where).filter(([key, value]) => !isInRows(value) && !key.includes('.'))),
       now,
       [],
       me,
       options,
     );
-    const tests = within.map(([column, value]) => compileInRows(table, column, value as InRowsValue, now));
+    const tests = within.map(([column, value]) => compileInRows(table, column, value, now));
     if (rest.none || tests.some((test) => test === undefined)) return { filter: { groups: [] }, none: true, orderBy: [] };
     const added = tests as Condition[];
-    return { ...rest, filter: { groups: rest.filter.groups.length ? rest.filter.groups.map((group) => [...group, ...added]) : [added] } };
+    return {
+      ...rest,
+      filter: { ...rest.filter, groups: rest.filter.groups.length ? rest.filter.groups.map((group) => [...group, ...added]) : [added] },
+    };
   }
   /* An operator object is the page-side condition (engine/shared/pageWhere.ts), compiled by the one compiler into the
-     language's text and read as text is: one vocabulary, the same refusals. */
-  if (Object.values(where).some((value) => value !== null && typeof value === 'object' && !Array.isArray(value))) {
+     language's text and read as text is: one vocabulary, the same refusals. A computed column's key goes the same way,
+     typed as its column would be, so its text is read where the computed columns are names (compileAnyWhere). */
+  if (computedKeys.length || Object.values(where).some((value) => value !== null && typeof value === 'object' && !Array.isArray(value))) {
     // An empty list matches nothing here too, as it does without an operator beside it; the rest is still read first,
     // so a column or operator that is not there is refused all the same.
     const empty = Object.entries(where).filter(([, value]) => Array.isArray(value) && !value.length);
+    const meta = computedKeys.length
+      ? {
+          ...table.meta,
+          columns: [
+            ...table.meta.columns,
+            ...computedKeys.map((name) => ({ name, type: COMPUTED_COLUMN_TYPE[declared![name].type], nullable: true, primaryKey: false })),
+          ],
+        }
+      : table.meta;
     const compiled = compilePageWhere(
       empty.length ? Object.fromEntries(Object.entries(where).filter(([, value]) => !(Array.isArray(value) && !value.length))) : where,
-      table.meta,
+      meta,
     );
     if ('error' in compiled) throw new Error(`${table.name}: ${compiled.error}`);
     for (const [column] of empty)
-      if (!Object.hasOwn(table.kinds, column)) throw new Error(`${table.name}: "${column}" is not one of its columns.`);
+      if (!Object.hasOwn(table.kinds, column) && !computedKeys.includes(column))
+        throw new Error(`${table.name}: "${column}" is not one of its columns.`);
     if (empty.length) return { filter: { groups: [] }, none: true, orderBy: [] };
     return compileWhere(table, compiled.text, now, [], me, options);
   }
@@ -544,6 +625,46 @@ export function compileWhere(
 }
 
 type InRowsValue = { readonly in: unknown };
+
+/**
+ * The paths of a where (`'customer_id.region': 'west'`) as the `in` each reference's columns make: one test per
+ * reference, its columns judged together (`customer_id: { in: { from: 'customer', where: { region: 'west' } } }`). The
+ * reference must be one of this table's to a table the handle reads, by its one key column, as an `in` selects it.
+ */
+function referencePaths(table: CommandTable, where: Record<string, unknown>, paths: readonly string[]): [string, InRowsValue][] {
+  const by = new Map<string, Record<string, unknown>>();
+  for (const path of paths) {
+    const dot = path.indexOf('.');
+    const column = path.slice(0, dot);
+    const rest = path.slice(dot + 1);
+    if (!column || !rest) throw new Error(`${table.name}: "${path}" is not a path; write it reference.column.`);
+    if (rest.includes('.'))
+      throw new Error(
+        `${table.name}: "${path}" crosses more than one reference; a where's path crosses one, so read the rows between first.`,
+      );
+    let inner = by.get(column);
+    if (!inner) by.set(column, (inner = {}));
+    inner[rest] = where[path];
+  }
+  return [...by].map(([column, inner]) => {
+    if (!Object.hasOwn(table.kinds, column)) throw new Error(`${table.name}: "${column}" is not one of its columns.`);
+    const fk = table.declared?.foreignKeys.find(
+      (key) => key.from.table === table.name && key.from.columns.length === 1 && key.from.columns[0] === column,
+    );
+    const reads = table.declared?.tables.map((each) => each.name) ?? [table.name];
+    if (!fk)
+      throw new Error(
+        `${table.name}: "${column}.…" follows "${column}", which is not a reference to a table this handle reads (${reads.join(', ')}); declare the table it points at in read or write.`,
+      );
+    const target = table.declared!.tables.find((each) => each.name === fk.to.table);
+    const key = target?.columns.filter((each) => each.primaryKey) ?? [];
+    if (key.length !== 1 || key[0].name !== fk.to.columns[0])
+      throw new Error(
+        `${table.name}: "${column}.…" points at ${fk.to.table} by a column that is not its one key; read ${fk.to.table} first.`,
+      );
+    return [column, { in: { from: fk.to.table, where: inner } }];
+  });
+}
 /* Any object naming `in` is the test, so a malformed one is refused as such rather than read as an operator. */
 const isInRows = (value: unknown): value is InRowsValue =>
   value !== null && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'in');
@@ -611,10 +732,18 @@ function compileAnyWhere(table: CommandTable, text: string, now: Date): Compiled
         `${table.name}: "${word} ${child}" asks about ${child}, which is not among the tables this handle reads (${reads.join(', ')}); declare it in read or write.`,
       );
   }
+  /* The language reads this table's computed columns as names (each written as its expression, servedComputed) and
+     no other table's, nor any rollup: a child's conditions read its stored columns, as its EXISTS writes them. */
+  const declared = computedOf(table);
+  const computed = Object.fromEntries(Object.entries(declared ?? {}).filter(([name]) => !Object.hasOwn(table.kinds, name)));
+  const bare = (meta: TableMeta): TableMeta => {
+    const { rollups: _rollups, computed: _computed, ...rest } = meta;
+    return meta.name === table.name && Object.keys(computed).length ? { ...rest, computed } : rest;
+  };
   const schema: DatabaseSchema = {
     label: table.name,
     dialect: 'sqlite',
-    tables: world?.tables ?? [table.meta],
+    tables: (world?.tables ?? [table.meta]).map(bare),
     foreignKeys: world?.foreignKeys ?? [],
     readAt: '',
   };
@@ -627,8 +756,25 @@ function compileAnyWhere(table: CommandTable, text: string, now: Date): Compiled
       throw new Error(`${table.name}: "${path}" is a path, and a condition here reads only ${table.name}'s own columns.`);
     return path;
   };
+  const used: Record<string, { type: ComputedType; expr: ComputedNode }> = {};
+  const isComputed = (name: string): boolean => Object.hasOwn(computed, name);
   const inner = (filter: Filter | undefined): void => {
-    for (const group of filter?.groups ?? []) for (const c of group) own(c.column);
+    for (const group of filter?.groups ?? [])
+      for (const c of group)
+        if (isComputed(own(c.column)))
+          throw new Error(`${table.name}: "${c.column}" is a computed column, which a where names of the row it reads, not inside "any".`);
+  };
+  /* A condition on a computed column: its expression goes with the filter, the condition names it. Compared with a
+     value only; one compared with another column, or set in order, is refused rather than read some other way. */
+  const condition = (path: string): string => {
+    if (!isComputed(own(path))) return path;
+    used[path] ??= servedComputed(table, path, computed[path], now);
+    return path;
+  };
+  const compared = (path: string, other: string): string => {
+    if (isComputed(path) || isComputed(own(other)))
+      throw new Error(`${table.name}: a computed column in a where is compared with a value, not with another column.`);
+    return other;
   };
   const groups = parsed.filter.groups.map((group) =>
     group.map((c): Condition => {
@@ -637,18 +783,22 @@ function compileAnyWhere(table: CommandTable, text: string, now: Date): Compiled
         return { column: c.path, op: c.op, any: c.any };
       }
       return {
-        column: own(c.path),
+        column: condition(c.path),
         op: c.op,
         ...(c.value === undefined ? {} : { value: c.value }),
         ...(c.collation ? { collation: c.collation } : {}),
-        ...(c.other === undefined ? {} : { other: own(c.other) }),
+        ...(c.other === undefined ? {} : { other: compared(c.path, c.other) }),
       };
     }),
   );
   return {
-    filter: { groups },
+    filter: { groups, ...(Object.keys(used).length ? { computed: used } : {}) },
     none: false,
-    orderBy: parsed.orderBy.map((order) => ({ column: own(order.path), direction: order.direction })),
+    orderBy: parsed.orderBy.map((order) => {
+      if (isComputed(own(order.path)))
+        throw new Error(`${table.name}: "${order.path}" is a computed column, and a handler's read is ordered by its columns.`);
+      return { column: order.path, direction: order.direction };
+    }),
     ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
   };
 }
@@ -931,6 +1081,8 @@ interface CommandDbOptions {
   readonly versionField?: string;
   /** A conflict on this table's row names the row's key. */
   readonly target?: string;
+  /** The command's `maxChanges`: the most rows one insertMany or updateWhere takes; absent, DEFAULT_CAP. */
+  readonly changeCap?: number;
   readonly now: () => Date;
   /** The file resources among `write`, by local name: their rows take bytes through `insertFile`. */
   readonly files?: ReadonlyMap<string, AppFileRule>;
@@ -949,6 +1101,8 @@ interface CommandDbOptions {
   readonly constant?: (table: CommandTable, column: ColumnMeta, word: WriteConstant['auto']) => Promise<Value>;
   /** The file bytes this run read before its handler (its lookup's `files.read` and `readFile`): readFile's budget starts there. */
   readonly fileRead?: number;
+  /** The App's `choose`, as this request proved it (app/appChoices.ts): what `chosen.<name>` in a where reads. */
+  readonly chosen?: Readonly<Record<string, string | number | null>>;
 }
 
 const isConstant = (value: unknown): value is WriteConstant =>
@@ -1089,6 +1243,8 @@ function tableHandle(
 ): ReadTable<UntypedRow> | WriteTable<UntypedRow> {
   const { tx, now } = options;
   const name = table.name;
+  /* No one is signed in to a handler's where (`me` stays refused), but the request's choices are its to read. */
+  const who: QueryPerson | undefined = options.chosen ? { email: null, chosen: options.chosen } : undefined;
   const rows = async (compiled: Compiled, limit: number, orderBy = compiled.orderBy): Promise<UntypedRow[]> => {
     if (compiled.none) return [];
     const result = await tx.query({ table: name, filter: compiled.filter, limit, offset: 0, ...(orderBy.length ? { orderBy } : {}) });
@@ -1105,13 +1261,14 @@ function tableHandle(
      the limit of each kept. */
   type Part = { readonly where: unknown; readonly values: readonly unknown[] };
   const compileParts = (parts: readonly Part[]): Compiled => {
-    const compiled = parts.map((part) => compileWhere(table, part.where, now(), part.values, undefined, HANDLE));
+    const compiled = parts.map((part) => compileWhere(table, part.where, now(), part.values, who, HANDLE));
     if (compiled.length === 1) return compiled[0];
     const filled = compiled.map((each) => each.filter.groups).filter((groups) => groups.length);
     const groups = filled.reduce<Condition[][]>((all, next) => all.flatMap((left) => next.map((right) => [...left, ...right])), [[]]);
     const limits = compiled.flatMap((each) => (each.limit === undefined ? [] : [each.limit]));
+    const computed = Object.assign({}, ...compiled.map((each) => each.filter.computed ?? {}));
     return {
-      filter: { groups: filled.length ? groups : [] },
+      filter: { groups: filled.length ? groups : [], ...(Object.keys(computed).length ? { computed } : {}) },
       none: compiled.some((each) => each.none),
       orderBy: compiled.flatMap((each) => each.orderBy),
       ...(limits.length ? { limit: Math.min(...limits) } : {}),
@@ -1212,7 +1369,7 @@ function tableHandle(
           return refuse('invalid_input');
         const tail = keysetAfter(table.meta, paged, boundary as Boundary, 'sqlite');
         if (!tail) return refuse('invalid_input');
-        filter = { groups: continueGroups(compiled.filter.groups, tail) as Condition[][] };
+        filter = { ...compiled.filter, groups: continueGroups(compiled.filter.groups, tail) as Condition[][] };
       }
       const found = await rows({ filter, none: compiled.none, orderBy: [] }, (size as number) + 1, paged);
       const shown = found.slice(0, size as number);
@@ -1313,7 +1470,7 @@ function tableHandle(
       return found[0] ?? refuse('not_found');
     },
     async find(where) {
-      const found = await rows(compileWhere(table, where, now(), [], undefined, HANDLE), 2);
+      const found = await rows(compileWhere(table, where, now(), [], who, HANDLE), 2);
       if (found.length > 1) throw new Error(`${name}: find matched several rows; narrow the where, or use where().`);
       return found[0];
     },
@@ -1342,16 +1499,16 @@ function tableHandle(
       const expanded = expandSegments(segment, segments);
       if (expanded.error) throw new Error(`${name}: ${expanded.error.message}`);
       try {
-        compileWhere(table, expanded.text, now(), [], undefined, HANDLE);
+        compileWhere(table, expanded.text, now(), [], who, HANDLE);
       } catch (error) {
         throw new Error(
-          `${name}: the segment "${segment}" cannot be read here: ${(error as Error).message.replace(`${name}: `, '')} A handler reads a table's own columns and the tables it declares, not its rollups, computed columns or paths.`,
+          `${name}: the segment "${segment}" cannot be read here: ${(error as Error).message.replace(`${name}: `, '')} A handler reads a table's own columns and the tables it declares, not its rollups or paths.`,
         );
       }
       return queryOver([{ where: expanded.text, values: [] }]);
     },
     async count(where) {
-      const compiled = compileWhere(table, where, now(), [], undefined, HANDLE);
+      const compiled = compileWhere(table, where, now(), [], who, HANDLE);
       return compiled.none ? 0 : tx.count(name, compiled.filter);
     },
     async readFile(given) {
@@ -1449,7 +1606,9 @@ function tableHandle(
     },
     async insertMany(given) {
       if (!Array.isArray(given)) throw new TypeError(`${name}: insertMany takes an array of rows.`);
-      if (given.length > DEFAULT_CAP) authorMistake(`${name}: insertMany writes at most ${DEFAULT_CAP} rows in one call.`);
+      const most = options.changeCap ?? DEFAULT_CAP;
+      if (given.length > most)
+        authorMistake(`${name}: insertMany writes at most ${most.toLocaleString('en-US')} rows in one call${raised(options)}.`);
       const requests = await Promise.all(
         given.map(async (values) => ({
           table: name,
@@ -1461,11 +1620,15 @@ function tableHandle(
     },
     async updateWhere(where, changes) {
       const values = await changed(changes);
-      const compiled = compileWhere(table, where, now(), [], undefined, HANDLE);
+      const compiled = compileWhere(table, where, now(), [], who, HANDLE);
       if (compiled.orderBy.length || compiled.limit !== undefined)
         authorMistake(`${name}: updateWhere's where says which rows; leave "sort" and "limit" out of it.`);
-      const found = await rows(compiled, DEFAULT_CAP + 1);
-      if (found.length > DEFAULT_CAP) authorMistake(`${name}: more than ${DEFAULT_CAP} rows match; updateWhere changes at most that many.`);
+      const most = options.changeCap ?? DEFAULT_CAP;
+      const found = await rows(compiled, most + 1);
+      if (found.length > most)
+        authorMistake(
+          `${name}: more than ${most.toLocaleString('en-US')} rows match; updateWhere changes at most that many${raised(options)}.`,
+        );
       if (!found.length || !Object.keys(values).length) return found;
       /* Each row with its own revision and its own guard, so one that moved since the read is a WriteConflict and
          the batch rolls back whole (adapter.ts updateAll), as one guarded update would. */

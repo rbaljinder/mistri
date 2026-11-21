@@ -144,8 +144,11 @@ export const EMBED_BUDGET = {
   headless: { raw: 144_000, br: 38_200 },
   adapter: { raw: 3_600, br: 1_400 },
   /* Moved with the first paint's, for the same reason (see BUDGET): the controls are drawn over UI SDK, and the
-     shell carries their script and their sheets as scoped text. Measured 762,581 / 102,604, from 657,900 / 93,000. */
-  shell: { raw: 785_000, br: 105_700 },
+     shell carries their script and their sheets as scoped text. Measured 762,581 / 102,604, from 657,900 / 93,000.
+     Raised at rc.78 (measured 103.5 KB in brotli, over 103.2): the shell's App-wide choice (`choose`: the chooser in the
+     top bar, the list's chip, the New form's default from it) and a frozen row's read-only record page, all drawn by the
+     served shell this chunk is. The brotli target is set about 3% above; the raw one held. */
+  shell: { raw: 785_000, br: 109_000 },
 };
 
 /* The chrome's words in a language besides English (vite.config.ts LOCALE_GROUP, src/client/copy/<lang>.ts), one chunk

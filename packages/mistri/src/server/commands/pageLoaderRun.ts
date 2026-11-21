@@ -6,6 +6,7 @@
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import { renamedAnyRows } from '@mistriwork/engine/shared/filter.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { chosenContext, type Chosen } from '../app/appChoices.js';
 import { zoneDay } from '../app/appStamps.js';
 import { commandCatalog, createCommandDb, zonedCatalog, type ReadTable, type UntypedRow } from './commandDb.js';
 import { isBusinessCommandExecutionError } from './commandErrors.js';
@@ -51,6 +52,8 @@ export async function runPageLoader(options: {
   now: Date;
   /** The reader's zone (the tenant's, then the App's): what `today()` and a date phrase read; UTC where none is named. */
   timezone?: string;
+  /** The App's `choose` as this request proved it (app/appChoices.ts); absent where it declares none. */
+  chosen?: Chosen;
 }): Promise<unknown> {
   const { loader, reader, schema } = options;
   const logical = options.logical ?? ((local: string) => local);
@@ -98,7 +101,14 @@ export async function runPageLoader(options: {
         }
       : {}),
   });
-  const handles = createCommandDb({ tx, catalog, read: loader.reads, write: [], now: () => options.now });
+  const handles = createCommandDb({
+    tx,
+    catalog,
+    read: loader.reads,
+    write: [],
+    now: () => options.now,
+    ...(options.chosen ? { chosen: options.chosen } : {}),
+  });
   const db = Object.freeze(Object.fromEntries(Object.entries(handles).map(([name, handle]) => [name, readOnly(handle)])));
   let timer: NodeJS.Timeout | undefined;
   const timeUp = new Promise<never>((_, reject) => {
@@ -120,6 +130,7 @@ export async function runPageLoader(options: {
             now: () => options.now,
             today: () => zoneDay(options.now, options.timezone),
             timezone: options.timezone ?? 'UTC',
+            chosen: chosenContext(options.chosen),
             signal: controller.signal,
           }),
         ),

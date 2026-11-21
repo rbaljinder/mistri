@@ -417,6 +417,8 @@ const CLIENT_CROSSINGS = [
   'AppReloadProblem',
   // A call to action into another App of the suite, installed as the shell's slots by appnav.js.
   'AppTargetAction',
+  // An App's choosers (`choose`), mounted into the bar by appChrome.js and fetched on demand with the first signed-in reader.
+  'ChoiceControl',
   // The bar's as-of chip: a development server started `--as-of` another moment, fetched on demand behind it.
   'AsOfChip',
   // The assistant's page, named as the shell's `rooms` by appnav.js and fetched on demand.

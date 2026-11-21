@@ -21,6 +21,7 @@ import { AppAccessDenied } from '../columnGrants.js';
 import { deleteImpact } from '../impact.js';
 import { explainWriteFailure, writeFailureOutcome, writeRefusalStatus } from '../constraints.js';
 import { findTable } from '../../shared/schema.js';
+import { isFrozenRefusal } from '../../shared/refusal.js';
 import { FILE_UPLOAD_PATH, bytesLabelled, send, sendBusy, sendResource, sendRowLocked } from './reply.js';
 import type { PostContext } from './context.js';
 
@@ -185,6 +186,11 @@ export async function recordWriteRoutes(post: PostContext, hooks: RecordHooks): 
         return true;
       }
       if (!completed && rules?.refused(res, path, err)) return true;
+      /* A frozen record (`frozen`, appModel.ts) is the record's state, said as a conflict is: 409, by its own code. */
+      if (!completed && isFrozenRefusal(err)) {
+        sendResource(res, path, 409, { errors: [await failureOf(err, false, values)], outcome: 'rejected' });
+        return true;
+      }
       if (!completed && (err instanceof Refusal || err instanceof WriteConflict)) throw err;
       /* Pointing an existing row at a row that is not there is the same
          mistake as inserting one, and gets the same answer. */
@@ -369,7 +375,7 @@ export async function recordWriteRoutes(post: PostContext, hooks: RecordHooks): 
       sendResource(
         res,
         path,
-        outcome === 'unknown' ? 200 : (writeRefusalStatus(err) ?? 400),
+        outcome === 'unknown' ? 200 : isFrozenRefusal(err) ? 409 : (writeRefusalStatus(err) ?? 400),
         outcome === 'unknown' ? { impact, deleted: null, outcome, errors } : { impact, deleted: false, outcome, errors },
       );
       return true;

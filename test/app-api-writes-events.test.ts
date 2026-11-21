@@ -24,7 +24,7 @@ import { SHOP_TABLES, shelfThroughApi, writeShopApp } from './appApiShop.js';
 
 const storeId = '6c2e1d63-8d2f-4d66-8f1b-5b4f4f1d3e22';
 
-async function shop(t: TestContext, narrowed = false, appendOnly = false) {
+async function shop(t: TestContext, narrowed = false, appendOnly = false, frozen?: string) {
   const directory = mkdtempSync(join(tmpdir(), 'tw-api-writes-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const business = join(directory, 'business.db'),
@@ -38,7 +38,7 @@ async function shop(t: TestContext, narrowed = false, appendOnly = false) {
   }
   migrateSqliteCommandJournal(business);
   await provisionStores({ sqlite: business }, { app: { id: 'shop', source: 'business' } });
-  const { appDir, config, commands } = writeShopApp(directory, { business, authStore: authPath, narrowed, appendOnly });
+  const { appDir, config, commands } = writeShopApp(directory, { business, authStore: authPath, narrowed, appendOnly, frozen });
   const loaded = await loadApp(appDir);
   writeFileSync(join(appDir, 'authority.lock'), loaded.authority!.report);
   const names = ['BETTER_AUTH_SECRET', 'MISTRI_AUTH_ADMIN_EMAIL', 'MISTRI_AUTH_ADMIN_PASSWORD'] as const;
@@ -210,6 +210,46 @@ test("generic writes: create, update and delete run as commands under the role's
   });
   assert.equal(removed.status, 200, await removed.clone().text());
   assert.deepEqual(f.row(`SELECT COUNT(*) AS n FROM item`), { n: 1 });
+  s.child.kill('SIGTERM');
+  assert.equal(await s.closed, 0);
+});
+
+test('a frozen row is refused every generic update and delete (409 frozen), and the document says so', { timeout: 120000 }, async (t) => {
+  const f = await shop(t, false, false, 'note = locked');
+  const seed = new DatabaseSync(f.business);
+  try {
+    seed.exec("INSERT INTO item(id,name,note) VALUES (7,'Sealed','locked'), (8,'Open','free')");
+  } finally {
+    seed.close();
+  }
+  const s = await serveApi(t, f, 'shop');
+  await s.started;
+  const editor = auth(f.tokens.editor);
+  const document = JSON.stringify(await (await fetch(`${s.base}/$openapi`, { headers: editor })).json());
+  assert.match(document, /frozen/);
+  const call = async (id: number, command: 'update-item' | 'delete-item', attempt: string, body: object) => {
+    const prepared = await fetch(`${s.base}/item/${id}/commands/${command}/v1/prepare`, { headers: editor });
+    assert.equal(prepared.status, 200, await prepared.clone().text());
+    return fetch(`${s.base}/item/${id}/commands/${command}/v1`, {
+      method: 'POST',
+      headers: { ...editor, ...json, 'if-match': prepared.headers.get('etag')!, 'idempotency-key': attempt },
+      body: JSON.stringify(body),
+    });
+  };
+  const updated = await call(7, 'update-item', 'frozen-update-000000001', { name: 'Changed' });
+  const updateBody = await updated.json();
+  assert.equal(updated.status, 409, JSON.stringify(updateBody));
+  assert.equal(updateBody.code, 'frozen');
+  assert.equal(updateBody.outcome, 'not_applied');
+  const removed = await call(7, 'delete-item', 'frozen-delete-000000001', {});
+  const removeBody = await removed.json();
+  assert.equal(removed.status, 409, JSON.stringify(removeBody));
+  assert.equal(removeBody.code, 'frozen');
+  assert.deepEqual(f.row('SELECT name FROM item WHERE id=7'), { name: 'Sealed' });
+  // The same App, a row the condition does not match: both writes go through.
+  const fine = await call(8, 'update-item', 'frozen-update-000000002', { name: 'Edited' });
+  assert.equal(fine.status, 200, await fine.clone().text());
+  assert.deepEqual(f.row('SELECT name FROM item WHERE id=8'), { name: 'Edited' });
   s.child.kill('SIGTERM');
   assert.equal(await s.closed, 0);
 });

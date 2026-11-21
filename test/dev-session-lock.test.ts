@@ -40,6 +40,9 @@ test('a second session on a folder a live session holds refuses, naming its pid,
       error.message.includes('port 4321') &&
       error.message.includes(`kill ${holder.pid}`),
   );
+  // Refused before the dev record is touched: the session that holds the folder keeps its secret and passwords.
+  assert.equal(existsSync(join(dir, '.mistri', 'dev.json')), false);
+  assert.equal(JSON.parse(readFileSync(join(dir, '.mistri', 'dev.pid'), 'utf8')).pid, holder.pid);
 });
 
 test("a pid that is gone is taken over silently, and the folder is the new session's", (t) => {

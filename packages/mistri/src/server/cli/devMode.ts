@@ -97,18 +97,33 @@ function claimDevFolder(folder: string, port: number | undefined): { owner: numb
   const write = (at: number | undefined) =>
     writeFileSync(file, `${JSON.stringify({ pid: owner, ...(at !== undefined ? { port: at } : {}) })}\n`);
   if (!supervised) {
-    try {
-      const held = JSON.parse(readFileSync(file, 'utf8')) as { pid?: unknown; port?: unknown };
+    mkdirSync(folder, { recursive: true });
+    /* Made only if absent (O_EXCL), so two sessions started at once cannot both find the folder free. A file that is
+       there is a holder's, unless its pid is gone or it does not parse: then it is taken over once. */
+    for (let tries = 0; ; tries++) {
+      try {
+        writeFileSync(file, `${JSON.stringify({ pid: owner, ...(port !== undefined ? { port } : {}) })}\n`, { flag: 'wx' });
+        break;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
+      let held: { pid?: unknown; port?: unknown } = {};
+      try {
+        held = JSON.parse(readFileSync(file, 'utf8')) as typeof held;
+      } catch {
+        /* One that does not parse: nobody holds the folder. */
+      }
       if (typeof held.pid === 'number' && held.pid !== process.pid && alive(held.pid))
         throw new DevRefusal(
           `another mistri dev session already serves this App folder (pid ${held.pid}${typeof held.port === 'number' ? `, port ${held.port}` : ''}); ` +
             `two sessions stop each other's server. Stop it with: kill ${held.pid} (or Ctrl-C in its terminal), then start again.`,
         );
-    } catch (error) {
-      if (error instanceof DevRefusal) throw error;
-      /* No file, or one that does not parse: nobody holds the folder. */
+      if (tries > 0) {
+        write(port);
+        break;
+      }
+      rmSync(file, { force: true });
     }
-    write(port);
     process.on('exit', () => {
       try {
         const held = JSON.parse(readFileSync(file, 'utf8')) as { pid?: unknown };
@@ -170,8 +185,9 @@ export function prepareDev(argv: string[], env: NodeJS.ProcessEnv = process.env)
     );
 
   const folder = join(app, '.mistri');
-  const { file, dev } = devFile(folder);
+  // Claimed before the dev record is touched: a session that is refused leaves the one that holds the folder alone.
   const claimed = claimDevFolder(folder, portAt >= 0 && /^\d+$/.test(args[portAt + 1] ?? '') ? Number(args[portAt + 1]) : undefined);
+  const { file, dev } = devFile(folder);
   env.BETTER_AUTH_SECRET = dev.secret;
   env.MISTRI_AUTH_ADMIN_EMAIL = ADMIN;
   env.MISTRI_AUTH_ADMIN_PASSWORD = dev.passwords.admin;

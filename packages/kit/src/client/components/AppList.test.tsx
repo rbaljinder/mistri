@@ -164,6 +164,7 @@ const spec = { id: 'tasks', ...view };
 const { AppList } = await import('./AppList.js');
 const { ListNavigationProvider } = await import('./listNavigation.js');
 const { installShell } = await import('../shellMode.js');
+const { setChoiceEntry } = await import('../choiceEntries.js');
 const { PHONE_QUERY, RAIL_QUERY, RECORDS_QUERY } = await import('./useMediaQuery.js');
 const { appListQuery, appCrumbLabel, appListFor, currentNavIndex, defaultListShow, litTabFor, visibleQuestion, wholeQuery } =
   await import('./appListModel.js');
@@ -989,4 +990,47 @@ test('with no bar over it, the heading row holds the title, the count, New and t
   draw(`task status = open ${PLUMBING}`, { embedded: true, newButton: <button type="button">New task</button> });
   expect(document.querySelector('.applist-head-tools')).toBeNull();
   expect(room.inCrumbs).toBe(false);
+});
+
+describe("a list a choice narrows (an App's `choose`, `chosen.site` in its query)", () => {
+  const open = vi.fn();
+  beforeEach(() => {
+    open.mockClear();
+    grants = { choose: { site: { table: 'site', label: 'name' } } };
+  });
+  afterEach(() => {
+    setChoiceEntry(undefined, entryOf());
+  });
+  function entryOf(picked?: string) {
+    return { choice: 'site', word: picked ? 'Site:' : '', name: picked ?? 'Choose site', ...(picked ? { picked } : {}), open };
+  }
+
+  test('says the pick in a chip with no x, which opens the chooser', async () => {
+    const entry = entryOf('Northside');
+    setChoiceEntry(entry);
+    draw('task priority = chosen.site');
+    const chip = await screen.findByRole('button', { name: /Site: Northside/ });
+    expect(chip.closest('.applist-chip')?.querySelector('.applist-chip-x')).toBeNull();
+    await userEvent.click(chip);
+    expect(open).toHaveBeenCalledTimes(1);
+    setChoiceEntry(undefined, entry);
+  });
+
+  test('says none where nothing is picked', async () => {
+    const entry = entryOf();
+    setChoiceEntry(entry);
+    draw('task priority = chosen.site');
+    expect(await screen.findByRole('button', { name: /Site: none/ })).toBeTruthy();
+    setChoiceEntry(undefined, entry);
+  });
+
+  test('is not drawn for a list that does not name the choice, or an App that does not declare it', () => {
+    setChoiceEntry(entryOf('Northside'));
+    draw('task priority = 2');
+    expect(screen.queryByText(/Site:/)).toBeNull();
+    cleanup();
+    grants = {};
+    draw('task priority = chosen.site');
+    expect(screen.queryByText(/Site:/)).toBeNull();
+  });
 });

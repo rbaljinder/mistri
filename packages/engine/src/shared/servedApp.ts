@@ -606,6 +606,8 @@ export interface ServedResource {
   favorite?: true;
   /** Its one row is a settings record, opened from the reader's settings under these words. */
   settings?: string;
+  /** The condition (query language) that freezes a record: one it matches takes no write, and the page draws it read-only. */
+  frozen?: string;
   /** What one record is called and several: New, a split's detail heading. */
   noun?: AppNoun;
   /** Its rows are files, as appFileRules resolved them: a list over it draws as attachments. */
@@ -702,8 +704,26 @@ export interface ServedApp<View extends object = ServedDashboardView | ServedFor
   directory?: { icon: import('./appIcons.js').AppIconName };
   /** The word the App's AI mark says (`ai.label`), "AI" when absent (kit AiMark). */
   ai?: { label: string };
+  /** The App-wide choices this reader can make (an App's `choose`), by name: each a table id of this reader's catalog,
+      the column its chooser shows, and whether the shell asks before the first page. A choice over a table this
+      reader cannot read is not here. */
+  choose?: Record<string, ServedChoice>;
+  /** The picks this person holds on the server, by choice name, each the row's key as text and proven under this reader
+      (a pick they can no longer read is left out). Present, even empty, only where the database keeps the preferences
+      store: it is how the shell knows a pick is written there too, and not only in the browser. */
+  picks?: Record<string, string>;
   /** This reader may approve something an AI can propose: For review, `/{app}/review`, and the proposals list. */
   review?: true;
+}
+
+/** One App-wide choice as the shell draws it (ServedApp.choose). */
+export interface ServedChoice {
+  /** The table id the choice is a row of. */
+  table: string;
+  /** The column its chooser shows for a row; absent, the record's own label. */
+  label?: string;
+  /** The shell asks before the first page. */
+  required?: true;
 }
 
 /** A menu node as the view order reads it: a view's reference, a group of nodes, or a link elsewhere. */
