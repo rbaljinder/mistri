@@ -36,10 +36,10 @@ import {
   type BuildEntryKind,
   type BuildManifest,
 } from '../app/appBuild.js';
-import { parseArgs } from '@mistriwork/engine/server/cli/args.js';
+import { parseArgs, CHECK_STORES_ASIDE, CHECK_VALIDATION } from '@mistriwork/engine/server/cli/args.js';
 import { runtimeVersion } from '@mistriwork/engine/server/packageVersion.js';
+import { refusalHeadline } from '@mistriwork/engine/shared/refusal.js';
 import { CHECK_BUILD_OF } from '../cli/apps.js';
-import { CHECK_STORES_ASIDE, CHECK_VALIDATION } from '@mistriwork/engine/server/cli/args.js';
 import { readStartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import { appTypes } from '../cli/oneShot.js';
 import { sameTypes, typesFileText } from '../typegen.js';
@@ -300,7 +300,7 @@ async function stagedBuild({
   try {
     loaded = await loadApp(appDir, { lock: 'report', ...entry });
   } catch (error) {
-    throw fail(BUILD_EXIT.validation, `validation failed: ${(error as Error).message}`);
+    throw fail(BUILD_EXIT.validation, `validation failed: ${refusalHeadline(error)}`);
   }
   const lock = await checkAuthorityLock(loaded.authority, false);
   if (lock.problem) throw fail(BUILD_EXIT.validation, `validation failed: ${lock.problem}`);
@@ -323,7 +323,7 @@ async function stagedBuild({
   try {
     // 3. Bundle.
     const bundler = await (seams.bundler ?? loadRolldown)().catch((error: Error) => {
-      throw fail(BUILD_EXIT.bundle, `bundle failed: ${error.message}`);
+      throw fail(BUILD_EXIT.bundle, `bundle failed: ${refusalHeadline(error)}`);
     });
     if (!bundler) {
       say(
@@ -344,7 +344,7 @@ async function stagedBuild({
           ...entry,
           module: pathToFileURL(join(staging, outputs.definition)).href,
         }).catch((error: Error) => {
-          throw new BundleError(`the bundled App definition does not load: ${error.message}`);
+          throw new BundleError(`the bundled App definition does not load: ${refusalHeadline(error)}`);
         });
         /* `modules` is the load's own bookkeeping (the files it read, for the watcher), not the App: the bundle
            is one file where the source was several, so the two lists differ by design. */
@@ -358,7 +358,7 @@ async function stagedBuild({
       if (Object.keys(server).length) warnings.push(...(await bundleServer(bundler, server, join(staging, 'server'))));
     } catch (error) {
       if (error instanceof BuildFailure) throw error;
-      throw fail(BUILD_EXIT.bundle, `bundle failed: ${(error as Error).message}`);
+      throw fail(BUILD_EXIT.bundle, `bundle failed: ${refusalHeadline(error)}`);
     }
     /* The components/ graph: each custom component as the source load
        compiled it, content-named, against exactly this mistri's SDK, so a
@@ -446,7 +446,7 @@ async function stagedBuild({
             );
           }
         } catch (error) {
-          throw fail(BUILD_EXIT.validation, `validation failed against the database: ${(error as Error).message}`);
+          throw fail(BUILD_EXIT.validation, `validation failed against the database: ${refusalHeadline(error)}`);
         }
         database = { status: 'passed', detail: 'validation passed on the build' };
       }

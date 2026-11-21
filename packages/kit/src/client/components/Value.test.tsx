@@ -541,4 +541,14 @@ describe('a list of plain values', () => {
     render(<Value col={col('meta', 'jsonb')} value={{ a: 1 }} tableId="t" />);
     expect(await screen.findByRole('button', { name: 'Raw' })).toBeTruthy();
   });
+
+  test('a record field with format json reads whole, a list cell shows an excerpt', async () => {
+    display = { format: 'json' };
+    const text = JSON.stringify({ plan: 'pro', seats: 4 });
+    const whole = render(<Value col={col('meta', 'text')} value={text} tableId="t" compact wholeText />);
+    expect(await whole.findByRole('button', { name: 'Raw' })).toBeTruthy();
+    whole.unmount();
+    const excerpt = render(<Value col={col('meta', 'text')} value={text} tableId="t" compact />);
+    expect(excerpt.container.querySelector('.json-preview-text')).toBeTruthy();
+  });
 });

@@ -1291,6 +1291,7 @@ export function sliceRing(center: number, radius: number, from: number, length: 
 export function DonutChart({
   rows,
   say = String,
+  sayLegend,
   label = keyWord,
   onPick,
   total,
@@ -1299,6 +1300,7 @@ export function DonutChart({
 }: {
   rows: ChartRow[];
   say?: Say;
+  sayLegend?: (totals: readonly number[]) => (value: unknown) => string;
   label?: (key: unknown) => string;
   /** A slice's display tone, where its column has them: slices wear the ink their dot and badge wear when every one has its own. */
   tone?: (key: unknown) => string | undefined;
@@ -1320,6 +1322,7 @@ export function DonutChart({
   const rest = all.slice(MAX_SLICES);
   if (rest.length) slices.push({ key: `others (${rest.length})`, value: rest.reduce((n, p) => n + p.value, 0) });
   const whole = slices.reduce((n, p) => n + p.value, 0);
+  const sayFigure = sayLegend ? sayLegend([whole, ...slices.map((p) => p.value)]) : say;
   const R = 15.9155; /* circumference 100, so dasharray speaks percent. */
   const C = 21;
   /* A step of the ramp rides in a property of its own, which the slice and its swatch both paint with. */
@@ -1342,7 +1345,7 @@ export function DonutChart({
        a drillable slice carries the button's role, name and keyboard
        behaviour, and the legend button stays as the second way in. */
     const drillable = onPick && p.raw != null && !(rest.length && i === slices.length - 1);
-    const said = `${p.key}: ${say(p.value)} (${formatPercent(share, { maximumFractionDigits: 0 })})`;
+    const said = `${p.key}: ${sayFigure(p.value)} (${formatPercent(share, { maximumFractionDigits: 0 })})`;
     const arc = (
       <circle
         key={i}
@@ -1401,11 +1404,11 @@ export function DonutChart({
         className="chart-donut"
         viewBox={`0 0 ${C * 2} ${C * 2}`}
         role={anyDrillable ? 'group' : 'img'}
-        aria-label={sayCopy('inAll', { whole: say(whole), map: slices.map((p) => `${p.key} ${say(p.value)}`).join(', ') })}
+        aria-label={sayCopy('inAll', { whole: sayFigure(whole), map: slices.map((p) => `${p.key} ${sayFigure(p.value)}`).join(', ') })}
       >
         {rings}
         <text className="chart-donut-total" x={C} y={total ? C : C + 1.5} textAnchor="middle">
-          {say(whole)}
+          {sayFigure(whole)}
         </text>
         {total && (
           <text className="chart-donut-caption" x={C} y={C + 4.5} textAnchor="middle">
@@ -1419,7 +1422,7 @@ export function DonutChart({
             <>
               <span className="chart-swatch" style={{ ...ramp(i), background: color(i), opacity: opacity(i) }} />
               <span className="chart-legend-key">{p.key}</span>
-              <span className="chart-legend-value">{say(p.value)}</span>
+              <span className="chart-legend-value">{sayFigure(p.value)}</span>
               <span className="chart-legend-share">{formatPercent((100 * p.value) / whole, { maximumFractionDigits: 0 })}</span>
             </>
           );

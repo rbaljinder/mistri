@@ -84,7 +84,7 @@ export default function BinMap({ rows }: SectionProps<typeof warehouseBins, Rows
 
 `@mistriwork/mistri/ui` is the only mistri module a component imports. It holds:
 
-- **The kit**: `Card`, `Stack`, `Row`, `Cluster`, `Beside`, `Heading`, `Button`, `Value`, `Tone`, `Meter`, `Stat`, `Sparkline`, `MiniBars`, `Tile`, `Columns`, `Table`, `Items`, `Item`, `Dropdown`, `Segmented`, `SplitListDetail`, `Empty`, `Loaded`, `Skeleton`, `Icon`, `Text` (`<Text tone="muted" size="sm">`: a line of secondary ink, `tone` `default`, `muted` or `danger`), `VisuallyHidden` (words only a screen reader hears, clipped rather than hidden: `<VisuallyHidden>, opens in a new tab</VisuallyHidden>`). `AiMark` is the mark the platform draws on whatever a model made or proposed, with the App's `ai.label` ("AI" unless said): draw it beside a value your component shows as a model's, `<AiMark quiet />` for the small one in a row. `Stat` takes a `delta` (`{ value: 12, good: 'up' }` is "+12" in the good ink, and "-3" with `good: 'down'` too) and an `href` that makes the whole figure a link. `Sparkline` (`values`, four or more) and `MiniBars` (`values`, `labels`, `highlight`) draw in the look's chart ink and tell a screen reader their values. A `Tile` is a card that is one control (`onPress` or `href`, `selected`, `disabled`), with the card's corner and lift rather than a button's. A `Card`'s title is an h3; a card that is a section of a page under the platform's h1 says `level={2}` so the outline does not skip a level. `Table` draws each cell as a `Value`, dressed as the App dresses that column; sorting stays yours (`sort`, `onSort`), and `onRowClick` makes the first cell a link. `Button` with an `href` is a link in the button's dress: it opens a new tab, copies as an address, and an address of this App is followed in place. `ButtonLink` from `@mistriwork/ui` is that same link-styled button for code outside the kit; there is no other name for it. The platform's fields (`TextField`, `Select`, `Checkbox`, `Switch`, `Slider`, `YesNo`, `ChoiceCards`, `FileField`) are exported from the same entry. A free-form page's row of verbs at the screen's foot is `<Row foot>`: on a phone a notice stands above it instead of covering it. `<Cluster min="14rem">` lays its children in equal columns at least that wide, as many across as fit and one on a phone, and never scrolls sideways: `<Cluster>{teams.map((team) => <Card key={team.id} title={team.name}>…</Card>)}</Cluster>`.
+- **The kit**: `Card`, `Stack`, `Row`, `Cluster`, `Beside`, `Heading`, `Button`, `Value`, `Tone`, `Meter`, `Stat`, `Sparkline`, `MiniBars`, `Tile`, `Columns`, `Table`, `Items`, `Item`, `Dropdown`, `Segmented`, `SplitListDetail`, `Empty`, `Loaded`, `Skeleton`, `Icon`, `Text` (`<Text tone="muted" size="sm">`: a line of secondary ink, `tone` `default`, `muted` or `danger`), `VisuallyHidden` (words only a screen reader hears, clipped rather than hidden: `<VisuallyHidden>, opens in a new tab</VisuallyHidden>`). `AiMark` is the mark the platform draws on whatever a model made or proposed, with the App's `ai.label` ("AI" unless said): draw it beside a value your component shows as a model's, `<AiMark quiet />` for the small one in a row. `Stat` takes a `delta` (`{ value: 12, good: 'up' }` is "+12" in the good ink, and "-3" with `good: 'down'` too) and an `href` that makes the whole figure a link. A `Meter` is a share of a whole (`value` against `max`, 100 unless said): `ariaLabel` names it where its `label` is not a string (`ariaLabel="Seats taken"`), `valueLabel` is the value as a screen reader says it (`valueLabel="12 of 40 seats"`), and `size="fluid"` stretches the bar across its row or column. `Sparkline` (`values`, four or more) and `MiniBars` (`values`, `labels`, `highlight`) draw in the look's chart ink and tell a screen reader their values. A `Tile` is a card that is one control (`onPress` or `href`, `selected`, `disabled`), with the card's corner and lift rather than a button's. A `Card`'s title is an h3; a card that is a section of a page under the platform's h1 says `level={2}` so the outline does not skip a level. `Table` draws each cell as a `Value`, dressed as the App dresses that column; sorting stays yours (`sort`, `onSort`), and `onRowClick` makes the first cell a link. `Button` with an `href` is a link in the button's dress: it opens a new tab, copies as an address, and an address of this App is followed in place. `ButtonLink` from `@mistriwork/ui` is that same link-styled button for code outside the kit; there is no other name for it. The platform's fields (`TextField`, `Select`, `Checkbox`, `Switch`, `Slider`, `YesNo`, `ChoiceCards`, `FileField`) are exported from the same entry. A free-form page's row of verbs at the screen's foot is `<Row foot>`: on a phone a notice stands above it instead of covering it. `<Cluster min="14rem">` lays its children in equal columns at least that wide, as many across as fit and one on a phone, and never scrolls sideways: `<Cluster>{teams.map((team) => <Card key={team.id} title={team.name}>…</Card>)}</Cluster>`.
 - **Reads**: `useRows`, `useRecord`, `useBreakdown`, `useFile`, all under the reader's grants, row policy and tenant.
   `useFile(resource)` gives a function from a row's key to the picture's address: `<img src={file({ id }, { thumbnail: true })} />`. In a tenant App the file is read on the reader's session first, so the address is `undefined` until it arrives and the component draws again then; draw a placeholder meanwhile.
   Each read answers `isPending` until its first answer and `isFetching` while any answer is on its way. A refresh that fails keeps the last good rows and says so: `isStale` is true and `refreshError` holds the failure. `useRows` reads `limit` rows (20 unless said), and its `page` says `{ limit, hasMore }`; `more()` reads the next page onto the end. `page.total` is there only when the server counted one, never guessed from the rows. Each read is consistent on its own: two reads on one page are two answers, possibly a moment apart, never one snapshot.
@@ -197,6 +197,34 @@ A `Card` takes a `count` (a quiet number beside the title) and an `action` (righ
 `Beside` is a main column beside a rail. The rail is `railWidth` wide (`'20rem'` by default, never past half the box) on the `side` you name (`'end'` by default). Where its own box is under 40rem wide (or under `stackBelow`, a CSS length such as `'56rem'`) it stacks, the main first, and it never scrolls sideways: `<Beside rail={<Card title="Facts">…</Card>}>…</Beside>`.
 
 `<Card ground="nav">`, or any element with `data-ground="nav"`, puts what is inside on the look's navigation ground: the kit's inks, hairlines and surfaces take the nav's own, so a `Stat`, `Value`, `Meter`, `Table`, `Items`, `Segmented` or `Empty` there reads in every look, light and dark, with no recipe of its own.
+
+### Segmented, Tabs or Select
+
+| Control | Use it to | Size of the set |
+| --- | --- | --- |
+| `Segmented` | Pick a value or filter within one view; the content below it is the same view, narrowed | 2 to 5 options |
+| `Tabs` | Switch between sibling panels of content, such as a record's related lists or sections | A handful of panels, each its own content |
+| `Select` | Choose from a big or open-ended set | Many options, or a list that grows |
+
+A record page with sibling panels uses `Tabs` (or `listTabs`), never `Segmented`.
+
+### An identity cell
+
+A column that names a row with a second line under it (a record id with a long external id beneath) says so on the column; it does not need a hand-rolled cell:
+
+```tsx
+<Table
+  label="Orders"
+  rows={rows}
+  onRowClick={(row) => open(row.id)}
+  columns={[{ key: 'id', label: 'Order', secondary: 'externalId', copy: true }, { key: 'status', label: 'Status' }]}
+/>
+```
+
+- `secondary` is a row field's key or a function of the row (`(row) => row.externalId`): a quieter line in the body's weight that wraps, never scrolls.
+- `emphasis` (`'strong'` or `'normal'`) is whether the primary line is emphasized; the first column is `'strong'` unless said. The weight is the primary line's alone, so the secondary line is never bold.
+- With `onRowClick` both lines sit inside the one link, the cell's only navigation target; there are no nested links or buttons.
+- `copy: true` puts a copy button beside the link, a sibling of it and never inside it.
 
 ### Types, values and styles
 

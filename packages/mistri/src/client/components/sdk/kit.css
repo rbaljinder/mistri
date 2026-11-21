@@ -701,6 +701,32 @@
     outline: var(--focus-width, 2px) solid var(--focus);
     outline-offset: 2px;
   }
+  /* An identity cell: the primary line carries the emphasis (and only it), a secondary line stands under it quiet and
+     in the body's weight, and a long value breaks rather than scrolling the table sideways. */
+  .kit-cell-primary {
+    overflow-wrap: anywhere;
+  }
+  .kit-cell-primary-strong {
+    font-weight: 600;
+  }
+  .kit-cell-secondary {
+    display: block;
+    font-size: var(--text-sm);
+    font-weight: 400;
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+  }
+  .kit-table-link:has(.kit-cell-secondary) {
+    display: block;
+    white-space: normal;
+  }
+  .kit-cell-copyable {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    max-width: 100%;
+    min-width: 0;
+  }
   .kit-table-empty {
     padding: var(--space-4) var(--space-4h);
     color: var(--ink-muted);

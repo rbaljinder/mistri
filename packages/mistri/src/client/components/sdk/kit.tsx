@@ -16,6 +16,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   type ComponentProps,
@@ -29,9 +30,10 @@ import { Button as UiButton, ButtonLink } from '@mistriwork/ui/Button.js';
 import { Icon as PlatformIcon } from '@mistriwork/kit/client/components/Icon.js';
 import { Empty as PlatformEmpty, Problem } from '@mistriwork/kit/client/components/Notes.js';
 import { Dressed, Said } from '@mistriwork/kit/client/components/Dressed.js';
-import { authoredDisplay, dressFor, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
+import { authoredDisplay, dressFor, maskedText, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
+import { CopyValue } from '@mistriwork/kit/client/components/CopyValue.js';
 import { useQuery } from '@tanstack/react-query';
-import { useHostIfAny, useUiHost } from './context.js';
+import { useHostIfAny, useUiHost, type UiHost } from './context.js';
 /* Named apart: `say` is also Sparkline's prop below, a figure's speaker. */
 import { say as sayKit } from '../../copy/components/components/sdk/kit.js';
 import { Sparkline as ChartSparkline, StackedColumns } from '@mistriwork/kit/client/components/Chart.js';
@@ -272,15 +274,65 @@ export function Value({
   const known = resource && column ? host.column(resource, column) : undefined;
   if (value === null || value === undefined || value === '') return <span className="null">—</span>;
   const rule = authoredDisplay(display) ?? known?.rule ?? null;
+  const drawn = <DrawnValue value={value} rule={rule} known={known} authored={display !== undefined} compact={compact} />;
+  /* A rule's `copy` is the record's copy button (CopyValue), never for a value a mask hides. */
+  if (!rule?.copy || maskedText(rule, value) !== undefined) return drawn;
+  return (
+    <CopyBeside value={value} label={known?.label ?? column ?? sayKit('aValue')}>
+      {drawn}
+    </CopyBeside>
+  );
+}
+
+function DrawnValue({
+  value,
+  rule,
+  known,
+  authored,
+  compact,
+}: {
+  value: unknown;
+  rule: DisplayRule | null;
+  known: ReturnType<UiHost['column']>;
+  authored: boolean;
+  compact: boolean;
+}) {
+  const host = useUiHost();
   const dress = dressFor(rule, value);
   if (dress) return <Dressed dress={dress} compact={compact} />;
   /* A reference holds its record's key; the lists say the record's name, so a column named here does too. */
   const target = known?.meta?.references?.table;
-  if (target && display === undefined && (typeof value === 'string' || typeof value === 'number'))
+  if (target && !authored && (typeof value === 'string' || typeof value === 'number'))
     return (
       <ReferenceName resource={target} value={value} fallback={<Said col={known?.meta} value={value} compact={compact} app={host.app} />} />
     );
   return <Said col={known?.meta} value={value} compact={compact} app={host.app} />;
+}
+
+/** What makes an element a target of its own: a value inside one gets no copy button, since a button in a link or a
+    row that opens is neither (the record's Value says the same through its `links`). `.clickable` is the Table's row
+    under `onRowClick`. Not any `[tabindex]`: a table that scrolls is a focusable region, and not a target. */
+const TARGET =
+  'a[href], button, summary, label, .clickable, [role="button"], [role="link"], [role="option"], [role="menuitem"], [role="tab"]';
+
+/**
+ * The value and its copy button, the record's markup. A component cannot say whether its caller drew it inside a
+ * target, so the page is asked: the button is added before the first paint where no ancestor is one, and never drawn
+ * inside one, not even for a frame.
+ */
+function CopyBeside({ value, label, children }: { value: unknown; label: string; children: ReactNode }) {
+  const host = useUiHost();
+  const box = useRef<HTMLSpanElement>(null);
+  const [free, setFree] = useState(false);
+  useLayoutEffect(() => {
+    setFree(!box.current?.parentElement?.closest(TARGET));
+  }, []);
+  return (
+    <span className="value-copyable" ref={box}>
+      {children}
+      {free && <CopyValue value={value} label={label} announce={(text, tone) => host.announce(text, tone)} />}
+    </span>
+  );
 }
 
 /**
@@ -299,18 +351,41 @@ function ReferenceName({ resource, value, fallback }: { resource: string; value:
   return named.data ? <span className="prose">{named.data.label}</span> : fallback;
 }
 
-/** A share of a whole as a bar and its figure: `value` against `max` (100 by default), in a tone when it means something. */
-export function Meter({ value, max = 100, tone, label }: { value: number; max?: number; tone?: ToneName; label?: ReactNode }) {
+/**
+ * A share of a whole as a bar and its figure: `value` against `max` (100 by default), in a tone when it means something.
+ * `ariaLabel` names the meter (what it measures, "Seats taken") where its `label` is not a string, or says other words
+ * than the figure; `valueLabel` is the value as a screen reader says it ("12 of 40 seats") in place of a bare number.
+ * `size="fluid"` stretches the bar across the width it is given (a card's row, a table's column) in place of the short
+ * bar beside a figure.
+ */
+export function Meter({
+  value,
+  max = 100,
+  tone,
+  label,
+  ariaLabel,
+  valueLabel,
+  size,
+}: {
+  value: number;
+  max?: number;
+  tone?: ToneName;
+  label?: ReactNode;
+  ariaLabel?: string;
+  valueLabel?: string;
+  size?: 'fluid';
+}) {
   const fill = max > 0 && Number.isFinite(value) ? Math.max(0, Math.min(100, (value / max) * 100)) : 0;
   const style: CSSProperties = { width: `${fill}%` };
   return (
     <span
-      className={`meter-wrap${tone ? ` meter-${tone}` : ''}`}
+      className={['meter-wrap', tone && `meter-${tone}`, size === 'fluid' && 'meter-fluid'].filter(Boolean).join(' ')}
       role="meter"
       aria-valuenow={value}
       aria-valuemin={0}
       aria-valuemax={max}
-      aria-label={typeof label === 'string' ? label : undefined}
+      aria-valuetext={valueLabel}
+      aria-label={ariaLabel ?? (typeof label === 'string' ? label : undefined)}
     >
       <span className="pct-bar">
         <span className="pct-fill" style={style} />
@@ -742,6 +817,12 @@ export interface TableColumn<Row> {
   render?: (row: Row) => ReactNode;
   /** Left out of the sort even where the table sorts. */
   sortable?: boolean;
+  /** A second, quieter line under the value: a row field's key, or a function of the row. Never bold, and it wraps. */
+  secondary?: string | ((row: Row) => ReactNode);
+  /** Whether the primary line is emphasized. The first column's is `'strong'` unless said; any other column's is `'normal'`. */
+  emphasis?: 'strong' | 'normal';
+  /** A copy button beside the cell, a sibling of the row link (never inside it), copying the field as stored. */
+  copy?: boolean;
 }
 
 /**
@@ -795,6 +876,7 @@ export function Table<Row extends Record<string, unknown>>({
   empty?: ReactNode;
 }) {
   const { box, scrolls } = useScrolls();
+  const host = useHostIfAny();
   return (
     <div ref={box} className="table-wrap kit-table" {...(scrolls ? { role: 'region', tabIndex: 0, 'aria-label': label } : {})}>
       <table aria-label={label}>
@@ -836,22 +918,51 @@ export function Table<Row extends Record<string, unknown>>({
                 ) : (
                   <Value value={row[column.key]} resource={column.resource} column={column.column} display={column.display} compact />
                 );
+                const second =
+                  typeof column.secondary === 'function'
+                    ? column.secondary(row)
+                    : column.secondary === undefined
+                      ? undefined
+                      : row[column.secondary];
+                const strong = (column.emphasis ?? (at === 0 ? 'strong' : 'normal')) === 'strong';
+                /* One target: both lines sit inside the link, and the weight is the primary line's alone. */
+                const lines = (
+                  <>
+                    <span className={`kit-cell-primary${strong ? ' kit-cell-primary-strong' : ''}`}>{drawn}</span>
+                    {given(second as ReactNode) && second !== '' && <span className="kit-cell-secondary">{second as ReactNode}</span>}
+                  </>
+                );
+                const stored = row[column.key];
+                const copyable = column.copy && stored !== null && stored !== undefined && stored !== '';
+                const target =
+                  onRowClick && at === 0 ? (
+                    <button
+                      type="button"
+                      className="kit-table-link"
+                      onClick={(event) => {
+                        // The row's own click is the pointer's; this one is the keyboard's, and must not run it twice.
+                        event.stopPropagation();
+                        onRowClick(row);
+                      }}
+                    >
+                      {lines}
+                    </button>
+                  ) : (
+                    lines
+                  );
                 return (
-                  <td key={column.key} className={`align-${column.align ?? 'left'}${typeof row[column.key] === 'number' ? ' num' : ''}`}>
-                    {onRowClick && at === 0 ? (
-                      <button
-                        type="button"
-                        className="kit-table-link"
-                        onClick={(event) => {
-                          // The row's own click is the pointer's; this one is the keyboard's, and must not run it twice.
-                          event.stopPropagation();
-                          onRowClick(row);
-                        }}
-                      >
-                        {drawn}
-                      </button>
+                  <td key={column.key} className={`kit-cell align-${column.align ?? 'left'}${typeof stored === 'number' ? ' num' : ''}`}>
+                    {copyable ? (
+                      <span className="kit-cell-copyable">
+                        {target}
+                        <CopyValue
+                          value={stored}
+                          label={typeof column.label === 'string' ? column.label : column.key}
+                          announce={(text, tone) => host?.announce(text, tone)}
+                        />
+                      </span>
                     ) : (
-                      drawn
+                      target
                     )}
                   </td>
                 );

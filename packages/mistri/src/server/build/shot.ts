@@ -50,6 +50,7 @@ import { readPage, sayPage } from './shotText.js';
 import { inPage } from './gradeProbe.js';
 import { performSteps, STEP_FLAGS, stepOf, type ShotStep } from './shotSteps.js';
 import { MATRIX_MODES, MATRIX_SIZES, matrixFile, matrixIndex } from './shotMatrix.js';
+import { refusalHeadline } from '@mistriwork/engine/shared/refusal.js';
 import { CONFIG_SECTIONS } from '../serviceConnections.js';
 
 const SHOT_USAGE =
@@ -1455,18 +1456,32 @@ interface OpenedShotRun {
 
 /**
  * The role a run signs in as when none is named: the one that reads the most resources (`read: true` is all of
- * them), the first declared on a tie — the role whose screens hold the most to measure. With no roles, the
- * bootstrapped administrator.
+ * them), breaking ties toward reachable views, fuller grants, unrestricted fields, and `admin` before declaration
+ * order — the role whose screens hold the most to measure. With no roles, the bootstrapped administrator.
  */
-export function widestRole(app: Pick<LoadedApp['app'], 'auth' | 'resources'>): string {
+export function widestRole(app: Pick<LoadedApp['app'], 'auth' | 'resources'> & { views?: LoadedApp['app']['views'] }): string {
   const all = Object.keys(app.resources ?? {}).length;
-  let best: { role: string; reads: number } | undefined;
+  const views = Object.values(app.views ?? {});
+  let best: { role: string; score: readonly number[] } | undefined;
   for (const [role, grant] of Object.entries(app.auth?.roles ?? {})) {
     if (grant.service === true) continue;
     const reads = grant.read === true ? all : Array.isArray(grant.read) ? grant.read.length : 0;
-    if (!best || reads > best.reads) best = { role, reads };
+    const reachableViews = views.filter((view) => !view.roles?.length || view.roles.includes(role)).length;
+    const writes = grant.write === true ? all : Array.isArray(grant.write) ? grant.write.length : 0;
+    const creates = grant.create === false ? 0 : Array.isArray(grant.create) ? grant.create.length : writes;
+    const commands = grant.commands?.length ?? 0;
+    const narrowed = Object.keys(grant.fields ?? {}).length;
+    const score = [reads, reachableViews, writes + creates + commands, -narrowed, grant.portal === true ? 0 : 1, role === 'admin' ? 1 : 0];
+    if (!best || compareTuple(score, best.score) > 0) best = { role, score };
   }
   return best?.role ?? 'admin';
+}
+
+function compareTuple(a: readonly number[], b: readonly number[]): number {
+  for (let i = 0; i < a.length; i++) {
+    if (a[i]! !== b[i]!) return a[i]! - b[i]!;
+  }
+  return 0;
 }
 
 /**
@@ -1542,7 +1557,7 @@ class ShotRun {
         ...(opts.appEntry !== undefined ? { entry: opts.appEntry } : {}),
         ...(env ? { env } : {}),
       }).catch((error) => {
-        throw new Refusal(`the App did not load: ${(error as Error).message.split('\n')[0]} mistri check --app says more.`);
+        throw new Refusal(`the App did not load: ${refusalHeadline(error).split('\n')[0]} mistri check --app says more.`);
       });
       refused(() => assertPresentationNamesApps(presentation, [loaded]));
       refused(() => assertDeploymentAuthNamesApps(deploymentAuth, [loaded]));

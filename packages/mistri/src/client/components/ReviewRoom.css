@@ -19,6 +19,7 @@
 .review-record { justify-self: start; color: var(--ink); font-weight: 600; overflow-wrap: anywhere; }
 .review-record-link { padding: 0; border: 0; background: none; color: var(--link); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
 @media (hover: hover) { .review-record-link:hover { text-decoration: underline; } }
+@media (pointer: coarse) { .review-record-link { position: relative; } .review-record-link::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); } }
 .review-record-noun { color: var(--ink-muted); font-weight: 400; }
 .review-reason { color: var(--ink); overflow-wrap: anywhere; }
 .review-meta { color: var(--ink-muted); font: var(--text-sm) var(--sans); }

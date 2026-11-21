@@ -27,12 +27,12 @@
       #table-list button[aria-current='true'],
       .mobile-nav-list button[aria-current='true']
     ) {
-    background: var(--nav-current);
-    color: var(--nav-on-current, var(--nav-ink));
+    background: var(--part-nav-current-ground, var(--nav-current));
+    color: var(--part-nav-current-ink, var(--nav-on-current, var(--nav-ink)));
     /* The block replaces a look's own mark, but not one the look draws beside any block (`--nav-current-mark`, the
      slot's marker in workshopLook.css), so a theme may tint the current entry and keep the accent's slot, as
      Workshop does. */
-    box-shadow: var(--nav-current-mark, none);
+    box-shadow: var(--part-nav-current-lift, var(--nav-current-mark, none));
   }
   :root[data-nav-current] .app-mode .topbar :is(.tn-item[aria-current='true'], .tn-group.active > .tn-group-button)::after {
     background: transparent;
@@ -256,15 +256,16 @@
     }
   }
 
-  /* A heading, not a crumb: the list title's step in the look's heading face (style.css tokens). */
+  /* A heading, not a crumb: the list title's step in the look's heading face (style.css tokens), or in the theme's
+     own (`page.title` part). */
   .crumbs h1.applist-title {
     margin: 0;
-    font-family: var(--heading-font, var(--sans));
+    font-family: var(--part-page-title-face, var(--heading-font, var(--sans)));
     font-size: var(--type-list-title);
     line-height: 1.2;
-    font-weight: var(--heading-weight);
-    letter-spacing: var(--track-title);
-    color: var(--ink);
+    font-weight: var(--part-page-title-weight, var(--heading-weight));
+    letter-spacing: var(--part-page-title-tracking, var(--track-title));
+    color: var(--part-page-title-ink, var(--ink));
   }
 
   .applist-head.in-crumbs {
@@ -900,9 +901,9 @@
     .pbd-drill {
       min-height: 44px;
     }
-    /* The command form's line pickers draw at the row's 30px. */
+    /* The command form's line pickers draw at 44px on a coarse pointer. */
     .form-lines-grid .lines-ref:not(.has-sub) .picker-input {
-      height: 40px;
+      height: 44px;
     }
     /* The chrome's own controls the same way, on ::before, since a tab's underline and a field's pencil are
      already their ::after: the brand, the header's icon buttons, a view's tabs, the buttons and a checklist
@@ -938,6 +939,7 @@
       .tn-mobile-menu,
       .tn-search,
       .presentation-seg,
+      .timeline-mode,
       .page-metric-value,
       .dashboard-note-action,
       .peekpanel-close,
@@ -972,6 +974,7 @@
       .tn-mobile-menu,
       .tn-search,
       .presentation-seg,
+      .timeline-mode,
       .page-metric-value,
       .dashboard-note-action,:is([data-slot='date-field'] > [data-slot='popover-trigger']),
       .peekpanel-close,
@@ -1427,7 +1430,11 @@
   /* The room is a pane standing on the menu's ground (docs/design.md, the shell): inset from the window's edge on the
      three sides the menu is not, a hairline round it and corners a step rounder than a control's. The menu and the
      room then read as two things, and the room as the one that changes. The menu's own edge would be a second
-     line beside the pane's. */
+     line beside the pane's, unless a theme draws it (`nav` part's edge).
+     A theme's part rules are in `@layer theme`, under this one: what a part may set on an element is said here
+     through the part's own token (`--part-ground-ground` and the rest, appTheme.js), so a declared part wins and
+     every other App draws as before (test/theme-parts-structure.test.ts). The pane's bar is the pane's head, so it
+     wears the page's ground, edge and corner too. */
   body.app-sidebar-shell .layout {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
@@ -1436,7 +1443,7 @@
   }
   body.app-sidebar-shell .layout > .sidebar {
     grid-row: 1 / -1;
-    border-right-color: transparent;
+    border-right-color: var(--part-nav-edge, transparent);
   }
   /* The pane's bar (sidebarShell.js): where the reader is, then what is the same in every room — the search, the
      bell, the account — at its far end, over a rule. It is the pane's head: its corners are the pane's, the room
@@ -1452,18 +1459,19 @@
     height: 52px;
     margin: var(--space-3) var(--space-3) 0 0;
     padding-inline: calc(var(--space-5) + var(--room-inset)) var(--space-4);
-    border: 1px solid var(--line);
+    border: 1px solid var(--part-ground-edge, var(--line));
     border-bottom: 0;
-    border-radius: calc(var(--radius) + 4px) calc(var(--radius) + 4px) 0 0;
-    background: var(--surface);
+    border-radius: var(--part-ground-radius, calc(var(--radius) + 4px)) var(--part-ground-radius, calc(var(--radius) + 4px)) 0 0;
+    background: var(--part-ground-ground, var(--surface));
   }
   body.app-sidebar-shell .layout > .content {
     grid-column: 2;
     margin: 0 var(--space-3) var(--space-3) 0;
-    border: 1px solid var(--line);
-    border-top: var(--pane-rule, 1px solid var(--line));
-    border-radius: 0 0 calc(var(--radius) + 4px) calc(var(--radius) + 4px);
-    background: var(--surface);
+    border: 1px solid var(--part-ground-edge, var(--line));
+    /* A look that rules its bar in ink keeps that rule: it is the bar's foot, not the pane's edge. */
+    border-top: var(--pane-rule, 1px solid var(--part-ground-edge, var(--line)));
+    border-radius: 0 0 var(--part-ground-radius, calc(var(--radius) + 4px)) var(--part-ground-radius, calc(var(--radius) + 4px));
+    background: var(--part-ground-ground, var(--surface));
   }
   /* The pane's own edge is a margin already: the room keeps a step less of its gutter inside it, so what stands
      in it starts where it would under a bar. An App's own gutter and a bare page keep theirs (features.css). */
@@ -1477,7 +1485,7 @@
   body.app-sidebar-shell.page-bare .layout > .content {
     margin: 0;
     border: 0;
-    border-radius: 0;
+    border-radius: var(--part-ground-radius, 0);
   }
   /* Where the reader is: the menu's group, then the room, said once more for the eye (the menu's current row and
      the room's heading say it to everyone else). The room's name gives way first. */

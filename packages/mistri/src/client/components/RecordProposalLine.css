@@ -7,5 +7,10 @@
 .record-ai-act { padding: 0; border: 0; background: none; color: var(--link); font: inherit; cursor: pointer; }
 @media (hover: hover) { .record-ai-act:hover { text-decoration: underline; } }
 .record-ai-act:disabled { color: var(--ink-muted); cursor: default; text-decoration: none; }
+@media (pointer: coarse) {
+.record-ai-line { gap: var(--space-2); }
+.record-ai-act { position: relative; }
+.record-ai-act::after { content: ''; position: absolute; left: 50%; top: 50%; width: max(100%, 44px); height: max(100%, 44px); transform: translate(-50%, -50%); }
+}
 .unconfirmed-mark { display: inline-flex; align-items: center; gap: var(--space-2); margin-inline-start: var(--space-2); font: var(--text-sm) var(--sans); }
 }

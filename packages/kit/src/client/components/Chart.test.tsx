@@ -489,6 +489,21 @@ describe('the donut', () => {
     }
   });
 
+  test('says the centre total and every slice in one number format when a legend speaker is given', () => {
+    const { container } = render(
+      <DonutChart
+        rows={[
+          { key: 'a', value: 1500 },
+          { key: 'b', value: 500 },
+        ]}
+        say={(n) => String(n)}
+        sayLegend={() => (n) => `$${Number(n) / 1000}k`}
+      />,
+    );
+    expect(container.querySelector('.chart-donut-total')?.textContent).toBe('$2k');
+    expect([...container.querySelectorAll('.chart-legend-value')].map((e) => e.textContent)).toEqual(['$1.5k', '$0.5k']);
+  });
+
   test('gathers the tail into others, and only a named slice is a door', async () => {
     const user = userEvent.setup();
     const picked: unknown[] = [];

@@ -15,9 +15,11 @@ import { useQueries } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { columnDisplay, columnLabel, findTable, state } from '../core.js';
 import { hasFilterOf } from '@mistriwork/engine/shared/listFilters.js';
+import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
 import { presentationColumns } from './columnPresentation.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import type { ColumnMeta, TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { message } from '../messages.js';
 import { andWords, written } from './conditionText.js';
 import type { ConditionSpeaker } from './conditionWords.js';
 import { referenceNameQuery } from './FilterBoxes.js';
@@ -35,7 +37,8 @@ function appSpeaker(table: TableMeta | undefined): ConditionSpeaker | null {
   if (!table?.columns.length || columnLabel(table.id, table.columns[0].name) == null) return null;
   return {
     column: (name) => table.columns.find((column) => column.name === name) ?? acrossColumn(table, name),
-    label: (name) => (columnLabel(table.id, name) as string | null) ?? humanName(name),
+    label: (name) =>
+      name === LABEL_SEGMENT ? message('common.name') : ((columnLabel(table.id, name) as string | null) ?? humanName(name)),
     rule: (name) => columnDisplay(table.id, name) as DisplayRule | null,
   };
 }
@@ -45,7 +48,10 @@ function appSpeaker(table: TableMeta | undefined): ConditionSpeaker | null {
    theirs — a yes with no value. A path or rows this reader is not served are no column, and said as another. */
 function acrossColumn(table: TableMeta, name: string): (ColumnMeta & { allowed?: readonly string[] }) | undefined {
   const has = hasFilterOf(name);
-  if (!has) return name.includes('.') ? (presentationColumns(state.schema, table, [name]).get(name) as ColumnMeta | undefined) : undefined;
+  if (!has)
+    return name.includes('.') || name === LABEL_SEGMENT
+      ? (presentationColumns(state.schema, table, [name]).get(name) as ColumnMeta | undefined)
+      : undefined;
   const child = (findTable(has.child) ?? state.schema?.tables.find((t: TableMeta) => t.name === has.child)) as TableMeta | undefined;
   if (!child) return undefined;
   if (child.segments && Object.hasOwn(child.segments, has.asks)) return { name, type: 'BOOLEAN', nullable: false, primaryKey: false };

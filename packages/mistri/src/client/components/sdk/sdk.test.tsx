@@ -7,7 +7,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as ui from './index.js';
 import type * as PublicUi from '../../../../schema/ui.js';
@@ -43,7 +43,8 @@ describe('the SDK surface', () => {
 });
 
 describe('the kit', () => {
-  const host = { column: () => undefined, app: true } as unknown as UiHost;
+  const announce = vi.fn();
+  const host = { column: () => undefined, app: true, announce } as unknown as UiHost;
   const withHost = (node: React.ReactNode) => render(<UiHostContext.Provider value={host}>{node}</UiHostContext.Provider>);
 
   test('a card inside a card is a plain group, never a box in a box', () => {
@@ -166,6 +167,63 @@ describe('the kit', () => {
       expect(onRowClick).toHaveBeenLastCalledWith(rows[1]);
     });
 
+    describe('identity cell', () => {
+      const identity = [
+        { key: 'name', label: 'Home', secondary: 'ref', copy: true },
+        { key: 'status', label: 'Status' },
+      ];
+      const identityRows = [{ name: 'Maple Court', ref: 'EXT-0000000000000000000000000001', status: 'ready' }];
+
+      test('draws a secondary line under the primary, and the weight is the primary line only', () => {
+        withHost(<Table label="Homes" columns={identity} rows={identityRows} />);
+        const secondary = screen.getByText('EXT-0000000000000000000000000001');
+        expect(secondary).toHaveClass('kit-cell-secondary');
+        expect(secondary).not.toHaveClass('kit-cell-primary-strong');
+        const cell = secondary.closest('td')!;
+        expect(cell).toHaveClass('kit-cell');
+        expect(within(cell).getByText('Maple Court').closest('.kit-cell-primary')).toHaveClass('kit-cell-primary-strong');
+        // Only the first column is strong unless said; `emphasis` says it either way.
+        expect(screen.getByText('ready').closest('.kit-cell-primary')).not.toHaveClass('kit-cell-primary-strong');
+      });
+
+      test('takes a function for the secondary and `emphasis` to turn the first column down', () => {
+        withHost(
+          <Table
+            label="Homes"
+            columns={[{ key: 'name', label: 'Home', emphasis: 'normal', secondary: (row) => `#${String(row.name).length}` }]}
+            rows={identityRows}
+          />,
+        );
+        expect(screen.getByText('#11')).toHaveClass('kit-cell-secondary');
+        expect(screen.getByText('Maple Court').closest('.kit-cell-primary')).not.toHaveClass('kit-cell-primary-strong');
+      });
+
+      test('holds both lines in the one link, with no interactive element nested in it, and the copy button beside it', async () => {
+        const onRowClick = vi.fn();
+        withHost(<Table label="Homes" columns={identity} rows={identityRows} onRowClick={onRowClick} />);
+        const link = screen.getByRole('button', { name: /Maple Court/ });
+        expect(link).toHaveClass('kit-table-link');
+        expect(link).toHaveTextContent('EXT-0000000000000000000000000001');
+        expect(link.querySelector('a, button, [role="button"], [tabindex]')).toBeNull();
+        const copy = screen.getByRole('button', { name: 'Copy Home' });
+        expect(link.contains(copy)).toBe(false);
+        expect(copy.closest('td')).toBe(link.closest('td'));
+        announce.mockClear();
+        fireEvent.click(copy);
+        expect(onRowClick).not.toHaveBeenCalled();
+        // The copy settles inside the test (said either way: happy-dom may refuse the clipboard), never after it.
+        await waitFor(() => expect(announce).toHaveBeenCalledTimes(1));
+      });
+
+      test("puts the weight on `.kit-cell-primary-strong` alone, in the kit's sheet and not on a cell", () => {
+        const css = readFileSync('packages/mistri/src/client/components/sdk/kit.css', 'utf8');
+        expect(css).toMatch(/\.kit-cell-primary-strong\s*\{[^}]*font-weight:\s*600/);
+        expect(css).toMatch(/\.kit-cell-secondary\s*\{[^}]*font-weight:\s*400[^}]*overflow-wrap:\s*anywhere/);
+        const theme = readFileSync('packages/kit/src/client/themeFamilies.css', 'utf8');
+        expect(theme).toMatch(/td:is\(:first-child:not\(\.row-host\), \.row-host \+ td\):not\(\.kit-cell\)\s*\{ font-weight: 600/);
+      });
+    });
+
     test('says its empty note under the head, and lets a column draw its own cell', () => {
       withHost(
         <Table
@@ -183,6 +241,21 @@ describe('the kit', () => {
   test('a meter is a meter to assistive technology', () => {
     withHost(<Meter value={30} max={60} label="30 of 60" />);
     expect(screen.getByRole('meter', { name: '30 of 60' })).toHaveAttribute('aria-valuenow', '30');
+  });
+
+  test("a meter is named and read in the App's words: ariaLabel names it, valueLabel says its value", () => {
+    withHost(<Meter value={12} max={40} label={<b>12</b>} ariaLabel="Seats taken" valueLabel="12 of 40 seats" />);
+    const meter = screen.getByRole('meter', { name: 'Seats taken' });
+    expect(meter).toHaveAttribute('aria-valuetext', '12 of 40 seats');
+    expect(meter).toHaveAttribute('aria-valuenow', '12');
+    expect(meter).not.toHaveClass('meter-fluid');
+  });
+
+  test('a fluid meter stretches across what it is given; ariaLabel says other words than a string label', () => {
+    withHost(<Meter value={3} max={4} tone="warn" label="3/4" ariaLabel="Steps done" size="fluid" />);
+    const meter = screen.getByRole('meter', { name: 'Steps done' });
+    expect(meter).toHaveClass('meter-wrap', 'meter-warn', 'meter-fluid');
+    expect(meter).not.toHaveAttribute('aria-valuetext');
   });
 });
 

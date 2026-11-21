@@ -5,6 +5,34 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.75
+
+Seams between the kit and a page of the App's own, from a field report.
+
+- A `<Button href>` reads as its variant again on a free-form page: the page's link ink no longer outranks the button's,
+  so a primary link is the primary button (it was the link color on the accent, 1.22:1). A button and a button-as-link
+  share one look when visited, hovered, focused, pressed or held, and a held link does not navigate.
+- A theme's page ground (`parts: { ground: { ground } }`) is the pane's in the sidebar shell too, in either pane recipe,
+  light and dark; the shell's structure reads the part's token rather than drawing the plain surface over it.
+- A `PageHeader` with verbs on a `head: false` page is two regions, the title over its description beside the verbs,
+  that stack on a phone, with no extra inset on a free-form page.
+- The custom components' `Value` honors a column's `display.copy` with the record's copy button and its notices,
+  copying the value as stored; it draws no button inside a link, a button or a row that opens.
+- A kit `Table` column can be a row's identity: `secondary` puts a second line inside the row's one link, and `copy`
+  draws the record's copy button beside it (never inside it), with the same notices and without opening the row.
+- `Meter` takes `ariaLabel` (what it measures), `valueLabel` (the value as a screen reader says it) and
+  `size: 'fluid'` (the bar across its row or column).
+- `page.useBreakdown()`'s `by` takes what a chart's does, held to the same check: `'day created_at'`,
+  `'month closed_at, status'`.
+- A view over a table with a templated record label searches by that label instead of saying `$label equals`.
+- A money column's default shows as an amount (`0.00`), not `Default: 0`.
+- Disabled pickers carry `aria-disabled`, `mistri grade` leaves disabled controls out of the edge-contrast check, and
+  line grips, line fields, timeline modes and proposal verbs reach 44px on a coarse pointer.
+- Card summaries keep their `·` separators clear of truncated text; a donut's centre and legend share one number format.
+- A JSON value on a record page reads whole; timeline day headers stay in view while the list scrolls and mixed
+  timestamp formats sort by time.
+- CLI load and build failures lead with the root cause, and the role `mistri grade` signs in as breaks ties by reach.
+
 ## 1.0.0-rc.74
 
 A CSV import can fill a parent and its lines in one go, its check is a true dry run, and a read can filter by another

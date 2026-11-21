@@ -21,6 +21,7 @@ import { canEditRow } from '../write.js';
 import { cardStem, sharedPrefix } from '@mistriwork/engine/shared/pagePaths.js';
 import { labelColumn, type ColumnMeta, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { Editable } from './Editable.js';
+import { jsonValueOf } from './jsonModel.js';
 import { RefJump, Value } from './Value.js';
 import { defaultFieldPaths, definedThrough, fieldsColumns } from '@mistriwork/engine/shared/recordReads.js';
 import { presentationColumns } from './columnPresentation.js';
@@ -492,8 +493,8 @@ export function FieldsSection({
             row={{ ...row, [path]: next }}
           />
         ) : (
-          /* A record's own field is where rich text is read whole; a list or a card shows its excerpt. */
-          <Value col={column} value={next} tableId={base.id} compact links wholeText />
+          /* A record's own field is where rich text and JSON documents are read whole; a list or a card shows an excerpt. */
+          <Value col={column} value={next} tableId={base.id} compact={jsonValueOf(column, next) === null} links wholeText />
         );
       dd = (
         <dd className="page-field-edit">
@@ -589,8 +590,11 @@ export function FieldsSection({
        its caption in an aside, Depot's product description wrapped word by word. */
     const rule = columnDisplay(base.id, path) as DisplayRule | null;
     const dress = column?.references || value === null || value === undefined ? null : dressFor(rule, value);
+    /* A JSON document is read whole under its caption, in a rail or a grid alike. */
+    const isJson = !column?.references && (dress?.kind === 'json' || jsonValueOf(column, value) !== null);
     const long =
       rule?.format === 'richText' ||
+      isJson ||
       (rail && !column?.references && value != null && (dress ? dress.kind === 'richText' : sayValue(column, value).kind === 'long'));
     /* …and a long text alone under its section's title is read under that title, as a document's paragraph. */
     const lone = Boolean(section.title) && paths.length === 1 && (!rail || long);

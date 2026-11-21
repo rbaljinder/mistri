@@ -99,6 +99,7 @@ export async function runFlowsCommand(
     if (opts.target) registry.add({ name: redact(opts.target), url: opts.target, schemas: opts.schemas, source: 'argument' });
     const [
       { loadApp },
+      { refusalHeadline },
       { isTenantApp },
       { loadJobModule, jobStorePolicy },
       { flowRunnersOf },
@@ -110,6 +111,7 @@ export async function runFlowsCommand(
       { startFlows },
     ] = await Promise.all([
       import('../app/apps.js'),
+      import('@mistriwork/engine/shared/refusal.js'),
       import('../../shared/app.js'),
       import('../jobs/jobLoader.js'),
       import('../workflows/flowChanges.js'),
@@ -128,7 +130,7 @@ export async function runFlowsCommand(
         ...(opts.commands !== undefined ? { commands: opts.commands } : {}),
       });
     } catch (error) {
-      return fail(`the App in ${flags['--app']} did not load: ${(error as Error).message.split('\n')[0]}`);
+      return fail(`the App in ${flags['--app']} did not load: ${refusalHeadline(error).split('\n')[0]}`);
     }
     const app = loaded.app;
     const def = Object.hasOwn(app.resources ?? {}, resource) ? app.resources![resource] : undefined;

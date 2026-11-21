@@ -97,7 +97,6 @@
     "font-size calc(32px * var(--type-k))": 1,
     "space -2px": 1,
     "space -8px": 1,
-    "space -15px": 1,
     "space -18px": 2,
     "space -20px": 1,
     "space -21px": 1,

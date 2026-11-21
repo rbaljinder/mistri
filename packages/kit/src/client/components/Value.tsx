@@ -19,7 +19,7 @@ import { itemsText, jsonValueOf, previewOf } from './jsonModel.js';
 import { TAGS_TYPE, tagChips } from '@mistriwork/engine/shared/tagLists.js';
 import { AvatarText, Dressed, Said } from './Dressed.js';
 import { ValueSlot } from './valueRenderers.js';
-import { Icon } from './Icon.js';
+import { CopyValue } from './CopyValue.js';
 import { say } from '../copy/record/components/Value.js';
 import { shellBody } from '../shellHost.js';
 import { Subtitled } from './SecondLine.js';
@@ -127,31 +127,12 @@ function BareValue(props: ValueProps) {
   return (
     <span className="value-copyable">
       {drawn}
-      <CopyValue value={value} label={columnLabel(tableId!, col?.name ?? '') ?? humanName(col?.name ?? '')} />
+      <CopyValue
+        value={value}
+        label={columnLabel(tableId!, col?.name ?? '') ?? humanName(col?.name ?? '')}
+        announce={(text, tone) => (tone === 'error' ? toast(text, 'error') : toast(text))}
+      />
     </span>
-  );
-}
-
-/** The stored value to the clipboard, as stored: an id past 2^53 arrives as a string and is copied as one. */
-function CopyValue({ value, label }: { value: unknown; label: string }) {
-  const named = say('copyValue', { label });
-  return (
-    <button
-      type="button"
-      className="value-copy"
-      aria-label={named}
-      title={named}
-      onClick={() => {
-        const text = typeof value === 'object' ? JSON.stringify(value) : String(value);
-        navigator.clipboard
-          .writeText(text)
-          .then(() => toast(say('copiedValue', { label })))
-          /* The clipboard can be refused — an insecure origin, a permission denied; the value is on screen. */
-          .catch(() => toast(say('common.theBrowserRefusedClipboard'), 'error'));
-      }}
-    >
-      <Icon name="copy" size={16} />
-    </button>
   );
 }
 
@@ -274,7 +255,7 @@ function PlatformValue({ col, value, tableId, compact = false, links = !compact,
   const link = tableId === undefined || !links ? null : linkFor(col?.name, value, rule, shellBody().classList.contains('app-mode'));
   if (link) return <ValueLink link={link} />;
   const dress = tableId === undefined ? null : dressFor(rule, value);
-  if (dress) return <Dressed dress={dress} compact={compact && !(wholeText && dress.kind === 'richText')} />;
+  if (dress) return <Dressed dress={dress} compact={compact && !(wholeText && (dress.kind === 'richText' || dress.kind === 'json'))} />;
   /* In an App a vocabulary's value is a word, as its chip says it ("On hold"
      for `on_hold`); the Workbench shows the data exactly. */
   return <Said col={col} value={value} compact={compact} app={shellBody().classList.contains('app-mode')} />;

@@ -31,7 +31,11 @@
 
   /* A filled primary is the ink, not the accent: UI SDK fills `solid` with its primary, which here is the accent
      that checked and selected states wear. */
-  /* A link dressed as a button is read as a button: no underline, in the button's own ink. */
+  /* A link dressed as a button is read as a button: no underline, in the button's own ink, in every state a link
+     has. The variants below key on the part, never on the element or a link state, so a visited, hovered, focused
+     or pressed link wears what the same button wears; a held one says `data-disabled` as a held button does
+     (Button.tsx). A rule that dresses plain links leaves the part alone (`:where(:not([data-slot]))`), because one
+     written straight into base outranks this whole layer (kit style.css, `.free-page-body a`). */
   a[data-slot='button'] {
     text-decoration: none;
   }

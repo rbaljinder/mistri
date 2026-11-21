@@ -365,8 +365,10 @@ export function appAddressBook(input: AddressBookInput): AddressBook {
       route = { segment: book.pages.get(page)!, table: table.id, target: { kind: 'page', page, table: table.id } };
     if (!route) {
       const target: RouteTarget = { kind: 'table', table: table.id };
-      // Only a resource the App declares is the author's to be told about.
-      if (claim(table.id, target, `resources "${table.name}"`, Boolean(resource))) route = { segment: table.id, table: table.id, target };
+      /* Only a resource the App declares is the author's to be told about; one that serves nothing of its own (`{}`, or
+         only access and ownership, which the served map drops) asks for no address, so losing one is not news. */
+      const told = resource !== undefined && Object.keys(resource).length > 0;
+      if (claim(table.id, target, `resources "${table.name}"`, told)) route = { segment: table.id, table: table.id, target };
     }
     if (!route) continue;
     if (resource?.address !== undefined) {

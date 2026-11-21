@@ -95,9 +95,29 @@ export interface ButtonLinkProps extends AnchorHTMLAttributes<HTMLAnchorElement>
 }
 
 /** A link dressed as a button: it goes somewhere (a download, another page) rather than doing something here, so it
-    is an anchor and nothing more, wearing the button's part for its look. */
-function DefaultButtonLink({ intent = 'secondary', size = 'default', block, ...rest }: ButtonLinkProps) {
-  return <a {...rest} data-slot="button" data-variant={VARIANT[intent]} data-size={SIZE[size]} data-block={block ? '' : undefined} />;
+    is an anchor and nothing more, wearing the button's part for its look. A held one (`aria-disabled`) says so in
+    the part's own state attribute, so it is drawn as a held button (dimmed, still under the pointer), and it refuses
+    to go, as a held button refuses its press. */
+function DefaultButtonLink({ intent = 'secondary', size = 'default', block, onClick, ...rest }: ButtonLinkProps) {
+  const held = rest['aria-disabled'] === true || rest['aria-disabled'] === 'true';
+  const follow = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (held) {
+      event.preventDefault();
+      return;
+    }
+    onClick?.(event);
+  };
+  return (
+    <a
+      {...rest}
+      onClick={follow}
+      data-slot="button"
+      data-variant={VARIANT[intent]}
+      data-size={SIZE[size]}
+      data-block={block ? '' : undefined}
+      data-disabled={held ? '' : undefined}
+    />
+  );
 }
 
 /* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */

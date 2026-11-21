@@ -499,8 +499,10 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
       )
         answer = await ask();
       assert.ok(answer.status < 300, `${name}: ${answer.status} ${answer.text.slice(0, 300)}`);
-      measured[name] = answer;
-      const line = `${name}: ${answer.total} flights ${JSON.stringify(answer.flights)}`;
+      /* Still on a refresh after both retries (a bulk save on a loaded runner outlasts the window each time): the
+         refresh's `auth` flight is the window's, and is discounted, as for the saves together below. */
+      measured[name] = refreshed(answer) ? { ...answer, total: answer.total - answer.flights.auth! } : answer;
+      const line = `${name}: ${answer.total} flights ${JSON.stringify(answer.flights)}${refreshed(answer) ? ' (one session refresh)' : ''}`;
       t.diagnostic(line);
       if (PRINT) console.log(`${line} ${answer.text.slice(0, 300)}\n${byFlight(answer.statements)}`);
     }

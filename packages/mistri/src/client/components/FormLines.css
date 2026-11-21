@@ -375,6 +375,26 @@
     height: 30px;
     padding: 0 var(--space-3);
   }
+  @media (pointer: coarse) {
+    .lines-grip {
+      position: relative;
+    }
+    .lines-grip::after {
+      content: '';
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      width: max(100%, 44px);
+      height: max(100%, 44px);
+      transform: translate(-50%, -50%);
+    }
+    .form-lines-grid .lines-box {
+      min-height: 44px;
+    }
+    .form-lines-grid .lines-box :is(.lines-input, .lines-control input, [data-slot='select-trigger'], .picker-input) {
+      height: 44px;
+    }
+  }
   .form-lines-grid .lines-input.is-figure {
     text-align: right;
     font-variant-numeric: tabular-nums;

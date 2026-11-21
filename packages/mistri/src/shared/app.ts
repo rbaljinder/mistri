@@ -2001,7 +2001,9 @@ export function resolveResources(app: AppDef, schema: DatabaseSchema): { resourc
           })()
         : {}),
     };
-    if (Object.keys(served).length) resources[table.id] = served;
+    /* A resource declared `{}` is still one of the App's: a free-form page may name it in `reads`, and the client
+       checks a page's resource against these keys, so an empty entry is kept rather than dropped. */
+    resources[table.id] = served;
   }
   /* A flow's page may draw its steps, and a record's page its run: both tables are told the steps table the binding
      names, where the binding runs, and whether each of its App kinds waits for a word (an approval) or only runs. */

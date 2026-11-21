@@ -54,7 +54,7 @@ import type { FormScalar } from '@mistriwork/engine/shared/formValues.js';
 import { isPickerDateTime } from '@mistriwork/ui/internal/datePickerModel.js';
 import { defaultCurrency } from '../locale.js';
 import { wordFor, type DisplayRule } from './valueModel.js';
-import { rowCurrency } from '@mistriwork/engine/shared/money.js';
+import { majorText, minorToMajor, rowCurrency } from '@mistriwork/engine/shared/money.js';
 import { MinorMoneyInput, minorProblem } from './MinorMoneyInput.js';
 import type { LineDraft } from '../shellMode.js';
 import {
@@ -1053,21 +1053,30 @@ export function PlatformControl({
      plain value, said as the column says it: an expression (a clock, a sequence) or a default the server keeps
      private is the database's to fill, and a field has nothing useful to say about it (a field report). */
   const literal = app ? literalDefault(column.default) : undefined;
+  const moneyDefault =
+    kind === 'money' && literal !== undefined
+      ? (() => {
+          const currency = rule?.currency ?? defaultCurrency();
+          return rule?.minor ? minorToMajor(literal, currency) : majorText(literal, currency);
+        })()
+      : undefined;
   const hint = explicitNull
     ? app
       ? say('common.noValue')
       : 'null'
     : column.identity || column.name === assigned
       ? say('assignedByTheDatabase')
-      : literal !== undefined
-        ? say('defaultValue', { value: allowed?.includes(literal) ? word(literal) : (wordFor(rule, literal) ?? literal) })
-        : column.default !== undefined || column.hasDefault === true
-          ? app
-            ? ''
-            : `default: ${column.default ?? ''}`
-          : column.references
-            ? `→ ${column.references.table}`
-            : '';
+      : moneyDefault !== undefined
+        ? moneyDefault
+        : literal !== undefined
+          ? say('defaultValue', { value: allowed?.includes(literal) ? word(literal) : (wordFor(rule, literal) ?? literal) })
+          : column.default !== undefined || column.hasDefault === true
+            ? app
+              ? ''
+              : `default: ${column.default ?? ''}`
+            : column.references
+              ? `→ ${column.references.table}`
+              : '';
   const said = placeholder ?? hint;
   /* An App's listbox with nothing chosen asks, quietly, as a command form's does; the workbench keeps its dash. */
   const unchosen =

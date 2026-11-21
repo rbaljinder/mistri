@@ -56,3 +56,10 @@ test('constraint paths use the shared resolver; unknown aliases do not invent me
   expect(columns.has('unknown')).toBe(false);
   expect(presentationColumns(undefined, contact, ['account_id.active']).size).toBe(2);
 });
+
+test('a templated record label is a text column, so its search and condition words speak of a name', () => {
+  const lead: TableMeta = { ...account, id: 'lead', name: 'lead', labelTemplate: '{first} {last}' };
+  const columns = presentationColumns({ ...schema, tables: [lead] }, lead, ['$label']);
+  expect(columns.get('$label')).toMatchObject({ name: '$label', type: 'TEXT', identifier: false });
+  expect(presentationColumns({ ...schema, tables: [account] }, account, ['$label']).has('$label')).toBe(false);
+});

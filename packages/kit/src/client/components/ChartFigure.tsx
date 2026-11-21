@@ -149,7 +149,7 @@ export function ChartFigure({
       {answer &&
         wide > 0 &&
         (donut ? (
-          <DonutChart rows={rows} say={say} label={label} onPick={onPick} total={total} ordered={scale} tone={tone} />
+          <DonutChart rows={rows} say={say} sayLegend={sayLegend} label={label} onPick={onPick} total={total} ordered={scale} tone={tone} />
         ) : bars ? (
           <BarChart rows={rows} say={say} label={label} wide={wide} high={height} target={target} tone={tone} partial={partial} />
         ) : stacked ? (

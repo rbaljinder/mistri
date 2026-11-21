@@ -94,12 +94,17 @@ test.describe('Desk blocks', () => {
           box.evaluate((element) => {
             const top = element.getBoundingClientRect().top;
             const lines = [...element.querySelectorAll('.timeline-day-label, [data-timeline-row], .timeline-fold')];
+            // A day's label stays at the top while its day scrolls: what the reader sees starts at its foot.
+            const held = lines.find(
+              (line) => line.matches('.timeline-day-label') && Math.abs(line.getBoundingClientRect().top - top) <= 0.5,
+            );
+            const seen = held ? held.getBoundingClientRect().bottom : top;
             return {
               overflows: element.scrollHeight > element.clientHeight,
               atFoot: element.scrollTop + element.clientHeight >= element.scrollHeight - 2,
               cut: lines.filter((line) => {
                 const edge = line.getBoundingClientRect();
-                return edge.top < top - 0.5 && edge.bottom > top + 0.5;
+                return line !== held && edge.top < seen - 0.5 && edge.bottom > seen + 0.5;
               }).length,
             };
           }),

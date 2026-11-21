@@ -98,6 +98,7 @@ export async function runJobsCommand(
     if (opts.target) registry.add({ name: redact(opts.target), url: opts.target, schemas: opts.schemas, source: 'argument' });
     const [
       { loadApp },
+      { refusalHeadline },
       { isTenantApp },
       { servedJobModule, jobDeployment },
       { jobToRun, enqueueManualRun, findRun, attemptEnded },
@@ -109,6 +110,7 @@ export async function runJobsCommand(
       { resolveConnection },
     ] = await Promise.all([
       import('../app/apps.js'),
+      import('@mistriwork/engine/shared/refusal.js'),
       import('../../shared/app.js'),
       import('../jobs/jobLoader.js'),
       import('../jobs/jobManualRun.js'),
@@ -127,7 +129,7 @@ export async function runJobsCommand(
         ...(opts.commands !== undefined ? { commands: opts.commands } : {}),
       });
     } catch (error) {
-      return fail(`the App in ${flags['--app']} did not load: ${(error as Error).message.split('\n')[0]}`);
+      return fail(`the App in ${flags['--app']} did not load: ${refusalHeadline(error).split('\n')[0]}`);
     }
     const app = loaded.app;
     const tenantApp = isTenantApp(app);
