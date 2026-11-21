@@ -14,7 +14,8 @@ import { captureTenantData } from '@mistriwork/engine/server/evidence.js';
 import type { Bound } from '@mistriwork/engine/server/http/trust.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { withoutCancellation } from '@mistriwork/engine/adapters/statementControl.js';
-import { ApiReadFailure } from './apiReadFailure.js';
+import { ApiReadFailure, apiReadStatus } from './apiReadFailure.js';
+import { CHOICE_HEADER, withChosenHeader } from './apiChosen.js';
 import { readApiBearerHeader } from './apiBearerHeader.js';
 import { bearerChallenge, presentsAuthorization } from '../auth/oauthResource.js';
 import { parseApiReadRoute } from './apiReadRoute.js';
@@ -157,10 +158,11 @@ export function createApiReadHandoffHttp<Owner extends HandoffReadOwner>(
       throw new ApiReadFailure('temporarily_unavailable');
     }
   };
-  const respond = (res: ServerResponse, status: number, code: string) => {
+  /** `detail` is a caller's own mistake about a choice, named by the sentence it is told (apiReadFailure.ts); never a row. */
+  const respond = (res: ServerResponse, status: number, code: string, detail?: string) => {
     if (res.destroyed || res.writableEnded) return;
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ error: { code, message: 'The API request could not be completed.' } }));
+    res.end(JSON.stringify({ error: { code, message: detail ?? 'The API request could not be completed.' } }));
   };
   return Object.freeze({
     prepare: async (): Promise<void> => {
@@ -326,19 +328,25 @@ export function createApiReadHandoffHttp<Owner extends HandoffReadOwner>(
               : route.operationId === '$asyncapi'
                 ? active.readAsyncApi!(credential, send, signal)
                 : route.rawKey === undefined
-                  ? active.readList(credential, route.operationId, route.rawQuery, send, signal)
+                  ? active.readList(
+                      credential,
+                      route.operationId,
+                      withChosenHeader(app, route.rawQuery, req.headers[CHOICE_HEADER]),
+                      send,
+                      signal,
+                    )
                   : active.readItem(credential, route.operationId, route.rawKey, send, signal));
           if (!written && !signal.aborted) respond(res, 503, 'temporarily_unavailable');
           return true;
         } catch (error) {
           if (written || cancellation.signal.aborted) return true;
           const code = error instanceof ApiReadFailure ? error.code : 'temporarily_unavailable';
-          const status = code === 'unauthenticated' ? 401 : code === 'forbidden' ? 403 : code === 'invalid_request' ? 400 : 503;
+          const { status, code: wire } = apiReadStatus(code);
           // A refused credential is the address's to answer for.
           if (status === 401 && client !== undefined) admission.charge(client);
           if (status === 401 && !res.destroyed && !res.writableEnded)
             res.setHeader('www-authenticate', bearerChallenge(auth, 'rest', true));
-          respond(res, status, code);
+          respond(res, status, wire, error instanceof ApiReadFailure ? error.detail : undefined);
           return true;
         } finally {
           req.removeListener('aborted', disconnect);

@@ -9,13 +9,19 @@ import { api } from '@mistriwork/kit/client/core.js';
 import { captureSessionIdentity, captureTenantLease } from '@mistriwork/kit/client/sessionIdentity.js';
 import { TENANT_HTTP_HEADERS as names } from '../../shared/tenantContext.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
+import { shell } from '@mistriwork/kit/client/shellMode.js';
 
 /** The account, and in a tenant App the tab's lease: what the server admits an assistant request by. */
 export function assistantHeaders(): Record<string, string> {
   const identity = captureSessionIdentity();
   if (identity.mode !== 'authenticated' || !identity.accountId) return {};
   const lease = identity.tenantRequired ? captureTenantLease(identity) : undefined;
+  /* The picks the shell would send with any read (an App's `choose`): the assistant acts for the person at this desk,
+     so each tool it calls reads under them. The server reads each row again under the person's own reach, and falls
+     back to their stored pick for a name left out; the assistant has no way to change either. */
+  const chosen = new URLSearchParams(shell().chosen()).toString();
   return {
+    ...(chosen ? { 'x-mistri-chosen': chosen } : {}),
     [names.account]: identity.accountId,
     ...(lease && identity.appId
       ? { [names.app]: identity.appId, [names.tab]: lease.tabId, [names.context]: lease.context, [names.revision]: String(lease.revision) }

@@ -45,6 +45,7 @@ after(() => setAssistantModel(undefined));
 
 const SCRIPT: AssistantScript = {
   turns: [
+    { when: 'chosen leads', steps: [{ tools: [{ name: 'query', input: { q: 'lead id = chosen.site' } }] }, { text: 'At that site.' }] },
     { when: 'leads', steps: [{ tools: [{ name: 'query', input: { q: 'lead' } }] }, { text: 'Here they are.' }] },
     {
       when: 'rename',
@@ -70,12 +71,15 @@ async function assistantFixture(
   cap?: number,
   declared: Record<string, unknown> = {},
   commands?: { registry: BusinessCommandRegistry; manifest: (raw: Record<string, any>) => void; resultReferences: Record<string, unknown> },
+  /** Declare `choose: { site: lead }`, for the tests of the picks a chat request carries. */
+  choose = false,
 ) {
   setAssistantModel(undefined);
   const tenantPolicy: Record<string, unknown> = commands ? { resultReferences: commands.resultReferences } : {};
   const f = await tenantSupportFixture(t, dialect, {
     manifest: (raw) => {
       Object.assign(raw, { assistant: declared });
+      if (choose) Object.assign(raw, { choose: { site: { from: 'lead', label: 'name' } } });
       commands?.manifest(raw);
     },
     tenantPolicy,
@@ -147,13 +151,24 @@ async function assistantFixture(
     [headers.context]: held.context,
     [headers.revision]: String(held.revision),
   });
-  /** An assistant request as the panel sends one: the lease, and nothing that names a tenant. */
-  const assistant = async (who: Account, held: TenantContextReply, path: string, body?: Record<string, unknown>) => {
+  /** An assistant request as the panel sends one: the lease, and nothing that names a tenant. `extra`: more headers, such as the shell's picks. */
+  const assistant = async (
+    who: Account,
+    held: TenantContextReply,
+    path: string,
+    body?: Record<string, unknown>,
+    extra: Record<string, string> = {},
+  ) => {
     const target = body === undefined ? `${path}${path.includes('?') ? '&' : '?'}app=${appId}` : path;
     const response = await fetch(f.origin + target, {
       method: body === undefined ? 'GET' : 'POST',
       signal: AbortSignal.timeout(30_000),
-      headers: { origin: f.origin, ...(body === undefined ? {} : { 'content-type': 'application/json' }), ...leaseHeaders(who, held) },
+      headers: {
+        origin: f.origin,
+        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
+        ...leaseHeaders(who, held),
+        ...extra,
+      },
       ...(body === undefined ? {} : { body: JSON.stringify({ app: appId, ...body }) }),
     });
     const text = await response.text();
@@ -210,6 +225,35 @@ const count = async (f: SupportFixture, table: string, where = '1 = 1', params: 
   Number((await f.rows(`SELECT count(*) AS n FROM "${table}" WHERE ${where}`, params))[0].n);
 
 for (const { dialect, skip } of TENANT_DIALECTS) {
+  test(
+    `${dialect}: a tenant chat request's x-mistri-chosen reaches the assistant's tool call, read again in the lease's tenant`,
+    { skip },
+    async (t) => {
+      const h: Harness = await assistantFixture(t, dialect, undefined, {}, undefined, true);
+      const { sam } = h.f.accounts;
+      applied(await h.setSwitch('north', true));
+      const north = await h.lease(sam, 'north');
+      const evidence = async (chosen?: string) => {
+        const asked = await h.assistant(
+          sam,
+          north,
+          '/api/assistant/turn',
+          { text: 'which chosen leads', mode: 'ask' },
+          chosen ? { 'x-mistri-chosen': chosen } : {},
+        );
+        assert.equal(asked.status, 200, JSON.stringify(asked.body));
+        return JSON.stringify(asked.events);
+      };
+      // The tenant's own key narrows the read to that row.
+      assert.match(await evidence('site=n1'), /North lead/);
+      // Another tenant's key reads as nothing under this member's reach: no rows, and no South lead anywhere.
+      const foreign = await evidence('site=s1');
+      assert.doesNotMatch(foreign, /South lead|North lead/);
+      // No pick (and none stored): nothing is chosen, so the question matches nothing and refuses.
+      assert.doesNotMatch(await evidence(), /South lead|North lead/);
+    },
+  );
+
   test(
     `${dialect}: one person in two tenants: no conversation, event or usage row crosses, and a forged id reads as nothing`,
     { skip },

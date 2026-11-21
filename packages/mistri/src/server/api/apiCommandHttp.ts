@@ -17,7 +17,9 @@ import { bearerChallenge, presentsAuthorization } from '../auth/oauthResource.js
 import { parseApiCommandRoute, type ApiCommandRoute } from './apiCommandRoute.js';
 import { parseApiReadRoute } from './apiReadRoute.js';
 import { ApiCommandRequestError, readApiCommandHeaders } from './apiCommandHeaders.js';
-import { apiTransportProblem, commandProblem } from './apiCommandResponse.js';
+import { apiTransportProblem, chosenProblem, commandProblem } from './apiCommandResponse.js';
+import { CHOICE_HEADER, takeBodyChosen } from './apiChosen.js';
+import { ApiReadFailure } from './apiReadFailure.js';
 import { ApiCommandUnauthenticated } from './sqliteApiCommandOwner.js';
 import {
   admitApiRequest,
@@ -45,7 +47,12 @@ function own(value: object, key: string): unknown {
  * `write` — once, or not at all. */
 export function createApiCommandHttp<
   Owner extends {
-    map(route: ApiCommandRoute, headers: Readonly<{ expectedVersion?: number; idempotencyKey?: string }>, body: unknown): unknown;
+    map(
+      route: ApiCommandRoute,
+      headers: Readonly<{ expectedVersion?: number; idempotencyKey?: string }>,
+      body: unknown,
+      chosen?: unknown,
+    ): unknown;
     retire(): Promise<void>;
   },
 >(
@@ -264,10 +271,20 @@ export function createApiCommandHttp<
           let envelope: unknown;
           if (route) {
             try {
-              envelope = active.map(route, headers!, body);
+              /* An App's `choose`: the call's own picks, from the body's `chosen` and the browser's header, judged in the
+                 mapper and read again by the owner under the token's reach (apiChosen.ts). Never a stored pick. */
+              const taken =
+                route.kind === 'prepare' || route.kind === 'recover'
+                  ? { body, said: undefined }
+                  : takeBodyChosen(app, body, req.headers[CHOICE_HEADER]);
+              envelope = active.map(route, headers!, taken.body, taken.said);
             } catch (error) {
               if (error instanceof ApiCommandRequestError) {
                 refuseEarly(res, error.code);
+                return true;
+              }
+              if (error instanceof ApiReadFailure && error.detail !== undefined) {
+                send(res, 422, JSON.stringify(chosenProblem(error)));
                 return true;
               }
               throw error;

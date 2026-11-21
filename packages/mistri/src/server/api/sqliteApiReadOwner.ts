@@ -18,6 +18,7 @@ import { assertAppApiContext, readApiApp } from './appApiValidation.js';
 import { createApiReadView } from './apiReadView.js';
 import { materializeApiReadResult } from './apiReadResult.js';
 import { createApiCursorReadView } from './apiCursorReadView.js';
+import { chosenAskOf, resolveApiChosen } from './apiChosen.js';
 import { ApiReadFailure, type ApiReadFailureCode } from './apiReadFailure.js';
 import { ApiTokenStoreUnavailable } from '../auth/apiTokenStoreFailure.js';
 import { renderApiReadOpenApi } from './apiReadOpenApi.js';
@@ -331,6 +332,19 @@ export async function createSqliteApiReadOwner(
             return buffer(credential, before, 200, JSON.stringify({ tools: listed.tools }), signal);
           }
           failure = 'invalid_request';
+          const scopedReads = () =>
+            authorizeResources(
+              reads,
+              withReadAuditSink(
+                resolveAppAccess(app, reads.schema, [...before.roles]),
+                { app: app.id, tenant: '', actor: `api-token:${before.tokenId}`, roles: before.roles },
+                physical,
+                lane,
+              ),
+            );
+          // What the call picked (`chosen.<name>`), read again under this token's own reach: never a stored pick.
+          const asked = 'query' in input ? chosenAskOf(app, reads.schema, input.query) : {};
+          const chosen = Object.keys(asked).length ? await resolveApiChosen(app, reads.schema, scopedReads().adapter, asked) : undefined;
           const cursor =
             'query' in input
               ? createApiCursorReadView(
@@ -346,6 +360,8 @@ export async function createSqliteApiReadOwner(
                     ttlMs: 15 * 60 * 1000,
                   },
                   new Date(),
+                  undefined,
+                  chosen,
                 )
               : undefined;
           const checked =
@@ -359,15 +375,7 @@ export async function createSqliteApiReadOwner(
                   view: cursor!.rows,
                 };
           failure = 'forbidden';
-          const scoped = authorizeResources(
-            reads,
-            withReadAuditSink(
-              resolveAppAccess(app, reads.schema, [...before.roles]),
-              { app: app.id, tenant: '', actor: `api-token:${before.tokenId}`, roles: before.roles },
-              physical,
-              lane,
-            ),
-          );
+          const scoped = scopedReads();
           failure = 'temporarily_unavailable';
           if (!scoped.adapter.runView) return refuse();
           requestCurrent();

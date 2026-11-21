@@ -8,7 +8,8 @@ import type { Registry } from '@mistriwork/engine/server/connections.js';
 import type { AppHost } from '../app/apps.js';
 import { captureTenantData } from '@mistriwork/engine/server/evidence.js';
 import type { Bound } from '@mistriwork/engine/server/http/trust.js';
-import { ApiReadFailure } from './apiReadFailure.js';
+import { ApiReadFailure, apiReadStatus } from './apiReadFailure.js';
+import { CHOICE_HEADER, withChosenHeader } from './apiChosen.js';
 import { readApiBearerHeader } from './apiBearerHeader.js';
 import { bearerChallenge, presentsAuthorization } from '../auth/oauthResource.js';
 import { parseApiReadRoute } from './apiReadRoute.js';
@@ -84,10 +85,11 @@ export function createSqliteApiReadHttp(
       throw new ApiReadFailure('temporarily_unavailable');
     }
   };
-  const respond = (res: ServerResponse, status: number, code: string) => {
+  /** `detail` is a caller's own mistake about a choice, named by the sentence it is told (apiReadFailure.ts); never a row. */
+  const respond = (res: ServerResponse, status: number, code: string, detail?: string) => {
     if (res.destroyed || res.writableEnded) return;
     res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' });
-    res.end(JSON.stringify({ error: { code, message: 'The API request could not be completed.' } }));
+    res.end(JSON.stringify({ error: { code, message: detail ?? 'The API request could not be completed.' } }));
   };
   return Object.freeze({
     prepare: async (): Promise<void> => {
@@ -209,7 +211,12 @@ export function createSqliteApiReadHttp(
                 : route.operationId === '$asyncapi'
                   ? await reader.readAsyncApi(credential, cancellation.signal)
                   : route.rawKey === undefined
-                    ? await reader.readList(credential, route.operationId, route.rawQuery, cancellation.signal)
+                    ? await reader.readList(
+                        credential,
+                        route.operationId,
+                        withChosenHeader(app, route.rawQuery, req.headers[CHOICE_HEADER]),
+                        cancellation.signal,
+                      )
                     : await reader.readItem(credential, route.operationId, route.rawKey, cancellation.signal);
           if (cancellation.signal.aborted || res.destroyed || res.writableEnded) return true;
           currentHost();
@@ -222,12 +229,12 @@ export function createSqliteApiReadHttp(
         } catch (error) {
           if (cancellation.signal.aborted) return true;
           const code = error instanceof ApiReadFailure ? error.code : 'temporarily_unavailable';
-          const status = code === 'unauthenticated' ? 401 : code === 'forbidden' ? 403 : code === 'invalid_request' ? 400 : 503;
+          const { status, code: wire } = apiReadStatus(code);
           // A refused credential is the address's to answer for.
           if (status === 401 && client !== undefined) admission.charge(client);
           if (status === 401 && !res.destroyed && !res.writableEnded)
             res.setHeader('www-authenticate', bearerChallenge(auth, 'rest', true));
-          respond(res, status, code);
+          respond(res, status, wire, error instanceof ApiReadFailure ? error.detail : undefined);
           return true;
         } finally {
           req.removeListener('aborted', disconnect);

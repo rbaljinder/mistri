@@ -346,16 +346,23 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
           if (trial && mode !== 'execute') throw new AppAccessDenied();
           /* The App-wide choices, read again under this member's own reader in their tenant (app/appChoices.ts): the tab's
              header, else what they stored for this tenant; `ctx.chosen` for what runs. */
-          const chosen =
-            acting && app.choose
+          /* A token (`entry` is its door) is not a person: it has no stored pick, only what its call named, and a name it
+             left out is unset rather than null (api/apiChosen.ts). */
+          const token = asked.entry !== undefined;
+          const read =
+            acting && app.choose && (!token || chosenHeader)
               ? await readChosen(
                   app,
                   ownership.schema,
                   await scope.reads(),
                   chosenHeader,
-                  await storedPicks?.(scope.principal.accountId, scope.principal.tenantId).catch((): Record<string, string> => ({})),
+                  token
+                    ? undefined
+                    : await storedPicks?.(scope.principal.accountId, scope.principal.tenantId).catch((): Record<string, string> => ({})),
                 )
               : undefined;
+          const named = token && chosenHeader ? new URLSearchParams(chosenHeader) : undefined;
+          const chosen = read && named ? Object.fromEntries(Object.entries(read).filter(([name]) => named.has(name))) : read;
           const said = { ...asked, ...(person ? { locale: person } : {}), ...(chosen ? { chosen } : {}) };
           const flags = commandFlagsOnce(async () => {
             await scope.session();

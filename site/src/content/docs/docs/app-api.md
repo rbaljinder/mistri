@@ -227,6 +227,22 @@ of their tenants, and the token is that membership's: its rows only, its roles
 only, and over once the membership is revoked or changed. The stdio
 `--app-mcp` takes no OAuth token.
 
+## A call that names its choice
+
+An App that declares [`choose`](/docs/dsl-root/) can be read and acted on at a
+row the call names; a token is not a person, so nothing is stored for it. A read
+takes `chosen.<name>=<key>` (`/views/visits?chosen.site=12`), a command takes a
+`chosen` object beside its input (`{ "chosen": { "site": "12" } }`), and an App
+MCP tool takes an optional `chosen` argument. The browser's `x-mistri-chosen`
+header (`site=12`) is accepted on reads and commands alike. Each key is read
+again under the token's own grants, so one it cannot read matches no row, never
+an error. There is no stored fallback for tokens: a name the call leaves out is
+unset. Two refusals, both `422`: `chosen_invalid` (a name the App does not
+declare, or a key the table cannot hold) and `chosen_required` (the question
+uses a name the call left out). A public form's verb ignores `chosen`: the public
+door is never widened. The OpenAPI document and the MCP tool schemas list these
+only for an App that declares `choose`.
+
 ## Export the contract
 
 `--export openapi` prints the document without starting a server, and

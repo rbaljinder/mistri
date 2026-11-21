@@ -12,6 +12,8 @@ import { createApiReadView } from './apiReadView.js';
 import { createApiReadCursorCodec } from './apiReadCursor.js';
 import { composeApiReadContinuation } from './apiReadContinuation.js';
 import { apiDialectOf, apiValueCodec, apiIntegerRepresentation } from './apiValueCodec.js';
+import type { ApiChosen } from './apiChosen.js';
+import { ApiReadFailure } from './apiReadFailure.js';
 
 interface Context {
   secret: Uint8Array;
@@ -70,6 +72,8 @@ export function createApiCursorReadView(
   now: Date,
   /** A tenant App's catalog, from trusted composition; otherwise checked here. */
   given?: ReturnType<typeof checkApiReadCatalog>,
+  /** The picks the call named (apiChosen.ts), read again by the owner under the token's reader. */
+  chosen?: ApiChosen,
 ) {
   try {
     const capturedApp = captureTenantData(app),
@@ -117,8 +121,8 @@ export function createApiCursorReadView(
     // spellings. Only a successful strict parse permits removing that member.
     const plan =
       operation.kind === 'view'
-        ? planApiViewReadRequest(capturedApp, capturedSchema, raw.operationId, raw.query, policy, new Date(instant), catalog)
-        : planApiReadRequest(capturedApp, capturedSchema, raw.operationId, raw.query, policy, catalog, new Date(instant));
+        ? planApiViewReadRequest(capturedApp, capturedSchema, raw.operationId, raw.query, policy, new Date(instant), catalog, chosen)
+        : planApiReadRequest(capturedApp, capturedSchema, raw.operationId, raw.query, policy, catalog, new Date(instant), chosen);
     const table = capturedSchema.tables.find((table) => table.id === operation.resource)!;
     for (const order of plan.order) {
       const column = table.columns.find((column) => column.name === order.column)!;
@@ -139,6 +143,7 @@ export function createApiCursorReadView(
       policy,
       new Date(instant),
       catalog,
+      chosen,
     );
     const actualCatalog = catalogFingerprint({
       appId: capturedApp.id,
@@ -205,7 +210,9 @@ export function createApiCursorReadView(
         }
       },
     });
-  } catch {
+  } catch (error) {
+    // The caller's own mistake about a choice is answered as such, not as an unavailable read (apiChosen.ts).
+    if (error instanceof ApiReadFailure) throw error;
     return refuse();
   }
 }

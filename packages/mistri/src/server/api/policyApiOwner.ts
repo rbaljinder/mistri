@@ -58,6 +58,7 @@ import { checkApiReadCatalog } from './apiReadCatalog.js';
 import { checkApiCommandCatalog } from './apiCommandCatalog.js';
 import { createApiReadView } from './apiReadView.js';
 import { createApiCursorReadView } from './apiCursorReadView.js';
+import { askedChosen, chosenAskOf, resolveApiChosen, takeChosenAsk, type ApiChosen } from './apiChosen.js';
 import { materializeApiReadResult } from './apiReadResult.js';
 import { renderApiReadOpenApi } from './apiReadOpenApi.js';
 import { narrowApiReadOpenApi } from './apiNarrowedReadOpenApi.js';
@@ -248,9 +249,12 @@ export async function createPolicyApiOwner(input: {
           // request is the caller's, answered as such, never a policy refusal.
           const now = new Date();
           let planned: { checked: ReturnType<typeof createApiReadView>; cursor?: ReturnType<typeof createApiCursorReadView> } | undefined;
-          try {
+          // What the call picked (`chosen.<name>`): judged here, read again under this principal's own reach once its
+          // reader exists, and planned a second time with the rows it proved (apiChosen.ts).
+          let asked: ReturnType<typeof chosenAskOf> = {};
+          const plan = (chosen?: ApiChosen): typeof planned => {
             if ('key' in request)
-              planned = {
+              return {
                 checked: createApiReadView(app, schema, { operationId, query: '', key: request.key }, { integers }, now, catalog),
               };
             else if ('query' in request) {
@@ -270,8 +274,9 @@ export async function createPolicyApiOwner(input: {
                 },
                 now,
                 catalog,
+                chosen,
               );
-              planned = {
+              return {
                 cursor,
                 checked: {
                   stage: 'checked-read-view' as const,
@@ -282,7 +287,13 @@ export async function createPolicyApiOwner(input: {
                 } as unknown as ReturnType<typeof createApiReadView>,
               };
             }
-          } catch {
+            return undefined;
+          };
+          try {
+            asked = 'query' in request ? chosenAskOf(app, schema, request.query) : {};
+            planned = plan(askedChosen(app, asked));
+          } catch (error) {
+            if (error instanceof ApiReadFailure && error.code.startsWith('chosen_')) throw error;
             return refuse('invalid_request');
           }
           let answer: Answer;
@@ -323,11 +334,13 @@ export async function createPolicyApiOwner(input: {
                   : [];
                 return { status: 200 as const, body: JSON.stringify({ tools: [...listed, ...runs] }) };
               }
-              const { checked, cursor } = planned!;
               // The deployment's scoped reader: this principal's rows, as the web UI reads them.
               const source = catalog.operations.find((operation) => operation.id === operationId)?.source;
               if (lanes && source === undefined) return refuse();
               const reads = lanes ? context.readsAt(source!) : context.data;
+              // The picks the call named, read again under this principal's own rows, and the read planned with them.
+              if (Object.keys(asked).length) planned = plan(await resolveApiChosen(app, schema, context.data, asked));
+              const { checked, cursor } = planned!;
               const runView = reads.runView;
               if (!runView) return refuse();
               /* The token is the reader the read audit names, under the door its transport set (server/readAudit.ts). */
@@ -395,7 +408,8 @@ export async function createPolicyApiOwner(input: {
       return track(
         (async (): Promise<'sent' | 'uncertain'> => {
           if (retired || !commands) return unknown();
-          const captured = snapshot(request, MAX_COMMAND_BYTES).value;
+          // The picks the mapper carried (`chosen`, apiChosen.ts) are not part of the envelope the executor judges.
+          const { envelope: captured, ask } = takeChosenAsk(snapshot(request, MAX_COMMAND_BYTES).value);
           const named =
             captured && typeof captured === 'object' && !Array.isArray(captured) ? (captured as { command?: unknown }).command : undefined;
           if (typeof named !== 'string') return unknown();
@@ -426,9 +440,14 @@ export async function createPolicyApiOwner(input: {
               const result = await policy.withContext(requestFor(credential, observed), async (context) => {
                 if (!actsAs(context, observed) || !context.commands) throw new AppAccessDenied();
                 admitted = true;
-                return mode === 'prepare'
-                  ? context.commands.prepare(captured, signal ? { signal } : {})
-                  : context.commands.execute(captured, { ...(signal ? { signal } : {}), door });
+                if (mode === 'prepare') return context.commands.prepare(captured, signal ? { signal } : {});
+                // What the call picked, read again under this principal's own rows, never a stored pick: `ctx.chosen`.
+                const picked = Object.keys(ask).length ? await resolveApiChosen(app, schema, context.data, ask) : undefined;
+                return context.commands.execute(captured, {
+                  ...(signal ? { signal } : {}),
+                  door,
+                  ...(picked ? { chosen: picked.chosen } : {}),
+                });
               });
               outcome =
                 mode === 'prepare'
@@ -496,9 +515,14 @@ export async function createPolicyApiOwner(input: {
       recover: (credential: unknown, request: unknown, send: CommandSend, signal?: AbortSignal) =>
         run('recover', credential, request, send, signal),
       /** Pure: the deployment's executor still validates everything the envelope says. */
-      map: (route: ApiCommandRoute, headers: Readonly<{ expectedVersion?: number; idempotencyKey?: string }>, body: unknown) => {
+      map: (
+        route: ApiCommandRoute,
+        headers: Readonly<{ expectedVersion?: number; idempotencyKey?: string }>,
+        body: unknown,
+        chosen?: unknown,
+      ) => {
         if (!mapper || retired) return unknown();
-        return mapper.map(route, headers, body);
+        return mapper.map(route, headers, body, chosen);
       },
       /** Routing for trusted composition (an App MCP session's tool names and
        * key codecs, the public document): declaration data, never authority —

@@ -137,9 +137,19 @@ export function previewApiMcpReadTools(
     const properties: Json = {},
       required: string[] = [];
     if (!Array.isArray(spec.parameters)) return fail();
+    // An App's `choose` is one optional object, keyed by choice name, in the tool's arguments (apiChosen.ts).
+    const picks: Json = {};
     for (const raw of spec.parameters) {
       const parameter = object(raw),
         key = parameter.name;
+      if (typeof key === 'string' && key.startsWith('chosen.') && parameter.in === 'query') {
+        const pick = key.slice('chosen.'.length);
+        picks[pick] = {
+          ...resolve(parameter.schema),
+          description: `The key of the ${app.choose?.[pick]?.from ?? pick} row this call works at, read again under this token's reach.`,
+        };
+        continue;
+      }
       if (
         typeof key !== 'string' ||
         Object.hasOwn(properties, key) ||
@@ -152,6 +162,15 @@ export function previewApiMcpReadTools(
       properties[key] = resolve(parameter.schema);
       if (parameter.required === true) required.push(key);
     }
+    if (Object.keys(picks).length)
+      properties.chosen = {
+        type: 'object',
+        additionalProperties: false,
+        properties: picks,
+        description:
+          'The App-wide choices this call makes for itself, by name: a question that says `chosen.<name>` reads them. ' +
+          'A name left out is unset, and a question that asks it is refused (chosen_required).',
+      };
     const response = object(object(object(object(spec.responses)['200']).content)['application/json']).schema;
     const exposedView = app.api.views.find((view) => view.view === authored);
     const label = operation.kind === 'view' ? (exposedView?.label ?? app.views[authored]?.label ?? authored) : authored;

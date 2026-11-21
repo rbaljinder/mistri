@@ -293,6 +293,9 @@ export function writeDepotApp(
     roles?: Record<string, unknown>;
     /** Ask for live sync (`live: true`); the business database must hold its store. */
     live?: boolean;
+    /** Declare `choose: { site: item }`, a `mine` view whose question is `id = chosen.site` (exposed over the API), and
+     * have `touch` answer which site it was told it works at. */
+    choose?: boolean;
   },
 ) {
   const appDir = join(directory, 'depot');
@@ -317,6 +320,7 @@ export function writeDepotApp(
         roles: { member: { read: true, ...(running ? { commands: names } : {}) }, ...options.roles },
       },
       sources: { business: { connection: 'data' } },
+      ...(options.choose ? { choose: { site: { from: 'item', label: 'name' } } } : {}),
       // A command cannot yet run on a resource with field rules, so the command
       // variant has none; the API exposure still names its fields explicitly,
       // and the tenant column is never one (tenantAuthoringSchema).
@@ -326,6 +330,7 @@ export function writeDepotApp(
       },
       views: {
         items: { kind: 'list', from: 'item' },
+        ...(options.choose ? { mine: { kind: 'list', from: 'item', query: 'id = chosen.site' } } : {}),
         ...(running ? { 'stock-item': { kind: 'form', label: 'Stock an item', command: 'stock' } } : {}),
         ...(notes ? { 'annotate-item': { kind: 'form', label: 'Annotate an item', command: 'annotate' } } : {}),
       },
@@ -337,6 +342,7 @@ export function writeDepotApp(
         roles: ['member'],
         resources: { item: { fields: running ? ['id', 'version', 'name'] : ['id', 'name'], sorts: ['id'] } },
         ...(running ? { commands: names } : {}),
+        ...(options.choose ? { views: ['mine'] } : {}),
       },
     }),
   );
@@ -357,11 +363,11 @@ export default defineAppTenantPolicy({ kind: 'tenant', appId: 'depot', storeId: 
     writeFileSync(
       commands,
       `import { defineCommand, defineCommands } from '${source('packages/mistri/src/server/commands/businessCommands.ts')}';
-import { shape, bool } from '${source('packages/mistri/src/server/commands/commandShapes.ts')}';
+import { shape, bool${options.choose ? ', nullable, text' : ''} } from '${source('packages/mistri/src/server/commands/commandShapes.ts')}';
 export default defineCommands({ touch: defineCommand({ source: 'business', target: 'item', 
-  input: {}, output: shape({ ok: bool() }), async handle(context) {
+  input: {}, output: shape({ ok: bool()${options.choose ? ', site: nullable(text())' : ''} }), async handle(context) {
     await context.tx.update({ table: 'item', key: { id: String(context.record.id) }, values: { version: Number(context.record.version) + 1 } });
-    return { ok: true };
+    return { ok: true${options.choose ? ', site: context.chosen.site === undefined ? null : String(context.chosen.site)' : ''} };
   } }), stock: defineCommand({ source: 'business', target: 'item', targets: 'none',
   input: { id: { type: 'text' }, name: { type: 'text' } }, output: shape({ ok: bool() }), async handle(context, input) {
     await context.tx.insert({ table: 'item', values: { id: input.id, name: input.name } });

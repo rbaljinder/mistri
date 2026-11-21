@@ -22,6 +22,7 @@ import { apiReadLaneConnections, apiReadLaneOf, laneResources } from './apiSourc
 import { postgresSnapshotReads } from './postgresSnapshotReads.js';
 import { createApiReadView } from './apiReadView.js';
 import { createApiCursorReadView } from './apiCursorReadView.js';
+import { chosenAskOf, resolveApiChosen } from './apiChosen.js';
 import { materializeApiReadResult } from './apiReadResult.js';
 import { ApiReadFailure } from './apiReadFailure.js';
 import { ApiTokenStoreUnavailable } from '../auth/apiTokenStoreFailure.js';
@@ -339,6 +340,21 @@ export async function createPostgresApiReadOwner(
                   );
                   return Object.freeze({ status: 200 as const, body: JSON.stringify({ tools: listed.tools }) });
                 }
+                const scopedReads = () =>
+                  authorizeResources(
+                    resources,
+                    withReadAuditSink(
+                      resolveAppAccess(app, resources.schema, [...observed.roles]),
+                      { app: app.id, tenant: '', actor: `api-token:${observed.tokenId}`, roles: observed.roles },
+                      physicals.get(lane)!.physical,
+                      lane,
+                    ),
+                  );
+                // What the call picked (`chosen.<name>`), read again under this token's own reach: never a stored pick.
+                const asked = 'query' in input ? chosenAskOf(app, resources.schema, input.query) : {};
+                const chosen = Object.keys(asked).length
+                  ? await resolveApiChosen(app, resources.schema, scopedReads().adapter, asked)
+                  : undefined;
                 const cursor =
                   'query' in input
                     ? createApiCursorReadView(
@@ -354,6 +370,8 @@ export async function createPostgresApiReadOwner(
                           ttlMs: 15 * 60 * 1000,
                         },
                         new Date(),
+                        undefined,
+                        chosen,
                       )
                     : undefined;
                 const checked =
@@ -369,15 +387,7 @@ export async function createPostgresApiReadOwner(
                 // Ordinary grants use the existing resource authorizer. Native
                 // lifetime is enforced by the held bridge and handoff, not the
                 // policy-row-scope-only assertActive argument.
-                const scoped = authorizeResources(
-                  resources,
-                  withReadAuditSink(
-                    resolveAppAccess(app, resources.schema, [...observed.roles]),
-                    { app: app.id, tenant: '', actor: `api-token:${observed.tokenId}`, roles: observed.roles },
-                    physicals.get(lane)!.physical,
-                    lane,
-                  ),
-                );
+                const scoped = scopedReads();
                 if (!scoped.adapter.runView) return refuse();
                 const rows = await withReadRoute(currentReadRoute() === 'mcp' ? 'mcp' : 'api', () => scoped.adapter.runView!(checked.view));
                 requestCurrent();

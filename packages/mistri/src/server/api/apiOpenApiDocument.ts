@@ -19,7 +19,7 @@ type Json = Record<string, any>;
 /** Which mistri document this is: the composed one, or reads alone (apiReadOpenApi.ts). */
 const DOCUMENT = 'app-api',
   READ_DOCUMENT = 'app-api-reads';
-const COMMAND_SCHEMA = /^(?:CommandProblem|CommandInput_[0-9a-f]+|CommandResult_[0-9a-f]+)$/;
+const COMMAND_SCHEMA = /^(?:CommandProblem|CommandInput_[0-9a-f]+|CommandBody_[0-9a-f]+|CommandResult_[0-9a-f]+)$/;
 const COMMAND_OPERATION = /^(?:command|commandMany|recover|prepare)_([0-9a-f]+)$/;
 const isCommandPath = (path: string) => path.includes('/commands/');
 const refuse = (): never => {

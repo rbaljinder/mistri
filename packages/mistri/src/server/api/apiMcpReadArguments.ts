@@ -10,6 +10,7 @@ import { renderApiReadOpenApi } from './apiReadOpenApi.js';
 import { createApiReadKeyCodec } from './apiReadKey.js';
 import { apiDialectOf, apiIntegerRepresentation, apiValueCodec } from './apiValueCodec.js';
 import { planApiItemReadRequest, planApiReadRequest, planApiViewReadRequest } from './apiReadRequest.js';
+import { askedChosen, checkChosenAsk } from './apiChosen.js';
 
 type ObjectValue = Record<string, unknown>;
 const refuse = (): never => {
@@ -100,8 +101,14 @@ export function createApiMcpReadArguments(
   if (matched.length !== 1 || !Array.isArray(matched[0].parameters)) return refuse();
   const parameters = matched[0].parameters.map(object);
   const allowed = new Map<string, ObjectValue>();
+  /* The App's choices are one `chosen` object in the arguments, not a flat `chosen.<name>` each (apiMcpReadTools). */
+  let picks = false;
   for (const parameter of parameters) {
     if (typeof parameter.name !== 'string' || allowed.has(parameter.name)) return refuse();
+    if (parameter.name.startsWith('chosen.')) {
+      picks = true;
+      continue;
+    }
     allowed.set(parameter.name, parameter);
   }
   const key = operation.kind === 'item' ? createApiReadKeyCodec(operation, schema, policy) : undefined;
@@ -111,7 +118,7 @@ export function createApiMcpReadArguments(
     decode(raw: unknown, now: Date) {
       const args = object(snapshot(raw, 32768).value);
       if (
-        Object.keys(args).some((name) => !allowed.has(name)) ||
+        Object.keys(args).some((name) => !allowed.has(name) && !(picks && name === 'chosen')) ||
         parameters.some((parameter) => parameter.required === true && !Object.hasOwn(args, String(parameter.name)))
       )
         return refuse();
@@ -164,9 +171,14 @@ export function createApiMcpReadArguments(
         }
         pairs.push(`${encodeURIComponent(name)}=${encodeURIComponent(text)}`);
       }
+      // What the call picked: a name the App does not declare or a key its table cannot hold is the caller's, said as such.
+      const said = Object.hasOwn(args, 'chosen') ? object(args.chosen) : {};
+      const ask = checkChosenAsk(app, schema, said);
+      for (const [name, text] of Object.entries(ask)) pairs.push(`${encodeURIComponent(`chosen.${name}`)}=${encodeURIComponent(text)}`);
       const query = pairs.join('&');
-      if (operation.kind === 'view') planApiViewReadRequest(app, schema, operationId, query, policy, now, catalog);
-      else planApiReadRequest(app, schema, operationId, query, policy, catalog, now);
+      const chosen = askedChosen(app, ask);
+      if (operation.kind === 'view') planApiViewReadRequest(app, schema, operationId, query, policy, now, catalog, chosen);
+      else planApiReadRequest(app, schema, operationId, query, policy, catalog, now, chosen);
       // Cursor stays opaque: only the eventual owner can verify its signature.
       return Object.freeze({ operationId, query, authorization: 'pending' as const });
     },

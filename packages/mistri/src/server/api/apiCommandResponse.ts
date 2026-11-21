@@ -3,6 +3,7 @@
  * own answers — never a second classification, and never a shape a caller
  * supplies. */
 import { BusinessCommandExecutionError, type RefusalCode } from '../commands/commandErrors.js';
+import type { ApiReadFailure } from './apiReadFailure.js';
 import { ROW_LOCKED_RETRY_AFTER_SECONDS } from '@mistriwork/engine/adapters/writeLanes.js';
 
 /* The statuses a bearer caller can hear after the owner has the request: the
@@ -47,6 +48,18 @@ export function commandProblem(
     outcome,
     ...(issued.field ? { field: issued.field } : {}),
     ...(issued.key ? { key: issued.key } : {}),
+  };
+}
+
+/** A call's own mistake about an App's `choose`: a name the App lacks or a key its table cannot hold. Nothing ran, and the
+ * title names the choice and says nothing of any row (apiChosen.ts). */
+export function chosenProblem(failure: ApiReadFailure) {
+  return {
+    type: 'urn:mistri:problem:chosen_invalid',
+    title: failure.detail ?? 'The call names a choice this App cannot read.',
+    status: 422,
+    code: 'chosen_invalid',
+    outcome: 'not_applied' as const,
   };
 }
 

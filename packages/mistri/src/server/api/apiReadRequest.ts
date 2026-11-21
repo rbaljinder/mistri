@@ -3,6 +3,8 @@ import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js'
 import type { AppDef } from '../../shared/appModel.js';
 import type { DatabaseSchema, Order } from '@mistriwork/engine/shared/schema.js';
 import { parseApiStandingQuery } from './apiStandingQuery.js';
+import { chosenPerson, type ApiChosen } from './apiChosen.js';
+import { ApiReadFailure } from './apiReadFailure.js';
 import { withDeclaredSegments } from '../../shared/appSegments.js';
 import { mentionsMe } from '../../shared/appMe.js';
 import { expandSegments } from '@mistriwork/engine/shared/query.js';
@@ -34,6 +36,8 @@ export function planApiReadRequest(
   given?: Catalog,
   /** The request's clock, for a segment that says `today`. */
   now: Date = new Date(),
+  /** The picks the call named (apiChosen.ts), for a segment that says `chosen.<name>`. */
+  chosen?: ApiChosen,
 ) {
   if (!app.api) throw new Error('API read request requires explicit exposure.');
   const catalog = given ?? checkApiReadCatalog(app.api, app, schema);
@@ -50,7 +54,9 @@ export function planApiReadRequest(
   )
     throw new Error('API list parameters: segment is not one this list offers.');
   const question =
-    parsed.segment === undefined ? undefined : parseApiStandingQuery(declared!, operation.resource, parsed.segment, appClock(app, now));
+    parsed.segment === undefined
+      ? undefined
+      : parseApiStandingQuery(declared!, operation.resource, parsed.segment, appClock(app, now), chosenPerson(chosen));
   if (question && (question.errors.length || question.columns.length || question.limit !== undefined || question.orderBy.length))
     throw new Error('API segment is unsupported.');
   return Object.freeze({
@@ -114,6 +120,8 @@ export function planApiViewReadRequest(
   options: { integers: 'decimal-string' | 'number' },
   now: Date,
   given?: Catalog,
+  /** The picks the call named (apiChosen.ts), for a question that says `chosen.<name>`. */
+  chosen?: ApiChosen,
 ) {
   if (!app.api) throw new Error('API read request requires explicit exposure.');
   const operation = (given ?? checkApiReadCatalog(app.api, app, schema)).operations.find((operation) => operation.id === operationId);
@@ -129,7 +137,11 @@ export function planApiViewReadRequest(
     operation.resource,
     selected.query,
     appClock(app, new Date(time)),
+    chosenPerson(chosen),
   );
+  // A question that asks a choice the call did not make is the caller's to answer, in the words a job gets.
+  const unchosen = question.errors.find((error) => /(?<![\w.])chosen\.[A-Za-z_]\w*/.test(error.message));
+  if (unchosen) throw new ApiReadFailure('chosen_required', unchosen.message);
   if (question.errors.length || question.columns.length || question.limit !== undefined)
     throw new Error('API standing view question is unsupported.');
   const plan = listPlan(

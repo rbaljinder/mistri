@@ -6,6 +6,7 @@ import { declaredOrder, type DatabaseSchema } from '@mistriwork/engine/shared/sc
 import type { ViewCondition, ViewDef } from '@mistriwork/engine/shared/viewPaths.js';
 import { planApiItemReadRequest, planApiReadRequest, planApiViewReadRequest } from './apiReadRequest.js';
 import { apiDialectOf, apiValueCodec } from './apiValueCodec.js';
+import type { ApiChosen } from './apiChosen.js';
 
 const refuse = (): never => {
   throw new Error('API read view conversion is unsupported or exceeds its bounds.');
@@ -55,6 +56,8 @@ export function createApiReadView(
   now: Date,
   /** A tenant App's catalog, from trusted composition; otherwise checked here. */
   catalog?: Parameters<typeof planApiReadRequest>[5],
+  /** The picks the call named (apiChosen.ts), read again by the owner under the token's reader. */
+  chosen?: ApiChosen,
 ) {
   const raw = object(snapshot(request, 32768).value);
   if (
@@ -71,8 +74,8 @@ export function createApiReadView(
   const plan = item
     ? planApiItemReadRequest(app, schema, request.operationId, request.key!, options, catalog)
     : request.operationId.startsWith('view:')
-      ? planApiViewReadRequest(app, schema, request.operationId, request.query, options, now, catalog)
-      : planApiReadRequest(app, schema, request.operationId, request.query, options, catalog, now);
+      ? planApiViewReadRequest(app, schema, request.operationId, request.query, options, now, catalog, chosen)
+      : planApiReadRequest(app, schema, request.operationId, request.query, options, catalog, now, chosen);
   let groups: ViewCondition[][];
   const view: ViewDef = { id: plan.operationId, name: plan.operationId, base: plan.resource, columns: [], limit: 2 };
   if (plan.stage === 'item-read-request-plan') {

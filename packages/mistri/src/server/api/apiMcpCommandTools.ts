@@ -17,6 +17,7 @@ import { defineCommands, type BusinessCommandRegistry } from '../commands/busine
 import { checkApiCommandCatalog } from './apiCommandCatalog.js';
 import { createApiCommandEnvelopeBundle } from './apiCommandEnvelope.js';
 import { renderApiInputSchema } from './apiInputSchema.js';
+import { chosenSchema } from './apiChosen.js';
 import { createApiReadKeyCodec } from './apiReadKey.js';
 
 type Json = Record<string, unknown>;
@@ -61,6 +62,12 @@ const closed = (properties: Json, required = Object.keys(properties)) => ({
   properties,
   required,
 });
+
+/** A run tool's arguments: closed, with the App's optional `chosen` beside them when it declares `choose` (apiChosen.ts). */
+const running = (app: AppDef, properties: Json) => {
+  const picks = chosenSchema(app);
+  return picks ? closed({ ...properties, chosen: picks }, Object.keys(properties)) : closed(properties);
+};
 
 export type ApiMcpCommandBinding = Readonly<{
   name: string;
@@ -137,7 +144,7 @@ export function projectApiMcpCommandTools(
         `It names no record; a retry with the same idempotencyKey replays its receipt.` +
         (several ? ` It runs on source "${operation.source}" alone; nothing is promised across calls.` : '')
       ).slice(0, 1024),
-      inputSchema: closed({ idempotencyKey: IDEMPOTENCY, input: rendered.schema }),
+      inputSchema: running(app, { idempotencyKey: IDEMPOTENCY, input: rendered.schema }),
       outputSchema: closed({
         receipt: closed({ id: envelope.receiptIdSchema, status: { const: 'applied' }, replayed: { type: 'boolean' } }),
         result: operation.outputSchema,
@@ -183,7 +190,7 @@ export function projectApiMcpCommandTools(
       `${operation.command} on one ${operation.resource}`,
       `Runs ${operation.command} on one ${operation.resource} through the App API, as this token allows; checked again on every call. ` +
         "version is the opaque revision returned by this command's prepare tool; a stale one is refused.",
-      closed({ key: codec.schema, version: REVISION, idempotencyKey: IDEMPOTENCY, input }),
+      running(app, { key: codec.schema, version: REVISION, idempotencyKey: IDEMPOTENCY, input }),
       applied,
     );
     if (operation.targets === 'many') {
@@ -191,7 +198,7 @@ export function projectApiMcpCommandTools(
         'many',
         `${operation.command} on several ${operation.resource} records`,
         `Runs ${operation.command} on up to ${BULK_LIMIT} ${operation.resource} records at once, in the order given, as this token allows.`,
-        closed({
+        running(app, {
           targets: { type: 'array', minItems: 1, maxItems: BULK_LIMIT, items: closed({ key: envelope.keySchema, version: REVISION }) },
           idempotencyKey: IDEMPOTENCY,
           input,
