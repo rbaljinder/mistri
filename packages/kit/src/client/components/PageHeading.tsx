@@ -30,14 +30,31 @@ export function PageHeading({
 }) {
   const Title = level === 1 ? 'h1' : 'h2';
   const drawn = actions !== undefined && actions !== null && actions !== false;
+  const heading = <Title className={`applist-title${hidden ? ' visually-hidden' : ''}`}>{title}</Title>;
+  /* A page that draws its own head says its own intro; `heading: false` hides only the title. */
+  const intro = description ? <p className="note dash-description">{description}</p> : null;
   return (
     <div className={`applist-head dash-head${drawn ? ' has-actions' : ''}${back ? ' has-back' : ''}`}>
       {back ? <div className="dash-head-back">{back}</div> : null}
-      <Title className={`applist-title${hidden ? ' visually-hidden' : ''}`}>{title}</Title>
-      {favorite}
-      {drawn ? <div className="applist-head-tools dash-head-actions">{actions}</div> : null}
-      {/* A page that draws its own head says its own intro; `heading: false` hides only the title. */}
-      {description ? <p className="note dash-description">{description}</p> : null}
+      {/* With verbs, the head is two regions: the words (title over intro) and the verbs. As siblings in one wrapping
+          row, an intro narrower than the line's room stood beside the verbs at a desk, a field report's page read
+          "title · intro · picker" across. Two regions hold the intro under its title and stack under it at a phone. */}
+      {drawn ? (
+        <>
+          <div className="dash-head-text">
+            {heading}
+            {favorite}
+            {intro}
+          </div>
+          <div className="applist-head-tools dash-head-actions">{actions}</div>
+        </>
+      ) : (
+        <>
+          {heading}
+          {favorite}
+          {intro}
+        </>
+      )}
     </div>
   );
 }

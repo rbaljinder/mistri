@@ -97,6 +97,69 @@ test.describe('The page kit vocabulary', () => {
     expect(await page.evaluate(() => (window as unknown as { marker: number }).marker)).toBe(1);
   });
 
+  // A field report: `<Button href intent="primary">` drew its words in the link color on the primary fill, 1.22:1,
+  // because a free-form page's plain-link rule outranked the button's ink. A button and a button that is a link
+  // share one contract, in every variant and every state a link has.
+  test('a button that is a link reads as the button, 4.5:1 at least, in every variant and state', async ({ page }) => {
+    await page.goto(`${app.origin}/vocabulary`);
+    await settled(page);
+    await page.addStyleTag({ content: '*, *::before, *::after { transition: none !important; }' });
+    // What a person sees: the ink and the ground it stands on, each laid over everything behind it (a canvas
+    // resolves any color syntax and composites the alpha), as rgb() the contrast helper reads.
+    const seen = (name: string) =>
+      page.getByRole('link', { name }).evaluate((link) => {
+        const paint = document.createElement('canvas').getContext('2d', { willReadFrequently: true })!;
+        const grounds: string[] = [];
+        for (let at: Element | null = link; at; at = at.parentElement) grounds.unshift(getComputedStyle(at).backgroundColor);
+        paint.fillStyle = '#fff';
+        paint.fillRect(0, 0, 1, 1);
+        for (const ground of grounds) {
+          paint.fillStyle = ground;
+          paint.fillRect(0, 0, 1, 1);
+        }
+        const pixel = () => `rgb(${[...paint.getImageData(0, 0, 1, 1).data.slice(0, 3)].join(', ')})`;
+        const ground = pixel();
+        paint.fillStyle = getComputedStyle(link).color;
+        paint.fillRect(0, 0, 1, 1);
+        return { ink: pixel(), ground, focusVisible: link.matches(':focus-visible'), active: link.matches(':active') };
+      });
+    const names = ['Go primary', 'Go secondary', 'Go quiet', 'Go danger', 'Go held'];
+    const failures: string[] = [];
+    const check = async (name: string, state: string) => {
+      const { ink, ground } = await seen(name);
+      const ratio = contrast(ink, ground);
+      if (ratio < 4.5) failures.push(`${name} ${state}: ${ink} on ${ground} is ${ratio.toFixed(2)}:1`);
+    };
+    for (const name of names) {
+      const link = page.getByRole('link', { name });
+      await expect(link).toHaveAttribute('data-slot', 'button');
+      await check(name, 'at rest');
+      await link.hover();
+      await check(name, 'hovered');
+      await page.mouse.down();
+      expect((await seen(name)).active, `${name} is pressed`).toBe(true);
+      await check(name, 'pressed');
+      await page.mouse.up();
+      await page.mouse.move(0, 0);
+      await page.keyboard.press('Shift');
+      await link.focus();
+      expect((await seen(name)).focusVisible, `${name} shows its keyboard focus`).toBe(true);
+      await check(name, 'focused');
+      await link.blur();
+    }
+    expect(failures).toEqual([]);
+    // A held link is drawn as a held button: it dims with the rest of it and hovering moves nothing.
+    const held = page.getByRole('link', { name: 'Go held' });
+    expect(await held.evaluate((link) => getComputedStyle(link).opacity)).not.toBe('1');
+    const before = await seen('Go held');
+    await held.hover();
+    expect(await seen('Go held')).toMatchObject({ ink: before.ink, ground: before.ground });
+    // Playwright waits for an aria-disabled element to be enabled; `force` clicks it as a person would, so the
+    // refusal under test is the link's own.
+    await held.click({ force: true });
+    await expect(page).not.toHaveURL(/intent=held/);
+  });
+
   test("a row's link is followed in place too, from anywhere on the row", async ({ page }) => {
     await page.goto(`${app.origin}/vocabulary`);
     await settled(page);
@@ -185,5 +248,105 @@ test.describe('The page kit vocabulary', () => {
     expect(native.width).toBeLessThanOrEqual(1);
     expect(native.height).toBeLessThanOrEqual(1);
     expect(native.opacity).toBe('0');
+  });
+
+  // A field report: a page that drew its own head (`head: false`) laid its title, intro and picker in one row, so at a
+  // desk the intro stood beside the picker, and the head stood a second gutter in from the page's body.
+  test("a page's own head is two regions, words and verbs, side by side at a desk and stacked at a phone, in the body's gutter", async ({
+    page,
+  }) => {
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto(`${app.origin}/headed`);
+      await settled(page);
+      const head = page.locator('.free-page-body .dash-head');
+      await expect(head.getByRole('heading', { level: 2, name: 'Floor' })).toBeVisible();
+      const box = async (selector: string) => (await page.locator(selector).first().boundingBox())!;
+      const title = await box('.free-page-body .dash-head .applist-title');
+      const intro = await box('.free-page-body .dash-head .dash-description');
+      const verbs = await box('.free-page-body .dash-head .dash-head-actions');
+      expect(intro.y, `${width}: the intro is under its title`).toBeGreaterThanOrEqual(title.y + title.height - 1);
+      expect(Math.abs(intro.x - title.x), `${width}: the intro starts where its title does`).toBeLessThan(1);
+      if (width === 1440) {
+        expect(verbs.x, 'at a desk the verbs stand at the far end').toBeGreaterThanOrEqual(intro.x + intro.width);
+        expect(verbs.y, 'at a desk the verbs stand beside the words, not under them').toBeLessThan(intro.y + intro.height);
+      } else {
+        expect(verbs.y, 'at a phone the verbs stand under the words').toBeGreaterThanOrEqual(intro.y + intro.height - 1);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      }
+      /* The head's words start where the body's content does: one gutter, the body's. */
+      const inset = await page.locator('.free-page-body').evaluate((body) => {
+        const at = body.getBoundingClientRect();
+        return at.x + parseFloat(getComputedStyle(body).paddingLeft);
+      });
+      expect(Math.abs(title.x - inset), `${width}: the head stands in the body's gutter`).toBeLessThan(1);
+    }
+  });
+
+  // A field report: a theme that declared the page's ground as a part (`parts: { ground: { ground } }`) was drawn as
+  // the plain surface, because the shell's pane said its own background after the theme's layer. The pane reads the
+  // part's token now; here the computed ground, in the sidebar's header and the bar's, the inset pane and the edge,
+  // light and dark, on a custom page.
+  test("a theme's declared page ground is the pane's, in either header, either pane, light and dark", async ({ page }) => {
+    test.setTimeout(LONG_MS);
+    const bar = await startLayersApp('page-kit', { env: { PAGE_KIT_HEADER: 'bar' } });
+    try {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      const wrong: string[] = [];
+      for (const [header, origin] of [
+        ['sidebar', app.origin],
+        ['bar', bar.origin],
+      ] as const) {
+        for (const theme of ['grounded', 'grounded-edge']) {
+          for (const mode of ['light', 'dark'] as const) {
+            await page.emulateMedia({ colorScheme: mode });
+            await page.goto(`${origin}/vocabulary`);
+            await page.evaluate(
+              ([pick, scheme]) => {
+                localStorage.setItem('mistri.custom-theme-choices', JSON.stringify([['page-kit', pick]]));
+                localStorage.setItem('mistri.theme', scheme!);
+              },
+              [theme, mode],
+            );
+            await page.reload();
+            /* Not settled(): after the first reload it waits out its whole deadline here, eight times over. The
+               page is drawn when the boot is done and the page's body stands. */
+            await expect(page.locator('html')).not.toHaveAttribute('data-starting', { timeout: 30_000 });
+            await expect(page.locator('.free-page-body')).toBeVisible();
+            await expect(page.locator('html')).toHaveAttribute('data-parts', /ground:ground/);
+            await expect(page.locator('body')).toHaveClass(header === 'sidebar' ? /app-sidebar-shell/ : /app-mode/);
+            if (header === 'bar') await expect(page.locator('body')).not.toHaveClass(/app-sidebar-shell/);
+            if (theme === 'grounded-edge') await expect(page.locator('html')).toHaveAttribute('data-look-pane', 'edge');
+            const seen = await page.evaluate((sidebar) => {
+              const resolve = (value: string) => {
+                const probe = document.createElement('span');
+                probe.style.backgroundColor = value;
+                document.body.append(probe);
+                const color = getComputedStyle(probe).backgroundColor;
+                probe.remove();
+                return color;
+              };
+              const ground = (selector: string) => {
+                const element = document.querySelector(selector);
+                return element ? getComputedStyle(element).backgroundColor : 'absent';
+              };
+              return {
+                part: resolve('var(--accent-soft)'),
+                surface: resolve('var(--surface)'),
+                content: ground('.app-mode .content'),
+                bar: sidebar ? ground('.layout > .pane-bar') : null,
+              };
+            }, header === 'sidebar');
+            const at = `${header} header, ${theme}, ${mode}`;
+            if (seen.part === seen.surface) wrong.push(`${at}: the part's role is the surface, so nothing is proven`);
+            if (seen.content !== seen.part) wrong.push(`${at}: the pane is ${seen.content}, the part says ${seen.part}`);
+            if (seen.bar !== null && seen.bar !== seen.part) wrong.push(`${at}: the pane's bar is ${seen.bar}, the part says ${seen.part}`);
+          }
+        }
+      }
+      expect(wrong).toEqual([]);
+    } finally {
+      await bar.stop();
+    }
   });
 });

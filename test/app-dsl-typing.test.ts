@@ -768,6 +768,33 @@ const DATED: DatabaseSchema = {
   ),
 };
 
+test("a page's useBreakdown groups by what a chart groups by: a column, a date in a period, several with commas", () => {
+  const compiled = compile(
+    [
+      'import type {} from "./mistri-schema.js";',
+      'import { definePage } from "@mistriwork/mistri/page";',
+      'const page = definePage({ label: "Late", reads: ["ticket"], component: () => null });',
+      'export default page;',
+      'export function Reads() {',
+      '  page.useBreakdown("ticket", { by: "status" });',
+      '  page.useBreakdown("ticket", { by: "owner_id.name" });',
+      '  page.useBreakdown("ticket", { by: "day due_at", measure: "count" });',
+      '  page.useBreakdown("ticket", { by: "month due_on, status", optional: true });',
+      '  // @ts-expect-error — not a column of ticket',
+      '  page.useBreakdown("ticket", { by: "stauts" });',
+      '  // @ts-expect-error — a fortnight is not a period',
+      '  page.useBreakdown("ticket", { by: "fortnight due_at" });',
+      '  // @ts-expect-error — status is not a date, so it has no day',
+      '  page.useBreakdown("ticket", { by: "day status" });',
+      '}',
+    ].join('\n'),
+    {},
+    {},
+    DATED,
+  );
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
 test('`now` and the date phrases read the same in a segment and in a metric query, on a timestamp and on a date (G180)', () => {
   const compiled = compile(
     [

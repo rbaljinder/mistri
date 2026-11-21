@@ -13,6 +13,7 @@
  */
 import { relative } from 'node:path';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
+import { refusalHeadline } from '@mistriwork/engine/shared/refusal.js';
 import { loadApp, type LoadedApp } from '../app/apps.js';
 import { AppProblems, type AppDef } from '../../shared/app.js';
 import { machinePath, type AppMachineDef } from '../../shared/appMachine.js';
@@ -56,7 +57,7 @@ async function loadTargetApp(appDir: string, opts: Options, config: StartupConfi
     });
   } catch (error) {
     if (!(error instanceof AppProblems && error.partial))
-      throw new Error(`the App in ${shown(appDir)} did not load: ${(error as Error).message.split('\n')[0]}`, { cause: error });
+      throw new Error(`the App in ${shown(appDir)} did not load: ${refusalHeadline(error).split('\n')[0]}`, { cause: error });
     return { path: appDir, dir: appDir, app: error.partial as AppDef, pages: [], sources: {} };
   }
 }

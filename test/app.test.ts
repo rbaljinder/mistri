@@ -1892,3 +1892,15 @@ test('a list view takes totals over its own numeric columns and a density, and r
   refused({ totals: ['hours', 'hours'] }, /"totals" that name one column twice/);
   refused({ totals: ['hours'], presentation: { kind: 'queue', primary: 'name' } }, /a footer of totals belongs to a grid/);
 });
+
+describe('served resources', () => {
+  test('a resource declared {} is still served, so a free-form page can read it', () => {
+    const app = parseAppConfig(
+      { name: 'Field Ops', resources: { work_order: {} }, views: { orders: { kind: 'list', from: 'work_order' } }, home: 'orders' },
+      WHERE,
+    );
+    const { resources, problems } = resolveResources(app, SCHEMA);
+    assert.deepEqual(problems, []);
+    assert.ok(Object.hasOwn(resources, 'work_order'), 'the empty declaration is one of the App’s resources, not dropped');
+  });
+});

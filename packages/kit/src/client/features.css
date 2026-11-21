@@ -729,6 +729,13 @@ body.app-mode.page-bare .content { padding-inline: 0; }
 .applist-head.dash-head:is(.has-actions, .has-back) { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2h); }
 .dash-head.has-back > .dash-head-back { flex-basis: 100%; margin-left: calc(var(--space-2) * -1); }
 .dash-head.has-actions > .dash-head-actions { margin-left: auto; }
+/* With verbs the words are one region (PageHeading.tsx): the intro under the title, the verbs at the far end, and the
+   verbs under the words once the line cannot hold both, at a phone. */
+.dash-head.has-actions > .dash-head-text { flex: 1 1 18rem; min-width: 0; }
+.dash-head-text > .applist-title { margin: 0; }
+/* A head a page draws in its own body stands in the body's gutter: its own inline padding was a second inset, the
+   head's words a step in from the page's first card. */
+.free-page-body .dash-head { padding-inline: 0; }
 .dash-head:is(.has-actions, .has-back) > .dash-description { flex-basis: 100%; margin: 0; }
 .dash-head-compact { align-items: center; gap: var(--space-2h); width: 100%; margin-bottom: var(--space-3); }
 .dash-head-compact .applist-title { margin: 0; }
@@ -844,6 +851,9 @@ body.app-mode.page-bare .content { padding-inline: 0; }
 /* A meter: a number against its max, the bar coloured by the rule's tone. */
 .meter-wrap { display: inline-flex; align-items: center; gap: var(--space-3); }
 .meter-wrap .pct-bar { width: 64px; }
+/* A fluid meter is the bar across its row (a card, a column), the figure at its end: the bar takes what is left. */
+.meter-wrap.meter-fluid { display: flex; width: 100%; min-width: 0; }
+.meter-wrap.meter-fluid .pct-bar { width: auto; flex: 1 1 auto; min-width: 0; }
 .meter-good .pct-fill { background: var(--status-good); }
 .meter-warn .pct-fill { background: var(--status-warning); }
 .meter-bad .pct-fill { background: var(--status-critical); }

@@ -42,3 +42,15 @@ test('it wears the same markup as the platform head of a page: the same box and 
   const strip = (html: string) => html.replace(/<h[12]/g, '<h').replace(/<\/h[12]>/g, '</h>');
   expect(strip(own.innerHTML)).toBe(strip(platform.innerHTML));
 });
+
+test('with verbs it is two regions: the words (title over intro) and, beside them, the verbs', () => {
+  // A field report: on a page with no platform head, the verbs stood between the title and its intro, a row of
+  // three. The words are one region now, so the verbs wrap under them at a phone and stand beside them at a desk.
+  const { container } = render(<PageHeader title="Floor" description="By bay" actions={<button type="button">Week</button>} />);
+  const head = container.querySelector('.dash-head')!;
+  const regions = [...head.children].map((child) => child.className);
+  expect(regions).toEqual(['dash-head-text', 'applist-head-tools dash-head-actions']);
+  const words = head.querySelector('.dash-head-text')!;
+  expect(words.children[0]).toBe(screen.getByRole('heading', { level: 2, name: 'Floor' }));
+  expect(words.children[1]).toHaveClass('dash-description');
+});

@@ -26,6 +26,7 @@ import {
 } from '@mistriwork/engine/shared/themePresets.js';
 import { DEFAULT_RECIPES, RECIPE_PARTS } from '@mistriwork/engine/shared/themeRecipes.js';
 import { ROUND } from '@mistriwork/engine/shared/themeTokens.js';
+import { refusalHeadline } from '@mistriwork/engine/shared/refusal.js';
 import { themeExtends, themeSpecOf } from '../../shared/themeSpec.js';
 
 const THEME_USAGE = 'mistri theme show <look|theme-id|.> [--app <dir>] [--diff <look|theme-id>] [--json]';
@@ -389,7 +390,7 @@ export async function runTheme(
       themes = loaded.app.ui.customThemes ?? [];
       worn = loaded.app.ui.theme?.preset ?? 'workshop';
     } catch (error) {
-      console.error(`mistri theme show: the App did not load: ${(error as Error).message}`);
+      console.error(`mistri theme show: the App did not load: ${refusalHeadline(error)}`);
       return 1;
     } finally {
       console.log = log;

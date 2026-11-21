@@ -59,6 +59,7 @@ import type {
   UiRow,
   UiRowsQuery,
 } from './ui.js';
+import type { GroupBy } from './query.js';
 /* Everything a custom component imports, so a page has one import path; `useRows` and `useRecord` are declared again
    below, typed from the schema, and a module's own declaration stands over the one `export *` brings. */
 export * from './ui.js';
@@ -421,9 +422,11 @@ export interface PageDefinition<
       `{ id: 13 }`), typed by the resource's primary key: `page.useRecord('account', page.useRecordKey('account'))`.
       The resource is the record's own; any other, or a page that is not a record's tab, throws. */
   useRecordKey<T extends R>(resource: T): RecordKey<T>;
-  /** One of the page's reads grouped and measured: `page.useBreakdown('pick_list', { by: 'status' })`. */
-  useBreakdown<T extends R>(resource: T, options: { by: ColumnPath<T>; measure?: string; query?: string; limit?: number; optional: true }): UiQuery<UiRow[]> & UiRefusable;
-  useBreakdown<T extends R>(resource: T, options: { by: ColumnPath<T>; measure?: string; query?: string; limit?: number; optional?: false }): UiQuery<UiRow[]>;
+  /** One of the page's reads grouped and measured: `page.useBreakdown('pick_list', { by: 'status' })`. `by` is what a
+      chart's is, held to the same check: a column or label path, a date in a period (`'day created_at'`), or
+      several of those with commas (`'month closed_at, status'`). */
+  useBreakdown<T extends R, const B extends string>(resource: T, options: { by: GroupBy<T, B>; measure?: string; query?: string; limit?: number; optional: true }): UiQuery<UiRow[]> & UiRefusable;
+  useBreakdown<T extends R, const B extends string>(resource: T, options: { by: GroupBy<T, B>; measure?: string; query?: string; limit?: number; optional?: false }): UiQuery<UiRow[]>;
   /** Where one of the page's file resources serves a row, for an `<img>`. */
   useFile<T extends R>(resource: T): (key: Readonly<Record<string, unknown>>, options?: { thumbnail?: boolean }) => string | undefined;
   /** One of the page's commands: `page.useCommand('pickList')`, its input typed by the command's declared inputs. */

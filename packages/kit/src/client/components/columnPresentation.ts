@@ -1,6 +1,8 @@
+import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
 import { TAGS_COLUMN, tagsColumnMeta } from '@mistriwork/engine/shared/tagLists.js';
 import type { ColumnMeta, DatabaseSchema, TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { resolvePath } from '@mistriwork/engine/shared/view.js';
+import { labelColumnMeta } from '@mistriwork/engine/shared/viewPaths.js';
 import { rollupColumnMeta } from '@mistriwork/engine/shared/rollups.js';
 import { computedColumnMeta } from '@mistriwork/engine/shared/computed.js';
 
@@ -31,6 +33,11 @@ export function presentationColumns(
     // A record's tags (tagLists.ts): chips in a cell, a checklist in a facet.
     if (path === TAGS_COLUMN && table.tags && !columns.has(path)) {
       columns.set(path, { ...tagsColumnMeta(), identifier: false });
+      continue;
+    }
+    // A templated record label (recordLabel.ts): searched and filtered as text.
+    if (path === LABEL_SEGMENT && table.labelTemplate && !columns.has(path)) {
+      columns.set(path, { ...labelColumnMeta(), identifier: false });
       continue;
     }
     if (columns.has(path) || !path.includes('.')) continue;

@@ -317,8 +317,12 @@ export declare function SplitListDetail(props: {
 export declare function Value(props: { value: unknown; resource?: string; column?: string; display?: ValueDisplay; compact?: boolean }): ReactTypes.ReactElement;
 /** A meaning as the looks say one: a dot and its word. */
 export declare function Tone(props: Children & { tone: ToneName }): ReactTypes.ReactElement;
-/** A share of a whole: `value` against `max` (100 by default) as a bar and its figure. */
-export declare function Meter(props: { value: number; max?: number; tone?: ToneName; label?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
+/** A share of a whole: `value` against `max` (100 by default) as a bar and its figure. `ariaLabel` names the meter where
+    `label` is not a string ("Seats taken"); `valueLabel` is the value as a screen reader says it ("12 of 40 seats");
+    `size: 'fluid'` stretches the bar across the width it is given in place of the short bar beside a figure. */
+export declare function Meter(props: {
+  value: number; max?: number; tone?: ToneName; label?: ReactTypes.ReactNode; ariaLabel?: string; valueLabel?: string; size?: 'fluid';
+}): ReactTypes.ReactElement;
 /** What a component says when it has nothing to draw. */
 export declare function Empty(props: { title: ReactTypes.ReactNode; description?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /* The platform's fields, drawn as the shell draws its own (their stylesheet is fetched with them): a label, a hint and a
@@ -430,6 +434,12 @@ export interface TableColumn<Row> {
   key: string; label: ReactTypes.ReactNode; align?: 'left' | 'right';
   resource?: string; column?: string; display?: ValueDisplay;
   render?: (row: Row) => ReactTypes.ReactNode; sortable?: boolean;
+  /** A second, quieter line under the value (a row field's key, or a function of the row): body weight, muted, wrapping. */
+  secondary?: string | ((row: Row) => ReactTypes.ReactNode);
+  /** Whether the primary line is emphasized: the first column's is `'strong'` unless said, any other's `'normal'`. */
+  emphasis?: 'strong' | 'normal';
+  /** A copy button beside the cell, a sibling of the row link and never inside it. */
+  copy?: boolean;
 }
 /** Rows in the look's own table. Sorting is the caller's: a head is a button once `onSort` is given and the table says which way it stands.
     With `onRowClick` the first cell is the row's link and the whole row answers a pointer. `label` names the table for assistive technology. */

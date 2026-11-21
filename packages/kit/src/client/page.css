@@ -1915,6 +1915,13 @@
     max-height: min(60vh, 30rem);
     overflow-y: auto;
   }
+  .timeline-scroll .timeline-day-label {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    padding-block: var(--space-1);
+    background: var(--surface);
+  }
   /* A tinted message (an internal note) is a card in its column: its tone's wash, and an edge that says what it is. */
   .timeline-row.is-tinted {
     padding: var(--space-3) var(--space-3h);
@@ -3399,16 +3406,13 @@
     color: var(--ink-muted);
     font: var(--text-base)/1.45 var(--sans);
   }
-  .cards-summary-item + .cards-summary-item {
-    margin-inline-start: var(--space-5);
-  }
-  .cards-summary-item::before {
-    content: '·';
-    display: inline-block;
-    width: 15px;
-    margin-inline-start: -15px;
-    text-align: center;
+  .cards-summary-item + .cards-summary-item::before {
+    content: ' · ' / '';
     color: var(--ink-subtle);
+  }
+  .cards-summary .tone {
+    max-width: 100%;
+    vertical-align: bottom;
   }
   .cards-summary .num-value {
     font: inherit;

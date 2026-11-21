@@ -11,8 +11,9 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 /** A fixture App of this shape (a local App with free-form pages over a SQLite seed): Layers unless another is named.
- * `writable` opens its connection to writes, which is what gives a related list its Add. */
-export async function startLayersApp(fixture = 'layers', options: { writable?: boolean } = {}) {
+ * `writable` opens its connection to writes, which is what gives a related list its Add; `env` is read by a fixture's
+ * app.ts, for a second shape of the one App (page-kit's header as a bar). */
+export async function startLayersApp(fixture = 'layers', options: { writable?: boolean; env?: Record<string, string> } = {}) {
   const FIXTURE = resolve('test/fixtures/apps', fixture);
   const directory = mkdtempSync(join(tmpdir(), 'mistri-layers-'));
   let child: ReturnType<typeof spawn> | undefined;
@@ -32,9 +33,15 @@ export async function startLayersApp(fixture = 'layers', options: { writable?: b
   try {
     const database = join(directory, `${fixture}.db`);
     execFileSync(process.execPath, ['--import', 'tsx', join(FIXTURE, 'seed.mjs'), database], { stdio: 'pipe' });
-    if (options.writable) {
-      const config = JSON.parse(readFileSync(`${database}.json`, 'utf8')) as { connections: Array<Record<string, unknown>> };
-      for (const connection of config.connections) connection.writable = true;
+    if (options.writable || options.env) {
+      const config = JSON.parse(readFileSync(`${database}.json`, 'utf8')) as {
+        connections: Array<Record<string, unknown>>;
+        apps?: unknown;
+      };
+      if (options.writable) for (const connection of config.connections) connection.writable = true;
+      /* A definition reads only what the config passes it (apps.ts): the --app below is this same entry, not a
+         second App. */
+      if (options.env) config.apps = [{ dir: FIXTURE, env: Object.keys(options.env) }];
       writeFileSync(`${database}.json`, JSON.stringify(config, null, 2));
     }
     let log = '';
@@ -53,7 +60,7 @@ export async function startLayersApp(fixture = 'layers', options: { writable?: b
           String(port),
         ],
         {
-          env: { ...process.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
+          env: { ...process.env, ...options.env, DATABASE_URL: '', XDG_CONFIG_HOME: join(directory, 'xdg'), MISTRI_OPEN: '0' },
           stdio: ['ignore', 'pipe', 'pipe'],
         },
       );

@@ -124,7 +124,12 @@ export function contrastReadings(input: { states: ReadonlyArray<readonly [string
   ]
     .filter(
       (el) =>
-        el.checkVisibility() && parseFloat(getComputedStyle(el).borderTopWidth) > 0 && rgba(getComputedStyle(el).borderTopColor)[3]! > 0,
+        el.checkVisibility() &&
+        !el.matches(':disabled, [aria-disabled="true"]') &&
+        !el.closest('fieldset:disabled, [aria-disabled="true"]') &&
+        !el.querySelector(':scope > .picker-input:disabled') &&
+        parseFloat(getComputedStyle(el).borderTopWidth) > 0 &&
+        rgba(getComputedStyle(el).borderTopColor)[3]! > 0,
     )
     .map((el) => {
       const edge = getComputedStyle(el).borderTopColor;

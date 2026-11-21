@@ -378,6 +378,7 @@ export function ChartSection({ section, plan, base }: SlotProps) {
           total={section.total}
           height={section.height}
           say={say}
+          sayLegend={section.shape === 'donut' || section.shape === 'stacked' ? (totals) => say.among(totals) : undefined}
           label={namedGroups(got, got.columns[0], firstLabel.say)}
           seriesLabel={namedGroups(got, second ? got.columns[1] : undefined, labelFor(second).say)}
           vocabulary={firstLabel.allowed}

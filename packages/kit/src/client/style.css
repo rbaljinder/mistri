@@ -28,8 +28,10 @@
 picture { display: contents; }
 
 /* A plain link a free-form page writes (`<a href={useHref().page(…)}>`) is the look's link ink, as the platform's own links
-   are, not the browser's blue. In base, so any rule the page or a component brings (a later layer) still wins. */
-.free-page-body a { color: var(--link); }
+   are, not the browser's blue. In base, so any rule the page or a component brings (a later layer) still wins. Only a
+   plain link: a rule written straight into base outranks every sub-layer base imports, the button part's included, so
+   without the :where() a `<Button href intent="primary">` wore the link ink on the primary fill (1.22:1). */
+.free-page-body a:where(:not([data-slot])) { color: var(--link); }
 
 body {
   margin: 0;

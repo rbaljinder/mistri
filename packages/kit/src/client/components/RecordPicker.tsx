@@ -395,6 +395,7 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
   return (
     <div
       className={`picker${props.multiple ? ' picker-multi' : ''}`}
+      aria-disabled={props.disabled || undefined}
       ref={wrap}
       onKeyDownCapture={(e) => {
         if (editing && open && e.key === 'Escape') {

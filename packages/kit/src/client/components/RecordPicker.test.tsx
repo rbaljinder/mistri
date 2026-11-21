@@ -66,6 +66,13 @@ test('an invalid field says so on its box, as every other input does, and a vali
   expect(fine.input).not.toHaveAttribute('aria-describedby');
 });
 
+test('a disabled picker says so on its wrapper, for assistive tech and the grade probe', () => {
+  const { input } = picker({ disabled: true });
+  expect(input.closest('.picker')).toHaveAttribute('aria-disabled', 'true');
+  cleanup();
+  expect(picker().input.closest('.picker')).not.toHaveAttribute('aria-disabled');
+});
+
 function picker(props: Partial<Extract<RecordPickerProps, { multiple?: false }>> = {}) {
   const { value: initialValue = 'A-1', ...overrides } = props;
   const changes = vi.fn();

@@ -283,10 +283,18 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
           }));
         }),
       );
+      const toEpoch = (when: string): number => {
+        const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}/.test(when) ? `${when.replace(' ', 'T')}Z` : when;
+        const ms = Date.parse(normalized);
+        return Number.isNaN(ms) ? 0 : ms;
+      };
       const merged = answers
         .flat()
         .filter((r) => r.when)
-        .sort((a, b) => (a.when < b.when ? 1 : a.when > b.when ? -1 : 0));
+        .sort((a, b) => {
+          const diff = toEpoch(b.when) - toEpoch(a.when);
+          return diff !== 0 ? diff : a.when < b.when ? 1 : a.when > b.when ? -1 : 0;
+        });
       return { rows: merged.slice(0, step * pages), more: streamMore || merged.length > step * pages };
     },
     staleTime: 0,
@@ -313,9 +321,16 @@ export function TimelineSection({ section, plan, base, recordKey }: SlotProps) {
         /* The box's height and its scroll are whole pixels and a face's lines are not (Barlow's start at fractions):
            floored, the edge fell up to a pixel inside the line it was meant to start. Rounded, it falls within half a
            pixel of that line's start, on either side, so a line is taken only where rounding lands no lower. */
+        /* A day's label stays in view at the top while its day scrolls (page.css), over the start of what is under
+           it: a message starts at the label's foot, not at the box's edge. A stuck label reports where it is held,
+           so a label is measured where its day starts. */
+        const label = (line: HTMLElement) => line.matches('.timeline-day-label');
+        const under = (line: HTMLElement) =>
+          label(line) ? 0 : (line.closest('.timeline-day')?.querySelector<HTMLElement>('.timeline-day-label')?.offsetHeight ?? 0);
+        const at = (line: HTMLElement) => ((label(line) && line.closest('.timeline-day')) || line).getBoundingClientRect().top;
         const edge = [...box.querySelectorAll<HTMLElement>('.timeline-day-label, [data-timeline-row], .timeline-fold')]
           .filter((line) => line.offsetHeight > 0)
-          .map((line) => line.getBoundingClientRect().top - origin)
+          .map((line) => at(line) - origin - under(line))
           .filter((top) => top >= over - 0.5)
           .sort((a, b) => a - b)[0];
         const height = edge === undefined ? room : Math.round(whole - edge);

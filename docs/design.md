@@ -115,6 +115,16 @@ excepted), motion past 200ms or outside a
 reduced-motion guard, a shadow, a class outside `c-<id>-`, a popup placed by
 `getBoundingClientRect` — the way the theme diagnostics warn.
 
+### Which one: Segmented, Tabs or Select
+
+| Control | Use it to | Size of the set |
+| --- | --- | --- |
+| `Segmented` | Pick a value or filter within one view; the content below it is the same view, narrowed | 2 to 5 options |
+| `Tabs` | Switch between sibling panels of content, such as a record's related lists or sections | A handful of panels, each its own content |
+| `Select` | Choose from a big or open-ended set | Many options, or a list that grows |
+
+A record page with sibling panels uses `Tabs` (or `listTabs`), never `Segmented`.
+
 ## Tokens (packages/ui/src/tokens.css — the only source)
 
 Every colour, radius, face, duration, space and text size is a custom property on

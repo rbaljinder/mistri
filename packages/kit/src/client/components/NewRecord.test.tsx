@@ -1253,14 +1253,28 @@ test("a database default is said only where it is a plain value, in the column's
       col('tier', 'TEXT', { hasDefault: true }),
       col('code', 'TEXT', { default: 'upper(md5(random()::text))' }),
       col('seats', 'INTEGER', { default: '(-1)::integer' }),
+      col('tax', 'INTEGER', { default: '0' }),
+      col('fee', 'NUMERIC', { default: '12.5' }),
     ],
   };
   const rule = { values: { walk: 'Walk-in' } };
-  draw(<NewRecordForm {...props()} table={table} display={(c: ColumnMeta) => (c.name === 'kind' ? rule : null) as never} />);
+  const moneyMinor = { format: 'money', minor: true, currency: 'USD' };
+  const moneyMajor = { format: 'money', currency: 'USD' };
+  draw(
+    <NewRecordForm
+      {...props()}
+      table={table}
+      display={(c: ColumnMeta) =>
+        (c.name === 'kind' ? rule : c.name === 'tax' ? moneyMinor : c.name === 'fee' ? moneyMajor : null) as never
+      }
+    />,
+  );
   expect(screen.getByRole('textbox', { name: 'Kind' })).toHaveAttribute('placeholder', 'Default: Walk-in');
   expect(screen.getByRole('textbox', { name: 'Tier' })).toHaveAttribute('placeholder', '');
   expect(screen.getByRole('textbox', { name: 'Code' })).toHaveAttribute('placeholder', '');
   expect(screen.getByLabelText('Seats')).toHaveAttribute('placeholder', 'Default: -1');
+  expect(screen.getByLabelText('Tax')).toHaveAttribute('placeholder', '0.00');
+  expect(screen.getByLabelText('Fee')).toHaveAttribute('placeholder', '12.50');
   expect(document.body.textContent).not.toMatch(/supplied by the database/);
 });
 

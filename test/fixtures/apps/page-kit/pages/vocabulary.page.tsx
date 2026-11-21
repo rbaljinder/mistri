@@ -85,6 +85,21 @@ function Vocabulary() {
             ]}
           />
           <Button href="/vocabulary?opened=1">Open</Button>
+          <Button href="/vocabulary?intent=primary" intent="primary">
+            Go primary
+          </Button>
+          <Button href="/vocabulary?intent=secondary" intent="secondary">
+            Go secondary
+          </Button>
+          <Button href="/vocabulary?intent=quiet" intent="quiet">
+            Go quiet
+          </Button>
+          <Button href="/vocabulary?intent=danger" intent="danger">
+            Go danger
+          </Button>
+          <Button href="/vocabulary?intent=held" intent="primary" aria-disabled="true">
+            Go held
+          </Button>
           <FileField label="Attachment" value={file} onChange={setFile} />
           <Skeleton height={24} width={160} />
         </Card>
