@@ -20,6 +20,7 @@ import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { TransactionOperations } from '../packages/engine/src/adapters/adapter.js';
 import { PostgresAdapter } from '../packages/engine/src/adapters/postgres.js';
+import { provisionPostgresSchemaEpoch } from '../packages/engine/src/adapters/postgresSchemaEpoch.js';
 import { startLatencyProxy } from '../e2e/support/latencyProxy.js';
 import { liveSkip } from './live.js';
 import { pgClient, uuidPostgresDatabase } from './support/tenantDialects.js';
@@ -146,6 +147,10 @@ describe('reads asked together on PostgreSQL leave in one flight', { skip: liveS
     } finally {
       await control.end();
     }
+    /* The epoch store, as a provisioned database has it. Without it the catalog kept by the warm-up below is keyed by a
+       five-second window (epochlessEpoch); a measured transaction that began in the next window looked its tables up
+       again, and a lookup's answer arriving apart from another's sent one read a flight behind the rest. */
+    await provisionPostgresSchemaEpoch(database.url);
     const proxy = await startLatencyProxy(database.url, 5);
     t.after(() => proxy.close());
     const adapter = new PostgresAdapter(proxy.route(database.url), 'reads together', ['public']);
