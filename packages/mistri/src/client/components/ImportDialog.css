@@ -53,6 +53,10 @@
 .import-preview tr.is-refused .import-status { color: var(--status-critical); }
 .import-says { display: block; }
 .import-says + .import-says { margin-top: var(--space-1); }
+/* A command import's check, by run: what the run would do, then what it would write. */
+.import-outcome { display: block; color: var(--ink); font-weight: 600; }
+.import-preview tr.is-refused .import-outcome { color: var(--status-critical); }
+.import-preview .import-writes { color: var(--ink-muted); font-size: var(--text-sm); font-variant-numeric: tabular-nums; white-space: nowrap; }
 }
 /* Layout no look may move, brought with the dialog so it stands in no first
    paint: the check says each row's problem whole, which a look's one-line cell

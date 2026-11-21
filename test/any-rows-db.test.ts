@@ -265,7 +265,7 @@ function proofs(open: () => Promise<World>, label: string, skip: false | string 
       const db = await handles(DECLARED);
       const sum = db.invoice.where('any line where qty > 5').sum('total');
       await assert.rejects(sum, (error: Error) =>
-        /read the rows with an "any"\/"no" where, or count them/.test(String(refusalCause(error) ?? '')),
+        /read the rows with an "any"\/"no" or an "in" where, or count them/.test(String(refusalCause(error) ?? '')),
       );
     });
   });

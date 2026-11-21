@@ -21,8 +21,8 @@ import { ScopedRelations, snapshotRowScope, type RowScope } from '../../shared/r
 import { compileView, compileViewCount } from '../../shared/view.js';
 import { compileBreakdown, compileBreakdownCount } from '../../shared/breakdown.js';
 import { compileAggregate } from '../../shared/aggregate.js';
-import { childRows } from '../../shared/anyRows.js';
-import type { AnyRows } from '../../shared/filter.js';
+import { childRows, plannedWithin, withinRows } from '../../shared/anyRows.js';
+import type { AnyRows, WithinPlan, WithinRows } from '../../shared/filter.js';
 import { readExactly, summed } from '../../shared/decimals.js';
 import { RequestFault } from '../../shared/refusal.js';
 import { storedTextOf, storedTextSelect } from './storedText.js';
@@ -126,8 +126,18 @@ export function createScopedReads(
        child is a relation of this statement, planned here with its values bound ahead of the outer filter's, so the
        EXISTS carries none. A child the reader's catalog does not hold is refused (ScopedRelations.table). */
     const planned = new Map<AnyRows, string>();
+    /* Another table's keys (`in`) are read through the reader's own scope too: the same relation a direct read of that
+       table is (its tenant, its row policy), narrowed by the test's own conditions, planned here so its values bind
+       ahead of the outer filter's and the subquery carries none. A table the reader's catalog does not hold is
+       refused (ScopedRelations.table). */
+    const subqueries = new Map<WithinRows, WithinPlan>();
     for (const group of filter?.groups ?? []) {
       for (const c of group) {
+        if (c.within !== undefined && !subqueries.has(c.within)) {
+          const { table: other, key, type } = withinRows(schema, c.within);
+          const source = c.within.filter?.groups.length ? relations.filtered(other.id, c.within.filter) : relations.table(other.id);
+          subqueries.set(c.within, plannedWithin(style, source, key, type));
+        }
         if (c.any === undefined || planned.has(c.any)) continue;
         const { child, join } = childRows(schema, id, c.any, style);
         const source = c.any.filter?.groups.length ? relations.filtered(child.id, c.any.filter) : relations.table(child.id);
@@ -143,7 +153,27 @@ export function createScopedReads(
             throw new RequestFault('This read cannot ask about the rows that point at it.');
           })()
       : undefined;
-    const where = buildWhere(filter, style, prefix.params.length + 1, column, undefined, undefined, exists, references, typeIn(table));
+    const within = subqueries.size
+      ? (rows: WithinRows) =>
+          subqueries.get(rows) ??
+          ((): never => {
+            throw new RequestFault("This read cannot compare a column with another table's rows.");
+          })()
+      : undefined;
+    const where = buildWhere(
+      filter,
+      style,
+      prefix.params.length + 1,
+      column,
+      undefined,
+      undefined,
+      exists,
+      references,
+      typeIn(table),
+      false,
+      undefined,
+      within,
+    );
     return { table, column, relation, prefix, where, params: [...prefix.params, ...where.params] };
   };
   /* A SQLite sum that cannot be exact says so in its cell (decimals.ts); PostgreSQL's numeric always is. */

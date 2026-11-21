@@ -95,6 +95,8 @@ export function tenantImporter({ app, contexts, appNow }: { app: AppDef; context
               commands: {
                 prepare: (body) => fresh(() => contexts.prepare(req, selectors, expected, body)).then(owned),
                 execute: (body) => fresh(() => attributed(() => contexts.execute(req, selectors, expected, body).then(owned))),
+                // The check's run: the same lease, grants and row policy as execute, rolled back (tenantCommands.ts trial).
+                trial: (body) => fresh(() => contexts.execute(req, selectors, expected, body, { trial: true })).then(owned),
               },
             },
             request,

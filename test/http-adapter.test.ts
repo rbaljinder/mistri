@@ -126,6 +126,16 @@ test('what the API cannot do is refused by name, and nothing is sent', async () 
       /cannot filter by "status in"/,
     ],
     [
+      // A handler's `status: { in: { from: 'tickets' } }`: a subquery no API is asked, even on a filterable column.
+      {
+        table: 'contacts',
+        limit: 5,
+        offset: 0,
+        filter: { groups: [[{ column: 'status', op: 'in', within: { table: 'tickets' } }]] },
+      },
+      /contacts comes from an API, so "status" cannot be tested against tickets's rows/,
+    ],
+    [
       {
         table: 'contacts',
         limit: 5,

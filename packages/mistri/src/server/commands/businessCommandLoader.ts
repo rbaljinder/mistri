@@ -137,12 +137,25 @@ export function validateBusinessCommandReferences(
       bulk.set(reference.id, action.when);
     }
   }
-  /* An import runs its command once per row, on the record the row's `match`
-     columns find: a signed-in command on one record of this resource. */
+  /* An import runs its command once per run of rows: on the record the run's `match` columns find, a signed-in
+     command on one record of this resource; or, where it creates records, a signed-in command on this resource that
+     names none, prepared over no record by the loop below. */
   for (const { at, resource: name, reference } of importCommandOccurrences(app)) {
     const command = registration(reference.id, reference.version, at);
-    if (reference.target !== name || (command.targets ?? 'one') !== 'one' || command.public === true) {
-      invalid(`${at}: import command "${reference.id}" must be a signed-in command on one "${name}" record.`);
+    const targets = command.targets ?? 'one';
+    if (reference.target !== name || (targets !== 'one' && targets !== 'none') || command.public === true) {
+      invalid(`${at}: import command "${reference.id}" must be a signed-in command on one "${name}" record, or one that names none.`);
+    }
+    if (reference.targets === 'none') {
+      const problem = commandReferenceCatalogProblem(
+        app,
+        command,
+        { id: reference.id, version: reference.version, input: reference.input },
+        name,
+        resources.schema,
+      );
+      if (problem) invalid(`Command "${reference.id}": ${problem}`);
+      continue;
     }
     const problem = commandReferenceCatalogProblem(app, command, reference, name, resources.schema);
     if (problem) invalid(`Command "${reference.id}": ${problem}`);

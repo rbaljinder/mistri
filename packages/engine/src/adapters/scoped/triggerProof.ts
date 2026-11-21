@@ -246,7 +246,8 @@ export function createTriggerProof(acceptance: TriggerAcceptance, tools: ProofTo
     // A relationship test reads another table's rows, which a trigger's inserted row cannot say.
     if (given.via !== undefined) return UNKNOWN;
     const condition = given as Condition;
-    if (condition.other !== undefined || condition.any !== undefined || condition.collation !== undefined) return UNKNOWN;
+    if (condition.other !== undefined || condition.any !== undefined || condition.within !== undefined || condition.collation !== undefined)
+      return UNKNOWN;
     if (!Object.hasOwn(row, condition.column)) return UNKNOWN;
     const value = row[condition.column];
     if (value === UNKNOWN) return UNKNOWN;

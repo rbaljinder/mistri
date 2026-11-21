@@ -206,5 +206,97 @@ function proofs(open: () => Promise<World>, label: string, skip: false | string 
   });
 }
 
+/* A row scope's batch (scoped/scopedTransaction.ts) against its one-row path: the same rows written, each answered
+   as that row alone is answered, and a row outside the scope refused by the same words. PostgreSQL only: SQLite's
+   scope offers no batch, so the command db writes there a row at a time. */
+function scopedParity(open: () => Promise<World>, skip: false | string) {
+  describe('a row scope writes a batch as it writes each of its rows', { skip }, () => {
+    let w: World;
+    before(async () => {
+      w = await open();
+      await w.adapter.introspect();
+    });
+    after(async () => {
+      await w?.close();
+    });
+
+    // The scope is the rows noted 'mine': seeded rows (no note) are outside it.
+    const mine = () => ({ [w.table]: { groups: [[{ column: 'note', op: '=' as const, value: 'mine' }]] } });
+    const scoped = <T>(run: (tx: WriteTransaction) => Promise<T>) => (w.adapter as PostgresAdapter).scopeTransaction(mine(), run);
+    const refusal = (run: (tx: WriteTransaction) => Promise<unknown>) =>
+      scoped(run).then(
+        () => assert.fail('expected a refusal'),
+        (error: Error) => ({ name: error.constructor.name, message: error.message }),
+      );
+    /** What a row's result says, less what differs by statement or by the key the identity handed out. */
+    const answered = (results: readonly { row?: Row; applied: Row }[]) =>
+      results.map(({ row, applied }) => ({ applied, row: row && { ...row, id: undefined } }));
+
+    test('the scope offers both batch forms, and no batch remove', async () => {
+      await scoped(async (tx) => {
+        assert.equal(typeof tx.insertMany, 'function');
+        assert.equal(typeof tx.updateMany, 'function');
+        assert.equal('removeMany' in tx, false);
+      });
+    });
+
+    test('insertMany answers each row as insert does, in one statement', async () => {
+      const values = [
+        { sku: 'p', qty: 1, note: 'mine' },
+        { sku: 'q', qty: 2, note: 'mine' },
+      ];
+      const one = await scoped(async (tx) => [
+        await tx.insert({ table: w.table, values: values[0]! }),
+        await tx.insert({ table: w.table, values: values[1]! }),
+      ]);
+      const batch = await scoped((tx) => tx.insertMany!(values.map((v) => ({ table: w.table, values: v }))));
+      assert.deepEqual(answered(batch), answered(one));
+      assert.equal(statementsOf(batch), 1);
+    });
+
+    test('a batch row outside the scope refuses as that row alone does, and no row lands', async () => {
+      const before = plain(await w.rows());
+      const alone = await refusal((tx) => tx.insert({ table: w.table, values: { sku: 'out', qty: 1, note: 'theirs' } }));
+      const batch = await refusal((tx) =>
+        tx.insertMany!([
+          { table: w.table, values: { sku: 'in', qty: 1, note: 'mine' } },
+          { table: w.table, values: { sku: 'out', qty: 1, note: 'theirs' } },
+        ]),
+      );
+      assert.deepEqual(batch, alone);
+      assert.deepEqual(plain(await w.rows()), before);
+    });
+
+    test('updateMany changes only rows in the scope, answering as update does', async () => {
+      const ours = plain(await w.rows())
+        .filter((row) => row.note === 'mine')
+        .map((row) => row.id);
+      assert.equal(ours.length >= 2, true);
+      const one = await scoped(async (tx) => [await tx.update({ table: w.table, key: { id: ours[0]! }, values: { qty: 50 } })]);
+      const batch = await scoped((tx) =>
+        tx.updateMany!(ours.slice(0, 2).map((id) => ({ table: w.table, key: { id }, values: { qty: 50 } }))),
+      );
+      assert.deepEqual(
+        batch.map((result) => result.affected),
+        [1, 1],
+      );
+      assert.deepEqual(batch[0]!.applied, one[0]!.applied);
+      assert.equal(statementsOf(batch), 1);
+
+      const before = plain(await w.rows());
+      const alone = await refusal((tx) => tx.update({ table: w.table, key: { id: 1 }, values: { qty: 99 } }));
+      const crossing = await refusal((tx) =>
+        tx.updateMany!([
+          { table: w.table, key: { id: ours[0]! }, values: { qty: 99 } },
+          { table: w.table, key: { id: 1 }, values: { qty: 99 } },
+        ]),
+      );
+      assert.deepEqual(crossing, alone);
+      assert.deepEqual(plain(await w.rows()), before);
+    });
+  });
+}
+
 proofs(sqliteWorld, 'SQLite');
 proofs(postgresWorld, 'PostgreSQL', liveSkip('postgres', LIVE));
+scopedParity(postgresWorld, liveSkip('postgres', LIVE));

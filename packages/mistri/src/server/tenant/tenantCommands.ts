@@ -15,6 +15,7 @@ import { createBusinessCommandAuthorizer } from '../commands/businessCommandAuth
 import {
   BusinessCommandExecutionError,
   executeBusinessCommand,
+  trialBusinessCommand,
   lookupBusinessCommandStatus,
   type BusinessCommandResult,
   type BusinessCommandStatus,
@@ -80,6 +81,11 @@ export interface TenantCommandExecutionOptions {
   readonly locale?: string;
   /** The signed-in account's display name, off its verified session (`actor.name`); absent where the store keeps none. */
   readonly name?: string;
+  /**
+   * An execute run as a trial (businessCommandExecution.ts trialBusinessCommand): under the same lease, grants and row
+   * policy, always rolled back, keeping no receipt. An import's check (tenantImport.ts); a tenant's own command only.
+   */
+  readonly trial?: true;
 }
 /** What holding a file answers: the file as held, or the refusal as the ordinary host says it. */
 type StagedFileAnswer =
@@ -125,7 +131,9 @@ export const tenantCommandDomain = domain;
 /** Capture host options without accepting replacement getters or a forged signal.
  * Handlers get an independently owned native signal, not the mutable input. */
 export function captureTenantCommandExecution(input: TenantCommandExecutionOptions) {
-  const raw = tenantOptions(input, ['signal', 'requestId', 'entry', 'locale', 'name']);
+  const raw = tenantOptions(input, ['signal', 'requestId', 'entry', 'locale', 'name', 'trial']);
+  const trial = captureTenantData(raw.trial);
+  if (trial !== undefined && trial !== true) throw new CommandInputError('trial');
   const requestId = captureTenantData(raw.requestId);
   if (requestId !== undefined && (typeof requestId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(requestId)))
     throw new CommandInputError('requestId');
@@ -179,6 +187,7 @@ export function captureTenantCommandExecution(input: TenantCommandExecutionOptio
       ...(entry === undefined ? {} : { entry: entry as 'api' | 'mcp' }),
       ...(locale === undefined ? {} : { locale }),
       ...(name === undefined ? {} : { name }),
+      ...(trial === true ? { trial: true as const } : {}),
     },
     close: () => {
       try {
@@ -321,7 +330,9 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                 scopedLocale(app, scope.principal.accountId, () => scope.reads()),
               ])
             : [undefined, undefined];
-          const { name: _name, ...asked } = context!.options;
+          const { name: _name, trial, ...asked } = context!.options;
+          // Only an execute is tried: every other step either reads or keeps what it does.
+          if (trial && mode !== 'execute') throw new AppAccessDenied();
           const said = person ? { ...asked, locale: person } : asked;
           const flags = commandFlagsOnce(async () => {
             await scope.session();
@@ -518,7 +529,9 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
             const execution = { ...said, flags: await authorizedCommandFlags(binding, actor, captured, flags) };
             return mode === 'status'
               ? await lookupBusinessCommandStatus(binding, actor, captured, execution)
-              : await executeBusinessCommand(binding, actor, captured, execution);
+              : trial
+                ? ((await trialBusinessCommand(binding, actor, captured, execution)) as unknown as BusinessCommandStatus)
+                : await executeBusinessCommand(binding, actor, captured, execution);
             /* The refusal is kept here because the writer replaces the error on
            its way out with a value-free TenantWriteFailure; the reason it
            carries has to be kept with it for the same reason. */

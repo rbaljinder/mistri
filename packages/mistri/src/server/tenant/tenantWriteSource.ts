@@ -7,8 +7,10 @@ import {
   TransactionOperations,
   TransactionOutcomeUnknown,
   type AggregateRequest,
+  type InsertRequest,
   type NoteRequest,
   type TellRequest,
+  type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { WriteLanes } from '@mistriwork/engine/adapters/writeLanes.js';
@@ -238,6 +240,21 @@ function recording(records: WriteTransaction, wrote: TenantCommittedWrite[], own
       wrote.push({ table: request.table, key: request.key });
       return result;
     },
+    // A batch names its rows as each row alone would, in the order the batch wrote them.
+    ...(records.insertMany && records.updateMany
+      ? {
+          insertMany: async (requests: readonly InsertRequest[]) => {
+            const results = await records.insertMany!(requests);
+            results.forEach((result, index) => wrote.push({ table: requests[index]!.table, key: result.key }));
+            return results;
+          },
+          updateMany: async (requests: readonly UpdateRequest[]) => {
+            const results = await records.updateMany!(requests);
+            for (const request of requests) wrote.push({ table: request.table, key: request.key });
+            return results;
+          },
+        }
+      : {}),
     remove: async (request) => {
       /* Read before the row goes: whoever follows this commit (a search index, tenantSearch.ts) removes the record's
          copy within its tenant, and the row can no longer say whose it was. */
@@ -587,6 +604,14 @@ export async function openSqliteTenantWriteSource(
                 : {}),
               insert: (request) => records.insert({ ...request, table: toPhysical(request.table) }),
               update: (request) => records.update({ ...request, table: toPhysical(request.table) }),
+              ...(records.insertMany && records.updateMany
+                ? {
+                    insertMany: (requests: readonly InsertRequest[]) =>
+                      records.insertMany!(requests.map((request) => ({ ...request, table: toPhysical(request.table) }))),
+                    updateMany: (requests: readonly UpdateRequest[]) =>
+                      records.updateMany!(requests.map((request) => ({ ...request, table: toPhysical(request.table) }))),
+                  }
+                : {}),
               remove: (request) => records.remove({ ...request, table: toPhysical(request.table) }).catch(said),
               ...(records.tell ? { tell: (request: TellRequest) => records.tell!({ ...request, table: toPhysical(request.table) }) } : {}),
               ...(records.noted
@@ -1029,6 +1054,18 @@ export async function openPostgresTenantWriteSource(
                 live();
                 return records.update({ ...request, table: toPhysical(request.table) });
               },
+              ...(records.insertMany && records.updateMany
+                ? {
+                    insertMany: (requests: readonly InsertRequest[]) => {
+                      live();
+                      return records.insertMany!(requests.map((request) => ({ ...request, table: toPhysical(request.table) })));
+                    },
+                    updateMany: (requests: readonly UpdateRequest[]) => {
+                      live();
+                      return records.updateMany!(requests.map((request) => ({ ...request, table: toPhysical(request.table) })));
+                    },
+                  }
+                : {}),
               remove: (request) => {
                 live();
                 return records.remove({ ...request, table: toPhysical(request.table) }).catch(said);

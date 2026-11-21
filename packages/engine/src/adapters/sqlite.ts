@@ -20,7 +20,7 @@ import {
 /* The tenant sources keep their catalog and store-layout checks by these (tenantReadSource.ts, tenantStore.ts). */
 export { cachedStatement, schemaFingerprint } from './sqliteHandles.js';
 import { captureScopeCatalog, mapScopeCatalog } from '../shared/scopeCatalog.js';
-import { inlineRows } from '../shared/anyRows.js';
+import { inlineRows, inlineWithin } from '../shared/anyRows.js';
 import { asksAboutRows } from '../shared/filter.js';
 import { qualifiedTable } from '../shared/sqlRelation.js';
 import type { SqlFragment } from '../shared/filter.js';
@@ -644,7 +644,9 @@ export class SqliteAdapter implements Adapter {
     const schema = await this.schema().catch(() => undefined);
     const inline =
       schema && inlineRows(schema, id, ANSI_STYLE.quote(relation), ANSI_STYLE, (child) => qualifiedTable(schema, child.id, ANSI_STYLE));
-    return buildWhere(filter, ANSI_STYLE, 1, undefined, undefined, undefined, undefined, false, undefined, false, inline);
+    /* Another table's keys (`in`) are read as this table is, from its own relation: the same bound. */
+    const within = schema && inlineWithin(schema, ANSI_STYLE, (other) => qualifiedTable(schema, other.id, ANSI_STYLE));
+    return buildWhere(filter, ANSI_STYLE, 1, undefined, undefined, undefined, undefined, false, undefined, false, inline, within);
   }
 
   private async queryOn(request: QueryRequest, db: DatabaseSync, read = false): Promise<QueryResult> {

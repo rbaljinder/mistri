@@ -63,6 +63,11 @@ import { laneCountsText, laneWindow } from '../packages/engine/src/shared/boardL
 type HttpOwner = ReturnType<typeof createTenantHttpServer>;
 type Answer = { status: number; headers: Headers; text: string; body: Record<string, unknown> };
 type Context = { tabId: string; context: string; appId: string; accountId: string; tenantId: string; revision: number; expiresAt: number };
+const attachInput = {
+  label: { label: 'Label', type: 'text' },
+  item: { label: 'Item', type: 'reference', from: 'item', by: 'id', labelColumn: 'name' },
+} as const;
+const attachRef = { id: 'attach', version: 1, target: 'link', targets: 'none', input: attachInput } as const;
 const appId = 'tenant-http',
   privateValue = 'PRIVATE_HTTP_TENANT_SENTINEL';
 const ownerHeaders = ['app', 'account', 'tenant', 'tab', 'context', 'lease-revision'].map((name) => `x-mistri-${name}`);
@@ -990,6 +995,81 @@ test("an import's refusals say nothing of another tenant's rows, and a table eve
   await assert.rejects(() => fixture(t, { imports: true, globals: true, globalImport: 'write' }), /"owner": "global".*takes no "access"/);
 });
 
+/* Both tenants hold an item whose address is `same`. A file's reference to it is read through the member's own lease,
+   so it finds that tenant's row alone, in the check (a rolled-back trial) and in the commit; the check leaves every table of
+   the file, both tenants' rows, receipts, journal and history, as it found it. */
+test('a command import resolves a reference by the address its own tenant holds, and a check leaves both tenants untouched', async (t) => {
+  const f = await fixture(t, { imports: true, linkImport: true, history: true }),
+    north = await f.open('north'),
+    south = await f.open('south');
+  const post = (context: Context, mode: 'check' | 'commit', csv: string) =>
+    f.data('/api/import', context, { table: 'link', csv: `Label,Item\r\n${csv}`, mapping: ['label', 'item'], mode });
+  const snapshot = () => {
+    const names = f.db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+      .all()
+      .map((row) => String(row.name));
+    return Object.fromEntries(
+      names.map((name) => [
+        name,
+        f.db
+          .prepare(`SELECT * FROM "${name}" ORDER BY rowid`)
+          .all()
+          .map((row) => ({ ...row })),
+      ]),
+    );
+  };
+  const links = () =>
+    f.db
+      .prepare('SELECT id, tenant_id, item_id FROM db_link ORDER BY id')
+      .all()
+      .map((row) => ({ ...row }));
+  const before = snapshot();
+  assert.ok(Object.keys(before).some((name) => name.includes('receipt')));
+  assert.ok(Object.keys(before).some((name) => name.includes('history')));
+
+  // The check names `same`, which both tenants hold: it is ready, tried through the handler, and writes nothing anywhere.
+  const checked = await post(north, 'check', 'one,same\r\ntwo,same');
+  owned(checked, north);
+  noPrivate(checked);
+  assert.equal(checked.body.outcome, 'checked', checked.text);
+  assert.equal(checked.body.ready, 2, checked.text);
+  assert.deepEqual(
+    (checked.body.runs as Array<{ outcome: string }>).map((run) => run.outcome),
+    ['create', 'create'],
+  );
+  assert.equal(f.control.commands, 2, 'each run was tried through the handler');
+  assert.deepEqual(snapshot(), before, 'the trial left every table of both tenants as it found it');
+  assert.doesNotMatch(checked.text, /south/i);
+
+  // The commit lands each link on north's item, and south's rows, receipts and history are as they were.
+  const committed = await post(north, 'commit', 'one,same\r\ntwo,same');
+  owned(committed, north);
+  assert.equal(committed.body.outcome, 'applied', committed.text);
+  assert.equal(committed.body.applied, 2);
+  assert.deepEqual(links(), [
+    { id: 'link-one', tenant_id: 'north', item_id: 'north-item' },
+    { id: 'link-two', tenant_id: 'north', item_id: 'north-item' },
+  ]);
+  assert.deepEqual(snapshot().db_item, before.db_item, 'no item of either tenant changed');
+  assert.deepEqual(snapshot().db_task, before.db_task);
+
+  // The same file in south resolves `same` to south's row, in the check and in the commit, and north's links are not its own.
+  const southBefore = snapshot();
+  const southChecked = await post(south, 'check', 'three,same');
+  owned(southChecked, south);
+  assert.equal(southChecked.body.ready, 1, southChecked.text);
+  assert.deepEqual(snapshot(), southBefore, "south's check wrote nothing either");
+  const southCommitted = await post(south, 'commit', 'three,same');
+  owned(southCommitted, south);
+  assert.equal(southCommitted.body.outcome, 'applied', southCommitted.text);
+  assert.deepEqual(links(), [
+    { id: 'link-one', tenant_id: 'north', item_id: 'north-item' },
+    { id: 'link-three', tenant_id: 'south', item_id: 'south-item' },
+    { id: 'link-two', tenant_id: 'north', item_id: 'north-item' },
+  ]);
+});
+
 test("a tenant's emailed notices go to its own members as their own membership, link into that tenant, and never carry another tenant's record", async (t) => {
   const f = await fixture(t, { notify: 'email' });
   const sent: Array<{ to: string; subject: string; text: string }> = [];
@@ -1263,6 +1343,8 @@ async function fixture(
     /** A command that updates `item`, a table with no version column. */
     unversioned?: boolean;
     imports?: boolean;
+    /** A command import of `link`, whose `item` column names an item by its `address` (business_id), which both tenants hold. */
+    linkImport?: boolean;
     branding?: 'readable' | 'managed';
     /** Each tenant brands the App (`branding`), its viewers the editors; the store a Map. */
     tenantBranding?: boolean;
@@ -1309,6 +1391,9 @@ async function fixture(
     INSERT INTO db_task VALUES ('north-task','north','same','North task',0),('south-task','south','same','South task',0);
     INSERT INTO db_note VALUES ('north-note','north','North note','PRIVATE_HTTP_TENANT_SENTINEL'${setup.foreignKey ? (setup.alternateKey ? ",'North item'" : ",'north-item'") : ''}),
       ('south-note','south','South note','PRIVATE_HTTP_TENANT_SENTINEL'${setup.foreignKey ? (setup.alternateKey ? ",'South item'" : ",'south-item'") : ''});`);
+  if (setup.linkImport)
+    db.exec(`CREATE TABLE db_link(id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, item_id TEXT NOT NULL REFERENCES db_item(id),
+      label TEXT NOT NULL);`);
   if (setup.globals)
     db.exec(`CREATE TABLE db_country(code TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL);
     INSERT INTO db_country VALUES ('us','United States');`);
@@ -1406,7 +1491,11 @@ async function fixture(
             read: true,
             write: ['item', ...(setup.files ? ['attachment'] : []), ...(setup.tags ? ['item_tag'] : [])],
             export: ['item'],
-            commands: [...(setup.twoCommands ? ['advance', 'hold'] : ['advance']), ...(setup.unversioned ? ['rename'] : [])],
+            commands: [
+              ...(setup.twoCommands ? ['advance', 'hold'] : ['advance']),
+              ...(setup.unversioned ? ['rename'] : []),
+              ...(setup.linkImport ? ['attach'] : []),
+            ],
           },
           viewer: { read: setup.metadata ? ['item'] : true },
         },
@@ -1417,6 +1506,7 @@ async function fixture(
           physical: 'db_item',
           owner: 'tenant',
           access: 'write',
+          ...(setup.linkImport ? { address: 'business_id' } : {}),
           fields: {
             read: ['id', 'business_id', 'name', ...(setup.notify ? ['watcher'] : []), ...(setup.mentions ? ['notes'] : [])],
             write: ['id', 'business_id', 'name', ...(setup.mentions ? ['notes'] : [])],
@@ -1470,6 +1560,17 @@ async function fixture(
           fields: { read: ['id', 'name', ...(setup.foreignKey ? ['item_id'] : [])] },
           ...(setup.metadata ? { display: { secret: { tone: { [privateValue]: 'bad' } } } } : {}),
         },
+        ...(setup.linkImport
+          ? {
+              link: {
+                physical: 'db_link',
+                owner: 'tenant',
+                access: 'write',
+                fields: { read: ['id', 'item_id', 'label'], write: ['id', 'item_id', 'label'] },
+                import: { command: attachRef },
+              },
+            }
+          : {}),
         ...(setup.globals
           ? {
               country: {
@@ -1527,6 +1628,7 @@ async function fixture(
         /* The whole App's first list over items, served to viewers alone: a mailed operator's link is the item
            under the list they are served. */
         ...(setup.notify === 'email' ? { watch: { kind: 'list', from: 'item', roles: ['viewer'] } } : {}),
+        ...(setup.linkImport ? { link: { kind: 'list', from: 'link' } } : {}),
         item: { kind: 'list', from: 'item', ...(setup.tags ? { filters: ['tags'] } : {}) },
         task: { kind: 'list', from: 'task' },
         ...(setup.activity
@@ -1586,6 +1688,7 @@ async function fixture(
   const rowScope: RowScope = {
     item: true,
     task: true,
+    ...(setup.linkImport ? { link: true } : {}),
     note: { groups: [[{ column: 'secret', op: '=', value: privateValue }]] },
     ...(setup.globals ? { country: true } : {}),
     ...(setup.files ? { attachment: true } : {}),
@@ -1621,8 +1724,24 @@ async function fixture(
       return { itemId: String(record.id) };
     },
   });
+  /* Creates a link to an item: the file names the item by its business id (the resource's address), the same in both tenants. */
+  const attach = defineCommand({
+    source: 'business',
+    target: 'link',
+    targets: 'none',
+    input: attachInput,
+    read: ['item'],
+    write: ['link'],
+    output: { parse: (value: unknown) => ({ linkId: String(object(value).linkId) }) },
+    async handle({ db }, input) {
+      control.commands++;
+      const made = await db.link.insert({ id: `link-${String(input.label)}`, item_id: String(input.item), label: String(input.label) });
+      return { linkId: String(made.id) };
+    },
+  });
   const registry = defineCommands({
     ...(setup.twoCommands ? { hold } : {}),
+    ...(setup.linkImport ? { attach } : {}),
     ...(setup.unversioned ? { rename } : {}),
     advance: defineCommand({
       source: 'business',
@@ -1651,6 +1770,7 @@ async function fixture(
     ownership: {
       item: { kind: 'tenant', column: 'tenant_id' },
       task: { kind: 'tenant', column: 'tenant_id' },
+      ...(setup.linkImport ? { link: { kind: 'tenant' as const, column: 'tenant_id' } } : {}),
       note: { kind: 'tenant', column: 'tenant_id' },
       ...(setup.globals ? { country: { kind: 'global' as const, access: 'read-only' as const } } : {}),
       ...(setup.files ? { attachment: { kind: 'tenant' as const, column: 'tenant_id' } } : {}),
@@ -1677,6 +1797,7 @@ async function fixture(
         return [{ table: 'task', key: { id: value.taskId as string } }];
       },
       ...(setup.twoCommands ? { hold: (result: unknown) => [{ table: 'task', key: { id: String(object(result).taskId) } }] } : {}),
+      ...(setup.linkImport ? { attach: (result: unknown) => [{ table: 'link', key: { id: String(object(result).linkId) } }] } : {}),
       ...(setup.unversioned ? { rename: (result: unknown) => [{ table: 'item', key: { id: String(object(result).itemId) } }] } : {}),
     },
   });

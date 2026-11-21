@@ -128,8 +128,9 @@ const READ_ONLY = ['insert', 'update', 'remove', 'upsert', 'delete'] as const;
 /** One looked-up table, read only. */
 export interface LookupTable<Row> {
   get(key: Readonly<Record<string, string | number>> | string | number): Promise<Row>;
-  find(where: Where<Row> | string): Promise<Row | undefined>;
-  where(where?: Where<Row> | string): RowQuery<Row>;
+  // No `in: { from }` here: a lookup reads its own table, and another table's rows are the handler's to read.
+  find(where: Where<Row, {}> | string): Promise<Row | undefined>;
+  where(where?: Where<Row, {}> | string): RowQuery<Row>;
   where(strings: TemplateStringsArray, ...values: readonly unknown[]): RowQuery<Row>;
   /**
    * A file resource's kept file, by a row read through this handle or its key, as the handler's

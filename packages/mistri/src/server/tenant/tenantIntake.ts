@@ -781,6 +781,8 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
             throw new Error();
         }
         context = captureTenantCommandExecution(execution);
+        // A public submission is never a trial: it keeps what it submits.
+        if (context.options.trial) throw new Error();
       } catch {
         throw new BusinessCommandExecutionError('invalid_input');
       }

@@ -1436,6 +1436,30 @@ export function parseCommandReference(raw: unknown, where: string): AppCommandRe
   };
 }
 
+/**
+ * The command an import runs, by name: one on the record `match` finds, or a signed-in command that creates
+ * (`targets: 'none'`), run where `match` is absent or finds nothing. A public command runs only from its public form.
+ */
+export function parseImportCommandReference(
+  raw: unknown,
+  where: string,
+): AppCommandReference | (Omit<AppCommandReference, 'targets'> & { targets: 'none' }) {
+  const [id, entry] = registered(raw, where);
+  if (entry.targets !== 'none') return parseCommandReference(raw, where);
+  if (entry.public === true)
+    return fail(where, `names "${id}", which is registered with public: true. A public command runs only from a public form`);
+  return {
+    id,
+    version: entry.version,
+    target: entry.target,
+    targets: 'none' as const,
+    ...(entry.realm === undefined ? {} : { realm: entry.realm }),
+    ...commandGate(entry),
+    input: served(entry.input),
+    ...(entry.rules?.length ? { rules: structuredClone(entry.rules) as DraftRule[] } : {}),
+  };
+}
+
 /** A command an API exposes, by name: one on a record, or a form's, as its registration says. A public one is its
     public form's verb; the server's catalog checks that form exists (api/apiCommandCatalog.ts). */
 export function parseExposedCommandReference(raw: unknown, where: string): AppCommandReference | AppFormCommandReference {

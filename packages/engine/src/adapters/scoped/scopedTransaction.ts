@@ -1,4 +1,15 @@
-import { Refusal, type Filter, type ScopedReads, type WriteTransaction } from '../adapter.js';
+import {
+  Refusal,
+  oneAtATime,
+  sameTable,
+  type Filter,
+  type InsertRequest,
+  type InsertResult,
+  type ScopedReads,
+  type UpdateRequest,
+  type UpdateResult,
+  type WriteTransaction,
+} from '../adapter.js';
 import { buildWhere, type Condition, type ConditionEquality, type SqlFragment, type SqlStyle } from '../../shared/filter.js';
 import { authorFault, recordRefusalCause, refusalCause, sayRefusal } from '../../shared/refusal.js';
 import type { RowScope, RowScopeFilter, ViaCondition } from '../../shared/rowScope.js';
@@ -445,7 +456,7 @@ function withOwnRows(
           if (given.via !== undefined || typeof given.column !== 'string') return given;
           const condition = given as Condition;
           const added = extra.get(condition.column);
-          if (!added || condition.other !== undefined || condition.any !== undefined) return condition;
+          if (!added || condition.other !== undefined || condition.any !== undefined || condition.within !== undefined) return condition;
           if (condition.op === '=' && comparable(condition.value))
             return { ...condition, op: 'in' as const, value: [condition.value, ...added] };
           if (condition.op === 'in' && Array.isArray(condition.value)) return { ...condition, value: [...condition.value, ...added] };
@@ -457,6 +468,9 @@ function withOwnRows(
   return out;
 }
 
+/** The most keys one read of a batch names: a command's batch is at most 1,000 rows (commandDb.ts), so one read. */
+const KEYS_A_READ = 1000;
+
 /** One reference a write makes, to be checked; or the refusal that ends the list where one cannot be. */
 type ParentCheck =
   | { readonly refused: string }
@@ -467,6 +481,10 @@ type ParentCheck =
       readonly parent: TableMeta;
       /** A row scope's `via` (the parent need only exist among the rows the principal may see, once or more), not a foreign key (exactly one). */
       readonly exists?: true;
+      /** A batch's checks of one foreign key, asked as one (combined): each member names exactly one parent. */
+      readonly members?: readonly Extract<ParentCheck, { fk: ForeignKey }>[];
+      /** Every check of the batch, in row order: where a combined one misses, they are asked again one at a time. */
+      readonly whole?: readonly ParentCheck[];
     };
 /** A check sent: its parent's lock and its count, in flight. */
 type Asked =
@@ -498,9 +516,9 @@ export function createScopedTransaction(
   /* The rows this transaction inserted inside the principal's rows, by table, and the reads that count them in
      (ScopeOwnRows). Rebuilt on each such insert; until the first, the reads are the ones resolved for the request. */
   const made = new Map<string, Record<string, unknown>[]>();
-  const madeBy = (table: TableMeta, row: Record<string, unknown>) => {
-    if (!own) return;
-    made.set(table.id, [...(made.get(table.id) ?? []), row]);
+  const madeBy = (table: TableMeta, ...rows: Record<string, unknown>[]) => {
+    if (!own || !rows.length) return;
+    made.set(table.id, [...(made.get(table.id) ?? []), ...rows]);
     const scope = withOwnRows(catalog.schema, own.scope, made);
     reads = own.reads(scope, false);
     guards = own.reads(scope, true);
@@ -582,14 +600,14 @@ export function createScopedTransaction(
      flight; the server runs it only once the lock is granted. */
   /* A row by its key, with its reference columns' stored text beside it where the engine reads one (storedText.ts):
      every check that takes a value from a stored row binds that text, never the driver's reading of it. */
-  const readStored = async (table: TableMeta, filter: Filter, within: Pick<ScopedReads, 'query' | 'count'>) => {
+  const readStored = async (table: TableMeta, filter: Filter, within: Pick<ScopedReads, 'query' | 'count'>, limit = 2) => {
     const texts = storedTextOf(catalog.schema, table);
-    const result = await within.query({ table: table.id, filter, limit: 2, offset: 0, ...(texts ? { storedText: true as const } : {}) });
+    const result = await within.query({ table: table.id, filter, limit, offset: 0, ...(texts ? { storedText: true as const } : {}) });
     return { ...result, rows: result.rows.map((row) => detachStoredText(texts, row)) };
   };
-  const lockedRead = async (table: TableMeta, filter: Filter, within: Pick<ScopedReads, 'query' | 'count'>) => {
+  const lockedRead = async (table: TableMeta, filter: Filter, within: Pick<ScopedReads, 'query' | 'count'>, limit?: number) => {
     const locked = locks?.target(table, filter);
-    const read = () => readStored(table, filter, within);
+    const read = () => readStored(table, filter, within, limit);
     if (!locks?.together) {
       await locked;
       return read();
@@ -616,6 +634,31 @@ export function createScopedTransaction(
   };
   const stored = async (table: TableMeta, key: Record<string, unknown>, within: Pick<ScopedReads, 'query' | 'count'> = guards) =>
     one(table, key, await lockedRead(table, keyFilter(table, key), within));
+  /* A batch's rows read as `stored` reads one, a read for up to KEYS_A_READ of them: one key column is one `in`, several
+     are a group a key, each key held to what keyFilter asks of one. Found by key as the read spells it; a row a key does
+     not find there (a padded char, a folded case) is read again alone (storedFrom), as `stored` reads it. */
+  const keyColumns = (table: TableMeta) => table.columns.filter((column) => column.primaryKey).map((column) => column.name);
+  const keyId = (table: TableMeta, row: Readonly<Record<string, unknown>>) =>
+    JSON.stringify(keyColumns(table).map((column) => String(row[column])));
+  const keysFilter = (table: TableMeta, keys: readonly Record<string, unknown>[]): Filter => {
+    const groups = keys.map((key) => keyFilter(table, key).groups[0]);
+    const pk = keyColumns(table);
+    if (pk.length !== 1) return { groups };
+    return { groups: [[{ column: pk[0], op: 'in', value: groups.map((group) => group[0].value as string | number) }]] };
+  };
+  const lockedReads = async (table: TableMeta, keys: readonly Record<string, unknown>[]) => {
+    const found = new Map<string, Record<string, unknown>>();
+    for (let at = 0; at < keys.length; at += KEYS_A_READ) {
+      const chunk = keys.slice(at, at + KEYS_A_READ);
+      for (const row of (await lockedRead(table, keysFilter(table, chunk), guards, chunk.length + 1)).rows)
+        found.set(keyId(table, row), row);
+    }
+    return found;
+  };
+  const storedFrom = async (table: TableMeta, key: Record<string, unknown>, found: ReadonlyMap<string, Record<string, unknown>>) => {
+    const row = found.get(keyId(table, key));
+    return row ? one(table, key, { rows: [row] }) : stored(table, key);
+  };
   /* Every reference a write makes must land on a row the principal reads:
      all of a new row's, and of an updated row only those whose columns the
      update sets. A reference the update leaves as it was is not this write's
@@ -773,8 +816,45 @@ export function createScopedTransaction(
   const bindsText = (check: Extract<ParentCheck, { fk: ForeignKey }>) => check.filter.groups[0].every((condition) => condition.equality);
   const unseen = (check: Extract<ParentCheck, { fk: ForeignKey }>) =>
     `"${check.fk.from.table}".${check.fk.from.columns.join('+')} points at the "${check.fk.to.table}" row ${keyText(Object.fromEntries(check.fk.to.columns.map((column, index) => [column, check.values[index]])))}, which the principal's rows do not include (or the command does not declare "${check.fk.to.table}" read).`;
-  /** Whether the count of a parent's rows does not prove the reference: a foreign key names one row, a `via` any number of them. */
-  const missing = (check: Extract<ParentCheck, { fk: ForeignKey }>, counted: number) => (check.exists ? counted < 1 : counted !== 1);
+  /** Whether the count of a parent's rows does not prove the reference: a foreign key names one row (one a member), a `via` any number of them. */
+  const missing = (check: Extract<ParentCheck, { fk: ForeignKey }>, counted: number) =>
+    check.exists ? counted < 1 : counted !== (check.members?.length ?? 1);
+  /* A batch's checks, one asked a foreign key where a row at a time asks one a row: its parents counted in one read
+     under the principal's rows, which proves them all where it counts each once (a foreign key names exactly one row,
+     so a count of every member is every member found, and found apart). Where it counts fewer — a parent hidden or
+     missing, or two values the key compares as one — every check is asked again a check at a time, in row order
+     (`whole`, verify), so the refusal said is the one a row at a time says. A `via` stays one check: it counts any
+     number of rows. A refused check ends the list, as it ends one row's. */
+  const combined = (checks: readonly ParentCheck[]): ParentCheck[] => {
+    const whole: ParentCheck[] = [];
+    for (const check of checks) {
+      if ('refused' in check) {
+        whole.push(check);
+        break;
+      }
+      if (!whole.some((done) => !('refused' in done) && sameCheck(done, check))) whole.push(check);
+    }
+    const out: (ParentCheck | Extract<ParentCheck, { fk: ForeignKey }>[])[] = [];
+    const open = new Map<ForeignKey, Extract<ParentCheck, { fk: ForeignKey }>[]>();
+    for (const check of whole) {
+      if ('refused' in check || check.exists) {
+        out.push(check);
+        continue;
+      }
+      let members = open.get(check.fk);
+      if (!members || members.length >= KEYS_A_READ) {
+        open.set(check.fk, (members = []));
+        out.push(members);
+      }
+      members.push(check);
+    }
+    return out.map((entry) => {
+      if (!Array.isArray(entry)) return 'refused' in entry ? entry : { ...entry, whole };
+      const [first] = entry;
+      if (entry.length === 1) return { ...first!, whole };
+      return { ...first!, filter: { groups: entry.flatMap((member) => member.filter.groups) }, members: entry, whole };
+    });
+  };
   /** The checks sent at once (locks.together): each parent's lock, then its count, every answer heard. */
   const ask = (checks: readonly ParentCheck[]): Asked[] =>
     checks.map((check) => {
@@ -788,13 +868,17 @@ export function createScopedTransaction(
   /* Checks asked ahead of the row they are for (built from what the write
      returned, or from what an update sets), used only where they name exactly
      the references the row as stored holds: the same statements, sent sooner. */
+  const sameCheck = (guess: ParentCheck, check: ParentCheck): boolean => {
+    if ('refused' in guess || 'refused' in check) return 'refused' in guess && 'refused' in check && guess.refused === check.refused;
+    return (
+      guess.fk === check.fk &&
+      guess.values.every((value, at) => sameBound(value, check.values[at], bindsText(check))) &&
+      (guess.members?.length ?? 0) === (check.members?.length ?? 0) &&
+      (guess.members ?? []).every((member, at) => sameCheck(member, check.members![at]!))
+    );
+  };
   const sameChecks = (asked: readonly Asked[], checks: readonly ParentCheck[]) =>
-    asked.length === checks.length &&
-    asked.every((guess, index) => {
-      const check = checks[index];
-      if ('refused' in guess || 'refused' in check) return 'refused' in guess && 'refused' in check && guess.refused === check.refused;
-      return guess.fk === check.fk && guess.values.every((value, at) => sameBound(value, check.values[at], bindsText(check)));
-    });
+    asked.length === checks.length && asked.every((guess, index) => sameCheck(guess, checks[index]!));
   /* References this transaction has proven: each parent locked and counted inside the principal's rows, which holds
      until COMMIT (the lock), so the same reference is not asked again after the write that made it. */
   const proven: Array<Extract<ParentCheck, { fk: ForeignKey }>> = [];
@@ -806,14 +890,15 @@ export function createScopedTransaction(
           (done) => done.fk === check.fk && done.values.every((value, at) => sameBound(value, check.values[at], bindsText(check))),
         ),
     );
-  const verify = async (checks: readonly ParentCheck[], guessed?: readonly Asked[]) => {
+  const verify = async (checks: readonly ParentCheck[], guessed?: readonly Asked[]): Promise<void> => {
     if (!locks?.together) {
       for (const check of checks) {
         if ('refused' in check) return refuse(check.refused);
         // A parent's visibility must hold until commit, not just at this read.
         await locks?.parent(check.parent, check.filter);
-        if (missing(check, await guards.count(check.fk.to.table, check.filter))) return refuse(unseen(check));
-        proven.push(check);
+        if (missing(check, await guards.count(check.fk.to.table, check.filter)))
+          return check.whole ? verify(unproven(check.whole)) : refuse(unseen(check));
+        proven.push(...(check.members ?? [check]));
       }
       return;
     }
@@ -823,8 +908,8 @@ export function createScopedTransaction(
     for (const check of asked) {
       if ('refused' in check) return refuse(check.refused);
       await check.locked;
-      if (missing(check, await check.counted)) return refuse(unseen(check));
-      proven.push(check);
+      if (missing(check, await check.counted)) return check.whole ? verify(unproven(check.whole)) : refuse(unseen(check));
+      proven.push(...(check.members ?? [check]));
     }
   };
   const parents = async (
@@ -875,25 +960,261 @@ export function createScopedTransaction(
      reference, a value a trigger writes, a deferred check. */
   /* A unique rule that refuses one names its column, and on PostgreSQL the value, of a row that may be outside the
      principal's rows: that the value is taken there is what the scope keeps. It is let through only where the
-     conflicting row is one the principal reads (uniqueConflictSeen); otherwise it is the scope's own refusal. */
-  const statement = <T>(sent: Promise<T>, table?: TableMeta, row?: Readonly<Record<string, unknown>>): Promise<T> =>
+     conflicting row is one the principal reads (uniqueConflictSeen); otherwise it is the scope's own refusal. A batch's
+     statement does not say which of its rows conflicted, so it is let through only where every row's would be. */
+  const statement = <T>(sent: Promise<T>, table?: TableMeta, rows: readonly Readonly<Record<string, unknown>>[] = [{}]): Promise<T> =>
     sent.catch((error: unknown) => {
       if (isForeignKeyViolation(error)) throw foreignKeyRefusal(error);
       if (isUniqueViolation(error) && table) {
         const columns = uniqueColumns(error, table);
         // With a scope present, a table it does not name has no rows the principal reads (shared/rowScope.ts).
         const rule = scope === undefined ? true : Object.hasOwn(scope, table.id) ? scope[table.id] : false;
-        if (!columns || !uniqueConflictSeen(rule, columns, row ?? {}, typeof (error as { errcode?: unknown }).errcode === 'number'))
-          throw uniqueRefusal(table, columns);
+        const sqlite = typeof (error as { errcode?: unknown }).errcode === 'number';
+        if (!columns || !rows.every((row) => uniqueConflictSeen(rule, columns, row, sqlite))) throw uniqueRefusal(table, columns);
       }
       throw error;
     });
-  const insertRow = (table: TableMeta, request: Parameters<WriteTransaction['insert']>[0]) =>
-    statement(records.insert(request), table, request.values ?? {});
-  const updateRow = (table: TableMeta, request: Parameters<WriteTransaction['update']>[0], row: Readonly<Record<string, unknown>>) =>
-    statement(records.update(request), table, row);
+  const insertRow = (table: TableMeta, request: InsertRequest) => statement(records.insert(request), table, [request.values ?? {}]);
+  const updateRow = (table: TableMeta, request: UpdateRequest, row: Readonly<Record<string, unknown>>) =>
+    statement(records.update(request), table, [row]);
   const afterward = async (afterwards: readonly Afterward[] | undefined, images: Parameters<Afterward>[0]) => {
     for (const next of afterwards ?? []) await next(images);
+  };
+  /* What a scoped update may not set: a key, or a column another table references, refused by name. Answers the set,
+     for the generated ones the update can still move (shiftedRefusal). */
+  const unmoved = (table: TableMeta, request: UpdateRequest): ReadonlySet<string> => {
+    const protectedColumns = new Set([
+      ...table.columns.filter((column) => column.primaryKey).map((column) => column.name),
+      ...catalog.schema.foreignKeys.filter((fk) => fk.to.table === table.id).flatMap((fk) => fk.to.columns),
+    ]);
+    const moved = Object.keys(request.values ?? {}).filter((column) => protectedColumns.has(column));
+    if (moved.length)
+      return refuse(`A scoped update may not change "${table.id}".${moved.join(', ')}: a key, or a column another table references.`);
+    return protectedColumns;
+  };
+  /* A key or a referenced column the database generates moves with the columns its expression reads, which the
+     names above cannot catch: one that moved is refused, whatever a cascade or the foreign key made of it. */
+  const shiftedRefusal = (
+    table: TableMeta,
+    protectedColumns: ReadonlySet<string>,
+    before: Record<string, unknown>,
+    now: Record<string, unknown>,
+  ) => {
+    const shifted = [...protectedColumns].filter(
+      (column) => generated(table, column) && JSON.stringify(before[column]) !== JSON.stringify(now[column]),
+    );
+    if (shifted.length)
+      refuse(
+        `A scoped update may not change "${table.id}".${shifted.join(', ')}: a key, or a column another table references, generated from the columns it sets.`,
+      );
+  };
+  const insert = async (request: InsertRequest): Promise<InsertResult> => {
+    const table = target(request.table, { kind: 'insert' });
+    const afterwards = proof && (await proof.before(table, { kind: 'insert' }, proof.images.insert(table, request.values)));
+    const given = unproven(parentChecks(table, request.values ?? {}, undefined, true));
+    if (!locks?.together) await verify(given);
+    const result = locks?.together ? await parentsFirst(given, () => insertRow(table, request)) : await insertRow(table, request);
+    const filter = keyFilter(table, result.key);
+    /* The new row locked and read back, and where the writer sends together
+       its references checked in the same flight, from the row the INSERT
+       returned (parents uses them only where the stored row holds exactly
+       those). No other transaction can see this row yet, so its lock is
+       granted at once and the read answers what a count before it would. */
+    const read = lockedRead(table, filter, guards);
+    const guessed = locks?.together && result.row ? ask(unproven(parentChecks(table, result.row))) : undefined;
+    read.catch(() => {});
+    const found = await read;
+    // Inside the bound and outside the principal's rows: the command's own row, answered by its key and what it wrote.
+    if (bound && found.rows.length !== 1) {
+      const within = await stored(table, result.key, bound.reads);
+      await parents(table, within, undefined, guessed);
+      await afterward(afterwards, { new: within, old: null });
+      return { key: result.key, applied: result.applied, sql: result.sql };
+    }
+    const row = one(table, result.key, found);
+    await parents(table, row, undefined, guessed);
+    await afterward(afterwards, { new: row, old: null });
+    madeBy(table, row);
+    return result;
+  };
+  const update = async (request: UpdateRequest): Promise<UpdateResult> => {
+    const table = target(request.table, { kind: 'update', set: Object.keys(request.values ?? {}) });
+    const protectedColumns = unmoved(table, request);
+    const before = await stored(table, request.key);
+    const set = new Set(Object.keys(request.values ?? {}));
+    const afterwards =
+      proof && (await proof.before(table, { kind: 'update', set: [...set] }, proof.images.update(table, before, request.values)));
+    // What the update sets is given; every other column of a reference it sets in part is as stored, bound as its text.
+    const written = overlaid(before, request.values);
+    const given = unproven(parentChecks(table, written, set, true));
+    if (!locks?.together) await verify(given);
+    /* The row read again after the write, sent the moment the write is: it
+       reads what the write wrote, and leaves in the write's round trip, with
+       the references the write sets checked ahead of it, as the row will
+       hold them. A reference refused is the answer whatever the write said;
+       otherwise a write that fails aborts the read too, and the write's
+       failure is the one thrown. */
+    const after: { row?: Promise<Record<string, unknown>> } = {};
+    const withdraw = locks?.behind?.(table, () => {
+      after.row = stored(table, request.key);
+      after.row.catch(() => {});
+    });
+    let result: Awaited<ReturnType<WriteTransaction['update']>>;
+    try {
+      // The references it sets leave ahead of it, in its flight (parentsFirst).
+      result = locks?.together
+        ? await parentsFirst(given, () => updateRow(table, request, written))
+        : await updateRow(table, request, written);
+    } finally {
+      withdraw?.();
+    }
+    if (result.affected !== 1) return refuse(`The update of "${table.id}" changed ${result.affected} rows, not one.`);
+    const now = await (after.row ?? stored(table, request.key));
+    shiftedRefusal(table, protectedColumns, before, now);
+    await parents(table, now, set);
+    await afterward(afterwards, { new: now, old: before });
+    return result;
+  };
+  /* A batch keeps every rule a row at a time keeps, and pays its flights once: the references it gives checked before
+     its one statement, a foreign key a read (combined), then one locked read of the rows it wrote, key IN (…), and
+     their references from the rows as stored. Where a row's rule needs the rows before it written first, the batch is
+     written a row at a time (oneAtATime), with the same outcome:
+     - a trigger that reads or writes another row (keyed): its proof reads before each row, and a later row's proof
+       may read what an earlier row's statement left;
+     - a table that references itself, or whose policy reaches its own rows: a row's parent may be a row the batch
+       writes before it, which a check sent ahead of the statement does not find;
+     - a reference that cannot be checked at all: a row at a time, the rows before it are written and checked first,
+       and the refusal said is theirs where they have one. */
+  const keyedTrigger = (table: TableMeta, write: TriggeringWrite) =>
+    (catalog.triggered?.get(table.id) ?? []).some(
+      (trigger) => !trigger.validates && firedBy([trigger], write, catalog.schema.dialect === 'sqlite').length > 0,
+    );
+  const selfReferenced = (table: TableMeta) => {
+    const rule = scope?.[table.id];
+    return (
+      catalog.schema.foreignKeys.some((fk) => fk.from.table === table.id && fk.to.table === table.id) ||
+      (!!rule &&
+        typeof rule === 'object' &&
+        rule.groups.some((group) => group.some((condition) => isViaCondition(condition) && condition.via.resource === table.id)))
+    );
+  };
+  const refusedIn = (checks: readonly ParentCheck[]) => checks.some((check) => 'refused' in check);
+  const insertMany = async (requests: readonly InsertRequest[]): Promise<InsertResult[]> => {
+    const table = target(sameTable(requests.map((request) => request.table)), { kind: 'insert' });
+    const given = requests.map((request) => parentChecks(table, request.values ?? {}, undefined, true));
+    if (requests.length < 2 || keyedTrigger(table, { kind: 'insert' }) || selfReferenced(table) || given.some(refusedIn))
+      return oneAtATime(requests, insert);
+    const afterwards: (readonly Afterward[] | undefined)[] = [];
+    for (const request of requests)
+      afterwards.push(proof && (await proof.before(table, { kind: 'insert' }, proof.images.insert(table, request.values))));
+    const checks = combined(unproven(given.flat()));
+    if (!locks?.together) await verify(checks);
+    const write = () =>
+      statement(
+        records.insertMany!(requests),
+        table,
+        requests.map((request) => request.values ?? {}),
+      );
+    const results = locks?.together ? await parentsFirst(checks, write) : await write();
+    /* The rows locked and read back in one read, and where the writer sends together their references checked in the
+       same flight, from the rows the INSERT returned (verify uses them only where the stored rows hold exactly those). */
+    const read = lockedReads(
+      table,
+      results.map((result) => result.key),
+    );
+    const guessed =
+      locks?.together && results.every((result) => result.row)
+        ? ask(combined(unproven(results.flatMap((result) => parentChecks(table, result.row!)))))
+        : undefined;
+    read.catch(() => {});
+    const found = await read;
+    const rows: Record<string, unknown>[] = [];
+    const outside = new Set<number>();
+    for (const [index, result] of results.entries()) {
+      const row = found.get(keyId(table, result.key));
+      if (row) {
+        rows.push(one(table, result.key, { rows: [row] }));
+        continue;
+      }
+      // A key the read spelled otherwise is read again alone, as a row at a time reads it.
+      const alone = await lockedRead(table, keyFilter(table, result.key), guards);
+      // Inside the bound and outside the principal's rows: the command's own row, answered by its key and what it wrote.
+      if (bound && alone.rows.length !== 1) {
+        rows.push(await stored(table, result.key, bound.reads));
+        outside.add(index);
+      } else rows.push(one(table, result.key, alone));
+    }
+    await verify(combined(unproven(rows.flatMap((row) => parentChecks(table, row)))), guessed);
+    for (const [index, row] of rows.entries()) await afterward(afterwards[index], { new: row, old: null });
+    madeBy(table, ...rows.filter((_, index) => !outside.has(index)));
+    return results.map((result, index) => (outside.has(index) ? { key: result.key, applied: result.applied, sql: result.sql } : result));
+  };
+  /* An update's batch likewise: the rows read before it in one locked read, the statement with the read after it sent
+     behind it (locks.behind), every row's references the update sets checked before and after. A row a batch names
+     twice, or one a row at a time would refuse before its statement, is written a row at a time. */
+  const updateMany = async (requests: readonly UpdateRequest[]): Promise<UpdateResult[]> => {
+    const id = sameTable(requests.map((request) => request.table));
+    let table: TableMeta | undefined;
+    let protectedColumns: ReadonlySet<string> = new Set();
+    const sets = requests.map((request) => new Set(Object.keys(request.values ?? {})));
+    try {
+      for (const [index, request] of requests.entries()) {
+        table = target(id, { kind: 'update', set: [...sets[index]!] });
+        protectedColumns = unmoved(table, request);
+        keyFilter(table, request.key);
+      }
+    } catch {
+      return oneAtATime(requests, update);
+    }
+    if (
+      !table ||
+      requests.length < 2 ||
+      new Set(requests.map((request) => keyId(table!, request.key))).size !== requests.length ||
+      sets.some((set) => keyedTrigger(table!, { kind: 'update', set: [...set] })) ||
+      selfReferenced(table)
+    )
+      return oneAtATime(requests, update);
+    const at = table;
+    const keys = requests.map((request) => request.key);
+    const found = await lockedReads(at, keys);
+    const befores: Record<string, unknown>[] = [];
+    for (const key of keys) befores.push(await storedFrom(at, key, found));
+    // What each update sets is given; every other column of a reference it sets in part is as stored, bound as its text.
+    const written = requests.map((request, index) => overlaid(befores[index]!, request.values));
+    const given = written.map((row, index) => parentChecks(at, row, sets[index], true));
+    if (given.some(refusedIn)) return oneAtATime(requests, update);
+    const afterwards: (readonly Afterward[] | undefined)[] = [];
+    for (const [index, request] of requests.entries())
+      afterwards.push(
+        proof &&
+          (await proof.before(at, { kind: 'update', set: [...sets[index]!] }, proof.images.update(at, befores[index]!, request.values))),
+      );
+    const checks = combined(unproven(given.flat()));
+    if (!locks?.together) await verify(checks);
+    // The rows read again after the write, sent the moment the (first) statement is, in its round trip.
+    const after: { read?: Promise<Map<string, Record<string, unknown>>> } = {};
+    const withdraw = locks?.behind?.(at, () => {
+      after.read = lockedReads(at, keys);
+      after.read.catch(() => {});
+    });
+    let results: UpdateResult[];
+    try {
+      const write = () => statement(records.updateMany!(requests), at, written);
+      results = locks?.together ? await parentsFirst(checks, write) : await write();
+    } finally {
+      withdraw?.();
+    }
+    for (const result of results)
+      if (result.affected !== 1) return refuse(`The update of "${at.id}" changed ${result.affected} rows, not one.`);
+    // A batch sent as several statements was read behind the first alone: read again once they all have run.
+    const statements = new Set(results.map((result) => result.sql.params));
+    const now = statements.size > 1 || !after.read ? await lockedReads(at, keys) : await after.read;
+    const rows: Record<string, unknown>[] = [];
+    for (const key of keys) rows.push(await storedFrom(at, key, now));
+    for (const [index, row] of rows.entries()) shiftedRefusal(at, protectedColumns, befores[index]!, row);
+    await verify(combined(unproven(rows.flatMap((row, index) => parentChecks(at, row, sets[index])))));
+    for (const [index, row] of rows.entries()) await afterward(afterwards[index], { new: row, old: befores[index]! });
+    return results;
   };
   return Object.freeze({
     query: (request) => reads.query(request),
@@ -905,87 +1226,9 @@ export function createScopedTransaction(
             reads.aggregate ? reads.aggregate(request) : refuse('This scope cannot aggregate.'),
         }
       : {}),
-    async insert(request) {
-      const table = target(request.table, { kind: 'insert' });
-      const afterwards = proof && (await proof.before(table, { kind: 'insert' }, proof.images.insert(table, request.values)));
-      const given = unproven(parentChecks(table, request.values ?? {}, undefined, true));
-      if (!locks?.together) await verify(given);
-      const result = locks?.together ? await parentsFirst(given, () => insertRow(table, request)) : await insertRow(table, request);
-      const filter = keyFilter(table, result.key);
-      /* The new row locked and read back, and where the writer sends together
-         its references checked in the same flight, from the row the INSERT
-         returned (parents uses them only where the stored row holds exactly
-         those). No other transaction can see this row yet, so its lock is
-         granted at once and the read answers what a count before it would. */
-      const read = lockedRead(table, filter, guards);
-      const guessed = locks?.together && result.row ? ask(unproven(parentChecks(table, result.row))) : undefined;
-      read.catch(() => {});
-      const found = await read;
-      // Inside the bound and outside the principal's rows: the command's own row, answered by its key and what it wrote.
-      if (bound && found.rows.length !== 1) {
-        const within = await stored(table, result.key, bound.reads);
-        await parents(table, within, undefined, guessed);
-        await afterward(afterwards, { new: within, old: null });
-        return { key: result.key, applied: result.applied, sql: result.sql };
-      }
-      const row = one(table, result.key, found);
-      await parents(table, row, undefined, guessed);
-      await afterward(afterwards, { new: row, old: null });
-      madeBy(table, row);
-      return result;
-    },
-    async update(request) {
-      const table = target(request.table, { kind: 'update', set: Object.keys(request.values ?? {}) });
-      const protectedColumns = new Set([
-        ...table.columns.filter((column) => column.primaryKey).map((column) => column.name),
-        ...catalog.schema.foreignKeys.filter((fk) => fk.to.table === table.id).flatMap((fk) => fk.to.columns),
-      ]);
-      const moved = Object.keys(request.values ?? {}).filter((column) => protectedColumns.has(column));
-      if (moved.length)
-        return refuse(`A scoped update may not change "${table.id}".${moved.join(', ')}: a key, or a column another table references.`);
-      const before = await stored(table, request.key);
-      const set = new Set(Object.keys(request.values ?? {}));
-      const afterwards =
-        proof && (await proof.before(table, { kind: 'update', set: [...set] }, proof.images.update(table, before, request.values)));
-      // What the update sets is given; every other column of a reference it sets in part is as stored, bound as its text.
-      const written = overlaid(before, request.values);
-      const given = unproven(parentChecks(table, written, set, true));
-      if (!locks?.together) await verify(given);
-      /* The row read again after the write, sent the moment the write is: it
-         reads what the write wrote, and leaves in the write's round trip, with
-         the references the write sets checked ahead of it, as the row will
-         hold them. A reference refused is the answer whatever the write said;
-         otherwise a write that fails aborts the read too, and the write's
-         failure is the one thrown. */
-      const after: { row?: Promise<Record<string, unknown>> } = {};
-      const withdraw = locks?.behind?.(table, () => {
-        after.row = stored(table, request.key);
-        after.row.catch(() => {});
-      });
-      let result: Awaited<ReturnType<WriteTransaction['update']>>;
-      try {
-        // The references it sets leave ahead of it, in its flight (parentsFirst).
-        result = locks?.together
-          ? await parentsFirst(given, () => updateRow(table, request, written))
-          : await updateRow(table, request, written);
-      } finally {
-        withdraw?.();
-      }
-      if (result.affected !== 1) return refuse(`The update of "${table.id}" changed ${result.affected} rows, not one.`);
-      const now = await (after.row ?? stored(table, request.key));
-      /* A key or a referenced column the database generates moves with the columns its expression reads, which the
-         names above cannot catch: one that moved is refused, whatever a cascade or the foreign key made of it. */
-      const shifted = [...protectedColumns].filter(
-        (column) => generated(table, column) && JSON.stringify(before[column]) !== JSON.stringify(now[column]),
-      );
-      if (shifted.length)
-        return refuse(
-          `A scoped update may not change "${table.id}".${shifted.join(', ')}: a key, or a column another table references, generated from the columns it sets.`,
-        );
-      await parents(table, now, set);
-      await afterward(afterwards, { new: now, old: before });
-      return result;
-    },
+    insert,
+    update,
+    ...(records.insertMany && records.updateMany ? { insertMany, updateMany } : {}),
     async remove(request) {
       const table = target(request.table, { kind: 'delete' });
       const children = catalog.schema.foreignKeys.filter((fk) => fk.to.table === table.id);

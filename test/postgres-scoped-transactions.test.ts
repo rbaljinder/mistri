@@ -161,7 +161,8 @@ describe('row-scoped transactions on PostgreSQL, against a real server', { skip:
       assert.equal(typeof adapter.scopeTransaction, 'function');
       assert.equal(typeof commandsOf(adapter).scopeCommandTransaction, 'function');
       const result = await adapter.scopeTransaction(rowsA(), async (tx, evidence) => {
-        assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
+        // A batch is one statement inside the scope, as the adapter's own transaction writes one; there is no batch remove.
+        assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'insertMany', 'query', 'remove', 'update', 'updateMany']);
         assert.ok(Object.isFrozen(evidence));
         assert.equal(evidence.dialect, 'postgres');
         assert.equal(await tx.count(ITEM), 2);

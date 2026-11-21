@@ -132,3 +132,101 @@ test('Import is offered only where the list opts in and the reader could make th
   );
   expect(screen.queryByRole('button', { name: 'Import' })).toBeNull();
 });
+
+test("a command import's check says each run: what it would create or refuse, and what it would write", async () => {
+  const user = userEvent.setup();
+  const order: TableMeta = {
+    id: 'sales.order',
+    name: 'order',
+    schema: 'sales',
+    isView: false,
+    columns: [
+      { name: 'id', type: 'INTEGER', nullable: false, primaryKey: true },
+      { name: 'number', type: 'TEXT', nullable: false, primaryKey: false },
+    ],
+  };
+  const def = {
+    command: {
+      id: 'placeOrder',
+      version: 1,
+      target: 'sales.order',
+      targets: 'none' as const,
+      input: [
+        { name: 'number', label: 'Number', type: 'text' as const, required: true },
+        {
+          name: 'lines',
+          label: 'Lines',
+          type: 'group' as const,
+          repeat: { max: 5 },
+          fields: [
+            { name: 'sku', label: 'SKU', type: 'text' as const, required: true },
+            { name: 'quantity', label: 'Quantity', type: 'number' as const, integer: true },
+          ],
+        },
+      ],
+    },
+    group: ['number'],
+  };
+  context.app = { resources: { 'sales.order': { import: def } }, views: {} };
+  draw(<ImportDialog table={order} def={def} noun={{ one: 'order', many: 'orders' }} onClose={() => {}} />);
+  expect(
+    screen.getByText(/Each row records number and lines on a new order\. Consecutive rows that agree on number are one order/),
+  ).toBeTruthy();
+  const input = document.querySelector('input[type=file]') as HTMLInputElement;
+  fireEvent.change(input, {
+    target: { files: [file('Number,SKU,Quantity\nSO-1,A-1,2\nSO-1,A-2,1\nSO-2,A-1,4\nSO-3,,1\n', 'orders.csv')] },
+  });
+  await screen.findByText(/Choose the field each column fills/);
+
+  api.mockResolvedValueOnce({
+    outcome: 'checked',
+    rows: 4,
+    ready: 3,
+    refused: [{ row: 4, line: 5, problems: [{ field: 'SKU', message: 'Required.' }] }],
+    runs: [
+      { rows: [1, 2], outcome: 'create', writes: { 'sales.order': 1, 'sales.order_line': 2 }, problems: [] },
+      { rows: [3], outcome: 'create', writes: {}, problems: [{ message: 'Checked without running: calls a provider.' }], ran: false },
+      { rows: [4], outcome: 'refused', writes: {}, problems: [{ field: 'SKU', message: 'Required.' }] },
+    ],
+  });
+  await user.click(screen.getByRole('button', { name: 'Check 4 rows' }));
+  // The group's own field is found by its caption: "SKU" names lines.sku.
+  expect(api).toHaveBeenLastCalledWith(
+    '/api/import',
+    expect.objectContaining({ mode: 'check', mapping: ['number', 'lines.sku', 'lines.quantity'] }),
+  );
+  expect((await screen.findByRole('status')).textContent).toBe(
+    '2 orders would be created; 1 order would be refused and left out. Each was tried and rolled back; nothing has been written yet.',
+  );
+  // The refused run first; a run's rows stay together, its first row speaking for all of them.
+  const rows = [...document.querySelectorAll('.import-preview tbody tr')];
+  expect(rows.map((row) => row.querySelector('.import-line')!.textContent)).toEqual(['5', '2', '3', '4']);
+  expect(rows[0].className).toBe('is-refused');
+  expect(rows[0].querySelector('.import-outcome')!.textContent).toBe('Refused');
+  expect(rows[1].querySelector('.import-outcome')!.textContent).toBe('Would create');
+  expect(rows[1].querySelector('.import-status')!.getAttribute('rowspan')).toBe('2');
+  expect([...rows[1].querySelectorAll('.import-writes .import-says')].map((said) => said.textContent)).toEqual([
+    'Order: 1',
+    'Order line: 2',
+  ]);
+  expect(rows[2].querySelector('.import-status')).toBeNull();
+  expect(rows[3].textContent).toContain('Checked without running: calls a provider.');
+
+  // The commit runs the inputs the check tried.
+  api.mockResolvedValueOnce({
+    outcome: 'applied',
+    rows: 4,
+    ready: 3,
+    applied: 3,
+    refused: [],
+    runs: [
+      { rows: [1, 2], outcome: 'create', writes: {}, problems: [] },
+      { rows: [3], outcome: 'create', writes: {}, problems: [] },
+      { rows: [4], outcome: 'refused', writes: {}, problems: [] },
+    ],
+  });
+  await user.click(screen.getByRole('button', { name: 'Import the 3 ready rows' }));
+  expect(api).toHaveBeenLastCalledWith('/api/import', expect.objectContaining({ mode: 'commit', skipRefused: true }));
+  // Three rows made two orders: the sentence counts records, by run.
+  expect((await screen.findByRole('status')).textContent).toBe('Imported 2 orders.');
+});

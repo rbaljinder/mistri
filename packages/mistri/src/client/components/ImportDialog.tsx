@@ -6,7 +6,10 @@
  * every judgment is the server's (POST /api/import, server/app/appImport.ts):
  * the check writes nothing and says what is wrong with each row, by field;
  * the import writes the rows the check passed — every one of them in one
- * transaction, or, for a command import, one command per row.
+ * transaction, or, for a command import, one command per run (a row, or a
+ * `group`'s consecutive rows). A command import's check runs each command in
+ * a transaction that is always rolled back, so it says what each run would
+ * do — create, update or be refused — and how many rows it would write.
  * A refused row is never written; the rows with problems download as a CSV
  * to fix and import again, each cell written so no spreadsheet reads it as
  * a formula.
@@ -18,8 +21,9 @@ import { activeApp } from '../appState.js';
 import { download } from '@mistriwork/kit/client/export.js';
 import { plural } from '@mistriwork/kit/client/locale.js';
 import { csvField, CRLF } from '@mistriwork/engine/shared/csv.js';
+import { humanName } from '@mistriwork/engine/shared/model.js';
 import { CsvError, parseCsv } from '../../shared/csvParse.js';
-import { importErrorCsv, importFields, mappingProblem, suggestMapping, type ImportReport } from '../../shared/appImport.js';
+import { importErrorCsv, importFields, mappingProblem, suggestMapping, type ImportReport, type ImportRun } from '../../shared/appImport.js';
 import { IMPORT_LIMITS, type AppImportDef } from '../../shared/appImportDeclaration.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { Modal } from '@mistriwork/ui/Modal.js';
@@ -76,9 +80,13 @@ export function ImportDialog({
     new Set(activeApp()?.resources?.[table.id]?.fixed ?? []),
   ).map((field) => ({
     ...field,
-    aliases: Object.entries(labels)
-      .filter(([path]) => path.startsWith(`${field.name}.`) && !path.slice(field.name.length + 1).includes('.'))
-      .map(([, said]) => said),
+    // A repeated group's field keeps its own: "SKU" names `lines.sku`.
+    aliases: [
+      ...(field.aliases ?? []),
+      ...Object.entries(labels)
+        .filter(([path]) => path.startsWith(`${field.name}.`) && !path.slice(field.name.length + 1).includes('.'))
+        .map(([, said]) => said),
+    ],
   }));
   const [step, setStep] = useState<Step>('file');
   const [file, setFile] = useState<ReadFile>();
@@ -189,6 +197,26 @@ export function ImportDialog({
     void choose(event.dataTransfer.files[0]);
   };
 
+  /* What a row does, said before the file is chosen: a command import names its inputs, and what finds or groups its rows. */
+  const lede = () => {
+    const command = def.command;
+    if (!command) return say('eachRowBecomesANew', { one: noun.one });
+    const said = (names: readonly string[]) =>
+      names
+        .map((column) => (columnLabel(table.id, column) ?? fields.find((field) => field.name === column)?.label ?? column).toLowerCase())
+        .join(' and ');
+    const inputs = command.input.map((input) => input.label.toLowerCase()).join(' and ');
+    const repeated = command.input.find((input) => input.type === 'group' && input.repeat);
+    return [
+      def.match?.length && command.targets !== 'none'
+        ? say('eachRowRecordsOnTheItsFind', { inputs, noun: noun.one, matches: said(def.match) })
+        : say('eachRowRecordsOnANew', { inputs, noun: noun.one }),
+      def.group?.length && repeated
+        ? say('rowsThatAgreeOn', { columns: said(def.group), noun: noun.one, entries: repeated.label.toLowerCase() })
+        : '',
+    ].join('');
+  };
+
   const current = STEPS.findIndex((item) => item.id === step);
   const mapped = mapping.map((name, index) => ({ name, index })).filter((item) => item.name !== null);
 
@@ -218,13 +246,7 @@ export function ImportDialog({
         <div className="import-step">
           <p className="import-lede">
             {say('aCsvFileWhose', { count: IMPORT_LIMITS.rows })} {IMPORT_LIMITS.bytes / 1024 / 1024} {say('mb')}
-            {def.command
-              ? say('eachRowRecordsOnTheItsFind', {
-                  inputs: def.command.input.map((input) => input.label.toLowerCase()).join(' and '),
-                  noun: noun.one,
-                  matches: def.match!.map((column) => (columnLabel(table.id, column) ?? column).toLowerCase()).join(' and '),
-                })
-              : say('eachRowBecomesANew', { one: noun.one })}
+            {lede()}
           </p>
           <label
             className={`import-drop${dragging ? ' is-over' : ''}`}
@@ -334,7 +356,9 @@ export function ImportDialog({
       {step === 'check' && file && checked && (
         <div className="import-step">
           <p className="import-lede" role="status">
-            {checked.refused.length ? (
+            {checked.runs ? (
+              runsSentence(checked.runs, noun)
+            ) : checked.refused.length ? (
               <>
                 {say('readyAProblemAndWill', {
                   ready: say('rowsAre', { count: checked.ready }),
@@ -399,15 +423,36 @@ export function ImportDialog({
   );
 }
 
+/** A command import's check, run by run: what would be created, updated and refused, each run tried and rolled back. */
+function runsSentence(runs: readonly ImportRun[], noun: { one: string; many: string }): string {
+  const words = { one: noun.one, other: noun.many };
+  const count = (outcome: ImportRun['outcome']) => runs.filter((run) => run.outcome === outcome).length;
+  const parts = [
+    count('create') ? say('wouldBeCreated', { records: plural(count('create'), words) }) : '',
+    count('update') ? say('wouldBeUpdated', { records: plural(count('update'), words) }) : '',
+    count('refused') ? say('wouldBeRefused', { records: plural(count('refused'), words) }) : '',
+  ].filter(Boolean);
+  return say('runsSummary', { parts: parts.join('; ') });
+}
+
+const outcomeWord = (outcome: ImportRun['outcome']) =>
+  outcome === 'create' ? say('wouldCreate') : outcome === 'update' ? say('wouldUpdate') : say('refused');
+
 function doneSentence(report: ImportReport, noun: { one: string; many: string }): string {
   const words = { one: noun.one, other: noun.many };
-  if (report.outcome === 'applied') return say('importedRecords', { records: plural(report.applied ?? 0, words) });
-  if (report.outcome === 'partial') return say('importedSomeRefused', { records: plural(report.applied ?? 0, words) });
+  // A command import counts records by run: a `group`'s rows make one.
+  const records = plural(report.runs ? report.runs.filter((run) => run.outcome !== 'refused').length : (report.applied ?? 0), words);
+  if (report.outcome === 'applied') return say('importedRecords', { records });
+  if (report.outcome === 'partial') return say('importedSomeRefused', { records });
   if (report.outcome === 'unknown') return report.error ?? say('theImportCouldNotBeConfirmed');
   return report.error ?? say('nothingWasImported');
 }
 
-/** The file's rows as they were read, those with a problem first, each with what is wrong with it. */
+/**
+ * The file's rows as they were read, those with a problem first, each with
+ * what is wrong with it. A command import's check says it by run: the run's
+ * rows stay together, and its first row says what the run would do and write.
+ */
 function Preview({
   file,
   report,
@@ -420,7 +465,16 @@ function Preview({
   label: (name: string) => string;
 }) {
   const refused = new Map(report.refused.map((problem) => [problem.row - 1, problem]));
-  const order = [...refused.keys(), ...file.rows.map((_, index) => index).filter((index) => !refused.has(index))].slice(0, SHOWN);
+  const runs = report.runs;
+  const order = (
+    runs
+      ? [...runs.filter((run) => run.outcome === 'refused'), ...runs.filter((run) => run.outcome !== 'refused')].flatMap((run) =>
+          run.rows.map((row) => row - 1),
+        )
+      : [...refused.keys(), ...file.rows.map((_, index) => index).filter((index) => !refused.has(index))]
+  ).slice(0, SHOWN);
+  const shown = new Set(order);
+  const runOf = new Map(runs?.flatMap((run) => run.rows.map((row) => [row - 1, run] as const)));
   return (
     <div className="import-preview" role="region" aria-label={say('theFilesRows')} tabIndex={0}>
       <table>
@@ -428,6 +482,7 @@ function Preview({
           <tr>
             <th scope="col">{say('lineHeading')}</th>
             <th scope="col">{say('check')}</th>
+            {runs && <th scope="col">{say('writesHeading')}</th>}
             {mapped.map(({ name, index }) => (
               <th key={index} scope="col">
                 {label(name!)}
@@ -438,19 +493,34 @@ function Preview({
         <tbody>
           {order.map((index) => {
             const problem = refused.get(index);
+            const run = runOf.get(index);
+            // A run's first row shown says it for every row of the run; the others leave the cells to it.
+            const span = run ? run.rows.filter((row) => shown.has(row - 1)).length : 1;
+            const heads = !run || run.rows.find((row) => shown.has(row - 1)) === index + 1;
             return (
-              <tr key={index} className={problem ? 'is-refused' : undefined}>
+              <tr key={index} className={(run ? run.outcome === 'refused' : problem) ? 'is-refused' : undefined}>
                 <td className="import-line">{file.lines[index]}</td>
-                <td className="import-status">
-                  {problem
-                    ? problem.problems.map((said, n) => (
-                        <span key={n} className="import-says">
-                          {said.field ? <b>{said.field}: </b> : null}
-                          {said.message}
+                {run ? (
+                  heads && (
+                    <>
+                      <td className="import-status" rowSpan={span}>
+                        <span className="import-outcome" data-outcome={run.outcome}>
+                          {outcomeWord(run.outcome)}
                         </span>
-                      ))
-                    : say('ready')}
-                </td>
+                        <Says problems={run.problems} />
+                      </td>
+                      <td className="import-writes" rowSpan={span}>
+                        {Object.entries(run.writes).map(([table, count]) => (
+                          <span key={table} className="import-says">
+                            {say('writeCount', { table: humanName(table.split('.').pop()!), count })}
+                          </span>
+                        ))}
+                      </td>
+                    </>
+                  )
+                ) : (
+                  <td className="import-status">{problem ? <Says problems={problem.problems} /> : say('ready')}</td>
+                )}
                 {mapped.map(({ index: column }) => (
                   <td key={column}>{file.rows[index][column] ?? ''}</td>
                 ))}
@@ -462,4 +532,13 @@ function Preview({
       {file.rows.length > SHOWN && <p className="import-note">{say('theFirstOfRows', { shown: SHOWN, count: file.rows.length })}</p>}
     </div>
   );
+}
+
+function Says({ problems }: { problems: ReadonlyArray<{ field?: string; message: string }> }) {
+  return problems.map((said, n) => (
+    <span key={n} className="import-says">
+      {said.field ? <b>{said.field}: </b> : null}
+      {said.message}
+    </span>
+  ));
 }

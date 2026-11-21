@@ -17,7 +17,7 @@
  * fixture works in databases of its own (ignitionLendingFixture.ts).
  */
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test, type TestContext } from 'node:test';
@@ -39,6 +39,8 @@ import { startLatencyProxy, type LatencyProxy, type Statement } from '../e2e/sup
 import { holdPort } from './support/heldPort.js';
 
 const LIVE = process.env.TABLEWALK_TEST_PG;
+/** How many vehicles the bulk command writes on its next run (the test sets it before each measurement). */
+const bulk = globalThis as { __mistriFlightsBulkRows?: number };
 const PRINT = process.env.TABLEWALK_FLIGHTS_PRINT === '1';
 const password = 'Ignition-flights-password-123!';
 
@@ -113,6 +115,8 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
   t.after(() => authStore.drop());
   await migratePostgresAuthStore(authStore.url);
 
+  const commandsFile = join(directory, 'commands.mjs');
+  writeFileSync(commandsFile, bulkCommandsModule());
   const loaded = await loadApp(IGNITION_DIR);
   /* Ignition keeps no inbox, and the bell asks one on every page of an App that does: a rule on its leads makes it
      one that does, and the notices it reads are planted below. */
@@ -126,6 +130,8 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
         ...lead,
         notify: [{ on: { changes: ['status'] }, when: 'status = qualified', to: ['qualified_by'], title: 'Lead {reference} moved' }],
       },
+      // The bulk command's vehicles (bulkCommandsModule): a command writes only what the App lets be written.
+      vehicle: { ...loaded.app.resources!.vehicle!, access: 'write' },
     },
   };
   const served = { ...loaded, app } as typeof loaded;
@@ -160,7 +166,7 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
     loaded: served,
     connections,
     policyFile: join(IGNITION_DIR, 'tenant-policy.ts'),
-    commandsFile: join(IGNITION_DIR, 'commands.ts'),
+    commandsFile,
   });
   const owner = await createTenantAuthenticatedHttpServer({
     loaded: served,
@@ -237,6 +243,44 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
   return { call, accountId, tenant, lending, boot };
 }
 
+/* Ignition's commands with `disqualifyLead` doing a batch's work after its own: a tenant command that disqualifies
+   its lead as the real one does (the lead's machine runs it from `new`), then adds vehicles with `insertMany` and
+   changes them all with `updateWhere`. The lead's update goes first so it is the one the opening sent ahead for, as
+   in `execute`: the flights past execute's are the batch's own. Its rows' count is read at each run, so the same
+   command is measured at 50 rows and at 200. */
+const bulkCommandsModule = () => {
+  const at = (path: string) => JSON.stringify(new URL(path, import.meta.url).href);
+  return `
+import ignition from ${at('./fixtures/apps/ignition/commands.ts')};
+import { disqualifyOutput } from ${at('./fixtures/apps/ignition/leads.ts')};
+import { defineCommand, defineCommands, field } from ${at('../packages/mistri/src/server/commands.ts')};
+let run = 0;
+export default defineCommands({
+  ...ignition,
+  disqualifyLead: defineCommand({
+    source: 'lending',
+    target: 'lead',
+    read: ['vehicle_model'],
+    write: ['vehicle'],
+    input: { reason: field.textarea({ max: 500 }) },
+    output: disqualifyOutput,
+    async handle({ db, record: lead }, { reason }) {
+      const { version } = await db.lead.update(lead, { status: 'disqualified', disqualified_reason: reason });
+      const rows = globalThis.__mistriFlightsBulkRows ?? 200;
+      run += 1;
+      const mileage = 900000 + run;
+      const made = await db.vehicle.insertMany(Array.from({ length: rows }, (_, n) => ({
+        id: 'bulk-' + run + '-' + n, stock_reference: 'BULK-' + run + '-' + n, model_id: 'model-vela-city',
+        condition: 'used', mileage, price: 9000, status: 'available',
+      })));
+      const sold = await db.vehicle.updateWhere({ mileage }, { status: 'sold' });
+      if (made.length !== rows || sold.length !== rows) throw new Error('the batch wrote ' + made.length + ' and changed ' + sold.length);
+      return disqualifyOutput.parse({ leadId: String(lead.id), version: Number(version), message: 'Lead disqualified.' });
+    },
+  }),
+});`;
+};
+
 /* The App's lists and an update command, read from its payload as scripts/capacity-harness.mjs reads them. */
 function listsOf(app: any): Array<{ table: string; show: string[]; tabs: string[] }> {
   return Object.values(app.views ?? {})
@@ -268,6 +312,13 @@ const BUDGETS: Record<string, number> = {
   prepare: 2,
   // the same opening; the handler's read of the lead; the write with its re-read; the receipt with COMMIT
   execute: 4,
+  /* The same opening and update, then 200 vehicles added by `insertMany` and changed by `updateWhere`: the INSERT
+     with its parents ahead of it; its one locked read-back of every row; the where's read; the audit's before images;
+     the locked read of the rows it changes; the UPDATE with its after-read; the target read again (the batch wrote
+     since its update); the receipt with COMMIT. Each batch pays what its one-row form pays, and the same at 50 rows
+     as at 200 (asserted below): a batch's flights do not grow with its rows. */
+  executeMany: 10,
+  'executeMany (50 rows)': 10,
   // admission, the second admission around the session check, its release fence: one whole snapshot each
   renew: 3,
   /* Discovery's memberships, the platform's and the tenant's names, beside the open's two admissions and its
@@ -348,6 +399,31 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
     const leadIds = (ids.body.rows as Array<{ id: string }>).map((row) => String(row.id));
     assert.ok(leadIds.length >= 2, `${leadIds.length} new leads to qualify`);
     let saves = 0;
+    /* The last new lead, disqualified by the bulk command and put back to new before each run. */
+    const bulkLead = { id: leadIds[leadIds.length - 1]! };
+    /* Another dealership's vehicles at every mileage a bulk run picks: `updateWhere` matches by mileage alone, and must
+       reach north-motors' rows only (the command also throws if it changed more rows than it added). */
+    const PLANTED = 20;
+    for (let n = 1; n <= PLANTED; n += 1)
+      await f.lending.exec(
+        `INSERT INTO vehicle (id, tenant_id, stock_reference, model_id, condition, mileage, price, status)
+         VALUES (?, 'harbor-auto', ?, 'model-vela-city', 'used', ?, 9000, 'available')`,
+        [`harbor-bulk-${n}`, `HARBOR-BULK-${n}`, 900000 + n],
+      );
+    const executeMany = async (rows: number) => {
+      await f.lending.exec(`UPDATE lead SET status = 'new', disqualified_reason = NULL WHERE id = ?`, [bulkLead.id]);
+      const prepared = await read('/api/commands/prepare', { command: 'disqualifyLead', commandVersion: 1, key: bulkLead });
+      bulk.__mistriFlightsBulkRows = rows;
+      saves += 1;
+      return read('/api/commands/execute', {
+        command: 'disqualifyLead',
+        commandVersion: 1,
+        key: bulkLead,
+        expectedVersion: prepared.body.expectedVersion,
+        idempotencyKey: `tenant-flights-${saves}`,
+        input: { reason: 'Bulk flights' },
+      });
+    };
     const requests: Record<string, () => Promise<Answer>> = {
       'run (list)': () => read('/api/run', { q: listQuery(leads, 0), limit: 20, offset: 0, exactCount: false }),
       counts: () => read('/api/counts', { items: leads.tabs.map((_, i) => listQuery(leads, i)) }),
@@ -378,6 +454,8 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
           input: {},
         });
       },
+      'executeMany (50 rows)': () => executeMany(50),
+      executeMany: () => executeMany(200),
       renew: async () => {
         const renewed = await f.call(
           select('/api/tenant/context/renew'),
@@ -426,6 +504,23 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
       t.diagnostic(line);
       if (PRINT) console.log(`${line} ${answer.text.slice(0, 300)}\n${byFlight(answer.statements)}`);
     }
+    assert.ok(
+      measured.executeMany!.total <= measured['executeMany (50 rows)']!.total,
+      `a batch's flights grow with its rows: ${measured['executeMany (50 rows)']!.total} at 50, ${measured.executeMany!.total} at 200`,
+    );
+    const bulkRuns = await f.lending.rows(
+      `SELECT count(DISTINCT mileage)::int AS runs, max(mileage) AS top FROM vehicle WHERE id LIKE 'bulk-%'`,
+    );
+    assert.ok(Number(bulkRuns[0]!.top) <= 900000 + PLANTED, `${bulkRuns[0]!.runs} bulk runs outran the planted mileages`);
+    assert.deepEqual(
+      await f.lending.rows(
+        `SELECT status, count(*)::int AS n FROM vehicle WHERE tenant_id = 'harbor-auto' AND id LIKE 'harbor-bulk-%' GROUP BY status`,
+      ),
+      [{ status: 'available', n: PLANTED }],
+      "a tenant's updateWhere reached another dealership's vehicles",
+    );
+    /* The bulk command leaves its lead disqualified; the saves below want it back among the open ones. */
+    await f.lending.exec(`UPDATE lead SET status = 'new', disqualified_reason = NULL WHERE id = ?`, [bulkLead.id]);
     /* Saves at once, as a dealership's people make them, each its own lead: each pays its own round trips still.
        Waiting on a writer, a lane or a lock is time, never another flight. One at a time, the budget could not
        see that. (A field deployment's saves read 7 round trips at the median under 25 people on rc.3 and 9 on rc.4:

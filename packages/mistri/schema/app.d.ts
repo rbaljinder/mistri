@@ -164,6 +164,8 @@ type PagePath = Register extends { pagePaths: infer P extends string } ? P : nev
 export type ActionName = Register extends { actions: infer A extends string } ? A : string;
 /** A command on an existing record of `Table`: what that resource's actions and import may run. */
 export type CommandOn<Table extends string = string> = NamesWhere<{ target: Table; targets: 'one' | 'many' }>;
+/** A command an import of `Table` may run: one on an existing record, or a signed-in one that names none and creates it. */
+export type ImportCommandOn<Table extends string = string> = CommandOn<Table> | NamesWhere<{ target: Table; targets: 'none'; public?: undefined }>;
 /** A command a form runs: it names no existing record. `Public` narrows to those a public form may run, or those it may not. */
 export type FormCommandName<Public extends boolean = boolean> = NamesWhere<{ targets: 'none' } & (boolean extends Public ? unknown : Public extends true ? { public: true } : { public?: undefined })>;
 /** A command's input names, or any text without generated types. */
@@ -1148,10 +1150,18 @@ export interface AppNotifyRule<Column extends string = string, Path extends stri
 }
 
 /** A command import: the command each row of a file runs, and the columns that find the record it runs on — a
-    reference column found by the record's name (`bin_id` by a bin's code). */
+    reference column found by its record's `address` key, then by its name (`bin_id` by a bin's code). A command that
+    names none (`targets: 'none'`) creates: it runs where `match` is left out or finds nothing; a row whose `match`
+    finds a record needs a command on one, and one that finds two is refused. */
 export interface AppImport<Column extends string = string, Command extends string = CommandName> {
   command: Command;
-  match: readonly Column[];
+  /** The resource's own columns that find the record each row runs on. Required unless the command names none. */
+  match?: readonly Column[];
+  /** Top-level inputs of the command that say which consecutive rows are one run: a run is one input, its top-level
+      fields from its first row and the command's one repeated group an entry per row (`group: ['order_ref']` makes
+      an order with its lines). A run's top-level cell that disagrees with its first row is refused by its row, and
+      so is a run longer than the group's `max`. Rows are never reordered. */
+  group?: readonly string[];
 }
 
 /** A computed column: what it comes to, and its expression. `computed.boolean('…')` writes one. A rollup's `column`
@@ -4538,7 +4548,7 @@ export type TypedResources<S extends SchemaShape, R extends SchemaReferences = n
     audit?: { redact?: 'values' | readonly GovernedOf<S, H, T>[]; reads?: true };
     rollups?: Record<string, TypedRollup<S, R>>;
     defined?: Partial<Record<ColumnOf<S, T>, { [F in TableOf<S>]: AppDefined<F, ColumnOf<S, T> & ColumnOf<S, F>> }[TableOf<S>]>>;
-    import?: boolean | AppImport<ColumnOf<S, T>, CommandOn<T>>;
+    import?: boolean | AppImport<ColumnOf<S, T>, ImportCommandOn<T>>;
     notify?: readonly AppNotifyRule<ColumnOf<S, T>, LabelPath<S, R, T>>[];
     flows?: AppFlows<ColumnOf<S, T>, TableOf<S>>;
   } };
@@ -4568,7 +4578,7 @@ export type TypedListView<S extends SchemaShape, R extends SchemaReferences = ne
     presentation?: AppListPresentation<ColumnOf<S, T>, OneHopPath<S, R, T>, LabelPath<S, R, T>>;
     board?: Omit<AppBoardList<ColumnOf<S, T>, OneHopPath<S, R, T>>, 'kind'>;
     split?: Omit<AppSplitListDetail<LabelPath<S, R, T>>, 'kind'>;
-    import?: boolean | AppImport<ColumnOf<S, T>, CommandOn<T>>;
+    import?: boolean | AppImport<ColumnOf<S, T>, ImportCommandOn<T>>;
   } }[TableOf<S>];
 
 /* A section that names its table is checked against that table's columns

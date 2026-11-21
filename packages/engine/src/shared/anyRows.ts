@@ -7,7 +7,7 @@
  */
 import { RequestFault } from './refusal.js';
 import { backrefsTo } from './viewPaths.js';
-import type { AnyRows, InlineRows, SqlStyle } from './filter.js';
+import type { AnyRows, InlineRows, SqlStyle, WithinPlan, WithinRows } from './filter.js';
 import { findTable, type DatabaseSchema, type TableMeta } from './schema.js';
 
 /** The alias the child rows stand under inside their EXISTS: the parent is named by its own relation. */
@@ -80,4 +80,62 @@ export function inlineRows(
       types: (name) => child.columns.find((column) => column.name === name)?.type,
     };
   };
+}
+
+/** The alias another table's rows stand under inside an `in`'s subquery. */
+const WITHIN = '_tw_in';
+
+const refusedWithin = () => new RequestFault("This read cannot compare a column with another table's rows.");
+
+/**
+ * The table an `in` names (`Condition.within`), and the key its subquery selects. Refused, never guessed, when the
+ * table is not one the catalog holds, has no key of one column to select, or its conditions say more than its own
+ * columns compared with values (no second `in`, no `any`, no column on the right, no resolved test, no path): one
+ * level only. The raw and the scoped read check it here, so the two cannot drift on what they refuse.
+ */
+export function withinRows(
+  schema: DatabaseSchema,
+  rows: WithinRows,
+): { readonly table: TableMeta; readonly key: string; readonly type: string } {
+  if (!rows || typeof rows !== 'object' || typeof rows.table !== 'string') throw refusedWithin();
+  const table = findTable(schema, rows.table);
+  if (!table) throw new RequestFault('Unknown table in an "in" test.');
+  const keys = table.columns.filter((column) => column.primaryKey);
+  if (keys.length !== 1) throw new RequestFault(`An "in" test selects a table's key, and ${table.name} has no key of exactly one column.`);
+  for (const group of rows.filter?.groups ?? []) {
+    for (const c of group) {
+      if (c.any !== undefined || c.within !== undefined || c.other !== undefined || c.via !== undefined || c.equality !== undefined)
+        throw new RequestFault('An "in" test reads one level: its rows are judged by their own columns, never by another "in" or "any".');
+      if (typeof c.column !== 'string' || !table.columns.some((column) => column.name === c.column))
+        throw new RequestFault('Unknown column in an "in" test.');
+    }
+  }
+  return { table, key: keys[0].name, type: keys[0].type };
+}
+
+/**
+ * `buildWhere`'s `within` for a raw read: the other table is read from its own relation, as the table asked about
+ * is, with no scope between, and its conditions bound in the statement's order.
+ */
+export function inlineWithin(
+  schema: DatabaseSchema,
+  style: SqlStyle,
+  relation: (table: TableMeta) => string,
+): (rows: WithinRows) => WithinPlan {
+  return (rows) => {
+    const { table, key, type } = withinRows(schema, rows);
+    const alias = style.quote(WITHIN);
+    return {
+      select: `SELECT ${alias}.${style.quote(key)} FROM ${relation(table)} ${alias}`,
+      column: (name) => `${alias}.${style.quote(name)}`,
+      types: (name) => table.columns.find((column) => column.name === name)?.type,
+      key: type,
+    };
+  };
+}
+
+/** The subquery of an `in` read from a relation already planned (scoped, its conditions bound there): it binds nothing. */
+export function plannedWithin(style: SqlStyle, source: string, key: string, type: string): WithinPlan {
+  const alias = style.quote(WITHIN);
+  return { select: `SELECT ${alias}.${style.quote(key)} FROM ${source} ${alias}`, key: type };
 }

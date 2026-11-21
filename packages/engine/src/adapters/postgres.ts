@@ -8,7 +8,7 @@
  * connect, or the leased writer inside a scoped transaction.
  */
 import { isProxy } from 'node:util/types';
-import { inlineRows } from '../shared/anyRows.js';
+import { inlineRows, inlineWithin } from '../shared/anyRows.js';
 import { asksAboutRows } from '../shared/filter.js';
 import { qualifiedTable } from '../shared/sqlRelation.js';
 import {
@@ -706,7 +706,9 @@ export class PostgresAdapter implements Adapter {
     if (!asksAboutRows(filter)) return buildWhere(filter, POSTGRES_STYLE);
     const schema = await this.schema().catch(() => undefined);
     const inline = schema && inlineRows(schema, id, qualified, POSTGRES_STYLE, (child) => qualifiedTable(schema, child.id, POSTGRES_STYLE));
-    return buildWhere(filter, POSTGRES_STYLE, 1, undefined, undefined, undefined, undefined, false, undefined, false, inline);
+    /* Another table's keys (`in`) are read as this table is, from its own relation: the same bound. */
+    const within = schema && inlineWithin(schema, POSTGRES_STYLE, (other) => qualifiedTable(schema, other.id, POSTGRES_STYLE));
+    return buildWhere(filter, POSTGRES_STYLE, 1, undefined, undefined, undefined, undefined, false, undefined, false, inline, within);
   }
 
   private async queryOn(request: QueryRequest, db: PgQuery, read = false): Promise<QueryResult> {
@@ -1033,10 +1035,10 @@ export class PostgresAdapter implements Adapter {
   }
 
   /** Several rows of one table added by one statement inside a transaction, each refused as `insert` refuses one (postgresBatchWrites). */
-  private async insertManyNow(requests: readonly InsertRequest[], write: PgQuery): Promise<InsertResult[]> {
+  private async insertManyNow(requests: readonly InsertRequest[], write: PgQuery, scoped = false): Promise<InsertResult[]> {
     const plans: InsertPlan[] = [];
     for (const request of requests) plans.push(await this.insertPlan(request, write));
-    return insertPlanned(plans, write);
+    return insertPlanned(plans, write, scoped);
   }
 
   /** Several rows of one table changed by one statement inside a transaction, each refused as `update` refuses one. */
@@ -1859,6 +1861,9 @@ export class PostgresAdapter implements Adapter {
               insert: (r) => this.insertNow(r, write, write, true),
               remove: (r) => this.removeNow(r, write, write),
               update: (r) => this.updateNow(r, write, write),
+              // The row scope proves a batch's rows as it proves one row's, around the one statement (scopedTransaction.ts).
+              insertMany: (rs) => this.insertManyNow(rs, write, true),
+              updateMany: (rs) => this.updateManyNow(rs, write),
             },
             // Filed under the table's id, as the rows sent ahead are; a read asked in its turn is sent as it was asked.
             (request) => {
@@ -1881,6 +1886,7 @@ export class PostgresAdapter implements Adapter {
               insert: writes.insert,
               remove: writes.remove,
               update: writes.update,
+              ...(writes.insertMany && writes.updateMany ? { insertMany: writes.insertMany, updateMany: writes.updateMany } : {}),
             },
             scopedReads(false),
             scopedReads(true),
@@ -1940,6 +1946,12 @@ export class PostgresAdapter implements Adapter {
                   insert: (r: InsertRequest) => invoke(r, (r) => records.insert(r)),
                   remove: (r: DeleteRequest) => invoke(r, (r) => records.remove(r)),
                   update: (r: UpdateRequest) => invoke(r, (r) => records.update(r)),
+                  ...(records.insertMany && records.updateMany
+                    ? {
+                        insertMany: (rs: readonly InsertRequest[]) => invoke(rs, (rs) => records.insertMany!(rs)),
+                        updateMany: (rs: readonly UpdateRequest[]) => invoke(rs, (rs) => records.updateMany!(rs)),
+                      }
+                    : {}),
                   // Beneath the row scope: the flows' command tells only of its own target, which it read through the scope.
                   ...(writes.tell ? { tell: (r: TellRequest) => invoke(r, (r) => writes.tell!(r)) } : {}),
                   ...(writes.noted ? { noted: (r: NoteRequest) => invoke(r, (r) => writes.noted!(r)) } : {}),

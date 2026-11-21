@@ -483,6 +483,14 @@ export class HttpAdapter implements Adapter {
     if (group.length === 1 && group[0].column === resource.key && group[0].op === '=') return group;
     const seen = new Set<string>();
     for (const condition of group) {
+      // A column tested against another table's rows (`in: { from }`) is a subquery no API is asked.
+      if (condition.within)
+        throw new Refusal(
+          `${resource.name} comes from an API, so "${condition.column}" cannot be tested against ${condition.within.table}'s rows.`,
+          {
+            columns: [condition.column],
+          },
+        );
       const declared = resource.filters[condition.column];
       const op = condition.op;
       if (!declared || (op !== '=' && op !== 'in') || !declared.ops.includes(op)) {

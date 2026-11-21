@@ -155,6 +155,10 @@ export const VALIDATION_CODES: ReadonlyArray<{ code: string; pattern: RegExp }> 
   { code: 'api-service-role', pattern: /\bapi\.service\.roles: "[^"]+" is not a service role/ },
   { code: 'api-service-tenant', pattern: /\bapi\.service: a service token is bound to one tenant/ },
   { code: 'api-service-unreachable', pattern: /\bapi\.service\.roles: "[^"]+" reads no table and runs no command/ },
+  /* Said in brackets by the import check (shared/appImport.ts), for the same reason. */
+  { code: 'import-group-command', pattern: /has "group" and no "command"/ },
+  { code: 'import-group-column', pattern: /import group "[^"]+" (?:\[import-group-column\] )?is not a plain input of/ },
+  { code: 'import-group-repeat', pattern: /"group" fills one repeated group/ },
   /* A warning about the connection, not the App's declaration: it was reported as `invalid-app`, which reads as an error. */
   { code: 'superuser-connection', pattern: /is read-only here, but its database role can do more/ },
 ];

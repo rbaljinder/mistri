@@ -498,7 +498,7 @@
       "oneOf": [{ "required": ["apps"], "properties": { "groups": false } }, { "required": ["groups"], "properties": { "apps": false } }]
     },
     "importDecl": {
-      "description": "Rows from a CSV file. true imports them as new records through the ordinary insert, under the reader's grants and the resource's validation. An object runs 'command' once per row, on the record its 'match' columns find.",
+      "description": "Rows from a CSV file. true imports them as new records through the ordinary insert, under the reader's grants and the resource's validation. An object runs 'command' once per row (or per run of rows with 'group'), on the record its 'match' columns find, or creating one where the command names none.",
       "oneOf": [
         {
           "type": "boolean"
@@ -507,8 +507,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
-            "command",
-            "match"
+            "command"
           ],
           "properties": {
             "command": {
@@ -523,7 +522,17 @@
                 "minLength": 1,
                 "pattern": "^[^.]+$"
               },
-              "description": "The resource's own columns that find the record each row runs on; a reference column is found by the record's name."
+              "description": "The resource's own columns that find the record each row runs on; a reference column is found by its record's address key, then by its name. Required unless the command names no record (targets: 'none')."
+            },
+            "group": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "minLength": 1
+              },
+              "description": "Top-level inputs of the command that say which consecutive rows are one run: the run's first row fills them and each row is one entry of the command's one repeated group."
             }
           }
         }

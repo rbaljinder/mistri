@@ -271,7 +271,19 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       let records!: WriteTransaction;
       await source.transaction(await f.evidence(), allow, (tx) => {
         records = tx;
-        assert.deepEqual(Reflect.ownKeys(tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
+        // Postgres's scoped writer batches; SQLite's adapter offers the batch forms only unscoped
+        // (adapters/sqlite.ts), so a tenant transaction there has neither.
+        const batch = dialect === 'postgres';
+        assert.deepEqual(Reflect.ownKeys(tx).sort(), [
+          'aggregate',
+          'count',
+          'insert',
+          ...(batch ? ['insertMany'] : []),
+          'query',
+          'remove',
+          'update',
+          ...(batch ? ['updateMany'] : []),
+        ]);
         assert.ok(Object.isFrozen(tx));
       });
       await assert.rejects(records.count('item'));

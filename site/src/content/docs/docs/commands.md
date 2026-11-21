@@ -251,6 +251,7 @@ reader may not see (another tenant's, or outside a row scope) alike, in the same
 words; a handler that answers a wrong key with its own refusal should read with
 `where` or `find`, which return nothing for both, so every caller gets one answer.
 A handler's `where` reads that table's own columns, and `any`/`no` over a child table the command declares in `read` or `write` (``db.invoice.where`any line where qty > 5` ``); a reference path, or a child it does not declare, is refused. [Where the query language works](/docs/query/#where-the-query-language-works) lists what each place reads.
+To filter by another table's columns, test a column against that table's rows in the object form: `db.invoice.where({ customer_id: { in: { from: 'customer', where: { region: 'west' } } } })` reads `customer_id IN (SELECT id FROM customer WHERE region = 'west')`. It works in `where`, `find`, `count` and `updateWhere`, in a handler, a policy and a loader. `from` must be a table the command declares in `read` or `write`, and that table must have a key of one column, which is what the subquery selects. Its rows are read as a direct read of that table is, under the same tenant, row policy and grant, so a customer the reader cannot see matches no invoice. Its `where` names that table's own columns, one level deep: an `in` inside it is refused by name. A lookup and an API resource refuse it.
 
 `db.<table>.segment(name)` reads one of the resource's [segments](/docs/query/#where-the-query-language-works) by its name, so a rule said once on the resource (`segments: { open: 'status = open' }`) is not said again in a handler: `await db.ticket.segment('open').where({ owner }).orderBy('due_on').limit(20)`. It is the segment's conditions written out as the language writes them, through the same transaction, grants and row scope as any other read here, and it chains with `.where(…)` (both must hold), `.orderBy`, `.limit`, sums and pages. A segment is read as a `where` is: it may name the table's own columns, other segments and `any`/`no` over a declared child, and one that names a rollup, a computed column, a reference path or `me` is refused at the call, naming the segment. A name the resource does not have is refused with the names it has, and a table the handler does not declare has no handle to ask. A page's [loader](/docs/custom-components/#free-form-pages) reads a segment the same way, so a board's list and a dashboard's figure over it are one rule.
 
@@ -267,8 +268,8 @@ notice for it: an import or a plain edit of the same table has no code to say.
 and returns them. Each row meets the checks one `insert` or `update` would meet:
 the footprint, the constants and stamps, the scopes and ownership, the policy,
 one audit change per row, and the effects. The rows are written in one statement
-on SQLite and PostgreSQL (one per set of columns the rows name); a tenant App, a row scope and a draft write them one at
-a time, with the same outcome.
+on SQLite and PostgreSQL (one per set of columns the rows name). In a tenant App or under a row scope, PostgreSQL writes
+them in one statement too; SQLite there, and a draft anywhere, write them one at a time, with the same outcome.
 
 ```ts
 await db.bin.insertMany(lines.map((line) => ({ shelf_id: record.id, sku: line.sku, qty: line.qty })));
@@ -595,6 +596,33 @@ invite: defineCommand({ source: 'main', target: 'dealer', output: shape({ apply:
 ```
 
 The receipt, the outbox and a replay keep `mistri-public:apply.<seal>`, never an address. The seal is the App's own, so only a reference a command made is ever said as a URL: a visitor who types `mistri-public:apply` into a field gets their words back as they typed them, in an answer and in mail alike. It becomes a URL where a capability link does: in the command's answer and in a delivered effect, which read the address as it stands then. An App says its own address (`/shop/vehicles`, `/shop/form/apply` under the server's public URL); a tenant App says the tenant's host and its current intake or public address as `?via=` ([tenant Apps](/docs/tenant-apps/#public-reads)). Where no address is known (MCP, a test with no server) an answer keeps the reference, and an effect that carries one is rejected rather than sent. An App MCP answer over stdio always keeps the raw reference, for public links and capability links alike. A view a visitor cannot open, or one the App does not have, is refused at the call, naming it.
+
+## Import a file through a command
+
+`import: true` makes each row of a CSV file a new record, checked as the New form checks it. Where a resource's writes
+are its commands', name one: each row runs it, on the record `match` finds or, for a command that creates
+(`targets: 'none'`), on a new one. `group` makes consecutive rows that agree on those columns one command, its
+repeated group filled one entry per row:
+
+```ts
+import: { command: 'placeOrder', group: ['number'] }
+```
+
+```csv
+Number,Customer,SKU,Quantity
+SO-1,Acme,A-1,2
+SO-1,Acme,A-2,1
+SO-2,Birch,A-1,4
+```
+
+That file places two orders, the first with two lines. A row of a run that says another customer than its first row
+is refused, naming the row; so is a run longer than the group's `repeat.max`. Rows are never reordered. A reference
+cell is read by its record's address key first, then its name.
+
+Check runs each command in a transaction that is always rolled back: it says what each would create, update or
+refuse, and how many rows it would write to each table, and keeps no receipt, history or effect. A command that calls
+a provider is checked without running. Import then runs the same inputs, each its own transaction; `skipRefused`
+leaves the refused ones out.
 
 ## Load and run
 
