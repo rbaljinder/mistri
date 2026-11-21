@@ -11,6 +11,8 @@ import { checkApiCommandCatalog } from './apiCommandCatalog.js';
 import { createApiReadKeyCodec } from './apiReadKey.js';
 import { ApiCommandRequestError } from './apiCommandHeaders.js';
 import type { ApiCommandRoute } from './apiCommandRoute.js';
+import { checkChosenAsk } from './apiChosen.js';
+import { ApiReadFailure } from './apiReadFailure.js';
 
 const invalid = (): never => {
   throw new ApiCommandRequestError('invalid_request');
@@ -72,7 +74,22 @@ export function createApiCommandRequestMapper(
       if (!target) return absent();
       return bodyKey(target.codec, key);
     },
-    map(route: ApiCommandRoute, headers: Headers, body: unknown) {
+    /**
+     * `said` is what the call picked for the App's `choose` (apiChosen.ts), already taken out of the body and the
+     * header: judged here, where the schema is, and carried on the envelope for the owner to read again under the
+     * token's reach. It is never input and never part of what the executor fingerprints.
+     */
+    map(route: ApiCommandRoute, headers: Headers, body: unknown, said?: unknown) {
+      const envelope = mapEnvelope(route, headers, body);
+      if (said === undefined || route.kind === 'prepare' || route.kind === 'recover') return envelope;
+      if (!said || typeof said !== 'object' || Array.isArray(said))
+        throw new ApiReadFailure('chosen_invalid', 'chosen must be an object keyed by choice name, each a row key.');
+      const ask = checkChosenAsk(app, schema, said as Record<string, unknown>);
+      return Object.keys(ask).length ? Object.freeze({ ...envelope, chosen: ask }) : envelope;
+    },
+  });
+  function mapEnvelope(route: ApiCommandRoute, headers: Headers, body: unknown) {
+    {
       if (route.appId !== app.id || route.version !== api.version) return absent();
       const identity = { command: route.command, commandVersion: route.commandVersion };
       // Scope-only recovery never invents a target, revision or input. A create
@@ -146,6 +163,6 @@ export function createApiCommandRequestMapper(
         expectedVersions.push(revision(entry.version));
       }
       return Object.freeze({ ...identity, keys, expectedVersions, idempotencyKey: headers.idempotencyKey, input: wrapper.input });
-    },
-  });
+    }
+  }
 }

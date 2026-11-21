@@ -59,6 +59,11 @@ export interface QueryPerson {
    * refused rather than read as text.
    */
   chosen?: Readonly<Record<string, string | number | null>>;
+  /**
+   * With `chosen`: declared choices the door was not told (an API call that named some picks and not others). Each
+   * reads as `chosen` itself being absent does, so the words say what to do rather than that the name is unknown.
+   */
+  chosenUnset?: readonly string[];
 }
 
 /** One column of a tenant's profile row, as a member may read it. */
@@ -212,10 +217,11 @@ export function chosenOperand(
     return me.once
       ? { error: `${word} is a choice of one request's person, and this query is read once for every request, so it cannot ask it.` }
       : { value: word };
-  if (!me?.chosen)
-    return {
-      error: `${word} is the person's App choice, and nothing here runs for a person at a desk (a job, a workflow step, an API call): take it as input, or quote it ("${word}") to mean the text.`,
-    };
+  const personLess = {
+    error: `${word} is the person's App choice, and nothing here runs for a person at a desk (a job, a workflow step, an API call): take it as input, or quote it ("${word}") to mean the text.`,
+  };
+  if (!me?.chosen) return personLess;
+  if (!Object.hasOwn(me.chosen, match[1]) && me.chosenUnset?.includes(match[1])) return personLess;
   if (!Object.hasOwn(me.chosen, match[1]))
     return { error: `${word} names no choice: the App's choose declares ${Object.keys(me.chosen).join(', ') || 'none'}.` };
   const value = me.chosen[match[1]];

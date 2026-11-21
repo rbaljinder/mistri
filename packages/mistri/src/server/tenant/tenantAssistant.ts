@@ -65,8 +65,10 @@ interface Lease {
 }
 
 /* What a browser request carries that the data server reads to admit it: who and from where. Nothing else is
-   passed on, and the lease's own headers are set from the recovered lease, never copied. */
-const CARRIED = ['host', 'origin', 'cookie', 'user-agent'];
+   passed on, and the lease's own headers are set from the recovered lease, never copied. The one exception is the
+   person's picks (an App's `choose`): a wish the data server reads again under this member's own reach, as it reads a
+   tab's, so a turn's tools work at the site the person works at. */
+const CARRIED = ['host', 'origin', 'cookie', 'user-agent', 'x-mistri-chosen'];
 
 /** A request to the data server, made inside this one: its admission headers and the lease's, a JSON body. */
 function forwarded(page: IncomingMessage, method: 'GET' | 'POST', target: string, body: unknown, extra: Record<string, string>) {

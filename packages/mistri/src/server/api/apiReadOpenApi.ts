@@ -60,6 +60,42 @@ function errorResponses(): Record<string, Json> {
   );
 }
 
+/** An App with `choose` can be told which row a call works at (apiChosen.ts): the one answer whose message is not fixed. */
+const chosenRefusal: Json = {
+  description: 'A `chosen` the App does not declare, a key its table cannot hold, or a text that asks for a choice the call did not make',
+  content: {
+    'application/json': {
+      schema: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['error'],
+        properties: {
+          error: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['code', 'message'],
+            properties: { code: { type: 'string', enum: ['chosen_invalid', 'chosen_required'] }, message: { type: 'string' } },
+          },
+        },
+      },
+    },
+  },
+};
+
+/** The `chosen.<name>` query parameters of an App's `choose`: the picks a call makes for itself. */
+function chosenParameters(app: AppDef): Json[] {
+  return Object.entries(app.choose ?? {}).map(([name, choice]) => ({
+    name: `chosen.${name}`,
+    in: 'query',
+    required: false,
+    schema: { type: 'string', minLength: 1, maxLength: 128 },
+    description:
+      `The key of the ${choice.from} row this call works at, which a question that says \`chosen.${name}\` reads. ` +
+      "It is read again under the token's own reach: one the token cannot read matches no row. There is no stored pick for a token, " +
+      `so a question that names it and a call that leaves it out is refused (422). The header \`x-mistri-chosen: ${name}=<key>\` says the same.`,
+  }));
+}
+
 export function renderApiReadOpenApi(
   app: AppDef,
   schema: DatabaseSchema,
@@ -154,6 +190,7 @@ export function renderApiReadOpenApi(
       for (const field of exposure.filters) {
         parameters.push(createApiFilterParameter(field, operation, schema, options));
       }
+      parameters.push(...chosenParameters(app));
     }
     // A spec covers either count choice and every allowed page size. The
     // concrete request codec additionally enforces count presence and limit.
@@ -200,6 +237,7 @@ export function renderApiReadOpenApi(
         responses: {
           '200': { description: 'Projected read result', content: { 'application/json': { schema: response } } },
           ...errorResponses(),
+          ...(app.choose && !item ? { '422': chosenRefusal } : {}),
         },
       },
     };

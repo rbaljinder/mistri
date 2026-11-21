@@ -1,6 +1,9 @@
 /** API-only standing-query constraints; the browser grammar is unchanged. */
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { parseViewQuery, resolvePath } from '@mistriwork/engine/shared/view.js';
+import type { QueryPerson } from '@mistriwork/engine/shared/queryOperands.js';
+import { expandSegments } from '@mistriwork/engine/shared/query.js';
+import { mentionsMe } from '../../shared/appMe.js';
 import { apiDialectOf, apiValueCodec } from './apiValueCodec.js';
 
 const fail = (): never => {
@@ -9,8 +12,14 @@ const fail = (): never => {
   );
 };
 
-export function parseApiStandingQuery(schema: DatabaseSchema, resource: string, text: string, now: Date) {
-  const parsed = parseViewQuery(schema, resource, text, now, { columnValues: false });
+/**
+ * `person` carries only the App's `choose` for this call (apiChosen.ts), never anyone: a question about `me` is
+ * still refused, as the API reads no person, so it is not compiled with one.
+ */
+export function parseApiStandingQuery(schema: DatabaseSchema, resource: string, text: string, now: Date, person?: QueryPerson) {
+  const me =
+    person && !mentionsMe(expandSegments(text, schema.tables.find((table) => table.id === resource)?.segments).text) ? person : undefined;
+  const parsed = parseViewQuery(schema, resource, text, now, { columnValues: false, ...(me ? { me } : {}) });
   if (parsed.errors.length) return parsed;
   const integers = new Map<string, ReturnType<typeof apiValueCodec>>();
   const columns = new Map<string, Set<string>>();
@@ -43,7 +52,7 @@ export function parseApiStandingQuery(schema: DatabaseSchema, resource: string, 
       columns: table.columns.map((column) => (columns.get(table.id)?.has(column.name) ? { ...column, type: 'TEXT' } : column)),
     })),
   };
-  const lexical = parseViewQuery(lexicalSchema, resource, text, now, { columnValues: false });
+  const lexical = parseViewQuery(lexicalSchema, resource, text, now, { columnValues: false, ...(me ? { me } : {}) });
   if (lexical.errors.length || lexical.filter.groups.length !== parsed.filter.groups.length) return fail();
   for (const [groupIndex, group] of parsed.filter.groups.entries()) {
     const raw = lexical.filter.groups[groupIndex];

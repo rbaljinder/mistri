@@ -74,6 +74,12 @@ export function parseApiListParams(
     const name = decode(part.slice(0, equals)),
       value = decode(part.slice(equals + 1));
     if (parameters.has(name)) fail('repeated parameter');
+    // An App's `choose` is named in the query the same way a filter is (`chosen.site=12`), and judged by the owner
+    // that reads it (apiChosen.ts): what the call picks is not a list parameter.
+    if (name.startsWith('chosen.')) {
+      parameters.set(name, value);
+      continue;
+    }
     if (reservedKeys.has(name) || (!filters.has(name) && !['limit', 'cursor', 'fields', 'sort', 'count', 'segment'].includes(name)))
       fail('unknown or unsupported parameter');
     parameters.set(name, value);

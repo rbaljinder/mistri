@@ -19,6 +19,7 @@ import { projectApiMcpCommandTools, type ApiMcpCommandBinding } from './apiMcpCo
 import { withApiWrites } from './apiGenericWrites.js';
 import { createApiReadKeyCodec } from './apiReadKey.js';
 import { ApiReadFailure } from './apiReadFailure.js';
+import { checkChosenAsk, type ApiChosenAsk } from './apiChosen.js';
 import { ApiCommandRequestError } from './apiCommandHeaders.js';
 import type { ApiCommandRoute } from './apiCommandRoute.js';
 import { readApiApp } from './appApiValidation.js';
@@ -42,6 +43,8 @@ type CommandCall = Readonly<{
   route: ApiCommandRoute;
   headers: Readonly<{ expectedVersion?: number; idempotencyKey?: string }>;
   body: unknown;
+  /** The call's own picks for the App's `choose` (apiChosen.ts), by name; the mapper judges them again. */
+  chosen?: ApiChosenAsk;
 }>;
 type CommandDeliver = (
   credential: string,
@@ -94,10 +97,10 @@ export function sqliteAppMcpCommands(owner: Awaited<ReturnType<typeof createSqli
         'tools' in request
           ? await owner.readTools(credential, signal)
           : request.kind === 'prepare'
-            ? await owner.prepare(credential, owner.map(request.route, request.headers, request.body), signal)
+            ? await owner.prepare(credential, owner.map(request.route, request.headers, request.body, request.chosen), signal)
             : request.kind === 'recover'
-              ? await owner.recover(credential, owner.map(request.route, request.headers, request.body), signal)
-              : await owner.execute(credential, owner.map(request.route, request.headers, request.body), signal, 'mcp');
+              ? await owner.recover(credential, owner.map(request.route, request.headers, request.body, request.chosen), signal)
+              : await owner.execute(credential, owner.map(request.route, request.headers, request.body, request.chosen), signal, 'mcp');
       try {
         if (signal.aborted) return;
         write(owner.consumeResult(handle));
@@ -117,7 +120,7 @@ export function postgresAppMcpCommands(owner: Awaited<ReturnType<typeof createPo
         await owner.readTools(credential, send, signal);
         return;
       }
-      const envelope = owner.map(request.route, request.headers, request.body);
+      const envelope = owner.map(request.route, request.headers, request.body, request.chosen);
       await (request.kind === 'prepare'
         ? owner.prepare(credential, envelope, send, signal)
         : request.kind === 'recover'
@@ -150,7 +153,7 @@ export function tenantAppMcpCommands(owner: Omit<Awaited<ReturnType<typeof creat
         await owner.readTools(credential, send);
         return;
       }
-      const envelope = owner.map(request.route, request.headers, request.body);
+      const envelope = owner.map(request.route, request.headers, request.body, request.chosen);
       await (request.kind === 'prepare'
         ? owner.prepare(credential, envelope, send, signal)
         : request.kind === 'recover'
@@ -281,7 +284,11 @@ export function createAppMcpSession(options: {
     let request: Request;
     try {
       request = decoder(operationId).decode(args ?? {}, new Date());
-    } catch {
+    } catch (error) {
+      // A choice the call got wrong (a name the App lacks, a key its table cannot hold, one a question needs and the call
+      // left out) is named, not "the arguments do not match": the agent can fix it (apiChosen.ts).
+      if (error instanceof ApiReadFailure && error.detail !== undefined)
+        return refused(id, JSON.stringify({ error: { code: error.code.replace('_', '-'), message: error.detail } }));
       return mismatch(id);
     }
     let written = false;
@@ -316,14 +323,30 @@ export function createAppMcpSession(options: {
             : binding.kind === 'create'
               ? ['idempotencyKey', 'input']
               : ['idempotencyKey'];
+    // An App that declares `choose` lets a run tool carry its picks beside its arguments, as an optional `chosen` object.
+    const picks = !!app.choose && ['one', 'many', 'create'].includes(binding.kind) && !!value && Object.hasOwn(value, 'chosen');
     if (
       !value ||
-      Object.keys(value).length !== wanted.length ||
+      Object.keys(value).length !== wanted.length + (picks ? 1 : 0) ||
       wanted.some((name) => !Object.hasOwn(value, name)) ||
       (binding.kind !== 'prepare' && typeof value.idempotencyKey !== 'string')
     )
       return mismatch(id);
     const base = { appId: app.id, version: api.version, command: binding.command, commandVersion: binding.version };
+    // A name the App lacks or a key its table cannot hold is the caller's, named so the agent can fix it.
+    let chosen: ApiChosenAsk | undefined;
+    if (picks) {
+      try {
+        const said = value.chosen;
+        if (!said || typeof said !== 'object' || Array.isArray(said))
+          throw new ApiReadFailure('chosen_invalid', 'chosen must be an object keyed by choice name, each a row key.');
+        chosen = checkChosenAsk(app, schema, said as Json);
+      } catch (error) {
+        if (error instanceof ApiReadFailure && error.detail !== undefined)
+          return refused(id, JSON.stringify({ error: { code: 'chosen_invalid', message: error.detail } }));
+        return mismatch(id);
+      }
+    }
     let call: CommandCall;
     if (binding.kind === 'prepare') {
       let rawKey: string;
@@ -378,6 +401,7 @@ export function createAppMcpSession(options: {
         body: undefined,
       };
     }
+    if (chosen && Object.keys(chosen).length) call = { ...call, chosen };
     let written = false;
     try {
       await commands!.deliver(credential, call, signal, (answer) => {

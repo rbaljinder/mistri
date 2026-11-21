@@ -11,6 +11,7 @@ import { resolvePath, type ViewDef } from '@mistriwork/engine/shared/view.js';
 import { apiDialectOf, apiFieldCodec, apiSingleDialect } from './apiValueCodec.js';
 import { withDeclaredSegments } from '../../shared/appSegments.js';
 import { parseApiStandingQuery } from './apiStandingQuery.js';
+import { catalogChosenPerson } from './apiChosen.js';
 import { validateResourceView, type ResourceAccess } from '../app/appAccess.js';
 import { tabKey } from '@mistriwork/engine/shared/addressParams.js';
 import { reservedKeys } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
@@ -175,7 +176,7 @@ export function scopedReadCatalog(
     const parse = (text: string) => {
       // Validation-only parse: computed relative dates never leave this
       // function. Request planning evaluates the captured authored text anew.
-      const parsed = parseApiStandingQuery(schema, base, text, new Date('2000-01-01T00:00:00Z'));
+      const parsed = parseApiStandingQuery(schema, base, text, new Date('2000-01-01T00:00:00Z'), catalogChosenPerson(app));
       if (parsed.errors.length) fail(at, parsed.errors[0].message);
       if (parsed.columns.length) fail(at, 'a standing question cannot replace the explicit API projection');
       if (parsed.limit !== undefined) fail(at, 'a standing question limit is unsupported and cannot be silently dropped');

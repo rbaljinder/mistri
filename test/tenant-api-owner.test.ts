@@ -70,7 +70,7 @@ type CommandAnswer = { status: number; replayed: boolean; body: Record<string, u
 async function depot(
   t: TestContext,
   dialect: 'sqlite' | 'postgres',
-  options: { commands?: boolean; renderLinks?: (value: unknown, tenantId: string) => Promise<unknown> } = {},
+  options: { commands?: boolean; choose?: boolean; renderLinks?: (value: unknown, tenantId: string) => Promise<unknown> } = {},
 ) {
   const directory = mkdtempSync(join(tmpdir(), `tw-tenant-api-${dialect}-`));
   const cleanup: Array<() => Promise<unknown> | unknown> = [() => rmSync(directory, { recursive: true, force: true })];
@@ -218,7 +218,7 @@ async function depot(
     }
   });
   const physical = dialect === 'sqlite' ? 'physical_item' : 'public.physical_item';
-  const written = writeDepotApp(directory, { business, authStore, physical, commands: options.commands });
+  const written = writeDepotApp(directory, { business, authStore, physical, commands: options.commands, choose: options.choose });
   const loaded = await loadApp(written.appDir);
   const registry = written.commands ? await loadBusinessCommands(written.commands) : undefined;
   const auth: AppAuthRuntime = await withSecret(() =>
@@ -655,4 +655,48 @@ for (const { dialect, skip } of [
     assert.ok('body' in stale && stale.status === 409, JSON.stringify(stale));
     assert.deepEqual(told, ['north', 'north']);
   });
+
+  test(
+    `tenant API choose on ${dialect}: another tenant's key is a null pick, never rows and never an error`,
+    { skip, timeout: 240000 },
+    async (t) => {
+      const f = await depot(t, dialect, { commands: true, choose: true });
+      const alice = await f.issue('alice', 'north');
+      const mine = (query: string) => f.ask((send) => f.owner.readList(alice.token, 'view:mine', query, send));
+      const ids = (answer: Answer) => {
+        assert.ok('body' in answer && answer.status === 200, JSON.stringify(answer));
+        return (answer.body.items as { id: string }[]).map((row) => row.id);
+      };
+      // Her own tenant's key narrows the view to that row.
+      assert.deepEqual(ids(await mine('chosen.site=north-1')), ['north-1']);
+      // Bob's tenant's key reads as null under her scoped reader: no rows, and the answer does not say the row exists.
+      assert.deepEqual(ids(await mine('chosen.site=south-1')), []);
+      // No pick at all is the door's own refusal, in the same words.
+      // (The owner refuses; the transport answers it 422.)
+      assert.deepEqual(await mine(''), { refused: 'chosen_required' });
+
+      // A command's body `chosen` reaches the handler as what her scope can read.
+      let counter = 0;
+      const touch = (chosen: unknown) =>
+        f.command((send) =>
+          f.owner.execute(
+            alice.token,
+            f.owner.map(
+              parseApiCommandRoute('/api/apps/depot/v1/item/north-1/commands/touch/v1'),
+              { expectedVersion: counter, idempotencyKey: `tenant-choose-${String(++counter).padStart(12, '0')}` },
+              {},
+              chosen,
+            ),
+            send,
+          ),
+        );
+      const site = (answer: CommandAnswer) => {
+        assert.ok('body' in answer && answer.status === 200, JSON.stringify(answer));
+        const body = answer.body as { result?: { site: string | null }; site?: string | null };
+        return body.result ? body.result.site : body.site;
+      };
+      assert.equal(site(await touch({ site: 'north-2' })), 'north-2');
+      assert.equal(site(await touch({ site: 'south-1' })), null);
+    },
+  );
 }

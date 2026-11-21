@@ -11,6 +11,7 @@ import { primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schem
 import { defineCommands, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { checkApiCommandCatalog } from './apiCommandCatalog.js';
 import { createApiCommandEnvelopeBundle } from './apiCommandEnvelope.js';
+import { chosenSchema } from './apiChosen.js';
 import { renderApiInputSchema } from './apiInputSchema.js';
 import { createApiReadKeyCodec } from './apiReadKey.js';
 import { apiCommandProblemStatuses } from './apiCommandResponse.js';
@@ -58,6 +59,19 @@ function frozenNote(app: AppDef, resource: string): { description: string } | Re
       : []),
   ];
   return notes.length ? { description: notes.join(' ') } : {};
+}
+
+/** The `chosen` object of a command body: one optional key per declared choice. */
+function chosenObject(app: AppDef): Json {
+  return chosenSchema(app) as Json;
+}
+
+/** The command input's schema with the optional `chosen` object added, where the App declares `choose`. */
+function chosenBody(app: AppDef, input: unknown): Json | undefined {
+  const picks = chosenSchema(app);
+  if (!picks || !input || typeof input !== 'object' || (input as Json).type !== 'object') return undefined;
+  const shape = input as Json;
+  return { ...shape, properties: { ...((shape.properties as Json | undefined) ?? {}), chosen: picks } };
 }
 
 export function renderApiCommandOpenApi(
@@ -108,6 +122,11 @@ export function renderApiCommandOpenApi(
     schemas[`CommandInput_${component}`] = renderApiInputSchema({ input: declarations[operation.command].input }).schema;
     schemas[`CommandResult_${component}`] = operation.outputSchema;
     const input = { $ref: `#/components/schemas/CommandInput_${component}` };
+    /* An App with `choose` reads a top-level `chosen` object beside the input (apiChosen.ts): its body is the input's
+       own shape with that one property added, so a client library can send it and a closed input still validates. */
+    const picked = chosenBody(app, schemas[`CommandInput_${component}`]);
+    if (picked) schemas[`CommandBody_${component}`] = picked;
+    const body = picked ? { $ref: `#/components/schemas/CommandBody_${component}` } : input;
     const result = { $ref: `#/components/schemas/CommandResult_${component}` };
     const suffix = `/commands/${operation.command}/v${operation.version}`;
     const idempotency = {
@@ -161,7 +180,7 @@ export function renderApiCommandOpenApi(
           operationId: `command_${component}`,
           summary: `Create one ${operation.resource}`,
           parameters: [idempotency],
-          requestBody: { required: true, content: { 'application/json': { schema: input } } },
+          requestBody: { required: true, content: { 'application/json': { schema: body } } },
           responses: executed,
           ...extensions,
         },
@@ -211,7 +230,7 @@ export function renderApiCommandOpenApi(
           },
           idempotency,
         ],
-        requestBody: { required: true, content: { 'application/json': { schema: input } } },
+        requestBody: { required: true, content: { 'application/json': { schema: body } } },
         responses: executed,
         ...extensions,
       },
@@ -247,6 +266,7 @@ export function renderApiCommandOpenApi(
                       'x-mistri-runtime-validation': ['duplicate-free-keys', 'ordered-targets'],
                     },
                     input,
+                    ...(app.choose ? { chosen: chosenObject(app) } : {}),
                   },
                 },
               },

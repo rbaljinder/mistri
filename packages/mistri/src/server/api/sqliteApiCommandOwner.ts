@@ -31,7 +31,9 @@ import { previewApiMcpReadTools } from './apiMcpReadTools.js';
 import { projectApiMcpCommandTools } from './apiMcpCommandTools.js';
 import { readApiApp } from './appApiValidation.js';
 import { apiWrites, withApiWrites } from './apiGenericWrites.js';
-import { AppAccessDenied } from '../app/appAccess.js';
+import { AppAccessDenied, authorizeResources } from '../app/appAccess.js';
+import { resolveAppAccess } from '../../shared/app.js';
+import { resolveApiChosen, takeChosenAsk } from './apiChosen.js';
 import type { CaptureCommandFlags } from '../commands/commandFlags.js';
 import { commandFlagsOnce } from '../commands/commandFlagCapture.js';
 import { apiCommandLaneConnections, apiCommandLaneOf } from './apiSourceLanes.js';
@@ -260,7 +262,8 @@ export async function createSqliteApiCommandOwner(
           current();
           // A document or a tool listing carries no envelope.
           const listing = mode === 'spec' || mode === 'tools';
-          const captured = listing ? undefined : snapshot(request, MAX_COMMAND_BYTES).value;
+          // The picks the mapper carried (`chosen`, apiChosen.ts) are not part of the envelope the executor judges.
+          const { envelope: captured, ask } = takeChosenAsk(listing ? undefined : snapshot(request, MAX_COMMAND_BYTES).value);
           const named = captured && typeof captured === 'object' && !Array.isArray(captured) ? own(captured, 'command') : undefined;
           if (!listing && typeof named !== 'string') return refuse();
           const command = named as string;
@@ -343,6 +346,13 @@ export async function createSqliteApiCommandOwner(
                 : apiPublicActor(app.id, publicForm, observation.tokenId);
             try {
               const authorized = binding.authorize(command, actor);
+              /* What the call picked (`chosen`), read again under this token's own grants, never a stored pick: `ctx.chosen`. */
+              const pickFor = async () => {
+                if (!Object.keys(ask).length || publicForm !== undefined) return {};
+                const reader = authorizeResources(resources, resolveAppAccess(app, resources.schema, [...observation.roles])).adapter;
+                const resolved = await resolveApiChosen(app, resources.schema, reader, ask);
+                return resolved ? { chosen: resolved.chosen } : {};
+              };
               const flags = mode === 'recover' ? undefined : await commandFlagsOnce(() => captureFlags?.(authorized.actor))();
               fresh(credential, observation, signal);
               // Never race abort against the native writer. Shared execution owns
@@ -351,7 +361,7 @@ export async function createSqliteApiCommandOwner(
                 mode === 'prepare'
                   ? await prepareApiCommand(binding, actor, captured, signal, flags)
                   : mode === 'execute'
-                    ? await executeBusinessCommand(binding, actor, captured, { signal, door, flags })
+                    ? await executeBusinessCommand(binding, actor, captured, { signal, door, flags, ...(await pickFor()) })
                     : await recoverBusinessCommandReceipt(binding, actor, captured, { signal });
               // A member's answer says its public links as URLs too, as the App's own command route does.
               const said =
@@ -431,9 +441,14 @@ export async function createSqliteApiCommandOwner(
       /** api-v1 only: App MCP `{tools}` — read and command — for this token now. */
       readTools: (credential: unknown, signal?: AbortSignal) => run('tools', credential, undefined, signal),
       /** Pure: the executor still validates everything the envelope says. */
-      map: (route: ApiCommandRoute, headers: Readonly<{ expectedVersion?: number; idempotencyKey?: string }>, body: unknown) => {
+      map: (
+        route: ApiCommandRoute,
+        headers: Readonly<{ expectedVersion?: number; idempotencyKey?: string }>,
+        body: unknown,
+        chosen?: unknown,
+      ) => {
         if (!mapper || retired) return refuse();
-        return mapper.map(route, headers, body);
+        return mapper.map(route, headers, body, chosen);
       },
       consumeResult: (handle: unknown) => {
         try {

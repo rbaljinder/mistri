@@ -5,6 +5,23 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.81
+
+`chosen` reaches the machine doors: the App API, App MCP and the assistant.
+
+- A read of the App API takes `chosen.<name>=<key>`, a command takes a `chosen` object in its body, and an App MCP tool
+  takes an optional `chosen` argument; the browser's `x-mistri-chosen` header says the same on reads and commands. Only an
+  App that declares `choose` lists them, in its OpenAPI document and its tool schemas. A view whose question names
+  `chosen.site` can now be read over the API and App MCP.
+- A token has no stored pick: a call that names none has none, so one call never answers by what someone last clicked in
+  the shell. Each key is read again under the token's own grants (its role's rows, its tenant), and one it cannot read
+  matches no row. A key its table cannot hold, or a name the App does not declare, is a `422` (`chosen_invalid`); a
+  question that names a choice the call left out is a `422` (`chosen_required`).
+- The assistant's tool calls read under the picks the chat request carries, else the person's stored pick, as a browser
+  read does, in a single App and a tenant App. It has no tool that changes a pick.
+- Tests: `test/app-api-choose.test.ts` holds the read, command, App MCP and OpenAPI doors, plain and under a row policy;
+  `test/assistant-chosen.test.ts` holds the assistant, with the scripted model.
+
 ## 1.0.0-rc.80
 
 `chosen` reaches every door a person sits behind, and says what to do on the doors with no person.

@@ -72,6 +72,7 @@ import type { ReadOperation } from './apiReadCatalog.js';
 import { checkApiTenantCommandCatalog, tenantCommandEvidence } from './apiTenantCommandCatalog.js';
 import { createApiReadView } from './apiReadView.js';
 import { createApiCursorReadView } from './apiCursorReadView.js';
+import { askedChosen, chosenAskOf, resolveApiChosen, takeChosenAsk, type ApiChosen } from './apiChosen.js';
 import { materializeApiReadResult } from './apiReadResult.js';
 import { renderApiReadOpenApi } from './apiReadOpenApi.js';
 import { narrowApiReadOpenApi } from './apiNarrowedReadOpenApi.js';
@@ -283,9 +284,12 @@ export async function createTenantApiOwner(input: {
           // request is the caller's, answered as such, never a tenant refusal.
           const now = new Date();
           let planned: { checked: ReturnType<typeof createApiReadView>; cursor?: ReturnType<typeof createApiCursorReadView> } | undefined;
-          try {
+          // What the call picked (`chosen.<name>`): judged here, read again under this principal's own reach once its
+          // reader exists, and planned a second time with the rows it proved (apiChosen.ts).
+          let asked: ReturnType<typeof chosenAskOf> = {};
+          const plan = (chosen?: ApiChosen): typeof planned => {
             if ('key' in request)
-              planned = {
+              return {
                 checked: createApiReadView(app, schema, { operationId, query: '', key: request.key }, { integers }, now, catalog),
               };
             else if ('query' in request) {
@@ -305,8 +309,9 @@ export async function createTenantApiOwner(input: {
                 },
                 now,
                 catalog,
+                chosen,
               );
-              planned = {
+              return {
                 cursor,
                 checked: {
                   stage: 'checked-read-view' as const,
@@ -317,12 +322,18 @@ export async function createTenantApiOwner(input: {
                 } as unknown as ReturnType<typeof createApiReadView>,
               };
             }
-          } catch {
+            return undefined;
+          };
+          try {
+            asked = 'query' in request ? chosenAskOf(app, schema, request.query) : {};
+            planned = plan(askedChosen(app, asked));
+          } catch (error) {
+            if (error instanceof ApiReadFailure && error.code.startsWith('chosen_')) throw error;
             return refuse('invalid_request');
           }
           /** The answer over the reads this caller was admitted to; `reader` is who the read audit names. */
           const answerWith = async (
-            data: Readonly<{ runView?: ScopedReads['runView']; countView?: ScopedReads['countView'] }>,
+            data: Readonly<{ query: ScopedReads['query']; runView?: ScopedReads['runView']; countView?: ScopedReads['countView'] }>,
             reader: string,
           ): Promise<Answer> => {
             if (spec) {
@@ -359,6 +370,8 @@ export async function createTenantApiOwner(input: {
                 : [];
               return { status: 200 as const, body: JSON.stringify({ tools: [...listed, ...runs] }) };
             }
+            // The picks the call named, read again under this member's own reach, and the read planned with them.
+            if (Object.keys(asked).length) planned = plan(await resolveApiChosen(app, schema, data, asked));
             const { checked, cursor } = planned!;
             if (!data.runView) return refuse();
             const runView = data.runView;
@@ -453,7 +466,8 @@ export async function createTenantApiOwner(input: {
       return track(
         (async (): Promise<'sent' | 'uncertain'> => {
           if (retired || !commands) return unknown();
-          const captured = snapshot(request, 131072).value;
+          // The picks the mapper carried (`chosen`, apiChosen.ts) are not part of the envelope the executor judges.
+          const { envelope: captured, ask } = takeChosenAsk(snapshot(request, 131072).value);
           const named =
             captured && typeof captured === 'object' && !Array.isArray(captured) ? (captured as { command?: unknown }).command : undefined;
           if (typeof named !== 'string') return unknown();
@@ -656,7 +670,12 @@ export async function createTenantApiOwner(input: {
                 const result =
                   mode === 'prepare'
                     ? await context.prepare(apiRequest, [binding.tenantId], captured, signal ? { signal } : {})
-                    : await context.execute(apiRequest, [binding.tenantId], captured, { ...(signal ? { signal } : {}), entry: door });
+                    : await context.execute(apiRequest, [binding.tenantId], captured, {
+                        ...(signal ? { signal } : {}),
+                        entry: door,
+                        // What the call picked, as the header spells it; read again in this member's tenant, never a stored pick.
+                        ...(Object.keys(ask).length ? { chosenHeader: new URLSearchParams(ask as Record<string, string>).toString() } : {}),
+                      });
                 outcome =
                   mode === 'prepare'
                     ? apiCommandPreparation(result)
@@ -757,9 +776,14 @@ export async function createTenantApiOwner(input: {
       recover: (credential: unknown, request: unknown, send: CommandSend, signal?: AbortSignal) =>
         run('recover', credential, request, send, signal),
       /** Pure: the runtime's executor still validates everything the envelope says. */
-      map: (route: ApiCommandRoute, headers: Readonly<{ expectedVersion?: number; idempotencyKey?: string }>, body: unknown) => {
+      map: (
+        route: ApiCommandRoute,
+        headers: Readonly<{ expectedVersion?: number; idempotencyKey?: string }>,
+        body: unknown,
+        chosen?: unknown,
+      ) => {
         if (!mapper || retired) return unknown();
-        return mapper.map(route, headers, body);
+        return mapper.map(route, headers, body, chosen);
       },
       /** Routing for trusted composition (an App MCP session's tool names and
        * key codecs): declaration data, never authority — every call is still
