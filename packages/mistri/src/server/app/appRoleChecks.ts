@@ -62,6 +62,45 @@ function roleViews(app: AppDef, schema: DatabaseSchema): RoleView[] {
   });
 }
 
+/** The signed-out visitor's view: what `auth.public` names, within the ceilings. */
+function visitorView(app: AppDef, schema: DatabaseSchema): RoleView | undefined {
+  if (!app.auth?.public) return undefined;
+  try {
+    const access = resolveAppAccess(app, schema, [], 'public');
+    const plain = accessibleSchema(schema, access);
+    return { role: 'public', plain, served: withRollups(app, plain), reads: access.readable };
+  } catch {
+    return undefined; // An invalid grant is refused on its own, with its own reason.
+  }
+}
+
+/**
+ * A headline's second figure or line on a derived column (a rollup, a computed column) a grant leaves out.
+ * The headline goes without it, as it goes without an earlier figure, and a base column the grant leaves out
+ * is usually meant; but a `read` list is the whole of what a reader reads, derived columns included, so one
+ * missing from it is more often forgotten: the rent a square foot beside a rent and an area the reader reads.
+ */
+function headlineGaps(
+  whole: DatabaseSchema,
+  view: RoleView,
+  base: string,
+  sections: readonly PageSection[],
+): { part: 'second figure' | 'second line'; missing: string }[] {
+  return sections.flatMap((section) => {
+    if (section.kind !== 'fields' || section.presentation !== 'headline') return [];
+    return (
+      [
+        ['second figure', section.subfigure],
+        ['second line', section.subtitle],
+      ] as const
+    ).flatMap(([part, path]) => {
+      const there = path ? tryResolvePath(whole, base, path).resolved : undefined;
+      const missing = path && there && (there.rollup || there.computed) ? unreadable(whole, view, base, path) : undefined;
+      return missing ? [{ part, missing }] : [];
+    });
+  });
+}
+
 /**
  * The roles only a client or a job holds: declared `service: true`, or named
  * by the API's `roles` or a jobs module's principal and by nothing a person
@@ -218,7 +257,7 @@ export function appRoleReach(
   const app = loaded.app;
   const service = serviceRoles(app, jobRoles);
   const views = roleViews(app, schema).filter((view) => !service.has(view.role));
-  if (!views.length) return { problems: [], warnings: [] };
+  if (!views.length && !app.auth?.public) return { problems: [], warnings: [] };
   const home = loaded.dir ?? dirname(loaded.path);
   const manifest = relative(home, loaded.path) || loaded.path;
   const whole = withRollups(app, schema);
@@ -340,7 +379,25 @@ export function appRoleReach(
       const checked = validatePage(whole, page);
       if (checked.error) continue; // Validation names it for everyone.
       const base = tableNamed(view.served, checked.base);
-      if (!base || fieldAccessiblePage(view.served, page)) continue;
+      if (!base) continue;
+      const feature = loaded.origins?.pages[page.id];
+      const file = relative(home, loaded.sources[page.id] ?? loaded.path) || loaded.path;
+      for (const { part, missing } of headlineGaps(whole, view, base.id, checked.sections)) {
+        const { said, fix } = explain(missing);
+        note(
+          warnings,
+          {
+            file,
+            head: `${feature ? `features "${feature}", ` : ''}page "${page.name}" [${CODE}]: its headline's ${part} names`,
+            missing: said,
+            tail: (roles) =>
+              `so the headline goes without it for ${roles.length === 1 ? 'that role' : 'them'}. ` +
+              `${grantFix(roles, fix)}, or leave it out of the headline.`,
+          },
+          role,
+        );
+      }
+      if (fieldAccessiblePage(view.served, page)) continue;
       // Left out for this role, section by section (readablePage), or the whole page when nothing of it reads.
       const kept = readablePage(view.served, page);
       /* A related list the role reads but does not write into is drawn without its New, which is what a create
@@ -369,12 +426,11 @@ export function appRoleReach(
         return [{ where, what: found }];
       });
       const first = culprits.find((culprit) => culprit.what) ?? culprits[0];
-      const feature = loaded.origins?.pages[page.id];
       const { said: missing, fix } = explain(first?.what ?? 'something');
       note(
         warnings,
         {
-          file: relative(home, loaded.sources[page.id] ?? loaded.path) || loaded.path,
+          file,
           head: `${feature ? `features "${feature}", ` : ''}page "${page.name}" [${CODE}]: ${first ? first.where : 'it'} names`,
           missing,
           tail: (roles) =>
@@ -387,11 +443,36 @@ export function appRoleReach(
       );
     }
   }
+  /* The signed-out visitor is served what `auth.public` names, so a headline it reads is judged against that
+     grant too: the asking rent on a listing without the rent a square foot beside it. */
+  const visitor = visitorView(app, schema);
+  const visitorWarnings: string[] = [];
+  if (visitor)
+    for (const page of loaded.pages) {
+      const checked = validatePage(whole, page);
+      if (checked.error) continue;
+      const base = tableNamed(visitor.served, checked.base);
+      if (!base) continue;
+      const feature = loaded.origins?.pages[page.id];
+      const file = relative(home, loaded.sources[page.id] ?? loaded.path) || loaded.path;
+      for (const { part, missing } of headlineGaps(whole, visitor, base.id, checked.sections)) {
+        const [table, column] = missing.slice(1, -1).split(/\.(?=[^.]+$)/);
+        const fix = missing.startsWith('the rollup')
+          ? 'Give the public grant what that rollup reads'
+          : column === undefined
+            ? `Add "${table}" to auth.public.read`
+            : `Add "${column}" to auth.public.fields.${table}.read`;
+        visitorWarnings.push(
+          `${file}: ${feature ? `features "${feature}", ` : ''}page "${page.name}" [${CODE}]: its headline's ${part} names ${missing}, ` +
+            `which the public grant cannot read, so the headline goes without it for a signed-out visitor. ${fix}, or leave it out of the headline.`,
+        );
+      }
+    }
   const say = (finding: Finding) =>
     finding.head.endsWith(' names')
       ? `${finding.file}: ${finding.head} ${finding.missing}, which ${whose(finding.roles)} cannot read, ${finding.tail(finding.roles)}`
       : `${finding.file}: ${finding.head}: ${whose(finding.roles)} cannot read ${finding.missing}, ${finding.tail(finding.roles)}`;
-  return { problems: [...problems.values()].map(say), warnings: [...warnings.values()].map(say) };
+  return { problems: [...problems.values()].map(say), warnings: [...[...warnings.values()].map(say), ...visitorWarnings] };
 }
 
 /* Where the App plainly means rows to be made by hand: a New form it dresses,

@@ -240,7 +240,11 @@ export function CalendarList({ table, spec, entry, interactive = true, label, re
       mounted.current = false;
     };
   }, []);
-  useEffect(() => {
+  /* A layout effect, not a passive one: a move is drawn by a synchronous flush, and React first runs the passive effects
+     still pending from the drag's last render — one of those would find the card on the day it is leaving, focus the
+     button that is about to go, and spend the refocus. Layout effects never wait, so the first to see a refocus is the
+     move's own render, with the card on its new day. */
+  useLayoutEffect(() => {
     const card = refocus.current ? cardRefs.current.get(refocus.current) : undefined;
     if (card) {
       card.focus();

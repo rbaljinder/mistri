@@ -13,7 +13,7 @@ Write `ui.theme` with the look and a palette, an accent or a theme with `brand`:
 | The App is | Look | Example |
 | --- | --- | --- |
 | Operations, field work, a desk, anything run from a dashboard home | `preset: 'workshop'` (the default) | `mistri docs looks` |
-| A polished workspace product: sales, a client-facing desk | `preset: 'lumen'` | [lintel/app.ts:177](../../../examples/apps/lintel/app.ts#L177) |
+| A polished workspace product: sales, a client-facing desk | `preset: 'lumen'` | [lintel/app.ts:178](../../../examples/apps/lintel/app.ts#L178) |
 | Dense back office: ledgers, admin tables, read in rows all day | `preset: 'mono'` | `mistri docs looks` |
 | People, care, scheduling: soft cards, a calmer page | `preset: 'sage'` | `mistri docs looks` |
 | Books and figures kept in ruled columns | `preset: 'ledger'` | `mistri docs looks` |
@@ -37,7 +37,7 @@ Write `ui.theme` with the look and a palette, an accent or a theme with `brand`:
   App and a settings dashboard with `brandingForm('Branding')`; the tenant can
   never change grounds, ink or recipes, and every save is validated as a theme.
 - **A mark** (`ui.logo`) and an `icon` on every view, of what it lists —
-  [lintel/app.ts:176](../../../examples/apps/lintel/app.ts#L176),
+  [lintel/app.ts:177](../../../examples/apps/lintel/app.ts#L177),
   [lintel/views.ts:25](../../../examples/apps/lintel/views.ts#L25).
 
 ## Make it look like the domain
@@ -255,7 +255,7 @@ sections follow the period, and say "now" figures in their `query` without it.
 ## Copy: en-US, sentence case, the reader's words
 
 - `locale`, `timezone` and `currency` in `ui` —
-  [lintel/app.ts:193](../../../examples/apps/lintel/app.ts#L193).
+  [lintel/app.ts:194](../../../examples/apps/lintel/app.ts#L194).
 - Sentence case, American spelling. A heading names what the section shows,
   never "Details", "Info" or "Data".
 - A form's `description` says in one sentence what a new record is for; a

@@ -286,6 +286,7 @@ public fields unit read listed — the App
 public fields unit read market_rent — the App
 public fields unit read number — the App
 public fields unit read property_id — the App
+public fields unit read rent_per_sqft — the App
 public fields unit read sqft — the App
 public form request-viewing runs command requestViewing version 1 — the App
 
@@ -301,7 +302,7 @@ contract messageOffice v1 2bf332f75f6d
 contract postRent v1 093d4704700e
 contract recordPayment v1 8cbb7afe63d3
 contract replyToResident v1 06e717f79b8a
-contract reportIssue v1 59f64cdf7961
+contract reportIssue v1 13b4da6cefc4
 contract requestViewing v1 a5a2d207dd5a
 contract scheduleVisit v1 ef34b8de7203
 contract settleCharge v1 b17c3db7792a

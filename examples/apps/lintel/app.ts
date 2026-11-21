@@ -154,6 +154,7 @@ export default defineApp({
             'bathrooms',
             'sqft',
             'market_rent',
+            'rent_per_sqft',
             'listed',
             'available_on',
             'headline',
