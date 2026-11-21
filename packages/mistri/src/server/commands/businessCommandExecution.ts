@@ -17,13 +17,8 @@ import {
   type UpdateResult,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
-import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
-import {
-  AUDIT_PART_ENTRIES,
-  AUDIT_TARGET_ENTRIES,
-  COMMAND_TARGET_BOUNDS,
-  type ReceiptActorKind,
-} from '../../adapters/commands/commandJournalSchema.js';
+import { CommandTransactionFailure, TrialRolledBack } from '../../adapters/commands/commandJournal.js';
+import { AUDIT_PART_ENTRIES, AUDIT_TARGET_ENTRIES, type ReceiptActorKind } from '../../adapters/commands/commandJournalSchema.js';
 import type { ProposalEvidence } from '../../adapters/commands/commandJournalTypes.js';
 import { scopedAudit, splitAudit } from '../../adapters/commands/commandAuditParts.js';
 import { EffectBodyTooLarge, EffectProjectionRefused, type CommandEventBatch } from '../../adapters/events/commandEventTypes.js';
@@ -94,7 +89,8 @@ import { lookupFileReader, stagedOwner, takeHeldFiles } from './stagedFiles.js';
 import type { CommandFileRule } from './businessCommandAuthorization.js';
 import { openSavedDraft, type SavedDraftRun } from '../forms/savedForms.js';
 import { currentSpan, errorCode, inSpan, tracing } from '@mistriwork/engine/adapters/telemetry/trace.js';
-import { authorFault, isRequestFault, refusalCause, refusalReasons } from '@mistriwork/engine/shared/refusal.js';
+import { authorFault, isRequestFault, refusalReasons } from '@mistriwork/engine/shared/refusal.js';
+import { AUDIT_TARGET_BYTES, auditRefusal, developerError, fileInsert, footprintFailure, withoutRevealed } from './commandWriteGuards.js';
 import { handlerNextNumber } from '../../adapters/commands/commandSequences.js';
 import { handlerLinks, mintQueued } from '../links/linkMint.js';
 import { bindMoments, commandConstant, machineInsert, machineUpdate } from './commandWriteStamps.js';
@@ -224,6 +220,32 @@ class ReceiptTaken extends Error {}
 export type BusinessCommandStatus = BusinessCommandResult | { status: 'not_found'; outcome: 'unknown' };
 
 /**
+ * A command run as a trial (`trialBusinessCommand`): the handler ran and its transaction rolled back, with the rows
+ * it would write counted by table; or it was not run at all, because it calls a provider whose call cannot be taken
+ * back.
+ */
+type CommandTrial =
+  | { status: 'trial'; ran: true; writes: Readonly<Record<string, number>>; result: unknown }
+  | { status: 'trial'; ran: false; reason: 'provider' };
+
+/**
+ * Run a command as `executeBusinessCommand` would, under the same grants, lease and row policy, in a transaction
+ * that is always rolled back: no receipt, no journal entry (its idempotency key stays unspent), no effects queued
+ * and nothing started after a commit. A command that calls a provider (`integrations`) is not run: its call would
+ * go out. A refusal is thrown as the command would throw it. What an import's check says (app/appImport.ts).
+ */
+export async function trialBusinessCommand(
+  binding: BusinessCommandBinding,
+  actor: BusinessCommandActor,
+  rawRequest: unknown,
+  options: Omit<ExecutionOptions, 'statusOnly' | 'proposalId' | 'analytics'> = {},
+): Promise<CommandTrial> {
+  return (await executeObserved(binding, actor, rawRequest, { ...options, trial: true })) as CommandTrial;
+}
+
+type RunOptions = ExecutionOptions & { trial?: true };
+
+/**
  * Execute trusted server TypeScript within one database transaction, SQLite
  * or PostgreSQL, whichever the source's `commandTransaction` opens. Session
  * verification belongs to the caller; business eligibility and conditional
@@ -245,8 +267,10 @@ export async function executeBusinessCommand(
   binding: BusinessCommandBinding,
   actor: BusinessCommandActor,
   rawRequest: unknown,
-  options: ExecutionOptions = {},
+  given: ExecutionOptions = {},
 ): Promise<BusinessCommandStatus> {
+  // A trial is asked for by name (trialBusinessCommand), never carried in on options spread from elsewhere.
+  const { trial: _trial, ...options } = given as RunOptions;
   const recorder = options.analytics ?? (options.statusOnly ? undefined : commandRecorders.get(actor.appId));
   if (recorder && !options.statusOnly) {
     const { analytics: _own, ...rest } = options;
@@ -262,15 +286,15 @@ export async function executeBusinessCommand(
       throw error;
     }
   }
-  return executeObserved(binding, actor, rawRequest, options);
+  return executeObserved(binding, actor, rawRequest, options) as Promise<BusinessCommandStatus>;
 }
 
 async function executeObserved(
   binding: BusinessCommandBinding,
   actor: BusinessCommandActor,
   rawRequest: unknown,
-  options: ExecutionOptions,
-): Promise<BusinessCommandStatus> {
+  options: RunOptions,
+): Promise<BusinessCommandStatus | CommandTrial> {
   if (!tracing()) return executeUntraced(binding, actor, rawRequest, options);
   /* The command's span: its id and version, how it came out and the refusal
      code travel; its input, its output and a refusal's recorded cause stay
@@ -327,8 +351,9 @@ async function executeUntraced(
   binding: BusinessCommandBinding,
   actor: BusinessCommandActor,
   rawRequest: unknown,
-  options: ExecutionOptions = {},
-): Promise<BusinessCommandStatus> {
+  options: RunOptions = {},
+): Promise<BusinessCommandStatus | CommandTrial> {
+  const trial = options.trial === true;
   let transactionStarted = false;
   const scoped = binding.scoped === true;
   // What a refusal may name: only a key the request itself listed, and only
@@ -585,6 +610,10 @@ async function executeUntraced(
       commandVersion: command.version,
       idempotencyKey: request.idempotencyKey,
     };
+    /* A trial is a first attempt that never commits: it neither reads a receipt nor runs for a proposal. A command
+       that calls a provider is answered unrun, before lookup, since a call that went out cannot be rolled back. */
+    if (trial && (options.statusOnly || options.proposalId !== undefined)) throw new AppAccessDenied();
+    if (trial && Object.keys(command.integrations ?? {}).length) return { status: 'trial', ran: false, reason: 'provider' };
     const answer = (receiptId: string, result: unknown, replayed: boolean): BusinessCommandResult => ({
       status: 'applied',
       receiptId,
@@ -621,22 +650,24 @@ async function executeUntraced(
       /* A lookup's reads of audited resources — its sources' and the target as it stands — are written as the
          handler's are, under this command; one the audit refuses fails the lookup, so the command, as any lookup failure. */
       const audited = authorized.audited;
-      const lookupQuery: typeof reader.query = audited?.lookups.size
-        ? async (source, local, read) => {
-            const result = await reader.query(source, local, read);
-            const found = audited.lookups.get(source)?.get(local);
-            if (found)
-              await auditCommandRead(authorized.readAudit, request.command, {
-                ...found,
-                keys: reader.catalogs[source]?.[local]?.key ?? [],
-                groups: read.filter?.groups,
-                sort: read.orderBy,
-                offset: read.offset,
-                rows: result.rows,
-              });
-            return result;
-          }
-        : reader.query;
+      // A trial writes no read audit: it is rolled back, and its reads are said again by the run it previews.
+      const lookupQuery: typeof reader.query =
+        audited?.lookups.size && !trial
+          ? async (source, local, read) => {
+              const result = await reader.query(source, local, read);
+              const found = audited.lookups.get(source)?.get(local);
+              if (found)
+                await auditCommandRead(authorized.readAudit, request.command, {
+                  ...found,
+                  keys: reader.catalogs[source]?.[local]?.key ?? [],
+                  groups: read.filter?.groups,
+                  sort: read.orderBy,
+                  offset: read.offset,
+                  rows: result.rows,
+                });
+              return result;
+            }
+          : reader.query;
       const targetAudit = audited?.tables.get(command.target);
       try {
         const before: UntypedRow[] = [];
@@ -644,7 +675,7 @@ async function executeUntraced(
           for (const key of list.keys) {
             const exact = canonicalKey(table, key);
             const row = exact ? await reader.target(exact) : undefined;
-            if (exact && targetAudit) {
+            if (exact && targetAudit && !trial) {
               await auditCommandRead(authorized.readAudit, request.command, {
                 ...targetAudit,
                 keys: table.key,
@@ -884,8 +915,9 @@ async function executeUntraced(
             const readsTargets = command.targets !== 'none' && !creating;
             if (track === undefined || !readsTargets) await assertTargets();
             // Nothing to replay without a receipt: a refusal is this attempt's own.
-            if (track === 'none') priorOutcomeUnknown = false;
-            const saved = track === undefined ? await journal.find(scope, events?.expectation) : undefined;
+            // A trial answers no receipt and keeps none: whatever it refuses is its own, and rolled back.
+            if (track === 'none' || trial) priorOutcomeUnknown = false;
+            const saved = track === undefined && !trial ? await journal.find(scope, events?.expectation) : undefined;
             if (scoped && !saved && track === undefined) priorOutcomeUnknown = false;
             if (saved) {
               if (saved.fingerprint !== fingerprint) throw new BusinessCommandExecutionError('idempotency_conflict');
@@ -917,7 +949,7 @@ async function executeUntraced(
          lock — and a taken one is replayed by the receipt-first lookup, so a
          retry never runs the handler again. A delivery racing its original
          is caught by the receipt's insert at commit instead. */
-            if (track !== undefined && track !== 'none') {
+            if (track !== undefined && track !== 'none' && !trial) {
               if (typeof journal.insert !== 'function' || typeof journal.taken !== 'function')
                 throw new BusinessCommandExecutionError('temporarily_unavailable');
               if (await journal.taken(scope)) throw new ReceiptTaken();
@@ -1036,6 +1068,11 @@ async function executeUntraced(
             };
             /* The rows this command has made on its target, by key text: a public command's link names the one it made. */
             const madeOnTarget: string[] = [];
+            /* The rows a trial would write, by table: what an import's check says each run would do. */
+            const trialWrites: Record<string, number> = {};
+            const tally = (table: string, rows: number) => {
+              if (trial && rows > 0) trialWrites[table] = (trialWrites[table] ?? 0) + rows;
+            };
             const { written: wroteOnTarget, wrote } = targetWrites(authorized, command.target);
             /* One insert as the handler asked it, written through `write`: the store's own insert for one row, one row of
              one statement for a batch (adapter.ts gathered), with the same stamps, footprint and audit either way. */
@@ -1055,6 +1092,7 @@ async function executeUntraced(
                 if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
                 throw error;
               }
+              tally(request.table, 1);
               if (request.table === command.target && result.key !== undefined) {
                 madeOnTarget.push(commandKeyText(result.key));
                 wrote(result.key, Object.keys(request.values), said);
@@ -1114,6 +1152,7 @@ async function executeUntraced(
                 else if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
                 throw error;
               }
+              tally(request.table, result.affected);
               if (before && before.rows.length !== 1) {
                 throw recordRefusalCause(
                   new BusinessCommandExecutionError('invalid_result'),
@@ -1220,6 +1259,7 @@ async function executeUntraced(
                   const own = request.table === command.target ? heldKey(request.key) : undefined;
                   if (own && !held.has(own)) await authorized.assertTarget?.(records, request.key);
                   const result = await store.remove(request);
+                  tally(request.table, result.affected);
                   if (own) {
                     held.delete(own);
                     if (result.affected === 1) removed.add(own);
@@ -1234,7 +1274,7 @@ async function executeUntraced(
             });
             /* The handler's `db` has a transaction with batches beside it; `context.tx`, the escape hatch, keeps its
              one-row surface. A batch: each row through everything above, its write one row of one statement. A store
-             that carries none (a draft, a scoped or tenant writer) leaves these out, and the db writes a row at a time. */
+             that carries none (a draft, a SQLite row scope) leaves these out, and the db writes a row at a time. */
             const batched = Object.freeze<WriteTransaction>({
               ...tx,
               ...(store.insertMany
@@ -1865,6 +1905,8 @@ async function executeUntraced(
                   events: eventBatch!.map((event) => ({ name: event.name, version: event.version, payload: event.payloadJson })),
                 }));
               checkCancelled();
+              // A trial ends here, before its receipt, provenance, links and journal: thrown, so all of it rolls back.
+              if (trial) throw new TrialRolledBack(trialWrites, JSON.parse(resultJson));
               const id = randomUUID();
               const completedAt = now().toISOString();
               // One receipt names every target through its audit rows, in order.
@@ -1931,6 +1973,14 @@ async function executeUntraced(
     }
     return committed;
   } catch (error) {
+    /* A trial's end: its transaction rolled back, so what it would have started after a commit is dropped and the
+       files it placed are deleted. Only one known rolled back is answered so; an unknown outcome is said as one. */
+    const ended = error instanceof CommandTransactionFailure ? error.cause : error;
+    if (ended instanceof TrialRolledBack && !(error instanceof CommandTransactionFailure && error.outcome === 'unknown')) {
+      afterCommit.length = 0;
+      for (const placed of placedFiles.splice(0)) await placed.discard();
+      return { status: 'trial', ran: true, writes: ended.writes, result: ended.result };
+    }
     let cause = footprintFault ?? (error instanceof CommandTransactionFailure ? error.cause : error);
     /* The fresh path checked for its receipt without a lock, so a delivery
        of the same request can commit after the check: this attempt then
@@ -1949,7 +1999,7 @@ async function executeUntraced(
       (isBusinessCommandExecutionError(reason) &&
         ['stale_record', 'ineligible_state', 'not_found', 'duplicate_record'].includes(reason.code)) ||
       writeFailureKind(reason) === 'unique';
-    if (tracked && rolledBack && racedBy(cause)) {
+    if (tracked && !trial && rolledBack && racedBy(cause)) {
       try {
         const status = await executeUntraced(binding, actor, rawRequest, { ...options, statusOnly: true, door: undefined });
         if (status.status === 'applied') return status;
@@ -1966,7 +2016,8 @@ async function executeUntraced(
        rollback known to have happened: an attempt whose commit may have landed keeps nothing more. A keep the record
        moved under is run again, three times at most; a keep that fails is what the caller hears, since what the
        refusal had to leave behind is not there. */
-    const keep = rolledBack && !options.statusOnly && keepRefused ? refusalKeep(cause) : undefined;
+    // A trial keeps nothing: what a refusal would leave behind is the real run's to leave.
+    const keep = rolledBack && !options.statusOnly && !trial && keepRefused ? refusalKeep(cause) : undefined;
     if (keep) {
       for (let attempt = 0; ; attempt++) {
         try {
@@ -2102,41 +2153,11 @@ export function lookupBusinessCommandStatus(
   return executeBusinessCommand(binding, actor, rawRequest, { ...options, statusOnly: true });
 }
 
-/* Why a change could not go into the command's audit, in the author's terms:
-   the entry is JSON, so a binary value (a Buffer handed to db.insert) cannot
-   be one, and each target's entries are bounded at 64 KiB. Said to the
-   operator (refusalReport.ts); the caller hears invalid_result. */
-/* What one target's audit may hold is what the journal's column holds. It was 64 KiB, below a single text a
-   command may take (65,536 characters, up to 4 bytes each, before and after), so a valid write was refused. */
-const AUDIT_TARGET_BYTES = COMMAND_TARGET_BOUNDS.changes;
-
-function auditRefusal(command: string, change: Record<string, unknown>): string {
-  const where = typeof change.resource === 'string' ? change.resource : 'a resource';
-  for (const side of ['values', 'before', 'after']) {
-    const image = change[side];
-    if (!image || typeof image !== 'object') continue;
-    for (const [column, value] of Object.entries(image)) {
-      if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) {
-        return (
-          `Command "${command}" wrote a binary value to ${where}.${column}; a command's audit keeps JSON values only ` +
-          '(text, numbers, booleans, null), so store bytes through a file resource or as text.'
-        );
-      }
-    }
-  }
-  return (
-    `Command "${command}"'s changes to ${where} are over the 4 MiB its audit keeps for one target; ` +
-    'write smaller values, or fewer rows per command.'
-  );
-}
-
 /* ---------- what a new row may carry ---------- */
 
 /** One carried row's key, as one string: a row is the same row before and after its handler. */
 const carriedKey = (key: readonly string[], row: Record<string, unknown>) => JSON.stringify(key.map((column) => String(row[column])));
 
-type Authorized = import('./businessCommandAccess.js').AuthorizedBusinessCommand;
-const developerError = (cause: string) => authorFault(new BusinessCommandExecutionError('invalid_result'), cause);
 /* How many more times a refusal's keep runs when the record moved under it. */
 /* An authorization made without an App to read (a test's) names no public view. */
 const noPublicLinks = (view: string): never => {
@@ -2144,103 +2165,3 @@ const noPublicLinks = (view: string): never => {
 };
 
 const KEEP_RETRIES = 3;
-
-/**
- * A reference a command's write sets must land in the command's footprint
- * (G67): a table it does not read is one whose row nothing proves, which a
- * scoped write refused as a row it could not see — an unexplained retry. The
- * handler's mistake, said as one: invalid_result, never a retry, the table
- * named for the operator, when the scoped write refuses the row — a row its
- * place forbids (a tenant's ownership column set to another tenant) stays
- * forbidden. Only what the write sets is judged: a row's other references
- * were proved when they were written. Said here and not at startup, since a
- * command that names no record may create rows in its target or only update
- * them, and startup cannot tell which (field report R10: an update-only
- * command was refused for not reading every table a new row would point at).
- */
-function footprintFailure(
-  commandId: string,
-  authorized: Authorized,
-  request: { table: string; values: Readonly<Record<string, unknown>> },
-): unknown {
-  const meta = authorized.catalog?.[request.table]?.meta;
-  if (!meta) return;
-  const footprint = new Set([...(authorized.command.read ?? []), ...(authorized.command.write ?? [])]);
-  for (const column of meta.columns) {
-    const to = column.references?.table;
-    const value = request.values[column.name];
-    if (!to || value === undefined || value === null || footprint.has(to)) continue;
-    return developerError(
-      `Command "${commandId}" set ${request.table}.${column.name}, which points at a "${to}" row, and "${to}" is not in the command's ` +
-        `footprint: add "${to}" to its read, so the reference is proved against the rows it reads.`,
-    );
-  }
-}
-
-/**
- * Bytes go only into a file resource's content (or thumbnail) column, within
- * its cap — the upload's rule (http/fileRows.ts) — and the audit keeps the
- * file's name, type and size where the bytes were, never the bytes. Returns
- * that stand-in for the audit's after-image; undefined for a row with none.
- */
-function fileInsert(
-  commandId: string,
-  authorized: Authorized,
-  request: { table: string; values: Record<string, unknown> },
-): Record<string, unknown> | undefined {
-  const binary = Object.entries(request.values).filter(([, value]) => ArrayBuffer.isView(value) || value instanceof ArrayBuffer);
-  if (!binary.length) return undefined;
-  const rule = authorized.files?.get(request.table);
-  if (!rule)
-    throw developerError(
-      `Command "${commandId}" wrote bytes to ${request.table}.${binary[0][0]}, which is not a file resource it writes: ` +
-        "a command stores bytes only through a resource's `file`, with db.<table>.insertFile(file, values).",
-    );
-  const said: Record<string, unknown> = {};
-  for (const [column, value] of binary) {
-    if (column !== rule.content && column !== rule.thumbnail)
-      throw developerError(
-        `Command "${commandId}" wrote bytes to ${request.table}.${column}; a file resource keeps bytes in "${rule.content}"` +
-          (rule.thumbnail ? ` and "${rule.thumbnail}"` : '') +
-          '.',
-      );
-    const size = (value as ArrayBufferView | ArrayBuffer).byteLength;
-    if (size > rule.maxBytes)
-      throw developerError(
-        `Command "${commandId}" wrote ${size} bytes to ${request.table}.${column}; the resource takes files up to ${rule.maxBytes} bytes.`,
-      );
-    said[column] = {
-      file: typeof request.values[rule.name] === 'string' ? request.values[rule.name] : null,
-      ...(rule.type && typeof request.values[rule.type] === 'string' ? { type: request.values[rule.type] } : {}),
-      bytes: size,
-    };
-  }
-  return said;
-}
-
-/* A handler that throws with a revealed value in its words would put it on the operator's stderr and in an author's
-   answer (refusalReport): the error leaves this call with the value cut from its message, its stack and its reasons. */
-async function withoutRevealed<T>(revealed: Record<string, string>, run: () => Promise<T>): Promise<T> {
-  try {
-    return await run();
-  } catch (error) {
-    const values = Object.values(revealed).filter((value) => value.length >= 4);
-    if (values.length && error instanceof Error) {
-      const cut = (text: string) => values.reduce((said, value) => said.split(value).join('[sensitive]'), text);
-      error.message = cut(error.message);
-      if (error.stack) error.stack = cut(error.stack);
-      scrubReasons(error, cut);
-    }
-    throw error;
-  }
-}
-
-function scrubReasons(error: Error, cut: (text: string) => string): void {
-  const seen = new Set<unknown>([error]);
-  for (let because = refusalCause(error) ?? error.cause, depth = 0; because instanceof Error && !seen.has(because) && depth < 8; depth++) {
-    seen.add(because);
-    because.message = cut(because.message);
-    if (because.stack) because.stack = cut(because.stack);
-    because = refusalCause(because) ?? because.cause;
-  }
-}

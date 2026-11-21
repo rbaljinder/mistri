@@ -3,7 +3,9 @@ import {
   TransactionOperations,
   TransactionOutcomeUnknown,
   type AggregateRequest,
+  type InsertRequest,
   type TellRequest,
+  type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
@@ -313,6 +315,43 @@ export async function runTenantCommandTransaction<T>(
         const result = await tx.update({ ...value, table });
         return { affected: result.affected, applied: project(table, result.applied), sql: { text: '', params: [] } };
       }),
+    /* A batch is its rows, each judged here as `insert` and `update` judge one (the table, a public submission's
+       limits, the key), then sent down whole so the writer beneath pays its round trips once. There is no batch
+       remove: removing counts each row's references, and that stays one row at a time. */
+    ...(tx.insertMany && tx.updateMany
+      ? {
+          insertMany: (inputs: readonly InsertRequest[]) =>
+            invoke(inputs, async (values) => {
+              const requests = values.map((value) => ({ ...value, table: authorization.table(value.table, true) }));
+              const results = await tx.insertMany!(requests);
+              return results.map((result, index) => {
+                const table = requests[index]!.table;
+                return {
+                  key: project(table, result.key),
+                  applied: project(table, result.applied),
+                  ...(result.row ? { row: project(table, result.row) } : {}),
+                  sql: { text: '', params: [] },
+                };
+              });
+            }),
+          updateMany: (inputs: readonly UpdateRequest[]) =>
+            invoke(inputs, async (values) => {
+              const requests = values.map((value) => {
+                const table = authorization.table(value.table, true);
+                if (!place.updates)
+                  throw refused(`a public submission updates no ${value.table} row here: it lands with the platform, which only inserts`);
+                keyFor(table, value.key);
+                return { ...value, table };
+              });
+              const results = await tx.updateMany!(requests);
+              return results.map((result, index) => ({
+                affected: result.affected,
+                applied: project(requests[index]!.table, result.applied),
+                sql: { text: '', params: [] },
+              }));
+            }),
+        }
+      : {}),
     remove: (input) =>
       invoke(input, async (value) => {
         const table = authorization.table(value.table, true);

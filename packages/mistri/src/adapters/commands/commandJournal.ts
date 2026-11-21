@@ -69,6 +69,19 @@ export class CommandTransactionFailure extends Error {
   }
 }
 
+/* A trial's handler finished: thrown where the receipt would be written, so the transaction rolls back with
+   everything it wrote, and caught by the executor as the trial's answer. A writer that queues operations must not
+   record it as the transaction's failure (tenantRequestRuntime.ts): the rollback is the trial working. */
+export class TrialRolledBack extends Error {
+  constructor(
+    readonly writes: Readonly<Record<string, number>>,
+    readonly result: unknown,
+  ) {
+    super('trial rolled back');
+    this.name = 'TrialRolledBack';
+  }
+}
+
 // SQLite stores canonical CREATE text without the schema qualifier.
 const inMain = (ddl: string) => ddl.replace(/^CREATE (TABLE|INDEX) /, 'CREATE $1 main.');
 

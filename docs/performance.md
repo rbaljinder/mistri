@@ -137,9 +137,15 @@ unintended statement fails a test.
   its `updateWhere(where, changes)` one read and one `UPDATE … SET c = CASE …`
   guarded per row, plus one before-image read when the command keeps an audit
   (a batch past the engine's parameter limit is split); each row still meets every check a single write
-  meets, run beside the statement rather than as one. A tenant writer, a row
-  scope and a draft have no batch form and write a row at a time
-  (`test/command-bulk-writes.test.ts`, `test/adapter-batch-writes.test.ts`).
+  meets, run beside the statement rather than as one. On PostgreSQL a tenant
+  writer and a row scope write the batch the same way, each row's scope and
+  parent checks run beside it, so 200 rows take the round trips 50 do
+  (`test/postgres-tenant-flights.test.ts`); SQLite's row scope and a draft
+  write a row at a time. Under a scope, a table with a trigger that reads other
+  rows, or a reference to itself, is also written a row at a time, so each row
+  sees the ones before it
+  (`test/command-bulk-writes.test.ts`, `test/adapter-batch-writes.test.ts`,
+  `test/postgres-tenant-batch-writes.test.ts`).
 - **Pages by key.** Next, Previous and Last read the rows after or before the
   ones on screen; a typed page number is read by offset, refused past 10,000.
 - **Long SQLite reads off the thread.** A count, filter or sort over 250,000

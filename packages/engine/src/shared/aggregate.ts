@@ -115,9 +115,9 @@ function aggregateBreakdown(schema: DatabaseSchema, request: AggregateRequest): 
   });
   const groups = (request.filter?.groups ?? []).map((group) =>
     group.map((condition): ViewCondition => {
-      /* A comparison with another column, or rows that point here (`any`), reads past this table's own values:
+      /* A comparison with another column, rows that point here (`any`), or another table's rows (`within`), reads past this table's own values:
          neither is a condition a command's where writes (compileWhere), and neither is taken here. */
-      if (condition.any !== undefined || condition.other !== undefined)
+      if (condition.any !== undefined || condition.other !== undefined || condition.within !== undefined)
         throw new RequestFault("An aggregate's where compares the table's own columns with values.");
       return {
         path: column(condition.column, 'where'),

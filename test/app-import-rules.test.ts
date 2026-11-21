@@ -5,14 +5,18 @@ import {
   checkImports,
   importErrorCsv,
   importFields,
+  importProblem,
   mappingProblem,
+  parseImportDef,
   parseLocaleDate,
   parseLocaleNumber,
   readCell,
   suggestMapping,
   type ImportField,
 } from '../packages/mistri/src/shared/appImport.js';
-import type { TableMeta } from '../packages/engine/src/shared/schema.js';
+import type { DatabaseSchema, TableMeta } from '../packages/engine/src/shared/schema.js';
+import type { AppImportDef } from '../packages/mistri/src/shared/appImportDeclaration.js';
+import { importRuns } from '../packages/mistri/src/server/app/appImport.js';
 
 const limits = { maxRows: 10, maxColumns: 5, maxField: 20 };
 
@@ -155,4 +159,84 @@ test('a command import is refused at load on a row-policy App; a tenant App serv
   assert.doesNotThrow(() =>
     checkImports({ auth: { rows: 'tenant' }, resources: { loan: { import: { command, match: ['code'] } } }, views: {} }, 'fixture'),
   );
+});
+
+/* An order placed from a sheet: one row per line, the order's number on each. */
+const order: TableMeta = {
+  id: 'sales_order',
+  name: 'sales_order',
+  schema: '',
+  isView: false,
+  columns: [
+    { name: 'id', type: 'INTEGER', nullable: false, primaryKey: true },
+    { name: 'number', type: 'TEXT', nullable: false, primaryKey: false },
+  ],
+};
+const orderSchema: DatabaseSchema = { label: 'sales', dialect: 'sqlite', tables: [order], foreignKeys: [], readAt: '' };
+const lines = {
+  name: 'lines',
+  label: 'Lines',
+  type: 'group',
+  repeat: { max: 3 },
+  fields: [
+    { name: 'sku', label: 'Item code', type: 'text', required: true },
+    { name: 'quantity', label: 'Quantity', type: 'number', integer: true, required: true },
+  ],
+};
+const placeOrder = (input: object[]) =>
+  ({ id: 'placeOrder', version: 1, target: 'sales_order', targets: 'none', input }) as unknown as NonNullable<AppImportDef['command']>;
+const numberInput = { name: 'number', label: 'Number', type: 'text', required: true };
+
+test('consecutive rows that agree on the group columns are one run; rows are never reordered, and an empty cell stands alone', () => {
+  const row = (number: string, lookup?: string) => ({
+    values: { number } as Record<string, unknown>,
+    lookups: new Map(lookup ? [['number', lookup]] : []),
+  });
+  const rows = [row('A'), row('A'), row('B'), row('A'), row(''), row(''), row('C'), row('7', 'C')];
+  const runs = importRuns(rows, ['number']);
+  assert.deepEqual(
+    runs.map((run) => run.map((member) => rows.indexOf(member))),
+    [[0, 1], [2], [3], [4], [5], [6, 7]],
+    'A again after B starts a run of its own; a reference reads by the text the file said',
+  );
+  assert.deepEqual(
+    importRuns(rows, undefined).map((run) => run.length),
+    rows.map(() => 1),
+  );
+});
+
+test('a group is declared with its command, on one repeated group, by top-level inputs', () => {
+  assert.throws(() => parseImportDef({ group: ['number'] }, 'resources.order'), /\[import-group-command\]/);
+  assert.throws(() => parseImportDef({ group: [] }, 'resources.order'), /"group" must list/);
+  const def = (input: object[], group = ['number']): AppImportDef => ({ command: placeOrder(input), group });
+  assert.equal(importProblem(def([numberInput, lines]), order, orderSchema), undefined);
+  assert.match(
+    importProblem(def([numberInput, { ...lines, repeat: undefined }]), order, orderSchema)!,
+    /\[import-group-repeat\].*has none/,
+  );
+  assert.match(
+    importProblem(def([numberInput, lines, { ...lines, name: 'notes' }]), order, orderSchema)!,
+    /\[import-group-repeat\].*has 2 \("lines", "notes"\)/,
+  );
+  assert.match(importProblem(def([numberInput, lines], ['lines']), order, orderSchema)!, /import group "lines" \[import-group-column\]/);
+  assert.match(
+    importProblem(def([numberInput, lines], ['customer']), order, orderSchema)!,
+    /import group "customer" \[import-group-column\]/,
+  );
+});
+
+test("a group's entries are columns of their own, mapped by the entry's own name", () => {
+  const fields = importFields(order, { command: placeOrder([numberInput, lines]), group: ['number'] });
+  assert.deepEqual(
+    fields.map((field) => [field.name, field.in ?? null, field.required]),
+    [
+      ['number', null, true],
+      ['lines.sku', 'lines', true],
+      ['lines.quantity', 'lines', true],
+    ],
+  );
+  // "SKU" is the entry's own name, not its caption or the group field's dotted one.
+  assert.deepEqual(suggestMapping(['Number', 'SKU', 'Quantity'], fields), ['number', 'lines.sku', 'lines.quantity']);
+  assert.deepEqual(suggestMapping(['Number', 'Item code', 'Qty'], fields), ['number', 'lines.sku', null]);
+  assert.equal(mappingProblem(['number', 'lines.sku', 'lines.quantity'], fields, 3), undefined);
 });

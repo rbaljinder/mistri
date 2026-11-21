@@ -20,9 +20,12 @@ export function scopedCommandInvoker(
   return <A, R>(input: A, work: (input: A) => Promise<R>, read = false): Promise<R> => {
     let captured = input;
     let invalid: { error: unknown } | undefined;
+    /* A batch (insertMany, updateMany) is its rows' requests, each captured and judged as it would be alone: one row's
+       bounds, not one bound over the whole batch. */
+    const batch = Array.isArray(input);
     if (scoped) {
       try {
-        captured = snapshotScopedData(input);
+        captured = (batch ? (input as unknown[]).map((request) => snapshotScopedData(request)) : snapshotScopedData(input)) as A;
       } catch (error) {
         invalid = { error };
       }
@@ -35,11 +38,10 @@ export function scopedCommandInvoker(
         if (
           command &&
           scoped &&
-          captured &&
-          typeof captured === 'object' &&
-          'table' in captured &&
-          typeof captured.table === 'string' &&
-          runtime(captured.table)
+          (batch ? (captured as unknown[]) : [captured]).some(
+            (request) =>
+              request && typeof request === 'object' && 'table' in request && typeof request.table === 'string' && runtime(request.table),
+          )
         ) {
           throw new Refusal('Reserved resources are runtime-only.');
         }

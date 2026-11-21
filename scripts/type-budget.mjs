@@ -228,11 +228,17 @@ const require = createRequire(join(ROOT, 'package.json'));
    rc.49: a tenant row rule's `when` reads the tenant's own columns, a resource action takes `submitLabel`, and the
    command context gains the tenant's time zone; names read once in the declarations, nothing per table (not
    isolated by a before/after run here). Synthetic measures 481,193 symbols (993 past), Ignition 242,640
-   instantiations (340 past) and 196,901 symbols (101 past). Those three rise to about 1.5% above; the rest hold. */
+   instantiations (340 past) and 196,901 symbols (101 past). Those three rise to about 1.5% above; the rest hold.
+   rc.74: a command's `where` takes `in: { from, where }`, and `from` names one of the tables that handle reads, so
+   each table's reader and writer carries the handle's reads (`ReadTable<Row, R>`, `Query<Row, R>`): one instantiation
+   of a table's methods per command handle rather than one for every handle. Ignition measures 68,627 / 250,325 /
+   202,861 (2.1%, 1.6%, 1.5% past). Typing the subquery's own `where` loosely took back 72 types and 328
+   instantiations, so the cost is the per-handle reads, not the subquery; taking it back means passing the reads as a
+   name lookup the methods do not carry. Ignition's three rise to about 1.5% above; the rest hold. */
 export const BUDGET = {
   synthetic: { types: 184_400, instantiations: 991_600, symbols: 488_400 },
   compass: { types: 32_500, instantiations: 149_000, symbols: 104_600 },
-  ignition: { types: 67_200, instantiations: 246_300, symbols: 199_900 },
+  ignition: { types: 69_700, instantiations: 254_100, symbols: 205_900 },
 };
 
 /* Seconds of an unloaded core, scaled from the process's wall time (`calibrate`): a

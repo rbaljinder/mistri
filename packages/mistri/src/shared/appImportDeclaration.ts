@@ -6,6 +6,9 @@
  */
 import type { AppCommandReference } from './command.js';
 
+/** The command an import runs: one that targets the record `match` finds, or one that creates (`targets: 'none'`). */
+export type ImportCommandReference = AppCommandReference | (Omit<AppCommandReference, 'targets'> & { targets: 'none' });
+
 /** How much one import may carry. The server refuses more before reading it; here, beside
     the declaration, so a route or transport that only sizes a request loads no parser. */
 export const IMPORT_LIMITS = Object.freeze({
@@ -23,12 +26,17 @@ export const IMPORT_LIMITS = Object.freeze({
  * What a resource or a view opts into. Empty (`import: true`) imports rows
  * as new records through the ordinary insert. With `command`, each row runs
  * that business command on the record `match` finds — for a resource whose
- * writes are the commands', where a plain insert is refused.
+ * writes are the commands', where a plain insert is refused. A creating
+ * command (`targets: 'none'`) runs where `match` is absent or finds nothing.
+ * With `group`, consecutive rows that agree on those columns are one run:
+ * one command input, its repeated group filled from every row of the run.
  */
 export interface AppImportDef {
-  command?: AppCommandReference;
+  command?: ImportCommandReference;
   /** A command import's columns that find the record a row runs on. */
   match?: string[];
+  /** A command import's columns that say which rows are one parent: consecutive rows that agree are one run. */
+  group?: string[];
 }
 
 export type ImportApp = {

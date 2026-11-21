@@ -786,7 +786,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.73: the App API's `service`, with its `roles` and `label` (three entries; every name was a key already): 1786/528.
     // 1.0.0-rc.73: a form view's `given`, and its done screen's `reference` and `home` (three entries, one new name): 1789/529.
     // 1.0.0-rc.73: a list view's head `link` (one entry; the name was a key already): 1790/529.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1792, names: 529 });
+    // 1.0.0-rc.74: a command import's `group`, the inputs that make consecutive rows one run (one entry; the name
+    // was a key already): 1793/529.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1793, names: 529 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {
@@ -907,10 +909,18 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     /* `group` came back as something else: the column a list view's grid groups its rows by, on a list view alone. */
     const { group: listGroup, ...listKeys } = appSchema.$defs.listView.properties;
     assert.equal(listGroup.type, 'string', "a list view's group names a column");
+    /* And again as a command import's `group`, the inputs that make consecutive rows one run, on an import alone. */
+    const [importFlag, importObject] = appSchema.$defs.importDecl.oneOf;
+    const { group: importGroup, ...importKeys } = importObject.properties;
+    assert.equal(importGroup.type, 'array', "an import's group lists the command's inputs");
     const app = declaredKeys({
       ...appSchema,
       properties: roots,
-      $defs: { ...appSchema.$defs, listView: { ...appSchema.$defs.listView, properties: listKeys } },
+      $defs: {
+        ...appSchema.$defs,
+        listView: { ...appSchema.$defs.listView, properties: listKeys },
+        importDecl: { ...appSchema.$defs.importDecl, oneOf: [importFlag, { ...importObject, properties: importKeys }] },
+      },
     });
     for (const gone of [
       'writable',

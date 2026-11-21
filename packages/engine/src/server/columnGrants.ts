@@ -476,8 +476,25 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
       for (const group of filter.groups)
         for (const condition of group)
           if (condition.any) assertAnyRows({ groups: [[{ ...condition, path: condition.column }]] });
-          else assertFields(table, [condition.column], 'read', server);
+          else {
+            assertFields(table, [condition.column], 'read', server);
+            if (condition.within !== undefined) assertWithin(condition.within, server);
+          }
     return filter;
+  };
+  /* `customer_id in (customer where region = west)` reads another table's rows: that table, the key the subquery
+     selects and every column its conditions name must be this reader's, as a read of that table would need. Its scope
+     is the statement's (scopedReads.ts), so a row policy on it narrows the keys as it narrows a list of its rows. */
+  const assertWithin = (within: NonNullable<Filter['groups'][number][number]['within']>, server: boolean) => {
+    if (!within || typeof within !== 'object' || typeof within.table !== 'string') throw new AppAccessDenied();
+    assertRead(within.table);
+    const key = schema.tables.find((item) => item.id === within.table)?.columns.filter((column) => column.primaryKey) ?? [];
+    if (key.length !== 1) throw new AppAccessDenied();
+    assertFields(within.table, [key[0].name], 'read', server);
+    for (const inner of within.filter?.groups.flat() ?? []) {
+      if (typeof inner.column !== 'string') throw new AppAccessDenied();
+      assertFields(within.table, [inner.column, ...(inner.other === undefined ? [] : [inner.other])], 'read', server);
+    }
   };
   const queryFor = (input: QueryRequest) => {
     const server = isServerRequest(input);

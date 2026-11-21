@@ -41,6 +41,13 @@ export interface Condition {
    */
   any?: AnyRows;
   /**
+   * The column's value is the key of a row of another table that matches: `customer_id in (customer where region =
+   * west)`. Written as `column IN (SELECT key FROM …)` over the other table's relation, so a row scope on that table
+   * narrows it as it narrows a list of its rows. `op` is `in` and `value` is absent. Only a builder that knows how to
+   * read that table (`buildWhere`'s `within`) compiles it; everywhere else it is refused, never dropped.
+   */
+  within?: WithinRows;
+  /**
    * Compare as a PostgreSQL foreign key compares a reference with its parent's key: by its own operator, named with
    * its schema, the value cast to the referencing column's type and each side to the operator's, as the database's
    * own check is written (ri_triggers.c). Read from the catalog for a scoped write's parent check
@@ -73,9 +80,34 @@ export interface InlineRows {
   readonly types?: (name: string) => string | undefined;
 }
 
-/** Whether a filter asks about the rows that point at the one read (`any`/`no`) anywhere. */
+/**
+ * The rows of a `within` condition (`Condition.within`): the table whose key the column is compared with, by its
+ * name in the read's namespace, and which of its rows count — conditions over its own columns compared with values.
+ */
+export interface WithinRows {
+  table: string;
+  filter?: Filter;
+}
+
+/**
+ * A `within` condition's rows as a builder resolved them (`buildWhere`'s `within`): the subquery that reads their key,
+ * `SELECT alias.key FROM relation alias`. Where `column` is given, the rows' own conditions are bound by `buildWhere`
+ * after it, in the statement's order; absent, the select carries them already (planned with the read's scope) and
+ * binds nothing here.
+ */
+export interface WithinPlan {
+  readonly select: string;
+  /** One of the rows' own columns, qualified; refuses a name the table does not hold. */
+  readonly column?: (name: string) => string;
+  /** A column's catalog type, where the style names its operators by schema. */
+  readonly types?: (name: string) => string | undefined;
+  /** The key's catalog type: with the compared column's, whether the comparison names the built-in operator. */
+  readonly key?: string;
+}
+
+/** Whether a filter asks about other rows — those that point at the one read (`any`/`no`), or another table's (`in`) — anywhere. */
 export const asksAboutRows = (filter: Filter | undefined): boolean =>
-  filter?.groups.some((group) => group.some((condition) => condition.any !== undefined)) === true;
+  filter?.groups.some((group) => group.some((condition) => condition.any !== undefined || condition.within !== undefined)) === true;
 
 /**
  * A filter whose `any`/`no` children are named in another namespace: a layer that renames the tables of a request
@@ -88,6 +120,8 @@ export function renamedAnyRows(filter: Filter | undefined, rename: (table: strin
     ...filter,
     groups: filter.groups.map((group) =>
       group.map((condition) => {
+        /* An `in`'s table is a table of the same read too. */
+        if (condition.within !== undefined) return { ...condition, within: { ...condition.within, table: rename(condition.within.table) } };
         if (condition.any === undefined) return condition;
         const { via } = condition.any;
         const at = via.lastIndexOf('.');
@@ -504,6 +538,8 @@ export function buildWhere(
   /** How an `any` condition is written when its child's values are bound here, in order, with the rest of the
       filter: a read that resolves the child itself (anyRows.ts). Absent, and without `exists`, one is refused. */
   inline?: (rows: AnyRows) => InlineRows,
+  /** How a `within` condition's subquery is read (`Condition.within`): its relation, scoped where the read is. Absent, one is refused. */
+  within?: (rows: WithinRows) => WithinPlan,
 ): SqlFragment {
   if (!filter?.groups.length) return { text: '', params: [] };
   const params: unknown[] = [];
@@ -553,7 +589,7 @@ export function buildWhere(
            values are bound where their relation is planned (rowScope.ts `filtered`),
            so the EXISTS carries no parameter here and the numbering is untouched. */
         if (c.any !== undefined) {
-          if ((!exists && !inline) || typeof c.any !== 'object' || c.any === null)
+          if ((!exists && !inline) || typeof c.any !== 'object' || c.any === null || c.within !== undefined)
             throw new RequestFault('This read cannot ask about the rows that point at it.');
           let text: string;
           if (exists) text = exists(c.any);
@@ -573,6 +609,30 @@ export function buildWhere(
           }
           /* `no task …` is the same rows asked the other way: none of them matches. */
           return c.op === 'isNull' ? `NOT ${text}` : text;
+        }
+        /* Before the column is written by an operator: another table's keys are no value. One level only — the rows'
+           own conditions are compiled with no hooks, so an `in` or an `any` inside them is refused, never dropped. */
+        if (c.within !== undefined) {
+          if (
+            !within ||
+            typeof c.within !== 'object' ||
+            c.within === null ||
+            c.op !== 'in' ||
+            c.other !== undefined ||
+            c.equality !== undefined
+          )
+            throw new RequestFault("This read cannot compare a column with another table's rows.");
+          const plan = within(c.within);
+          let narrowed = '';
+          if (plan.column && c.within.filter?.groups.length) {
+            const inner = buildWhere(c.within.filter, style, index, plan.column, undefined, undefined, undefined, false, plan.types);
+            params.push(...inner.params);
+            index += inner.params.length;
+            narrowed = inner.text;
+          }
+          const col = column(c.column, c);
+          const typed = builtin(c.column) && plan.key !== undefined && style.builtin?.(plan.key);
+          return typed ? `${col} ${operator('=')} ANY (${plan.select}${narrowed})` : `${col} IN (${plan.select}${narrowed})`;
         }
         /* Before the column is written: a record's tags are no column. */
         if (c.op === 'has') {
@@ -688,6 +748,7 @@ function sameCondition(a: Condition, b: Condition): boolean {
     a.collation !== b.collation ||
     a.other !== b.other ||
     a.any !== b.any ||
+    a.within !== b.within ||
     a.equality !== b.equality ||
     a.via?.text !== b.via?.text
   )

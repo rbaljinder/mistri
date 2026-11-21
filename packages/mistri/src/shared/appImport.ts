@@ -12,28 +12,30 @@
  */
 import { majorToMinor } from '@mistriwork/engine/shared/moneyEntry.js';
 import { csvField, CRLF } from '@mistriwork/engine/shared/csv.js';
-import { commandReferenceProblem, parseCommandReference, type AppCommandField, type AppCommandReference } from './command.js';
-import type { AppImportDef, ImportApp } from './appImportDeclaration.js';
+import { commandInputProblem, commandReferenceProblem, parseImportCommandReference, type AppCommandField } from './command.js';
+import type { AppCommandGroup } from '@mistriwork/engine/schema/model.js';
+import type { AppImportDef, ImportApp, ImportCommandReference } from './appImportDeclaration.js';
 import { allowKeys, humanName, plainRecord, vocabularyWord } from '@mistriwork/engine/shared/model.js';
 import {
   columnKind,
   isBinaryType,
   labelColumn,
   looksLikeDate,
+  tableNamed,
   type ColumnMeta,
   type DatabaseSchema,
   type TableMeta,
 } from '@mistriwork/engine/shared/schema.js';
 
-/** `import` on a resource: true, or `{ command, match }`. */
+/** `import` on a resource: true, or `{ command, match, group }`. */
 export function parseImportDef(raw: unknown, at: string): AppImportDef | undefined {
   const here = `${at}, "import"`;
   if (raw === false) return undefined;
   if (raw === true) return {};
-  const declared = plainRecord(raw, here, 'true, or an object { command, match } naming the command each row runs');
-  allowKeys(declared, ['command', 'match'], here);
+  const declared = plainRecord(raw, here, 'true, or an object { command, match, group } naming the command each row runs');
+  allowKeys(declared, ['command', 'match', 'group'], here);
   const def: AppImportDef = {};
-  if (declared.command !== undefined) def.command = parseCommandReference(declared.command, `${here} "command"`);
+  if (declared.command !== undefined) def.command = parseImportCommandReference(declared.command, `${here} "command"`);
   if (declared.match !== undefined) {
     const match = declared.match;
     if (
@@ -46,7 +48,21 @@ export function parseImportDef(raw: unknown, at: string): AppImportDef | undefin
     def.match = match.map((column) => (column as string).trim());
     if (new Set(def.match).size !== def.match.length) throw new Error(`${here} "match" names a column twice.`);
   }
-  if (def.command && !def.match) {
+  if (declared.group !== undefined) {
+    const group = declared.group;
+    if (!Array.isArray(group) || !group.length || group.some((column) => typeof column !== 'string' || !column.trim())) {
+      throw new Error(`${here} "group" must list the command's inputs that say which consecutive rows are one run.`);
+    }
+    def.group = group.map((column) => (column as string).trim());
+    if (new Set(def.group).size !== def.group.length) throw new Error(`${here} "group" names a column twice.`);
+    // Rows are grouped into one command's input, so there is no group without the command it fills.
+    if (!def.command)
+      throw new Error(
+        `${here} has "group" and no "command" [import-group-command]: rows are grouped into one command's input. Name the command each run fills, or drop "group".`,
+      );
+  }
+  // A creating command (targets: 'none') runs where nothing is matched; one on a record needs the columns that find it.
+  if (def.command && def.command.targets !== 'none' && !def.match) {
     throw new Error(`${here} runs "${def.command.id}" on a record each row names: say which columns find it, as match: ['…'].`);
   }
   if (def.match && !def.command) {
@@ -66,28 +82,47 @@ export function parseViewImport(raw: unknown, at: string): AppImportDef | false 
 /**
  * Why an import cannot be offered over this catalog, or undefined. A plain
  * import needs a table with a primary key (its rows are named and reported
- * by it). A command import needs a command on this resource that
- * names one record, input of plain fields a column can fill, and `match`
- * columns of the table that are not also the command's inputs.
+ * by it). A command import needs a command on this resource that names one
+ * record or creates one (`targets: 'none'`), input of plain fields a column
+ * can fill, and `match` columns of the table. On a command that names the
+ * record, a `match` column is not also an input; a creating command may take
+ * it as one, since nothing found means the row's own value is the new one's.
+ * With `group`, the command has exactly one repeated group, which the run's
+ * rows fill, and every `group` column is one of its top-level inputs.
  */
 export function importProblem(def: AppImportDef, table: TableMeta, schema: DatabaseSchema): string | undefined {
   if (table.isView) return 'import writes records, and this is a view.';
   if (!table.columns.some((column) => column.primaryKey)) return 'import needs a table with a primary key.';
   if (!def.command) return undefined;
-  const reference = commandReferenceProblem(def.command, table.id, schema);
-  if (reference) return `import command "${def.command.id}": ${reference}`;
-  if ((def.command.targets ?? 'one') !== 'one')
-    return `import command "${def.command.id}" targets many records; each row runs a command on one.`;
-  const group = def.command.input.find((field) => field.type === 'group' || field.type === 'lines');
-  if (group)
-    return `import command "${def.command.id}" asks for "${group.name}", ${group.type === 'lines' ? 'lines' : 'a group'}; a column of a file fills one plain field.`;
+  const command = def.command;
+  const creates = command.targets === 'none';
+  const reference = creates ? creatingCommandProblem(command, table, schema) : commandReferenceProblem(command, table.id, schema);
+  if (reference) return `import command "${command.id}": ${reference}`;
+  if (command.targets === 'many') return `import command "${command.id}" targets many records; each row runs a command on one.`;
+  const repeated = def.group ? command.input.filter((field): field is AppCommandGroup => field.type === 'group' && !!field.repeat) : [];
+  if (def.group && repeated.length !== 1)
+    return `import command "${command.id}" [import-group-repeat]: "group" fills one repeated group from a run's rows, and the command has ${repeated.length ? `${repeated.length} (${repeated.map((field) => `"${field.name}"`).join(', ')})` : 'none'}. Give it one field.group(…, { repeat }).`;
+  const nested = command.input.find((field) => (field.type === 'group' || field.type === 'lines') && field !== repeated[0]);
+  if (nested)
+    return `import command "${command.id}" asks for "${nested.name}", ${nested.type === 'lines' ? 'lines' : 'a group'}; a column of a file fills one plain field.`;
+  for (const column of def.group ?? []) {
+    const input = command.input.find((field) => field.name === column);
+    if (!input || input.type === 'group' || input.type === 'lines')
+      return `import group "${column}" [import-group-column] is not a plain input of "${command.id}"; the columns that say which rows are one run are top-level inputs the run's first row fills.`;
+  }
   for (const column of def.match ?? []) {
     if (!table.columns.some((c) => c.name === column)) return `import match "${column}" is not a column of "${table.name}".`;
-    if (def.command.input.some((field) => field.name === column)) {
-      return `import match "${column}" is also an input of "${def.command.id}"; a column either finds the record or fills the command.`;
+    if (!creates && command.input.some((field) => field.name === column)) {
+      return `import match "${column}" is also an input of "${command.id}"; a column either finds the record or fills the command.`;
     }
   }
   return undefined;
+}
+
+/* A creating command's own checks: it inserts into this resource, and names no record its input could read. */
+function creatingCommandProblem(command: ImportCommandReference, table: TableMeta, schema: DatabaseSchema): string | undefined {
+  if (tableNamed(schema, command.target)?.id !== table.id) return 'Command target must match the action’s owning resource.';
+  return commandInputProblem(command.input, schema);
 }
 
 /* ---------- the fields a column may fill ---------- */
@@ -101,8 +136,10 @@ export interface ImportField {
   kind: ImportFieldKind;
   /** A file must give it: no default, not nullable, or a required command input. */
   required: boolean;
-  /** A `match` column: it finds the record rather than filling a value. */
+  /** A `match` column: it finds the record rather than filling a value (on a creating command, it may fill one too). */
   match?: true;
+  /** A field of the command's repeated group (`import.group`): each row of a run fills one entry. Named `<group>.<field>`. */
+  in?: string;
   /** The table a reference points at, and the column it points to. */
   references?: { table: string; column: string };
   /** The values the column or the choice takes. */
@@ -168,35 +205,28 @@ export function importFields(
   fixed: ReadonlySet<string> = new Set(),
 ): ImportField[] {
   if (def.command) {
+    const command = def.command;
+    // A creating command may take a match column as its input too: the one field then finds, and fills when nothing is found.
+    const both = (name: string) => command.targets === 'none' && command.input.some((field) => field.name === name);
     const matched = (def.match ?? []).flatMap((name) => {
+      if (both(name)) return [];
       const column = table.columns.find((c) => c.name === name);
       return column ? [{ ...columnField(column, labelOf(name)), required: true, match: true as const }] : [];
     });
-    const inputs = def.command.input.flatMap((field): ImportField[] => {
-      // A sheet's column holds one value; questions defined in rows are an object of them, which no column fills.
-      if (
-        field.type === 'group' ||
-        field.type === 'lines' ||
-        field.type === 'defined' ||
-        field.type === 'files' ||
-        field.type === 'signature'
-      )
-        return [];
-      const base = { name: field.name, label: field.label, required: field.required === true, field };
-      switch (field.type) {
-        case 'number':
-          return [{ ...base, kind: field.integer ? 'integer' : 'number' }];
-        case 'boolean':
-          return [{ ...base, kind: 'boolean' }];
-        case 'date':
-          return [{ ...base, kind: 'date' }];
-        case 'choice':
-          return [{ ...base, kind: 'choice', allowed: field.options.map((option) => ({ value: option.value, label: option.label })) }];
-        case 'reference':
-          return [{ ...base, kind: 'reference', references: { table: field.from, column: field.by } }];
-        default:
-          return [{ ...base, kind: 'text' }];
-      }
+    const inputs = command.input.flatMap((field): ImportField[] => {
+      // The repeated group `import.group` fills: each of its plain fields is a column, one entry per row of a run.
+      if (def.group && field.type === 'group' && field.repeat)
+        return field.fields.flatMap((inner) =>
+          plainInput(inner).map((entry) => ({ ...entry, name: `${field.name}.${inner.name}`, in: field.name, aliases: [inner.name] })),
+        );
+      // A group column says which run a row is in, so every row says it.
+      return plainInput(field).map((entry) =>
+        def.match?.includes(field.name)
+          ? { ...entry, required: true, match: true as const }
+          : def.group?.includes(field.name)
+            ? { ...entry, required: true }
+            : entry,
+      );
     });
     return [...matched, ...inputs];
   }
@@ -215,6 +245,28 @@ export function importFields(
       const by = minor ? minorByOf(column.name) : undefined;
       return minor ? { ...field, minor, ...(by ? { minorBy: by } : {}) } : field;
     });
+}
+
+/* A command input a sheet's column fills, as its field; none for one a column cannot hold. */
+function plainInput(field: AppCommandField): ImportField[] {
+  // A sheet's column holds one value; questions defined in rows are an object of them, which no column fills.
+  if (field.type === 'group' || field.type === 'lines' || field.type === 'defined' || field.type === 'files' || field.type === 'signature')
+    return [];
+  const base = { name: field.name, label: field.label, required: field.required === true, field };
+  switch (field.type) {
+    case 'number':
+      return [{ ...base, kind: field.integer ? 'integer' : 'number' }];
+    case 'boolean':
+      return [{ ...base, kind: 'boolean' }];
+    case 'date':
+      return [{ ...base, kind: 'date' }];
+    case 'choice':
+      return [{ ...base, kind: 'choice', allowed: field.options.map((option) => ({ value: option.value, label: option.label })) }];
+    case 'reference':
+      return [{ ...base, kind: 'reference', references: { table: field.from, column: field.by } }];
+    default:
+      return [{ ...base, kind: 'text' }];
+  }
 }
 
 /* ---------- a header's suggested field ---------- */
@@ -493,6 +545,22 @@ export interface ImportRowProblem {
   problems: Array<{ field?: string; message: string }>;
 }
 
+/**
+ * One command run of a command import: the rows that made its input (one, or a
+ * `group`'s run of them) and what its handler would do, or did. A check runs the
+ * handler in a transaction that is always rolled back, so `writes` is what it
+ * would write; `ran: false` is a run checked without its handler, which calls a provider.
+ */
+export interface ImportRun {
+  /** 1-based data rows, in file order. */
+  rows: number[];
+  outcome: 'create' | 'update' | 'refused';
+  /** Rows written per table, by the table's id. */
+  writes: Record<string, number>;
+  problems: Array<{ field?: string; message: string }>;
+  ran?: false;
+}
+
 export interface ImportReport {
   outcome: 'checked' | 'applied' | 'not_applied' | 'partial' | 'unknown';
   rows: number;
@@ -500,6 +568,8 @@ export interface ImportReport {
   ready: number;
   applied?: number;
   refused: ImportRowProblem[];
+  /** A command import's runs, in file order. */
+  runs?: ImportRun[];
   /** Said once for the whole file, when the file itself is the problem. */
   error?: string;
 }
@@ -546,8 +616,8 @@ export function checkImports(
 }
 
 /** Every command an import runs, with where it is declared and the resource it acts on. */
-export function importCommandOccurrences(app: ImportApp): Array<{ at: string; resource: string; reference: AppCommandReference }> {
-  const found: Array<{ at: string; resource: string; reference: AppCommandReference }> = [];
+export function importCommandOccurrences(app: ImportApp): Array<{ at: string; resource: string; reference: ImportCommandReference }> {
+  const found: Array<{ at: string; resource: string; reference: ImportCommandReference }> = [];
   for (const [resource, block] of Object.entries(app.resources ?? {})) {
     if (block.import?.command) found.push({ at: `resources "${resource}"`, resource, reference: block.import.command });
   }

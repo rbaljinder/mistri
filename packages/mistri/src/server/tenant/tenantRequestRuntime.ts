@@ -1,6 +1,6 @@
 import { isPromise } from 'node:util/types';
 import { TransactionOperations, TransactionOutcomeUnknown, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
-import { CommandTransactionFailure, type CommandJournal } from '../../adapters/commands/commandJournal.js';
+import { CommandTransactionFailure, TrialRolledBack, type CommandJournal } from '../../adapters/commands/commandJournal.js';
 import { declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape, type AppDef } from '../../shared/app.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { assertScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
@@ -364,43 +364,56 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
                 invalid = true;
               }
             }
-            return operations.run(async () => {
-              if (invalid || callbackFailure) return denyTenant();
-              let workFailure: { error: unknown } | undefined;
-              const work = async (records: WriteTransaction, journal?: CommandJournal) => {
-                // The writer's fence passed: the membership is held from here to COMMIT or ROLLBACK.
-                fenced = true;
-                await session();
-                try {
-                  const result = await run(
-                    apiScope ? admitScopedInserts(records, apiScope.scope, apiScope.key, ownership.schema) : records,
-                    journal,
-                  );
+            /* A trial's rollback is its answer, not a failed write: it settles the queued operation instead of
+               rejecting it, so the request's operations are not poisoned and finish() does not rethrow it, and is
+               rethrown here, outside the queue, for the executor to catch. */
+            let trialEnded: CommandTransactionFailure | undefined;
+            return operations
+              .run(async () => {
+                if (invalid || callbackFailure) return denyTenant();
+                let workFailure: { error: unknown } | undefined;
+                const work = async (records: WriteTransaction, journal?: CommandJournal) => {
+                  // The writer's fence passed: the membership is held from here to COMMIT or ROLLBACK.
+                  fenced = true;
                   await session();
+                  try {
+                    const result = await run(
+                      apiScope ? admitScopedInserts(records, apiScope.scope, apiScope.key, ownership.schema) : records,
+                      journal,
+                    );
+                    await session();
+                    return result;
+                  } catch (error) {
+                    workFailure = { error };
+                    throw error;
+                  }
+                };
+                try {
+                  const result = command
+                    ? await writer.commandTransaction(admitted, sourceRows, work, active, operation, ceiling)
+                    : await writer.transaction(admitted, rows, (records) => work(records), active, operation);
+                  committed = true;
                   return result;
                 } catch (error) {
-                  workFailure = { error };
+                  // Actual outer source completion, not callback return, classifies
+                  // this wrapper. Preserve the private domain cause for the existing
+                  // executor while keeping the source's confirmed/unknown outcome.
+                  if (command) {
+                    const outcome = error instanceof TenantWriteFailure ? error.outcome : 'unknown';
+                    const failure = new CommandTransactionFailure(workFailure?.error ?? error, outcome);
+                    if (outcome === 'not_applied' && workFailure?.error instanceof TrialRolledBack) {
+                      trialEnded = failure;
+                      return undefined as R;
+                    }
+                    throw failure;
+                  }
                   throw error;
                 }
-              };
-              try {
-                const result = command
-                  ? await writer.commandTransaction(admitted, sourceRows, work, active, operation, ceiling)
-                  : await writer.transaction(admitted, rows, (records) => work(records), active, operation);
-                committed = true;
+              })
+              .then((result) => {
+                if (trialEnded) throw trialEnded;
                 return result;
-              } catch (error) {
-                // Actual outer source completion, not callback return, classifies
-                // this wrapper. Preserve the private domain cause for the existing
-                // executor while keeping the source's confirmed/unknown outcome.
-                if (command)
-                  throw new CommandTransactionFailure(
-                    workFailure?.error ?? error,
-                    error instanceof TenantWriteFailure ? error.outcome : 'unknown',
-                  );
-                throw error;
-              }
-            });
+              });
           };
           const advisoryReads = <R>(run: (records: WriteTransaction) => R | Promise<R>, ceiling: readonly string[]): Promise<R> => {
             if (!accepting) return Promise.reject(new TenantWriteFailure('not_applied'));

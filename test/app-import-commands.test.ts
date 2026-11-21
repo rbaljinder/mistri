@@ -145,7 +145,7 @@ const sheet = (lines: string[], extra: object = {}) => ({
   ...extra,
 });
 
-test("a command import checks each row against its record and the command's input without running it", async () => {
+test("a command import checks each row against its record and the command's input, and tries the ready ones in a trial that keeps nothing", async () => {
   await fixture(async ({ post, db, calls }) => {
     const checked = await post(sheet(['L-1,Ada', 'L-2,Grace', 'L-9,Ada', 'L-404,Ada', 'L-1,Ada', ',Ada']));
     assert.equal(checked.status, 200, JSON.stringify(checked.body));
@@ -161,7 +161,8 @@ test("a command import checks each row against its record and the command's inpu
     assert.match(said[5], /finds the same record as row 1/);
     assert.match(said[6], /^Code: A value is required\.$/);
     assert.equal(Object.hasOwn(checked.body, 'undo'), false);
-    assert.deepEqual(calls, [], 'a check never runs the command');
+    // The ready row's handler runs once, inside a transaction the check rolls back.
+    assert.deepEqual(calls, ['L-1:1'], 'a check tries only the ready row');
     assert.equal(
       reviewers(db).every((row) => row.reviewer === null),
       true,

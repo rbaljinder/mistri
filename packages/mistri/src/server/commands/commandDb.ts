@@ -106,8 +106,13 @@ export type SourceTables<Src, Target extends string> =
 export type LocalName<Name extends string> = Name extends `${string}.${infer L}` ? L : Name;
 type RowIn<Scope, T> = T extends keyof Scope ? Readonly<Scope[T]> : UntypedRow;
 
-/** A column's operators, the page-side `Where`'s own: ranges on anything ordered, matches on text, and `not`. */
-type Operators<V> = {
+/** The tables a handle reads, by name, each its row: what a where's `in: { from }` may name. Untyped, any table. */
+type Reads = Readonly<Record<string, object>>;
+/** One of the read tables' rows a where matches, for `in`: their own columns only, so no `in` inside it. */
+type InRows<R> = { [T in keyof R & string]: { readonly from: T; readonly where: Where<R[T], {}> } }[keyof R & string];
+/** A column's operators, the page-side `Where`'s own: ranges on anything ordered, matches on text, and `not`; and `in`,
+    the key of one of another read table's rows (`customer_id: { in: { from: 'customer', where: { region: 'west' } } }`). */
+type Operators<V, R> = {
   readonly not?: V | null | readonly V[];
   readonly gt?: V;
   readonly gte?: V;
@@ -116,14 +121,15 @@ type Operators<V> = {
   readonly contains?: string;
   readonly startsWith?: string;
   readonly endsWith?: string;
+  readonly in?: InRows<R>;
 };
 /** Every entry must hold: a value, a list meaning one of them, `null` meaning empty, or operators
     (`{ day: { gte: from, lte: to } }`) as a page's `where` says them. */
-export type Where<Row> = {
-  readonly [C in keyof Row]?: Row[C] | readonly Exclude<Row[C], null | undefined>[] | Operators<Exclude<Row[C], null | undefined>>;
+export type Where<Row, R = Reads> = {
+  readonly [C in keyof Row]?: Row[C] | readonly Exclude<Row[C], null | undefined>[] | Operators<Exclude<Row[C], null | undefined>, R>;
 };
 /** A where: an object, or the query language (`'status = new and year >= 2018'`). */
-type WhereInput<Row> = Where<Row> | string;
+type WhereInput<Row, R = Reads> = Where<Row, R> | string;
 
 /** Rows of one table, read when awaited: what a lookup's `where` answers (commandLookup.ts), which reads rows only. */
 export interface RowQuery<Row> extends PromiseLike<Row[]> {
@@ -139,12 +145,12 @@ export interface RowQuery<Row> extends PromiseLike<Row[]> {
 type AnyMeasures = Readonly<Record<string, Measure>>;
 
 /** A query over one table in a command's transaction, run when awaited: rows, sums, groups and pages. */
-export interface Query<Row> extends RowQuery<Row> {
+export interface Query<Row, R extends Reads = Reads> extends RowQuery<Row> {
   /** Narrows the rows further: every where this query has been given must hold (`db.lead.segment('open').where({ owner: 7 })`). */
-  where(where: WhereInput<Row>): Query<Row>;
-  orderBy(column: keyof Row & string, direction?: 'asc' | 'desc'): Query<Row>;
+  where(where: WhereInput<Row, R>): Query<Row, R>;
+  orderBy(column: keyof Row & string, direction?: 'asc' | 'desc'): Query<Row, R>;
   /** At most this many rows. Without it, more than 1,000 is refused rather than cut. */
-  limit(count: number): Query<Row>;
+  limit(count: number): Query<Row, R>;
   /** The matching rows' total of a number column: an exact decimal string for a decimal or an integer column
       (`'1834.50'`, `'0.00'` over no rows), a number for a float column (`REAL`, `double precision`), whose digits are
       not exact. SQLite refuses a decimal sum it cannot add exactly rather than answer it wrong. */
@@ -221,15 +227,15 @@ export interface Page<Row> {
   /** The next page's `after`; absent on the last page. */
   readonly next?: Boundary;
 }
-export interface ReadTable<Row> {
+export interface ReadTable<Row, R extends Reads = Reads> {
   /** The row with this key — a one-column key's value, or `{ column: value }` — or `not_found`. */
   get(key: string | number | Partial<Row>): Promise<Row>;
   /** The one row that matches, or undefined; several is the handler's mistake, not a refusal. */
-  find(where: WhereInput<Row>): Promise<Row | undefined>;
-  where(where?: WhereInput<Row>): Query<Row>;
+  find(where: WhereInput<Row, R>): Promise<Row | undefined>;
+  where(where?: WhereInput<Row, R>): Query<Row, R>;
   /** The query language with values, each quoted: ``where`make = ${make}` ``. */
-  where(template: TemplateStringsArray, ...values: readonly (string | number | boolean)[]): Query<Row>;
-  count(where?: WhereInput<Row>): Promise<number>;
+  where(template: TemplateStringsArray, ...values: readonly (string | number | boolean)[]): Query<Row, R>;
+  count(where?: WhereInput<Row, R>): Promise<number>;
   /**
    * The rows of one of this resource's segments (`segments: { open: 'status = open' }` on the App's resource): the
    * conditions the segment's name stands for, read through the same grants, field projection and row policy as any
@@ -237,7 +243,7 @@ export interface ReadTable<Row> {
    * have is refused, with the ones it has. A segment that names what a handler's `db` does not read (a rollup, a
    * path, `me`) is refused as such at the call.
    */
-  segment(name: string): Query<Row>;
+  segment(name: string): Query<Row, R>;
   /**
    * A file resource's file — its name, type, size and bytes — by its row as read here, or its key: read through the
    * same grants and row policy as `get`, so a row this command may not see is `not_found`, as is one with no file. A
@@ -264,7 +270,10 @@ export interface WriteOptions {
   readonly words?: Readonly<Record<string, string | { readonly view: string; toJSON(): string }>>;
 }
 
-export interface WriteTable<Row, Moves extends object = Readonly<Record<string, UntypedRow>>> extends ReadTable<Row> {
+export interface WriteTable<Row, Moves extends object = Readonly<Record<string, UntypedRow>>, R extends Reads = Reads> extends ReadTable<
+  Row,
+  R
+> {
   /** The row as stored, its key and defaults included. */
   insert(values: Written<Row>, options?: WriteOptions): Promise<Row>;
   /** Writes `changes` guarded by the row's values for those columns, bumping its revision: the new row, or `stale_record`. */
@@ -281,7 +290,7 @@ export interface WriteTable<Row, Moves extends object = Readonly<Record<string, 
    * one read, then one statement where the source can say it. The rows as written; `stale_record` when any moved
    * since the read, and nothing is written. More than 1,000 matches is refused rather than cut.
    */
-  updateWhere(where: WhereInput<Row>, changes: Written<Row>): Promise<Row[]>;
+  updateWhere(where: WhereInput<Row, R>, changes: Written<Row>): Promise<Row[]>;
   /**
    * A file resource's new row (`file: { content, name, type?, size? }`): the
    * bytes, name, type and size go in the columns the resource names, held to
@@ -345,12 +354,16 @@ export const period = Object.freeze({
 
 /** A command's tables: read `R`, written `W`. */
 export type CommandTables<Scope, R extends string, W extends string> = {
-  readonly [T in R | W]: T extends W ? WriteTable<RowIn<Scope, T>, { readonly [To in W]: RowIn<Scope, To> }> : ReadTable<RowIn<Scope, T>>;
+  readonly [T in R | W]: T extends W
+    ? WriteTable<RowIn<Scope, T>, { readonly [To in W]: RowIn<Scope, To> }, { readonly [To in R | W]: RowIn<Scope, To> }>
+    : ReadTable<RowIn<Scope, T>, { readonly [To in R | W]: RowIn<Scope, To> }>;
 };
 /** One table's row on a source: `RowOf<typeof lending, 'lead'>`. */
 export type RowOf<Src, Table extends string> = RowIn<SourceTables<Src, Table>, LocalName<Table>>;
 /** Some of a source's tables, read-only — for a helper a handler passes its `db` to. */
-export type CommandDb<Src, Tables extends string> = { readonly [T in Tables]: ReadTable<RowOf<Src, T>> };
+export type CommandDb<Src, Tables extends string> = {
+  readonly [T in Tables]: ReadTable<RowOf<Src, T>, { readonly [To in Tables]: RowOf<Src, To> }>;
+};
 
 /* ---------- the catalog ---------- */
 
@@ -480,6 +493,27 @@ export function compileWhere(
   }
   if (!where || typeof where !== 'object' || Array.isArray(where))
     throw new TypeError(`${table.name}: a where is an object or the query language.`);
+  /* A column tested against another table's rows (`customer_id: { in: { from: 'customer', where } }`) is carried as a
+     condition of its own (`Condition.within`); the rest of the where is read as it would be without it. */
+  const within = Object.entries(where).filter(([, value]) => isInRows(value));
+  if (within.length) {
+    if (!options.anyRows) {
+      const [column] = within[0];
+      throw new Error(`${table.name}: "${column}: { in: … }" reads another table's rows, which only a handler's db reads.`);
+    }
+    const rest = compileWhere(
+      table,
+      Object.fromEntries(Object.entries(where).filter(([, value]) => !isInRows(value))),
+      now,
+      [],
+      me,
+      options,
+    );
+    const tests = within.map(([column, value]) => compileInRows(table, column, value as InRowsValue, now));
+    if (rest.none || tests.some((test) => test === undefined)) return { filter: { groups: [] }, none: true, orderBy: [] };
+    const added = tests as Condition[];
+    return { ...rest, filter: { groups: rest.filter.groups.length ? rest.filter.groups.map((group) => [...group, ...added]) : [added] } };
+  }
   /* An operator object is the page-side condition (engine/shared/pageWhere.ts), compiled by the one compiler into the
      language's text and read as text is: one vocabulary, the same refusals. */
   if (Object.values(where).some((value) => value !== null && typeof value === 'object' && !Array.isArray(value))) {
@@ -507,6 +541,56 @@ export function compileWhere(
     } else if (value !== undefined) conditions.push({ column, op: '=', value: scalar(table, column, value) });
   }
   return { filter: { groups: conditions.length ? [conditions] : [] }, none, orderBy: [] };
+}
+
+type InRowsValue = { readonly in: unknown };
+/* Any object naming `in` is the test, so a malformed one is refused as such rather than read as an operator. */
+const isInRows = (value: unknown): value is InRowsValue =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) && Object.hasOwn(value, 'in');
+
+/**
+ * `column: { in: { from, where } }`: the column's value is the key of one of `from`'s rows that `where` matches. The
+ * table must be one the handle declares, read as a direct read of it is — the same transaction, scope, row policy and
+ * narrowing (the executor writes it as `column IN (SELECT key FROM from WHERE …)`). Its `where` judges that table's own
+ * columns, one level down: another `in` there is refused by name. Undefined when the where matches no row at all.
+ */
+function compileInRows(table: CommandTable, column: string, value: InRowsValue, now: Date): Condition | undefined {
+  if (!Object.hasOwn(table.kinds, column)) throw new Error(`${table.name}: "${column}" is not one of its columns.`);
+  const test = value.in as { from?: unknown; where?: unknown } | null;
+  const said = `"${column}: { in: … }"`;
+  if (
+    Object.keys(value).length !== 1 ||
+    !test ||
+    typeof test !== 'object' ||
+    Array.isArray(test) ||
+    Object.keys(test).some((key) => key !== 'from' && key !== 'where') ||
+    typeof test.from !== 'string'
+  )
+    throw new Error(`${table.name}: ${said} is written { in: { from: 'table', where: { … } } } and stands alone.`);
+  const from = test.from;
+  const reads = table.declared?.tables.map((each) => each.name) ?? [table.name];
+  const other = table.declared?.tables.find((each) => each.name === from);
+  if (!other)
+    throw new Error(
+      `${table.name}: "${column}: { in: { from: '${from}' } }" reads ${from}, which is not among the tables this handle reads (${reads.join(', ')}); declare it in read or write.`,
+    );
+  const key = other.columns.filter((each) => each.primaryKey);
+  if (key.length !== 1) throw new Error(`${table.name}: ${said} selects ${from}'s key, and ${from} has no key of exactly one column.`);
+  if (test.where === null || typeof test.where !== 'object' || Array.isArray(test.where))
+    throw new Error(`${table.name}: ${said} judges ${from}'s rows by an object where ({ column: value }).`);
+  for (const [inner, given] of Object.entries(test.where))
+    if (isInRows(given))
+      throw new Error(`${table.name}: ${said} reads one level; "${inner}: { in: … }" inside it is refused, so read ${from}'s rows first.`);
+  const rows: CommandTable = {
+    name: from,
+    key: [key[0].name],
+    kinds: Object.fromEntries(other.columns.map((each) => [each.name, columnKind(each.type)])),
+    meta: other,
+    ...(table.zone ? { zone: table.zone } : {}),
+  };
+  const compiled = compileWhere(rows, test.where, now);
+  if (compiled.none) return undefined;
+  return { column, op: 'in', within: { table: from, ...(compiled.filter.groups.length ? { filter: compiled.filter } : {}) } };
 }
 
 /**
@@ -1061,7 +1145,9 @@ function tableHandle(
       if (compiled.orderBy.length || compiled.limit !== undefined)
         authorMistake(`${name}: an aggregate's where says which rows; leave "sort" and "limit" out of it.`);
       if (asksAboutRows(compiled.filter))
-        authorMistake(`${name}: a sum or a group reads rows by their own columns; read the rows with an "any"/"no" where, or count them.`);
+        authorMistake(
+          `${name}: a sum or a group reads rows by their own columns; read the rows with an "any"/"no" or an "in" where, or count them.`,
+        );
       const orderBy = groupOrder.map((o) => ({ name: plan.orderName(o.name), direction: o.direction }));
       if (compiled.none) return grouped ? [] : [plan.decode({})];
       /* Fail closed: a transaction that cannot say an aggregate under its scope (an HTTP source, a facade that

@@ -15,7 +15,7 @@ import { isRuntimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { compileView, resolveAggregate, type ViewDef, type ViewFilter } from '@mistriwork/engine/shared/view.js';
 import { compileBreakdown, type BreakdownDef } from '@mistriwork/engine/shared/breakdown.js';
-import { ANSI_STYLE, type AnyRows, type Condition, type Filter } from '@mistriwork/engine/shared/filter.js';
+import { ANSI_STYLE, type AnyRows, type Condition, type Filter, type WithinRows } from '@mistriwork/engine/shared/filter.js';
 import { parseQuery, readsOf, saidAt } from '@mistriwork/engine/shared/query.js';
 import type { ViewCondition } from '@mistriwork/engine/shared/viewPaths.js';
 import type { Rollup } from '@mistriwork/engine/shared/rollups.js';
@@ -343,13 +343,23 @@ function physicalView(view: ViewDef, catalog: AppResourceCatalog): ViewDef {
 
 /* An `any` condition names its child rows by endpoints, as a rollup does (`opportunity.account_id`): renaming the
    table is the whole translation. The child's own conditions are its columns and references, which keep their names;
-   a narrowed child's conditions join them, so `any` asks only of the rows that resource reads. */
-function physicalAny<F extends { groups: Array<Array<{ any?: AnyRows }>> }>(filter: F, catalog: AppResourceCatalog): F {
-  if (!filter.groups.some((group) => group.some((condition) => condition.any))) return filter;
+   a narrowed child's conditions join them, so `any` asks only of the rows that resource reads. An `in` names its table
+   by resource, renamed the same way, a narrowed resource's conditions joining its own: its keys are the ones a read of
+   that resource lists. */
+function physicalAny<F extends { groups: Array<Array<{ any?: AnyRows; within?: WithinRows }>> }>(
+  filter: F,
+  catalog: AppResourceCatalog,
+): F {
+  if (!filter.groups.some((group) => group.some((condition) => condition.any || condition.within))) return filter;
   return {
     ...filter,
     groups: filter.groups.map((group) =>
       group.map((condition) => {
+        if (condition.within) {
+          const { table } = condition.within;
+          const narrowed = narrowedFilter(condition.within.filter, table, catalog);
+          return { ...condition, within: { table: catalog.toPhysical(table), ...(narrowed ? { filter: narrowed } : {}) } };
+        }
         if (!condition.any) return condition;
         const { via } = condition.any;
         const child = via.slice(0, via.lastIndexOf('.'));
@@ -445,7 +455,7 @@ function narrowedConditions(schema: DatabaseSchema, logical: string, table: stri
   if (!filter.groups.length) throw new Error(`${at}: it says no conditions.`);
   if (clock) throw new Error(`${at}: a resource's conditions are fixed, so they read no date relative to today.`);
   for (const condition of filter.groups.flat()) {
-    if (condition.any || condition.other !== undefined || condition.column.includes('.'))
+    if (condition.any || condition.within || condition.other !== undefined || condition.column.includes('.'))
       throw new Error(
         `${at}: "${condition.column}" is not one of ${table}'s own columns compared with a value; a resource's conditions read its own row.`,
       );

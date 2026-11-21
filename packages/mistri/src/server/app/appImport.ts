@@ -9,9 +9,12 @@
  * rolled back, so a check writes nothing and says what is wrong with every
  * row rather than the first. Its commit is one transaction: every row or
  * none. A command import runs the
- * resource's declared command once per row, on the record the row's `match`
- * columns find — prepared and executed exactly as the command's own route
- * would, so it never goes around the command — and reports each row.
+ * resource's declared command once per run — a row, or the consecutive rows
+ * that agree on its `group` columns — on the record the `match` columns find,
+ * or creating one (`targets: 'none'`) — prepared and executed exactly as the
+ * command's own route would, so it never goes around the command. Its check
+ * runs each run's handler in a transaction that is always rolled back (the
+ * executor's trial), and says what each would create, update or refuse.
  *
  * The HTTP route (http/importRoutes.ts) builds the runtime: which writer,
  * which reader, whose commands.
@@ -36,7 +39,9 @@ import {
   type ImportReport,
   type ImportRequest,
   type ImportRowProblem,
+  type ImportRun,
 } from '../../shared/appImport.js';
+import type { AppCommandGroup } from '@mistriwork/engine/schema/model.js';
 import { IMPORT_LIMITS } from '../../shared/appImportDeclaration.js';
 import { importDeclaration, type AppImportDef } from '../../shared/appImportDeclaration.js';
 import type { ViewCondition, ViewDef } from '@mistriwork/engine/shared/viewPaths.js';
@@ -64,10 +69,12 @@ export interface ImportWriter {
   commit(requests: InsertRequest[]): Promise<unknown>;
 }
 
-/** Where a command import's rows go: the command's own prepare and execute. */
+/** Where a command import's rows go: the command's own prepare and execute, and its trial, which writes nothing. */
 interface ImportCommands {
   prepare(body: unknown): Promise<unknown>;
   execute(body: unknown): Promise<unknown>;
+  /** The handler run in a transaction that is always rolled back: no receipt, no journal entry, no effects. */
+  trial(body: unknown): Promise<unknown>;
 }
 
 interface ImportRuntime {
@@ -133,7 +140,8 @@ interface ReadRow {
   line: number;
   values: Record<string, string | number | boolean | null>;
   lookups: Map<string, string>;
-  problems: Array<{ field?: string; message: string }>;
+  /** `withRun`: a row refused only because another row of its run is. */
+  problems: Array<{ field?: string; message: string; withRun?: true }>;
 }
 
 const REASONS: Record<CommandInputReason, string> = {
@@ -250,7 +258,8 @@ const NUMBER_TEXT = /^-?\d+(\.\d+)?$/;
 
 /**
  * Every reference cell found by the record it names, a batch per field: by
- * its key, its record name (a column, or a templated `$label`), the column
+ * the resource's `address` natural key first, exactly, when it declares one;
+ * then by its key, its record name (a column, or a templated `$label`), the column
  * the catalog names it by, or a column the database keeps unique. One
  * record, or the row is refused — none found, or several a name could mean.
  * Read under the reader's grants: a record they cannot read is not found.
@@ -285,9 +294,41 @@ async function findByName(
     for (const text of texts) answers.set(text, { problem: `"${text}" names a ${noun}, which you cannot read.` });
     return answers;
   }
-  const naming = namingColumns(parent, keyColumn, app.resources?.[tableId]?.recordLabel);
   const kindOf = (path: string) =>
     path === '$label' ? 'text' : columnKind(parent.columns.find((column) => column.name === path)?.type ?? '');
+  /* The natural key is unique among the records the reader may read (within the tenant, in a tenant App), so a
+     text it holds names that one record exactly; a name only answers what the key did not. */
+  const address = app.resources?.[tableId]?.address;
+  let named = texts;
+  if (address && parent.columns.some((column) => column.name === address)) {
+    const found = await matchColumns(runtime, parent, keyColumn, [address], kindOf, texts);
+    for (const [text, keys] of found) if (keys.size === 1) answers.set(text, { value: [...keys.values()][0] });
+    named = texts.filter((text) => !answers.has(text));
+    if (!named.length) return answers;
+  }
+  const naming = namingColumns(parent, keyColumn, app.resources?.[tableId]?.recordLabel);
+  const matches = await matchColumns(runtime, parent, keyColumn, naming, kindOf, named);
+  for (const text of named) {
+    const keys = matches.get(text);
+    if (!keys?.size) answers.set(text, { problem: `No ${noun} is named "${text}".` });
+    else if (keys.size > 1)
+      answers.set(text, {
+        problem: `"${text}" could name ${keys.size} records of ${noun}; use the one's own ${humanName(keyColumn)} instead.`,
+      });
+    else answers.set(text, { value: [...keys.values()][0] });
+  }
+  return answers;
+}
+
+/* The records whose `naming` columns hold one of the texts, read under the reader's grants, 200 texts at a time. */
+async function matchColumns(
+  runtime: ImportRuntime,
+  parent: TableMeta,
+  keyColumn: string,
+  naming: readonly string[],
+  kindOf: (path: string) => string,
+  texts: readonly string[],
+): Promise<Map<string, Map<string, string | number>>> {
   const matches = new Map<string, Map<string, string | number>>();
   for (let at = 0; at < texts.length; at += 200) {
     checkCancelled(runtime.signal);
@@ -305,7 +346,7 @@ async function findByName(
       columns: [...new Set([keyColumn, ...naming])].map((path) => ({ path })),
       filter: { groups },
     };
-    const { result } = await readView(runtime.reader, schema, view, { limit: 5000 }, 'none');
+    const { result } = await readView(runtime.reader, runtime.schema, view, { limit: 5000 }, 'none');
     for (const row of result.rows) {
       const key = row[keyColumn];
       if (typeof key !== 'string' && typeof key !== 'number') continue;
@@ -320,16 +361,7 @@ async function findByName(
       }
     }
   }
-  for (const text of texts) {
-    const keys = matches.get(text);
-    if (!keys?.size) answers.set(text, { problem: `No ${noun} is named "${text}".` });
-    else if (keys.size > 1)
-      answers.set(text, {
-        problem: `"${text}" could name ${keys.size} records of ${noun}; use the one's own ${humanName(keyColumn)} instead.`,
-      });
-    else answers.set(text, { value: [...keys.values()][0] });
-  }
-  return answers;
+  return matches;
 }
 
 /* ---------- a plain import ---------- */
@@ -443,6 +475,40 @@ function refusedRows(rows: readonly ReadRow[], fieldLabel: (name: string) => str
 
 /* ---------- a command import ---------- */
 
+/** One command run: its rows, the record it updates (or none, when it creates), and the input they make. */
+interface CommandRun {
+  rows: ReadRow[];
+  outcome: 'create' | 'update' | 'refused';
+  key: Record<string, string | number>;
+  input: Record<string, unknown>;
+  problems: Array<{ field?: string; message: string }>;
+  writes: Record<string, number>;
+  ran?: false;
+}
+
+/**
+ * A command import's runs: consecutive rows that agree on the `group` columns
+ * are one run, one row is one run without it. Rows are never reordered: the
+ * same values further down the file start a run of their own. A row whose
+ * group cell is empty, or unreadable, stands alone.
+ */
+export function importRuns<Row extends { values: Record<string, unknown>; lookups: Map<string, string> }>(
+  rows: readonly Row[],
+  group: readonly string[] | undefined,
+): Row[][] {
+  if (!group?.length) return rows.map((row) => [row]);
+  const runs: Row[][] = [];
+  let last: string | undefined;
+  for (const row of rows) {
+    const said = group.map((name) => row.lookups.get(name) ?? row.values[name]);
+    const key = said.some((value) => value === undefined || value === null || value === '') ? undefined : JSON.stringify(said);
+    if (key !== undefined && key === last) runs[runs.length - 1].push(row);
+    else runs.push([row]);
+    last = key;
+  }
+  return runs;
+}
+
 async function commandImport(
   runtime: ImportRuntime,
   request: ImportRequest,
@@ -455,8 +521,15 @@ async function commandImport(
 ): Promise<ImportReport> {
   const command = def.command!;
   const commands = runtime.commands!;
+  const creates = command.targets === 'none';
   const keyColumns = primaryKey(table);
-  const inputs = fields.filter((field) => !field.match);
+  // The run's first row fills the top level; each row of a run fills one entry of the repeated group.
+  const topLevel = fields.filter((field) => !field.in);
+  const inputs = topLevel.filter((field) => field.field && (creates || !field.match));
+  const repeated = def.group
+    ? (command.input.find((field) => field.type === 'group' && field.repeat) as AppCommandGroup | undefined)
+    : undefined;
+  const entries = fields.filter((field) => field.in);
   const standing = textToView(runtime.schema, `${table.id} ${declared.query ?? ''}`.trim(), {
     id: 'import',
     name: 'import',
@@ -465,113 +538,227 @@ async function commandImport(
   });
   if (!standing.view || standing.errors.length) throw new ImportUnavailable(404, 'This list does not import files.');
   const base = standing.view;
-  const ready = new Map<number, { key: Record<string, string | number>; input: Record<string, unknown> }>();
+  const said = (row: ReadRow, name: string) => row.lookups.get(name) ?? row.values[name];
+  const valueOf = (field: ImportField, value: unknown) => (field.kind === 'date' && typeof value === 'string' ? value.slice(0, 10) : value);
+  const runs: CommandRun[] = importRuns(rows, def.group).map((members) => ({
+    rows: members,
+    outcome: 'refused',
+    key: {},
+    input: {},
+    problems: [],
+    writes: {},
+  }));
   const targeted = new Map<string, number>();
-  for (const row of rows) {
-    if (row.problems.length) continue;
+  for (const run of runs) {
     checkCancelled(runtime.signal);
-    // The record the row runs on: the list's own question and the row's match columns, exactly one.
-    const conditions: ViewCondition[] = (def.match ?? []).map((column) => ({
-      path: column,
-      op: '=' as const,
-      value: row.values[column] as string | number,
-    }));
-    const groups = (base.filter?.groups.length ? base.filter.groups : [[]]).map((group) => [...group, ...conditions]);
-    const found = await readView(
-      runtime.reader,
-      runtime.schema,
-      { id: 'import', name: 'import', base: base.base, columns: keyColumns.map((path) => ({ path })), filter: { groups } },
-      { limit: 2 },
-      'none',
-    );
-    const described = (def.match ?? [])
-      .map((column) => `${fieldLabel(column)} ${row.lookups.get(column) ?? String(row.values[column])}`)
-      .join(', ');
-    if (found.result.rows.length !== 1) {
-      row.problems.push({
-        message: found.result.rows.length
-          ? `${described} finds more than one record; add a column that tells them apart.`
-          : `No record in this list has ${described}.`,
+    const [first] = run.rows;
+    // A run's rows say its top-level fields alike: one that says another value is refused, by its row.
+    for (const row of run.rows.slice(1)) {
+      for (const field of topLevel) {
+        if (row.problems.some((problem) => problem.field === field.name)) continue;
+        if (JSON.stringify(said(row, field.name) ?? null) !== JSON.stringify(said(first, field.name) ?? null))
+          row.problems.push({
+            field: field.name,
+            message: `This disagrees with row ${first.index + 1}, which starts its run; a run's rows say "${field.label}" alike.`,
+          });
+      }
+    }
+    if (repeated && run.rows.length > repeated.repeat!.max) {
+      first.problems.push({
+        message: `This run has ${run.rows.length} rows; "${repeated.label}" takes at most ${repeated.repeat!.max}. Split it.`,
       });
-      continue;
     }
-    const key = Object.fromEntries(keyColumns.map((column) => [column, found.result.rows[0][column] as string | number]));
-    const said = JSON.stringify(key);
-    if (targeted.has(said)) {
-      row.problems.push({ message: `This row finds the same record as row ${targeted.get(said)! + 1}; each record is imported once.` });
-      continue;
+    if (run.rows.some((row) => row.problems.length)) continue;
+    // The record the run acts on: the list's own question and the first row's match columns.
+    if (def.match?.length) {
+      const conditions: ViewCondition[] = def.match.map((column) => ({
+        path: column,
+        op: '=' as const,
+        value: first.values[column] as string | number,
+      }));
+      const groups = (base.filter?.groups.length ? base.filter.groups : [[]]).map((group) => [...group, ...conditions]);
+      const found = await readView(
+        runtime.reader,
+        runtime.schema,
+        { id: 'import', name: 'import', base: base.base, columns: keyColumns.map((path) => ({ path })), filter: { groups } },
+        { limit: 2 },
+        'none',
+      );
+      const described = def.match
+        .map((column) => `${fieldLabel(column)} ${first.lookups.get(column) ?? String(first.values[column])}`)
+        .join(', ');
+      const hits = found.result.rows;
+      if (hits.length > 1) {
+        first.problems.push({ message: `${described} finds more than one record; add a column that tells them apart.` });
+        continue;
+      }
+      if (hits.length === 1 && creates) {
+        first.problems.push({ message: `${described} finds a record already; this import creates records.` });
+        continue;
+      }
+      if (!hits.length && !creates) {
+        first.problems.push({ message: `No record in this list has ${described}.` });
+        continue;
+      }
+      if (hits.length) run.key = Object.fromEntries(keyColumns.map((column) => [column, hits[0][column] as string | number]));
+      // Each record is imported once: by the key it finds, or, for one this import creates, by the values that find it.
+      const target = hits.length ? JSON.stringify(run.key) : `new\u0000${JSON.stringify(def.match.map((column) => first.values[column]))}`;
+      if (targeted.has(target)) {
+        first.problems.push({
+          message: hits.length
+            ? `This row finds the same record as row ${targeted.get(target)! + 1}; each record is imported once.`
+            : `Row ${targeted.get(target)! + 1} creates this record already; each record is imported once.`,
+        });
+        continue;
+      }
+      targeted.set(target, first.index);
     }
-    targeted.set(said, row.index);
-    const input: Record<string, unknown> = {};
     for (const field of inputs) {
-      const value = row.values[field.name];
-      if (value === undefined || value === null) continue;
-      input[field.name] = field.kind === 'date' && typeof value === 'string' ? value.slice(0, 10) : value;
+      const value = first.values[field.name];
+      if (value !== undefined && value !== null) run.input[field.name] = valueOf(field, value);
     }
-    // The command's own reading of its input, every problem at once.
-    const problems = commandInputProblems(command.input, input);
-    if (problems.length) {
-      for (const problem of problems)
-        row.problems.push({ ...(problem.path ? { field: problem.path.replace(/[[.].*$/, '') } : {}), message: REASONS[problem.reason] });
-      continue;
+    if (repeated)
+      run.input[repeated.name] = run.rows.map((row) => {
+        const entry: Record<string, unknown> = {};
+        for (const field of entries) {
+          const value = row.values[field.name];
+          if (value !== undefined && value !== null) entry[field.name.slice(repeated.name.length + 1)] = valueOf(field, value);
+        }
+        return entry;
+      });
+    // The command's own reading of its input, every problem at once, each on the row whose cell said it.
+    const problems = commandInputProblems(command.input, run.input);
+    for (const problem of problems) {
+      const entry = repeated && new RegExp(`^${repeated.name}\\[(\\d+)\\]\\.([^[.]+)`).exec(problem.path);
+      const row = entry ? (run.rows[Number(entry[1])] ?? first) : first;
+      const field = entry ? `${repeated!.name}.${entry[2]}` : problem.path.replace(/[[.].*$/, '');
+      row.problems.push({ ...(field ? { field } : {}), message: REASONS[problem.reason] });
     }
+    if (problems.length) continue;
+    run.outcome = creates ? 'create' : 'update';
+  }
+  // Each run tried: its handler run in a transaction that is always rolled back, under the same grants as its commit.
+  for (const run of runs) {
+    if (run.outcome === 'refused') continue;
+    checkCancelled(runtime.signal);
     try {
-      await commands.prepare({ command: command.id, commandVersion: command.version, key });
-      ready.set(row.index, { key, input });
+      const body = await envelope(command, commands, run);
+      if (request.mode === 'check') {
+        const trial = (await commands.trial(body)) as { ran?: boolean; writes?: Record<string, number> };
+        if (trial?.ran === false) {
+          run.ran = false;
+          run.problems.push({ message: 'Checked without running: calls a provider.' });
+        } else run.writes = { ...(trial?.writes ?? {}) };
+      }
     } catch (error) {
-      row.problems.push(commandRefusal(error));
+      run.rows[0].problems.push(commandRefusal(error));
+      run.outcome = 'refused';
     }
   }
+  settleRuns(runs);
+  const readyRows = (list: readonly CommandRun[]) => list.reduce((sum, run) => sum + run.rows.length, 0);
+  const ready = runs.filter((run) => run.outcome !== 'refused');
   let refused = refusedRows(rows, fieldLabel);
-  if (request.mode === 'check') return { outcome: 'checked', rows: rows.length, ready: ready.size, refused };
-  if ((refused.length && !request.skipRefused) || !ready.size) {
+  if (request.mode === 'check')
+    return { outcome: 'checked', rows: rows.length, ready: readyRows(ready), refused, runs: reportRuns(runs, fieldLabel) };
+  if ((refused.length && !request.skipRefused) || !ready.length) {
     return {
       outcome: 'not_applied',
       rows: rows.length,
-      ready: ready.size,
+      ready: readyRows(ready),
       refused,
-      ...(ready.size ? {} : { error: 'No row can be imported.' }),
+      runs: reportRuns(runs, fieldLabel),
+      ...(ready.length ? {} : { error: 'No row can be imported.' }),
     };
   }
+  // The commit runs the inputs the check tried, each run its own transaction.
   let applied = 0;
   let stopped: string | undefined;
-  for (const row of rows) {
-    const job = ready.get(row.index);
-    if (!job) continue;
+  for (const run of ready) {
     if (stopped || runtime.signal.aborted) {
-      row.problems.push({ message: stopped ? "Not run: an earlier row's outcome is unknown." : 'Not run: the import was cancelled.' });
+      run.rows[0].problems.push({
+        message: stopped ? "Not run: an earlier row's outcome is unknown." : 'Not run: the import was cancelled.',
+      });
+      run.outcome = 'refused';
       continue;
     }
     try {
-      // Each row prepared again, for the revision it holds now, then run.
-      const prepared = (await commands.prepare({ command: command.id, commandVersion: command.version, key: job.key })) as {
-        expectedVersion?: unknown;
-      };
-      if (typeof prepared?.expectedVersion !== 'number') throw new Error('The command did not prepare.');
-      await attributeAction(runtime.commandLabel, () =>
-        commands.execute({
-          command: command.id,
-          commandVersion: command.version,
-          key: job.key,
-          expectedVersion: prepared.expectedVersion,
-          idempotencyKey: `import-${randomUUID().replace(/-/g, '')}`,
-          input: job.input,
-        }),
-      );
-      applied++;
+      const body = await envelope(command, commands, run);
+      await attributeAction(runtime.commandLabel, () => commands.execute(body));
+      applied += run.rows.length;
     } catch (error) {
-      row.problems.push(commandRefusal(error));
+      run.rows[0].problems.push(commandRefusal(error));
+      run.outcome = 'refused';
       if ((error as { outcome?: string }).outcome === 'unknown') stopped = 'unknown';
     }
   }
+  settleRuns(runs);
   refused = refusedRows(rows, fieldLabel);
+  const readyCount = readyRows(ready);
   return {
-    outcome: stopped ? 'unknown' : applied === ready.size ? 'applied' : applied ? 'partial' : 'not_applied',
+    outcome: stopped ? 'unknown' : applied === readyCount ? 'applied' : applied ? 'partial' : 'not_applied',
     rows: rows.length,
-    ready: ready.size,
+    ready: readyCount,
     applied,
     refused,
+    runs: reportRuns(runs, fieldLabel),
   };
+}
+
+/* A run's command as its own route would be sent it: a record's prepared for the revision it holds now, a new one at 0. */
+async function envelope(command: NonNullable<AppImportDef['command']>, commands: ImportCommands, run: CommandRun) {
+  let expectedVersion = 0;
+  if (run.outcome === 'update') {
+    const prepared = (await commands.prepare({ command: command.id, commandVersion: command.version, key: run.key })) as {
+      expectedVersion?: unknown;
+    };
+    if (typeof prepared?.expectedVersion !== 'number') throw new Error('The command did not prepare.');
+    expectedVersion = prepared.expectedVersion;
+  }
+  return {
+    command: command.id,
+    commandVersion: command.version,
+    key: run.key,
+    expectedVersion,
+    idempotencyKey: `import-${randomUUID().replace(/-/g, '')}`,
+    input: run.input,
+  };
+}
+
+/* A run is refused when any of its rows is; its other rows say why they were not imported. */
+function settleRuns(runs: readonly CommandRun[]) {
+  for (const run of runs) {
+    const refusing = run.rows.find((row) => row.problems.length && !row.problems.every((problem) => problem.withRun));
+    if (!refusing) continue;
+    run.outcome = 'refused';
+    for (const row of run.rows)
+      if (!row.problems.length)
+        row.problems.push({ message: `Not imported: row ${refusing.index + 1} of its run is refused.`, withRun: true });
+  }
+}
+
+function reportRuns(runs: readonly CommandRun[], fieldLabel: (name: string) => string): ImportRun[] {
+  return runs.map((run) => {
+    const several = run.rows.length > 1;
+    const problems = [
+      ...run.rows.flatMap((row) =>
+        row.problems
+          .filter((problem) => !problem.withRun)
+          .map((problem) => ({
+            ...(problem.field ? { field: fieldLabel(problem.field) } : {}),
+            message: several ? `Row ${row.index + 1}: ${problem.message}` : problem.message,
+          })),
+      ),
+      ...run.problems,
+    ];
+    return {
+      rows: run.rows.map((row) => row.index + 1),
+      outcome: run.outcome,
+      writes: run.writes,
+      problems,
+      ...(run.ran === false ? { ran: false as const } : {}),
+    };
+  });
 }
 
 function commandRefusal(error: unknown): { field?: string; message: string } {

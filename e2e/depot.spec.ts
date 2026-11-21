@@ -482,7 +482,9 @@ test.describe('Depot inventory operations', () => {
       const dialog = page.getByRole('dialog', { name: 'Import count lines' });
       await dialog.locator('input[type=file]').setInputFiles({ name: 'aisle.csv', mimeType: 'text/csv', buffer: Buffer.from(csv) });
       await dialog.getByRole('button', { name: 'Check 3 rows' }).click();
-      await expect(dialog.getByRole('status')).toHaveText('1 row is ready; 2 rows have a problem and will be left out.');
+      await expect(dialog.getByRole('status')).toHaveText(
+        '1 count line would be updated; 2 count lines would be refused and left out. Each was tried and rolled back; nothing has been written yet.',
+      );
       // A closed count's line is not on the sheet, so no row lands on it.
       await expect(dialog.getByText(`No record in this list has Bin ${closed.bin}, Product ${closed.sku}.`)).toBeVisible();
       await dialog.getByRole('button', { name: 'Import the 1 ready row' }).click();

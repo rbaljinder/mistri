@@ -592,9 +592,10 @@ command's id; never a support visit's id or a row's key.
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `resources.*.import` | boolean \| object | Stable | Rows from a CSV file. true imports them as new records through the ordinary insert, under the reader's grants and the resource's validation. An object runs 'command' once per row, on the record its 'match' columns find. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.import` | boolean \| object | Stable | Rows from a CSV file. true imports them as new records through the ordinary insert, under the reader's grants and the resource's validation. An object runs 'command' once per row (or per run of rows with 'group'), on the record its 'match' columns find, or creating one where the command names none. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.import.command` | string | Stable | A command, by its name in the App's commands module (defineCommands). The server fills in its input, target and version from the registration; mistri-commands.d.ts types the names. Used in `examples/apps/lintel/app.ts`. |
-| `resources.*.import.match` | array | Stable | The resource's own columns that find the record each row runs on; a reference column is found by the record's name. |
+| `resources.*.import.group` | array | Stable | Top-level inputs of the command that say which consecutive rows are one run: the run's first row fills them and each row is one entry of the command's one repeated group. Used in `examples/apps/lintel/pages/resident.ts`. |
+| `resources.*.import.match` | array | Stable | The resource's own columns that find the record each row runs on; a reference column is found by its record's address key, then by its name. Required unless the command names no record (targets: 'none'). |
 
 ## `resources.*.inputs`
 

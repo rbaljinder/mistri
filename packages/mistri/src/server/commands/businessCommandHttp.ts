@@ -12,6 +12,7 @@ import { collectCommandAvailability, readCommandAvailability } from './commandAv
 import {
   BusinessCommandExecutionError,
   executeBusinessCommand,
+  trialBusinessCommand,
   lookupBusinessCommandStatus,
   type CommandDoor,
 } from './businessCommandExecution.js';
@@ -587,7 +588,12 @@ export async function openBusinessCommandCalls(options: {
   signal: AbortSignal;
   requestId?: string;
   captureFlags?: CaptureCommandFlags;
-}): Promise<{ prepare(body: unknown): Promise<unknown>; execute(body: unknown): Promise<unknown>; release(): void }> {
+}): Promise<{
+  prepare(body: unknown): Promise<unknown>;
+  execute(body: unknown): Promise<unknown>;
+  trial(body: unknown): Promise<unknown>;
+  release(): void;
+}> {
   const { registry, app, commands, connection, actor, events, signal } = options;
   const captureFlags = options.captureFlags;
   let admittedActor = actor;
@@ -626,6 +632,15 @@ export async function openBusinessCommandCalls(options: {
         mapped(async () => {
           const body = snapshot(raw, MAX_COMMAND_BYTES).value;
           return executeBusinessCommand(binding, actor, body, {
+            ...execution,
+            flags: await authorizedCommandFlags(binding, actor, body, admittedFlags),
+          });
+        }),
+      // The same run, authorized the same way, rolled back (businessCommandExecution.ts trialBusinessCommand).
+      trial: (raw) =>
+        mapped(async () => {
+          const body = snapshot(raw, MAX_COMMAND_BYTES).value;
+          return trialBusinessCommand(binding, actor, body, {
             ...execution,
             flags: await authorizedCommandFlags(binding, actor, body, admittedFlags),
           });

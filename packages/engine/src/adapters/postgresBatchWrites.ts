@@ -40,7 +40,7 @@ export interface UpdatePlan extends InsertPlan {
  * `INSERT … RETURNING *` for each run of rows naming the same columns, its rows matched back to the
  * requests that wrote them (batchedRows).
  */
-export async function insertPlanned(plans: readonly InsertPlan[], write: PgQuery): Promise<InsertResult[]> {
+export async function insertPlanned(plans: readonly InsertPlan[], write: PgQuery, scoped = false): Promise<InsertResult[]> {
   sameTable(plans.map((plan) => `${plan.found.schema}.${plan.found.name}`));
   const found = plans[0]!.found;
   const pk = plans[0]!.meta.filter((c) => c.is_pk).map((c) => c.name);
@@ -63,6 +63,15 @@ export async function insertPlanned(plans: readonly InsertPlan[], write: PgQuery
         chunk.map((plan) => plan.applied),
         result.rows as Array<Record<string, unknown>>,
       ).forEach((stored, index) => {
+        /* A scope re-reads each stored row by its key, as the single insert's does (postgres.ts insertNow): a key that
+           comes back as no text or number (a bytea's label) proves nothing, and is refused before it stands in. */
+        if (
+          scoped &&
+          pk.some(
+            (column) => !(typeof stored[column] === 'string' || (typeof stored[column] === 'number' && Number.isFinite(stored[column]))),
+          )
+        )
+          throw new Refusal('The stored key cannot be checked in this row scope.');
         const row = toJsonSafe(stored) as Record<string, unknown>;
         const key: Record<string, string | number> = {};
         for (const c of pk) key[c] = row[c] as string | number;

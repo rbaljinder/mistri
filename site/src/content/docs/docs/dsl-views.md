@@ -872,7 +872,8 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=list].import` | boolean \| object | Stable | This list's own CSV import, or false for none where its resource offers one. Used in `examples/apps/lintel/resources.ts`. |
 | `views.*[kind=list].import.command` | string | Stable | A command, by its name in the App's commands module (defineCommands). The server fills in its input, target and version from the registration; mistri-commands.d.ts types the names. Used in `examples/apps/lintel/app.ts`. |
-| `views.*[kind=list].import.match` | array | Stable | The resource's own columns that find the record each row runs on; a reference column is found by the record's name. |
+| `views.*[kind=list].import.group` | array | Stable | Top-level inputs of the command that say which consecutive rows are one run: the run's first row fills them and each row is one entry of the command's one repeated group. Used in `examples/apps/lintel/pages/resident.ts`. |
+| `views.*[kind=list].import.match` | array | Stable | The resource's own columns that find the record each row runs on; a reference column is found by its record's address key, then by its name. Required unless the command names no record (targets: 'none'). |
 
 ## `views.*[kind=list].kind`
 

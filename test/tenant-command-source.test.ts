@@ -244,7 +244,10 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         return { found: await journal.find(scope()), outside: { quantity: await f.quantity(), counts: await f.counts() } };
       });
       assert.deepEqual(observed, {
-        records: ['aggregate', 'count', 'insert', 'query', 'remove', 'update'],
+        // PostgreSQL's scope writes a batch in one statement; SQLite's writes it a row at a time beneath the command db.
+        records: postgres
+          ? ['aggregate', 'count', 'insert', 'insertMany', 'query', 'remove', 'update', 'updateMany']
+          : ['aggregate', 'count', 'insert', 'query', 'remove', 'update'],
         journal: [
           'appendReadAudit',
           'commit',

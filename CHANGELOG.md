@@ -5,6 +5,34 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.74
+
+A CSV import can fill a parent and its lines in one go, its check is a true dry run, and a read can filter by another
+table's columns.
+
+- Grouped import: `import: { command, group: ['number'] }` makes consecutive rows that agree on the group columns one
+  command input; the first row fills the top-level fields and each row one entry of the command's repeated group. A
+  row that disagrees with its run's first row is refused by row, and so is a run longer than the group's `repeat.max`.
+  Rows are never reordered. New check codes: `import-group-command`, `import-group-column`, `import-group-repeat`.
+- Creating import commands: an import may name a `targets: 'none'` command. It runs where there is no `match`, or where
+  `match` finds nothing; a row whose match finds a record, or two rows that would create the same one, are refused.
+- References in an imported cell are read by the target's `address` natural key first, then by its naming columns,
+  always within the tenant the import runs in.
+- The import's check runs each command in a transaction that is always rolled back, under the same grants and row
+  policies as its commit: no receipt, history entry, live change or effect is kept. The report lists each run with
+  `outcome` (`create`, `update` or `refused`), its `writes` per table and its problems; a command that calls a provider
+  is reported as checked without running. The import dialog shows that preview run by run before Import.
+- A handler, policy or loader filters by another table's columns:
+  `db.invoice.where({ customer_id: { in: { from: 'customer', where: { region: 'west' } } } })` reads
+  `customer_id IN (SELECT id FROM customer WHERE region = …)`, in `where`, `find`, `count` and `updateWhere`. `from`
+  must be among the command's reads and have a one-column key. The subquery is read under the same tenant, row policy
+  and grant as a direct read of that table. One level only. SQLite and PostgreSQL; an API resource, a lookup, a `when`
+  and a sum or group over the read refuse it by name.
+- On PostgreSQL, a tenant App's `insertMany` and `updateWhere` now write their rows in one statement instead of one
+  statement per row. Each row still gets the same tenant, scope, parent, unique-key and policy checks as a single write.
+  If any row is refused, the whole batch is refused and no row is written. A command that adds 200 rows makes the same
+  number of round trips as one that adds 50. SQLite tenant Apps and drafts still write one row at a time.
+
 ## 1.0.0-rc.73
 
 A program can work for one tenant, schedules follow each tenant, each deployment keeps its own sign-in store, and a

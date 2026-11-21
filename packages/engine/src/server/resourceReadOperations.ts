@@ -183,6 +183,29 @@ export function assertStructuredReadFilter<Field extends 'column' | 'path'>(
         assertStructuredReadFilter(any!.filter, 'column');
         continue;
       }
+      /* The key of another table's rows (`customer_id in (customer where …)`, Condition.within): a command's read, one
+         level deep, its own conditions plain comparisons judged by the same rule. The read's scope plans that table
+         (scopedReads.ts), so a tenant's subquery keys only its own rows. */
+      if (field === 'column' && condition.within !== undefined) {
+        const within = condition.within as Record<string, unknown> | null;
+        if (
+          Object.keys(condition).some((key) => !['column', 'op', 'within'].includes(key)) ||
+          typeof condition.column !== 'string' ||
+          !condition.column.length ||
+          condition.op !== 'in' ||
+          !within ||
+          typeof within !== 'object' ||
+          Array.isArray(within) ||
+          Object.keys(within).some((key) => key !== 'table' && key !== 'filter') ||
+          typeof within.table !== 'string' ||
+          !within.table.length
+        )
+          fail();
+        assertStructuredReadFilter(within!.filter, 'column');
+        const inner = within!.filter as { groups: Array<Array<Record<string, unknown>>> } | null | undefined;
+        if (inner?.groups.some((group) => group.some((nested) => nested.within !== undefined))) fail();
+        continue;
+      }
       if (
         Object.keys(condition).some((key) => ![field, 'op', 'value', 'collation', ...(other ? ['other'] : [])].includes(key)) ||
         typeof condition[field] !== 'string' ||

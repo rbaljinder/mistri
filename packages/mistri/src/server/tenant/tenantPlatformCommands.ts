@@ -599,6 +599,8 @@ export function bindPlatformCommands<Request>(runtime: PlatformRequestRuntime<Re
       try {
         captured = captureTenantData(body);
         context = captureTenantCommandExecution(input);
+        // A trial is a tenant's own import check; the platform realm runs none.
+        if (context.options.trial) throw new Error();
       } catch {
         throw new BusinessCommandExecutionError('invalid_input', mode === 'prepare' ? 'not_applied' : 'unknown');
       }

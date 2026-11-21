@@ -129,6 +129,15 @@ async function runManaged<T>(
     insert = method('insert'),
     update = method('update'),
     remove = method('remove');
+  /* Optional, as a batch is: present where the engine beneath writes several rows in one statement (the command
+     db's insertMany and updateWhere). Both or neither, as the engine carries them. */
+  const many = (['insertMany', 'updateMany'] as const).map((name) => Object.getOwnPropertyDescriptor(records, name));
+  const batches = many.every((descriptor) => descriptor && 'value' in descriptor && typeof descriptor.value === 'function')
+    ? {
+        insertMany: ((...args: unknown[]) => Reflect.apply(many[0]!.value, records, args)) as NonNullable<WriteTransaction['insertMany']>,
+        updateMany: ((...args: unknown[]) => Reflect.apply(many[1]!.value, records, args)) as NonNullable<WriteTransaction['updateMany']>,
+      }
+    : undefined;
   // Optional, as a flow's notify step is the one caller: present where the engine keeps notices.
   const told = Object.getOwnPropertyDescriptor(records, 'tell');
   const tell =
@@ -265,6 +274,38 @@ async function runManaged<T>(
       return work(captured!);
     });
   };
+  /** A row to insert as this tenant may write it: its own columns, the owner's column stamped, never given. */
+  const inserting = (value: InsertRequest): InsertRequest => {
+    tenantRecord(value, ['table', 'values']);
+    const { table, column } = writable(value.table, 'insert'),
+      supplied = values(table, value.values, true);
+    if (column !== undefined && Object.hasOwn(supplied, column)) return denyTenant();
+    // Bytes are outside the JSON value union; every adapter binds them as BLOB or bytea (http/fileRows.ts).
+    return captureTenantData({
+      table: table.id,
+      values: column === undefined ? supplied : { ...supplied, [column]: tenantId! },
+    } as InsertRequest);
+  };
+  /** A row to change as this tenant may change it: its key completed with the owner, the owner never moved. */
+  const updating = (value: UpdateRequest): UpdateRequest => {
+    tenantRecord(value, ['table', 'key', 'values', 'expected']);
+    const { table, column } = writable(value.table, 'update'),
+      supplied = values(table, value.values);
+    if (column !== undefined && Object.hasOwn(supplied, column)) return denyTenant();
+    // A key, or a column another row's key names, moves with a command only: an edit that moved one could carry rows with it.
+    if (ownRowsOnly && Object.keys(supplied).some((name) => keyColumn(table, name))) return denyTenant();
+    const completeKey = key(table, column, value.key);
+    let expected: Record<string, Scalar> | undefined;
+    if (value.expected !== undefined) {
+      const original = values(table, value.expected);
+      if (column !== undefined && tenantId !== undefined && Object.hasOwn(original, column) && original[column] !== tenantId)
+        return denyTenant();
+      // An exact ownership value is not a grant. Preserve the map so the
+      // engine's exactly-touched-fields rule can still reject extra fields.
+      expected = original;
+    }
+    return captureTenantData({ table: table.id, key: completeKey, values: supplied, ...(expected !== undefined ? { expected } : {}) });
+  };
   const tx: WriteTransaction = Object.freeze({
     query: (request: QueryRequest) =>
       invoke(request, async (value) => {
@@ -315,42 +356,18 @@ async function runManaged<T>(
             }),
         }
       : {}),
-    insert: (request: InsertRequest) =>
-      invoke(request, (value) => {
-        tenantRecord(value, ['table', 'values']);
-        const { table, column } = writable(value.table, 'insert'),
-          supplied = values(table, value.values, true);
-        if (column !== undefined && Object.hasOwn(supplied, column)) return denyTenant();
-        // Bytes are outside the JSON value union; every adapter binds them as BLOB or bytea (http/fileRows.ts).
-        return insert(
-          captureTenantData({
-            table: table.id,
-            values: column === undefined ? supplied : { ...supplied, [column]: tenantId! },
-          } as InsertRequest),
-        );
-      }),
-    update: (request: UpdateRequest) =>
-      invoke(request, (value) => {
-        tenantRecord(value, ['table', 'key', 'values', 'expected']);
-        const { table, column } = writable(value.table, 'update'),
-          supplied = values(table, value.values);
-        if (column !== undefined && Object.hasOwn(supplied, column)) return denyTenant();
-        // A key, or a column another row's key names, moves with a command only: an edit that moved one could carry rows with it.
-        if (ownRowsOnly && Object.keys(supplied).some((name) => keyColumn(table, name))) return denyTenant();
-        const completeKey = key(table, column, value.key);
-        let expected: Record<string, Scalar> | undefined;
-        if (value.expected !== undefined) {
-          const original = values(table, value.expected);
-          if (column !== undefined && tenantId !== undefined && Object.hasOwn(original, column) && original[column] !== tenantId)
-            return denyTenant();
-          // An exact ownership value is not a grant. Preserve the map so the
-          // engine's exactly-touched-fields rule can still reject extra fields.
-          expected = original;
+    insert: (request: InsertRequest) => invoke(request, (value) => insert(inserting(value))),
+    update: (request: UpdateRequest) => invoke(request, (value) => update(updating(value))),
+    /* A batch is its rows, each judged and stamped as one row alone is, then written by the engine beneath in one
+       statement. Never a batch remove: a removal counts each row's references, one row at a time. */
+    ...(batches
+      ? {
+          insertMany: (requests: readonly InsertRequest[]) =>
+            invoke(requests, (value) => batches.insertMany((Array.isArray(value) ? value : denyTenant()).map(inserting))),
+          updateMany: (requests: readonly UpdateRequest[]) =>
+            invoke(requests, (value) => batches.updateMany((Array.isArray(value) ? value : denyTenant()).map(updating))),
         }
-        return update(
-          captureTenantData({ table: table.id, key: completeKey, values: supplied, ...(expected !== undefined ? { expected } : {}) }),
-        );
-      }),
+      : {}),
     remove: (request: DeleteRequest) =>
       invoke(request, (value) => {
         /* `unreferenced` (a draft's Start over) is accepted and dropped: under a tenant's bound every referencing

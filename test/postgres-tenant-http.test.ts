@@ -125,12 +125,13 @@ const SETUP = [
   `INSERT INTO public.pg_task VALUES ('north-task', 'north', 'same', 'North task', 0), ('south-task', 'south', 'same', 'South task', 0)`,
 ];
 
-/* A free-form page whose loader reads items, and one whose loader tries to write one. */
-const pageView = (key: string) => ({
+/* A free-form page whose loader reads items, one whose loader tries to write one, and one whose loader reads tasks by an
+   in-subquery on items. */
+const pageView = (key: string, reads = ['item']) => ({
   kind: 'page',
   label: key,
   component: { id: `page-${key}`, module: `./pages/${key}.page.tsx`, kind: 'page' },
-  reads: ['item'],
+  reads,
   loader: key,
 });
 const manifest = (store: string, mentions: boolean | 'email' = false, pages = false) => ({
@@ -178,10 +179,12 @@ const manifest = (store: string, mentions: boolean | 'email' = false, pages = fa
   views: {
     items: { kind: 'list', from: 'item' },
     tasks: { kind: 'list', from: 'task' },
-    ...(pages ? { board: pageView('board'), scribble: pageView('scribble'), fan: pageView('fan') } : {}),
+    ...(pages
+      ? { board: pageView('board'), scribble: pageView('scribble'), fan: pageView('fan'), within: pageView('within', ['task', 'item']) }
+      : {}),
   },
   home: 'items',
-  nav: ['items', 'tasks', ...(pages ? ['board', 'scribble', 'fan'] : [])],
+  nav: ['items', 'tasks', ...(pages ? ['board', 'scribble', 'fan', 'within'] : [])],
 });
 const policyModule = (extra = '', mentions: boolean | 'email' = false) => `export default {
   kind: 'tenant', appId: ${JSON.stringify(appId)}, storeId: ${JSON.stringify(binding.storeId)},
@@ -202,6 +205,9 @@ export const loaders = defineLoaders({
   scribble: defineLoader({ reads: ['item'], load: async ({ db }) => db.item.update({ id: 'north-item' }, { name: 'WRITTEN' }) }),
   fan: defineLoader({ reads: ['item'], load: async ({ db }) => ({
     names: (await Promise.all(Array.from({ length: ${FAN} }, () => db.item.where({}).orderBy('id')))).map((rows) => rows.map((row) => row.name).join()),
+  }) }),
+  within: defineLoader({ reads: ['task', 'item'], load: async ({ db }) => ({
+    tasks: (await db.task.where({ name: { in: { from: 'item', where: { business_id: 'same' } } } }).orderBy('id')).map((row) => row.id),
   }) }),
 });`
     : ''
@@ -900,6 +906,38 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     assert.equal(wrote.body.code, 'loader_refused');
     assert.deepEqual(await items(), before);
     refused(await f.data('/api/pages/load', { ...south, ...f.signedIn(ada) }, { page: 'board' }));
+  });
+
+  test("a page loader's in-subquery keys only its tenant's rows on PostgreSQL, though both tenants' rows hold the where's value", async (t) => {
+    const f = await fixture(t, { pages: true }),
+      ada = await f.signup('Ada'),
+      bob = await f.signup('Bob');
+    await f.grant(ada, 'north');
+    await f.grant(bob, 'south');
+    const north = await f.open(ada, 'north'),
+      south = await f.open(bob, 'south');
+    const within = async (context: Context) => {
+      const reply = await f.data('/api/pages/load', context, { page: 'within' });
+      assert.equal(reply.status, 200, reply.text);
+      sealed(reply);
+      return reply.body;
+    };
+    /* Both items hold business_id 'same', and both tasks name north's item. Read whole, the subquery keys both items
+       and both tasks match; read as south, it keys south's item alone, so south's task, naming north's key, does not. */
+    await control.query("UPDATE public.pg_task SET name = 'north-item'");
+    const whole = await control.query(
+      "SELECT id FROM public.pg_task WHERE name IN (SELECT id FROM public.pg_item WHERE business_id = 'same') ORDER BY id",
+    );
+    assert.deepEqual(
+      whole.rows.map((row) => row.id),
+      ['north-task', 'south-task'],
+    );
+    assert.deepEqual(await within(north), { data: { tasks: ['north-task'] } });
+    assert.deepEqual(await within(south), { data: { tasks: [] } });
+    // Naming its own tenant's item, south's task matches: the empty answer above was the scope, not the loader.
+    await control.query("UPDATE public.pg_task SET name = 'south-item' WHERE id = 'south-task'");
+    assert.deepEqual(await within(south), { data: { tasks: ['south-task'] } });
+    assert.deepEqual(await within(north), { data: { tasks: ['north-task'] } });
   });
 
   test("a page's loader reads on one snapshot of its tenant, however many reads it asks at once", async (t) => {
