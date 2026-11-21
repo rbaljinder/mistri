@@ -5,6 +5,20 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.80
+
+`chosen` reaches every door a person sits behind, and says what to do on the doors with no person.
+
+- Fix: a signed-in form's draft steps now see the person's App choice (`ctx.chosen`, and `chosen.*` in a handler's
+  `where`), on a single App and in a tenant App. Before, a draft step was told nothing was chosen.
+- Fix: in an App with a row policy, a command's execute, its draft steps and a proposal's approval now carry the
+  person's choice too. Before, each of them ran with nothing chosen.
+- A job, a workflow step or an API call that names `chosen.*` is refused in words that say why and what to do: nothing
+  there runs for a person at a desk, so take the row as input, or quote it to mean the text.
+- Tests: each command door that carries a choice (single App, row policy, tenant on SQLite and PostgreSQL) is held to
+  the header pick, the stored pick, a header over a stored pick, and an unreadable or another tenant's pick reading as
+  none.
+
 ## 1.0.0-rc.79
 
 A check for the headline figure a grant forgets, and two flakes fixed at their cause.

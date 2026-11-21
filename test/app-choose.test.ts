@@ -63,7 +63,10 @@ test('an undeclared choice, a query with no App choice meant, and a once-read qu
     read('site_id = chosen.region', person({ site: 2 })).errors[0].message,
     /chosen\.region names no choice: the App's choose declares site/,
   );
-  assert.match(read('site_id = chosen.site').errors[0].message, /no App choice is meant here/);
+  assert.match(
+    read('site_id = chosen.site').errors[0].message,
+    /nothing here runs for a person at a desk \(a job, a workflow step, an API call\): take it as input, or quote it \("chosen\.site"\)/,
+  );
   assert.match(read('site_id = chosen.site', ANYONE_ONCE).errors[0].message, /read once for every request/);
   // A check before any request reads the word as written: it compiles, and says nothing of a value.
   assert.deepEqual(read('site_id = chosen.site', ANYONE).errors, []);

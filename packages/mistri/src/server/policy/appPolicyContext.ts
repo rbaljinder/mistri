@@ -1,4 +1,5 @@
 import { isPromise, isProxy } from 'node:util/types';
+import type { Chosen } from '../app/appChoices.js';
 import {
   TransactionOutcomeUnknown,
   type Adapter,
@@ -92,6 +93,8 @@ interface PolicyCommandOptions {
   door?: import('../commands/businessCommandExecution.js').CommandDoor;
   /** The locale the caller resolved for whoever asked (`ctx.locale`), clamped by the executor. */
   locale?: string;
+  /** The App's `choose` the browser door proved under these rows (app/appChoices.ts): `ctx.chosen` for what runs. */
+  chosen?: Chosen;
 }
 
 /** Server-only capability, not a wire token or a bag of client-supplied grants. */
@@ -860,6 +863,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                     requestId: options?.requestId,
                     ...(options?.door ? { door: options.door } : {}),
                     ...(options?.locale ? { locale: options.locale } : {}),
+                    ...(options?.chosen ? { chosen: options.chosen } : {}),
                   };
                   return executeBusinessCommand(commandBinding, principal, body, {
                     ...execution,
@@ -905,7 +909,12 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                       binding: commandBinding,
                       actor: principal,
                       body,
-                      execution: { signal: options?.signal, requestId: options?.requestId, locale: options?.locale },
+                      execution: {
+                        signal: options?.signal,
+                        requestId: options?.requestId,
+                        locale: options?.locale,
+                        chosen: options?.chosen,
+                      },
                       flagsFor: (envelope) => authorizedCommandFlags(commandBinding, principal, envelope, flags),
                       ...(options?.door ? { door: options.door } : {}),
                     });
@@ -936,6 +945,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                           requestId: options?.requestId,
                           ...(options?.door ? { door: options.door } : {}),
                           ...(options?.locale ? { locale: options.locale } : {}),
+                          ...(options?.chosen ? { chosen: options.chosen } : {}),
                           flags: await authorizedCommandFlags(commandBinding, principal, envelope, flags),
                           proposalId,
                         }),

@@ -213,7 +213,9 @@ export function chosenOperand(
       ? { error: `${word} is a choice of one request's person, and this query is read once for every request, so it cannot ask it.` }
       : { value: word };
   if (!me?.chosen)
-    return { error: `${word} is the person's App choice, and no App choice is meant here. Quote it ("${word}") to mean the text.` };
+    return {
+      error: `${word} is the person's App choice, and nothing here runs for a person at a desk (a job, a workflow step, an API call): take it as input, or quote it ("${word}") to mean the text.`,
+    };
   if (!Object.hasOwn(me.chosen, match[1]))
     return { error: `${word} names no choice: the App's choose declares ${Object.keys(me.chosen).join(', ') || 'none'}.` };
   const value = me.chosen[match[1]];

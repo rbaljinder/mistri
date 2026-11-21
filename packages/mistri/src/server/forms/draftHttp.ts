@@ -22,6 +22,7 @@
  * review of everything that will be submitted. It is only ever the owner's (the same owner predicate found the draft),
  * and never a column no step shows: the owner, the token, the expiry, the progress and the platform's own.
  */
+import type { Chosen } from '../app/appChoices.js';
 import type { WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
 import { ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
@@ -238,7 +239,13 @@ interface DraftRouteOptions {
   readonly binding: BusinessCommandBinding;
   readonly actor: BusinessCommandActor;
   readonly body: unknown;
-  readonly execution: { signal?: AbortSignal | undefined; requestId?: string | undefined; locale?: string | undefined };
+  /** `chosen` is the App's `choose` as the door proved it (app/appChoices.ts): a step's `ctx.chosen`, as an execute's. */
+  readonly execution: {
+    signal?: AbortSignal | undefined;
+    requestId?: string | undefined;
+    locale?: string | undefined;
+    chosen?: Chosen | undefined;
+  };
   /** The flags for this command's run, captured under the actor's grant of it. */
   readonly flagsFor: (envelope: unknown) => Promise<CommandFlags>;
   readonly door?: CommandDoor;
@@ -384,6 +391,7 @@ export async function runDraftRoute(options: DraftRouteOptions): Promise<unknown
     ...(options.execution.signal ? { signal: options.execution.signal } : {}),
     ...(options.execution.requestId ? { requestId: options.execution.requestId } : {}),
     ...(options.execution.locale ? { locale: options.execution.locale } : {}),
+    ...(options.execution.chosen ? { chosen: options.execution.chosen } : {}),
     flags: await options.flagsFor(envelope),
     ...(options.door ? { door: options.door } : {}),
     draft: run,
