@@ -462,7 +462,7 @@ test('a section the reader cannot read is left out of the page, never the page; 
   assert.equal(readablePage(schema, { ...page(fields), base: 'hidden_table' }), undefined);
 });
 
-test('a related list whose New the reader may not use stays without it; a headline’s earlier figure the reader may not read is left off', () => {
+test('a related list whose New the reader may not use stays without it; a headline’s other figures the reader may not read are left off', () => {
   const create = { label: 'Add note' };
   const notes: PageSection = { ...list, columns: ['name'], create };
   // The reader reads notes and writes none of them: the shopper on a car's photos.
@@ -483,6 +483,10 @@ test('a related list whose New the reader may not use stays without it; a headli
     ),
   };
   assert.deepEqual(readablePage(hidden, page(headline))?.sections, [{ kind: 'fields', paths: ['name'], presentation: 'headline' }]);
+  // Its second figure and second line go the same way: a visitor reads the asking rent without the rent a square foot.
+  const figures: PageSection = { kind: 'fields', paths: ['name'], presentation: 'headline', subfigure: 'revision', subtitle: 'status' };
+  assert.deepEqual(readablePage(schema, page(figures))?.sections, [figures]);
+  assert.deepEqual(readablePage(hidden, page(figures))?.sections, [{ kind: 'fields', paths: ['name'], presentation: 'headline' }]);
 });
 
 /* G49: a role narrowed to some of a table's columns keeps the page's layout. Its header and its properties lose the

@@ -152,7 +152,13 @@ export function assertStructuredReadFilter<Field extends 'column' | 'path'>(
   };
   if (typeof filter !== 'object' || Array.isArray(filter)) fail();
   const given = filter as Record<string, unknown>;
-  if (Object.keys(given).some((key) => key !== 'groups') || !Array.isArray(given.groups)) fail();
+  /* A column filter may carry the computed columns its conditions name (Filter.computed): its shape is checked here,
+     each expression where it is written (computedWhere.ts checkedComputed), never on the strength of this check. */
+  const computed = given.computed;
+  const carriesComputed =
+    field === 'column' && computed !== undefined && computed !== null && typeof computed === 'object' && !Array.isArray(computed);
+  if (Object.keys(given).some((key) => key !== 'groups' && !(key === 'computed' && carriesComputed)) || !Array.isArray(given.groups))
+    fail();
   const scalar = (value: unknown) =>
     value === null || typeof value === 'string' || typeof value === 'boolean' || (typeof value === 'number' && Number.isFinite(value));
   for (const group of given.groups as unknown[]) {

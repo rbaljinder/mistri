@@ -209,6 +209,11 @@ export const main: Main = async () => {
   }
   const opts = parseArgs(process.argv.slice(2));
   if (process.env[CHECK_VALIDATION] === '1') opts.checkApp = true;
+  /* A `mistri dev` host whose parent holds the port (devSupervisor.ts): every address it makes is the parent's. */
+  if (opts.dev && process.env.MISTRI_DEV_PORT) {
+    const handed = (await import('./devSupervisor.js')).handedOffPort();
+    if (handed !== undefined) Object.assign(opts, { port: handed, portGiven: true });
+  }
   if (await answeredFirst(opts, MISTRI)) return;
   /* The database browser's modes, before anything is read: they open a database with no App, which is the
      database browser's to do. */
@@ -479,6 +484,7 @@ export const main: Main = async () => {
       const first = loadedApps[0];
       const code = await superviseDev({
         ...typed,
+        listen: { port: opts.port, host: opts.host },
         watch: (changed) =>
           watchForSave(first.dir ?? dirname(first.path), [opts.policy, opts.commands, opts.jobs, config.configPath], changed),
       });
@@ -715,6 +721,7 @@ export const main: Main = async () => {
         await superviseDev({
           ...typed,
           onlyOnChange: true,
+          listen: { port: opts.port, host: opts.host },
           watch: (changed) =>
             first
               ? watchForSave(first.dir ?? dirname(first.path), [opts.policy, opts.commands, opts.jobs, config.configPath], changed)

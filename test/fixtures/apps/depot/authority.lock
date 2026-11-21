@@ -85,7 +85,11 @@ role admin fields supplier read email — the App
 role admin fields supplier read id — the App
 role admin fields supplier read lead_time_days — the App
 role admin fields supplier read name — the App
+role admin fields supplier read open_orders — the App
+role admin fields supplier read open_value — the App
 role admin fields supplier read phone — the App
+role admin fields supplier read products — the App
+role admin fields supplier read received_recently — the App
 role admin fields supplier read state — the App
 role admin fields supplier read terms — the App
 role admin fields supplier write city — the App
@@ -171,7 +175,11 @@ role manager fields supplier read email — the App
 role manager fields supplier read id — the App
 role manager fields supplier read lead_time_days — the App
 role manager fields supplier read name — the App
+role manager fields supplier read open_orders — the App
+role manager fields supplier read open_value — the App
 role manager fields supplier read phone — the App
+role manager fields supplier read products — the App
+role manager fields supplier read received_recently — the App
 role manager fields supplier read state — the App
 role manager fields supplier read terms — the App
 role manager fields supplier write city — the App
@@ -248,7 +256,11 @@ role purchaser fields supplier read email — the App
 role purchaser fields supplier read id — the App
 role purchaser fields supplier read lead_time_days — the App
 role purchaser fields supplier read name — the App
+role purchaser fields supplier read open_orders — the App
+role purchaser fields supplier read open_value — the App
 role purchaser fields supplier read phone — the App
+role purchaser fields supplier read products — the App
+role purchaser fields supplier read received_recently — the App
 role purchaser fields supplier read state — the App
 role purchaser fields supplier read terms — the App
 role purchaser fields supplier write city — the App

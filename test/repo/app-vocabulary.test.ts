@@ -32,6 +32,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'audiences',
       'auth',
       'branding',
+      // rc.80: App-wide picked rows (the current site), read as `chosen.<name>` (server/app/appChoices.ts).
+      'choose',
       'connection',
       'experiments',
       'flags',
@@ -101,6 +103,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'file',
       'flows',
       'form',
+      'frozen',
       'hidden',
       'import',
       'inputs',
@@ -165,6 +168,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'ai',
       'apiTokens',
       'assistant',
+      // rc.80: the App's choices this reader can make, each over a table their catalog has (ChoiceControl.tsx).
+      'choose',
       'components',
       // The fields a decision may suggest, by table, so a record holds their places before it asks (decide/decisionServing.ts).
       'decisions',
@@ -186,6 +191,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'name',
       'nav',
       'pages',
+      // rc.81: the picks this person keeps on the server, by choice name; present only where the database keeps the preferences store.
+      'picks',
       'problems',
       // rc.1: a public page's public commands, by name, which its door runs signed out (http/pageCommandRoutes.ts).
       'publicCommands',

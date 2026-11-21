@@ -132,7 +132,8 @@ column (a number is said to at most two places, its value kept whole), and a rol
 window reads a computed date (`over: 'renews_on'`) when it reads only its
 row's own columns; it is never written, and `fields.write`, `form.show` and an action's
 `set` refuse it. A role is served it only where every column it reads is
-readable to that role. A fixed action's `set` takes the same kind of
+readable to that role, and a role's `fields.read` list that leaves it out keeps it
+from that role. A fixed action's `set` takes the same kind of
 expression for a stamp (`computed.date('today + 14 days')`); anything heavier
 is a [command](/docs/commands/) or a database view.
 
@@ -268,6 +269,21 @@ validation: [
 A rule is a condition the record must meet on every write, optionally under
 `when`, which compares the record's own columns. At most 128 rules per
 resource.
+
+## Frozen records
+
+```ts
+resources: {
+  lead: { access: 'write', delete: true, frozen: 'status in (closed, void) and locked_at is not empty' },
+},
+```
+
+`frozen` is a condition over the resource's own columns, in the same words as a
+list's search. A row that meets it, as it is stored before the change, is
+refused every update, delete and command on every door with `409 frozen`, and
+the record page draws it read-only. New is unaffected, and so is a command that
+names no record. `mistri check` names the resource when a column is unknown or
+the condition does not read.
 
 ## Read audit
 

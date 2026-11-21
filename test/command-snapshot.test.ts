@@ -162,3 +162,11 @@ describe('one snapshot on a live PostgreSQL', { skip: liveSkip('postgres', PG) }
     );
   });
 });
+
+test('maxChanges is a whole number from 1 to 16,384, or the definition is refused when the App loads', () => {
+  const base = { source: 'books', target: 'ledger', read: ['ledger'], write: ['ledger'], input: {}, handle: () => ({}) } as const;
+  assert.equal(defineCommand({ ...base, maxChanges: 16_384 }).maxChanges, 16_384);
+  assert.equal(defineCommand(base).maxChanges, undefined);
+  for (const bad of [0, 1.5, 16_385, '5000'])
+    assert.throws(() => defineCommand({ ...base, maxChanges: bad as number }), /maxChanges is a whole number from 1 to 16,384/);
+});

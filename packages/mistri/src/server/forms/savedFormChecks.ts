@@ -26,7 +26,7 @@ import {
   type AppFormView,
 } from '../../shared/app.js';
 import { columnKind, findTable, primaryKey, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { choiceWhereColumns, commandFieldsDeep } from '../../shared/command.js';
+import { choiceFillColumnsDeep, choiceWhereColumns, commandFieldsDeep } from '../../shared/command.js';
 import { compileNotifyWhen, notifyWhenHolds } from '../../shared/appNotify.js';
 import { formCommands, isSavedForm } from '../../shared/appSavedForms.js';
 import { stepUpAddressProblem } from '../../shared/appStepUp.js';
@@ -92,6 +92,7 @@ function publicPickerProblem(
   schema: DatabaseSchema,
   on = 'a public form',
 ): string | undefined {
+  const filling = choiceFillColumnsDeep(command.fields);
   for (const { field: declared, path } of commandFieldsDeep(command.fields)) {
     /* A choice from a table's rows is read the same way: the visitor's read offers them. */
     const field =
@@ -107,6 +108,9 @@ function publicPickerProblem(
               labelColumns: declared.source.labelColumns,
               /* The columns a `where` compares are served on each row, for the page to narrow by: read the same way. */
               where: choiceWhereColumns(declared.source.match),
+              /* The columns other inputs start from this pick (`default: { answer }`) are served on each row too, to a
+                 signed-out visitor: read the same way, so a column the public may not read is refused here. */
+              fills: filling.get(declared) ?? [],
             }
           : undefined;
     if (!field) continue;
@@ -127,7 +131,8 @@ function publicPickerProblem(
     const localized = 'labelColumns' in field ? Object.values(field.labelColumns ?? {}) : [];
     const sort = 'sort' in field && field.sort ? [field.sort.column] : [];
     const where = 'where' in field ? field.where : [];
-    for (const column of new Set([field.by, field.labelColumn, ...localized, ...sort, ...tree, ...where])) {
+    const fills = 'fills' in field ? field.fills : [];
+    for (const column of new Set([field.by, field.labelColumn, ...localized, ...sort, ...tree, ...where, ...fills])) {
       if (keys.includes(column)) continue;
       if (ceilings.some((read) => !read.includes(column)))
         return `${at}, and a visitor may not read its column "${column}". Name it in "auth.public.fields.${resource}", or pick by, label and tree columns the public reads.`;

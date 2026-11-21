@@ -278,7 +278,7 @@ test('an audit of 4,096 changes and 2M characters is kept whole; a copy past the
   });
 });
 
-test('audit parts are refused when they are not whole pieces or run past 4,096 changes, and none of them is written', async () => {
+test('audit parts are refused when they are not whole pieces or run past 16,384 changes, and none of them is written', async () => {
   await fixture(async (adapter, db) => {
     const whole = (count: number) => JSON.stringify(Array.from({ length: count }, (_, at) => ({ field: `f${at}` })));
     const refusals: Array<[string, readonly string[]]> = [
@@ -286,7 +286,7 @@ test('audit parts are refused when they are not whole pieces or run past 4,096 c
       ['an empty piece', ['[]']],
       ['a piece of more than 256', [whole(257)]],
       ['a piece short of 256 before the last', [whole(10), whole(10)]],
-      ['more than sixteen pieces in all', Array.from({ length: 16 }, () => whole(256))],
+      ['more than the platform keeps in all', Array.from({ length: 64 }, () => whole(256))],
     ];
     for (const [, parts] of refusals)
       await assert.rejects(

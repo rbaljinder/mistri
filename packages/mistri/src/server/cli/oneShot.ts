@@ -38,6 +38,7 @@ import { snapshotCommandChecks } from '../app/appSnapshotChecks.js';
 import { consumesCommandWarnings, machineCommandWarnings, referenceReadWarnings } from '../app/appMachineChecks.js';
 import { appIndexWarnings } from '../../shared/appIndexWarnings.js';
 import { appSignUpProblems } from '../../shared/appWarnings.js';
+import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { checkAuthorityLock } from '../app/authorityLock.js';
 import { recordTabCollisions, recordTabWordsByView } from '../app/recordTabWords.js';
 import { CONTRACT_PREFIX, contractDigest, contractLines, lockedContracts } from '../commands/commandContracts.js';
@@ -281,17 +282,31 @@ export async function appOpenApi(
      the parameter, as the served one does. A generated client must be given
      that serializer, and mistri's own OpenAPI importer skips such a
      resource rather than misreading it. */
-  const { renderAppApiOpenApi } = await import('../api/apiPublicSpec.js');
-  if (!exposed) return JSON.stringify(renderAppApiOpenApi(loaded.app, runtime.schema, { integers }), null, 2);
+  if (!exposed) return JSON.stringify(await renderApiExport(registry, loaded.app, runtime, integers), null, 2);
   const { loadBusinessCommands } = await import('../commands/businessCommandLoader.js');
   const commands = loadedCommands ?? (await loadBusinessCommands(commandsFile!));
+  return JSON.stringify(await renderApiExport(registry, loaded.app, runtime, integers, commands), null, 2);
+}
+
+/** The document `--export openapi` prints, and what `mistri check` renders to judge the same App: one function, so
+ * the check refuses what the export refuses, by the same rules, and a rule added to the renderer reaches both.
+ * Local operator metadata only; nothing is read from the data. */
+async function renderApiExport(
+  registry: Registry,
+  app: LoadedApp['app'],
+  runtime: Awaited<ReturnType<typeof loadAppRuntimeResources>>,
+  integers: 'number' | 'decimal-string',
+  commands?: BusinessCommandRegistry,
+): Promise<unknown> {
+  const { renderAppApiOpenApi } = await import('../api/apiPublicSpec.js');
+  if (!commands) return renderAppApiOpenApi(app, runtime.schema, { integers });
   // The same trusted binding facts the command owner hands the catalog.
   const evidence = {
     connectionFor: runtime.connectionFor,
     writableConnection: (id: string) => registry.configOf(id)?.writable === true,
     transactionalConnection: (id: string) => !!commandsOf(runtime.forConnection(id)).commandTransaction,
   };
-  return JSON.stringify(renderAppApiOpenApi(loaded.app, runtime.schema, { integers, commands, evidence }), null, 2);
+  return renderAppApiOpenApi(app, runtime.schema, { integers, commands, evidence });
 }
 
 /** The App's event-driven surface as AsyncAPI 3.0 (apiAsyncApi.ts): its feed
@@ -633,6 +648,26 @@ async function commandContractCheck(
   return { problems, lines: [...lines, ...owned.lines], missing };
 }
 
+/** The export's own refusal as a check problem, for an ordinary App that declares an API; a tenant App's document
+ * is judged against its policy's ownership (tenantApiExport.ts) and is not rendered here. A refusal the catalog
+ * checks already said (the commands' startup) is not said twice. */
+async function apiExportProblems(
+  registry: Registry,
+  app: LoadedApp,
+  resources: Awaited<ReturnType<typeof loadAppRuntimeResources>>,
+  commands: BusinessCommandRegistry | undefined,
+): Promise<string[]> {
+  if (!app.app.api || isTenantApp(app.app)) return [];
+  const exposed = apiExposesCommands(app.app.api);
+  if (exposed && !commands) return [];
+  try {
+    await renderApiExport(registry, app.app, resources, 'decimal-string', exposed ? commands : undefined);
+    return [];
+  } catch (error) {
+    return [`${app.path}: ${(error as Error).message}`];
+  }
+}
+
 export async function checkApps(opts: Options, registry: Registry, loadedApps: LoadedApp[], hosted: CommandHost): Promise<void> {
   const { commandHosting, jobHost, jobLines, effectHost, effectLines, jobCommands, jobRoles, workflows, workflowProblems } = hosted;
   let services: { problems: string[]; warnings: string[] } = { problems: [], warnings: [] };
@@ -746,6 +781,8 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
       });
       lines = [
         ...appProblems(app, schema),
+        // What `--export openapi` would refuse: the same render, so a refusal is found here and not by the first export.
+        ...(await apiExportProblems(registry, app, resources, commandHosting?.registry ?? app.commands?.registry)),
         ...recordTabCollisions(app.app, app.pages, schema),
         ...reach.problems,
         // A New form's default on a column a role that makes the rows does not write: served without it.
@@ -821,6 +858,20 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
          lacks: a tenant App's is often made fresh, its triggers not yet migrated in (a field report). */
       const declared = app.dir ? await readFile(join(app.dir, 'schema.sql'), 'utf8').catch(() => undefined) : undefined;
       if (declared) advice.push(...schemaTriggerWarnings(app.app, commands, declared, triggersOf));
+      // Any App's write that a trigger reading other tables can refuse, and one schema.sql is about to bring (a migration not yet run).
+      const { crossTableTriggerWarnings } = await import('../commands/commandTriggerChecks.js');
+      advice.push(
+        ...(
+          await crossTableTriggerWarnings(
+            app.app,
+            resources,
+            commands,
+            async (id) => (await registry.open(id)).adapter,
+            triggersOf,
+            declared,
+          )
+        ).map((warning) => `${app.path}: ${warning}`),
+      );
       /* Its decisions' inputs against the schema served, and their contracts against decisions.lock. */
       if (decisions.size && commandRegistry && app === loadedApps[0]) {
         const { checkDecisions, decisionLockDirectory } = await import('../decide/decisionCheck.js');

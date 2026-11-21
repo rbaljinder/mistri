@@ -635,6 +635,18 @@ test('a record dropped on another half hour starts there, its end moved with it'
 
 test('the records are one Tab stop; Alt and an arrow move one by a half hour, and Alt, Shift and an arrow its end', async () => {
   drawTimed();
+  /* The server keeps what it applied: the rows are read again after each move, and a slow machine may press the next
+     key after that read is drawn, which must then be the moved record, not the one the fixture started with. */
+  const served = meetings.map((row) => ({ ...row }));
+  mocks.api.mockImplementation(async () => ({ rows: served.map((row) => ({ ...row })) }));
+  mocks.apply.mockImplementation(async (_target: unknown, values: Record<string, string>, items: Array<{ key: { id: number } }>) => {
+    for (const item of items)
+      Object.assign(
+        served.find((row) => row.id === item.key.id)!,
+        values,
+      );
+    return { outcomes: [{ kind: 'applied', message: '' }] };
+  });
   const user = userEvent.setup();
   const review = await screen.findByRole('button', { name: /Design review/ });
   const focusable = [...document.querySelectorAll('.calendar-time-card')].filter((card) => card.getAttribute('tabindex') === '0');
@@ -655,7 +667,7 @@ test('the records are one Tab stop; Alt and an arrow move one by a half hour, an
   );
   await vi.waitFor(() => expect(screen.getByRole('button', { name: /Design review/ })).not.toHaveClass('is-moving'));
   screen.getByRole('button', { name: /Design review/ }).focus();
-  // Its end, from where the move left it (this fixture's server is read again after the last write only).
+  // Its end, from where the move left it.
   await user.keyboard('{Alt>}{Shift>}{ArrowDown}{/Shift}{/Alt}');
   await vi.waitFor(() =>
     expect(mocks.apply).toHaveBeenLastCalledWith(expect.anything(), { ends_at: `${today}T11:30:00` }, expect.anything(), expect.anything()),

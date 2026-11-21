@@ -34,6 +34,7 @@ import { BUILD_MANIFEST } from '../app/appBuild.js';
 import { authorityLockProblem } from '../app/authorityLock.js';
 import { staleSkillWarning } from '../cli/agentInit.js';
 import { httpSpecFindings } from './checkHttpSpec.js';
+import { devScriptWarning } from './checkDevScript.js';
 import { placementIn } from '../../shared/appUi.js';
 import { fontBudgetProblem, fontSummary } from '../app/appFonts.js';
 import { writtenAt, type FixedThemeProblem } from '../../shared/themeFix.js';
@@ -553,9 +554,9 @@ async function storesPendingStep(registry: Registry, loaded: LoadedApp, opts: Op
     ...(opts.jobs !== undefined ? { jobs: opts.jobs } : {}),
     ...(opts.policy !== undefined ? { policy: opts.policy } : {}),
   });
-  /* Live sync is the one store a start does without (live/liveBinding.ts says it off, and pages refresh on focus):
-     the plan makes it, and its absence fails nothing here. */
-  const missing = plan.stores.filter((store) => store.state !== 'present' && store.id !== 'live-change');
+  /* Live sync and the preferences are the stores a start does without (live/liveBinding.ts says live sync off, and pages
+     refresh on focus; picks stay in the browser): the plan makes them, and their absence fails nothing here. */
+  const missing = plan.stores.filter((store) => store.state !== 'present' && store.id !== 'live-change' && store.id !== 'preferences');
   if (!missing.length) return undefined;
   const byConnection = new Map<string, string[]>();
   for (const store of missing)
@@ -1653,6 +1654,20 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
         judged.lines = [...judged.lines, `error: ${staleSkill}`];
         judged.problems = [...(judged.problems ?? []), problem('validation', 'skill-stale', staleSkill)];
         judged.status = 'failed';
+      }
+    }
+
+    /* A dev script that serves the source without `mistri dev`: a warning, since serving it so is allowed, but a save
+       is then not followed and a restart drops the port. */
+    const devScript = devScriptWarning(appDir);
+    if (devScript) {
+      const judged = steps.findLast((step) => step.name === 'validation');
+      if (judged) {
+        judged.lines = [...judged.lines, `warning: ${devScript}`];
+        judged.problems = [
+          ...(judged.problems ?? []),
+          problem('validation', 'dev-script-not-dev', devScript, { fix: 'mistri dev --app <dir>' }, 'warning'),
+        ];
       }
     }
 

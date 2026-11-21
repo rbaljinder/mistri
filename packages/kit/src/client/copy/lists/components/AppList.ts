@@ -31,4 +31,7 @@ export const say = defineMessages({
   captionFilters: '{caption} filters',
   everything: 'Everything',
   layout: 'Show {caption} as',
+  chosen: '{thing}: {value}',
+  chosenNone: 'none',
+  chosenChange: 'Change {thing}',
 });

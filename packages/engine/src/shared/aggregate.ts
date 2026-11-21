@@ -16,6 +16,7 @@
  */
 import type { BreakdownDef, BreakdownKey, Measure } from './breakdown.js';
 import { compileBreakdown, DATE_UNITS } from './breakdown.js';
+import { checkedComputed } from './computedWhere.js';
 import type { RowScope } from './rowScope.js';
 import type { DateUnit, Filter, SqlStyle } from './filter.js';
 import { RequestFault } from './refusal.js';
@@ -113,6 +114,10 @@ function aggregateBreakdown(schema: DatabaseSchema, request: AggregateRequest): 
       ...(measure.column === undefined ? {} : { path: column(measure.column, 'measure') }),
     };
   });
+  /* A computed column its where names is written as its expression over the table's own columns, as a view writes
+     one (ViewDef.expressions); checked first, as a single-table read's is (computedWhere.ts). Keys and measures
+     stay the table's own columns. */
+  const computed = request.filter ? checkedComputed(request.filter, table) : new Map<string, never>();
   const groups = (request.filter?.groups ?? []).map((group) =>
     group.map((condition): ViewCondition => {
       /* A comparison with another column, rows that point here (`any`), or another table's rows (`within`), reads past this table's own values:
@@ -120,7 +125,7 @@ function aggregateBreakdown(schema: DatabaseSchema, request: AggregateRequest): 
       if (condition.any !== undefined || condition.other !== undefined || condition.within !== undefined)
         throw new RequestFault("An aggregate's where compares the table's own columns with values.");
       return {
-        path: column(condition.column, 'where'),
+        path: computed.has(condition.column) ? condition.column : column(condition.column, 'where'),
         op: condition.op,
         ...(condition.value === undefined ? {} : { value: condition.value }),
         ...(condition.collation ? { collation: condition.collation } : {}),
@@ -143,6 +148,7 @@ function aggregateBreakdown(schema: DatabaseSchema, request: AggregateRequest): 
     ...(dates.length ? { dateColumns: dates } : {}),
     measures,
     ...(groups.length ? { filter: { groups } } : {}),
+    ...(computed.size ? { expressions: Object.fromEntries([...computed].map(([name, def]) => [name, { ...def, on: '' }])) } : {}),
     ...(orderBy.length ? { orderBy } : {}),
     limit: request.limit,
   };

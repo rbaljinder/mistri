@@ -94,7 +94,7 @@ export function renderApiReadOpenApi(
     const viewId = operation.kind === 'view' ? operation.id.slice('view:'.length) : undefined;
     const view = viewId === undefined ? undefined : app.views[viewId];
     if (view && 'table' in view && (view.sorts?.length || view.totals?.length)) {
-      throw new Error('The App API read document does not yet publish named sorts or totals.');
+      throw new Error('The App API read document does not yet publish named sorts or totals [api-view-totals].');
     }
     const composite = operation.primaryKey.length > 1;
     const key = composite ? 'key' : operation.primaryKey[0];

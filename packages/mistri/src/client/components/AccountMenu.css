@@ -35,4 +35,12 @@
   .account-menu-context bdi { font-weight: 600; overflow-wrap: anywhere; }
   .account-menu-context-word { color: var(--ink-muted); }
 }
+/* The App's choices, said and opened here below the width the bar holds their controls (ChoiceControl.css). */
+.account-menu-choice, .account-menu-choice-sep { display: none; }
+@media (max-width: 1279px) {
+  .account-menu-choice { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 var(--space-2h); }
+  .account-menu-choice-sep { display: block; height: 0; margin: var(--space-2) 0 var(--space-2); border-top: 1px solid var(--line); }
+  .account-menu-choice bdi { font-weight: 600; overflow-wrap: anywhere; }
+  .account-menu-choice-word { color: var(--ink-muted); }
+}
 }

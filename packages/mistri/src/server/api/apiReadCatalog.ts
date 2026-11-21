@@ -165,7 +165,7 @@ export function scopedReadCatalog(
       }
       // Exact comparison and keyset order over these need per-kind rules the API does not have yet.
       if (use !== 'field' && (kind === 'decimal' || kind === 'timestamp' || kind === 'json'))
-        fail(at, `${use} "${field}" has type ${column.type}, which the API does not filter or sort by`);
+        fail(at, `${use} "${field}" has type ${column.type}, which the API does not filter or sort by [api-${use}-type]`);
     };
     exposure.fields.forEach((field) => represent(field, 'field'));
     exposure.filters.forEach((field) => represent(field, 'filter'));

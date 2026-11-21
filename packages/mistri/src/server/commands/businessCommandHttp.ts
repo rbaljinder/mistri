@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { Chosen } from '../app/appChoices.js';
 import type { AppDef } from '../../shared/app.js';
 import type { BusinessCommandActor, BusinessCommandRegistry } from './businessCommands.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
@@ -81,6 +82,7 @@ export function businessCommandHttpError(error: unknown, statusOnly = false) {
                         'command_version_mismatch',
                         'idempotency_conflict',
                         'ineligible_state',
+                        'frozen',
                         'reviewer_unavailable',
                         'duplicate_record',
                       ].includes(safe.code)
@@ -221,9 +223,11 @@ export async function dispatchScopedBusinessCommandHttp(options: {
   body?: unknown;
   /** The locale the caller resolved for whoever asked (`ctx.locale`), for what runs: a draft's step and an execute. */
   locale?: string;
+  /** The App's `choose` the caller proved under this reader (app/appChoices.ts): `ctx.chosen` for what runs. */
+  chosen?: Chosen;
 }): Promise<unknown> {
   const { req, res, path, commands } = options;
-  const said = options.locale ? { locale: options.locale } : {};
+  const said = { ...(options.locale ? { locale: options.locale } : {}), ...(options.chosen ? { chosen: options.chosen } : {}) };
   if (req.method !== 'POST' || !COMMAND_ROUTE_PATHS.includes(path)) {
     throw new BusinessCommandExecutionError('invalid_input', 'unknown');
   }
@@ -307,8 +311,11 @@ export async function dispatchBusinessCommandHttp(options: {
   label?: (body: unknown) => string | undefined;
   /** The body, where it was read already (as above). */
   body?: unknown;
+  /** The App's `choose` the caller proved under this reader (app/appChoices.ts): `ctx.chosen` for what runs. */
+  chosen?: Chosen;
 }): Promise<unknown> {
   const { req, res, path, registry, app, commands, connection, actor, events } = options;
+  const chosen = options.chosen ? { chosen: options.chosen } : {};
   const captureFlags = options.captureFlags;
   let admittedActor = actor;
   const flags = commandFlagsOnce(() => captureFlags?.(admittedActor));
@@ -353,7 +360,7 @@ export async function dispatchBusinessCommandHttp(options: {
         binding,
         actor,
         body,
-        execution: { ...execution, locale: await askedLocale(app, resources, actor, req) },
+        execution: { ...execution, locale: await askedLocale(app, resources, actor, req), ...chosen },
         flagsFor: (envelope) => authorizedCommandFlags(binding, actor, envelope, admittedFlags),
         door: browserDoor(req),
       });
@@ -430,7 +437,7 @@ export async function dispatchBusinessCommandHttp(options: {
     if (path === '/api/commands/status') return await lookupBusinessCommandStatus(binding, actor, body, { ...execution, flags: captured });
     const locale = await askedLocale(app, resources, actor, req);
     const answer = await attributeAction(options.label?.(body), () =>
-      executeBusinessCommand(binding, actor, body, { ...execution, flags: captured, door: browserDoor(req), locale }),
+      executeBusinessCommand(binding, actor, body, { ...execution, flags: captured, door: browserDoor(req), locale, ...chosen }),
     );
     /* A link the command minted (context.link) is said here, to whoever ran it, as its URL; the receipt keeps the
        reference only, so a status read or a replay elsewhere never holds the secret (links/linkToken.ts). */

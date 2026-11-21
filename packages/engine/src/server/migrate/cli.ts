@@ -705,6 +705,15 @@ async function runDesired(
     const path = newMigration(target.dir, name!, false, new Date(), `${diffHeader()}${sql}\n`);
     write(`wrote ${shown(path)}:`);
     write(sql);
+    // A trigger's body is the database's to run: `check` names the ones that read other tables once they are migrated in.
+    const triggers = [
+      ...sql.matchAll(/\bCREATE\s+(?:OR\s+REPLACE\s+)?(?:CONSTRAINT\s+)?TRIGGER\s+(?:IF\s+NOT\s+EXISTS\s+)?("[^"]+"|[\w$.]+)/gi),
+    ].map((found) => found[1]!);
+    if (triggers.length)
+      write(
+        `note: it creates ${plural(triggers.length, 'trigger')} (${triggers.join(', ')}). A trigger that reads another table can refuse a write ` +
+          'in ways an App cannot see; `mistri check --app` names those [trigger-cross-table].',
+      );
     if (/\bDROP\b/i.test(sql))
       write('note: it drops something. If that is a rename, rewrite it as RENAME: a diff cannot tell a rename from a drop and an add.');
     return EXIT.ok;

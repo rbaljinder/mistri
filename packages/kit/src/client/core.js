@@ -226,6 +226,9 @@ async function sent(path, body, headers) {
   }
 }
 
+/* The header an App's picks are sent in (server/app/appChoices.ts). */
+const CHOSEN_HEADER = 'x-mistri-chosen';
+
 /**
  * @param {string} path
  * @param {Record<string, unknown> | undefined} body
@@ -233,6 +236,10 @@ async function sent(path, body, headers) {
  * @returns {Promise<any>}
  */
 async function request(path, body, headers) {
+  /* The App-wide picks ride every request (an App's `choose`): the server reads each row again under the reader, so
+     the header is a wish and never a grant. A caller's own header of the same name wins. */
+  const chosen = new URLSearchParams(shell().chosen()).toString();
+  if (chosen) headers = { [CHOSEN_HEADER]: chosen, ...headers };
   const parsedPath = new URL(path, window.location.href);
   if (!path.startsWith('/api/') || parsedPath.hash || parsedPath.pathname !== path.split('?')[0]) {
     throw Object.assign(new Error(say('useACanonicalApi')), { outcome: 'not_applied' });

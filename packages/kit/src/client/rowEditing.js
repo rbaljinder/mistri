@@ -6,6 +6,7 @@
  * write.js re-exports both; the rules are these, once.
  */
 import { isAppendOnly } from '@mistriwork/engine/shared/schema.js';
+import { rowMeetsCondition } from '@mistriwork/engine/shared/rowCondition.js';
 import { prefersPages, state, writeAllowed } from './core.js';
 import { planColumn } from './columns.js';
 import { pageBridge } from './uiBridge.js';
@@ -28,20 +29,22 @@ export function booleanChoices(column, row) {
 }
 
 /**
- * Whether the row is in a state its machine freezes (`final: { freeze: true }`): the server refuses every write to it,
- * so no editor is offered. Judged from the row's own state, which a row that does not carry the column cannot say.
+ * Whether the row is frozen: in a state its machine freezes (`final: { freeze: true }`), or matching its resource's
+ * `frozen` condition. The server refuses every write to it, so no editor is offered. Judged from the row's own values,
+ * which a row that does not carry a column cannot say (the server's refusal then stands, a 409 `frozen`).
  */
 function frozenRow(tableId, row) {
   if (!row) return false;
   const app =
-    /** @type {{ resources?: Record<string, { machine?: import('@mistriwork/engine/shared/servedApp.js').ServedMachine }> } | null} */ (
+    /** @type {{ resources?: Record<string, { frozen?: string, machine?: import('@mistriwork/engine/shared/servedApp.js').ServedMachine }> } | null} */ (
       pageBridge.activeApp()
     );
-  const machine = app?.resources?.[tableId]?.machine;
+  const resource = app?.resources?.[tableId];
+  const machine = resource?.machine;
   const value = machine ? row[machine.column] : undefined;
-  return (
-    machine !== undefined && value !== undefined && value !== null && machine.states.some((s) => s.freeze && s.value === String(value))
-  );
+  if (machine !== undefined && value !== undefined && value !== null && machine.states.some((s) => s.freeze && s.value === String(value)))
+    return true;
+  return typeof resource?.frozen === 'string' && rowMeetsCondition(state.schema, tableId, resource.frozen, row);
 }
 
 /** True when this row can be edited at all: write mode on, and a full key; a frozen row (`row`, where the caller has it) is not. */

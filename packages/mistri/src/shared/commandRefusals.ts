@@ -13,6 +13,7 @@ export const COMMAND_REFUSAL_MESSAGES = {
   not_found: 'The record was not found.',
   ineligible_state: 'This record is not eligible for this command.',
   consumes_refused: 'There is not enough left of what this would use.',
+  frozen: 'This record is frozen and cannot be changed.',
   out_of_scope: "The row is outside this token's scope.",
   reviewer_unavailable: 'The selected reviewer is unavailable.',
   forbidden: 'This command is not available to this account.',

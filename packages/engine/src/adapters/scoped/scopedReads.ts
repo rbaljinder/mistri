@@ -25,6 +25,7 @@ import { childRows, plannedWithin, withinRows } from '../../shared/anyRows.js';
 import type { AnyRows, WithinPlan, WithinRows } from '../../shared/filter.js';
 import { readExactly, summed } from '../../shared/decimals.js';
 import { RequestFault } from '../../shared/refusal.js';
+import { asksComputed, withComputedWhere } from '../../shared/computedWhere.js';
 import { storedTextOf, storedTextSelect } from './storedText.js';
 
 /** Structured read arguments must not retain mutable values across driver
@@ -160,16 +161,19 @@ export function createScopedReads(
             throw new RequestFault("This read cannot compare a column with another table's rows.");
           })()
       : undefined;
+    /* A computed column is written as its expression over this table's own columns (computedWhere.ts), each read
+       through the same resolver, so a column this read cannot name is refused inside the expression as outside. */
+    const own = filter && asksComputed(filter) ? withComputedWhere(filter, table, style, column, typeIn(table)) : undefined;
     const where = buildWhere(
-      filter,
+      own?.filter ?? filter,
       style,
       prefix.params.length + 1,
-      column,
+      own?.column ?? column,
       undefined,
       undefined,
       exists,
       references,
-      typeIn(table),
+      own?.types ?? typeIn(table),
       false,
       undefined,
       within,

@@ -108,6 +108,7 @@ async function fixture(
   handler?: (context: BusinessCommandContext, input: { reviewer: string; note: string }) => Promise<unknown>,
   secondary = false,
   availability?: (context: BusinessCommandAvailabilityContext) => readonly boolean[] | Promise<readonly boolean[]>,
+  maxChanges?: number,
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-command-execution-'));
   const path = join(directory, 'loans.db');
@@ -159,6 +160,7 @@ async function fixture(
         target: 'loan',
         write: ['assignment_history'],
         ...(availability ? { availability } : {}),
+        ...(maxChanges ? { maxChanges } : {}),
         // A required reviewer, trimmed, and a note: the declaration's parser checks both.
         input: {
           reviewer: { label: 'Reviewer', type: 'text' },
@@ -574,12 +576,42 @@ test('a command that makes 4,096 changes keeps them in sixteen pieces; one more 
     errorCode('invalid_result')(refused);
     assert.match(
       refusalReasons(refused).join('\n'),
-      /made more than 4,096 changes for one target; its audit keeps at most 4,096 \(and 4 MiB\)/,
+      /made more than 4,096 changes for one target; a command may change at most 4,096 unless it declares maxChanges \(up to 16,384\), and its audit keeps 4 MiB/,
     );
     assert.equal(rows(f.db, 'assignment_history').length, 0);
     assert.equal(rows(f.db, COMMAND_JOURNAL_TABLES.receipt).length, 0);
     assert.equal(rows(f.db, COMMAND_JOURNAL_TABLES.auditPart).length, 0);
   }, insertRows(4097));
+});
+
+test('maxChanges raises what one target keeps, up to what it says; one more is refused by name', async () => {
+  await fixture(
+    async (f) => {
+      await executeBusinessCommand(f.binding, actor, request());
+      assert.equal(auditOf(f.db).whole.length, 5000);
+    },
+    insertRows(5000),
+    false,
+    undefined,
+    5000,
+  );
+  await fixture(
+    async (f) => {
+      const refused: unknown = await executeBusinessCommand(f.binding, actor, request()).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+      errorCode('invalid_result')(refused);
+      const said = refusalReasons(refused).join('\n');
+      assert.match(said, /made more than 5,000 changes for one target; a command may change at most 5,000 \(up to 16,384\)/);
+      assert.doesNotMatch(said, /declares maxChanges/);
+      assert.equal(rows(f.db, 'assignment_history').length, 0);
+    },
+    insertRows(5001),
+    false,
+    undefined,
+    5000,
+  );
 });
 
 test('the 4 MiB a target keeps is over its whole audit, the pieces after the first included', async () => {

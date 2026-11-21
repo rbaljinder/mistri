@@ -119,11 +119,17 @@ test(
 
     // A page saved: the host is started again on the same port, once the old one has let it go.
     assert.doesNotMatch(await sayings(), /Ask for a visit/);
-    save('views.ts', (text) => text.replace("'Request a visit'", "'Ask for a visit'"));
+    assert.match(await (await person.request('/api/app')).text(), /"Visit requests"/);
+    save('views.ts', (text) => text.replace("'Request a visit'", "'Ask for a visit'").replace("'Visit requests'", "'Asked visits'"));
     await until('the host to start again', () => listening() === 2);
     assert.match(output, /the App changed; starting it again/);
     assert.equal(alive(firstHost[0]), false, 'the old host is gone');
     assert.equal(childrenOf(parent.pid!).length, 1);
+    // What the new host serves is the page as saved, not as the first host compiled it (field report #68).
+    const served = await tenantTestClient(origin, 'clinic', { accountId, email, password }, 'north');
+    const shown = await (await served.request('/api/app')).text();
+    assert.match(shown, /"Asked visits"/);
+    assert.doesNotMatch(shown, /"Visit requests"/);
 
     // The session is the auth store's and the cookie's: it signs in again with nothing but the cookie it held.
     const session = await person.request('/api/auth/get-session');

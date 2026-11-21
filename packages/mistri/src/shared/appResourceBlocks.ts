@@ -82,6 +82,7 @@ const IDENTIFIER = /^[A-Za-z_][A-Za-z0-9_]*$/;
 export const RESOURCE_BLOCK_KEYS = [
   'physical',
   'query',
+  'frozen',
   'access',
   'delete',
   'favorite',
@@ -260,7 +261,7 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
       const raw = plainRecord(
         value,
         at,
-        'an object. A resource block is { physical?, query?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, triggers?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, audit?, settings?, import?, notify?, links? }',
+        'an object. A resource block is { physical?, query?, frozen?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, triggers?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, audit?, settings?, import?, notify?, links? }',
       );
       allowKeys(raw, [...RESOURCE_BLOCK_KEYS, 'owner', 'clone', 'live'], at);
       if (dot < 0 && data.sources && !data.defaultSource) {
@@ -309,6 +310,15 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
             `${at} has a "query" that is not conditions over its table's columns, at most 500 characters, like "kind = order".`,
           );
         resource.query = raw.query.trim();
+      }
+      /* Rows that take no change: shape here, the condition against the table where the App's rules resolve
+         (appTransitionRules), as a machine's frozen state is judged. */
+      if (raw.frozen !== undefined) {
+        if (typeof raw.frozen !== 'string' || !raw.frozen.trim() || raw.frozen.length > 500)
+          throw new Error(
+            `${at} has a "frozen" that is not a condition over its table's columns, at most 500 characters, like "status = closed".`,
+          );
+        resource.frozen = raw.frozen.trim();
       }
       /* A resource reads unless it says it writes: there is no 'read' to write. */
       if (raw.access !== undefined) {

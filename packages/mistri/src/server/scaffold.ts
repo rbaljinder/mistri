@@ -1913,7 +1913,7 @@ function projectFiles({
         "import { pathToFileURL } from 'node:url';",
       ],
       'const [action, ...userArgs] = process.argv.slice(2);\n' +
-        "if (!['check', 'start', 'seed'].includes(action)) throw new Error('Usage: node mistri-run.mjs <check|start|seed>');\n\n" +
+        "if (!['dev', 'check', 'start', 'seed'].includes(action)) throw new Error('Usage: node mistri-run.mjs <dev|check|start|seed>');\n\n" +
         'const require = createRequire(import.meta.url);\n' +
         "const manifest = require.resolve('@mistriwork/mistri/package.json');\n" +
         "const { bin } = JSON.parse(readFileSync(manifest, 'utf8'));\n" +
@@ -1933,10 +1933,11 @@ function projectFiles({
       name: id,
       private: true,
       type: 'module',
-      /* The two commands of the authoring loop, run from this directory. Without
+      /* The commands of the authoring loop, run from this directory. Without
        a config named here they find the database the way mistri always
        does: ./mistri.json, then the user's config directory. */
       scripts: {
+        dev: explicitConfig ? 'node mistri-run.mjs dev' : 'mistri dev --app .',
         check: explicitConfig ? 'node mistri-run.mjs check' : 'mistri check --app .',
         start: explicitConfig ? 'node mistri-run.mjs start' : 'mistri --app .',
         ...formatScripts,

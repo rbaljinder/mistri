@@ -278,7 +278,15 @@ export function checkedPerson(app: AppDef, schema: DatabaseSchema): QueryPerson 
      the same shape (server appMe.ts readMeSets). */
   const names = meSetsIn(...textsOf(app));
   const sets = Object.fromEntries(names.map((name) => [name, meSetShape(schema, person, name).set]));
-  return { email: 'someone@example.invalid', ...(person ? { person } : {}), ...(names.length ? { sets } : {}) };
+  /* The App's choices, none picked: a view's `chosen.site` is judged as the request will read it (a pick, or nothing,
+     which matches no row), and one that names no declared choice is refused by name. */
+  const chosen = app.choose ? Object.fromEntries(Object.keys(app.choose).map((name) => [name, null])) : undefined;
+  return {
+    email: 'someone@example.invalid',
+    ...(person ? { person } : {}),
+    ...(names.length ? { sets } : {}),
+    ...(chosen ? { chosen } : {}),
+  };
 }
 
 /* Every text an App holds, wherever a condition may sit in it: the memberships it reads are found by their words. */

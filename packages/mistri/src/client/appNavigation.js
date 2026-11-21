@@ -32,6 +32,7 @@ import { say } from './copy/shell/appNavigation.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { presentList } from './components/presentedList.js';
 import { surfaceShell } from './surfaceShell.js';
+import { chosenNow } from './appChoices.js';
 
 /**
  * Ask the server which app, if any, this connection is running. Answered
@@ -259,6 +260,8 @@ export const appShell = {
   ...surfaceShell,
   app: activeApp,
   inApp: inAppMode,
+  /* The App's `choose` picks this tab holds (appChoices.ts), sent with every request; none outside an App. */
+  chosen: () => (inAppMode() ? chosenNow(sessionIdentity(), activeApp()?.choose, activeApp()?.picks) : {}),
   loadError: appLoadError,
   saveMode: appSaveMode,
   recordLabel: (tableId) => activeApp()?.resources?.[tableId]?.recordLabel,

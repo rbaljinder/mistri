@@ -308,10 +308,15 @@ const BUDGETS: Record<string, number> = {
   inbox: 2,
   // the release fence alone: BEGIN, the LOCK, the membership and COMMIT in one message (no suggestions read)
   'record-decisions': 1,
+  /* BEGIN with the lock, the membership and the one read of every asked record behind it; COMMIT; the release
+     fence. Two records or twenty, the same three: the fence does not ride the COMMIT as a list's does, since a check's
+     reads past the first (a derived `when`, an availability hook) are not known to be its last wave. */
+  'availability (2 records)': 3,
+  'availability (20 records)': 3,
   // BEGIN, locks, the tenant and membership, the row; COMMIT
   prepare: 2,
-  // the same opening; the handler's read of the lead; the write with its re-read; the receipt with COMMIT
-  execute: 4,
+  // the same opening, with the lead the handler reads; the write with its re-read behind it; the receipt with COMMIT
+  execute: 3,
   /* The same opening and update, then 200 vehicles added by `insertMany` and changed by `updateWhere`: the INSERT
      with its parents ahead of it; its one locked read-back of every row; the where's read; the audit's before images;
      the locked read of the rows it changes; the UPDATE with its after-read; the target read again (the batch wrote
@@ -424,6 +429,26 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
         input: { reason: 'Bulk flights' },
       });
     };
+    /* Every lead the member may read, whatever its state: an availability check answers true for some and false for
+       others, as a list's row actions are asked. */
+    const readPool = async () =>
+      (
+        (await read('/api/run', { q: `${leads.table} show id`, limit: 100, offset: 0, count: 'none' })).body.rows as Array<{ id: string }>
+      ).map((row) => String(row.id));
+    /* The dealership has a handful of leads; copies of them, each in its original's state, make twenty to ask about. */
+    const seeded = await readPool();
+    for (let n = 0; seeded.length + n < 20; n += 1)
+      await f.lending.exec(
+        `INSERT INTO lead (id, tenant_id, reference, applicant_name, applicant_email, vehicle_stock, requested_amount, down_payment,
+           term_months, submitted_on, status, qualified_by, qualified_on, disqualified_reason)
+         SELECT ?, tenant_id, ?, applicant_name, applicant_email, vehicle_stock, requested_amount, down_payment, term_months,
+           submitted_on, status, qualified_by, qualified_on, disqualified_reason FROM lead WHERE id = ?`,
+        [`flights-availability-${n}`, `FLIGHTS-AVAILABILITY-${n}`, seeded[n % seeded.length]],
+      );
+    const poolIds = await readPool();
+    assert.ok(poolIds.length >= 20, `${poolIds.length} leads to ask availability of`);
+    const availability = (keys: readonly string[]) =>
+      read('/api/commands/availability', { checks: [{ command: 'qualifyLead', commandVersion: 1, keys: keys.map((id) => ({ id })) }] });
     const requests: Record<string, () => Promise<Answer>> = {
       'run (list)': () => read('/api/run', { q: listQuery(leads, 0), limit: 20, offset: 0, exactCount: false }),
       counts: () => read('/api/counts', { items: leads.tabs.map((_, i) => listQuery(leads, i)) }),
@@ -438,6 +463,8 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
       'run (pool)': () => read('/api/run', { q: `${leads.table} show id`, limit: 100, offset: 0, count: 'none' }),
       inbox: () => read('/api/inbox', { limit: 1 }),
       'record-decisions': () => read('/api/record-decisions', { table: leads.table, key: { id: leadIds[0] } }),
+      'availability (2 records)': () => availability(poolIds.slice(0, 2)),
+      'availability (20 records)': () => availability(poolIds.slice(0, 20)),
       prepare: () => read('/api/commands/prepare', { command: 'qualifyLead', commandVersion: 1, key: { id: leadIds[1] } }),
       execute: async () => {
         const key = { id: leadIds[0] };
@@ -513,6 +540,18 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
       appFlights(measured.executeMany!) <= appFlights(measured['executeMany (50 rows)']!),
       `a batch's flights grow with its rows: ${JSON.stringify(measured['executeMany (50 rows)']!.flights)} at 50, ${JSON.stringify(measured.executeMany!.flights)} at 200`,
     );
+    /* A page's row actions: the whole id set is read once with the command's row condition and target check,
+       not once per record (commandAvailability.ts readCommandAvailability), so ten times the records cost no flight more. */
+    assert.ok(
+      appFlights(measured['availability (20 records)']!) <= appFlights(measured['availability (2 records)']!),
+      `availability's flights grow with its records: ${JSON.stringify(measured['availability (2 records)']!.flights)} at 2, ${JSON.stringify(measured['availability (20 records)']!.flights)} at 20`,
+    );
+    // The batch answers each record as asking for it alone does.
+    const batched = (await availability(poolIds.slice(0, 20))).body.checks[0].available as boolean[];
+    const alone: boolean[] = [];
+    for (const id of poolIds.slice(0, 20)) alone.push((await availability([id])).body.checks[0].available[0]);
+    assert.deepEqual(batched, alone);
+    assert.ok(batched.includes(true) && batched.includes(false), `a mixed batch: ${JSON.stringify(batched)}`);
     const bulkRuns = await f.lending.rows(
       `SELECT count(DISTINCT mileage)::int AS runs, max(mileage) AS top FROM vehicle WHERE id LIKE 'bulk-%'`,
     );

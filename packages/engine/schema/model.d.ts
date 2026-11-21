@@ -61,6 +61,11 @@ export type StaticAppTarget = AppTarget<string | number>;
  * `{ record }` and `{ tenant }` are read when the form is prepared, so they
  * fill a field of the input itself; `{ record }` on a command that targets one
  * record.
+ *
+ * `{ answer: 'treatment.usual_fee' }` starts from another input's pick: the column of the row a choice from a table
+ * has picked (`field.choice({ from, labelColumn })`), or the key of the `values` a static option carries. It is
+ * filled when the person picks, in an input they have not edited, and stays theirs to change. The choice is another
+ * input of the same list: of the input itself, or of the same group or line. No input filled this way is another's source.
  */
 export type CommandFieldDefault =
   | string
@@ -68,7 +73,8 @@ export type CommandFieldDefault =
   | boolean
   | { readonly auto: 'today' | 'now' | 'me' }
   | { readonly record: string }
-  | { readonly tenant: string };
+  | { readonly tenant: string }
+  | { readonly answer: string };
 
 /** One option of a `choice` input. */
 export interface AppCommandChoice {
@@ -83,8 +89,11 @@ export interface AppCommandChoice {
       `tenant.<column>` alone (`"tenant.country = 'IN'"`), shared through `auth.tenancy.shared`. Judged as the form
       is prepared or a public form is served; a submitted withheld value is refused as no choice. */
   when?: string;
-  /** Set by the server on a table's row it served (`source.served`): the columns its `where` compares, so the page
-      offers the rows the answers given match without a read of its own. Never written in an App. */
+  /** What picking this option fills into other inputs of the form: the keys inputs name in `default: { answer: '<this input>.<key>' }`. Scalars only. */
+  values?: Readonly<Record<string, string | number | boolean | null>>;
+  /** Set by the server on a table's row it served (`source.served`): the columns its `where` compares and the ones
+      other inputs start from (`default: { answer }`), so the page offers the rows the answers given match, and fills
+      from the pick, without a read of its own. Never written in an App. */
   row?: Readonly<Record<string, string | number | boolean | null>>;
 }
 

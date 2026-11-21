@@ -30,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.77; the
+These App features ship in mistri 1.0.0-rc.78; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -679,6 +679,8 @@ Exit codes: 1 could not run, 2 not spent (no --yes, or over --max-cost),
 mistri tenant init [<tenant>...] [--app <dir>] --policy <file>
 mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
                 [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
+mistri tenant grant --account <email>... [--tenant <id>...] --roles <role,...> [--days <n>] [--app <dir>] --policy <file>
+mistri tenant grant --from <file.csv> [--days <n>] [--app <dir>] --policy <file>
 mistri tenant brand <tenant> [--name <name>] [--preset <theme>] [--file <branding.json>]
                 [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
 A tenant App's first boot, after `mistri migrate stores up --policy`, from
@@ -689,7 +691,13 @@ with --tenant of that tenant, with that realm's --roles, for --days (default
 180, at most 366). An address with no account gets one in the App's auth
 store, its password read from MISTRI_ACCOUNT_PASSWORD, never the command
 line: the store the App names, else mistri dev's once dev has started the
-App there, else a plain start's; grant says which. brand saves a tenant's
+App there, else a plain start's; grant says which. Several at once: repeat --account and --tenant (each account in each tenant), or
+--from names a CSV with the header account,tenant,role (an empty tenant is the
+platform realm; several roles are written a|b). Every row is checked first, so a
+wrong one is listed with the others and none is applied; then each tenant is
+granted in one transaction, and an account that already holds a membership there
+is left as it is, so the run can be repeated. A running server reads grants from
+the store as it serves: it is not restarted. brand saves a tenant's
 branding, checked as a tenant admin's save is against the App's branding:
 --file names the whole value (JSON), else the saved one is kept, and
 --name and --preset are laid over either; the stored logo is kept. A

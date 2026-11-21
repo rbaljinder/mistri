@@ -205,6 +205,14 @@ export const PROVISION: Readonly<Record<string, Provisioners>> = {
       await (await import('../../packages/mistri/src/adapters/assistant/postgresAssistant.js')).provisionPostgresAssistant(url);
     },
   },
+  preferences: {
+    sqlite: async (path) => {
+      (await import('../../packages/mistri/src/adapters/preferences/sqlitePreferences.js')).provisionSqlitePreferences(path);
+    },
+    postgres: async (url) => {
+      await (await import('../../packages/mistri/src/adapters/preferences/postgresPreferences.js')).provisionPostgresPreferences(url);
+    },
+  },
   decisions: {
     sqlite: async (path) => {
       (await import('../../packages/mistri/src/adapters/decide/sqliteDecisions.js')).provisionSqliteDecisions(path);

@@ -631,6 +631,8 @@ After mistri migrate stores up --policy.
 mistri tenant init [<tenant>...] [--app <dir>] --policy <file>
 mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
                 [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
+mistri tenant grant --account <email>... [--tenant <id>...] --roles <role,...> [--days <n>] [--app <dir>] --policy <file>
+mistri tenant grant --from <file.csv> [--days <n>] [--app <dir>] --policy <file>
 mistri tenant brand <tenant> [--name <name>] [--preset <theme>] [--file <branding.json>]
                 [--app <dir>] --policy <file> [--operator <name>] [<db> | --db <target> | --config <path>]
 init opens the platform realm (when the App declares one) and puts each named
@@ -640,7 +642,15 @@ with --tenant of that tenant, with that realm's --roles, for --days (default
 180, at most 366). An address with no account gets one in the App's auth
 store, its password read from MISTRI_ACCOUNT_PASSWORD, never the command
 line: the store the App names, else mistri dev's once dev has started the
-App there, else a plain start's; grant says which. brand saves a tenant's
+App there, else a plain start's; grant says which.
+Several at once: repeat --account and --tenant (each account in each tenant), or
+--from names a CSV with the header account,tenant,role (an empty tenant is the
+platform realm; several roles are written a|b). Every row is checked first, so a
+wrong one is listed with the others and none is applied; then each tenant is
+granted in one transaction, and an account that already holds a membership there
+is left as it is, so the run can be repeated. A running server reads grants from
+the store as it serves: it is not restarted.
+brand saves a tenant's
 branding, checked as a tenant admin's save is against the App's branding:
 --file names the whole value (JSON), else the saved one is kept, and
 --name and --preset are laid over either; the stored logo is kept. A
@@ -870,6 +880,11 @@ member of every tenant of its profile table, up to the first 100 by its
 key, or of the platform realm for a platform role. An account dev.json
 names that the auth store does not hold (the store deleted, or another
 tree's) is made again with its kept password, and the start says so.
+When a save needs the App started again, mistri dev keeps its port: a
+request sent meanwhile waits for the new start (up to 30 seconds, then
+503 with Retry-After), and an open stream ends with the old one. One
+session per App directory: a second mistri dev on it refuses, naming the
+first one's pid and port (a session that is gone is taken over).
 
 mistri test init [--app <dir>] [--config <path>] [--force]
 
@@ -954,6 +969,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 
 | Flag | Said in |
 | --- | --- |
+| `--account` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--actor` | [Reading the read audit](#reading-the-read-audit) |
 | `--ahead` | [A tenant App's sandboxes](#a-tenant-apps-sandboxes) |
 | `--allow-contract` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |
@@ -1011,6 +1027,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--fix` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--flow` | [Starting flows on records already there](#starting-flows-on-records-already-there) |
 | `--force` | [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers), [Giving a coding agent the App skill](#giving-a-coding-agent-the-app-skill), [Running an App on this machine, and testing it](#running-an-app-on-this-machine-and-testing-it) |
+| `--from` | [A tenant App's first boot](#a-tenant-apps-first-boot) |
 | `--from-openapi` | [Options](#options) |
 | `--full` | [Looking at an App](#looking-at-an-app) |
 | `--help` | [Options](#options), [Commands](#commands) |

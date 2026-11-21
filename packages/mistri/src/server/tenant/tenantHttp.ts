@@ -11,7 +11,6 @@ import { readTenantMessages } from '../app/recordMessages.js';
 import { tenantImporter } from './tenantImport.js';
 import { tenantProjection } from './tenantProjection.js';
 import { componentMessages, frameworkWords } from '../app/appMessages.js';
-import type { TenantIntegrations } from './tenantIntegrations.js';
 import { IntegrationSettingsRefusal } from '../integrations/integrationRuntime.js';
 import { LogoRefused } from '../app/brandImage.js';
 import { EXPERIMENT_EXPOSURES_PATH } from '../experiments/exposureHttp.js';
@@ -30,7 +29,6 @@ import {
   type UpdateResult,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { isTenantApp, tenantAppShape, zonedNow, type AppDef } from '../../shared/app.js';
-import type { TenantLook } from './tenantLook.js';
 import { appZone } from '../../shared/appUi.js';
 import { localeWeekStart } from '@mistriwork/engine/shared/weekStart.js';
 import { shownWrite } from '../http/fileRows.js';
@@ -59,6 +57,10 @@ import { doorRefusal, writes as changesSomething, type Bound } from '@mistriwork
 import { frontDoor } from '@mistriwork/engine/server/http/frontDoor.js';
 import { dispatchResourceReadHttp } from '@mistriwork/engine/server/resourceReadHttp.js';
 import { APP_READS } from '../app/appReads.js';
+import { CHOICE_HEADER, chosenFor, withChosen } from '../app/appChoices.js';
+import { CHOOSE_PATH } from '../app/appChoosing.js';
+import type { TenantPreferences } from './tenantPreferences.js';
+import type { TenantHttpOptions } from './tenantHttpOptions.js';
 import { createTenantContexts, lostContext, refusedWriteBody, TenantContextsBusy, tenantLeaseFailureCode } from './tenantContexts.js';
 import { arrivalGate, arrivalWidth } from './tenantArrivals.js';
 import {
@@ -123,7 +125,6 @@ import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import { PAGE_HEADER, pageLoad, pageManifestRefusal } from '../http/pageLoad.js';
 import { currentReadRoute, readRouteOf, withReadKind, withReadRoute } from '../readAudit.js';
 import { readRefusalHeaders, tenantReadRefusal } from './tenantReadRefusal.js';
-import type { PageLoader } from '../commands/pageLoaders.js';
 import { attributeAction, attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { tenantHistoryStoreKey } from './tenantRecordHistoryStore.js';
 import { decisionsServedBy, servedDecisions } from '../decide/decisionServing.js';
@@ -131,7 +132,6 @@ import { offersReview } from '../commands/makerWrites.js';
 import { answerDecisions, DECISION_PATHS } from '../http/decisionRoutes.js';
 import { inboxEmailFor, markInboxFor, readInboxFor } from '../inbox.js';
 import { TenantTokenRefusal, type TenantTokenService } from './tenantTokenService.js';
-import type { TenantSearch } from './tenantSearch.js';
 import { leaseInbox } from './tenantInbox.js';
 import { answerLiveOff, LIVE_PATH } from '../live/liveRoute.js';
 import { liveOffResources, liveSyncOn } from '../live/liveBinding.js';
@@ -179,49 +179,6 @@ import {
 export { tenantHttpBinding, tenantHttpHeader, send } from './tenantWire.js';
 import { readAdapter, together, type ReadContext } from './tenantReadAdapter.js';
 
-interface TenantHttpOptions {
-  readonly app: AppDef;
-  /** The look a save changed in place (tenantLook.ts, G175): worn by the App payload, never by its authority. */
-  readonly look?: () => TenantLook | undefined;
-  readonly enrollment: TenantEnrollment<IncomingMessage>;
-  readonly verifySessionInstance: (request: IncomingMessage) => VerifiedSessionInstance | null | Promise<VerifiedSessionInstance | null>;
-  readonly bound: Bound;
-  /** The host's support owner: its routes and the support lease's fence. */
-  readonly support?: TenantSupport;
-  /** Where each of the App's compiled custom components is served (appComponents.ts componentHrefs): code, never a row. */
-  readonly components?: Readonly<Record<string, { kind: string; href: string; css?: string }>>;
-  /** A member's own App API tokens (tenantTokenService.ts), when the App declares an `api`. */
-  readonly tokens?: TenantTokenService;
-  /** The App's search (tenantSearch.ts): a context's reader made searchable within its tenant. */
-  readonly search?: Pick<TenantSearch, 'reader'>;
-  /** Each tenant's branding (tenantBranding.ts), when the App declares `branding`. */
-  readonly branding?: TenantBrandingService;
-  /** The tenant's custom domains (http/customDomains.ts), when the suite configures `customDomains`. */
-  readonly domains?: TenantDomainsService;
-  /** The tenant's read audit for its own admins (tenantReadsRoute.ts), when a resource audits its reads and the App
-      names admins (domains or branding editors). */
-  readonly reads?: TenantReadsService;
-  /** The integrations' settings screen (tenantIntegrations.ts), when the jobs module lists integrations. */
-  readonly integrations?: NonNullable<TenantIntegrations['settings']>;
-  /** Whether a tenant has the App's assistant (tenantAssistant.ts): its switch is on and a model is set up. */
-  readonly assistant?: { offered(tenantId: string): Promise<boolean> };
-  /** The verified reader's own name, for a dashboard that greets `{me.name}` (appGreeting.ts): words on a
-      screen, never an authority. Absent, or saying nothing, the greeting is left out. */
-  readonly readerName?: (req: IncomingMessage) => string | undefined;
-  /** The free-form pages' loaders, by name: the commands module's `loaders` (commands/pageLoaders.ts). */
-  readonly loaders?: Readonly<Record<string, PageLoader>>;
-  /** Whether this request's login was made here in the last five minutes, by the rule opening a support session
-      keeps (nativeSignInAge.ts): what issuing an API token asks. Absent, no token is issued. */
-  readonly recentSignIn?: (req: IncomingMessage) => Promise<boolean>;
-  /** The path of the source App this host serves while its author works on it (cli/tenant.ts authoringApp): a command's
-      refusal then tells its cause to a reader on this machine, as the ordinary server's does (refusalReport.ts). Absent
-      for a build, which is served as built. */
-  readonly authoring?: string;
-  /** A command answer with each capability link it minted rendered as its URL, for the member's own tenant
-      (tenantLinks.ts rendered), when the App declares links. Absent, a reference stays `mistri-link:<id>.<seal>`. */
-  readonly renderLinks?: (value: unknown, tenantId: string) => Promise<unknown>;
-}
-
 /** Private integration server, deliberately not mounted by the CLI/createApp.
  * No Registry, ordinary adapter, authoring store, static UI or raw-SQL fallback
  * is reachable here. Successful construction transfers enrollment retirement. */
@@ -246,7 +203,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     'recentSignIn',
     'authoring',
     'renderLinks',
+    'preferences',
   ]);
+  const picks = raw.preferences as TenantPreferences | undefined;
   const integrationSettings = raw.integrations as TenantHttpOptions['integrations'];
   const tokens = raw.tokens as TenantTokenService | undefined;
   const tenantBranding = raw.branding as TenantBrandingService | undefined;
@@ -963,6 +922,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
            check decides; this one only says who the reader is. */
         let sessionAsked: { readonly value: VerifiedSessionInstance | null } | undefined;
         const sessionOf = async () => (sessionAsked ? sessionAsked.value : verified(req));
+        /* This member's stored picks in their tenant's own lease (tenantPreferences.ts); a platform or support lease holds none. */
+        const storedFor = (context: ReadContext) => (picks ? picks.storedFor(context.principal, !platform && !onSupport) : {});
         const tenantPerson = async (context: ReadContext, schema: ReturnType<typeof tenantServedSchema>) => {
           const session = await sessionOf();
           const staff = platform ? app.auth?.tenancy?.platform?.me : undefined;
@@ -970,14 +931,20 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           const owned = people.auth?.me ? ownership.ownership[people.auth.me.from]?.kind : undefined;
           const account = (context.principal as { accountId?: unknown }).accountId;
           const own = !onSupport && owned === (platform ? 'platform' : 'tenant') && typeof account === 'string';
-          return lookupTenantPerson(
-            people,
-            schema,
-            session?.identity.who ?? null,
-            own ? (account as string) : undefined,
-            readAdapter(context),
-            platform ? undefined : context.tenant,
-          );
+          /* With the App-wide choices, read under this tenant's own reader: another tenant's site is no row it sees,
+             so a pick carried across tenants is dropped (appChoices.ts). */
+          const [person, chosen] = await Promise.all([
+            lookupTenantPerson(
+              people,
+              schema,
+              session?.identity.who ?? null,
+              own ? (account as string) : undefined,
+              readAdapter(context),
+              platform ? undefined : context.tenant,
+            ),
+            chosenFor(app, schema, readAdapter(context), req, await storedFor(context)),
+          ]);
+          return withChosen(person, chosen);
         };
         if (path === TENANT_EXPORT_PATH) {
           const readerEmail = computedSaysMe ? ((await sessionOf())?.identity.who ?? null) : null;
@@ -1026,6 +993,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                  the LOCK and the membership, a COMMIT and a fence apiece (a profile: a loader's twenty reads were
                  twenty snapshots on a database 30 ms away). The loader's timeout bounds how long the one is held,
                  and a read its loader asks once that timeout has passed is refused before it reaches the snapshot. */
+              const chosenStored = await storedFor(context);
               const loaded = await together(context, () =>
                 pageLoad({
                   app: appSurfaceForRealm(app, pages, platform ? 'platform' : 'tenant').app,
@@ -1037,6 +1005,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   reader: readAdapter(context),
                   schema,
                   ...(context.zone === undefined ? {} : { zone: context.zone }),
+                  chosenHeader: req.headers[CHOICE_HEADER],
+                  chosenStored,
                 }),
               );
               return { status: loaded.status, body: loaded.body };
@@ -1194,11 +1164,17 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   ...(addresses && Object.keys(addresses).length ? { addresses: { ...addresses } } : {}),
                 };
               }
+              /* This member's stored picks in their tenant, still theirs to make under this lease's reader. */
+              const memberPicks =
+                forApp && served && picks
+                  ? await picks.picksFor(context.principal, !platform && !onSupport, schema, readAdapter(context))
+                  : undefined;
               return path === '/api/app'
                 ? reply({
                     appId: app.id,
                     /* A greeting is said to the lease's own member, never to a support operator inside the tenant. */
-                    app: served && greetReader(served, onSupport ? undefined : nameOf(req)),
+                    app:
+                      served && greetReader(memberPicks ? { ...served, picks: memberPicks } : served, onSupport ? undefined : nameOf(req)),
                   })
                 : reply({ appId: app.id, pages: metadata.pages });
             }
@@ -1225,6 +1201,12 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                     ? await markInboxFor({ ...options, ids: input.ids, all: input.all })
                     : await inboxEmailFor({ ...options, email: input.email }),
               );
+            }
+            if (path === CHOOSE_PATH) {
+              if (!picks || !app.choose) return { status: 404, body: { error: 'Not found.', code: 'not_found' } };
+              if (platform || onSupport) return denyTenant();
+              const done = await picks.choose(context.principal, schema, readAdapter(context), input);
+              return done === true ? reply({ ok: true }) : done;
             }
             if (path === '/api/tokens' || path === '/api/tokens/issue' || path === '/api/tokens/revoke') {
               /* A member's own API tokens, on their tenant's lease: the
@@ -1853,7 +1835,13 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         const picked = pickedLocale(app, req);
         /* And who they are by name, off the verified session (`actor.name`): a window onto the sign-in store, never input. */
         const named = nameOf(req);
-        const execution = { signal: controller.signal, ...(picked ? { locale: picked } : {}), ...(named ? { name: named } : {}) };
+        const chosenHeader = req.headers[CHOICE_HEADER];
+        const execution = {
+          signal: controller.signal,
+          ...(picked ? { locale: picked } : {}),
+          ...(named ? { name: named } : {}),
+          ...(typeof chosenHeader === 'string' ? { chosenHeader } : {}),
+        };
         const result = await attributed(
           () => tenantCommandRoute(contexts, { path, platform, req, selectors, expected, input, execution }),
           commandActionLabel(app, input),

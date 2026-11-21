@@ -1656,6 +1656,83 @@ export async function grantTenantMembership(
   });
 }
 
+/** Several accounts' memberships in one realm, in one transaction: a tenant's, or with `tenantId: null` the
+ * platform's. `mistri tenant grant` with several accounts or tenants applies each tenant this way, so a tenant is
+ * granted whole or not at all. An account already holding a live membership there is left as it is and listed
+ * in `held`, not refused: a run that stopped part-way is run again. */
+export async function grantMemberships(
+  where: TenantMaintenanceTarget,
+  binding: TenantStoreBinding,
+  input: Readonly<{
+    app: string;
+    tenantId: string | null;
+    grants: readonly Readonly<{ accountId: string; roles: readonly string[] }>[];
+    validUntil: number;
+    operator: string;
+  }>,
+): Promise<Readonly<{ granted: readonly { accountId: string; membershipId: string; receiptId: string }[]; held: readonly string[] }>> {
+  const value = request(input, ['app', 'tenantId', 'grants', 'validUntil', 'operator'], 'grantMemberships');
+  const owner = bindingOf(binding),
+    operator = operatorOf(value.operator);
+  const realm = value.tenantId === null ? 'platform' : 'tenant';
+  const anchorId = value.tenantId === null ? PLATFORM_TENANT_ID : tenantOf(value.tenantId);
+  if (!Array.isArray(value.grants) || !value.grants.length) return refuse('grants is a list of one or more accounts.');
+  targetOf(where);
+  const loaded = await appOf(value.app, owner);
+  const ceiling = ceilingOf(loaded, realm);
+  const validUntil = validUntilOf(value.validUntil, Date.now());
+  const grants = (value.grants as { accountId: string; roles: readonly string[] }[]).map((grant) => ({
+    accountId: text(grant.accountId, 1024, 'accountId'),
+    roles: rolesOf(grant.roles, ceiling, realm),
+  }));
+  if (new Set(grants.map((grant) => grant.accountId)).size !== grants.length) return refuse('An account is named twice.');
+  for (const grant of grants) await assertAccount(loaded, grant.accountId);
+  return transact(where, owner, async (step) => {
+    const anchor = await step.anchor(anchorId, realm);
+    if (!anchor || anchor.status !== 'active')
+      return refuse(
+        realm === 'platform'
+          ? 'The platform row (@platform) must exist and be active.'
+          : `The tenant ${anchorId} must exist and be active.`,
+      );
+    const granted: { accountId: string; membershipId: string; receiptId: string }[] = [];
+    const held: string[] = [];
+    for (const { accountId, roles } of grants) {
+      if (await step.live(anchorId, accountId)) {
+        held.push(accountId);
+        continue;
+      }
+      const membershipId = randomUUID();
+      const row = { accountId, membershipId, status: 'active' as const, roles, validUntil, expectedVersion: null };
+      if (realm === 'platform') await step.store.putPlatformMembership(row);
+      else await step.store.putMembership({ ...row, tenantId: anchorId });
+      const membership = Object.freeze({
+        membershipId,
+        tenantId: anchorId,
+        accountId,
+        status: 'active' as const,
+        version: '1',
+        roles,
+        validUntil,
+      });
+      const operation = realm === 'platform' ? 'grantPlatformMembership' : 'grantTenantMembership';
+      const receiptId = await record(
+        step,
+        owner,
+        operator,
+        operation,
+        anchorId,
+        realm === 'platform'
+          ? { accountId, roles: [...roles].sort(), validUntil }
+          : { tenantId: anchorId, accountId, roles: [...roles].sort(), validUntil },
+        { operation, anchor, membership },
+      );
+      granted.push({ accountId, membershipId, receiptId });
+    }
+    return Object.freeze({ granted: Object.freeze(granted), held: Object.freeze(held) });
+  });
+}
+
 /** Revoke one active tenant membership at its current version; revocation is
  * terminal. Idempotent: a membership already revoked is left as it is and
  * answered with its version and `receiptId: null`, so a caller cleaning up

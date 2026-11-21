@@ -1,3 +1,5 @@
+import { preferencesAt } from '../app/appPreferences.js';
+import { tenantPreferences } from './tenantPreferences.js';
 import { createTenantExperimentConversionAuthority } from './experimentConversionAuthority.js';
 import { realpathSync, statSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
@@ -497,7 +499,22 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
       ...(policy.resolvePlatformRows === undefined ? {} : { resolvePlatformRows: policy.resolvePlatformRows, platformRoles }),
       ...(outside.length ? { platformSources: Object.freeze(outside) } : {}),
       ...(policy.authorizeDeletedRecord === undefined ? {} : { authorizeDeletedRecord: policy.authorizeDeletedRecord }),
-      ...(registry ? { commands: { registry, resultReferences: policy.resultReferences! } } : {}),
+      /* What a member stored for the App's `choose`, beside the tenant source (tenantPreferences.ts): `ctx.chosen`'s
+         fallback where their tab sends no pick. */
+      ...(registry
+        ? {
+            commands: {
+              registry,
+              resultReferences: policy.resultReferences!,
+              ...(app.choose
+                ? {
+                    storedPicks: tenantPreferences(app, () => preferencesAt(app, path === undefined ? { url: source.url! } : { path }))
+                      .stored,
+                  }
+                : {}),
+            },
+          }
+        : {}),
       ...(policy.intake === undefined ? {} : { intake: policy.intake }),
       ...(policy.public === undefined
         ? {}

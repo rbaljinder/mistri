@@ -56,7 +56,9 @@ test('Console component artifact loads from an installed tree without source or 
   // same JSON viewer's sources, as above. 400 KB since the controls moved to UI SDK (measured 396,989, from 384,705):
   // the room frames its own controls in the package's Field, which it bundles, and Field is now a slot of the control
   // kit, so the seam it is read through and the change details the seam passes on come with it (9 KB of source).
-  assert.ok(Buffer.byteLength(compiled.files[`${entry.js}.map`]) < 400_000, 'the map contains only component sources');
+  // 410 KB since rc.78 (measured 400,269): the kit's list copy, which each room embeds, says an App-wide choice's
+  // chip (`choose`), and the list and New-form sources it is read from came along.
+  assert.ok(Buffer.byteLength(compiled.files[`${entry.js}.map`]) < 410_000, 'the map contains only component sources');
   assert.ok(entry.css && compiled.files[entry.css], 'the scoped stylesheet ships with the room');
 
   // Only the emitted loader and its normal source-mode signal exist here:

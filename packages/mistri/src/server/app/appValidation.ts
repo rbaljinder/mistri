@@ -458,6 +458,18 @@ async function storedRow(tx: WriteTransaction, table: TableMeta, key: Record<str
   return result.rows[0];
 }
 
+/* The row a write returned, as storedRow would read it: the table's columns only, and none where one is missing
+   (a returned row cut short), which is then read. */
+function returnedRow(table: TableMeta, returned: Readonly<Record<string, unknown>> | undefined): Record<string, unknown> | undefined {
+  if (!returned) return undefined;
+  const row: Record<string, unknown> = {};
+  for (const { name } of table.columns) {
+    if (!Object.hasOwn(returned, name)) return undefined;
+    row[name] = returned[name];
+  }
+  return row;
+}
+
 /** Validate the database's actual post-image, never a write-intent DTO. */
 export async function validateStoredPostImage(
   tx: WriteTransaction,
@@ -467,6 +479,8 @@ export async function validateStoredPostImage(
   key: Record<string, string | number>,
   /** The columns an update wrote, or `insert`: a row-defined column is judged when it or its `per` was written. */
   written: readonly string[] | 'insert' = 'insert',
+  /** The row as the write itself returned it (UpdateResult.row), so the stored row costs no read of its own. */
+  returned?: Readonly<Record<string, unknown>>,
 ): Promise<void> {
   // A rich text rule was held on the way in (cleanRichTextValues); the post-image has nothing more to say about it.
   const rules = validation?.get(tableName)?.filter(
@@ -485,7 +499,7 @@ export async function validateStoredPostImage(
   if (!rules?.length) return;
   const table = schema.tables.find((candidate) => candidate.id === tableName);
   if (!table || table.isView) throw new AppValidationDenied();
-  const row = await storedRow(tx, table, key);
+  const row = returnedRow(table, returned) ?? (await storedRow(tx, table, key));
   const declared = rules.filter(
     (rule): rule is FormRule =>
       !isWorked(rule) &&

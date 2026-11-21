@@ -8,6 +8,7 @@ import { recordRefusalCause, tenantRecord } from '@mistriwork/engine/server/evid
 import { FILE_READ_PATH, FILE_UPLOAD_PATH } from '@mistriwork/engine/server/http/reply.js';
 import { PAGE_STEP_FIELDS } from '@mistriwork/engine/shared/keysetPage.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
+import { CHOOSE_PATH } from '../app/appChoosing.js';
 import { IMPORT_LIMITS } from '../../shared/appImportDeclaration.js';
 import { TENANT_BOOT_PATH, TENANT_ENTER_PATH } from '../../shared/tenantBoot.js';
 import { DECISION_PATHS } from '../http/decisionRoutes.js';
@@ -82,6 +83,7 @@ export const TENANT_METADATA_POSTS: ReadonlySet<string> = new Set([
   '/api/inbox',
   '/api/inbox/read',
   '/api/inbox/email',
+  CHOOSE_PATH,
   '/api/tokens',
   '/api/tokens/issue',
   '/api/tokens/revoke',
@@ -118,6 +120,7 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/inbox': ['limit', 'before', 'unread'],
   '/api/inbox/read': ['ids', 'all'],
   '/api/inbox/email': ['email'],
+  [CHOOSE_PATH]: ['name', 'value'],
   '/api/tokens': [],
   '/api/tokens/issue': ['label', 'roles', 'operations', 'days', 'service'],
   '/api/tokens/revoke': ['id'],

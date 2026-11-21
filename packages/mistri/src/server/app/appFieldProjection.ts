@@ -65,7 +65,11 @@ export function fieldAccessiblePage(schema: DatabaseSchema, page: PageDef): bool
     for (const [index, section] of checked.sections.entries()) {
       switch (section.kind) {
         case 'fields':
-          for (const path of [...(section.paths ?? []), ...(section.was === undefined ? [] : [section.was])])
+          // A headline's earlier and second figures and its second line are read with it (recordReads.ts fieldsColumns).
+          for (const path of [
+            ...(section.paths ?? []),
+            ...[section.was, section.subfigure, section.subtitle].filter((p) => p !== undefined),
+          ])
             resolvePath(schema, checked.base, path);
           break;
         case 'list': {
@@ -184,16 +188,18 @@ export function fieldAccessiblePage(schema: DatabaseSchema, page: PageDef): bool
 /**
  * A section without the parts a reader may go without: a related list's
  * create (its New is for the roles that write the table; the rest read the
- * list) and a headline's earlier figure (`was`). Undefined when the section
- * has neither, so there is nothing to fall back to.
+ * list) and a headline's earlier figure (`was`), second figure (`subfigure`)
+ * and second line (`subtitle`) — a visitor reads the asking rent without the
+ * rent a square foot their grant leaves out. Undefined when the section has
+ * none, so there is nothing to fall back to.
  */
 function withoutOptional(section: PageDef['sections'][number]): PageDef['sections'][number] | undefined {
   if (section.kind === 'list' && section.create) {
     const { create: _create, ...list } = section;
     return list;
   }
-  if (section.kind === 'fields' && section.was !== undefined) {
-    const { was: _was, ...fields } = section;
+  if (section.kind === 'fields' && (section.was ?? section.subfigure ?? section.subtitle) !== undefined) {
+    const { was: _was, subfigure: _subfigure, subtitle: _subtitle, ...fields } = section;
     return fields;
   }
   return undefined;
@@ -213,10 +219,10 @@ function readableFields(
   section: PageDef['sections'][number],
 ): PageDef['sections'][number] | undefined {
   if (section.kind !== 'fields' || !section.paths?.length) return undefined;
-  const { was: _was, ...plain } = section;
+  const { was: _was, subfigure: _subfigure, subtitle: _subtitle, ...plain } = section;
   const paths = plain.paths!.filter((path) => fieldAccessiblePage(schema, { ...page, sections: [{ ...plain, paths: [path] }] }));
   if (!paths.length) return undefined;
-  // A headline's earlier figure stays while the reader reads it too.
+  // A headline's other figures stay while the reader reads them too.
   for (const narrowed of [
     { ...section, paths },
     { ...plain, paths },

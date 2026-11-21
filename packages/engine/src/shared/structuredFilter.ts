@@ -3,6 +3,7 @@
  * over columns or view paths, with scalar values. Parsers may build looser
  * drafts; this is the shape they validate into.
  */
+import type { FilterComputed } from './computedWhere.js';
 import type { Op } from './filter.js';
 
 export type StructuredScalar = string | number | boolean | null;
@@ -18,4 +19,6 @@ type StructuredCondition<Field extends 'column' | 'path'> = Record<Field, string
   );
 export interface StructuredFilter<Field extends 'column' | 'path' = 'column'> {
   groups: Array<Array<StructuredCondition<Field>>>;
+  /** The computed columns a column filter's conditions name, each checked where it is written (computedWhere.ts). */
+  computed?: Field extends 'column' ? FilterComputed : never;
 }

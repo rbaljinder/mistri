@@ -965,6 +965,20 @@ export interface AppAuditDef {
   reads?: true;
 }
 
+/**
+ * One App-wide choice (`choose: { site: { from: 'sites', label: 'name' } }`): a row of a declared resource the person
+ * picks once — the site they work at — and every page reads as `chosen.<name>`. A filter, never a grant: the picked
+ * id is re-read under the person's own row policy on every request (server/app/appChoices.ts).
+ */
+export interface AppChoice {
+  /** The declared resource whose rows are chosen among. */
+  from: string;
+  /** The column the chooser shows for a row; absent, the record's own label. */
+  label?: string;
+  /** The shell asks before the first page, as the tenant chooser does. */
+  required?: true;
+}
+
 export interface ResourceDef {
   /** The physical table in its source's catalog, when the name alone does not find it. */
   physical?: string;
@@ -1001,6 +1015,10 @@ export interface ResourceDef {
   /** A settings record: the resource's one row, opened from the reader's
       settings (the account menu) under these words. */
   settings?: string;
+  /** Rows that take no change: a condition in the query language (`status = closed`), judged against the stored row.
+      A row it matches is refused every update, delete and command on every door (409 `frozen`) and drawn read-only;
+      creating rows is unaffected (appTransitions.ts). */
+  frozen?: string;
   /** What one record is called and several: the New button, a split's detail heading, a page's
       label and a list's when they say none. Absent, the table's own name. */
   noun?: AppNoun;
@@ -1317,6 +1335,8 @@ export interface AppDef {
   shortName?: string;
   /** The word every built-in AI mark says (the review queue, a record's proposal line, history); "AI" when absent. */
   ai?: { label: string };
+  /** The App-wide choices a person makes once and every page reads (`chosen.site`, `ctx.chosen.site`), by name. */
+  choose?: Readonly<Record<string, AppChoice>>;
   /** Connection this app is for, by id or name. Absent means every connection. */
   connection?: string;
   /** Every resource the App declares, by logical name. A physical binding

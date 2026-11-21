@@ -24,6 +24,8 @@ export function writeShopApp(
     appendOnly?: boolean;
     /** Resources that audit their reads (`audit: { reads: true }`). */
     audited?: readonly string[];
+    /** A `frozen` condition on `item`: a matching item is refused every update and delete. */
+    frozen?: string;
   },
 ) {
   /* `shelf`: the items whose note is "shelf", a narrowed resource the editor writes through the API's generic writes
@@ -50,6 +52,7 @@ export function writeShopApp(
                 ...resource,
                 ...(options.physical ? { physical: `public.${name}` } : {}),
                 ...(options.audited?.includes(name) ? { audit: { reads: true } } : {}),
+                ...(options.frozen && name === 'item' ? { frozen: options.frozen } : {}),
               },
             ],
           ),

@@ -220,7 +220,7 @@ export function saidIconProblem(fields: readonly AppCommandField[], where: strin
 }
 
 function choiceOption(raw: unknown, where: string, rules: FieldRules): AppCommandChoice {
-  const o = record(raw, ['value', 'label', 'icon', 'help', 'when'], where);
+  const o = record(raw, ['value', 'label', 'icon', 'help', 'when', 'values'], where);
   const value = o.value;
   if (!(typeof value === 'string' && value.trim() && value.length <= 120) && !(typeof value === 'number' && Number.isFinite(value))) {
     return fail(where, 'a choice value must be nonempty text of at most 120 characters or a finite number');
@@ -233,7 +233,27 @@ function choiceOption(raw: unknown, where: string, rules: FieldRules): AppComman
     ...(o.icon === undefined ? {} : { icon: o.icon as string }),
     ...(o.help === undefined ? {} : { help: caption(o.help, where, 200) }),
     ...(o.when === undefined ? {} : { when: optionWhen(o.when, `${where} (${JSON.stringify(value)})`, rules) }),
+    ...(o.values === undefined ? {} : { values: optionValues(o.values, `${where} (${JSON.stringify(value)})`) }),
   };
+}
+
+/* What picking an option fills into other inputs: keys other inputs name in `default: { answer: '<input>.<key>' }`,
+   each a scalar the input then judges as it judges anything typed. */
+function optionValues(raw: unknown, where: string): Readonly<Record<string, string | number | boolean | null>> {
+  const at = `${where}: values`;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return fail(at, 'is an object of keys and their values: { usual_fee: 120 }');
+  const entries = Object.entries(raw);
+  if (!entries.length || entries.length > 20) return fail(at, 'holds one to twenty keys');
+  for (const [key, value] of entries) {
+    name(key, `${at}, "${key}"`);
+    if (
+      !(value === null || typeof value === 'boolean') &&
+      !(typeof value === 'string' && value.length <= 500) &&
+      !(typeof value === 'number' && Number.isFinite(value))
+    )
+      return fail(at, `"${key}" is text of at most 500 characters, a finite number, true, false or null`);
+  }
+  return Object.freeze(Object.fromEntries(entries)) as Readonly<Record<string, string | number | boolean | null>>;
 }
 
 /* An option offered only where the placing tenant's profile holds a condition (`tenant.country = 'IN'`). It reads
@@ -286,7 +306,14 @@ function fieldStart(raw: unknown, made: AppCommandField, where: string, rules: F
     const start = raw as Record<string, unknown>;
     const word =
       Object.keys(start).length === 1
-        ? (start.auto ?? (typeof start.record === 'string' ? 'record' : typeof start.tenant === 'string' ? 'tenant' : undefined))
+        ? (start.auto ??
+          (typeof start.record === 'string'
+            ? 'record'
+            : typeof start.tenant === 'string'
+              ? 'tenant'
+              : typeof start.answer === 'string'
+                ? 'answer'
+                : undefined))
         : undefined;
     if (word === 'record' || word === 'me' || word === 'tenant') {
       if (rules.publicForm) return fail(at, 'a public form has no record, no reader and no member to start a field from');
@@ -302,16 +329,24 @@ function fieldStart(raw: unknown, made: AppCommandField, where: string, rules: F
       return { record: start.record as string };
     }
     if (word === 'tenant') return { tenant: name(start.tenant, at) };
+    if (word === 'answer') {
+      // Which input it is, and that it is a choice beside this one, is judged where the siblings are known (fieldList).
+      const parts = String(start.answer).split('.');
+      if (parts.length !== 2)
+        return fail(at, "{ answer } names a choice input and a column or value key of its pick: { answer: 'treatment.usual_fee' }");
+      for (const part of parts) name(part, at);
+      return { answer: start.answer as string };
+    }
     if (typeof word === 'string' && START_WORDS[word]?.includes(made.type)) return { auto: word as 'today' | 'now' | 'me' };
     return fail(
       at,
-      'is a literal, today (a date field), now (a datetime field), me (a text field), { record: column } or { tenant: column }',
+      'is a literal, today (a date field), now (a datetime field), me (a text field), { record: column }, { tenant: column } or { answer: choice.column }',
     );
   }
   if (typeof raw === 'string' || typeof raw === 'boolean' || (typeof raw === 'number' && Number.isFinite(raw))) return raw;
   return fail(
     at,
-    'is a literal, today (a date field), now (a datetime field), me (a text field), { record: column } or { tenant: column }',
+    'is a literal, today (a date field), now (a datetime field), me (a text field), { record: column }, { tenant: column } or { answer: choice.column }',
   );
 }
 
@@ -1147,6 +1182,21 @@ function fieldList(raw: unknown, where: string, rules: FieldRules): AppCommandFi
         }
       }
     }
+    const filled = answerStart(item);
+    if (filled) {
+      const [named, key] = filled;
+      const at = `input "${item.name}" default { answer: '${named}.${key}' }`;
+      const other = byName.get(named);
+      const nearby = rules.depth ? 'the same group or line' : 'this input';
+      if (!other || other === item)
+        return fail(where, `${at} names "${named}", which is not a choice beside it: a fill is from a choice of ${nearby}`);
+      if (other.type !== 'choice')
+        return fail(where, `${at} names "${named}", a ${other.type} field; only a choice, one pick, fills other inputs`);
+      if (!other.source && !other.options.some((option) => option.values && Object.hasOwn(option.values, key)))
+        return fail(where, `${at}: no option of "${named}" carries values.${key}`);
+      if (answerStart(other))
+        return fail(where, `${at} names "${named}", which is itself filled from another input; a fill does not chain`);
+    }
     for (const rule of ['below', 'above'] as const) {
       const other = (item as { below?: string; above?: string })[rule];
       if (other === undefined) continue;
@@ -1161,6 +1211,40 @@ function fieldList(raw: unknown, where: string, rules: FieldRules): AppCommandFi
     }
   }
   return choicesNarrowed(list, where, rules, sensitiveField);
+}
+
+/* A field that starts from another input's pick: the input and the column or key it names. */
+const answerStart = (item: AppCommandField): [string, string] | undefined => {
+  const start = item.type === 'group' || item.type === 'lines' ? undefined : item.default;
+  return start && typeof start === 'object' && 'answer' in start ? (start.answer.split('.') as [string, string]) : undefined;
+};
+
+/** The inputs of `list` that start from the pick of the choice `named` beside them: each input and the column or key
+    of the pick it takes. A line's choice is judged among its own line's inputs, so it fills that line only. */
+export function choiceFills(list: readonly AppCommandField[], named: string): Record<string, string> {
+  const fills: Record<string, string> = {};
+  for (const item of list) {
+    const asked = answerStart(item);
+    if (asked && asked[0] === named) fills[item.name] = asked[1];
+  }
+  return fills;
+}
+
+/** The columns of a table choice's rows its siblings start from, in name order: what a served row carries besides its
+    `where` columns, and what the form reads beside the key and the label. */
+export const choiceFillColumns = (list: readonly AppCommandField[], named: string): string[] =>
+  [...new Set(Object.values(choiceFills(list, named)))].sort();
+
+/** `choiceFillColumns` for every choice of a list and of the groups in it, by the choice itself. */
+export function choiceFillColumnsDeep(
+  list: readonly AppCommandField[],
+  into = new Map<AppCommandField, string[]>(),
+): Map<AppCommandField, string[]> {
+  for (const item of list) {
+    if (item.type === 'group') choiceFillColumnsDeep(item.fields, into);
+    else if (item.type === 'choice') into.set(item, choiceFillColumns(list, item.name));
+  }
+  return into;
 }
 
 /* The fields a condition cannot compare: a value of several parts, or none it can read. */
@@ -1582,12 +1666,31 @@ function linesInputProblem(f: Extract<AppCommandField, { type: 'lines' }>, schem
   return undefined;
 }
 
+/* Each column an input starts from the pick of a choice from a table (`default: { answer }`) is a column of that table. */
+function fillColumnProblem(list: readonly AppCommandField[], schema: DatabaseSchema): string | undefined {
+  for (const item of list) {
+    if (item.type === 'group') {
+      const problem = fillColumnProblem(item.fields, schema);
+      if (problem) return problem;
+    }
+    const asked = answerStart(item);
+    const source = asked && list.find((other) => other.name === asked[0]);
+    if (!asked || !source || source.type !== 'choice' || !source.source) continue;
+    const from = tableNamed(schema, source.source.from);
+    if (from && !from.columns.some((c) => c.name === asked[1]))
+      return `Command input "${item.name}" starts from "${asked[0]}.${asked[1]}", and "${source.source.from}" has no column "${asked[1]}".`;
+  }
+  return undefined;
+}
+
 /** The reference inputs a command asks, against the catalog: a form's command has only these to check. */
 export function commandInputProblem(
   input: readonly AppCommandField[],
   schema: DatabaseSchema,
   target?: { table: TableMeta; many: boolean },
 ): string | undefined {
+  const filling = fillColumnProblem(input, schema);
+  if (filling) return filling;
   for (const { field: f } of commandFieldsDeep(input)) {
     const start = f.type === 'group' ? undefined : f.default;
     // A path's first step is the record's own column; the hops past it are judged where the command is bound.

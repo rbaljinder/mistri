@@ -18,6 +18,7 @@ import { ComponentStyleScope } from '@mistriwork/ui/internal/ComponentStyleScope
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, primaryKey, state } from '@mistriwork/kit/client/core.js';
+import { appNow } from '@mistriwork/kit/client/locale.js';
 import { pathEqualityFilter } from '@mistriwork/kit/client/resourceRequests.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { Problem } from '@mistriwork/kit/client/components/Notes.js';
@@ -30,6 +31,7 @@ import { pageLoadKey, pageLoadPlace } from './hooks.js';
 import { rowsByPath } from './rows.js';
 import { batchedBreakdown } from '@mistriwork/kit/client/breakdownBatch.js';
 import { breakdownText, measureText } from '@mistriwork/engine/shared/dashboardAsks.js';
+import { windowBounds } from '@mistriwork/engine/shared/queryDates.js';
 import { groupsAsked } from '@mistriwork/engine/shared/appComponents.js';
 import { totalFigure, totalGroups, type TotalGroup, type TotalValue } from '../../../shared/customTotals.js';
 import { say } from '../../copy/components/components/sdk/CustomSection.js';
@@ -46,6 +48,8 @@ type SectionComponentProps =
       state: 'ready' | 'empty';
       /** On a dashboard: the window its reads are over, in the query grammar's words. */
       period?: string;
+      /** That window's bounds, as its reads compared against them: `start` in it, `end` the first moment after. */
+      window?: { start: string; end: string };
     }
   | { props: Record<string, unknown>; data: unknown; refresh: () => void };
 
@@ -345,6 +349,9 @@ function DashReads({
       ) as Record<string, UiRow[]>,
   });
   if (!section.component) return null;
+  /* Worked out as the server worked out the reads' `over = <phrase>`, against the App's today, so the bounds a
+     component says are the ones its rows were narrowed to. */
+  const bounds = windowNow ? windowBounds(windowNow, appNow()) : undefined;
   /* Loading and a failed read are said as a record page's section says them (PageSectionBox): its skeleton bar under
      the title, then the problem in place of the drawing, with a retry. */
   let body: ReactNode;
@@ -366,6 +373,7 @@ function DashReads({
           section: { title: section.title, width: section.width ?? 'full', region: aside ? 'aside' : 'main' },
           state: stateOf(undefined, rows, false),
           ...(windowNow ? { period: windowNow } : {}),
+          ...(bounds ? { window: bounds } : {}),
         }}
       />
     );

@@ -13,6 +13,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
+import { machine } from '@mistriwork/mistri/app';
 import { test } from 'node:test';
 import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
 import { COMMAND_JOURNAL_TABLES } from '../packages/mistri/src/adapters/commands/commandJournalSchema.js';
@@ -76,6 +77,7 @@ const CONTRACTS = {
   revoke: { target: 'application' },
   discard: { target: 'application' },
   apply: { public: true, input: { applicant: { type: 'text', max: 80 } } },
+  accept: { target: 'application' },
 };
 
 const RAW = {
@@ -127,6 +129,22 @@ const RAW = {
    delete-and-revoke tests above may remove, so they keep the plain schema. */
 const DOCUMENTS = `CREATE TABLE document (id INTEGER PRIMARY KEY, application_id INTEGER NOT NULL REFERENCES application(id), title TEXT NOT NULL, secret TEXT);
   INSERT INTO document VALUES (1, 2, 'Pay stub', 's1'), (2, 2, 'Bank statement', 's2'), (3, 2, 'Lease', 's3');`;
+/* A quote the customer accepts: `accept` is a verb of the machine and is granted to no role, so only a link moves it. */
+const QUOTE_RAW = {
+  ...RAW,
+  resources: {
+    application: {
+      ...RAW.resources.application,
+      machine: machine('status', { draft: { on: { send: 'sent' } }, sent: { on: { accept: 'accepted' } }, accepted: { final: true } }),
+      links: { ...RAW.resources.application.links, quote: { show: ['applicant', 'status'], commands: ['accept'] } },
+    },
+  },
+};
+/* Withdrawn applications are frozen: the status link's own command is refused on one, though the link was minted before. */
+const FROZEN_RAW = {
+  ...RAW,
+  resources: { application: { ...RAW.resources.application, frozen: 'status = withdrawn' } },
+};
 const RELATED_RAW = {
   ...RAW,
   resources: {
@@ -166,6 +184,10 @@ async function fixture(
   options: {
     history?: boolean;
     related?: boolean;
+    /** Application 1 is a sent quote and 2 a draft, under a machine whose `accept` verb only the `quote` link runs. */
+    quote?: boolean;
+    /** Applications are frozen once withdrawn (FROZEN_RAW). */
+    frozen?: boolean;
     /** Runs after the adapter has answered a read of this table: where a test acts mid-render. */
     afterRead?: (table: string, sql: DatabaseSync) => void;
   } = {},
@@ -174,6 +196,7 @@ async function fixture(
   const file = join(directory, 'intake.db');
   const setup = new DatabaseSync(file);
   setup.exec(options.related ? `${SCHEMA}\n${DOCUMENTS}` : SCHEMA);
+  if (options.quote) setup.exec(`UPDATE application SET status = CASE id WHEN 1 THEN 'sent' ELSE 'draft' END`);
   setup.close();
   migrateSqliteCommandJournal(file);
   if (options.history) provisionSqliteRecordHistory(file);
@@ -211,6 +234,14 @@ async function fixture(
       output: shape({ link: text() }),
       async handle({ link }, input) {
         return { link: await link((input as { link: string }).link) };
+      },
+    }),
+    accept: defineCommand({
+      source: 'main',
+      target: 'application',
+      track: 'receipts',
+      async handle({ tx, record }) {
+        await tx.update({ table: 'application', key: { id: Number(record.id) }, values: { status: 'accepted' } });
       },
     }),
     withdraw: defineCommand({
@@ -267,7 +298,7 @@ async function fixture(
       },
     }),
   });
-  const app = parse(options.related ? RELATED_RAW : RAW);
+  const app = parse(options.related ? RELATED_RAW : options.quote ? QUOTE_RAW : options.frozen ? FROZEN_RAW : RAW);
   const clerk: Identity = { id: 'account-clerk', who: 'clerk@example.test', role: 'clerk' };
   let role = 'clerk';
   const pages: PageDef[] = options.history
@@ -684,6 +715,39 @@ test('the link principal runs only its declared commands, on its one record, fro
     });
     assert.notEqual(generic.status, 200);
   }));
+
+test('a link runs nothing on a frozen row: 409 frozen, and the row is as it was', () =>
+  fixture(
+    async ({ mint, land, post, sql }) => {
+      const { id, session } = await land((await mint('status', 1)).url);
+      const headers = { 'x-mistri-link': session };
+      const prepared = await post(`/l/${id}/prepare`, {}, headers);
+      const version = prepared.body.commands.withdraw.expectedVersion;
+      // The row freezes after the link was minted and opened, by a write outside the link.
+      sql.exec("UPDATE application SET status = 'withdrawn' WHERE id = 1");
+      const run = (key: string) =>
+        post(`/l/${id}/run`, { command: 'withdraw', expectedVersion: version, idempotencyKey: key, input: { reason: 'Again' } }, headers);
+      const refused = await run('withdraw-frozen-0001');
+      assert.equal(refused.status, 409, refused.text);
+      assert.equal(refused.body.code, 'frozen');
+      assert.equal(sql.prepare('SELECT note FROM application WHERE id = 1').get()!.note, 'private note');
+      // A row the condition does not match still runs, on its own link.
+      const other = await land((await mint('status', 2)).url);
+      const ready = await post(`/l/${other.id}/prepare`, {}, { 'x-mistri-link': other.session });
+      const done = await post(
+        `/l/${other.id}/run`,
+        {
+          command: 'withdraw',
+          expectedVersion: ready.body.commands.withdraw.expectedVersion,
+          idempotencyKey: 'withdraw-frozen-0002',
+          input: {},
+        },
+        { 'x-mistri-link': other.session },
+      );
+      assert.equal(done.status, 200, done.text);
+    },
+    { frozen: true },
+  ));
 
 test('every miss is one answer on one floor: unknown, wrong MAC, revoked, expired and spent', () =>
   fixture(async ({ mint, get, command, sql, origin }) => {
@@ -1301,3 +1365,36 @@ test('a link’s related list is refused at load where its child audits its read
     );
   }
 });
+
+test('a link that names a machine verb moves a record along it, and the machine refuses it from any other state', () =>
+  fixture(
+    async ({ mint, land, post, sql }) => {
+      const status = (id: number) => (sql.prepare('SELECT status FROM application WHERE id = ?').get(id) as { status: string }).status;
+      const run = async (id: number, key: string) => {
+        const { url } = await mint('quote', id);
+        const { id: link, session } = await land(url);
+        const headers = { 'x-mistri-link': session };
+        const prepared = await post(`/l/${link}/prepare`, {}, headers);
+        assert.equal(prepared.status, 200, prepared.text);
+        return post(
+          `/l/${link}/run`,
+          { command: 'accept', expectedVersion: prepared.body.commands.accept?.expectedVersion, idempotencyKey: key, input: {} },
+          headers,
+        );
+      };
+      // sent -> accepted, on the link door, as the link's principal: no role holds the command.
+      const sent = await run(1, 'accept-sent-000001');
+      assert.equal(sent.status, 200, sent.text);
+      assert.equal(status(1), 'accepted');
+      const actor = sql.prepare(`SELECT actor_id FROM ${COMMAND_JOURNAL_TABLES.receipt} WHERE command_id = 'accept'`).get() as {
+        actor_id: string;
+      };
+      assert.match(actor.actor_id, /^link:/);
+      // draft: the machine's own refusal, as a person would hear it.
+      const draft = await run(2, 'accept-draft-00001');
+      assert.equal(draft.status, 409, draft.text);
+      assert.equal(draft.body.code, 'ineligible_state', 'the answer a person running the verb would hear');
+      assert.equal(status(2), 'draft');
+    },
+    { quote: true },
+  ));

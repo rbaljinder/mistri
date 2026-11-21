@@ -211,6 +211,8 @@ describe('the words', () => {
     );
     assert.ok(problems.some((p) => /action "flag" sets "is_overdue", which is computed/.test(p)));
     assert.ok(problems.some((p) => /role "staff", "fields", "task", write names "days_open", which is computed/.test(p)));
+    // Read, it is named as a column is: served where every column it reads is.
+    assert.ok(!problems.some((p) => /read names "days_open"/.test(p)), problems.join('\n'));
   });
 });
 
@@ -608,7 +610,10 @@ describe('a running App', () => {
         auth: {
           roles: {
             lead: { read: true },
-            guest: { read: true, fields: { task: { read: ['id', 'name', 'completed', 'opened_on'] } } },
+            // A field grant names the computed columns it reads: `is_overdue` is named, but reads a due date the guest does not.
+            guest: { read: true, fields: { task: { read: ['id', 'name', 'completed', 'opened_on', 'days_open', 'is_overdue'] } } },
+            // Every input read, but neither computed column named: a narrowed list keeps them from the role.
+            clerk: { read: true, fields: { task: { read: ['id', 'name', 'due_on', 'completed', 'opened_on'] } } },
           },
         },
         views: { tasks: { kind: 'list', from: 'task' } },
@@ -664,9 +669,10 @@ describe('a running App', () => {
       const schema = (await (await fetch(`http://${bound.host}:${bound.port}/api/schema?app=tasks`)).json()) as DatabaseSchema;
       assert.deepEqual(Object.keys(schema.tables.find((table) => table.id === 'task')!.computed ?? {}), ['is_overdue', 'days_open']);
 
-      /* The guest reads no due date: `is_overdue` is not served, so it cannot
-         be shown, filtered or sorted by — it would say what `due_on` may not.
-         `days_open` reads only what the guest reads, so it is served. */
+      /* The guest reads no due date: `is_overdue` is not served, though its
+         grant names it, so it cannot be shown, filtered or sorted by — it
+         would say what `due_on` may not. `days_open` reads only what the
+         guest reads, so it is served. */
       role = 'guest';
       const leaked = [
         await run({ columns: [{ path: 'name' }, { path: 'is_overdue' }] }),
@@ -689,6 +695,13 @@ describe('a running App', () => {
       assert.deepEqual(Object.keys(guestSchema.tables.find((table) => table.id === 'task')!.computed ?? {}), ['days_open']);
       const allowed = await run({ columns: [{ path: 'name' }, { path: 'days_open' }] });
       assert.equal(allowed.status, 200, JSON.stringify(allowed.body));
+
+      role = 'clerk';
+      const clerkSchema = (await (await fetch(`http://${bound.host}:${bound.port}/api/schema?app=tasks`)).json()) as DatabaseSchema;
+      assert.equal(clerkSchema.tables.find((table) => table.id === 'task')!.computed, undefined);
+      const unnamed = await run({ columns: [{ path: 'name' }, { path: 'days_open' }] });
+      assert.equal(unnamed.status, 400, JSON.stringify(unnamed));
+      assert.match(unnamed.body.error, /"days_open" is not a column on task/);
     } finally {
       const closed = new Promise<void>((resolve) => server.close(() => resolve()));
       server.closeAllConnections();

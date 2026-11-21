@@ -119,6 +119,7 @@ describe('scaffoldApp', () => {
         const generated = scaffoldApp(SCHEMA, { database: { config } }).files;
         const scripts = JSON.parse(generated['package.json']).scripts;
         assert.deepEqual(scripts, {
+          dev: 'node mistri-run.mjs dev',
           check: 'node mistri-run.mjs check',
           start: 'node mistri-run.mjs start',
           format: 'oxfmt "**/*.ts"',
@@ -170,7 +171,7 @@ describe('scaffoldApp', () => {
       for (const args of [[], ['invalid']]) {
         const out = spawnSync(process.execPath, ['mistri-run.mjs', ...args], { cwd: dir, encoding: 'utf8' });
         assert.equal(out.status, 1);
-        assert.match(out.stderr, /Usage: node mistri-run\.mjs <check\|start\|seed>/);
+        assert.match(out.stderr, /Usage: node mistri-run\.mjs <dev\|check\|start\|seed>/);
         assert.equal(out.stdout, '', 'invalid actions never load the CLI');
       }
     } finally {
@@ -344,6 +345,7 @@ describe('scaffoldApp', () => {
     assert.equal(pkg.type, 'module');
     assert.deepEqual(Object.keys(pkg.dependencies), ['@mistriwork/mistri']);
     assert.deepEqual(pkg.scripts, {
+      dev: 'mistri dev --app .',
       check: 'mistri check --app .',
       start: 'mistri --app .',
       format: 'oxfmt "**/*.ts"',

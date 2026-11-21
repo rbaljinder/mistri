@@ -102,6 +102,7 @@ type ResourceHttpIdentity<Mode extends ResourceHttpMode> = Mode extends 'app'
 type HttpErrorCode =
   | 'validation_failed'
   | 'consumes_refused'
+  | 'frozen'
   | 'record_conflict'
   | 'required_value'
   | 'duplicate_value'

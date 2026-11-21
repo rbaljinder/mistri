@@ -145,6 +145,9 @@ export interface ShellMode {
   unauthorized(info: unknown): void;
   /** Draw the App's sign-in in place, so a signed-out visitor comes back to this address (publicSurface.js); a no-op where none signs in. */
   signInHere(appId: string): void;
+  /** The App-wide rows this tab has picked (an App's `choose`), each name's key as text: sent with every request as
+      `x-mistri-chosen`, and believed only once the server has read the row again. None in the Workbench. */
+  chosen(): Readonly<Record<string, string>>;
   /** A tenant session's requests, or null where there is no tenant. */
   tenant: TenantRequests | null;
   tenantLinks: TenantLinks | null;
@@ -427,6 +430,7 @@ interface FormLinesPart {
 
 const none = () => false;
 const NOTHING_REACHABLE: ReadonlySet<string> = new Set();
+const NOTHING_CHOSEN: Readonly<Record<string, string>> = Object.freeze({});
 const WORKBENCH: ShellMode = Object.freeze({
   app: () => null,
   inApp: none,
@@ -447,6 +451,7 @@ const WORKBENCH: ShellMode = Object.freeze({
   peekRecord: null,
   unauthorized: () => {},
   signInHere: () => {},
+  chosen: () => NOTHING_CHOSEN,
   tenant: null,
   tenantLinks: null,
   mutations: Object.freeze({ start: () => undefined, unknown: none, settle: none, hasUnresolved: none }),

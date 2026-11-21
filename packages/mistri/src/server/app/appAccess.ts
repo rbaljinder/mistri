@@ -134,7 +134,7 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
     operationAccess: ResourceAccess,
     request: UpdateRequest,
     write: () => Promise<Awaited<ReturnType<WriteTransaction['update']>>>,
-  ) => {
+  ): Promise<Awaited<ReturnType<WriteTransaction['update']>>> => {
     const rules = consumesOf(operationAccess.validation, request.table).filter(
       (rule) => Object.hasOwn(request.values, rule.reference) || (rule.by !== undefined && Object.hasOwn(request.values, rule.by)),
     );
@@ -147,7 +147,9 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
       const after = await consumesImage(writer, request.table, postImageKey(full, request.table, request.key, result.applied), rules);
       await moveConsumed(writer, rules, before, after, parentReadable(operationAccess));
     }
-    return result;
+    // Balances moved since the UPDATE answered: the stored row is read again, not taken from it.
+    const { row: _moved, ...said } = result;
+    return said;
   };
   /* The action's own columns are the write's authority, not the role's field
      grants; the row, its key and what the action's `when` reads must still be
@@ -191,7 +193,7 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
             // An undo is a write too: a frozen record is not put back.
             if (operationAccess.transitions?.has(request.table))
               await import('./appTransitions.js').then(({ assertNotFrozen }) =>
-                assertNotFrozen(writer, operationAccess.transitions, request),
+                assertNotFrozen(writer, operationAccess.transitions, request, undefined, full, me),
               );
           })
         : import('./appTransitions.js').then(async ({ assertGrantedAction, assertTransitions }) => {
@@ -218,6 +220,7 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
             request.table,
             postImageKey(full, request.table, request.key, result.applied),
             Object.keys(request.values),
+            result.row,
           );
         }
         return result;
@@ -306,18 +309,27 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
               request.table,
               postImageKey(full, request.table, request.key, result.applied),
               Object.keys(request.values),
+              result.row,
             );
           }
           return result;
         });
     },
     remove: (request, access) => {
+      /* A frozen row is not deleted either: judged of the stored row, once it is locked, on every door that removes. */
+      const notFrozen = async () => {
+        if (!access.transitions?.get(request.table)?.frozenWhen) return;
+        if (writer.lockRecord) await writer.lockRecord({ table: request.table, key: request.key });
+        const { assertRowNotFrozen } = await import('./appTransitions.js');
+        await assertRowNotFrozen(writer, full, access.transitions, request.table, request.key, access.me && (() => access.me!(writer)));
+      };
       // A removed line gives back what it took.
       const consumed = consumesOf(access.validation, request.table);
-      if (!consumed.length) return writer.remove(request);
+      if (!consumed.length) return notFrozen().then(() => writer.remove(request));
       const readable = parentReadable(captureAccess(access));
       return (async () => {
         if (writer.lockRecord) await writer.lockRecord({ table: request.table, key: request.key });
+        await notFrozen();
         const before = await consumesImage(writer, request.table, request.key, consumed);
         const result = await writer.remove(request);
         if (result.affected === 1) await moveConsumed(writer, consumed, before, undefined, readable);

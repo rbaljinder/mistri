@@ -32,6 +32,7 @@ import { AppAccessDenied, authorizeTransaction, type ResourceAccess } from '../a
 import { AppValidationDenied, ConsumesRefused } from '../app/appValidationDenied.js';
 import { compileAppDefinitionValidation } from '../app/appValidation.js';
 import { AppFrozenDenied, AppTransitionDenied, compileAppTransitions } from '../app/appTransitions.js';
+import { isFrozenRefusal } from '@mistriwork/engine/shared/refusal.js';
 import { compileAppStamps, stampInsert, stampUpdate } from '../app/appStamps.js';
 import { lookupPerson, personKey } from '../app/appMe.js';
 
@@ -233,6 +234,7 @@ function synthesize(app: AppDef, schema: DatabaseSchema, write: ApiWrite): AnyBu
       if (error instanceof ConsumesRefused)
         throw new BusinessCommandExecutionError('consumes_refused', 'not_applied', undefined, undefined, error.sentence);
       if (error instanceof AppValidationDenied) refuse('invalid_input', error.fields[0]);
+      if (isFrozenRefusal(error)) throw new BusinessCommandExecutionError('frozen', 'not_applied', undefined, undefined, error.message);
       if (error instanceof AppFrozenDenied)
         throw new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, undefined, error.message);
       if (error instanceof AppTransitionDenied) refuse('ineligible_state');

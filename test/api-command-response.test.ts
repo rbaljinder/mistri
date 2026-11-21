@@ -113,6 +113,7 @@ test('the refusal table is the design table, and titles are the platform message
       duplicate_record: 409,
       ineligible_state: 409,
       idempotency_conflict: 409,
+      frozen: 409,
       invalid_result: 500,
       row_locked: 503,
       temporarily_unavailable: 503,

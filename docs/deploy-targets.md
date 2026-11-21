@@ -171,7 +171,10 @@ entrypoint maps it (G6, 0.9.6).
 
 **Health.** Liveness `GET /healthz`; readiness and startup `GET /readyz`
 (503 while starting, while a tenant App's writer is closed after an uncertain
-write and reopening, and from shutdown on); both answer before any gate or App
+write and reopening, and from shutdown on; a tenant App's server also answers
+503 `{ ready: false, opened, of }` until each tenant has opened once after the
+start, a few at a time, then 200 listing a tenant that failed to open as
+`failed`, by key, without holding readiness: `packages/mistri/src/server/tenant/tenantWarmup.ts`); both answer before any gate or App
 and probe no database (`packages/engine/src/server/http/probes.ts`). Under `--base-path`
 they move with it. The Dockerfile `mistri build --dockerfile` writes probes
 `/healthz` (G6, 0.9.6).

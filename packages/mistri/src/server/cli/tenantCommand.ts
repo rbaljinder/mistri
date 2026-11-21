@@ -13,6 +13,7 @@
 import { refusalHeadline } from '@mistriwork/engine/shared/refusal.js';
 import { existsSync, readFileSync } from 'node:fs';
 import { userInfo } from 'node:os';
+import { collapse, rowsFromCsv, rowsFromFlags, type GrantRow } from './tenantGrantPlan.js';
 import { resolve } from 'node:path';
 
 const TENANT_USAGE = `mistri tenant init [<tenant>...] [--app <dir>] --policy <file> [--suite <suite.json> [--subdomain <label>]]
@@ -25,6 +26,8 @@ const TENANT_USAGE = `mistri tenant init [<tenant>...] [--app <dir>] --policy <f
        mistri tenant host primary <tenant> <host> [--app <dir>] --policy <file>
        mistri tenant grant <email> --roles <role,...> [--tenant <id>] [--name <name>] [--days <n>]
                  [--app <dir>] --policy <file>
+       mistri tenant grant --account <email>... [--tenant <id>...] --roles <role,...> [--days <n>] [--app <dir>] --policy <file>
+       mistri tenant grant --from <file.csv> [--days <n>] [--app <dir>] --policy <file>
        mistri tenant brand <tenant> [--name <name>] [--preset <theme>] [--file <branding.json>]
                  [--app <dir>] --policy <file>
        mistri tenant clone <source> <sandbox> [--app <dir>] --policy <file> [--samples]
@@ -59,6 +62,15 @@ const HELP = `${TENANT_USAGE}
           --name (default: the address before its @). The store is the
           one the App names, else mistri dev's once dev has started the
           App there, else a plain start's; grant says which.
+          Several at once: repeat --account and --tenant (each account in
+          each tenant), or --from names a CSV with the header
+          account,tenant,role (an empty tenant is the platform realm;
+          several roles are written a|b). Every row is checked first, and
+          one that is wrong is listed with the others and none is applied;
+          then each tenant is granted in one transaction. An account that
+          already holds a membership there is left as it is, so the run can
+          be repeated. A running server reads grants from the store as it
+          serves: nothing is restarted.
   brand   Saves <tenant>'s branding, checked as a tenant admin's save is
           against the App's branding: --file names the whole value (JSON),
           else the saved one is kept; --name and --preset are laid over
@@ -106,7 +118,11 @@ const FLAGS = [
   '--subdomain',
   '--host',
   '--custom',
+  '--account',
+  '--from',
 ];
+/** Flags that may be given more than once: grant's accounts and tenants. */
+const REPEATED = new Set(['--account', '--tenant']);
 const DURATION = /^(\d+)(ms|s|m|h|d)?$/;
 const UNIT: Record<string, number> = { ms: 1, s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
 
@@ -130,6 +146,8 @@ export async function runTenantCommand(
     return fail(`host is list, add, verify, remove or primary.\n${TENANT_USAGE}`);
   const offset = command === 'host' ? 2 : 1;
   let wanted = command === 'clone' ? 2 : sub === 'primary' || sub === 'verify' ? 2 : 1;
+  // grant's address may be given by --account (or --from) instead.
+  if (command === 'grant' && (argv[1] === undefined || argv[1].startsWith('-'))) wanted = 0;
   if (command === 'init' || sub === 'list') {
     wanted = 0;
     while (offset + wanted < argv.length && !argv[offset + wanted].startsWith('-')) wanted++;
@@ -137,7 +155,7 @@ export async function runTenantCommand(
   const tenants = argv.slice(offset, offset + wanted);
   const email = command === 'grant' ? tenants[0] : undefined;
   if (command === 'grant') {
-    if (email === undefined || !/^[^\s@]+@[^\s@]+$/.test(email)) return fail(`grant names an email address.\n${TENANT_USAGE}`);
+    if (email !== undefined && !/^[^\s@]+@[^\s@]+$/.test(email)) return fail(`grant names an email address.\n${TENANT_USAGE}`);
   } else if (command === 'host') {
     // remove names a host, primary and verify a tenant and then its host; the others a tenant.
     const pair = sub === 'primary' || sub === 'verify';
@@ -149,6 +167,7 @@ export async function runTenantCommand(
       `${command} names ${command === 'clone' ? 'the source tenant and the new sandbox' : command === 'init' ? 'its tenants' : command === 'brand' ? 'a tenant' : 'a sandbox'} by id: a–z, 0–9, "_" and "-".\n${TENANT_USAGE}`,
     );
   const flags: Record<string, string> = {};
+  const repeated: Record<string, string[]> = {};
   let samples = false,
     primary = false;
   const rest: string[] = [];
@@ -165,8 +184,9 @@ export async function runTenantCommand(
     if (FLAGS.includes(arg)) {
       const value = argv[i + 1];
       if (value === undefined || value.startsWith('--')) return fail(`${arg} needs a value.\n${TENANT_USAGE}`);
-      if (Object.hasOwn(flags, arg)) return fail(`${arg} may be supplied only once.`);
-      flags[arg] = value;
+      if (REPEATED.has(arg)) (repeated[arg] ??= []).push(value);
+      else if (Object.hasOwn(flags, arg)) return fail(`${arg} may be supplied only once.`);
+      flags[arg] ??= value;
       i++;
       continue;
     }
@@ -212,8 +232,8 @@ export async function runTenantCommand(
     if (!custom && command === 'host' && sub === 'add' && !tenantDomain)
       return fail(`${flags['--suite']} sets no tenantDomain, so it has no subdomains to give.`);
   }
-  if (command !== 'grant' && ['--roles', '--tenant', '--days'].some((flag) => flags[flag] !== undefined))
-    return fail(`--roles, --tenant and --days are grant's.\n${TENANT_USAGE}`);
+  if (command !== 'grant' && ['--roles', '--tenant', '--days', '--account', '--from'].some((flag) => flags[flag] !== undefined))
+    return fail(`--roles, --tenant, --days, --account and --from are grant's.\n${TENANT_USAGE}`);
   if (command !== 'grant' && command !== 'brand' && flags['--name'] !== undefined)
     return fail(`--name is grant's and brand's.\n${TENANT_USAGE}`);
   if (command !== 'brand' && (flags['--preset'] !== undefined || flags['--file'] !== undefined))
@@ -228,9 +248,43 @@ export async function runTenantCommand(
       return fail(`${flags['--file']} is not a JSON branding value: ${(error as Error).message}`);
     }
   }
-  if (command === 'grant' && !flags['--roles']) return fail(`grant needs --roles.\n${TENANT_USAGE}`);
-  if (flags['--tenant'] !== undefined && !TENANT.test(flags['--tenant']))
-    return fail('--tenant names a tenant by id: a–z, 0–9, "_" and "-".');
+  const accounts = [...tenants, ...(repeated['--account'] ?? [])];
+  let plan: GrantRow[] = [];
+  if (command === 'grant') {
+    if (flags['--from'] !== undefined) {
+      if (accounts.length || repeated['--tenant'] || flags['--roles'] !== undefined)
+        return fail(
+          `--from carries the accounts, tenants and roles itself: it is not given with an email, --account, --tenant or --roles.\n${TENANT_USAGE}`,
+        );
+    } else if (!accounts.length) return fail(`grant names an email address, or --account, or --from.\n${TENANT_USAGE}`);
+    else if (!flags['--roles']) return fail(`grant needs --roles.\n${TENANT_USAGE}`);
+    // Every row is read and judged before anything is opened or written: the whole list is said at once.
+    let read: { rows: GrantRow[]; problems: string[] };
+    if (flags['--from'] !== undefined) {
+      let csv: string;
+      try {
+        csv = readFileSync(resolve(flags['--from']), 'utf8');
+      } catch (error) {
+        return fail(`${flags['--from']} could not be read: ${(error as Error).message}`);
+      }
+      read = rowsFromCsv(csv);
+    } else
+      read = rowsFromFlags(
+        accounts,
+        repeated['--tenant'] ?? [],
+        flags['--roles']
+          .split(',')
+          .map((role) => role.trim())
+          .filter(Boolean),
+      );
+    const collapsed = collapse(read.rows);
+    const problems = [...read.problems, ...collapsed.problems];
+    if (problems.length)
+      return fail(
+        `nothing was granted; ${problems.length === 1 ? 'one row is' : `${problems.length} rows are`} wrong:\n  ${problems.join('\n  ')}`,
+      );
+    plan = collapsed.rows;
+  }
   const days = flags['--days'] === undefined ? 180 : /^[1-9][0-9]{0,2}$/.test(flags['--days']) ? Number(flags['--days']) : NaN;
   if (!(days <= 366)) return fail('--days is a whole number of days, 1 to 366.');
   if (
@@ -347,35 +401,80 @@ export async function runTenantCommand(
       if (local.env.XDG_CONFIG_HOME === undefined) delete process.env.XDG_CONFIG_HOME;
       else process.env.XDG_CONFIG_HOME = local.env.XDG_CONFIG_HOME;
       try {
-        let accountId = await maintenance.findAppAccount(app, email!).catch((error: Error) => {
-          // The store grant was pointed at could not be opened: where dev has not started the App, the one command that
-          // makes dev's store is the way on, rather than the store's own error alone.
-          throw new GrantStoreRefusal(
-            `the sign-in store could not be opened (${local.store}): ${error.message.split('\n')[0]}` +
-              (local.kept === 'dev' ? '' : `\nStart the App's dev server, then grant again: mistri dev --app ${flags['--app']}`),
+        const refuse = (problems: string[]) =>
+          fail(
+            `nothing was granted; ${problems.length === 1 ? 'one thing is' : `${problems.length} things are`} wrong:\n  ${problems.join('\n  ')}`,
           );
-        });
-        if (accountId === null) {
+        // Everything the store can say is asked before anything is written: the tenants are active, each role is
+        // its realm's, and every account is there or can be made.
+        const { membershipRole } = await import('../tenant/tenantFeatureMembershipRoles.js');
+        const active = new Set(await maintenance.readActiveTenants(where, binding));
+        const problems: string[] = [];
+        for (const row of plan) {
+          const realm = row.tenant === null ? 'platform' : 'tenant';
+          if (row.tenant === null && !loaded.app.auth?.tenancy?.platform)
+            problems.push(`${row.where}: the App declares no platform realm.`);
+          else if (row.tenant !== null && !active.has(row.tenant)) problems.push(`${row.where}: ${row.tenant} is not an active tenant.`);
+          for (const role of row.roles)
+            if (!membershipRole(loaded.app, role, realm))
+              problems.push(`${row.where}: "${role}" is not a ${realm}-realm role a person holds.`);
+        }
+        const found = new Map<string, string | null>();
+        for (const address of new Set(plan.map((row) => row.account))) {
+          const id = await maintenance.findAppAccount(app, address).catch((error: Error) => {
+            // The store grant was pointed at could not be opened: where dev has not started the App, the one command that
+            // makes dev's store is the way on, rather than the store's own error alone.
+            throw new GrantStoreRefusal(
+              `the sign-in store could not be opened (${local.store}): ${error.message.split('\n')[0]}` +
+                (local.kept === 'dev' ? '' : `\nStart the App's dev server, then grant again: mistri dev --app ${flags['--app']}`),
+            );
+          });
+          found.set(address, id);
           // A password on the command line would be in the shell's history and the process list.
-          const password = process.env.MISTRI_ACCOUNT_PASSWORD;
-          if (!password) return fail(`${email} has no account yet: set MISTRI_ACCOUNT_PASSWORD to the password it is made with.`);
-          [accountId] = await maintenance.createAppAccounts(app, [
-            { email: email!, name: flags['--name'] ?? email!.split('@')[0], password },
-          ]);
-          write(`${email}: an account was made in ${kept}.`);
-        } else write(`${email}: the account in ${kept}.`);
-        const roles = flags['--roles']
-          .split(',')
-          .map((role) => role.trim())
-          .filter(Boolean);
+          if (id === null && !process.env.MISTRI_ACCOUNT_PASSWORD)
+            problems.push(`${address} has no account yet: set MISTRI_ACCOUNT_PASSWORD to the password it is made with.`);
+        }
+        if (problems.length) return refuse(problems);
+        for (const [address, id] of found) {
+          if (id === null) {
+            const [made] = await maintenance.createAppAccounts(app, [
+              { email: address, name: flags['--name'] ?? address.split('@')[0], password: process.env.MISTRI_ACCOUNT_PASSWORD! },
+            ]);
+            found.set(address, made);
+            write(`${address}: an account was made in ${kept}.`);
+          } else write(`${address}: the account in ${kept}.`);
+        }
         const validUntil = Date.now() + days * 86_400_000;
-        const tenantId = flags['--tenant'];
-        const granted = tenantId
-          ? await maintenance.grantTenantMembership(where, binding, { app, tenantId, accountId, roles, validUntil, operator })
-          : await maintenance.grantPlatformMembership(where, binding, { app, accountId, roles, validUntil, operator });
-        write(
-          `${email}: ${roles.join(', ')} of ${tenantId ?? 'the platform realm'} until ${new Date(validUntil).toISOString().slice(0, 10)}. Receipt ${granted.receiptId}.`,
-        );
+        const until = new Date(validUntil).toISOString().slice(0, 10);
+        // One transaction per tenant (the platform realm is one more): a tenant is granted whole or not at all.
+        const groups = new Map<string | null, GrantRow[]>();
+        for (const row of plan) groups.set(row.tenant, [...(groups.get(row.tenant) ?? []), row]);
+        for (const [tenantId, rows] of groups) {
+          const label = tenantId ?? 'the platform realm';
+          const byAccount = new Map(rows.map((row) => [found.get(row.account)!, row]));
+          let done: Awaited<ReturnType<typeof maintenance.grantMemberships>>;
+          try {
+            done = await maintenance.grantMemberships(where, binding, {
+              app,
+              tenantId,
+              grants: rows.map((row) => ({ accountId: found.get(row.account)!, roles: row.roles })),
+              validUntil,
+              operator,
+            });
+          } catch (error) {
+            if (plan.length > 1 && error instanceof maintenance.TenantMaintenanceRefusal)
+              return fail(
+                `${label} was not granted (${error.message}); the tenants before it were. Running the same command again leaves what they hold as it is.`,
+              );
+            throw error;
+          }
+          for (const grant of done.granted)
+            write(
+              `${byAccount.get(grant.accountId)!.account}: ${byAccount.get(grant.accountId)!.roles.join(', ')} of ${label} until ${until}. Receipt ${grant.receiptId}.`,
+            );
+          for (const held of done.held) write(`${byAccount.get(held)!.account}: already holds a membership of ${label}, left as it is.`);
+          if (plan.length > 1) write(`${label}: granted ${done.granted.length}, already held ${done.held.length}.`);
+        }
         return 0;
       } catch (error) {
         if (error instanceof GrantStoreRefusal) return fail(error.message);

@@ -1,4 +1,5 @@
 import { commandVisitorAudit } from '../experiments/commandVisitor.js';
+import { chosenContext, type Chosen } from '../app/appChoices.js';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isProxy } from 'node:util/types';
@@ -18,7 +19,12 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure, TrialRolledBack } from '../../adapters/commands/commandJournal.js';
-import { AUDIT_PART_ENTRIES, AUDIT_TARGET_ENTRIES, type ReceiptActorKind } from '../../adapters/commands/commandJournalSchema.js';
+import {
+  AUDIT_PART_ENTRIES,
+  AUDIT_TARGET_ENTRIES,
+  AUDIT_TARGET_ENTRIES_MOST,
+  type ReceiptActorKind,
+} from '../../adapters/commands/commandJournalSchema.js';
 import type { ProposalEvidence } from '../../adapters/commands/commandJournalTypes.js';
 import { scopedAudit, splitAudit } from '../../adapters/commands/commandAuditParts.js';
 import { EffectBodyTooLarge, EffectProjectionRefused, type CommandEventBatch } from '../../adapters/events/commandEventTypes.js';
@@ -89,11 +95,13 @@ import { lookupFileReader, stagedOwner, takeHeldFiles } from './stagedFiles.js';
 import type { CommandFileRule } from './businessCommandAuthorization.js';
 import { openSavedDraft, type SavedDraftRun } from '../forms/savedForms.js';
 import { currentSpan, errorCode, inSpan, tracing } from '@mistriwork/engine/adapters/telemetry/trace.js';
-import { authorFault, isRequestFault, refusalReasons } from '@mistriwork/engine/shared/refusal.js';
+import { authorFault, isFrozenRefusal, isRequestFault, refusalReasons } from '@mistriwork/engine/shared/refusal.js';
 import { AUDIT_TARGET_BYTES, auditRefusal, developerError, fileInsert, footprintFailure, withoutRevealed } from './commandWriteGuards.js';
 import { handlerNextNumber } from '../../adapters/commands/commandSequences.js';
 import { handlerLinks, mintQueued } from '../links/linkMint.js';
 import { bindMoments, commandConstant, machineInsert, machineUpdate } from './commandWriteStamps.js';
+import { assertWriteNotFrozen, rowFrozen } from './commandFrozen.js';
+import type { QueryPerson } from '@mistriwork/engine/shared/query.js';
 import { commandFlagEnabled, commandFlagsReader, executeWithCommandFlags, type CommandFlags } from './commandFlags.js';
 
 // Keep existing internal imports compatible; handlers and metadata use the leaf directly.
@@ -165,6 +173,11 @@ interface ExecutionOptions {
    * the handler's `ctx.locale` once clamped to the App's catalogs. Absent, it is the App's own. Never input.
    */
   locale?: string;
+  /**
+   * The App's `choose` as the browser door proved it for this request (app/appChoices.ts): the handler's `ctx.chosen`
+   * and what `chosen.<name>` in its where reads. Absent at every other door, where nothing is chosen. Never input.
+   */
+  chosen?: Chosen;
   /**
    * The proposal an approval runs this command from (proposals.ts): its receipt names it. Server-set when a
    * person approves, never input.
@@ -379,6 +392,8 @@ async function executeUntraced(
   let tracked = false;
   // Whether this command reads one snapshot (snapshotRead.ts), for the refusal its conflict is said as.
   let snapshot = false;
+  // The most changes one target's audit takes: the command's own `maxChanges`, else the platform's default.
+  let changeCap = AUDIT_TARGET_ENTRIES;
   /* Objects a handler's insertFile put in a bucket (files/fileStorage.ts):
      deleted when the transaction is known to have rolled back, and left for
      the sweep when its outcome is unknown. */
@@ -443,6 +458,7 @@ async function executeUntraced(
         'This command runs only once a person approves it.',
       );
     snapshot = command.snapshot === true;
+    changeCap = command.maxChanges ?? AUDIT_TARGET_ENTRIES;
     const flags = commandFlagsReader(options.flags);
     const flagEnabled = commandFlagEnabled(command, flags);
     // A command's events and its effects, which are recorded as events.
@@ -1034,11 +1050,12 @@ async function executeUntraced(
             const recordChange = (change: { resource: string; key?: unknown } & Record<string, unknown>) => {
               if (change.resource === command.target) attribute(change.key);
               const list = changes[attributed];
-              if (list.length >= AUDIT_TARGET_ENTRIES) {
+              if (list.length >= changeCap) {
                 throw recordRefusalCause(
                   new BusinessCommandExecutionError('invalid_result'),
-                  `Command "${request.command}" made more than ${AUDIT_TARGET_ENTRIES.toLocaleString('en-US')} changes for one target; ` +
-                    `its audit keeps at most ${AUDIT_TARGET_ENTRIES.toLocaleString('en-US')} (and 4 MiB).`,
+                  `Command "${request.command}" made more than ${changeCap.toLocaleString('en-US')} changes for one target; ` +
+                    `a command may change at most ${changeCap.toLocaleString('en-US')}${command.maxChanges === undefined ? ' unless it declares maxChanges' : ''} ` +
+                    `(up to ${AUDIT_TARGET_ENTRIES_MOST.toLocaleString('en-US')}), and its audit keeps 4 MiB.`,
                 );
               }
               try {
@@ -1106,6 +1123,17 @@ async function executeUntraced(
                 });
               return result;
             };
+            /* `me` in a `frozen` condition is this actor, read once and only where a condition says it (commandWhen.ts). */
+            let frozenPerson: Promise<QueryPerson | undefined> | undefined;
+            const frozenMe = authorized.machine?.frozenWhen
+              ? () =>
+                  (frozenPerson ??= whenPerson(
+                    store,
+                    authorized.actor,
+                    authorized.people,
+                    [...authorized.machine!.frozenWhen!.values()].map((rule) => rule.text),
+                  ))
+              : undefined;
             /* One update, likewise. `read` is the audit's before image where a batch read them all in one statement:
              a row it lacks a column of (a machine's `since`, added here) is read on its own, as a single update's is. */
             const updateVia = async (
@@ -1115,6 +1143,16 @@ async function executeUntraced(
             ): Promise<UpdateResult> => {
               checkCancelled();
               if (request.table === command.target) guardTarget(request.key);
+              /* A frozen row (`frozen`, appModel.ts) takes no change, judged of the row as stored, before any write. */
+              await assertWriteNotFrozen(
+                authorized.machine?.frozenWhen,
+                store,
+                authorized.catalog,
+                request.table,
+                request.key,
+                now(),
+                frozenMe,
+              );
               const said = Object.keys(request.values);
               /* A machine's column moves along an edge of its graph, and its `since` with it. The audit's before image
                is read with the state, in its one read, where the machine reads one. */
@@ -1256,6 +1294,15 @@ async function executeUntraced(
                   checkCancelled();
                   addingOnly(request.table);
                   if (request.table === command.target) guardTarget(request.key);
+                  await assertWriteNotFrozen(
+                    authorized.machine?.frozenWhen,
+                    store,
+                    authorized.catalog,
+                    request.table,
+                    request.key,
+                    now(),
+                    frozenMe,
+                  );
                   const own = request.table === command.target ? heldKey(request.key) : undefined;
                   if (own && !held.has(own)) await authorized.assertTarget?.(records, request.key);
                   const result = await store.remove(request);
@@ -1332,6 +1379,7 @@ async function executeUntraced(
                 command.targets !== 'none' && !creating
                   ? await whenPerson(tx, authorized.actor, authorized.people, [
                       command.when,
+                      authorized.machine?.frozenWhen?.get(command.target)?.text,
                       ...command.fields.map((field) => (field.type === 'group' ? undefined : field.when)),
                     ])
                   : undefined;
@@ -1386,6 +1434,23 @@ async function executeUntraced(
                         `${found!.rows.length} rows of ${command.target}; a target names exactly one row.`,
                     );
                   }
+                  /* A frozen row (`frozen`, appModel.ts) takes no command at all, one that only reads it included: judged
+               of the row as stored, before the command's own `when`, so the refusal says what the record is. */
+                  const frozenRule = authorized.machine?.frozenWhen?.get(command.target);
+                  if (
+                    frozenRule &&
+                    (await rowFrozen(
+                      tx,
+                      authorized.catalog,
+                      command.target,
+                      exact,
+                      frozenRule,
+                      now(),
+                      me,
+                      normalizeRow(table, found!.rows[0]),
+                    ))
+                  )
+                    throw new BusinessCommandExecutionError('frozen', 'not_applied', undefined, key, frozenRule.said);
                   /* The revision the request holds is the row's as read now: its
                version column, or the digest of the row (commandRevision.ts),
                taken before the row is normalized, as prepare takes it. A job
@@ -1601,6 +1666,8 @@ async function executeUntraced(
                 now,
                 ...(authorized.versionField === undefined ? {} : { versionField: authorized.versionField }),
                 target: command.target,
+                ...(options.chosen ? { chosen: options.chosen } : {}),
+                ...(command.maxChanges === undefined ? {} : { changeCap: command.maxChanges }),
                 constant: (table, column, word) => commandConstant(authorized, tx, table.meta, column, word, now()),
                 fileRead: lookupFiles?.budget.read ?? 0,
                 ...(authorized.fileReads ? { fileReads: authorized.fileReads, fileScope } : {}),
@@ -1737,6 +1804,7 @@ async function executeUntraced(
                       today: () => zoneDay(now(), authorized.timezone),
                       timezone: authorized.timezone ?? 'UTC',
                       locale,
+                      chosen: chosenContext(options.chosen),
                       flags: executionFlags,
                       db,
                       tx: audit(tx),
@@ -2070,6 +2138,10 @@ async function executeUntraced(
     if (cause instanceof CommandInputError) throw new BusinessCommandExecutionError('invalid_input', outcome, cause.field);
     /* A write a narrowed resource's query does not allow (appNarrowedWrites.ts): the record's state, said in its own
        sentence, where it fell through to temporarily_unavailable, a retry that could never succeed. */
+    /* A write a record's `frozen` condition refuses, met below the command's own checks (the App's rules over its
+       transaction): the record's state, said as 409 `frozen`, where it fell through to temporarily_unavailable. */
+    if (isFrozenRefusal(cause))
+      throw recordRefusalCause(new BusinessCommandExecutionError('frozen', outcome, undefined, undefined, cause.message), cause);
     if (cause instanceof NarrowedRefusal)
       throw recordRefusalCause(new BusinessCommandExecutionError('ineligible_state', outcome, undefined, undefined, cause.message), cause);
     /* A handler's write the App's rules refused (a text rule, a row-defined

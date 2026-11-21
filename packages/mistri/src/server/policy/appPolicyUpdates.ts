@@ -1,5 +1,5 @@
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { assertTransitionInsert, assertTransitions, type AppTransitionRules } from '../app/appTransitions.js';
+import { assertRowNotFrozen, assertTransitionInsert, assertTransitions, type AppTransitionRules } from '../app/appTransitions.js';
 import { stampInsert, stampUpdate, type AppStamps, type StampMoment } from '../app/appStamps.js';
 import { bindUploadParent, type UploadParent } from '../files/uploadParent.js';
 import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
@@ -147,6 +147,7 @@ export function createHttpPolicyUpdates(
     );
     const record = { table, key: actualKey, row };
     if (!(await context.authorizeDeletedRecord!(record))) throw new AppAccessDenied();
+    await assertRowNotFrozen(tx, context.schema, transitions(context.schema), table, actualKey);
     await tx.remove({ table, key: actualKey });
     if (!(await context.authorizeDeletedRecord!(record))) throw new AppAccessDenied();
   };
@@ -200,6 +201,7 @@ export function createHttpPolicyUpdates(
             );
             const record = { table, key: actualKey, row };
             if (!(await context.authorizeDeletedRecord!(record))) throw new AppAccessDenied();
+            await assertRowNotFrozen(tx, context.schema, transitions(context.schema), table, actualKey);
             if (body.confirm === true) await tx.remove({ table, key: actualKey });
             if (!(await context.authorizeDeletedRecord!(record))) throw new AppAccessDenied();
             assertWritable(context, table);

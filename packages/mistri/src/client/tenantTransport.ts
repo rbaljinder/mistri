@@ -76,6 +76,8 @@ const reads = new Set([
   // The lease's own inbox, and marking its notices read: the lease names whose inbox it is.
   '/api/inbox',
   '/api/inbox/read',
+  // One App-wide pick kept for the lease's member in its tenant (server tenantPreferences.ts): the lease names both.
+  '/api/choose',
   // The lease's tenant's branding, and its admins' save of it (server tenantBranding.ts): the lease names the tenant.
   '/api/branding',
   '/api/branding/save',
@@ -292,7 +294,8 @@ function publishable(snapshot: SessionIdentitySnapshot, lease: TenantContextRepl
 /* What a read says it is (the kit's pickerApi, relatedApi, pageApi), so the server audits it by its door
    (readAudit.ts) and holds a free-form page to its declared reads: those headers alone, never the lease's own. */
 const READ_HEADER = 'x-mistri-read';
-const SAID = [READ_HEADER, PAGE_HEADER] as const;
+/* And the App-wide picks (an App's `choose`), which the tenant's server reads again under the member's reader. */
+const SAID = [READ_HEADER, PAGE_HEADER, 'x-mistri-chosen'] as const;
 function sayingWhatItIs(said: Readonly<Record<string, string>> | undefined): Record<string, string> {
   const kept: Record<string, string> = {};
   for (const name of SAID) if (typeof said?.[name] === 'string') kept[name] = said[name];

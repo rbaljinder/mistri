@@ -430,6 +430,22 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     },
   },
   {
+    id: 'preferences',
+    title: "each person's per-App preferences, the App-wide picks first",
+    tables: { prefix: '__mistri_preference_' },
+    current: both(1),
+    read: marked(everywhere('__mistri_preference_meta')),
+    upgrades: {},
+    provision: {
+      sqlite: async (path) => (await import('../adapters/preferences/sqlitePreferences.js')).provisionSqlitePreferences(path),
+      postgres: async (url) => (await import('../adapters/preferences/postgresPreferences.js')).provisionPostgresPreferences(url),
+    },
+    attest: {
+      sqlite: async (db) => (await import('../adapters/preferences/sqlitePreferences.js')).sqlitePreferencesReady(db),
+      postgres: async (client) => (await import('../adapters/preferences/postgresPreferences.js')).postgresPreferencesReady(client),
+    },
+  },
+  {
     id: 'decisions',
     title: 'decisions made, their outcomes and usage',
     tables: { prefix: '__mistri_decision_' },

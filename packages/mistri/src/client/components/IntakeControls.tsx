@@ -35,6 +35,7 @@ import { appWord } from '@mistriwork/kit/client/messages.js';
 import { say } from '../copy/forms/components/IntakeControls.js';
 import { amountIn, maskShown, moneySymbol, PLACE } from './fieldShown.js';
 import { ChoiceRadios } from './ChoiceRadios.js';
+import { fillColumns, useChoiceFill, type ChoiceFill } from './choiceFill.js';
 
 type Field = AppCommandField;
 type Choice = Extract<Field, { type: 'choice' | 'choices' }>['options'][number];
@@ -53,6 +54,8 @@ interface IntakeControlProps {
   source?: ChoiceSource;
   /** The form's answers so far: what a choice narrowed by the others (`where`) reads. */
   answers?: Readonly<Record<string, unknown>>;
+  /** The inputs beside a choice that start from its pick (`default: { answer }`), and where its pick puts them. */
+  fill?: ChoiceFill;
 }
 
 /** At most this many rows are offered by a choice from a table; past it the form is a reference's to ask. */
@@ -70,6 +73,7 @@ function useSourced(
   field: Field,
   source: ChoiceSource | undefined,
   answers: Readonly<Record<string, unknown>> | undefined,
+  fill?: ChoiceFill,
 ): readonly Choice[] | undefined {
   const from = (field.type === 'choice' || field.type === 'choices') && field.source ? field.source : undefined;
   const match = from?.match;
@@ -81,6 +85,8 @@ function useSourced(
   const served =
     from && (field.type === 'choice' || field.type === 'choices') && (from.served || field.options.length) ? field.options : undefined;
   const local = from ? choiceLabelColumn(from, formatLocale()) : undefined;
+  /* The columns the inputs beside it start from its pick ride along with its rows: read here, served on a public form's. */
+  const filled = fillColumns(fill?.fills);
   const read = useQuery({
     queryKey: [
       'command-choices',
@@ -91,12 +97,13 @@ function useSourced(
       from?.sort?.column,
       from?.sort?.direction,
       local?.column,
+      ...filled,
       ...(match ? choiceAnswers(match).map((name) => answers?.[name] ?? null) : []),
     ],
     enabled: from !== undefined && source !== undefined && served === undefined && (!match || bound !== undefined),
     staleTime: 60_000,
     queryFn: async () => {
-      const columns = [...new Set([from!.by, from!.labelColumn, ...(local ? [local.column] : [])])].join(', ');
+      const columns = [...new Set([from!.by, from!.labelColumn, ...(local ? [local.column] : []), ...filled])].join(', ');
       const data = await run(source!, {
         q: `${from!.from}${narrowedBy ? ` ${narrowedBy}` : ''} show ${columns} sort ${from!.sort ? `${from!.sort.column} ${from!.sort.direction}` : from!.labelColumn}`,
         limit: SOURCED_MOST,
@@ -105,7 +112,13 @@ function useSourced(
       });
       const rows = Array.isArray(data.rows) ? (data.rows as Record<string, unknown>[]) : [];
       const keyed = rows.filter((row) => typeof row[from!.by] === 'string' || typeof row[from!.by] === 'number');
-      return choiceOptions(keyed, from!, local);
+      const options = choiceOptions(keyed, from!, local);
+      if (!filled.length) return options;
+      const byKey = new Map(keyed.map((row) => [row[from!.by], row]));
+      return options.map((option) => ({
+        ...option,
+        row: Object.fromEntries(filled.map((column) => [column, byKey.get(option.value)?.[column] ?? null])) as NonNullable<Choice['row']>,
+      }));
     },
   });
   if (!from) return undefined;
@@ -215,8 +228,9 @@ function cardFit(options: readonly Choice[]): 'short' | 'brief' | undefined {
 
 /* A choice from a table: its rows read (the one control here that reads anything), then drawn as written choices. */
 function SourcedControl(props: IntakeControlProps) {
-  const sourced = useSourced(props.field, props.source, props.answers);
+  const sourced = useSourced(props.field, props.source, props.answers, props.fill);
   useStalePickCleared(props, sourced);
+  useChoiceFill({ value: props.value, offered: sourced, fill: props.fill });
   const { field, id, value, disabled, onChange } = props;
   if (field.type !== 'choice' && field.type !== 'choices') return null;
   if (!sourced) return null;
@@ -265,7 +279,8 @@ function SourcedControl(props: IntakeControlProps) {
       />
     );
   }
-  return <IntakeControl {...props} field={drawn} />;
+  // The fill is this control's (above), not the drawn field's.
+  return <IntakeControl {...props} field={drawn} fill={undefined} />;
 }
 
 /* An amount as it is read once typed, grouped in the App's locale (`2,500`); while it is typed, the digits alone, so the
@@ -301,6 +316,12 @@ export function IntakeControl(props: IntakeControlProps) {
   const aria = { 'aria-describedby': props['aria-describedby'], 'aria-invalid': props['aria-invalid'] };
   const [shown, setShown] = useState(false);
   const [typing, setTyping] = useState(false);
+  // A written choice drawn as cards or buttons: its options are on offer already (a table's are SourcedControl's).
+  useChoiceFill({
+    value,
+    offered: field.type === 'choice' && !field.source ? field.options : undefined,
+    fill: field.type === 'choice' && !field.source ? props.fill : undefined,
+  });
 
   if (field.type === 'money' && field.as !== 'slider') {
     /* The symbol stands inside the box, over its start, hidden from a screen reader so it hears the amount alone; the

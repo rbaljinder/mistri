@@ -28,6 +28,7 @@ import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schem
 import type { PageLoader } from '../commands/pageLoaders.js';
 import { strayRead } from './tablesReached.js';
 import { PageLoaderRefused, runPageLoader } from '../commands/pageLoaderRun.js';
+import { readChosen, type StoredPicks } from '../app/appChoices.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 
 export { PAGE_HEADER, PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
@@ -64,6 +65,10 @@ export async function pageLoad(options: {
   /* The surface a headless request names (surfaceGate.ts): its loader is run in place of a page's, and it keeps no
      parameters, so a front end passes none. */
   surface?: AppSurface;
+  /** The request's `x-mistri-chosen` (app/appChoices.ts): read again under `reader` before the loader sees it. */
+  chosenHeader?: string | string[];
+  /** What the person has stored for a name the header leaves out (app/appPreferences.ts). */
+  chosenStored?: StoredPicks;
 }): Promise<Reply> {
   const { app, body, schema, surface } = options;
   if (!surface && (typeof body.page !== 'string' || body.page.length > 64))
@@ -107,6 +112,7 @@ export async function pageLoad(options: {
       viewer: { ...(options.account === undefined ? {} : { account: options.account }), roles: [...options.roles] },
       now: clockNow(),
       timezone: appZone(app.ui, options.zone),
+      chosen: await readChosen(app, schema, options.reader, options.chosenHeader, options.chosenStored),
     });
     return { status: 200, body: { data } };
   } catch (error) {

@@ -5,6 +5,82 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.78
+
+A warm start for tenant Apps, grants in bulk, fewer round trips a save, a dev server that keeps its port, the data and access seams a field report asked for, an outsider who moves a record through a link, rows that freeze, and an App-wide choice that follows the person.
+
+- A tenant App's `/readyz` now answers 503 (`{ ready: false, opened, of }`) until every tenant has opened once after the
+  start, so a load balancer no longer sends traffic into the first-request cost on a hosted Postgres. A tenant that
+  fails to open is logged and listed as `failed` (by key only) but does not hold readiness. `/healthz` is unchanged.
+- `mistri tenant grant` takes several accounts and tenants in one run: repeat `--account` and `--tenant`, or give
+  `--from <file.csv>` (header `account,tenant,role`). Every row is checked first and a wrong one refuses the whole run
+  in words; then each tenant is granted in one transaction, memberships already held are left as they are (so a run can
+  be repeated), and a running server sees the grants without a restart.
+- On PostgreSQL, saving a record whose App validates the stored row now takes three round trips instead of four: the
+  update hands back the row it wrote, so it is no longer read a second time.
+- Checking which commands a page of records may run costs the same database round trips for 20 records as for 2, and a
+  test now holds both that and identical answers to asking record by record.
+- A tenant App's command save on PostgreSQL is now held to three round trips by test, down from a ceiling of four.
+- `mistri dev` keeps its port while the App starts again after a save: a request sent meanwhile waits for the new start
+  (up to 30 seconds, then a 503 "the App is starting again" with Retry-After). Host, the peer address, streams and
+  upgrades are untouched; an open stream ends with the old start. Tenant and ordinary Apps alike.
+- A second `mistri dev` on the same App folder refuses and names the first session's pid and port; a session that is
+  gone is taken over.
+- New check code `dev-script-not-dev` (a warning): package.json's dev script (or start, when there is no dev) serves the
+  App's source with `mistri --app` instead of `mistri dev`.
+- An App made by `mistri new --brief` or from a schema has a `dev` script (`mistri dev --app .`, or
+  `node mistri-run.mjs dev` beside a named config), so its own package.json passes that check.
+- A command may declare `maxChanges`, a whole number from 1 to 16,384: it raises both the changes the audit keeps for
+  one target (4,096 by default) and the rows one `insertMany` or `updateWhere` call takes (1,000 by default), so a batch
+  command no longer has to split itself. A command over either limit is refused with the number, and with
+  `maxChanges` when it has not declared one; `mistri check` refuses a value outside the range at load.
+- `mistri check` renders the App API document the export renders, so what the export refuses is a check problem with a
+  code first: `api-sort-type` and `api-filter-type` (a decimal, timestamp or JSON column), `api-view-totals`,
+  `api-command-no-record` and `api-command-unheld`.
+- New check code `trigger-cross-table` (a warning): a table the App writes has a trigger, or a `CHECK`, default or domain
+  calling a database function, that reads or writes other tables, as the database has it or as `schema.sql` declares
+  it before its migration runs. `mistri migrate diff` notes the triggers a migration creates and points at it.
+- A role's `fields.<resource>.read` may name the resource's rollups and computed columns: a list that leaves one out
+  keeps it from the role, and one it names is served only where every column it reads is readable. A `write` list
+  that names one is refused at load, since they are read, never written.
+- A handler's or a loader's object `where` takes a path through a reference, `{ 'customer_id.region': 'west' }`, read
+  as the `in` over the table it points at, under that table's grants and row scope. A path crosses one reference.
+- A handler's or a loader's `where` names the table's computed columns, `db.task.where('is_overdue = true')`, written
+  as the expression a list shows and held to the grant on every column it reads. One that reads through a reference,
+  a rollup or `me` is refused by name.
+- A dashboard's custom section is handed its window's bounds beside `period`: `window.start` and `window.end`, in the
+  App's time zone, the end the first moment after the window.
+- A link that names a machine verb (a command) moves the record along it on the link's door, and the machine refuses it from any other state with the answer staff would hear (`ineligible_state`); the receipt's actor is `link:<id>`.
+- A command named by a link and granted to no role is the outsider's alone: `mistri check` and the App API export take it as valid (it is no `api-command-unheld` unless `api.commands` names it). The recipe is "A customer accepts a quote" in the commands docs.
+- A resource can declare `frozen: 'status = closed'`, a condition over its own columns. A row that matches it, as it is stored, is refused every update, delete and command on every door (the record form, the App API, MCP, record-page commands and capability links) with a 409 `frozen`, and its record page is drawn read-only with no verbs. Creating rows is unaffected.
+- `mistri check` names the resource when a `frozen` condition reads an unknown column or does not parse, and the API's OpenAPI document lists the 409 `frozen` on the update, delete and command operations.
+- An App can declare `choose: { site: { from: 'sites', label: 'name', required: true } }`: one row the person works "at", picked in the shell (beside the account menu at a desk, inside it on narrower screens) and kept for the person (below). Views, dashboards and loaders read it as `chosen.site`, handlers and page loaders as `ctx.chosen.site`, and a New form's reference to `sites` starts on it. The server re-reads the pick under the person's own row policy on every request, so a choice narrows what someone sees and never widens it. A `required` choice is asked for before the first page. `mistri check` refuses a `chosen.x` that names no choice, and a `from` that has no single key column or that the App does not serve.
+- Three rows of the field report needed no new code, and the report now says so: `mistri grade` already starts a fresh browser every ten routes (rc.38), public forms already carry the catalog words custom input components need (rc.50), and splitting a larger App into folders is the "Organizing a larger App" recipe.
+- A pick can fill other inputs of a command's form (a field report from the user's own App): an input's
+  `default: { answer: 'treatment.usual_minutes' }` starts from the column of the row a choice beside it has picked,
+  or from the key of the `values` a written option carries. A pick fills each input the person has not edited and
+  never writes over one they have; a form opened with a pick fills only what is empty. A line's choice fills that line
+  only. The load refuses a source that is not a choice of the same input, group or line, a column or key that is not
+  there, a sensitive input and a chain, and on a public form a column `auth.public` does not open.
+- An App's `choose` is kept for the person: a pick is written to a new `preferences` store in the App's own database
+  (one row per person, App and tenant, values of at most 128 characters), so it follows them to another device. A tab
+  may still pick another for itself (session storage); where the database keeps no store, picks stay in the browser as
+  before. The store is versioned like the others (v1 on SQLite and PostgreSQL, layout fixtures held by test), declared
+  by `choose` and made by `mistri migrate up --app`; an App without it starts all the same, as it does without live
+  sync, and its picks stay in the browser.
+- Held picks arrive with the App (`picks`, proven again under the person's own grants; one they can no longer read is
+  left out, not deleted), and `POST /api/choose` with `{ name, value | null }` writes one: an undeclared name is a 400,
+  a row the person cannot read a 422. Every request reads the person's pick unless the tab sent its own; a tab that
+  agrees with the stored pick sends nothing, so first paint is no longer held for a pick.
+- A list narrowed by a choice (`site_id = chosen.site`) says so in a chip, "Site: Northside" or "Site: none", beside the
+  filters it already shows. It has no x; it opens the chooser.
+- A view whose query reads `chosen.<name>` was dropped from the App's payload for every reader, because the loader
+  judged it with nobody to pick; it is now judged as a request reads it (nothing chosen matches no row).
+- A tenant App's command route reads `ctx.chosen` as the single App's does, and a tenant member's picks are kept per
+  tenant, so switching tenant never carries a site from another.
+- Jobs, workflow steps and API or App MCP calls run with `ctx.chosen` empty, now written down where the type is: no
+  person is at a desk, so a handler that needs a site takes it as input.
+
 ## 1.0.0-rc.77
 
 A tenant switch that held, and the smaller seams a field report found.

@@ -43,7 +43,7 @@ export async function collectCommandAvailability(
         !(error instanceof AppAccessDenied) &&
         !(
           isBusinessCommandExecutionError(error) &&
-          ['forbidden', 'not_found', 'command_version_mismatch', 'ineligible_state'].includes(error.code)
+          ['forbidden', 'not_found', 'command_version_mismatch', 'ineligible_state', 'frozen'].includes(error.code)
         )
       ) {
         // Never relay a business hook's private key/field/reason through this
@@ -97,7 +97,8 @@ export async function readCommandAvailability(options: {
   const now = options.now ?? (() => appTime());
   let groups = keys.map((key) => keyFilter(key!).groups[0]);
   // A `when` over a rollup or a computed column is judged of each row once read (commandWhen.ts).
-  const me = await whenPerson(reader, options.actor, options.people, [command.when]);
+  const frozenRule = options.machine?.frozenWhen?.get(command.target);
+  const me = await whenPerson(reader, options.actor, options.people, [command.when, frozenRule?.text]);
   const when = command.when === undefined ? undefined : compileWhen(table, command.when, now(), me);
   if (when?.none) return none();
   if (when && !when.derived.size && when.filter.groups.length)
@@ -116,6 +117,29 @@ export async function readCommandAvailability(options: {
   }
   const graph = options.machine?.verb && options.machine.tables.get(command.target);
   if (graph) for (const [text, row] of rows) if (!options.machine!.verb!.from.has(String(row[graph.column]))) rows.delete(text);
+  /* A frozen row (`frozen`, appModel.ts) is offered no command: every row asked about is judged in one read, the
+     rows' keys beside each group of the condition, as the `when` above is. */
+  if (frozenRule && rows.size) {
+    const frozen = compileWhen(table, frozenRule.text, now(), me);
+    if (!frozen.none && frozen.derived.size) {
+      const held = await whenHolds(reader, catalog, command.target, frozen, [...rows.values()], now());
+      [...rows.keys()].forEach((text, at) => held[at] && rows.delete(text));
+    } else if (!frozen.none) {
+      const own = [...rows.values()].map((row) => keyFilter(canonicalKey(table, row)!).groups[0]);
+      const matched = await reader.query({
+        table: command.target,
+        columns: [...table.key],
+        filter: { groups: own.flatMap((group) => frozen.filter.groups.map((condition) => [...group, ...condition])) },
+        offset: 0,
+        limit: rows.size + 1,
+      });
+      for (const row of matched.rows) {
+        const key = canonicalKey(table, row);
+        if (key) rows.delete(commandKeyText(key));
+      }
+    }
+    if (signal.aborted) throw new BusinessCommandExecutionError('cancelled');
+  }
   if (when?.derived.size) {
     const held = await whenHolds(reader, catalog, command.target, when, [...rows.values()], now());
     [...rows.keys()].forEach((text, at) => held[at] || rows.delete(text));

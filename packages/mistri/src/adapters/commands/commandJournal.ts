@@ -6,7 +6,7 @@ import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedRea
 import {
   assertSqliteCommandJournal,
   AUDIT_PART_ENTRIES,
-  AUDIT_TARGET_ENTRIES,
+  AUDIT_TARGET_ENTRIES_MOST,
   catalog,
   COMMAND_JOURNAL_TABLES,
   COMMAND_TARGET_BOUNDS,
@@ -386,7 +386,7 @@ function validateAudit(audit: CommandAudit): void {
   if (audit.changesParts === undefined) return;
   // The continuation of a full first piece: whole pieces in order, up to the target's most.
   const parts = audit.changesParts;
-  if (!Array.isArray(parts) || !parts.length || parts.length > AUDIT_TARGET_ENTRIES / AUDIT_PART_ENTRIES - 1) return invalid();
+  if (!Array.isArray(parts) || !parts.length || parts.length > AUDIT_TARGET_ENTRIES_MOST / AUDIT_PART_ENTRIES - 1) return invalid();
   for (const [at, part] of parts.entries()) {
     json(part, 'audit changes', COMMAND_TARGET_BOUNDS.changes);
     const entries: unknown = JSON.parse(part);

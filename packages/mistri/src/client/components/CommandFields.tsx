@@ -39,6 +39,7 @@ import { InputSlot, builtInInputId } from '@mistriwork/kit/client/components/inp
 import { appWord } from '@mistriwork/kit/client/messages.js';
 import { say } from '../copy/forms/components/CommandFields.js';
 import { ChoiceRadios } from './ChoiceRadios.js';
+import { useChoiceFill, useListFills, type ChoiceFill } from './choiceFill.js';
 import type { DefinedField } from '@mistriwork/engine/shared/definedFields.js';
 import type { HeldTarget } from './HeldFiles.js';
 import { forgetHeldFile } from '../heldFileNames.js';
@@ -595,8 +596,11 @@ export function CommandFieldControl({
   valid,
   onLeave,
   answers,
+  fill,
 }: {
   field: Exclude<ValueField, { type: 'reference' | 'defined' }>;
+  /** The inputs beside this choice that start from its pick (`default: { answer }`), and where its pick puts them. */
+  fill?: ChoiceFill;
   /** The form's answers so far: a choice narrowed by the others (`where`) reads them. */
   answers?: CommandValues;
   /** The intake style's valid check on a text or number box: present, the box keeps room for the mark; true draws it. */
@@ -616,6 +620,12 @@ export function CommandFieldControl({
   disabled?: boolean;
   onChange: (value: CommandValue) => void;
 }) {
+  // A written choice is on offer already; a choice from a table, or one drawn as cards, fills from where it is read (IntakeControls).
+  useChoiceFill({
+    value,
+    offered: field.type === 'choice' && !drawnByIntake(field) ? field.options : undefined,
+    fill: field.type === 'choice' && !drawnByIntake(field) ? fill : undefined,
+  });
   const common = {
     id,
     'aria-describedby': describedBy,
@@ -646,6 +656,7 @@ export function CommandFieldControl({
         value={value}
         disabled={disabled}
         onChange={onChange}
+        {...(fill ? { fill } : {})}
         {...(connection !== undefined ? { source: connection } : visitor ? { source: { visitor } } : {})}
         {...(answers && (field.type === 'choice' || field.type === 'choices') && field.source?.match ? { answers } : {})}
       />,
@@ -898,6 +909,7 @@ export function CommandFields({
   onChange: (values: CommandValues, path: string) => void;
 }) {
   const logic = useArrived(draftLogic, asksDraftLogic(whole?.fields ?? fields));
+  const fills = useListFills(fields, values, onChange, (name) => name);
   const hidden = draftHidden(fields, values, whole);
   if (!logic && asksDraftLogic(whole?.fields ?? fields)) return null;
   return (
@@ -913,7 +925,11 @@ export function CommandFields({
               value={values[field.name]}
               answers={whole?.values ?? values}
               shared={shared}
-              onChange={(next, path) => onChange({ ...values, [field.name]: next }, path)}
+              fill={fills.forField(field)}
+              onChange={(next, path) => {
+                fills.edited(field.name);
+                onChange({ ...values, [field.name]: next }, path);
+              }}
             />
           );
           // A number's live lines (`live`), under it, read over every answer so far.
@@ -941,10 +957,13 @@ function FieldEntry({
   onChange,
   shared,
   answers,
+  fill,
 }: {
   field: AppCommandField;
   path: string;
   value: Entry;
+  /** Where this choice's pick puts the inputs beside it that start from it (`default: { answer }`). */
+  fill?: ChoiceFill;
   /** The whole form's answers, where this is one of its own fields (a choice inside a group reads no `where`). */
   answers?: CommandValues;
   shared: CommandFieldsShared;
@@ -1129,6 +1148,7 @@ function FieldEntry({
                 {...(shared.visitor ? { visitor: shared.visitor } : {})}
                 {...(shared.record ? { record: shared.record } : {})}
                 {...(answers ? { answers } : {})}
+                {...(fill ? { fill } : {})}
               />
             );
             /* The App's own input, where it names one for this input: the form still keeps, checks and sends the value. */
@@ -1172,6 +1192,8 @@ function GroupFields({
   onChange: (value: Entry, path: string) => void;
 }) {
   const hidden = draftHidden(field.fields, values);
+  // A group's choice fills the group's inputs, and a line's its own line's: the values here are that row's.
+  const fills = useListFills(field.fields, values, onChange, (name) => `${path}.${name}`);
   return (
     <div className="command-fields">
       {field.fields
@@ -1183,7 +1205,11 @@ function GroupFields({
             path={`${path}.${member.name}`}
             value={values[member.name]}
             shared={shared}
-            onChange={(next, changed) => onChange({ ...values, [member.name]: next }, changed)}
+            fill={fills.forField(member)}
+            onChange={(next, changed) => {
+              fills.edited(member.name);
+              onChange({ ...values, [member.name]: next }, changed);
+            }}
           />
         ))}
     </div>

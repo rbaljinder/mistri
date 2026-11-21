@@ -18,6 +18,7 @@ export const REFUSAL_STATUS: Readonly<Partial<Record<RefusalCode, 403 | 404 | 40
   stale_record: 409,
   duplicate_record: 409,
   ineligible_state: 409,
+  frozen: 409,
   idempotency_conflict: 409,
   invalid_result: 500,
   temporarily_unavailable: 503,

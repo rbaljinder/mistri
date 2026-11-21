@@ -85,6 +85,32 @@ moves. A resource's `live: false` keeps a hot or log-like table out: its writes
 are not announced and its pages refresh as without live sync. The operator's
 `--no-live` turns live sync off for every App whatever they say.
 
+## Choose
+
+```ts
+choose: { site: { from: 'sites', label: 'name', required: true } },
+views: { visits: { kind: 'list', resource: 'visit', query: 'site_id = chosen.site' } },
+```
+
+A row a person works in, picked once: the bar says "Site: Northside" and opens
+a chooser over `from`; below 1280px wide it is an item of the account menu.
+Pages read the picked row's key as `chosen.site`, in a query and in a loader's or
+a handler's `where`, and as `ctx.chosen.site`. A New form's reference to `from`
+starts at it, unless the person has already chosen a value in the form.
+`required` asks before the first page. At most three.
+
+The pick is kept for the person in the App's `preferences` store (per tenant in
+a tenant App), so it follows them to another device; a tab may pick another for
+itself. It is not in the address, so a shared link opens at the reader's own
+site. A list that a choice narrows says so in a chip ("Site: Northside") that
+opens the chooser. Every request reads the pick again under the reader's own
+grants: an id they cannot read counts as nothing chosen, which matches no row.
+It narrows a page and never grants anything. `mistri check` refuses a `chosen.x`
+that names no choice.
+
+Jobs, workflow steps and API or App MCP calls run with `ctx.chosen` empty: no
+person is at a desk, so a handler that needs a site takes it as input.
+
 ## Retention
 
 ```ts

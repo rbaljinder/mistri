@@ -30,6 +30,7 @@ import { readyCommand, sendCommand } from '../commandSend.js';
 import { commandFieldsDeep } from '../../shared/command.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { useCommandAnswers } from '../commandAvailability.js';
+import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import type { ActionBarProps, RecordActions } from '@mistriwork/kit/client/components/pageContext.js';
 import { orderActions } from './actionOrder.js';
 import { toastDone } from './commandResult.js';
@@ -346,16 +347,20 @@ export function ActionBar({
   /* A machine's verb that says itself differently by state ("Move to Proposal") asks which state the record is in
      the same way: one condition per label, answered with the rest. A command action with a `when` of its own asks
      that part alone, also with the rest. */
+  /* A record its resource freezes (`frozen`, a condition) takes no fixed update: the server refuses it, so the verb is
+     not drawn. Asked as any condition of a verb is, of this record, in the same batch. */
+  const frozenText = (pageBridge.activeApp() as { resources?: Record<string, { frozen?: string }> } | null)?.resources?.[tableId]?.frozen;
   const asked = [
-    ...new Set(
-      drawable.flatMap((action) =>
+    ...new Set([
+      ...(frozenText !== undefined && drawable.some((action) => !isCommand(action)) ? [frozenText] : []),
+      ...drawable.flatMap((action) =>
         isCommand(action)
           ? [...(action.offered ? [action.offered] : []), ...(action.labels ?? []).map((said) => said.when)]
           : action.when
             ? [action.when]
             : [],
       ),
-    ),
+    ]),
   ];
   const conditions = useQueries({
     queries: asked.map((when) => ({
@@ -379,7 +384,7 @@ export function ActionBar({
         ? availableCommand(action) &&
           (!action.offered || answered.get(action.offered) === true) &&
           (action.labels ?? []).every((candidate) => answered.get(candidate.when) !== undefined)
-        : !action.when || answered.get(action.when) === true,
+        : (!action.when || answered.get(action.when) === true) && (frozenText === undefined || answered.get(frozenText) === false),
     )
     .map(said);
   /* One filled verb, the forward one; the destructive last and quiet (actionOrder.ts). Without a

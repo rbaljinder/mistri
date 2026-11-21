@@ -18,6 +18,7 @@ import {
 } from '@mistriwork/engine/shared/firstPaint.js';
 import { sessionIdentity } from './sessionIdentity.js';
 import { shellById } from './shellHost.js';
+import { shell } from './shellMode.js';
 
 /* Long enough for the first room and what it asks as it draws, and no
    longer: past it every read is the reader's own again. */
@@ -55,6 +56,14 @@ function held(): FirstPaintData | null {
     return null;
   }
   if (!owner && identity.mode !== 'unknown') owner = identity;
+  /* The page was drawn for the pick the server holds for this person (an App's `choose`, read from their store as the
+     page's reads were asked), so a person with a stored pick keeps first paint: nothing waits on one. Only a tab that
+     differs from it, or one with no store to hold it, sends a pick of its own (`chosen()` is that difference), and
+     none of the page's answers is that tab's: every one is asked again. */
+  if (Object.keys(shell().chosen()).length) {
+    data = null;
+    return null;
+  }
   return data;
 }
 

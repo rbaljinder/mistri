@@ -2,6 +2,7 @@
 // the PostgreSQL source (tenantReadSourceShared.ts) for development and the single-file deployments.
 import { sandboxRows, sandboxStorePresent, sqliteSandboxSession } from './tenantSandboxStore.js';
 import { realpathSync, statSync } from 'node:fs';
+import { isPromise } from 'node:util/types';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
 import { ANSI_STYLE, Serial, type AggregateRequest, type ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { createScopedReads } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
@@ -219,9 +220,17 @@ export function openSqliteTenantReadSource(
       db.exec('BEGIN');
       try {
         assertCatalog();
-        const result = await work();
+        // A read that answered synchronously commits before yielding. The deferred BEGIN holds a shared lock from
+        // its first read to COMMIT, and a turn spent awaiting in between lets a synchronous writer in this process
+        // (the integration store, a job's store) take the thread and spin on that lock for its whole busy timeout.
+        // The turn a synchronous read would have spent there is spent after COMMIT instead, so a close that lands
+        // before delivery is still seen by the caller's check.
+        const pending = work();
+        const synchronous = !isPromise(pending);
+        const result = (synchronous ? pending : await pending) as T;
         active();
         db.exec('COMMIT');
+        if (synchronous) await undefined;
         return result;
       } finally {
         if (db.isTransaction) {
@@ -559,7 +568,7 @@ export function openSqliteTenantReadSource(
           }),
         ),
       readActiveTenants: (options?: ActiveTenantsQuery) =>
-        invoke(options ?? {}, (query): Promise<readonly ActiveTenant[]> =>
+        invoke(options ?? {}, (query): readonly ActiveTenant[] =>
           readActiveWith(owned, query, readSqliteActiveTenants(db, owner), (sql) => db.prepare(sql).all() as Record<string, unknown>[]),
         ),
       readHosts: () => invoke(null, () => sqliteTenantHostOps(db, () => {}).list()),

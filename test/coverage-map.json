@@ -126,6 +126,16 @@
       ]
     },
     {
+      "id": "choose",
+      "surface": ["dsl: app: choose"],
+      "tests": [
+        { "file": "test/app-choose.test.ts" },
+        { "file": "packages/mistri/src/client/appChoices.test.ts" },
+        { "file": "packages/mistri/src/client/components/ChoiceControl.test.tsx" },
+        { "file": "packages/kit/src/client/components/NewRecord.test.tsx" }
+      ]
+    },
+    {
       "id": "audit",
       "surface": ["dsl: app: resources.*.audit", "dsl: app: track"],
       "tests": [{ "file": "e2e/record-history.spec.ts" }],
@@ -168,6 +178,11 @@
         { "file": "e2e/thread-transitions.spec.ts" }
       ],
       "browser": true
+    },
+    {
+      "id": "frozen-rows",
+      "surface": ["dsl: app: resources.*.frozen"],
+      "tests": [{ "file": "test/app-frozen.test.ts" }, { "file": "test/capability-links.test.ts" }, { "file": "test/api-check-parity.test.ts" }]
     },
     { "id": "at-timers", "surface": ["dsl: app: resources.*.at"], "tests": [{ "file": "test/tenant-timers.test.ts" }] },
     {
@@ -1197,6 +1212,8 @@
     { "id": "cli-flag-repeatable", "surface": ["cli: flag --repeatable"], "tests": [{ "file": "test/migrate-flags.test.ts" }] },
     { "id": "cli-flag-replicas", "surface": ["cli: flag --replicas"], "tests": [{ "file": "test/check-deploy.test.ts" }] },
     { "id": "cli-flag-roles", "surface": ["cli: flag --roles"], "tests": [{ "file": "test/tenant-first-boot-cli.test.ts" }] },
+    { "id": "cli-flag-account", "surface": ["cli: flag --account"], "tests": [{ "file": "test/tenant-first-boot-cli.test.ts" }] },
+    { "id": "cli-flag-from", "surface": ["cli: flag --from"], "tests": [{ "file": "test/tenant-first-boot-cli.test.ts" }] },
     {
       "id": "cli-flag-routes",
       "surface": ["cli: flag --routes"],

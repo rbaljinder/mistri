@@ -93,10 +93,12 @@ export function scopedCommandCatalog(
     } else if (targeted) {
       if (authorizer.creates(id)) fail(id, 'targeted exposure conflicts with existing untargeted form semantics');
     } else {
-      if (!authorizer.creates(id)) fail(id, 'API-only untargeted commands require future shared reference integration');
+      if (!authorizer.creates(id))
+        fail(id, 'API-only untargeted commands require future shared reference integration [api-command-no-record]');
       // A generic create is the platform's own; any other names a signed-in form it shares.
       const forms = Object.values(app.views).filter((view) => isFormView(view) && !view.public && view.command.id === id);
-      if (!forms.length && !genericWriteOf(command)) fail(id, 'untargeted exposure requires an existing signed-in form');
+      if (!forms.length && !genericWriteOf(command))
+        fail(id, 'untargeted exposure requires an existing signed-in form [api-command-no-record]');
     }
     const read = command.read.map((local) => logicalResource(app, command.source, local));
     /* One App API request reads one connection. The authorizer keeps a
@@ -149,7 +151,8 @@ export function scopedCommandCatalog(
             }
             return !elevated.length || elevated.every((table) => resolveAppAccess(app, schema, [role]).readable.has(table));
           });
-    if (form === undefined && !eligibleRoles.length) fail(id, 'no declared API role authorizes the whole command footprint');
+    if (form === undefined && !eligibleRoles.length)
+      fail(id, 'no declared API role authorizes the whole command footprint [api-command-unheld]');
     return Object.freeze({
       id: `command:${id}`,
       command: id,

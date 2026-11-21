@@ -240,7 +240,7 @@ Five rules cost a first App a `check` run each. Each guards something real, and 
 - **A role that edits a table a command writes names its columns.** It narrows `fields: { table: { write: [...] } }`, and the list leaves the command's `version` column out (`[command-and-edit]`, [Roles](/docs/roles/)).
 - **A checklist ticks a real boolean.** `checked` is a local boolean column of the list's table, declared `BOOLEAN` in SQLite, not a computed one.
 - **A calendar's title is text.** Its `primary` is a text column, or a one-hop label path such as `owner_id.name`.
-- **A role's field list holds the table's own columns.** A rollup or a computed column is not one, and the list keeps the whole primary key readable.
+- **A role's field list holds the table's own columns, and its read list the rollups and computed columns it shows.** A write list names none of those, and the list keeps the whole primary key readable.
 
 ## Run it
 

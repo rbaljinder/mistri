@@ -222,7 +222,11 @@ export async function personKey(
  */
 /* `tenant.<column>` outside quoted text: the reader's tenant profile, which rides on the person (QueryPerson.tenant). */
 const TENANT_WORD = /(?<![\w.])tenant\.[A-Za-z_]/;
-const mentions = (text: string) => mentionsMe(text) || (text.includes('tenant.') && TENANT_WORD.test(maskQuoted(text)));
+/* `chosen.<name>` outside quoted text: the App-wide choice, which rides on the person too (QueryPerson.chosen). */
+const CHOSEN_WORD = /(?<![\w.])chosen\.[A-Za-z_]/;
+const mentionsChosen = (text: string) => text.includes('chosen.') && CHOSEN_WORD.test(maskQuoted(text));
+const mentions = (text: string) =>
+  mentionsMe(text) || (text.includes('tenant.') && TENANT_WORD.test(maskQuoted(text))) || mentionsChosen(text);
 
 /**
  * Whether any of these texts compares with `me`, directly or through a segment it names: a tab that names
@@ -248,7 +252,8 @@ export function emailOnly(app: AppDef, texts: readonly unknown[], schema: Databa
   /* A column that holds the account's id is not the email: `me` beside it is the person's row. */
   if (!column || !/^[A-Za-z_]\w*$/.test(column) || app.auth?.me?.by === 'account') return false;
   const said = texts.filter((text): text is string => typeof text === 'string');
-  if (segmentsNamed(said, schema).some((text) => mentionsMe(text))) return false;
+  /* A choice is the request's, read with the person: the email alone does not carry it. */
+  if (said.some(mentionsChosen) || segmentsNamed(said, schema).some((text) => mentionsMe(text) || mentionsChosen(text))) return false;
   const compared = new RegExp(`(?:^|[^\\w.])(?:[A-Za-z_]\\w*\\.)*${column}\\s*!?=\\s*$`, 'i');
   let found = false;
   for (const text of said) {

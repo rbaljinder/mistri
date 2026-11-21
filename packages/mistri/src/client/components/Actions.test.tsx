@@ -46,6 +46,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
 
 const { ActionBar } = await import('./Actions.js');
 const { updateAttempts } = await import('../../../../kit/src/client/updateAttempts.js');
+const { pageBridge } = await import('../../../../kit/src/client/uiBridge.js');
 
 const actions: AppAction[] = [
   { id: 'startWorking', label: 'Start working', set: { status: 'working' }, when: 'status = new' },
@@ -289,6 +290,18 @@ describe('the action bar', () => {
     draw();
     expect(screen.getByRole('button', { name: 'Mark lost' })).toBeVisible();
     expect(await screen.findByRole('button', { name: 'Start working' })).toBeVisible();
+  });
+
+  test('a record its resource freezes draws no fixed verb, and an unfrozen one still does', async () => {
+    vi.spyOn(pageBridge, 'activeApp').mockReturnValue({ resources: { lead: { frozen: 'status = lost' } } });
+    // The server answers the frozen condition for this record: it matches.
+    draw({ matches: async (when) => when === 'status = lost' || when === 'status = new' });
+    await vi.waitFor(() => expect(screen.queryByRole('button', { name: 'Mark lost' })).toBeNull());
+    expect(screen.queryByRole('button', { name: 'Start working' })).toBeNull();
+    cleanup();
+    draw({ matches: async (when) => when === 'status = new' });
+    expect(await screen.findByRole('button', { name: 'Start working' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Mark lost' })).toBeVisible();
   });
 
   test('and stays hidden when it does not', async () => {

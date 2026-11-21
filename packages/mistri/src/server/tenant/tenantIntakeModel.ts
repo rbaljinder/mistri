@@ -12,6 +12,7 @@
  * published for. What it rules out is choosing a tenant: nothing a visitor
  * types — a dealer code, a tenant id, a field — decides ownership.
  */
+import { isPromise } from 'node:util/types';
 import type { CommandJournalPlatform, CommandJournalTenant } from '../../adapters/commands/commandJournalTypes.js';
 import { isPublicForm, type AppDef, type AppFormView } from '../../shared/app.js';
 import { isTokenActorId, publicActorId } from '../../shared/publicActor.js';
@@ -401,39 +402,69 @@ function activeTenantsZone(owned: TenantOwnershipSnapshot, query: unknown): stri
  * statement of no parameter as the owner. A schedule on a tenant-owned table is the first row by key each tenant
  * holds there (as `ui.timezone`'s column is a reader's first row), read across tenants by the server: a plan, never
  * authority, since each run is admitted on its own tenant's row. A value that is not text is no one's schedule.
+ *
+ * Given a synchronous `all` (SQLite) the answer is synchronous too: the reader's snapshot is a SQLite transaction,
+ * and one that waited on a promise between its reads and its COMMIT would hold its lock across a turn in which a
+ * writer in the same process can block the whole thread on that lock until its busy timeout.
  */
-export async function readActiveWith(
+export function readActiveWith(
+  owned: TenantOwnershipSnapshot,
+  query: unknown,
+  active: readonly string[],
+  all: (sql: string) => readonly Record<string, unknown>[],
+): readonly ActiveTenant[];
+export function readActiveWith(
+  owned: TenantOwnershipSnapshot,
+  query: unknown,
+  active: readonly string[],
+  all: (sql: string) => Promise<readonly Record<string, unknown>[]>,
+): Promise<readonly ActiveTenant[]>;
+export function readActiveWith(
   owned: TenantOwnershipSnapshot,
   query: unknown,
   active: readonly string[],
   all: (sql: string) => readonly Record<string, unknown>[] | Promise<readonly Record<string, unknown>[]>,
-): Promise<readonly ActiveTenant[]> {
+): readonly ActiveTenant[] | Promise<readonly ActiveTenant[]> {
   const zone = activeTenantsZone(owned, query),
     asked = (query as ActiveTenantsQuery).schedule;
   if (asked !== undefined) tenantIdentifier(asked, 256);
   const dot = asked === undefined ? -1 : asked.indexOf('.');
   if (asked !== undefined && dot < 1) return denyTenant();
   const profileSchedule = asked !== undefined && asked.slice(0, dot) === 'tenant' ? asked.slice(dot + 1) : undefined;
-  const zones = zone === undefined ? undefined : activeWithColumn(owned, zone, active, await all(tenantProfileColumnQuery(owned, zone)));
-  let schedules: ReadonlyMap<string, TenantValue> | undefined;
-  if (profileSchedule !== undefined) {
-    const rows = await all(tenantProfileColumnQuery(owned, profileSchedule));
-    schedules = new Map(activeWithColumn(owned, profileSchedule, active, rows).map((tenant) => [tenant.id, tenant.zone]));
-  } else if (asked !== undefined) {
-    const held = new Map<string, TenantValue>();
-    for (const row of await all(tenantScheduleQuery(owned, asked.slice(0, dot), asked.slice(dot + 1))))
-      held.set(String(row.k), typeof row.c0 === 'string' ? row.c0 : null);
-    schedules = held;
-  }
-  return Object.freeze(
-    active.map((id, at) =>
-      Object.freeze({
-        id,
-        ...(zones ? { zone: zones[at].zone } : {}),
-        ...(schedules ? { schedule: schedules.get(id) ?? null } : {}),
-      }),
+  const schedulesOf = (): ReadonlyMap<string, TenantValue> | undefined | Promise<ReadonlyMap<string, TenantValue>> => {
+    if (profileSchedule !== undefined)
+      return after(
+        all(tenantProfileColumnQuery(owned, profileSchedule)),
+        (rows) => new Map(activeWithColumn(owned, profileSchedule, active, rows).map((tenant) => [tenant.id, tenant.zone])),
+      );
+    if (asked === undefined) return undefined;
+    return after(all(tenantScheduleQuery(owned, asked.slice(0, dot), asked.slice(dot + 1))), (rows) => {
+      const held = new Map<string, TenantValue>();
+      for (const row of rows) held.set(String(row.k), typeof row.c0 === 'string' ? row.c0 : null);
+      return held;
+    });
+  };
+  const zonesOf =
+    zone === undefined
+      ? undefined
+      : after(all(tenantProfileColumnQuery(owned, zone)), (rows) => activeWithColumn(owned, zone, active, rows));
+  return after(zonesOf, (zones) =>
+    after(schedulesOf(), (schedules) =>
+      Object.freeze(
+        active.map((id, at) =>
+          Object.freeze({
+            id,
+            ...(zones ? { zone: zones[at].zone } : {}),
+            ...(schedules ? { schedule: schedules.get(id) ?? null } : {}),
+          }),
+        ),
+      ),
     ),
   );
+}
+/** `f` of a value now, or of a promise's value when it settles: a read stays synchronous when its source is. */
+function after<T, R>(value: T | Promise<T>, f: (value: T) => R | Promise<R>): R | Promise<R> {
+  return isPromise(value) ? (value as Promise<T>).then(f) : f(value as T);
 }
 /** One column of a tenant-owned table, off the first row by key of each tenant, with the tenant its owner column
  * names. Anything not of this App's catalog, or a table no tenant owns, is refused. */

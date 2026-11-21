@@ -17,6 +17,10 @@ import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { servesLinks, withLinkUrls } from '../links/linkLookup.js';
 import { withAppPublicUrls } from '../links/publicLink.js';
 import { personLocale, requestLocale } from '../app/readerLocale.js';
+import { CHOICE_HEADER, readChosen, type Chosen } from '../app/appChoices.js';
+import { storedForPerson } from '../app/appPreferences.js';
+import { resolveSource } from './source.js';
+import type { AppDef } from '../../shared/appModel.js';
 
 /** Who runs a command on an App with no row policy: the verified session's account, roles and words. */
 export function sessionCommandActor(identity: Identity, id: string, appId: string) {
@@ -74,14 +78,24 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
       }
       res.setHeader('x-mistri-app', signedIn.app.app.id);
       /* Their own row, read under their own rows as their pages read it (http/source.ts); else their pick. */
-      const person =
-        path === COMMAND_ROUTES.execute || path === COMMAND_ROUTES.draft
-          ? await personLocale(signedIn.app.app, policyContext.schema, policyContext.data, {
-              email: sessionActorWords(identity).email,
-              account: identity.id,
-            }).catch(() => undefined)
-          : undefined;
+      const runs = path === COMMAND_ROUTES.execute || path === COMMAND_ROUTES.draft;
+      const person = runs
+        ? await personLocale(signedIn.app.app, policyContext.schema, policyContext.data, {
+            email: sessionActorWords(identity).email,
+            account: identity.id,
+          }).catch(() => undefined)
+        : undefined;
       const locale = requestLocale(signedIn.app.app, { ...(person ? { person } : {}), visitor: false, req });
+      /* The App-wide choices, read again under the same rows (app/appChoices.ts): `ctx.chosen` for what runs. */
+      const chosen = runs
+        ? await readChosen(
+            signedIn.app.app,
+            policyContext.schema,
+            policyContext.data,
+            req.headers[CHOICE_HEADER],
+            await storedForPerson(ctx.registry, signedIn, identity.id),
+          )
+        : undefined;
       const result = await dispatchScopedBusinessCommandHttp({
         req,
         res,
@@ -90,6 +104,7 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
         label: (body) => commandActionLabel(signedIn.app.app, body),
         ...given,
         ...(locale ? { locale } : {}),
+        ...(chosen ? { chosen } : {}),
       });
       send(res, 200, path === COMMAND_ROUTES.execute ? await policyLinkUrls(ctx, result) : result);
       return true;
@@ -120,6 +135,7 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
       label: (body) => commandActionLabel(signedIn.app.app, body),
       ...given,
       actor,
+      ...(await browserChosen(ctx, signedIn.app.app, path)),
     });
     send(res, 200, result);
     return true;
@@ -144,4 +160,19 @@ async function policyLinkUrls(ctx: RequestContext, answer: unknown): Promise<unk
   } finally {
     for (const release of releases.reverse()) release();
   }
+}
+
+/* The App-wide choices the tab sent, for a command that runs, read again under the rows this person's pages read
+   (http/source.ts): `ctx.chosen` in its handler. Nothing is read for an App that declares no choose. */
+async function browserChosen(ctx: RequestContext, app: AppDef, path: string): Promise<{ chosen?: Chosen }> {
+  if (!app.choose || (path !== COMMAND_ROUTES.execute && path !== COMMAND_ROUTES.draft)) return {};
+  const source = await resolveSource(ctx, app.id);
+  const chosen = await readChosen(
+    app,
+    source.schema,
+    source.adapter,
+    ctx.req.headers[CHOICE_HEADER],
+    await storedForPerson(ctx.registry, source.selectedHost, ctx.identity.id),
+  );
+  return chosen ? { chosen } : {};
 }
