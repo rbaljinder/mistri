@@ -96,6 +96,10 @@ test('results are values: an applied step, and a refusal with its status and cod
   const again = await manager.command('approveTimeOff', approved.value.key);
   assert.ok(!again.ok && again.status === 409, JSON.stringify(again));
   assert.equal(typeof (!again.ok && again.code), 'string');
+  /* The refusal says why, as the server's log does, to a role that is no administrator: the host runs from source and
+     asks for it (engine refusalReport.ts), so a test never has to read host.logs(). */
+  assert.ok(!again.ok && typeof again.cause === 'string' && again.cause.length > 0, JSON.stringify(again));
+  assert.match(host.logs(), new RegExp(again.cause!.slice(0, 20).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
 
   const admin = await host.as('admin');
   const saved = await admin.update('employee', { id: 1 }, { title: 'Chief' });

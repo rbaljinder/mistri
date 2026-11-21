@@ -137,13 +137,15 @@ test('aborting the first host request does not poison shared owner acquisition',
 
 const storeId = '21a53156-f274-4622-8a68-3f0b82c2c45a';
 const unavailable = { message: 'The API item read is unavailable.' };
-async function fixture(t: TestContext, pagination = false) {
+async function fixture(t: TestContext, pagination = false, flags = false) {
   const directory = mkdtempSync(join(tmpdir(), 'tw-api-item-reader-'));
   const path = join(directory, 'auth.db'),
     business = join(directory, 'business.db');
   const db = new DatabaseSync(business);
   db.exec("CREATE TABLE people(id INTEGER PRIMARY KEY,name TEXT NOT NULL,secret TEXT); INSERT INTO people VALUES(1,'Visible','hidden');");
   if (pagination) db.exec("INSERT INTO people VALUES(2,'Second','hidden'),(3,'Third','hidden'),(4,'Fourth','hidden')");
+  /* SQLite holds a BOOLEAN as 0 and 1; the API says true and false. */
+  if (flags) db.exec('ALTER TABLE people ADD COLUMN active BOOLEAN NOT NULL DEFAULT 0; UPDATE people SET active = 1 WHERE id IN (2, 4)');
   db.close();
   const app = parseAppConfig(
     {
@@ -158,7 +160,13 @@ async function fixture(t: TestContext, pagination = false) {
         version: 1,
         roles: ['reader'],
         views: ['people'],
-        resources: { person: { fields: ['id', 'name'], filters: ['id'], sorts: ['id', 'name'] } },
+        resources: {
+          person: {
+            fields: flags ? ['id', 'name', 'active'] : ['id', 'name'],
+            filters: flags ? ['id', 'active'] : ['id'],
+            sorts: flags ? ['id', 'name', 'active'] : ['id', 'name'],
+          },
+        },
       },
     },
     'item reader fixture',
@@ -825,6 +833,36 @@ test('native list and standing-view cursors retain projection and uncontinued co
   const names = byName.items.map((row: { name: string }) => row.name);
   assert.ok(names.length > 1);
   assert.deepEqual(names, [...names].sort());
+});
+
+test('a BOOLEAN column on SQLite is true or false on the wire, filters on it, and orders a cursor', async (t) => {
+  const f = await fixture(t, true, true);
+  const read = async (query: string) =>
+    JSON.parse(f.reader.consumeResult(await f.reader.readList(f.token.token, 'list:person', query)).body);
+  const all = await read('fields=id,active&sort=id');
+  assert.deepEqual(all.items, [
+    { id: '1', active: false },
+    { id: '2', active: true },
+    { id: '3', active: false },
+    { id: '4', active: true },
+  ]);
+  assert.deepEqual((await read('fields=id&active=true&sort=id')).items, [{ id: '2' }, { id: '4' }]);
+  assert.deepEqual((await read('fields=id&active=false&sort=id')).items, [{ id: '1' }, { id: '3' }]);
+  // A boolean sort column pages without skipping or repeating a row: false before true, the key breaking ties.
+  for (const [sort, expected] of [
+    ['active', ['1', '3', '2', '4']],
+    ['-active', ['2', '4', '1', '3']],
+  ] as const) {
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    for (let page = 0; page < 4; page++) {
+      const body = await read(`fields=id&sort=${sort}&limit=1` + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''));
+      seen.push(...body.items.map((row: { id: string }) => row.id));
+      cursor = body.next;
+      if (cursor === null) break;
+    }
+    assert.deepEqual(seen, expected, sort);
+  }
 });
 
 test('native list cursor rejects tampering, query/operation/scope and owner rebinding', async (t) => {

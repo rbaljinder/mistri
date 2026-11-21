@@ -150,6 +150,9 @@ async function startHost(options: HostOptions, argumentsFor: (port: number) => P
            (heap, pools) out of them (serverTiming.ts). */
         MISTRI_SERVER_TIMING: '1',
         MISTRI_SERVER_TIMING_TOKEN: randomBytes(16).toString('hex'),
+        /* From source only: a built host is what a deployment runs, and its response bodies never carry a cause
+           (engine's refusalReport.ts). */
+        ...(!built ? { MISTRI_TEST_REFUSAL_CAUSE: 'source' } : {}),
         ...options.environment,
         ...(options.asOf !== undefined ? { MISTRI_AS_OF: options.asOf instanceof Date ? options.asOf.toISOString() : options.asOf } : {}),
         XDG_CONFIG_HOME: options.workspace.path('config'),

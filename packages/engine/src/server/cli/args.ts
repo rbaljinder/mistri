@@ -5,7 +5,7 @@
  * test/prose.test.ts holds the two and the README to each other.
  */
 import { parseHostList, type ProxyRange } from '../http/trust.js';
-import { isReaderCount, MAX_READERS } from '../../adapters/postgresPool.js';
+import { isIdleSeconds, isReaderCount, MAX_IDLE_SECONDS, MAX_READERS } from '../../adapters/postgresPool.js';
 import { isLockTimeout, isWriterCount, MAX_LOCK_TIMEOUT_MS, MAX_WRITERS, MIN_LOCK_TIMEOUT_MS } from '../../adapters/writeLanes.js';
 import type { PoolerMode } from '../../adapters/poolMetrics.js';
 import { envName, productEnv } from '../product.js';
@@ -369,7 +369,8 @@ export function shutdownTimings(opts: Pick<Options, 'drainDelay' | 'shutdownGrac
  */
 export function postgresPoolFlags(
   opts: Pick<Options, 'readPool' | 'writePool' | 'pooler' | 'lockTimeout'>,
-): { readers?: number; writers?: number; pooler?: PoolerMode; lockTimeoutMs?: number } | string {
+  env: NodeJS.ProcessEnv = process.env,
+): { readers?: number; writers?: number; pooler?: PoolerMode; lockTimeoutMs?: number; idleSeconds?: number } | string {
   let readers: number | undefined;
   if (opts.readPool !== undefined) {
     readers = /^\d+$/.test(opts.readPool) ? Number(opts.readPool) : Number.NaN;
@@ -395,10 +396,21 @@ export function postgresPoolFlags(
   if (pooler !== undefined && pooler !== 'session' && pooler !== 'transaction') {
     return `--pooler takes "session" or "transaction"; "${pooler}" is neither. It comes from the flag or ${envName('POOLER')}.`;
   }
+  /* Environment only, like the deployment fact it is: how long a hosted database or its pooler lets a connection sit
+     idle. A connection's own "pool": { "idleSeconds" } wins over it (postgresPool.ts resolvePoolIdle). */
+  let idleSeconds: number | undefined;
+  const idle = productEnv('POOL_IDLE', env)?.trim();
+  if (idle) {
+    idleSeconds = /^\d+$/.test(idle) ? Number(idle) : Number.NaN;
+    if (!isIdleSeconds(idleSeconds)) {
+      return `${envName('POOL_IDLE')} takes whole seconds from 1 to ${MAX_IDLE_SECONDS}; "${idle}" is not one.`;
+    }
+  }
   return {
     ...(readers !== undefined ? { readers } : {}),
     ...(writers !== undefined ? { writers } : {}),
     ...(pooler !== undefined ? { pooler } : {}),
     ...(lockTimeoutMs !== undefined ? { lockTimeoutMs } : {}),
+    ...(idleSeconds !== undefined ? { idleSeconds } : {}),
   };
 }

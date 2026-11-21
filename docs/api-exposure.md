@@ -412,8 +412,10 @@ and proxy roles do not authenticate these endpoints, and bearer tokens do not
 authenticate the browser's internal API. List responses contain `items` and
 `next`; pass a non-null `next` back as the `cursor` query parameter.
 
-Cursor ordering supports integer, finite-number, PostgreSQL boolean and text
-columns. A nullable sort puts its nulls last in either direction, on every
+Cursor ordering supports integer, finite-number, boolean and text
+columns. A boolean is JSON `true` or `false` on every dialect, in a row, a filter
+and a spec: SQLite stores a `BOOLEAN` as 0 and 1 and the API converts it, false
+sorting before true. A nullable sort puts its nulls last in either direction, on every
 dialect, and a cursor that stops on a null resumes among the nulls; the primary
 key that ends every order is nonnullable. Text is ordered and compared by its bytes — `COLLATE "C"` on
 PostgreSQL, `COLLATE BINARY` on SQLite — whatever collation the column or the

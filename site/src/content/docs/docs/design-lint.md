@@ -114,7 +114,7 @@ npx @mistriwork/mistri grade --config mistri.json --theme all --palette all --as
 | `changed-app` | Under `--theme`, a control or part of the accessibility tree at 1280 is gone or added against the App's own look's; a control folded into a "More" menu still counts when grade opens the fold and finds it there, a shortcut hint and chart ticks do not (error) | report the part: a theme changes how the App looks, never which controls a reader can reach |
 | `layout-shift` | The page moves more than 0.1 (CLS) after its first paint (error) | give the late part its height before it arrives |
 | `clipped-text` | Words cut mid-word with no ellipsis: a chip, a label (warning) | let them wrap, or say less |
-| `small-target` | On a phone, a control under 44px either way (warning) | padding, not a smaller box; report the platform's own controls rather than restyle them |
+| `small-target` | On a phone, a control under 44px either way (warning); at a desk the bar is WCAG 2.5.8's 24px, so a desk row is not padded to 44px | padding, not a smaller box; report the platform's own controls rather than restyle them |
 | `empty-section` | A section drawn with nothing but its heading (warning) | `empty: 'No visits yet.'`, or hide it when empty |
 | `unseeded-list` | Half the App's lists or more, and at least two, have no rows: the pages were measured with nothing on them (warning) | `npx @mistriwork/mistri seed --app .` (`--rows <n>` for more), then grade again |
 | `mixed-format` | One column or section says its figures two ways: cents and none, grouped and not, compact and full; a section's quantity beside its price is two measures, not one (warning) | one `format` for the column, not text built by hand |

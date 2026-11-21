@@ -5,6 +5,32 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.77
+
+A tenant switch that held, and the smaller seams a field report found.
+
+- Switching tenants no longer locks the session: a batch of breakdown reads no longer lets one item close the tenant's
+  read window while the others still need it, so the next read is not refused. A test models it without PostgreSQL.
+- A test client's refusal carries `cause`, the reason the server logs for it, for any role, when the host runs from
+  source; a production response never does.
+- A public form takes an id from its link with `given`: the visitor is never shown it and the command still judges it
+  (documented, with a signed-out test).
+- A New form's database default and a form default on a column worded by display values already read in the display
+  word; both are now covered by tests.
+- The App API serves a BOOLEAN column as JSON `true` or `false` on SQLite as on PostgreSQL, in rows, filters, sorts,
+  cursors and the OpenAPI spec.
+- A connection's `pool` takes `idleSeconds` and `minIdle`, and `MISTRI_POOL_IDLE` sets the idle window for every pool;
+  the connection's own setting wins.
+- A page's `nav.position` counts the App's own entries in its group, never other pages, so the menu no longer changes
+  with page file names.
+- A card whose `badge` names its title's column no longer says the title twice (a vocabulary word titling the card drew
+  it again as the chip).
+- A record page's related lists as tabs: an empty list's note is measured below the strip with no Add bar and on a phone
+  too, beside the writable desk case rc.72 fixed.
+- rc.76 was never tagged: its main run failed a tenant-automation test whose clock came from the hour it ran at, so
+  between six and seven UTC the seven o'clock slot came first. The test now starts at a fixed hour; rc.77 carries
+  rc.76's changes.
+
 ## 1.0.0-rc.76
 
 Kit parts for designed pages, and the guards that keep a look able to dress them.

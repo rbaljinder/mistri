@@ -608,7 +608,9 @@ for (const { dialect, skip } of ENGINES)
           lab = await openLab(t, dialect, module);
         for (const statement of kept.keep) await lab.rows(statement);
         const enrollment = await enroll(t, lab, module, cadenceApp);
-        const clock = { now: Math.floor((Date.now() - 72 * HOUR) / 60_000) * 60_000 - 1_000 },
+        // A second before a UTC midnight three days back, so the next six comes before the next seven. Taken from the
+        // real clock alone, a run between six and seven UTC found seven first and every tenant due at "six".
+        const clock = { now: Math.floor((Date.now() - 72 * HOUR) / (24 * HOUR)) * 24 * HOUR - 1_000 },
           host = await hostOf(t, enrollment, clock);
         const six = nextSlot(parseEvery('0 6 * * *', 'UTC'), clock.now)!,
           seven = nextSlot(parseEvery('0 7 * * *', 'UTC'), clock.now)!;

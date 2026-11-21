@@ -212,7 +212,7 @@ export default definePage({ label: String(typeof process === 'object' && process
     assert.deepEqual(placePages(nav, [page({ public: undefined })], 'desk').nav, ['tickets', 'kiosk']);
   });
 
-  test('page-nav: position is an index into the siblings as they stand when the page is placed, in path order', () => {
+  test("page-nav: position counts the App's own entries, never other pages", () => {
     const at = (key: string, position: number) => ({
       key,
       module: `./pages/${key}.page.tsx`,
@@ -225,12 +225,33 @@ export default definePage({ label: String(typeof process === 'object' && process
         { id: 'b', label: 'B', children: [] },
       ],
     };
-    // Each group is one sibling; a page placed before another counts among the siblings of the next.
+    // Each group is one entry of the App's own; another page never counts toward a position.
     const placed = placePages(groups, [at('one', 0), at('two', 1), at('three', 9)], 'desk').nav as Array<string | { id: string }>;
     assert.deepEqual(
       placed.map((node) => (typeof node === 'string' ? node : node.id)),
-      ['one', 'two', 'a', 'b', 'three'],
+      ['one', 'a', 'two', 'b', 'three'],
     );
+  });
+
+  test("page-nav: the menu does not depend on the page files' names, in a group or a list of groups", () => {
+    const at = (key: string, position?: number) => ({
+      key,
+      module: `./pages/${key}.page.tsx`,
+      fields: { label: key, reads: ['desk'], nav: { group: ['g', 'h'], ...(position === undefined ? {} : { position }) } },
+    });
+    const group = (id: string) => ({ id, label: id, children: ['i0', 'i1', 'i2'] });
+    const app = { ...APP, nav: [group('g'), group('h')] };
+    const a = at('a', 2),
+      b = at('b', 0),
+      c = at('c');
+    for (const order of [
+      [a, b, c],
+      [c, b, a],
+      [b, c, a],
+    ]) {
+      const nav = placePages(app, order, 'desk').nav as Array<{ children: string[] }>;
+      for (const each of nav) assert.deepEqual(each.children, ['b', 'i0', 'i1', 'a', 'i2', 'c']);
+    }
   });
 
   test('page-nav: a page placed where nav has no group; named in nav it stands where nav puts it, and says nothing of its own place', () => {

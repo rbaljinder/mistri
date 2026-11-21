@@ -462,6 +462,11 @@ export async function dispatchResourceReadHttp(
     }
     const results: ResourceReadHttpReply[] = Array.from({ length: items.length });
     const queue = (items as Record<string, unknown>[]).map((item, at) => ({ item, at }));
+    /* An item's route knows its own last wave, not the batch's: the others are
+       still queued, or between their reads, when it says so, and a tenant App's
+       fence that left with it refuses every read after (TenantReadContext.lastWave).
+       Only a batch of one is that route alone. */
+    const each = items.length === 1 ? options : { ...options, lastWave: undefined };
     const one = async (): Promise<void> => {
       for (let next = queue.shift(); next; next = queue.shift()) {
         const page = run(next.item);
@@ -473,9 +478,9 @@ export async function dispatchResourceReadHttp(
                 Object.fromEntries(RUN_FIELDS.filter((field) => page[field] !== undefined).map((field) => [field, page[field]])),
                 adapter,
                 schema,
-                options,
+                each,
               )
-            : dispatchResourceReadHttp('/api/breakdown', { def, text, limit, offset }, adapter, schema, options)))!;
+            : dispatchResourceReadHttp('/api/breakdown', { def, text, limit, offset }, adapter, schema, each)))!;
         } catch (error) {
           /* A request's own refusal (a ResourceReadError: the provider's are
              stripped of the class before they get here) is said in its item.

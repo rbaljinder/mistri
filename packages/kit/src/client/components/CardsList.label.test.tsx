@@ -58,6 +58,7 @@ test("the column a card is titled by is left out of the card's values", () => {
     kind: 'cards',
     primary: 'title',
     value: 'title',
+    badge: 'title',
     description: 'title',
     facts: ['title', 'trim'],
     lines: ['title', 'dealer'],

@@ -51,6 +51,8 @@ export interface ServerSettings {
   readonly pooler: PoolerMode;
   /** `--write-pool`; unset, the balanced size (writeLanes.ts). */
   readonly writers?: number;
+  /** `MISTRI_POOL_IDLE`: seconds an idle PostgreSQL connection stays open; unset, five minutes (postgresPool.ts). */
+  readonly idleSeconds?: number;
   /** `--lock-timeout`; unset, the default. */
   readonly lockTimeoutMs?: number;
   /**
