@@ -36,6 +36,8 @@ import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/clien
 import { batchedBreakdown } from '@mistriwork/kit/client/breakdownBatch.js';
 import { densityChoice } from '@mistriwork/kit/client/density.js';
 import { fillComposer as fillPageComposer } from '@mistriwork/kit/client/components/composerDraft.js';
+import { compileWhere } from '@mistriwork/engine/shared/pageWhere.js';
+import { andQuery } from '@mistriwork/engine/shared/query.js';
 import { tableNamed, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { HOST_GLOBAL, uiBreakdownText, uiRowsQuery, uiViewRunBody } from '../../../shared/uiSdk.js';
 import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
@@ -220,9 +222,13 @@ const pageHost: UiHost = {
     const paths = show?.length ? [...new Set([...show, ...keyed])] : show;
     return (await viewRows(table, paths, where, 1, asking.page))[0];
   },
-  async breakdown(resource, { by, measure, query, limit, page }) {
+  async breakdown(resource, { by, measure, query, limit, page, where }) {
     const table = tableOf(resource);
-    const text = uiBreakdownText(table.id, query, measure, by);
+    /* The server's breakdown reads text alone, so an object condition is written as the text it means here, beside
+       the query, as `useRows` asks it. */
+    const compiled = compileWhere(where, table);
+    if ('error' in compiled) throw new Error(compiled.error);
+    const text = uiBreakdownText(table.id, andQuery(compiled.text, query), measure, by);
     /* A page's breakdown is asked alone: a batch is many sections' and carries no one page's name. */
     const got = page
       ? ((await pageApi(page, '/api/breakdown', { text, ...(limit ? { limit } : {}) })) as { rows?: UiRow[] })

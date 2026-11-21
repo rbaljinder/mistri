@@ -626,6 +626,12 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | --- | --- | --- | --- |
 | `ui.pwa` | boolean | Preview | true makes the App an installable PWA: its pages carry its manifest and worker registration, and it serves its worker, its painted icons and an offline page for failed navigations. Offline data is not part of it: with no connection the App opens to its offline page, and its lists, records and writes need the network. |
 
+## `ui.redirects`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `ui.redirects` | object | Stable | Moved addresses, old path → new path, for a page renamed or folded into another: { '/old/:id': '/new/:id' }. The old address answers 308 to the new, its query kept. A :name segment matches one segment and may be said again in the target; the first match in the order written wins. mistri check --routes refuses a target that is not an address the App answers to, a redirect of a redirect (a chain or a cycle) and a source that is a live route's address. |
+
 ## `ui.shell`
 
 | Key | Type | Status | What it does |

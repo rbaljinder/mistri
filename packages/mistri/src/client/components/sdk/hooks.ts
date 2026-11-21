@@ -50,6 +50,7 @@ import {
   type UiViewer,
 } from './context.js';
 import { say } from '../../copy/components/components/sdk/hooks.js';
+import { filledHookRows } from '../bucketFill.js';
 import { reviewFresh, subscribeReviews } from '../../commandReviews.js';
 import { messageLanguage, subscribeMessages } from '@mistriwork/kit/client/messages.js';
 import type { AppFlagReader, AppFlagValue } from '../../../shared/appFlagValues.js';
@@ -280,29 +281,59 @@ export function useRecord(
   );
 }
 
+/** A breakdown's row: the server's own keys, and the measure as `value` and the group's size as `count` under fixed names. */
+export type UiBreakdownRow = UiRow & { value: number; count: number };
+
+/* The measure asked with the group's size beside it, so every row carries `count` whatever was measured. */
+const withCount = (measure: string | undefined): string | undefined =>
+  measure === undefined || measure.split(',').some((each) => each.trim() === 'count') ? measure : `${measure}, count`;
+
+/* The server keys a row by its groups, then its measures as written (`sum(net)`, or an alias), then any labels: the
+   first measure is the column after the groups, which no spelling of it can move. */
+function typedRow(row: UiRow, groups: number): UiBreakdownRow {
+  const first = Object.keys(row)[groups];
+  return { ...row, value: Number(first === undefined ? 0 : row[first]), count: Number(row.count ?? 0) };
+}
+
 /**
  * A resource's rows grouped and measured: `useBreakdown('pay_stub', { by: 'status', measure: 'sum net' })`.
  * Each row is keyed as the server names its columns: the groups by their paths (`status`, `day(moved_at)`),
- * the measure as written (`count`, `sum(net)`, `max(on_hand_after)`).
+ * the measure as written (`count`, `sum(net)`, `max(on_hand_after)`); beside them, the measure is `value` and the
+ * group's size `count`, so a caller reads both without spelling the server's key.
  */
 export function useBreakdown(
   resource: string,
   options: UiBreakdownOptions & { optional: true },
-): UseQueryResult<UiRow[]> & UiReadState & UiRefusable;
-export function useBreakdown(resource: string, options: UiBreakdownOptions & { optional?: false }): UseQueryResult<UiRow[]> & UiReadState;
+): UseQueryResult<UiBreakdownRow[]> & UiReadState & UiRefusable;
+export function useBreakdown(
+  resource: string,
+  options: UiBreakdownOptions & { optional?: false },
+): UseQueryResult<UiBreakdownRow[]> & UiReadState;
 export function useBreakdown(
   resource: string,
   options: UiBreakdownOptions & { optional?: boolean },
-): UseQueryResult<UiRow[]> & UiReadState & UiRefusable {
+): UseQueryResult<UiBreakdownRow[]> & UiReadState & UiRefusable {
   const host = useUiHost();
   const page = useDeclared(resource);
-  const { optional = false, ...rest } = options;
-  const asked = page ? { ...rest, page } : rest;
+  const { optional = false, fill, ...rest } = options;
+  const measure = withCount(rest.measure);
+  const asked = { ...rest, ...(measure === undefined ? {} : { measure }), ...(page ? { page } : {}) };
+  const groups = rest.by.split(',').length;
+  /* The fill is the client's (bucketFill.ts), not the server's: one answer serves every fill, and the server is asked
+     what it holds. Its select is held while the read is, so a page's paint does not refill the same rows. The fill
+     runs on the server's keys, before the rows are typed, so a filled period gets its `value` and `count` too. */
+  const { by, query } = rest;
+  const written = rest.measure;
+  const typed = useCallback(
+    (rows: UiRow[]) => filledHookRows(rows, { by, measure: written, query, fill }).map((row) => typedRow(row as UiRow, groups)),
+    [by, written, query, fill, groups],
+  );
   return optionally(
     withReadState(
       useQuery({
         queryKey: ['mistri-ui', 'breakdown', ...host.scope, resource, asked],
         queryFn: () => host.breakdown(resource, asked),
+        select: typed,
       }),
     ),
     optional,
@@ -462,6 +493,7 @@ const inAppPath = (path: string): boolean =>
  */
 export function useHref(): {
   signIn(options?: { then?: string }): string;
+  home(): string;
   view(view: string, params?: Readonly<Record<string, string>>): string;
   record(view: string, key: Readonly<Record<string, unknown>>, options?: { tab?: string }): string;
   page(path: string, params?: Readonly<Record<string, string>>): string;
@@ -479,6 +511,7 @@ export function useHref(): {
         const then = options?.then;
         return then !== undefined && inAppPath(then) ? `${address}?then=${encodeURIComponent(then)}` : address;
       },
+      home: () => said({ kind: 'home' }, say('addressHome')),
       view: (view, params) => said({ kind: 'view', view, ...(params ? { params } : {}) }, say('addressView', { view })),
       record: (view, key, options) =>
         said({ kind: 'record', view, key, ...(options?.tab ? { tab: options.tab } : {}) }, say('addressRecord', { view })),

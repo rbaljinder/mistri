@@ -15,6 +15,7 @@ export const say = defineMessages({
   blockSplitKey: '<Split> picks a record by one key column, and "{resource}" has {count}.',
   blockSplitParam: '<Split> keeps its pick in "{param}", which is not one of the page\'s params.',
   blockSplitDetail: 'Details',
+  blockWindowParam: '<Metric> takes its window from "{param}", which is not one of the page\'s params. It has {params}.',
   blockWholeNumber: 'a whole number of 1 or more',
   blockNothing: 'no commands or actions',
   blockNoPage: 'This record has no page.',

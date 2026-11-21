@@ -3363,6 +3363,11 @@ export interface AppUi {
   /** The App's own themes (`defineTheme(...)`): `theme.preset` names one as its look, and each is offered in the
       reader's theme picker. */
   customThemes?: readonly import('@mistriwork/engine/schema/theme.js').Theme[];
+  /** Moved addresses, old path → new path, for a page renamed or folded into another: `redirects: { '/old/:id': '/new/:id' }`.
+      The old address answers 308 to the new, its query kept. A `:name` segment matches one segment and may be said again in
+      the target; the first match in the order written wins. `mistri check --routes` refuses a target that is not an address
+      the App answers to, a redirect of a redirect (a chain or a cycle) and a source that is a live route's address. */
+  redirects?: Readonly<Record<string, string>>;
   shell?: AppShell;
   /** Omission keeps explicit Save. Workbench always uses explicit review/apply. */
   editing?: AppEditing;

@@ -592,12 +592,12 @@
     background: transparent;
     color: var(--ink);
   }
-  :root[data-look-tabs='underline'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true'] {
+  :root[data-look-tabs='underline'] :is(.tab, :where(body.app-mode) .page-tab):is([aria-selected='true'], [aria-pressed='true']) {
     background: transparent;
     color: var(--ink);
     font-weight: 600;
   }
-  :root[data-look-tabs='underline'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true']::after {
+  :root[data-look-tabs='underline'] :is(.tab, :where(body.app-mode) .page-tab):is([aria-selected='true'], [aria-pressed='true'])::after {
     content: '';
     position: absolute;
     left: 0;

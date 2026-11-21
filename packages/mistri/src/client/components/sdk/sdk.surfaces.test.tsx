@@ -219,7 +219,7 @@ describe('commands, inputs, lists and pages', () => {
     vi.doUnmock('./componentLoader.js');
   });
 
-  test('a breakdown is keyed as the server keys one', async () => {
+  test('a breakdown is keyed as the server keys one, with its first measure as value and its count beside it', async () => {
     const Counted = () => {
       const got = useBreakdown('move', { by: 'product_id, day moved_at', measure: 'max after' });
       return <p>{JSON.stringify(got.data ?? null)}</p>;
@@ -236,6 +236,8 @@ describe('commands, inputs, lists and pages', () => {
         }),
       },
     );
-    expect(await screen.findByText('[{"product_id":1,"day(moved_at)":"2026-09-01","max(after)":9}]')).toBeInTheDocument();
+    expect(
+      await screen.findByText('[{"product_id":1,"day(moved_at)":"2026-09-01","max(after)":9,"count":2,"value":9}]'),
+    ).toBeInTheDocument();
   });
 });

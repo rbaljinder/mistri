@@ -463,7 +463,7 @@ html[data-starting] .content.nav-holding.nav-holding-focusable > :not(.nav-held)
   white-space: nowrap; flex-shrink: 0;
 }
 .tab:hover { color: var(--ink); }
-.tab[aria-selected="true"] { color: var(--accent-ink); border-bottom-color: var(--accent); }
+.tab:is([aria-selected="true"], [aria-pressed="true"]) { color: var(--accent-ink); border-bottom-color: var(--accent); }
 
 /* Wider than it was: with the sidebar on the left, 14px of gutter on the
    right reads as none at all beside a panel edge. */

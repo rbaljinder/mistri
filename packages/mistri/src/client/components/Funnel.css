@@ -78,8 +78,12 @@ button.dash-funnel-drop:hover {
   font: var(--text-xs) var(--sans);
   color: var(--ink-muted);
 }
+/* A stage's bar is the kit's meter track and fill (pct-bar, the one Bars and Meter draw), dressed as the funnel's
+   own: thicker, square to the look's radius, and as wide as its column rather than a meter's fixed width. */
 .dash-funnel-track {
   display: block;
+  width: auto;
+  flex: initial;
   height: 14px;
   border-radius: min(4px, var(--radius));
   background: color-mix(in srgb, var(--chart-1, var(--accent)) 12%, var(--surface));

@@ -48,8 +48,14 @@ interface UiRowsPage {
 export interface UiBreakdownOptions extends UiAsking {
   by: string;
   measure?: string;
+  /** A condition written as an object, or a list of them joined by `and`, as `useRows` takes one (a counted
+      `<Choose>`'s Scope and its own `where`): written as query text for the server's breakdown, which reads text alone. */
+  where?: unknown;
   query?: string;
   limit?: number;
+  /** A dated count or sum's empty periods at zero: across the window its query names, across what was answered, or
+      not at all. Absent, the window where the query names one, else what was answered. */
+  fill?: 'window' | 'observed' | false;
 }
 export type OpenMode = 'page' | 'drawer' | 'modal';
 export interface UiOpenViewOptions {
@@ -254,9 +260,10 @@ export interface UiViewer {
   roles: readonly string[];
 }
 
-/** What `useHref` asks a host to address: the sign-in, a list or dashboard by its key, a record under a list view, a page by its path. */
+/** What `useHref` asks a host to address: the sign-in, the App's root, a list or dashboard by its key, a record under a list view, a page by its path. */
 export type UiAddress =
   | { kind: 'signIn' }
+  | { kind: 'home' }
   | { kind: 'view'; view: string; params?: Readonly<Record<string, string>> }
   | { kind: 'record'; view: string; key: Readonly<Record<string, unknown>>; tab?: string }
   | { kind: 'page'; path: string; params?: Readonly<Record<string, string>> };

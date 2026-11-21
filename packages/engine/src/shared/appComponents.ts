@@ -571,7 +571,7 @@ export function parsePage(raw: Record<string, unknown>, at: string): PageDecl {
     params.includes('period')
   ) {
     throw new Error(
-      `[page-params] ${at} has "params" that are not up to ${MAX_PAGE_PARAMS} lowercase words, each 'id', 'text', 'date', 'date-range' or a list of its values, like params: { list: 'id' }; "period" is a dashboard's.`,
+      `[page-params] ${at} has "params" that are not up to ${MAX_PAGE_PARAMS} lowercase words, each 'id', 'text', 'date', 'date-range' or a list of its values, like params: { list: 'id' }; "period" is a dashboard's address word, so a page's own window is named "window": params: { window: ['last-30-days', 'last-90-days'] }, read by a windowed <Metric window="window" over="close_date" previous spark />.`,
     );
   }
   if (raw.loader !== undefined && (typeof raw.loader !== 'string' || !LOADER.test(raw.loader))) {

@@ -40,7 +40,8 @@ import { writtenAt, type FixedThemeProblem } from '../../shared/themeFix.js';
 import { themePlace, themeSummary, writeThemeFix } from './themeSource.js';
 import { loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { mountClashes } from '../../shared/appAddress.js';
-import { segmentsTakenFrom, settingsMount, type AddressMount } from '@mistriwork/engine/shared/mount.js';
+import { redirectProblems } from '../../shared/appRedirects.js';
+import { appHome, segmentsTakenFrom, settingsMount, type AddressMount } from '@mistriwork/engine/shared/mount.js';
 import { isTenantApp } from '../../shared/appModel.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { getCommandEvents } from '../commands/businessCommands.js';
@@ -1816,8 +1817,19 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           }
           if (!mount) steps.push({ name: 'routes', status: 'failed', detail: why, lines: [], problems: [problem('routes', 'mount', why)] });
           else {
-            const table = checkedRoutes(loaded, schema, mount);
-            const clashes = mountClashes(appRoutes(loaded, schema), segmentsTakenFrom(mount, loaded.app.id));
+            const moved = loaded.app.ui?.redirects;
+            const table = [
+              ...checkedRoutes(loaded, schema, mount),
+              /* A moved address is one the App answers to too: said with where it goes (ui.redirects). */
+              ...Object.entries(moved ?? {}).map(([source, target]) => ({
+                path: `${appHome(mount, loaded!.app.id).replace(/\/$/, '')}${source}`,
+                what: `moved to ${target} (308, query kept)`,
+              })),
+            ];
+            const clashes = [
+              ...mountClashes(appRoutes(loaded, schema), segmentsTakenFrom(mount, loaded.app.id)),
+              ...redirectProblems(moved, appRoutes(loaded, schema)),
+            ];
             const width = Math.max(...table.map((row) => row.path.length));
             routeTableSaid = table;
             steps.push(

@@ -28,6 +28,7 @@ import { parseFooter } from './appLanding.js';
 import { parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 import { unknownKey } from '@mistriwork/engine/shared/suggest.js';
 import { zoneKnown } from './appZone.js';
+import { parseRedirects } from './appRedirects.js';
 import { parseWhen } from './appWhen.js';
 
 /** Who the header's search is offered to; false hides it from everyone. */
@@ -55,6 +56,7 @@ export const UI_KEYS = [
   'pwa',
   'headless',
   'microphone',
+  'redirects',
 ] as const;
 export const SHELL_KEYS = [
   'menuSearch',
@@ -140,6 +142,7 @@ export function parseUi(raw: unknown, where: string): AppUi {
   if (raw.microphone !== undefined && typeof raw.microphone !== 'boolean') {
     throw new Error(`${where}: "ui.microphone" is not true or false.`);
   }
+  const redirects = raw.redirects === undefined ? undefined : parseRedirects(raw.redirects, where);
   const parsedShell = raw.shell === undefined ? undefined : parseShell(raw.shell, where);
   const editing = raw.editing === undefined ? undefined : parseEditing(raw.editing, where);
   const appSwitcher = raw.appSwitcher === undefined ? undefined : parseAppSwitcher(raw.appSwitcher, `${where}: ui.appSwitcher`);
@@ -229,6 +232,7 @@ export function parseUi(raw: unknown, where: string): AppUi {
     ...(raw.pwa === undefined ? {} : { pwa: raw.pwa as boolean }),
     ...(raw.headless === undefined ? {} : { headless: raw.headless as boolean }),
     ...(raw.microphone === undefined ? {} : { microphone: raw.microphone as boolean }),
+    ...(redirects === undefined ? {} : { redirects }),
     ...(locale?.tag === undefined ? {} : { locale: locale.tag }),
     ...(locale?.column === undefined ? {} : { localeColumn: locale.column }),
     ...(messages === undefined ? {} : { messages }),

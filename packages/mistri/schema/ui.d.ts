@@ -23,7 +23,7 @@
  * not the boundary.
  */
 import type * as ReactTypes from 'react';
-import type { AppIcon, PropValues, Register, SectionWidth } from './app.js';
+import type { AppIconName, PropValues, Register, SectionWidth } from './app.js';
 export type { SectionWidth };
 
 /** Pass the generated `Flags<typeof manifest>` alias. These are evaluated
@@ -323,6 +323,12 @@ export declare function Tone(props: Children & { tone: ToneName }): ReactTypes.R
 export declare function Meter(props: {
   value: number; max?: number; tone?: ToneName; label?: ReactTypes.ReactNode; ariaLabel?: string; valueLabel?: string; size?: 'fluid';
 }): ReactTypes.ReactElement;
+/** Groups as bars against the largest, in the order given: a label, the bar on Meter's track, the figure and a quiet note
+    ("4 deals"). Each row is a meter said whole ("Proposal: $120,000, 4 deals"); on a phone the label sits above its bar. */
+export declare function Bars(props: {
+  label?: string; items: ReadonlyArray<{ key: string; label: ReactTypes.ReactNode; value: number; note?: ReactTypes.ReactNode }>;
+  format?: 'number' | 'money' | 'percent'; say?: (value: number) => string; tone?: ToneName;
+}): ReactTypes.ReactElement;
 /** What a component says when it has nothing to draw. */
 export declare function Empty(props: { title: ReactTypes.ReactNode; description?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
 /* The platform's fields, drawn as the shell draws its own (their stylesheet is fetched with them): a label, a hint and a
@@ -397,7 +403,7 @@ export declare function Loaded<T>(props: {
   children: (data: NonNullable<T>) => ReactTypes.ReactNode;
 }): ReactTypes.ReactElement;
 /** One of the App's curated marks: the names a view's `icon` takes. Decoration unless it has a label. */
-export declare function Icon(props: { name: AppIcon; label?: string; size?: number | string }): ReactTypes.ReactElement;
+export declare function Icon(props: { name: AppIconName; label?: string; size?: number | string }): ReactTypes.ReactElement;
 /** A few exclusive choices as one row of words, the chosen one filled; arrows move the choice. A choice may carry a count.
     Past four choices, at a phone's width a native picker stands in the row's place; `className` is the App's own class. */
 export declare function Segmented<T extends string>(props: {
@@ -409,7 +415,8 @@ export declare function Segmented<T extends string>(props: {
     where both are given. With `href` the whole Stat is a link, followed in place for an address of this App. */
 export declare function Stat(props: {
   label: ReactTypes.ReactNode; value: ReactTypes.ReactNode; change?: { text: ReactTypes.ReactNode; tone?: ToneName };
-  delta?: { value: number | string; good?: 'up' | 'down' };
+  /** `against` says what the change is against, after it: "vs prior 90 days". */
+  delta?: { value: number | string; good?: 'up' | 'down'; against?: string };
   trend?: ReadonlyArray<number | { key: string; value: number }>; href?: string; say?: (value: unknown) => string;
 }): ReactTypes.ReactElement;
 /** The shape of a run of numbers in the look's chart ink, spanning its container. Four values or more draw; a screen reader gets the values. @preview */
@@ -440,6 +447,9 @@ export interface TableColumn<Row> {
   emphasis?: 'strong' | 'normal';
   /** A copy button beside the cell, a sibling of the row link and never inside it. */
   copy?: boolean;
+  /** A face before the value, for a column that names someone: a row field holding the picture's address (the name is
+      the cell's own value), or a function of the row. Initials stand in where there is no picture; the disc is decoration. */
+  avatar?: string | ((row: Row) => { name: string; src?: string });
 }
 /** Rows in the look's own table. Sorting is the caller's: a head is a button once `onSort` is given and the table says which way it stands.
     With `onRowClick` the first cell is the row's link and the whole row answers a pointer. `label` names the table for assistive technology. */
@@ -448,6 +458,19 @@ export declare function Table<Row extends Record<string, unknown>>(props: {
   rowKey?: (row: Row, index: number) => string | number;
   sort?: { key: string; direction: 'asc' | 'desc' }; onSort?: (key: string) => void;
   onRowClick?: (row: Row) => void; empty?: ReactTypes.ReactNode;
+}): ReactTypes.ReactElement;
+/** Someone, as a face and a name, with an optional second line (a role, an address) that wraps. Initials stand in where
+    there is no picture, and the face is decoration: the name is what is read. With `href` the name is a link. On a phone
+    the face is the small one. */
+export declare function Person(props: {
+  name: string; secondary?: ReactTypes.ReactNode; src?: string; href?: string; size?: 'sm' | 'md' | 'lg';
+}): ReactTypes.ReactElement;
+/** One of `Details`' fields: a column of the row, labeled and drawn as the App says, or a label and value of the page's own. */
+export type DetailsField = string | { label: ReactTypes.ReactNode; value: ReactTypes.ReactNode };
+/** A record's fields as a list of labels and values, dressed as a record page's: `<Details resource="ticket" row={row}
+    fields={['status', 'owner']} />`. A long value wraps; one column on a phone, two at a desk when `columns={2}`. */
+export declare function Details(props: {
+  resource: string; row: UiRow; fields: ReadonlyArray<DetailsField>; columns?: 1 | 2;
 }): ReactTypes.ReactElement;
 
 /* ---------- hooks ---------- */
@@ -489,8 +512,14 @@ export declare function useRecord(resource: string, key: Readonly<Record<string,
 export declare function useRecord(resource: string, key: Readonly<Record<string, unknown>> | undefined, show?: readonly string[], options?: { optional?: false }): UiQuery<UiRow | null>;
 /** A resource's rows grouped and measured: `useBreakdown('pay_stub', { by: 'status', measure: 'sum net' })`. Each row is keyed as the
     server names its columns: the groups by their paths (`status`, `day(moved_at)`), the measure as written (`count`, `sum(net)`). */
-export declare function useBreakdown(resource: string, options: { by: string; measure?: string; query?: string; limit?: number; optional: true }): UiQuery<UiRow[]> & UiRefusable;
-export declare function useBreakdown(resource: string, options: { by: string; measure?: string; query?: string; limit?: number; optional?: false }): UiQuery<UiRow[]>;
+export declare function useBreakdown<const B extends string>(resource: string, options: { by: B; measure?: string; query?: string; where?: Readonly<Record<string, unknown>>; limit?: number; optional: true }): UiQuery<UiBreakdownRow<B>[]> & UiRefusable;
+export declare function useBreakdown<const B extends string>(resource: string, options: { by: B; measure?: string; query?: string; where?: Readonly<Record<string, unknown>>; limit?: number; optional?: false }): UiQuery<UiBreakdownRow<B>[]>;
+/** A group's key as the server names its column: `day moved_at` is `day(moved_at)`. */
+type BreakdownKey<P extends string> = P extends `${infer F} ${infer C}` ? `${F}(${C})` : P;
+type BreakdownKeys<B extends string> = B extends `${infer Head},${infer Rest}` ? BreakdownKey<Trim<Head>> | BreakdownKeys<Rest> : BreakdownKey<Trim<B>>;
+type Trim<S extends string> = S extends ` ${infer T}` ? Trim<T> : S extends `${infer T} ` ? Trim<T> : S;
+/** One row of a breakdown: its groups by the keys `by` names, the first measure as `value` and the rows it stands for as `count`. */
+export type UiBreakdownRow<B extends string = string> = UiRow & { readonly [K in BreakdownKeys<B>]: unknown } & { readonly value: number; readonly count: number };
 /** Where a component may send the reader: a record, as a page, a peek or a dialog, or one of the App's views. */
 export declare function useNavigate(): {
   openRecord(resource: string, key: Readonly<Record<string, unknown>>, options?: { mode?: OpenMode; label?: string }): void;
@@ -521,6 +550,8 @@ export declare function useNotice(): (notice: { text: string; tone?: 'ok' | 'err
 export declare function useHref(): {
   /** The sign-in's address. `then` is an in-App path to go on to once signed in (`/leads/4`): carried as `?then=`, which the sign-in reads; an absolute or protocol-relative address is dropped, not carried. */
   signIn(options?: { then?: string }): string;
+  /** The App's root, where its home opens: under a base path or a mount it is that, not `/`. `<a href={useHref().home()}>`. */
+  home(): string;
   /** A list or dashboard by its view key: `view('leads', { tab: 'working', search: 'stone' })` is `/leads?tab=working&search=stone`. */
   view(view: string, params?: Readonly<Record<string, string>>): string;
   /** A record by its key under the view that shows its table: `record('leads', { id: 127 })` is `/leads/127`, and `{ tab: 'map' }` adds the tab's word. */
@@ -826,6 +857,7 @@ export declare function useFormat(): {
   number(value: number | string, options?: Intl.NumberFormatOptions): string;
   /** `money('1999', { minor: true })` is "$19.99"; a currency code alone is `money(5, 'EUR')`. */
   money(value: number | string, options?: string | MoneyFormat): string;
+  /** A percent in points, as a breakdown's share is: `percent(56)` is "56%", not "5,600%". */
   percent(value: number): string;
   date(value: string): string;
   /** A moment as the App's clock says it; with `timezone` (an IANA zone), the instant said there with the zone's name. `style: 'short'` is the fewest characters ("3/5/26, 2:30 PM"), for a cell or a card's line. */

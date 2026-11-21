@@ -103,6 +103,23 @@ describe('a command on one row', () => {
     expect(screen.getByRole('button', { name: 'Check in Morgan Lee' })).not.toBeDisabled();
   });
 
+  test('with `unavailable="hide"` a verb the row does not allow is not drawn at all', async () => {
+    const available = (key: Readonly<Record<string, unknown>>) => key.id !== 4;
+    const hiding = definePage({
+      label: 'Desk',
+      reads: ['booking'],
+      commands: ['checkIn'],
+      component: () => (
+        <List from="booking" where={{ class_session_id: 4, status: 'booked' }} show={['guest_name']} sort="guest_name">
+          {(row) => <CommandButton command="checkIn" row={row} unavailable="hide" />}
+        </List>
+      ),
+    });
+    renderPage(hiding, { data: BOOKINGS, viewer: SIGNED_IN, commands: { checkIn: { label: 'Check in', available } } });
+    await vi.waitFor(() => expect(screen.getByRole('button', { name: 'Check in Morgan Lee' })).not.toBeDisabled());
+    expect(screen.queryByRole('button', { name: 'Check in Kai Moss' })).toBeNull();
+  });
+
   test("announces its outcome in `done`'s words, and a refusal in the server's", async () => {
     const announced: { text: string; tone: 'ok' | 'error' }[] = [];
     const drawn = renderPage(desk, { data: BOOKINGS, viewer: SIGNED_IN, commands: { checkIn: { label: 'Check in' } }, announced });

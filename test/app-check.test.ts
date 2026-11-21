@@ -287,6 +287,13 @@ describe('tsc, said readably', () => {
     assert.match(lines[6], /hint: "lable" is not a key this place takes/);
   });
 
+  test('an import of the kit is sent to @mistriwork/mistri/page', () => {
+    const lines = readableTypeErrors(
+      "pages/board.page.tsx(2,10): error TS2305: Module '\"@mistriwork/kit\"' has no exported member 'Stat'.",
+    );
+    assert.match(lines[1], /hint: @mistriwork\/kit is mistri's own plumbing, not an App's: a page draws with @mistriwork\/mistri\/page/);
+  });
+
   /* A field report: a workspace package sharing a stylesheet (mistri.cssPrefix) lacked "type": "module", and the hint
      sent the reader to the App's package.json, which had it. */
   test("CommonJS is said of the package.json over the file tsc named, the App's or a workspace package's", () => {

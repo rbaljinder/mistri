@@ -5,6 +5,30 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.76
+
+Kit parts for designed pages, and the guards that keep a look able to dress them.
+
+- `useHref().home()` is the App's front door wherever it is mounted, and `ui.redirects` (`{ '/old/:id': '/new/:id' }`)
+  keeps a moved page's old address answering with a 308 that carries the query. `mistri check --routes` refuses a
+  target that is no route, a redirect of a redirect and a source that would hide a live route (`route-clash`).
+- `ActionButton` and `CommandButton` take `unavailable: 'hide'` to draw nothing, in place of a held button, where the
+  row's state does not offer the verb.
+- A page that draws the kit's `PageHeader` itself (`head: false`) keeps the pane's top space above it; a page whose first part is its own (a hero) still starts at the top of the pane.
+- A kit `Table` too wide for its room folds its last columns under the first cell, each value named for a screen
+  reader, before it scrolls; a table that still overflows with one column left scrolls as before.
+- A `Card` inside `page.Grid` shares the row and wraps at about 16rem, so a bento card no longer draws 42px wide.
+- A kit import error points at `@mistriwork/mistri/page`; the reserved `period` param message names `window` and the
+  windowed metric part; a stylesheet class outside the component's prefix prints the prefix it needs.
+- `fillBuckets` rows put the period's key before the zeroed measures, so `page.useBreakdown` types a filled row as a
+  number (it read `NaN`); `Bars` and `fillBuckets` are on the one `@mistriwork/mistri/page` import path.
+- `e2e/page-parts-themes.spec.ts` holds every kit part to every built-in look, light and dark, at a desk and a phone
+  (text contrast, field edges, token-only color, the status recipe, no sideways scroll), and a static check keeps color
+  literals out of the parts' stylesheets. A `crm-designed` fixture draws Compass's leads, a lead and its sales dashboard
+  on the parts in about 280 lines and no stylesheet.
+- The App's first-paint stylesheet target is 523,000 bytes raw (was 520,000) for the kit parts' rules; the brotli target and
+  the public surface's held.
+
 ## 1.0.0-rc.75
 
 Seams between the kit and a page of the App's own, from a field report.

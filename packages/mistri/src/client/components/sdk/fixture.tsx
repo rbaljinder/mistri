@@ -358,19 +358,29 @@ function grouping(part: string): { name: string; value: (row: UiRow) => unknown 
   return { name: first, value: (row) => row[first] };
 }
 
-function breakdown(data: Fixtures, resource: string, by: string, measure: string | undefined, limit: number | undefined): UiRow[] {
+function breakdown(
+  data: Fixtures,
+  resource: string,
+  by: string,
+  measure: string | undefined,
+  limit: number | undefined,
+  where?: unknown,
+): UiRow[] {
   const groups = by ? by.split(',').map(grouping) : [];
-  const [fn = 'count', column] = (measure ?? 'count').trim().split(/\s+/);
-  const name = fn === 'count' ? 'count' : `${fn}(${column})`;
-  const buckets = new Map<string, { keys: unknown[]; values: number[] }>();
-  for (const row of data.tables[resource] ?? []) {
+  /* Measures as the server takes them, comma-separated (`sum net, count`), each keyed as it keys one. */
+  const measures = (measure ?? 'count').split(',').map((each) => {
+    const [fn = 'count', column = ''] = each.trim().split(/\s+/);
+    return { fn, column, name: fn === 'count' ? 'count' : `${fn}(${column})` };
+  });
+  const buckets = new Map<string, { keys: unknown[]; rows: UiRow[] }>();
+  for (const row of (data.tables[resource] ?? []).filter((each) => matches(each, where))) {
     const keys = groups.map((group) => group.value(row));
     const text = JSON.stringify(keys);
-    const bucket = buckets.get(text) ?? { keys, values: [] };
-    bucket.values.push(fn === 'count' ? 1 : Number(row[column] ?? 0));
+    const bucket = buckets.get(text) ?? { keys, rows: [] };
+    bucket.rows.push(row);
     buckets.set(text, bucket);
   }
-  const measured = (values: number[]) =>
+  const measured = (fn: string, values: number[]) =>
     fn === 'count' || fn === 'sum'
       ? values.reduce((a, b) => a + b, 0)
       : fn === 'min'
@@ -378,9 +388,18 @@ function breakdown(data: Fixtures, resource: string, by: string, measure: string
         : fn === 'max'
           ? Math.max(...values)
           : values.reduce((a, b) => a + b, 0) / values.length;
-  return [...buckets.values()]
-    .slice(0, limit ?? 100_000)
-    .map(({ keys, values }) => ({ ...Object.fromEntries(groups.map((group, i) => [group.name, keys[i]])), [name]: measured(values) }));
+  return [...buckets.values()].slice(0, limit ?? 100_000).map(({ keys, rows }) => ({
+    ...Object.fromEntries(groups.map((group, i) => [group.name, keys[i]])),
+    ...Object.fromEntries(
+      measures.map(({ fn, column, name }) => [
+        name,
+        measured(
+          fn,
+          rows.map((row) => (fn === 'count' ? 1 : Number(row[column] ?? 0))),
+        ),
+      ]),
+    ),
+  }));
 }
 
 /* A row's name as the App's catalog titles it: the table's name column, else its key. Undefined without the table, and the
@@ -418,6 +437,7 @@ function fixtureHref(to: UiAddress): string {
     return text ? `?${text}` : '';
   };
   if (to.kind === 'signIn') return '/sign-in';
+  if (to.kind === 'home') return '/';
   if (to.kind === 'view') return `/${encodeURIComponent(to.view)}${query(to.params)}`;
   if (to.kind === 'page') return `/${encodeURIComponent(to.path)}${query(to.params)}`;
   const entries = Object.entries(to.key);
@@ -559,9 +579,9 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
       );
       return row && pick(row, show?.length ? [...new Set([...show, ...Object.keys(key)])] : show);
     },
-    breakdown: async (resource, { by, measure, limit }) => {
+    breakdown: async (resource, { by, measure, limit, where }) => {
       refuse(resource);
-      return breakdown(data, resource, by, measure, limit);
+      return breakdown(data, resource, by, measure, limit, where);
     },
     load: async (_page, _params, loader) =>
       (loader !== undefined && options.loaders && Object.hasOwn(options.loaders, loader) ? options.loaders[loader] : options.loaded) ??

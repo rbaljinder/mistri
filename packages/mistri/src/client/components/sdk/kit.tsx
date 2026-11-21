@@ -26,13 +26,17 @@ import {
   type ReactNode,
 } from 'react';
 import type { AppIconName } from '@mistriwork/engine/shared/appIcons.js';
+import type { DISPLAY_TONES } from '@mistriwork/engine/shared/model.js';
 import { Button as UiButton, ButtonLink } from '@mistriwork/ui/Button.js';
 import { Icon as PlatformIcon } from '@mistriwork/kit/client/components/Icon.js';
 import { Empty as PlatformEmpty, Problem } from '@mistriwork/kit/client/components/Notes.js';
 import { Dressed, Said } from '@mistriwork/kit/client/components/Dressed.js';
 import { authoredDisplay, dressFor, maskedText, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import { CopyValue } from '@mistriwork/kit/client/components/CopyValue.js';
+import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+import { PHONE_QUERY, useMediaQuery } from '@mistriwork/kit/client/components/useMediaQuery.js';
 import { useQuery } from '@tanstack/react-query';
+import { formatMoney, formatNumber, formatPercent } from '@mistriwork/kit/client/locale.js';
 import { useHostIfAny, useUiHost, type UiHost } from './context.js';
 /* Named apart: `say` is also Sparkline's prop below, a figure's speaker. */
 import { say as sayKit } from '../../copy/components/components/sdk/kit.js';
@@ -44,7 +48,13 @@ export { SplitListDetail } from '../SplitListDetail.js';
 type Gap = 'tight' | 'field' | 'section';
 const GAPS: Record<Gap, string> = { tight: 'kit-gap-tight', field: 'kit-gap-field', section: 'kit-gap-section' };
 
-const InCard = createContext(false);
+/* Inside a kit Card: whether that Card names its own title and at which level, so a page part drawn in it knows to
+   drop its own frame and, where the Card names none, to give its title as the Card's head (blocks.tsx). */
+type CardFrame = false | { titled: boolean; level: 2 | 3 | 4 };
+const InCard = createContext<CardFrame>(false);
+
+/** The kit Card a part is drawn in, if any: its title's presence and level. */
+export const useInCard = (): CardFrame => useContext(InCard);
 
 /** A slot that was given something: `0` is a count, and `null`, `false` and `undefined` are a slot left empty. */
 const given = (slot: ReactNode): boolean => slot !== undefined && slot !== null && slot !== false;
@@ -97,7 +107,7 @@ export function Card({
         <>{heading}</>
       )}
       {given(description) && <p className="kit-card-description">{description}</p>}
-      <InCard.Provider value={true}>{children}</InCard.Provider>
+      <InCard.Provider value={{ titled: title !== undefined, level }}>{children}</InCard.Provider>
     </div>
   );
 }
@@ -244,7 +254,8 @@ export function Heading({ level = 3, children, className }: { level?: 3 | 4; chi
   return <Tag className={['kit-heading', className].filter(Boolean).join(' ')}>{children}</Tag>;
 }
 
-export type ToneName = 'good' | 'warn' | 'bad' | 'info' | 'neutral';
+/* The display rule's tones, by the one list: a page that names a column's tone names it as the rule did. */
+export type ToneName = (typeof DISPLAY_TONES)[number];
 
 /** A meaning as the looks say one: a dot and its word. Earned, like a display rule's tone. */
 export function Tone({ tone, children }: { tone: ToneName; children?: ReactNode }) {
@@ -392,6 +403,60 @@ export function Meter({
       </span>
       {label !== undefined && <span className="num-value">{label}</span>}
     </span>
+  );
+}
+
+/** One row of `Bars`: its key, its label, its figure and a quiet note after it ("4 deals"). */
+interface BarItem {
+  key: string;
+  label: ReactNode;
+  value: number;
+  note?: ReactNode;
+}
+
+const BAR_FORMATS = {
+  number: (value: number) => formatNumber(value),
+  money: (value: number) => formatMoney(value),
+  percent: (value: number) => formatPercent(value),
+} as const;
+
+/**
+ * Groups as bars against the largest: a label, the bar on Meter's track and fill, the figure and a note. The rows are
+ * drawn in the order given (a breakdown hands them in its column's declared order). Each row is a meter a screen
+ * reader says whole, "Proposal: $120,000, 4 deals"; `say` (or `format`) says a figure. On a phone the label sits
+ * above its bar.
+ */
+export function Bars({
+  label,
+  items,
+  format = 'number',
+  say,
+  tone,
+}: {
+  label?: string;
+  items: ReadonlyArray<BarItem>;
+  format?: keyof typeof BAR_FORMATS;
+  say?: (value: number) => string;
+  tone?: ToneName;
+}) {
+  const figure = say ?? BAR_FORMATS[format];
+  const max = Math.max(0, ...items.map((item) => (Number.isFinite(item.value) ? item.value : 0)));
+  return (
+    <ul className="kit-bars" aria-label={label}>
+      {items.map((item) => {
+        const said = figure(item.value);
+        const named = typeof item.label === 'string' || typeof item.label === 'number' ? String(item.label) : item.key;
+        const note = typeof item.note === 'string' || typeof item.note === 'number' ? `, ${item.note}` : '';
+        return (
+          <li key={item.key} className="kit-bars-row">
+            <span className="kit-bars-label">{item.label}</span>
+            <Meter value={item.value} max={max} tone={tone} size="fluid" ariaLabel={named} valueLabel={`${named}: ${said}${note}`} />
+            <span className="kit-bars-figure">{said}</span>
+            <span className="kit-bars-note">{item.note}</span>
+          </li>
+        );
+      })}
+    </ul>
   );
 }
 
@@ -614,7 +679,7 @@ export function Stat({
   label: ReactNode;
   value: ReactNode;
   change?: { text: ReactNode; tone?: ToneName };
-  delta?: { value: number | string; good?: 'up' | 'down' };
+  delta?: { value: number | string; good?: 'up' | 'down'; against?: string };
   trend?: ReadonlyArray<number | { key: string; value: number }>;
   href?: string;
   say?: (value: unknown) => string;
@@ -631,12 +696,18 @@ export function Stat({
       <span className="kit-stat-row">
         <span className="kit-stat-figure">{value}</span>
         {points.length >= 4 && (
-          <span className="spark-host kit-stat-spark">
+          /* The trend is a picture of what the figure and its change already say in words. */
+          <span className="spark-host kit-stat-spark" aria-hidden="true">
             <ChartSparkline rows={points} say={say} />
           </span>
         )}
       </span>
-      {news && <span className={`kit-stat-change${news.tone ? ` kit-stat-${news.tone}` : ''}`}>{news.text}</span>}
+      {news && (
+        <span className={`kit-stat-change${news.tone ? ` kit-stat-${news.tone}` : ''}`}>
+          {news.text}
+          {!change && delta?.against && <span className="kit-stat-against"> {delta.against}</span>}
+        </span>
+      )}
     </>
   );
   const className = `${nested ? 'kit-stat kit-stat-plain' : 'kit-stat'}${href === undefined ? '' : ' kit-stat-link'}`;
@@ -823,28 +894,61 @@ export interface TableColumn<Row> {
   emphasis?: 'strong' | 'normal';
   /** A copy button beside the cell, a sibling of the row link (never inside it), copying the field as stored. */
   copy?: boolean;
+  /**
+   * A person's or a thing's disc before the lines: a row field's key holding the picture's address (the name is the
+   * cell's value), or a function of the row. Without a picture the disc says the name's initials.
+   */
+  avatar?: string | ((row: Row) => { name: string; src?: string });
 }
 
 /**
- * Whether a box scrolls sideways right now. Such a box is a Tab stop and has a name (WCAG 2.1.1; axe
- * scrollable-region-focusable): a keyboard reader cannot reach what is off the edge of a box they cannot focus. It is
- * so only while it scrolls — a table that fits adds no stop to the page — and only attributes change, so nothing moves.
+ * How many of a table's last columns fold into its first cell, and whether the box still scrolls sideways after
+ * that. A table never scrolls where it can fold (docs/design.md, Standing layout rules): the columns past the room's
+ * edge leave the head, last first, and are said as a quiet detail line under the first cell, as an App's list folds
+ * on a phone. The fold is decided before the paint (a layout effect re-renders until it fits), and redone from none
+ * when the box's width changes, so a wider room takes its columns back.
+ *
+ * A box that still scrolls once everything that can fold has (one column wider than a phone) is a Tab stop and has a
+ * name (WCAG 2.1.1; axe scrollable-region-focusable): a keyboard reader cannot reach what is off the edge of a box
+ * they cannot focus. It is so only while it scrolls, and only attributes change, so nothing moves.
  */
-function useScrolls() {
+function useTableFold(count: number) {
   const box = useRef<HTMLDivElement>(null);
+  const [folded, setFolded] = useState(0);
   const [scrolls, setScrolls] = useState(false);
-  useEffect(() => {
+  const [, setPass] = useState(0);
+  const width = useRef(-1);
+  // After every render, not on a list of inputs: the rows usually arrive after the first paint, and what they hold
+  // is what overflows. One read of two widths; it settles because a fold only grows while the box overflows.
+  useLayoutEffect(() => {
     const node = box.current;
     if (!node) return;
-    const measure = () => setScrolls(node.scrollWidth > node.clientWidth + 1);
-    measure();
-    if (typeof ResizeObserver === 'undefined') return;
-    const watch = new ResizeObserver(measure);
+    const over = node.scrollWidth > node.clientWidth + 1;
+    if (over && folded < count - 1) {
+      setFolded(folded + 1);
+      return;
+    }
+    setScrolls(over);
+  });
+  useEffect(() => {
+    const node = box.current;
+    if (!node || typeof ResizeObserver === 'undefined') return;
+    width.current = node.clientWidth;
+    // The room's width changing starts the fold again from none; the table's own size changing (a font arriving, a
+    // value drawn late) only measures again.
+    const watch = new ResizeObserver(() => {
+      if (node.clientWidth !== width.current) {
+        width.current = node.clientWidth;
+        setFolded(0);
+      }
+      setPass((at) => at + 1);
+    });
     watch.observe(node);
-    if (node.firstElementChild) watch.observe(node.firstElementChild);
+    const table = node.querySelector('table');
+    if (table) watch.observe(table);
     return () => watch.disconnect();
   }, []);
-  return { box, scrolls };
+  return { box, folded, scrolls };
 }
 
 /**
@@ -875,14 +979,22 @@ export function Table<Row extends Record<string, unknown>>({
   /** Said under the head when there are no rows. */
   empty?: ReactNode;
 }) {
-  const { box, scrolls } = useScrolls();
+  const { box, folded, scrolls } = useTableFold(columns.length);
   const host = useHostIfAny();
+  const shown = folded ? columns.slice(0, columns.length - folded) : columns;
+  const tucked = folded ? columns.slice(columns.length - folded) : [];
+  const cellOf = (column: TableColumn<Row>, row: Row) =>
+    column.render ? (
+      column.render(row)
+    ) : (
+      <Value value={row[column.key]} resource={column.resource} column={column.column} display={column.display} compact />
+    );
   return (
     <div ref={box} className="table-wrap kit-table" {...(scrolls ? { role: 'region', tabIndex: 0, 'aria-label': label } : {})}>
       <table aria-label={label}>
         <thead>
           <tr>
-            {columns.map((column) => {
+            {shown.map((column) => {
               const align = column.align ?? 'left';
               const sorted = sort?.key === column.key ? sort.direction : undefined;
               const sortable = Boolean(onSort) && column.sortable !== false;
@@ -912,12 +1024,8 @@ export function Table<Row extends Record<string, unknown>>({
               className={onRowClick ? 'clickable' : undefined}
               onClick={onRowClick && (() => onRowClick(row))}
             >
-              {columns.map((column, at) => {
-                const drawn = column.render ? (
-                  column.render(row)
-                ) : (
-                  <Value value={row[column.key]} resource={column.resource} column={column.column} display={column.display} compact />
-                );
+              {shown.map((column, at) => {
+                const drawn = cellOf(column, row);
                 const second =
                   typeof column.secondary === 'function'
                     ? column.secondary(row)
@@ -926,11 +1034,33 @@ export function Table<Row extends Record<string, unknown>>({
                       : row[column.secondary];
                 const strong = (column.emphasis ?? (at === 0 ? 'strong' : 'normal')) === 'strong';
                 /* One target: both lines sit inside the link, and the weight is the primary line's alone. */
-                const lines = (
+                const text = (
                   <>
                     <span className={`kit-cell-primary${strong ? ' kit-cell-primary-strong' : ''}`}>{drawn}</span>
                     {given(second as ReactNode) && second !== '' && <span className="kit-cell-secondary">{second as ReactNode}</span>}
+                    {at === 0 && tucked.length > 0 && (
+                      <span className="kit-cell-secondary kit-cell-folded">
+                        {tucked.map((other) => (
+                          <span key={other.key} className="kit-cell-fold">
+                            <span className="visually-hidden">{other.label}: </span>
+                            {cellOf(other, row)}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                   </>
+                );
+                const face = column.avatar === undefined ? undefined : faceOf(column.avatar, row, column.key);
+                /* The disc is inside the one target too, and hidden: the name beside it is what is read. */
+                const lines = face ? (
+                  <span className="kit-cell-identity">
+                    <span className="kit-cell-avatar" aria-hidden="true">
+                      <Avatar name={face.name} src={face.src} size="sm" />
+                    </span>
+                    <span className="kit-cell-lines">{text}</span>
+                  </span>
+                ) : (
+                  text
                 );
                 const stored = row[column.key];
                 const copyable = column.copy && stored !== null && stored !== undefined && stored !== '';
@@ -1134,4 +1264,111 @@ export function Button(props: ButtonProps | LinkProps) {
 function LinkedButton({ href, onClick, ...rest }: LinkProps) {
   const follow = useFollow(href, onClick);
   return <ButtonLink {...rest} href={href} onClick={follow} />;
+}
+
+/*
+ * The disc is the house control's (pageControls.ts), fetched with the page's controls the first time a row or a
+ * person draws one, so a page that draws no face pays nothing for it.
+ */
+const Avatar = onDemand(() => import('./pageControls.js'), 'Avatar', { quiet: true });
+
+const textOf = (value: unknown): string => (value === null || value === undefined ? '' : String(value));
+
+/** A row's face: a field holding the picture's address under the cell's own value as the name, or the column's function. */
+function faceOf<Row extends Record<string, unknown>>(
+  avatar: string | ((row: Row) => { name: string; src?: string }),
+  row: Row,
+  key: string,
+): { name: string; src?: string } {
+  if (typeof avatar === 'function') return avatar(row);
+  const src = textOf(row[avatar]);
+  return { name: textOf(row[key]), ...(src ? { src } : {}) };
+}
+
+/**
+ * A person as a line of the page: their disc, their name and one quieter line under it (a company, a role). The disc
+ * is decorative (`aria-hidden`) and says the initials until there is a picture; the name is the text a reader hears,
+ * and with `href` it is the link, followed in place as `Button` follows one. On a phone the second line wraps under the
+ * name and the disc is the small one, whatever size was asked.
+ */
+export function Person({
+  name,
+  secondary,
+  src,
+  href,
+  size = 'md',
+}: {
+  name: string;
+  secondary?: ReactNode;
+  src?: string;
+  href?: string;
+  size?: 'sm' | 'md' | 'lg';
+}) {
+  const phone = useMediaQuery(PHONE_QUERY);
+  const follow = useFollow(href);
+  const drawn = phone ? 'sm' : size;
+  return (
+    <span className="kit-person" data-size={drawn}>
+      <span className="kit-person-avatar" aria-hidden="true">
+        <Avatar name={name} src={src} size={drawn} />
+      </span>
+      <span className="kit-person-text">
+        {href === undefined ? (
+          <span className="kit-person-name">{name}</span>
+        ) : (
+          <a className="kit-person-name" href={href} onClick={follow}>
+            {name}
+          </a>
+        )}
+        {given(secondary) && secondary !== '' && <span className="kit-person-secondary">{secondary}</span>}
+      </span>
+    </span>
+  );
+}
+
+/** A field `Details` lists: a column of the resource by name, or a pair the page worked out itself. */
+export type DetailsField = string | { label: ReactNode; value: ReactNode };
+
+/**
+ * A record's facts as terms and values: one `<dl>`, each column's label from the App (`host.column`) and its value a
+ * `Value`, dressed as the column is. It is the record page's own field grid (PageFields.tsx draws its read-only fields
+ * under the same `kit-details`), so a look that dresses one dresses both; what it adds is that a long value wraps where
+ * the record page clips it to a line, since a page's facts beside a card have no row of their own to open. `columns`
+ * fixes the count at a desk; a phone has one.
+ */
+export function Details<Row extends Record<string, unknown>>({
+  resource,
+  row,
+  fields,
+  columns,
+}: {
+  resource: string;
+  row: Row;
+  fields: ReadonlyArray<DetailsField>;
+  columns?: 1 | 2;
+}) {
+  const host = useUiHost();
+  return (
+    <dl
+      className="page-field-grid kit-details kit-details-wrap"
+      data-columns={columns}
+      style={columns ? ({ '--page-field-columns': `repeat(${columns}, minmax(0, 1fr))` } as CSSProperties) : undefined}
+    >
+      {fields.map((field, at) =>
+        typeof field === 'string' ? (
+          <div key={field} className="page-field">
+            <dt>{host.column(resource, field)?.label ?? field}</dt>
+            <dd>
+              <Value value={row[field]} resource={resource} column={field} />
+            </dd>
+          </div>
+        ) : (
+          <div key={`at-${at}`} className="page-field">
+            <dt>{field.label}</dt>
+            <dd>{given(field.value) && field.value !== '' ? field.value : <span className="null">—</span>}</dd>
+          </div>
+        ),
+      )}
+    </dl>
+  );
 }

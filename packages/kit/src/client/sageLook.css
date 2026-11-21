@@ -280,7 +280,7 @@
   }
   /* What is chosen: a tint of the accent and the text's ink, never a fill in the accent. A record's tabs are the
      list's: one soft pill for the group that is open, on a page and on a list alike. */
-  :root[data-look-tabs='tint'] :is(.tab, body.app-mode .page-tab)[aria-selected='true'] {
+  :root[data-look-tabs='tint'] :is(.tab, body.app-mode .page-tab):is([aria-selected='true'], [aria-pressed='true']) {
     background: var(--chosen);
     color: var(--ink);
   }

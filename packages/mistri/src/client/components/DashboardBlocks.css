@@ -109,6 +109,26 @@ a.dash-step-card { text-decoration: none; }
 .page-section.dash-custom:has(> .custom-section:empty) { display: none; }
 }
 
+/* A block inside a kit Card (sdk/blocks.tsx SectionBlock): the Card is its frame, in every look and theme, so the
+   section's own box, inset and title go — a chart in a card read as a framed panel inside a framed panel, its title
+   indented twice. In structure because a look or a theme's section part dresses `.page-section` later than
+   components; the title, where the Card names none, is drawn as the Card's own head. */
+@layer structure {
+  /* A divided-stat look frames the metric strip (.home-cards) rather than its tile, so the strip's box goes too. */
+  .kit-card-part > .page-section,
+  .kit-card-part > .page-section > .home-cards,
+  .kit-card-part > .page-section > .home-cards > .home-card {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+  }
+  .kit-card-part > .page-section > .page-section-title,
+  .kit-card-part > .page-section > :is(.dash-section-head, .dash-list-head) > .page-section-title { display: none; }
+}
+
 /* Moved here from features.css: these dress only what this component draws, so they travel with
    it and not in every first paint (scripts/bundle-budget.mjs). */
 @layer base {

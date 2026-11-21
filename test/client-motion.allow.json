@@ -38,7 +38,6 @@
   "packages/mistri/src/client/components/ImportDialog.css": 2,
   "packages/mistri/src/client/components/Inbox.css": 2,
   "packages/mistri/src/client/components/NewMenu.css": 2,
-  "packages/mistri/src/client/components/sdk/kit.css": 2,
   "packages/mistri/src/client/components/SuiteNavigation.css": 1,
   "packages/mistri/src/client/components/TreeList.css": 3,
   "packages/mistri/src/client/components/TriageBoard.css": 7,

@@ -179,6 +179,24 @@ test('a stylesheet several components draw owns classes after its own name, wher
   assert.match(warnings.find((w) => /c-ticket-lists/.test(w.text))!.text, /or "c-ticket-list-…" after the stylesheet/);
 });
 
+test("the class refusal prints every prefix the stylesheet may use: each component sharing it, its own name, and a package's", async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'tw-said-'));
+  made.push(dir);
+  await mkdir(join(dir, 'packages', 'ui'), { recursive: true });
+  await writeFile(join(dir, 'packages', 'ui', 'package.json'), JSON.stringify({ mistri: { cssPrefix: 'acme' } }));
+  await writeFile(join(dir, 'packages', 'ui', 'ui.css'), '.acme-ok { gap: 0; }\n.stray-in-package { gap: 0; }');
+  await writeFile(join(dir, 'designed.css'), '.stray { gap: 0; }');
+  const { warnings } = await lintComponents(dir, {
+    entries: {
+      'page-leads': { sources: ['designed.css', 'packages/ui/ui.css'] },
+      'page-lead': { sources: ['designed.css'] },
+    },
+  } as never);
+  const said = warnings.find((w) => /"\.stray"/.test(w.text))!.text;
+  assert.match(said, /name its classes "c-page-leads-…" or "c-page-lead-…", or "c-designed-…" after the stylesheet, so no look/);
+  assert.match(warnings.find((w) => /"\.stray-in-package"/.test(w.text))!.text, /or "acme-…" where the package's cssPrefix says so/);
+});
+
 test("the looks' own shadow tokens and a blur-free inset stripe are not a shadow warning; any other shadow still is", async () => {
   const fine = await lint({
     'tile.css':

@@ -124,6 +124,7 @@ reduced-motion guard, a shadow, a class outside `c-<id>-`, a popup placed by
 | `Select` | Choose from a big or open-ended set | Many options, or a list that grows |
 
 A record page with sibling panels uses `Tabs` (or `listTabs`), never `Segmented`.
+A page's `<Choose count>` is the exception to Segmented's five: it draws up to eight counted options as the list's tab row at a desk, because a count per option is what the list's own tabs are, the listbox past that, and the phone's own picker.
 
 ## Tokens (packages/ui/src/tokens.css — the only source)
 

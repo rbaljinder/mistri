@@ -33,12 +33,17 @@ import type { Section } from '@mistriwork/kit/client/components/dashboardModel.j
 import type { PageSections } from '../RecordPageBody.js';
 import type { PageEntry } from '@mistriwork/kit/client/components/pageModel.js';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
+import { windowed } from '@mistriwork/engine/shared/dashboardAsks.js';
+import { windowPhraseOf } from '@mistriwork/engine/shared/autoBucket.js';
+import { ALL_TIME, readPeriod } from '@mistriwork/engine/shared/addressParams.js';
+import { metricWindow } from '@mistriwork/kit/client/components/dashboardModel.js';
+import { withoutWindowPhrase } from '../../../shared/dashWindow.js';
 import { compileWhere } from '@mistriwork/engine/shared/pageWhere.js';
-import { scopedCondition, UiPageContext, UiScopeContext, type UiPageFrame, type UiScope } from './context.js';
+import { scopedCondition, UiPageContext, UiParamKindsContext, UiScopeContext, type UiPageFrame, type UiScope } from './context.js';
 import { say } from '../../copy/components/components/sdk/blocks.js';
 import { BLOCK_RENAMED, renamedMessages } from '../../../shared/renamedWords.js';
 import { useRows } from './hooks.js';
-import { Value } from './kit.js';
+import { useInCard, Value } from './kit.js';
 
 const DashboardBlock = onDemand(() => import('../Dashboard.js'), 'DashboardBlock');
 const RecordPageBody = onDemand(() => import('../RecordPageBody.js'), 'RecordPageBody');
@@ -138,15 +143,54 @@ function block<R extends object>(
   };
 }
 
-/* A dashboard's section, drawn where the page places it. Memoized on its words, so a page's redraw is not a refetch. */
-function SectionBlock({ section }: { section: Section }) {
-  const words = JSON.stringify(section);
-  const held = useMemo(() => section, [words]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <DashboardBlock section={held} />;
+/* A true-or-false word: written bare (`previous`) it is true. */
+function flag(block: string, props: Props, name: string): void {
+  const value = props[name];
+  if (value !== undefined && typeof value !== 'boolean')
+    throw new Error(say('blockValue', { block, name, value: String(value), allowed: 'true, false' }));
 }
 
-const METRIC = ['title', 'from', 'where', 'query', 'measure', 'compare', 'better', 'format', 'unit', 'target', 'width'];
-function metricSection(props: Props, page: UiPageFrame | null, scope: UiScope | null): { section: Section } {
+/* A dashboard's section, drawn where the page places it. Memoized on its words, so a page's redraw is not a refetch.
+   Inside a kit Card the Card is the frame: the section's own box and inset are dropped (DashboardBlocks.css), and its
+   title is the Card's head where the Card names none, so a chart in a card reads as one surface with one title. A
+   metric keeps its own label, which is part of the name its card is opened by. */
+function SectionBlock({ section }: { section: Section }) {
+  const frame = useInCard();
+  const words = JSON.stringify(section);
+  const held = useMemo(() => section, [words]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!frame) return <DashboardBlock section={held} />;
+  const Head = `h${frame.level}` as 'h2' | 'h3' | 'h4';
+  return (
+    <div className={`kit-card-part kit-card-part-${section.kind}`}>
+      {!frame.titled && section.kind !== 'metric' && section.title && <Head className="kit-card-title">{section.title}</Head>}
+      <DashboardBlock section={held} />
+    </div>
+  );
+}
+
+const METRIC = [
+  'title',
+  'from',
+  'where',
+  'query',
+  'measure',
+  'compare',
+  'better',
+  'format',
+  'unit',
+  'target',
+  'width',
+  'over',
+  'window',
+  'previous',
+  'spark',
+];
+interface MetricAsk {
+  section: Section;
+  /** The page param the reader's window is kept in. */
+  window?: string;
+}
+function metricSection(props: Props, page: UiPageFrame | null, scope: UiScope | null): MetricAsk {
   takes('Metric', props, METRIC);
   const table = resourceOf('Metric', fromOf(props, scope), page);
   const query = conditionOf('Metric', props, scope, table);
@@ -154,6 +198,17 @@ function metricSection(props: Props, page: UiPageFrame | null, scope: UiScope | 
   oneOf('Metric', props, 'better', BETTER);
   oneOf('Metric', props, 'format', FIGURE_FORMATS);
   oneOf('Metric', props, 'width', WIDTHS);
+  flag('Metric', props, 'previous');
+  flag('Metric', props, 'spark');
+  /* A window is kept in one of the page's params, so a link carries it and a control bound to the param moves it;
+     a name the page does not declare would be a window nobody can pick. */
+  const window = props.window;
+  if (window !== undefined && (typeof window !== 'string' || !page?.params.includes(window))) {
+    const params = page?.params.length ? page.params.map((name) => `"${name}"`).join(', ') : 'none';
+    throw new Error(say('blockWindowParam', { param: String(window), params }));
+  }
+  const over = props.over === undefined ? undefined : needs('Metric', props, 'over');
+  if ((window !== undefined || props.previous) && over === undefined) throw new Error(say('blockNeeds', { block: 'Metric', name: 'over' }));
   /* A goal read from data is the metric's three words again; its table, where it names one, is one the page reads. */
   const goal = props.target;
   let target: Section['target'];
@@ -166,16 +221,47 @@ function metricSection(props: Props, page: UiPageFrame | null, scope: UiScope | 
       measure: asked.measure ?? (props.measure as string | undefined) ?? 'count',
     };
   } else if (goal !== undefined) target = goal as number;
+  /* As the server serves a dashboard's metric (shared/app.ts): its own window lifted out into `windowBase`, so the
+     reader's stands in its place rather than intersecting it, and `previous` the compare re-derived against it. */
+  const follows = window !== undefined || props.previous === true;
   return {
     section: {
       kind: 'metric',
       table: table.id,
       ...(query === undefined ? {} : { query }),
-      ...carried(props, ['measure', 'compare', 'better', 'format', 'unit', 'width']),
+      ...carried(props, ['measure', 'compare', 'better', 'format', 'unit', 'width', 'over', 'spark']),
+      ...(follows && over ? { windowBase: withoutWindowPhrase(query, over) ?? query ?? '' } : {}),
+      ...(props.previous === true ? { comparePeriod: true } : {}),
       title,
       ...(target === undefined ? {} : { target }),
     } as Section,
+    ...(typeof window === 'string' ? { window } : {}),
   };
+}
+
+/* A param's word as the query's phrase: `last-30-days` is `last 30 days`; all time is no window at all. */
+const phraseOf = (word: string | undefined): string | null =>
+  !word || readPeriod(word) === ALL_TIME ? null : word.replace(/-/g, ' ').trim() || null;
+
+/* A metric over the page's window: the param's word now, else the first the param offers, else the metric's own
+   window. Drawn by the dashboard's own card, windowed as the dashboard windows it (one path, one batched read). */
+function MetricBlock({ section, window }: MetricAsk) {
+  const page = useContext(UiPageContext);
+  const kinds = useContext(UiParamKindsContext);
+  const kind = window ? kinds[window] : undefined;
+  const offered = Array.isArray(kind) ? kind.map(String) : undefined;
+  const asked = window ? page?.get(window) : undefined;
+  /* A list param holds one of its words; one it does not offer (an old link) reads as its first, as a picker would. */
+  const word = offered && (asked === undefined || !offered.includes(asked)) ? offered[0] : asked;
+  const picked = window ? phraseOf(word) : null;
+  const allTime = window !== undefined && picked === null;
+  const at = picked ?? (section.comparePeriod && !window ? windowPhraseOf(section.query, section.over) : null);
+  const drawn = useMemo(() => {
+    const said = metricWindow(section.title ?? '', section, picked);
+    const moved = allTime ? { ...section, query: section.windowBase || undefined, compare: undefined } : windowed(section, at);
+    return { ...moved, title: said.title, ...(said.note && !window ? { windowNote: said.note } : {}) } as Section;
+  }, [section, picked, at, allTime, window]);
+  return <SectionBlock section={drawn} />;
 }
 
 /* A chart's and a breakdown's figures are said as a metric's are: `format` and `unit` reach the dashboard's own sayer
@@ -197,7 +283,9 @@ const CHART = [
   'format',
   'unit',
   'width',
+  'fill',
 ];
+const FILLS = ['window', 'observed', false] as const;
 function chartSection(props: Props, page: UiPageFrame | null, scope: UiScope | null): { section: Section } {
   takes('Chart', props, CHART);
   const table = resourceOf('Chart', fromOf(props, scope), page);
@@ -208,19 +296,28 @@ function chartSection(props: Props, page: UiPageFrame | null, scope: UiScope | n
   oneOf('Chart', props, 'curve', CURVES);
   oneOf('Chart', props, 'format', FIGURE_FORMATS);
   oneOf('Chart', props, 'width', WIDTHS);
+  if (props.fill !== undefined && !(FILLS as readonly unknown[]).includes(props.fill))
+    throw new Error(
+      say('blockValue', {
+        block: 'Chart',
+        name: 'fill',
+        value: String(props.fill),
+        allowed: FILLS.map((f) => JSON.stringify(f)).join(', '),
+      }),
+    );
   return {
     section: {
       kind: 'chart',
       table: table.id,
       shape: 'line',
       ...(query === undefined ? {} : { query }),
-      ...carried(props, ['by', 'measure', 'shape', 'x', 'curve', 'total', 'target', 'limit', 'height', 'format', 'unit', 'width']),
+      ...carried(props, ['by', 'measure', 'shape', 'x', 'curve', 'total', 'target', 'limit', 'height', 'format', 'unit', 'width', 'fill']),
       title,
     } as Section,
   };
 }
 
-const BREAKDOWN = ['title', 'from', 'by', 'where', 'query', 'measure', 'limit', 'format', 'unit', 'width'];
+const BREAKDOWN = ['title', 'from', 'by', 'where', 'query', 'measure', 'limit', 'format', 'unit', 'width', 'shape', 'also'];
 function breakdownSection(props: Props, page: UiPageFrame | null, scope: UiScope | null): { section: Section } {
   takes('Breakdown', props, BREAKDOWN);
   const table = resourceOf('Breakdown', fromOf(props, scope), page);
@@ -229,12 +326,18 @@ function breakdownSection(props: Props, page: UiPageFrame | null, scope: UiScope
   needs('Breakdown', props, 'by');
   oneOf('Breakdown', props, 'format', FIGURE_FORMATS);
   oneOf('Breakdown', props, 'width', WIDTHS);
+  oneOf('Breakdown', props, 'shape', ['bars'] as const);
+  /* The second measure is said beside a bar; the default rows have no place for it, so it is not silently dropped. */
+  if (props.also !== undefined) {
+    needs('Breakdown', props, 'also');
+    if (props.shape !== 'bars') throw new Error(say('blockNeeds', { block: 'Breakdown', name: 'shape="bars"' }));
+  }
   return {
     section: {
       kind: 'breakdown',
       table: table.id,
       ...(query === undefined ? {} : { query }),
-      ...carried(props, ['by', 'measure', 'limit', 'format', 'unit', 'width']),
+      ...carried(props, ['by', 'measure', 'limit', 'format', 'unit', 'width', 'shape', 'also']),
       title,
     } as Section,
   };
@@ -544,7 +647,7 @@ function TabsBlock({ tabs, param, label, page }: TabsAsk) {
   );
 }
 
-export const Metric = block(metricSection, SectionBlock);
+export const Metric = block(metricSection, MetricBlock);
 export const Chart = block(chartSection, SectionBlock);
 export const Breakdown = block(breakdownSection, SectionBlock);
 export const Rows = block(rowsSection, SectionBlock);

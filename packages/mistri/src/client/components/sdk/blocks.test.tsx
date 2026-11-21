@@ -6,11 +6,13 @@ import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
 import type { ReactNode } from 'react';
+import type { AskedSection } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { UiPageContext, UiScopeContext, type UiPageFrame } from './context.js';
 
 const mocks = vi.hoisted(() => ({
   pageFor: vi.fn(async (table: string) => (table === 'note' ? null : `page-${table}`)),
   set: vi.fn(),
+  inCard: false as false | { titled: boolean; level: 2 | 3 | 4 },
 }));
 const column = (name: string, primaryKey = false) => ({ name, type: 'TEXT', nullable: !primaryKey, primaryKey });
 vi.mock('../../../../../kit/src/client/core.js', () => ({
@@ -70,7 +72,7 @@ vi.mock('./hooks.js', () => ({
     ],
   })),
 }));
-vi.mock('./kit.js', () => ({ Value: ({ value }: { value: unknown }) => <>{String(value)}</> }));
+vi.mock('./kit.js', () => ({ Value: ({ value }: { value: unknown }) => <>{String(value)}</>, useInCard: () => mocks.inCard }));
 vi.mock('../AssistantPanel.js', () => ({ AssistantRoom: handed('assistant') }));
 vi.mock('../../../../../kit/src/client/components/PageSections.js', () => ({
   TabStrip: ({
@@ -107,6 +109,7 @@ const { Assistant, Board, Breakdown, Calendar, Chart, Gallery, Gantt, Metric, Re
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  mocks.inCard = false;
 });
 
 const frame: UiPageFrame = {
@@ -382,4 +385,89 @@ test('a Split whose refresh fails keeps its rows and the record open beside them
   } finally {
     if (original) vi.mocked(useRows).mockImplementation(original);
   }
+});
+
+test("a windowed Metric is the dashboard's windowed metric: the page param's window stands where the author's did", async () => {
+  const { windowed } = await import('../../../../../engine/src/shared/dashboardAsks.js');
+  const { UiParamKindsContext } = await import('./context.js');
+  const windows = { ...frame, params: ['tab', 'pick', 'window'], get: (name: string) => (name === 'window' ? 'last-30-days' : undefined) };
+  render(
+    <UiPageContext.Provider value={windows}>
+      <UiParamKindsContext.Provider value={{ window: ['last-30-days', 'last-90-days', 'all-time'] }}>
+        <Metric
+          title="Won"
+          from="ticket"
+          query="status = won and starts_on = last 90 days"
+          over="starts_on"
+          window="window"
+          previous
+          spark
+        />
+      </UiParamKindsContext.Provider>
+    </UiPageContext.Provider>,
+  );
+  const { section } = await json('section');
+  // The ask a dashboard's metric is served (shared/app.ts): its own window lifted out, the compare re-derived.
+  const asked = windowed(
+    {
+      kind: 'metric',
+      table: 'ticket',
+      query: 'status = won and starts_on = last 90 days',
+      over: 'starts_on',
+      windowBase: 'status = won',
+      comparePeriod: true,
+    } as AskedSection,
+    'last 30 days',
+  );
+  expect(section).toMatchObject({
+    query: asked.query,
+    compare: asked.compare,
+    windowPhrase: 'last 30 days',
+    windowBase: 'status = won',
+    comparePeriod: true,
+    over: 'starts_on',
+    spark: true,
+  });
+  expect(asked.query).toBe('status = won and starts_on = last 30 days');
+  expect(asked.compare).toBe('status = won and starts_on = previous 30 days');
+});
+
+test("a Metric refuses a window kept in no page param, naming it; a breakdown's second measure asks for bars; a fill is one of three", async () => {
+  vi.spyOn(console, 'error').mockImplementation(() => {});
+  inPage(<Metric title="Won" from="ticket" over="starts_on" window="period2" />);
+  expect(
+    await screen.findByText(/<Metric> takes its window from "period2", which is not one of the page's params. It has "tab", "pick"./),
+  ).toBeTruthy();
+  cleanup();
+  inPage(<Metric title="Won" from="ticket" previous />);
+  expect(await screen.findByText(/<Metric> needs "over"./)).toBeTruthy();
+  cleanup();
+  inPage(<Breakdown title="By stage" from="ticket" by="name" also="count" />);
+  expect(await screen.findByText(/<Breakdown> needs "shape="bars""./)).toBeTruthy();
+  cleanup();
+  inPage(<Chart title="Opened" from="ticket" by="month starts_on" fill={'all' as never} />);
+  expect(await screen.findByText(/<Chart> has a "fill" of "all"/)).toBeTruthy();
+  cleanup();
+  inPage(<Breakdown title="By stage" from="ticket" by="name" measure="sum id" shape="bars" also="count" />);
+  expect((await json('section')).section).toMatchObject({ shape: 'bars', also: 'count', measure: 'sum id' });
+  cleanup();
+  inPage(<Chart title="Opened" from="ticket" by="month starts_on" fill={false} />);
+  expect((await json('section')).section).toMatchObject({ kind: 'chart', fill: false });
+});
+
+test("inside a Card with no title of its own a chart's title is the Card's head; a metric keeps its label", async () => {
+  mocks.inCard = { titled: false, level: 3 };
+  const { container } = inPage(<Chart title="Opened" from="ticket" by="month starts_on" />);
+  await json('section');
+  expect(container.querySelector('.kit-card-part-chart > h3.kit-card-title')?.textContent).toBe('Opened');
+  cleanup();
+  const metric = inPage(<Metric title="Open" from="ticket" />);
+  await json('section');
+  expect(metric.container.querySelector('.kit-card-title')).toBeNull();
+  expect(metric.container.querySelector('.kit-card-part-metric')).toBeTruthy();
+  cleanup();
+  mocks.inCard = { titled: true, level: 3 };
+  const titled = inPage(<Breakdown title="By status" from="ticket" by="name" />);
+  await json('section');
+  expect(titled.container.querySelector('.kit-card-title')).toBeNull();
 });

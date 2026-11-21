@@ -234,10 +234,12 @@ const require = createRequire(join(ROOT, 'package.json'));
    of a table's methods per command handle rather than one for every handle. Ignition measures 68,627 / 250,325 /
    202,861 (2.1%, 1.6%, 1.5% past). Typing the subquery's own `where` loosely took back 72 types and 328
    instantiations, so the cost is the per-handle reads, not the subquery; taking it back means passing the reads as a
-   name lookup the methods do not carry. Ignition's three rise to about 1.5% above; the rest hold. */
+   name lookup the methods do not carry. Ignition's three rise to about 1.5% above; the rest hold.
+   rc.76: an App declaration takes `redirects` (old address → new), one member read once; nothing per table.
+   Compass measures 104,602 symbols (2 past); its symbols rise to about 1.5% above, the rest hold. */
 export const BUDGET = {
   synthetic: { types: 184_400, instantiations: 991_600, symbols: 488_400 },
-  compass: { types: 32_500, instantiations: 149_000, symbols: 104_600 },
+  compass: { types: 32_500, instantiations: 149_000, symbols: 106_200 },
   ignition: { types: 69_700, instantiations: 254_100, symbols: 205_900 },
 };
 

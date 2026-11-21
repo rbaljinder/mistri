@@ -54,6 +54,7 @@ import type {
   LoaderData,
   LoaderPageProps,
   PageProps,
+  UiBreakdownRow,
   UiQuery,
   UiRefusable,
   UiRow,
@@ -424,9 +425,10 @@ export interface PageDefinition<
   useRecordKey<T extends R>(resource: T): RecordKey<T>;
   /** One of the page's reads grouped and measured: `page.useBreakdown('pick_list', { by: 'status' })`. `by` is what a
       chart's is, held to the same check: a column or label path, a date in a period (`'day created_at'`), or
-      several of those with commas (`'month closed_at, status'`). */
-  useBreakdown<T extends R, const B extends string>(resource: T, options: { by: GroupBy<T, B>; measure?: string; query?: string; limit?: number; optional: true }): UiQuery<UiRow[]> & UiRefusable;
-  useBreakdown<T extends R, const B extends string>(resource: T, options: { by: GroupBy<T, B>; measure?: string; query?: string; limit?: number; optional?: false }): UiQuery<UiRow[]>;
+      several of those with commas (`'month closed_at, status'`). Each row carries its groups by those keys (`day(created_at)`),
+      the first measure as `value` and the rows it stands for as `count`. */
+  useBreakdown<T extends R, const B extends string>(resource: T, options: { by: GroupBy<T, B>; measure?: string; query?: string; where?: Where<T>; limit?: number; fill?: BreakdownFill; optional: true }): UiQuery<UiBreakdownRow<B>[]> & UiRefusable;
+  useBreakdown<T extends R, const B extends string>(resource: T, options: { by: GroupBy<T, B>; measure?: string; query?: string; where?: Where<T>; limit?: number; fill?: BreakdownFill; optional?: false }): UiQuery<UiBreakdownRow<B>[]>;
   /** Where one of the page's file resources serves a row, for an `<img>`. */
   useFile<T extends R>(resource: T): (key: Readonly<Record<string, unknown>>, options?: { thumbnail?: boolean }) => string | undefined;
   /** One of the page's commands: `page.useCommand('pickList')`, its input typed by the command's declared inputs. */
@@ -447,11 +449,13 @@ export interface PageDefinition<
     ParamValue<N extends keyof K ? K[N] : 'text', TextKeyed<N, R>> | undefined,
     (value: ParamInput<N extends keyof K ? K[N] : 'text', TextKeyed<N, R>> | undefined, options?: { push?: boolean }) => void,
   ];
-  /** `Choose` held to this page: `param` is one of its params (one of a few words, when no `from` is named), `from` one of its
-      reads, `value`, `label` and `sort` columns of that read. A type error otherwise. */
+  /** `Choose` held to this page: `param` is one of its params (one of a few words, when no `from` is named, or any param a
+      `count` finds the values of), `from` and `count`'s `of` among its reads, `value`, `label`, `sort` and `by` columns of
+      those reads. A type error otherwise. */
   Choose: {
-    <T extends R>(props: ChooseProps<ParamsOfKind<P, K, 'id' | 'text' | readonly string[]>> & ChooseRows<T>): ReactTypes.ReactElement;
-    (props: ChooseProps<ParamsOfKind<P, K, readonly string[]>> & { from?: undefined }): ReactTypes.ReactElement;
+    <T extends R>(props: ChooseProps<ParamsOfKind<P, K, 'id' | 'text' | readonly string[]>, R> & ChooseRows<T>): ReactTypes.ReactElement;
+    (props: ChooseProps<ParamsOfKind<P, K, readonly string[]>, R> & { from?: undefined }): ReactTypes.ReactElement;
+    (props: ChooseProps<ParamsOfKind<P, K, 'id' | 'text'>, R> & { from?: undefined; count: true | ChooseCount<R> }): ReactTypes.ReactElement;
   };
   /** `Search` held to this page: `param` is one of its text params. */
   Search(props: SearchProps<ParamsOfKind<P, K, 'text'>>): ReactTypes.ReactElement;
@@ -468,14 +472,26 @@ type ParamsOfKind<P extends string, K, Kind> = { [N in P]: N extends keyof K ? (
 type SortOf<T extends string> = ColumnPath<T> | `${ColumnPath<T>} asc` | `${ColumnPath<T>} desc`;
 
 /** What every `Choose` takes. */
-export interface ChooseProps<P extends string = string> {
+export interface ChooseProps<P extends string = string, R extends string = ResourceName> {
   /** One of the page's `params`: the address is the control's state, so Back and a pasted link restore it. */
   param: P;
   /** Names the control for assistive technology; the param's name when absent. */
   name?: string;
   /** Present, a first choice with this word that clears the param (a param is optional; the control says so only when asked). */
   all?: string;
+  /**
+   * Each choice says how many rows it holds, and the control is the list's tab row (up to eight choices at a desk; the
+   * listbox past that, and the phone's own picker, with the counts in the options' words). `true` counts the param's own
+   * column on the page's read (a `<Scope from>`'s, else the one resource the page reads), under the Scope's conditions
+   * but its own; `{ of, by, where }` counts another resource by one of its columns. The options' words are the counted
+   * column's display labels; a param with no words of its own offers the values the count finds.
+   */
+  count?: true | ChooseCount<R>;
 }
+/** What a counted `Choose` counts: the rows of `of`, grouped by its column `by`, under `where`. */
+export type ChooseCount<R extends string = ResourceName> = {
+  [T in R]: { of: T; by: ColumnPath<T>; where?: Where<T> };
+}[R];
 /** A `Choose` whose options are the rows of a read of the page: the value is `value`'s column (`id`), what an option says is `label`. */
 export interface ChooseRows<T extends string> {
   from: T;
@@ -603,6 +619,8 @@ export declare function defineSurface<
 export declare function useHref(): {
   /** The sign-in's address. `then` is an in-App path to go on to once signed in (`/leads/4`): carried as `?then=`, which the sign-in reads; an absolute or protocol-relative address is dropped, not carried. */
   signIn(options?: { then?: string }): string;
+  /** The App's root, where its home opens: under a base path or a mount it is that, not `/`. `<a href={useHref().home()}>`. */
+  home(): string;
   /** A list or dashboard by its view key: `view('leads', { tab: 'working', search: 'stone' })` is `/leads?tab=working&search=stone`. */
   view(view: ViewKeyName, params?: Readonly<Record<string, string>>): string;
   /** A record by its key under the view that shows its table: `record('leads', { id: 127 })` is `/leads/127`; `{ tab: 'map' }` adds the tab's word. */
@@ -712,6 +730,8 @@ export declare function CommandButton(props: {
   size?: 'compact' | 'default' | 'large';
   done?: string;
   onDone?: (outcome: CommandOutcome) => void;
+  /** A verb the row's state does not allow: `'disable'` draws it held (the default), `'hide'` draws nothing. */
+  unavailable?: 'disable' | 'hide';
 }): ReactTypes.ReactElement | null;
 /** One of the page's fixed actions on one row, as `CommandButton` draws a command: `<ActionButton action="startVisit" row={visit} />`. */
 export declare function ActionButton(props: {
@@ -722,6 +742,8 @@ export declare function ActionButton(props: {
   size?: 'compact' | 'default' | 'large';
   done?: string;
   onDone?: (outcome: CommandOutcome) => void;
+  /** A verb the row's state does not allow: `'disable'` draws it held (the default), `'hide'` draws nothing. */
+  unavailable?: 'disable' | 'hide';
 }): ReactTypes.ReactElement | null;
 
 /**
@@ -785,13 +807,31 @@ export declare function Tabs(props: {
  * The options are the rows of a read of the page (`from`, with `where`, `query`, `sort`, `limit`), or the param's own words
  * when it is declared as a list (`params: { view: ['list', 'board'] }`). A row of segments for up to five short options, the
  * house listbox past that; a control that holds its height while the options load. The address is its state: a change
- * replaces the entry (Back leaves the page), and a link opens with the choice made. `page.Choose` is this held to the page's
- * own params and reads.
+ * replaces the entry (Back leaves the page), and a link opens with the choice made. With `count`, each choice says how many
+ * rows it holds: `<Choose param="status" count all="All leads" />`. `page.Choose` is this held to the page's own params and
+ * reads.
  */
 export declare function Choose<const T extends ResourceName>(props: ChooseProps & ChooseRows<T>): ReactTypes.ReactElement;
 export declare function Choose(props: ChooseProps & { from?: undefined }): ReactTypes.ReactElement;
 /** A search box kept in a text param of the page, typed into after a pause and replacing the entry: `<Search param="q" />`. */
 export declare function Search(props: SearchProps): ReactTypes.ReactElement;
+/* rc.76 slice B: a breakdown's empty periods, filled. */
+/** Which empty periods a time breakdown fills with zero (`fill` on `Chart` and `page.useBreakdown`). */
+export type BreakdownFill = 'window' | 'observed' | false;
+/** Rows keyed by period with the empty periods put back as zero and marked `filled: true`, read in the App's zone:
+    `fillBuckets(rows, { unit: 'day', from, to, timeZone: useFormat().timezone, key: 'day(created_at)' })`. */
+export declare function fillBuckets<Row extends Readonly<Record<string, unknown>>>(
+  rows: readonly Row[],
+  options: {
+    unit: 'day' | 'week' | 'month' | 'quarter';
+    from?: Date;
+    to?: Date;
+    timeZone?: string;
+    key?: string;
+    zero?: readonly string[];
+    weekStart?: number;
+  },
+): Array<Row | (Record<string, unknown> & { filled: true })>;
 /** Two date fields kept in one param of kind `'date-range'` (`2026-11-01..2026-11-08`, either end open): `<DateRange param="period" />`. */
 export declare function DateRange(props: DateRangeProps): ReactTypes.ReactElement;
 
@@ -823,6 +863,14 @@ export declare function Metric<const R extends ResourceName = never>(props: {
   unit?: string;
   target?: number | { from?: ResourceName; query?: string; measure?: string };
   width?: BlockWidth;
+  /** The date column the figure is windowed on: with `window`, the figure is over the reader's pick, as a dashboard's is. */
+  over?: string;
+  /** The page param that holds the window, by name: `params: { window: ['last-30-days', 'this-quarter'] }`, `window="window"`. */
+  window?: string;
+  /** The change against the window before it ("vs previous 30 days"); none where the window has no length to step back by. */
+  previous?: boolean;
+  /** A small trend line over the window beside the figure; `false` leaves the figure alone. */
+  spark?: boolean;
 }): ReactTypes.ReactElement;
 /** A chart, `chart()`: `<Chart title="Bookings" from="opportunity" by="month close_date" measure="sum amount" />`. */
 export declare function Chart<const R extends ResourceName = never>(props: {
@@ -844,6 +892,9 @@ export declare function Chart<const R extends ResourceName = never>(props: {
   /** A short word said after each figure, like "days". */
   unit?: string;
   width?: BlockWidth;
+  /** The periods with no rows: `'window'` draws every period of the query's window as zero, `'observed'` only those
+      between the first and last that hold rows, `false` none. A count or a sum only; `'window'` where the query has one. */
+  fill?: BreakdownFill;
 }): ReactTypes.ReactElement;
 /** Groups measured as bars, `breakdown()`: `<Breakdown title="By priority" from="ticket" by="priority" measure="avg first_response_seconds" format="duration" />`. */
 export declare function Breakdown<const R extends ResourceName = never>(props: {
@@ -859,6 +910,10 @@ export declare function Breakdown<const R extends ResourceName = never>(props: {
   /** A short word said after each figure, like "days". */
   unit?: string;
   width?: BlockWidth;
+  /** `'bars'`: one labeled bar per group, in the column's declared order, as the `Bars` part draws them. */
+  shape?: 'bars';
+  /** A second measure said beside each bar, like `count` for "4 deals". */
+  also?: string;
 }): ReactTypes.ReactElement;
 /** One record as its page shows it, its name and verbs over its fields (or `show`'s): `<RecordCard from="account" record={{ id: 12 }} />`. */
 export declare function RecordCard<const R extends ResourceName>(props: {

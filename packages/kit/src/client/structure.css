@@ -1202,6 +1202,13 @@
   .free-page-body.is-own > .page-section {
     padding-top: 0;
   }
+  /* ...but a page that draws the kit's own head (PageHeader) keeps the pane's top space, the one a head's row leaves
+     above its title (--page-top): without it that head stood flush under the pane's bar, a step higher than every page
+     whose head the shell draws. A page whose first part is its own (a hero) still starts at the pane's top, and a bare
+     page owns the window and keeps none. */
+  .free-page-body.is-own:not(.is-bare):has(.applist-head) {
+    padding-top: var(--page-top);
+  }
   /* The first part of a free-form page that has a head stands one gap under it (--page-head-gap), as a list's controls
      do. It was the head's own margin, the body's (the sidebar shell's rule below) and the section's, three spaces said
      one on another: 62px under the head against a list's 27. */

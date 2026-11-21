@@ -815,6 +815,7 @@
       ]
     },
     { "id": "timezone", "surface": ["dsl: app: ui.timezone"], "tests": [{ "file": "test/app-timezone-projection.test.ts" }] },
+    { "id": "redirects", "surface": ["dsl: app: ui.redirects"], "tests": [{ "file": "test/app-redirects.test.ts" }] },
     {
       "id": "pwa",
       "surface": ["dsl: app: ui.pwa"],

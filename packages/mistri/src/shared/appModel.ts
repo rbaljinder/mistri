@@ -1209,6 +1209,8 @@ export interface AppUi {
   headless?: boolean;
   /** true lets the App's pages ask for the microphone, from the App's own origin alone (a voice note, a dictated field in one of its custom components). Absent or false, every page's Permissions-Policy refuses it, as it always did; nothing else in that header changes. */
   microphone?: boolean;
+  /** Moved addresses, old path → new path (`{ '/old/:id': '/new/:id' }`): the old one answers 308 to the new, query kept (shared/appRedirects.ts). */
+  redirects?: Readonly<Record<string, string>>;
   /** App shell visibility and spacing; omitted settings keep the existing UI. */
   shell?: AppShell;
   /** Omission keeps explicit Save. Workbench always uses explicit review/apply. */

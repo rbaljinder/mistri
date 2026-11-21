@@ -115,7 +115,9 @@ import {
   type Picks,
   type Section,
 } from '@mistriwork/kit/client/components/dashboardModel.js';
-import { declaredOrder, orderDeclared } from '@mistriwork/kit/client/components/groupOrder.js';
+import { orderDeclared } from '@mistriwork/kit/client/components/groupOrder.js';
+import { DashboardBars, orderOf } from './DashboardBars.js';
+import { filledAnswer } from './bucketFill.js';
 import { appNow, formatApprox, formatDate, formatPercent, formatRelativeDay } from '@mistriwork/kit/client/locale.js';
 import { dateWindow } from '@mistriwork/engine/shared/queryDates.js';
 /* The dashboard's own blocks' sheet travels with this chunk (onDemand), not in the first stylesheet. */
@@ -616,23 +618,17 @@ function SparkHost({ points, say }: { points: Array<{ key: unknown; value: unkno
   /* A trend is its shape: one bar standing in an empty window read as a mark left on the card, so it is drawn
      where two of its points or more have something to show. */
   const drawn = points && points.length >= 4 && points.filter((point) => Number(point.value) !== 0 && point.value != null).length >= 2;
-  return <span className="spark-host is-reserved">{drawn && <Sparkline rows={points} say={say} />}</span>;
+  return (
+    <span className="spark-host is-reserved" aria-hidden="true">
+      {drawn && <Sparkline rows={points} say={say} />}
+    </span>
+  );
 }
 
 /* ---------- breakdown, chart, matrix ---------- */
 
 /* How many groups a breakdown asks for before it orders them itself (orderGroups): shared/dashboardAsks.ts. */
 const askedFor = groupsAskedFor;
-
-/** The order of the column a section groups by, where it declares one (groupOrder.ts, declaredOrder). */
-function orderOf(table: string | undefined, by: string | undefined): { vocabulary?: string[]; scale: boolean } {
-  /* A computed column (an age in days) is not among the table's own columns: its declared type says whether it is a
-     scale (shared/computed.ts). */
-  const meta = findTable(table ?? '') as TableMeta | undefined;
-  const computed = by && meta?.computed && Object.hasOwn(meta.computed, by) ? meta.computed[by] : undefined;
-  const column = meta?.columns.find((c) => c.name === by) ?? (computed ? { type: computed.type } : undefined);
-  return declaredOrder(column, by ? (columnDisplay(table ?? '', by) as DisplayRule | null) : null, by);
-}
 
 /**
  * A breakdown's goals by group key (G76): each group's goal, the groups with a goal and nothing measured yet (a seller
@@ -698,12 +694,7 @@ const BreakdownRows = memo(function BreakdownRows({ section }: { section: Sectio
   const measured = [...(data.data.rows ?? []), ...(goal?.unmet(data.data.rows ?? []) ?? [])];
   const kept = scale && !vocabulary && section.limit ? orderGroups(measured, keyName, countName).slice(0, section.limit) : measured;
   const rows = orderDeclared(kept, keyName, countName, vocabulary, scale).slice(0, section.limit);
-  if (!rows.length)
-    return section.emptyMode === 'hide' ? (
-      <LeaveOut />
-    ) : (
-      <Nothing text={inAppMode() ? sayCopy('nothingToCountYet') : sayCopy('noToCount', { table: section.table ?? '' })} />
-    );
+  if (!rows.length) return noGroups(section);
   const largest = Math.max(...rows.map((r) => Number(r[countName]) || 0));
   const sayRow = say.among(rows.map((r) => r[countName]));
   const sayKey = namedGroups(data.data, keyName, goal?.sayKey ?? sayGroup(section.table, section.by));
@@ -982,7 +973,7 @@ const Chart = memo(function Chart({ section }: { section: Section }) {
     section.table,
   );
   const drawn = auto?.draw(data);
-  const answer = auto ? drawn?.answer : data.data;
+  const answer = auto ? drawn?.answer : filledAnswer(data.data, section);
   const [firstKey = '', secondKey = ''] = (section.by ?? '').split(',').map((key) => key.trim());
   if (data.isError) return <Problem text={(data.error as Error).message} />;
   const label = namedGroups(answer, answer?.columns?.[0], sayGroup(section.table, firstKey));
@@ -1749,6 +1740,12 @@ function useNothing(plain: string): { text: string; detail?: string; action?: Re
 function Nothing({ text }: { text: string }) {
   return <Empty {...useNothing(text)} />;
 }
+const noGroups = (section: Section) =>
+  section.emptyMode === 'hide' ? (
+    <LeaveOut />
+  ) : (
+    <Nothing text={inAppMode() ? sayCopy('nothingToCountYet') : sayCopy('noToCount', { table: section.table ?? '' })} />
+  );
 
 const Sections = memo(function Sections({
   dashboard,
@@ -1906,6 +1903,8 @@ const Sections = memo(function Sections({
               <StepCards section={section} />
             ) : section.kind === 'matrix' ? (
               <Matrix section={section} />
+            ) : section.shape === 'bars' ? (
+              <DashboardBars section={section} nothing={noGroups(section)} />
             ) : (
               <BreakdownRows section={section} />
             )}

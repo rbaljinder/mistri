@@ -107,6 +107,115 @@ describe('Choose over the next words', () => {
   });
 });
 
+const LEADS = fixtures(
+  {
+    lead: [
+      { id: 1, status: 'new', owner: 'ana' },
+      { id: 2, status: 'working', owner: 'ana' },
+      { id: 3, status: 'working', owner: 'ben' },
+      { id: 4, status: 'working', owner: 'ana' },
+      { id: 5, status: 'won', owner: 'ben' },
+    ],
+    stage: [
+      { id: 'qualify', title: 'Qualify' },
+      { id: 'propose', title: 'Propose' },
+    ],
+    opportunity: [
+      { id: 1, stage_id: 'qualify', open: true },
+      { id: 2, stage_id: 'propose', open: true },
+      { id: 3, stage_id: 'propose', open: false },
+    ],
+  },
+  { display: { 'lead.status': { values: { won: 'Closed won' } } } },
+);
+function leadsPage(params: Record<string, unknown>, body: () => ReactNode, reads = ['lead']) {
+  return definePage({
+    label: 'Leads',
+    reads,
+    params: params as never,
+    component: () => (
+      <>
+        {body()}
+        <Address names={Object.keys(params)} />
+      </>
+    ),
+  });
+}
+/* The phone's width, as the browser answers `(max-width: 600px)`; restored after each test. */
+function onAPhone() {
+  vi.spyOn(window, 'matchMedia').mockImplementation(
+    (query: string) =>
+      ({
+        matches: query.includes('max-width: 600px'),
+        media: query,
+        addEventListener() {},
+        removeEventListener() {},
+        addListener() {},
+        removeListener() {},
+      }) as never,
+  );
+}
+
+describe('Choose with count', () => {
+  afterEach(() => vi.restoreAllMocks());
+
+  test("counts the param's column on the page's read: toggle buttons in a named group, each named with its count", async () => {
+    const page = leadsPage({ status: ['new', 'working', 'won'] }, () => <Choose param="status" count all="All leads" />);
+    renderPage(page, { data: LEADS, address: { status: 'working' } });
+    const group = await screen.findByRole('group', { name: 'Status' });
+    expect(group.closest('.tabs')).not.toBeNull();
+    expect(await screen.findByRole('button', { name: 'Working, 3' })).toHaveAttribute('aria-pressed', 'true');
+    // The words are the column's display labels; `all` counts every row, and the count ignores the control's own choice.
+    expect(screen.getByRole('button', { name: 'All leads, 5' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Closed won, 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New, 1' }).querySelector('.tab-count')).toHaveTextContent('1');
+    fireEvent.click(screen.getByRole('button', { name: 'All leads, 5' }));
+    await waitFor(() => expect(screen.getByLabelText('address')).toHaveTextContent('{"status":null}'));
+  });
+
+  test('`of`, `by` and `where` count another resource; the options are the rows a `from` names', async () => {
+    const page = leadsPage(
+      { stage: 'text' },
+      () => <Choose param="stage" from="stage" label="title" count={{ of: 'opportunity', by: 'stage_id', where: { open: true } }} />,
+      ['stage', 'opportunity'],
+    );
+    renderPage(page, { data: LEADS });
+    expect(await screen.findByRole('button', { name: 'Propose, 1' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Qualify, 1' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Propose, 1' }));
+    await waitFor(() => expect(screen.getByLabelText('address')).toHaveTextContent('{"stage":"propose"}'));
+  });
+
+  test('past eight choices at a desk is the listbox, its counts in the options', async () => {
+    const nine = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'];
+    const rows = nine.map((word, i) => ({ id: i + 1, letter: word }));
+    const page = leadsPage({ letter: nine }, () => <Choose param="letter" count />, ['letters']);
+    renderPage(page, { data: fixtures({ letters: rows }) });
+    const pick = await screen.findByRole('button', { name: /^Letter\b/ });
+    expect(screen.queryByRole('group', { name: 'Letter' })).toBeNull();
+    await userEvent.click(pick);
+    expect(await screen.findByRole('option', { name: 'B (1)' })).toBeInTheDocument();
+  });
+
+  test("a phone's own picker, the counts in each option's words", async () => {
+    onAPhone();
+    const page = leadsPage({ status: ['new', 'working', 'won'] }, () => <Choose param="status" count all="All leads" />);
+    renderPage(page, { data: LEADS });
+    const pick = (await screen.findByRole('combobox', { name: 'Status' })) as HTMLSelectElement;
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Working (3)' })).toBeInTheDocument());
+    expect(screen.getByRole('option', { name: 'All leads (5)' })).toBeInTheDocument();
+    fireEvent.change(pick, { target: { value: 'won' } });
+    await waitFor(() => expect(screen.getByLabelText('address')).toHaveTextContent('{"status":"won"}'));
+  });
+
+  test('a page that reads more than one resource asks for `of` and `by`', () => {
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const page = leadsPage({ status: ['new'] }, () => <Choose param="status" count />, ['lead', 'stage']);
+    expect(() => renderPage(page, { data: LEADS })).toThrow(/counts the page's read/);
+    quiet.mockRestore();
+  });
+});
+
 describe('Choose over a read', () => {
   test('long labels are a listbox of the rows, and the chosen id reaches the address', async () => {
     const page = pageWith({ class: 'id' }, () => <Classes />);

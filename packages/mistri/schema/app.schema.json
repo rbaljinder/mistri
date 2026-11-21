@@ -7248,6 +7248,13 @@
           "type": "boolean",
           "description": "true lets the App's pages ask for the microphone, from the App's own origin alone (a voice note, a dictated field in one of its custom components). Absent or false, every page's Permissions-Policy refuses it, as it always did; nothing else in that header changes."
         },
+        "redirects": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 100,
+          "additionalProperties": { "type": "string" },
+          "description": "Moved addresses, old path \u2192 new path, for a page renamed or folded into another: { '/old/:id': '/new/:id' }. The old address answers 308 to the new, its query kept. A :name segment matches one segment and may be said again in the target; the first match in the order written wins. mistri check --routes refuses a target that is not an address the App answers to, a redirect of a redirect (a chain or a cycle) and a source that is a live route's address."
+        },
         "locale": {
           "description": "BCP 47 tag the App is said and written in: the language of its captions where it has messages/ catalogs, and every figure \u2014 numbers, money, percents, dates, times, relative days and counts (\"en-AU\"). Absent: the reader\u2019s browser decides the figures. { column, default } reads each reader's own tag from the first row of that text column they may read; a tenant's (branding allow locale) comes next, then default.",
           "anyOf": [

@@ -74,6 +74,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'messages',
       'microphone',
       'pwa',
+      'redirects',
       'shell',
       'theme',
       'timezone',

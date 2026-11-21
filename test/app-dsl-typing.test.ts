@@ -795,6 +795,56 @@ test("a page's useBreakdown groups by what a chart groups by: a column, a date i
   assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
 });
 
+test("a breakdown's rows are typed, a counted Choose is held to the page's reads, and the kit's parts to their words", () => {
+  const compiled = compile(
+    [
+      'import type {} from "./mistri-schema.js";',
+      'import { Choose, Details, Icon, Person, Table, definePage, useBreakdown } from "@mistriwork/mistri/page";',
+      'const page = definePage({ label: "Late", reads: ["ticket", "person"], params: { status: ["open", "closed"], owner: "id" }, component: () => null });',
+      'export default page;',
+      'export function Reads() {',
+      '  // A row carries its groups under the keys the server names them by, the measure as value and the rows as count.',
+      '  const rows = page.useBreakdown("ticket", { by: "day due_at, status", where: { status: "open" } }).data ?? [];',
+      '  const value: number = rows[0]!.value;',
+      '  const count: number = rows[0]!.count;',
+      '  const day: unknown = rows[0]!["day(due_at)"];',
+      '  const status: unknown = rows[0]!.status;',
+      '  // @ts-expect-error — a count is a number, not a string',
+      '  const said: string = rows[0]!.count;',
+      '  // @ts-expect-error — where names columns of the read',
+      '  page.useBreakdown("ticket", { by: "status", where: { stauts: "open" } });',
+      '  const loose = useBreakdown("ticket", { by: "status" }).data ?? [];',
+      '  const share: number = loose[0]!.value;',
+      '  void [value, count, day, status, said, share];',
+      '}',
+      "// A counted Choose: the param's own column on the page's read, or another read by one of its columns.",
+      'page.Choose({ param: "status", count: true, all: "All tickets" });',
+      'page.Choose({ param: "owner", count: { of: "ticket", by: "owner_id", where: { status: "open" } } });',
+      'page.Choose({ param: "owner", from: "person", label: "name", count: { of: "ticket", by: "owner_id" } });',
+      'Choose({ param: "anything", count: true });',
+      '// @ts-expect-error — by is a column of what is counted',
+      'page.Choose({ param: "owner", count: { of: "ticket", by: "stauts" } });',
+      "// @ts-expect-error — what is counted is one of the page's reads",
+      'page.Choose({ param: "owner", count: { of: "reply", by: "id" } });',
+      'Icon({ name: "users" });',
+      '// @ts-expect-error — an icon is one of the curated names',
+      'Icon({ name: "unicorn" });',
+      'Person({ name: "Ada Stone", secondary: "Acme", href: "/people/7", size: "sm" });',
+      '// @ts-expect-error — a person is sm, md or lg',
+      'Person({ name: "Ada Stone", size: "xl" });',
+      'Details({ resource: "ticket", row: {}, fields: ["status", { label: "Age", value: "3 days" }], columns: 2 });',
+      '// @ts-expect-error — one column or two',
+      'Details({ resource: "ticket", row: {}, fields: ["status"], columns: 3 });',
+      'Table({ label: "People", rows: [{ name: "Ada", photo: "" }], columns: [{ key: "name", label: "Name", avatar: "photo" }] });',
+      'Table({ label: "People", rows: [{ name: "Ada" }], columns: [{ key: "name", label: "Name", avatar: (row) => ({ name: String(row.name) }) }] });',
+    ].join('\n'),
+    {},
+    {},
+    DATED,
+  );
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
 test('`now` and the date phrases read the same in a segment and in a metric query, on a timestamp and on a date (G180)', () => {
   const compiled = compile(
     [

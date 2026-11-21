@@ -788,7 +788,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.73: a list view's head `link` (one entry; the name was a key already): 1790/529.
     // 1.0.0-rc.74: a command import's `group`, the inputs that make consecutive rows one run (one entry; the name
     // was a key already): 1793/529.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1793, names: 529 });
+    // 1.0.0-rc.76: an App's moved addresses, `ui.redirects` (one entry, one new name): 1794/530.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1794, names: 530 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

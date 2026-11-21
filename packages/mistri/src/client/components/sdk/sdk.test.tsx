@@ -789,6 +789,33 @@ describe('a Table whose box scrolls sideways', () => {
     expect(fits.container.querySelector('.kit-table')).not.toHaveAttribute('tabindex');
     expect(screen.queryByRole('region')).toBeNull();
   });
+
+  test('folds its last columns under the first cell before it scrolls, each value named for a screen reader', async () => {
+    // Each column the box holds asks 150px of a 320px room: four ask 600, two fit.
+    Object.defineProperty(HTMLElement.prototype, 'scrollWidth', {
+      configurable: true,
+      get(this: HTMLElement) {
+        return this.querySelectorAll('th').length * 150;
+      },
+    });
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => 320 });
+    type Deal = { name: string; owner: string; stage: string; amount: string };
+    const four = (['name', 'owner', 'stage', 'amount'] as const).map((key) => ({
+      key,
+      label: key[0]!.toUpperCase() + key.slice(1),
+      render: (row: Deal) => row[key],
+    }));
+    const { container } = render(
+      <ui.Table label="Deals" columns={four} rows={[{ name: 'Acme renewal', owner: 'Ada', stage: 'Won', amount: '$900' }]} />,
+    );
+    await vi.waitFor(() => expect(container.querySelectorAll('th')).toHaveLength(2));
+    expect([...container.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['Name', 'Owner']);
+    const line = container.querySelector('td .kit-cell-folded')!;
+    expect(line.textContent).toBe('Stage: WonAmount: $900');
+    expect([...line.querySelectorAll('.visually-hidden')].map((label) => label.textContent)).toEqual(['Stage: ', 'Amount: ']);
+    // Folding was enough: the box is not a scrolling region.
+    expect(container.querySelector('.kit-table')).not.toHaveAttribute('tabindex');
+  });
 });
 
 describe('a custom component section in a card', () => {

@@ -13,6 +13,7 @@ export const say = defineMessages({
   addressView: 'the view "{view}"',
   addressRecord: 'a record under "{view}"',
   addressPage: 'the page "{path}"',
+  addressHome: "the App's home",
   noAddressFor: 'The App has no address for {what}: name a view, record or page it declares.',
   noCommands: 'no commands',
   noActions: 'no actions',

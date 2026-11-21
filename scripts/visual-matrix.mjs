@@ -574,6 +574,14 @@ export const APPS = [
       ['new-job', '/jobs/new'],
     ],
   },
+  /* The kit parts a designed page is built from (a counted filter, an identity column, a windowed figure, bars, a
+     person, details), over invented deals: the eye's half of e2e/page-parts-themes.spec.ts. */
+  {
+    id: 'page-kit',
+    seed: (db) => run(process.execPath, ['test/fixtures/apps/page-kit/seed.mjs', db]),
+    serve: (db) => ['--config', `${db}.json`, '--app', 'test/fixtures/apps/page-kit'],
+    pages: [['parts', '/parts']],
+  },
   /* Read by `--styles` only: the App `npm run smoke` walks, over the built-in demo. A release's pictures are of the
      sample Apps. */
   {

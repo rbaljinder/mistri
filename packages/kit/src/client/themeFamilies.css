@@ -224,14 +224,14 @@
    `font` shorthand resets neither, so four looks named their record tabs in capitals. Mono
    sets its own label below. */
 :root[data-theme-style] :is(.tab, :where(body.app-mode) .page-tab) { border: 0; border-radius: var(--radius); padding: var(--space-2) var(--space-4); font: 500 var(--text-base) var(--sans); text-transform: none; letter-spacing: normal; color: var(--ink-muted); }
-:root[data-theme-style] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected="true"] { background: var(--accent); color: var(--on-accent); border-bottom-width: 0; }
+:root[data-theme-style] :is(.tab, :where(body.app-mode) .page-tab):is([aria-selected="true"], [aria-pressed="true"]) { background: var(--accent); color: var(--on-accent); border-bottom-width: 0; }
 /* A tab drawn as a box is a control in the list's toolbar: the toolbar's height, so it stands level with the filters
    beside it (a 24px pill stood beside 30px filters), and the control's corner, so a look whose buttons are pills has
    pill tabs. The height is the line's, not a box's, so a count beside the name keeps its baseline. */
 :root[data-theme-style]:is([data-look-tabs='pill'], [data-look-tabs='tint'], [data-look-tabs='inverted']) :is(.tab, :where(body.app-mode) .page-tab) { line-height: calc(var(--control-h-sm) - 2 * var(--space-2)); border-radius: var(--control-radius, var(--radius)); }
 /* The chosen pill is a soft one in the ink with an edge of its own: filled in the accent, as the primary button
    is, it read as a second primary over every list and on every record. */
-html:root[data-theme-style][data-look-tabs='pill'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true'] { background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); }
+html:root[data-theme-style][data-look-tabs='pill'] :is(.tab, :where(body.app-mode) .page-tab):is([aria-selected='true'], [aria-pressed='true']) { background: var(--raised); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line-strong); }
 :root[data-theme-style] .tab .tab-count { font-size: var(--text-sm); line-height: 1; }
 /* A two-or-three-way switch (a Segmented, a list's Rows/Board, the phone's Records/Table, Tree/Raw) is one drawing in every
    look: a tray on the raised ground with a hairline, and the chosen one inside it. The tray's corner is the item's plus
@@ -516,7 +516,7 @@ html:root[data-theme-style] .record-presentation { margin-inline-start: auto; }
   :root[data-look-nav='inverted'] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current='true']) :is(.tn-caret, .nav-icon) {
     color: inherit;
   }
-  :root[data-look-tabs='inverted'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true'] {
+  :root[data-look-tabs='inverted'] :is(.tab, :where(body.app-mode) .page-tab):is([aria-selected='true'], [aria-pressed='true']) {
     background: var(--ink);
     color: var(--ground);
     border-radius: var(--radius);

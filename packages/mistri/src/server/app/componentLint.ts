@@ -474,8 +474,11 @@ function cssFindings(
   declared: readonly string[] = [],
 ): void {
   const prefixes = [...ids.map((id) => `c-${id}`), ...declared];
-  const prefix = `c-${ids[0]}`;
+  /* What the refusal tells a person to write: every component's own name-space (a shared sheet has several), the
+     stylesheet's after its own name, and a package's declared prefix, so the sentence is the whole of the rule. */
+  const prefix = ids.map((id) => `"c-${id}-…"`).join(' or ');
   const sheet = declared.find((own) => own.startsWith('c-'));
+  const packaged = declared.filter((own) => !own.startsWith('c-')).map((own) => `"${own}-…"`);
   /* Each rule's body with the reduced-motion query it sits in, if any: motion is fine only inside one. */
   const guarded: Array<[number, number]> = [];
   for (const match of text.matchAll(/@media[^{]*prefers-reduced-motion\s*:\s*no-preference[^{]*\{/g)) {
@@ -537,7 +540,7 @@ function cssFindings(
     if (prefixes.some((own) => name === own || name.startsWith(`${own}-`))) continue;
     warn(
       lineAt(match.index),
-      `the class ".${name}" is not this component's: name its classes "${prefix}-…"${sheet ? `, or "${sheet}-…" after the stylesheet` : ''}, so no look or other component meets them`,
+      `the class ".${name}" is not this component's: name its classes ${prefix}${sheet ? `, or "${sheet}-…" after the stylesheet` : ''}${packaged.length ? `, or ${packaged.join(' or ')} where the package's cssPrefix says so` : ''}, so no look or other component meets them`,
     );
   }
 }

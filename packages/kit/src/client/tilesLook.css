@@ -164,12 +164,12 @@
     text-transform: none;
   }
   @media (hover: hover) {
-    :root[data-look-tabs='lifted'] :is(.tab, :where(body.app-mode) .page-tab):hover:not([aria-selected='true']) {
+    :root[data-look-tabs='lifted'] :is(.tab, :where(body.app-mode) .page-tab):hover:not([aria-selected='true'], [aria-pressed='true']) {
       background: color-mix(in srgb, var(--ink) 5%, transparent);
       color: var(--ink);
     }
   }
-  :root[data-look-tabs='lifted'] :is(.tab, :where(body.app-mode) .page-tab)[aria-selected='true'] {
+  :root[data-look-tabs='lifted'] :is(.tab, :where(body.app-mode) .page-tab):is([aria-selected='true'], [aria-pressed='true']) {
     background: var(--surface);
     color: var(--ink);
     font-weight: 600;
