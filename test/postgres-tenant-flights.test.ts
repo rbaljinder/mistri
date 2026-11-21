@@ -504,9 +504,12 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
       t.diagnostic(line);
       if (PRINT) console.log(`${line} ${answer.text.slice(0, 300)}\n${byFlight(answer.statements)}`);
     }
+    /* The App database's flights are what a batch's size could grow; a session read on the sign-in store is paid
+       once per window, and a 200-row run on a loaded machine is slow enough to land on one. */
+    const appFlights = (answer: Answer): number => answer.flights.app ?? 0;
     assert.ok(
-      measured.executeMany!.total <= measured['executeMany (50 rows)']!.total,
-      `a batch's flights grow with its rows: ${measured['executeMany (50 rows)']!.total} at 50, ${measured.executeMany!.total} at 200`,
+      appFlights(measured.executeMany!) <= appFlights(measured['executeMany (50 rows)']!),
+      `a batch's flights grow with its rows: ${JSON.stringify(measured['executeMany (50 rows)']!.flights)} at 50, ${JSON.stringify(measured.executeMany!.flights)} at 200`,
     );
     const bulkRuns = await f.lending.rows(
       `SELECT count(DISTINCT mileage)::int AS runs, max(mileage) AS top FROM vehicle WHERE id LIKE 'bulk-%'`,
