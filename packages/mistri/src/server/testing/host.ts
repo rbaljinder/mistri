@@ -392,6 +392,10 @@ function setup(url: string, control: string) {
     if (tenantId === PLATFORM_TENANT_ID) throw new Error('The platform realm is host.platform(account), not a tenant.');
     return member(tenantId, account);
   }
+  /** One more membership for a person `tenant` made, so a test can be someone in several tenants. */
+  async function join(client: TestTenantClient, tenantId: string, roles: readonly string[]): Promise<void> {
+    await ask(TEST_CONTROL_PATHS.membership, { tenant: tenantId, roles, accountId: client.account.accountId });
+  }
   async function member(tenantId: string, account: TestTenantAccount): Promise<TestTenantClient> {
     if (!account || !Array.isArray(account.roles) || !account.roles.length)
       throw new Error(`A member of "${tenantId}" holds one or more roles: { roles: ['…'] }.`);
@@ -409,6 +413,7 @@ function setup(url: string, control: string) {
   return {
     seed,
     tenant,
+    join,
     /** A platform member of a tenant App: as `tenant`, in the platform realm (`auth.tenancy.platform`). */
     platform: (account: TestTenantAccount): Promise<TestTenantClient> => member(PLATFORM_TENANT_ID, account),
     /**

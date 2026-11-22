@@ -126,7 +126,9 @@ export function testControlFrom(
         : `${word(String(roles[0]))}.${word(tenant)}.${randomBytes(4).toString('hex')}@example.test`;
     const password = randomBytes(18).toString('base64url');
     const name = typeof body.name === 'string' && body.name ? body.name : `Test ${roles[0]} of ${tenant}`;
-    const accountId = await createNativeAccount(host.auth, { email, name, password }, { by: 'maintenance' });
+    /* A person already made, given one more tenant: a test of someone in several. */
+    const existing = typeof body.accountId === 'string' && body.accountId ? body.accountId : undefined;
+    const accountId = existing ?? (await createNativeAccount(host.auth, { email, name, password }, { by: 'maintenance' }));
     await ensureLocalTenant(access, tenant, 'test-host');
     await grantLocalMembership(access, { tenantId: tenant, accountId, roles: roles as string[], days: 1, operator: 'test-host' });
     return { appId: host.app.app.id, accountId, email, password };

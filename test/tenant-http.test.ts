@@ -1995,10 +1995,15 @@ test('enter enters only a sole membership, and refuses whatever discovery, open 
   const several = await enter();
   none(several);
   assert.deepEqual(several.body, await discovery());
-  /* Nor where the link names one of them, or this tab kept one: the chooser is still asked. */
-  none(await enter({ tenant: 'north' }));
+  /* Where the link names one of them, or this tab kept one, the person has said which (shared `enteredTenant`): that
+     one is entered in the same request (a kept context is resumed only once let go, as below). A link to a tenant that is not theirs asks. */
+  none(await enter({ tenant: 'nowhere' }));
+  assert.equal(lease(await enter({ tenant: 'south' })).tenantId, 'south');
+  enters(await enter({ tenant: 'north' }));
   const held = await f.open('north');
-  none(await enter({ kept: { tenantId: 'north', tabId: held.tabId } }));
+  const kept = await enter({ kept: { tenantId: 'north', tabId: held.tabId } });
+  assert.equal(lease(kept).tenantId, 'north');
+  assert.ok(object(kept.body.entered).boot, 'the boot rides in the answer');
   owned(await f.data('/api/query', held, { table: 'item' }), held);
 
   /* One tenant: entered, on the lease `/open` would have opened, with the page's boot on it. */

@@ -25,7 +25,8 @@ test.describe('A page built on the behaviors', () => {
   test('the behaviors are fetched by the page that imports them, and by no page that does not', async ({ page }) => {
     const asked: string[] = [];
     page.on('request', (request) => {
-      if (/\/_mistri\/sdk\/behaviors\.js/.test(request.url())) asked.push(request.url());
+      /* Under the build's hash where a component names it (server http/componentRoutes.ts), bare where it does not. */
+      if (/\/_mistri\/sdk\/(?:[0-9a-f]{10}\/)?behaviors\.js/.test(request.url())) asked.push(request.url());
     });
     await page.goto(`${app.origin}/things`);
     await settled(page);

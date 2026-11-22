@@ -1,5 +1,5 @@
 import type { Response } from '@playwright/test';
-import { isSelection, selectionRoute } from './support/tenantSelection.js';
+import { entersBeforeIdentity, isSelection, selectionRoute } from './support/tenantSelection.js';
 import { test, expect, invitationArtifactOptions, type Page } from './support/invitationTest.js';
 import { startTenantInvitations, type TenantInvitationFixture } from './support/tenantInvitationServer.js';
 import {
@@ -165,6 +165,13 @@ test('unknown invitation survives a held real business selection for the same na
     let selected!: Promise<Response>;
     await selfMemberChooser(page, app, async () => {
       await page.route(selectionRoute, async (route) => {
+        /* Entering before who-am-I brings the account and the selection in one answer, so nothing on the account can
+           be asked while that selection is held: the race this test is about needs who-am-I first, as the page asks it
+           where that first enter fails. Refused unsent, it takes no lease. */
+        if (entersBeforeIdentity(route.request())) {
+          await route.abort('failed');
+          return;
+        }
         const response = await route.fetch({ maxRetries: 0, timeout: 45_000 });
         expect(response.status()).toBe(200);
         committed.release();

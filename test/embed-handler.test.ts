@@ -22,6 +22,7 @@ import { bridgeFetch, EMBEDDED_PEER } from '../packages/mistri/src/server/embed/
 import { provisionSqliteLiveChange } from '../packages/mistri/src/adapters/live/sqliteLiveChange.js';
 import { createHandler, type Handler } from '../packages/mistri/src/server/handler.js';
 import { withHostPaths } from '../packages/mistri/src/server/http/componentRoutes.js';
+import { hostVersion } from '../packages/mistri/src/server/app/componentSdk.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
 import { createAppAuth } from '../packages/mistri/src/server/auth/auth.js';
 import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
@@ -141,10 +142,10 @@ test("a served component's host imports are paths under the base, whatever quote
   };
   assert.equal(
     withHostPaths(files, 'a.js', '/crm'),
-    'import{jsx as e}from"/crm/_mistri/sdk/react-jsx-runtime.js";import * as R from \'/crm/_mistri/sdk/react.js\';' +
-      'import "/crm/_mistri/sdk/ui.js";const m=import("/crm/_mistri/sdk/react-dom.js");',
+    `import{jsx as e}from"/crm/_mistri/sdk/${hostVersion()}/react-jsx-runtime.js";import * as R from '/crm/_mistri/sdk/${hostVersion()}/react.js';` +
+      `import "/crm/_mistri/sdk/${hostVersion()}/ui.js";const m=import("/crm/_mistri/sdk/${hostVersion()}/react-dom.js");`,
   );
-  assert.match(withHostPaths(files, 'a.js', ''), /from"\/_mistri\/sdk\/react-jsx-runtime\.js"/);
+  assert.match(withHostPaths(files, 'a.js', ''), /from"\/_mistri\/sdk\/[0-9a-f]{10}\/react-jsx-runtime\.js"/);
   assert.equal(withHostPaths({ 'b.js': 'const s = "react";' }, 'b.js', '/crm'), 'const s = "react";', 'a string is not an import');
 });
 
@@ -260,7 +261,7 @@ describe('an App mounted at /crm', () => {
     const js = await fetch(`${origin}/crm${componentHref.slice('/tick'.length)}`);
     assert.equal(js.status, 200);
     const code = await js.text();
-    assert.match(code, /["']\/crm\/_mistri\/sdk\/ui\.js["']/, 'its host imports are said under the base');
+    assert.match(code, /["']\/crm\/_mistri\/sdk\/[0-9a-f]{10}\/ui\.js["']/, 'its host imports are said under the base');
     assert.doesNotMatch(code, /from\s*["']@mistriwork\/mistri\/ui["']/);
     const sdk = await fetch(`${origin}/crm/_mistri/sdk/react.js`);
     assert.equal(sdk.status, 200);
@@ -340,7 +341,7 @@ describe('an App mounted at /crm', () => {
     // Outside the base path names nothing; there is no next() to hand it to.
     assert.equal((await tw.fetch(new Request('https://shop.test/elsewhere'))).status, 404);
     const sdk = await tw.fetch(new Request(`https://shop.test/crm${componentHref.slice('/tick'.length)}`));
-    assert.match(await sdk.text(), /\/crm\/_mistri\/sdk\/ui\.js/);
+    assert.match(await sdk.text(), /\/crm\/_mistri\/sdk\/[0-9a-f]{10}\/ui\.js/);
   });
 });
 

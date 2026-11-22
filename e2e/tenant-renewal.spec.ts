@@ -86,7 +86,8 @@ test.describe('tenant renewal preserves mounted work', () => {
 
   async function modalPresentation(page: Page) {
     /* The App's payload as the shell takes it: its own reply, or the answer the page's boot carries for it
-       (mistri shared/tenantBoot.ts). */
+       (mistri shared/tenantBoot.ts), whether the page asked that boot itself or it came in the /enter that entered
+       the tenant as the page loaded (`entered.boot`). */
     const present = (payload: { app: { views: Record<string, unknown> } }) => {
       // Presentation override only: genuine auth, catalog, grants, context and
       // all writes still come from the disposable native tenant host.
@@ -96,15 +97,22 @@ test.describe('tenant renewal preserves mounted work', () => {
       expect(item).toBeTruthy();
       item!.open = 'modal';
     };
+    type Boot = { reads: Record<string, { body: { app: { views: Record<string, unknown> } } }> };
+    const presentBoot = (boot: Boot) => {
+      for (const [key, read] of Object.entries(boot.reads)) if (key.startsWith('GET /api/app?')) present(read.body);
+    };
     await page.route(
-      (url) => url.pathname === '/api/app' || url.pathname === '/api/boot',
+      (url) => url.pathname === '/api/app' || url.pathname === '/api/boot' || url.pathname === '/api/tenant/enter',
       async (route) => {
         const response = await route.fetch();
-        const json = await response.json();
-        if (new URL(route.request().url()).pathname === '/api/app') present(json);
-        else
-          for (const [key, read] of Object.entries(json.reads as Record<string, { body: { app: { views: Record<string, unknown> } } }>))
-            if (key.startsWith('GET /api/app?')) present(read.body);
+        const path = new URL(route.request().url()).pathname;
+        const json = await response.json().catch(() => undefined);
+        if (path === '/api/tenant/enter' && !json?.entered?.boot) {
+          await route.fulfill({ response });
+          return;
+        }
+        if (path === '/api/app') present(json);
+        else presentBoot(path === '/api/boot' ? json : json.entered.boot);
         await route.fulfill({ response, json });
       },
     );

@@ -15,6 +15,7 @@
  * browser bundle, never in the server's runtime dependencies. `@mistriwork/mistri/ui`'s
  * and `@mistriwork/mistri/page`'s names remain the SDK's own (shared/uiSdk.ts), pinned by a test.
  */
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import {
@@ -99,4 +100,26 @@ export function hostModuleSource(file: string): string | undefined {
     made.set(module, source);
   }
   return source;
+}
+
+let version: string | undefined;
+
+/**
+ * A short content hash of the host module set, the segment a served component's host paths carry
+ * (`/_mistri/sdk/<version>/react.js`) so the browser may keep them for a year: a build whose modules differ has a
+ * different one. Computed once per process from the served sources, which are the same in every worker and replica of
+ * one build, so a page and a component fetched from two of them still name the same files.
+ */
+export function hostVersion(): string {
+  if (version === undefined) {
+    const hash = createHash('sha256');
+    for (const module of SERVED_MODULES)
+      hash
+        .update(HOST_MODULES[module])
+        .update('\0')
+        .update(hostModuleSource(HOST_MODULES[module]) ?? '')
+        .update('\0');
+    version = hash.digest('hex').slice(0, 10);
+  }
+  return version;
 }

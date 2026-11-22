@@ -123,31 +123,36 @@ export async function tenantReferences(adapter: Adapter, schema: DatabaseSchema,
     key,
     incoming.flatMap((fk) => fk.to.columns),
   );
-  const references = [];
-  for (const fk of incoming) {
-    const values = fk.to.columns.map((column) => row[column]);
-    if (values.some((value) => value === null)) continue;
-    if (values.some((value) => typeof value !== 'string' && !(typeof value === 'number' && Number.isFinite(value)))) return denyTenant();
-    const filter = {
-      groups: [fk.from.columns.map((column, index) => ({ column, op: '=' as const, value: values[index] as string | number }))],
-    };
-    // Bounded as the ordinary host bounds a reference: "10,000+" past it.
-    const { count, capped } = await readCount(adapter, schema, {
-      table: fk.from.table,
-      filter,
-      exact: true,
-      countLimit: DEFAULT_COUNT_LIMIT,
-    });
-    references.push({
-      table: fk.from.table,
-      columns: fk.from.columns,
-      toColumns: fk.to.columns,
-      constraint: fk.name,
-      count,
-      ...(capped ? { capped } : {}),
-      filter,
-      label: labelColumn(findTable(schema, fk.from.table)!),
-    });
-  }
+  /* Every count is asked at once: each needs only the record's row, and together they are one wave on the snapshot the
+     caller holds (tenantHttp.ts), where asked one after another each was a round trip of its own. A refusal still
+     fails the whole answer, as it did in order, and the answer keeps the schema's order. */
+  const asked = await Promise.all(
+    incoming.map(async (fk) => {
+      const values = fk.to.columns.map((column) => row[column]);
+      if (values.some((value) => value === null)) return undefined;
+      if (values.some((value) => typeof value !== 'string' && !(typeof value === 'number' && Number.isFinite(value)))) return denyTenant();
+      const filter = {
+        groups: [fk.from.columns.map((column, index) => ({ column, op: '=' as const, value: values[index] as string | number }))],
+      };
+      // Bounded as the ordinary host bounds a reference: "10,000+" past it.
+      const { count, capped } = await readCount(adapter, schema, {
+        table: fk.from.table,
+        filter,
+        exact: true,
+        countLimit: DEFAULT_COUNT_LIMIT,
+      });
+      return {
+        table: fk.from.table,
+        columns: fk.from.columns,
+        toColumns: fk.to.columns,
+        constraint: fk.name,
+        count,
+        ...(capped ? { capped } : {}),
+        filter,
+        label: labelColumn(findTable(schema, fk.from.table)!),
+      };
+    }),
+  );
+  const references = asked.filter((reference) => reference !== undefined);
   return captureTenantData({ table: tableId, primaryKey: primaryKey(findTable(schema, tableId)!), references });
 }

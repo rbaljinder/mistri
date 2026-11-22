@@ -123,23 +123,22 @@ interface AppListProps {
    the next list puts focus back on its twin. */
 let refocus: { column?: string; value?: string; tab?: string } | null = null;
 
-/**
- * Every tab's badge, asked in one request (`/api/counts`) and counted in one
- * statement where the server can: a list with six tabs was six requests, each
- * running the whole list's read — joins, sort, a page of rows — to use its
- * count. Each is bounded as a list's total is ("10,000+"). A minute's cache,
- * shared by every list on the connection that shows the same tabs. A server
- * that refuses the batch is asked tab by tab, as before.
- */
-function useTabCounts(questions: string[]): Map<string, Counted | null> | undefined {
-  const items = [...new Set(questions)].sort();
-  const client = useQueryClient();
-  return useQuery<Map<string, Counted | null>>({
-    queryKey: ['count', state.activeConnection ?? '', 'tabs', items],
-    /* While a new batch is on the way each badge says what it last said — a batch's answer, or the grid's total
-       when its tab was on screen (gridCount) — so swapping tabs never empties the badges and shifts the row. */
-    placeholderData: () => knownCounts(client),
-    queryFn: async () => {
+/** The questions a list's tab strip asks the counts of: every tab but the one the grid's own total answers, and each of
+ * the reader's saved views; none where the strip has nothing but the one tab. Said once, for the list that draws the
+ * badges and for the press that begins them (listRowsPress.ts). */
+export function badgeQuestions(spec: ListSpec, table: string, gridTab: number, yours: readonly SavedView[]): string[] {
+  const tabs = shownTabs(spec);
+  return tabs.length > 1 || yours.length > 0
+    ? [...tabs.flatMap((_, i) => (i === gridTab ? [] : [appListQuery(spec, i)])), ...yours.map((f) => squeeze(`${table} ${f.query}`))]
+    : [];
+}
+
+/** The badges' read as the query that asks it: its key and its ask, for the list that draws them and for a press on the
+ * menu entry that opens it (listRowsPress.ts), which begins the same batch while the button is still down. */
+export function tabCountsRead(items: string[]) {
+  return {
+    queryKey: ['count', state.activeConnection ?? '', 'tabs', items] as unknown[],
+    queryFn: async (): Promise<Map<string, Counted | null>> => {
       const said = (data: { total?: unknown; cappedTotal?: unknown; errors?: unknown[] } | undefined): Counted | null =>
         data && !data.errors?.length && typeof data.total === 'number' ? { total: data.total, capped: data.cappedTotal === true } : null;
       try {
@@ -175,6 +174,25 @@ function useTabCounts(questions: string[]): Map<string, Counted | null> | undefi
         );
       }
     },
+  };
+}
+
+/**
+ * Every tab's badge, asked in one request (`/api/counts`) and counted in one
+ * statement where the server can: a list with six tabs was six requests, each
+ * running the whole list's read — joins, sort, a page of rows — to use its
+ * count. Each is bounded as a list's total is ("10,000+"). A minute's cache,
+ * shared by every list on the connection that shows the same tabs. A server
+ * that refuses the batch is asked tab by tab, as before.
+ */
+function useTabCounts(questions: string[]): Map<string, Counted | null> | undefined {
+  const items = [...new Set(questions)].sort();
+  const client = useQueryClient();
+  return useQuery<Map<string, Counted | null>>({
+    ...tabCountsRead(items),
+    /* While a new batch is on the way each badge says what it last said — a batch's answer, or the grid's total
+       when its tab was on screen (gridCount) — so swapping tabs never empties the badges and shifts the row. */
+    placeholderData: () => knownCounts(client),
     enabled: items.length > 0,
     staleTime: 60_000,
   }).data;
@@ -455,14 +473,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   /* The badges not already on screen: the grid's own total answers the tab
      it shows, so that one is never asked twice (and a list whose grid is
      still loading does not ask again once it lands). */
-  const tabCounts = useTabCounts(
-    tabs.length > 1 || yours.length > 0
-      ? [
-          ...tabs.flatMap((_, i) => (i === gridTab ? [] : [appListQuery(spec, i)])),
-          ...yours.map((f) => squeeze(`${entry.table} ${f.query}`)),
-        ]
-      : [],
-  );
+  const tabCounts = useTabCounts(badgeQuestions(spec, entry.table, gridTab, yours));
 
   /* The grid's own total is a count its tab's badge said: kept with the batches, for the placeholder. */
   useEffect(() => {

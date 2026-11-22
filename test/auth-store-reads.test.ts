@@ -13,7 +13,8 @@ import { EventEmitter } from 'node:events';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { authReadTtlMs, createAuthStoreReads, DEFAULT_AUTH_READ_TTL_MS } from '../packages/mistri/src/server/auth/authStoreReads.js';
-import { authPoolSize, observedClient, transactionPooledClient } from '../packages/mistri/src/server/auth/authStore.js';
+import { pgConnectionOptions } from '../packages/engine/src/adapters/postgresValues.js';
+import { authPoolIdle, authPoolSize, observedClient, transactionPooledClient } from '../packages/mistri/src/server/auth/authStore.js';
 import type { PgQuery } from '../packages/engine/src/adapters/postgresPool.js';
 
 const tick = () => new Promise<void>((resolve) => setImmediate(resolve));
@@ -220,6 +221,13 @@ test('MISTRI_AUTH_SESSION_CACHE and MISTRI_AUTH_POOL are read as seconds and con
   assert.equal(authPoolSize({}), 4);
   assert.equal(authPoolSize({ MISTRI_AUTH_POOL: '16' }), 16);
   for (const bad of ['0', '65', '2.5', 'many']) assert.throws(() => authPoolSize({ MISTRI_AUTH_POOL: bad }), /1 to 64/);
+});
+
+test('the store pool keeps one connection warm through five idle minutes, and every pg socket asks for keepalive', () => {
+  assert.deepEqual(authPoolIdle(4), { idleTimeoutMillis: 300_000, min: 1, allowExitOnIdle: true });
+  assert.equal(authPoolIdle(1).min, 1);
+  assert.equal(pgConnectionOptions('postgres://u:p@h/db').keepAlive, true);
+  assert.equal(pgConnectionOptions('postgres://u:p@h/db?sslrootcert=system').keepAlive, true);
 });
 
 /** pg's Client as far as the store's wrappers use it: query with a promise or a callback, and 'end'. */

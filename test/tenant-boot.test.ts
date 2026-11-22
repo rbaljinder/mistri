@@ -223,6 +223,25 @@ async function evidence(t: TestContext) {
     const elsewhere = (await (await member({ tenant: 'south' })).json()) as Entered;
     assert.equal('entered' in elsewhere, false);
 
+    /* A person in two clinics: a link that names one, or the one this tab kept, enters it in the same request; a link
+       to a clinic that is not theirs, or to none, asks. */
+    await host.join(northOwner, 'south', ['owner']);
+    const two = await asker(northOwner);
+    const names = (value: Entered) => value.memberships.map((membership) => membership.tenantId).sort();
+    const several = (await (await two({})).json()) as Entered;
+    assert.deepEqual(names(several), ['north', 'south']);
+    assert.equal('entered' in several, false, 'two clinics and no word of which: the chooser');
+    const named = (await (await two({ tenant: 'south' })).json()) as Entered;
+    assert.equal(named.entered?.context.tenantId, 'south');
+    assert.ok(
+      Object.keys(named.entered!.boot.reads).some((name) => name.startsWith('POST /api/run?')),
+      'the boot is in the answer',
+    );
+    const kept = (await (await two({ kept: { tenantId: 'north', tabId: 'tab-that-is-gone' } })).json()) as Entered;
+    assert.equal(kept.entered?.context.tenantId, 'north');
+    const strange = (await (await two({ tenant: 'east' })).json()) as Entered;
+    assert.equal('entered' in strange, false);
+
     const platform = await asker(operator);
     const asked = await platform({});
     assert.equal(asked.status, 200, await asked.clone().text());
@@ -233,6 +252,49 @@ async function evidence(t: TestContext) {
     /* A support visit is opened by the support routes alone: naming its realm here, or the platform's, is refused. */
     for (const query of ['&realm=support&tenant=north', '&realm=platform', '&tenant=north'])
       assert.equal((await platform({}, query)).status, 400, query);
+  });
+
+  /* A tenant page's first request is entering, before it knows whose session it is, and its answer says who-am-I: the
+     very body `/api/whoami` answers (one function in the host), for a signed-in member, who is entered as ever, and
+     for no one, whose answer is who-am-I's and takes no lease. */
+  await t.test("enter answers who-am-I as who-am-I does, signed in or out, with nothing sent but the page's address", async () => {
+    const enter = (session: ReturnType<typeof createTestClient>, tenant?: string) =>
+      session.request(`${TENANT_ENTER_PATH}?app=clinic`, {
+        method: 'POST',
+        headers: { [TENANT_HTTP_HEADERS.app]: 'clinic' },
+        json: { path: '/clinic/appointments', search: '', ...(tenant ? { tenant } : {}) },
+      });
+    const whoami = async (session: ReturnType<typeof createTestClient>) => {
+      const answer = await session.request('/api/whoami?app=clinic');
+      assert.equal(answer.status, 200);
+      return (await answer.json()) as Record<string, unknown>;
+    };
+    const member = createTestClient(host.url, { app: 'clinic' });
+    await member.signIn(northOwner.account.email, northOwner.account.password);
+    /* In two clinics by now, so the link names one. */
+    const entered = await enter(member, 'north');
+    assert.equal(entered.status, 200, await entered.clone().text());
+    const inside = (await entered.json()) as { whoami?: Record<string, unknown>; entered?: { context: { tenantId: string } } };
+    assert.equal(inside.entered?.context.tenantId, 'north', 'still entered with its boot');
+    assert.equal(inside.whoami?.signedIn, true);
+    assert.equal(inside.whoami?.accountId, northOwner.account.accountId);
+    assert.equal(entered.headers.get(TENANT_HTTP_HEADERS.account), northOwner.account.accountId);
+    assert.deepEqual(inside.whoami, await whoami(member));
+    /* A platform member, who is asked to choose: the same body, and no lease. */
+    const operatorSession = createTestClient(host.url, { app: 'clinic' });
+    await operatorSession.signIn(operator.account.email, operator.account.password);
+    const chosen = (await (await enter(operatorSession)).json()) as { whoami?: Record<string, unknown>; entered?: unknown };
+    assert.equal('entered' in chosen, false);
+    assert.deepEqual(chosen.whoami, await whoami(operatorSession));
+    /* No session: who-am-I's signed-out answer, and nothing else of the entry. */
+    const visitor = createTestClient(host.url, { app: 'clinic' });
+    const signedOut = await enter(visitor);
+    assert.equal(signedOut.status, 200, await signedOut.clone().text());
+    const nobody = (await signedOut.json()) as Record<string, unknown>;
+    assert.equal(nobody.status, 'signed_out');
+    assert.equal(signedOut.headers.get(TENANT_HTTP_HEADERS.account), null);
+    assert.equal((nobody.whoami as Record<string, unknown>).signedIn, false);
+    assert.deepEqual(nobody.whoami, await whoami(visitor));
   });
 }
 

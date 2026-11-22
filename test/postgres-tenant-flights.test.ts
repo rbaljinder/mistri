@@ -327,9 +327,22 @@ const BUDGETS: Record<string, number> = {
   // admission, the second admission around the session check, its release fence: one whole snapshot each
   renew: 3,
   /* Discovery's memberships, the platform's and the tenant's names, beside the open's two admissions and its
-     fence, the tenant's addresses, then the boot's own snapshot (BEGIN with every read, the inbox's visibility,
-     COMMIT) and its fence: 14, a flight or two more as the parallel snapshots interleave on the wire. */
-  enter: 16,
+     fence, the tenant's addresses, then the boot it carries (one snapshot: BEGIN with every read, the inbox's
+     visibility, and its COMMIT with the release fence riding it): 13, a flight more as the parallel snapshots
+     interleave on the wire. */
+  enter: 14,
+  /* The page's first reads, asked past the sign-in: one snapshot of the context's reads, its COMMIT carrying the
+     release fence (TenantReadRuntime `fencedTogether`) rather than a snapshot of the fence's own after it. */
+  boot: 4,
+  /* A record page's compose: its plan and every read its sections ask, on one snapshot ending with the fence, then
+     the verbs' availability where the page carries checks, which keeps its own fence (availability, above). */
+  'pages/compose': 7,
+  /* A write's refresh: lists and counts asked in one moment, every one a bounded read, so one bounded request: BEGIN
+     with the reads, and the COMMIT with the fence behind (tenantHttp.ts `boundedBatch`). */
+  'batch reads': 2,
+  /* The record's references: its row, then every count at once, on one snapshot whose COMMIT carries the release fence
+     (tenantHttp.ts), where each read on a snapshot of its own was seven. */
+  references: 3,
 };
 /* The first of a catalog description's six statements (adapters/postgresCatalog.ts). */
 const DESCRIBES = /\bAS approx_rows\b/;
@@ -481,6 +494,18 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
           input: {},
         });
       },
+      // The page's first reads in one request (a boot that enters nothing), as the shell asks it past the sign-in.
+      boot: () => read('/api/boot', { path: '/ignition/leads', search: '' }),
+      'pages/compose': () => read('/api/pages/compose', { page: 'suggested:lead', key: { id: leadIds[0] } }),
+      /* A write's refresh: the lists and counts a page stands in, asked in one moment (a batch of bounded reads). */
+      'batch reads': () =>
+        read('/api/boot', {
+          reads: [
+            { method: 'POST', path: '/api/run', body: { q: listQuery(leads, 0), limit: 20, offset: 0, exactCount: false } },
+            { method: 'POST', path: '/api/counts', body: { items: leads.tabs.map((_, i) => listQuery(leads, i)) } },
+          ],
+        }),
+      references: () => read('/api/references', { table: leads.table, key: { id: leadIds[0] } }),
       'executeMany (50 rows)': () => executeMany(50),
       executeMany: () => executeMany(200),
       renew: async () => {
@@ -546,6 +571,14 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
       appFlights(measured['availability (20 records)']!) <= appFlights(measured['availability (2 records)']!),
       `availability's flights grow with its records: ${JSON.stringify(measured['availability (2 records)']!.flights)} at 2, ${JSON.stringify(measured['availability (20 records)']!.flights)} at 20`,
     );
+    /* A batch of bounded reads took the bounded path (its budget, above) and answers each as asking for it alone does. */
+    const batchedReads = (await requests['batch reads']!()).body.reads as Record<string, { body: unknown }>;
+    const batchedList = Object.entries(batchedReads).find(([name]) => name.startsWith('POST /api/run?'));
+    const batchedCounts = Object.entries(batchedReads).find(([name]) => name.startsWith('POST /api/counts?'));
+    assert.ok(batchedList && batchedCounts, Object.keys(batchedReads).join('\n'));
+    const timeless = (body: unknown) => ({ ...(body as Record<string, unknown>), ms: undefined });
+    assert.deepEqual(timeless(batchedList[1].body), timeless((await requests['run (list)']!()).body));
+    assert.deepEqual(timeless(batchedCounts[1].body), timeless((await requests.counts!()).body));
     // The batch answers each record as asking for it alone does.
     const batched = (await availability(poolIds.slice(0, 20))).body.checks[0].available as boolean[];
     const alone: boolean[] = [];

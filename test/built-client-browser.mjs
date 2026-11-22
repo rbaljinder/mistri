@@ -59,8 +59,10 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
    core is heavier in a first page, and its sheet is carried under the controls'), and with the three looks added
    beside it (Atelier, Graphite, Bloom: every built-in look's definition is in the entry, 17 KB raw for the three).
    Measured cold: 288.1 KB the staff sign-in, 509 KB Forecourt's list (504.6 KB its landing), 621.2 KB Tick's list;
-   the targets sit about 3% above. */
-const FIRST_PAINT_WIRE_KB = { public: 297, app: 525, workshop: 640 };
+   the targets sit about 3% above. rc.84's one-call tenant entry (enter carries the boot and who-am-I, one rule for
+   which tenant is entered) lives in the guest chunk a sign-in fetches, and took the staff sign-in to 297.1 KB; it
+   moved about 0.5% above. */
+const FIRST_PAINT_WIRE_KB = { public: 299, app: 525, workshop: 640 };
 const NEVER = {
   public: ['/assets/shell', '/assets/chrome', '/assets/tenant'],
   app: ['/assets/tenant', '/assets/public'],

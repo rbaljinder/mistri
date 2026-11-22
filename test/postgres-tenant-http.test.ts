@@ -108,7 +108,7 @@ const RESET = [
      FOR r IN SELECT n.nspname, c.relname FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
        WHERE lower(c.relname) LIKE '\\_\\_mistri\\_%' AND c.relkind IN ('r', 'p') AND n.nspname !~ '^pg_temp'
      LOOP EXECUTE format('DROP TABLE IF EXISTS %I.%I CASCADE', r.nspname, r.relname); END LOOP; END $$`,
-  'DROP TABLE IF EXISTS public.pg_item, public.pg_task, public.pg_person CASCADE',
+  'DROP TABLE IF EXISTS public.pg_item, public.pg_task, public.pg_person, public.pg_tag CASCADE',
 ];
 /* Each tenant's people, a row per membership holding the account's id (auth.me), and an item's notes that @mention them. */
 const MENTIONS = [
@@ -124,6 +124,13 @@ const SETUP = [
   `INSERT INTO public.pg_item VALUES ('north-item', 'north', 'same', 'North item'), ('south-item', 'south', 'same', 'South item')`,
   `INSERT INTO public.pg_task VALUES ('north-task', 'north', 'same', 'North task', 0), ('south-task', 'south', 'same', 'South task', 0)`,
 ];
+/* A tag table, for the rollup a loader asks for with `.with` (only where the App declares it). */
+const DERIVED = [
+  `CREATE TABLE public.pg_tag (id text PRIMARY KEY, tenant_id text NOT NULL, item_id text NOT NULL REFERENCES public.pg_item(id))`,
+  /* North's item has two tags of its own and south's one; a tag south made on north's item is no north count. */
+  `INSERT INTO public.pg_tag VALUES ('n1', 'north', 'north-item'), ('n2', 'north', 'north-item'), ('s1', 'south', 'south-item'),
+     ('s2', 'south', 'north-item')`,
+];
 
 /* A free-form page whose loader reads items, one whose loader tries to write one, and one whose loader reads tasks by an
    in-subquery on items. */
@@ -134,7 +141,7 @@ const pageView = (key: string, reads = ['item']) => ({
   reads,
   loader: key,
 });
-const manifest = (store: string, mentions: boolean | 'email' = false, pages = false) => ({
+const manifest = (store: string, mentions: boolean | 'email' = false, pages = false, derived = false) => ({
   id: appId,
   name: 'PostgreSQL tenant fixture',
   auth: {
@@ -151,6 +158,7 @@ const manifest = (store: string, mentions: boolean | 'email' = false, pages = fa
       physical: 'public.pg_item',
       owner: 'tenant',
       access: 'write',
+      ...(derived ? { rollups: { tags: { fn: 'count', from: 'tag' } }, computed: { tagged: { type: 'boolean', value: 'tags > 0' } } } : {}),
       fields: mentions
         ? { read: ['id', 'business_id', 'name', 'notes'], write: ['id', 'business_id', 'name', 'notes'] }
         : { read: ['id', 'business_id', 'name'], write: ['id', 'business_id', 'name'] },
@@ -167,6 +175,7 @@ const manifest = (store: string, mentions: boolean | 'email' = false, pages = fa
           }
         : {}),
     },
+    ...(derived ? { tag: { physical: 'public.pg_tag', owner: 'tenant', fields: { read: ['id', 'item_id'] } } } : {}),
     ...(mentions ? { person: { physical: 'public.pg_person', owner: 'tenant', fields: { read: ['id', 'handle', 'account_id'] } } } : {}),
     task: {
       physical: 'public.pg_task',
@@ -180,17 +189,23 @@ const manifest = (store: string, mentions: boolean | 'email' = false, pages = fa
     items: { kind: 'list', from: 'item' },
     tasks: { kind: 'list', from: 'task' },
     ...(pages
-      ? { board: pageView('board'), scribble: pageView('scribble'), fan: pageView('fan'), within: pageView('within', ['task', 'item']) }
+      ? {
+          board: pageView('board'),
+          scribble: pageView('scribble'),
+          fan: pageView('fan'),
+          within: pageView('within', ['task', 'item']),
+          figures: pageView('figures'),
+        }
       : {}),
   },
   home: 'items',
-  nav: ['items', 'tasks', ...(pages ? ['board', 'scribble', 'fan', 'within'] : [])],
+  nav: ['items', 'tasks', ...(pages ? ['board', 'scribble', 'fan', 'within', 'figures'] : [])],
 });
-const policyModule = (extra = '', mentions: boolean | 'email' = false) => `export default {
+const policyModule = (extra = '', mentions: boolean | 'email' = false, derived = false) => `export default {
   kind: 'tenant', appId: ${JSON.stringify(appId)}, storeId: ${JSON.stringify(binding.storeId)},
-  ownership: { item: { kind: 'tenant', column: 'tenant_id' }, task: { kind: 'tenant', column: 'tenant_id' }${mentions ? ", person: { kind: 'tenant', column: 'tenant_id' }" : ''} },
-  resolveMembershipRows: () => ({ item: true, task: true${mentions ? ', person: true' : ''} }),
-  resolveRows: () => ({ item: true, task: true${mentions ? ', person: true' : ''} }),
+  ownership: { item: { kind: 'tenant', column: 'tenant_id' }, task: { kind: 'tenant', column: 'tenant_id' }${derived ? ", tag: { kind: 'tenant', column: 'tenant_id' }" : ''}${mentions ? ", person: { kind: 'tenant', column: 'tenant_id' }" : ''} },
+  resolveMembershipRows: () => ({ item: true, task: true${derived ? ', tag: true' : ''}${mentions ? ', person: true' : ''} }),
+  resolveRows: () => ({ item: true, task: true${derived ? ', tag: true' : ''}${mentions ? ', person: true' : ''} }),
   authorizeDeletedRecord: () => true,
   resultReferences: { advance: result => [{ table: 'task', key: { id: result.taskId } }] },
   ${extra}
@@ -205,6 +220,9 @@ export const loaders = defineLoaders({
   scribble: defineLoader({ reads: ['item'], load: async ({ db }) => db.item.update({ id: 'north-item' }, { name: 'WRITTEN' }) }),
   fan: defineLoader({ reads: ['item'], load: async ({ db }) => ({
     names: (await Promise.all(Array.from({ length: ${FAN} }, () => db.item.where({}).orderBy('id')))).map((rows) => rows.map((row) => row.name).join()),
+  }) }),
+  figures: defineLoader({ reads: ['item', 'item.tags', 'item.tagged'], load: async ({ db }) => ({
+    items: (await db.item.where({}).with('tags', 'tagged').orderBy('id')).map((row) => ({ id: row.id, tags: row.tags, tagged: row.tagged })),
   }) }),
   within: defineLoader({ reads: ['task', 'item'], load: async ({ db }) => ({
     tasks: (await db.task.where({ name: { in: { from: 'item', where: { business_id: 'same' } } } }).orderBy('id')).map((row) => row.id),
@@ -280,9 +298,17 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
   /** The operator's files, the database layout and a prepared startup, without a host. */
   async function deployment(
     t: TestContext,
-    patch: { policy?: string; store?: string; administration?: boolean; mentions?: boolean | 'email'; pages?: boolean } = {},
+    patch: {
+      policy?: string;
+      store?: string;
+      administration?: boolean;
+      mentions?: boolean | 'email';
+      pages?: boolean;
+      derived?: boolean;
+    } = {},
   ) {
-    for (const statement of [...RESET, ...SETUP, ...(patch.mentions ? MENTIONS : [])]) await control.query(statement);
+    for (const statement of [...RESET, ...SETUP, ...(patch.mentions ? MENTIONS : []), ...(patch.derived ? DERIVED : [])])
+      await control.query(statement);
     await migratePostgresTenantStore(url, binding);
     if (patch.mentions) await provisionPostgresInbox(url);
     await migratePostgresCommandJournal(url);
@@ -297,14 +323,18 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
       commandsFile = join(directory, 'commands.mjs');
     writeFileSync(
       appPath,
-      JSON.stringify(namedCommands(manifest(patch.store === 'business-database' ? url : (patch.store ?? './auth.db'), patch.mentions)).app),
+      JSON.stringify(
+        namedCommands(
+          manifest(patch.store === 'business-database' ? url : (patch.store ?? './auth.db'), patch.mentions, false, patch.derived),
+        ).app,
+      ),
     );
-    writeFileSync(policyFile, policyModule(patch.policy, patch.mentions));
+    writeFileSync(policyFile, policyModule(patch.policy, patch.mentions, patch.derived));
     writeFileSync(commandsFile, commandsModule(patch.pages));
     const read = await loadApp(appPath);
     /* A page's component module is the App directory's to compile; the loader is the commands module's. The pages'
        views are the parsed manifest's, grafted on, so the host serves the loaders the commands module exports. */
-    const paged = patch.pages ? parseTestApp(manifest('./auth.db', patch.mentions, true), 'pg pages') : undefined;
+    const paged = patch.pages ? parseTestApp(manifest('./auth.db', patch.mentions, true, patch.derived), 'pg pages') : undefined;
     const loaded = paged ? { ...read, app: { ...read.app, views: paged.views, nav: paged.nav } } : read;
     const connection: ConnectionConfig = {
       id: binding.source.connection,
@@ -335,7 +365,10 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     return registry;
   }
 
-  async function fixture(t: TestContext, patch: { mentions?: boolean | 'email'; pages?: boolean; mail?: EmailTransport } = {}) {
+  async function fixture(
+    t: TestContext,
+    patch: { mentions?: boolean | 'email'; pages?: boolean; derived?: boolean; mail?: EmailTransport } = {},
+  ) {
     const { loaded, prepare } = await deployment(t, patch);
     const prepared = await prepare();
     const held = await holdPort(),
@@ -906,6 +939,38 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     assert.equal(wrote.body.code, 'loader_refused');
     assert.deepEqual(await items(), before);
     refused(await f.data('/api/pages/load', { ...south, ...f.signedIn(ada) }, { page: 'board' }));
+  });
+
+  test("a tenant page loader's .with reads the computed column and rollup a tenant list shows, counted in its own tenant only", async (t) => {
+    const f = await fixture(t, { pages: true, derived: true }),
+      ada = await f.signup('Ada'),
+      bob = await f.signup('Bob');
+    await f.grant(ada, 'north');
+    await f.grant(bob, 'south');
+    const north = await f.open(ada, 'north'),
+      south = await f.open(bob, 'south');
+    const figures = async (context: Context) => {
+      const reply = await f.data('/api/pages/load', context, { page: 'figures' });
+      assert.equal(reply.status, 200, reply.text);
+      sealed(reply);
+      return (reply.body.data as { items: Record<string, unknown>[] }).items;
+    };
+    const list = async (context: Context) =>
+      rows(
+        await f.data('/api/view/run', context, {
+          view: {
+            base: 'item',
+            columns: [{ path: 'id' }, { path: 'tags' }, { path: 'tagged' }],
+            orderBy: [{ path: 'id', direction: 'asc' }],
+          },
+          limit: 50,
+        }),
+      );
+    for (const context of [north, south]) assert.deepEqual(await figures(context), await list(context));
+    // South's tag on north's item is in the database, and in no one's count: north's item has the two tags north made.
+    assert.equal((await control.query("SELECT count(*)::int AS n FROM public.pg_tag WHERE item_id = 'north-item'")).rows[0].n, 3);
+    assert.deepEqual(await figures(north), [{ id: 'north-item', tags: '2', tagged: true }]);
+    assert.deepEqual(await figures(south), [{ id: 'south-item', tags: '1', tagged: true }]);
   });
 
   test("a page loader's in-subquery keys only its tenant's rows on PostgreSQL, though both tenants' rows hold the where's value", async (t) => {

@@ -29,7 +29,7 @@ import {
   TENANT_BATCH_READS,
   TENANT_BOOT_PATH,
   TENANT_ENTER_PATH,
-  soleTenant,
+  enteredTenant,
   type TenantBatchRead,
 } from '../shared/tenantBoot.js';
 import { readKey } from '@mistriwork/engine/shared/firstPaint.js';
@@ -393,7 +393,7 @@ function discovered(
     !Array.isArray(value.memberships) ||
     value.memberships.length > 256 ||
     Object.keys(value).some(
-      (key) => !['status', 'appId', 'accountId', 'memberships', 'platform', ...(entering ? ['entered'] : [])].includes(key),
+      (key) => !['status', 'appId', 'accountId', 'memberships', 'platform', ...(entering ? ['entered', 'whoami'] : [])].includes(key),
     ) ||
     ('platform' in value && value.platform !== true)
   )
@@ -431,9 +431,9 @@ export interface TenantEntry {
 }
 
 /**
- * Discovery, and for someone with one tenant, the lease in it and the page's boot on that lease, in one request
+ * Discovery, and for someone with one tenant, or whose link or tab names one of theirs, the lease in it and the page's boot on that lease, in one request
  * (shared/tenantBoot.ts `TENANT_ENTER_PATH`). The lease is taken only where it is the very one discovery's own answer
- * would have the chooser enter (shared `soleTenant`): this tab's kept context resumed, or a new one.
+ * would have the chooser enter (shared `enteredTenant`): this tab's kept context resumed, or a new one.
  */
 export async function enterTenant(
   page: { readonly path: string; readonly search: string },
@@ -443,12 +443,37 @@ export async function enterTenant(
   const snapshot = captureSessionIdentity();
   account(snapshot);
   if (snapshot.tenant || requested === PLATFORM_TENANT_ID) throw unavailable();
+  const first = firstEntry;
+  firstEntry = undefined;
+  /* The page's first request was this one (`enterFirst`), asked before who-am-I and answered with it: taken here for
+     the session it was made as, and only for the very request this look would send. Any other is asked afresh. */
+  if (
+    first &&
+    first.me.accountId === snapshot.accountId &&
+    first.sent.path === page.path &&
+    first.sent.search === page.search &&
+    first.sent.tenant === requested &&
+    first.sent.kept?.tenantId === kept?.tenantId &&
+    first.sent.kept?.tabId === kept?.tabId
+  )
+    return entryOf(first.value, first.response, snapshot, requested, kept);
   const { value, response } = await request(snapshot, `${TENANT_ENTER_PATH}?${new URLSearchParams({ app: snapshot.appId! })}`, {
     path: page.path,
     search: page.search,
     ...(requested === undefined ? {} : { tenant: requested }),
     ...(kept ? { kept: { tenantId: kept.tenantId, tabId: kept.tabId } } : {}),
   });
+  return entryOf(value, response, snapshot, requested, kept);
+}
+
+/** Entering's answer, checked against the session it was asked as. */
+function entryOf(
+  value: Record<string, unknown>,
+  response: Response,
+  snapshot: SessionIdentitySnapshot,
+  requested: string | undefined,
+  kept: { readonly tenantId: string; readonly tabId: string } | undefined,
+): TenantEntry {
   const found = discovered(value, snapshot, true);
   if (!('entered' in value)) return { tenants: found.tenants };
   const entered = value.entered;
@@ -459,7 +484,7 @@ export async function enterTenant(
   )
     throw unavailable();
   const lease = context(entered.context, snapshot, response);
-  const sole = soleTenant(found.memberships, found.platform, requested);
+  const sole = enteredTenant(found.memberships, found.platform, { named: requested, kept: kept?.tenantId });
   if (
     sole === undefined ||
     lease.tenantId !== sole ||
@@ -468,6 +493,66 @@ export async function enterTenant(
   )
     throw unavailable();
   return { tenants: found.tenants, lease, ...(object(entered.boot) ? { boot: entered.boot } : {}) };
+}
+
+/** The page's first request, held for the look that follows who-am-I (`enterTenant`). */
+interface FirstEntry {
+  readonly value: Record<string, unknown>;
+  readonly response: Response;
+  readonly me: Record<string, unknown>;
+  readonly sent: {
+    readonly path: string;
+    readonly search: string;
+    readonly tenant: string | undefined;
+    readonly kept: { readonly tenantId: string; readonly tabId: string } | undefined;
+  };
+}
+let firstEntry: FirstEntry | undefined;
+
+/**
+ * A tenant App's first request: entering, before the page knows who is signed in, whose answer says who-am-I as
+ * `/api/whoami` does (server tenantAuthenticatedHttp.ts `whoamiAnswer`). Identity comes from the server's session
+ * alone: nothing sent here says who the person is, and the account the answer names must be the one its header
+ * names. The entry is held for the chooser's first look (`enterTenant`), which checks it as any answer, and who-am-I
+ * is returned for the page to establish its identity from. Undefined where the host did not answer so — a signed-out
+ * request included, which the page then asks who-am-I of as it always did, so each outcome stays what it was.
+ */
+export async function enterFirst(
+  appId: string,
+  page: { readonly path: string; readonly search: string },
+  requested?: string,
+  kept?: { readonly tenantId: string; readonly tabId: string },
+): Promise<Record<string, unknown> | undefined> {
+  firstEntry = undefined;
+  if (requested === PLATFORM_TENANT_ID) return undefined;
+  const sent = { path: page.path, search: page.search, tenant: requested, kept };
+  let response: Response;
+  let value: unknown;
+  try {
+    response = await fetchServer(`${TENANT_ENTER_PATH}?${new URLSearchParams({ app: appId })}`, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      method: 'POST',
+      headers: { [names.app]: appId, 'content-type': 'application/json' },
+      body: JSON.stringify({
+        path: page.path,
+        search: page.search,
+        ...(requested === undefined ? {} : { tenant: requested }),
+        ...(kept ? { kept: { tenantId: kept.tenantId, tabId: kept.tabId } } : {}),
+      }),
+    });
+    value = await response.json();
+  } catch {
+    return undefined;
+  }
+  if (!response.ok || !object(value) || !object(value.whoami)) return undefined;
+  const me = value.whoami;
+  if (me.appId !== appId) return undefined;
+  /* Signed out, the answer is who-am-I's alone: no lease was taken, and the page draws what it drew. */
+  if (me.signedIn !== true) return me.signedIn === false && value.status === 'signed_out' ? me : undefined;
+  if (me.tenant !== true || typeof me.accountId !== 'string' || response.headers.get(names.account) !== me.accountId) return undefined;
+  firstEntry = { value, response, me, sent };
+  return me;
 }
 
 /** The caller retires browser state before dispatch. A lost acknowledgement

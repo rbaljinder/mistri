@@ -230,7 +230,7 @@ describe('the compile', () => {
     const compiled = (await compileComponents(at, new Map([['hello', { id: 'hello', module: './widgets/Hello.jsx', kind: 'section' }]])))!;
     const js = compiled.files[compiled.entries.hello.js];
     assert.match(js, /from "@mistriwork\/mistri\/ui"/);
-    assert.match(withHostPaths(compiled.files, compiled.entries.hello.js, '/tick'), /from "\/tick\/_mistri\/sdk\/ui\.js"/);
+    assert.match(withHostPaths(compiled.files, compiled.entries.hello.js, '/tick'), /from "\/tick\/_mistri\/sdk\/[0-9a-f]{10}\/ui\.js"/);
   });
 
   test('refuses what a browser module may never reach, and a module with nothing to draw', async () => {
@@ -448,12 +448,28 @@ describe('served, and built', () => {
       assert.match(js.headers.get('cache-control') ?? '', /immutable/);
       // Its bare host imports are said as the host modules' paths: no page needs an import map for them.
       const code = await js.text();
-      assert.match(code, /["']\/_mistri\/sdk\/ui\.js["']/);
+      const named = /["'](\/_mistri\/sdk\/([0-9a-f]{10})\/ui\.js)["']/.exec(code);
+      assert.ok(named, 'host modules are named under the build hash');
       assert.doesNotMatch(code, /from\s*["'](?:react|@mistriwork\/mistri\/ui)["']/);
       assert.equal((await fetch(`${origin}/_components/hello-000000000000.js`)).status, 404);
       const react = await fetch(`${origin}/_mistri/sdk/react.js`);
       assert.equal(react.headers.get('cache-control'), 'no-cache');
       assert.match(await react.text(), /__mistri/);
+      // A host path under the build's hash is kept for a year; any other hash still answers, asked about each time.
+      const kept = await fetch(`${origin}${named[1]}`);
+      assert.equal(kept.headers.get('cache-control'), 'public, max-age=31536000, immutable');
+      const etag = kept.headers.get('etag');
+      assert.ok(etag);
+      assert.equal((await fetch(`${origin}${named[1]}`, { headers: { 'if-none-match': etag } })).status, 304);
+      const old = await fetch(`${origin}/_mistri/sdk/0123456789/ui.js`);
+      assert.equal(old.status, 200);
+      assert.equal(old.headers.get('cache-control'), 'no-cache');
+      assert.equal(await old.text(), await (await fetch(`${origin}${named[1]}`)).text());
+      const plain = await fetch(`${origin}/_mistri/sdk/ui.js`);
+      assert.equal(
+        (await fetch(`${origin}/_mistri/sdk/ui.js`, { headers: { 'if-none-match': plain.headers.get('etag') ?? '' } })).status,
+        304,
+      );
       const shell = await fetch(`${origin}/`);
       assert.doesNotMatch(await shell.text(), /type="importmap"/, 'a page needs no import map, so a host page can mount the App');
     } finally {

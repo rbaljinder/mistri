@@ -5,7 +5,7 @@ let session: typeof import('../../../kit/src/client/sessionIdentity.js');
 let transport: typeof import('./tenantTransport.js');
 let boot: typeof import('./tenantBootLoad.js');
 const proof = (tenantId = 'north', context = 'context-north'): TenantContextReply => ({
-  appId: 'atlas',
+  appId: 'desk',
   accountId: 'alice',
   tenantId,
   tabId: 'tab-one',
@@ -40,7 +40,7 @@ beforeEach(async () => {
   boot = await import('./tenantBootLoad.js');
   const lifecycle = await import('../../../kit/src/client/sessionLifecycle.js');
   lifecycle.configureSessionLifecycle({ onLock: vi.fn() });
-  session.establishSessionIdentity({ signedIn: true, appId: 'atlas', accountId: 'alice' });
+  session.establishSessionIdentity({ signedIn: true, appId: 'desk', accountId: 'alice' });
   session.requireTenantSelection();
 });
 afterEach(() => {
@@ -52,24 +52,24 @@ test('discovery is account-only, bounded and never auto-selects a tenant', async
   const fetcher = vi
     .fn()
     .mockResolvedValue(
-      new Response(JSON.stringify({ status: 'ready', appId: 'atlas', accountId: 'alice', memberships: [{ tenantId: 'north' }] })),
+      new Response(JSON.stringify({ status: 'ready', appId: 'desk', accountId: 'alice', memberships: [{ tenantId: 'north' }] })),
     );
   vi.stubGlobal('fetch', fetcher);
   expect(await transport.discoverTenants()).toEqual(['north']);
   expect(session.sessionIdentity().tenant).toBeUndefined();
-  expect(fetcher.mock.calls[0][0]).toBe('/api/tenant/bootstrap?app=atlas');
-  expect(fetcher.mock.calls[0][1].headers).toEqual({ 'x-mistri-app': 'atlas', 'x-mistri-account': 'alice' });
+  expect(fetcher.mock.calls[0][0]).toBe('/api/tenant/bootstrap?app=desk');
+  expect(fetcher.mock.calls[0][1].headers).toEqual({ 'x-mistri-app': 'desk', 'x-mistri-account': 'alice' });
 });
 
 test('entering takes a lease only where discovery has the one tenant it would enter, and checks it attests', async () => {
-  const discovery = { status: 'ready', appId: 'atlas', accountId: 'alice', memberships: [{ tenantId: 'north' }] };
+  const discovery = { status: 'ready', appId: 'desk', accountId: 'alice', memberships: [{ tenantId: 'north' }] };
   const boot = { reads: {}, items: {} };
-  const page = { path: '/atlas/leads', search: '?tab=open' };
+  const page = { path: '/desk/leads', search: '?tab=open' };
   const lease = proof();
   const fetcher = vi.fn().mockResolvedValue(reply({ ...discovery, entered: { context: lease, boot } }, lease));
   vi.stubGlobal('fetch', fetcher);
   expect(await transport.enterTenant(page)).toEqual({ tenants: ['north'], lease, boot });
-  expect(fetcher.mock.calls[0][0]).toBe('/api/tenant/enter?app=atlas');
+  expect(fetcher.mock.calls[0][0]).toBe('/api/tenant/enter?app=desk');
   expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual(page);
   /* The kept context, resumed: the same tab, at any revision. */
   const resumed = { ...proof(), revision: 3 };
@@ -84,6 +84,14 @@ test('entering takes a lease only where discovery has the one tenant it would en
     new Response(JSON.stringify({ ...discovery, memberships: [{ tenantId: 'north' }, { tenantId: 'south' }] })),
   );
   expect(await transport.enterTenant(page)).toEqual({ tenants: ['north', 'south'] });
+  /* Several memberships: the tenant a link names, or this tab kept, as the person's own, is entered; another is not. */
+  const both = { ...discovery, memberships: [{ tenantId: 'north' }, { tenantId: 'south' }] };
+  fetcher.mockResolvedValueOnce(reply({ ...both, entered: { context: lease, boot } }, lease));
+  expect(await transport.enterTenant(page, 'north')).toEqual({ tenants: ['north', 'south'], lease, boot });
+  fetcher.mockResolvedValueOnce(reply({ ...both, entered: { context: resumed } }, resumed));
+  expect((await transport.enterTenant(page, undefined, { tenantId: 'north', tabId: 'tab-one' })).lease).toEqual(resumed);
+  fetcher.mockResolvedValueOnce(reply({ ...both, entered: { context: proof() } }, proof()));
+  await expect(transport.enterTenant(page, 'east')).rejects.toThrow();
   /* A lease the chooser would not have entered, or one the reply does not attest, is never taken. */
   for (const [body, owner, requested] of [
     [{ ...discovery, memberships: [{ tenantId: 'north' }, { tenantId: 'south' }], entered: { context: proof() } }, proof(), undefined],
@@ -103,10 +111,64 @@ test('entering takes a lease only where discovery has the one tenant it would en
   await expect(transport.enterTenant(page, '@platform')).rejects.toThrow();
 });
 
+test("the page's first request is entering, which says who-am-I: no who-am-I is asked, and the look takes that answer", async () => {
+  const discovery = { status: 'ready', appId: 'desk', accountId: 'alice', memberships: [{ tenantId: 'north' }] };
+  const me = { signedIn: true, accountId: 'alice', appId: 'desk', who: 'alice', header: null, tenant: true };
+  const boot = { reads: {}, items: {} };
+  const page = { path: '/desk/leads', search: '?tab=open' };
+  const lease = proof();
+  const fetcher = vi.fn().mockResolvedValue(reply({ ...discovery, whoami: me, entered: { context: lease, boot } }, lease));
+  vi.stubGlobal('fetch', fetcher);
+  expect(await transport.enterFirst('desk', page, undefined, undefined)).toEqual(me);
+  /* One request, entering, naming no account of its own: identity is the server's session's alone. */
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(fetcher.mock.calls[0][0]).toBe('/api/tenant/enter?app=desk');
+  expect(fetcher.mock.calls[0][1].headers).toEqual({ 'x-mistri-app': 'desk', 'content-type': 'application/json' });
+  /* The chooser's first look is that answer, checked as any, and asks nothing more. */
+  expect(await transport.enterTenant(page)).toEqual({ tenants: ['north'], lease, boot });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  /* Held once: a second look asks for itself. */
+  fetcher.mockResolvedValueOnce(reply({ ...discovery, entered: { context: lease, boot } }, lease));
+  await transport.enterTenant(page);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  /* A look that is not the one asked is asked afresh. */
+  for (const [again, requested] of [
+    [{ path: '/desk/other', search: '' }, undefined],
+    [page, 'north'],
+  ] as const) {
+    fetcher.mockResolvedValueOnce(reply({ ...discovery, whoami: me, entered: { context: lease, boot } }, lease));
+    await transport.enterFirst('desk', page);
+    fetcher.mockResolvedValueOnce(reply({ ...discovery, entered: { context: lease, boot } }, lease));
+    const before = fetcher.mock.calls.length;
+    await transport.enterTenant(again, requested);
+    expect(fetcher.mock.calls.length, `${again.path} ${requested}`).toBe(before + 1);
+  }
+  /* An answer that does not attest the account, says no who-am-I, or is not the App's is not taken as who-am-I. */
+  for (const [body, owner] of [
+    [{ ...discovery, whoami: { ...me, accountId: 'mallory' }, entered: { context: lease } }, lease],
+    [{ ...discovery, whoami: { ...me, appId: 'other' } }, lease],
+    [{ ...discovery, whoami: { ...me, tenant: undefined } }, lease],
+    [{ ...discovery }, lease],
+  ] as const) {
+    fetcher.mockResolvedValueOnce(reply(body, owner));
+    expect(await transport.enterFirst('desk', page)).toBeUndefined();
+  }
+  fetcher.mockResolvedValueOnce(reply({ error: 'busy' }, lease, 503));
+  expect(await transport.enterFirst('desk', page)).toBeUndefined();
+  fetcher.mockRejectedValueOnce(new Error('offline'));
+  expect(await transport.enterFirst('desk', page)).toBeUndefined();
+  /* Signed out, it is who-am-I's own answer, which the page draws the sign-in from as ever. */
+  const out = { signedIn: false, accountId: null, appId: 'desk', who: null, header: null, signIn: { providers: ['email'] }, tenant: true };
+  fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ status: 'signed_out', whoami: out })));
+  expect(await transport.enterFirst('desk', page)).toEqual(out);
+  /* The platform realm is never entered this way. */
+  expect(await transport.enterFirst('desk', page, '@platform')).toBeUndefined();
+});
+
 test('mounted tenant discovery, reads and release stay under the App base path', async () => {
   const meta = document.createElement('meta');
   meta.name = 'mistri-mount';
-  meta.content = JSON.stringify({ base: '/leads', apps: { atlas: '' } });
+  meta.content = JSON.stringify({ base: '/leads', apps: { desk: '' } });
   document.head.append(meta);
   try {
     vi.resetModules();
@@ -114,26 +176,26 @@ test('mounted tenant discovery, reads and release stay under the App base path',
     const mounted = await import('./tenantTransport.js');
     const lifecycle = await import('../../../kit/src/client/sessionLifecycle.js');
     lifecycle.configureSessionLifecycle({ onLock: vi.fn() });
-    identity.establishSessionIdentity({ signedIn: true, appId: 'atlas', accountId: 'alice' });
+    identity.establishSessionIdentity({ signedIn: true, appId: 'desk', accountId: 'alice' });
     identity.requireTenantSelection();
     const fetcher = vi
       .fn()
       .mockResolvedValue(
-        new Response(JSON.stringify({ status: 'ready', appId: 'atlas', accountId: 'alice', memberships: [{ tenantId: 'north' }] })),
+        new Response(JSON.stringify({ status: 'ready', appId: 'desk', accountId: 'alice', memberships: [{ tenantId: 'north' }] })),
       );
     vi.stubGlobal('fetch', fetcher);
     expect(await mounted.discoverTenants()).toEqual(['north']);
-    expect(fetcher.mock.calls.at(-1)![0]).toBe('/leads/api/tenant/bootstrap?app=atlas');
+    expect(fetcher.mock.calls.at(-1)![0]).toBe('/leads/api/tenant/bootstrap?app=desk');
     const lease = proof();
     fetcher.mockResolvedValue(reply(lease, lease));
     await mounted.chooseTenant('north');
     identity.establishTenantSelection(lease);
-    expect(fetcher.mock.calls.at(-1)![0]).toBe('/leads/api/tenant/context/open?app=atlas&tenant=north');
+    expect(fetcher.mock.calls.at(-1)![0]).toBe('/leads/api/tenant/context/open?app=desk&tenant=north');
     fetcher.mockResolvedValue(reply({ rows: [] }, lease));
-    await mounted.tenantReadApi('/api/query', { table: 'item' }, 'atlas');
-    expect(fetcher.mock.calls.at(-1)![0]).toBe('/leads/api/query?app=atlas&tenant=north');
+    await mounted.tenantReadApi('/api/query', { table: 'item' }, 'desk');
+    expect(fetcher.mock.calls.at(-1)![0]).toBe('/leads/api/query?app=desk&tenant=north');
     mounted.releaseTenant(lease);
-    expect(fetcher.mock.calls.at(-1)![0]).toBe('/leads/api/tenant/context/release?app=atlas');
+    expect(fetcher.mock.calls.at(-1)![0]).toBe('/leads/api/tenant/context/release?app=desk');
   } finally {
     meta.remove();
   }
@@ -150,7 +212,7 @@ test('discovery offers the platform realm as one more choice under its reserved 
       .fn()
       .mockResolvedValue(
         new Response(
-          JSON.stringify({ status: 'ready', appId: 'atlas', accountId: 'alice', memberships: [{ tenantId: 'north' }], platform: true }),
+          JSON.stringify({ status: 'ready', appId: 'desk', accountId: 'alice', memberships: [{ tenantId: 'north' }], platform: true }),
         ),
       ),
   );
@@ -162,7 +224,7 @@ test('discovery offers the platform realm as one more choice under its reserved 
   ]) {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 'ready', appId: 'atlas', accountId: 'alice', ...body }))),
+      vi.fn().mockResolvedValue(new Response(JSON.stringify({ status: 'ready', appId: 'desk', accountId: 'alice', ...body }))),
     );
     await expect(transport.discoverTenants()).rejects.toThrow();
   }
@@ -173,7 +235,7 @@ test('the platform realm is chosen, read and renewed by ?realm=platform, and its
     fetcher = vi.fn().mockResolvedValue(platformReply(lease));
   vi.stubGlobal('fetch', fetcher);
   expect(await transport.chooseTenant('@platform')).toEqual(lease);
-  expect(fetcher.mock.calls[0][0]).toBe('/api/tenant/context/open?app=atlas&realm=platform');
+  expect(fetcher.mock.calls[0][0]).toBe('/api/tenant/context/open?app=desk&realm=platform');
   // A reply without the realm header, or a realm on a tenant's lease, is not this context.
   fetcher.mockResolvedValue(reply(lease, lease));
   await expect(transport.chooseTenant('@platform')).rejects.toThrow();
@@ -182,25 +244,25 @@ test('the platform realm is chosen, read and renewed by ?realm=platform, and its
   session.establishTenantSelection(lease);
   expect(session.sessionIdentity().tenant).toMatchObject({ tenantId: '@platform', realm: 'platform' });
   fetcher.mockResolvedValue(platformReply({ rows: [] }));
-  await transport.tenantReadApi('/api/query', { table: 'item' }, 'atlas');
-  expect(fetcher.mock.calls.at(-1)![0]).toBe('/api/query?app=atlas&realm=platform');
+  await transport.tenantReadApi('/api/query', { table: 'item' }, 'desk');
+  expect(fetcher.mock.calls.at(-1)![0]).toBe('/api/query?app=desk&realm=platform');
   // The platform realm saves its own rows, but a change with no platform answer, an import, never leaves the browser.
   const sent = fetcher.mock.calls.length;
-  await expect(transport.tenantMutationApi('/api/import', { table: 'item', rows: [{ name: 'b' }] }, 'atlas')).rejects.toMatchObject({
+  await expect(transport.tenantMutationApi('/api/import', { table: 'item', rows: [{ name: 'b' }] }, 'desk')).rejects.toMatchObject({
     outcome: 'not_applied',
   });
   expect(fetcher.mock.calls.length).toBe(sent);
   const renewed = { ...lease, revision: 2 };
   fetcher.mockResolvedValue(platformReply(renewed, renewed));
   expect(await transport.renewTenant(session.captureSessionIdentity(), lease)).toEqual(renewed);
-  expect(fetcher.mock.calls.at(-1)![0]).toBe('/api/tenant/context/renew?app=atlas&realm=platform');
+  expect(fetcher.mock.calls.at(-1)![0]).toBe('/api/tenant/context/renew?app=desk&realm=platform');
 });
 
 test.each([
   { status: 'ready', appId: 'other', accountId: 'alice', memberships: [] },
-  { status: 'ready', appId: 'atlas', accountId: 'bob', memberships: [] },
-  { status: 'ready', appId: 'atlas', accountId: 'alice', memberships: [{ tenantId: 'north' }, { tenantId: 'north' }] },
-  { status: 'ready', appId: 'atlas', accountId: 'alice', memberships: [{ tenantId: 'north', roles: ['admin'] }] },
+  { status: 'ready', appId: 'desk', accountId: 'bob', memberships: [] },
+  { status: 'ready', appId: 'desk', accountId: 'alice', memberships: [{ tenantId: 'north' }, { tenantId: 'north' }] },
+  { status: 'ready', appId: 'desk', accountId: 'alice', memberships: [{ tenantId: 'north', roles: ['admin'] }] },
 ])('malformed discovery does not select or publish a tenant: %j', async (body) => {
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(body))));
   await expect(transport.discoverTenants()).rejects.toThrow();
@@ -249,7 +311,7 @@ test('lost switch acknowledgement leaves selection absent; recovery is explicit'
   expect(session.sessionIdentity().tenant).toBeUndefined();
   fetcher.mockResolvedValue(reply(next, next));
   expect(await transport.recoverTenant(original.tabId)).toEqual(next);
-  expect(fetcher.mock.calls[1][0]).toBe('/api/tenant/context/recover?app=atlas');
+  expect(fetcher.mock.calls[1][0]).toBe('/api/tenant/context/recover?app=desk');
 });
 
 test('inactive recovery carries no implied owner and malformed recovery refuses', async () => {
@@ -264,11 +326,11 @@ test('selected reads carry canonical URL selectors and tab/context assertions, n
   session.establishTenantSelection(proof());
   const fetcher = vi.fn().mockResolvedValue(reply({ rows: [{ id: 'same', name: 'North' }] }));
   vi.stubGlobal('fetch', fetcher);
-  expect(await transport.tenantReadApi('/api/query', { table: 'item', app: 'atlas' }, 'atlas')).toEqual({
+  expect(await transport.tenantReadApi('/api/query', { table: 'item', app: 'desk' }, 'desk')).toEqual({
     rows: [{ id: 'same', name: 'North' }],
   });
   const [url, init] = fetcher.mock.calls[0];
-  expect(url).toBe('/api/query?app=atlas&tenant=north');
+  expect(url).toBe('/api/query?app=desk&tenant=north');
   expect(JSON.parse(init.body)).toEqual({ table: 'item' });
   expect(init.headers).not.toHaveProperty('x-mistri-tenant');
   expect(init.headers['x-mistri-tab']).toBe('tab-one');
@@ -282,14 +344,14 @@ test('a picker’s and a related list’s reads say what they are on the lease, 
   const { installShell } = await import('../../../kit/src/client/shellMode.js');
   installShell((await import('./surfaceShell.js')).surfaceShell);
   const core = await import('../../../kit/src/client/core.js');
-  core.state.activeConnection = 'atlas';
+  core.state.activeConnection = 'desk';
   await core.pickerApi('/api/query', { table: 'item' });
   await core.relatedApi('/api/query', { table: 'item' });
   await core.api('/api/query', { table: 'item' });
-  expect(fetcher.mock.calls.map(([url]) => url)).toEqual(Array(3).fill('/api/query?app=atlas&tenant=north'));
+  expect(fetcher.mock.calls.map(([url]) => url)).toEqual(Array(3).fill('/api/query?app=desk&tenant=north'));
   expect(fetcher.mock.calls.map(([, init]) => init.headers['x-mistri-read'])).toEqual(['picker', 'related', undefined]);
   // What a read says it is never speaks for the lease: only those headers ride, and the lease's own win.
-  await transport.tenantReadApi('/api/query', { table: 'item' }, 'atlas', undefined, {
+  await transport.tenantReadApi('/api/query', { table: 'item' }, 'desk', undefined, {
     'x-mistri-read': 'picker',
     'x-mistri-tenant': 'south',
     'x-mistri-context': 'context-south',
@@ -305,14 +367,14 @@ test('command availability is an owned tenant read, never an unscoped or mutatio
   const result = { availability: [{ available: true }] };
   const fetcher = vi.fn().mockResolvedValue(reply(result));
   vi.stubGlobal('fetch', fetcher);
-  await expect(transport.tenantReadApi('/api/commands/availability', payload, 'atlas')).rejects.toThrow();
+  await expect(transport.tenantReadApi('/api/commands/availability', payload, 'desk')).rejects.toThrow();
   expect(fetcher).not.toHaveBeenCalled();
   session.establishTenantSelection(proof());
-  expect(await transport.tenantReadApi('/api/commands/availability', payload, 'atlas')).toEqual(result);
+  expect(await transport.tenantReadApi('/api/commands/availability', payload, 'desk')).toEqual(result);
   const [url, init] = fetcher.mock.calls[0];
-  expect(url).toBe('/api/commands/availability?app=atlas&tenant=north');
+  expect(url).toBe('/api/commands/availability?app=desk&tenant=north');
   expect(init.headers).toMatchObject({
-    'x-mistri-app': 'atlas',
+    'x-mistri-app': 'desk',
     'x-mistri-account': 'alice',
     'x-mistri-context': 'context-north',
     'x-mistri-tab': 'tab-one',
@@ -321,7 +383,7 @@ test('command availability is an owned tenant read, never an unscoped or mutatio
   expect(JSON.parse(init.body)).toEqual(payload);
   expect(transport.isTenantMutationPath('/api/commands/availability')).toBe(false);
   fetcher.mockResolvedValue(reply(result, proof('south', 'context-south')));
-  await expect(transport.tenantReadApi('/api/commands/availability', payload, 'atlas')).rejects.toThrow();
+  await expect(transport.tenantReadApi('/api/commands/availability', payload, 'desk')).rejects.toThrow();
 });
 
 test('availability refuses a suspended lease before sending a request', async () => {
@@ -329,7 +391,7 @@ test('availability refuses a suspended lease before sending a request', async ()
   session.suspendTenantLease(session.captureSessionIdentity());
   const fetcher = vi.fn();
   vi.stubGlobal('fetch', fetcher);
-  await expect(transport.tenantReadApi('/api/commands/availability', { checks: [] }, 'atlas')).rejects.toThrow();
+  await expect(transport.tenantReadApi('/api/commands/availability', { checks: [] }, 'desk')).rejects.toThrow();
   expect(fetcher).not.toHaveBeenCalled();
 });
 
@@ -344,7 +406,7 @@ test('the streamed export is asked on the lease, and a file is kept only where i
   vi.stubGlobal('fetch', fetcher);
   const answer = await transport.tenantExport({ q: 'lead', format: 'csv', columns: ['id'] });
   expect(await answer.text()).toBe('id\r\n1\r\n');
-  expect(fetcher.mock.calls[0][0]).toBe('/api/export?app=atlas&tenant=north');
+  expect(fetcher.mock.calls[0][0]).toBe('/api/export?app=desk&tenant=north');
   expect(fetcher.mock.calls[0][1]).toMatchObject({
     method: 'POST',
     cache: 'no-store',
@@ -364,8 +426,8 @@ test('context monitoring forwards its abort signal without dropping owner assert
   const controller = new AbortController(),
     fetcher = vi.fn().mockResolvedValue(reply({ app: true }));
   vi.stubGlobal('fetch', fetcher);
-  await transport.tenantReadApi('/api/runtime', undefined, 'atlas', controller.signal);
-  expect(fetcher.mock.calls[0][0]).toBe('/api/runtime?app=atlas&tenant=north');
+  await transport.tenantReadApi('/api/runtime', undefined, 'desk', controller.signal);
+  expect(fetcher.mock.calls[0][0]).toBe('/api/runtime?app=desk&tenant=north');
   expect(fetcher.mock.calls[0][1]).toMatchObject({
     signal: controller.signal,
     cache: 'no-store',
@@ -389,7 +451,7 @@ test.each([
   session.establishTenantSelection(proof());
   const fetcher = vi.fn();
   vi.stubGlobal('fetch', fetcher);
-  await expect(transport.tenantReadApi(path, { table: 'item' }, 'atlas')).rejects.toThrow();
+  await expect(transport.tenantReadApi(path, { table: 'item' }, 'desk')).rejects.toThrow();
   expect(fetcher).not.toHaveBeenCalled();
 });
 
@@ -489,13 +551,13 @@ test('renewal uses only control assertions, returns a frozen receipt and leaves 
   expect(session.tenantLeaseActive()).toBe(false);
   expect(fetcher).toHaveBeenCalledOnce();
   expect(fetcher.mock.calls[0]).toEqual([
-    '/api/tenant/context/renew?app=atlas&tenant=north',
+    '/api/tenant/context/renew?app=desk&tenant=north',
     {
       method: 'POST',
       credentials: 'same-origin',
       cache: 'no-store',
       signal: controller.signal,
-      headers: { 'x-mistri-app': 'atlas', 'x-mistri-account': 'alice', 'content-type': 'application/json' },
+      headers: { 'x-mistri-app': 'desk', 'x-mistri-account': 'alice', 'content-type': 'application/json' },
       body: JSON.stringify({ tabId: original.tabId, expectedContext: original.context, expectedRevision: 1 }),
     },
   ]);
@@ -682,12 +744,12 @@ test('reads refused because the server forgot the context enter the same tenant 
   });
   vi.stubGlobal('fetch', fetcher);
   const [schema, rows] = await Promise.all([transport.tenantReadApi('/api/schema'), transport.tenantReadApi('/api/run', { q: 'item' })]);
-  expect(schema).toEqual({ asked: '/api/schema?app=atlas&tenant=north' });
-  expect(rows).toEqual({ asked: '/api/run?app=atlas&tenant=north' });
+  expect(schema).toEqual({ asked: '/api/schema?app=desk&tenant=north' });
+  expect(rows).toEqual({ asked: '/api/run?app=desk&tenant=north' });
   /* Two refused, one entry, two asked again. */
   const opened = fetcher.mock.calls.filter(([url]) => url.startsWith('/api/tenant/context/open'));
   expect(opened).toHaveLength(1);
-  expect(opened[0][0]).toBe('/api/tenant/context/open?app=atlas&tenant=north');
+  expect(opened[0][0]).toBe('/api/tenant/context/open?app=desk&tenant=north');
   expect(opened[0][1].method).toBe('POST');
   expect(fetcher).toHaveBeenCalledTimes(5);
   for (const [, init] of fetcher.mock.calls.slice(-2)) {
@@ -911,7 +973,7 @@ test('discovery keeps what each tenant is called beside its id, and refuses a na
       new Response(
         JSON.stringify({
           status: 'ready',
-          appId: 'atlas',
+          appId: 'desk',
           accountId: 'alice',
           memberships: [{ tenantId: 'north', name: 'North Motors' }, { tenantId: 'south' }],
         }),
@@ -926,7 +988,7 @@ test('discovery keeps what each tenant is called beside its id, and refuses a na
       vi
         .fn()
         .mockResolvedValue(
-          new Response(JSON.stringify({ status: 'ready', appId: 'atlas', accountId: 'alice', memberships: [{ tenantId: 'north', name }] })),
+          new Response(JSON.stringify({ status: 'ready', appId: 'desk', accountId: 'alice', memberships: [{ tenantId: 'north', name }] })),
         ),
     );
     await expect(transport.discoverTenants()).rejects.toThrow();
@@ -937,7 +999,7 @@ test('discovery keeps what each tenant is called beside its id, and refuses a na
       .fn()
       .mockResolvedValue(
         new Response(
-          JSON.stringify({ status: 'ready', appId: 'atlas', accountId: 'alice', memberships: [{ tenantId: 'north', label: 'North' }] }),
+          JSON.stringify({ status: 'ready', appId: 'desk', accountId: 'alice', memberships: [{ tenantId: 'north', label: 'North' }] }),
         ),
       ),
   );
@@ -949,8 +1011,8 @@ test("the page's boot answers each read it carries once, on the context it was r
   const { readKey } = await import('@mistriwork/engine/shared/firstPaint.js');
   const carried = {
     reads: {
-      [readKey('GET', '/api/app?app=atlas&tenant=north')]: { body: { appId: 'atlas', app: { name: 'Atlas' } } },
-      [readKey('POST', '/api/run?app=atlas&tenant=north', { q: 'item', limit: 50 })]: {
+      [readKey('GET', '/api/app?app=desk&tenant=north')]: { body: { appId: 'desk', app: { name: 'Desk' } } },
+      [readKey('POST', '/api/run?app=desk&tenant=north', { q: 'item', limit: 50 })]: {
         body: { rows: [{ id: 'carried' }] },
         reads: 'item',
       },
@@ -962,18 +1024,18 @@ test("the page's boot answers each read it carries once, on the context it was r
     .mockResolvedValueOnce(reply(carried))
     .mockImplementation(async () => reply({ rows: [{ id: 'asked' }] }));
   vi.stubGlobal('fetch', fetcher);
-  await boot.loadTenantBoot('/atlas/items', '');
+  await boot.loadTenantBoot('/desk/items', '');
   const [url, init] = fetcher.mock.calls[0];
-  expect(url).toBe('/api/boot?app=atlas&tenant=north');
-  expect(JSON.parse(init.body)).toEqual({ path: '/atlas/items', search: '' });
+  expect(url).toBe('/api/boot?app=desk&tenant=north');
+  expect(JSON.parse(init.body)).toEqual({ path: '/desk/items', search: '' });
   expect(init.headers['x-mistri-context']).toBe('context-north');
   /* Each as the shell asks it, the App named or not: answered from the boot, with no request. */
-  expect(await transport.tenantReadApi('/api/app?app=atlas', undefined, 'atlas')).toEqual({ appId: 'atlas', app: { name: 'Atlas' } });
-  expect(await transport.tenantReadApi('/api/run', { q: 'item', limit: 50, app: 'atlas' }, 'atlas')).toEqual({ rows: [{ id: 'carried' }] });
+  expect(await transport.tenantReadApi('/api/app?app=desk', undefined, 'desk')).toEqual({ appId: 'desk', app: { name: 'Desk' } });
+  expect(await transport.tenantReadApi('/api/run', { q: 'item', limit: 50, app: 'desk' }, 'desk')).toEqual({ rows: [{ id: 'carried' }] });
   expect(fetcher).toHaveBeenCalledTimes(1);
   /* Once: the same read again, and a read it did not carry, are asked. */
-  expect(await transport.tenantReadApi('/api/run', { q: 'item', limit: 50 }, 'atlas')).toEqual({ rows: [{ id: 'asked' }] });
-  expect(await transport.tenantReadApi('/api/run', { q: 'item', limit: 25 }, 'atlas')).toEqual({ rows: [{ id: 'asked' }] });
+  expect(await transport.tenantReadApi('/api/run', { q: 'item', limit: 50 }, 'desk')).toEqual({ rows: [{ id: 'asked' }] });
+  expect(await transport.tenantReadApi('/api/run', { q: 'item', limit: 25 }, 'desk')).toEqual({ rows: [{ id: 'asked' }] });
   expect(fetcher).toHaveBeenCalledTimes(3);
 });
 
@@ -981,19 +1043,19 @@ test('a boot that does not attest the lease, or is refused, carries nothing and 
   session.establishTenantSelection(proof());
   const { readKey } = await import('@mistriwork/engine/shared/firstPaint.js');
   const carried = {
-    reads: { [readKey('GET', '/api/app?app=atlas&tenant=north')]: { body: { appId: 'atlas', app: { name: 'Stale' } } } },
+    reads: { [readKey('GET', '/api/app?app=desk&tenant=north')]: { body: { appId: 'desk', app: { name: 'Stale' } } } },
     items: {},
   };
   const fetcher = vi
     .fn()
     .mockResolvedValueOnce(reply(carried, proof('north', 'context-other')))
     .mockResolvedValueOnce(reply({ error: 'The tenant context could not be verified.', code: 'tenant_context_unavailable' }, proof(), 403))
-    .mockResolvedValue(reply({ appId: 'atlas', app: { name: 'Asked' } }));
+    .mockResolvedValue(reply({ appId: 'desk', app: { name: 'Asked' } }));
   vi.stubGlobal('fetch', fetcher);
-  await boot.loadTenantBoot('/atlas/items', '');
-  await boot.loadTenantBoot('/atlas/items', '');
+  await boot.loadTenantBoot('/desk/items', '');
+  await boot.loadTenantBoot('/desk/items', '');
   expect(session.tenantLeaseActive()).toBe(true);
-  expect(await transport.tenantReadApi('/api/app', undefined, 'atlas')).toEqual({ appId: 'atlas', app: { name: 'Asked' } });
+  expect(await transport.tenantReadApi('/api/app', undefined, 'desk')).toEqual({ appId: 'desk', app: { name: 'Asked' } });
   expect(fetcher).toHaveBeenCalledTimes(3);
 });
 
@@ -1002,8 +1064,8 @@ test('reads asked in one moment go as one request on the lease, each taking its 
   const { readKey } = await import('@mistriwork/engine/shared/firstPaint.js');
   const batch = {
     reads: {
-      [readKey('POST', '/api/pages/compose?app=atlas&tenant=north', { table: 'item', key: { id: 'n1' } })]: { body: { plan: 'composed' } },
-      [readKey('POST', '/api/run?app=atlas&tenant=north', { q: 'item', limit: 50 })]: {
+      [readKey('POST', '/api/pages/compose?app=desk&tenant=north', { table: 'item', key: { id: 'n1' } })]: { body: { plan: 'composed' } },
+      [readKey('POST', '/api/run?app=desk&tenant=north', { q: 'item', limit: 50 })]: {
         body: { rows: [{ id: 'batched' }] },
         reads: 'item',
       },
@@ -1019,14 +1081,14 @@ test('reads asked in one moment go as one request on the lease, each taking its 
   /* A write's refresh: its reads belong together (kit client/readGathering.ts). */
   gatherReads();
   const [composed, rows, counts] = await Promise.all([
-    transport.tenantReadApi('/api/pages/compose', { table: 'item', key: { id: 'n1' }, app: 'atlas' }, 'atlas'),
-    transport.tenantReadApi('/api/run', { q: 'item', limit: 50 }, 'atlas'),
-    transport.tenantReadApi('/api/counts', { items: [] }, 'atlas'),
+    transport.tenantReadApi('/api/pages/compose', { table: 'item', key: { id: 'n1' }, app: 'desk' }, 'desk'),
+    transport.tenantReadApi('/api/run', { q: 'item', limit: 50 }, 'desk'),
+    transport.tenantReadApi('/api/counts', { items: [] }, 'desk'),
   ]);
   expect(composed).toEqual({ plan: 'composed' });
   expect(rows).toEqual({ rows: [{ id: 'batched' }] });
   const [url, init] = fetcher.mock.calls[0];
-  expect(url).toBe('/api/boot?app=atlas&tenant=north');
+  expect(url).toBe('/api/boot?app=desk&tenant=north');
   expect(init.headers['x-mistri-context']).toBe('context-north');
   expect(JSON.parse(init.body)).toEqual({
     reads: [
@@ -1038,20 +1100,17 @@ test('reads asked in one moment go as one request on the lease, each taking its 
   /* The one the batch did not answer is asked alone, as ever. */
   expect(counts).toEqual({ counts: [3] });
   expect(fetcher).toHaveBeenCalledTimes(2);
-  expect(fetcher.mock.calls[1][0]).toBe('/api/counts?app=atlas&tenant=north');
+  expect(fetcher.mock.calls[1][0]).toBe('/api/counts?app=desk&tenant=north');
   /* Outside such a moment, reads asked together go as they always did, each alone. */
   await Promise.all([
-    transport.tenantReadApi('/api/counts', { items: [] }, 'atlas'),
-    transport.tenantReadApi('/api/run', { q: 'x' }, 'atlas'),
+    transport.tenantReadApi('/api/counts', { items: [] }, 'desk'),
+    transport.tenantReadApi('/api/run', { q: 'x' }, 'desk'),
   ]);
-  expect(fetcher.mock.calls.slice(2).map(([url]) => url)).toEqual([
-    '/api/counts?app=atlas&tenant=north',
-    '/api/run?app=atlas&tenant=north',
-  ]);
+  expect(fetcher.mock.calls.slice(2).map(([url]) => url)).toEqual(['/api/counts?app=desk&tenant=north', '/api/run?app=desk&tenant=north']);
   /* Alone in its moment, a read goes alone. */
   gatherReads();
-  await transport.tenantReadApi('/api/counts', { items: [] }, 'atlas');
-  expect(fetcher.mock.calls[4][0]).toBe('/api/counts?app=atlas&tenant=north');
+  await transport.tenantReadApi('/api/counts', { items: [] }, 'desk');
+  expect(fetcher.mock.calls[4][0]).toBe('/api/counts?app=desk&tenant=north');
 });
 
 /* A picker's and a related list's read can be gathered with a write's refresh, and a batch is one request: what each
@@ -1064,7 +1123,7 @@ test('a gathered picker or related read says what it is on its item, and a page 
       ? reply({
           reads: Object.fromEntries(
             JSON.parse(init.body!).reads.map((read: { path: string; body: object }) => [
-              readKey('POST', `${read.path}?app=atlas&tenant=north`, read.body),
+              readKey('POST', `${read.path}?app=desk&tenant=north`, read.body),
               { body: { rows: [] } },
             ]),
           ),
@@ -1076,10 +1135,10 @@ test('a gathered picker or related read says what it is on its item, and a page 
   const { gatherReads } = await import('../../../kit/src/client/readGathering.js');
   gatherReads();
   await Promise.all([
-    transport.tenantReadApi('/api/view/run', { view: { base: 'item' } }, 'atlas', undefined, { 'x-mistri-read': 'picker' }),
-    transport.tenantReadApi('/api/view/run', { view: { base: 'note' } }, 'atlas', undefined, { 'x-mistri-read': 'related' }),
-    transport.tenantReadApi('/api/run', { q: 'item' }, 'atlas'),
-    transport.tenantReadApi('/api/view/run', { view: { base: 'page' } }, 'atlas', undefined, { 'x-mistri-page': 'board' }),
+    transport.tenantReadApi('/api/view/run', { view: { base: 'item' } }, 'desk', undefined, { 'x-mistri-read': 'picker' }),
+    transport.tenantReadApi('/api/view/run', { view: { base: 'note' } }, 'desk', undefined, { 'x-mistri-read': 'related' }),
+    transport.tenantReadApi('/api/run', { q: 'item' }, 'desk'),
+    transport.tenantReadApi('/api/view/run', { view: { base: 'page' } }, 'desk', undefined, { 'x-mistri-page': 'board' }),
   ]);
   const boots = fetcher.mock.calls.filter(([url]) => url.startsWith('/api/boot'));
   expect(boots).toHaveLength(1);
@@ -1102,18 +1161,18 @@ test('a host that will not batch for a lease is asked read by read from then on'
   const both = () => {
     gatherReads();
     return Promise.all([
-      transport.tenantReadApi('/api/run', { q: 'item' }, 'atlas'),
-      transport.tenantReadApi('/api/run', { q: 'other' }, 'atlas'),
+      transport.tenantReadApi('/api/run', { q: 'item' }, 'desk'),
+      transport.tenantReadApi('/api/run', { q: 'other' }, 'desk'),
     ]);
   };
   expect(await both()).toEqual([
-    { rows: [{ id: '/api/run?app=atlas&tenant=north' }] },
-    { rows: [{ id: '/api/run?app=atlas&tenant=north' }] },
+    { rows: [{ id: '/api/run?app=desk&tenant=north' }] },
+    { rows: [{ id: '/api/run?app=desk&tenant=north' }] },
   ]);
   expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
-    '/api/boot?app=atlas&tenant=north',
-    '/api/run?app=atlas&tenant=north',
-    '/api/run?app=atlas&tenant=north',
+    '/api/boot?app=desk&tenant=north',
+    '/api/run?app=desk&tenant=north',
+    '/api/run?app=desk&tenant=north',
   ]);
   await both();
   expect(fetcher.mock.calls.filter(([url]) => url.startsWith('/api/boot'))).toHaveLength(1);

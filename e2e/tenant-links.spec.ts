@@ -32,6 +32,15 @@ function requests(page: Page) {
     if (path === '/api/tenant/context/open') seen.opens++;
     if (path === '/api/tenant/context/switch') seen.switches++;
   });
+  /* A tenant entered as the page loads is entered by its /enter (mistri shared/tenantBoot.ts `enteredTenant`): the
+     lease it answers is an open, and the boot it carries is a read, made under the tenant it entered. */
+  page.on('response', async (response) => {
+    if (new URL(response.url()).pathname !== '/api/tenant/enter' || !(await isSelection(response))) return;
+    seen.opens++;
+    const body = await response.json();
+    if (body.entered.boot)
+      seen.resources.push(`${new URL(response.url()).origin}/api/boot?${new URLSearchParams({ tenant: body.entered.context.tenantId })}`);
+  });
   return seen;
 }
 async function login(page: Page, app: TenantAppFixture) {
@@ -83,8 +92,10 @@ async function arrive(page: Page, tenant: string, go: () => Promise<unknown>, se
   const before = seen.resources.length;
   let readFirst: string[] | undefined;
   const pending = page.waitForResponse(async (response) => {
+    /* Counted as the answer arrives, before its body is read: what the page asks once it has the lease comes after. */
+    const at = seen.resources.length;
     if (!(await isSelection(response))) return false;
-    readFirst = seen.resources.slice(before);
+    readFirst = seen.resources.slice(before, at);
     return true;
   });
   await go();
@@ -368,36 +379,38 @@ test.describe('private tenant browser links', () => {
     const gate = new Promise<void>((resolve) => {
       release = resolve;
     });
-    /* The App's metadata arrives in the page's boot, the one read the shell asks once its lease is open
-       (mistri shared/tenantBoot.ts): holding it holds the App. */
-    await page.route('**/api/boot?*', async (route) => {
+    /* The App's metadata arrives in the page's boot (mistri shared/tenantBoot.ts): carried by the /enter that enters
+       north as the page loads, or, where that enter carries none, the one read the shell asks once its lease is open.
+       Holding whichever brings it holds the App. */
+    await page.route('**/api/{tenant/enter,boot}?*', async (route) => {
       const target = new URL(route.request().url());
-      if (target.pathname !== '/api/boot' || target.searchParams.get('tenant') !== 'north') {
+      const booting = target.pathname === '/api/boot' && target.searchParams.get('tenant') === 'north';
+      if (target.pathname !== '/api/tenant/enter' && !booting) {
         await route.continue();
         return;
       }
       const response = await route.fetch({ maxRetries: 0 });
-      expect(response.status()).toBe(200);
-      expect(response.headers()[names.app]).toBe(app.appId);
-      expect(response.headers()[names.account]).toBe(app.accounts.alice.id);
-      expect(response.headers()[names.tenant]).toBe('north');
-      expect(response.headers()[names.context]).toBe(route.request().headers()[names.context]);
+      if (booting) {
+        expect(response.status()).toBe(200);
+        expect(response.headers()[names.app]).toBe(app.appId);
+        expect(response.headers()[names.account]).toBe(app.accounts.alice.id);
+        expect(response.headers()[names.tenant]).toBe('north');
+        expect(response.headers()[names.context]).toBe(route.request().headers()[names.context]);
+      } else if (!(await response.json().catch(() => undefined))?.entered?.boot) {
+        await route.fulfill({ response });
+        return;
+      }
       held = true;
       await gate;
       await route.fulfill({ response });
       delivered = true;
     });
     try {
-      // The record names north, one of Alice's: the page opens its lease as it loads. Do not use arrive():
-      // waiting for the switch control here would deadlock the very readiness boundary whose absence the test
-      // needs to observe.
-      const opening = page.waitForResponse((response) => new URL(response.url()).pathname === '/api/tenant/context/open');
+      // The record names north, one of Alice's: the page enters it as it loads. Do not use arrive(): waiting for
+      // the switch control here would deadlock the very readiness boundary whose absence the test needs to observe.
+      // Where the lease comes with the held boot, it is read once released.
+      const selected = page.waitForResponse(isSelection);
       await page.goto(record(app, 'north'));
-      const opened = await opening;
-      expect(opened.status()).toBe(200);
-      const owner = (await opened.json()) as TenantContextReply;
-      expect(owner.tenantId).toBe('north');
-      expect(opened.headers()[names.context]).toBe(owner.context);
       await expect.poll(() => held).toBe(true);
       await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
       expect(delivered).toBe(false);
@@ -410,6 +423,14 @@ test.describe('private tenant browser links', () => {
       await expect(page.locator('#session-lock')).not.toBeVisible();
       release();
       await expect.poll(() => delivered).toBe(true);
+      const opened = await selected;
+      expect(opened.status()).toBe(200);
+      const owner = await leaseOfSelection(opened);
+      expect(owner.tenantId).toBe('north');
+      expect(owner.accountId).toBe(app.accounts.alice.id);
+      expect(opened.headers()[names.app]).toBe(app.appId);
+      expect(opened.headers()[names.tenant]).toBe('north');
+      expect(opened.headers()[names.context]).toBe(owner.context);
       await expect(page.getByRole('button', { name: 'Tenant: north', exact: true })).toBeVisible();
       await expect(page.getByRole('heading', { name: 'North item', exact: true })).toBeVisible();
       await expect(page.locator('.workspace-opening')).toHaveCount(0);
