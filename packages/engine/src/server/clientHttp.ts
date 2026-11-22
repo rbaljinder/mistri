@@ -387,7 +387,8 @@ export function withHead(html: string, head: ShellTitle | undefined): string {
   /* Read by the entry before it starts a main (packages/kit/src/client/shellStart.js): the Workbench's, not an App's. */
   if (head!.workbench) beforeScripts('<meta name="mistri-shell" content="workbench">');
   if (head!.scheme) beforeScripts(`<meta name="mistri-scheme" content="${escapeHtml(head!.scheme)}">`);
-  if (head!.grounds) out = out.replace(/<\/head>/i, () => `  ${groundsMeta(head!.grounds!)}\n  </head>`);
+  /* Before the scripts too: the first one keys its cached startup colours by the look these grounds say. */
+  if (head!.grounds) beforeScripts(groundsMeta(head!.grounds!).replace(/\n  /g, '\n    '));
   if (head!.observe)
     out = out.replace(/<\/head>/i, () => `  <meta name="mistri-observe" content="${escapeHtml(head!.observe!)}">\n  </head>`);
   if (head!.density)

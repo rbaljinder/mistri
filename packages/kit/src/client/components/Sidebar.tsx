@@ -190,9 +190,9 @@ export function Sidebar({ host, footerHost: suppliedFooterHost, onSelect, tabNav
     host.toggleAttribute('data-marks', host.querySelector('.nav-icon') !== null);
   });
   /* The current row is brought clear of the foot's fade (features.css `scroll-padding-bottom`): a page you are on that
-     sits under the fade reads as greyed out, as if disabled. */
+     sits under the fade reads as greyed out, as if disabled. A dashboard or a form is current with no table row lit
+     (`current` is -1 then), so what is lit is asked of the list itself (a field report). */
   useLayoutEffect(() => {
-    if (current < 0) return;
     host.querySelector<HTMLElement>(':scope > li > [aria-current="true"]')?.scrollIntoView?.({ block: 'nearest' });
   }, [host, current, dashView, formView]);
   const rail = !tabNavigation && railed();

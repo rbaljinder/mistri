@@ -2187,6 +2187,30 @@ test("/api/breakdowns answers each card in the tenant's own rows, and a failing 
   assert.doesNotMatch(batch.text, /South item|south/);
 });
 
+/* A free-form page's reads in one request on a tenant lease (kit breakdownBatch.ts `batchedView`): each view item is
+   answered as /api/view/run answers it alone, in the tenant's own rows, and a read the catalog cannot answer fails
+   alone. A field report: nineteen lists on one page were nineteen requests, each its own admission. */
+test("/api/breakdowns answers a page's view reads each in the tenant's own rows, and a failing read alone", async (t) => {
+  const f = await fixture(t),
+    a = await f.open();
+  const names = { view: { id: 'items', name: 'item', base: 'item', columns: [{ path: 'name' }] }, count: 'none' };
+  const batch = await f.data('/api/breakdowns', a, {
+    items: [{ view: names }, { view: { ...names, query: 'name = "North item"' } }, { view: { view: { base: 'nowhere' } } }],
+  });
+  owned(batch, a);
+  const [all, picked, broken] = (batch.body as { results: Array<{ status: number; body: Record<string, unknown> }> }).results;
+  const alone = await f.data('/api/view/run', a, names);
+  owned(alone, a);
+  assert.equal(all.status, 200, JSON.stringify(all.body));
+  assert.deepEqual(all.body.rows, rows(alone), 'the batched read is the single read');
+  assert.deepEqual(
+    (picked.body.rows as Array<Record<string, unknown>>).map((row) => row.name),
+    ['North item'],
+  );
+  assert.ok(broken.status >= 400 || (broken.body.errors as unknown[] | undefined)?.length, JSON.stringify(broken));
+  assert.doesNotMatch(batch.text, /South item|south/);
+});
+
 /* A tags filter, as the rail asks it (G61): the list and its facet counts read `tags has` in the tenant's own rows,
    and a question the catalog cannot answer refuses that one read, never the tenant context. */
 test("a tags filter reads in the tenant's rows on the list and its rail counts; a bad question refuses only itself", async (t) => {

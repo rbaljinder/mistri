@@ -1257,6 +1257,40 @@ describe('over HTTP, under a row policy', () => {
     const stray = await call('/api/view/run', { view: { base: 'note' }, count: false }, { 'x-mistri-page': 'board' });
     assert.equal(stray.status, 403);
     assert.equal(stray.body.code, 'page_undeclared');
+    // A page's reads in one request (kit breakdownBatch.ts `batchedView`): each answered as its own request would be —
+    // under this reader's row policy and grants and the page's manifest. A field report: nineteen lists, nineteen requests.
+    const page = { 'x-mistri-page': 'board' };
+    const tickets = uiViewRunBody('ticket', 'ticket', ['name'], '', 50);
+    const desks = uiViewRunBody('desk', 'desk', ['name'], '', 50);
+    const notes = uiViewRunBody('note', 'note', ['body'], '', 50);
+    type Results = { results: Array<{ status: number; body: { rows?: Array<{ name?: unknown }>; error?: string } }> };
+    const names = (reply: { body: { rows?: Array<{ name?: unknown }> } }) => reply.body.rows?.map((row) => row.name);
+    const batched = async () => {
+      const batch = await call('/api/breakdowns', { items: [{ view: tickets }, { view: desks }] }, page);
+      assert.equal(batch.status, 200, JSON.stringify(batch.body));
+      return (batch.body as unknown as Results).results;
+    };
+    const [southTickets, southDesks] = await batched();
+    assert.deepEqual(names(southTickets!), ['South one']);
+    assert.deepEqual(names(southDesks!), ['South']);
+    const alone = (await call('/api/view/run', tickets, page)) as unknown as { body: { rows?: Array<{ name?: unknown }> } };
+    assert.deepEqual(names(southTickets!), names(alone), 'the batched read is the single read');
+    control.identity = { id: 'north', who: 'north@example.test', role: 'reader' };
+    const [northTickets, northDesks] = await batched();
+    assert.deepEqual(names(northTickets!), ['North one', 'North two'], "the policy is each reader's, per read");
+    assert.deepEqual(names(northDesks!), ['North']);
+    // A read the grants refuse, or of a resource there is none of, fails alone, as its own request does.
+    const noteAlone = await call('/api/view/run', notes);
+    const mixed = (
+      await call('/api/breakdowns', { items: [{ view: tickets }, { view: notes }, { view: { view: { base: 'nowhere' }, count: 'none' } }] })
+    ).body as unknown as Results;
+    assert.deepEqual(names(mixed.results[0]!), ['North one', 'North two']);
+    assert.deepEqual(mixed.results[1], { status: noteAlone.status, body: noteAlone.body });
+    assert.equal(mixed.results[2]!.status, 404);
+    // A read the page does not declare refuses the request, as alone, with the page's words: the client asks each alone.
+    const strayBatch = await call('/api/breakdowns', { items: [{ view: tickets }, { view: notes }] }, page);
+    assert.equal(strayBatch.status, 403);
+    assert.deepEqual(strayBatch.body, (await call('/api/view/run', notes, page)).body);
     control.identity = null;
     assert.notEqual(
       (await call('/api/pages/load', { page: 'board' })).status,

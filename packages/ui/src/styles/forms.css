@@ -128,7 +128,13 @@
       pointer-events: none;
     }
 
+    /* The words are a column: the title, then its line under it. As the row a choice's icon and words stand in (below),
+       a line of help stood beside its title, and at a phone's half-width the title wrapped to a word a line (a field
+       report). */
     & [data-slot='choice-label'] {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: var(--m-space-1);
       font-weight: var(--m-weight-strong);
     }
 

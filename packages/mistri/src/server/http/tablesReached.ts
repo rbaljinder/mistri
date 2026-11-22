@@ -138,6 +138,9 @@ export function tablesReached(schema: DatabaseSchema | undefined, path: string, 
       const given = isRecord(item) ? item : {};
       /* A batched list is a text query (`run.q`), read as a view is. */
       const run = isRecord(given.run) ? given.run : undefined;
+      /* A batched view (a free-form page's rows) reaches what `/api/view/run` would. */
+      const view = isRecord(given.view) ? given.view : undefined;
+      if (view) return reachedBy(schema, { view: view.view, text: view.text, query: view.query });
       return reachedBy(schema, run ? { text: run.q } : { def: given.def, text: given.text });
     });
   }

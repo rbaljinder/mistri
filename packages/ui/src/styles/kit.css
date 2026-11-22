@@ -233,7 +233,9 @@
     & [data-slot='input'] {
       flex: 1;
       align-self: stretch;
-      min-width: 0;
+      /* The date's text is never narrower than a full date and its padding ("MM/DD/YYYY" is ten characters): a form
+         that sets a date and a time in a box as wide as its answer left "MM/D" showing (a field report). */
+      min-width: calc(10ch + var(--m-space-6));
       height: auto;
       /* The box's edge is the input's own where a form sizes its inputs with their edge counted in. */
       margin-block: calc(-1 * var(--control-border-w));

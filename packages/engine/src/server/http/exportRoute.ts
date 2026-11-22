@@ -152,7 +152,7 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
   const amountsOf = (tableId: string) => asked.amounts?.(tableId);
   /* An App that grants by role says who exports which table (appExportable); the file is refused where the Export menu is not offered. */
   if (!may('')) {
-    answer(403, { error: 'Export is not available to this person.' });
+    answer(403, refusal('forbidden', ['Export is not available to this person.']));
     return undefined;
   }
   /* Counted until the response closes, whichever way it ends: a refusal, the file, or a client that left. */
@@ -170,11 +170,11 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
   });
   const format = body.format ?? 'csv';
   if (typeof format !== 'string' || !Object.hasOwn(FORMATS, format)) {
-    answer(400, { error: 'format must be "csv", "json" or "ndjson".' });
+    answer(400, refusal('invalid_request', ['format must be "csv", "json" or "ndjson".']));
     return undefined;
   }
   if (body.columns !== undefined && (!Array.isArray(body.columns) || body.columns.some((column) => typeof column !== 'string'))) {
-    answer(400, { error: 'columns must be a list of column names.' });
+    answer(400, refusal('invalid_request', ['columns must be a list of column names.']));
     return undefined;
   }
   const text = String(body.q ?? '');
@@ -238,14 +238,20 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
      found — the same answer whether it exists or not, so a refusal tells nothing — and any other question that cannot
      be read is a bad request. Either way `errors` says why, as `/api/run`'s does. */
   if (!parsed.query || parsed.errors.length) {
-    answer(servesTable(schema, text) ? 400 : 404, { errors: parsed.errors });
+    const code = servesTable(schema, text) ? 'invalid_request' : 'not_found';
+    /* Each error keeps where it is in the question (`at`), which the query bar underlines. */
+    const said = refusal(
+      code,
+      parsed.errors.map((error) => error.message),
+    );
+    answer(code === 'not_found' ? 404 : 400, { ...said, errors: parsed.errors.map((error) => ({ code, ...error })) });
     return undefined;
   }
 
   const query = parsed.query;
   const table = findTable(schema, query.table);
   if (!table) {
-    answer(404, { error: `Unknown table "${query.table}"` });
+    answer(404, refusal('not_found', [`Unknown table "${query.table}"`]));
     return undefined;
   }
   if (!may(table.id)) return refuseTable(answer, table.id);
@@ -305,10 +311,17 @@ function servesTable(schema: DatabaseSchema, text: string): boolean {
 }
 
 function refuseTable(answer: (status: number, body: unknown) => void, tableId: string): undefined {
-  answer(403, {
-    error: `Export of "${tableId}" is not available to this person.`,
-  });
+  answer(403, refusal('forbidden', [`Export of "${tableId}" is not available to this person.`]));
   return undefined;
+}
+
+/**
+ * A reply that is not the file, in the body the App API's other refusals use: a snake_case `code` a program branches
+ * on, `error` for a client that reads one sentence, and `errors` for the Export menu, which shows the first. A field
+ * report read a refusal's body for its code and found none, and took the status alone for the reason.
+ */
+function refusal(code: 'forbidden' | 'not_found' | 'invalid_request', messages: readonly string[]) {
+  return { code, error: messages[0] ?? '', errors: messages.map((message) => ({ code, message })) };
 }
 
 /** Stands for a table a view reaches that cannot be named (a many-valued condition it cannot resolve): never exportable. */

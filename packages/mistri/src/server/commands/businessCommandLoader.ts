@@ -1,4 +1,4 @@
-import { basename, resolve } from 'node:path';
+import { basename, dirname, resolve } from 'node:path';
 import { connectionFailure } from '../storeConnection.js';
 import { pathToFileURL } from 'node:url';
 import { appCommandGrants, isFormView, logicalResource, type AppAction, type AppDef } from '../../shared/app.js';
@@ -58,11 +58,16 @@ export async function loadBusinessCommands(file: string): Promise<BusinessComman
       /* Loaded as CommonJS, the module's `import { defineCommand }` became a require of a second copy of mistri, whose
          commands this copy does not know: "must be created with defineCommand" sent an external assessment to look
          for a command written without it. Said as the module type, with the fix, where that is the cause. */
-      const { commonJsReason } = await import('../cli/projectSetup.js');
+      const { commonJsPackage, commonJsReason } = await import('../cli/projectSetup.js');
       const reason = commonJsReason(file) ?? (Object.hasOwn(module, 'module.exports') ? 'Node read it so' : undefined);
       if (reason) {
+        // The package.json the key is missing from, by its path: a module in a workspace package is read under that package's.
+        const owner = commonJsPackage(file);
+        const where = owner
+          ? `${owner} (npm pkg set type=module, in ${dirname(owner)})`
+          : "the App's package.json (npm pkg set type=module)";
         throw new BusinessCommandDefinitionError(
-          `The commands module "${basename(file)}" was loaded as CommonJS (${reason}), so the defineCommand it imported is a second copy of mistri whose commands this server does not know. Make it an ES module: set "type": "module" in the App's package.json (npm pkg set type=module), or name the file ${basename(file).replace(/\.[^.]+$/, '')}.mts.`,
+          `The commands module "${basename(file)}" was loaded as CommonJS (${reason}), so the defineCommand it imported is a second copy of mistri whose commands this server does not know. Make it an ES module: set "type": "module" in ${where}, or name the file ${basename(file).replace(/\.[^.]+$/, '')}.mts.`,
         );
       }
       throw new BusinessCommandDefinitionError(`${shape}. ${error.message}`);

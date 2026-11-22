@@ -2,7 +2,7 @@
 // while boot is still resolving the workspace; native reload remains usable.
 import { say } from './copy/shell/startup.js';
 import { herePath } from './addressMount.js';
-import { addHostListener, removeHostListener, shellBody, shellById, shellRoot } from './shellHost.js';
+import { addHostListener, removeHostListener, shellBody, shellById, shellQueryAll, shellRoot } from './shellHost.js';
 
 function guardStartupKeys(event: KeyboardEvent): void {
   if (!shellRoot().hasAttribute('data-starting')) return;
@@ -15,7 +15,10 @@ export function rememberStartupAppearance(): void {
   if (shellRoot().hasAttribute('data-starting')) return;
   try {
     const colors = getComputedStyle(shellBody());
-    // The App's id as index.html's first script reads it: the inside address's first segment.
+    /* The App's id as index.html's first script reads it: the inside address's first segment. And the look the
+       server says the page wears (its theme-color grounds): an App whose look is read from the environment wears
+       another after a restart with the same address and the same reader picks, and its veil must not keep the
+       last look's ground (a field report). */
     const signature = JSON.stringify([
       herePath().split('/')[1] || '',
       localStorage.getItem('mistri.theme'),
@@ -23,6 +26,7 @@ export function rememberStartupAppearance(): void {
       matchMedia('(prefers-color-scheme: dark)').matches,
       localStorage.getItem('mistri.workbench-visual-theme'),
       localStorage.getItem('mistri.visual-palettes'),
+      [...shellQueryAll<HTMLMetaElement>('meta[name="theme-color"]')].map((meta) => meta.content).join(' '),
     ]);
     sessionStorage.setItem('mistri.startup.v1', JSON.stringify({ signature, background: colors.backgroundColor, text: colors.color }));
   } catch {

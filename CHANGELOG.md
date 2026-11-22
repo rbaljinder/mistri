@@ -5,6 +5,64 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.82
+
+Fixes from a field report: the server and access first, then the client, then speed.
+
+- Fix: when the server refuses a free-form page's read (`status in ("")`, say), that read's `useRows` now fails with the
+  name of the read and the server's reason. The page's other reads still draw beside it. Before, the error said only
+  that the rows could not be read, and nothing told which read it was.
+- Fix: a public command whose handler calls `db.<table>.remove(…)` is now refused with "A public command may not remove
+  rows (db.<table>.remove): mark the row instead, and remove it from a signed-in command." This holds on every public
+  door, in a tenant App and under a row policy. Before, it said "This command is not available to this account", which
+  sent the author to look at grants. Public commands still never delete.
+- Fix: a refused export (403, 404 or 400) now carries the body the App API's other refusals use: a snake_case `code`
+  (`forbidden`, `not_found` or `invalid_request`), with `error` and `errors`. Before, it carried no code.
+- Fix: a role that reads a record's table, but not one section of the page the App draws it with, now opens the record
+  on its table's own page. Before, "This page is not available to your role" kept the record shut.
+- Fix: a command that sets a reference to a table missing from its `read` now tells its author `Command "…" writes
+  job.bench_id, which references "bench", and does not read "bench": add "bench" to the command's read`. Before, it said
+  the table "is not in the command's footprint".
+- Fix: an App whose look changed between starts (`ui.theme.preset` read from the environment) no longer starts behind
+  the last look's colors. The startup veil's cache is now keyed by the look the server serves.
+- Fix: a commands module loaded as CommonJS is now refused with the path of the `package.json` that lacks
+  `"type": "module"`, a workspace package's included. Before, the refusal named the App's own.
+- Fix: `mistri check --design` now gives `raw-label` only where a record label prints a value as stored: an amount, or a
+  date whose display rule gives it a `format`, and its message says which. Any other date or timestamp is said as its
+  day, a date declared through `types` included, and is quiet. Before, such a declared date could be flagged, and a
+  formatted one was not.
+- Tests: these are held in `hostRefusedRead.test.tsx`, `page.test.ts`, `record-compose-http`, `policy-public-intake`,
+  `tenant-intake`, `app-export-grant`, `tenant-command-actor-tenant`, `startup.test.ts`, `business-command-http` and
+  `design-lint`. `tenantMutationTransport.test.ts` now also holds that a command refused `tenant_lease_stale` with its
+  outcome unknown settles as unknown, and that the next run is sent under the renewed lease.
+- Fix: a call to action that follows a signed-in form in place opens that form's room. Before, following one by its key
+  (a button's `to: { view }`) opened a dashboard page of the same name, which is not there.
+- Fix: a dialog a related row's menu opens names the row by its `recordLabel`, references followed as the list draws it.
+  Before, a grouped related list's rows were named by their key ("Open 1004").
+- Fix: a bare page draws no crumb bar over it, whatever its history. The bar is hidden by the stylesheet as well as
+  left out of the walk, so a param set with `push` never brings it over the page's controls.
+- Fix: a related list drawn as a tab follows its section's `when` and `empty` as a section does. The reader's tab is held
+  by what it is, not by its place, so when the tab they are on goes (its `when` stops holding, its rows are gone) the
+  first tab standing is selected, and a tab that comes or goes before it does not move them to another list.
+- Fix: the shell menu's current room is scrolled clear of the fade at the menu's foot also when it is a dashboard or a
+  form. Before, only a table's row was, and the current page looked greyed out.
+- Fix: a command form's accept box, and the date and time and the choice cards beside it, hold their layout in a
+  dialog. A date is never narrower than a full date in its field ("MM/DD/YYYY", not "MM/D"). A card's line stands under
+  its title, not beside it. At a phone's width cards with words to read, and cards of several, are one to a row.
+- Tests: `e2e/command-drawer.spec.ts` and `e2e/intake-form.spec.ts` hold the geometry, `TabStrip.test.tsx` the strip's
+  tab, `Page.test.tsx`, `Sidebar.test.tsx` and `viewLink.test.ts` the rest.
+- Speed: a signed-in tenant list read is now 4 statements to the App's database, in one snapshot with its release
+  fence pipelined behind it. Before, a field report counted 8, and the sign-in store read again at every fence.
+- Speed: on PostgreSQL a signed-in person's session is kept in the server's process for up to a minute
+  (`MISTRI_AUTH_SESSION_CACHE`, 0 to 60 seconds), never past the session's own expiry. A file store keeps nothing: it
+  is read in place. Sign-out, revocation and a password change in the same
+  process drop it at once; another instance may honor a revoked session until its minute is up. Membership, role and
+  tenant are read on every request, so a removed member loses access on the next one.
+- Speed: a free-form page's `useRows` reads that start together ride one request (`/api/breakdowns`, up to 48 to a
+  request), each with its own rows, loading and error. Before, a page of 19 reads made 19 requests.
+- Tests: `postgres-tenant-statements.test.ts` holds the statement budgets and the session cache, `hostBatch.test.tsx`
+  and `e2e/page-kit.spec.ts` the one request.
+
 ## 1.0.0-rc.81
 
 `chosen` reaches the machine doors: the App API, App MCP and the assistant.

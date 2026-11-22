@@ -85,15 +85,12 @@ test(
     assert.equal(opened.body.code, 'invalid_result', JSON.stringify(opened.body));
     assert.match(
       server.log(),
-      /Command "openJob" set job\.bench_id, which points at a "bench" row, and "bench" is not in the command's footprint: add "bench" to its read/,
+      /Command "openJob" writes job\.bench_id, which references "bench", and does not read "bench": add "bench" to the command's read/,
     );
 
     const assigned = await run('assign', { id: 2 });
     assert.equal(assigned.body.code, 'invalid_result', JSON.stringify(assigned.body));
-    assert.match(
-      server.log(),
-      /Command "assign" set job\.staff_id, which points at a "staff" row, and "staff" is not in the command's footprint/,
-    );
+    assert.match(server.log(), /Command "assign" writes job\.staff_id, which references "staff", and does not read "staff"/);
   },
 );
 
@@ -116,7 +113,7 @@ test('a footprint failure leads with what to fix, for its author, and stays opaq
       cookie,
     );
   const cause =
-    /^Command "openJob" set job\.bench_id, which points at a "bench" row, and "bench" is not in the command's footprint: add "bench" to its read/;
+    /^Command "openJob" writes job\.bench_id, which references "bench", and does not read "bench": add "bench" to the command's read/;
 
   // The App's administrator, on this machine, at an App served from its source: told why, as `cause`.
   const author = await execute(await server.owner(), 1);
@@ -132,7 +129,7 @@ test('a footprint failure leads with what to fix, for its author, and stays opaq
   const said = server.log();
   assert.match(
     said,
-    /refused \(500 invalid_result\): Command "openJob" set job\.bench_id[^\n]*\n\s+callers are told: The command did not produce a valid result\./,
+    /refused \(500 invalid_result\): Command "openJob" writes job\.bench_id[^\n]*\n\s+callers are told: The command did not produce a valid result\./,
     said,
   );
   assert.doesNotMatch(said, /refused \(500 invalid_result\): The command did not produce a valid result\./, said);

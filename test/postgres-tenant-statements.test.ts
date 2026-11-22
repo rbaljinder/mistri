@@ -311,13 +311,19 @@ const sayCost = (cost: Cost) =>
 
 describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres', LIVE) }, () => {
   test('a tenant list and a metadata read stay within their statement budgets', async (t) => {
-    const f = await deploy(t),
-      north = await f.enter('north');
+    const f = await deploy(t);
+    f.counter.clear();
+    const north = await f.enter('north');
     const counted = async (path: string, body?: unknown) => {
       f.counter.clear();
       const reply = await north.read(path, body);
       assert.equal(reply.status, 200, reply.text);
-      return { reply, business: f.counter.on(path, 'postgres').filter((sql) => !SESSION.test(sql)), auth: f.counter.on(path, 'sqlite') };
+      const sqlite = f.counter.on(path, 'sqlite');
+      return {
+        reply,
+        business: f.counter.on(path, 'postgres').filter((sql) => !SESSION.test(sql)),
+        auth: sqlite,
+      };
     };
     // Warm: the first read after start may open the reader pool's connections.
     await counted('/api/run', list);
@@ -335,8 +341,9 @@ describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres'
         ['/api/app', metadata],
       ] as const) {
         console.log(`--- ${name}`);
-        for (const sql of [...counts.business, ...counts.auth.map((sql) => `[auth] ${sql}`)])
-          console.log(sql.replace(/\s+/g, ' ').slice(0, 160));
+        for (const message of counts.business)
+          for (const sql of statementsOf(message)) console.log(`[${purposeOf(sql)}] ${sql.replace(/\s+/g, ' ').slice(0, 220)}`);
+        for (const sql of counts.auth) console.log(`[auth] ${sql.replace(/\s+/g, ' ').slice(0, 160)}`);
       }
     }
     /* A snapshot is two messages: BEGIN with the relation locks (the
@@ -358,11 +365,17 @@ describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres'
       0,
       'an unchanged catalog is neither described nor its store attested again',
     );
-    assert.ok(rows.business.length <= 8, `a tenant list is ${rows.business.length} business messages`);
-    assert.ok(metadata.business.length <= 3 + 4, `a tenant metadata read is ${metadata.business.length} business messages`);
-    // The auth store: the session resolved once per request, then its row observed at each fence.
-    assert.ok(rows.auth.length <= 20, `a tenant list is ${rows.auth.length} auth statements`);
-    assert.ok(metadata.auth.length <= 10, `a tenant metadata read is ${metadata.auth.length} auth statements`);
+    /* Measured 4 and 4: a list is its snapshot (BEGIN with the pin and the membership, the rows and the count) and
+       the release fence's; a metadata read the fence and the intake address's own. Both were 8 and 7 before. */
+    assert.ok(rows.business.length <= 4, `a tenant list is ${rows.business.length} business messages`);
+    assert.ok(metadata.business.length <= 4, `a tenant metadata read is ${metadata.business.length} business messages`);
+    /* The auth store. This fixture's is a file, and a file store keeps nothing (authStoreReads.ts): it is read in
+       place, a statement with no round trip, so the session resolved once and its row observed at each fence is
+       what a request costs (measured 9 and 8; main held 20 and 10). A PostgreSQL store keeps the session for up to a
+       minute instead, which auth-store-reads.test.ts holds. */
+    assert.ok(rows.auth.length <= 9, `a tenant list is ${rows.auth.length} auth statements:\n${rows.auth.join('\n')}`);
+    assert.ok(metadata.auth.length <= 8, `a tenant metadata read is ${metadata.auth.length} auth statements`);
+    /* The cookie resolves to its session once, and that one read is the row every fence observes. */
     assert.equal(
       rows.auth.filter((sql) => /from "session" where "session"\."token"/.test(sql)).length,
       1,
@@ -588,12 +601,17 @@ describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres'
        assertion is now answered by its own read in the snapshot (tenantCommandTransaction.ts), and the count is the
        same wherever the database is. */
     const trips: Record<string, number> = {},
-      most: Record<string, number> = {};
+      most: Record<string, number> = {},
+      authReads: Record<string, number> = {};
     for (const [name, ask] of Object.entries(steps)) {
       const counts: number[] = [];
+      authReads[name] = 0;
       for (let sample = 0; sample < 3; sample++) {
         tally = 0;
+        f.counter.clear();
         const reply = await ask();
+        for (const request of f.counter.requests)
+          authReads[name] = Math.max(authReads[name], request.engines.filter((engine) => engine === 'sqlite').length);
         assert.equal(reply.status, 200, reply.text);
         if ('entered' in reply.body) assert.ok(object(object(reply.body.entered).boot).reads, reply.text);
         counts.push(tally);
@@ -601,7 +619,7 @@ describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres'
       }
       trips[name] = Math.min(...counts);
       most[name] = Math.max(...counts);
-      t.diagnostic(`${name}: ${trips[name]} flights (samples ${counts.join(', ')})`);
+      t.diagnostic(`${name}: ${trips[name]} flights (samples ${counts.join(', ')}), at most ${authReads[name]} auth statements a request`);
     }
     /* Entering: the boot reads on the evidence its lease's open just kept rather than admitting again, its room's
        reads are planned and asked as the App's metadata is, beside it, and a tenant's own address is one statement
@@ -618,6 +636,13 @@ describe('tenant requests on Ignition (PostgreSQL)', { skip: liveSkip('postgres'
         `entering a ${page} is ${trips[`enter (${page})`]} flights, the three apart ${trips[`apart (${page})`]} to ${most[`apart (${page})`]}`,
       );
       assert.ok(trips[`enter (${page})`] <= entering[page], `entering a ${page} is ${trips[`enter (${page})`]} flights`);
+      /* The auth store is a file here, read in place (see above), so an entry's auth statements cost no round trip;
+         they are held at what was measured (47 and 106 at most in one request) so a new read at every fence shows. */
+      const authAtMost = { list: 47, record: 106 };
+      assert.ok(
+        authReads[`enter (${page})`] <= authAtMost[page],
+        `entering a ${page} read the auth store ${authReads[`enter (${page})`]} times in one request`,
+      );
     }
   });
 

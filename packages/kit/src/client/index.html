@@ -75,6 +75,7 @@
           const signature = JSON.stringify([app === undefined ? first : encodeURIComponent(app), mode,
             localStorage.getItem('mistri.visual-theme'), systemDark,
             localStorage.getItem('mistri.workbench-visual-theme'), localStorage.getItem('mistri.visual-palettes'),
+            [...document.querySelectorAll('meta[name="theme-color"]')].map(meta => meta.content).join(' '),
             ...(branding ? [branding.value.identity] : [])]);
           const cached = JSON.parse(sessionStorage.getItem('mistri.startup.v1') || 'null');
           if (!branding && cached?.signature === signature && CSS.supports('color', cached.background) && CSS.supports('color', cached.text)) {

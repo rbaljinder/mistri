@@ -56,6 +56,8 @@ function plainCount(schema: DatabaseSchema, view: ViewDef): { filter?: Filter } 
 
 /* What a batched list's page may say: what `/api/run` reads of a first page. */
 const RUN_FIELDS = ['q', 'limit', 'offset', 'count', 'exactCount', 'countLimit', 'lanes'] as const;
+/* What a batched view may say: what `/api/view/run` reads. */
+const VIEW_FIELDS = ['view', 'text', 'query', 'where', 'count', 'limit', 'offset'] as const;
 
 /** The most rows a lanes read keeps per lane: a board's page, a few times over. */
 const LANE_MOST = 100;
@@ -460,6 +462,16 @@ export async function dispatchResourceReadHttp(
     if ((items as Record<string, unknown>[]).some((item) => 'run' in item && !run(item))) {
       return refusal(400, ['A batched list is `run: { q, limit, offset, count, exactCount, countLimit }`.']);
     }
+    /* A free-form page's reads ride the same way (the ui-sdk host's useRows, its record, its choices): an item
+       that is `view` is answered as `/api/view/run` answers it, from the view-run fields alone. Nineteen lists
+       on one page were nineteen requests, each its own admission and its own person looked up. */
+    const viewed = (item: Record<string, unknown>) =>
+      item.view && typeof item.view === 'object' && !Array.isArray(item.view) ? (item.view as Record<string, unknown>) : undefined;
+    if ((items as Record<string, unknown>[]).some((item) => 'view' in item && !viewed(item))) {
+      return refusal(400, ['A batched view is `view: { view, text, query, where, count, limit, offset }`.']);
+    }
+    const only = (asked: Record<string, unknown>, fields: readonly string[]) =>
+      Object.fromEntries(fields.filter((field) => asked[field] !== undefined).map((field) => [field, asked[field]]));
     const results: ResourceReadHttpReply[] = Array.from({ length: items.length });
     const queue = (items as Record<string, unknown>[]).map((item, at) => ({ item, at }));
     /* An item's route knows its own last wave, not the batch's: the others are
@@ -470,17 +482,14 @@ export async function dispatchResourceReadHttp(
     const one = async (): Promise<void> => {
       for (let next = queue.shift(); next; next = queue.shift()) {
         const page = run(next.item);
+        const view = viewed(next.item);
         const { def, text, limit, offset } = next.item;
         try {
           results[next.at] = (await (page
-            ? dispatchResourceReadHttp(
-                '/api/run',
-                Object.fromEntries(RUN_FIELDS.filter((field) => page[field] !== undefined).map((field) => [field, page[field]])),
-                adapter,
-                schema,
-                each,
-              )
-            : dispatchResourceReadHttp('/api/breakdown', { def, text, limit, offset }, adapter, schema, each)))!;
+            ? dispatchResourceReadHttp('/api/run', only(page, RUN_FIELDS), adapter, schema, each)
+            : view
+              ? dispatchResourceReadHttp('/api/view/run', only(view, VIEW_FIELDS), adapter, schema, each)
+              : dispatchResourceReadHttp('/api/breakdown', { def, text, limit, offset }, adapter, schema, each)))!;
         } catch (error) {
           /* A request's own refusal (a ResourceReadError: the provider's are
              stripped of the class before they get here) is said in its item.

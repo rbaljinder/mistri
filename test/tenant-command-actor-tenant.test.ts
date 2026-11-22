@@ -2,6 +2,7 @@
  * What a tenant App's command handler is told beside its input, through the tenant HTTP command path:
  * `ctx.tenant.<shared column>` (the tenant profile columns `auth.tenancy.shared` lists, read once per request) and
  * `ctx.actor.name` (the signed-in account's display name, off the verified session; absent where there is none).
+ * And what its author is told when the handler sets a reference to a table the command does not read.
  */
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
@@ -29,10 +30,10 @@ const app = parseTestApp(
     auth: {
       rows: 'tenant',
       tenancy: { label: 'Customer', profile: 'customer', shared: ['plan', 'country'], platform: { label: 'Operator' } },
-      roles: { agent: { realm: 'tenant', read: ['ticket'], commands: ['noteWho'] }, operator: { realm: 'platform', read: true } },
+      roles: { agent: { realm: 'tenant', read: ['ticket', 'shelf'], commands: ['noteWho'] }, operator: { realm: 'platform', read: true } },
     },
     sources: { business: { connection: binding.source.connection } },
-    resources: { customer: { owner: 'platform' }, ticket: { owner: 'tenant', access: 'write' } },
+    resources: { customer: { owner: 'platform' }, ticket: { owner: 'tenant', access: 'write' }, shelf: { owner: 'tenant' } },
     views: { tickets: { kind: 'list', from: 'ticket', realm: 'tenant' } },
     home: 'tickets',
     nav: [{ id: 'desk', label: 'Desk', realm: 'tenant', children: ['tickets'] }],
@@ -50,6 +51,8 @@ const registry = defineCommands({
     write: ['ticket'],
     input: {
       id: { type: 'text' },
+      // A reference to a table the command does not read: its run is the author's mistake, said as one.
+      shelf: { type: 'text', optional: true },
       // Offered only where the tenant's profile holds the option's `when`: a run elsewhere is refused it.
       reach: {
         type: 'choice',
@@ -63,17 +66,21 @@ const registry = defineCommands({
     output: { parse: (value: unknown) => value as { id: string } },
     async handle({ db, tenant, actor }, input) {
       seen.push({ tenant: { ...tenant }, name: actor.name, hasName: 'name' in actor });
-      await db.ticket.insert({ id: String(input.id), opened_on: '2026-01-01' });
+      await db.ticket.insert({ id: String(input.id), opened_on: '2026-01-01', ...(input.shelf ? { shelf_id: input.shelf } : {}) });
       return { id: String(input.id) };
     },
   }),
 });
-const rows: RowScope = { ticket: true };
+const rows: RowScope = { ticket: true, shelf: true };
 const policy = defineAppTenantPolicy({
   kind: 'tenant',
   appId,
   storeId: binding.storeId,
-  ownership: { customer: { kind: 'platform' }, ticket: { kind: 'tenant', column: 'tenant_id' } },
+  ownership: {
+    customer: { kind: 'platform' },
+    ticket: { kind: 'tenant', column: 'tenant_id' },
+    shelf: { kind: 'tenant', column: 'tenant_id' },
+  },
   resolveMembershipRows: () => rows,
   resolveRows: () => rows,
   resultReferences: { noteWho: () => [] },
@@ -84,10 +91,12 @@ async function fixture(t: TestContext, dialect: TenantDialect, readerName?: () =
   const suffix = `actor_${randomUUID().replaceAll('-', '')}`;
   const tables = `
     CREATE TABLE customer (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, plan TEXT, country TEXT);
-    CREATE TABLE ticket (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, opened_on DATE NOT NULL);
+    CREATE TABLE shelf (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL);
+    CREATE TABLE ticket (id TEXT NOT NULL PRIMARY KEY, tenant_id TEXT NOT NULL, opened_on DATE NOT NULL, shelf_id TEXT REFERENCES shelf(id));
+    INSERT INTO shelf (id, tenant_id, name) VALUES ('s1', 'north', 'Front');
     INSERT INTO customer (id, name, plan, country) VALUES ('north', 'North', 'pro', 'US'), ('bare', 'Bare', NULL, NULL);`;
   const engine = await openTenantEngine(dialect, {
-    tables: ['customer', 'ticket'],
+    tables: ['customer', 'ticket', 'shelf'],
     sqlite: `PRAGMA journal_mode=WAL; PRAGMA foreign_keys=ON;${tables}`,
     postgres: tables,
     database: suffix,
@@ -237,6 +246,26 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       const anon = await fixture(t, dialect);
       await anon.run('north', 'd');
       assert.equal(seen[0].hasName, false);
+    });
+
+    /* A field report: a command that set a reference to a table missing from its `read` answered 500 invalid_result,
+       and what lay beneath was "This operation is not available in the current row scope". The terminal leads with
+       the table, the column and the fix; the caller's sentence is unchanged, and the next run goes through. */
+    test('a reference to a table the command does not read names the table, the column and the fix', async (t) => {
+      const said: string[] = [];
+      t.mock.method(console, 'error', (...args: unknown[]) => said.push(args.map(String).join(' ')));
+      const { execute } = await fixture(t, dialect);
+      const refused = await execute('north', { id: 'h', shelf: 's1' });
+      assert.equal(refused.status, 500, refused.text);
+      assert.equal(refused.body.code, 'invalid_result', refused.text);
+      const log = said.join('\n');
+      assert.match(
+        log,
+        /refused \(500 invalid_result\): Command "noteWho" writes ticket\.shelf_id, which references "shelf", and does not read "shelf": add "shelf" to the command's read/,
+        log,
+      );
+      assert.doesNotMatch(log, /row scope/, log);
+      assert.equal((await execute('north', { id: 'i' })).status, 200);
     });
   });
 }

@@ -9,6 +9,12 @@ import type { UntypedRow, WriteTable } from './commandDb.js';
 
 const messages = COMMAND_REFUSAL_MESSAGES;
 
+/** What a visitor, and so a public command's author, is told when its handler removes a row: the delete and the way
+    round it, never the table (the operator's log names that). Every public door says it, a tenant App's and a row
+    policy's: "not available to this account" sent an author looking at grants (a field report). */
+export const PUBLIC_REMOVAL =
+  'A public command may not remove rows (db.<table>.remove): mark the row instead, and remove it from a signed-in command.';
+
 /* A handler can hold a second copy of this class. It imports it from
    `@mistriwork/mistri/commands`, and that is dist/ through the package self-reference
    but src/ under tsx (the root tsconfig's `paths`); a deployment that mixes

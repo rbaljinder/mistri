@@ -723,6 +723,36 @@ describe('mistri check --design', () => {
     assert.equal(label('Order of {total}').length, 1);
   });
 
+  test("raw-label is quiet where the platform says a label's date as its day, and says which where it does not", () => {
+    const shipped = {
+      ...schema,
+      tables: schema.tables.map((table) =>
+        table.id === 'sales_order' ? { ...table, columns: [...table.columns, column('shipped', 'TEXT')] } : table,
+      ),
+    };
+    const label = (recordLabel: string, more: object = {}) =>
+      designLint(
+        {
+          ...composed,
+          resources: { ...composed.resources, sales_order: { ...composed.resources!.sales_order, recordLabel, ...more } },
+        } as AppDef,
+        [composedPage],
+        shipped,
+      ).filter((finding) => finding.code === 'raw-label');
+    // A SQLite TEXT date the App declares (`types`), handed the catalog as the database reads it: served, it is a date.
+    assert.deepEqual(label('{customer_id.name} · shipped {shipped}', { types: { shipped: 'date' } }), []);
+    // A date whose display gives it a format is left to the display, so the label prints it as stored: said, and why.
+    const formatted = label('{customer_id.name} · {ordered_on}', {
+      display: { ...composed.resources!.sales_order.display, ordered_on: { format: 'relative' } },
+    });
+    assert.equal(formatted.length, 1);
+    assert.match(formatted[0]!.text, /'ordered_on'\], a date its display formats \('relative'\).*prints it as stored \(2026-10-23\)/);
+    // An amount is printed as stored, and the finding says it is the amount, not the date beside it.
+    const [amount, ...rest] = label('{ordered_on} · {total}');
+    assert.equal(rest.length, 0);
+    assert.match(amount!.text, /names \['total'\], an amount a template prints as stored/);
+  });
+
   test('a heading that names no content is said, on a page and in a New form', () => {
     const page = {
       ...composedPage,

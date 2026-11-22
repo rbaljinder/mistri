@@ -34,6 +34,17 @@ export function commonJsReason(file: string, name: (path: string) => string = (p
   return `${name(found.path)} ${found.type === undefined ? 'has no "type"' : `says "type": ${JSON.stringify(found.type)}`}`;
 }
 
+/**
+ * The package.json that makes this module CommonJS (it lacks `"type": "module"`), or undefined where the module's
+ * extension decides it, or where it is an ES module. A module in a workspace package is read under that package's
+ * package.json, not the App's: the fix belongs in the one this names (a field report was sent to the App's).
+ */
+export function commonJsPackage(file: string): string | undefined {
+  if (/\.[mc][jt]s$/.test(file)) return undefined;
+  const found = nearestPackage(dirname(resolve(file)));
+  return found && found.type !== 'module' ? found.path : undefined;
+}
+
 /** One sentence when the TypeScript a project resolves is missing or older than 7. */
 export function typescriptProblem(dir: string): string | undefined {
   let version: string;

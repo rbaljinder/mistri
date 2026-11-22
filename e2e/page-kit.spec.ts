@@ -411,4 +411,25 @@ test.describe('The page kit vocabulary', () => {
       await bar.stop();
     }
   });
+
+  /* A field report: a page of nineteen lists asked nineteen requests at once, each queued behind the others on a
+     remote database. The lists asked in one moment now go as one batch (kit breakdownBatch.ts); a second request is
+     room for a list that mounts a moment late, not for the nineteen. */
+  test("a page's nineteen lists on entry are at most two read requests, and each draws its own rows", async ({ page }) => {
+    const reads: string[] = [];
+    page.on('request', (request) => {
+      const path = new URL(request.url()).pathname;
+      if (/^\/api\/(view\/run|breakdowns?|run)$/.test(path)) reads.push(path);
+    });
+    await page.goto(`${app.origin}/many`);
+    await settled(page);
+    const cards = page.locator('.free-page-body').getByText(/^\d+ rows$/);
+    await expect(cards).toHaveCount(19);
+    expect(await cards.allTextContents()).toEqual(
+      ['3', '1', '1', '1', '2', '1', '1', '1', '10', '4', '2', '2', '2', '4', '3', '3', '4', '3', '3'].map((count) => `${count} rows`),
+    );
+    /* Counted, so a read that moved to another address fails here rather than passing as no reads at all. */
+    expect(reads.length, reads.join(', ')).toBeGreaterThan(0);
+    expect(reads.length, reads.join(', ')).toBeLessThanOrEqual(2);
+  });
 });

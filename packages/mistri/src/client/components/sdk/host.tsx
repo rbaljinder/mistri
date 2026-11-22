@@ -18,7 +18,6 @@ import * as ui from './index.js';
 import * as page from './page.js';
 import './kit.css';
 import {
-  api,
   columnDisplay,
   columnLabel,
   labelPath,
@@ -33,7 +32,7 @@ import {
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
-import { batchedBreakdown } from '@mistriwork/kit/client/breakdownBatch.js';
+import { batchedBreakdown, batchedView } from '@mistriwork/kit/client/breakdownBatch.js';
 import { densityChoice } from '@mistriwork/kit/client/density.js';
 import { fillComposer as fillPageComposer } from '@mistriwork/kit/client/components/composerDraft.js';
 import { compileWhere } from '@mistriwork/engine/shared/pageWhere.js';
@@ -106,7 +105,13 @@ async function viewRows(
     ...(where === undefined ? {} : { where }),
     ...(offset ? { offset } : {}),
   };
-  const got = page ? await pageApi(page, '/api/view/run', body) : await api('/api/view/run', body);
+  /* Asked with the page's other reads of the same moment: nineteen lists on one page are one request, each still its
+     own query with its own rows or its own error (kit breakdownBatch.ts). */
+  const got = await batchedView<Parameters<typeof rowsByPath>[1]>(body, page);
+  /* A refused read (a query the language cannot parse, say) fails this read alone, and says which read it was: a
+     page with several reads otherwise shows a parser's words with nothing to tell which of them they belong to. */
+  const refusal = (got as { errors?: Array<{ message?: string }> } | null)?.errors?.[0]?.message;
+  if (refusal) throw new Error(say('theRowsOfRefused', { name: table.name, reason: refusal }));
   return rowsByPath(paths, got, say('theRowsOfCould', { name: table.name }), { schema: state.schema, base: table.id });
 }
 
@@ -229,10 +234,9 @@ const pageHost: UiHost = {
     const compiled = compileWhere(where, table);
     if ('error' in compiled) throw new Error(compiled.error);
     const text = uiBreakdownText(table.id, andQuery(compiled.text, query), measure, by);
-    /* A page's breakdown is asked alone: a batch is many sections' and carries no one page's name. */
-    const got = page
-      ? ((await pageApi(page, '/api/breakdown', { text, ...(limit ? { limit } : {}) })) as { rows?: UiRow[] })
-      : await batchedBreakdown<{ rows?: UiRow[] }>({ text, limit });
+    /* A page's breakdown rides with that page's other reads, under its name, so the server holds the batch to the
+       page's manifest as it would the one read. */
+    const got = await batchedBreakdown<{ rows?: UiRow[] }>({ text, limit, ...(page ? { page } : {}) });
     return got.rows ?? [];
   },
   async load(page, params, loader) {

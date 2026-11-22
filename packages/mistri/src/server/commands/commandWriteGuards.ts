@@ -62,8 +62,8 @@ export function footprintFailure(
     const value = request.values[column.name];
     if (!to || value === undefined || value === null || footprint.has(to)) continue;
     return developerError(
-      `Command "${commandId}" set ${request.table}.${column.name}, which points at a "${to}" row, and "${to}" is not in the command's ` +
-        `footprint: add "${to}" to its read, so the reference is proved against the rows it reads.`,
+      `Command "${commandId}" writes ${request.table}.${column.name}, which references "${to}", and does not read "${to}": ` +
+        `add "${to}" to the command's read, so the reference is proved against the rows it reads.`,
     );
   }
 }

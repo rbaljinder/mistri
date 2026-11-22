@@ -1,6 +1,6 @@
 /**
- * What a PostgreSQL authentication store answered about a session, kept for a
- * few seconds in this process, so a signed-in request costs no round trip to
+ * What a PostgreSQL authentication store answered about a session, kept for up
+ * to a minute in this process, so a signed-in request costs no round trip to
  * the store once the session has been read.
  *
  * A field report measured why that matters: a tenant App's list page made 116
@@ -13,11 +13,9 @@
  *
  * What is kept, and for how long:
  *
- * - A read is kept for `ttlMs` (MISTRI_AUTH_SESSION_CACHE, five seconds by
- *   default): a page's burst and the reads that follow a save land well inside
- *   it, so they cost one read between them; and it is short beside anything a
- *   person does after signing out somewhere else. Zero keeps nothing, and
- *   every observation reads the store, as before.
+ * - A read is kept for `ttlMs` (MISTRI_AUTH_SESSION_CACHE, sixty seconds by
+ *   default; DEFAULT_AUTH_READ_TTL_MS says why), and never past the session's
+ *   own expiry. Zero keeps nothing, and every observation reads the store.
  * - Every statement this process sends the store through its pool is seen
  *   here before it leaves and when it is answered (authStore.ts), and anything
  *   but a read — a sign-out, a revoked or shortened session, a ban, a role
@@ -40,10 +38,20 @@
  */
 import { statementHead } from '@mistriwork/engine/adapters/postgresPooler.js';
 
-/** Five seconds: see the header. */
-export const DEFAULT_AUTH_READ_TTL_MS = 5_000;
+/**
+ * Sixty seconds, the maintainer's call. Everything this process does to a
+ * session (a sign-out, a revocation, a password change, a ban) drops what is
+ * kept at once, so the window only bounds what another instance or a
+ * maintenance command did: a session revoked there is honored here for up to
+ * a minute. A person working a page asks again every few seconds, and at five
+ * seconds most of those asks read the store; at sixty, one read covers a
+ * stretch of work. Membership, roles and the tenant are never kept here: they
+ * are read fresh with every request. The file store keeps nothing: it is read
+ * in place, with no round trip to save.
+ */
+export const DEFAULT_AUTH_READ_TTL_MS = 60_000;
 const MAX_TTL_S = 60;
-/** Enough for every session a busy instance sees in a few seconds; the oldest goes first past it. */
+/** Enough for every session a busy instance sees in a minute; the oldest goes first past it. */
 const MAX_ENTRIES = 10_000;
 
 /** MISTRI_AUTH_SESSION_CACHE in seconds, 0 to 60, as milliseconds; the default where it is unset. */

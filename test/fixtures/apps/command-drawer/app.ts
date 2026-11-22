@@ -17,6 +17,7 @@ export default defineApp({
       actions: {
         quickNote: action('Quick note', { command: 'quickNote' }),
         fullNote: action('Write a note', { command: 'fullNote' }),
+        bookVisit: action('Book a visit', { command: 'bookVisit' }),
       },
     },
     visit_note: { access: 'write' },
@@ -24,7 +25,7 @@ export default defineApp({
   auth: {
     providers: ['email'],
     defaultRole: 'nurse',
-    roles: { nurse: { read: true, write: false, commands: ['quickNote', 'fullNote'] } },
+    roles: { nurse: { read: true, write: false, commands: ['quickNote', 'fullNote', 'bookVisit'] } },
   },
   views: { patients: listView('Patients', 'patient', { show: ['name', 'last_note'] }) },
   pages: {

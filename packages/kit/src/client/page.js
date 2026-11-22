@@ -160,7 +160,20 @@ export async function pageById(id, tableId) {
     return suggested(asTable.id);
   }
   if (tableId) {
-    if (appPagesOnly()) throw new Error(say('thereIsNoPage', { id }));
+    if (appPagesOnly()) {
+      /* A page the App draws this table's records with (its payload's address book lists it) that this reader's
+         catalog left out, because not one of its sections reads for their role (readablePage). The record is still
+         theirs: its table's own page draws it, as a section they cannot read is left out of a page they can (a field
+         report: such a record did not open at all). An id the App never named is still no page. */
+      const named = /** @type {{ pages?: unknown }} */ (shell().app() ?? {}).pages;
+      const listed = Array.isArray(named) && named.some((p) => p?.id === id && p?.base === tableId);
+      if (listed && findTable(tableId)) {
+        const own = await recordPageId(tableId);
+        assertCurrent(owner);
+        if (own !== id) return pageById(own, tableId);
+      }
+      throw new Error(say('thereIsNoPage', { id }));
+    }
     return suggested(tableId);
   }
   throw new Error(say('thereIsNoPage', { id }));
