@@ -4,6 +4,9 @@
  * container. `USAGE` in cli/usage.ts says the same list in words, and
  * test/prose.test.ts holds the two and the README to each other.
  */
+import { readFileSync } from 'node:fs';
+import { availableParallelism } from 'node:os';
+import { join } from 'node:path';
 import { parseHostList, type ProxyRange } from '../http/trust.js';
 import { isIdleSeconds, isReaderCount, MAX_IDLE_SECONDS, MAX_READERS } from '../../adapters/postgresPool.js';
 import { isLockTimeout, isWriterCount, MAX_LOCK_TIMEOUT_MS, MAX_WRITERS, MIN_LOCK_TIMEOUT_MS } from '../../adapters/writeLanes.js';
@@ -147,6 +150,8 @@ export interface Options {
   drainDelay?: string;
   /** `--shutdown-grace` as written: seconds a response still unfinished after the drain may keep the process. Checked by shutdownTimings. */
   shutdownGrace?: string;
+  /** `--workers` as written: how many processes serve one start, or `auto` for one per core. Checked by workerCount. */
+  workers?: string;
   /**
    * Not a flag: set by `createHandler` (embed/handler.ts), whose server
    * runs inside somebody else's process. A startup refusal throws instead of
@@ -207,6 +212,7 @@ export function parseArgs(argv: string[]): Options {
     else if (arg === '--lock-timeout') opts.lockTimeout = argv[++i] ?? '';
     else if (arg === '--pooler') opts.pooler = argv[++i] ?? '';
     else if (arg === '--drain-delay') opts.drainDelay = argv[++i] ?? '';
+    else if (arg === '--workers') opts.workers = argv[++i] ?? '';
     else if (arg === '--shutdown-grace') opts.shutdownGrace = argv[++i] ?? '';
     else if (arg === '--api-integers') {
       if (opts.apiIntegers !== undefined) opts.unknown = '--api-integers (may be supplied only once)';
@@ -328,6 +334,8 @@ export function parseArgs(argv: string[]): Options {
   // How long a platform lets a stopping container drain is the deployment's too.
   if (opts.drainDelay === undefined && productEnv('DRAIN_DELAY')?.trim()) opts.drainDelay = productEnv('DRAIN_DELAY')!.trim();
   if (opts.shutdownGrace === undefined && productEnv('SHUTDOWN_GRACE')?.trim()) opts.shutdownGrace = productEnv('SHUTDOWN_GRACE')!.trim();
+  // How many cores the host gives the server is the deployment's, as its pool is.
+  if (opts.workers === undefined && productEnv('WORKERS')?.trim()) opts.workers = productEnv('WORKERS')!.trim();
   // Where the proxy serves it is the deployment's, as the host names are.
   if (opts.basePath === undefined && productEnv('BASE_PATH')?.trim()) opts.basePath = productEnv('BASE_PATH')!.trim();
   return opts;
@@ -359,6 +367,105 @@ export function shutdownTimings(opts: Pick<Options, 'drainDelay' | 'shutdownGrac
   const graceMs = seconds(opts.shutdownGrace, '--shutdown-grace', envName('SHUTDOWN_GRACE'), 1, MAX_SHUTDOWN_GRACE_S);
   if (typeof graceMs === 'string') return graceMs;
   return { drainMs: drainMs ?? DEFAULT_SHUTDOWN_TIMINGS.drainMs, graceMs: graceMs ?? DEFAULT_SHUTDOWN_TIMINGS.graceMs };
+}
+
+/** The most processes one start runs: past this, a host wants replicas behind a balancer, not more workers. */
+export const MAX_WORKERS = 64;
+
+/** The memory each worker is given at least: a worker is a whole server (its heap, pools and caches), and one squeezed below this is killed for memory before another core helps. */
+export const WORKER_MEMORY_BYTES = 256 * 1024 * 1024;
+
+/** One cgroup file's text by its name under the cgroup root, or undefined where it cannot be read. */
+export type CgroupReader = (name: string) => string | undefined;
+
+/** Reads cgroup files under `root`; a file that is missing or unreadable is no limit, as on a Mac or a host with no container. */
+function cgroupReader(root = '/sys/fs/cgroup'): CgroupReader {
+  return (name) => {
+    try {
+      return readFileSync(join(root, name), 'utf8');
+    } catch {
+      return undefined;
+    }
+  };
+}
+
+/** Where `auto`'s count came from, as the startup line says it. */
+type CoreSource = 'cores' | 'cpu-quota' | 'memory-limit';
+
+export type CoreCount = Readonly<{
+  /** How many workers `auto` runs: the cores, narrowed by the memory limit. */
+  cores: number;
+  /** The CPUs this process may use: the host's, narrowed by the CPU quota. Pools are shared out by this. */
+  cpus: number;
+  source: CoreSource;
+}>;
+
+const positive = (text: string | undefined): number | undefined => {
+  const value = text === undefined ? Number.NaN : Number(text.trim());
+  return Number.isFinite(value) && value > 0 ? value : undefined;
+};
+
+/** The CPU quota in whole CPUs, rounded up: cgroup v2 `cpu.max`, else v1's quota and period. Undefined where there is none. */
+function cpuQuota(read: CgroupReader): number | undefined {
+  const max = read('cpu.max')?.trim().split(/\s+/);
+  if (max && max.length >= 1 && max[0] !== '') {
+    if (max[0] === 'max') return undefined;
+    const quota = positive(max[0]);
+    const period = positive(max[1] ?? '100000');
+    return quota && period ? Math.ceil(quota / period) : undefined;
+  }
+  // v1 writes -1 for no quota, which `positive` reads as none.
+  const quota = positive(read('cpu/cpu.cfs_quota_us'));
+  const period = positive(read('cpu/cpu.cfs_period_us'));
+  return quota && period ? Math.ceil(quota / period) : undefined;
+}
+
+/** The memory limit in bytes: cgroup v2 `memory.max` (`max` is none), else v1 `memory.limit_in_bytes`. */
+function memoryLimit(read: CgroupReader): number | undefined {
+  const v2 = read('memory.max')?.trim();
+  if (v2 !== undefined && v2 !== '') return v2 === 'max' ? undefined : positive(v2);
+  // v1 writes a page-rounded 2^63 for no limit; anything past the host is none.
+  const v1 = positive(read('memory/memory.limit_in_bytes'));
+  return v1 !== undefined && v1 < Number.MAX_SAFE_INTEGER ? v1 : undefined;
+}
+
+/**
+ * The cores one start may use. `os.availableParallelism` counts the host's
+ * CPUs on Linux and ignores a container's CPU quota, so a one-CPU Cloud Run
+ * instance on a 32-core host would fork 32 workers; the quota narrows it, and
+ * the memory limit narrows it again so each worker has WORKER_MEMORY_BYTES.
+ * The reader is injected so a test feeds fake cgroup files.
+ */
+export function availableCores(read: CgroupReader = cgroupReader(), parallelism: number = availableParallelism()): CoreCount {
+  const host = Math.max(1, parallelism);
+  const quota = cpuQuota(read);
+  const cpus = quota !== undefined && quota < host ? Math.max(1, quota) : host;
+  const memory = memoryLimit(read);
+  const fits = memory === undefined ? Number.POSITIVE_INFINITY : Math.max(1, Math.floor(memory / WORKER_MEMORY_BYTES));
+  if (fits < cpus) return { cores: fits, cpus, source: 'memory-limit' };
+  return { cores: cpus, cpus, source: cpus < host ? 'cpu-quota' : 'cores' };
+}
+
+/** The startup line's reason for a count `auto` gave: "4 cores", "the container's CPU quota". */
+export function coreSourceSaid(count: CoreCount): string {
+  if (count.source === 'cpu-quota') return "the container's CPU quota";
+  if (count.source === 'memory-limit') return `the container's memory limit (${WORKER_MEMORY_BYTES / 1024 / 1024} MiB a worker)`;
+  return `${count.cores} ${count.cores === 1 ? 'core' : 'cores'}`;
+}
+
+/**
+ * How many processes `--workers` (or its variable) asks one start to run, or
+ * the sentence saying why it cannot be used: a whole number, or `auto` for
+ * one per core this process may use (availableCores, which a container's CPU
+ * quota and memory limit narrow). `auto` unless asked otherwise; where the
+ * start cannot run several processes, the caller falls back to one.
+ */
+export function workerCount(opts: Pick<Options, 'workers'>, cores: number = availableCores().cores): number | string {
+  if (opts.workers === undefined || opts.workers === 'auto') return Math.min(MAX_WORKERS, Math.max(1, cores));
+  const given = /^\d+$/.test(opts.workers) ? Number(opts.workers) : Number.NaN;
+  if (!(given >= 1 && given <= MAX_WORKERS))
+    return `--workers takes a whole number from 1 to ${MAX_WORKERS} or "auto"; "${opts.workers}" is not one. It comes from the flag or ${envName('WORKERS')}.`;
+  return given;
 }
 
 /**

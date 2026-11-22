@@ -11,18 +11,18 @@
  * is one of several processes refuses without the key, and a production start warns (`ticketKeyStart`).
  */
 import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { processKey } from '../processKey.js';
 
 /** Younger than this, the form was not filled by a person. */
 const TICKET_MIN_AGE_MS = 3_000;
 /** Older than this, the page was left open for a day: loaded again, it gets a new one. */
 export const TICKET_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
-const PROCESS_KEY = randomBytes(32);
 const derived = new Map<string, Buffer>();
 
 function ticketKey(): Buffer {
   const secret = process.env.MISTRI_FORM_KEY;
-  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) return PROCESS_KEY;
+  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) return processKey('public-ticket.v1');
   let key = derived.get(secret);
   if (!key) {
     key = Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'utf8'), 'mistri.form-key', 'public-ticket.v1', 32));

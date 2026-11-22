@@ -73,6 +73,15 @@ const POSITIONAL_AT: Record<string, (argv: readonly string[]) => string | undefi
 };
 
 export const main: Main = async () => {
+  try {
+    await start();
+  } finally {
+    // A worker's start that returned without serving must still exit (workers.ts leaveWhenDone).
+    if (process.env.MISTRI_WORKER_INDEX !== undefined) (await import('./workers.js')).leaveWhenDone();
+  }
+};
+
+const start = async (): Promise<void> => {
   /* Before any flag is read: the variables both binaries read are said in this one's name (MISTRI_*). */
   setProduct('mistri');
   /* From a source checkout, an App outside it still finds the framework (buildResolution.ts). */
@@ -147,12 +156,15 @@ export const main: Main = async () => {
     return runSubcommand(command, argv, 'mistri');
   }
   /* Past the commands, a start: what it needs is loaded now, and not for a command above. */
-  const [{ CHECK_VALIDATION, parseArgs }, { configureWriteOrder }, { apiReadStartupOptions, appMcpStartupOptions, readAppMcpToken }] =
-    await Promise.all([
-      import('@mistriwork/engine/server/cli/args.js'),
-      import('@mistriwork/engine/adapters/writeLanes.js'),
-      import('@mistriwork/engine/server/cli/startupOptions.js'),
-    ]);
+  const [
+    { availableCores, CHECK_VALIDATION, coreSourceSaid, parseArgs, workerCount },
+    { configureWriteOrder },
+    { apiReadStartupOptions, appMcpStartupOptions, readAppMcpToken },
+  ] = await Promise.all([
+    import('@mistriwork/engine/server/cli/args.js'),
+    import('@mistriwork/engine/adapters/writeLanes.js'),
+    import('@mistriwork/engine/server/cli/startupOptions.js'),
+  ]);
   const [{ answeredFirst, configureProcess, startFor, SCHEMA_EXPORTS }, { packageVersion }, { USAGE }] = await Promise.all([
     import('@mistriwork/engine/server/cli/startup.js'),
     import('@mistriwork/engine/server/cli/usage.js'),
@@ -202,7 +214,11 @@ export const main: Main = async () => {
     process.exitCode = 2;
     return;
   }
-  if (!dev && process.env[CHECK_VALIDATION] !== '1') {
+  /* A worker of a `--workers` start (workers.ts) was forked with the arguments its primary settled, profile and all.
+     Only the cluster's own flag is read here: workers.ts and what it carries load after a print-and-exit flag is
+     answered, so `--help` stays the flag parser alone (test/cli-startup.test.ts). */
+  const forked = (await import('node:cluster')).default.isWorker;
+  if (!dev && process.env[CHECK_VALIDATION] !== '1' && !forked) {
     const argv = await profiled(process.argv.slice(2), false);
     if (!argv) return;
     process.argv.splice(2, Infinity, ...argv);
@@ -215,6 +231,55 @@ export const main: Main = async () => {
     if (handed !== undefined) Object.assign(opts, { port: handed, portGiven: true });
   }
   if (await answeredFirst(opts, MISTRI)) return;
+  const workers = await import('./workers.js');
+  const asWorker = workers.workerIndex() !== undefined;
+  /* `--workers` (workers.ts): how many processes serve this start, one per core this process may use unless asked
+     otherwise. `mistri dev` is one process, whose parent restarts it on a save; a deployment's MISTRI_WORKERS is not a
+     reason to refuse it, a flag typed at it is. */
+  let workerTotal = 1;
+  let workerReason: string | undefined;
+  /* Nobody asked: a start that cannot run several (SQLite) serves as one process rather than refusing. An explicit
+     count, from the flag or the variable, is a request, and is refused there. */
+  const workersDefaulted = opts.workers === undefined;
+  if (asWorker) {
+    /* Every address a worker makes is its primary's port, and the keys it would make up alone are the start's
+       (processKey.ts, which takes its secret out of the environment as it loads, before any App code runs). */
+    Object.assign(opts, { port: workers.workerPort(), portGiven: true });
+    workers.quietUntilServing();
+    await import('../processKey.js');
+    const [{ configureLocalCache, MemoryCacheStore }, { balancedPoolSize }, { appReaders }] = await Promise.all([
+      import('@mistriwork/engine/adapters/cache/cacheStore.js'),
+      import('@mistriwork/engine/adapters/writeLanes.js'),
+      import('@mistriwork/engine/adapters/postgresPool.js'),
+    ]);
+    configureLocalCache(() => workers.busEvictingCache(new MemoryCacheStore()));
+    /* The cores are shared: a worker's pools are what its share of them warrants, so n workers hold about the
+       connections one process would have (check --deploy counts them the same way). A pool the deployment named is
+       its own. */
+    const share = Math.ceil(availableCores().cpus / workers.workerTotal());
+    if (opts.writePool === undefined) opts.writePool = String(balancedPoolSize(share));
+    if (opts.readPool === undefined) opts.readPool = String(appReaders(Number(opts.writePool), share));
+  } else {
+    const cores = availableCores();
+    const counted = workerCount(opts, cores.cores);
+    if (typeof counted === 'string') {
+      console.error(`mistri: ${counted}`);
+      process.exitCode = 2;
+      return;
+    }
+    if (dev || opts.dev) {
+      if (counted > 1 && typed.argv.includes('--workers')) {
+        console.error(
+          `mistri${dev ? ' dev' : ''}: --workers is for a production start; dev runs one process, which it starts again on a save. Drop --workers.`,
+        );
+        process.exitCode = 2;
+        return;
+      }
+    } else {
+      workerTotal = counted;
+      workerReason = opts.workers === undefined || opts.workers === 'auto' ? coreSourceSaid(cores) : 'as asked';
+    }
+  }
   /* The database browser's modes, before anything is read: they open a database with no App, which is the
      database browser's to do. */
   const browsing = opts.mcp
@@ -262,6 +327,31 @@ export const main: Main = async () => {
     const { draftFromOpenapi } = await import('@mistriwork/engine/server/openapiDraft.js');
     process.exitCode = await draftFromOpenapi(opts.fromOpenapi);
     return;
+  }
+  /* Several workers: this process holds the port and serves nothing, so nothing below is for it (workers.ts). A
+     mode that serves no HTTP is one process whatever --workers says, as a mounted handler is its embedder's. */
+  if (
+    workerTotal > 1 &&
+    !opts.embedded &&
+    !opts.appMcp &&
+    !opts.export &&
+    !opts.scaffoldApp &&
+    !opts.checkApp &&
+    opts.reindex === undefined
+  ) {
+    const supervised = await workers.superviseWorkers({
+      count: workerTotal,
+      port: opts.port,
+      host: opts.host,
+      portGiven: opts.portGiven,
+      reason: workerReason,
+      defaulted: workersDefaulted,
+    });
+    if (typeof supervised === 'number') process.exit(supervised);
+    /* The first worker found the start cannot run several (refuseSqliteWorkers), or will not serve at all (a refusal
+       this process then reaches and says itself): it is served here, as one process. */
+    if (supervised.alone) console.log(supervised.alone);
+    workerTotal = 1;
   }
   configureProcess(opts, 'mistri');
   /* Published at an https address, the server stands behind a TLS front end: its cookies are Secure, its answers pin
@@ -358,9 +448,15 @@ export const main: Main = async () => {
       (await import('../tenant/tenantBackstopOwner.js')).assertNoBackstop(registry, 'the Workbench');
     } catch (error) {
       await registry.closeAll();
+      if (asWorker && workers.workersDefaulted()) await workers.serveAlone();
       console.error(`mistri: ${(error as Error).message}`);
       process.exitCode = 2;
       return;
+    }
+    /* Nobody asked for workers: the primary takes the start back and says this once itself, rather than each worker. */
+    if (asWorker && workers.workersDefaulted()) {
+      await registry.closeAll();
+      await workers.serveAlone();
     }
     return refuseBrowser('a server with no App', process.argv.slice(2), registry);
   }
@@ -388,6 +484,35 @@ export const main: Main = async () => {
   configureWriteOrder(config.apps.length || opts.apps?.length || opts.appEntry !== undefined ? 'keyed' : 'serial');
   const apps: StartupApps = await (await import('./apps.js')).loadStartupApps(opts, registry, config);
   const { loadedApps } = apps;
+  /* Several workers write as several processes: a SQLite file has one writer, and each worker's writer pool would
+     queue behind the others' file lock (or a session store's), where one process orders its own. Refused in the
+     first worker once its connections are named (a demo's is made late) and before it serves or runs a job, so the
+     start fails with this sentence rather than serving slowly (workers.ts). */
+  const refuseSqliteWorkers = async (): Promise<void> => {
+    if (!asWorker || workers.workerTotal() <= 1) return;
+    const { deployFindings } = await import('../build/checkDeploy.js');
+    const sqlite = new Set(['deploy-sqlite-source', 'deploy-sqlite-auth-store', 'deploy-default-auth-store']);
+    const onSqlite = loadedApps.some((loaded) =>
+      deployFindings({
+        app: loaded.app,
+        connections: registry.configs(),
+        activeId: registry.active ?? undefined,
+        cache: false,
+        env: process.env,
+      }).some((finding) => sqlite.has(finding.code)),
+    );
+    if (!onSqlite) return;
+    await registry.closeAll();
+    // Nobody asked for workers: the primary serves the start as one process and says why (workers.ts serveAlone).
+    if (workers.workersDefaulted())
+      await workers.serveAlone(
+        "mistri: one process: SQLite has one writer; workers need the App's data on PostgreSQL or MySQL and auth.store on PostgreSQL.",
+      );
+    console.error(
+      "mistri: --workers needs a network database; SQLite has one writer. Point the App's connections at postgres:// or mysql:// URLs and auth.store at a postgres:// URL, or run one process.",
+    );
+    process.exit(2);
+  };
   try {
     if (loadedApps.some((loaded) => loaded.build)) latency.refuseForBuild();
     /* App logic's clock as of another moment (http/clock.ts), once the Apps are read: a date alone is midnight in
@@ -491,6 +616,7 @@ export const main: Main = async () => {
       process.exit(code);
     }
     // `mistri dev`: once it answers, a sign-in per role, each a member where it works (cli/devMode.ts).
+    await refuseSqliteWorkers();
     dev?.serving(opts, loadedApps, registry);
     await serveTenantApp(opts, registry, config, apps, Boolean(nonPolicyMode));
     return;
@@ -730,6 +856,7 @@ export const main: Main = async () => {
       );
     }
   }
+  await refuseSqliteWorkers();
   const { hostCommands } = await import('./commandHost.js');
   const hosted = await hostCommands(opts, registry, loadedApps);
 

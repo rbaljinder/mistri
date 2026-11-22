@@ -14,7 +14,7 @@
  * file is a deployment this project supports; refusing there would break it.
  */
 import { isAbsolute } from 'node:path';
-import { availableParallelism } from 'node:os';
+import { availableCores } from '@mistriwork/engine/server/cli/args.js';
 import { appReaders } from '@mistriwork/engine/adapters/postgresPool.js';
 import { balancedPoolSize } from '@mistriwork/engine/adapters/writeLanes.js';
 import { databaseOf, primaryConnections, sayBudget, type DatabaseBudget } from '@mistriwork/engine/adapters/connectionBudget.js';
@@ -40,6 +40,8 @@ export interface DeployInput {
   cache: boolean;
   /** How many instances the deployment runs, when the operator said (`--replicas`). */
   replicas?: number;
+  /** How many processes each instance runs (`--workers`): each is a process of its own to the database and the limits. */
+  workers?: number;
   /** What the database allows this role, when the operator said (`--connection-limit`): the sum below must fit it. */
   connectionLimit?: number;
   /** The process's `--read-pool` and `--write-pool`, when given; a connection's own `pool` wins over them. */
@@ -171,6 +173,8 @@ export function deployFindings(input: DeployInput): DeployFinding[] {
     });
   }
 
+  /* Rate limits and lockout counters are each replica's own without a cache service. A start's workers are not
+     counted: they share their primary's (cli/primaryCounters.ts), as they share one form key (processKey.ts). */
   if ((input.replicas ?? 1) > 1 && !input.cache) {
     found.push({
       code: 'deploy-per-process-limits',
@@ -182,22 +186,26 @@ export function deployFindings(input: DeployInput): DeployFinding[] {
   return found;
 }
 
+/** The processes the deployment runs: each replica's workers (`--replicas` × `--workers`). */
+const processCount = (input: Pick<DeployInput, 'replicas' | 'workers'>): number => (input.replicas ?? 1) * (input.workers ?? 1);
+
 const count = (value: unknown): number | undefined =>
   typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : undefined;
 
 /**
- * What the replicas of this App may hold against each database: one process's pools times the replicas, summed by
- * database, because two connections or the auth store may name one. Per process, a PostgreSQL source holds its
- * readers, its writers and the background writer, one LISTEN connection for live sync, and each read replica
- * another reader pool; the sign-in store holds `MISTRI_AUTH_POOL`. Sizes follow the flags, a connection's `pool`,
- * and else the defaults an App gets (writers: twice the cores, 4 to 16; readers: as many as the writers) — the cores
- * of the machine that runs the check, which are the deployment's only when the two match. The hosts the App builds
- * from what it declares — a tenant App's shared request manager, the server's own stores — are servedHosts.ts's,
+ * What the processes of this App may hold against each database: one process's pools times the replicas times each
+ * one's workers, summed by database, because two connections or the auth store may name one. Per process, a
+ * PostgreSQL source holds its readers, its writers and the background writer, one LISTEN connection for live sync,
+ * and each read replica another reader pool; the sign-in store holds `MISTRI_AUTH_POOL`. Sizes follow the flags, a
+ * connection's `pool`, and else the defaults an App gets (writers: twice the cores, 4 to 16; readers: as many as the
+ * writers) — the cores of the machine that runs the check, which are the deployment's only when the two match, and a
+ * worker's share of them under `--workers`. The hosts the App builds from what it declares — a tenant App's shared
+ * request manager, the server's own stores — are servedHosts.ts's,
  * on the home connection (docs/postgresql.md).
  */
 export function connectionBudgets(input: DeployInput): { rows: DatabaseBudget[]; findings: DeployFinding[] } {
   const { app, env } = input;
-  const processes = input.replicas ?? 1;
+  const processes = processCount(input);
   const perProcess = new Map<string, number>();
   const parts = new Map<string, HostConnections[]>();
   const add = (url: string, connections: number, host: string) => {
@@ -205,7 +213,9 @@ export function connectionBudgets(input: DeployInput): { rows: DatabaseBudget[];
     perProcess.set(database, (perProcess.get(database) ?? 0) + connections);
     parts.set(database, [...(parts.get(database) ?? []), { host, connections }]);
   };
-  const cores = input.cpus ?? availableParallelism();
+  const cores = input.cpus ?? availableCores().cpus;
+  /* A worker's default pools are sized for its share of the cores, as the start sizes them (cli/mistriMain.ts). */
+  const share = Math.ceil(cores / (input.workers ?? 1));
   let sized = false;
   const bound = [
     ...new Set([...Object.values(app.sources ?? {}).map((source) => source.connection), ...(app.connection ? [app.connection] : [])]),
@@ -224,8 +234,8 @@ export function connectionBudgets(input: DeployInput): { rows: DatabaseBudget[];
     const pool = (connection.pool ?? {}) as { read?: unknown; write?: unknown };
     const given = { write: count(pool.write) ?? input.pools?.writers, read: count(pool.read) ?? input.pools?.readers };
     if (given.write === undefined || given.read === undefined) sized = true;
-    const writers = given.write ?? balancedPoolSize(cores);
-    const readers = given.read ?? appReaders(writers, cores);
+    const writers = given.write ?? balancedPoolSize(share);
+    const readers = given.read ?? appReaders(writers, share);
     /* A tenant App opens no adapter of its own on its home connection: its request paths share one manager there,
        which servedHosts counts with the LISTEN (tenant/tenantConnections.ts). */
     if (!(home && input.served?.tenant)) add(url, primaryConnections({ readers, writers }), 'adapter');

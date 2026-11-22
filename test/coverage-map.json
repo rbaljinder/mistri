@@ -1323,6 +1323,11 @@
     { "id": "cli-flag-where", "surface": ["cli: flag --where"], "tests": [{ "file": "test/flows-start.test.ts" }] },
     { "id": "cli-flag-width", "surface": ["cli: flag --width"], "tests": [{ "file": "e2e/shot.spec.ts" }] },
     {
+      "id": "cli-flag-workers",
+      "surface": ["cli: flag --workers"],
+      "tests": [{ "file": "test/workers-cli-pg.test.ts" }, { "file": "test/workers-cli.test.ts" }, { "file": "test/check-deploy.test.ts" }]
+    },
+    {
       "id": "cli-flag-write-authority",
       "surface": ["cli: flag --write-authority"],
       "tests": [{ "file": "test/api-token-args.test.ts" }, { "file": "test/new-api.test.ts" }]

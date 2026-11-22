@@ -241,10 +241,16 @@ export async function loadStartupApps(opts: Options, registry: Registry, config:
       });
       if (ticketKey && 'refuse' in ticketKey && !opts.checkApp) throw new Error(ticketKey.refuse);
       if (ticketKey) console.warn(`warning: ${'refuse' in ticketKey ? ticketKey.refuse : ticketKey.warn}`);
+      const namespace = loadedApps.length === 1 ? loadedApps[0].app.id : 'deployment';
       if (sharedCache) {
-        const namespace = loadedApps.length === 1 ? loadedApps[0].app.id : 'deployment';
         configurePublicFormLimits(registry.cache(), namespace);
         configureSignInState(registry.cache(), namespace);
+      } else if ((await import('./workers.js')).workerIndex() !== undefined) {
+        /* Without one, the workers of a `--workers` start count in their primary, so the start spends one budget, as
+           one process would (primaryCounters.ts). */
+        const { primaryCounters } = await import('./primaryCounters.js');
+        configurePublicFormLimits(primaryCounters('forms'), namespace);
+        configureSignInState(primaryCounters('signin'), namespace, primaryCounters('pending'));
       }
       for (const loaded of loadedApps) {
         pages = mergeAppPages(pages, loaded, config.configPath);

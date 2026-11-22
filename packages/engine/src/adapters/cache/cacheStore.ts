@@ -16,7 +16,10 @@ import { CacheUnavailable, RespReplyError, type RespClient } from './resp.js';
 export { CacheUnavailable } from './resp.js';
 
 export interface CacheStore {
-  readonly kind: 'memory' | 'valkey';
+  /** `primary`: the counters a worker of the App framework's `--workers` start keeps in its primary process, shared by
+      the start's workers as a Valkey's are by its instances. Unlike Valkey's, its reads throw CacheUnavailable when
+      the primary does not answer, rather than miss, so a lockout can be failed closed (the framework's signInState). */
+  readonly kind: 'memory' | 'valkey' | 'primary';
   get(key: string): Promise<string | undefined>;
   set(key: string, value: string, ttlMs: number): Promise<void>;
   delete(key: string): Promise<void>;
@@ -28,6 +31,20 @@ export interface CacheStore {
    */
   incr(key: string, ttlMs: number, by?: number): Promise<{ count: number; ttlMs: number }>;
   close(): Promise<void>;
+}
+
+/* What a deployment's cache is where its config names none: this process's own store, unless the process is one of
+   several serving one start (the App framework's --workers), whose store also tells the others what it forgot. */
+let makeLocal = (): CacheStore => new MemoryCacheStore();
+
+/** How this process makes its own cache store from now on: called once, at startup, before a Registry hands one out. */
+export function configureLocalCache(make: () => CacheStore): void {
+  makeLocal = make;
+}
+
+/** A cache store of this process's own, for a Registry whose config names no cache connection. */
+export function localCache(): CacheStore {
+  return makeLocal();
 }
 
 /* Thirty days: a copy kept longer than that is a copy nobody meant to keep. */

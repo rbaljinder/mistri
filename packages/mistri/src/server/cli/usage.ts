@@ -152,6 +152,14 @@ Options:
                       keep the process before it is cut (default 10, 1 to 300).
                       Hold the drain and this inside the platform's stop
                       timeout. Or set MISTRI_SHUTDOWN_GRACE.
+      --workers <n|auto>
+                      Processes serving the one port (default auto: one per
+                      core the container is given, its CPU quota and 256 MiB
+                      of its memory limit each, at most 64); a session's
+                      requests stay on one. More requests at once, not a
+                      faster page. PostgreSQL or MySQL only: a SQLite start
+                      is one process unless asked. 1 turns it off; mistri dev
+                      is always one. Or set MISTRI_WORKERS.
       --config <path> Read connections from this file, and the cache,
                       search, webhook, email (smtps://, smtp:// or log:)
                       and OAuth services beside them; the paths in it are
@@ -329,7 +337,7 @@ Checking an App while authoring it — the one command of the loop:
                   [--no-index-check] [--no-query-check]
                   [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
                   [--schema-file [<schema.sql>] [--dev-url <url>]]
-                  [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
+                  [--deploy [--replicas <n>] [--workers <n|auto>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
 
   Three or four steps, each with its own verdict line. Schema types: regenerates
   the App's mistri-schema.d.ts from the database when it has drifted (a
@@ -383,14 +391,15 @@ Checking an App while authoring it — the one command of the loop:
   judges whether the App survives a container being replaced: it refuses a
   source or auth.store on a SQLite file, the default auth.store, a missing
   BETTER_AUTH_SECRET and a \${NAME} the environment lacks (run it with the
-  deployment's environment), and with --replicas <n> above one it warns that
-  rate limits are per process without a cache service and refuses a public
+  deployment's environment), and with --replicas <n> (or --workers <n|auto>,
+  each replica's processes) above one process it warns that rate limits are
+  per process without a cache service and refuses a public
   page's door without MISTRI_FORM_KEY. It also prints, per database, the
   connections one process may hold (read and write pools, the background
   writer, LISTEN, each read replica, the sign-in store's pool, and the
   hosts the App serves with: jobs, effects, integrations, decisions, the
   API event feed, the assistant; given --jobs, its module is read for them)
-  times --replicas, and with --connection-limit <n> (the connections the
+  times the processes (--replicas times --workers), and with --connection-limit <n> (the connections the
   database allows this role) refuses a total above it. Pool defaults follow
   the cores: --cpus <n> says the deployment's (this machine's otherwise,
   and the line says which it assumed). It also reads the migrations not yet

@@ -77,6 +77,7 @@ The server's flags: where the data is, how it is served, and what an App adds.
 | `--pooler <mode>` | session (the default): PostgreSQL is reached directly, or through a pooler that keeps a client on one server connection. transaction: through PgBouncer in transaction mode or RDS Proxy; the read-only guard and the statement cap are then set per transaction. Or set MISTRI_POOLER. |
 | `--drain-delay <s>` | Seconds /readyz answers 503 before the listener closes on SIGTERM, so a balancer that probes takes this instance out first (default 0, up to 120). Or set MISTRI_DRAIN_DELAY. |
 | `--shutdown-grace <s>` | Seconds a response still unfinished after the drain may keep the process before it is cut (default 10, 1 to 300). Hold the drain and this inside the platform's stop timeout. Or set MISTRI_SHUTDOWN_GRACE. |
+| `--workers <n|auto>` | Processes serving the one port (default auto: one per core the container is given, its CPU quota and 256 MiB of its memory limit each, at most 64); a session's requests stay on one. More requests at once, not a faster page. PostgreSQL or MySQL only: a SQLite start is one process unless asked. 1 turns it off; mistri dev is always one. Or set MISTRI_WORKERS. |
 | `--config <path>` | Read connections from this file, and the cache, search, webhook, email (smtps://, smtp:// or log:) and OAuth services beside them; the paths in it are relative to its folder |
 | `--no-config` | Ignore any config file |
 | `--no-live` | Turn live sync off, even for an App that asks for it (live: true): its open pages then refresh on focus and after their own saves. Nothing is written to the change store and /api/live answers 204. |
@@ -122,7 +123,7 @@ mistri check [--app <dir>] [--app-entry <file>]
                 [--no-index-check] [--no-query-check]
                 [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
                 [--schema-file [<schema.sql>] [--dev-url <url>]]
-                [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
+                [--deploy [--replicas <n>] [--workers <n|auto>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
 
 Three or four steps, each with its own verdict line. Schema types: regenerates
 the App's mistri-schema.d.ts from the database when it has drifted (a
@@ -176,14 +177,15 @@ every step reads it, and it is dropped after. Its tables are empty. --deploy add
 judges whether the App survives a container being replaced: it refuses a
 source or auth.store on a SQLite file, the default auth.store, a missing
 BETTER_AUTH_SECRET and a \${NAME} the environment lacks (run it with the
-deployment's environment), and with --replicas <n> above one it warns that
-rate limits are per process without a cache service and refuses a public
+deployment's environment), and with --replicas <n> (or --workers <n|auto>,
+each replica's processes) above one process it warns that rate limits are
+per process without a cache service and refuses a public
 page's door without MISTRI_FORM_KEY. It also prints, per database, the
 connections one process may hold (read and write pools, the background
 writer, LISTEN, each read replica, the sign-in store's pool, and the
 hosts the App serves with: jobs, effects, integrations, decisions, the
 API event feed, the assistant; given --jobs, its module is read for them)
-times --replicas, and with --connection-limit <n> (the connections the
+times the processes (--replicas times --workers), and with --connection-limit <n> (the connections the
 database allows this role) refuses a total above it. Pool defaults follow
 the cores: --cpus <n> says the deployment's (this machine's otherwise,
 and the line says which it assumed). It also reads the migrations not yet
@@ -1115,6 +1117,7 @@ Browsing a database with no App is the database browser's: npx tablewalk <db>.
 | `--warnings` | [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--where` | [Starting flows on records already there](#starting-flows-on-records-already-there) |
 | `--width` | [Looking at an App](#looking-at-an-app) |
+| `--workers` | [Options](#options), [Checking an App while authoring it](#checking-an-app-while-authoring-it) |
 | `--write-authority` | [Options](#options) |
 | `--write-pool` | [Options](#options) |
 | `--yes` | [Measuring a decision before it applies](#measuring-a-decision-before-it-applies), [Deploying an App to Cloudflare Containers](#deploying-an-app-to-cloudflare-containers) |

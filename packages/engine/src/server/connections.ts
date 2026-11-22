@@ -42,7 +42,7 @@ import {
   type ServiceKinds,
 } from './configSections.js';
 import { CACHE_SECTIONS, openCache } from './cacheService.js';
-import { MemoryCacheStore, scopedCache, type CacheStore } from '../adapters/cache/cacheStore.js';
+import { localCache, scopedCache, type CacheStore } from '../adapters/cache/cacheStore.js';
 import type { HttpDescription } from '../adapters/http/httpDescription.js';
 import type { Adapter } from '../adapters/adapter.js';
 import type { PoolRoleStats } from '../adapters/poolMetrics.js';
@@ -321,7 +321,7 @@ export class Registry {
           this.cacheWarnedAt = Date.now();
           this.onWarning(`${message} Reading it as misses until it answers.`);
         })
-      : new MemoryCacheStore();
+      : localCache();
     return this.cacheStore;
   }
 

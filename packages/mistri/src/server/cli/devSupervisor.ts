@@ -31,6 +31,7 @@ import { watch, type FSWatcher } from 'node:fs';
 import { createServer, type Server, type Socket } from 'node:net';
 import { basename, dirname, resolve } from 'node:path';
 import { GENERATED_TYPE_FILES } from '../formatterConfig.js';
+import { listenAsWorker, releaseWorker, workerPort } from './workers.js';
 
 /** Marks the child: it retires with DEV_CHANGED_EXIT instead of leaving the terminal to restart. Not a flag, not documented. */
 export const DEV_SUPERVISED_ENV = 'MISTRI_DEV_SUPERVISED';
@@ -205,8 +206,11 @@ async function frontDoor(listen: { port: number; host: string }, holdMs: number)
   };
 }
 
-/** In the child: the public port its parent holds, when this host is served through handed sockets. */
+/** In the child: the public port its parent holds, when this host is served through handed sockets. A worker of a
+    `--workers` start is served the same way, by its primary (workers.ts). */
 export function handedOffPort(): number | undefined {
+  const worker = workerPort();
+  if (worker !== undefined) return worker;
   if (process.env[DEV_SUPERVISED_ENV] !== '1' || typeof process.send !== 'function') return undefined;
   const port = Number(process.env[DEV_PORT_ENV]);
   return Number.isInteger(port) && port >= 0 ? port : undefined;
@@ -220,6 +224,10 @@ let released: (() => void) | undefined;
  * ephemeral loopback port instead, says it is ready once listening, and serves the sockets it is handed.
  */
 export function listenForDev(server: Server, port: number, host: string): void {
+  if (workerPort() !== undefined) {
+    listenAsWorker(server as unknown as import('node:http').Server);
+    return;
+  }
   if (handedOffPort() === undefined) {
     server.listen(port, host);
     return;
@@ -242,6 +250,7 @@ export function listenForDev(server: Server, port: number, host: string): void {
  * sent has arrived, so none reaches a host that is closing. Undefined where there is no parent holding the port.
  */
 export function releaseForDev(): Promise<void> | undefined {
+  if (workerPort() !== undefined) return releaseWorker();
   if (handedOffPort() === undefined || !process.connected) return undefined;
   return (releasing ??= new Promise<void>((done) => {
     // A parent that does not answer (stopping too) does not hold the host up.

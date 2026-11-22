@@ -167,6 +167,7 @@ entrypoint maps it (G6, 0.9.6).
 | `APP_DB_PASSWORD` etc. | referenced from `mistri.json` |
 | `MISTRI_S3_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY` | when files go to a bucket and the platform gives no role (an ECS task role, or EC2's with `MISTRI_S3_INSTANCE_ROLE=1`, is read instead: G3, 0.9.7) |
 | `MISTRI_DRAIN_DELAY`, `MISTRI_SHUTDOWN_GRACE` | seconds; see Shutdown (G5, 0.9.7) |
+| `MISTRI_WORKERS` | unset: `auto`, one process per core the container is given (its CPU quota, 256 MiB of its memory limit each), PostgreSQL or MySQL only; `1` turns it off; capacity under concurrent load, not a faster page (replicas for more machines) |
 | `NODE_OPTIONS` | `--enable-source-maps` |
 
 **Health.** Liveness `GET /healthz`; readiness and startup `GET /readyz`

@@ -5,6 +5,24 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.83
+
+One start now uses every core it is given.
+
+- A production start (`mistri <app>`) on PostgreSQL or MySQL now runs one worker process per core, sharing one port.
+  `--workers <n>` sets the count, and `--workers 1` or `MISTRI_WORKERS=1` turns it off. `mistri dev` stays one process.
+  Before, a start was one Node process, and the other cores of its machine sat idle.
+- In a container the count follows the CPU quota, not the host's cores, with at least 256 MiB of memory per worker. The
+  startup log says how many workers it started and why.
+- A SQLite start, or one whose sign-in store is SQLite, runs as one process and says why: SQLite has one writer. An
+  explicit `--workers` above 1 there is refused.
+- The workers of one start share sign-in lockouts, Better Auth's request budget and the public forms' budgets, so a
+  visitor gets one budget, not one per worker. When a worker cannot reach the others, a lockout check refuses rather
+  than guess, and a plain request budget goes on in that worker's own count.
+- Signing out, revoking a session and changing a password take effect on every worker at once.
+- `mistri check --deploy` warns about per-process limits only for replicas without a cache service, not for the workers
+  of one start.
+
 ## 1.0.0-rc.82
 
 Fixes from a field report: the server and access first, then the client, then speed.

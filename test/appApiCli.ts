@@ -25,6 +25,8 @@ export const childEnv = (extra: Record<string, string> = {}): NodeJS.ProcessEnv 
     ),
   ),
   MISTRI_OPEN: '0',
+  // One process, not one per core: a file that tests workers says --workers, which the variable does not outrank.
+  MISTRI_WORKERS: '1',
   BETTER_AUTH_SECRET: SESSION_SECRET,
   ...extra,
 });
