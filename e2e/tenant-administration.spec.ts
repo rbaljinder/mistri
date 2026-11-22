@@ -1,5 +1,5 @@
 import type { APIResponse, Response } from '@playwright/test';
-import { isSelection, selectionRoute } from './support/tenantSelection.js';
+import { entersBeforeIdentity, isSelection, selectionRoute } from './support/tenantSelection.js';
 import { test, expect, type Locator, type Page } from './support/harness.js';
 import { administrationPolicy, startTenantAdministration, type TenantAdministrationFixture } from './support/tenantAdministrationServer.js';
 import {
@@ -587,6 +587,13 @@ test.describe('native tenant administration browser integration', () => {
       let selectionDelivered!: Promise<Response>;
       const login = await selfMemberChooser(page, app, async () => {
         await page.route(selectionRoute, async (route) => {
+          /* Entering before who-am-I brings the account and the selection in one answer, so nothing on the account can
+             be asked while that selection is held: the race this test is about needs who-am-I first, as the page asks it
+             where that first enter fails. Refused unsent, it takes no lease. */
+          if (entersBeforeIdentity(route.request())) {
+            await route.abort('failed');
+            return;
+          }
           const response = await route.fetch({ maxRetries: 0 });
           expect(response.status()).toBe(200);
           selectionCommitted.release();

@@ -12,6 +12,7 @@ import {
 import {
   chooseTenant,
   discoverTenants,
+  enterFirst,
   enterTenant,
   recoverTenant,
   releaseTenant,
@@ -19,7 +20,8 @@ import {
   type TenantEntry,
 } from './tenantTransport.js';
 import { adoptTenantBoot } from './tenantBootLoad.js';
-import { soleTenant } from '../shared/tenantBoot.js';
+import { enteredTenant } from '../shared/tenantBoot.js';
+import { enterAddress, parseTenantLink } from './tenantLink.js';
 import { checkSessionIdentity, invalidateSession } from '@mistriwork/kit/client/sessionLifecycle.js';
 import { startTenantRenewal, type TenantRenewalOptions } from './tenantRenewal.js';
 import { tenantSuspensionOverlay } from './tenantSuspension.js';
@@ -110,6 +112,36 @@ function keptHere(owner: ReturnType<typeof captureSessionIdentity>): { tenantId:
   } catch {
     return undefined;
   }
+}
+/* The same context before the page knows whose session it is: the first request names whatever this tab kept for the
+   App, and the host resumes it only for the session that holds it. `keptHere` then holds the account to it. */
+function keptFor(appId: string): { tenantId: string; tabId: string } | undefined {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(KEPT) ?? 'null') as { appId?: unknown; tenantId?: unknown; tabId?: unknown } | null;
+    return value &&
+      value.appId === appId &&
+      typeof value.tenantId === 'string' &&
+      value.tenantId !== PLATFORM_TENANT_ID &&
+      typeof value.tabId === 'string'
+      ? { tenantId: value.tenantId, tabId: value.tabId }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+/**
+ * The page's first request, for a tenant App's address: entering, whose answer is who-am-I's too
+ * (tenantTransport.ts `enterFirst`). The look the page takes once it has established who is signed in is that
+ * request's answer, not another. Undefined for an address that names no entry, or one the host did not answer so.
+ */
+export async function enterFirstAt(appId: string, location: string): Promise<Record<string, unknown> | undefined> {
+  let link;
+  try {
+    link = parseTenantLink(location, appId);
+  } catch {
+    return undefined;
+  }
+  return enterFirst(appId, enterAddress(link), link.tenantId ?? undefined, keptFor(appId));
 }
 /* Leases entered with their page's boot already held (`/api/tenant/enter`): the shell asks no boot of its own. */
 const bootedLeases = new WeakSet<TenantContextReply>();
@@ -206,23 +238,18 @@ export async function initialTenantSelection(
      workspace in its place). */
   let answered = false,
     shown = false;
-  const sole = (): string | undefined =>
-    error === undefined
-      ? (soleTenant(
-          tenantIds.filter((tenantId) => tenantId !== PLATFORM_TENANT_ID),
-          tenantIds.includes(PLATFORM_TENANT_ID),
-          requestedTenant,
-        ) ?? preferred())
-      : undefined;
   /* With several memberships, the chooser is for a person who has not said which: a link that names a tenant of
      theirs has said, and so has this tab by the tenant it was in before a reload. A link that names a tenant that is
-     not theirs is no answer, and does not fall back on the last one: the chooser stays, saying whose link it is. */
-  const preferred = (): string | undefined => {
-    if (requestedTenant !== undefined)
-      return requestedTenant !== PLATFORM_TENANT_ID && tenantIds.includes(requestedTenant) ? requestedTenant : undefined;
-    const before = keptHere(owner)?.tenantId;
-    return before !== undefined && tenantIds.includes(before) ? before : undefined;
-  };
+     not theirs is no answer, and does not fall back on the last one: the chooser stays, saying whose link it is.
+     The rule is shared (`enteredTenant`), so the host completes the same enter in one request. */
+  const sole = (): string | undefined =>
+    error === undefined
+      ? enteredTenant(
+          tenantIds.filter((tenantId) => tenantId !== PLATFORM_TENANT_ID),
+          tenantIds.includes(PLATFORM_TENANT_ID),
+          { named: requestedTenant, kept: keptHere(owner)?.tenantId },
+        )
+      : undefined;
   const draw = () => {
     if (!current() || held) return;
     shown = true;

@@ -161,6 +161,13 @@ export interface Query<Row, R extends Reads = Reads> extends RowQuery<Row> {
   orderBy(column: keyof Row & string, direction?: 'asc' | 'desc'): Query<Row, R>;
   /** At most this many rows. Without it, more than 1,000 is refused rather than cut. */
   limit(count: number): Query<Row, R>;
+  /**
+   * Beside each row's own columns, the App's computed columns and rollups named here (`.with('balance', 'open_alerts')`),
+   * worked out by the SQL a list of the table writes for them, in the same one read, as this reader is served them.
+   * Only a page's loader reads them, and only the names it declares in `reads` (`'invoice.balance'`); a command's `db`
+   * reads stored columns. They go with a read of rows: not a sum, a group or a page.
+   */
+  with<const N extends string>(...names: readonly N[]): Query<Row & { readonly [K in N]: Value }, R>;
   /** The matching rows' total of a number column: an exact decimal string for a decimal or an integer column
       (`'1834.50'`, `'0.00'` over no rows), a number for a float column (`REAL`, `double precision`), whose digits are
       not exact. SQLite refuses a decimal sum it cannot add exactly rather than answer it wrong. */
@@ -1103,6 +1110,16 @@ interface CommandDbOptions {
   readonly fileRead?: number;
   /** The App's `choose`, as this request proved it (app/appChoices.ts): what `chosen.<name>` in a where reads. */
   readonly chosen?: Readonly<Record<string, string | number | null>>;
+  /** The computed columns and rollups each table's `.with` may ask for, by local table name: a loader's declared reads. */
+  readonly derived?: Readonly<Record<string, readonly string[]>>;
+  /** Reads rows with those names beside them, in one statement (pageLoaderRun.ts); absent, `.with` is refused. */
+  readonly readDerived?: (request: {
+    readonly table: string;
+    readonly names: readonly string[];
+    readonly filter: Filter;
+    readonly orderBy: readonly { column: string; direction: 'asc' | 'desc' }[];
+    readonly limit: number;
+  }) => Promise<{ readonly rows: readonly Readonly<Record<string, unknown>>[] }>;
 }
 
 const isConstant = (value: unknown): value is WriteConstant =>
@@ -1245,8 +1262,19 @@ function tableHandle(
   const name = table.name;
   /* No one is signed in to a handler's where (`me` stays refused), but the request's choices are its to read. */
   const who: QueryPerson | undefined = options.chosen ? { email: null, chosen: options.chosen } : undefined;
-  const rows = async (compiled: Compiled, limit: number, orderBy = compiled.orderBy): Promise<UntypedRow[]> => {
+  const rows = async (
+    compiled: Compiled,
+    limit: number,
+    orderBy = compiled.orderBy,
+    withNames: readonly string[] = [],
+  ): Promise<UntypedRow[]> => {
     if (compiled.none) return [];
+    if (withNames.length) {
+      if (compiled.filter.groups.flat().some((condition) => condition.any || condition.within))
+        authorMistake(`${name}: a read with .with takes a where over the row's own columns and computed columns, not "any" or "in".`);
+      const found = await options.readDerived!({ table: name, names: withNames, filter: compiled.filter, orderBy, limit });
+      return found.rows.map((row) => normalizeRow(table, row) as UntypedRow);
+    }
     const result = await tx.query({ table: name, filter: compiled.filter, limit, offset: 0, ...(orderBy.length ? { orderBy } : {}) });
     return result.rows.map((row) => normalizeRow(table, row) as UntypedRow);
   };
@@ -1276,11 +1304,12 @@ function tableHandle(
   };
   const queryOver = (parts: Part[]): Query<UntypedRow> => {
     const order: { column: string; direction: 'asc' | 'desc' }[] = [];
+    const withNames: string[] = [];
     let cap: number | undefined;
     const run = async (limit?: number): Promise<UntypedRow[]> => {
       const compiled = compileParts(parts);
       const bound = limit ?? cap ?? compiled.limit;
-      const found = await rows(compiled, bound ?? DEFAULT_CAP + 1, [...compiled.orderBy, ...order]);
+      const found = await rows(compiled, bound ?? DEFAULT_CAP + 1, [...compiled.orderBy, ...order], withNames);
       if (bound === undefined && found.length > DEFAULT_CAP) {
         throw new Error(`${name}: more than ${DEFAULT_CAP} rows match; say how many with .limit(n).`);
       }
@@ -1297,6 +1326,7 @@ function tableHandle(
     ): Promise<Readonly<Record<string, unknown>>[]> => {
       if (order.length || cap !== undefined)
         authorMistake(`${name}: .orderBy and .limit order and count rows, and an aggregate reads every row its where matches.`);
+      if (withNames.length) authorMistake(`${name}: .with goes with a read of rows; a sum or a group measures the columns themselves.`);
       const plan = planAggregate(table, keys, given);
       const compiled = compileParts(parts);
       if (compiled.orderBy.length || compiled.limit !== undefined)
@@ -1347,6 +1377,7 @@ function tableHandle(
       return paged;
     };
     const page = async (after: unknown, size: unknown): Promise<Page<UntypedRow>> => {
+      if (withNames.length) authorMistake(`${name}: .with goes with a read of rows, not a page of them.`);
       if (typeof size !== 'number' || !Number.isSafeInteger(size) || size < 1 || size > MOST_PAGE)
         authorMistake(`${name}: a page's size is a whole number from 1 to ${MOST_PAGE}.`);
       const compiled = compileParts(parts);
@@ -1395,6 +1426,22 @@ function tableHandle(
         if (!Number.isSafeInteger(count) || count < 1) throw new RangeError(`${name}: a limit is a positive whole number.`);
         cap = count;
         return query;
+      },
+      with(...names) {
+        if (!options.readDerived)
+          authorMistake(
+            `${name}: .with reads a computed column or rollup, which a page's loader does; a command's db reads stored columns.`,
+          );
+        for (const each of names as readonly unknown[]) {
+          const allowed = options.derived?.[name];
+          if (typeof each !== 'string' || !allowed?.includes(each))
+            authorMistake(
+              `${name}: ${typeof each === 'string' ? `"${each}"` : 'a name'} is not declared; list '${name}.${typeof each === 'string' ? each : '<name>'}' in the loader's reads` +
+                `${allowed?.length ? ` (it declares ${allowed.join(', ')})` : ''}.`,
+            );
+          if (!withNames.includes(each)) withNames.push(each);
+        }
+        return query as never;
       },
       first: async () => (await run(1))[0],
       sum: async (column) => (await measured([], { total: sum(column) }, false))[0].total as string | number,

@@ -56,6 +56,12 @@ const listOf = (saved: Saved | undefined, list: string): SavedView[] => {
   return Array.isArray(views) ? views.filter(valid) : [];
 };
 
+/** One list's views as the cache holds them, without asking: undefined until the connection's views have been read. */
+export function savedViewsCached(client: QueryClient, list: string): SavedView[] | undefined {
+  const saved = client.getQueryData<Saved>(savedViewsKey());
+  return saved ? listOf(saved, list) : undefined;
+}
+
 /** One list's views, and whose they are — undefined until known, and when the server will not say. */
 export function useSavedViews(list: string): { views: SavedView[]; store: ViewStore | undefined } {
   const saved = useQuery({ queryKey: savedViewsKey(), queryFn: fetchSavedViews, staleTime: Infinity });

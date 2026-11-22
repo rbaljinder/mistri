@@ -12,7 +12,7 @@
  * One menu open at a time, and none after the pointer or the keyboard has
  * left: outside click and Escape close whatever is open.
  */
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent, type ReactNode } from 'react';
 import {
   Menu,
   MenuContent,
@@ -29,6 +29,7 @@ import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { NavGlyph } from '@mistriwork/kit/client/components/NavGlyph.js';
 import { go, pageView, subscribeWalk, tableView, toast, state } from '@mistriwork/kit/client/core.js';
 import { openPalette } from '@mistriwork/kit/client/palette.js';
+import { prefetchList } from '@mistriwork/kit/client/components/listRowsPress.js';
 import { appListQuery, currentNavIndex } from '@mistriwork/kit/client/components/appListModel.js';
 import {
   ASSISTANT_PAGE,
@@ -213,6 +214,15 @@ export function TopNav({ app, host }: TopNavProps) {
       'data-navq': list ? (list.query ?? '') : undefined,
       'aria-current': isCurrent(entry),
       title: !dash ? (entry.error ?? undefined) : undefined,
+      /* A press, or Enter, begins the list's first reads while the button is still down (listRowsPress.ts); hovering asks nothing. */
+      ...(list
+        ? {
+            onPointerDown: () => prefetchList(list),
+            onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+              if (event.key === 'Enter') prefetchList(list);
+            },
+          }
+        : {}),
     };
     if (!inPop)
       return (

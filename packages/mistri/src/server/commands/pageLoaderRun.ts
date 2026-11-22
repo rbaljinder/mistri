@@ -6,6 +6,8 @@
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import { renamedAnyRows } from '@mistriwork/engine/shared/filter.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { ResourceReadError, readView, type ResourceReader } from '@mistriwork/engine/server/resourceReadOperations.js';
+import type { ViewDef } from '@mistriwork/engine/shared/view.js';
 import { chosenContext, type Chosen } from '../app/appChoices.js';
 import { zoneDay } from '../app/appStamps.js';
 import { commandCatalog, createCommandDb, zonedCatalog, type ReadTable, type UntypedRow } from './commandDb.js';
@@ -42,7 +44,7 @@ function readOnly(handle: ReadTable<UntypedRow>): ReadTable<UntypedRow> {
 export async function runPageLoader(options: {
   name: string;
   loader: PageLoader;
-  reader: Pick<Adapter, 'query' | 'count' | 'aggregate'>;
+  reader: Pick<Adapter, 'query' | 'count' | 'aggregate'> & Partial<Pick<Adapter, 'runView'>>;
   schema: DatabaseSchema;
   /** A declared resource's table in `schema` (logicalResource for a qualified source). */
   logical?: (local: string) => string;
@@ -101,12 +103,51 @@ export async function runPageLoader(options: {
         }
       : {}),
   });
+  /* `.with(…)`: the rows of one table with the computed columns and rollups asked for, as a list of that table reads
+     them — one view through the reader the list reads through (resourceReadOperations.ts readView), so the SQL, the
+     grants and field projection, and the row policy are the list's own, in one statement. A name this reader's catalog
+     does not serve (an input its field grant hides) is refused as a list refuses it. */
+  const readDerived: NonNullable<Parameters<typeof createCommandDb>[0]['readDerived']> = async (request) => {
+    if (!open) throw revoked();
+    const base = idOf(request.table)!;
+    const meta = tableNamed(schema, logical(request.table))!;
+    const served = (each: string) => Object.hasOwn(meta.rollups ?? {}, each) || Object.hasOwn(meta.computed ?? {}, each);
+    const stray = request.names.find((each) => !served(each) || meta.columns.some((column) => column.name === each));
+    if (stray !== undefined) {
+      throw new PageLoaderRefused(
+        403,
+        'loader_refused',
+        `The loader "${options.name}" asks for "${stray}" of ${request.table}, which is not a computed column or rollup this reader is served.`,
+      );
+    }
+    const view: ViewDef = {
+      id: `loader:${options.name}`,
+      name: options.name,
+      base,
+      columns: [...meta.columns.map((column) => column.name), ...request.names].map((path) => ({ path })),
+      ...(request.filter.groups.length
+        ? { filter: { groups: request.filter.groups.map((group) => group.map(({ column, ...rest }) => ({ ...rest, path: column }))) } }
+        : {}),
+      ...(request.orderBy.length ? { orderBy: request.orderBy.map((order) => ({ path: order.column, direction: order.direction })) } : {}),
+      limit: request.limit,
+    };
+    try {
+      const read = await readView(reader as unknown as ResourceReader, schema, view, { limit: request.limit }, 'none');
+      if (!open) throw revoked();
+      return { rows: read.result.rows as never };
+    } catch (error) {
+      if (error instanceof ResourceReadError && error.status !== 501)
+        throw new PageLoaderRefused(403, 'loader_refused', `The loader "${options.name}": ${error.message}`);
+      throw error;
+    }
+  };
   const handles = createCommandDb({
     tx,
     catalog,
     read: loader.reads,
     write: [],
     now: () => options.now,
+    ...(loader.derived && Object.keys(loader.derived).length ? { derived: loader.derived, readDerived } : {}),
     ...(options.chosen ? { chosen: options.chosen } : {}),
   });
   const db = Object.freeze(Object.fromEntries(Object.entries(handles).map(([name, handle]) => [name, readOnly(handle)])));

@@ -33,7 +33,11 @@ import { provisionPostgresInbox } from '../packages/mistri/src/adapters/inbox/po
 import { appResourceCatalog } from '../packages/mistri/src/server/app/appResources.js';
 import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
 import { captureTenantOwnership } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
-import { createTenantReadRuntime, withBoundedReads } from '../packages/mistri/src/server/tenant/tenantReadRuntime.js';
+import {
+  createTenantReadRuntime,
+  withBoundedReads,
+  type TenantReadContext,
+} from '../packages/mistri/src/server/tenant/tenantReadRuntime.js';
 import type { TenantReadSource } from '../packages/mistri/src/server/tenant/tenantReadSource.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 import { liveSkip } from './live.js';
@@ -640,5 +644,61 @@ describe('bounded tenant reads on PostgreSQL', { skip: liveSkip('postgres', LIVE
     await assert.rejects(f.source.readInbox(f.inbox));
     await f.engine.exec('ALTER TABLE mistri.inbox_notice RENAME COLUMN title_moved TO title');
     assert.equal(await readiness(), 1);
+  });
+  /* An unbounded request's own `together` (a page's boot, a composed record page, a free-form page's load) ends its
+     snapshot with the release fence in the same message, where the fence was a snapshot of its own after it. */
+  test("an unbounded request's together rides the release fence on its snapshot's end, and answers as before", async (t) => {
+    const f = await fixture(t);
+    await f.runtime.withContext(request, ['north'], ({ data }) => data.query(items));
+    const sent = wire(t);
+    const asked = async ({ data }: Pick<TenantReadContext, 'data'>) => {
+      const [listed, counted] = await Promise.all([data.query(items), data.count('item')]);
+      return { names: f.names(listed), count: counted };
+    };
+    const plain = await f.runtime.withContext(request, ['north'], asked);
+    const plainLeases = new Set(sent.map((statement) => statement.lease)).size;
+    assert.equal(finishes(sent).length, 0, 'without together, the fence is a snapshot of its own');
+    sent.length = 0;
+    const together = await f.runtime.withContext(request, ['north'], ({ data, together: shared }) => shared!(() => asked({ data })));
+    assert.deepEqual(together, plain);
+    assert.equal(finishes(sent).length, 1, JSON.stringify(sent));
+    const reads = sent.filter((statement) => /_tw_scope/.test(statement.text));
+    assert.equal(new Set(reads.map((statement) => statement.lease)).size, 1, 'both reads on one snapshot');
+    assert.equal(finishes(sent)[0]!.lease, reads[0]!.lease, 'the fence ends the snapshot the reads were on');
+    assert.ok(new Set(sent.map((statement) => statement.lease)).size < plainLeases, "no snapshot of the fence's own");
+  });
+
+  test('a membership revoked while an unbounded together reads is refused at the fence that rides its end', async (t) => {
+    const f = await fixture(t);
+    await f.runtime.withContext(request, ['north'], ({ data }) => data.query(items));
+    const sent = wire(t);
+    let listed: unknown;
+    await assert.rejects(
+      f.runtime.withContext(request, ['north'], ({ data, together }) =>
+        together!(async () => {
+          listed = f.names(await data.query(items));
+          await f.revoke();
+          return listed;
+        }),
+      ),
+      denied,
+    );
+    assert.deepEqual(listed, ['One', 'Three'], 'the read answered, on the snapshot');
+    assert.equal(finishes(sent).length, 1, 'the fence rode the snapshot end, and refused');
+  });
+
+  test('a read asked after an unbounded together is fenced after it, as ever: a revocation behind it is refused', async (t) => {
+    const f = await fixture(t);
+    await f.runtime.withContext(request, ['north'], ({ data }) => data.query(items));
+    await assert.rejects(
+      f.runtime.withContext(request, ['north'], async ({ data, together }) => {
+        // The fence that rode the snapshot's end held; the read after it, past that fence, is the request's too.
+        const inside = await together!(() => data.query(items));
+        const after = await data.query(items);
+        await f.revoke();
+        return [f.names(inside), f.names(after)];
+      }),
+      denied,
+    );
   });
 });

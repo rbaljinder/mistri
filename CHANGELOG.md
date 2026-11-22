@@ -5,6 +5,38 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## 1.0.0-rc.84
+
+Faster first loads, from a field report: a tenant App's page took 2.6 s to open on a remote PostgreSQL.
+
+- The six component host scripts (`/_mistri/sdk/…`) now live at an address that names their version, and are kept for
+  a year. Before, every page load downloaded them in full. A page still open from an older start keeps working: its
+  old address answers with the current scripts, unkept, and every answer carries an ETag, so a repeat check is a quick
+  not-modified.
+- A person in several workspaces, whose link or last visit in this tab names one of them, now gets the workspace, its
+  context and its first page in one request. Before, they waited for enter, then resume, then boot, one after another.
+  The host still chooses only among the person's own memberships, and never enters the platform realm unasked.
+- The first page load after half a minute of quiet no longer pays for a new connection to the sign-in store (185 to
+  260 ms on a hosted database). One connection now stays open for five minutes, or `MISTRI_POOL_IDLE`, and every
+  PostgreSQL connection asks for TCP keepalive.
+- Opening a page or a record in a tenant App checks your membership in the message that ends its reads. Before, the
+  check was a round trip of its own afterwards; a membership taken away mid-request is still refused.
+- The refresh after a save asks its lists and counts in two round trips. Before, it took three.
+- Pressing a menu entry, or Enter on it, starts loading its list's rows and tab counts. Before, they began only after
+  the click, so the page now opens sooner.
+- A page loader can now ask for the App's computed columns and rollups with `.with('balance', 'open_alerts')`, and
+  gets them in the same read as the rows. Before, a loader that wanted a balance or an alert count read the rows again
+  to work it out, which cost several more trips to the database; now it is one read, and it matches what the list
+  shows. A loader lists the names it uses, as `'invoice.balance'`, in its `reads`, and `mistri check` names one the
+  App does not declare.
+- A tenant App's first request is now its entry, which also says who is signed in, so the first page settles in one
+  round trip. Before, the page asked who was signed in and only then asked to enter.
+- A record's references are read on one snapshot in three round trips to the database. Before, they took seven.
+- A record page's available actions start as soon as the record is known, beside its first reads. Before, they were
+  asked only after those reads had finished.
+- The public pages' first-visit budget moves from 297 KB to 299 KB: the one-call tenant entry is in the script a
+  sign-in loads, which took a cold staff sign-in to 297.1 KB.
+
 ## 1.0.0-rc.83
 
 One start now uses every core it is given.

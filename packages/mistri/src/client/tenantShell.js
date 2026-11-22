@@ -7,12 +7,13 @@ export {
   checkBrowserTenant,
   configureTenantResume,
   configureTenantSupport,
+  enterFirstAt,
   enteredWithBoot,
   initialTenantSelection,
   refreshTenantDiscovery,
   suspendBrowserTenant,
   tenantControl,
 } from './tenantBrowser.js';
-export { parseTenantLink, qualifyTenantLink, tenantRootLink } from './tenantLink.js';
+export { enterAddress, parseTenantLink, qualifyTenantLink, tenantRootLink } from './tenantLink.js';
 export { followTenantHistory } from './tenantNavigation.js';
 export { loadTenantBoot } from './tenantBootLoad.js';

@@ -10,6 +10,14 @@
  *     }),
  *   });
  *
+ * A loader that wants the App's computed columns or rollups beside a row's own
+ * (a balance, an alert count) declares each as `'table.name'` among its `reads`
+ * and asks for it with `.with(…)`, which the lists' own SQL answers in the one
+ * read, so it does not read rows again to work them out:
+ *
+ *   reads: ['invoice', 'invoice.balance', 'invoice.open_alerts'],
+ *   load: async ({ db }) => ({ rows: await db.invoice.where({ status: 'open' }).with('balance', 'open_alerts').limit(20) }),
+ *
  * A loader is a reader, never a writer, and never anyone but the person the
  * page is drawn for:
  *
@@ -49,6 +57,9 @@ export interface PageLoaderViewer {
   readonly roles: readonly string[];
 }
 
+/** A `reads` entry's table: `'invoice.balance'` is the `invoice` table's, a plain name its own. */
+type ReadTableOf<Name extends string> = Name extends `${infer T}.${string}` ? T : Name;
+
 /** What a loader's `load` is handed. */
 export interface PageLoaderContext<Src = string, R extends string = string> {
   /** The tables it declared, read-only, as this reader may read them. */
@@ -73,7 +84,10 @@ export interface PageLoaderContext<Src = string, R extends string = string> {
 
 /** A loader as `defineLoader` makes it. */
 export interface PageLoader<Result = unknown, Src = string, R extends string = string> {
+  /** The tables it reads (a `'table.name'` entry names the table here, and its derived name in `derived`). */
   readonly reads: readonly R[];
+  /** The computed columns and rollups it may ask for with `.with`, by table. */
+  readonly derived: Readonly<Record<string, readonly string[]>>;
   readonly source?: string;
   /** Milliseconds. */
   readonly timeout: number;
@@ -93,13 +107,14 @@ const NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 export function defineLoader<
   Result,
   Src = string,
-  const R extends readonly (keyof SourceTables<Src, string> & string)[] = readonly (keyof SourceTables<Src, string> & string)[],
+  const R extends readonly ((keyof SourceTables<Src, string> & string) | `${keyof SourceTables<Src, string> & string}.${string}`)[] =
+    readonly (keyof SourceTables<Src, string> & string)[],
 >(definition: {
   readonly reads: R;
   readonly source?: Src;
   readonly timeout?: `${number} second` | `${number} seconds`;
-  readonly load: (context: PageLoaderContext<Src, R[number]>) => Result | Promise<Result>;
-}): PageLoader<Awaited<Result>, Src, R[number]> {
+  readonly load: (context: PageLoaderContext<Src, ReadTableOf<R[number]>>) => Result | Promise<Result>;
+}): PageLoader<Awaited<Result>, Src, ReadTableOf<R[number]>> {
   if (!definition || typeof definition !== 'object') throw new TypeError('defineLoader takes { reads, load }.');
   for (const key of Object.keys(definition)) if (!LOADER_KEYS.has(key)) throw new TypeError(`defineLoader has no "${key}".`);
   const reads = definition.reads as unknown;
@@ -113,14 +128,31 @@ export function defineLoader<
     throw new TypeError("A loader's timeout is between '1 second' and '10 seconds'.");
   const source = definition.source === undefined ? undefined : sourceName(definition.source);
   if (definition.source !== undefined && !source) throw new TypeError("A loader's source is a defineSource() handle or its name.");
+  /* `'invoice.balance'` asks for the computed column or rollup `balance` of `invoice` through `.with`: the table is
+     among the reads too, so what a loader may read is one list a person can see. */
+  const tables = new Set<string>();
+  const derived: Record<string, string[]> = Object.create(null);
+  for (const entry of reads as string[]) if (!entry.includes('.')) tables.add(entry);
+  for (const entry of reads as string[]) {
+    const dot = entry.lastIndexOf('.');
+    if (dot < 0) continue;
+    const table = entry.slice(0, dot);
+    const name = entry.slice(dot + 1);
+    if (!tables.has(table) || !name)
+      throw new TypeError(`A loader's reads name "${entry}", a computed column or rollup of "${table}": list "${table}" in reads too.`);
+    (derived[table] ??= []).push(name);
+  }
   const loader = Object.freeze({
-    reads: Object.freeze([...new Set(reads as string[])]),
+    reads: Object.freeze([...tables]),
+    derived: Object.freeze(
+      Object.fromEntries(Object.entries(derived).map(([table, names]) => [table, Object.freeze([...new Set(names)])])),
+    ),
     ...(source ? { source } : {}),
     timeout,
     load: definition.load,
   });
   made.add(loader);
-  return loader as unknown as PageLoader<Awaited<Result>, Src, R[number]>;
+  return loader as unknown as PageLoader<Awaited<Result>, Src, ReadTableOf<R[number]>>;
 }
 
 /** The App's loaders by name: `export const loaders = defineLoaders({ pickWalk })` in its commands module. */

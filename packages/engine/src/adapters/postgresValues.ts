@@ -34,10 +34,17 @@ export function redact(connectionString: string): string {
  * certificate chain and the host name against its default roots, which is
  * verify-full. A string's own `sslmode` still wins, as it does for pg; none of
  * its values weakens this, because `disable` is the operator's word.
+ *
+ * Every socket asks for TCP keepalive: a hosted database or its pooler drops a silent connection without a word,
+ * and a warm pooled one found dead costs an error and the reconnect it was kept to avoid.
  */
-export function pgConnectionOptions(connectionString: string): { connectionString: string; ssl?: { rejectUnauthorized: true } } {
+export function pgConnectionOptions(connectionString: string): {
+  connectionString: string;
+  keepAlive: true;
+  ssl?: { rejectUnauthorized: true };
+} {
   const at = connectionString.indexOf('?');
-  if (at < 0 || !/(^|[?&])sslrootcert=system(&|$)/i.test(connectionString.slice(at))) return { connectionString };
+  if (at < 0 || !/(^|[?&])sslrootcert=system(&|$)/i.test(connectionString.slice(at))) return { connectionString, keepAlive: true };
   const query = connectionString
     .slice(at + 1)
     .split('&')
@@ -45,8 +52,8 @@ export function pgConnectionOptions(connectionString: string): { connectionStrin
     .join('&');
   const stripped = connectionString.slice(0, at) + (query ? `?${query}` : '');
   // `disable` is the operator's word: the root is dropped but no TLS is asked for.
-  if (/(^|&)sslmode=disable(&|$)/i.test(query)) return { connectionString: stripped };
-  return { connectionString: stripped, ssl: { rejectUnauthorized: true } };
+  if (/(^|&)sslmode=disable(&|$)/i.test(query)) return { connectionString: stripped, keepAlive: true };
+  return { connectionString: stripped, keepAlive: true, ssl: { rejectUnauthorized: true } };
 }
 
 /** One value, made safe to send as JSON. See `toJsonSafe` for the row form. */

@@ -18,7 +18,7 @@ import { setAppKeepsRoles, setRoleLabels } from '@mistriwork/kit/client/roleLabe
 import { invalidateSession } from '@mistriwork/kit/client/sessionLifecycle.js';
 import { setPublicVisitor } from './publicVisitor.js';
 import { landingRoute, publicFormRoute } from './publicRoutes.js';
-import { arrivedPlacement, herePath, keepPlacement } from '@mistriwork/kit/client/addressMount.js';
+import { arrivedPlacement, herePath, hereSearch, keepPlacement } from '@mistriwork/kit/client/addressMount.js';
 import { setPublicPlacement } from '@mistriwork/kit/client/requestIdentity.js';
 import { shellQuery } from '@mistriwork/kit/client/shellHost.js';
 
@@ -80,7 +80,17 @@ export async function start() {
   const asked = new URLSearchParams();
   if (requestedApp) asked.set('app', requestedApp);
   if (via) asked.set('via', via);
-  const me = await api(asked.size ? `/api/whoami?${asked}` : '/api/whoami');
+  /* A tenant App's own address starts with entering, which says who-am-I in the same answer (tenantTransport.ts
+     `enterFirst`): the page asks no who-am-I before it. The flows it needs are preloaded beside this entry. Where the
+     host did not answer so — or the address is the sign-in's, a public visitor's, or not an entry — who-am-I is
+     asked, as it always was. */
+  const entered =
+    requestedApp && !via && landingAt?.kind !== 'sign-in' && shellQuery('meta[name="mistri-tenant-enters"]')
+      ? await import('./tenantShell.js')
+          .then((tenancy) => tenancy.enterFirstAt(requestedApp, herePath() + hereSearch() + window.location.hash))
+          .catch(() => undefined)
+      : undefined;
+  const me = entered ?? (await api(asked.size ? `/api/whoami?${asked}` : '/api/whoami'));
   establishSessionIdentity(me);
   setPublicPlacement(keepPlacement(!me.signedIn && me.tenantPublic === true));
   // What the App calls its roles, for every screen that names one.

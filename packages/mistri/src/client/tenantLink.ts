@@ -97,6 +97,12 @@ export function parseTenantLink(link: string, appId: string): TenantLink {
   return { pathname, search, tenantId: selector.value };
 }
 
+/** The inside address a link asks to be entered at, as the entry request names it: its path, and its own
+ * parameters — selector off — with their `?` where there are any. */
+export function enterAddress(link: TenantLink): { path: string; search: string } {
+  return { path: link.pathname, search: link.search ? `?${link.search}` : '' };
+}
+
 /** The safe root after a signed-in visitor reloads at the App's sign-in
  * door. A tenant selector survives because it is already a link contract;
  * every other query is auth-route data, not a room or a return destination. */

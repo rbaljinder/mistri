@@ -226,14 +226,13 @@ export async function chooseTenant(me, requestedApp, incomingLocation, kit) {
   /* The address the page opens where it is entered in the link's tenant, or with none named, its one: discovery
      carries the lease and this page's boot with it then (shared/tenantBoot.ts `TENANT_ENTER_PATH`). */
   const linked = link.search ? `${link.pathname}?${link.search}` : link.pathname;
-  const linkedQuery = linked.indexOf('?');
   const selection = tenancy.initialTenantSelection(
     $('content'),
     typeof me.appName === 'string' ? me.appName : me.appId,
     link.tenantId ?? undefined,
     typeof me.platformLabel === 'string' ? me.platformLabel : undefined,
     typeof me.tenantLabel === 'string' ? me.tenantLabel : undefined,
-    { path: linkedQuery < 0 ? linked : linked.slice(0, linkedQuery), search: linkedQuery < 0 ? '' : linked.slice(linkedQuery) },
+    tenancy.enterAddress(link),
   );
   await showAccount(me, kit);
   /* Entered directly (a link to one of the person's tenants), the selection can settle before this reveal's

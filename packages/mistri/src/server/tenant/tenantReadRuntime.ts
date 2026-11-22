@@ -320,6 +320,11 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
             let failure: unknown;
             let lastTime = principal.verifiedAt;
             const pending = new Set<Promise<void>>();
+            /* The snapshots the callback's own `together` rides the release fence on (`fencedTogether`). */
+            const riding = new AsyncLocalStorage<true>();
+            let ridden = false,
+              beside = false,
+              ridingOpen = 0;
             let releaseFlags = () => {};
             const assertActive = () => {
               checkTenantInvocation(guard, principal);
@@ -370,6 +375,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
             };
             const track = <A, R>(input: A, work: (captured: A) => Promise<R>, validate: (captured: A) => void): Promise<R> => {
               if (!accepting || !active || retired) return Promise.reject(new TenantContextError());
+              if ((ridden || ridingOpen) && !riding.getStore()) beside = true;
               let complete!: () => void;
               const reserved = new Promise<void>((resolve) => {
                 complete = resolve;
@@ -541,7 +547,34 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                  This member's own locale, read the same way: under this context's scope, from their row. Neither
                  reads the other's answer, so both are asked at once, and both are settled before either failure
                  is told: no read of this context is left running behind it. */
+              // A first admission its owner makes again (tenantInvocationAdmittedAgain): that one is the fence.
+              const again = isAdmittedAgain(guard);
               const together = <R>(work: () => Promise<R>): Promise<R> => source.together(principal, work);
+              /* What the callback's own `together` (a boot's, a composed page's) is handed where the request is not
+                 bounded: the same one snapshot, whose end carries the release fence (TenantReadSource.togetherFenced)
+                 instead of leaving it to a snapshot of its own once the reads are done — a round trip on every boot,
+                 page load and compose. The fence only proves the membership after the reads it followed, so it is
+                 trusted only while every read of this context was asked inside such a snapshot and had settled when
+                 it ended; a read asked beside one, or after it, or a second snapshot open at once, and the caller
+                 fences as it always did. A refused fence fails the callback as the separate one failed the request. */
+              const fencedTogether = <R>(work: () => Promise<R>): Promise<R> => {
+                if (bounded || again || riding.getStore()) return together(work);
+                if (pending.size || ridingOpen) beside = true;
+                ridingOpen++;
+                ridden = false;
+                return source
+                  .togetherFenced(principal, () => riding.run(true, work), { lastWave: false })
+                  .then((ran) => {
+                    if (pending.size) beside = true;
+                    ridden = ran.fenced;
+                    return ran.value;
+                  })
+                  .finally(() => {
+                    ridingOpen--;
+                  });
+              };
+              /* Whether the membership was proved after every read, by the end of the snapshot they were on. */
+              const fenceRode = () => ridden && !beside && ridingOpen === 0;
               const lastWave = () => source.lastWave();
               let output: T | undefined,
                 callbackFailed = false,
@@ -570,7 +603,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                   principal,
                   schema,
                   data,
-                  together,
+                  together: fencedTogether,
                   lastWave,
                   tenant,
                   ...(capabilities === undefined ? {} : { capabilities }),
@@ -638,8 +671,6 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                 if (!bounded) await revalidateSession();
                 return true;
               };
-              // A first admission its owner makes again (tenantInvocationAdmittedAgain): that one is the fence.
-              const again = isAdmittedAgain(guard);
               if (bounded && !again) {
                 /* Every read on one snapshot, and the membership fence in the message that ends it, after the
                  session's (`withBoundedReads`); where it could not ride, in a snapshot of its own as below. */
@@ -673,7 +704,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
               } else {
                 if (!(await answer())) return denyTenantFor(failure);
                 if (!again) {
-                  await source.assertCurrent(principal);
+                  if (!fenceRode()) await source.assertCurrent(principal);
                   assertActive();
                 }
               }

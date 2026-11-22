@@ -107,10 +107,30 @@ export function tenantEnterRequest(input: Readonly<Record<string, unknown>>, app
  * choice too, and where the address names a tenant, that one. One rule for the chooser that enters it at once
  * (client tenantBrowser.ts) and the host that enters it in the same request as discovery (tenantHttp.ts).
  */
-export function soleTenant(memberships: readonly string[], platform: boolean, named?: string): string | undefined {
+function soleTenant(memberships: readonly string[], platform: boolean, named?: string): string | undefined {
   return memberships.length === 1 && !platform && memberships[0] !== PLATFORM_TENANT_ID && (named === undefined || named === memberships[0])
     ? memberships[0]
     : undefined;
+}
+
+/**
+ * The tenant the host completes an enter for, and the page takes without asking: the sole membership (`soleTenant`);
+ * else the tenant the address names, if it is one of the person's; else the one this tab kept, if it is one of theirs.
+ * Never the platform realm; where a link names a tenant that is not theirs, none, and the chooser says whose link it is.
+ * `memberships` come only from discovery, so `named` and `kept` choose among them and add nothing. One rule for the
+ * host (tenantHttp.ts), the chooser (client tenantBrowser.ts) and the check on the answer (client tenantTransport.ts),
+ * so they agree on which tenant one request carries a lease and the boot for. A field report: a person in several
+ * tenants, whose link named one, paid enter, resume and boot in three rounds.
+ */
+export function enteredTenant(
+  memberships: readonly string[],
+  platform: boolean,
+  { named, kept }: { readonly named?: string; readonly kept?: string } = {},
+): string | undefined {
+  const only = soleTenant(memberships, platform, named);
+  if (only !== undefined) return only;
+  const chosen = named ?? kept;
+  return chosen !== undefined && chosen !== PLATFORM_TENANT_ID && memberships.includes(chosen) ? chosen : undefined;
 }
 
 /** Whether a boot request says an address it can plan: two strings within the bound, the path the App's own. */

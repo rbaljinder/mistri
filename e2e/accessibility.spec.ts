@@ -150,7 +150,12 @@ test('an App’s smoke rooms, in every look', async ({ page }) => {
     await page.goto(APP);
     await painted(page);
     if (reads(0, index)) await audit(page, `${as} home`, findings);
+    const home = page.url();
     await page.locator('#table-list button[data-table]').first().click();
+    /* The home's rows stand as a held picture (navigationHold.ts) until the list is drawn, and can satisfy a wait
+       for the list's: wait for the list itself, or axe audits a pane with nothing shown in it. */
+    await expect(page).not.toHaveURL(home);
+    await expect(page.locator('#content.nav-holding')).toHaveCount(0);
     await expect(page.locator('tbody tr').first()).toBeVisible();
     if (reads(1, index)) await audit(page, `${as} list`, findings);
     await page.locator('tbody tr').first().click();

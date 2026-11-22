@@ -1274,7 +1274,11 @@ export async function openPostgresTenantReadSource(
           end();
         }
       },
-      togetherFenced: async <T>(evidence: TenantMembershipEvidence, work: () => Promise<T>): Promise<{ value: T; fenced: boolean }> => {
+      togetherFenced: async <T>(
+        evidence: TenantMembershipEvidence,
+        work: () => Promise<T>,
+        options?: { readonly lastWave?: boolean },
+      ): Promise<{ value: T; fenced: boolean }> => {
         if (typeof work !== 'function') return Promise.reject(new TenantContextError());
         /* Inside another `together` of this source: its snapshot is the one, and its owner fences. */
         if (sharing.getStore()) return { value: await work(), fenced: false };
@@ -1291,7 +1295,9 @@ export async function openPostgresTenantReadSource(
           key: JSON.stringify(fence),
           open: true,
           fence: false,
-          closable: true,
+          /* A boot or a composed page asks many waves, and a read of one saying "last" must not send the fence ahead
+             of the rest: only a request that declares its last wave (withBoundedReads) may. */
+          closable: options?.lastWave !== false,
           running: new Set(),
           ended: new Promise<void>((resolve) => {
             end = resolve;

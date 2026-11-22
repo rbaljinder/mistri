@@ -327,6 +327,15 @@ A page may name several loaders: `loaders: ['pickFigures']` beside, or instead o
 
 A loader's `db` also reads a resource's segment by name, `db.pick_list.segment('to_pick_lists')`, under the same grants, field projection and row policy, and it chains `where`, `orderBy` and `limit` as any read does. The rule that says which lists are waiting is then written once, in the resource, and the list's tab, a figure and the loader all read it. A segment that uses a rollup, a computed column, a path or `me` cannot be read in a handler, and the call says so by the segment's name.
 
+A loader reads the App's computed columns and rollups beside a row's own with `.with(…)`: list each as `'table.name'` among `reads`, and ask for it by name. They come back as fields of each row, worked out by the same SQL the table's lists use, in the same one read, so the page does not read rows again to total them up. A name the loader did not list is refused (`mistri check` names an unknown one), and one this reader's field grant hides is refused as a list does not show it. `.with` goes with a read of rows, not a sum, a group or a page; a command's `db` has none.
+
+```ts
+reads: ['invoice', 'invoice.balance', 'invoice.open_alerts'],
+async load({ db }) {
+  return { rows: await db.invoice.where({ status: 'open' }).with('balance', 'open_alerts').limit(20) };
+},
+```
+
 ### Blocks
 
 The platform's sections are components of `@mistriwork/mistri/page`, each taking its DSL helper's words as props and `from` for its table, one the page reads (or a `Scope`'s), and `where` beside `query`. Each loads when a page first draws it.

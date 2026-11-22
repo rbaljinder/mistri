@@ -17,12 +17,17 @@
  * in them. Every read a component makes is an ordinary request authorized on
  * its own. A component's files are named for their content and kept for a
  * year; a new compile is new names, which the App payload points at. The host
- * modules depend on the mistri that serves them and are asked about each
- * time.
+ * modules depend on the mistri that serves them, so a component names them under
+ * the build's content hash (`/_mistri/sdk/<hash>/react.js`, componentSdk.ts
+ * hostVersion) and they are kept for a year too; a path with no hash, or another
+ * build's, is answered with the current module and asked about each time, so a
+ * page left open across a deploy keeps working. A field report: a load fetched
+ * all six whole, every time.
  */
 import { send } from '@mistriwork/engine/server/http/reply.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
-import { hostModuleSource } from '../app/componentSdk.js';
+import { createHash } from 'node:crypto';
+import { hostModuleSource, hostVersion } from '../app/componentSdk.js';
 import { COMPONENTS_SEGMENT, HOST_MODULES, SDK_PATH } from '../../shared/uiSdk.js';
 import { publicFormInputIds } from '../../shared/appComponentPlaces.js';
 import { isPublicForm } from '../../shared/app.js';
@@ -54,7 +59,7 @@ export function withHostPaths(files: Readonly<Record<string, string>>, name: str
     code = files[name].replace(
       HOST_SPECIFIER,
       (_match, before: string, quote: string, module: keyof typeof HOST_MODULES) =>
-        `${before}${quote}${base}${SDK_PATH}${HOST_MODULES[module]}${quote}`,
+        `${before}${quote}${base}${SDK_PATH}${hostVersion()}/${HOST_MODULES[module]}${quote}`,
     );
     made.set(key, code);
   }
@@ -72,16 +77,59 @@ function missing(ctx: Pick<RequestContext, 'req' | 'res'>): true {
   return true;
 }
 
-function reply(ctx: Pick<RequestContext, 'req' | 'res'>, body: string, type: string, cache: string): true {
+function reply(
+  ctx: Pick<RequestContext, 'req' | 'res'>,
+  body: string,
+  type: string,
+  cache: string,
+  extra: Record<string, string> = {},
+): true {
   const head = ctx.req.method === 'HEAD';
   ctx.res.writeHead(200, {
     'content-type': type,
     'cache-control': cache,
     'x-content-type-options': 'nosniff',
     'content-length': Buffer.byteLength(body),
+    ...extra,
   });
   ctx.res.end(head ? undefined : body);
   return true;
+}
+
+/** The host module a path under `/_mistri/sdk/` names, with how long it may be kept; undefined for none. */
+function hostModuleAnswer(rest: string): { source: string; cache: string } | undefined {
+  const versioned = /^([0-9a-f]{10})\/([^/]+)$/.exec(rest);
+  const source = hostModuleSource(versioned ? versioned[2] : rest);
+  if (source === undefined) return undefined;
+  return { source, cache: versioned?.[1] === hostVersion() ? 'public, max-age=31536000, immutable' : 'no-cache' };
+}
+
+const tags = new Map<string, string>();
+
+/* The strong validator of one served source: its content, so a rebuilt module is a new one and an unchanged one is a 304. */
+function etagOf(source: string): string {
+  let tag = tags.get(source);
+  if (tag === undefined) {
+    tag = `"${createHash('sha256').update(source).digest('hex').slice(0, 20)}"`;
+    tags.set(source, tag);
+  }
+  return tag;
+}
+
+function hostModuleRoute(ctx: Pick<RequestContext, 'req' | 'res'>, path: string): true {
+  const answer = hostModuleAnswer(path.slice(SDK_PATH.length));
+  if (!answer) {
+    send(ctx.res, 404, { error: 'No such module.' });
+    return true;
+  }
+  const tag = etagOf(answer.source);
+  const match = ctx.req.headers['if-none-match'];
+  if (typeof match === 'string' && match.split(',').some((candidate) => candidate.trim() === tag)) {
+    ctx.res.writeHead(304, { etag: tag, 'cache-control': answer.cache, 'x-content-type-options': 'nosniff' });
+    ctx.res.end();
+    return true;
+  }
+  return reply(ctx, answer.source, TYPES.js, answer.cache, { etag: tag });
 }
 
 /**
@@ -104,14 +152,7 @@ export async function tenantComponentRoute(
   visitorFiles: ReadonlySet<string> = new Set(),
 ): Promise<boolean> {
   if (ctx.req.method !== 'GET' && ctx.req.method !== 'HEAD') return false;
-  if (path.startsWith(SDK_PATH)) {
-    const source = hostModuleSource(path.slice(SDK_PATH.length));
-    if (source === undefined) {
-      send(ctx.res, 404, { error: 'No such module.' });
-      return true;
-    }
-    return reply(ctx, source, TYPES.js, 'no-cache');
-  }
+  if (path.startsWith(SDK_PATH)) return hostModuleRoute(ctx, path);
   const match = FILE.exec(path);
   if (!match) return underComponents(path) ? missing(ctx) : false;
   let named: string;
@@ -153,16 +194,9 @@ function publicFormFiles(host: AppHost): ReadonlySet<string> {
 }
 
 export async function componentRoutes(ctx: RequestContext): Promise<boolean> {
-  const { req, res, path, appHosts } = ctx;
+  const { req, path, appHosts } = ctx;
   if (req.method !== 'GET' && req.method !== 'HEAD') return false;
-  if (path.startsWith(SDK_PATH)) {
-    const source = hostModuleSource(path.slice(SDK_PATH.length));
-    if (source === undefined) {
-      send(res, 404, { error: 'No such module.' });
-      return true;
-    }
-    return reply(ctx, source, TYPES.js, 'no-cache');
-  }
+  if (path.startsWith(SDK_PATH)) return hostModuleRoute(ctx, path);
   const match = FILE.exec(path);
   if (!match) return underComponents(path) ? missing(ctx) : false;
   let appId: string;

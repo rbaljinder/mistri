@@ -119,6 +119,7 @@ export function sealedPgOptions(target: string, policy: NetworkPolicy): Record<s
     user,
     database: decoded(url.pathname.slice(1)) || user,
     password: () => password,
+    keepAlive: true,
     ssl,
     ...(url.searchParams.get('application_name') ? { application_name: url.searchParams.get('application_name') } : {}),
     stream: () => guardedSocket(policy),

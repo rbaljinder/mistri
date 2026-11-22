@@ -215,6 +215,9 @@ interface ShellTitle {
   appFaces?: string;
   /** A tenant host's page: its shell page preloads the tenant's flows too (clientSurface.ts tenantPreloads). */
   tenant?: true;
+  /** A tenant App's own address (not a tenant's mapped host): the page's first request is `/api/tenant/enter`, which
+      answers who-am-I too, so the client asks no who-am-I before it. Named in the head for the client to read. */
+  enters?: true;
   /** The reader's locale where the server knows it (an App's), so a non-English reader's chrome words are preloaded (clientSurface.ts localePreloads). */
   locale?: string;
   /** The page's first answers (http/firstPaint.ts), asked only when a page — not a file — is what is sent. */
@@ -490,7 +493,10 @@ function withLooks(html: string, shell: ShellTitle | undefined, files: Iterable<
     lookPreloads(shell?.looks ?? [], assets, shell?.faces) +
     (shell?.appFaces ?? '') +
     localePreloads(shell?.locale, assets) +
-    (shell?.tenant && !shell.workbench && surfaceFor(shell.path ?? '') === 'shell' ? tenantPreloads(assets) : '');
+    (shell?.tenant && !shell.workbench && surfaceFor(shell.path ?? '') === 'shell' ? tenantPreloads(assets) : '') +
+    (shell?.enters && !shell.workbench && surfaceFor(shell.path ?? '') === 'shell'
+      ? '    <meta name="mistri-tenant-enters" content="1">\n'
+      : '');
   if (!links) return html;
   return /<script type="module"/i.test(html)
     ? html.replace(/<script type="module"/i, (match) => `${links.trimStart()}    ${match}`)

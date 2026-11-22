@@ -87,6 +87,8 @@ export interface PgPool extends PgQuery {
 export interface PgPoolOptions {
   connectionString?: string;
   ssl?: { rejectUnauthorized: true };
+  /** TCP keepalive on the socket (pgConnectionOptions). */
+  keepAlive?: boolean;
   max: number;
   connectionTimeoutMillis: number;
   idleTimeoutMillis: number;

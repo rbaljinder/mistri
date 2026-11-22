@@ -47,6 +47,14 @@ export interface TenantHttpOptions {
   /** The verified reader's own name, for a dashboard that greets `{me.name}` (appGreeting.ts): words on a
       screen, never an authority. Absent, or saying nothing, the greeting is left out. */
   readonly readerName?: (req: IncomingMessage) => string | undefined;
+  /** Who-am-I's answer for this request, the same function the host's `/api/whoami` answers with, which
+      `/api/tenant/enter` carries so a page's first request is its entry, for the session that request just proved. Absent,
+      the entry carries none. */
+  readonly whoami?: (
+    req: IncomingMessage,
+    expected: string | undefined,
+    proof: VerifiedSessionInstance | null,
+  ) => Promise<Record<string, unknown>>;
   /** The free-form pages' loaders, by name: the commands module's `loaders` (commands/pageLoaders.ts). */
   readonly loaders?: Readonly<Record<string, PageLoader>>;
   /** Whether this request's login was made here in the last five minutes, by the rule opening a support session

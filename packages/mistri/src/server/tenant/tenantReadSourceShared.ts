@@ -105,8 +105,13 @@ export interface TenantReadSource {
    * settled, its COMMIT and this evidence's membership in a fresh snapshot of its own, one round trip where the
    * COMMIT and assertCurrent's own snapshot were three. A membership that no longer holds refuses. `fenced` says
    * whether it rode; where it did not — nothing was read, the attestation was due, `work` failed, SQLite — the
-   * caller fences as before. */
-  togetherFenced<T>(evidence: TenantMembershipEvidence, work: () => Promise<T>): Promise<{ value: T; fenced: boolean }>;
+   * caller fences as before. `lastWave: false` is for work that asks reads past any one wave (a boot, a composed
+   * page): its reads may name `lastWave` and nothing leaves early, so the fence goes once they have all settled. */
+  togetherFenced<T>(
+    evidence: TenantMembershipEvidence,
+    work: () => Promise<T>,
+    options?: { readonly lastWave?: boolean },
+  ): Promise<{ value: T; fenced: boolean }>;
   /** Asked inside `togetherFenced`'s `work`, just before its last wave of reads: the release fence leaves with that
    * wave, pipelined behind its last statement, rather than in a round trip of its own once the reads have settled.
    * The fence's snapshot still begins after every read on the shared one has finished (the server runs a

@@ -4,7 +4,7 @@ import { userEvent } from '@testing-library/user-event';
 import { configureAppTargetLinks } from '../appTargetLinks.js';
 import { establishSessionIdentity, lockSessionIdentity } from '../../../../kit/src/client/sessionIdentity.js';
 
-const { go, openPalette } = vi.hoisted(() => ({ go: vi.fn(), openPalette: vi.fn() }));
+const { go, openPalette, prefetchList } = vi.hoisted(() => ({ go: vi.fn(), openPalette: vi.fn(), prefetchList: vi.fn() }));
 vi.mock('../../../../kit/src/client/core.js', () => ({
   go,
   // Nothing on the walk, and a walk that never moves.
@@ -19,6 +19,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   pageView: (pageId: string) => ({ kind: 'page', pageId }),
 }));
 vi.mock('../../../../kit/src/client/palette.js', () => ({ openPalette }));
+vi.mock('../../../../kit/src/client/components/listRowsPress.js', () => ({ prefetchList }));
 vi.mock('../../../../kit/src/client/components/appListModel.js', () => ({
   appListQuery: ({ table }: { table: string }) => table,
   currentNavIndex: () => -1,
@@ -395,6 +396,32 @@ test('folded, groups one level deep are labelled sections of one menu, every roo
   ).toEqual(['Sales board', 'Leads', 'Deals', 'Tasks']);
   await user.click(within(menu).getByRole('menuitem', { name: 'Deals' }));
   expect(go).toHaveBeenCalledWith({ kind: 'table', table: 'deal', query: 'deal', view: 'deals' }, 'reset');
+});
+
+test("a press or Enter on a list's entry begins its reads; hovering, and a room that is not a list, ask nothing", async () => {
+  /* The destination's first reads start while the button is down, so its mount finds them (listRowsPress.ts). */
+  const user = userEvent.setup();
+  const portal: Served = {
+    ...sectioned,
+    nav: [{ ...(sectioned.nav[0] as object), inline: true } as Served['nav'][number], sectioned.nav[1]],
+  };
+  const { container } = draw(false, portal);
+  const strip = container.querySelector('.tn-links') as HTMLElement;
+  const leads = within(strip).getByRole('button', { name: 'Leads' });
+  await user.hover(leads);
+  expect(prefetchList).not.toHaveBeenCalled();
+  await user.pointer({ keys: '[MouseLeft>]', target: leads });
+  expect(prefetchList).toHaveBeenCalledTimes(1);
+  expect(prefetchList).toHaveBeenCalledWith(expect.objectContaining({ table: 'lead', id: 'leads' }));
+  await user.pointer({ keys: '[/MouseLeft]', target: leads });
+  prefetchList.mockClear();
+  const deals = within(strip).getByRole('button', { name: 'Deals' });
+  deals.focus();
+  await user.keyboard('{Enter}');
+  expect(prefetchList).toHaveBeenCalledWith(expect.objectContaining({ table: 'deal', id: 'deals' }));
+  prefetchList.mockClear();
+  await user.pointer({ keys: '[MouseLeft>]', target: within(strip).getByRole('button', { name: 'Sales board' }) });
+  expect(prefetchList).not.toHaveBeenCalled();
 });
 
 test('an inline group draws its rooms in the bar as links of their own; folded, it is a section like any group', async () => {

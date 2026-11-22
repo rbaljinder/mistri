@@ -26,7 +26,8 @@ import {
 import { SQLITE_AUTH_META_DDL, SQLITE_AUTH_META_TABLE, SQLITE_AUTH_STORE_VERSION } from '../../adapters/auth/sqliteAuthStoreLayout.js';
 import { layoutRefusal, sqliteLayoutVersion } from '@mistriwork/engine/adapters/layoutRefusal.js';
 import { holdConnections } from '@mistriwork/engine/adapters/connectionBudget.js';
-import { postgresPoolDefaults, type PgPool, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
+import { postgresPoolDefaults, resolvePoolIdle, type PgPool, type PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
+import { serverSettings } from '@mistriwork/engine/adapters/serverSettings.js';
 import { transactionScoped } from '@mistriwork/engine/adapters/postgresPooler.js';
 import { probeRoundTrips, timeClient, timePoolCheckouts, type ProbeClient } from '@mistriwork/engine/adapters/telemetry/serverTiming.js';
 import { pgConnectionOptions } from '@mistriwork/engine/adapters/postgresValues.js';
@@ -284,6 +285,17 @@ function witnessedPool(Pool: new (options: Record<string, unknown>) => PgPool): 
   } as unknown as new (options: Record<string, unknown>) => PgPool;
 }
 
+/**
+ * How long the store's idle connections stay open, and the one kept through it. A session read leases a connection;
+ * at the old thirty seconds the first read after a quiet spell reconnected (TCP, TLS, SCRAM and the two SETs), about
+ * 185 to 260 ms on a hosted database, before a page's first byte. It takes the App pools' window (five minutes, or
+ * MISTRI_POOL_IDLE) and keeps one backend warm, which holdConnections already counts as part of the pool's size.
+ * Idle ones never hold the process open, so a one-shot mode that forgets to close still exits.
+ */
+export function authPoolIdle(size: number): { idleTimeoutMillis: number; min: number; allowExitOnIdle: true } {
+  return { ...resolvePoolIdle({}, serverSettings(), 1, size), allowExitOnIdle: true };
+}
+
 export async function openPostgresAuthStore(url: string): Promise<AuthStoreHandle> {
   const specifier = 'pg';
   const pg = (await import(specifier).catch(() => {
@@ -315,7 +327,7 @@ export async function openPostgresAuthStore(url: string): Promise<AuthStoreHandl
     ...pgConnectionOptions(url),
     max: size,
     connectionTimeoutMillis: 10_000,
-    idleTimeoutMillis: 30_000,
+    ...authPoolIdle(size),
     Client: observedClient(pooled ? transactionPooledClient(Client) : Client, reads),
     ...(pooled ? { pipeline: true } : {}),
     onConnect: async (client: { query(text: string): Promise<unknown>; on(event: 'error', listener: () => void): unknown }) => {

@@ -6,8 +6,8 @@ import { startTenantApp, type TenantAppFixture } from './support/tenantServer.js
  * member's tenants and the lease, the shell used to ask the runtime, then the App, its pages and its schema, then the
  * room's own reads, each round after the last had answered: on a remote database every round is a network's latency
  * and a context's admission. The page is now asked for in one read on the lease, and someone in one tenant is
- * entered with it in the same request as discovery (`/api/tenant/enter`), so a list or a record settles in two
- * rounds — who-am-I, then everything else — whatever the room asks. A change that brings a round back fails here, by
+ * entered with it in the same request as discovery (`/api/tenant/enter`), which says who-am-I as well, so a list or a
+ * record settles in one round — the entry — whatever the room asks. A change that brings a round back fails here, by
  * name.
  */
 test.describe("a tenant App's first page", () => {
@@ -49,7 +49,7 @@ test.describe("a tenant App's first page", () => {
     return { asked: asked.filter((request) => request.path !== '/api/live').sort((a, b) => a.started - b.started), flows };
   }
 
-  test('a list and a record each ask the page with the lease, in two rounds', async ({ page }) => {
+  test('a list and a record each ask the page with the lease, in one round', async ({ page }) => {
     app = await startTenantApp({ writable: true, shell: true });
     const signed = await page.request.post(app.origin + '/api/auth/sign-in/email', {
       headers: { origin: app.origin },
@@ -81,17 +81,18 @@ test.describe("a tenant App's first page", () => {
         '/api/pages/suggested',
       ])
         expect(paths, said).not.toContain(carried);
-      /* Who-am-I, then the member's tenants, the lease and the boot in one; never asked again apart. The bell's
-         count the boot carries too, so it is not asked at all. */
-      expect(paths, said).toEqual(['/api/whoami', '/api/tenant/enter']);
-      expect(Math.max(...asked.map((request) => request.wave)), said).toBe(2);
-      /* The tenant's flows are asked beside the entry (clientSurface.ts tenantPreloads), not once who-am-I has said
-         the session is a tenant's: that was a round trip between who-am-I and entering. Built pages only — the
+      /* Who-am-I, the member's tenants, the lease and the boot in one, asked before the page knows who is signed in
+         (tenantTransport.ts `enterFirst`); never asked again apart. The bell's count the boot carries too, so it is
+         not asked at all. */
+      expect(paths, said).toEqual(['/api/tenant/enter']);
+      expect(Math.max(...asked.map((request) => request.wave)), said).toBe(1);
+      /* The tenant's flows are asked beside the page, not once who-am-I has said the session is a tenant's
+         (clientSurface.ts tenantPreloads): the entry waits on them, being made from them. Built pages only — the
          source client under Vite names no chunks. */
       if (process.env.MISTRI_BUILT_CLIENT === '1') {
-        const whoami = asked.find((request) => request.path === '/api/whoami')!;
+        const entry = asked.find((request) => request.path === '/api/tenant/enter')!;
         expect(flows, `${said}\ntenant flows not asked`).toBeDefined();
-        expect(flows!, `${said}\ntenant flows asked at ${flows}, who-am-I answered at ${whoami.ended}`).toBeLessThanOrEqual(whoami.started);
+        expect(flows!, `${said}\ntenant flows asked at ${flows}, the entry sent at ${entry.started}`).toBeLessThanOrEqual(entry.started);
       }
     }
   });

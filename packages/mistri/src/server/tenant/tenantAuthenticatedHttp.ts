@@ -821,6 +821,11 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       look: () => look,
       enrollment,
       verifySessionInstance: verify,
+      /* Entering says who-am-I too (whoamiAnswer): the page's first request is the entry, not who-am-I before it. */
+      whoami: async (req: IncomingMessage, expected: string | undefined, proof: VerifiedSessionInstance | null) => {
+        const answered = await whoamiAnswer(req, new URL('/api/whoami', 'http://localhost'), expected, proof);
+        return 'refused' in answered ? denyTenant() : answered.body;
+      },
       readerName,
       recentSignIn,
       bound: raw.bound as Bound,
@@ -1294,6 +1299,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       mount: { base: mount.base, json: mountJson(mount) },
       path,
       tenant: true as const,
+      ...(req && !getTenantHostIntent(req) ? { enters: true as const } : {}),
       /* `ui.microphone` is the App's, whichever host serves it (http/handler.ts says the same of an ordinary App). */
       ...(loaded.app.ui.microphone ? { microphone: true as const } : {}),
       looks: lookSheetsFor(worn().ui, undefined, hosted?.value.theme),
@@ -1316,6 +1322,132 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     /* Its pool checkouts wait in line as its client's (a forwarded address only from --trust-proxy) until its
        session names the account (verify, above; poolAdmission.ts). The data server runs inside this frame: it is
        dispatched to, never listened on, and its own binding takes no proxies. */
+    /* Who-am-I's answer for this request's session. One function for both routes that say it — `/api/whoami` and
+       `/api/tenant/enter`, which carries it so that a page's first request is its entry (tenantHttp.ts `whoami`) — so
+       what the one says of a person the other cannot differ. A refusal is a status for the route to answer; the
+       account a signed-in answer is for is the one the route names in its header. */
+    const whoamiAnswer = async (
+      req: IncomingMessage,
+      url: URL,
+      expected: string | undefined,
+      /* The session where the caller has just proved it (entering): read again, it would be one more look at the store. */
+      held?: VerifiedSessionInstance | null,
+    ): Promise<{ readonly body: Record<string, unknown>; readonly account?: string } | { readonly refused: number | undefined }> => {
+      /* A visitor's address, or this App's mapped host, where the App opens reads to visitors: the
+         visitor's answer, whoever's cookie rides along — a member reads as a member at the App's own
+         address, never through a tenant's public one. Whether the address places anyone is the reads'
+         to say, each as one missing page; this answer names no tenant either way. */
+      if (dispatchPublicReads && (url.searchParams.has('via') || (mappedHost(req) && !pinnedRequests.has(req)))) {
+        if (mappedHost(req) && url.searchParams.has('via')) return { refused: undefined };
+        active();
+        return {
+          body: {
+            signedIn: false,
+            accountId: null,
+            appId: loaded.app.id,
+            who: null,
+            header: null,
+            ...(signIn.suite ? { suite: signIn.suite } : {}),
+            signIn: {
+              ...signIn,
+              ...(browser ? { look: withIconGlyphs(appLook(loaded.app)) } : {}),
+            },
+            public: true,
+            tenantPublic: true,
+            ...hostSignInOffer(req),
+            ...(browser
+              ? {
+                  appName: loaded.app.name,
+                  ...(loaded.app.shortName ? { appShortName: loaded.app.shortName } : {}),
+                  ...(home === undefined ? {} : { home }),
+                  // The landing's view key, as the single-App who-am-I sends it (gate.ts): without it
+                  // the signed-out home skips the landing and a visitor gets the sign-in screen.
+                  ...(loaded.app.landing ? { landingView: loaded.app.landing.view } : {}),
+                }
+              : {}),
+          },
+        };
+      }
+      const proof = held !== undefined ? held : await verify(req);
+      active();
+      const instant = now();
+      active();
+      if (!Number.isFinite(instant)) return denyTenant();
+      // Signed out, the public view the App's home rules start a visitor on — its
+      // landing or a public form — so the client draws it instead of the sign-in screen.
+      // With invitations and email sign-in, a signed-out invitee may claim an
+      // account-creating invitation: the form needs only the App to claim into.
+      if (proof === null)
+        return {
+          body: {
+            signedIn: false,
+            accountId: null,
+            appId: loaded.app.id,
+            who: null,
+            header: null,
+            ...(signIn.suite ? { suite: signIn.suite } : {}),
+            signIn: {
+              ...signIn,
+              // The door in the App's own colours, as the ordinary server draws it (gate.ts).
+              ...(browser ? { look: withIconGlyphs(appLook(loaded.app)) } : {}),
+              ...(administration?.invitations?.claim && Array.isArray(signIn.providers) && signIn.providers.includes('email')
+                ? { invitationClaim: loaded.app.id }
+                : {}),
+            },
+            ...hostSignInOffer(req),
+            ...(browser
+              ? {
+                  tenant: true,
+                  appName: loaded.app.name,
+                  ...(loaded.app.shortName ? { appShortName: loaded.app.shortName } : {}),
+                  ...(home === undefined ? {} : { home }),
+                  // The landing's view key, as the single-App who-am-I sends it (gate.ts): without it
+                  // the signed-out home skips the landing and a visitor gets the sign-in screen.
+                  ...(loaded.app.landing ? { landingView: loaded.app.landing.view } : {}),
+                }
+              : {}),
+          },
+        };
+      tenantIdentifier(proof.identity.id, 1024);
+      validateHeaderValue(headers.account, proof.identity.id);
+      if (proof.expiresAt <= instant) return denyTenant();
+      if (expected !== undefined && expected !== proof.identity.id) return { refused: 409 };
+      /* Signed in on a tenant's own host: one tenant, and none of an operator's rooms, which stay on the
+         deployment's own host (`pinnedRoute`); the client draws no tenant switcher for it. */
+      const pinned = hostSignIns?.pinned(proof) != null;
+      return {
+        body: {
+          signedIn: true,
+          accountId: proof.identity.id,
+          appId: loaded.app.id,
+          who: proof.identity.who,
+          header: null,
+          accountProfile: true,
+          ...roleLabelsOf(loaded.app.auth),
+          ...keepsRoles(loaded.app.auth),
+          ...(signIn.suite ? { suite: signIn.suite } : {}),
+          ...(pinned ? { pinned: true } : {}),
+          ...(!pinned && administrationOptions?.policy ? { tenantAdministration: true } : {}),
+          ...(!pinned && administration?.invitations ? { tenantInvitations: true } : {}),
+          ...(!pinned && support ? { tenantSupport: true } : {}),
+          // A bell for the notices kept in each lease's own inbox (tenantInbox.ts).
+          ...(appKeepsInbox(loaded.app) ? { inbox: true } : {}),
+          /* The chooser is drawn before the App's payload, which needs a
+           chosen tenant: so its look, and what the App calls a tenant, travel here. */
+          ...(browser
+            ? {
+                tenant: true,
+                appName: loaded.app.name,
+                ...(loaded.app.shortName ? { appShortName: loaded.app.shortName } : {}),
+                look: withIconGlyphs(appLook(loaded.app)),
+                ...(loaded.app.auth?.tenancy?.label ? { tenantLabel: loaded.app.auth.tenancy.label } : {}),
+                ...(loaded.app.auth?.tenancy?.platform ? { platformLabel: loaded.app.auth.tenancy.platform.label } : {}),
+              }
+            : {}),
+        },
+        account: proof.identity.id,
+      };
+    };
     const server = frontDoor({ trustedProxies: publicBound.trustedProxies }, (req, res) => {
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
@@ -1702,114 +1834,10 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             (req.headers['content-length'] !== undefined && req.headers['content-length'] !== '0')
           )
             return refuse();
-          /* A visitor's address, or this App's mapped host, where the App opens reads to visitors: the
-             visitor's answer, whoever's cookie rides along — a member reads as a member at the App's own
-             address, never through a tenant's public one. Whether the address places anyone is the reads'
-             to say, each as one missing page; this answer names no tenant either way. */
-          if (dispatchPublicReads && (url.searchParams.has('via') || (mappedHost(req) && !pinnedRequests.has(req)))) {
-            if (mappedHost(req) && url.searchParams.has('via')) return refuse();
-            active();
-            return send(req, res, 200, {
-              signedIn: false,
-              accountId: null,
-              appId: loaded.app.id,
-              who: null,
-              header: null,
-              ...(signIn.suite ? { suite: signIn.suite } : {}),
-              signIn: {
-                ...signIn,
-                ...(browser ? { look: withIconGlyphs(appLook(loaded.app)) } : {}),
-              },
-              public: true,
-              tenantPublic: true,
-              ...hostSignInOffer(req),
-              ...(browser
-                ? {
-                    appName: loaded.app.name,
-                    ...(loaded.app.shortName ? { appShortName: loaded.app.shortName } : {}),
-                    ...(home === undefined ? {} : { home }),
-                    // The landing's view key, as the single-App who-am-I sends it (gate.ts): without it
-                    // the signed-out home skips the landing and a visitor gets the sign-in screen.
-                    ...(loaded.app.landing ? { landingView: loaded.app.landing.view } : {}),
-                  }
-                : {}),
-            });
-          }
-          const proof = await verify(req);
-          active();
-          const instant = now();
-          active();
-          if (!Number.isFinite(instant)) return denyTenant();
-          // Signed out, the public view the App's home rules start a visitor on — its
-          // landing or a public form — so the client draws it instead of the sign-in screen.
-          // With invitations and email sign-in, a signed-out invitee may claim an
-          // account-creating invitation: the form needs only the App to claim into.
-          if (proof === null)
-            return send(req, res, 200, {
-              signedIn: false,
-              accountId: null,
-              appId: loaded.app.id,
-              who: null,
-              header: null,
-              ...(signIn.suite ? { suite: signIn.suite } : {}),
-              signIn: {
-                ...signIn,
-                // The door in the App's own colours, as the ordinary server draws it (gate.ts).
-                ...(browser ? { look: withIconGlyphs(appLook(loaded.app)) } : {}),
-                ...(administration?.invitations?.claim && Array.isArray(signIn.providers) && signIn.providers.includes('email')
-                  ? { invitationClaim: loaded.app.id }
-                  : {}),
-              },
-              ...hostSignInOffer(req),
-              ...(browser
-                ? {
-                    tenant: true,
-                    appName: loaded.app.name,
-                    ...(loaded.app.shortName ? { appShortName: loaded.app.shortName } : {}),
-                    ...(home === undefined ? {} : { home }),
-                    // The landing's view key, as the single-App who-am-I sends it (gate.ts): without it
-                    // the signed-out home skips the landing and a visitor gets the sign-in screen.
-                    ...(loaded.app.landing ? { landingView: loaded.app.landing.view } : {}),
-                  }
-                : {}),
-            });
-          tenantIdentifier(proof.identity.id, 1024);
-          validateHeaderValue(headers.account, proof.identity.id);
-          if (proof.expiresAt <= instant) return denyTenant();
-          if (expected !== undefined && expected !== proof.identity.id) return refuse(409);
-          res.setHeader(headers.account, proof.identity.id);
-          /* Signed in on a tenant's own host: one tenant, and none of an operator's rooms, which stay on the
-             deployment's own host (`pinnedRoute`); the client draws no tenant switcher for it. */
-          const pinned = hostSignIns?.pinned(proof) != null;
-          return send(req, res, 200, {
-            signedIn: true,
-            accountId: proof.identity.id,
-            appId: loaded.app.id,
-            who: proof.identity.who,
-            header: null,
-            accountProfile: true,
-            ...roleLabelsOf(loaded.app.auth),
-            ...keepsRoles(loaded.app.auth),
-            ...(signIn.suite ? { suite: signIn.suite } : {}),
-            ...(pinned ? { pinned: true } : {}),
-            ...(!pinned && administrationOptions?.policy ? { tenantAdministration: true } : {}),
-            ...(!pinned && administration?.invitations ? { tenantInvitations: true } : {}),
-            ...(!pinned && support ? { tenantSupport: true } : {}),
-            // A bell for the notices kept in each lease's own inbox (tenantInbox.ts).
-            ...(appKeepsInbox(loaded.app) ? { inbox: true } : {}),
-            /* The chooser is drawn before the App's payload, which needs a
-               chosen tenant: so its look, and what the App calls a tenant, travel here. */
-            ...(browser
-              ? {
-                  tenant: true,
-                  appName: loaded.app.name,
-                  ...(loaded.app.shortName ? { appShortName: loaded.app.shortName } : {}),
-                  look: withIconGlyphs(appLook(loaded.app)),
-                  ...(loaded.app.auth?.tenancy?.label ? { tenantLabel: loaded.app.auth.tenancy.label } : {}),
-                  ...(loaded.app.auth?.tenancy?.platform ? { platformLabel: loaded.app.auth.tenancy.platform.label } : {}),
-                }
-              : {}),
-          });
+          const answered = await whoamiAnswer(req, url, expected);
+          if ('refused' in answered) return refuse(answered.refused);
+          if (answered.account !== undefined) res.setHeader(headers.account, answered.account);
+          return send(req, res, 200, answered.body);
         }
         if (path === '/api/auth/sign-out') {
           // A sign-out that names no account is not refused for a session that no longer verifies.

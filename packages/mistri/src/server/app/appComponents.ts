@@ -33,6 +33,7 @@ import { fileURLToPath } from 'node:url';
 import type { ComponentDecl, ComponentKind } from '@mistriwork/engine/shared/appComponents.js';
 import { COMPONENTS_SEGMENT, HOST_MODULES } from '../../shared/uiSdk.js';
 import { loadRolldown, rolldownErrors, type Bundler } from '../build/bundle.js';
+import { hostVersion } from './componentSdk.js';
 
 /** One compiled component: its kind, the files it is served as, and the App's own modules it was made from. */
 interface CompiledComponent {
@@ -246,7 +247,15 @@ export async function compileComponents(
   const files: Record<string, string> = {};
   for (const decl of [...decls.values()].sort((a, b) => a.id.localeCompare(b.id))) {
     const built = await compileOne(bundler, dir, decl, options.minify ?? false, options.shared);
-    const hash = createHash('sha256').update(built.code).update('\0').update(built.css).digest('hex').slice(0, 12);
+    /* The host version is in the name because the code is served with its host paths written, and those name it. */
+    const hash = createHash('sha256')
+      .update(built.code)
+      .update('\0')
+      .update(built.css)
+      .update('\0')
+      .update(hostVersion())
+      .digest('hex')
+      .slice(0, 12);
     const name = `${decl.id}-${hash}`;
     files[`${name}.js`] = `${built.code.trimEnd()}\n//# sourceMappingURL=${name}.js.map\n`;
     if (built.map) files[`${name}.js.map`] = JSON.stringify({ ...JSON.parse(built.map), file: `${name}.js` });
@@ -279,7 +288,14 @@ export async function compileUiKit(
     );
   const decl: ComponentDecl = { id: UI_KIT, module, kind: 'section' };
   const built = await compileOne(bundler, dir, decl, options.minify ?? false, options.shared, true);
-  const hash = createHash('sha256').update(built.code).update('\0').update(built.css).digest('hex').slice(0, 12);
+  const hash = createHash('sha256')
+    .update(built.code)
+    .update('\0')
+    .update(built.css)
+    .update('\0')
+    .update(hostVersion())
+    .digest('hex')
+    .slice(0, 12);
   const name = `${UI_KIT}-${hash}`;
   const files: Record<string, string> = { ...compiled?.files };
   files[`${name}.js`] = `${built.code.trimEnd()}\n//# sourceMappingURL=${name}.js.map\n`;
