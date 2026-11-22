@@ -11,8 +11,9 @@
  * environment, never printed or stored; a deployment with a keyed input and
  * no key refuses to start rather than falling back to a digest.
  */
-import { createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
 import type { AppCommandField } from '../../shared/command.js';
+import { processKey } from '../processKey.js';
 
 const FORM_KEY_VARIABLE = 'MISTRI_FORM_KEY';
 const AUTH_SECRET_VARIABLE = 'BETTER_AUTH_SECRET';
@@ -71,8 +72,6 @@ export function purposeKey(purpose: string, appId?: string): Buffer {
   return key;
 }
 
-const PROCESS_SEAL = randomBytes(32);
-
 /**
  * A key for sealing what the server writes and later reads back as its own — a link reference a command minted, which
  * a visitor's typed look-alike must not pass for. The form key's purpose key where the App has one; else one derived
@@ -86,7 +85,7 @@ export function sealKey(purpose: string, appId?: string): Buffer {
     if (!(error instanceof FormKeyMissing)) throw error;
   }
   const secret = appId !== undefined && configuredAuth.has(appId) ? configuredAuth.get(appId) : process.env[AUTH_SECRET_VARIABLE];
-  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) return PROCESS_SEAL;
+  if (typeof secret !== 'string' || Buffer.byteLength(secret, 'utf8') < 32) return processKey(`seal\u0000${purpose}`);
   const cacheKey = `seal\u0000${purpose}\u0000${secret}`;
   let key = derived.get(cacheKey);
   if (!key) {

@@ -28,7 +28,10 @@
  * - A change another process makes (another instance, a maintenance command,
  *   an operator's SQL) is not seen until what was kept expires: a session
  *   revoked elsewhere is honored here for at most `ttlMs`. That is the price
- *   of the cache, and the setting's reason to exist.
+ *   of the cache, and the setting's reason to exist. The workers of one
+ *   `--workers` start are not another process here: each tells the others
+ *   when it changes the store (processBus.ts `session.evict`), and they drop
+ *   what they kept as the one that made the change does.
  * - Reads asked together while one is in flight share it, so a burst that
  *   arrives cold reads once.
  *
@@ -36,7 +39,9 @@
  * header a request presents), one map per store handle, so nothing is shared
  * across Apps but the knowledge that the store changed.
  */
+import { createHash } from 'node:crypto';
 import { statementHead } from '@mistriwork/engine/adapters/postgresPooler.js';
+import { publish, subscribe } from '../processBus.js';
 
 /**
  * Sixty seconds, the maintainer's call. Everything this process does to a
@@ -94,6 +99,21 @@ export interface AuthStoreReads {
    one App's sign-out drops what another kept of the same rows. */
 const epochs = new Map<string, { value: number }>();
 
+/* The same epochs by a digest of the URL, as the process bus names a store: the URL carries credentials. A worker
+   that hears another changed a store moves its epoch on, which is all a change here does to the other handles. */
+const byDigest = new Map<string, { value: number }>();
+const storeKey = (store: string) => createHash('sha256').update(store).digest('base64url').slice(0, 22);
+let listening = false;
+function listen(): void {
+  if (listening) return;
+  listening = true;
+  subscribe('session.evict', (payload) => {
+    const said = payload as { store?: unknown; from?: unknown } | undefined;
+    const epoch = said?.from !== process.pid && typeof said?.store === 'string' ? byDigest.get(said.store) : undefined;
+    if (epoch) epoch.value += 1;
+  });
+}
+
 const READ = /^SELECT\b/i;
 const BEGINS = /^(?:BEGIN|START\s+TRANSACTION)\b/i;
 /** As postgresPooler.ts reads a transaction's end: not ROLLBACK TO a savepoint, and not the PREPARED forms. */
@@ -102,14 +122,20 @@ const ENDS = /^(?:COMMIT|END|ABORT|ROLLBACK)\b(?!\s+(?:(?:WORK|TRANSACTION)\s+)?
 const NEUTRAL = /^(?:SAVEPOINT|RELEASE|ROLLBACK\s+(?:(?:WORK|TRANSACTION)\s+)?TO|SET|RESET|SHOW)\b/i;
 
 export function createAuthStoreReads(store: string, ttlMs: number, clock: () => number = Date.now): AuthStoreReads {
+  const digest = storeKey(store);
   let epoch = epochs.get(store);
-  if (!epoch) epochs.set(store, (epoch = { value: 0 }));
+  if (!epoch) {
+    epochs.set(store, (epoch = { value: 0 }));
+    byDigest.set(digest, epoch);
+  }
+  listen();
   const shared = epoch;
   const entries = new Map<string, { value: unknown; epoch: number; at: number }>();
   const flights = new Map<string, { epoch: number; promise: Promise<unknown> }>();
   const changed = () => {
     shared.value += 1;
     entries.clear();
+    publish('session.evict', { store: digest, from: process.pid });
   };
   const put = (key: string, value: unknown, mark: ReadMark) => {
     if (ttlMs <= 0 || shared.value !== mark.epoch || clock() - mark.at >= ttlMs) return;

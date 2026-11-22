@@ -5066,6 +5066,7 @@
         "flag --warnings",
         "flag --where",
         "flag --width",
+        "flag --workers",
         "flag --write-authority",
         "flag --write-pool",
         "flag --yes"

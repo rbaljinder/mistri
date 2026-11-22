@@ -17,6 +17,7 @@ import type { AppDef } from '../../shared/appModel.js';
 import { provenPicks } from './appChoices.js';
 import { appEntrypoint } from './appEntrypoint.js';
 import type { AppHost } from './apps.js';
+import { publish, subscribe } from '../processBus.js';
 
 /** The key a pick is kept under. */
 const choiceKey = (name: string): string => `choose.${name}`;
@@ -74,12 +75,15 @@ export const preferencesAt = (app: AppDef, where: Where): Promise<PreferencesSto
   app.choose ? once(app, () => where, Date.now()) : Promise.resolve(undefined);
 
 /* What a person's picks were read as, for a moment: every read of a request asks them (the person's row, a loader, a
-   command), and a round trip to PostgreSQL for each would be paid again and again. A change made here forgets them; a
-   change another process made is read after TTL_MS. */
+   command), and a round trip to PostgreSQL for each would be paid again and again. A change made here forgets them, in
+   every worker of this start too (processBus.ts); a change a replica made is read after TTL_MS. */
 const TTL_MS = 3000;
 const recent = new Map<string, { at: number; picks: Promise<Record<string, string>> }>();
 const RECENT_MOST = 2000;
 const remembered = (app: string, subject: string, scope: string) => JSON.stringify([app, subject, scope]);
+subscribe('preferences.evict', (key) => {
+  if (typeof key === 'string') recent.delete(key);
+});
 
 /** The picks this person holds in this scope, by choice name: only names the App declares, and none without a store. */
 export async function storedPicks(
@@ -122,7 +126,7 @@ export async function storePick(
   value: string | null,
 ): Promise<void> {
   await store.set({ app: app.id, subject, scope }, choiceKey(name), value);
-  recent.delete(remembered(app.id, subject, scope));
+  publish('preferences.evict', remembered(app.id, subject, scope));
 }
 
 /** What this person has stored for the App on this deployment: nothing for a visitor, an App with no `choose`, or a database with no store. */

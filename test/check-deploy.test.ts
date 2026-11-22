@@ -115,6 +115,14 @@ describe('deployFindings', () => {
     assert.deepEqual(deployFindings(input()), []);
   });
 
+  test("a start's workers are not warned of: they share their primary's counts, and only replicas keep their own", () => {
+    assert.deepEqual(deployFindings(input({ workers: 4 })), []);
+    const found = deployFindings(input({ replicas: 3, workers: 2 }));
+    assert.deepEqual(codes(found), ['warning deploy-per-process-limits']);
+    assert.match(found[0].message, /^3 replicas are expected .* 3 times the budget/);
+    assert.deepEqual(deployFindings(input({ replicas: 3, workers: 2, cache: true })), []);
+  });
+
   test("a public page's door without MISTRI_FORM_KEY is warned of, and refused for several replicas", () => {
     const doors = {
       id: 'a',
@@ -123,6 +131,8 @@ describe('deployFindings', () => {
     } as unknown as DeployInput['app'];
     assert.deepEqual(codes(deployFindings(input({ app: doors }))), ['warning deploy-form-key']);
     assert.deepEqual(codes(deployFindings(input({ app: doors, replicas: 3, cache: true }))), ['error deploy-form-key']);
+    // Workers derive one key between them (processKey.ts), so they alone do not make the missing key an error.
+    assert.deepEqual(codes(deployFindings(input({ app: doors, workers: 4, cache: true }))), ['warning deploy-form-key']);
     assert.deepEqual(deployFindings(input({ app: doors, replicas: 3, cache: true, env: { MISTRI_FORM_KEY: secret } })), []);
     assert.deepEqual(deployFindings(input({ replicas: 3, cache: true })), [], 'no door, no ticket');
   });
@@ -215,7 +225,7 @@ describe('mistri check --deploy', () => {
     assert.match(alone.err, /--strict-migrations makes --deploy fail/);
   });
 
-  test('without --deploy nothing about deployment is judged, and --replicas alone is refused', async () => {
+  test('without --deploy nothing about deployment is judged, and --replicas or --workers alone is refused', async () => {
     const without = await run(['check', '--app', dir, '--config', config, '--json']);
     assert.ok(!JSON.parse(without.out).problems.some((problem: { step: string }) => problem.step === 'deploy'));
     const alone = await run(['check', '--app', dir, '--config', config, '--replicas', '2']);
@@ -230,5 +240,11 @@ describe('mistri check --deploy', () => {
     const bad = await run(['check', '--app', dir, '--config', config, '--deploy', '--connection-limit', 'many']);
     assert.equal(bad.code, 1);
     assert.match(bad.err, /--connection-limit takes the connections the database allows/);
+    const workers = await run(['check', '--app', dir, '--config', config, '--workers', '2']);
+    assert.equal(workers.code, 1);
+    assert.match(workers.err, /--workers says how many processes each instance runs, for --deploy to count/);
+    const many = await run(['check', '--app', dir, '--config', config, '--deploy', '--workers', 'lots']);
+    assert.equal(many.code, 1);
+    assert.match(many.err, /--workers takes a whole number from 1 to 64 or "auto"/);
   });
 });

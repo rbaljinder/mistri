@@ -30,7 +30,7 @@ App build to run on the supported Node 24 runtime; TypeScript examples also
 have an explicit typecheck (TypeScript 7 or later, the native compiler), and `mistri build` is the optional production
 step that runs it, validates the App and bundles it — see
 [Build and deploy an App](https://mistriwork.dev/docs/build-and-deploy/).
-These App features ship in mistri 1.0.0-rc.82; the
+These App features ship in mistri 1.0.0-rc.83; the
 [status page](https://mistriwork.dev/docs/status/) says what is stable
 and what comes next. Start with the sample catalog (`examples/apps/README.md`),
 written for people and coding agents, then the [App DSL reference](https://mistriwork.dev/docs/app-dsl/) (the same pages read offline with `npx @mistriwork/mistri docs`).
@@ -239,6 +239,14 @@ mistri mail-dns [<config>]    the SPF, DKIM and DMARC records tenant mail is sen
                               (default 10, 1 to 300); hold both inside the
                               platform's stop timeout. Or set
                               MISTRI_SHUTDOWN_GRACE
+      --workers <n|auto>      processes serving the one port (default auto:
+                              one per core the container is given, its CPU
+                              quota and 256 MiB of its memory limit each, at
+                              most 64); a session's requests stay on one. More
+                              requests at once, not a faster page. PostgreSQL
+                              or MySQL only: a SQLite start is one process
+                              unless asked. 1 turns it off; mistri dev is
+                              always one. Or set MISTRI_WORKERS
       --host <addr>           interface to bind (default 127.0.0.1)
       --allowed-host <name>   also answer for this Host header; repeatable
       --trust-proxy <address|CIDR>
@@ -459,7 +467,7 @@ mistri check [--app <dir>] [--app-entry <file>]
                 [--no-index-check] [--no-query-check]
                 [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]]
                 [--schema-file [<schema.sql>] [--dev-url <url>]]
-                [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
+                [--deploy [--replicas <n>] [--workers <n|auto>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]
                               the authoring loop in one command: regenerate the
                               App's mistri-schema.d.ts when the database
                               has changed, its mistri-commands.d.ts from
@@ -491,7 +499,8 @@ mistri check [--app <dir>] [--app-entry <file>]
                               --deploy judges whether the App
                               survives a replaced container (no SQLite
                               source or auth.store, BETTER_AUTH_SECRET set;
-                              --replicas <n> warns of per-process rate
+                              --replicas <n> (and --workers <n|auto>, each
+                              replica's processes) warns of per-process rate
                               limits and, with --connection-limit <n>,
                               refuses pools that sum past it, counting the
                               hosts the App serves with; --cpus <n> sizes

@@ -41,6 +41,8 @@ import { lanes } from './scripts/e2e-lanes.mjs';
 process.env.MISTRI_TEST_AUTH_LIMITS ??= 'off';
 /* The seam is read only in a process that says it is a test (auth/requestRules.ts), and the servers inherit this. */
 process.env.NODE_ENV ??= 'test';
+/* A start runs a worker per core by default; each server here is one process, as a spec expects one to answer. */
+process.env.MISTRI_WORKERS ??= '1';
 
 /* Which lane this invocation is: `scripts/test-e2e.mjs` runs the suite twice
    and says so here, because `webServer` is a property of the whole config and

@@ -48,7 +48,7 @@ import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schem
 import { getCommandEvents } from '../commands/businessCommands.js';
 import { NO_OUTPUT } from '../commands/commandShapes.js';
 import { AppProblems, homeSourceOf, isFormView, logicalResource, withRollups, type AppDef } from '../../shared/app.js';
-import { parseArgs, postgresPoolFlags, type Options } from '@mistriwork/engine/server/cli/args.js';
+import { availableCores, parseArgs, postgresPoolFlags, workerCount, type Options } from '@mistriwork/engine/server/cli/args.js';
 import { sayBudget } from '@mistriwork/engine/adapters/connectionBudget.js';
 import { readStartupConfig } from '@mistriwork/engine/server/cli/config.js';
 import { moduleTypeProblem } from '../cli/projectSetup.js';
@@ -141,7 +141,7 @@ const CHECK_EXIT = {
 } as const;
 
 const CHECK_USAGE =
-  'mistri check [--app <dir>] [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--no-index-check] [--no-query-check] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--schema-file [<schema.sql>] [--dev-url <url>]] [--deploy [--replicas <n>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]';
+  'mistri check [--app <dir>] [--app-entry <file>] [<db> | --db <target> | --config <path>] [--commands <file>] [--jobs <file>] [--policy <file>] [--bump <command>] [--routes [--mount <app>=<path>] [--base-path <path>]] [--design] [--fix] [--fail-on-design-warning] [--defaults] [--no-index-check] [--no-query-check] [--warnings] [--pending [--pending-on <url>] [--migrations <dir>] [--history-table <name>]] [--schema-file [<schema.sql>] [--dev-url <url>]] [--deploy [--replicas <n>] [--workers <n|auto>] [--connection-limit <n>] [--cpus <n>] [--strict-migrations]] [--json | --brief]';
 
 /** The one JSON document `--json` prints (schema/check.schema.json). */
 interface CheckReport {
@@ -859,7 +859,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           "--no-query-check skips the queries step: the database EXPLAINs each read the App's pages would make (lists, related and grouped lists, timelines, breakdowns, figures, rollups) and says the ones it refuses (query-invalid, with the page:section); nothing is run, and PostgreSQL plans them in a READ ONLY transaction.\n" +
           '--bump <command> moves a command whose contract changed to its next version in authority.lock (its API route, receipts and jobs follow).\n' +
           "--pending judges the App against the schema as it will be after the pending migrations (mistri migrate), applied to a scratch copy, or with --pending-on <url> to the scratch database that URL names (a branch of the database, never the App's own). Exit 6: one failed there. The backstop step is not judged on a copy: check without --pending once they are applied.\n" +
-          "--deploy judges whether the App survives a container being replaced (mistri docs build-and-deploy): it refuses a source or auth.store on a SQLite file, the default auth.store, and a missing BETTER_AUTH_SECRET or ${NAME} the environment lacks, and with --replicas <n> above one it warns about per-process rate limits. It also reads the migrations not yet applied and warns about a statement that breaks the code still running (a dropped or renamed column or table, a type change, SET NOT NULL, a NOT NULL column without a default), as expand/contract steps; mark a deliberate one with a '-- mistri: contract' comment on the line before it, and add --strict-migrations to fail on the rest. Run it with the deployment's environment. Exit 7.\n" +
+          "--deploy judges whether the App survives a container being replaced (mistri docs build-and-deploy): it refuses a source or auth.store on a SQLite file, the default auth.store, and a missing BETTER_AUTH_SECRET or ${NAME} the environment lacks, and with --replicas <n> (or --workers <n|auto>, each replica's processes) above one process it warns about per-process rate limits and counts every process's pools. It also reads the migrations not yet applied and warns about a statement that breaks the code still running (a dropped or renamed column or table, a type change, SET NOT NULL, a NOT NULL column without a default), as expand/contract steps; mark a deliberate one with a '-- mistri: contract' comment on the line before it, and add --strict-migrations to fail on the rest. Run it with the deployment's environment. Exit 7.\n" +
           '--json prints one JSON document instead (schema/check.schema.json): every finding with its code, file, line, column, path and fix.\n' +
           '--brief prints one line per problem, `code file:line message — fix: …`, and nothing else (ok when there is none): errors each in full, warnings a group by code and resource with its count and one example (--warnings lists every one). Exit codes are the same. mistri explain <code> says more.',
       );
@@ -1019,6 +1019,19 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     return CHECK_EXIT.couldNotCheck;
   }
   let opts = parseArgs(rest);
+  /* --workers is the start's flag, read by parseArgs as the start reads it (and MISTRI_WORKERS with it, the
+     deployment's environment being what --deploy is run with): here it multiplies the processes --deploy counts. */
+  if (rest.includes('--workers') && !deploy) {
+    console.error(`mistri check: --workers says how many processes each instance runs, for --deploy to count. ${CHECK_USAGE}`);
+    return CHECK_EXIT.couldNotCheck;
+  }
+  /* The count a start here would run (`auto` unless asked: the cores, narrowed by a container's limits), or the
+     cores --cpus names. */
+  const workers = deploy ? workerCount(opts, cpus ?? availableCores().cores) : 1;
+  if (typeof workers === 'string') {
+    console.error(`mistri check: ${workers} ${CHECK_USAGE}`);
+    return CHECK_EXIT.couldNotCheck;
+  }
   const mode = MODES.find(([key]) => opts[key] !== undefined && opts[key] !== false);
   const refusal = opts.unknown
     ? `unknown option "${opts.unknown}"`
@@ -2014,6 +2027,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           activeId: registry.active ?? undefined,
           cache: registry.serviceConfigs().some((service) => service.kind === 'cache'),
           ...(replicas !== undefined ? { replicas } : {}),
+          ...(workers > 1 ? { workers } : {}),
           ...(connectionLimit !== undefined ? { connectionLimit } : {}),
           ...(cpus !== undefined ? { cpus } : {}),
           served: await servedFactsOf(loaded.app, loaded.commands?.registry, opts.jobs),

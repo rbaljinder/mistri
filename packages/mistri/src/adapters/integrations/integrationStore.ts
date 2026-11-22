@@ -63,6 +63,9 @@ type ActorKind = (typeof ACTOR_KINDS)[number];
 const list = (values: readonly string[]) => values.map((value) => `'${value}'`).join(', ');
 /* Messages and calls are kept ninety days: long enough to answer "did it go?", short enough not to become an archive. */
 const KEEP_MS = 90 * 86_400_000;
+/* How long a held message a process took to send stays out of the others' reach: a page is 32 sends of at most 12
+   seconds each (integrationChannels.ts), so ten minutes outlasts any page a live process is still working through. */
+const DUE_LEASE_MS = 10 * 60_000;
 
 /* Who made the write, and the index the email caps count by. */
 const ACTOR_KIND_SQLITE = `actor_kind TEXT CHECK (actor_kind IN (${list(ACTOR_KINDS)}))`;
@@ -837,19 +840,24 @@ async function openPostgresIntegrationStore(url: string): Promise<IntegrationSto
         ],
       );
     },
+    /* Every process of a deployment (replicas, --workers) runs the held-message loop, so a page is leased as it is
+       read: the rows taken move their due moment past the time a page of sends can take, and another process's look
+       skips them (SKIP LOCKED for one taken this instant), where two plain reads sent the same text twice. Each send
+       puts its row's next state, which ends the lease; a process that dies holding one leaves the row to be looked at
+       again once the lease runs out, as a failed send is. SQLite has one process, so its read stays plain. */
     async due(app, now, limit, channel) {
-      return (
-        channel === undefined
-          ? await query(`SELECT * FROM ${table(t.message)} WHERE app = $1 AND state = 'held' AND due_at <= $2 ORDER BY due_at LIMIT $3`, [
-              app,
-              now,
-              limit,
-            ])
-          : await query(
-              `SELECT * FROM ${table(t.message)} WHERE app = $1 AND state = 'held' AND due_at <= $2 AND channel = $3 ORDER BY due_at LIMIT $4`,
-              [app, now, channel, limit],
-            )
-      ).map(messageOf);
+      const filter = channel === undefined ? '' : ' AND channel = $5';
+      const rows = await query(
+        `UPDATE ${table(t.message)} AS m SET due_at = $3
+           FROM (SELECT * FROM ${table(t.message)} WHERE app = $1 AND state = 'held' AND due_at <= $2${filter}
+                 ORDER BY due_at LIMIT $4 FOR UPDATE SKIP LOCKED) AS taken
+          WHERE m.app = taken.app AND m.key = taken.key
+          RETURNING taken.*`,
+        channel === undefined ? [app, now, now + DUE_LEASE_MS, limit] : [app, now, now + DUE_LEASE_MS, limit, channel],
+      );
+      /* The rows as they were read, their own due moments kept: the lease is the store's, and a send that holds one
+         again puts the moment it chooses. RETURNING keeps no order. */
+      return rows.map(messageOf).sort((a, b) => (a.dueAt ?? 0) - (b.dueAt ?? 0));
     },
     async sentSince(app, tenant, channel, since, recipient) {
       const [row] =

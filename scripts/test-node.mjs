@@ -398,6 +398,9 @@ async function main() {
           MISTRI_TEST_AUTH_LIMITS: process.env.MISTRI_TEST_AUTH_LIMITS ?? 'off',
           /* The seam is read only in a process that says it is a test (auth/requestRules.ts). */
           NODE_ENV: process.env.NODE_ENV ?? 'test',
+          /* A start runs a worker per core by default: hundreds of test servers each forking a core's worth would
+             swamp the machine. One process each; the files that test workers ask for them with --workers. */
+          MISTRI_WORKERS: process.env.MISTRI_WORKERS ?? '1',
         },
       },
     );

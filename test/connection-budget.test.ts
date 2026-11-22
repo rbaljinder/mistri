@@ -89,6 +89,19 @@ describe('the sum check --deploy prints', () => {
     assert.equal(connectionBudgets(input({ cpus: 1 })).rows[0].cpus, undefined);
   });
 
+  test('--workers splits the cores between the workers and multiplies the processes with the replicas', () => {
+    const bare = [{ id: 'main', name: 'main', url: business.url }];
+    const one = connectionBudgets(input({ connections: bare, cpus: 8 })).rows[0];
+    assert.equal(one.perProcess, 16 + 16 + 1 + 1, 'one process at 8 cpus: sixteen of each');
+    const split = connectionBudgets(input({ connections: bare, cpus: 8, workers: 4, replicas: 2 })).rows[0];
+    // Each worker sizes its pools for its two cores: four writers (the floor), ten readers.
+    assert.equal(split.perProcess, 4 + 10 + 1 + 1);
+    assert.equal(split.processes, 8, 'two replicas of four workers');
+    assert.equal(split.total, 16 * 8);
+    // Sizes the operator gave are each process's, whatever the workers.
+    assert.equal(connectionBudgets(input({ workers: 4 })).rows[0].perProcess, 6 + 4 + 1 + 1);
+  });
+
   test('an App that declares jobs and effects counts the one manager their stores share, on the home database', () => {
     const bare = [{ id: 'main', name: 'main', url: business.url }];
     const one = connectionBudgets(input({ connections: bare, cpus: 1 })).rows[0];
