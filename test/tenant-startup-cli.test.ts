@@ -407,8 +407,8 @@ test('a tenant App with a free-form page and a message catalog starts and serves
   mkdirSync(join(f.appDir, 'messages'));
   writeFileSync(
     join(f.appDir, 'pages', 'board.page.tsx'),
-    `import { definePage, Empty } from '@mistriwork/mistri/page';
-export default definePage({ label: 'Board', reads: ['item'], component: () => <Empty title="TENANT_BOARD_PAGE" /> });
+    `import { definePage, EmptyState } from '@mistriwork/mistri/page';
+export default definePage({ label: 'Board', reads: ['item'], component: () => <EmptyState title="TENANT_BOARD_PAGE" /> });
 `,
   );
   // An App said in Spanish: its own catalog is the one it needs.

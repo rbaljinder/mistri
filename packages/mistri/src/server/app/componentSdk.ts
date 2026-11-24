@@ -18,16 +18,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import {
-  BEHAVIORS_EXPORTS,
-  HOST_GLOBAL,
-  HOST_MODULES,
-  LAZY_HOST_MODULES,
-  PAGE_EXPORTS,
-  SERVED_MODULES,
-  UI_EXPORTS,
-  type HostModule,
-} from '../../shared/uiSdk.js';
+import { HOST_GLOBAL, HOST_MODULES, LAZY_HOST_MODULES, SDK_MODULE_EXPORTS, SERVED_MODULES, type HostModule } from '../../shared/uiSdk.js';
 import { FROM_SOURCE } from '@mistriwork/engine/server/devclient.js';
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/;
@@ -53,12 +44,10 @@ function packagedExports(): Readonly<Record<HostModule, readonly string[]>> {
       )
         throw new Error(`Invalid exports for ${module}.`);
     }
-    if (
-      JSON.stringify(manifest['@mistriwork/mistri/ui']) !== JSON.stringify(UI_EXPORTS) ||
-      JSON.stringify(manifest['@mistriwork/mistri/page']) !== JSON.stringify(PAGE_EXPORTS) ||
-      JSON.stringify(manifest['@mistriwork/mistri/behaviors']) !== JSON.stringify(BEHAVIORS_EXPORTS)
-    )
-      throw new Error('The SDK exports do not match this build.');
+    for (const [module, expected] of Object.entries(SDK_MODULE_EXPORTS)) {
+      if (JSON.stringify(manifest[module as HostModule]) !== JSON.stringify(expected))
+        throw new Error('The SDK exports do not match this build.');
+    }
     return (packagedNames = manifest as Record<HostModule, string[]>);
   } catch (cause) {
     throw new Error('mistri: component SDK refused: component-sdk-exports.json is missing or invalid. Rebuild the package.', { cause });
@@ -68,9 +57,7 @@ function packagedExports(): Readonly<Record<HostModule, readonly string[]>> {
 /** A host module's value exports, as a component's named imports read them. */
 export function exportNames(module: HostModule): readonly string[] {
   if (!FROM_SOURCE) return packagedExports()[module];
-  if (module === '@mistriwork/mistri/ui') return UI_EXPORTS;
-  if (module === '@mistriwork/mistri/page') return PAGE_EXPORTS;
-  if (module === '@mistriwork/mistri/behaviors') return BEHAVIORS_EXPORTS;
+  if (Object.hasOwn(SDK_MODULE_EXPORTS, module)) return SDK_MODULE_EXPORTS[module]!;
   /* The CommonJS exports object: what the page's bundle hands a named import.
      React's `__…INTERNALS…` are not a component's to reach. */
   return Object.keys(createRequire(import.meta.url)(module) as object).filter(

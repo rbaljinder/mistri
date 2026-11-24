@@ -1,13 +1,15 @@
 /* Brought by a gantt list (GanttList.tsx), loaded only where a list is drawn as one. Tokens only. */
 @layer components {
 .gantt { min-width: 0; }
-.gantt-chart { display: grid; min-width: 0; padding: var(--space-2) 0 var(--space-3); }
+/* As tall as its rows: the room's pane is the one thing that scrolls (docs/design.md, Standing layout rules). Capped
+   at 32rem it cut its last row in half over an empty pane and was a second scroll bar inside the first. */
+.gantt-chart { display: grid; min-width: 0; overflow-x: clip; padding: var(--space-2) 0 var(--space-3); }
 .gantt-ruler, .gantt-row { display: grid; grid-template-columns: minmax(96px, 22%) minmax(0, 1fr); align-items: center; gap: var(--space-4); }
-.gantt-ruler { height: 40px; border-bottom: 1px solid var(--line); }
+.gantt-ruler { height: 40px; border-bottom: 1px solid var(--line); overflow: hidden; }
 .gantt-row { min-height: calc(var(--lanes, 1) * 28px + 6px); border-bottom: 1px solid color-mix(in srgb, var(--line) 50%, transparent); }
 .gantt-name { min-width: 0; padding-inline-start: var(--space-4); overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font: var(--text-base) var(--sans); color: var(--ink); }
-.gantt-track { position: relative; align-self: stretch; min-height: 28px; margin-inline-end: var(--space-4); }
-.gantt-tick { position: absolute; bottom: 4px; padding-inline-start: var(--space-2); font: var(--text-xs) var(--sans); color: var(--ink-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.gantt-track { position: relative; align-self: stretch; min-height: 28px; margin-inline-end: var(--space-4); overflow: hidden; }
+.gantt-tick { position: absolute; bottom: 4px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; padding-inline-start: var(--space-2); font: var(--text-xs) var(--sans); color: var(--ink-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
 .gantt-grid { position: absolute; top: 0; bottom: 0; width: 1px; background: color-mix(in srgb, var(--line) 60%, transparent); }
 .gantt-today { position: absolute; top: 0; bottom: 0; width: 2px; margin-inline-start: -1px; background: var(--accent); opacity: .6; }
 .gantt-bar {

@@ -500,6 +500,7 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
     table.id,
     'board-lane',
     identity.epoch,
+    lane,
     laneText(lane),
     LANE_PAGE * (pages[lane] ?? 1),
   ];
@@ -512,7 +513,7 @@ export function BoardList({ table, rows: page, spec, actions = [], interactive =
         enabled: Boolean(query) && paged(lane.id) && !lane.folded,
         // "Show more" keeps the cards drawn while the longer page is read; another question does not.
         placeholderData: (previous: unknown, before?: { queryKey: readonly unknown[] }) =>
-          before?.queryKey[5] === q ? previous : undefined,
+          before?.queryKey[6] === q ? previous : undefined,
         queryFn: async () => {
           const data = (await api('/api/run', { q, limit, offset: 0, count: 'none' })) as {
             rows?: Array<Record<string, unknown>>;
@@ -1296,7 +1297,7 @@ function Confirm({ move, lane, onAnswer }: { move: Move; lane: string; onAnswer:
       <p>{say('moveTitleToLane', { title: move.card.title, lane })}</p>
       <div className="confirm-actions">
         <Button onClick={() => answer(false)}>{say('common.cancel')}</Button>
-        <Button intent="primary" onClick={() => answer(true)}>
+        <Button variant="primary" onClick={() => answer(true)}>
           {label}
         </Button>
       </div>

@@ -97,7 +97,7 @@ describe('what check refuses, one fixture per code', () => {
     return readPageFiles(dir, await pageFiles(dir));
   }
   const pageSource = (fields: string) =>
-    `import { definePage, Empty } from '@mistriwork/mistri/page';\nexport default definePage({ ${fields}, component: () => <Empty title="x" /> });\n`;
+    `import { definePage, EmptyState } from '@mistriwork/mistri/page';\nexport default definePage({ ${fields}, component: () => <EmptyState title="x" /> });\n`;
 
   test('page-file: a page file whose default is not a definePage, or that gives definePage a key it does not take', async (t) => {
     await assert.rejects(
@@ -282,31 +282,48 @@ export default definePage({ label: String(typeof process === 'object' && process
     assert.deepEqual(placePages(APP, [page(false)], 'desk').nav, APP.nav, 'nav: false keeps it out of the menu');
   });
 
-  test("page-file: a record's tab is pages/<list view>/[id]/<tab>.page.tsx, placed under no menu; a page anywhere else in a folder is refused", async (t) => {
+  test("page-file: a record's tab is pages/<list view>/[id]/<tab>.page.tsx, static subfolders join with hyphens, and malformed bracket paths are refused", async (t) => {
     const read = await readFiles(t, {
+      'ops/dispatch.page.tsx': pageSource("label: 'Dispatch', reads: ['desk']"),
       'tickets/[id]/history.page.tsx': pageSource("label: 'History', reads: ['ticket', 'note']"),
       'walk.page.tsx': pageSource("label: 'Walk', reads: ['desk']"),
     });
     assert.deepEqual(
       read.map((page) => [page.key, page.module, page.record]),
       [
+        ['ops-dispatch', './pages/ops/dispatch.page.tsx', undefined],
         ['tickets-history', './pages/tickets/[id]/history.page.tsx', { view: 'tickets', tab: 'history' }],
         ['walk', './pages/walk.page.tsx', undefined],
       ],
-      "a tab's key joins its list's and its word",
+      "a tab's key joins its list's and its word; a static subfolder joins its segments",
     );
-    for (const misplaced of ['tickets/history.page.tsx', 'tickets/[id]/more/history.page.tsx', 'tickets/[key]/history.page.tsx'])
+    for (const misplaced of ['tickets/[id]/more/history.page.tsx', 'tickets/[key]/history.page.tsx'])
       await assert.rejects(
         readFiles(t, { [misplaced]: pageSource("label: 'History', reads: ['ticket']") }),
         new RegExp(`\\[page-file\\] pages/${misplaced.replace(/[[\]/.]/g, '\\$&')} is misplaced`),
         misplaced,
       );
+    /* A folder's page and a dashed name are one key: the second would silently take the first's view and address. */
+    await assert.rejects(
+      readFiles(t, {
+        'ops/dispatch.page.tsx': pageSource("label: 'Dispatch', reads: ['desk']"),
+        'ops-dispatch.page.tsx': pageSource("label: 'Dispatch too', reads: ['desk']"),
+      }),
+      /\[page-file\] pages\/ops-dispatch\.page\.tsx and pages\/ops\/dispatch\.page\.tsx are both the page "ops-dispatch"/,
+    );
+    await assert.rejects(
+      readFiles(t, {
+        'tickets/[id]/history.page.tsx': pageSource("label: 'History', reads: ['ticket']"),
+        'tickets/history.page.tsx': pageSource("label: 'History', reads: ['ticket']"),
+      }),
+      /\[page-file\] pages\/tickets\/\[id\]\/history\.page\.tsx and pages\/tickets\/history\.page\.tsx are both the page "tickets-history"/,
+    );
     await assert.rejects(
       readFiles(t, { 'tickets/[id]/history.page.tsx': pageSource("label: 'History', reads: ['ticket'], nav: { group: 'floor' }") }),
       /\[page-nav\] pages\/tickets\/\[id\]\/history\.page\.tsx is a record's tab and has "nav"/,
     );
     const placed = placePages(APP, read, 'desk');
-    assert.deepEqual(placed.nav, [...APP.nav, 'walk'], 'the tab takes no menu entry; the page beside it does');
+    assert.deepEqual(placed.nav, [...APP.nav, 'ops-dispatch', 'walk'], 'the tab takes no menu entry; top-level and subfolder pages do');
     assert.deepEqual((placed.views as Record<string, { record?: unknown }>)['tickets-history'].record, { view: 'tickets', tab: 'history' });
   });
 
@@ -636,7 +653,7 @@ export default definePage({ label: String(typeof process === 'object' && process
     t.after(() => rmSync(dir, { recursive: true, force: true }));
     mkdirSync(join(dir, 'pages'));
     const source = (fields: string) =>
-      `import { definePage, Empty } from '@mistriwork/mistri/page';\nexport default definePage({ label: 'A', reads: ['desk'], ${fields}, component: () => <Empty title="x" /> });\n`;
+      `import { definePage, EmptyState } from '@mistriwork/mistri/page';\nexport default definePage({ label: 'A', reads: ['desk'], ${fields}, component: () => <EmptyState title="x" /> });\n`;
     const read = async (fields: string) => {
       writeFileSync(join(dir, 'pages', 'a.page.tsx'), source(fields));
       return readPageFiles(dir, await pageFiles(dir));
@@ -726,20 +743,20 @@ function Board() {
     );
   });
 
-  test('page-undeclared: a block, Scope or List reading, or a CommandButton, Steps or ActionButton running, what the page does not declare', async () => {
-    const source = `import { definePage, Scope, List, Metric, CommandButton, ActionButton, Empty, Steps, Value } from '@mistriwork/mistri/page';
+  test('page-undeclared: a block, Scope or RecordList reading, or a CommandButton, Steps or ActionButton running, what the page does not declare', async () => {
+    const source = `import { definePage, Scope, RecordList, Metric, CommandButton, ActionButton, EmptyState, Steps, Value } from '@mistriwork/mistri/page';
 const page = definePage({ label: 'Board', reads: ['ticket'], commands: ['settle'], actions: ['start'], component: Board });
 export default page;
 function Board() {
   return (
     <Scope from="note" where={{ open: true }}>
       <Metric title="Open" from="ticket" />
-      <List from="reply">{(row) => <CommandButton command="refund" row={row} />}</List>
-      <List from="ticket">{(row) => <ActionButton action="finish" row={row} />}</List>
+      <RecordList from="reply">{(row) => <CommandButton command="refund" row={row} />}</RecordList>
+      <RecordList from="ticket">{(row) => <ActionButton action="finish" row={row} />}</RecordList>
       <CommandButton command="settle" row={{}} />
       <Steps command="reopen" param="step" steps={[{ id: 'why', label: 'Why', inputs: ['reason'] }]} />
       <ActionButton action="start" row={{}} />
-      <Empty title="None" action={<ActionButton action="start" row={{}} />} />
+      <EmptyState title="None" action={<ActionButton action="start" row={{}} />} />
       <Value value={1} resource="invoice" />
     </Scope>
   );
@@ -754,16 +771,16 @@ function Board() {
       scan.undeclared.map((problem) => problem.text),
       [
         '[page-undeclared] <Scope from> reads "note", which the page "board" does not declare in its reads',
-        '[page-undeclared] <List from> reads "reply", which the page "board" does not declare in its reads',
+        '[page-undeclared] <RecordList from> reads "reply", which the page "board" does not declare in its reads',
         `[page-undeclared] <CommandButton command> runs "refund", which the page "board" does not declare in its commands. Add it to definePage({ commands: [...] }). Declaring grants nothing: useCommand('refund').granted then says whether this reader may run it`,
         '[page-undeclared] <ActionButton action> runs "finish", which the page "board" does not declare in its actions',
         `[page-undeclared] <Steps command> runs "reopen", which the page "board" does not declare in its commands. Add it to definePage({ commands: [...] }). Declaring grants nothing: useCommand('reopen').granted then says whether this reader may run it`,
       ],
     );
-    assert.equal(scan.unread.length, 0, '<Empty action> is a button and <Value resource> reads nothing: neither is a name to hold');
+    assert.equal(scan.unread.length, 0, '<EmptyState action> is a button and <Value resource> reads nothing: neither is a name to hold');
   });
 
-  test("page-undeclared: a <Rows>, <List> or <RecordCard> show or query that crosses into a table the page does not read, on its own from or its Scope's", async (t) => {
+  test("page-undeclared: a <Rows>, <RecordList> or <RecordCard> show or query that crosses into a table the page does not read, on its own from or its Scope's", async (t) => {
     const dir = mkdtempSync(join(tmpdir(), 'mistri-page-block-paths-'));
     const file = join(dir, 'desk.db');
     const db = new DatabaseSync(file);
@@ -775,14 +792,14 @@ function Board() {
       rmSync(dir, { recursive: true, force: true });
     });
     const schema = await adapter.introspect();
-    const source = `import { definePage, Scope, Rows, List, RecordCard } from '@mistriwork/mistri/page';
+    const source = `import { definePage, Scope, Rows, RecordList, RecordCard } from '@mistriwork/mistri/page';
 const page = definePage({ label: 'Settle', reads: ['ticket'], component: Settle });
 export default page;
 function Settle() {
   return (
     <>
       <Rows from="ticket" show={['name', 'desk_id.name']} />
-      <List from="ticket" show={['name', 'desk_id']} query="desk_id.name = North">{(row) => null}</List>
+      <RecordList from="ticket" show={['name', 'desk_id']} query="desk_id.name = North">{(row) => null}</RecordList>
       <Scope from="ticket">
         <RecordCard record={{ id: 1 }} show={['desk_id.name']} />
         <Rows show={['name']} />
@@ -798,7 +815,7 @@ function Settle() {
       scan.undeclared.map((problem) => `${problem.line}: ${problem.text}`),
       [
         '7: [page-undeclared] <Rows from="ticket"> reads "desk" through its show "desk_id.name", which the page "settle" does not declare in its reads',
-        '8: [page-undeclared] <List from="ticket"> reads "desk" through its query "desk_id.name = North", which the page "settle" does not declare in its reads',
+        '8: [page-undeclared] <RecordList from="ticket"> reads "desk" through its query "desk_id.name = North", which the page "settle" does not declare in its reads',
         '10: [page-undeclared] <RecordCard from="ticket"> reads "desk" through its show "desk_id.name", which the page "settle" does not declare in its reads',
       ],
       "a reference's own column and an expression read nothing past the base",

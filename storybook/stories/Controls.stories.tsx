@@ -26,7 +26,7 @@ function Controls({ disabled = false, invalid = false }: { disabled?: boolean; i
         <Dropdown
           ariaLabel="Team"
           value={team}
-          onChange={setTeam}
+          onValueChange={setTeam}
           disabled={disabled}
           ariaInvalid={invalid}
           items={[
@@ -38,7 +38,7 @@ function Controls({ disabled = false, invalid = false }: { disabled?: boolean; i
       </div>
       <div className="insert-field">
         <label htmlFor="start-date">Start date</label>
-        <DateField id="start-date" value={date} onChange={setDate} disabled={disabled} aria-invalid={invalid || undefined} />
+        <DateField id="start-date" value={date} onValueChange={setDate} disabled={disabled} aria-invalid={invalid || undefined} />
       </div>
       <div className="insert-field">
         <label htmlFor="manager-search">Manager</label>

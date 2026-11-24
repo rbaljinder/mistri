@@ -30,6 +30,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { untypedExports } from './export-types.mjs';
 import { published } from './pack-manifest.mjs';
+import { sanitizeUiDistDts } from './self-contained-ui-dts.mjs';
 import { PACKAGES } from './workspace.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -93,6 +94,7 @@ ${BEHAVIOR_PRIMITIVES.map(
 ).join('\n')}
 `,
 );
+sanitizeUiDistDts(join(ROOT, 'packages/ui/dist'));
 
 node('scripts/package-docs.mjs');
 node('--conditions=mistri-built', 'scripts/package-console.mjs');

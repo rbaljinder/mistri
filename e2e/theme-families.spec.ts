@@ -316,17 +316,25 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
         expect(shape.rule).toBeGreaterThan(0.5);
         expect(shape.boxedNeutral).toEqual([]);
         expect(shape.boxedTones.length).toBe(shape.meaningfulTones);
-      } else if (id === 'lumen' || id === 'workshop') {
-        /* Lumen's recorded exceptions (docs/design.md, Lumen's exceptions),
-       exactly: the list open on the ground as in every look, its heads over
-       a hairline rather than the 2px rule, and every status a dot and its
-       word, boxed by nothing. Workshop shares the hairline since rc.18
-       (Workshop's exceptions). */
+      } else if (id === 'workshop') {
+        /* Workshop's recorded exceptions (docs/design.md, Workshop's exceptions), exactly: the list open on the
+       ground as in every look, its heads over a hairline rather than the 2px rule (since rc.18), and every status
+       a dot and its word, boxed by nothing. */
         expect(shape.box).toEqual({ border: '0px', shadow: 'none', fill: 'rgba(0, 0, 0, 0)' });
         expect(shape.rule).toBeGreaterThan(0.5);
         expect(shape.rule).toBeLessThan(1.5);
         expect(shape.boxedNeutral).toEqual([]);
         expect(shape.boxedTones).toEqual([]);
+      } else if (id === 'lumen') {
+        /* Lumen (`blocks: 'card'`, `status: 'pill-dot'`, docs/design.md):
+       the list is a bordered surface card with its heads over a hairline, and
+       meaningful statuses wear tinted dot-pills while neutral values stay plain. */
+        expect(shape.box!.border).toBe('1px');
+        expect(shape.box!.fill).not.toBe('rgba(0, 0, 0, 0)');
+        expect(shape.rule).toBeGreaterThan(0.5);
+        expect(shape.rule).toBeLessThan(1.5);
+        expect(shape.boxedNeutral).toEqual([]);
+        expect(shape.boxedTones.length).toBe(shape.meaningfulTones);
       } else if (id === 'atelier') {
         /* Atelier's recorded exceptions (docs/design.md): a printed table, open on the paper, its head row over the
        one rule in the ink (`table: 'open'`; it was a hairline under capital heads on a band), and every status a

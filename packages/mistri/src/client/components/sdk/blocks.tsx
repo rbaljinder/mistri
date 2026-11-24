@@ -1,7 +1,7 @@
 /**
  * The platform's blocks as a free-form page's components (`@mistriwork/mistri/page`): `<Rows>`, `<Metric>`, `<Chart>`,
- * `<Breakdown>`, `<RecordCard>`, `<Timeline>`, `<Tree>`, `<Gantt>`, `<Board>`, `<Calendar>`, `<Gallery>`, `<Split>`,
- * `<Assistant>` and `<Tabs>`.
+ * `<Breakdown>`, `<RecordCard>`, `<Timeline>`, `<Tree>`, `<Gantt>`, `<Board>`, `<Calendar>`, `<Gallery>`,
+ * `<RecordSplit>` and `<Assistant>`.
  *
  * Each is the component that draws the same thing on a dashboard, a record page or a list, handed the section it
  * would be handed there: no block draws anything of its own. Their props are the DSL's words for that section
@@ -31,7 +31,6 @@ import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { captureRecordSurfaceOwner } from '@mistriwork/kit/client/components/recordSurface.js';
 import type { Section } from '@mistriwork/kit/client/components/dashboardModel.js';
 import type { PageSections } from '../RecordPageBody.js';
-import type { PageEntry } from '@mistriwork/kit/client/components/pageModel.js';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import { windowed } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { windowPhraseOf } from '@mistriwork/engine/shared/autoBucket.js';
@@ -52,7 +51,6 @@ const GanttList = onDemand(() => import('../GanttList.js'), 'GanttList');
 const PresentedList = onDemand(() => import('./PresentedList.js'), 'PresentedList');
 const SplitListDetail = onDemand(() => import('../SplitListDetail.js'), 'SplitListDetail');
 const AssistantRoom = onDemand(() => import('../AssistantPanel.js'), 'AssistantRoom');
-const TabStrip = onDemand(() => import('@mistriwork/kit/client/components/PageSections.js'), 'TabStrip');
 
 const WIDTHS = ['full', 'half', 'third', 'two-thirds'] as const;
 const CURVES = ['smooth', 'straight'] as const;
@@ -65,9 +63,10 @@ const RENAMED = renamedMessages(BLOCK_RENAMED);
 
 /* Each prop a block takes is one of its DSL words; anything else is a typo the author should hear about. */
 function takes(block: string, props: Props, words: readonly string[]): void {
+  const accepted = words.includes('className') ? words : [...words, 'className'];
   for (const name of Object.keys(props)) {
-    if (words.includes(name)) continue;
-    if (Object.hasOwn(RENAMED, name) && words.includes(RENAMED[name]))
+    if (accepted.includes(name)) continue;
+    if (Object.hasOwn(RENAMED, name) && accepted.includes(RENAMED[name]))
       throw new Error(say('blockRenamed', { block, name, now: RENAMED[name] }));
     throw new Error(say('blockHasNo', { block, name, takes: words.join(', ') }));
   }
@@ -127,6 +126,7 @@ function conditionOf(block: string, props: Props, scope: UiScope | null, table: 
 function block<R extends object>(
   judge: (props: Props, page: UiPageFrame | null, scope: UiScope | null) => R,
   draw: (resolved: R) => ReactNode,
+  options: { handlesClassName?: boolean } = {},
 ) {
   return function Block(props: Props) {
     const page = useContext(UiPageContext);
@@ -139,7 +139,9 @@ function block<R extends object>(
       console.error(text);
       return <Problem crashed text={text} />;
     }
-    return <ErrorBoundary>{createElement(draw as (props: R) => ReactNode, resolved)}</ErrorBoundary>;
+    const content = <ErrorBoundary>{createElement(draw as (props: R) => ReactNode, resolved)}</ErrorBoundary>;
+    const className = !options.handlesClassName && typeof props.className === 'string' && props.className ? props.className : undefined;
+    return className ? <div className={className}>{content}</div> : content;
   };
 }
 
@@ -369,6 +371,7 @@ interface RecordAsk {
   recordKey: Record<string, unknown>;
   show?: readonly string[];
   only?: string;
+  compact?: boolean;
 }
 
 function recordAsk(blockName: string, props: Props, page: UiPageFrame | null, only?: string): RecordAsk {
@@ -385,7 +388,7 @@ function recordAsk(blockName: string, props: Props, page: UiPageFrame | null, on
 }
 
 /* A record's own page, drawn in the page: its fields (or `show`'s) under its name and verbs, or only its timeline. */
-function RecordBlock({ table, recordKey, show, only }: RecordAsk) {
+function RecordBlock({ table, recordKey, show, only, compact }: RecordAsk) {
   const keyText = JSON.stringify(recordKey);
   const fields = show?.join('\u0000');
   const mounted = useRef(true);
@@ -410,7 +413,7 @@ function RecordBlock({ table, recordKey, show, only }: RecordAsk) {
   const sections = useMemo(() => (show?.length ? ([{ kind: 'fields', paths: [...show] }] as PageSections) : undefined), [fields]); // eslint-disable-line react-hooks/exhaustive-deps
   if (pageId === null) return <p className="note">{say('blockNoPage')}</p>;
   if (pageId === undefined) return null;
-  return (
+  const body = (
     <RecordPageBody
       key={keyText}
       owner={owner}
@@ -425,6 +428,7 @@ function RecordBlock({ table, recordKey, show, only }: RecordAsk) {
       {...(only ? { only } : {})}
     />
   );
+  return compact ? <div className="kit-record-card">{body}</div> : body;
 }
 
 /* A tree and a Gantt chart are a list's presentations: their words are the presentation's, read by its own parser. */
@@ -432,28 +436,50 @@ interface Presented {
   table: TableMeta;
   spec: AppTreeList | AppGanttList;
   entry: { kind: 'table'; table: string; query: string };
+  limit?: number;
 }
 
 function presented(blockName: string, kind: 'tree' | 'gantt', words: string[]) {
   return (props: Props, page: UiPageFrame | null, scope: UiScope | null): Presented => {
-    takes(blockName, props, ['from', 'where', 'query', ...words]);
+    takes(blockName, props, ['from', 'where', 'query', 'limit', ...words]);
     const table = resourceOf(blockName, fromOf(props, scope), page);
     const spec = parsePresentation({ kind, ...carried(props, words) }, `<${blockName}>`) as AppTreeList | AppGanttList;
-    return { table, spec, entry: { kind: 'table', table: table.id, query: conditionOf(blockName, props, scope, table) ?? '' } };
+    if (props.limit !== undefined && (!Number.isInteger(props.limit) || (props.limit as number) < 1))
+      throw new Error(say('blockValue', { block: blockName, name: 'limit', value: String(props.limit), allowed: say('blockWholeNumber') }));
+    return {
+      table,
+      spec,
+      entry: { kind: 'table', table: table.id, query: conditionOf(blockName, props, scope, table) ?? '' },
+      ...(props.limit === undefined ? {} : { limit: props.limit as number }),
+    };
   };
 }
 
 /* Held on their words, so a page's redraw is not a refetch. */
-function TreeBlock({ table, spec, entry }: Presented) {
-  const words = JSON.stringify([spec, entry]);
-  const held = useMemo(() => ({ spec, entry }), [words]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <TreeList table={table} spec={held.spec as AppTreeList} entry={held.entry} />;
+function TreeBlock({ table, spec, entry, limit }: Presented) {
+  const words = JSON.stringify([spec, entry, limit]);
+  const held = useMemo(() => ({ spec, entry, limit }), [words]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <TreeList
+      table={table}
+      spec={held.spec as AppTreeList}
+      entry={held.entry}
+      {...(held.limit === undefined ? {} : { limit: held.limit })}
+    />
+  );
 }
 
-function GanttBlock({ table, spec, entry }: Presented) {
-  const words = JSON.stringify([spec, entry]);
-  const held = useMemo(() => ({ spec, entry }), [words]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <GanttList table={table} spec={held.spec as AppGanttList} entry={held.entry} />;
+function GanttBlock({ table, spec, entry, limit }: Presented) {
+  const words = JSON.stringify([spec, entry, limit]);
+  const held = useMemo(() => ({ spec, entry, limit }), [words]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <GanttList
+      table={table}
+      spec={held.spec as AppGanttList}
+      entry={held.entry}
+      {...(held.limit === undefined ? {} : { limit: held.limit })}
+    />
+  );
 }
 
 /* A board, a calendar and a gallery are list presentations too, but they read through the list's own room (the lanes'
@@ -465,7 +491,17 @@ type PresentedAsk = ComponentProps<typeof PresentedList>;
 function listed(blockName: string, kind: 'board' | 'calendar' | 'cards', required: readonly string[]) {
   const words = PRESENTATION_KEYS[kind].filter((word) => word !== 'kind');
   return (props: Props, page: UiPageFrame | null, scope: UiScope | null): PresentedAsk => {
-    takes(blockName, props, ['from', 'where', 'query', 'sort', 'limit', 'label', ...(kind === 'board' ? ['move'] : []), ...words]);
+    takes(blockName, props, [
+      'from',
+      'where',
+      'query',
+      'sort',
+      'limit',
+      'label',
+      'ariaLabel',
+      ...(kind === 'board' ? ['move'] : []),
+      ...words,
+    ]);
     /* A gallery's `image` is a column or the related file resource's `{ from, whose, sort }`: parsed as the cards' own. */
     for (const name of required)
       if (!(name === 'image' && props[name] !== null && typeof props[name] === 'object')) needs(blockName, props, name);
@@ -478,7 +514,7 @@ function listed(blockName: string, kind: 'board' | 'calendar' | 'cards', require
       spec,
       query: conditionOf(blockName, props, scope, table) ?? '',
       ...carried(props, ['sort', 'limit']),
-      label: typeof props.label === 'string' ? props.label : blockName,
+      label: typeof props.ariaLabel === 'string' ? props.ariaLabel : typeof props.label === 'string' ? props.label : blockName,
       moves: movesOf(blockName, props, page),
     };
   };
@@ -508,7 +544,7 @@ function PresentedBlock(ask: PresentedAsk) {
   return <PresentedList {...ask} />;
 }
 
-/* A split: the rows in a queue beside the picked record's own page, the pick kept in a page param when it names one. */
+/* A record split: the rows in a queue beside the picked record's own page, the pick kept in a page param when it names one. */
 interface SplitAsk {
   table: TableMeta;
   spec: AppSplitListDetail & { row: NonNullable<AppSplitListDetail['row']> };
@@ -516,29 +552,34 @@ interface SplitAsk {
   sort?: string;
   param?: string;
   label: string;
+  className?: string;
   page: UiPageFrame | null;
 }
 
 function splitAsk(props: Props, page: UiPageFrame | null, scope: UiScope | null): SplitAsk {
-  takes('Split', props, ['from', 'where', 'query', 'sort', 'param', 'label', 'detail', 'limit', 'row']);
-  if (props.row === null || typeof props.row !== 'object') throw new Error(say('blockNeeds', { block: 'Split', name: 'row' }));
-  const table = resourceOf('Split', fromOf(props, scope), page);
-  const spec = parsePresentation({ kind: 'split', ...carried(props, ['detail', 'limit', 'row']) }, '<Split>') as SplitAsk['spec'];
+  takes('RecordSplit', props, ['from', 'where', 'query', 'sort', 'param', 'label', 'ariaLabel', 'detail', 'limit', 'row', 'className']);
+  if (props.row === null || typeof props.row !== 'object') throw new Error(say('blockNeeds', { block: 'RecordSplit', name: 'row' }));
+  const table = resourceOf('RecordSplit', fromOf(props, scope), page);
+  const spec = parsePresentation({ kind: 'split', ...carried(props, ['detail', 'limit', 'row']) }, '<RecordSplit>') as SplitAsk['spec'];
   if (primaryKey(table).length !== 1)
     throw new Error(say('blockSplitKey', { resource: table.id, count: String(primaryKey(table).length) }));
   const param = props.param as string | undefined;
   if (param !== undefined && !page?.params.includes(param)) throw new Error(say('blockSplitParam', { param: String(param) }));
+  const resolvedLabel =
+    typeof props.ariaLabel === 'string' ? props.ariaLabel : typeof props.label === 'string' ? props.label : 'RecordSplit';
+  const className = typeof props.className === 'string' && props.className ? props.className : undefined;
   return {
     table,
     spec,
-    query: conditionOf('Split', props, scope, table) ?? '',
+    query: conditionOf('RecordSplit', props, scope, table) ?? '',
     ...carried(props, ['sort', 'param']),
-    label: typeof props.label === 'string' ? props.label : 'Split',
+    label: resolvedLabel,
+    ...(className === undefined ? {} : { className }),
     page,
   };
 }
 
-function SplitBlock({ table, spec, query, sort, param, label, page }: SplitAsk) {
+function SplitBlock({ table, spec, query, sort, param, label, className, page }: SplitAsk) {
   const [local, setLocal] = useState<string | undefined>();
   const [key] = primaryKey(table);
   const picked = param ? page?.get(param) : local;
@@ -563,6 +604,7 @@ function SplitBlock({ table, spec, query, sort, param, label, page }: SplitAsk) 
     <>
       {problem}
       <SplitListDetail
+        className={className}
         listLabel={label}
         detailLabel={say('blockSplitDetail')}
         detailTitle={row ? String(row[primary] ?? '') : say('blockSplitDetail')}
@@ -600,60 +642,19 @@ function SplitBlock({ table, spec, query, sort, param, label, page }: SplitAsk) 
   );
 }
 
-interface TabSpec {
-  key: string;
-  label: ReactNode;
-  content: ReactNode;
-}
-
-interface TabsAsk {
-  tabs: readonly TabSpec[];
-  param?: string;
-  label: string;
-  page: UiPageFrame | null;
-}
-
-function tabsAsk(props: Props, page: UiPageFrame | null): TabsAsk {
-  takes('Tabs', props, ['tabs', 'param', 'label']);
-  const tabs = props.tabs as readonly TabSpec[] | undefined;
-  if (
-    !Array.isArray(tabs) ||
-    !tabs.length ||
-    tabs.some((tab) => !tab || typeof tab.key !== 'string' || !tab.key) ||
-    new Set(tabs.map((tab) => tab.key)).size !== tabs.length
-  ) {
-    throw new Error(say('blockTabs'));
-  }
-  const param = props.param as string | undefined;
-  if (param !== undefined && !page?.params.includes(param)) throw new Error(say('blockTabParam', { param: String(param) }));
-  return { tabs, ...(param === undefined ? {} : { param }), label: typeof props.label === 'string' ? props.label : '', page };
-}
-
-/* Tabs, as a record page's are drawn: each panel drawn the first time it is opened, and kept in a page param if named. */
-function TabsBlock({ tabs, param, label, page }: TabsAsk) {
-  const strip = tabs.map((tab) => ({ key: tab.key, token: tab.key, label: tab.label }));
-  const entry = useMemo(() => ({ tab: param ? page?.get(param) : undefined }) as PageEntry, []); // eslint-disable-line react-hooks/exhaustive-deps
-  return (
-    <TabStrip
-      tabs={strip}
-      name={label}
-      entry={entry}
-      scoped={false}
-      onTab={(token: string | undefined) => {
-        if (param) page?.set(param, token);
-      }}
-      draw={(i: number) => tabs[i].content}
-    />
-  );
-}
-
 export const Metric = block(metricSection, MetricBlock);
 export const Chart = block(chartSection, SectionBlock);
 export const Breakdown = block(breakdownSection, SectionBlock);
 export const Rows = block(rowsSection, SectionBlock);
 export const RecordCard = block((props, page) => {
   takes('RecordCard', props, ['from', 'record', 'show']);
-  return recordAsk('RecordCard', props, page);
+  const ask = recordAsk('RecordCard', props, page);
+  const defaultShow = ask.table.columns
+    .filter((c) => !c.primaryKey)
+    .slice(0, 8)
+    .map((c) => c.name);
+  const boundedShow = defaultShow.length ? defaultShow : ask.table.columns.slice(0, 8).map((c) => c.name);
+  return { ...ask, show: ask.show ?? boundedShow, compact: true };
 }, RecordBlock);
 export const Timeline = block((props, page) => {
   takes('Timeline', props, ['from', 'record']);
@@ -663,8 +664,8 @@ export const Tree = block(presented('Tree', 'tree', ['parent', 'primary', 'lines
 export const Gantt = block(presented('Gantt', 'gantt', ['start', 'end', 'primary', 'by', 'progress']), GanttBlock);
 export const Board = block(listed('Board', 'board', ['by']), PresentedBlock);
 export const Calendar = block(listed('Calendar', 'calendar', ['date']), PresentedBlock);
-export const Gallery = block(listed('Gallery', 'cards', ['image']), PresentedBlock);
-export const Split = block(splitAsk, SplitBlock);
+export const Gallery = block(listed('Gallery', 'cards', []), PresentedBlock);
+export const RecordSplit = block(splitAsk, SplitBlock, { handlesClassName: true });
 export const Assistant = block(
   (props) => {
     takes('Assistant', props, ['conversation']);
@@ -672,7 +673,6 @@ export const Assistant = block(
   },
   (ask: { conversation?: string }) => <AssistantRoom {...ask} />,
 );
-export const Tabs = block(tabsAsk, TabsBlock);
 /* `<Steps>` (steps.tsx): a command's form over several steps, its stepper and the intake style's sheets loaded with
    it, so a page that draws none carries none. */
 export const Steps = onDemand(() => import('./steps.js'), 'Steps', { quiet: true });

@@ -22,9 +22,25 @@ import { treeFiles } from '../scripts/workspace.mjs';
 
 const ROOT = new URL('../', import.meta.url).pathname;
 
-const files = treeFiles('src/client')
-  .filter(({ rel }) => rel.endsWith('.css'))
-  .map(({ path }) => path);
+function cssFilesUnder(dir) {
+  const out = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.name === 'node_modules' || entry.name === 'dist') continue;
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...cssFilesUnder(full));
+    else if (entry.name.endsWith('.css')) out.push(full);
+  }
+  return out.sort();
+}
+
+const files = [
+  ...new Set([
+    ...treeFiles('src/client')
+      .filter(({ rel }) => rel.endsWith('.css'))
+      .map(({ path }) => path),
+    ...cssFilesUnder(join(ROOT, 'packages/ui/src')),
+  ]),
+];
 
 /** Split on a separator that is not inside parentheses. */
 function split(value, separator) {
@@ -44,9 +60,9 @@ function split(value, separator) {
   return parts.map((p) => p.trim()).filter(Boolean);
 }
 
-/** A size in pixels that does not follow the base: a bare `12px`, or an expression with pixels and no `--type-k`. */
+/** A size in pixels or rem that does not follow the base: a bare `12px`/`0.75rem`, or an expression with px/rem and no `--type-k`. */
 const fixed = (term) =>
-  (/^-?[\d.]+px$/.test(term) || (/\d(?:\.\d+)?px/.test(term) && /^[a-z-]+\(/.test(term))) && !term.includes('--type-k');
+  (/^-?[\d.]+(?:px|rem)$/.test(term) || (/\d(?:\.\d+)?(?:px|rem)/.test(term) && /^[a-z-]+\(/.test(term))) && !term.includes('--type-k');
 
 /** The size term of a `font` shorthand: the term before the family, its line height after a slash dropped. */
 function shorthandSizes(value) {
@@ -69,7 +85,9 @@ for (const file of files) {
 }
 
 if (failures.length) {
-  console.error('✗ a text size in pixels that does not follow the theme’s base (write calc(<n>px * var(--type-k))):\n');
+  console.error(
+    '✗ a text size in pixels or rem that does not follow the theme’s base (write var(--text-*) or calc(<n>px * var(--type-k))):\n',
+  );
   for (const failure of failures) console.error(`  ${failure}`);
   process.exit(1);
 }

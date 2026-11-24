@@ -16,7 +16,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Button } from '@mistriwork/ui/Button.js';
 import { findTable, go, rowView, state, toast } from '@mistriwork/kit/client/core.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
-import { AiMark, aiWord } from '@mistriwork/kit/client/components/AiMark.js';
+import { AiBadge, aiWord } from '@mistriwork/kit/client/components/AiMark.js';
 import { Empty } from '@mistriwork/kit/client/components/Notes.js';
 import { useCrumbSlots } from '@mistriwork/kit/client/components/crumbSlot.js';
 import { formatDateTime } from '@mistriwork/kit/client/locale.js';
@@ -156,10 +156,10 @@ export function ReviewRoom() {
                 <span className="review-group-count">{rows.length}</span>
                 {action?.bulk === true && rows.length > 1 && (
                   <span className="review-group-tools">
-                    <Button intent="secondary" size="compact" disabled={anyBusy} onClick={() => void decide(rows, 'approve')}>
+                    <Button variant="secondary" size="sm" disabled={anyBusy} onClick={() => void decide(rows, 'approve')}>
                       {say('approveAll')}
                     </Button>
-                    <Button intent="quiet" size="compact" disabled={anyBusy} onClick={() => void decide(rows, 'dismiss')}>
+                    <Button variant="ghost" size="sm" disabled={anyBusy} onClick={() => void decide(rows, 'dismiss')}>
                       {say('dismissAll')}
                     </Button>
                   </span>
@@ -168,7 +168,7 @@ export function ReviewRoom() {
               <ul className="review-list">
                 {rows.map((proposal) => (
                   <li key={proposal.id} className="review-row" data-proposal={proposal.id}>
-                    <AiMark quiet className="review-mark" />
+                    <AiBadge quiet className="review-mark" />
                     <div className="review-text">
                       <RecordLink table={table} keyJson={proposal.target} />
                       {proposal.reason ? <span className="review-reason">{proposal.reason}</span> : null}
@@ -178,24 +178,19 @@ export function ReviewRoom() {
                     </div>
                     <span className="review-tools">
                       <Button
-                        intent="primary"
-                        size="compact"
-                        busy={busy.has(proposal.id)}
+                        variant="primary"
+                        size="sm"
+                        loading={busy.has(proposal.id)}
                         onClick={() => void decide([proposal], 'approve')}
                       >
                         {say('approve')}
                       </Button>
                       {action && (
-                        <Button intent="quiet" size="compact" disabled={busy.has(proposal.id)} onClick={() => change(proposal)}>
+                        <Button variant="ghost" size="sm" disabled={busy.has(proposal.id)} onClick={() => change(proposal)}>
                           {say('change')}
                         </Button>
                       )}
-                      <Button
-                        intent="quiet"
-                        size="compact"
-                        disabled={busy.has(proposal.id)}
-                        onClick={() => void decide([proposal], 'dismiss')}
-                      >
+                      <Button variant="ghost" size="sm" disabled={busy.has(proposal.id)} onClick={() => void decide([proposal], 'dismiss')}>
                         {say('dismiss')}
                       </Button>
                     </span>
@@ -224,7 +219,7 @@ export function ReviewRoom() {
                     {mark.actorKind === 'job' ? (
                       <span className="review-maker">{say('byJob', { job: mark.actor })}</span>
                     ) : (
-                      <AiMark quiet className="review-mark" />
+                      <AiBadge quiet className="review-mark" />
                     )}
                     <div className="review-text">
                       <RecordLink table={mark.resource} keyJson={mark.rowKey} />
@@ -234,7 +229,7 @@ export function ReviewRoom() {
                       </span>
                     </div>
                     <span className="review-tools">
-                      <Button intent="secondary" size="compact" busy={busy.has(mark.id)} onClick={() => void confirm(mark)}>
+                      <Button variant="secondary" size="sm" loading={busy.has(mark.id)} onClick={() => void confirm(mark)}>
                         {say('confirm')}
                       </Button>
                     </span>

@@ -78,15 +78,15 @@ vi.mock('../../../../kit/src/client/components/Dropdown.js', () => ({
   Dropdown: ({
     items,
     value,
-    onChange,
+    onValueChange,
     ariaLabel,
   }: {
     items: Array<{ value: string; label: string }>;
     value: string;
-    onChange: (v: string) => void;
+    onValueChange: (v: string) => void;
     ariaLabel: string;
   }) => (
-    <select aria-label={ariaLabel} value={value} onChange={(event) => onChange(event.target.value)}>
+    <select aria-label={ariaLabel} value={value} onChange={(event) => onValueChange(event.target.value)}>
       {items.map((item) => (
         <option key={item.value} value={item.value}>
           {item.label}

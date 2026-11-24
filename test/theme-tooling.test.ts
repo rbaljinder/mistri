@@ -407,7 +407,7 @@ describe('theme show', () => {
     const shown = showTheme(compiled());
     assert.equal(shown.extends, 'lumen');
     assert.deepEqual(shown.colors.default!.light['accent'], { value: '#e8590c', from: 'own' });
-    assert.deepEqual(shown.colors.default!.light['ground'], { value: '#ffffff', from: 'lumen' });
+    assert.deepEqual(shown.colors.default!.light['ground'], { value: '#f8fafc', from: 'lumen' });
     assert.equal(shown.colors.racing!.light['accent']!.from, 'own');
     assert.equal(shown.colors.racing!.light['ground']!.from, 'default');
     assert.equal(shown.recipes.nav!.from, 'lumen');

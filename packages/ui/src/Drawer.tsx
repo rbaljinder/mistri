@@ -16,13 +16,15 @@
  * the same).
  */
 import { Drawer as Sheet, DrawerBackdrop, DrawerClose, DrawerContent, DrawerTitle } from '@ui-sdk/react/drawer';
-import { useContext, type ReactNode } from 'react';
+import { useContext, type ReactNode, type Ref } from 'react';
 import type { ChangeDetails } from './changeDetails.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { heard } from './internal/layers.js';
 import { popupContainer } from './internal/popups.js';
+import { useSurfaceSeam } from './internal/surfaceSeam.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Screen edge from which a `Drawer` sheet enters. */
 export type DrawerSide = 'left' | 'right';
 
 interface DrawerBase {
@@ -48,9 +50,12 @@ interface DrawerBase {
   closeDisabled?: boolean;
   /** The close control's name, in the caller's language. */
   closeLabel?: string;
+  /** Localized strings for Drawer controls. */
+  words?: { close?: string };
+  ref?: Ref<HTMLDivElement>;
 }
 
-/** A sheet is named by a title it draws or by an `ariaLabel` it does not; one of the two is required, so none is announced unnamed. */
+/** Props for `Drawer`; requires either a visible `title` or an `ariaLabel`. */
 export type DrawerProps = DrawerBase & ({ title: ReactNode; ariaLabel?: string } | { title?: undefined; ariaLabel: string });
 
 function DefaultDrawer({
@@ -62,33 +67,34 @@ function DefaultDrawer({
   children,
   className,
   closeDisabled = false,
-  closeLabel = 'Close',
+  closeLabel,
+  words,
+  ref,
 }: DrawerProps) {
   const componentScope = useContext(ComponentStyleScope);
+  const seam = useSurfaceSeam();
+  const resolvedCloseLabel = closeLabel ?? words?.close ?? seam?.defaultWords?.().close ?? 'Close';
   return (
     <Sheet
       container={popupContainer()}
       open={open}
       side={side}
       onOpenChange={(next, details) => {
-        /* A non-cancellable operation: a dismissal request (Escape, a
-           click outside) is refused here, as Modal's beforeClose refuses
-           one, and the controlled drawer stays open. */
         if (!next && closeDisabled) return details.cancel();
         onOpenChange?.(next, heard(details));
       }}
     >
       <DrawerBackdrop />
       <DrawerContent
+        ref={ref}
         data-kind="sheet"
         data-component={componentScope}
         className={className}
         aria-label={ariaLabel ?? (typeof title === 'string' ? title : undefined)}
       >
         <header data-slot="sheet-head">
-          {/* Without a title the head still has two ends, so the close control stays at the far one. */}
           {title !== undefined ? <DrawerTitle>{title}</DrawerTitle> : <span />}
-          <DrawerClose aria-label={closeLabel} disabled={closeDisabled} data-variant="quiet">
+          <DrawerClose aria-label={resolvedCloseLabel} disabled={closeDisabled} data-variant="quiet">
             <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
               <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
             </svg>
@@ -100,5 +106,5 @@ function DefaultDrawer({
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Slide-in edge sheet dialog with focus trap, backdrop scrim, and Escape/swipe dismissal. */
 export const Drawer = slotted('Drawer', DefaultDrawer, { onOpenChange: [1, 'implicit'] });

@@ -25,7 +25,7 @@
  * `<button>` card an App draws keeps its own corner under a round-control look.
  */
 import { createHash } from 'node:crypto';
-import { realpathSync, statSync } from 'node:fs';
+import { existsSync, realpathSync, statSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { createRequire, isBuiltin } from 'node:module';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
@@ -73,7 +73,7 @@ const REFUSED: Array<[RegExp, string]> = [
   ],
   [/^@mistriwork\/mistri\/ui\/testing$/, "is for a component's tests, not the component"],
   [
-    /^@mistriwork\/mistri$|^@mistriwork\/mistri\/(?!app$|ui$|page$)/,
+    /^@mistriwork\/mistri$|^@mistriwork\/mistri\/(?!app$|ui$|page$|behaviors$|primitives$|charts$|views$)/,
     'is not a module a component may import; it draws with @mistriwork/mistri/ui',
   ],
   [
@@ -86,6 +86,32 @@ const REFUSED: Array<[RegExp, string]> = [
   ],
 ];
 
+/* The page's on-demand entries, lowest first: each brings its own stylesheet and those under it (the primitives'
+   stand on the charts', the views' on both: packages/mistri/src/client/components/sdk/{charts,primitives,views}.ts). */
+const SURFACE_ENTRIES = ['charts', 'primitives', 'views'] as const;
+type SurfaceEntry = (typeof SURFACE_ENTRIES)[number];
+/* The entry that brings a host stylesheet a component names. One that is every surface at once (`style.css`,
+   `styles/surfaces.css`) needs the highest, which is all of them: a component that names it may write the views'
+   classes in its own markup without importing a view. A name not listed per bundle falls to that one too. */
+const HOST_SURFACES_CSS = new Map<string, SurfaceEntry>([
+  ['@mistriwork/ui/style.css', 'views'],
+  ['@mistriwork/ui/styles/surfaces.css', 'views'],
+  ['@mistriwork/ui/styles/surfaces/views.css', 'views'],
+  ['@mistriwork/ui/styles/surfaces/primitives.css', 'primitives'],
+  ['@mistriwork/ui/styles/ui-sdk-surfaces.css', 'primitives'],
+  ['@mistriwork/ui/styles/surfaces/charts.css', 'charts'],
+  ['@mistriwork/ui/styles/surfaces/base.css', 'charts'],
+]);
+const surfaceEntryId = (entry: SurfaceEntry) => `@mistriwork/mistri/${entry}`;
+const HOST_UI_CSS = new Set([
+  ...HOST_SURFACES_CSS.keys(),
+  '@mistriwork/ui/controls.css',
+  '@mistriwork/ui/tokens.css',
+  '@mistriwork/ui/behaviors.css',
+  '@mistriwork/ui/preferences.css',
+]);
+const VIRTUAL_HOST_CSS = '\0mistri:host-ui-css';
+
 const inside = (file: string, dir: string) => file === dir || file.startsWith(dir.endsWith(sep) ? dir : dir + sep);
 const installed = (file: string) => file.split(sep).includes('node_modules');
 
@@ -96,6 +122,157 @@ function real(path: string): string {
   } catch {
     return path;
   }
+}
+
+interface ParsedCssImport {
+  start: number;
+  end: number;
+  spec: string;
+  layer?: string;
+  supports?: string;
+  media?: string;
+}
+
+/**
+ * Reads top-level `@import` statements from a stylesheet: quoted (`"..."`, `'...'`) or `url(...)` (quoted or unquoted),
+ * followed by optional `layer` / `layer(name)`, `supports(...)` and media conditions up to the closing `;`.
+ */
+function scanCssImports(css: string): ParsedCssImport[] {
+  const found: ParsedCssImport[] = [];
+  const len = css.length;
+  let i = 0;
+  const skipSpaceAndComments = () => {
+    while (i < len) {
+      if (/\s/.test(css[i]!)) {
+        i += 1;
+      } else if (css[i] === '/' && css[i + 1] === '*') {
+        const close = css.indexOf('*/', i + 2);
+        i = close >= 0 ? close + 2 : len;
+      } else {
+        break;
+      }
+    }
+  };
+  const readQuoted = (): string | undefined => {
+    const q = css[i];
+    if (q !== '"' && q !== "'") return undefined;
+    i += 1;
+    let out = '';
+    while (i < len && css[i] !== q) {
+      if (css[i] === '\\' && i + 1 < len) {
+        out += css[i + 1]!;
+        i += 2;
+      } else {
+        out += css[i]!;
+        i += 1;
+      }
+    }
+    if (css[i] === q) i += 1;
+    return out;
+  };
+  const readParens = (): string => {
+    let depth = 1;
+    i += 1;
+    const start = i;
+    while (i < len && depth > 0) {
+      const ch = css[i]!;
+      if (ch === '"' || ch === "'") {
+        readQuoted();
+        continue;
+      }
+      if (ch === '/' && css[i + 1] === '*') {
+        const close = css.indexOf('*/', i + 2);
+        i = close >= 0 ? close + 2 : len;
+        continue;
+      }
+      if (ch === '(') depth += 1;
+      else if (ch === ')') depth -= 1;
+      i += 1;
+    }
+    return css.slice(start, depth === 0 ? i - 1 : i).trim();
+  };
+  const skipStatement = () => {
+    while (i < len) {
+      const ch = css[i]!;
+      if (ch === '"' || ch === "'") {
+        readQuoted();
+        continue;
+      }
+      if (ch === '/' && css[i + 1] === '*') {
+        const close = css.indexOf('*/', i + 2);
+        i = close >= 0 ? close + 2 : len;
+        continue;
+      }
+      if (ch === '(') {
+        readParens();
+        continue;
+      }
+      if (ch === ';') {
+        i += 1;
+        return true;
+      }
+      if (ch === '{') return false;
+      i += 1;
+    }
+    return false;
+  };
+
+  while (i < len) {
+    skipSpaceAndComments();
+    if (i >= len || css[i] !== '@') break;
+    const start = i;
+    const kw = /^@([A-Za-z-]+)/.exec(css.slice(i))?.[1]?.toLowerCase();
+    if (kw === 'charset' || kw === 'layer') {
+      i += 1 + kw.length;
+      if (skipStatement()) continue;
+      break;
+    }
+    if (kw !== 'import') break;
+    i += 7;
+    skipSpaceAndComments();
+    let spec: string | undefined;
+    if (css[i] === '"' || css[i] === "'") {
+      spec = readQuoted()?.trim();
+    } else if (/^url\(/i.test(css.slice(i, i + 4))) {
+      i += 3; // positioned at '('
+      const body = readParens();
+      if ((body.startsWith('"') && body.endsWith('"')) || (body.startsWith("'") && body.endsWith("'"))) {
+        spec = body.slice(1, -1).trim();
+      } else {
+        spec = body.trim();
+      }
+    }
+    if (!spec) break;
+    skipSpaceAndComments();
+    let layer: string | undefined;
+    if (/^layer(?:\s*\(|\b)/i.test(css.slice(i))) {
+      i += 5;
+      skipSpaceAndComments();
+      layer = css[i] === '(' ? readParens() : '';
+      skipSpaceAndComments();
+    }
+    let supports: string | undefined;
+    if (/^supports\s*\(/i.test(css.slice(i))) {
+      i += 8;
+      skipSpaceAndComments();
+      if (css[i] === '(') supports = readParens();
+      skipSpaceAndComments();
+    }
+    const mediaStart = i;
+    if (!skipStatement()) break;
+    const media = css.slice(mediaStart, i - 1).trim() || undefined;
+    found.push({ start, end: i, spec, layer, supports, media });
+  }
+  return found;
+}
+
+function wrapImportedCss(css: string, stmt: ParsedCssImport): string {
+  let out = css.trim();
+  if (!out) return '';
+  if (stmt.supports) out = `@supports (${stmt.supports}) {\n${out}\n}`;
+  if (stmt.media) out = `@media ${stmt.media} {\n${out}\n}`;
+  if (stmt.layer !== undefined) out = stmt.layer ? `@layer ${stmt.layer} {\n${out}\n}` : `@layer {\n${out}\n}`;
+  return `${out}\n`;
 }
 
 function wrapCss(id: string, css: string): string {
@@ -143,6 +320,9 @@ async function compileOne(
     name: 'mistri:component-boundary',
     async resolveId(source, importer, options) {
       if (Object.hasOwn(HOST_MODULES, source)) return { id: source, external: true };
+      const surfaceEntry = HOST_SURFACES_CSS.get(source);
+      if (surfaceEntry) return { id: surfaceEntryId(surfaceEntry), external: true };
+      if (HOST_UI_CSS.has(source)) return { id: VIRTUAL_HOST_CSS };
       if (source === '@mistriwork/mistri/app') return APP_DSL;
       const refused = REFUSED.find(([pattern]) => pattern.test(source));
       if (refused) this.error(`${shown(importer)}: "${source}" ${refused[1]}.`);
@@ -163,6 +343,7 @@ async function compileOne(
     /* A stylesheet is collected in the order the graph imports it (buildEnd)
        and served beside the script; Rolldown no longer bundles CSS. */
     load(id) {
+      if (id === VIRTUAL_HOST_CSS) return { code: '', moduleSideEffects: false, moduleType: 'js' };
       if (id.endsWith('.css')) return { code: '', moduleSideEffects: true, moduleType: 'js' };
       return null;
     },
@@ -220,12 +401,80 @@ async function compileOne(
           : `${at} has no default export. Export the component: export default function Thing(props) { … }.`,
     );
   const cssFiles = order.filter((id) => id.endsWith('.css') && isAbsolute(id));
-  const css = (await Promise.all(cssFiles.map((id) => readFile(id, 'utf8')))).join('\n');
+  const extraCss = new Set<string>();
+  const visitedCss = new Set<string>();
+  /* The highest entry a stylesheet of the component's asks for by importing a host sheet, as its place in SURFACE_ENTRIES. */
+  let cssNeedsEntry = -1;
+  const readCss = async (cssId: string, stack = new Set<string>()): Promise<string> => {
+    const resolvedId = real(cssId);
+    if (stack.has(resolvedId) || visitedCss.has(resolvedId)) return '';
+    visitedCss.add(resolvedId);
+    const nextStack = new Set(stack);
+    nextStack.add(resolvedId);
+    const raw = await readFile(resolvedId, 'utf8');
+    const chunks: string[] = [];
+    let last = 0;
+    for (const stmt of scanCssImports(raw)) {
+      chunks.push(raw.slice(last, stmt.start));
+      last = stmt.end;
+      const surfaceEntry = HOST_SURFACES_CSS.get(stmt.spec);
+      if (surfaceEntry) cssNeedsEntry = Math.max(cssNeedsEntry, SURFACE_ENTRIES.indexOf(surfaceEntry));
+      if (HOST_UI_CSS.has(stmt.spec)) continue;
+      if (/^(?:https?:|\/\/|data:)/i.test(stmt.spec)) {
+        throw new Error(
+          `${at}: CSS @import "${stmt.spec}" cannot load an external URL inside a scoped component stylesheet; import a local or installed stylesheet.`,
+        );
+      }
+      const refused = REFUSED.find(([pattern]) => pattern.test(stmt.spec));
+      if (refused) throw new Error(`${at}: CSS @import "${stmt.spec}" ${refused[1]}.`);
+      let candidate: string | null = null;
+      if (stmt.spec.startsWith('.')) {
+        const local = resolve(dirname(resolvedId), stmt.spec);
+        if (existsSync(local)) candidate = local;
+      } else {
+        const local = resolve(dirname(resolvedId), stmt.spec);
+        if (existsSync(local)) {
+          candidate = local;
+        } else {
+          try {
+            candidate = createRequire(resolvedId).resolve(stmt.spec);
+          } catch {
+            candidate = null;
+          }
+        }
+      }
+      if (!candidate || !existsSync(candidate)) {
+        throw new Error(`${at}: CSS @import "${stmt.spec}" could not be resolved from ${shown(resolvedId)}.`);
+      }
+      const realChild = real(candidate);
+      if (SERVER_CODE.some((dir) => inside(realChild, dir)))
+        throw new Error(`${at}: CSS @import "${stmt.spec}" is mistri's own server code.`);
+      if (!inside(realChild, root) && !installed(realChild) && !shared.some((dir) => inside(realChild, real(dir))))
+        throw new Error(`${at}: CSS @import "${stmt.spec}" resolves outside the App directory.`);
+      extraCss.add(realChild);
+      const childCss = await readCss(realChild, nextStack);
+      chunks.push(wrapImportedCss(childCss, stmt));
+    }
+    chunks.push(raw.slice(last));
+    return chunks.join('');
+  };
+  const cssParts: string[] = [];
+  for (const id of cssFiles) cssParts.push(await readCss(id));
+  const css = cssParts.filter(Boolean).join('\n');
+  /* The compiled code already brings an entry's stylesheet where it imports that entry or a higher one; the import
+     is added only for what the component's own CSS asked for beyond that. */
+  const imported = Math.max(
+    -1,
+    ...[...chunk.code.matchAll(/@mistriwork\/mistri\/(primitives|charts|views)\b/g)].map(([, entry]) =>
+      SURFACE_ENTRIES.indexOf(entry as SurfaceEntry),
+    ),
+  );
+  const code = cssNeedsEntry > imported ? `import "${surfaceEntryId(SURFACE_ENTRIES[cssNeedsEntry]!)}";${chunk.code}` : chunk.code;
   const own = (id: string) => isAbsolute(id) && inside(real(id), root) && !installed(id);
-  const sources = [...new Set([...modules.filter(own), ...cssFiles.filter(own)])]
+  const sources = [...new Set([...modules.filter(own), ...cssFiles.filter(own), ...[...extraCss].filter(own)])]
     .map((id) => relative(root, real(id)).split(sep).join('/'))
     .sort();
-  return { code: chunk.code, map: chunk.map?.toString() ?? '', css, sources };
+  return { code, map: chunk.map?.toString() ?? '', css, sources };
 }
 
 /**

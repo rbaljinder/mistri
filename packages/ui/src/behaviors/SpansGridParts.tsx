@@ -27,19 +27,22 @@ const along = (range: Pick<SpansRange, 'axis'>, from: number, to?: number): CSSP
  */
 export function SpansAxis({
   step,
-  format = String,
+  formatValue,
+  format,
   labels = true,
   lines = true,
   every = 1,
   className,
 }: {
   step: number;
+  formatValue?: (value: number) => ReactNode;
   format?: (value: number) => ReactNode;
   labels?: boolean;
   lines?: boolean;
   every?: number;
   className?: string;
 }) {
+  const formatTick = formatValue ?? format ?? String;
   const range = useContext(SpansRangeContext);
   const ticks: number[] = [];
   if (step > 0) for (let value = range.min; value <= range.max; value += step) ticks.push(value);
@@ -50,7 +53,7 @@ export function SpansAxis({
           {lines && <i data-slot="spans-axis-line" data-value={value} style={along(range, share(range, value))} />}
           {labels && at % Math.max(1, every) === 0 && (
             <span data-slot="spans-axis-label" data-value={value} style={along(range, share(range, value))}>
-              {format(value)}
+              {formatTick(value)}
             </span>
           )}
         </span>

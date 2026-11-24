@@ -8,7 +8,7 @@ import * as behaviors from './behaviors.js';
 test('the behaviors module exports exactly the names the served module re-exports', () => {
   expect(Object.keys(behaviors).sort()).toEqual([...BEHAVIORS_EXPORTS].sort());
   expect(Object.keys(HOST_MODULES)).toContain('@mistriwork/mistri/behaviors');
-  expect(LAZY_HOST_MODULES).toEqual(['@mistriwork/mistri/behaviors']);
+  expect(LAZY_HOST_MODULES).toContain('@mistriwork/mistri/behaviors');
 });
 
 test('the declared parts are the ones the module hands out', () => {

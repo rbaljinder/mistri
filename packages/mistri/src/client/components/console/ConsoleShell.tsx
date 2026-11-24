@@ -10,7 +10,7 @@
  * was last answered beside one button that asks now.
  */
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { Button, Dropdown, Icon, SplitListDetail, useFormat, useNavigate } from '@mistriwork/mistri/ui';
+import { Button, Dropdown, Icon, SplitView, useFormat, useNavigate } from '@mistriwork/mistri/ui';
 import { useAddressState } from '@mistriwork/mistri/page';
 import { useMessageLanguage } from '@mistriwork/kit/client/components/useMessageLanguage.js';
 import { say } from '../../copy/console/components/console/ConsoleShell.js';
@@ -221,9 +221,9 @@ const mac = () => typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(nav
  */
 /** The Console lays its rooms out with two props the public split leaves out (the shell's own, SplitListDetail.tsx):
     the detail's title in sentence case, and a full-width list until a record is picked. */
-export const ConsoleSplit = SplitListDetail as (
-  props: Parameters<typeof SplitListDetail>[0] & { sentenceTitle?: boolean; expandList?: boolean },
-) => ReturnType<typeof SplitListDetail>;
+export const ConsoleSplit = SplitView as (
+  props: Parameters<typeof SplitView>[0] & { sentenceTitle?: boolean; expandList?: boolean },
+) => ReturnType<typeof SplitView>;
 
 export function ConsoleHead({
   title,
@@ -293,7 +293,7 @@ export function ConsoleHead({
                 label: entry.name,
                 ...(entry.detail ? { detail: entry.detail } : {}),
               }))}
-              onChange={(value) => {
+              onValueChange={(value) => {
                 const next = apps.find((entry) => entry.id === value);
                 if (next) onApp(next);
               }}
@@ -311,10 +311,10 @@ export function ConsoleHead({
             <>
               <Updated at={live.at} pending={live.pending} />
               <Button
-                size="compact"
-                intent="quiet"
+                size="sm"
+                variant="ghost"
                 className="console-refresh"
-                aria-label={say('refreshNow')}
+                ariaLabel={say('refreshNow')}
                 title={say('refreshNow')}
                 onClick={live.onRefresh}
               >

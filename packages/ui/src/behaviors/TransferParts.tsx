@@ -20,7 +20,7 @@
    Slots: `transfer`, `transfer-list` (`data-list`, `data-takes`, `data-refuses`, `data-over`), `transfer-item`
    (`data-carried`, `data-dragging`) and `transfer-handle` (`data-carried`). */
 import { createParts } from '@ui-sdk/react/primitive';
-import type { ComponentProps, ReactNode } from 'react';
+import { type ComponentProps, Fragment, type ReactNode } from 'react';
 import { type CommitProps, movedLists, PendingProvider, useCommit, usePending } from './commit.js';
 import { type Change, heard } from './heard.js';
 import { transfer, type TransferMove, type TransferReason } from './transfer.js';
@@ -36,6 +36,7 @@ export function Transfer({
   onValueChange,
   onCommit,
   commitDelay,
+  words,
   value,
   defaultValue,
   ...props
@@ -44,7 +45,7 @@ export function Transfer({
   defaultValue?: Lists;
   onValueChange?: (value: Lists, details: TransferChange) => void;
 } & CommitProps<Lists, TransferChange>) {
-  const commit = useCommit<Lists, TransferChange>({ value, defaultValue, onValueChange, onCommit, commitDelay, moved: movedLists });
+  const commit = useCommit<Lists, TransferChange>({ value, defaultValue, onValueChange, onCommit, commitDelay, words, moved: movedLists });
   const root = (
     <parts.Root {...props} value={commit.value} defaultValue={commit.defaultValue} {...heard({ onValueChange: commit.onValueChange })} />
   );
@@ -64,7 +65,7 @@ export function TransferList({
   return (
     <parts.List {...props}>
       {(state) => {
-        const items = state.keys.map((key, at) => children(key, at));
+        const items = state.keys.map((key, at) => <Fragment key={key}>{children(key, at)}</Fragment>);
         return around ? around(items, state) : items;
       }}
     </parts.List>

@@ -104,7 +104,7 @@ describe('useOptions', () => {
             }}
             open={open}
             onOpenChange={setOpen}
-            inputProps={{ 'aria-label': 'Payee' }}
+            inputProps={{ ariaLabel: 'Payee' }}
             popupClassName="payee-popup"
             listClassName="payee-list"
           />

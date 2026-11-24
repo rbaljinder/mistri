@@ -96,3 +96,33 @@ test('every built-in look says its pill corner, so var(--pill-radius) always has
   assert.ok(LOOKS.length >= 7);
   for (const look of LOOKS) assert.ok(look.shape?.radius?.pill !== undefined, `${look.id}`);
 });
+
+/** A light island in a dark page kept the dark tokens: the nested stamp said only `color-scheme`. The block that moves them back is held to the dark blocks, so a token dark mode starts moving is moved back in the same change. */
+test('a nested light island restates every token the dark blocks move, at the root light value', () => {
+  const sheet = readFileSync(`${ROOT}packages/ui/src/tokens.css`, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '');
+  /* The last block of a selector: the stamp's first is the one line that says `color-scheme`. */
+  const block = (selector: string, last = false) => {
+    const at = last ? sheet.lastIndexOf(`${selector} {`) : sheet.indexOf(`${selector} {`);
+    assert.ok(at >= 0, `tokens.css has a "${selector}" block`);
+    const body = sheet.slice(at + selector.length + 2, sheet.indexOf('}', at));
+    return new Map([...body.matchAll(/(--[a-z0-9-]+)\s*:\s*([^;]+);/g)].map((match) => [match[1]!, match[2]!.trim()]));
+  };
+  const root = block(':root');
+  const bySystem = block('  :root:not([data-theme="light"])', true);
+  const byStamp = block(':root[data-theme="dark"],\n[data-theme="dark"]', true);
+  const island = block('[data-theme="light"]:not(:root)');
+  assert.ok(byStamp.size > 20, 'the dark palette was found');
+  assert.deepEqual([...bySystem], [...byStamp], 'dark by the system and dark by the stamp are one palette');
+  assert.deepEqual([...island.keys()].sort(), [...byStamp.keys()].sort(), 'the island moves back exactly what dark moves');
+  for (const [token, value] of island) {
+    /* A token the root never says (its readers carry a fallback) is unset, so the fallback stands again. */
+    assert.equal(value, root.get(token) ?? 'initial', token);
+    assert.notEqual(value, byStamp.get(token), `${token} is moved by dark`);
+  }
+  /* What the root derives from the palette is derived again on any stamped island: a custom property is worked out
+     where it is written, so the root's `--on-accent` would be inherited as the page's ground. */
+  const derived = block('[data-theme]:not(:root)');
+  for (const [token, value] of root) {
+    if (/var\(--(?:ground|surface|accent|scrim-light)\)/.test(value)) assert.equal(derived.get(token), value, token);
+  }
+});

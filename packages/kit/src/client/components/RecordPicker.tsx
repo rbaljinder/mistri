@@ -459,14 +459,14 @@ function RecordPickerControl(props: RecordPickerProps & { scope?: string }) {
           )
         }
         onPick={pick}
-        inputRef={setInput}
+        ref={setInput}
         popupRef={editing?.popupRef}
         anchorRef={wrap}
         fit="width"
         inputProps={{
           type: 'text',
           className: 'picker-input',
-          'aria-label': ariaLabel ?? say('choose', { name: humanName(table.name) }),
+          ariaLabel: ariaLabel ?? say('choose', { name: humanName(table.name) }),
           /* In an App the resource's own noun ("lead"), not the table's name ("crm_lead"). */
           placeholder:
             placeholder ??

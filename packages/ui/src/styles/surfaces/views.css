@@ -1,0 +1,13 @@
+/* The composite views' bundle (`@mistriwork/ui/views.js`): tables and filters, schedule and board, tree and timeline,
+   shell, AI, auth, media and onboarding, workflows and settings. It stands on `base.css`, `charts.css` and
+   `primitives.css`, which a page loads before it. The order below is the cascade's: keep it. */
+@import './order.css';
+@import './views-tables.css';
+@import './views-schedule.css';
+@import './views-tree-timeline.css';
+@import './views-shell.css';
+@import './views-ai.css';
+@import './views-auth.css';
+@import './views-media-onboarding.css';
+@import './views-workflows.css';
+@import './views-settings.css';

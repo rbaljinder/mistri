@@ -15,16 +15,14 @@
  */
 import { useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import { axisMarks, periodTick } from './Chart.js';
+import { f1, levelGutter, measureOf, PERIOD, tickSay, tickWidth, type Say } from './chartAxes.js';
 import { orderGroups } from './dashboardModel.js';
 import { formatPercent as percentOf } from '../locale.js';
 import { say as sayCopy } from '../copy/dashboards/components/ChartShapes.js';
+import { shellRoot } from '../shellHost.js';
 import { textMeasure } from './textMeasure.js';
-import { niceScale } from '@mistriwork/engine/shared/niceTicks.js';
+import { bandsAlong, extentOf, niceScale } from '@mistriwork/ui/charts/core.js';
 import './ChartShapes.css';
-
-/** How a figure is said; its `tick` is how an axis says a round level (Chart.tsx). */
-type Say = ((value: unknown) => string) & { tick?: ((value: unknown) => string) & { steps?: readonly number[] } };
-const tickSay = (say: Say) => say.tick ?? say;
 
 export type ExtraShape = 'scatter' | 'heatmap' | 'waterfall' | 'treemap';
 
@@ -54,12 +52,6 @@ interface ChartShapeProps {
 }
 
 const pct = (share: number) => percentOf(share, { maximumFractionDigits: 0 });
-const f1 = (n: number) => n.toFixed(1);
-/** A period the grammar buckets by ("2026-08", "2026-Q3"), which keeps the calendar's order. */
-const PERIOD = /^\d{4}(-\d{2}(-\d{2})?|-Q[1-4])?$/;
-/** The width a tick's words take at the axis's 11px, budgeted as Chart.tsx budgets it. */
-const tickWidth = (text: string) => text.length * 6.6 + 4;
-const finite = (value: unknown) => Number.isFinite(Number(value)) && value !== null && value !== '';
 
 /** One key's values in a fixed order: numbers and periods ascending, a vocabulary's words in its order, the rest as read. */
 function keyOrder(keys: unknown[], vocabulary?: readonly string[]): string[] {
@@ -137,19 +129,24 @@ function Tip({ text, at, top, wide }: { text: string; at: number; top: number; w
 
 function Scatter({ answer, say, sayX = say, names, label, wide, high }: ChartShapeProps) {
   const [key, xs, ys] = answer.columns ?? [];
-  const dots = (answer.rows ?? [])
-    .filter((row) => finite(row[xs]) && finite(row[ys]))
-    .map((row) => ({ key: row[key], x: Number(row[xs]), y: Number(row[ys]) }));
+  /* A group with either measure absent has no place on the plot (measureOf: the charts' one reading rule). */
+  const dots = (answer.rows ?? []).flatMap((row) => {
+    const mx = measureOf(row[xs]),
+      my = measureOf(row[ys]);
+    return mx && my ? [{ key: row[key], x: mx.value, y: my.value }] : [];
+  });
   const [near, setNear] = useState<number | null>(null);
   if (!dots.length) return null;
   const W = wide;
   const H = high ? Math.max(160, Math.round(high)) : Math.max(200, Math.min(Math.round(W / 2.2), 320));
-  const yScale = levelsOf(Math.min(0, ...dots.map((d) => d.y)), Math.max(...dots.map((d) => d.y)) || 1, say.tick?.steps),
-    xScale = levelsOf(Math.min(0, ...dots.map((d) => d.x)), Math.max(...dots.map((d) => d.x)) || 1, sayX.tick?.steps);
+  const spreadY = extentOf(dots.map((d) => d.y)),
+    spreadX = extentOf(dots.map((d) => d.x));
+  const yScale = levelsOf(Math.min(0, spreadY.min), spreadY.max || 1, say.tick?.steps),
+    xScale = levelsOf(Math.min(0, spreadX.min), spreadX.max || 1, sayX.tick?.steps);
   const [minX, maxX, minY, maxY] = [xScale.min, xScale.max, yScale.min, yScale.max];
   const yLevels = yScale.levels,
     xLevels = xScale.levels;
-  const gutter = Math.max(...yLevels.map((v) => tickWidth(tickSay(say)(v)))) + 6;
+  const gutter = levelGutter(yLevels, say);
   const PAD = { top: 28, right: Math.max(...xLevels.map((v) => tickWidth(tickSay(sayX)(v)))) / 2 + 4, bottom: 24, left: gutter };
   const x = (v: number) => PAD.left + ((v - minX) / (maxX - minX || 1)) * (W - PAD.left - PAD.right);
   const y = (v: number) => PAD.top + (1 - (v - minY) / (maxY - minY || 1)) * (H - PAD.top - PAD.bottom);
@@ -213,7 +210,13 @@ const HEAT_STEPS = [14, 30, 46, 64, 82];
  * half width read "10 …", "11 …". Each name is measured at the head's 11px against a column's share of the grid,
  * after the row names' 8ch and the cells' 2px spacing; a name that is not shown stays for a reader.
  */
-function headEvery(names: readonly string[], wide: number, measure = textMeasure('400 11px system-ui, sans-serif')): number {
+function headEvery(
+  names: readonly string[],
+  wide: number,
+  measure = textMeasure(
+    `400 11px ${(typeof document !== 'undefined' && getComputedStyle(shellRoot()).getPropertyValue('--sans').trim()) || 'sans-serif'}`,
+  ),
+): number {
   if (!names.length || !wide) return 1;
   const column = (wide - 88) / names.length - 2;
   const widest = Math.max(...names.map((name) => (measure ? measure(name) : name.length * 6)));
@@ -343,10 +346,12 @@ function Waterfall({ answer, say, label, vocabulary, wide, high, limit, target }
   const scale = levelsOf(min, max, say.tick?.steps);
   const levels = scale.levels;
   const span = scale.max - scale.min || 1;
-  const PAD = { top: 30, right: 6, bottom: 24, left: Math.max(...levels.map((v) => tickWidth(tickSay(say)(v)))) + 6 };
-  const band = (W - PAD.left - PAD.right) / bars.length;
-  const barWide = Math.max(2, Math.min(48, band * 0.64));
-  const mid = (i: number) => PAD.left + band * (i + 0.5);
+  const PAD = { top: 30, right: 6, bottom: 24, left: levelGutter(levels, say) };
+  const {
+    band,
+    bar: barWide,
+    mid,
+  } = bandsAlong(bars.length, PAD.left, W - PAD.left - PAD.right, { share: 0.64, widest: 48, narrowest: 2 });
   const y = (v: number) => PAD.top + (1 - (v - scale.min) / span) * (H - PAD.top - PAD.bottom);
   const marks = axisMarks(names, mid, { centered: true });
   const active = near ?? bars.length - 1;

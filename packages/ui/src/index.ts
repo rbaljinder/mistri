@@ -7,12 +7,31 @@
  * icons, its answers and its hooks are props (scripts/check-boundary.mjs holds the `ui` layer to importing only
  * itself).
  */
-export { Button, ButtonLink, buttonClass, type ButtonIntent, type ButtonLinkProps, type ButtonProps, type ButtonSize } from './Button.js';
-export { Field, type AnswerKind, type FieldControlProps } from './Field.js';
+export { type ControlSize, type EmptyStateSpec, type Tone, isEmptyStateSpec, toDataTone, toKitTone } from './internal/cx.js';
+export {
+  InCardContext,
+  UiSurfaceSeamContext,
+  installSurfaceSeam,
+  useInCard,
+  useSurfaceSeam,
+  type CardFrame,
+  type UiSurfaceSeam,
+} from './internal/surfaceSeam.js';
+export { Button, ButtonLink, buttonClass, type ButtonLinkProps, type ButtonProps, type ButtonSize, type ButtonVariant } from './Button.js';
+export { Field, type AnswerKind, type FieldControlProps, type FieldProps } from './Field.js';
 /* What every change callback hears second: the reason, the hand, the event. */
 export { type ChangeDetails, type ChangeSource } from './changeDetails.js';
-export { Modal, type ModalHandle } from './Modal.js';
-export { DropMenu, DropGroup, DropItem, DropSeparator } from './DropMenu.js';
+export { Modal, type ModalHandle, type ModalProps } from './Modal.js';
+export {
+  DropMenu,
+  DropGroup,
+  DropItem,
+  DropSeparator,
+  type DropGroupProps,
+  type DropItemProps,
+  type DropMenuProps,
+  type DropSeparatorProps,
+} from './DropMenu.js';
 export {
   Dropdown,
   MultiDropdown,
@@ -26,8 +45,10 @@ export { Typeahead, type TypeaheadProps, type TypeaheadReason } from './Typeahea
 export {
   Icon,
   loadIconsWith,
+  onUnknownIcon,
   registerIcons,
   weighIconsWith,
+  type AppIconName,
   type IconGlyph,
   type IconProps,
   type IconWeight,
@@ -36,11 +57,20 @@ export {
 export { DateField, type DateFieldOpenReason, type DateFieldProps, type DateFieldWords } from './DateField.js';
 /* The form controls. Preview: @mistriwork/ui is Preview at 1.0, and these are the newest of it. */
 export type { FieldFrame } from './fieldFrame.js';
-export { TextField, MaskedField, MoneyField, ValidMark, type MaskedFieldProps, type TextFieldProps } from './TextField.js';
+export {
+  TextField,
+  MaskedField,
+  MoneyField,
+  ValidMark,
+  type MaskedFieldProps,
+  type MoneyFieldProps,
+  type TextFieldProps,
+  type ValidMarkProps,
+} from './TextField.js';
 export { TextArea, type TextAreaProps } from './TextArea.js';
 export { SensitiveField, type SensitiveFieldProps } from './SensitiveField.js';
 export { FileField, type FileFieldProps } from './FileField.js';
-export { Select, MultiSelect } from './Select.js';
+export { Select, MultiSelect, type MultiSelectProps, type SelectOption, type SelectProps } from './Select.js';
 export {
   CheckCards,
   ChoiceCards,
@@ -52,6 +82,7 @@ export {
   type CheckboxProps,
   type ChoiceCardsProps,
   type ChoiceOption,
+  type ConsentProps,
   type YesNoProps,
 } from './Choices.js';
 export { Slider, type SliderProps } from './Slider.js';
@@ -63,24 +94,45 @@ export {
   ReviewList,
   StepHeader,
   type ActionBarProps,
+  type ColumnsProps,
   type HelpTipProps,
   type ProgressBarProps,
+  type ReviewListProps,
   type StepHeaderProps,
 } from './FormParts.js';
-/* The landing hero's blocks. Preview, like the controls: a badge over a heading, two to four photo tiles, icon rows. */
-export { Badge, IconRows, PhotoTiles, type BadgeProps, type IconRowsProps, type PhotoTile, type PhotoTilesProps } from './HeroBlocks.js';
+/* The landing hero's blocks and semantic badges. */
+export {
+  Badge,
+  IconRows,
+  PhotoTiles,
+  type BadgeProps,
+  type BadgeTone,
+  type IconRowsProps,
+  type PhotoTile,
+  type PhotoTilesProps,
+} from './HeroBlocks.js';
 export { digits, grouped, isoDay, maskNamed, masks, type Mask, type MaskName } from './masks.js';
 export { ComponentStyleScope } from './internal/ComponentStyleScope.js';
+export { dateFormat, isPickerDate, isPickerDateTime, splitDateTime } from './internal/datePickerModel.js';
 export { popupContainer, drawPopupsIn } from './internal/popups.js';
-export { measureFrom, refreshViewportScale, viewportBox, viewportScale, viewportSize } from './internal/ruler.js';
-/* The standalone primitives added for the showcase's missing list: a switch, tabs, a drawer, a popover, an avatar disc and pagination. Preview, like the controls. */
+export {
+  PHONE_QUERY,
+  TABLET_QUERY,
+  measureFrom,
+  refreshViewportScale,
+  viewportBox,
+  viewportScale,
+  viewportSize,
+} from './internal/ruler.js';
+export { DURATION_STEPS, niceScale, type NiceScale } from './internal/niceTicks.js';
+/* The standalone primitives: switch, tabs, drawer, popover, avatar and pagination. */
 export { Switch, type SwitchProps } from './Switch.js';
-export { Tabs, type TabItem, type TabsProps } from './Tabs.js';
+export { Tabs, type TabItem, type TabItemDefinition, type TabsProps, type TabsVariant } from './Tabs.js';
 export { Drawer, type DrawerProps, type DrawerSide } from './Drawer.js';
 export { Popover, type PopoverProps } from './Popover.js';
-export { Avatar, initialsOf, type AvatarProps, type AvatarSize } from './Avatar.js';
+export { Avatar, initialsOf, type AvatarProps, type AvatarSize, type AvatarStatus } from './Avatar.js';
 export { Pagination, paginationItems, type PaginationProps } from './Pagination.js';
-/* The remainder-wave primitives: a carousel, resizable panes, a scroll area and a general tooltip, Preview like the rest. */
+/* Carousel, resizable panes, scroll area and tooltip. */
 export { Carousel, type CarouselProps, type CarouselSlide } from './Carousel.js';
 export { Resizable, type ResizablePanel, type ResizableProps } from './Resizable.js';
 export { ScrollArea, type ScrollAreaProps } from './ScrollArea.js';

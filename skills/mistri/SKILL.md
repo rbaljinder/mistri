@@ -70,8 +70,8 @@ task needs with `npx @mistriwork/mistri docs <topic>` (`app-dsl` indexes every k
 - Writes are opt-in twice: `"writable": true` on the connection and `access: 'write'` on the
   resource. Credentials stay in `mistri.json` as `${VARIABLE}` references, never in `app.ts`.
   Never reseed, migrate or write to an existing database without asking.
-- Prefer a built-in block; a custom component only for a drawing no block makes, after the gap is shown. Spell every key as the docs do; never guess one.
-- A `role=` written by hand in a custom component is almost always a bug: use the shipped primitive (`Dropdown`, `Select`, `Tabs`, `Modal`, `Drawer`); `mistri check` names it. A menu or a combobox has none an App imports yet: use the native element.
+- Prefer a built-in block; a custom component only for a drawing no block makes, after the gap is shown. Spell every key as the docs do; never guess one. Its parts come from `@mistriwork/mistri/ui` (a page's from `@mistriwork/mistri/page`); charts, the operational controls and pickers, and composite views are `@mistriwork/mistri/charts`, `@mistriwork/mistri/primitives` and `@mistriwork/mistri/views`, Preview at 1.0 (names and props may still change): use one only where `/ui` and `/page` have no part for the job, and say so in the hand-back.
+- A `role=` written by hand in a custom component is almost always a bug: use the shipped primitive (`Dropdown`, `Select`, `Tabs`, `Modal`, `Drawer`); `mistri check` names it. A menu is `DropdownMenu` and a combobox `Combobox`, from `@mistriwork/mistri/primitives`.
 - A whole screen no view draws is a free-form page: `pages/<path>.page.tsx`, `definePage` from `@mistriwork/mistri/page`,
   declaring its `reads`, `commands`, `params` and `loader` (or `loaders`, read by name with `page.useLoader`); a condition is a `where` object, a row's verb a `<CommandButton command row />`; it writes only through those commands, never `fetch`.
 - A branded public site, a flow the person's own React owns, or a route that is not a command takes the general

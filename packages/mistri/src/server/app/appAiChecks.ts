@@ -35,7 +35,7 @@ function textFindings(node: unknown, path: string, seen: WeakSet<object>, out: s
       if (TEXT_KEYS.has(key) && AI_WORD.test(value))
         out.push(
           `${at} says "${value.slice(0, 60)}" [ai-text-bare]: the word AI is the App's to say once; ` +
-            `set ai: { label } and draw <AiMark/> where a page says it, rather than spelling AI in a label`,
+            `set ai: { label } and draw <AiBadge/> where a page says it, rather than spelling AI in a label`,
         );
     } else textFindings(value, at, seen, out);
   }
@@ -49,7 +49,7 @@ export function aiTextWarnings(app: AppDef, commands: BusinessCommandRegistry | 
     if (typeof command.label === 'string' && AI_WORD.test(command.label))
       out.push(
         `command "${id}" is labeled "${command.label.slice(0, 60)}" [ai-text-bare]: the word AI is the App's to say once; ` +
-          `set ai: { label } and draw <AiMark/> where a page says it, rather than spelling AI in a label`,
+          `set ai: { label } and draw <AiBadge/> where a page says it, rather than spelling AI in a label`,
       );
   return out;
 }

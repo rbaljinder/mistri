@@ -73,7 +73,7 @@ The module, `widgets/BinMap.tsx`, draws with `@mistriwork/mistri/ui`.
 ## Write the module
 
 ```tsx
-import { Empty, useFormat, useNavigate, type SectionProps } from '@mistriwork/mistri/ui';
+import { EmptyState, useFormat, useNavigate, type SectionProps } from '@mistriwork/mistri/ui';
 import type { Rows } from '../mistri-schema.d.ts';
 import type { warehouseBins } from '../pages/warehouse.ts';
 
@@ -82,25 +82,25 @@ export default function BinMap({ rows }: SectionProps<typeof warehouseBins, Rows
 }
 ```
 
-`@mistriwork/mistri/ui` is the only mistri module a component imports. It holds:
+Custom components and pages import from six mistri client entry points — `@mistriwork/mistri/ui` (the kit, reads, commands and App hooks), `@mistriwork/mistri/page` (free-form pages: everything in `/ui` plus page blocks and param controls), `@mistriwork/mistri/primitives` (operational controls, pickers, menus and structured editors), `@mistriwork/mistri/charts` (responsive SVG charts), `@mistriwork/mistri/views` (composite product views) and `@mistriwork/mistri/behaviors` (headless drag, calendar, resize and inline-edit behaviors). `@mistriwork/mistri/ui` holds:
 
-- **The kit**: `Card`, `Stack`, `Row`, `Cluster`, `Beside`, `Heading`, `Button`, `Value`, `Tone`, `Meter`, `Stat`, `Sparkline`, `MiniBars`, `Tile`, `Columns`, `Table`, `Items`, `Item`, `Dropdown`, `Segmented`, `SplitListDetail`, `Empty`, `Loaded`, `Skeleton`, `Icon`, `Text` (`<Text tone="muted" size="sm">`: a line of secondary ink, `tone` `default`, `muted` or `danger`), `VisuallyHidden` (words only a screen reader hears, clipped rather than hidden: `<VisuallyHidden>, opens in a new tab</VisuallyHidden>`). `AiMark` is the mark the platform draws on whatever a model made or proposed, with the App's `ai.label` ("AI" unless said): draw it beside a value your component shows as a model's, `<AiMark quiet />` for the small one in a row. `Stat` takes a `delta` (`{ value: 12, good: 'up' }` is "+12" in the good ink, and "-3" with `good: 'down'` too) and an `href` that makes the whole figure a link. A `Meter` is a share of a whole (`value` against `max`, 100 unless said): `ariaLabel` names it where its `label` is not a string (`ariaLabel="Seats taken"`), `valueLabel` is the value as a screen reader says it (`valueLabel="12 of 40 seats"`), and `size="fluid"` stretches the bar across its row or column. `Sparkline` (`values`, four or more) and `MiniBars` (`values`, `labels`, `highlight`) draw in the look's chart ink and tell a screen reader their values. A `Tile` is a card that is one control (`onPress` or `href`, `selected`, `disabled`), with the card's corner and lift rather than a button's. `Stat`'s `delta.against` says what the change is against, after it (`{ value: 12, good: 'up', against: 'vs last month' }` is "+12 vs last month"); its trend line is drawn for the eye and hidden from a screen reader, which hears the figure and the change. `Bars` draws groups as labeled bars against the largest, in the order given (`items`: `{ key, label, value, note? }`, the `note` a quiet second figure such as "4 deals"); each row is a meter a screen reader hears whole, and on a phone the label stands above its bar. A `Card`'s title is an h3; a card that is a section of a page under the platform's h1 says `level={2}` so the outline does not skip a level. `Table` draws each cell as a `Value`, dressed as the App dresses that column; sorting stays yours (`sort`, `onSort`), and `onRowClick` makes the first cell a link. `Button` with an `href` is a link in the button's dress: it opens a new tab, copies as an address, and an address of this App is followed in place. `ButtonLink` from `@mistriwork/ui` is that same link-styled button for code outside the kit; there is no other name for it. The platform's fields (`TextField`, `Select`, `Checkbox`, `Switch`, `Slider`, `YesNo`, `ChoiceCards`, `FileField`) are exported from the same entry. A free-form page's row of verbs at the screen's foot is `<Row foot>`: on a phone a notice stands above it instead of covering it. `<Cluster min="14rem">` lays its children in equal columns at least that wide, as many across as fit and one on a phone, and never scrolls sideways: `<Cluster>{teams.map((team) => <Card key={team.id} title={team.name}>…</Card>)}</Cluster>`.
+- **The kit**: `Card`, `Stack`, `Row`, `Cluster`, `Beside`, `Heading`, `Button`, `Badge`, `Value`, `StatusDot`, `Meter`, `StatCard`, `Sparkline`, `MiniBars`, `BreakdownList`, `Tile`, `Columns`, `Table`, `ItemList`, `ItemRow`, `DescriptionList`, `Dropdown`, `SegmentedControl`, `SplitView`, `EmptyState`, `Loaded`, `Skeleton`, `Icon`, `Text` (`<Text muted size="sm">`: a line of secondary ink; `hierarchy` `default`, `secondary`, `muted` or `subtle`, and `tone` a `Tone`), `VisuallyHidden` (words only a screen reader hears, clipped rather than hidden: `<VisuallyHidden>, opens in a new tab</VisuallyHidden>`). `AiBadge` is the badge the platform draws on whatever a model made or proposed, with the App's `ai.label` ("AI" unless said): draw it beside a value your component shows as a model's, `<AiBadge quiet />` for the small one in a row. `StatCard` takes a `delta` (`{ value: 12, good: 'up', against: 'vs last month' }` is "+12 vs last month" in the good ink, and "-3" with `good: 'down'` too), a `trend` array (drawn as a sparkline for the eye and hidden from a screen reader, which hears the figure and the change), `formatValue`, and an `href` that makes the whole figure a link. A `Meter` is a share of a whole (`value` against `max`, 100 unless said): `ariaLabel` names it where its `label` is not a string (`ariaLabel="Seats taken"`), `formatValue` (with an optional `format` preset, `'number'` or `'percent'`) formats the figure, `valueLabel` is the value as a screen reader says it (`valueLabel="12 of 40 seats"`), and `fluid` stretches the bar across its row or column. `Sparkline` (`data`, `formatValue`) and `MiniBars` (`data`, `labels`, `highlight`, `formatValue`) draw in the look's chart ink and tell a screen reader their values. A `Tile` is a card that is one control (`onClick` or `href`, `selected`, `disabled`), with the card's corner and lift rather than a button's. `BreakdownList` draws groups as labeled bars against the largest, or against `total` with `showPercent`, in the order given (`items`: `{ key, label, value, note? }`, formatted by `formatValue` or `format`, the `note` a quiet second figure such as "4 deals"); each row is a meter a screen reader hears whole, and on a phone the label stands above its bar. A `Card`'s title is an h3; a card that is a section of a page under the platform's h1 says `level={2}` so the outline does not skip a level. `Table` draws each cell as a `Value`, dressed as the App dresses that column; sorting stays yours (`sort`, `onSort`), and `onRowClick` makes the first cell a link. `Button` with an `href` is a link in the button's dress: it opens a new tab, copies as an address, and an address of this App is followed in place. `ButtonLink` from `@mistriwork/mistri/primitives` is that same link-styled button; there is no other name for it. The platform's fields (`TextField`, `Select`, `Checkbox`, `Switch`, `Slider`, `YesNo`, `ChoiceCards`, `FileField`) are exported from the same entry. A free-form page's row of verbs at the screen's foot is `<Row foot>`: on a phone a notice stands above it instead of covering it. `<Cluster min="14rem">` lays its children in equal columns at least that wide, as many across as fit and one on a phone, and never scrolls sideways: `<Cluster>{teams.map((team) => <Card key={team.id} title={team.name}>…</Card>)}</Cluster>`.
 - **Reads**: `useRows`, `useRecord`, `useBreakdown`, `useFile`, all under the reader's grants, row policy and tenant.
   `useFile(resource)` gives a function from a row's key to the picture's address: `<img src={file({ id }, { thumbnail: true })} />`. In a tenant App the file is read on the reader's session first, so the address is `undefined` until it arrives and the component draws again then; draw a placeholder meanwhile.
   Each read answers `isPending` until its first answer and `isFetching` while any answer is on its way. A refresh that fails keeps the last good rows and says so: `isStale` is true and `refreshError` holds the failure. `useRows` reads `limit` rows (20 unless said), and its `page` says `{ limit, hasMore }`; `more()` reads the next page onto the end. `page.total` is there only when the server counted one, never guessed from the rows. Each read is consistent on its own: two reads on one page are two answers, possibly a moment apart, never one snapshot.
 - **Commands**: `useCommand(cmd)` with `available`, `reason`, `run` and `open`; an applied run resolves with the command's `output`. `useAction(id)` is the same handle for a fixed action (a machine's verb, `action(label, { set })`). `useGranted(cmd)` is only whether the reader may run it, the same answer as `useCommand(cmd).granted`.
-- **Inputs**: `run(record, input)` takes only the command's declared inputs, by name. A refusal names the inputs it is about in `fields` (`{ amount: 'Enter an amount of zero or more.' }`): say each beside its control. `useField(cmd, name)` binds one input to a control of your own: its label, `text` as typed, `value` as it is sent, `error` once judged, and `inputProps` for the shell's fields; a `money` input reads what is typed with `parseMoney(text, { currency, locale })`, which answers `{ minor, major }` exactly (a figure past 2^53 stays text) or `{ problem }`. `useOptions(cmd, name)` is a reference input's choices for a picker you draw (`Typeahead` from `@mistriwork/ui` keeps the keyboard): searched and paged as the platform's own picker reads them, the latest text winning, and `resolved` names a pick by its key, `available: false` where the reader has lost access to it.
+- **Inputs**: `run(record, input)` takes only the command's declared inputs, by name. A refusal names the inputs it is about in `fields` (`{ amount: 'Enter an amount of zero or more.' }`): say each beside its control. `useField(cmd, name)` binds one input to a control of your own: its label, `text` as typed, `value` as it is sent, `error` once judged, and `inputProps` for the shell's fields; a `money` input reads what is typed with `parseMoney(text, { currency, locale })`, which answers `{ minor, major }` exactly (a figure past 2^53 stays text) or `{ problem }`. `useOptions(cmd, name)` is a reference input's choices for a picker you draw (`Typeahead` from `@mistriwork/mistri/primitives` keeps the keyboard): searched and paged as the platform's own picker reads them, the latest text winning, and `resolved` names a pick by its key, `available: false` where the reader has lost access to it.
 - **Optional reads**: a read the reader may not be granted, such as a part of a page that another source serves, says `optional: true` (`useRecord(resource, key, show, { optional: true })`) and answers `refused: boolean`, typed only then. A 401 or 403 gives `refused: true` and `isError: false`, with no toast and no error boundary, so the page draws its own note; a 500 stays an error.
 - **Choices of a resource**: `useOptions(resource, { where })` is the same picker for a resource the page declares in `reads`, labeled by its title column (`useOptions('region')`), under the reader's row policy. A resource the page does not read is refused as any other read is.
 - **Addresses**: `useHref()` gives `home()` (the App's front door, wherever it is mounted), `signIn()`, `view(key, params?)`, `record(view, key, { tab? })` and `page(path, params?)`, the App's canonical addresses typed against its views and pages (`<a href={href.signIn()}>Sign in</a>`), so a page never writes a path by hand.
-- **Saying something**: `useNotice()` returns `notice({ text, tone })`, the platform's own notice (`tone` is `ok` or `error`), the one a refused verb is said in, for a page that refuses something of its own.
+- **Saying something**: `useNotice()` returns `notice({ text, tone })`, the platform's own notice (`tone` is a `Tone`: `'neutral'`, `'info'`, `'good'`, `'warning'`, `'critical'` or `'accent'`), the one a refused verb is said in, for a page that refuses something of its own.
 - **Opening a page**: `useNavigate().openPage(name, params?)` moves to one of the App's custom pages in place, with no reload, through the shell's router and the page's canonical address (`openPage('schedule', { day: '2026-11-09' })`), and `pageHref(name, params?)` gives that address for an `<a href>` whose plain click you hand to `openPage`. A page the App has no address for throws.
 - **Quiet runs**: `run(record, input, { quiet: true })` returns a refusal as ever but shows no notice in the shell, for a page that says it in place: `const outcome = await book.run(slot, input, { quiet: true }); if (outcome.status === 'refused') setProblem(outcome.message);`.
 - **Pointer position**: `layoutPoint(event, element)` answers `{ x, y }`, where the pointer is inside the element in the layout pixels the page styles in, however the reader's density zoom is set: `const { y } = layoutPoint(event, column.current)`. Use it instead of `getBoundingClientRect`, which `check` warns about as `component-ruler`.
-- **Widgets**: a list to choose from, a menu, tabs or a dialog is a primitive's, not a `role=` written by hand: the role promises keys, focus and states the primitive keeps. `check` warns about a hand-written `role="listbox"`, `option`, `menu`, `menuitem`, `tab`, `tablist`, `dialog` or `combobox` attribute as `component-role`, naming the primitive to draw instead (a menu and a combobox have none an App can import yet: prefer the native element).
-- **The rest**: `useNavigate`, `useComposer` (fills the page's conversation box, never sends), `useViewer` (`signedIn`, `account`, and `roles`, the roles the reader holds here), `useFormat`, `useMessage`, `useLook`, `useToken`, `useFlags`.
+- **Widgets**: a list to choose from, a menu, tabs or a dialog is a primitive's, not a `role=` written by hand: the role promises keys, focus and states the primitive keeps. `check` warns about a hand-written `role="listbox"`, `option`, `menu`, `menuitem`, `tab`, `tablist`, `dialog` or `combobox` attribute as `component-role`, naming the primitive to draw instead (`@mistriwork/mistri/primitives` provides `DropdownMenu` and `Combobox` alongside `Select`, `Listbox`, `Tabs` and `Modal`).
+- **The rest**: `useNavigate`, `useComposer` (fills the page's conversation box, never sends), `useViewer` (`signedIn`, `account`, and `roles`, the roles the reader holds here), `useAccountProfile` (`profile`, `isPending`, `error`, `save`, `changeEmail` over `/api/auth/profile` for the signed-in reader's name and email), `useFormat`, `useMessage`, `useLook`, `useToken`, `useFlags`.
 
-`<Loaded query={rows}>{(data) => …}</Loaded>` draws a read's three other states as the platform does: a skeleton while it loads (`loading={<Skeleton lines={3} />}` draws a placeholder shaped like the drawing instead of the bar, so nothing under it moves when it lands; `Skeleton` takes `height`, `width` and `lines`), `empty` (or "Nothing here yet."; `empty={null}` draws nothing) for no rows, and the error with Try again. `useFormat().money(value, { currency, minor, whole, compact })` says a figure as a `money` column does, exactly, from a decimal string too; `dateTime(value, { timezone: 'America/Chicago' })` says it in that zone and `{ style: 'short' }` in the fewest characters ("3/5/26, 2:30 PM"), and `timezone` is the App's own (`ui.timezone`), for reckoning "today" as the App's day.
+`<Loaded query={rows}>{(data) => …}</Loaded>` draws a read's three other states as the platform does: a skeleton while it loads (`loading={<Skeleton lines={3} />}` draws a placeholder shaped like the drawing instead of the bar, so nothing under it moves when it lands; `Skeleton` takes `height`, `width` and `lines`), `empty` (`{ title, body?, action? }`, or "Nothing here yet."; `empty={null}` draws nothing) for no rows, and the error with Try again. `useFormat().money(value, { currency, minor, whole, compact })` says a figure as a `money` column does, exactly, from a decimal string too; `dateTime(value, { timezone: 'America/Chicago' })` says it in that zone and `{ style: 'short' }` in the fewest characters ("3/5/26, 2:30 PM"), and `timezone` is the App's own (`ui.timezone`), for reckoning "today" as the App's day.
 
 ### Run a command
 
@@ -109,14 +109,14 @@ const close = useCommand('closeTicket');
 const can = close.available(ticket); // undefined while the server is asked
 {
   can !== false && (
-    <Button busy={can === undefined} onClick={() => close.run(ticket, { outcome: 'fixed' })}>
+    <Button loading={can === undefined} onClick={() => close.run(ticket, { outcome: 'fixed' })}>
       Close
     </Button>
   );
 }
 ```
 
-- Gate a button on `available(record)`, not `granted`: `granted` is the role, `available` adds the command's `when` for this record. While it is undefined, keep the button and set `busy`, never `disabled`: a disabled button drops the reader's focus.
+- Gate a button on `available(record)`, not `granted`: `granted` is the role, `available` adds the command's `when` for this record. While it is undefined, keep the button and set `loading`, never `disabled`: a disabled button drops the reader's focus.
 - `run` resolves with `{ status }`: `applied`, `refused` (in the server's words), `closed` when its form was closed unsent, or `unknown` when the answer was lost. On `unknown`, call `check()` before sending again: it asks under the same key, so the run applies at most once.
 - An applied run's `output` is typed by the command's declared `output` once `mistri check` has written `mistri-commands.d.ts`, so `done.output.assigned` needs no cast. A command that declares no `output` gives `undefined`, and a public command run from a public page gives `{ reference, receipt }`.
 - One key covers each run. For a command that names no record, or a public page's, a run that must survive a reload takes `{ attempt }`: a `crypto.randomUUID()` made once per intent and kept (in the address, say). The same attempt sent again is the same run.
@@ -172,43 +172,43 @@ A breakdown by a period (`by: 'day created_at'`) answers only the periods that h
 
 ### Rows, a rail and the dark ground
 
-`Items` is a list of rows with no head row, where `Table` always draws one. Each `Item` has a `title`, and may have a `lead` (an icon, an avatar, a time, a `Value`), a `tone` (a dot in the lead column, or, beside a `lead`, the lead in that tone's ink), one quiet `note` under the title and an `action` at the row's end. With `href` or `onClick` the title is the row's one link or button, the whole row answers a pointer as a table's rows do, and a click inside `action` never opens it. On a phone the action stays on the row and the note wraps. The lead is one column the rows share, as wide as its widest, so times and marks line up down the list. `empty` is drawn when there are no rows; inside a `Card` it is flush with the card, not a box in a box.
+`ItemList` is a list of rows with no head row, where `Table` always draws one. Each `ItemRow` has a `title`, and may have a `leading` slot (an icon, an avatar, a time, a `Value`), a `tone` (a dot in the leading column, or, beside `leading`, the slot in that tone's ink), one quiet `description` under the title and `actions` at the row's end. With `href` or `onClick` the title is the row's one link or button, the whole row answers a pointer as a table's rows do, and a click inside `actions` never opens it. On a phone the action stays on the row and the description wraps. The leading slot is one column the rows share, as wide as its widest, so times and marks line up down the list. `empty` (`{ title, body?, action? }` or a node) is drawn when there are no rows; inside a `Card` it is flush with the card, not a box in a box.
 
-A long list in runs (overdue, today, later) takes `groups`: `{ title, count?, items }` each, `key` optional. Each run's head holds the top of the room while its own rows pass beneath it, and the next run's head takes its place; the lead column is still one width down every run, and a run with no rows draws no head. A screen reader hears a list of lists, each named by its head.
+A long list in runs (overdue, today, later) takes `groups`: `{ title, count?, items }` each, `key` optional. Each run's head holds the top of the room while its own rows pass beneath it, and the next run's head takes its place; the leading column is still one width down every run, and a run with no rows draws no head. A screen reader hears a list of lists, each named by its head.
 
 ```tsx
-<Items
-  label="Work"
+<ItemList
+  ariaLabel="Work"
   groups={[
-    { title: 'Overdue', count: overdue.length, items: overdue.map((task) => <Item key={task.id} title={task.title} note={task.due} />) },
-    { title: 'Today', count: today.length, items: today.map((task) => <Item key={task.id} title={task.title} lead={task.time} />) },
+    { title: 'Overdue', count: overdue.length, items: overdue.map((task) => <ItemRow key={task.id} title={task.title} description={task.due} />) },
+    { title: 'Today', count: today.length, items: today.map((task) => <ItemRow key={task.id} title={task.title} leading={task.time} />) },
   ]}
 />
 ```
 
 ```tsx
-<Items label="Open work" empty={<Empty title="Nothing open" />}>
+<ItemList ariaLabel="Open work" empty={{ title: 'Nothing open' }}>
   {tasks.map((task) => (
-    <Item key={task.id} title={task.title} note={task.due} onClick={() => open(task)} action={<Button intent="quiet">Done</Button>} />
+    <ItemRow key={task.id} title={task.title} description={task.due} onClick={() => open(task)} actions={<Button variant="ghost">Done</Button>} />
   ))}
-</Items>
+</ItemList>
 ```
 
-A `Card` takes a `count` (a quiet number beside the title) and an `action` (right-aligned in the title row): `<Card title="Open work" count={tasks.length} action={<Button intent="quiet">Add</Button>}>`. With neither, the title is the heading alone. `description` is one quiet line under the title (what the part holds), and `tone` (`good`, `warn`, `bad`, `info`) says the title in that status ink.
+A `Card` takes a `count` (a quiet number beside the title) and an `action` (right-aligned in the title row): `<Card title="Open work" count={tasks.length} action={<Button variant="ghost">Add</Button>}>`. With neither, the title is the heading alone. `description` is one quiet line under the title (what the part holds), and `tone` (`good`, `warning`, `critical`, `info`, `accent`, `neutral`) says the title in that status ink.
 
 `Beside` is a main column beside a rail. The rail is `railWidth` wide (`'20rem'` by default, never past half the box) on the `side` you name (`'end'` by default). Where its own box is under 40rem wide (or under `stackBelow`, a CSS length such as `'56rem'`) it stacks, the main first, and it never scrolls sideways: `<Beside rail={<Card title="Facts">…</Card>}>…</Beside>`.
 
-`<Card ground="nav">`, or any element with `data-ground="nav"`, puts what is inside on the look's navigation ground: the kit's inks, hairlines and surfaces take the nav's own, so a `Stat`, `Value`, `Meter`, `Table`, `Items`, `Segmented` or `Empty` there reads in every look, light and dark, with no recipe of its own.
+`<Card ground="nav">`, or any element with `data-ground="nav"`, puts what is inside on the look's navigation ground: the kit's inks, hairlines and surfaces take the nav's own, so a `StatCard`, `Value`, `Meter`, `Table`, `ItemList`, `SegmentedControl` or `EmptyState` there reads in every look, light and dark, with no recipe of its own.
 
-### Segmented, Tabs or Select
+### SegmentedControl, Tabs or Select
 
 | Control | Use it to | Size of the set |
 | --- | --- | --- |
-| `Segmented` | Pick a value or filter within one view; the content below it is the same view, narrowed | 2 to 5 options |
+| `SegmentedControl` | Pick a value or filter within one view; the content below it is the same view, narrowed | 2 to 5 options |
 | `Tabs` | Switch between sibling panels of content, such as a record's related lists or sections | A handful of panels, each its own content |
 | `Select` | Choose from a big or open-ended set | Many options, or a list that grows |
 
-A record page with sibling panels uses `Tabs` (or `listTabs`), never `Segmented`. A page's `<Choose count>` is the exception to Segmented's five: it draws up to eight counted options as the list's own tab row at a desk, the listbox past that, and the phone's own picker.
+A record page with sibling panels uses `Tabs` (or `listTabs`), never `SegmentedControl`. A page's `<Choose count>` is the exception to SegmentedControl's five: it draws up to eight counted options as the list's own tab row at a desk, the listbox past that, and the phone's own picker.
 
 ### An identity cell
 
@@ -216,7 +216,7 @@ A column that names a row with a second line under it (a record id with a long e
 
 ```tsx
 <Table
-  label="Orders"
+  ariaLabel="Orders"
   rows={rows}
   onRowClick={(row) => open(row.id)}
   columns={[{ key: 'id', label: 'Order', secondary: 'externalId', copy: true }, { key: 'status', label: 'Status' }]}
@@ -233,7 +233,7 @@ A column that names a row with a second line under it (a record id with a long e
 
 `<Person name="Ada Stone" secondary="Acme, buyer" src={photo} href="/compass/contacts/7" size="md">` is a person as a line of the page: their disc (the initials until there is a picture), their name and one quieter line. With `href` the name is the link. `size` is `sm`, `md` or `lg`; on a phone the disc is the small one and the second line wraps.
 
-`<Details resource="leads" row={lead} fields={['status', 'owner', { label: 'Age', value: age }]} columns={2}>` lists a record's facts as terms and values. A column named by string takes its label from the App and draws its value as `Value` does; a `{ label, value }` pair is one the page worked out. It is the record page's own field grid, so a look dresses both alike, but a long value wraps instead of clipping. `columns` (1 or 2) fixes the count at a desk; a phone has one.
+`<DescriptionList resource="lead" row={lead} fields={['status', 'owner', { label: 'Age', value: age }]} columns={2}>` lists a record's facts as terms and values. A column named by string takes its label from the App and draws its value as `Value` does; a `{ label, value }` pair is one the page worked out. It is the record page's own field grid, so a look dresses both alike, but a long value wraps instead of clipping. `columns` (1, 2 or 3) fixes the count at a desk; a phone has one.
 
 ### Which part for which job
 
@@ -246,9 +246,9 @@ Reach for a part before writing markup; each is token-only, so every look and th
 | A status, as the look says it (dot, pill, pill and dot, or quiet) | `Value`, or a `Table` column `{ resource: 'lead', column: 'status' }`; the recipe is the theme's |
 | A figure over the reader's window, against the one before | `<Metric title="Won" measure="sum amount" over="close_date" window="window" previous spark />` |
 | Groups as labeled bars, in the column's order | `<Breakdown title="Pipeline" by="stage" measure="sum amount" also="count" shape="bars" />` |
-| Bars from numbers a page worked out | `<Bars label="By owner" format="money" items={[{ key, label, value, note }]} />` |
+| Bars from numbers a page worked out | `<BreakdownList ariaLabel="By owner" format="money" items={[{ key, label, value, note }]} />` |
 | Someone as a face and a name | `<Person name="Ada Stone" secondary="Acme" href={href} />` |
-| A record's facts as terms and values | `<Details resource="lead" row={lead} fields={['status', { label: 'Age', value: age }]} />` |
+| A record's facts as terms and values | `<DescriptionList resource="lead" row={lead} fields={['status', { label: 'Age', value: age }]} />` |
 | What happened with a record, across tables | `<Timeline from="lead" record={lead} />`, drawing the streams the record's page declares (`stream(…, { about })` reads another record's rows, such as the contact a lead became) |
 | A verb offered only where it applies | `<ActionButton action="markLost" row={lead} unavailable="hide" />`; the default draws it held |
 | Periods with no rows as zero | `<Chart by="week closed_at" fill="window" />`, or `fillBuckets` over rows of your own |
@@ -258,7 +258,7 @@ A page that draws its own head (`head: false`) keeps the space a head would stan
 
 ### Types, values and styles
 
-- A status `Value` or `Tone` is drawn by the look's status recipe: `dot`, `pill`, `pill-dot` or `quiet`. An App that wants soft badges everywhere says so once, `defineTheme({ recipes: { status: 'pill' } })`, never per page. `Tone` takes the display rule's tone names.
+- A status `Value` or `StatusDot` is drawn by the look's status recipe: `dot`, `pill`, `pill-dot` or `quiet`. An App that wants soft badges everywhere says so once, `defineTheme({ recipes: { status: 'pill' } })`, never per page. `StatusDot` takes the display rule's tone names.
 - `mistri check` writes `mistri-components.d.ts`: a props type per component, named from its id (`sales-summary` is `SalesSummaryProps`), from its declared props, reads, figures and record fields.
 - A value component may export `label(value)`, the word each value of the column's vocabulary is said as, in breakdowns, legends, filter chips and the CSV export. It is synchronous and returns at most 80 characters; declared `values` win.
 - Style with the tokens (`var(--surface)`, `var(--ink)`, `var(--accent)`, `var(--space-1)` to `var(--space-8)`, `var(--text-xs)` to `var(--text-xl)`…) and classes named `c-<component-id>-…`. `tokens` and the `Token` type list them all; `check` warns about a `var(--…)` that is none of them and names the nearest. An imported stylesheet is scoped to the component, including one a module reached through `import()` imports.
@@ -287,7 +287,7 @@ const page = definePage({
 
 See it in the sample (`examples/apps/ladle/pages/check-in.page.tsx:24`).
 
-- The path is the file's name, and the address: `/check-in?class=2`. `home` may name a page by its path.
+- The path is the file's name, and the address: `/check-in?class=2`. `home` may name a page by its path. A page may sit in a folder, which joins its name with a dash: `pages/ops/dispatch.page.tsx` is the page `ops-dispatch` at `/ops-dispatch`, and a second file that comes to the same key (`pages/ops-dispatch.page.tsx`) is refused (`[page-file]`).
 - A page's path is its address alone: a view with the same key is refused (`[page-path]`), and the page never replaces it. Rename the file, or remove the view and let the page take its place.
 - `nav: { group }` is the nav group the page stands in. In a nav split into workspaces, a list stands in each: `nav: { group: ['sales', 'support'] }`. A group the nav lacks, or one named twice, is refused (`[page-nav]`).
 - A page stands where it asks (`nav: { group, position }`), or where the App's own `nav` names it by its path, like a view: `nav: ['tickets', 'check-in', navGroup('desk', 'Desk', ['queue', 'tally'])]` puts the pages `check-in` second in the menu and `tally` last in the Desk group, each at its declared place among its siblings (`mistri check` writes its path into `mistri-commands.d.ts` so the types know it, and an id that is no view and no page is refused by name). Say it in one place: a page the nav names takes no `nav: { group, position }` or `nav: false` of its own (`[page-nav]`). `nav: false` keeps it out of the menu, and a `public: true` page that says nothing of `nav` stays off the signed-in menu too (it is the signed-out door's); say `nav: {}` or `nav: { group }` to put it in both. A `nav: false` page is still served at its address; another page reaches it with `pageHref('<key>')` or `openPage('<key>')`, and `mistri check` warns ([`page-unlinked`](/docs/check-codes/#page-unlinked)) when no source links to it.
@@ -296,12 +296,12 @@ See it in the sample (`examples/apps/ladle/pages/check-in.page.tsx:24`).
 - A page that must stay current needs `live: true` on the App (live sync is off unless the App asks; `dev` says so), or its own timer that calls `refresh()` for its loader and each read's `refetch()` (`page.useRows(…).refetch()`) for the rows it draws.
 - `icon` is one of the built-in names, and a misspelled one is a type error in the page's file.
 - `page.useRows`, `useRecord`, `useBreakdown` and `useFile` read only its `reads`; `page.useCommand` runs only its `commands` and `page.useAction` only its `actions`. Anything else is a type error, a `[page-undeclared]` problem in `check`, and refused by the server. A `show`, `query` or `sort` path across a reference (`customer_id.name`) reads the table it lands on, so that table is in `reads` too: the types allow the path, and `check` refuses it when the path is written in place, `as const`, or in a `const` at the top of the module.
-- `params` names the address's parameters and their kind: `'id'`, `'text'`, `'date'`, `'date-range'` (`2026-11-01..2026-11-08`, either end open) or a list of its values (`view: ['list', 'board']`); a plain list (`params: ['class']`) is text. `page.useParam('class')` keeps state in the address and hands back a value already of its kind: an id is a number, past 2^53 its digits (a param named for a resource the page reads, with a text key, as a tenant's tables have, holds URL-safe text instead: `params: { vehicle: 'id' }` with `reads: ['vehicle']`); a day not on the calendar, or a value not in the list, is no value.
-- A read's rows (`useRows`, and a `List`'s) are typed from its `show` and the schema, plus the resource's key column or columns, which both always carry: a key column (`row.id` where the key is `id`) is there, and typed, without `show` naming it. Any other column `show` leaves out is a type error. Name the key in `show` only to draw it. A `List` that takes its resource from an enclosing `Scope` still carries the key, but its type cannot name the resource, so the key is not typed there: give the `List` its own `from` to type it. `where` is its condition as an object keyed by the columns (`{ status: ['booked', 'waiting'], party_size: { gt: 1 }, paid_on: null }`), the same condition the query language says; the server refuses a column or operator it does not know. `query` still takes the language's text or a segment's name.
-- `<Scope from where>` says a condition once: every block inside reads under it, and a Scope inside another narrows it. `<List from where show sort limit empty>{(row) => …}</List>` draws a row each, says its loading, empty, failed and refused states, and "Showing the first 20." when its `limit` cut the rows short.
+- `params` names the address's parameters and their kind: `'id'`, `'text'`, `'date'`, `'date-range'` (`2026-11-01..2026-11-08`, either end open) or a list of its values (`view: ['list', 'board']`); a plain list (`params: ['class']`) is text. `const [value, setValue] = page.useParam('class')` keeps state in the address and hands back `[value, setValue]`, the value already of its kind: an id is a number, past 2^53 its digits (a param named for a resource the page reads, with a text key, as a tenant's tables have, holds URL-safe text instead: `params: { vehicle: 'id' }` with `reads: ['vehicle']`); a day not on the calendar, or a value not in the list, is no value.
+- A read's rows (`useRows`, and a `RecordList`'s) are typed from its `show` and the schema, plus the resource's key column or columns, which both always carry: a key column (`row.id` where the key is `id`) is there, and typed, without `show` naming it. Any other column `show` leaves out is a type error. Name the key in `show` only to draw it. A `RecordList` that takes its resource from an enclosing `Scope` still carries the key, but its type cannot name the resource, so the key is not typed there: give the `RecordList` its own `from` to type it. `where` is its condition as an object keyed by the columns (`{ status: ['booked', 'waiting'], party_size: { gt: 1 }, paid_on: null }`), the same condition the query language says; the server refuses a column or operator it does not know. `query` still takes the language's text or a segment's name.
+- `<Scope from where>` says a condition once: every block inside reads under it, and a Scope inside another narrows it. `<RecordList from where show sort limit empty>{(row) => …}</RecordList>` draws a row each, says its loading, empty, failed and refused states, and "Showing the first 20." when its `limit` cut the rows short.
 - `forms` names the form views the page opens (a view whose `command` makes it a form). `page.useForm('apply')` reads the form's draft as the form itself resumes it (`dirty`, `saved`, `step`, `expiresAt`), so the page can say "Continue your application"; `open(input, { at })` opens it filled with its command's inputs (typed by name) and, for a draft, at a step it has reached; `goTo(step)` and `startOver()` drive the form itself, and `outcome` says how it last closed. The server still judges every submit.
 - `<CommandButton command row />` and `<ActionButton action row />` (a command that names no row, `targets: 'none'`, takes none: `<CommandButton command />`) are hidden where the reader is not granted them, held where the row's state does not allow them, busy while they run, named with the row's title ("Check in Morgan Lee"), and say the outcome aloud; `done` words it.
-- `@mistriwork/mistri/page` holds everything `@mistriwork/mistri/ui` does, and the shell's own `Modal`, `Drawer`, `Popover`, `Tooltip`, `TextField`, `TextArea` (a box of several lines in the same frame), `DateField`, `DateNav` (previous, Today, next and the date field for a day or a week at a time: `step="week"`, `skip` for days not to land on, and `T` goes to today unless a box is being typed in), `Select`, `FileField` (the browser's file picker, handing the page the chosen `File` or null; with `multiple`, a `File[]` in and out), `Choices`, `Switch`, `Slider`, `Pagination` and `Avatar`, so a page needs one import.
+- `@mistriwork/mistri/page` holds everything `@mistriwork/mistri/ui` does, plus the shell's own `Modal`, `Drawer`, `Popover`, `Tooltip`, `TextField`, `TextArea` (a box of several lines in the same frame), `DateField`, `DateNav` (previous, Today, next and the date field for a day or a week at a time: `step="week"`, `skip` for days not to land on, and `T` goes to today unless a box is being typed in), `Select`, `FileField` (the browser's file picker, handing the page the chosen `File` or null; with `multiple`, a `File[]` in and out), `Choices`, `Switch`, `Slider`, `Pagination` and `Avatar`. Composite views (`@mistriwork/mistri/views`), SVG charts (`@mistriwork/mistri/charts`), operational controls (`@mistriwork/mistri/primitives`) and headless behaviors (`@mistriwork/mistri/behaviors`), all Preview at 1.0, are shared once across the shell with no duplicate CSS or view code per page.
 - A role is offered the page when it is granted every read (`roles` narrows it; `public: true` opens it within `auth.public`). `useCommand(…).granted` is false for a command the role lacks; draw its button where `available(record)` is not false. To ask whether the reader may run a command the page does not run, as an entry shown only to a role that may use it, call `useGranted(cmd)`: it writes nothing, so the command need not be in `commands`. A service role is offered a page only where the page names it.
 - A `public: true` page may name `public: true` commands, and a signed-out visitor runs them through the page's own door. That door asks for the page's ticket, takes a request from the page's own origin only (never from a host that embeds it), and holds the run to the public form's rules. `run(record, input, { challenge })` passes a human check's token where `auth.challenge` names one. The applied answer's `output` is `{ reference, receipt }`, never the input, and its `message` the command's own words or else a thank-you naming the reference: show it, and `output.reference` beside it where the visitor needs it and the command's words leave it out, or go on with `useNavigate()` to a page of your own. A lost answer is `unknown`, and `check({ challenge })` asks again under the same submission. On a tenant App the run lands where its visitor's address places it, through [public intake](/docs/tenant-apps/#public-intake), which says what such a page may run.
 - `authority.lock` records which pages are public, the public commands each runs, and which load; what a signed-in page reads and runs is the roles' grants, which the lock already records. `<CommandForm command="…" />` is a command's own dialog behind a button.
@@ -341,14 +341,14 @@ async load({ db }) {
 The platform's sections are components of `@mistriwork/mistri/page`, each taking its DSL helper's words as props and `from` for its table, one the page reads (or a `Scope`'s), and `where` beside `query`. Each loads when a page first draws it.
 
 ```tsx
-<Grid>
+<PageGrid>
   <Metric title="Open" from="ticket" where={{ status: 'open' }} width="third" />
   <Chart title="Opened" from="ticket" by="month opened_on" width="two-thirds" />
   <Panel title="This record" width="half">
     <RecordCard from="ticket" record={{ id: 7 }} />
   </Panel>
   <Tabs param="tab" tabs={[{ key: 'open', label: 'Open', content: <Rows title="Open" from="ticket" where={{ status: 'open' }} /> }]} />
-</Grid>
+</PageGrid>
 ```
 
 - `<Rows title from where query show sort limit />`: a dashboard's `rows()`.
@@ -358,9 +358,9 @@ The platform's sections are components of `@mistriwork/mistri/page`, each taking
 - `<RecordCard from record show />`: the record as its page shows it, its name and verbs over its fields.
 - `<Timeline from record />`: the record page's timeline.
 - `<Tree from parent primary />` and `<Gantt from start end primary />`: a list's `tree()` and `gantt()`.
-- `<Board from by … />`, `<Calendar from date … />`, `<Gallery from image … />` and `<Split from row … />`: a list's `board()`, `calendar()`, `cards()` with an `image`, and `split()`; see [Lists as blocks](#lists-as-blocks).
+- `<Board from by … />`, `<Calendar from date … />`, `<Gallery from image … />` and `<RecordSplit from row … />`: a list's `board()`, `calendar()`, `cards()` with an `image`, and `split()`; see [Lists as blocks](#lists-as-blocks).
 - `<Assistant />`: the App's assistant, where it declares one.
-- `<Grid>`, `<Panel title width>` and `<Tabs tabs param>`: the layout, with `width` `full`, `half`, `third` or `two-thirds`.
+- `<PageGrid>`, `<Panel title width>` and `<Tabs tabs param>`: the layout, with `width` `full`, `half`, `third` or `two-thirds`.
 - `<PageHeader title description actions back />`: the head for a page that sets `head: false` and draws its own, in the platform's head markup so it reads like every other page's in every theme. `actions` is the page's verbs at the head's far end (typically `<CommandForm>` buttons), `back` is `{ label, href }`, an address of this App followed in place. It draws an `h2`: the page's one `h1` is the platform's.
 
 A word a block does not take, or a resource the page does not read, stands as a problem note in the block's place.
@@ -375,13 +375,13 @@ A list's presentation is a block too, drawn by the same room the list views use,
 <Board from="ticket" by="status" primary="title" where={{ owner_id: owner }} move={['advance']} />
 <Calendar from="class_session" date="starts_at" primary="title" lines={['room_id']} />
 <Gallery from="vehicle" image="photo_url" primary="title" value="price" />
-<Split from="ticket" row={{ primary: 'title', lines: ['unit_id'] }} detail={['title', 'status']} param="ticket" />
+<RecordSplit from="ticket" row={{ primary: 'title', lines: ['unit_id'] }} detail={['title', 'status']} param="ticket" />
 ```
 
 - `<Board>` moves a card only with a command or fixed action the page declares (`commands`, `actions`); `move` narrows which. A drop runs it through the command pipeline with the same rules, refusals and card placement as a list's board, and a board the page declares no move for is read. `move` names something the page does not declare, and the block stands as a problem note.
 - `<Calendar>` and `<Gallery>` are read; a card or a day opens its record.
 - `<Gallery>`'s `image` is a column holding an image address, or a related file resource's first file, as a list's cards take it: `image={{ from: 'product_photo', whose: 'product_id', sort: 'position' }}`.
-- `<Split>` lists the rows in a queue beside the picked record's own page. `param` keeps the pick in a page param (one key column), so Back and a link keep it; without it the block holds the pick itself.
+- `<RecordSplit>` lists the rows in a queue beside the picked record's own page. `param` keeps the pick in a page param (one key column), so Back and a link keep it; without it the block holds the pick itself.
 
 Lintel's delivery board adds the month the deliveries fell in with a `<Calendar>` over the read the page already holds:
 
@@ -427,7 +427,7 @@ function Masthead() {
 
 ### The tenant's team
 
-`useTeam()` is the current tenant's team: `{ members, invitations, roles, canManage, loading, error, invite, changeRole, remove, reissue, cancel }`. A member is `{ id, name, email, role, you }`, an invitation `{ id, email, role, expiresAt }`; `roles` are the roles the reader may place people in. Each action returns a promise and the team is read again when it settles, so a list drawn from `members` stays current. Outside a tenant App it is an empty team with `canManage: false`.
+`useTeam()` is the current tenant's team: `{ members, invitations, roles, canManage, isPending, error, invite, changeRole, remove, reissue, cancel }`. A member is `{ id, name, email, role, you }`, an invitation `{ id, email, role, expiresAt }`; `roles` are the roles the reader may place people in. Each action returns a promise and the team is read again when it settles, so a list drawn from `members` stays current. Outside a tenant App it is an empty team with `canManage: false`.
 
 It is a view over the routes the shell's own account dialogs use, so the reader's grant is exactly what those routes enforce: administration (`/api/tenant/administration/…`: `memberships` lists a tenant's members by the operation they may be changed with, `execute` replaces or revokes a membership) and invitations (`/api/tenant/invitations/…`: `targets`, `list`, and `execute` to issue, reissue or revoke), each under the signed-in account's own session context. Member and invitation rows carry the account's name and address, said from the sign-in store. `canManage` is true when the reader holds any of those grants on this tenant; the server still judges every request. `invite` and `reissue` resolve with the one-time `token` the invitee is handed, where the server returned one.
 
@@ -445,7 +445,7 @@ function Team() {
       ))}
       {team.canManage && (
         <Row>
-          <TextField label="Email" value={email} onChange={setEmail} />
+          <TextField label="Email" value={email} onValueChange={setEmail} />
           <Button onClick={() => team.invite(email, team.roles[0])}>Invite</Button>
         </Row>
       )}
@@ -456,7 +456,7 @@ function Team() {
 
 ### Who read a record
 
-`useReadAudit(filters)` is the organization's read audit (`audit: { reads: true }` on a resource): `{ reads, next, more, loading, error }`, newest first. A line is `{ id, at, actor, person, roles, membership, resource, route, command, kind, record, count }`; `filters` are `actor`, `resource`, `record`, `since`, `until` and `before` (a line's id). `more()` reads the page below onto the end of `reads`, and `next` is absent once the last line is read. It reads the route the Settings Reads room reads, so its gate is that room's: the tenant's admins, the tenant from the session. Anyone else gets the route's refusal as `error` and no lines, so check `error` before drawing an empty list as "nobody". Outside a tenant App it is empty.
+`useReadAudit(filters)` is the organization's read audit (`audit: { reads: true }` on a resource): `{ reads, next, more, isPending, error }`, newest first. A line is `{ id, at, actor, person, roles, membership, resource, route, command, kind, record, count }`; `filters` are `actor`, `resource`, `record`, `since`, `until` and `before` (a line's id). `more()` reads the page below onto the end of `reads`, and `next` is absent once the last line is read. It reads the route the Settings Reads room reads, so its gate is that room's: the tenant's admins, the tenant from the session. Anyone else gets the route's refusal as `error` and no lines, so check `error` before drawing an empty list as "nobody". Outside a tenant App it is empty.
 
 ```tsx
 function SeenBy({ patient }: { patient: { id: number } }) {
@@ -515,7 +515,7 @@ function Pipeline(): ReactNode {
 }
 ```
 
-- The folder names a list view the App declares (its table is the record's), and `[id]` is the record's key, whatever its columns are called. The file's name is the tab's word in the address: lowercase and dashed, and not `new` or `edit`. A page file in any other folder is refused (`[page-file]`).
+- The folder names a list view the App declares (its table is the record's), and `[id]` is the record's key, whatever its columns are called. The file's name is the tab's word in the address: lowercase and dashed, and not `new` or `edit`. A page file under any other bracketed folder is refused (`[page-file]`); a folder with no brackets only groups pages, its name joined to the page's with a dash.
 - `page.useRecordKey('account')` is the key of the record the tab is drawn on, typed by the table's primary key: `{ readonly id: number }`, every column of a composite key, an id past 2^53 as its digits. It is the key, not the row: `page.useRecord('account', page.useRecordKey('account'))` reads the row when the page wants its fields. Naming another resource, or calling it on a page that is not a tab, throws.
 - `reads` includes the record's own resource. The tab is drawn for a role granted every read, as a page is offered; a role that may read the account but not its opportunities sees the account without the tab.
 - A tab's word is one word, one tab: a word its record's page already has (a related list's title, a section's `tab`, `history`) is refused (`[page-tab]`), as is a file whose key `<view>-<tab>` is also a page's path. A tab is drawn on its table's record page from every list view, so the file's list view names only the resource it reads.
@@ -558,7 +558,7 @@ const page = definePage({
 - Type by role, not by weight: `var(--type-display)`, `var(--type-list-title)` and `var(--type-record-title)` for the page's headings, `var(--heading-weight)`, and the `--text-xs` to `--text-xl` steps. Each look sets them, so the component follows it.
 - Check it in grayscale in two distinct looks. Hierarchy should hold without hue.
 - An App's own composition variants follow `useLook()` (`look`, `preset`, `mode`, `density`), not a prop of your own.
-- A button waiting on the server is `busy`, never `disabled`.
+- A button waiting on the server is `loading`, never `disabled`.
 - What the reader moves, walks or edits in place (a list to order, cards carried between lanes, a month of days) is built on [the behaviors](/docs/behaviors/), which answer the keyboard, a finger and a screen reader.
 
 ## Security

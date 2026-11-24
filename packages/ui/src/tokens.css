@@ -9,26 +9,26 @@
      theme's type.base worn as base / 13px, so one setting grows the whole
      scale together. 1 draws every size as written. */
   --type-k: 1;
-  --ground: #fbfaf8;
+  --ground: #f8fafc;
   --surface: #ffffff;
-  --raised: #f3f1ed;
-  --line: #e2ded6;
-  --line-strong: #cbc5b9;
+  --raised: #f1f5f9;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
   /* A form control's edge: 3:1 on the field and on the ground it sits on
      (WCAG 1.4.11), where the two hairlines above are 1.3 to 2:1. Only fields
      wear it; sections, cards, tables and rules keep the quiet hairline. */
-  --line-control: #8d887f;
-  --ink: #24211c;
-  --ink-muted: #6d675d;
+  --line-control: #64748b;
+  --ink: #0f172a;
+  --ink-muted: #475569;
   /* The faintest ink still clears 4.5:1 on every light ground. It was a
      50%-alpha grey that composited to about 1.6:1 — matrix headers, every
      `null`, type hints and disabled sort headers were decoration to a
      reader who needed them to be text. */
-  --ink-subtle: #736c65;
+  --ink-subtle: #586475;
   /* The ring's ink: the look's softer tint of its accent (`focus` in the palette), the accent where a palette
      sets none. On :root, not body, so a look's inline value is the one every ring reads. */
   --focus: var(--accent);
-  --accent: #1d6a5a;
+  --accent: #2455df;
   /* The accent is a fill; the words drawn on it and the words drawn in it are the palette's `onAccent` and `accentInk`
      where a theme names them or its accent would fail without. Unsaid they are the page's color and the accent itself,
      as they were when the accent was both. An App's own accent is worn on body (appTheme.js), which writes them there. */
@@ -37,21 +37,25 @@
   /* Elevation and scrims, tokens rather than literals in every sheet, so
      dark mode can deepen them: a 16% black shadow on a dark ground is no
      shadow at all. */
-  --shadow-pop: 0 6px 20px rgb(0 0 0 / 0.16);
-  --shadow-panel: 0 10px 34px rgb(0 0 0 / 0.18);
-  --shadow-modal: 0 18px 50px rgb(0 0 0 / 0.24);
-  --scrim: rgb(0 0 0 / 0.28);
-  --scrim-light: rgb(0 0 0 / 0.14);
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.14);
+  --shadow-panel: 0 14px 36px rgb(0 0 0 / 0.18);
+  --shadow-modal: 0 24px 56px rgb(0 0 0 / 0.24);
+  --scrim: rgb(0 0 0 / 0.34);
+  --scrim-light: rgb(0 0 0 / 0.16);
+  /* The lift a field and a quiet button take: a hairline's worth, drawn from the light scrim, which is black in both
+     schemes and deeper in the dark one. Said here so no sheet's fallback draws it from the ink, which is light on a
+     dark ground and would glow. A look restates it. */
+  --shadow-control: 0 1px 2px color-mix(in srgb, var(--scrim-light) 40%, transparent);
   /* A photo is judged against dark whatever the page's theme, so the
      lightbox's ground and ink are the same in both. */
   --lightbox-ground: rgb(10 12 16 / 0.94);
   --lightbox-ink: rgb(255 255 255 / 0.94);
   --lightbox-line: rgb(255 255 255 / 0.22);
-  --accent-soft: #1d6a5a14;
-  --link: #17594c;
-  --status-warning: #9a4b12;
-  --status-critical: #a12d2d;
-  --status-info: #7a5cc0;
+  --accent-soft: #2455df14;
+  --link: #1d4ed8;
+  --status-warning: #a14b08;
+  --status-critical: #c92626;
+  --status-info: #087562;
   /* What an AI made (a generated draft's badge, a suggestion's edge, the
      assistant's mark): a fuchsia, a hue no status colour and no look's info
      wears, so a mark that says "a model wrote this" is never taken for good
@@ -59,7 +63,7 @@
   --ai: #a62a9c;
   /* Success, independent of --accent: an app may theme its accent indigo,
      and "good" must stay green there. */
-  --status-good: #1f7a46;
+  --status-good: #15803d;
   /* The code face, single-sourced: --mono is the data face and follows the
      typography preference; --code is what code surfaces pin to. A host's
      look may set --data-face on the root to dress the data in another face;
@@ -135,6 +139,7 @@
      A cell taller than its row (two lines, an avatar) grows it. */
   --row-h: 40px;
   /* The text scale, each step over the theme's base like every size. */
+  --text-2xs: calc(10px * var(--type-k));
   --text-xs: calc(11px * var(--type-k));
   --text-sm: calc(12px * var(--type-k));
   --text-base: calc(13px * var(--type-k));
@@ -191,6 +196,7 @@
   /* How much of it a changed row starts at, over the surface: a hue the eye catches across the room, not a fill.
      Dark grounds take more, since the hue over a dark surface reads fainter at one share. */
   --changed-mix: 18%;
+  color-scheme: light;
 }
 
 :root[data-density='comfortable'] { --row-h: calc(40px / var(--density-zoom, 1)); }
@@ -202,68 +208,130 @@
   :root { --page-top: var(--space-5); }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --t-press: 0ms;
+    --t-hover: 0ms;
+    --t-popover: 0ms;
+    --t-panel: 0ms;
+    --t-changed: 0ms;
+  }
+}
+[data-nx-motion="reduced"] {
+  --t-press: 0ms;
+  --t-hover: 0ms;
+  --t-popover: 0ms;
+  --t-panel: 0ms;
+  --t-changed: 0ms;
+}
+
 /* The browser draws its own controls — a checkbox, a radio, a date's
    calendar, the window's scroll bar — in the scheme it is told. Untold, they
-   stayed white on every dark ground: a column of bright squares down a list. */
-:root { color-scheme: light; }
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) { color-scheme: dark; }
-}
-:root[data-theme="dark"] { color-scheme: dark; }
-
+   stayed white on every dark ground: a column of bright squares down a list. Each palette says its scheme with its
+   colours, last in its block (the root's light above, the two dark blocks and the light island below), so the two
+   cannot part. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --ground: #16181a;
-    --surface: #1c1f22;
-    --raised: #23272b;
-    --line: #2f343a;
-    --line-strong: #454c54;
-    --line-control: #6e7378;
-    --ink: #e4e2dd;
-    --ink-muted: #9aa0a6;
-    --ink-subtle: #979da4;
-    --accent: #5fc9ad;
-    --accent-soft: #5fc9ad1a;
+    --ground: #0c0e12;
+    --surface: #13161c;
+    --raised: #1b2028;
+    --line: #262c36;
+    --line-strong: #3a4352;
+    --line-control: #707a8c;
+    --ink: #f1f5f9;
+    --ink-muted: #a0acc0;
+    --ink-subtle: #96a2b6;
+    --accent: #85a6ff;
+    --accent-soft: #85a6ff1a;
     --changed-mix: 22%;
-    --link: #6fd4b8;
+    --link: #94b2ff;
     /* A matrix's heaviest tint, where the ink still reads at 4.5:1 on this pale accent (theme.ts heatTop). */
-    --heat-top: 46%;
-    --status-warning: #e0a05c;
-    --status-critical: #e8756f;
-    --status-info: #b39ae8;
+    --heat-top: 61%;
+    --status-warning: #fbbf24;
+    --status-critical: #f87171;
+    --status-info: #3cd2b5;
     --ai: #e58bdc;
-    --status-good: #57b884;
-    --shadow-pop: 0 6px 20px rgb(0 0 0 / 0.5);
-    --shadow-panel: 0 10px 34px rgb(0 0 0 / 0.55);
-    --shadow-modal: 0 18px 50px rgb(0 0 0 / 0.65);
-    --scrim: rgb(0 0 0 / 0.55);
-    --scrim-light: rgb(0 0 0 / 0.35);
+    --status-good: #4ade80;
+    --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5);
+    --shadow-panel: 0 14px 36px rgb(0 0 0 / 0.6);
+    --shadow-modal: 0 24px 56px rgb(0 0 0 / 0.7);
+    --scrim: rgb(0 0 0 / 0.6);
+    --scrim-light: rgb(0 0 0 / 0.38);
+    color-scheme: dark;
   }
 }
 
-:root[data-theme="dark"] {
-  --ground: #16181a;
-  --surface: #1c1f22;
-  --raised: #23272b;
-  --line: #2f343a;
-  --line-strong: #454c54;
-  --line-control: #6e7378;
-  --ink: #e4e2dd;
-  --ink-muted: #9aa0a6;
-  --ink-subtle: #979da4;
-  --accent: #5fc9ad;
-  --accent-soft: #5fc9ad1a;
+:root[data-theme="dark"],
+[data-theme="dark"] {
+  --ground: #0c0e12;
+  --surface: #13161c;
+  --raised: #1b2028;
+  --line: #262c36;
+  --line-strong: #3a4352;
+  --line-control: #707a8c;
+  --ink: #f1f5f9;
+  --ink-muted: #a0acc0;
+  --ink-subtle: #96a2b6;
+  --accent: #85a6ff;
+  --accent-soft: #85a6ff1a;
   --changed-mix: 22%;
-  --link: #6fd4b8;
-  --heat-top: 46%;
-  --status-warning: #e0a05c;
-  --status-critical: #e8756f;
-  --status-info: #b39ae8;
+  --link: #94b2ff;
+  --heat-top: 61%;
+  --status-warning: #fbbf24;
+  --status-critical: #f87171;
+  --status-info: #3cd2b5;
   --ai: #e58bdc;
-  --status-good: #57b884;
-  --shadow-pop: 0 6px 20px rgb(0 0 0 / 0.5);
-  --shadow-panel: 0 10px 34px rgb(0 0 0 / 0.55);
-  --shadow-modal: 0 18px 50px rgb(0 0 0 / 0.65);
-  --scrim: rgb(0 0 0 / 0.55);
-  --scrim-light: rgb(0 0 0 / 0.35);
+  --status-good: #4ade80;
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.5);
+  --shadow-panel: 0 14px 36px rgb(0 0 0 / 0.6);
+  --shadow-modal: 0 24px 56px rgb(0 0 0 / 0.7);
+  --scrim: rgb(0 0 0 / 0.6);
+  --scrim-light: rgb(0 0 0 / 0.38);
+  color-scheme: dark;
+}
+
+/* A light island in a dark page (a preview, a printed sheet): the stamp on anything but the root moves every token the
+   dark blocks move back to the root's light value. Stamped on the element, so it stands over the palette the page
+   hands down, whether the page is dark by its own stamp or by the system's preference. `--heat-top` has no light
+   value here (its readers carry the fallback), so it is unset. test/ui-tokens.test.ts holds this block to the dark one. */
+[data-theme="light"]:not(:root) {
+  --ground: #f8fafc;
+  --surface: #ffffff;
+  --raised: #f1f5f9;
+  --line: #e2e8f0;
+  --line-strong: #cbd5e1;
+  --line-control: #64748b;
+  --ink: #0f172a;
+  --ink-muted: #475569;
+  --ink-subtle: #586475;
+  --accent: #2455df;
+  --accent-soft: #2455df14;
+  --changed-mix: 18%;
+  --link: #1d4ed8;
+  --heat-top: initial;
+  --status-warning: #a14b08;
+  --status-critical: #c92626;
+  --status-info: #087562;
+  --ai: #a62a9c;
+  --status-good: #15803d;
+  --shadow-pop: 0 8px 24px rgb(0 0 0 / 0.14);
+  --shadow-panel: 0 14px 36px rgb(0 0 0 / 0.18);
+  --shadow-modal: 0 24px 56px rgb(0 0 0 / 0.24);
+  --scrim: rgb(0 0 0 / 0.34);
+  --scrim-light: rgb(0 0 0 / 0.16);
+  color-scheme: light;
+}
+
+/* A name that reads another is worked out where it is written, not where it is used: the root's `--on-accent` is the
+   root's ground, and an island would inherit that colour, not the rule. So the names the root derives from the palette
+   are derived again on a stamped island, light or dark, from the palette it now holds. */
+[data-theme]:not(:root) {
+  --focus: var(--accent);
+  --on-accent: var(--ground);
+  --accent-ink: var(--accent);
+  --field-fill: var(--surface);
+  --shadow-control: 0 1px 2px color-mix(in srgb, var(--scrim-light) 40%, transparent);
+  /* A look's primary is written for the page's scheme; the island's primary is its accent, as where no look says one. */
+  --primary: initial;
+  --on-primary: initial;
 }

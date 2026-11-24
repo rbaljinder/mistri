@@ -410,10 +410,10 @@ export function DeleteConversation({
       <h2>{say('deleteConversation', { title: conversation.title })}</h2>
       <p>{say('deleteConversationTerms')}</p>
       <div className="confirm-actions">
-        <Button intent="secondary" onClick={() => dialog.current?.close()}>
+        <Button variant="secondary" onClick={() => dialog.current?.close()}>
           {say('common.cancel')}
         </Button>
-        <Button intent="danger" onClick={onConfirm}>
+        <Button variant="danger" onClick={onConfirm}>
           {say('delete')}
         </Button>
       </div>

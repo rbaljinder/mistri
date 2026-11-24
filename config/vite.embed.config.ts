@@ -147,8 +147,16 @@ function shellSkeleton(): Plugin {
  *
  * Highest first: a group takes its modules' dependencies with it unless a
  * group before it has them. Parts loaded on demand stay chunks of their own,
- * as they are when served.
+ * as they are when served, and barrels (`packages/kit/src/vite.ts` `BARRELS`)
+ * are not followed so one helper from `@mistriwork/ui` does not claim every
+ * control for the shell.
  */
+const BARRELS = [
+  /\/node_modules\/@ui-sdk\/core\/dist\/(?:renderer|index)\.js$/,
+  /(?:\/packages\/ui\/src|\/@mistriwork\/ui\/dist)\/(?:index|primitives|charts|views)\.(?:ts|js)$/,
+];
+const barrel = (id: string) => BARRELS.some((one) => one.test(id));
+
 function embedChunks(): { plugin: Plugin; groups: CodeSplittingGroup[] } {
   const home = new Map<string, 'router' | 'provider' | 'shell'>();
   const plugin: Plugin = {
@@ -163,7 +171,7 @@ function embedChunks(): { plugin: Plugin; groups: CodeSplittingGroup[] } {
           const id = pending.pop()!;
           if (seen.has(id) || stop.has(id)) continue;
           seen.add(id);
-          pending.push(...(this.getModuleInfo(id)?.importedIds ?? []));
+          if (!barrel(id)) pending.push(...(this.getModuleInfo(id)?.importedIds ?? []));
         }
         return seen;
       };

@@ -12,7 +12,7 @@
  * Nothing here imports a primitive's module, only its types: a kit compiled apart from the page reads this file for
  * `defineUiKit`, and the defaults arrive in `defaultUiKit` as the page loads them.
  */
-import { createElement, useContext, useMemo, type ComponentProps, type ComponentType, type ReactNode } from 'react';
+import { createElement, useContext, useMemo, type ComponentType, type ReactNode } from 'react';
 import type { Avatar } from './Avatar.js';
 import type { Button, ButtonLink } from './Button.js';
 import type { Carousel } from './Carousel.js';
@@ -51,7 +51,7 @@ type KitCallback<F> = F extends (...args: [...infer A, infer D extends ChangeDet
   ? (...args: A | [...A, D]) => R
   : F;
 type KitProps<P> = { [K in keyof P]: KitCallback<P[K]> };
-type Slot<C extends ComponentType<any>> = ComponentType<KitProps<ComponentProps<C>>>;
+type Slot<C> = C extends ComponentType<infer P> ? ComponentType<KitProps<P>> : never;
 /* A Typeahead's item callbacks carry no details, and passed through KitCallback while `T` is still open the item itself
    is taken for details (`onPick(item)` then asks for a `T & ChangeDetails`), so they keep their own types. */
 type TypeaheadItemProps = 'itemKey' | 'itemLabel' | 'itemClassName' | 'renderItem' | 'onPick' | 'onHighlight';
@@ -136,7 +136,7 @@ export const defaultUiKit = defaultSlots as unknown as Readonly<Partial<UiKitSlo
 
 /**
  * A slot that is the platform's own control with something changed, where a kit wants to dress one and not redraw
- * it: `Button: dress('Button', (Button, props) => <Button {...props} size="large" />)`. The function is handed the
+ * it: `Button: dress('Button', (Button, props) => <Button {...props} size="lg" />)`. The function is handed the
  * default and the props the slot was drawn with, typed for that slot, and the default is read at each draw, when the
  * page has loaded it.
  */

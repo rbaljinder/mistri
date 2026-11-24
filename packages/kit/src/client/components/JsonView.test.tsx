@@ -359,10 +359,10 @@ describe('raw', () => {
     expect(tint('null')).toEqual(['null']);
     expect(tint('punct')).toContain('{');
     const wrap = screen.getByRole('button', { name: 'Wrap' });
-    expect(wrap).toHaveAttribute('aria-pressed', 'false');
-    expect(region).not.toHaveClass('is-wrapped');
-    await userEvent.click(wrap);
     expect(wrap).toHaveAttribute('aria-pressed', 'true');
     expect(region).toHaveClass('is-wrapped');
+    await userEvent.click(wrap);
+    expect(wrap).toHaveAttribute('aria-pressed', 'false');
+    expect(region).not.toHaveClass('is-wrapped');
   });
 });

@@ -273,7 +273,7 @@ function SourcedControl(props: IntakeControlProps) {
             : []),
           ...options.map((option, index) => ({ value: String(index), label: option.label })),
         ]}
-        onChange={(next) => {
+        onValueChange={(next) => {
           if (next !== '') onChange(options[Number(next)].value);
         }}
       />
@@ -438,7 +438,7 @@ export function IntakeControl(props: IntakeControlProps) {
           value={drawn}
           onChange={(event) => onChange(field.mask ? maskRaw(field.mask, event.target.value) : event.target.value)}
         />
-        <Button intent="quiet" aria-controls={id} aria-pressed={shown} onClick={() => setShown(!shown)}>
+        <Button variant="ghost" aria-controls={id} aria-pressed={shown} onClick={() => setShown(!shown)}>
           {shown ? say('hideValue') : say('showValue')}
         </Button>
       </div>

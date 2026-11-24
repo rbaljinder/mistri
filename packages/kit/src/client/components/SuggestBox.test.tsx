@@ -53,7 +53,7 @@ function Harness({ onSearch, onPick }: { onSearch: (text: string) => void; onPic
       onText={setText}
       onPick={onPick}
       inputProps={{
-        'aria-label': 'Search cars',
+        ariaLabel: 'Search cars',
         onKeyDown: (e) => {
           if (e.key === 'Enter') onSearch(text);
         },

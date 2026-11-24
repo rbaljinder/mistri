@@ -8,4 +8,5 @@ export const say = defineMessages({
   reviewStale: 'The record changed after you reviewed {label}. Review it again before you run it.',
   flagFixtureUnavailable: 'Evaluated flag fixture unavailable.',
   fixtureRefused: 'The reader may not read {resource}.',
+  fixtureEmail: '{account}@example.test',
 });

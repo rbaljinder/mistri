@@ -16,7 +16,7 @@ interface UiReadAudit {
   next: number | undefined;
   /** Reads the next page onto the end; nothing while there is none or one is already under way. */
   more(): void;
-  loading: boolean;
+  isPending: boolean;
   error: Error | null;
 }
 
@@ -42,7 +42,7 @@ export function useReadAudit(filters: ReadAuditFilters = {}): UiReadAudit {
     reads,
     next: query.error ? undefined : query.data?.pages.at(-1)?.next,
     more,
-    loading: query.isPending,
+    isPending: query.isPending,
     error: query.error,
   };
 }

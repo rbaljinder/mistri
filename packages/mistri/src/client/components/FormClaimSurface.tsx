@@ -110,10 +110,10 @@ export function FormClaimSurface({
             {say('addApplication')} <strong>{phase.reference}</strong> {say('toTheAccountYouAreSigned')}
           </p>
           <div className="form-claim-actions">
-            <Button intent="primary" onClick={() => void answer('yes')} busy={pending}>
+            <Button variant="primary" onClick={() => void answer('yes')} loading={pending}>
               {say('yesAdd')}
             </Button>
-            <Button intent="secondary" onClick={() => void answer('no')} disabled={pending}>
+            <Button variant="secondary" onClick={() => void answer('no')} disabled={pending}>
               {say('common.no')}
             </Button>
           </div>

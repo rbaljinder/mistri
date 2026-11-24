@@ -16,12 +16,12 @@ import {
   Card,
   Cluster,
   definePage,
-  Empty,
-  Grid,
+  EmptyState,
   Loaded,
+  PageGrid,
   Panel,
   Stack,
-  Stat,
+  StatCard,
   Table,
   Text,
   useFormat,
@@ -102,7 +102,7 @@ function DeliveryBoard(): ReactNode {
     const parcel = row.tracking_number ? byTracking.get(row.tracking_number) : undefined;
     return parcel ? status(parcel) : <span>{refused ? 'Not available' : row.tracking_number ? 'No such parcel' : '—'}</span>;
   };
-  const none = <Empty title="No parcels on file" description="The carrier has none to report for the storeroom." />;
+  const none = <EmptyState title="No parcels on file" description="The carrier has none to report for the storeroom." />;
 
   const lookColumns: TableColumn<(typeof looks)[number]>[] = [
     {
@@ -170,12 +170,12 @@ function DeliveryBoard(): ReactNode {
   return (
     <Stack gap="section">
       <Cluster min="9rem">
-        <Stat label="On its way" value={shipments.data ? onItsWay.length : '–'} />
-        <Stat label="Arriving today" value={shipments.data ? dueToday.length : '–'} />
-        <Stat label="Needs a look" value={shipments.data ? looks.length : '–'} />
-        <Stat label="Received, 30 days" value={receipts.data ? lately.length : '–'} />
+        <StatCard label="On its way" value={shipments.data ? onItsWay.length : '–'} />
+        <StatCard label="Arriving today" value={shipments.data ? dueToday.length : '–'} />
+        <StatCard label="Needs a look" value={shipments.data ? looks.length : '–'} />
+        <StatCard label="Received, 30 days" value={receipts.data ? lately.length : '–'} />
       </Cluster>
-      <Grid>
+      <PageGrid>
         <Panel title="Needs a look" width="full">
           {refused ? (
             <CarrierRefused />
@@ -183,9 +183,9 @@ function DeliveryBoard(): ReactNode {
             <Loaded query={shipments} height={96} empty={none}>
               {() =>
                 looks.length === 0 ? (
-                  <Empty title="Nothing late or held" description="Every parcel the carrier lists is moving or has been booked in." />
+                  <EmptyState title="Nothing late or held" description="Every parcel the carrier lists is moving or has been booked in." />
                 ) : (
-                  <Table label="Parcels that need a look" rows={looks} rowKey={(row) => row.parcel.tracking_number} columns={lookColumns} />
+                  <Table ariaLabel="Parcels that need a look" rows={looks} rowKey={(r) => r.parcel.tracking_number} columns={lookColumns} />
                 )
               }
             </Loaded>
@@ -198,9 +198,9 @@ function DeliveryBoard(): ReactNode {
             <Loaded query={shipments} height={160} empty={none}>
               {() =>
                 onItsWay.length === 0 ? (
-                  <Empty title="Nothing on its way" description="Every parcel the carrier lists has been delivered." />
+                  <EmptyState title="Nothing on its way" description="Every parcel the carrier lists has been delivered." />
                 ) : (
-                  <Table label="Parcels on their way" rows={onItsWay} rowKey={(row) => row.tracking_number} columns={wayColumns} />
+                  <Table ariaLabel="Parcels on their way" rows={onItsWay} rowKey={(row) => row.tracking_number} columns={wayColumns} />
                 )
               }
             </Loaded>
@@ -210,14 +210,14 @@ function DeliveryBoard(): ReactNode {
           <Loaded
             query={receipts}
             height={160}
-            empty={<Empty title="No deliveries yet" description="Book a delivery in under Parts deliveries and it shows here." />}
+            empty={<EmptyState title="No deliveries yet" description="Book a delivery in under Parts deliveries and it shows here." />}
           >
             {() =>
               lately.length === 0 ? (
-                <Empty title="Nothing received in 30 days" description="Older deliveries are under Parts deliveries." />
+                <EmptyState title="Nothing received in 30 days" description="Older deliveries are under Parts deliveries." />
               ) : (
                 <Table
-                  label="Deliveries received lately"
+                  ariaLabel="Deliveries received lately"
                   rows={lately}
                   rowKey={(row) => `${row.tracking_number ?? ''}${row.received_on}${row['part_id.name']}`}
                   columns={arrivedColumns}
@@ -230,7 +230,7 @@ function DeliveryBoard(): ReactNode {
         <Panel title="Deliveries by day" width="full">
           <Calendar from="part_receipt" date="received_on" primary="part_id.name" lines={['vendor']} label="Deliveries by day" />
         </Panel>
-      </Grid>
+      </PageGrid>
     </Stack>
   );
 }
@@ -240,7 +240,7 @@ function CarrierRefused(): ReactNode {
   return (
     <Card>
       <Text>The carrier’s tracking is not open to you</Text>
-      <Text tone="muted" size="sm">
+      <Text muted size="sm">
         Deliveries booked in are still listed below.
       </Text>
     </Card>

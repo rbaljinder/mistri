@@ -11,10 +11,10 @@ import {
   Pagination,
   Popover,
   Search,
-  Segmented,
+  SegmentedControl,
   Select,
   Stack,
-  Stat,
+  StatCard,
   TextField,
   definePage,
   useHref,
@@ -59,11 +59,11 @@ function Kit() {
         , or on.
       </p>
       <Stack>
-        <Segmented
-          label="Size"
-          size="compact"
+        <SegmentedControl
+          ariaLabel="Size"
+          size="sm"
           value={tab}
-          onChange={setTab}
+          onValueChange={setTab}
           options={[
             { value: 'x', label: 'One' },
             { value: 'y', label: 'Two' },
@@ -72,13 +72,13 @@ function Kit() {
         <page.Choose param="view" />
         <Search param="search" />
         <Card title="Totals">
-          <Stat label="Things" value="3" />
+          <StatCard label="Things" value="3" />
         </Card>
-        <TextField label="Name" value={name} onChange={setName} />
+        <TextField label="Name" value={name} onValueChange={setName} />
         <Select
           label="Kind"
           value={pick}
-          onChange={setPick}
+          onValueChange={setPick}
           options={[
             { value: 'a', label: 'Alpha' },
             { value: 'b', label: 'Beta' },

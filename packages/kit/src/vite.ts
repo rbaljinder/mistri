@@ -137,7 +137,10 @@ export function noDevtoolsClient(): Plugin {
  * whoever imports the family. What only a barrel reaches is given to no part here: the bundler places it with
  * whatever uses it, which is the entry where the entry does and the part fetched on demand where only that does.
  */
-const BARRELS = [/\/node_modules\/@ui-sdk\/core\/dist\/(?:renderer|index)\.js$/];
+const BARRELS = [
+  /\/node_modules\/@ui-sdk\/core\/dist\/(?:renderer|index)\.js$/,
+  /(?:\/packages\/ui\/src|\/@mistriwork\/ui\/dist)\/(?:index|primitives|charts|views)\.(?:ts|js)$/,
+];
 const barrel = (id: string) => BARRELS.some((one) => one.test(id));
 interface Surfaces {
   /** Modules the entry's chunk holds beside the entry's own graph, by path. */
@@ -259,7 +262,7 @@ function surfacePages(pages: Readonly<Record<string, readonly string[]>>): Plugi
 
 /**
  * The license of every face the build ships (the kit's client/fonts/), written beside the client as `fonts/<name>`:
- * Lumen's Inter, Workshop's Barlow and Ledger's IBM Plex Mono are under the SIL Open Font License, which asks that its
+ * Lumen's Inter, Workshop's Barlow, Manrope and Ledger's IBM Plex Mono are under the SIL Open Font License, which asks that its
  * text travel with the font, and dist is what the package's `files` allowlist ships.
  */
 function fontLicenses(): Plugin {

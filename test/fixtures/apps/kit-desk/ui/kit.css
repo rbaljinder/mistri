@@ -37,11 +37,11 @@
   border-color: currentColor;
   color: var(--danger, #b42318);
 }
-.kit-quiet {
+.kit-ghost {
   border-color: transparent;
   background: transparent;
 }
-.kit-compact {
+.kit-sm {
   min-height: 1.5rem;
   padding: 0 0.375rem;
 }

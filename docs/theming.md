@@ -21,7 +21,7 @@ this file is the contract.
 | Preset | Character |
 | --- | --- |
 | Workshop | The default. The desk as a workbench, ported from a field report's theme, the paper on the frame: a grained paper bar and menu and one paper band behind a page's head (a list's title, tabs and filters, a record's trail, name and facts), the work on white, ink-black type and one hue — Safety orange unless a palette says another — kept to the few marks a reader takes for the brand color: the primary verb's fill (the ink's words on it, edged in the ink, as a hazard tag prints them), links and the current tab's rule, a 3px marker beside the menu's current entry, the focus ring, a checked box and a chart's first series. The current entry is a soft tint of the menu's ink, by day and by night. Titles in Barlow Semi Condensed's bold, in sentence case, with a stat's figures and the App's name (in capitals) in it too; sections, tabs, column heads and labels in Barlow, the labels in the semibold and the muted ink, shipped with the look; hairlines; one divided strip of figures; filters not yet asked for on a solid edge; 2px corners; nothing floats. |
-| Lumen | Flat, calm and modern: a warm, faintly tinted shell around white working surfaces, elevation only on what floats (menus, dialogs, drawers), one confident accent for the primary action, the current room, selection, focus, the main chart series and the current step; a menu whose current room is a soft pill with quiet counts on its lists of work; metrics in a divided strip; record fields in a property rail; tables on hairlines with the record's name as the row's anchor and a head that sticks; statuses as a dot and their word (grey where neutral); a workflow as a track of segments; charts as a 1.5px line in one hue's steps; Inter, shipped with the look. Its blue is the **Cobalt** palette; every other palette changes only the accent's family. |
+| Lumen | Calm and crisp: a cool, faintly tinted shell around white working cards, subtle card lift with deeper elevation on overlays (menus, dialogs, drawers), one confident accent for the primary action, the current room, selection, focus, the main chart series and the current step; a menu whose current room is a soft pill with quiet counts on its lists of work; metrics in icon-marked cards; record fields in a property rail; tables as bordered surface cards on hairlines with the record's name as the row's anchor and a head that sticks; meaningful statuses as tinted dot-pills (neutral values plain with a grey dot); a workflow as a track of segments; charts as a 1.5px line in one hue's steps; Inter across interface, headings and figures, shipped with the look. Its blue is the **Cobalt** palette; every other palette changes only the accent's family. |
 | Mono | Black and white: square corners, rules in the ink over grey hairlines, monospace figures and labels, the current tab inverted; colour only for status. |
 | Ledger | A bookkeeper's desk, ported from a field report's theme: green-tinted paper on a faint graph-paper ground, every figure, id, date and label in a monospace (IBM Plex Mono) with titles and prose in Inter, a dark green cover for the menu and the bar with a gilt mark for the current entry, field groups and dashboard sections as square boxes ruled in the strong line, a table's heads closed with a double rule (`rules: 'double'`), and one deep ledger green for the accent. Light and dark. |
 | Sage | A soft workspace: warm cream grounds with a dashboard's sections and stat cards on white panels (a soft shadow, the 8px radius and its 12px larger step) and tables open on the ground, near-black ink for text and calls to action, sage green for charts and good news, a warm tint for what is chosen, and meaning in soft tinted pills. |
@@ -36,11 +36,11 @@ a theme that extends no look. Sage keeps the headings, tabs and type scale but
 puts a dashboard's sections and its stat cards on white panels (a table stays
 open, rows on the ground under a hairline) and says a status as a tinted pill —
 its exceptions are recorded in [design.md](design.md#the-refusal-list-after-impeccablestyle-kept-where-it-applies).
-Lumen keeps the headings and type scale and stays flat: sections, metric strips,
-tables and record fields stand open on the ground, divided by hairlines; only
-what floats is lifted. Tabs are underlined, statuses are a dot and their word,
+Lumen keeps the headings and type scale over crisp white surface cards:
+sections, stat cards and tables stand as 1px-bordered cards divided inside by
+hairlines, tabs are underlined, meaningful statuses wear tinted dot-pills,
 a workflow in order is numbered marks joined by a rule, a dashboard's steps are a strip, and board
-lanes are headed by tinted strips (Lumen's exceptions, in
+lanes are headed by tinted strips (recorded in
 [design.md](design.md#the-refusal-list-after-impeccablestyle-kept-where-it-applies)).
 Ledger is Lumen's flat structure drawn square and ruled: dashboard sections and
 field groups are boxes in the strong line, a table's heads close with a double
@@ -220,27 +220,27 @@ CSS.
 | Part       | Values                                                                                                                  |
 | ---------- | ----------------------------------------------------------------------------------------------------------------------- |
 | `nav`      | `tint`, `inverted` (Mono), `wash` (Ledger), `underline` (own), `pill` (Lumen), `quiet` (Sage, Atelier), `slot` (Workshop, Graphite), `float` (Bloom) |
-| `bar`      | `plain` (Atelier), `ruled` (Workshop, Mono), `dark` (Ledger, Graphite), `airy` (Lumen), `soft` (Sage, Bloom)            |
+| `bar`      | `plain` (Atelier), `ruled` (Workshop, Mono), `dark` (Ledger, Graphite), `airy` (Lumen), `soft` (Sage, Bloom) |
 | `tabs`     | `pill` (Bloom), `inverted` (Mono), `underline` (Lumen), `rule` (Workshop, Ledger, Atelier), `tint` (Sage), `lifted` (Graphite) |
-| `windows`  | `segmented` (Workshop, Graphite), `lifted` (Lumen, Bloom), `tint` (Sage, Atelier)                                                                 |
-| `stat`     | `plain` (Atelier), `framed` (Mono), `topline` (own), `ruled`, `icon` (own), `panel` (Sage, Graphite), `divided` (Lumen, Workshop, Ledger), `bento` (Bloom) |
-| `section`  | `open` (Workshop, Lumen, Atelier), `card` (Graphite), `panel` (Sage, Ledger, Bloom)                                                                  |
-| `fields`   | `open` (Workshop), `panel` (Sage, Ledger, Bloom), `card` (Graphite), `rail` (Lumen, Atelier)                                                         |
-| `table`    | `open` (Workshop, Mono, Atelier), `tinted` (own), `hairline` (Sage, Ledger), `card` (Graphite), `quiet` (Lumen), `banded` (own), `rows` (Bloom) |
-| `status`   | `dot` (Workshop), `pill` (Sage, Bloom), `pill-dot` (Graphite), `quiet` (Lumen, Ledger, Atelier)                                                      |
-| `board`    | `ruled` (Workshop, Atelier), `soft` (Sage, Bloom), `strip` (Lumen, Graphite)                                                                      |
-| `chart`    | `plain` (Workshop), `wash` (Sage, Bloom), `gradient` (Graphite), `line` (Lumen, Atelier)                                                     |
-| `buttons`  | `accent`, `raised` (Lumen), `keyed` (Workshop)                                                                          |
-| `links`    | `plain`, `underline` (Mono), `name` (Atelier)                                                                                    |
-| `rules`    | `ink` (Mono, Atelier), `hairline` (Workshop, Lumen, Sage, Graphite, Bloom), `double` (Ledger)                                                     |
-| `avatar`   | `plain`, `large` (Sage), `round` (Lumen, Bloom)                                                                                |
-| `workflow` | `markers` (Workshop, Lumen), `pills` (Graphite), `segments` (Bloom)                                                                 |
-| `banner`   | `tint`, `gradient` (Bloom), `plain` (Workshop, Lumen)                                                                     |
-| `steps`    | `flat`, `tinted` (Bloom), `strip` (Workshop, Lumen)                                                                       |
-| `lanes`    | `tint`, `tag` (Workshop, Graphite), `plain` (Ledger, Atelier)                                                                                 |
-| `header`   | `plain`, `band` (Workshop, Sage), `hero` (own)                                                                          |
+| `windows`  | `segmented` (Workshop, Mono, Ledger, Graphite), `lifted` (Lumen, Bloom), `tint` (Sage, Atelier) |
+| `stat`     | `plain` (Atelier), `framed` (Mono), `topline` (own), `ruled`, `icon` (Lumen), `panel` (Sage, Graphite), `divided` (Workshop, Ledger), `bento` (Bloom) |
+| `section`  | `open` (Workshop, Mono, Atelier), `card` (Lumen, Graphite), `panel` (Sage, Ledger, Bloom) |
+| `fields`   | `open` (Workshop, Mono), `panel` (Sage, Ledger, Bloom), `card` (Lumen, Graphite), `rail` (Atelier) |
+| `table`    | `open` (Workshop, Mono, Atelier), `tinted` (own), `hairline` (Sage), `card` (Lumen, Graphite), `quiet`, `banded` (Ledger), `rows` (Bloom) |
+| `status`   | `dot` (Workshop, Mono), `pill` (Sage, Bloom), `pill-dot` (Lumen, Graphite), `quiet` (Ledger, Atelier) |
+| `board`    | `ruled` (Workshop, Mono, Ledger, Atelier), `soft` (Sage, Bloom), `strip` (Lumen, Graphite) |
+| `chart`    | `plain` (Workshop, Mono, Ledger), `wash` (Sage, Bloom), `gradient` (Lumen, Graphite), `line` (Atelier) |
+| `buttons`  | `accent` (Mono, Sage, Ledger, Atelier, Graphite, Bloom), `raised` (Lumen), `keyed` (Workshop) |
+| `links`    | `plain` (Workshop, Lumen, Sage, Ledger, Graphite, Bloom), `underline` (Mono), `name` (Atelier) |
+| `rules`    | `ink` (Mono, Atelier), `hairline` (Workshop, Lumen, Sage, Graphite, Bloom), `double` (Ledger) |
+| `avatar`   | `plain` (Workshop, Mono, Ledger, Atelier, Graphite), `large` (Sage), `round` (Lumen, Bloom) |
+| `workflow` | `markers` (Workshop, Lumen, Mono, Sage, Ledger, Atelier), `pills` (Graphite), `segments` (Bloom) |
+| `banner`   | `tint` (Mono, Sage), `gradient` (Bloom), `plain` (Workshop, Lumen, Ledger, Atelier, Graphite) |
+| `steps`    | `flat` (Mono, Sage), `tinted` (Bloom), `strip` (Workshop, Lumen, Ledger, Atelier, Graphite) |
+| `lanes`    | `tint` (Lumen, Mono, Sage, Bloom), `tag` (Workshop, Graphite), `plain` (Ledger, Atelier) |
+| `header`   | `plain` (Lumen, Mono, Ledger, Atelier, Graphite, Bloom), `band` (Workshop, Sage), `hero` (own) |
 | `pane`     | `inset`, `edge` (own: the room runs to the window's right and bottom edges beside a side menu)                          |
-| `filters`  | `solid`, `dashed`, `quiet` (Lumen)                                                                                      |
+| `filters`  | `solid` (Workshop, Lumen, Mono, Sage, Ledger, Graphite, Bloom), `dashed`, `quiet` (Atelier) |
 
 Each value is pictured on the CRM (the former Compass sample) in the site's recipe gallery
 (`site/src/content/docs/docs/theme-recipes.md`, its pictures under
@@ -249,6 +249,27 @@ Each value is pictured on the CRM (the former Compass sample) in the site's reci
 App's own theme and page, and the bench `mistri dev` serves at `/_theme`
 tries values on the App's own pages, light and dark side by side, with every
 contrast check read as it changes and the `defineTheme` line to paste back.
+
+The Preview entry points a free-form page draws with (`@mistriwork/mistri/views`, `/primitives`, `/charts`) wear
+the same recipes, each answered for the part that plays the kit's role:
+
+| Part              | Worn by                                                                                                   |
+| ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `table`, `rules`  | `DataTable`: its frame, its head (ground, rule, face, case, weight), its rows' rule, band and hover       |
+| `stat`            | `StatCard`: its box, its label and its figure                                                             |
+| `board`, `lanes`  | `KanbanBoard`: the lane, its head and its name, a card's corner and lift                                  |
+| `tabs`            | `Tabs` (by its slots, and by its own rules when it has a count, an icon or `fitted`)                      |
+| `status`          | a `Badge` in a status tone, and `StatusDot`                                                               |
+| `chart`           | `LineChart` and `AreaChart`: the grid's rule, the line's weight, the wash, the points                     |
+| `elevation`       | `Card`: its lift                                                                                          |
+
+The label and figure roles (`type.roles`) reach a table's heads, a figure's label and the figure. The rules are
+written once per recipe VALUE in the look's tokens (`packages/mistri/src/client/components/sdk/surfaces-*.css`, in
+the `look` layer) and arrive with the entry's own stylesheet, so an App's own theme is dressed as a built-in look
+is and the first stylesheet carries none of them. A `variant` a page asks of `Tabs` by name is the page's choice
+and is left alone; a bar's corner is cut into its path and is not a recipe's to move; the other views
+(`CalendarView`, `GanttView`, `CardGridView`, the review and settings views) read the look's tokens only.
+`test/sdk-look-recipes.test.ts` holds every value the kit dresses to an answer for the twin.
 
 `shape.elevation` is `hairline` (the default), `flat` (Mono), `soft` (Sage)
 or `raised` (Lumen): a preset, each its look's own drawing of a card's lift
@@ -306,7 +327,7 @@ spelling is refused with its new one.
 ### Past the menu: bands, patterns, parts and icons
 
 Four things a theme may say that no built-in look does (but Workshop's menu
-grain, a pattern), each held to the contract as a recipe is, and each worn
+grain and Ledger's faint graph paper, each a pattern), each held to the contract as a recipe is, and each worn
 only where it is said: a theme that says none of them sets no attribute and
 fetches no sheet, so every theme written before them draws as it did (the
 computed-style snapshot of every look holds this).
@@ -618,9 +639,11 @@ and dark on the color promises only.
 
 Fonts expose `ui`, `data`, `heading`, and `code` stacks. These reference installed
 or separately app-hosted fonts; definitions do not fetch assets or inject
-`@font-face`. The faces mistri ships are Lumen's: Inter for the interface and
-Manrope for its headings and hero figures, each declared in a sheet of its
-own, so a theme that extends Lumen and keeps its stacks is set in them too. The heading role covers page and section titles; a base style may
+`@font-face`. Mistri ships Barlow and Barlow Semi Condensed (Workshop's interface and
+its titles), Inter (Lumen's interface, headings and figures), IBM Plex Mono
+(Mono's and Ledger's data and figures) and Manrope (no built-in look's, for a
+theme that names it), each in a sheet of its own, so a theme that names any of
+those stacks fetches only the sheet it wears. The heading role covers page and section titles; a base style may
 also use it for its wordmark. Density and structural layout are not font settings.
 
 The four stacks are also tokens a component reads (`--sans`, `--mono`, `--heading-font`, `--code`; `tokens` from `@mistriwork/mistri/ui`). Which face a column's values wear is the App's to say per column, not the theme's: a display rule's `face` (`data`, `ui` or `code`) sets it, and unasked an App reads text in the reading face and keeps the data face for keys, references and codes, so a theme whose data face is monospace does not turn every name into code.
@@ -628,7 +651,7 @@ The four stacks are also tokens a component reads (`--sans`, `--mono`, `--headin
 `shape.radius` is `{ control, field, pill, panel }`; one bare length is refused. `control` is a button's, an
 input's and a select's corner, `0px` through `16px` or `'round'`; `field` a record's and a form's field,
 `0px` through `12px`; `panel` a card's, a section's and a dialog's, `0px` through `20px` (omitted, one and a
-half controls', at most 20px). Each look has one radius for controls and fields: Lumen and Sage 8px, Ledger 2px (its fields square), Mono
+half controls', at most 20px). Each look has its own radii: Workshop 2px throughout, Lumen 6px controls and fields (8px panels), Sage 8px (12px panels), Ledger 2px (its fields square), Mono
 square, and a theme that extends none 4px. A custom theme inherits its base's radii, and an explicit custom
 radius wins. A round control is a pill (`--control-radius`); every other box that follows the control's
 corner — a menu, a card, a row — takes 8px, because a card is not a pill, and a popup never passes 12px. A card, tile or row an App draws reads `--radius-card`, which is the `panel` corner (the look's box corner when none is said) and never a control's, so it stays square-cornered under a round control; set it from `panel`, or override the token in the App's own stylesheet.

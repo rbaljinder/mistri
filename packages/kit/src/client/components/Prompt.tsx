@@ -8,7 +8,7 @@ import { Modal, type ModalHandle } from '@mistriwork/ui/Modal.js';
 import { DateField } from './DateField.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
-import { isPickerDate, isPickerDateTime } from '@mistriwork/ui/internal/datePickerModel.js';
+import { isPickerDate, isPickerDateTime } from '@mistriwork/ui';
 import { appNow, formatLocale, formatTimezone } from '../locale.js';
 import { say } from '../copy/shell/components/Prompt.js';
 
@@ -101,13 +101,13 @@ export function PromptDialog({
           ) : dateOnly || dateTime ? (
             <DateField
               id={fieldId}
-              inputRef={(node) => {
+              ref={(node) => {
                 input.current = node;
               }}
               value={date}
-              onChange={setDate}
+              onValueChange={setDate}
               withTime={dateTime}
-              aria-label={label}
+              ariaLabel={label}
               placeholder={dateTime ? undefined : placeholder}
               locale={formatLocale()}
               timezone={formatTimezone()}
@@ -128,7 +128,7 @@ export function PromptDialog({
         {hint ? <p className="confirm-params">{hint}</p> : null}
         <div className="confirm-actions">
           <Button
-            intent="secondary"
+            variant="secondary"
             onClick={() => {
               finish(null);
               dialog.current?.close();
@@ -136,7 +136,7 @@ export function PromptDialog({
           >
             {say('common.cancel')}
           </Button>
-          <Button intent="primary" type="submit">
+          <Button variant="primary" type="submit">
             {confirmLabel}
           </Button>
         </div>
@@ -192,11 +192,11 @@ export function RangeDialog({ title, fromLabel, toLabel, hint, type = 'text', pl
             {calendar ? (
               <DateField
                 id={`${fieldId}-from`}
-                inputRef={from}
+                ref={from}
                 value={fromDate}
-                onChange={setFromDate}
+                onValueChange={setFromDate}
                 withTime={type === 'datetime-local'}
-                aria-label={fromLabel}
+                ariaLabel={fromLabel}
                 placeholder={type === 'date' ? placeholder : undefined}
                 locale={formatLocale()}
                 timezone={formatTimezone()}
@@ -210,11 +210,11 @@ export function RangeDialog({ title, fromLabel, toLabel, hint, type = 'text', pl
             {calendar ? (
               <DateField
                 id={`${fieldId}-to`}
-                inputRef={to}
+                ref={to}
                 value={toDate}
-                onChange={setToDate}
+                onValueChange={setToDate}
                 withTime={type === 'datetime-local'}
-                aria-label={toLabel}
+                ariaLabel={toLabel}
                 placeholder={type === 'date' ? placeholder : undefined}
                 locale={formatLocale()}
                 timezone={formatTimezone()}
@@ -228,7 +228,7 @@ export function RangeDialog({ title, fromLabel, toLabel, hint, type = 'text', pl
         {hint ? <p className="confirm-params">{hint}</p> : null}
         <div className="confirm-actions">
           <Button
-            intent="secondary"
+            variant="secondary"
             onClick={() => {
               finish(null);
               dialog.current?.close();
@@ -236,7 +236,7 @@ export function RangeDialog({ title, fromLabel, toLabel, hint, type = 'text', pl
           >
             {say('common.cancel')}
           </Button>
-          <Button intent="primary" type="submit">
+          <Button variant="primary" type="submit">
             {say('common.apply')}
           </Button>
         </div>
@@ -267,7 +267,7 @@ export function ConfirmDialog({ title, body, confirmLabel = 'OK', cancelLabel = 
         <p>{body}</p>
         <div className="confirm-actions">
           <Button
-            intent="secondary"
+            variant="secondary"
             onClick={() => {
               finish(false);
               dialog.current?.close();
@@ -275,7 +275,7 @@ export function ConfirmDialog({ title, body, confirmLabel = 'OK', cancelLabel = 
           >
             {cancelLabel}
           </Button>
-          <Button intent="danger" type="submit">
+          <Button variant="danger" type="submit">
             {confirmLabel}
           </Button>
         </div>

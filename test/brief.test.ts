@@ -218,6 +218,44 @@ describe('mistri new --brief', () => {
     assert.match(mistri(dir, 'check', '--brief'), /^ok\s*$/);
   });
 
+  test('two commands into one state are two verbs of the machine, neither dropped', async () => {
+    // A field report: `triage` and `assignSpecialist` both move a referral from queued to triaged, and the machine
+    // kept one. Each is a verb out of the state the brief names, and the App the draft writes still checks.
+    const block = {
+      app: { name: 'Referrals', theme: 'lumen' },
+      entities: { referral: { patient: 'text!', status: 'choice queued|triaged|seen|closed =queued' } },
+      roles: { admin: { label: 'Admin', read: true, write: true, commands: ['triage', 'assignSpecialist', 'reopen'] } },
+      commands: [
+        { id: 'triage', on: 'referral', label: 'Triage', when: 'status = queued', set: { status: 'triaged' } },
+        { id: 'assignSpecialist', on: 'referral', label: 'Assign specialist', when: 'status = queued', set: { status: 'triaged' } },
+        { id: 'reopen', on: 'referral', label: 'Reopen', when: 'status = seen', set: { status: 'triaged' } },
+      ],
+    };
+    const file = join(root, 'two.md');
+    writeFileSync(file, document(block));
+    const dir = join(root, 'two');
+    const log = console.log;
+    console.log = () => {};
+    try {
+      assert.equal(await runNewApp(['--brief', file, dir]), 0);
+    } finally {
+      console.log = log;
+    }
+    const resources = readFileSync(join(dir, 'resources.ts'), 'utf8');
+    assert.match(resources, /queued: \{ on: \{ triage: 'triaged', assignSpecialist: 'triaged'/);
+    /* A third from another state is its own edge, and takes neither of the first two's. */
+    assert.match(resources, /seen: \{ on: \{[^}]*reopen: 'triaged'/);
+    assert.doesNotMatch(resources, /queued: \{ on: \{[^}]*reopen/);
+    assert.doesNotMatch(resources, /action\('(?:Triage|Assign specialist|Reopen)'/);
+    /* A tsconfig that reads the pages the App will grow: JSX and the DOM, as every scaffold writes it. */
+    const tsconfig = JSON.parse(readFileSync(join(dir, 'tsconfig.json'), 'utf8'));
+    assert.deepEqual(tsconfig.include, ['**/*.ts', '**/*.tsx']);
+    assert.equal(tsconfig.compilerOptions.jsx, 'react-jsx');
+    assert.ok(tsconfig.compilerOptions.lib.includes('DOM'));
+    mistri(dir, 'migrate', 'stores', 'up');
+    assert.match(mistri(dir, 'check', '--brief'), /^ok\s*$/);
+  });
+
   test('refuses a brief that cannot be read and a folder that is not empty, before writing anything', async () => {
     const quiet = console.error;
     console.error = () => {};

@@ -56,6 +56,11 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [secret, setSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
   const load = useCallback(async () => {
     try {
       const got = (await api('/api/tokens', {})) as Reply;
@@ -129,7 +134,7 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
           <div>
             <input data-slot="input" readOnly value={secret} aria-label={say('title')} onFocus={(event) => event.target.select()} />
             <Button
-              size="compact"
+              size="sm"
               onClick={() => {
                 void navigator.clipboard?.writeText(secret).then(() => setCopied(true));
               }}
@@ -171,10 +176,10 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
                   <td>
                     {!token.revokedAt && (
                       <Button
-                        intent="danger"
-                        size="compact"
-                        busy={busy === token.id}
-                        busyLabel={say('revoking')}
+                        variant="danger"
+                        size="sm"
+                        loading={busy === token.id}
+                        loadingLabel={say('revoking')}
                         onClick={() => void revoke(token.id)}
                       >
                         {say('revoke')}
@@ -195,7 +200,7 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
           ) : (
             <>
               {service && (
-                <Field label={say('kind')} size="compact" group>
+                <Field label={say('kind')} size="sm" group>
                   {(control) => (
                     <div className="api-tokens-roles" {...control} role="radiogroup">
                       {listing.choices.roles.length > 0 && (
@@ -213,11 +218,11 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
                 </Field>
               )}
               {service && making === 'service' && <p className="note">{say('serviceNote', { name: service.label })}</p>}
-              <Field label={say('label')} hint={say('labelHint')} size="compact" required>
+              <Field label={say('label')} hint={say('labelHint')} size="sm" required>
                 <input data-slot="input" value={label} maxLength={200} onChange={(event) => setLabel(event.target.value)} />
               </Field>
               {service && making === 'service' && service.roles.length > 1 && (
-                <Field label={say('serviceRole')} size="compact" group>
+                <Field label={say('serviceRole')} size="sm" group>
                   {(control) => (
                     <div className="api-tokens-roles" {...control} role="radiogroup">
                       {service.roles.map((each) => (
@@ -231,7 +236,7 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
                 </Field>
               )}
               {making === 'member' && listing.choices.roles.length > 1 && (
-                <Field label={say('roles')} size="compact" group>
+                <Field label={say('roles')} size="sm" group>
                   {(control) => (
                     <div className="api-tokens-roles" {...control} role="group">
                       {listing.choices.roles.map((role) => (
@@ -250,7 +255,7 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
                   )}
                 </Field>
               )}
-              <Field label={say('days')} hint={say('daysHint', { most: listing.choices.maxDays })} size="compact">
+              <Field label={say('days')} hint={say('daysHint', { most: listing.choices.maxDays })} size="sm">
                 <input
                   data-slot="input"
                   className="api-tokens-days"
@@ -263,11 +268,11 @@ export function TenantApiTokens({ onClose }: { onClose: () => void }) {
               </Field>
               <div className="api-tokens-actions">
                 <Button
-                  intent="primary"
-                  size="compact"
+                  variant="primary"
+                  size="sm"
                   type="submit"
-                  busy={busy === 'make'}
-                  busyLabel={say('creating')}
+                  loading={busy === 'make'}
+                  loadingLabel={say('creating')}
                   disabled={!label.trim() || !ready}
                 >
                   {say('create')}

@@ -32,6 +32,7 @@ import {
 import { createPortal } from 'react-dom';
 import { Autocomplete, AutocompleteContent, AutocompleteInput, AutocompleteItem, AutocompleteList } from '@ui-sdk/react/autocomplete';
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
+import { cx, isEmptyStateSpec, type EmptyStateSpec } from './internal/cx.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
 import { viewportBox } from './internal/ruler.js';
 import { told } from './internal/told.js';
@@ -54,6 +55,7 @@ export type TypeaheadReason =
   | 'cancel-open'
   | 'implicit';
 
+/** Props for the `Typeahead` combobox primitive. */
 export interface TypeaheadProps<T> {
   text: string;
   onText: (text: string, details: ChangeDetails<TypeaheadReason>) => void;
@@ -67,8 +69,11 @@ export interface TypeaheadProps<T> {
   open: boolean;
   onOpenChange: (open: boolean, details: ChangeDetails<TypeaheadReason>) => void;
   /** The `<input>`'s own attributes — class, label, placeholder, title, the caller's keys. */
-  inputProps: InputHTMLAttributes<HTMLInputElement>;
-  inputRef?: Ref<HTMLInputElement>;
+  inputProps: Omit<InputHTMLAttributes<HTMLInputElement>, 'onChange' | 'aria-label' | 'inlist'> & {
+    ariaLabel?: string;
+  };
+  /** Forwarded ref to the underlying `<input>` element. */
+  ref?: Ref<HTMLInputElement>;
   /** The actual popup, including when it is portalled outside the input's parent. */
   popupRef?: Ref<HTMLDivElement>;
   /** The element the list is sized and placed against; the input by default. */
@@ -78,7 +83,7 @@ export interface TypeaheadProps<T> {
   popupClassName: string;
   listClassName: string;
   /** Shown in the list when nothing matches; nothing at all when omitted. */
-  empty?: ReactNode;
+  empty?: EmptyStateSpec | ReactNode;
   emptyClassName?: string;
   /**
    * Where the list is drawn: inside the enclosing dialog (the default), so
@@ -92,6 +97,7 @@ export interface TypeaheadProps<T> {
   autoHighlight?: boolean;
   /** Hears the row lit by the keys or the pointer, and undefined when none is. */
   onHighlight?: (item: T | undefined) => void;
+  className?: string;
 }
 
 /* UI SDK's word for why the text or the list moved, where it is one a caller here can hear; `implicit` otherwise. */
@@ -112,30 +118,35 @@ const REASONS = new Set<string>([
 ]);
 const reason = (said: string | undefined): TypeaheadReason => (said && REASONS.has(said) ? (said as TypeaheadReason) : 'implicit');
 
-function DefaultTypeahead<T>({
-  text,
-  onText,
-  items,
-  itemKey,
-  itemLabel,
-  itemClassName,
-  renderItem,
-  onPick,
-  open,
-  onOpenChange,
-  inputProps,
-  inputRef,
-  popupRef,
-  anchorRef,
-  fit = 'min-width',
-  popupClassName,
-  listClassName,
-  empty,
-  emptyClassName,
-  portal = 'dialog',
-  autoHighlight = true,
-  onHighlight,
-}: TypeaheadProps<T>) {
+function DefaultTypeahead<T>(props: TypeaheadProps<T>) {
+  const {
+    text,
+    onText,
+    items,
+    itemKey,
+    itemLabel,
+    itemClassName,
+    renderItem,
+    onPick,
+    open,
+    onOpenChange,
+    inputProps,
+    ref,
+    popupRef,
+    anchorRef,
+    fit = 'min-width',
+    popupClassName,
+    listClassName,
+    empty,
+    emptyClassName,
+    portal = 'dialog',
+    autoHighlight = true,
+    onHighlight,
+    className,
+  } = props;
+  const forwardedRef = ref ?? (props as { inputRef?: Ref<HTMLInputElement> }).inputRef;
+  const rawInputProps = inputProps as InputHTMLAttributes<HTMLInputElement> & { ariaLabel?: string };
+  const inputAriaLabel = rawInputProps.ariaLabel ?? rawInputProps['aria-label'];
   const byKey = new Map(items.map((item) => [itemKey(item), item]));
   /* The first row is lit while the reader types, so Enter takes it, and not by the list merely opening: a press on
      the box shows the list with no row in hand, and the arrows start from the top. UI SDK lights the first row of
@@ -149,21 +160,30 @@ function DefaultTypeahead<T>({
   const pressed = useRef(false);
   const box = useRef<HTMLInputElement | null>(null);
   const dialog = useDialogContainer(box);
+  const [anchorNode, setAnchorNode] = useState<HTMLElement | undefined>(undefined);
+  useLayoutEffect(() => {
+    setAnchorNode(anchorRef?.current ?? undefined);
+  }, [anchorRef, open]);
   /* Nothing matches: the message is a status beside the box, never a listbox with no option to hold (a pattern
      violation of its own). UI SDK's popup calls itself a listbox when it holds no list, so the message is drawn
      here instead, under the box, measured on the zoom-aware ruler as everything placed by hand is. */
-  const nothing = open && items.length === 0 && empty !== undefined;
+  const nothing = open && items.length === 0 && empty !== undefined && empty !== null && empty !== false;
   const [under, setUnder] = useState<CSSProperties>();
   useLayoutEffect(() => {
     const anchor = anchorRef?.current ?? box.current;
     if (!nothing || !anchor) return;
     const at = viewportBox(anchor);
-    setUnder({ position: 'fixed', left: at.left, top: at.bottom + 4, [fit === 'width' ? 'width' : 'minWidth']: at.width });
+    setUnder({
+      position: 'fixed',
+      left: at.left,
+      top: at.bottom + 4,
+      ...(fit === 'width' ? { width: at.width, maxWidth: at.width } : { minWidth: at.width }),
+    });
   }, [nothing, anchorRef, fit, text]);
   /* The list is named as its box is. A box named by a `<label for>` has no name attribute to copy, and pointing the
      list at the box itself would read out what is typed in it (an embedded textbox contributes its value), so the
      label's words are read off the input and given as the list's own name; failing a label, the input's title. */
-  const named = inputProps['aria-label'] !== undefined || inputProps['aria-labelledby'] !== undefined;
+  const named = inputAriaLabel !== undefined || rawInputProps['aria-labelledby'] !== undefined;
   const [labelWords, setLabelWords] = useState<string | undefined>();
   useEffect(() => {
     if (named) return;
@@ -171,10 +191,21 @@ function DefaultTypeahead<T>({
       .map((label) => (label.textContent ?? '').replace(/\s+/g, ' ').trim())
       .filter(Boolean)
       .join(' ');
-    setLabelWords(words || inputProps.title || undefined);
-  }, [named, inputProps.title]);
+    setLabelWords(words || rawInputProps.title || undefined);
+  }, [named, rawInputProps.title]);
   // The text is the caller's `text` and nothing else: an input's own value or change handler would be a second one.
-  const { value: _value, defaultValue: _defaultValue, onChange: _onChange, onKeyDown, onClick, onBlur, ...input } = inputProps;
+  const {
+    value: _value,
+    defaultValue: _defaultValue,
+    onChange: _onChange,
+    ariaLabel: _ariaLabel,
+    'aria-label': _rawAriaLabel,
+    onKeyDown,
+    onClick,
+    onBlur,
+    className: inputClassName,
+    ...input
+  } = rawInputProps;
   /* Open with nothing to list: the caller still holds the list open (a search that found no one, with or without a
      message to say so), and UI SDK has no popup up to hear a press elsewhere or the keyboard leaving. Both are
      heard here, once, so the caller is told it closed as it is for a list with options in it. */
@@ -206,6 +237,15 @@ function DefaultTypeahead<T>({
   const popup: CSSProperties =
     fit === 'width' ? { width: '100%' } : { minWidth: 'var(--anchor-width)', maxWidth: 'var(--available-width)' };
   const targetContainer = (portal === 'body' ? null : dialog) ?? popupContainer();
+  const emptyContent = isEmptyStateSpec(empty) ? (
+    <>
+      <div>{empty.title}</div>
+      {empty.body ? <div>{empty.body}</div> : null}
+      {empty.action ? <div>{empty.action}</div> : null}
+    </>
+  ) : (
+    empty
+  );
   const emptyOverlay = nothing ? (
     <div ref={emptyBox} data-slot="autocomplete-content" data-kind="empty" data-fit={fit} style={under}>
       {/* The list's class is the popup's surface (ground, edge, shadow) to a caller, so while there is no list
@@ -213,12 +253,13 @@ function DefaultTypeahead<T>({
       <div ref={setPopup} className={popupClassName} data-slot="autocomplete-popup" data-open="" style={popup}>
         <div className={listClassName}>
           <div className={emptyClassName} data-slot="autocomplete-empty" role="status">
-            {empty}
+            {emptyContent}
           </div>
         </div>
       </div>
     </div>
   ) : null;
+  const resolvedAnchor = anchorRef ? (anchorRef.current ?? anchorNode ?? box.current ?? undefined) : undefined;
   return (
     <Autocomplete
       value={text}
@@ -257,10 +298,12 @@ function DefaultTypeahead<T>({
     >
       <AutocompleteInput
         {...(input as ComponentProps<typeof AutocompleteInput>)}
+        aria-label={inputAriaLabel}
+        className={cx(inputClassName, className)}
         ref={(node: HTMLInputElement | null) => {
           box.current = node;
-          if (typeof inputRef === 'function') inputRef(node);
-          else if (inputRef) (inputRef as { current: HTMLInputElement | null }).current = node;
+          if (typeof forwardedRef === 'function') forwardedRef(node);
+          else if (forwardedRef) (forwardedRef as { current: HTMLInputElement | null }).current = node;
         }}
         onBlur={(event) => {
           onBlur?.(event);
@@ -294,7 +337,7 @@ function DefaultTypeahead<T>({
       <AutocompleteContent
         data-fit={fit}
         style={fit === 'width' ? { width: 'var(--anchor-width)', maxWidth: 'var(--available-width)' } : undefined}
-        anchor={anchorRef ? { getBoundingClientRect: () => (anchorRef.current ?? box.current)!.getBoundingClientRect() } : undefined}
+        anchor={resolvedAnchor}
         container={targetContainer}
       >
         {/* The caller's popup says it is open itself: its class is what a caller's stylesheet and tests know, and
@@ -304,7 +347,7 @@ function DefaultTypeahead<T>({
           {items.length > 0 ? (
             <AutocompleteList
               className={listClassName}
-              aria-label={named ? input['aria-label'] : labelWords}
+              aria-label={named ? inputAriaLabel : labelWords}
               aria-labelledby={input['aria-labelledby']}
             >
               {items.map((item) => (
@@ -326,5 +369,5 @@ function DefaultTypeahead<T>({
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Text input with ranked popup suggestions, keyboard navigation, and custom item rendering. */
 export const Typeahead = slotted('Typeahead', DefaultTypeahead, { onText: [1, 'input-change'], onOpenChange: [1, 'implicit'] });

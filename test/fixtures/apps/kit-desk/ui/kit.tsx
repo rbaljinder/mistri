@@ -14,42 +14,85 @@ import './kit.css';
 const classes = (...names: Array<string | false | undefined>) => names.filter(Boolean).join(' ');
 
 const Button: UiKitSlots['Button'] = ({
-  intent = 'secondary',
+  variant = 'secondary',
   size,
-  busy = false,
-  busyLabel,
+  loading = false,
+  loadingLabel,
+  leadingIcon,
+  trailingIcon,
+  shortcut,
   block = false,
+  iconOnly: _iconOnly,
   type = 'button',
+  ariaLabel,
   className,
   disabled,
+  onClick,
   children,
   ref,
   ...rest
-}) => (
-  <button
-    {...rest}
-    ref={ref}
-    type={type}
-    data-kit="button"
-    data-intent={intent}
-    className={classes('kit-button', `kit-${intent}`, size === 'compact' && 'kit-compact', block && 'kit-block', className)}
-    disabled={disabled || busy}
-    aria-busy={busy || undefined}
-  >
-    {busy && busyLabel ? busyLabel : children}
-  </button>
-);
+}) => {
+  return (
+    <button
+      {...rest}
+      ref={ref}
+      type={type}
+      aria-label={ariaLabel}
+      data-kit="button"
+      data-variant={variant}
+      className={classes('kit-button', `kit-${variant}`, size === 'sm' && 'kit-sm', block && 'kit-block', className)}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      onClick={onClick ? (e) => void onClick(e, { reason: 'press', source: 'pointer', event: e.nativeEvent } as never) : undefined}
+    >
+      {leadingIcon}
+      {loading && loadingLabel ? loadingLabel : children}
+      {trailingIcon}
+      {shortcut}
+    </button>
+  );
+};
 
-const ButtonLink: UiKitSlots['ButtonLink'] = ({ intent = 'secondary', size, block = false, className, children, ref, ...rest }) => (
-  <a
-    {...rest}
-    ref={ref}
-    data-kit="button-link"
-    className={classes('kit-button', `kit-${intent}`, size === 'compact' && 'kit-compact', block && 'kit-block', className)}
-  >
-    {children}
-  </a>
-);
+const ButtonLink: UiKitSlots['ButtonLink'] = ({
+  variant = 'secondary',
+  size,
+  leadingIcon,
+  trailingIcon,
+  shortcut,
+  block = false,
+  iconOnly: _iconOnly,
+  disabled,
+  ariaLabel,
+  onClick,
+  className,
+  children,
+  ref,
+  ...rest
+}) => {
+  const held = Boolean(disabled) || rest['aria-disabled'] === true || rest['aria-disabled'] === 'true';
+  return (
+    <a
+      {...rest}
+      ref={ref}
+      aria-label={ariaLabel}
+      data-kit="button-link"
+      aria-disabled={held ? true : rest['aria-disabled']}
+      onClick={(e) => {
+        if (held) {
+          e.preventDefault();
+          return;
+        }
+        onClick?.(e);
+      }}
+      className={classes('kit-button', `kit-${variant}`, size === 'sm' && 'kit-sm', block && 'kit-block', className)}
+    >
+      {leadingIcon}
+      {children}
+      {trailingIcon}
+      {shortcut}
+    </a>
+  );
+};
 
 const FOCUSABLE =
   'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -129,6 +172,7 @@ const DropMenu: UiKitSlots['DropMenu'] = ({
   triggerClassName,
   triggerTitle,
   triggerLabel,
+  ariaLabel,
   label,
   popupClassName,
   align = 'end',
@@ -184,7 +228,7 @@ const DropMenu: UiKitSlots['DropMenu'] = ({
         type="button"
         className={classes('kit-button', 'kit-secondary', triggerClassName)}
         title={triggerTitle}
-        aria-label={triggerLabel}
+        aria-label={ariaLabel ?? triggerLabel}
         aria-haspopup="menu"
         aria-expanded={shown}
         onClick={() => set(!shown)}
@@ -267,7 +311,7 @@ const Typeahead: UiKitSlots['Typeahead'] = ({
   open,
   onOpenChange,
   inputProps,
-  inputRef,
+  ref,
   popupRef,
   popupClassName,
   listClassName,
@@ -290,13 +334,14 @@ const Typeahead: UiKitSlots['Typeahead'] = ({
     onHighlight?.(at >= 0 ? items[at] : undefined);
   };
   const shown = open && (items.length > 0 || empty !== undefined);
-  const { onKeyDown, onBlur, className, ...rest } = inputProps;
+  const { onKeyDown, onBlur, className, ariaLabel, ...rest } = inputProps;
   return (
     <>
       <input
         type="text"
         {...rest}
-        ref={inputRef}
+        ref={ref}
+        aria-label={ariaLabel}
         role="combobox"
         aria-expanded={shown}
         aria-controls={shown ? list : undefined}
@@ -333,14 +378,14 @@ const Typeahead: UiKitSlots['Typeahead'] = ({
           {items.length === 0 ? (
             <div id={list} className={classes('kit-list', listClassName)}>
               <div role="status" className={emptyClassName}>
-                {empty}
+                {typeof empty === 'object' && empty !== null && 'title' in empty ? empty.title : empty}
               </div>
             </div>
           ) : (
             <div
               role="listbox"
               id={list}
-              aria-label={rest['aria-label']}
+              aria-label={ariaLabel}
               aria-labelledby={rest['aria-labelledby']}
               className={classes('kit-list', listClassName)}
             >
@@ -374,7 +419,7 @@ const DateField: UiKitSlots['DateField'] = ({
   id,
   words,
   value,
-  onChange,
+  onValueChange,
   onBlur,
   onKeyDown,
   disabled,
@@ -383,10 +428,10 @@ const DateField: UiKitSlots['DateField'] = ({
   max,
   className,
   name,
-  inputRef,
+  ref,
   placeholder,
   withTime,
-  'aria-label': label,
+  ariaLabel: label,
   'aria-invalid': invalid,
   'aria-describedby': describedBy,
 }) => {
@@ -395,7 +440,7 @@ const DateField: UiKitSlots['DateField'] = ({
     <span data-kit="date-field" className="kit-date">
       <input
         id={id}
-        ref={inputRef}
+        ref={ref}
         type="text"
         name={name}
         className={classes('kit-field', className)}
@@ -406,13 +451,13 @@ const DateField: UiKitSlots['DateField'] = ({
         aria-label={label}
         aria-invalid={invalid}
         aria-describedby={describedBy}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => onValueChange?.(event.target.value)}
         onBlur={onBlur}
         onKeyDown={onKeyDown}
       />
       <button
         type="button"
-        className="kit-button kit-quiet kit-compact"
+        className="kit-button kit-ghost kit-sm"
         aria-label={words.chooseDate(label)}
         aria-expanded={picking}
         disabled={disabled}
@@ -429,7 +474,7 @@ const DateField: UiKitSlots['DateField'] = ({
           min={min}
           max={max}
           onChange={(event) => {
-            onChange(withTime ? event.target.value.replace('T', ' ') : event.target.value);
+            onValueChange?.(withTime ? event.target.value.replace('T', ' ') : event.target.value);
             setPicking(false);
           }}
         />

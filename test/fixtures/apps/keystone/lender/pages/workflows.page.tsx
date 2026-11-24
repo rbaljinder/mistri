@@ -15,7 +15,7 @@
  */
 import type { ReactNode } from 'react';
 import { definePage } from '@mistriwork/mistri/page';
-import { Button, Dropdown, Empty, Row, Stack, Tone, useEffect, useFormat, useState, useViewer } from '@mistriwork/mistri/ui';
+import { Button, Dropdown, EmptyState, Row, Stack, StatusDot, useEffect, useFormat, useState, useViewer } from '@mistriwork/mistri/ui';
 import './workflows.css';
 
 const page = definePage({
@@ -54,12 +54,12 @@ interface Step {
   errorCode: string | null;
 }
 
-const TONE: Record<State, 'good' | 'warn' | 'bad' | 'info' | 'neutral'> = {
+const TONE: Record<State, 'good' | 'warning' | 'critical' | 'info' | 'neutral'> = {
   running: 'info',
   waiting: 'neutral',
   completed: 'good',
-  failed: 'bad',
-  diverged: 'bad',
+  failed: 'critical',
+  diverged: 'critical',
   cancelled: 'neutral',
 };
 const WORD: Record<State, string> = {
@@ -117,7 +117,7 @@ async function call<T>(account: string, path: string, body?: unknown): Promise<T
 
 function WorkflowsPage(): ReactNode {
   const viewer = useViewer();
-  if (!viewer.signedIn || !viewer.account) return <Empty title="Sign in to see the workflows." />;
+  if (!viewer.signedIn || !viewer.account) return <EmptyState title="Sign in to see the workflows." />;
   return <Workflows account={viewer.account} />;
 }
 
@@ -149,8 +149,8 @@ function Workflows({ account }: { account: string }) {
   return (
     <Stack className="c-page-workflows" gap="section">
       <Row align="end" className="c-page-workflows-bar">
-        <Dropdown ariaLabel="Show instances" items={FILTERS} value={filter} onChange={setFilter} />
-        <Button intent="quiet" onClick={() => setRevision(revision + 1)}>
+        <Dropdown ariaLabel="Show instances" items={FILTERS} value={filter} onValueChange={setFilter} />
+        <Button variant="ghost" onClick={() => setRevision(revision + 1)}>
           Refresh
         </Button>
       </Row>
@@ -163,7 +163,7 @@ function Workflows({ account }: { account: string }) {
           {list.error}
         </p>
       ) : !instances.length ? (
-        <Empty title="No workflow instances" description="An instance starts when the fact its workflow listens for is recorded." />
+        <EmptyState title="No workflow instances" description="An instance starts when the fact its workflow listens for is recorded." />
       ) : (
         <table className="c-page-workflows-table">
           <caption className="c-page-workflows-sr">Workflow instances</caption>
@@ -187,7 +187,7 @@ function Workflows({ account }: { account: string }) {
                 </td>
                 <td className="c-page-workflows-key">{item.key}</td>
                 <td>
-                  <Tone tone={TONE[item.state]}>{WORD[item.state]}</Tone>
+                  <StatusDot tone={TONE[item.state]}>{WORD[item.state]}</StatusDot>
                 </td>
                 <td className="c-page-workflows-num">v{item.version}</td>
                 <td>{item.currentStep ?? '—'}</td>
@@ -257,7 +257,7 @@ function Detail({
         <h3 className="c-page-workflows-title">
           {instance.workflow} · {instance.key}
         </h3>
-        <Tone tone={TONE[instance.state]}>{WORD[instance.state]}</Tone>
+        <StatusDot tone={TONE[instance.state]}>{WORD[instance.state]}</StatusDot>
         <span className="c-page-workflows-quiet">
           Version {instance.version}, started {when(instance.createdAt)}
         </span>
@@ -303,14 +303,14 @@ function Detail({
                 <td>{step.kind}</td>
                 <td>
                   {step.status === 'completed' ? (
-                    <Tone tone="good">Completed</Tone>
+                    <StatusDot tone="good">Completed</StatusDot>
                   ) : step.status === 'pending' ? (
                     'Pending'
                   ) : (
-                    <Tone tone="bad">
+                    <StatusDot tone="critical">
                       {step.status === 'refused' ? 'Refused' : 'Failed'}
                       {step.errorCode ? ` (${step.errorCode})` : ''}
-                    </Tone>
+                    </StatusDot>
                   )}
                 </td>
                 <td className="c-page-workflows-num">{step.attempts}</td>
@@ -322,22 +322,22 @@ function Detail({
       )}
       <Row className="c-page-workflows-actions">
         {retryable && (
-          <Button intent="primary" busy={busy === 'retry'} busyLabel="Retrying…" onClick={() => void act('retry')}>
+          <Button variant="primary" loading={busy === 'retry'} loadingLabel="Retrying…" onClick={() => void act('retry')}>
             Retry
           </Button>
         )}
         {live && !asking && (
-          <Button intent="secondary" disabled={busy !== undefined} onClick={() => setAsking(true)}>
+          <Button variant="secondary" disabled={busy !== undefined} onClick={() => setAsking(true)}>
             Cancel
           </Button>
         )}
         {live && asking && (
           <>
             <span className="c-page-workflows-ask">Cancel this instance for good?</span>
-            <Button intent="danger" onClick={() => void act('cancel')}>
+            <Button variant="danger" onClick={() => void act('cancel')}>
               Yes, cancel it
             </Button>
-            <Button intent="quiet" onClick={() => setAsking(false)}>
+            <Button variant="ghost" onClick={() => setAsking(false)}>
               Keep it
             </Button>
           </>

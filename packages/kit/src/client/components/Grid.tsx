@@ -58,6 +58,7 @@ import {
   viewportScale,
 } from '../core.js';
 import { opensRecord } from '../recordIntent.js';
+import { SumsAway, TotalsRow, TotalValue, totalWords, type AwaySum } from './GridTotals.js';
 import { labelColumn as namingColumn, labelPath as namingPath } from '@mistriwork/engine/shared/schema.js';
 import { ListSubtitles } from './listSubtitles.js';
 import { datesAmong, dressFor, leadTonePath, maskedText, ruleSays, subtitlePath, type DisplayRule } from './valueModel.js';
@@ -89,7 +90,7 @@ import {
 import type { TrailList } from '../recordTrail.js';
 import { useGridKeyboard } from './useGridKeyboard.js';
 import { useChangedRows } from '../liveState.js';
-import { fontLoaded, textMeasure } from './textMeasure.js';
+import { clearTextMeasures, fontLoaded, textMeasure } from './textMeasure.js';
 import { presentationColumns } from './columnPresentation.js';
 import { usePins } from './usePins.js';
 import { useStickyHead } from './useStickyHead.js';
@@ -267,30 +268,6 @@ function clampCell(raw: string): { text: string; title?: string } {
  * that draws it is decided by its type while whether it points somewhere
  * is decided by the schema.
  */
-/** A total, dressed as its column is; a sum past 2^53 is shown as the server sent it. */
-function TotalValue({ value, display }: { value: unknown; display: DisplayRule | null }) {
-  if (value === undefined)
-    return (
-      <span className="grid-totals-pending" aria-label={say('summing')}>
-        …
-      </span>
-    );
-  if (value === null) return <span className="null">{emptyWord()}</span>;
-  const dress = dressFor(display, value);
-  if (dress && dress.kind !== 'meter') return <Dressed dress={dress} compact={dress.kind === 'richText'} />;
-  return <span className="num-value">{formatNumber(value)}</span>;
-}
-
-/** The words the totals row draws for a column's sum, which its column is sized by (TotalValue's words); none while the
-    sum is on its way, absent, or drawn by a meter. */
-function totalWords(display: DisplayRule | null, value: unknown): string | undefined {
-  if (value === undefined || value === null) return undefined;
-  const dress = dressFor(display, value);
-  if (!dress) return formatNumber(value);
-  if (dress.kind === 'meter') return undefined;
-  return String((dress.kind === 'tone' || dress.kind === 'word' || dress.kind === 'mark' ? dress.label : dress.text) ?? value);
-}
-
 /** The words a plain cell draws for a value, which the grid sizes a column by and a folded detail line tests its head
     against: a reference's label, a display rule's own words, a number as formatted, else the raw value. */
 function drawnWords(display: DisplayRule | null, plan: Plan, value: unknown, label?: unknown): unknown {
@@ -1054,7 +1031,28 @@ export function Grid({
             const chip = row.children[index]?.querySelector<HTMLElement>('.tone:not(.tone-figure)');
             const words = chip?.textContent?.trim();
             const said = words ? textMeasure(fonts[index])?.(words) : undefined;
-            if (chip && said !== undefined) extra = Math.max(extra, Math.ceil(chip.offsetWidth - said));
+            if (chip && words && said !== undefined) {
+              const cs = getComputedStyle(chip);
+              const chipFont = `${cs.fontStyle} ${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+              sizedInFallback = sizedInFallback || !fontLoaded(chipFont);
+              measuredIn += ` ${chipFont}`;
+              const chipWords = cs.textTransform === 'uppercase' ? words.toUpperCase() : words;
+              const chipText = (textMeasure(chipFont)?.(chipWords) ?? said) + (parseFloat(cs.letterSpacing) || 0) * words.length;
+              const padAndBorder =
+                (parseFloat(cs.paddingLeft) || 0) +
+                (parseFloat(cs.paddingRight) || 0) +
+                (parseFloat(cs.borderLeftWidth) || 0) +
+                (parseFloat(cs.borderRightWidth) || 0);
+              const before = getComputedStyle(chip, '::before');
+              const hasDot = before.content !== 'none' && before.content !== 'normal' && before.display !== 'none';
+              const dotAndGap = hasDot
+                ? (parseFloat(before.width) || 0) +
+                  (parseFloat(before.marginLeft) || 0) +
+                  (parseFloat(before.marginRight) || 0) +
+                  (parseFloat(cs.columnGap) || parseFloat(cs.gap) || 0)
+                : 0;
+              extra = Math.max(extra, Math.max(0, Math.ceil(padAndBorder + dotAndGap + (chipText - said))));
+            }
           }
           return extra;
         });
@@ -1079,17 +1077,39 @@ export function Grid({
        measured — its sheet was still on its way, so nothing said to wait for it (textMeasure.ts): the arrival names
        its family, and a family the grid measured in is measured again. */
     const faces = globalThis.document?.fonts;
+    let frame = 0;
+    let frame2 = 0;
+    let disposed = false;
+    const remeasure = () => {
+      if (disposed) return;
+      clearTextMeasures();
+      measure();
+      setFaceEpoch((was) => was + 1);
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(frame2);
+      frame = requestAnimationFrame(() => {
+        frame2 = requestAnimationFrame(() => {
+          if (disposed) return;
+          clearTextMeasures();
+          measure();
+          setFaceEpoch((was) => was + 1);
+        });
+      });
+    };
     const arrived = (event: Event) => {
       const families = ((event as Partial<FontFaceSetLoadEvent>).fontfaces ?? []).map((face) =>
         face.family.replace(/["']/g, '').toLowerCase(),
       );
       const used = measuredIn.toLowerCase();
       if (!sizedInFallback && !families.some((family) => family && used.includes(family))) return;
-      measure();
-      setFaceEpoch((was) => was + 1);
+      remeasure();
+      void faces?.ready?.then?.(remeasure);
     };
     faces?.addEventListener?.('loadingdone', arrived);
     return () => {
+      disposed = true;
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(frame2);
       faces?.removeEventListener?.('loadingdone', arrived);
       observer.disconnect();
       removeHostListener(window, VISUAL_THEME_EVENT, themeChanged);
@@ -1255,9 +1275,10 @@ export function Grid({
   const ordered = useMemo(() => applyColumnOrder(drawn, columnOrder), [drawn, columnOrder]);
   const orderedHints = useMemo(() => ordered.map((name) => drawnHints[drawn.indexOf(name)]!), [ordered, drawn, drawnHints]);
   const measureOrdered = useMemo(() => measureIn(ordered), [measureIn, ordered]);
+  const squeezeFit = (dropColumns || folds) && sizing === 'fit';
   const fit = useMemo(
-    () => fitGridColumns(orderedHints, availableWidth, slotted, trailing, headChar, measureOrdered, dropColumns),
-    [orderedHints, availableWidth, slotted, trailing, headChar, measureOrdered, dropColumns],
+    () => fitGridColumns(orderedHints, availableWidth, slotted, trailing, headChar, measureOrdered, squeezeFit),
+    [orderedHints, availableWidth, slotted, trailing, headChar, measureOrdered, squeezeFit],
   );
   /* A dragged width stands in place of its fitted one. A scrolled grid has
      no colgroup until a width is dragged: then it takes one, and the fixed
@@ -1520,6 +1541,12 @@ export function Grid({
     );
     return words.reduce((best, name) => (width(name) > width(best) ? name : best), named);
   })();
+  /* The totalled columns among the folded: their sums are said in the footer's caption and each group's head. */
+  const sumsAway: AwaySum[] = totals
+    ? folded
+        .filter((name) => Object.hasOwn(totals, name))
+        .map((name) => ({ name, head: String(labels?.[name] ?? columnLabel(table?.id, name) ?? name) }))
+    : [];
   const columnValuesKey = `${ordered.join(',')}\u0000${folded.join(',')}`;
   const columnValues = useMemo(
     () => new Map([...ordered, ...folded].map((name) => [name, rows.map((row) => row[name])])),
@@ -1955,6 +1982,7 @@ export function Grid({
                         slot={slotted}
                         trail={trailing}
                         columns={ordered}
+                        away={sumsAway}
                         table={table}
                       />
                     )}
@@ -1986,19 +2014,15 @@ export function Grid({
         })()}
         {totals && rows.length > 0 && (
           <tfoot>
-            <tr className="grid-totals">
-              {slotted && <td className="expander-cell" />}
-              {ordered.map((name, index) => {
-                if (!Object.hasOwn(totals, name))
-                  return <td key={name}>{index === 0 && <span className="grid-totals-label">{totalsLabel}</span>}</td>;
-                return (
-                  <td key={name} className="align-right num">
-                    <TotalValue value={totals[name]} display={columnDisplay(table?.id, name) as DisplayRule | null} />
-                  </td>
-                );
-              })}
-              {trailing && <td />}
-            </tr>
+            <TotalsRow
+              columns={ordered}
+              totals={totals}
+              label={totalsLabel}
+              away={sumsAway}
+              slot={slotted}
+              trail={trailing}
+              table={table}
+            />
           </tfoot>
         )}
       </table>
@@ -2030,6 +2054,7 @@ function GroupHeadRow({
   slot,
   trail,
   columns,
+  away,
   table,
 }: {
   head: GroupHead;
@@ -2041,6 +2066,8 @@ function GroupHeadRow({
   slot: boolean;
   trail: boolean;
   columns: string[];
+  /** The totalled columns folded under the row's name: their subtotals are said beside the count. */
+  away: readonly AwaySum[];
   table: TableMeta | undefined;
 }) {
   const sums = head.sums ?? {};
@@ -2055,6 +2082,11 @@ function GroupHeadRow({
           <Icon name={folded ? 'caret-right' : 'caret-down'} size={14} className="grid-group-caret" />
           <span className="grid-group-name">{head.label}</span>
           {head.count !== undefined && <span className="grid-group-count">{formatNumber(head.count)}</span>}
+          {head.sums && away.length > 0 && (
+            <span>
+              <SumsAway sums={sums} away={away} table={table} />
+            </span>
+          )}
         </button>
       </td>
       {columns.slice(lead).map((name) =>

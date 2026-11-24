@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
-import { loadHttpAppPolicy, type HttpAppPolicy } from '../packages/mistri/src/server/policy/appPolicyHttp.js';
+import { httpRowPolicyAllows, loadHttpAppPolicy, type HttpAppPolicy } from '../packages/mistri/src/server/policy/appPolicyHttp.js';
 import { AppRowPolicyDefinitionError } from '../packages/mistri/src/server/policy/appRowPolicy.js';
 import type { AppHost } from '../packages/mistri/src/server/app/apps.js';
 import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
@@ -764,6 +764,29 @@ test('row-policy HTTP without write grants refuses mutations and unsupported API
     assert.equal(result.headers.get('cache-control'), 'no-store', path);
     publicData(result.body);
   }
+  for (const path of ['/api/assistant', '/api/assistant/conversation', '/api/assistant/search']) {
+    assert.equal(httpRowPolicyAllows('GET', path), true, path);
+  }
+  for (const path of [
+    '/api/assistant/turn',
+    '/api/assistant/resolve',
+    '/api/assistant/acted',
+    '/api/assistant/rename',
+    '/api/assistant/delete',
+  ]) {
+    assert.equal(httpRowPolicyAllows('POST', path), true, path);
+  }
+  /* The assistant's routes are answered before the policy wraps a request (handler.ts OPEN_ROUTES), so the allow-list
+     above is not what answers here: the route's own 404 is, where the policy's refusal of a route it does not list
+     would be a 403. A conversation's owner is the verified session's account (test/assistant-http.test.ts holds that
+     another account can neither read, rename nor delete it). */
+  const assistantList = await call(`/api/assistant?app=${appId}`);
+  assert.equal(assistantList.status, 404);
+  assert.equal(assistantList.body.error, 'This App has no assistant.');
+  publicData(assistantList.body);
+  const forgotten = await call('/api/assistant/delete', { app: appId, conversation: 'c1' });
+  assert.equal(forgotten.status, 404, JSON.stringify(forgotten.body));
+  assert.equal(forgotten.body.error, 'This App has no assistant.');
   assert.deepEqual(
     f.databases.map((db) => db.prepare('SELECT * FROM physical_ticket ORDER BY id').all()),
     before,

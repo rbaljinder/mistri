@@ -4,43 +4,43 @@ import { Icon, loadIconsWith, onUnknownIcon, registerIcons, weighIconsWith, type
 
 afterEach(cleanup);
 
-const dot: IconGlyph = [['M0 0h1'], ['M0 0h2']];
-const ring: IconGlyph = [['M1 1h1'], ['M1 1h2']];
+const check: IconGlyph = [['M0 0h1'], ['M0 0h2']];
+const star: IconGlyph = [['M1 1h1'], ['M1 1h2']];
 const paths = (svg: Element) => [...svg.querySelectorAll('path')].map((path) => path.getAttribute('d'));
 
 test('a registered glyph draws regular, or bold when asked, in a labelled or decorative box', () => {
-  registerIcons({ dot });
-  const { container, rerender } = render(<Icon name="dot" size={16} />);
+  registerIcons({ check });
+  const { container, rerender } = render(<Icon name="check" size={16} />);
   const svg = container.querySelector('svg')!;
   expect(paths(svg)).toEqual(['M0 0h1']);
   expect(svg).toHaveAttribute('aria-hidden', 'true');
   expect(svg).toHaveAttribute('width', '16');
   expect(svg).toHaveClass('mistri-icon');
-  rerender(<Icon name="dot" weight="bold" label="Dot" />);
-  expect(paths(screen.getByRole('img', { name: 'Dot' }))).toEqual(['M0 0h2']);
+  rerender(<Icon name="check" weight="bold" label="Check" />);
+  expect(paths(screen.getByRole('img', { name: 'Check' }))).toEqual(['M0 0h2']);
 });
 
 test('a name not yet known keeps its box and draws once the loader brings it', async () => {
-  loadIconsWith(async () => ({ ring }));
-  const { container } = render(<Icon name="ring" size={20} />);
+  loadIconsWith(async () => ({ star }));
+  const { container } = render(<Icon name="star" size={20} />);
   const svg = container.querySelector('svg')!;
   expect(svg).toHaveAttribute('width', '20');
   await waitFor(() => expect(paths(svg)).toEqual(['M1 1h1']));
 });
 
 test("the page's weight draws an icon that names none; one that names its own keeps it", () => {
-  registerIcons({ dot });
+  registerIcons({ check });
   weighIconsWith({
     weight: () => 'fill',
-    drawing: (name) => (name === 'dot' ? ['M9 9'] : undefined),
+    drawing: (name) => (name === 'check' ? ['M9 9'] : undefined),
     subscribe: () => () => {},
     version: () => 1,
   });
   try {
     const { container } = render(
       <>
-        <Icon name="dot" />
-        <Icon name="dot" weight="bold" />
+        <Icon name="check" />
+        <Icon name="check" weight="bold" />
       </>,
     );
     const [weighed, own] = [...container.querySelectorAll('svg')];
@@ -56,20 +56,22 @@ test("the page's weight draws an icon that names none; one that names its own ke
 test('a name that names no glyph, once every glyph is in, is told once and may draw another instead', async () => {
   const told: string[] = [];
   onUnknownIcon((name, names) => {
-    told.push(`${name}: ${names.includes('ring') ? 'ring among them' : 'no ring'}`);
-    return 'dot';
+    told.push(`${name}: ${names.includes('star') ? 'star among them' : 'no star'}`);
+    return 'check';
   });
-  registerIcons({ dot });
-  loadIconsWith(async () => ({ ring }));
+  registerIcons({ check });
+  loadIconsWith(async () => ({ star }));
   const { container } = render(
     <>
+      {/* @ts-expect-error — misspelled icon name fails the typecheck and triggers onUnknownIcon at runtime */}
       <Icon name="rnig" />
+      {/* @ts-expect-error — second render verifies deduplicated unknown-icon callback */}
       <Icon name="rnig" />
     </>,
   );
   const [first, second] = container.querySelectorAll('svg');
   await waitFor(() => expect(paths(first)).toEqual(['M0 0h1']));
   expect(paths(second)).toEqual(['M0 0h1']);
-  expect(told).toEqual(['rnig: ring among them']);
+  expect(told).toEqual(['rnig: star among them']);
   onUnknownIcon(undefined);
 });

@@ -11,7 +11,7 @@
  */
 import { personFacing } from '@mistriwork/kit/client/audience.js';
 import { Fragment, createElement } from 'react';
-import { PHONE_QUERY, TABLET_QUERY } from '@mistriwork/ui/internal/ruler.js';
+import { PHONE_QUERY, TABLET_QUERY } from '@mistriwork/ui';
 import { AssistantTrigger, registerAskInPalette } from './components/AssistantTrigger.js';
 import { element, mount, queryClient, unmount } from '@mistriwork/kit/client/components/mount.js';
 import { captureAccountIdentity, requireTenantSelection, sessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';

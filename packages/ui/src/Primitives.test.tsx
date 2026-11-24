@@ -23,7 +23,7 @@ test('a switch says its state and toggles on Space, and a busy switch refuses th
   expect(control).toHaveAttribute('aria-checked', 'false');
   await userEvent.click(control);
   expect(onCheckedChange).toHaveBeenCalledWith(true, expect.objectContaining({ reason: 'toggle', source: 'pointer' }));
-  rerender(<Switch label="Notify me" checked onCheckedChange={onCheckedChange} busy />);
+  rerender(<Switch label="Notify me" checked onCheckedChange={onCheckedChange} loading />);
   expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
   await userEvent.click(screen.getByRole('switch'));
   expect(onCheckedChange).toHaveBeenCalledTimes(1);

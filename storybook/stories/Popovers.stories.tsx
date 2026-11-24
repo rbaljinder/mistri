@@ -34,7 +34,7 @@ export const Select: StoryObj = {
           <Dropdown
             ariaLabel="Team"
             value={team}
-            onChange={setTeam}
+            onValueChange={setTeam}
             items={[
               { value: 'design', label: 'Design' },
               { value: 'engineering', label: 'Engineering', detail: 'Platform & product' },
@@ -96,7 +96,9 @@ export const TypeaheadResults: StoryObj = {
 export const DatePicker: StoryObj = {
   render: function Open() {
     const [date, setDate] = useState('2026-09-22');
-    return <div className="insert-fields">{field('Start date', <DateField id="start" value={date} onChange={setDate} />, 'start')}</div>;
+    return (
+      <div className="insert-fields">{field('Start date', <DateField id="start" value={date} onValueChange={setDate} />, 'start')}</div>
+    );
   },
   play: async ({ canvasElement }) => {
     await userEvent.click(within(canvasElement).getByRole('button', { name: /Choose date/ }));

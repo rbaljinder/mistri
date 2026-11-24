@@ -417,8 +417,10 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
             noun: (app ? (resourceOf(farTable)?.noun?.one ?? recordNoun(undefined, farTable.name)) : farTable.name).toLocaleLowerCase(),
           }
         : undefined;
+    /* A card, not a list: said without the list's class, which a look that panels a record's lists (themeFamilies.css)
+       drew a second box around the card's own by. */
     return (
-      <section className={`${sectionClass(section)} page-card-section`}>
+      <section className={`${sectionClass(section).replace(' page-list ', ' ')} page-card-section`}>
         <CurrentCard
           table={table}
           caption={section.title}

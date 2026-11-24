@@ -36,6 +36,7 @@ export function Spans({
   onValueChange,
   onCommit,
   commitDelay,
+  words,
   value,
   defaultValue,
   ...props
@@ -43,8 +44,9 @@ export function Spans({
   value?: Span[];
   defaultValue?: Span[];
   onValueChange?: (value: Span[], details: SpansChange) => void;
-} & CommitProps<Span[], SpansChange>) {
-  const commit = useCommit<Span[], SpansChange>({ value, defaultValue, onValueChange, onCommit, commitDelay, moved: movedSpans });
+  words?: { unavailable?: (label?: string) => string; reverted?: string };
+} & Omit<CommitProps<Span[], SpansChange>, 'words'>) {
+  const commit = useCommit<Span[], SpansChange>({ value, defaultValue, onValueChange, onCommit, commitDelay, words, moved: movedSpans });
   const regions = useRef(new Map<string, SpansRegionEntry>());
   const { min = 0, max = 100, axis = 'x' } = props as { min?: number; max?: number; axis?: 'x' | 'y' };
   const range = useMemo<SpansRange>(() => ({ min, max, axis, regions: regions.current }), [min, max, axis]);
@@ -55,7 +57,8 @@ export function Spans({
     const region = span && regions.current.size > 0 ? refusedBy(range, span.track, span.start, span.end) : undefined;
     if (region) {
       details.cancel();
-      announce(region.label ? `${region.label} is not open to that` : 'Not available there', { priority: 'assertive' });
+      const message = words?.unavailable?.(region.label) ?? (region.label ? `${region.label} is not open to that` : 'Not available there');
+      announce(message, { priority: 'assertive' });
       return;
     }
     commit.onValueChange?.(next, details);

@@ -306,6 +306,8 @@
     }
     body.app-mode :is(.crumb-tools, .applist-head-tools) .export-summary {
       min-width: 36px;
+      padding-inline: 0;
+      justify-content: center;
       text-align: center;
     }
     body.app-mode :is(.crumb-tools, .applist-head-tools) .applist-import {
@@ -314,6 +316,12 @@
     }
     body.app-mode :is(.crumb-tools, .applist-head-tools) {
       gap: var(--space-2);
+    }
+    body.app-mode .applist-head-row {
+      gap: var(--space-2h);
+    }
+    body.app-mode .applist-head-row .applist-count-of {
+      display: none;
     }
     body.app-mode :is(.crumb-tools, .applist-head-tools) .applist-import-mark {
       display: block;
@@ -396,7 +404,7 @@
   }
   .applist-controls .applist-fields > .applist-search {
     flex: 0 1 15rem;
-    min-width: 10rem;
+    min-width: 8.5rem;
   }
   /* On a phone the tabs take a row of their own under the search and Filters: sharing the one row, the first tab's
    count was cut off and the next out of sight. The strip clips to its padding box (it folds, below),
@@ -708,11 +716,22 @@
    exactly like an enabled one — and an invalid field wears the danger edge
    beside its written problem, keeping the focus ring. In an App only. */
   :root[data-visual-theme]
-    :is(input:not(.picker-input), textarea, select,[data-slot='select-trigger'], .record-picker-trigger, .cell-edit,:is([data-slot='input'], [data-slot='textarea'])):is(
-      :disabled,
-      [aria-disabled='true']
-    ),
-  :root[data-visual-theme] .picker:has(> .picker-input:disabled) {
+    :is(
+      input:not(.picker-input),
+      textarea,
+      select,
+      [data-slot='select-trigger'],
+      .record-picker-trigger,
+      .cell-edit,
+      [data-slot='input'],
+      [data-slot='textarea']
+    ):is(:disabled, [aria-disabled='true']),
+  :root[data-visual-theme] .picker:has(> .picker-input:disabled),
+  :root[data-visual-theme]
+    :is([data-slot='field-box'], [data-slot='input-group'], [data-slot='date-field']):is(
+      [data-disabled],
+      :has(:is(input, textarea):is(:disabled, [aria-disabled='true']))
+    ) {
     background: var(--raised);
     color: var(--ink-muted);
     border-color: var(--line);
@@ -722,22 +741,55 @@
   /* In a command form, whose fields at rest are a clean outline on the ground (formDress.css), a raised fill would
      read as a field to fill in: a disabled one there keeps the ground, and its edge goes dashed and faint. */
   :root[data-visual-theme] :is(.form-page, .command-form, .insert-form-app)
-    :is(input:not(.picker-input), textarea, select,[data-slot='select-trigger'], .record-picker-trigger,:is([data-slot='input'], [data-slot='textarea'])):is(:disabled, [aria-disabled='true']):not(.form-lines *),
-  :root[data-visual-theme] :is(.form-page, .command-form, .insert-form-app) .picker:has(> .picker-input:disabled) {
+    :is(
+      input:not(.picker-input),
+      textarea,
+      select,
+      [data-slot='select-trigger'],
+      .record-picker-trigger,
+      [data-slot='input'],
+      [data-slot='textarea']
+    ):is(:disabled, [aria-disabled='true']):not(.form-lines *),
+  :root[data-visual-theme] :is(.form-page, .command-form, .insert-form-app) .picker:has(> .picker-input:disabled),
+  :root[data-visual-theme] :is(.form-page, .command-form, .insert-form-app)
+    :is([data-slot='field-box'], [data-slot='input-group'], [data-slot='date-field']):is(
+      [data-disabled],
+      :has(:is(input, textarea):is(:disabled, [aria-disabled='true']))
+    ):not(.form-lines *) {
     background: transparent;
     border-style: dashed;
     border-color: color-mix(in oklab, var(--ink) 22%, transparent);
   }
-  /* A picker is one field (N02): its box carries the state, and the text box inside it takes the dim ink with no ground of its own. */
+  /* A picker or composite field box is one field (N02): guard.css strips inner borders/fills; keep inner vertical padding flat. */
+  :root[data-visual-theme]
+    :is([data-slot='field-box'], [data-slot='input-group'], [data-slot='date-field'])
+    input:not([type='checkbox'], [type='radio']) {
+    padding-block: 0;
+  }
   :root[data-visual-theme] .picker > .picker-input:disabled {
     background: none;
     color: var(--ink-muted);
     cursor: not-allowed;
   }
   :root[data-visual-theme]
-    :is(input:not(.picker-input), textarea, select,[data-slot='select-trigger'], .record-picker-trigger, .cell-edit,:is([data-slot='input'], [data-slot='textarea']))[aria-invalid='true'],
+    :is(
+      input:not(.picker-input),
+      textarea,
+      select,
+      [data-slot='select-trigger'],
+      .record-picker-trigger,
+      .cell-edit,
+      [data-slot='input'],
+      [data-slot='textarea']
+    )[aria-invalid='true'],
   :root[data-visual-theme] .picker:has(> .picker-input[aria-invalid='true']),
-  :root[data-visual-theme] [data-slot='field'][data-invalid] .picker {
+  :root[data-visual-theme] [data-slot='field'][data-invalid] .picker,
+  :root[data-visual-theme]
+    :is([data-slot='field-box'], [data-slot='input-group'], [data-slot='date-field']):is(
+      [data-invalid],
+      :has([aria-invalid='true']),
+      [data-slot='field'][data-invalid] &
+    ) {
     border-color: var(--status-critical);
   }
   /* A section's lone field whose label the section title already says: the
@@ -1540,6 +1592,13 @@
     content: '';
     flex: none;
     width: 16px;
+  }
+  /* Its words take the row after the held place, as they do after a mark (style.css): the button spreads its
+     children to its two edges for a count at the end, and with the held place first the words were the last child,
+     set against the right edge. */
+  body.app-mode:not(.sidebar-hidden) #table-list[data-marks] button:not(.nav-group-fold):not(:has(> :is(.nav-icon, .nav-dot))) > .nav-label {
+    flex: 1;
+    min-width: 0;
   }
   /* The menu's toggle, the bar's first key: its mark starts on the room's own left edge, so the square it is
      pressed in hangs a step outside it. */

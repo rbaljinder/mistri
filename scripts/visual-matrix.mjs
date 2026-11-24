@@ -580,7 +580,17 @@ export const APPS = [
     id: 'page-kit',
     seed: (db) => run(process.execPath, ['test/fixtures/apps/page-kit/seed.mjs', db]),
     serve: (db) => ['--config', `${db}.json`, '--app', 'test/fixtures/apps/page-kit'],
-    pages: [['parts', '/parts']],
+    pages: [
+      ['parts', '/parts'],
+      ['gallery-inputs', '/gallery-inputs'],
+      ['gallery-pickers', '/gallery-pickers'],
+      ['gallery-display', '/gallery-display'],
+      ['gallery-charts', '/gallery-charts'],
+      ['gallery-views', '/gallery-views'],
+      ['gallery-product', '/gallery-product'],
+      ['gallery-kit', '/gallery-kit'],
+      ['gallery-behaviors', '/gallery-behaviors'],
+    ],
   },
   /* Read by `--styles` only: the App `npm run smoke` walks, over the built-in demo. A release's pictures are of the
      sample Apps. */

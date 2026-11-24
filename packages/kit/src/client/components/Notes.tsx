@@ -77,7 +77,7 @@ export function Problem({ text, retry, crashed = false }: { text: string; retry?
     <div className="problem" role="alert" {...(crashed ? { 'data-section-error': '' } : {})}>
       <Icon name="warning" className="problem-mark" />
       <p className="problem-text">{said}</p>
-      <Button size="compact" className="problem-retry" onClick={again}>
+      <Button size="sm" className="problem-retry" onClick={again}>
         {message('problem.retry')}
       </Button>
     </div>

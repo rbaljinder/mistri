@@ -13,7 +13,7 @@ import { breakdownText, sectionPeriod, windowed } from '@mistriwork/engine/share
 import { columnDisplay, findTable, quote } from '../core.js';
 import { defaultCurrency, formatLocale, formatMoney, formatNumber, formatPercent, formatWholeMoney } from '../locale.js';
 import { currencyDigits, currencyPath, minorFigure } from '@mistriwork/engine/shared/money.js';
-import { DURATION_STEPS } from '@mistriwork/engine/shared/niceTicks.js';
+import { DURATION_STEPS } from '@mistriwork/ui';
 import { sayDuration, withUnit } from './valueModel.js';
 import { say } from '../copy/dashboards/components/dashboardModel.js';
 import { ALL_TIME, readPeriod } from '@mistriwork/engine/shared/addressParams.js';

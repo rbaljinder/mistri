@@ -8,30 +8,34 @@
    column back. Every state is an attribute: `data-sized` on a column that has a width, `data-sizing` on the one
    being dragged and on the root. */
 import { announce, bindDrag, type ChangeDetails, createChange, definePrimitive } from '@ui-sdk/core';
+import { viewportBox } from '../internal/ruler.js';
 import { zoomOf } from './dress.js';
 
 /* The reasons are words of UI SDK's own vocabulary, which it holds a change's event to in development: a width
    given back is a `clear-press`, by a double-click or a key. */
+/** Change reason emitted when a column width is dragged, stepped by keyboard, or reset. */
 export type WidthsReason = 'drag' | 'move-key' | 'clear-press';
 
+/** Configuration options for the `widths` column-sizing primitive. */
 export type WidthsOptions = {
-  /* The widths the reader has set, in CSS pixels, by column. */
+  /** The widths the reader has set, in CSS pixels, by column. */
   value?: Record<string, number>;
   defaultValue?: Record<string, number>;
   onValueChange?: (value: Record<string, number>, details: ChangeDetails<WidthsReason> & { key: string }) => void;
-  /* The narrowest and widest a column may be made. */
+  /** The narrowest and widest a column may be made. */
   min?: number;
   max?: number;
-  /* How far an arrow key moves an edge; Shift moves it five times as far. */
+  /** How far an arrow key moves an edge; Shift moves it five times as far. */
   step?: number;
-  /* What a screen reader hears when a key sets a width or gives one back: the column's label and its width in
-     pixels, or no width for a column that is its own again. The words are the caller's, in the reader's language;
-     unsaid, they are English. */
-  say?: (label: string, width: number | undefined) => string;
+  /** Screen-reader announcement formatter when a key sets a width or restores auto width (`undefined`). */
+  formatWidth?: (label: string, width: number | undefined) => string;
+  /** Accessible label for a column's resize handle. */
+  resizeLabel?: (label: string) => string;
 };
 
 type Draft = { key: string; width: number };
 
+/** Column-width drag and keyboard-resize UI SDK primitive. */
 export const widths = definePrimitive({
   name: 'widths',
   options: {
@@ -41,7 +45,8 @@ export const widths = definePrimitive({
     min: 'number',
     max: 'number',
     step: 'number',
-    say: 'action',
+    formatWidth: 'action',
+    resizeLabel: 'action',
   },
   controlled: ['value'],
   state: (options: WidthsOptions) => ({
@@ -51,10 +56,17 @@ export const widths = definePrimitive({
   sync: (options) => (options.value === undefined ? {} : { value: options.value }),
   api: (context) => {
     const change = createChange(context);
-    const said = (label: string, width: number | undefined): string =>
-      context.options().say?.(label, width) ?? (width === undefined ? `${label}, its own width` : `${label}, ${width} pixels wide`);
-    const held = (width: number): number =>
-      Math.round(Math.min(Math.max(width, context.options().min ?? 64), context.options().max ?? 640));
+    const said = (label: string, width: number | undefined): string => {
+      const opts = context.options() as WidthsOptions & { say?: (label: string, width: number | undefined) => string };
+      return (
+        opts.formatWidth?.(label, width) ??
+        opts.say?.(label, width) ??
+        (width === undefined ? `${label}, its own width` : `${label}, ${width} pixels wide`)
+      );
+    };
+    const min = (): number => context.options().min ?? 64;
+    const max = (): number => context.options().max ?? 640;
+    const held = (width: number): number => Math.round(Math.min(Math.max(width, min()), max()));
     /* The width a column has now: the draft's while its bar is dragged, else what the reader set, else none. */
     const of = (state: { value: Record<string, number>; sizing: Draft | null }, key: string): number | undefined =>
       state.sizing?.key === key ? state.sizing.width : state.value[key];
@@ -71,6 +83,9 @@ export const widths = definePrimitive({
     context.onDestroy(() => stop?.());
     return {
       of,
+      min,
+      max,
+      handleLabel: (label: string): string => context.options().resizeLabel?.(label) ?? `Resize ${label}`,
       /* Follows the pointer that pressed a bar. The column is measured as it stands, so a column that was never
          sized starts from the width its words gave it. */
       drag(event: PointerEvent, bar: HTMLElement, key: string, column: HTMLElement) {
@@ -78,7 +93,7 @@ export const widths = definePrimitive({
         event.preventDefault();
         // Under a zoomed page a width is in the stylesheet's pixels and the pointer moves in the screen's.
         const zoom = zoomOf(column);
-        const from = column.getBoundingClientRect().width / zoom;
+        const from = viewportBox(column).width;
         const start = event.clientX;
         const towardEnd = getComputedStyle(column).direction === 'rtl' ? -1 : 1;
         stop?.();
@@ -97,7 +112,7 @@ export const widths = definePrimitive({
       keydown(event: KeyboardEvent, key: string, column: HTMLElement, label: string): boolean {
         if (!event.altKey) return false;
         const step = (context.options().step ?? 16) * (event.shiftKey ? 5 : 1);
-        const now = of(context.store.get(), key) ?? column.getBoundingClientRect().width / zoomOf(column);
+        const now = of(context.store.get(), key) ?? viewportBox(column).width;
         if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
           event.preventDefault();
           const next = held(now + (event.key === 'ArrowRight' ? step : -step));
@@ -106,6 +121,26 @@ export const widths = definePrimitive({
         }
         if (event.key === 'Backspace' || event.key === 'Delete') {
           event.preventDefault();
+          if (set(key, undefined, 'clear-press', event)) announce(said(label, undefined));
+          return true;
+        }
+        return false;
+      },
+      /* Direct keyboard interaction when focus is on the resize handle itself. */
+      handleKeydown(event: KeyboardEvent, key: string, handleEl: HTMLElement, label: string): boolean {
+        const column = handleEl.closest<HTMLElement>('[data-slot="widths-column"]') ?? handleEl;
+        const step = (context.options().step ?? 16) * (event.shiftKey ? 5 : 1);
+        const now = of(context.store.get(), key) ?? viewportBox(column).width;
+        if (event.key === 'ArrowRight' || event.key === 'ArrowLeft') {
+          event.preventDefault();
+          event.stopPropagation();
+          const next = held(now + (event.key === 'ArrowRight' ? step : -step));
+          if (set(key, next, 'move-key', event)) announce(said(label, next));
+          return true;
+        }
+        if (event.key === 'Backspace' || event.key === 'Delete' || event.key === 'Home') {
+          event.preventDefault();
+          event.stopPropagation();
           if (set(key, undefined, 'clear-press', event)) announce(said(label, undefined));
           return true;
         }
@@ -128,6 +163,7 @@ export const widths = definePrimitive({
       attrs: (state, part) => {
         const width = part.api.of(state, part.key);
         return {
+          'aria-keyshortcuts': 'Alt+ArrowLeft Alt+ArrowRight Alt+Backspace',
           'data-sized': width === undefined ? undefined : '',
           'data-sizing': state.sizing?.key === part.key ? '' : undefined,
           style: width === undefined ? undefined : `width:${width}px;min-width:${width}px;max-width:${width}px`,
@@ -135,20 +171,32 @@ export const widths = definePrimitive({
       },
       on: {
         keydown: (event, { api, key, el, props }) => {
+          if (event.defaultPrevented) return;
           if (el) api.keydown(event, key, el, props.label ?? key);
         },
       },
     }),
-    /* The bar at the column's far edge. A pointer's only: the keyboard has the header. */
-    handle: slot<{ value?: string }>({
-      props: { value: { kind: 'string', from: 'column', required: true } },
-      attrs: (state, part) => ({
-        role: 'separator',
-        'aria-orientation': 'vertical',
-        'aria-hidden': 'true',
-        'data-sizing': state.sizing?.key === part.key ? '' : undefined,
-      }),
+    /* The bar at the column's far edge: focusable separator for pointer and keyboard resize. */
+    handle: slot<{ value?: string; label?: string }>({
+      props: { value: { kind: 'string', from: 'column', required: true }, label: { kind: 'string', from: 'column' } },
+      attrs: (state, part) => {
+        const width = part.api.of(state, part.key);
+        return {
+          role: 'separator',
+          tabindex: '0',
+          'aria-orientation': 'vertical',
+          'aria-label': part.api.handleLabel(part.props.label ?? part.key),
+          'aria-keyshortcuts': 'ArrowLeft ArrowRight Alt+ArrowLeft Alt+ArrowRight Backspace',
+          'aria-valuemin': String(part.api.min()),
+          'aria-valuemax': String(part.api.max()),
+          'aria-valuenow': width !== undefined ? String(width) : undefined,
+          'data-sizing': state.sizing?.key === part.key ? '' : undefined,
+        };
+      },
       on: {
+        keydown: (event, { api, key, el, props }) => {
+          if (el) api.handleKeydown(event, key, el, props.label ?? key);
+        },
         pointerdown: (event, { api, key, el }) => {
           const column = el?.closest<HTMLElement>('[data-slot="widths-column"]');
           if (el && column) api.drag(event, el, key, column);

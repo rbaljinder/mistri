@@ -167,9 +167,11 @@ test('on a phone a layout is one column in reading order and does not scroll sid
 test('a folded matrix holds each figure inside its cell, readable on its heaviest tint', async ({ page }) => {
   test.setTimeout(LONG_MS);
   /* The desk is a narrow one: a section's table starts on its heading now, with no leading padding in its first cell
-     (page.css), and those 14px are what made this matrix too wide for a 1280px window. It fits there, and folds here. */
+     (page.css), and those 14px are what made this matrix too wide for a 1280px window. It fits there, and folds here.
+     Narrower than it was: a cell's floor is a count's width now (DashboardBlocks.css), so on Workshop's open page the
+     seven months fit a 1024px window whole. */
   for (const [width, height] of [
-    [1024, 800],
+    [900, 800],
     [390, 844],
   ] as const)
     for (const colorScheme of ['light', 'dark'] as const) {

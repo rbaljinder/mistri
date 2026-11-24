@@ -597,9 +597,9 @@ most) renames it on every surface. A component or page that shows what a model
 made draws the same mark, so the word stays in one place:
 
 ```tsx
-import { AiMark } from '@mistriwork/mistri/ui';
+import { AiBadge } from '@mistriwork/mistri/ui';
 
-<p><AiMark /> Suggested reply</p>
+<p><AiBadge /> Suggested reply</p>
 ```
 
 A record's history says who made a change as well as who did it: "Proposed by
@@ -607,7 +607,7 @@ AI · approved by" the approver for an approved proposal, and "Made by AI" or
 "Made by job" with its name for a maker's own run, each with the mark.
 
 `mistri check` advises three things here, none of which fails it: the word AI
-spelled in a label, a title or a page's text rather than drawn as `<AiMark />`
+spelled in a label, a title or a page's text rather than drawn as `<AiBadge />`
 ([`ai-text-bare`](/docs/check-codes/#ai-text-bare)); a command the assistant may
 run, or that a suggest-only decision answers through, without `approval: 'ai'`
 ([`ai-command-unreviewed`](/docs/check-codes/#ai-command-unreviewed)); and a

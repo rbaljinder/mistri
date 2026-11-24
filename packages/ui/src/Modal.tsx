@@ -32,11 +32,13 @@ import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { popupContainer } from './internal/popups.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Imperative handle for closing an open `Modal`. */
 export interface ModalHandle {
   close: () => void;
 }
 
-interface ModalProps {
+/** Props for the `Modal` dialog primitive. */
+export interface ModalProps {
   /** The classes the stylesheet knows the box by (`confirm`, `prefs`); the first also names the scrim (`[data-slot='dialog-backdrop'][data-for='confirm']`). Optional: a bare modal is centered and sized as a modal alone. */
   className?: string;
   /** Told once, however the dialog closed. */
@@ -223,5 +225,5 @@ function DefaultModal({
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Modal dialog layer with focus trapping, scrim dismissal, Escape handling, and focus restoration. */
 export const Modal = slotted('Modal', DefaultModal);

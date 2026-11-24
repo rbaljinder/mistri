@@ -1,0 +1,184 @@
+/* `@mistriwork/mistri/views`' own sheet, over the three it imports first (surfaces-base.css, surfaces-charts.css,
+   surfaces-primitives.css): a composite view draws primitives, so it never loads without theirs. */
+@import '@mistriwork/ui/styles/surfaces/views.css' layer(surfaces);
+
+/* The look on the composite views (surfaces-base.css says how these are written, and why here). */
+@layer look {
+  /* ---------- table: open, tinted, hairline, card, quiet, banded, rows ----------
+     `DataTable` is the SDK's list. Under every look its frame is gone and its head stands on the page's ground over
+     the look's head rule, as a list's does (themeFamilies.css); each value then says what it changes. The head's
+     rule is drawn as an inset shade, not a border: a border on a sticky head scrolls away from it. */
+  [data-theme-style] .nx-data-table-surface {
+    --nx-table-edge: 0;
+    --nx-table-radius: 0;
+    --nx-table-ground: transparent;
+    --nx-table-lift: none;
+    --nx-table-track: normal;
+    --nx-th-ground: var(--ground);
+    --nx-th-rule: inset 0 calc(-1 * var(--rules-weight, 2px)) 0 var(--rules-head, var(--ink));
+    --nx-th-face: var(--sans);
+    --nx-th-size: var(--text-base);
+    --nx-th-track: normal;
+    --nx-th-h: 2.75rem;
+    --nx-td-size: var(--text-md);
+    --nx-row-rule: var(--line);
+  }
+  /* The kit sets every head of an App in its sans at one weight, in its own layer over the table's (visualThemes.css,
+     `.app-mode th`): the head's face, weight and ink are said again here, where a recipe and the label's role can
+     reach them. */
+  [data-theme-style] .nx-table-th {
+    color: var(--nx-th-ink, var(--ink-muted));
+    font-family: var(--nx-label-face, var(--nx-th-face));
+    font-weight: var(--nx-label-weight, var(--nx-th-weight, 600));
+  }
+  /* A head that sorts is a button, which the kit sets in its own face and case: it says its head's. */
+  [data-theme-style] .nx-table-sort-btn {
+    font: inherit;
+    letter-spacing: inherit;
+    text-transform: inherit;
+  }
+  [data-look-table='open'] .app-sidebar-shell .nx-data-table-surface {
+    --nx-th-ground: var(--surface);
+  }
+  [data-look-table='tinted'] .nx-data-table-surface {
+    --nx-row-hover: color-mix(in srgb, var(--accent) 4%, var(--surface));
+  }
+  [data-look-table='hairline'] .nx-data-table-surface {
+    --nx-th-rule: inset 0 -1px 0 var(--line);
+    --nx-th-size: var(--text-sm);
+    --nx-td-size: var(--text-base);
+  }
+  [data-look-table='card'] .nx-data-table-surface {
+    --nx-table-edge: var(--panel-border-width, 1px) solid var(--line);
+    --nx-table-radius: var(--radius-lg);
+    --nx-table-ground: var(--surface);
+    --nx-table-lift: var(--shadow-card, none);
+    --nx-th-ground: var(--table-head-ground, var(--raised));
+    --nx-th-rule: inset 0 -1px 0 var(--line);
+    --nx-th-size: var(--text-sm);
+    --nx-th-weight: 500;
+    --nx-th-h: 2.25rem;
+    --nx-td-size: var(--text-base);
+    --nx-row-rule: var(--row-rule, var(--line));
+    --nx-row-hover: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
+  }
+  [data-look-table='quiet'] .nx-data-table-surface {
+    --nx-th-rule: inset 0 -1px 0 var(--line);
+    --nx-th-size: var(--text-sm);
+    --nx-th-weight: 500;
+    --nx-th-ink: var(--ink-subtle);
+    --nx-td-size: var(--text-base);
+    --nx-row-rule: var(--row-rule, var(--line));
+    --nx-row-hover: color-mix(in srgb, var(--ink) 2.5%, var(--surface));
+  }
+  [data-look-table='banded'] .nx-data-table-surface {
+    --nx-row-band: var(--band, var(--raised));
+    --nx-row-band-hover: color-mix(in srgb, var(--ink) 6%, var(--band, var(--raised)));
+  }
+  /* rows: the list is one tile, its rows ruled apart inside it; the ring is inside the tile, so the tile keeps a
+     pixel for it. Its heads are plain words whatever the label's role says, as the kit's are (tilesLook.css). */
+  [data-look-table='rows'] .nx-data-table-surface {
+    --nx-table-pad: 1px;
+    --nx-table-radius: var(--radius-lg);
+    --nx-table-ground: var(--surface);
+    --nx-table-lift: var(--tile-lift, var(--shadow-card, none));
+    --nx-th-ground: var(--surface);
+    --nx-th-rule: inset 0 -1px 0 var(--line);
+    --nx-td-size: var(--text-base);
+    --nx-row-hover: color-mix(in srgb, var(--accent) 4%, var(--surface));
+    --nx-row-chosen: color-mix(in srgb, var(--accent) 7%, var(--surface));
+  }
+  [data-look-table='rows'] .nx-table-th {
+    font: 500 var(--text-sm) var(--sans);
+    letter-spacing: normal;
+    text-transform: none;
+  }
+  /* `rules: 'double'`: a column head closes on a double rule, two lines of the head's rule with the head's ground
+     between them, and the cells are set a step down (ledgerLook.css). */
+  [data-look-rules='double'] .nx-data-table-surface {
+    --nx-th-rule: inset 0 -1px 0 var(--rules-head), inset 0 -2px 0 var(--nx-th-ground), inset 0 -3px 0 var(--rules-head);
+    --nx-td-size: calc(var(--text-base) / var(--type-k, 1));
+  }
+
+  /* ---------- board: ruled, soft, strip; lanes: tint, tag, plain ----------
+     `KanbanBoard` is the SDK's board. `ruled` is what every look draws unless it says otherwise: a lane open under
+     the look's section rule, its cards boxed on the ground. */
+  [data-theme-style] .nx-kanban-lane {
+    --nx-lane-pad: var(--space-3h) 0 0;
+    --nx-lane-radius: 0;
+    --nx-lane-edge: transparent;
+    --nx-lane-rule: var(--rules-weight, 2px) solid var(--rules-section, var(--ink));
+    --nx-lane-ground: transparent;
+    --nx-lane-head-pad: 0 var(--space-1) var(--space-3);
+    --nx-lane-cards-pad: 0 0 var(--space-3);
+    --nx-lane-title-size: var(--text-md);
+    --nx-lane-card-radius: var(--panel-radius, var(--radius));
+    --nx-lane-card-lift: none;
+  }
+  /* soft: a lane is a quiet tray that holds its head and its cards, each card a sheet on it. */
+  [data-look-board='soft'] .nx-kanban-lane {
+    --nx-lane-pad: var(--space-3);
+    --nx-lane-radius: var(--panel-radius, var(--radius-lg));
+    --nx-lane-rule: 1px solid transparent;
+    --nx-lane-ground: color-mix(in oklab, var(--raised) 70%, var(--surface));
+    --nx-lane-head-pad: var(--space-2) var(--space-2h) var(--space-3);
+    --nx-lane-card-lift: var(--shadow-card, none);
+  }
+  /* strip: a lane headed by a strip in its state's tint, in a tray a step off the ground. */
+  [data-look-board='strip'] .nx-kanban-lane {
+    --nx-lane-pad: var(--space-2h);
+    --nx-lane-radius: var(--radius-lg);
+    --nx-lane-edge: color-mix(in srgb, var(--line) 82%, transparent);
+    --nx-lane-rule: 1px solid var(--nx-lane-edge);
+    --nx-lane-ground: color-mix(in srgb, var(--raised) 58%, var(--ground));
+    --nx-lane-head-pad: var(--space-1h) var(--space-3);
+    --nx-lane-head-radius: var(--radius);
+    --nx-lane-head-ground: var(--raised);
+    --nx-lane-cards-pad: var(--space-2h) 0 0;
+    --nx-lane-title-size: var(--text-sm);
+    --nx-lane-card-radius: var(--radius);
+    --nx-lane-card-lift: var(--shadow-card, none);
+  }
+  /* A lane's state is its head's dot; the recipes that tint or tag the head read it from there. */
+  .nx-kanban-lane-header:has([data-tone='good']) {
+    --nx-lane-tone: var(--status-good);
+  }
+  .nx-kanban-lane-header:has([data-tone='warning']) {
+    --nx-lane-tone: var(--status-warning);
+  }
+  .nx-kanban-lane-header:has([data-tone='critical']) {
+    --nx-lane-tone: var(--status-critical);
+  }
+  .nx-kanban-lane-header:has([data-tone='info']) {
+    --nx-lane-tone: var(--status-info);
+  }
+  [data-look-board='strip'] .nx-kanban-lane-header:has(:is([data-tone='good'], [data-tone='warning'], [data-tone='critical'], [data-tone='info'])) {
+    --nx-lane-head-ground: color-mix(in srgb, var(--nx-lane-tone) 9%, var(--surface));
+    --nx-lane-ink: color-mix(in srgb, var(--nx-lane-tone) 78%, var(--ink));
+  }
+  /* tag: the lane's name is a filled tag in its state's colour, in capitals; plain: its name alone. Neither keeps
+     the dot. An untoned lane's tag is the muted ink, as the kit's is (brandLook.css). */
+  [data-look-lanes='tag'] .nx-kanban-lane-title {
+    padding: 1px var(--space-3);
+    border-radius: var(--pill-radius, var(--radius));
+    background: var(--nx-lane-tone, var(--ink-muted));
+    color: var(--surface);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: var(--track-caps);
+  }
+  /* tint: the name in its state's ink beside its dot, and where a status is a pill the name is that pill. */
+  [data-look-lanes='tint'] .nx-kanban-lane-header:has(:is([data-tone='good'], [data-tone='warning'], [data-tone='critical'], [data-tone='info'])) {
+    --nx-lane-ink: color-mix(in srgb, var(--nx-lane-tone) 78%, var(--ink));
+  }
+  [data-look-lanes='tint'][data-look-status='pill'] .nx-kanban-lane-header:has(:is([data-tone='good'], [data-tone='warning'], [data-tone='critical'], [data-tone='info'])) .nx-kanban-lane-title {
+    padding: var(--space-1) var(--space-3h);
+    border-radius: var(--pill-radius, 999px);
+    background: color-mix(in srgb, currentColor 13%, transparent);
+    font-weight: 500;
+  }
+  :is([data-look-lanes='tag'], [data-look-lanes='plain'], [data-look-lanes='tint'][data-look-status='pill']) .nx-kanban-lane-title-group > .nx-status-dot {
+    display: none;
+  }
+}

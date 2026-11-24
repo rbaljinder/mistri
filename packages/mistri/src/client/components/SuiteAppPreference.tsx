@@ -105,7 +105,7 @@ function Preference({ scope }: { scope: SuiteNavigationScope }) {
           value={view.selection ?? ''}
           disabled={view.status !== 'ready'}
           items={[{ value: '', label: say('ask') }, ...view.apps.map((app) => ({ value: app.id, label: app.name }))]}
-          onChange={(value) => setView((was) => (was.status === 'ready' ? { ...was, selection: value || null, saved: false } : was))}
+          onValueChange={(value) => setView((was) => (was.status === 'ready' ? { ...was, selection: value || null, saved: false } : was))}
         />
         {view.status === 'loading' && <p role="status">{say('loading')}</p>}
         {view.status === 'error' && <p role="status">{say('loadFailed')}</p>}

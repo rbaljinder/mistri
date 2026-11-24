@@ -1,9 +1,9 @@
 /**
  * `@mistriwork/mistri/ui`: everything a custom component imports from mistri. The
  * host's own React (re-exported, so a component can take its hooks from here
- * and never resolve a React of its own), the kit (kit.tsx) and the hooks
- * (hooks.ts). Nothing else of the client is reachable through it: no store,
- * no walk, no raw request.
+ * and never resolve a React of its own), the unified UI controls/primitives/charts/views,
+ * Mistri's schema-aware kit pieces (`kit.tsx`), and the hooks (`hooks.ts`). Nothing else of the
+ * client is reachable through it: no store, no walk, no raw request.
  *
  * In the page this module is the page's own, handed to components through
  * the host modules (packages/mistri/src/server/app/componentSdk.ts); published, it is built to
@@ -11,61 +11,52 @@
  * packages/mistri/schema/ui.d.ts. Its value exports are `UI_EXPORTS` (shared/uiSdk.ts),
  * which a test holds to this list.
  */
+import '@mistriwork/kit/client/formControls.css';
+import { installSurfaceSeam } from '@mistriwork/ui';
 import * as React from 'react';
-import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+import { mistriSurfaceSeam } from './seam.js';
 
 export { React };
 export { UI_TOKENS as tokens } from '@mistriwork/kit/shared/uiTokens.js';
 export { Fragment, useCallback, useContext, useEffect, useId, useMemo, useReducer, useRef, useState } from 'react';
 export {
-  Bars,
-  Beside,
+  Badge,
   Button,
+  Checkbox,
+  ChoiceCards,
+  Dropdown,
+  FileField,
+  Select,
+  Slider,
+  Switch,
+  TextArea,
+  TextField,
+  YesNo,
+} from '@mistriwork/ui';
+export {
+  AiBadge,
+  Beside,
   Card,
   Cluster,
-  Columns,
-  Details,
-  Dropdown,
-  Empty,
+  DescriptionList,
+  EmptyState,
   Heading,
-  Icon,
-  Item,
-  Items,
-  Loaded,
+  ItemList,
+  ItemRow,
   Meter,
-  MiniBars,
   Person,
   Row,
-  Segmented,
+  SegmentedControl,
   Skeleton,
-  Sparkline,
-  SplitListDetail,
   Stack,
-  Stat,
-  Table,
+  StatCard,
+  StatusDot,
   Text,
-  Tile,
-  Tone,
-  Value,
   VisuallyHidden,
-} from './kit.js';
-/* The platform's fields, as the shell dresses its own (pageControls.ts): a part of their own with their rules, fetched
-   the first time a component draws one, so one that draws none carries none. A record section that asks a question
-   draws the platform's field here, not a native input dressed to look like one. The rest of the house controls (a
-   modal, a drawer, a date picker) are a free-form page's, from `@mistriwork/mistri/page`. */
-const controls = () => import('./pageControls.js');
-export const Checkbox = onDemand(controls, 'Checkbox', { quiet: true });
-export const ChoiceCards = onDemand(controls, 'ChoiceCards', { quiet: true });
-export const FileField = onDemand(controls, 'FileField', { quiet: true });
-export const Select = onDemand(controls, 'Select', { quiet: true });
-export const Slider = onDemand(controls, 'Slider', { quiet: true });
-export const Switch = onDemand(controls, 'Switch', { quiet: true });
-export const TextArea = onDemand(controls, 'TextArea', { quiet: true });
-export const TextField = onDemand(controls, 'TextField', { quiet: true });
-export const YesNo = onDemand(controls, 'YesNo', { quiet: true });
-/* The one AI mark the shell draws on what a model made or proposed (kit's AiMark.tsx), so an App's own component says
-   it the same way; fetched the first time one is drawn, as the fields are. */
-export const AiMark = onDemand(() => import('@mistriwork/kit/client/components/AiMark.js'), 'AiMark', { quiet: true });
+} from '@mistriwork/ui/primitives.js';
+export { BreakdownList, MiniBars, Sparkline } from '@mistriwork/ui/charts.js';
+export { SplitView } from '@mistriwork/ui/views.js';
+export { Columns, Icon, Loaded, Table, Tile, Value } from './kit.js';
 export {
   useAction,
   useAnalytics,
@@ -89,6 +80,7 @@ export {
   useVisitor,
 } from './hooks.js';
 export { useTeam } from './team.js';
+export { useAccountProfile } from './accountProfile.js';
 /* The tenant's read audit, as the Settings Reads room reads it (its own module: readAudit.ts). */
 export { useReadAudit } from './readAudit.js';
 /* Opening a tenant in one request from a platform App's own screen (its own module: openTenant.ts). */
@@ -98,3 +90,5 @@ export { useBranding, useDeployment } from './deployment.js';
 export { parseMoney, useField } from './fields.js';
 export { layoutPoint } from './layout.js';
 export { useOptions } from './options.js';
+
+installSurfaceSeam(mistriSurfaceSeam);

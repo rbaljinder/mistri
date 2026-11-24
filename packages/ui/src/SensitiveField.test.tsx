@@ -19,7 +19,7 @@ function Ssn({ start = '' }: { start?: string }) {
         label="SSN"
         mask={masks.ssn}
         value={raw}
-        onChange={set}
+        onValueChange={set}
         showLabel="Show"
         hideLabel="Hide"
         note="Stored securely"
@@ -52,12 +52,12 @@ test('Show draws the number with its mask; Hide puts the dots back', async () =>
   expect(box).toHaveValue('•'.repeat(11));
 });
 
-test('the button stands beside the box, not inside it', () => {
+test('the button stands inside the field box beside the input', () => {
   render(<Ssn />);
   const button = screen.getByRole('button', { name: 'Show' });
-  expect(button.closest('[data-slot="field-box"]')).toBeNull();
-  expect(button.parentElement).toHaveAttribute('data-slot', 'field-with-action');
-  expect(button.parentElement).toContainElement(screen.getByRole('textbox'));
+  const box = button.closest('[data-slot="field-box"]');
+  expect(box).not.toBeNull();
+  expect(box).toContainElement(screen.getByRole('textbox'));
 });
 
 test('backspace takes the last digit off, and typed text past the mask is dropped', async () => {

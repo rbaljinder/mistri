@@ -1,48 +1,57 @@
-/** The Button primitive: an intent's attributes, and busy that keeps the focus. */
+/** The Button primitive: canonical variant and size attributes, and loading that keeps the focus. */
 import { afterEach, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { Button, buttonClass, type ButtonIntent, type ButtonSize } from './Button.js';
+import { Button, buttonClass, type ButtonSize, type ButtonVariant } from './Button.js';
 
 afterEach(cleanup);
 
-test('every intent and size is one button with one class of its own', () => {
-  const intents: ButtonIntent[] = ['primary', 'secondary', 'quiet', 'danger'];
-  const sizes: ButtonSize[] = ['compact', 'default', 'large'];
+test('every variant and size is one button part with canonical data-variant and data-size attributes', () => {
+  const variants: ButtonVariant[] = ['primary', 'secondary', 'soft', 'outline', 'ghost', 'danger', 'danger-soft'];
+  const sizes: ButtonSize[] = ['xs', 'sm', 'md', 'lg'];
   render(
     <>
-      {intents.flatMap((intent) =>
-        sizes.map((size) => <Button key={`${intent}-${size}`} intent={intent} size={size}>{`${intent} ${size}`}</Button>),
+      {variants.flatMap((variant) =>
+        sizes.map((size) => (
+          <Button key={`${variant}-${size}`} variant={variant} size={size}>
+            {`${variant} ${size}`}
+          </Button>
+        )),
       )}
     </>,
   );
-  // An intent and a size are attributes of the one button part; the outlined secondary and the default size say none.
-  const variant = { primary: 'solid', secondary: null, quiet: 'quiet', danger: 'destructive' };
-  const scale = { compact: 'sm', default: null, large: 'lg' };
-  for (const intent of intents)
+  const expectedVariant: Record<ButtonVariant, string | null> = {
+    primary: 'solid',
+    secondary: null,
+    soft: 'soft',
+    outline: 'outline',
+    ghost: 'quiet',
+    danger: 'destructive',
+    'danger-soft': 'danger-soft',
+  };
+  const expectedSize: Record<ButtonSize, string | null> = { xs: 'xs', sm: 'sm', md: null, lg: 'lg' };
+  for (const variant of variants)
     for (const size of sizes) {
-      const button = screen.getByRole('button', { name: `${intent} ${size}` });
+      const button = screen.getByRole('button', { name: `${variant} ${size}` });
       expect(button).toHaveAttribute('data-slot', 'button');
-      expect(button.getAttribute('data-variant')).toBe(variant[intent]);
-      expect(button.getAttribute('data-size')).toBe(scale[size]);
+      expect(button.getAttribute('data-variant')).toBe(expectedVariant[variant]);
+      expect(button.getAttribute('data-size')).toBe(expectedSize[size]);
     }
 });
 
-test('each intent wears the class the looks already dress, beside its own', () => {
-  // What holds is that each intent has a word of its own, beside the button's.
-  expect(buttonClass({ intent: 'primary' }).split(' ')).toEqual(expect.arrayContaining(['ui-button', 'ui-button-primary']));
-  expect(buttonClass({ intent: 'secondary' }).split(' ')).toEqual(expect.arrayContaining(['ui-button', 'ui-button-secondary']));
-  expect(buttonClass({ intent: 'danger' }).split(' ')).toEqual(expect.arrayContaining(['ui-button', 'ui-button-danger']));
-  // Quiet is a word in the link ink, not the outlined secondary.
-  expect(buttonClass({ intent: 'quiet' }).split(' ')).not.toContain('ui-button-secondary');
-  expect(buttonClass({ size: 'large', block: true, className: 'x' })).toMatch(/ui-button-large.*ui-button-block.*x/);
-  expect(buttonClass({ size: 'default' })).not.toMatch(/ui-button-default/);
+test('buttonClass maps variant, size, and block onto canonical utility classes', () => {
+  expect(buttonClass({ variant: 'primary' }).split(' ')).toEqual(expect.arrayContaining(['ui-button', 'ui-button-primary']));
+  expect(buttonClass({ variant: 'secondary' }).split(' ')).toEqual(expect.arrayContaining(['ui-button', 'ui-button-secondary']));
+  expect(buttonClass({ variant: 'danger' }).split(' ')).toEqual(expect.arrayContaining(['ui-button', 'ui-button-danger']));
+  expect(buttonClass({ variant: 'ghost' }).split(' ')).not.toContain('ui-button-secondary');
+  expect(buttonClass({ size: 'lg', block: true, className: 'x' })).toMatch(/ui-button-lg.*ui-button-block.*x/);
+  expect(buttonClass({ size: 'md' })).not.toMatch(/ui-button-md/);
 });
 
 test('a button is a plain button unless it says it submits', () => {
   render(
     <form>
       <Button>Cancel</Button>
-      <Button type="submit" intent="primary">
+      <Button type="submit" variant="primary">
         Save
       </Button>
     </form>,
@@ -51,12 +60,12 @@ test('a button is a plain button unless it says it submits', () => {
   expect(screen.getByRole('button', { name: 'Save' })).toHaveAttribute('type', 'submit');
 });
 
-test('busy says so, keeps the focus, and refuses the press and the submission it would make', () => {
+test('loading says so, keeps the focus, and refuses the press and the submission it would make', () => {
   const pressed = vi.fn();
   const submitted = vi.fn((event: Event) => event.preventDefault());
   const { rerender } = render(
     <form onSubmit={(e) => submitted(e.nativeEvent)}>
-      <Button type="submit" intent="primary" busy busyLabel="Saving…" onClick={pressed}>
+      <Button type="submit" variant="primary" loading loadingLabel="Saving…" onClick={pressed}>
         Save
       </Button>
     </form>,
@@ -64,6 +73,7 @@ test('busy says so, keeps the focus, and refuses the press and the submission it
   const button = screen.getByRole('button', { name: 'Saving…' });
   button.focus();
   expect(button).toHaveAttribute('aria-disabled', 'true');
+  expect(button).toHaveAttribute('aria-busy', 'true');
   expect(button).not.toBeDisabled();
   fireEvent.click(button);
   expect(pressed).not.toHaveBeenCalled();
@@ -71,7 +81,7 @@ test('busy says so, keeps the focus, and refuses the press and the submission it
   expect(button).toHaveFocus();
   rerender(
     <form onSubmit={(e) => submitted(e.nativeEvent)}>
-      <Button type="submit" intent="primary" busyLabel="Saving…" onClick={pressed}>
+      <Button type="submit" variant="primary" loadingLabel="Saving…" onClick={pressed}>
         Save
       </Button>
     </form>,

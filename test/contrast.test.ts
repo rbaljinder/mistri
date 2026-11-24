@@ -235,11 +235,13 @@ test('Workshop is the look an App wears by default, and its palette marks the br
 
 /** The custom properties a rule declares, with var(--x) references to its own or the base rule's resolved. */
 function declared(css: string, selector: string): Record<string, string> {
-  const start = css.indexOf(`${selector} {`);
-  assert.ok(start >= 0, `${selector} rule`);
-  const body = css.slice(start + selector.length + 2, css.indexOf('\n}', start)).replace(/\/\*[\s\S]*?\*\//g, '');
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const match = new RegExp(`(?:^|\\n)${escaped}(?:,\\s*[^\\{]+)? \\{`).exec(css);
+  assert.ok(match, `${selector} rule`);
+  const from = match.index + match[0].length;
+  const body = css.slice(from, css.indexOf('\n}', from)).replace(/\/\*[\s\S]*?\*\//g, '');
   const out: Record<string, string> = {};
-  for (const match of body.matchAll(/(--[\w-]+):\s*([^;]+);/g)) out[match[1]!] = match[2]!.trim();
+  for (const entry of body.matchAll(/(--[\w-]+):\s*([^;]+);/g)) out[entry[1]!] = entry[2]!.trim();
   return out;
 }
 
@@ -308,14 +310,11 @@ test('info has a hue of its own: apart from the accent in every look, palette an
 
 test("the browser's own --ai and --status-info stand apart from its accent and from each other, light and dark", () => {
   const css = readFileSync(new URL('../packages/ui/src/tokens.css', import.meta.url), 'utf8');
-  const light = css.slice(css.indexOf(':root {'), css.indexOf('@media (prefers-color-scheme: dark)'));
-  const dark = css.slice(css.indexOf(':root[data-theme="dark"] {'));
-  for (const [mode, block] of [
-    ['light', light],
-    ['dark', dark],
+  for (const [mode, vars] of [
+    ['light', declared(css, ':root')],
+    ['dark', declared(css, ':root[data-theme="dark"]')],
   ] as const) {
-    const token = (name: string) => new RegExp(`\\s${name}:\\s*(#[0-9a-f]{6})`, 'i').exec(block)?.[1];
-    const [accent, info, ai] = [token('--accent'), token('--status-info'), token('--ai')];
+    const [accent, info, ai] = [vars['--accent'], vars['--status-info'], vars['--ai']];
     assert.ok(accent && info && ai, `${mode}: the three are written`);
     assert.ok(hueGap(accent, info) >= INFO_APART, `${mode}: info is ${hueGap(accent, info).toFixed(0)} degrees from the accent`);
     assert.ok(hueGap(ai, info) >= 30, `${mode}: ai is ${hueGap(ai, info).toFixed(0)} degrees from info`);

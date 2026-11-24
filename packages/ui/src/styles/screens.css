@@ -35,12 +35,15 @@
   @media (pointer: coarse), (max-width: 40rem) {
     :is(
       [data-slot='input'],
+      [data-slot='field-box'],
+      [data-slot='input-group'],
+      [data-slot='date-field'],
       [data-slot='textarea'],
       [data-slot='select-trigger'],
-      [data-slot='autocomplete-input'],
+      [data-slot='autocomplete-input']:not([data-slot='input-group'] *),
       [data-slot='choice'],
       [data-slot='check-cards-card'],
-      [data-slot='button']:not([data-size='sm'])
+      [data-slot='button']:not([data-size='sm'], [data-slot='field-box'] > *)
     ) {
       min-height: calc(44px / var(--density-zoom, 1));
     }
@@ -67,7 +70,7 @@
       [data-slot='autocomplete-input'],
       [data-slot='date-field-time']
     ) {
-      font-size: max(16px, var(--m-text));
+      font-size: max(16px, var(--m-text, calc(13px * var(--type-k, 1))));
     }
   }
 

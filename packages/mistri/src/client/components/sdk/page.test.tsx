@@ -12,7 +12,7 @@ import { UiPageContext, type UiPageFrame } from './context.js';
 import { fixtureHost, SectionFrame } from './fixture.js';
 import { fixtures, renderPage } from './testing.js';
 import { useCommand, useGranted, useRows } from './hooks.js';
-import { ActionButton, CommandButton, definePage, List, Scope } from './page.js';
+import { ActionButton, CommandButton, definePage, RecordList, Scope } from './page.js';
 
 const BOOKINGS = fixtures({
   booking: [
@@ -39,14 +39,14 @@ describe('a command on one row', () => {
     commands: ['checkIn'],
     actions: ['seat'],
     component: () => (
-      <List from="booking" where={{ class_session_id: 4, status: 'booked' }} show={['guest_name']} sort="guest_name">
+      <RecordList from="booking" where={{ class_session_id: 4, status: 'booked' }} show={['guest_name']} sort="guest_name">
         {(row) => (
           <>
             <CommandButton command="checkIn" row={row} done={`${row.guest_name} is checked in.`} />
             <ActionButton action="seat" row={row} />
           </>
         )}
-      </List>
+      </RecordList>
     ),
   });
 
@@ -110,9 +110,9 @@ describe('a command on one row', () => {
       reads: ['booking'],
       commands: ['checkIn'],
       component: () => (
-        <List from="booking" where={{ class_session_id: 4, status: 'booked' }} show={['guest_name']} sort="guest_name">
+        <RecordList from="booking" where={{ class_session_id: 4, status: 'booked' }} show={['guest_name']} sort="guest_name">
           {(row) => <CommandButton command="checkIn" row={row} unavailable="hide" />}
-        </List>
+        </RecordList>
       ),
     });
     renderPage(hiding, { data: BOOKINGS, viewer: SIGNED_IN, commands: { checkIn: { label: 'Check in', available } } });
@@ -178,20 +178,20 @@ describe('asking whether a command may be run', () => {
   });
 });
 
-describe('Scope and List', () => {
-  test("a List inside a Scope reads the Scope's resource under its condition and its own", async () => {
+describe('Scope and RecordList', () => {
+  test("a RecordList inside a Scope reads the Scope's resource under its condition and its own", async () => {
     const page = definePage({
       label: 'Class',
       reads: ['booking'],
       component: () => (
         <Scope from="booking" where={{ class_session_id: 4 }}>
-          <List where={{ status: 'booked' }} show={['guest_name']} sort="guest_name" label="Expected">
+          <RecordList where={{ status: 'booked' }} show={['guest_name']} sort="guest_name" ariaLabel="Expected">
             {(row) => <span>{`${row.guest_name}`}</span>}
-          </List>
+          </RecordList>
           <Scope from="booking" where={{ party_size: { gt: 2 } }}>
-            <List show={['guest_name']} label="Large parties">
+            <RecordList show={['guest_name']} ariaLabel="Large parties">
               {(row) => <span>{`${row.guest_name}`}</span>}
-            </List>
+            </RecordList>
           </Scope>
         </Scope>
       ),
@@ -204,14 +204,14 @@ describe('Scope and List', () => {
     expect([...large.querySelectorAll('li')].map((item) => item.textContent)).toEqual(['Kai Moss']);
   });
 
-  test('a List with no rows says its empty state; one the reader may not read says so, not "nothing here"', async () => {
+  test('a RecordList with no rows says its empty state; one the reader may not read says so, not "nothing here"', async () => {
     const page = definePage({
       label: 'Empty',
       reads: ['booking'],
       component: () => (
-        <List from="booking" where={{ status: 'cancelled' }} empty="No cancellations.">
+        <RecordList from="booking" where={{ status: 'cancelled' }} empty="No cancellations.">
           {(row) => <span>{`${row.guest_name}`}</span>}
-        </List>
+        </RecordList>
       ),
     });
     renderPage(page, { data: BOOKINGS });
@@ -225,7 +225,7 @@ describe('Scope and List', () => {
       };
       const view = render(
         <SectionFrame host={host} id="refused" width={960}>
-          <List from="booking">{(row) => <span>{`${row.guest_name}`}</span>}</List>
+          <RecordList from="booking">{(row) => <span>{`${row.guest_name}`}</span>}</RecordList>
         </SectionFrame>,
       );
       expect(await view.findByText(said[status])).toBeInTheDocument();
@@ -236,18 +236,18 @@ describe('Scope and List', () => {
 });
 
 describe('a read past its limit, and one that changes under the page', () => {
-  test('a List cut at its limit says it shows the first rows; one that holds them all says nothing', async () => {
+  test('a RecordList cut at its limit says it shows the first rows; one that holds them all says nothing', async () => {
     const page = definePage({
       label: 'Bookings',
       reads: ['booking'],
       component: () => (
         <>
-          <List from="booking" show={['guest_name']} sort="id" limit={2} label="First">
+          <RecordList from="booking" show={['guest_name']} sort="id" limit={2} ariaLabel="First">
             {(row) => <span>{`${row.guest_name}`}</span>}
-          </List>
-          <List from="booking" show={['guest_name']} sort="id" limit={4} label="All">
+          </RecordList>
+          <RecordList from="booking" show={['guest_name']} sort="id" limit={4} ariaLabel="All">
             {(row) => <span>{`${row.guest_name}`}</span>}
-          </List>
+          </RecordList>
         </>
       ),
     });
@@ -323,9 +323,9 @@ describe('a read past its limit, and one that changes under the page', () => {
       label: 'Refused',
       reads: ['booking'],
       component: () => (
-        <List from="booking" empty="Nothing here.">
+        <RecordList from="booking" empty="Nothing here.">
           {(row) => <span>{`${row.guest_name}`}</span>}
-        </List>
+        </RecordList>
       ),
     });
     renderPage(page, { data: BOOKINGS, refused: { booking: 403 } });
@@ -475,10 +475,9 @@ describe('a form the page declares', () => {
       if (apply.isPending) return null;
       return (
         <>
-          <p>
-            {JSON.stringify({ granted: apply.granted, step: apply.step, saved: apply.saved, dirty: apply.dirty, pending: apply.pending })}
-          </p>
+          <p>{JSON.stringify({ granted: apply.granted, step: apply.step, saved: apply.saved, dirty: apply.dirty })}</p>
           <p>{apply.outcome ? `ended ${apply.outcome.status}` : 'not opened'}</p>
+          <p>{apply.isSubmitting ? 'submit in flight' : 'nothing in flight'}</p>
           <button onClick={() => void apply.open({ plan: 'team' })}>{apply.dirty ? 'Continue your application' : 'Apply'}</button>
           <button onClick={() => void apply.goTo('you')}>Edit your details</button>
           <button onClick={() => void apply.startOver().then((gone) => gone || setNote('kept'))}>Start over</button>
@@ -491,7 +490,8 @@ describe('a form the page declares', () => {
   test('a resumed draft reads as the form resumes it, and the page continues it', async () => {
     const draft = { saved: ['you'], step: 'plan', expiresAt: '2026-11-15T00:00:00.000Z' };
     const drawn = renderPage(home, { viewer: SIGNED_IN, forms: { apply: { steps, draft } } });
-    expect(await screen.findByText('{"granted":true,"step":"plan","saved":["you"],"dirty":true,"pending":false}')).toBeInTheDocument();
+    expect(await screen.findByText('{"granted":true,"step":"plan","saved":["you"],"dirty":true}')).toBeInTheDocument();
+    expect(screen.getByText('nothing in flight')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Continue your application' }));
     fireEvent.click(screen.getByRole('button', { name: 'Edit your details' }));
     expect(drawn.navigations).toEqual([
@@ -514,14 +514,16 @@ describe('a form the page declares', () => {
     renderPage(home, { viewer: SIGNED_IN, forms: { apply: { steps, draft, pending: true } } });
     fireEvent.click(await screen.findByRole('button', { name: 'Start over' }));
     await vi.waitFor(() => expect(notes).toEqual(['kept']));
-    expect(screen.getByText(/"pending":true/)).toBeInTheDocument();
+    expect(screen.getByText(/"dirty":true/)).toBeInTheDocument();
+    /* The draft was read (`isPending` is over) and the submit is still out: the two are different questions. */
+    expect(screen.getByText('submit in flight')).toBeInTheDocument();
   });
 
   test('Start over discards the draft, and the page reads it gone', async () => {
     const draft = { saved: ['you'], step: 'plan', expiresAt: null };
     renderPage(home, { viewer: SIGNED_IN, forms: { apply: { steps, draft } } });
     fireEvent.click(await screen.findByRole('button', { name: 'Start over' }));
-    expect(await screen.findByText('{"granted":true,"step":null,"saved":[],"dirty":false,"pending":false}')).toBeInTheDocument();
+    expect(await screen.findByText('{"granted":true,"step":null,"saved":[],"dirty":false}')).toBeInTheDocument();
   });
 
   test('a form not served, or a signed-out reader, is not granted', async () => {

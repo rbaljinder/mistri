@@ -2592,6 +2592,9 @@ test('a current card is the one chosen row, titled by its name and opening it, a
   const title = await screen.findByRole('button', { name: 'Lease 7' });
   const box = title.closest('.page-current')!;
   expect(within(box as HTMLElement).getByText('Current lease')).toHaveClass('page-card-caption');
+  // One box: the section is the card's, never also a list's panel (a look that panels lists framed it twice).
+  expect(box.closest('section')).toHaveClass('page-section', 'page-card-section');
+  expect(box.closest('section')).not.toHaveClass('page-list');
   expect([...box.querySelectorAll('.page-card-fact dt')].map((dt) => dt.textContent)).toEqual(['Rent', 'Ends on']);
   await userEvent.setup().click(within(box as HTMLElement).getByRole('button', { name: 'View lease' }));
   expect(gone.at(-1)).toEqual(['open', 'lease', { id: 7 }, 'Lease 7']);

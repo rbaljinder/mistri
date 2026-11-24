@@ -148,7 +148,7 @@ export function ReferenceName({
     return (
       <span>
         {say('nameCouldNotBeLoaded')}{' '}
-        <Button intent="quiet" size="compact" onClick={() => void name.refetch()}>
+        <Button variant="ghost" size="sm" onClick={() => void name.refetch()}>
           {say('tryAgain')}
         </Button>
       </span>

@@ -13,11 +13,13 @@
  * say; en-US and USD unless it does.
  */
 import { act, cleanup, fireEvent, render, within, type BoundFunctions, type queries, type RenderResult } from '@testing-library/react';
+import { installSurfaceSeam, UiSurfaceSeamContext } from '@mistriwork/ui';
 import { createElement, useState, type ComponentType, type ReactNode } from 'react';
 import { installShell } from '@mistriwork/kit/client/shellMode.js';
 import type { QueryClient } from '@tanstack/react-query';
 import type { UiRow } from './context.js';
 import { resetReviews, staleReviews } from '../../commandReviews.js';
+import { mistriSurfaceSeam } from './seam.js';
 import { say } from '../../copy/components/components/sdk/testing.js';
 import {
   FixtureComponent,
@@ -121,6 +123,7 @@ function prepare(options: RenderOptions): void {
      last drawing is taken down before the next rather than piling up. */
   cleanup();
   resetReviews();
+  installSurfaceSeam(mistriSurfaceSeam);
   installShell({
     format: () => ({
       locale: options.locale ?? 'en-US',
@@ -143,14 +146,16 @@ function drawn(
   const navigations: Navigation[] = [];
   const commands: CommandCall[] = [];
   const view = render(
-    <FixtureComponent
-      component={component}
-      declaration={declaration}
-      options={served}
-      navigations={navigations}
-      commands={commands}
-      client={client}
-    />,
+    <UiSurfaceSeamContext.Provider value={mistriSurfaceSeam}>
+      <FixtureComponent
+        component={component}
+        declaration={declaration}
+        options={served}
+        navigations={navigations}
+        commands={commands}
+        client={client}
+      />
+    </UiSurfaceSeamContext.Provider>,
   );
   return Object.assign(view, { navigations, commands, refresh: refresher(served, client), region: regioned(view) });
 }
@@ -163,15 +168,17 @@ function framed(options: RenderOptions, id: string, className: string | undefine
   const navigations: Navigation[] = [];
   const commands: CommandCall[] = [];
   const view = render(
-    <SectionFrame
-      host={fixtureHost(served.data!, served, navigations, commands)}
-      id={id}
-      width={served.width ?? 960}
-      client={client}
-      {...(className ? { className } : {})}
-    >
-      {body(served)}
-    </SectionFrame>,
+    <UiSurfaceSeamContext.Provider value={mistriSurfaceSeam}>
+      <SectionFrame
+        host={fixtureHost(served.data!, served, navigations, commands)}
+        id={id}
+        width={served.width ?? 960}
+        client={client}
+        {...(className ? { className } : {})}
+      >
+        {body(served)}
+      </SectionFrame>
+    </UiSurfaceSeamContext.Provider>,
   );
   return Object.assign(view, { navigations, commands, refresh: refresher(served, client), region: regioned(view) });
 }

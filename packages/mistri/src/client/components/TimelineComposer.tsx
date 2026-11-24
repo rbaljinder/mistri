@@ -154,7 +154,7 @@ export function TimelineComposer({
               }}
             />
           )}
-          <Button intent="primary" type="submit" disabled={!text.trim() || sending}>
+          <Button variant="primary" type="submit" disabled={!text.trim() || sending}>
             {sending ? say('sending') : mode[0] === 'note' ? say('addNote') : mode[2]}
           </Button>
         </div>

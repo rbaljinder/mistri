@@ -70,7 +70,7 @@ export function ThemeLab({ onDone }: { onDone: () => void }) {
             ariaLabel={say('preferences.visualTheme')}
             value={visualThemeChoice()}
             items={visualThemeOptions().map((item) => ({ ...item, swatches: [...item.swatches] }))}
-            onChange={(value) => after(() => setVisualTheme(value))}
+            onValueChange={(value) => after(() => setVisualTheme(value))}
           />
         </label>
         {visualPaletteOptions().length > 1 && (
@@ -80,7 +80,7 @@ export function ThemeLab({ onDone }: { onDone: () => void }) {
               ariaLabel={say('preferences.palette')}
               value={visualPaletteChoice()}
               items={visualPaletteOptions().map((item) => ({ ...item, swatches: [...item.swatches] }))}
-              onChange={(value) => after(() => setVisualPalette(value))}
+              onValueChange={(value) => after(() => setVisualPalette(value))}
             />
           </label>
         )}
@@ -94,7 +94,7 @@ export function ThemeLab({ onDone }: { onDone: () => void }) {
               { value: 'light', label: say('preferences.light') },
               { value: 'dark', label: say('preferences.dark') },
             ]}
-            onChange={(value) => after(() => setTheme(value))}
+            onValueChange={(value) => after(() => setTheme(value))}
           />
         </label>
       </div>
@@ -122,7 +122,7 @@ export function ThemeLab({ onDone }: { onDone: () => void }) {
               <Dropdown
                 ariaLabel={say('sampleStatus')}
                 value={status}
-                onChange={setStatus}
+                onValueChange={setStatus}
                 items={[
                   { value: 'active', label: say('active') },
                   { value: 'pending', label: say('pending') },

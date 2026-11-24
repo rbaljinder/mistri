@@ -21,7 +21,7 @@
    `"sortable-item"` or `"sortable-handle"` with `data-sorting`, `data-grabbed`, `data-dragging` and
    `data-disabled` for a stylesheet. */
 import { createParts } from '@ui-sdk/react/primitive';
-import type { ComponentProps, ReactNode } from 'react';
+import { type ComponentProps, Fragment, type ReactNode } from 'react';
 import { type CommitProps, movedKeys, PendingProvider, useCommit, usePending } from './commit.js';
 import { type Change, heard } from './heard.js';
 import { sortable, type SortableReason } from './sortable.js';
@@ -35,6 +35,7 @@ export function Sortable({
   onValueChange,
   onCommit,
   commitDelay,
+  words,
   value,
   defaultValue,
   ...props
@@ -50,11 +51,12 @@ export function Sortable({
     onValueChange,
     onCommit,
     commitDelay,
+    words,
     moved: movedKeys,
   });
   const root = (
     <parts.Root {...props} value={commit.value} defaultValue={commit.defaultValue} {...heard({ onValueChange: commit.onValueChange })}>
-      {({ order }) => order.map((key, at) => children(key, at))}
+      {({ order }) => order.map((key, at) => <Fragment key={key}>{children(key, at)}</Fragment>)}
     </parts.Root>
   );
   return commit.pending ? <PendingProvider value={commit.pending}>{root}</PendingProvider> : root;

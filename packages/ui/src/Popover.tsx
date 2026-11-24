@@ -10,14 +10,15 @@
  * Drawn inside an enclosing dialog, so a dialog's focus trap keeps it as
  * its own, and otherwise where the page says its popups go (popups.ts).
  */
-import { Popover as Layer, PopoverContent, PopoverTrigger } from '@ui-sdk/react/popover';
-import { useContext, useRef, type ReactNode } from 'react';
+import { Popover as Layer, PopoverArrow, PopoverContent, PopoverTrigger } from '@ui-sdk/react/popover';
+import { useContext, useRef, type ReactNode, type Ref } from 'react';
 import type { ChangeDetails } from './changeDetails.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { heard, triggerElement } from './internal/layers.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Props for the `Popover` anchored floating surface. */
 export interface PopoverProps {
   trigger: ReactNode;
   children: ReactNode;
@@ -37,37 +38,54 @@ export interface PopoverProps {
       | 'implicit'
     >,
   ) => void;
+  side?: 'top' | 'bottom' | 'left' | 'right';
+  align?: 'start' | 'center' | 'end';
+  sideOffset?: number;
+  arrow?: boolean;
   className?: string;
   /** The popup's accessible name, where it needs one. */
   ariaLabel?: string;
+  ref?: Ref<HTMLDivElement>;
 }
 
-function DefaultPopover({ trigger, children, open, defaultOpen, onOpenChange, className, ariaLabel }: PopoverProps) {
+function DefaultPopover({
+  trigger,
+  children,
+  open,
+  defaultOpen,
+  onOpenChange,
+  side,
+  align,
+  sideOffset = 8,
+  arrow,
+  className,
+  ariaLabel,
+  ref,
+}: PopoverProps) {
   const anchor = useRef<HTMLButtonElement>(null);
   const container = useDialogContainer(anchor);
-  /* The layer is drawn outside the page that opened it; the page's scope goes with it (Modal.tsx). */
   const componentScope = useContext(ComponentStyleScope);
   return (
     <Layer open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange && ((next, details) => onOpenChange(next, heard(details)))}>
-      {/* The trigger is rendered as the trigger, not inside one: a button passed as a child would nest inside the
-          part's own button, giving two buttons for one control (DropMenu.tsx does the same for its trigger). */}
       <PopoverTrigger render={triggerElement(trigger)} ref={anchor} />
       <PopoverContent
+        ref={ref}
         className={className}
         data-component={componentScope}
         aria-label={ariaLabel}
-        /* UI SDK names the popup by its trigger. A name the caller gives is the popup's own, and the trigger's
-           words would be read in its place: `aria-labelledby` outranks `aria-label`. */
         render={ariaLabel ? (drawn) => <div {...drawn} aria-labelledby={undefined} /> : undefined}
-        sideOffset={8}
+        side={side}
+        align={align}
+        sideOffset={sideOffset}
         collisionPadding={8}
         container={container ?? popupContainer()}
       >
+        {arrow ? <PopoverArrow className="nx-popover-arrow" /> : null}
         {children}
       </PopoverContent>
     </Layer>
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Anchored floating popover layer with collision-aware placement, Escape dismissal, and dialog portal containment. */
 export const Popover = slotted('Popover', DefaultPopover, { onOpenChange: [1, 'implicit'] });

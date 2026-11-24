@@ -28,34 +28,34 @@ function Boxes() {
   const [file, setFile] = useState<File | null>(null);
   return (
     <div style={column}>
-      <TextField label="First name" value={name} onChange={setName} valid={name.length > 1} tip={TIP} />
-      <TextField label="Employer" value="" onChange={() => {}} optional="(optional)" hint="Leave it out if self-employed." />
-      <TextField label="Email" value="maya@" onChange={() => {}} valid={false} problem="Enter an email like name@example.com." />
+      <TextField label="First name" value={name} onValueChange={setName} valid={name.length > 1} tip={TIP} />
+      <TextField label="Employer" value="" onValueChange={() => {}} optional="(optional)" hint="Leave it out if self-employed." />
+      <TextField label="Email" value="maya@" onValueChange={() => {}} valid={false} problem="Enter an email like name@example.com." />
       <Columns cols="1fr 1.4fr">
-        <MaskedField label="Phone" mask={masks.phone} value={phone} onChange={setPhone} valid={phone.length === 10} />
-        <MaskedField label="Born" mask={masks.date} value={born} onChange={setBorn} />
+        <MaskedField label="Phone" mask={masks.phone} value={phone} onValueChange={setPhone} valid={phone.length === 10} />
+        <MaskedField label="Born" mask={masks.date} value={born} onValueChange={setBorn} />
       </Columns>
-      <MoneyField label="Monthly income" value={pay} onChange={setPay} />
+      <MoneyField label="Monthly income" value={pay} onValueChange={setPay} />
       <SensitiveField
         label="Social Security number"
         mask={masks.ssn}
         value={ssn}
-        onChange={setSsn}
+        onValueChange={setSsn}
         showLabel="Show"
         hideLabel="Hide"
         note="Stored securely."
         valid={ssn.length === 9}
       />
-      <TextField label="Read only" value="Fixed" onChange={() => {}} readOnly />
+      <TextField label="Read only" value="Fixed" onValueChange={() => {}} readOnly />
       <FileField
         label="Contacts file"
         hint="A CSV, read here before anything is sent."
         accept=".csv,text/csv"
         value={file}
-        onChange={setFile}
+        onValueChange={setFile}
       />
-      <FileField label="With a problem" value={null} onChange={() => {}} problem="Choose a file." />
-      <FileField label="Disabled" value={null} onChange={() => {}} disabled />
+      <FileField label="With a problem" value={null} onValueChange={() => {}} problem="Choose a file." />
+      <FileField label="Disabled" value={null} onValueChange={() => {}} disabled />
     </div>
   );
 }
@@ -66,9 +66,9 @@ function Lists() {
   const [many, setMany] = useState<string[]>(['acura', 'alfa romeo']);
   return (
     <div style={column}>
-      <Select label="Make" options={MAKES} value={one} onChange={setOne} placeholder="Choose" />
-      <MultiSelect label="Makes you like" options={MAKES} value={many} onChange={setMany} placeholder="Choose" />
-      <Select label="With a problem" options={MAKES} value="" onChange={() => {}} placeholder="Choose" problem="Choose a make." />
+      <Select label="Make" options={MAKES} value={one} onValueChange={setOne} placeholder="Choose" />
+      <MultiSelect label="Makes you like" options={MAKES} value={many} onValueChange={setMany} placeholder="Choose" />
+      <Select label="With a problem" options={MAKES} value="" onValueChange={() => {}} placeholder="Choose" problem="Choose a make." />
     </div>
   );
 }
@@ -87,16 +87,16 @@ function Choices() {
   ];
   return (
     <div style={column}>
-      <YesNo label="Do you own a home?" value={own} onChange={setOwn} yes="Yes" no="No" />
-      <ChoiceCards label="Vehicle" options={kinds} value={one} onChange={setOne} />
-      <ChoiceCards label="Vehicles" multiple exclusive="none" options={kinds} value={many} onChange={setMany} />
-      <Checkbox label="Email me updates" checked={agree} onChange={setAgree} />
+      <YesNo label="Do you own a home?" value={own} onValueChange={setOwn} yes="Yes" no="No" />
+      <ChoiceCards label="Vehicle" options={kinds} value={one} onValueChange={setOne} />
+      <ChoiceCards label="Vehicles" multiple exclusive="none" options={kinds} value={many} onValueChange={setMany} />
+      <Checkbox label="Email me updates" checked={agree} onCheckedChange={setAgree} />
       <Consent
         label="I agree to the terms and the privacy notice, and I understand how my answers are used."
         checked={agree}
-        onChange={setAgree}
+        onCheckedChange={setAgree}
       />
-      <Slider label="Monthly budget" min={150} max={1000} step={10} value={budget} onChange={setBudget} format={(n) => `$${n}`} />
+      <Slider label="Monthly budget" min={150} max={1000} step={10} value={budget} onValueChange={setBudget} formatValue={(n) => `$${n}`} />
     </div>
   );
 }
@@ -108,7 +108,7 @@ export const Chrome: StoryObj = {
       <ProgressBar value={3} max={12} label="Step 3 of 12" />
       <StepHeader title="Next, your income." lead="This helps us pre-qualify you for vehicles in your budget." />
       <ReviewList label="Your answers">
-        <TextField label="Employer" value="Northwind" onChange={() => {}} readOnly />
+        <TextField label="Employer" value="Northwind" onValueChange={() => {}} readOnly />
       </ReviewList>
       <ActionBar back={{ label: 'Back', onClick: () => {} }} primary={{ label: 'Continue', onClick: () => {} }} />
     </div>

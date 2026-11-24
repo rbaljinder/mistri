@@ -28,8 +28,10 @@
   position: relative;
   /* The button's own height is a compact control's; here it is a word in the line. */
   height: auto;
+  min-width: 0;
   min-height: 0;
-  padding-block: 0;
+  padding: 0;
+  border: 0;
   line-height: inherit;
 }
 .decision-chip .decision-chip-accept::after,

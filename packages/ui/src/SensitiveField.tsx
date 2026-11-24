@@ -6,20 +6,21 @@
  * dots are all the page holds. Preview: @mistriwork/ui is Preview at 1.0.
  */
 import { Input } from '@ui-sdk/react/input';
-import { useState, type ReactNode } from 'react';
+import { useState, type ReactNode, type Ref } from 'react';
 import { Button } from './Button.js';
 import type { FieldFrame } from './fieldFrame.js';
-import { digits, type Mask } from './masks.js';
+import { digits, maskNamed, type Mask, type MaskName } from './masks.js';
 import { ValidMark } from './TextField.js';
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { Frame } from './internal/Frame.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Props for the `SensitiveField` masked secret control. */
 export interface SensitiveFieldProps extends FieldFrame {
   /** The raw value. */
   value: string;
-  onChange: (raw: string, details: ChangeDetails<'input-change'>) => void;
-  mask: Mask;
+  onValueChange?: (raw: string, details: ChangeDetails<'input-change'>) => void;
+  mask: Mask | MaskName;
   disabled?: boolean;
   valid?: boolean;
   validIcon?: ReactNode;
@@ -30,15 +31,22 @@ export interface SensitiveFieldProps extends FieldFrame {
   /** The words of the button beside the box. */
   showLabel: string;
   hideLabel: string;
+  ref?: Ref<HTMLInputElement>;
 }
 
 function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
   const [shown, setShown] = useState(false);
-  const formatted = props.mask.format(props.value);
+  const resolvedMask = maskNamed(props.mask);
+  const formatted = resolvedMask.format(props.value);
   const display = shown ? formatted : '•'.repeat(formatted.length);
+  const targetRef = props.ref ?? (props as { inputRef?: Ref<HTMLInputElement> }).inputRef;
+  const emit = (raw: string, details: ChangeDetails<'input-change'>) => {
+    const legacy = (props as { onChange?: (raw: string, details: ChangeDetails<'input-change'>) => void }).onChange;
+    props.onValueChange?.(raw, details);
+    legacy?.(raw, details);
+  };
   const change = (typed: string, caret: number | null, details: ChangeDetails<'input-change'>): void => {
-    if (shown) return props.onChange(props.mask.parse(typed), details);
-    // Hidden: preserve unchanged leading and trailing dots around the edited span so mid-string edits do not corrupt later digits.
+    if (shown) return emit(resolvedMask.parse(typed), details);
     if (/^•*$/.test(typed)) {
       if (typed.length >= formatted.length) return;
       const at = caret !== null && caret <= typed.length ? caret : typed.length;
@@ -51,7 +59,7 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
         const post = digits(suffix);
         nextDigits = pre.length > 0 ? pre.slice(0, -1) + post : post.slice(1);
       }
-      return props.onChange(props.mask.parse(nextDigits), details);
+      return emit(resolvedMask.parse(nextDigits), details);
     }
     let lead = 0;
     while (lead < typed.length && lead < formatted.length && typed[lead] === '•') lead++;
@@ -62,7 +70,7 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
     const prefix = formatted.slice(0, lead);
     const inserted = typed.slice(lead, typed.length - trail);
     const suffix = trail > 0 ? formatted.slice(formatted.length - trail) : '';
-    props.onChange(props.mask.parse(digits(prefix) + digits(inserted) + digits(suffix)), details);
+    emit(resolvedMask.parse(digits(prefix) + digits(inserted) + digits(suffix)), details);
   };
   return (
     <Frame {...props}>
@@ -70,10 +78,11 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
         <div data-slot="field-box" data-has-mark={props.valid === undefined ? undefined : ''}>
           <Input
             id={props.id}
+            ref={targetRef}
             data-hidden={shown ? undefined : ''}
             value={display}
             disabled={props.disabled}
-            inputMode={props.mask.inputMode ?? 'numeric'}
+            inputMode={resolvedMask.inputMode ?? 'numeric'}
             autoComplete="off"
             autoCorrect="off"
             autoCapitalize="off"
@@ -81,15 +90,14 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
             data-1p-ignore=""
             data-lpignore="true"
             aria-required={props.required || undefined}
-            // React's own change, as the text box hears it (TextField.tsx says why).
             onChange={(event) => change(event.target.value, event.target.selectionStart, changeDetails('input-change', event))}
             onBlur={props.onBlur}
           />
           {props.valid ? <ValidMark icon={props.validIcon} /> : null}
+          <Button variant="ghost" disabled={props.disabled} aria-pressed={shown} aria-controls={props.id} onClick={() => setShown(!shown)}>
+            {shown ? props.hideLabel : props.showLabel}
+          </Button>
         </div>
-        <Button intent="quiet" disabled={props.disabled} aria-pressed={shown} aria-controls={props.id} onClick={() => setShown(!shown)}>
-          {shown ? props.hideLabel : props.showLabel}
-        </Button>
       </div>
       {props.note ? (
         <p data-slot="field-note">
@@ -101,5 +109,5 @@ function DefaultSensitiveField(props: SensitiveFieldProps): ReactNode {
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const SensitiveField = slotted('SensitiveField', DefaultSensitiveField, { onChange: [1, 'input-change'] });
+/** Masked sensitive identifier field holding bullet dots in the DOM until explicitly revealed. */
+export const SensitiveField = slotted('SensitiveField', DefaultSensitiveField, { onValueChange: [1, 'input-change'] });

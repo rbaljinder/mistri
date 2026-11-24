@@ -237,7 +237,7 @@ function BoxControl({
       items={[{ value: '', label: 'any' }, ...options.map(([l, value]) => ({ value, label: l }))]}
       value={chosen}
       ariaLabel={say('common.filter2', { label })}
-      onChange={(value) => {
+      onValueChange={(value) => {
         onEdit({ tail: value });
         queueMicrotask(onSubmit);
       }}
@@ -387,7 +387,7 @@ export function RefBox({
         inputProps={{
           type: 'text',
           className: 'applist-quick applist-quick-text',
-          'aria-label': say('common.filter2', { label: box.label }),
+          ariaLabel: say('common.filter2', { label: box.label }),
           title:
             chosenId && (!edit || edit.id != null) && !appReader
               ? `${box.column} = ${chosenId}`

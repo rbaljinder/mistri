@@ -12,6 +12,7 @@
  * sign-out or a switch of account never serves one reader's rows to another.
  */
 import { useCallback, useContext, useEffect, useMemo, useReducer, useRef, useState, useSyncExternalStore } from 'react';
+import type { Tone } from '@mistriwork/ui';
 import { keepPreviousData, useInfiniteQuery, useQuery, type UseQueryResult } from '@tanstack/react-query';
 import {
   defaultCurrency,
@@ -392,8 +393,9 @@ interface UiForm extends UiReadState {
   /** The draft holds saved steps not yet submitted: leaving loses nothing, but they are not sent. */
   dirty: boolean;
   expiresAt: string | null;
-  /** A submit sent and not yet known to have landed: `startOver()` refuses until it is. */
-  pending: boolean;
+  /** A submit sent and not yet known to have landed: `startOver()` refuses until it is. Not `isPending`, which is the
+      first read of the draft with nothing to draw yet. */
+  isSubmitting: boolean;
   /** How the form ended the last time this page opened it; null before. */
   outcome: UiFormOutcome | null;
   isPending: boolean;
@@ -437,7 +439,7 @@ export function useForm(view: string): UiForm {
     saved: state?.draft?.saved ?? [],
     dirty: (state?.draft?.saved.length ?? 0) > 0,
     expiresAt: state?.draft?.expiresAt ?? null,
-    pending: state?.pending ?? false,
+    isSubmitting: state?.pending ?? false,
     outcome,
     isPending: read.isPending,
     error: read.error,
@@ -582,6 +584,8 @@ interface UiCommand {
    */
   reason(record: Readonly<Record<string, unknown>>): CommandUnavailable | undefined;
   /** Whether a run on this record is on its way. */
+  isPending(record: Readonly<Record<string, unknown>>): boolean;
+  /** @deprecated `isPending`, the name every hook says it by. Kept, since Apps written before 1.0.0-rc.85 call it. */
   pending(record: Readonly<Record<string, unknown>>): boolean;
   run(
     record: Readonly<Record<string, unknown>>,
@@ -663,7 +667,7 @@ export function useGranted(ref: UiCommandRef): boolean {
 
 /**
  * One of the App's fixed actions, a machine's verb or `action(label, { set })`, by its id: `useAction('startVisit')`. It
- * is held as a command is (`granted`, `available`, `reason`, `pending`, `run`, `open`, and the same outcome), but it is
+ * is held as a command is (`granted`, `available`, `reason`, `isPending`, `run`, `open`, and the same outcome), but it is
  * the record page's own button: `run(record)` writes the action's `set` to that record by its key through the update
  * route, asking first when the action says `confirm`, and the server judges it again, as it judges the record page's —
  * a record in a state the action leaves, or one this reader may not move, is refused in its words, never skipped. It
@@ -762,6 +766,7 @@ function useHandle(handle: UiCommandHandle, viewer: UiViewer): UiCommand {
       if (!handle.granted) return 'not-granted';
       return available(record) === false ? 'unavailable' : undefined;
     },
+    isPending: (record) => running.has(keyText(record)),
     pending: (record) => running.has(keyText(record)),
     run: (record, input, options) => track(keyText(record), handle.run(record, input, options)),
     open: (record, input, options) => track(keyText(record), handle.open(record, input, options)),
@@ -806,12 +811,22 @@ export function useAddressState(
 
 /**
  * Raises the platform's own notice, the one a verb's outcome is said in: a toast, read out by assistive technology.
- * `tone` is `ok` (the default) or `error`. A page that refuses something of its own (a move the rules do not allow)
- * says it as a refused command does, instead of drawing a banner of its own.
+ * `tone` is one of the canonical `Tone` values: `critical` is said as a refusal is (it stays until dismissed and
+ * interrupts a screen reader), `warning` as a caution that passes, and the rest as a verb that landed.
+ *
+ * `'error'`, the word this took before the tones were unified, is still read as `critical`. A page written in
+ * JavaScript, or one that builds the notice untyped, gets no compile error for the old word, and saying a refusal as a
+ * success is the one outcome a notice must not have.
  */
-export function useNotice(): (notice: { text: string; tone?: 'ok' | 'error' }) => void {
+export function useNotice(): (notice: { text: string; tone?: Tone }) => void {
   const host = useUiHost();
-  return useCallback(({ text, tone = 'ok' }) => host.announce(text, tone), [host]);
+  return useCallback(
+    ({ text, tone = 'neutral' }) => {
+      const said: string = tone;
+      host.announce(text, said === 'critical' || said === 'error' ? 'error' : said === 'warning' ? 'warning' : 'ok');
+    },
+    [host],
+  );
 }
 
 /**

@@ -21,7 +21,8 @@
       }
 
       & [data-slot='tabs-tab'] {
-        height: calc(var(--m-unit) * 8);
+        height: auto;
+        min-height: var(--control-h);
         padding-inline: var(--m-space-4);
       }
 
@@ -159,15 +160,16 @@
     }
   }
 
-  /* A key: a hard edge under it, which goes when it is pressed. */
+  /* A key: a hard edge under it, which goes when it is pressed. The edge is the ink on a light ground; on a dark one
+     the ink is near white and the edge would be the brightest line on the page, so it is the strong rule there. */
   @scope ([data-look-buttons='keyed']) to ([data-custom-theme], [data-look-buttons]) {
     [data-slot='button']:not([data-variant='quiet'], [data-variant='bare']) {
       border-radius: calc(var(--m-radius) - 2px);
-      box-shadow: 0 2px 0 var(--m-ink);
+      box-shadow: 0 2px 0 light-dark(var(--m-ink), var(--m-line-strong));
       translate: 0 -1px;
 
       &:active {
-        box-shadow: 0 0 0 var(--m-ink);
+        box-shadow: 0 0 0 light-dark(var(--m-ink), var(--m-line-strong));
         translate: 0 1px;
       }
     }
@@ -224,8 +226,6 @@
       --m-space-6: 1.125rem;
       --m-space-7: 1.5rem;
       --m-space-8: 2.25rem;
-      --m-seam: 1.875rem;
-      --m-pad-box: var(--m-space-5);
     }
   }
 
@@ -236,8 +236,6 @@
       --m-space-6: 1.875rem;
       --m-space-7: 2.5rem;
       --m-space-8: 3.75rem;
-      --m-seam: 3.125rem;
-      --m-pad-box: var(--m-space-5);
     }
   }
 
@@ -249,8 +247,6 @@
       --m-space-6: 1.5rem;
       --m-space-7: 2rem;
       --m-space-8: 3rem;
-      --m-seam: 2.5rem;
-      --m-pad-box: var(--m-space-5);
     }
   }
 
@@ -355,7 +351,9 @@
     [data-slot='input'],
     [data-slot='textarea'],
     [data-slot='select-trigger'],
-    [data-slot='autocomplete-input'],
+    [data-slot='autocomplete-input']:not([data-slot='input-group'] *),
+    [data-slot='field-box'],
+    [data-slot='input-group'],
     [data-slot='date-field'],
     [data-slot='file-field'],
     [data-slot='check-cards-card'],

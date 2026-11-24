@@ -637,8 +637,8 @@ test("a page's controls are held to its params and reads, and layout is 'bare' o
     page.Choose({ param: 'owner', from: 'reply' });
     // @ts-expect-error The label is a column of the read.
     page.Choose({ param: 'owner', from: 'ticket', label: 'subjet' });
-    // @ts-expect-error The order is a column of the read.
-    page.Choose({ param: 'owner', from: 'ticket', sort: 'subjet' });
+    // @ts-expect-error The value is a column of the read.
+    page.Choose({ param: 'owner', from: 'ticket', value: 'subjet' });
     // @ts-expect-error Without a read, the options are the param's words: a param of kind id has none.
     page.Choose({ param: 'owner' });
     // @ts-expect-error A search box is kept in a text param.
@@ -651,10 +651,10 @@ test("a page's controls are held to its params and reads, and layout is 'bare' o
   assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
 });
 
-test("a List's and a useRows read's rows carry the resource's key beside what show names", () => {
+test("a RecordList's and a useRows read's rows carry the resource's key beside what show names", () => {
   const compiled = compile(`
     import type {} from './mistri-schema.js';
-    import { definePage, List } from '@mistriwork/mistri/page';
+    import { definePage, RecordList } from '@mistriwork/mistri/page';
     const page = definePage({ label: 'Board', reads: ['ticket'], component: () => null });
     export default page;
     export function Rows() {
@@ -667,7 +667,7 @@ test("a List's and a useRows read's rows carry the resource's key beside what sh
         first.status;
         return [id, subject];
       }
-      return List({
+      return RecordList({
         from: 'ticket',
         show: ['subject'],
         children: (row) => {
@@ -768,6 +768,35 @@ const DATED: DatabaseSchema = {
   ),
 };
 
+test("a page's object where takes only the operators the server has, each on a column kind that has it", () => {
+  /* A field report: `{ status: { in: [...] } }` compiled, the server refused the read (pageWhere.ts has no `in`: a
+     list is the value itself), and a page that drew `rows.data ?? []` showed an empty table. */
+  const compiled = compile(`
+    import type {} from './mistri-schema.js';
+    import { RecordList, definePage, useRows } from '@mistriwork/mistri/page';
+    const page = definePage({ label: 'Board', reads: ['ticket'], component: () => null });
+    export default page;
+    export function Reads() {
+      // What the server reads: a value, a list, null, and the operators, several at once.
+      page.useRows('ticket', { where: { status: ['open', 'closed'], subject: { contains: 'door', not: null }, priority: { gt: 'a', lte: 'm' } } });
+      page.useRows('ticket', { where: { subject: { not: ['a', 'b'] }, owner_id: undefined } });
+      // @ts-expect-error — the object form has no "in": a list is written as the value
+      page.useRows('ticket', { where: { status: { in: ['open', 'closed'] } } });
+      // @ts-expect-error — nor "eq", beside one it does have
+      page.useRows('ticket', { where: { subject: { contains: 'door', eq: 'x' } } });
+      // Held in a variable, where no excess-property check runs: still refused, having no operator the form has.
+      const held = { status: { in: ['open'] } };
+      // @ts-expect-error — an object with none of the operators is not a condition
+      page.useRows('ticket', { where: held });
+      // @ts-expect-error — the same through the entry point's own hook
+      useRows('ticket', { where: { status: { in: ['open'] } } });
+      // @ts-expect-error — and through a block
+      RecordList({ from: 'ticket', where: { status: { oneOf: ['open'] } }, children: () => null });
+    }
+  `);
+  assert.equal(compiled.status, 0, compiled.stdout + compiled.stderr);
+});
+
 test("a page's useBreakdown groups by what a chart groups by: a column, a date in a period, several with commas", () => {
   const compiled = compile(
     [
@@ -799,7 +828,7 @@ test("a breakdown's rows are typed, a counted Choose is held to the page's reads
   const compiled = compile(
     [
       'import type {} from "./mistri-schema.js";',
-      'import { Choose, Details, Icon, Person, Table, definePage, useBreakdown } from "@mistriwork/mistri/page";',
+      'import { Choose, DescriptionList, Icon, Person, Table, definePage, useBreakdown } from "@mistriwork/mistri/page";',
       'const page = definePage({ label: "Late", reads: ["ticket", "person"], params: { status: ["open", "closed"], owner: "id" }, component: () => null });',
       'export default page;',
       'export function Reads() {',
@@ -832,11 +861,11 @@ test("a breakdown's rows are typed, a counted Choose is held to the page's reads
       'Person({ name: "Ada Stone", secondary: "Acme", href: "/people/7", size: "sm" });',
       '// @ts-expect-error — a person is sm, md or lg',
       'Person({ name: "Ada Stone", size: "xl" });',
-      'Details({ resource: "ticket", row: {}, fields: ["status", { label: "Age", value: "3 days" }], columns: 2 });',
-      '// @ts-expect-error — one column or two',
-      'Details({ resource: "ticket", row: {}, fields: ["status"], columns: 3 });',
-      'Table({ label: "People", rows: [{ name: "Ada", photo: "" }], columns: [{ key: "name", label: "Name", avatar: "photo" }] });',
-      'Table({ label: "People", rows: [{ name: "Ada" }], columns: [{ key: "name", label: "Name", avatar: (row) => ({ name: String(row.name) }) }] });',
+      'DescriptionList({ resource: "ticket", row: {}, fields: ["status", { label: "Age", value: "3 days" }], columns: 2 });',
+      '// @ts-expect-error — one, two or three columns',
+      'DescriptionList({ resource: "ticket", row: {}, fields: ["status"], columns: 4 });',
+      'Table({ ariaLabel: "People", rows: [{ name: "Ada", photo: "" }], columns: [{ key: "name", label: "Name", avatar: "photo" }] });',
+      'Table({ ariaLabel: "People", rows: [{ name: "Ada" }], columns: [{ key: "name", label: "Name", avatar: (row) => ({ name: String(row.name) }) }] });',
     ].join('\n'),
     {},
     {},

@@ -12,7 +12,7 @@
  * would have asked for; the query is the server's to judge, so the rows a
  * fixture gives are the rows it answered.
  */
-import { ComponentStyleScope } from '@mistriwork/ui/internal/ComponentStyleScope.js';
+import { ComponentStyleScope, UiSurfaceSeamContext } from '@mistriwork/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { authoredDisplay, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
@@ -43,6 +43,7 @@ import { say } from '../../copy/components/components/sdk/fixture.js';
 import { heldReview, holdReview, reviewFresh, reviewOwner, staleReview } from '../../commandReviews.js';
 import { captureAppFlagValues, type AppFlagValue } from '../../../shared/appFlagValues.js';
 import { registerPageBlocks } from './pageBlocks.js';
+import { mistriSurfaceSeam } from './seam.js';
 import { noTeamAccess } from '../../teamTypes.js';
 import { noReadAuditAccess } from '../../readAuditTypes.js';
 import { sayAppMessage } from './appMessage.js';
@@ -125,6 +126,8 @@ export interface RenderOptions {
   locale?: string;
   /** The team `useTeam()` reads in a test (empty and managing nothing when absent). */
   team?: import('../../teamTypes.js').TeamAccess;
+  /** The account profile `useAccountProfile()` reads in a test. */
+  accountProfile?: import('../../accountProfileTypes.js').AccountProfileAccess;
   /** The read audit `useReadAudit()` reads in a test (empty when absent). */
   reads?: import('../../readAuditTypes.js').ReadAuditAccess;
   currency?: string;
@@ -168,7 +171,7 @@ export interface RenderOptions {
   /** The App's catalog `useMessage` says, in the language under test: `{ 'help.title': 'Help center' }`. A key left out is said as itself. */
   messages?: Record<string, string>;
   /** Where what a page announces (`<CommandButton>`'s outcome) is collected, for a test to read; it is also drawn in a `status` region. */
-  announced?: { text: string; tone: 'ok' | 'error' }[];
+  announced?: { text: string; tone: 'ok' | 'error' | 'warning' }[];
   /** What `useNavigate().publicLink` answers, by view key: a tenant's own links. None by default. */
   publicLinks?: Record<string, string>;
   /**
@@ -674,6 +677,36 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     deployment: () => ({ name: 'Fixture App', mark: null, theme: look.look, locale: options.locale ?? null, basePath: '' }),
     branding: () => ({ name: 'Fixture App', logo: null, accent: null }),
     team: options.team ?? noTeamAccess,
+    accountProfile:
+      options.accountProfile ??
+      (() => {
+        const accountId = viewer.signedIn ? (viewer.account ?? 'account_1') : '';
+        let currentName = accountId;
+        return {
+          read: async () =>
+            viewer.signedIn
+              ? {
+                  accountId,
+                  appId: 'fixture',
+                  name: currentName,
+                  email: say('fixtureEmail', { account: accountId }),
+                  providers: ['email'],
+                }
+              : null,
+          save: async (name: string) => {
+            if (!viewer.signedIn) throw new Error(say('signInToDo'));
+            currentName = name.trim();
+            return {
+              accountId,
+              appId: 'fixture',
+              name: currentName,
+              email: say('fixtureEmail', { account: accountId }),
+              providers: ['email'],
+            };
+          },
+          changeEmail: async () => {},
+        };
+      })(),
     reads: options.reads ?? noReadAuditAccess,
     token: (name) => options.tokens?.[name] ?? '',
     subscribeLook: () => () => {},
@@ -722,15 +755,17 @@ export function SectionFrame({
   const [client] = useState(() => given ?? fixtureClient());
   return (
     <QueryClientProvider client={client}>
-      <UiHostContext.Provider value={host}>
-        <UiSizeContext.Provider value={{ width, compact: width < COMPACT_BELOW }}>
-          <ComponentStyleScope.Provider value={id}>
-            <div className={className} data-component={id} style={{ width, maxWidth: '100%' }}>
-              {children}
-            </div>
-          </ComponentStyleScope.Provider>
-        </UiSizeContext.Provider>
-      </UiHostContext.Provider>
+      <UiSurfaceSeamContext.Provider value={mistriSurfaceSeam}>
+        <UiHostContext.Provider value={host}>
+          <UiSizeContext.Provider value={{ width, compact: width < COMPACT_BELOW }}>
+            <ComponentStyleScope.Provider value={id}>
+              <div className={className} data-component={id} style={{ width, maxWidth: '100%' }}>
+                {children}
+              </div>
+            </ComponentStyleScope.Provider>
+          </UiSizeContext.Provider>
+        </UiHostContext.Provider>
+      </UiSurfaceSeamContext.Provider>
     </QueryClientProvider>
   );
 }

@@ -15,7 +15,7 @@
  */
 import type { RenderResult } from '@testing-library/react';
 import type { ComponentType } from 'react';
-import type { OpenMode, ToneName, UiRow, ValueDisplay } from './ui.js';
+import type { OpenMode, Tone, UiRow, ValueDisplay } from './ui.js';
 import type { FlagValue } from './app.js';
 
 /** Rows by resource, and the display rules the App would dress them with. */
@@ -110,7 +110,7 @@ export interface RenderOptions {
   messages?: Record<string, string>;
   /** Where what a page announces (`<CommandButton>`'s outcome, a refusal) is collected, for a test to read; it is also
       drawn in a `status` region, so `findByText` reads it as a person hears it. */
-  announced?: { text: string; tone: 'ok' | 'error' }[];
+  announced?: { text: string; tone: 'ok' | 'warning' | 'error' }[];
   /** The resources the reader may not read, with the status the server refuses each with (401 signed out, 403 not this role):
       a read of one fails as the page's does, so the refused state is what is drawn. */
   refused?: Record<string, 401 | 403>;
@@ -201,7 +201,7 @@ export declare function examples(component: ComponentType<never>, declaration: o
 /** Draw one of a component's examples as its story draws it. */
 export declare function renderExample(meta: ReturnType<typeof examples>, story: Example, options?: RenderOptions): Drawn;
 
-export type { ToneName };
+export type { Tone };
 
 /** A `<Board>`, or a list view's board presentation, as a person meets it: cards in lanes. Each answers the element and throws when it is missing or ambiguous. `scope` narrows the search (`view.region('Work').getByRole…` is the other way in). */
 export declare const board: {

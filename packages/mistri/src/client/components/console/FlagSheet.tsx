@@ -14,7 +14,7 @@
  * for this flag; the server checks them again at commit.
  */
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { Button, Empty, Stack, Tone } from '@mistriwork/mistri/ui';
+import { Button, EmptyState, Stack, StatusDot } from '@mistriwork/mistri/ui';
 import { Field } from '@mistriwork/ui/Field.js';
 import { JsonView } from '@mistriwork/kit/client/components/JsonView.js';
 import { useMessageLanguage } from '@mistriwork/kit/client/components/useMessageLanguage.js';
@@ -243,23 +243,23 @@ export function FlagRecord({ request, id, onChanged }: { request: ConsoleRequest
         {detail.disabled === undefined ? (
           <span className="console-faint">{say('stateHidden')}</span>
         ) : off ? (
-          <Tone tone="neutral">{say('stateOff')}</Tone>
+          <StatusDot tone="neutral">{say('stateOff')}</StatusDot>
         ) : (
-          <Tone tone="good">{say('stateOn')}</Tone>
+          <StatusDot tone="good">{say('stateOn')}</StatusDot>
         )}
         <span className="console-sheet-actions">
           {lifecycle.map((operation) => (
-            <Button key={operation} size="compact" disabled={busy || reviewing} onClick={() => ask({ kind: 'lifecycle', operation })}>
+            <Button key={operation} size="sm" disabled={busy || reviewing} onClick={() => ask({ kind: 'lifecycle', operation })}>
               {LIFECYCLE[operation]()}
             </Button>
           ))}
           {!off && can('kill') && (
-            <Button size="compact" intent="danger" disabled={busy || reviewing} onClick={() => ask({ kind: 'kill' })}>
+            <Button size="sm" variant="danger" disabled={busy || reviewing} onClick={() => ask({ kind: 'kill' })}>
               {say('turnOff')}
             </Button>
           )}
           {off && can('manage') && canView && (
-            <Button size="compact" intent="primary" disabled={busy || reviewing} onClick={() => ask({ kind: 'on' })}>
+            <Button size="sm" variant="primary" disabled={busy || reviewing} onClick={() => ask({ kind: 'on' })}>
               {say('turnOn')}
             </Button>
           )}
@@ -375,7 +375,7 @@ export function FlagRecord({ request, id, onChanged }: { request: ConsoleRequest
                   <section className="console-section" aria-label={say('recent')}>
                     <div className="console-section-head">
                       <h3 className="console-section-title">{say('recent')}</h3>
-                      <Button size="compact" intent="quiet" onClick={() => setTab('history')}>
+                      <Button size="sm" variant="ghost" onClick={() => setTab('history')}>
                         {say('allHistory')}
                       </Button>
                     </div>
@@ -397,8 +397,8 @@ export function FlagRecord({ request, id, onChanged }: { request: ConsoleRequest
             {invalid ? <span className="console-problem">{invalid}</span> : say('stagedCount', { count: changes.length })}
           </span>
           <Button
-            size="compact"
-            intent="quiet"
+            size="sm"
+            variant="ghost"
             disabled={busy}
             onClick={() => {
               setDraft(undefined);
@@ -407,7 +407,7 @@ export function FlagRecord({ request, id, onChanged }: { request: ConsoleRequest
           >
             {say('discard')}
           </Button>
-          <Button size="compact" intent="primary" disabled={busy || !!invalid || !changes.length} onClick={() => ask({ kind: 'set' })}>
+          <Button size="sm" variant="primary" disabled={busy || !!invalid || !changes.length} onClick={() => ask({ kind: 'set' })}>
             {say('review')}
           </Button>
         </div>
@@ -419,7 +419,7 @@ export function FlagRecord({ request, id, onChanged }: { request: ConsoleRequest
       )}
       {blocked && (
         <div>
-          <Button size="compact" disabled={busy} onClick={() => void refresh(false)}>
+          <Button size="sm" disabled={busy} onClick={() => void refresh(false)}>
             {say('refetch')}
           </Button>
         </div>
@@ -500,7 +500,7 @@ function Review({
         {pending.kind === 'on' && <p>{say('onHint')}</p>}
         {pending.kind === 'lifecycle' && <p>{say('lifecycleHint')}</p>}
         {pending.kind === 'revert' && (
-          <Field size="compact" label={say('revisionToRestore')} hint={say('revertHint')}>
+          <Field size="sm" label={say('revisionToRestore')} hint={say('revertHint')}>
             <input
               type="number"
               min="0"
@@ -522,10 +522,10 @@ function Review({
           />
         </Field>
         <div className="console-review-actions">
-          <Button intent={kill ? 'danger' : 'primary'} type="submit" busy={busy} disabled={blocked}>
+          <Button variant={kill ? 'danger' : 'primary'} type="submit" loading={busy} disabled={blocked}>
             {kill ? say('confirmOff') : say('apply')}
           </Button>
-          <Button intent="quiet" disabled={busy} onClick={back}>
+          <Button variant="ghost" disabled={busy} onClick={back}>
             {say('back')}
           </Button>
         </div>
@@ -622,7 +622,7 @@ function Timeline({
         {say('loadingHistory')}
       </p>
     );
-  if (!entries?.length) return <Empty title={say('noHistory')} />;
+  if (!entries?.length) return <EmptyState title={say('noHistory')} />;
   return (
     <ol className="console-timeline console-history" aria-label={say('history')}>
       {entries.map((entry) => (
@@ -649,7 +649,7 @@ function Timeline({
               </details>
               {canRestore && (
                 <div>
-                  <Button size="compact" intent="quiet" onClick={() => restore(entry.revision)}>
+                  <Button size="sm" variant="ghost" onClick={() => restore(entry.revision)}>
                     {say('restoreRevision', { revision: entry.revision })}
                   </Button>
                 </div>

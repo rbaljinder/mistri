@@ -833,8 +833,8 @@ const BoardCard = memo(
             <div className="triage-card-foot">
               {card.next && (
                 <Button
-                  size="compact"
-                  intent={card.next.strong ? 'primary' : 'secondary'}
+                  size="sm"
+                  variant={card.next.strong ? 'primary' : 'secondary'}
                   className="triage-card-next"
                   disabled={moving || card.pending !== undefined}
                   onClick={() => acts.current.move(card, { lane: card.next!.lane })}

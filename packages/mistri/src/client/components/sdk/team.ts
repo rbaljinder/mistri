@@ -14,7 +14,7 @@ interface UiTeam {
   invitations: readonly TeamInvitation[];
   roles: readonly string[];
   canManage: boolean;
-  loading: boolean;
+  isPending: boolean;
   error: Error | null;
   /** Invite by email into a role; the one-time `token` is what the invitee is handed, where the server returned one. */
   invite(email: string, role: string): Promise<TeamHandoff>;
@@ -47,7 +47,7 @@ export function useTeam(): UiTeam {
     invitations: read.invitations,
     roles: read.roles,
     canManage: read.canManage,
-    loading: query.isPending,
+    isPending: query.isPending,
     error: query.error,
     invite: (email, role) => act(() => host.team.invite(email, role)),
     changeRole: (memberId, role) => act(() => host.team.changeRole(memberId, role)),

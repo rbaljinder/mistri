@@ -6,47 +6,56 @@
 import { Input } from '@ui-sdk/react/input';
 import { useLayoutEffect, useRef, type ReactNode, type Ref } from 'react';
 import type { FieldFrame } from './fieldFrame.js';
-import { digits, masks, type Mask } from './masks.js';
+import { digits, maskNamed, masks, type Mask, type MaskName } from './masks.js';
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { Frame } from './internal/Frame.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Props for `ValidMark`. */
+export interface ValidMarkProps {
+  icon?: ReactNode;
+  className?: string;
+  ref?: Ref<HTMLSpanElement>;
+}
+
 /** The mark at a box's inline end: drawn in CSS unless a picture is lent. Decorative: validity is `aria-invalid`'s to say. */
-function DefaultValidMark({ icon }: { icon?: ReactNode }): ReactNode {
+function DefaultValidMark({ icon, className, ref }: ValidMarkProps): ReactNode {
   return (
-    <span data-slot="field-mark" aria-hidden="true">
+    <span ref={ref} data-slot="field-mark" className={className || undefined} aria-hidden="true">
       {icon}
     </span>
   );
 }
 
+/** Props for the `TextField` form control. */
 export interface TextFieldProps extends FieldFrame {
   value: string;
-  onChange: (value: string, details: ChangeDetails<'input-change'>) => void;
+  onValueChange?: (value: string, details: ChangeDetails<'input-change'>) => void;
   onBlur?: () => void;
   /** Present, the box reserves room for the mark; true draws it. Leave it out for a box that never shows one. */
   valid?: boolean;
   /** A picture for the mark in place of the drawn check. */
   validIcon?: ReactNode;
   type?: 'text' | 'email' | 'tel' | 'url';
-  inputMode?: 'text' | 'email' | 'tel' | 'numeric' | 'url';
+  inputMode?: 'text' | 'email' | 'tel' | 'numeric' | 'decimal' | 'url';
   autoComplete?: string;
   placeholder?: string;
   name?: string;
   disabled?: boolean;
   readOnly?: boolean;
-  inputRef?: Ref<HTMLInputElement>;
+  ref?: Ref<HTMLInputElement>;
   /** Something drawn under the box: a computed line, say. */
   after?: ReactNode;
 }
 
 function DefaultTextField(props: TextFieldProps): ReactNode {
+  const targetRef = props.ref ?? (props as { inputRef?: Ref<HTMLInputElement> }).inputRef;
   return (
     <Frame {...props}>
       <div data-slot="field-box" data-has-mark={props.valid === undefined ? undefined : ''}>
         <Input
           id={props.id}
-          ref={props.inputRef}
+          ref={targetRef}
           type={props.type ?? 'text'}
           name={props.name}
           value={props.value}
@@ -56,10 +65,12 @@ function DefaultTextField(props: TextFieldProps): ReactNode {
           disabled={props.disabled}
           readOnly={props.readOnly}
           aria-required={props.required || undefined}
-          /* React's own change, not UI SDK's `onValueChange`: that one hears the `input` event alone, and a value put
-             in the box without one (a browser's autofill, a script that sets it and says `change`) would be shown and
-             never reported. */
-          onChange={(event) => props.onChange(event.target.value, changeDetails('input-change', event))}
+          onChange={(event) => {
+            const info = changeDetails('input-change', event);
+            const legacy = (props as { onChange?: (value: string, details: ChangeDetails<'input-change'>) => void }).onChange;
+            props.onValueChange?.(event.target.value, info);
+            legacy?.(event.target.value, info);
+          }}
           onBlur={props.onBlur}
         />
         {props.valid ? <ValidMark icon={props.validIcon} /> : null}
@@ -69,11 +80,12 @@ function DefaultTextField(props: TextFieldProps): ReactNode {
   );
 }
 
-export interface MaskedFieldProps extends Omit<TextFieldProps, 'value' | 'onChange'> {
-  mask: Mask;
+/** Props for the `MaskedField` form control. */
+export interface MaskedFieldProps extends Omit<TextFieldProps, 'value' | 'onValueChange'> {
+  mask: Mask | MaskName;
   /** The raw value: the digits, usually. */
   value: string;
-  onChange: (raw: string, details: ChangeDetails<'input-change'>) => void;
+  onValueChange?: (raw: string, details: ChangeDetails<'input-change'>) => void;
 }
 
 /* Where the caret belongs in `text` when it stood after this many digits: just past the last of them. */
@@ -87,16 +99,25 @@ function caretAfter(text: string, kept: number): number {
   return text.length;
 }
 
-/* The mask is a pair of functions and knows nothing of the caret (masks.ts), so the box keeps it: a value rewritten
-   under the reader's hands would otherwise throw the caret to the end each time they edit its middle. Where the kept
-   value is digits, the caret is put back after as many digits as stood before it, and a Backspace that only took out
-   a bracket or a dash takes the digit before it instead, since the mask would draw the punctuation again. A mask that
-   keeps more than digits is left to the browser. */
 /** A box that shows its value through a mask and keeps the raw one: `masks.phone`, `masks.date` (typed MM/DD/YYYY), `masks.ssn`… */
-function DefaultMaskedField({ mask, value, onChange, inputRef, ...rest }: MaskedFieldProps): ReactNode {
+function DefaultMaskedField(props: MaskedFieldProps): ReactNode {
+  const {
+    mask,
+    value,
+    onValueChange,
+    ref,
+    onChange: legacyChange,
+    inputRef: legacyRef,
+    ...rest
+  } = props as MaskedFieldProps & {
+    onChange?: (raw: string, details: ChangeDetails<'input-change'>) => void;
+    inputRef?: Ref<HTMLInputElement>;
+  };
+  const resolvedMask = maskNamed(mask);
+  const targetRef = ref ?? legacyRef;
   const box = useRef<HTMLInputElement | null>(null);
   const kept = useRef<number | null>(null);
-  const shown = mask.format(value);
+  const shown = resolvedMask.format(value);
   useLayoutEffect(() => {
     const at = kept.current;
     kept.current = null;
@@ -107,14 +128,14 @@ function DefaultMaskedField({ mask, value, onChange, inputRef, ...rest }: Masked
   return (
     <TextField
       {...rest}
-      inputRef={(el: HTMLInputElement | null) => {
+      ref={(el: HTMLInputElement | null) => {
         box.current = el;
-        if (typeof inputRef === 'function') inputRef(el);
-        else if (inputRef) (inputRef as { current: HTMLInputElement | null }).current = el;
+        if (typeof targetRef === 'function') targetRef(el);
+        else if (targetRef) (targetRef as { current: HTMLInputElement | null }).current = el;
       }}
       value={shown}
-      onChange={(typed, details) => {
-        let next = mask.parse(typed);
+      onValueChange={(typed, details) => {
+        let next = resolvedMask.parse(typed);
         if (/^\d*$/.test(value) && /^\d*$/.test(next)) {
           const before = digits(typed.slice(0, box.current?.selectionStart ?? typed.length)).length;
           if (next === value && typed.length < shown.length && before > 0) {
@@ -122,21 +143,32 @@ function DefaultMaskedField({ mask, value, onChange, inputRef, ...rest }: Masked
             kept.current = before - 1;
           } else kept.current = before;
         }
-        onChange(next, details);
+        onValueChange?.(next, details);
+        legacyChange?.(next, details);
       }}
-      inputMode={rest.inputMode ?? mask.inputMode}
-      placeholder={rest.placeholder ?? mask.placeholder}
+      inputMode={rest.inputMode ?? resolvedMask.inputMode}
+      placeholder={rest.placeholder ?? resolvedMask.placeholder}
     />
   );
 }
 
-/** Whole money, drawn `$2,500` (or `25,000` with `symbol=""`). The value is the digits. */
-function DefaultMoneyField({ symbol = '$', ...rest }: Omit<MaskedFieldProps, 'mask'> & { symbol?: string }): ReactNode {
+/** Props for the `MoneyField` form control. */
+export type MoneyFieldProps = Omit<MaskedFieldProps, 'mask'> & { symbol?: string };
+
+/** Money, drawn `$2,500` or `$1,250.50` (or `25,000` with `symbol=""`) in the page's locale. The value is a plain decimal
+    string whatever the locale: `2500`, `1250.5`, `-5`. */
+function DefaultMoneyField({ symbol = '$', ...rest }: MoneyFieldProps): ReactNode {
   return <MaskedField kind="money" {...rest} mask={masks.money(symbol)} />;
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Decorative inline check indicator rendered inside validated field boxes. */
 export const ValidMark = slotted('ValidMark', DefaultValidMark);
-export const TextField = slotted('TextField', DefaultTextField, { onChange: [1, 'input-change'] });
-export const MaskedField = slotted('MaskedField', DefaultMaskedField, { onChange: [1, 'input-change'] });
-export const MoneyField = slotted('MoneyField', DefaultMoneyField, { onChange: [1, 'input-change'] });
+
+/** Framed single-line text input wiring label, hint, problem, and optional validity mark. */
+export const TextField = slotted('TextField', DefaultTextField, { onValueChange: [1, 'input-change'] });
+
+/** Framed text input formatting display values through a reversible `Mask` while preserving caret position. */
+export const MaskedField = slotted('MaskedField', DefaultMaskedField, { onValueChange: [1, 'input-change'] });
+
+/** Framed currency input built over `MaskedField` and `masks.money`. */
+export const MoneyField = slotted('MoneyField', DefaultMoneyField, { onValueChange: [1, 'input-change'] });

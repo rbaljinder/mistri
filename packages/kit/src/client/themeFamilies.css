@@ -80,7 +80,7 @@
   /* An open table's head stands on what the table stands on, and in the pane that is the surface: on the window's
      ground it was a band behind the head row in every look whose ground is not its surface. Opaque still, since
      the rows scroll under it. */
-  :root[data-look-table='open'] body.app-sidebar-shell .content th:where(:not([data-slot])) {
+  :root[data-look-table='open'] body.app-sidebar-shell .content th:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     background: var(--surface);
   }
   /* `rules: 'hairline'`: a record's sections keep their rules, softened from the ink to the hairline. `double` keeps
@@ -129,17 +129,17 @@
 :root[data-theme-style] .table-wrap { padding: 0; }
 /* The weight and the cells' padding are the kit's (600; 10px): these rules once said 500 and 11px/14px
    and lost to the kit on specificity, so they never showed. They say what ships. */
-:root[data-theme-style] th:where(:not([data-slot])) { background: var(--ground); font: 600 var(--text-base) var(--sans); color: var(--ink-muted); text-transform: none; letter-spacing: normal; border-bottom: var(--rules-weight, 2px) solid var(--rules-head, var(--ink)); }
+:root[data-theme-style] th:where(:not([data-slot], .nx-table *, .nx-csv-table *)) { background: var(--ground); font: 600 var(--text-base) var(--sans); color: var(--ink-muted); text-transform: none; letter-spacing: normal; border-bottom: var(--rules-weight, 2px) solid var(--rules-head, var(--ink)); }
 /* A row's own head (a matrix's "Closed won") is a th in the body: it takes
    the row's hairline, not the header's rule, or every row read as underlined. */
-:root[data-theme-style] tbody th:where(:not([data-slot])) { border-bottom: 1px solid var(--line); background: transparent; }
+:root[data-theme-style] tbody th:where(:not([data-slot], .nx-table *, .nx-csv-table *)) { border-bottom: 1px solid var(--line); background: transparent; }
 /* Where the ground is a panel's — a peek, a dialog — the header takes it. */
 :root[data-theme-style] :is(.peekpanel,[data-slot='dialog-content'][data-kind='modal']) th { background: var(--surface); }
 /* A form's lines are a form, not a data table: their head is the grid's own quiet caption row (FormLines.css), on
    whatever ground the form stands. Without this the head took the page's ground, a grey band across a white form. */
 :root[data-theme-style] .form-lines-grid th { background: none; font: 500 var(--text-sm) var(--sans); border-bottom: 1px solid var(--line); }
-:root[data-theme-style] td:where(:not([data-slot])) { border-bottom: 1px solid var(--line); }
-:root[data-theme-style] tbody tr:hover td:where(:not([data-slot])) { background: var(--raised); }
+:root[data-theme-style] td:where(:not([data-slot], .nx-table *, .nx-csv-table *)) { border-bottom: 1px solid var(--line); }
+:root[data-theme-style] tbody tr:hover td:where(:not([data-slot], .nx-table *, .nx-csv-table *)) { background: var(--raised); }
 :root[data-theme-style] .grid-totals td { background: var(--ground); border-top: 1px solid var(--ink); }
 
 /* A board's lanes stand under a rule in the ink instead of in a box, and a
@@ -208,7 +208,7 @@
 :root[data-theme-style] .app-mode .content { background: var(--ground); }
 :root[data-theme-style] .app-mode .topbar { border-bottom: 1px solid var(--nav-line); }
 :root[data-theme-style] .app-mode .topbar :is(.tn-group.active > .tn-group-button, .tn-item[aria-current="true"]) { background: color-mix(in srgb, var(--nav-ink) 8%, transparent); color: var(--nav-ink); border-radius: var(--radius); }
-:root[data-theme-style] td:where(:not([data-slot])) { font-size: var(--text-md); }
+:root[data-theme-style] td:where(:not([data-slot], .nx-table *, .nx-csv-table *)) { font-size: var(--text-md); }
 /* The row's name anchors it, in every look: its first column a step heavier than the rest, so the eye has somewhere
    to land before it reads across (a row's tick, where it has one, stands before it). A kit Table's cell is
    not bold as a whole: its weight is its primary line's (`.kit-cell-primary-strong`, kit.css), so a secondary
@@ -689,7 +689,7 @@ html:root[data-theme-style] .record-presentation { margin-inline-start: auto; }
     text-transform: uppercase;
     letter-spacing: var(--type-label-tracking, var(--track-caps));
   }
-  :root[data-type-label~='small-caps'] thead th:where(:not([data-slot])) {
+  :root[data-type-label~='small-caps'] thead th:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     font: 600 var(--text-xs) var(--type-label-font, var(--sans));
     text-transform: uppercase;
     letter-spacing: var(--type-label-tracking, var(--track-caps));
@@ -1029,6 +1029,13 @@ html:root[data-theme-style] .record-presentation { margin-inline-start: auto; }
     :root[data-look-workflow='markers'] .workflow-steps[data-ordered] li[data-passed] .workflow-marker::before {
       mask: none;
       background: CanvasText;
+    }
+    /* A status pill is its tint, which the system does not draw: it takes an edge in the text's colour, as an
+       outline so the row keeps its height. Only where the look draws a pill: a word beside its dot has no box to
+       edge. The dot's own colour is with the other forced-colours cues (style.css, last). */
+    :root:not([data-look-status='quiet'], [data-look-status='dot']) .tone:not(.record-tag, .tone-neutral) {
+      outline: 1px solid;
+      outline-offset: -1px;
     }
   }
 

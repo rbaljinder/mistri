@@ -200,8 +200,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
   {
     "id": "lumen",
     "label": "Lumen",
-    "light": p("#ffffff #ffffff #f5f4f2 #ebe8e4 #8f8a83 #8f8a83 #1c1a17 #5c5852 #726c64 #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - #127a40 #a65308 #c52a2a #1c6c7d #fbfaf9 #1c1a17 #5c5852 #ebe8e4 #2d4fd6 - - #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0 #a3510b #94a3b8 #ebe8e4 #ebe8e4 1px - #1c1a17 #ffffff"),
-    "dark": p("#121110 #161514 #201f1d #2d2b27 #726d65 #726d65 #eeece8 #b8b3ab #9f9a92 #8aa1ff #1d2547 #91a8ff #5a73d6 - - #4ade80 #fbbf24 #f87171 #1cc2e0 #141312 #eeece8 #aaa59d #262422 #91a8ff - - #4369f0 #12a678 #9a78ec #c88317 #e0559b #1597b9 #d26b3b #6b7694 #2d2b27 #2d2b27 1px - #eeece8 #121110"),
+    "light": p("#f8fafc #ffffff #f1f5f9 #e2e8f0 #7c899b #7c899b #0f172a #475569 #515e70 #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - #127a40 #a65308 #c52a2a #1c6c7d #f5f7fa #0f172a #475569 #e2e8f0 #2d4fd6 - - #2557e0 #9a6cf7 #0e9a6c #d97706 #e0428a #0e8fb0 #a3510b #94a3b8 #e2e8f0 #e2e8f0 1px - #0f172a #ffffff"),
+    "dark": p("#0b0e14 #111620 #181f2c #222a38 #647084 #717d92 #edf2f7 #aeb9cc #94a1b6 #8aa1ff #1d2547 #91a8ff #5a73d6 - - #4ade80 #fbbf24 #f87171 #1cc2e0 #0d1118 #edf2f7 #a4b0c3 #1e2532 #91a8ff - - #4369f0 #12a678 #9a78ec #c88317 #e0559b #1597b9 #d26b3b #6b7694 #222a38 #222a38 1px - #edf2f7 #0b0e14"),
     "palettes": [
       {
         "id": "crimson",
@@ -230,7 +230,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       {
         "id": "emerald",
         "label": "Emerald",
-        "light": p("- - - - - - - - - #08734f #e4f6ed #08734f #36966f - - - - - #2d4fd6 - - - - #08734f - - #0e9a6c #2557e0 #9a6cf7"),
+        "light": p("- - - - - - - - - #08734f #e4f6ed #006d4a #36966f - - - - - #2d4fd6 - - - - #006d4a - - #0e9a6c #2557e0 #9a6cf7"),
         "dark": p("- - - - - - - - - #4ad6a0 #0f3529 #7ee6bd #279771 - - - - - #91a8ff - - - - #7ee6bd - - #12a678 #3559e6")
       },
       {
@@ -280,12 +280,12 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "fonts": {
       "ui": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
       "data": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
-      "heading": "Manrope, \"Manrope Fallback\", Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
-      "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
+      "heading": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "figures": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
     },
     "radius": {
-      "control": "8px",
-      "field": "8px",
+      "control": "6px",
+      "field": "6px",
       "pill": "999px"
     },
     "recipes": {
@@ -293,13 +293,13 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "bar": "airy",
       "tabs": "underline",
       "windows": "lifted",
-      "stat": "divided",
-      "section": "open",
-      "fields": "rail",
-      "table": "quiet",
-      "status": "quiet",
+      "stat": "icon",
+      "section": "card",
+      "fields": "card",
+      "table": "card",
+      "status": "pill-dot",
       "board": "strip",
-      "chart": "line",
+      "chart": "gradient",
       "buttons": "raised",
       "links": "plain",
       "rules": "hairline",
@@ -310,7 +310,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "lanes": "tint",
       "header": "plain",
       "pane": "inset",
-      "filters": "quiet",
+      "filters": "solid",
       "required": "star",
       "formStep": "plain",
       "actionBar": "plain"
@@ -319,19 +319,32 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "type": {
       "roles": {
         "title": {
-          "size": "28px",
-          "weight": 700,
-          "tracking": "-0.02em"
+          "size": "22px",
+          "weight": 600,
+          "tracking": "-0.022em"
         },
         "heading": {
-          "size": "24px",
-          "weight": 700,
+          "size": "19px",
+          "weight": 600,
           "tracking": "-0.018em"
         },
         "section": {
-          "size": "16px",
+          "size": "14px",
           "weight": 600,
           "tracking": "-0.01em"
+        },
+        "data": {
+          "features": [
+            "tnum"
+          ]
+        },
+        "figure": {
+          "size": "24px",
+          "weight": 600,
+          "tracking": "-0.025em",
+          "features": [
+            "tnum"
+          ]
         }
       }
     },
@@ -693,8 +706,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "fonts": {
       "ui": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
       "data": "'IBM Plex Mono', ui-monospace, Menlo, monospace",
-      "heading": "Manrope, \"Manrope Fallback\", Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
-      "figures": "'IBM Plex Mono', 'IBM Plex Mono Fallback', ui-monospace, Menlo, monospace"
+      "heading": "Inter, \"Inter Fallback\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "figures": "'IBM Plex Mono', ui-monospace, Menlo, monospace"
     },
     "radius": {
       "control": "2px",
@@ -737,7 +750,7 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "roles": {
         "title": {
           "size": "26px",
-          "weight": 700,
+          "weight": 600,
           "tracking": "-0.01em"
         },
         "heading": {
@@ -765,14 +778,14 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
           ]
         },
         "figure": {
-          "face": "data",
           "size": "30px",
           "weight": 500,
           "tracking": "-0.02em",
           "features": [
             "tnum",
             "zero"
-          ]
+          ],
+          "face": "data"
         },
         "nav": {
           "face": "ui",

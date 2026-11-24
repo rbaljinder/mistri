@@ -22,6 +22,9 @@ import * as mistriMaintenance from '@mistriwork/mistri/maintenance';
 import * as mistriOpenfeature from '@mistriwork/mistri/openfeature';
 import * as mistriIntegration from '@mistriwork/mistri/integration';
 import * as mistriBehaviors from '@mistriwork/mistri/behaviors';
+import * as mistriCharts from '@mistriwork/mistri/charts';
+import * as mistriPrimitives from '@mistriwork/mistri/primitives';
+import * as mistriViews from '@mistriwork/mistri/views';
 import * as engine from '@mistriwork/engine';
 import * as engineHost from '@mistriwork/engine/host';
 import * as kit from '@mistriwork/kit';
@@ -53,6 +56,9 @@ export const entries = {
   '@mistriwork/mistri/openfeature': some<keyof typeof mistriOpenfeature>(true),
   '@mistriwork/mistri/integration': some<keyof typeof mistriIntegration>(true),
   '@mistriwork/mistri/behaviors': some<keyof typeof mistriBehaviors>(true),
+  '@mistriwork/mistri/charts': some<keyof typeof mistriCharts>(true),
+  '@mistriwork/mistri/primitives': some<keyof typeof mistriPrimitives>(true),
+  '@mistriwork/mistri/views': some<keyof typeof mistriViews>(true),
   '@mistriwork/engine': some<keyof typeof engine>(true),
   '@mistriwork/engine/host': some<keyof typeof engineHost>(true),
   '@mistriwork/kit': some<keyof typeof kit>(true),

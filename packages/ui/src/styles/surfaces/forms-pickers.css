@@ -1,0 +1,887 @@
+/* Select, Combobox, Autocomplete, Listbox, Date/Time/Color pickers, and multi-step form layouts. */
+@layer m-surfaces {
+@layer components {
+  /* === Select, Combobox, Autocomplete & Listbox === */
+
+  .nx-select-chevron {
+    color: var(--ink-muted);
+    flex-shrink: 0;
+  }
+
+  /* Combobox Multi-Chips Box */
+  [data-slot="combobox-chips"].nx-combobox-chips {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+    width: 100%;
+    min-height: var(--form-control-h, var(--control-h));
+    padding: var(--space-2) var(--space-2h) var(--space-2) var(--space-3);
+    border: var(--control-border-w, 1px) solid var(--field-edge, var(--line-control, var(--line-strong)));
+    border-radius: var(--field-radius, var(--radius));
+    background: var(--field-fill, var(--surface));
+    box-shadow: none;
+    transition: border-color var(--t-hover) var(--ease-out);
+
+    &:focus-within {
+      outline: var(--focus-width, 2px) solid var(--focus, var(--accent));
+      outline-offset: -1px;
+      border-color: var(--focus, var(--accent));
+      box-shadow: none;
+    }
+
+    &[data-invalid],
+    &:has([aria-invalid="true"]) {
+      border-color: var(--status-critical);
+    }
+
+    & .nx-combobox-chips-input {
+      flex: 1 1 5rem;
+      min-width: 4rem;
+      height: 1.5rem;
+      padding-inline: var(--space-2);
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      color: var(--ink);
+      font-family: var(--sans);
+      font-size: var(--text-base);
+      outline: none;
+    }
+  }
+
+  .nx-combobox-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-inline-start: auto;
+  }
+
+  /* Popup Lists, Items, Search & Groups */
+  .nx-popup-search {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2h);
+    padding: var(--space-2h) var(--space-3h);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  }
+
+  .nx-popup-search-icon {
+    color: var(--ink-muted);
+    flex-shrink: 0;
+  }
+
+  .nx-popup-search-input {
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: var(--text-base);
+    outline: none;
+
+    &::placeholder {
+      color: var(--ink-subtle);
+    }
+  }
+
+  .nx-popup-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: var(--space-2);
+    max-height: 17.5rem;
+    overflow-y: auto;
+  }
+
+  .nx-popup-group-label {
+    padding: var(--space-2h) var(--space-3) var(--space-2);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: var(--track-caps);
+    text-transform: uppercase;
+    color: var(--ink-subtle);
+  }
+
+  .nx-popup-separator {
+    height: 1px;
+    margin: var(--space-2);
+    background: color-mix(in srgb, var(--line) 72%, transparent);
+  }
+
+  .nx-popup-empty {
+    padding: var(--space-5) var(--space-4);
+    text-align: center;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+
+  :is(.nx-combobox-item, .nx-autocomplete-item, .nx-listbox-item) {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+    max-width: 100%;
+    padding: var(--space-2h) var(--space-3);
+    min-height: 2rem;
+
+    &[data-disabled] {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+  }
+
+  .nx-item-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-muted);
+    flex-shrink: 0;
+  }
+
+  .nx-item-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .nx-item-label {
+    font-size: var(--text-base);
+    color: var(--ink);
+    line-height: 1.35;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    & mark {
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+      border-radius: 2px;
+      font-weight: 600;
+    }
+  }
+
+  .nx-item-description {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    line-height: 1.35;
+  }
+
+  .nx-item-indicator {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-inline-start: auto;
+    color: var(--accent-ink);
+    flex-shrink: 0;
+  }
+
+  .nx-combobox-create {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2h);
+    margin: var(--space-2);
+    padding: var(--space-2h) var(--space-3);
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    color: var(--accent-ink);
+    font-size: var(--text-base);
+    font-weight: 500;
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:is([data-highlighted], :hover) {
+      background: var(--accent-soft);
+    }
+    }
+  }
+
+  /* Inline Listbox */
+  [data-slot="listbox"].nx-listbox {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    padding: var(--space-2);
+    border-radius: var(--radius-card);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent));
+    max-height: 18rem;
+    overflow-y: auto;
+  }
+
+  [data-slot="listbox-item"].nx-listbox-item:is([data-selected], [aria-selected="true"]) {
+    background: var(--accent-soft);
+    color: var(--ink);
+  }
+
+  /* === Pickers: DateInput, TimeInput, Calendar, DatePicker, ColorPicker, TriggerMenu === */
+  .nx-time-input,
+  [data-slot="time-input"] {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    min-height: var(--form-control-h, var(--control-h));
+    height: auto;
+    padding-inline: var(--space-3h);
+    border: var(--control-border-w, 1px) solid var(--field-edge, var(--line-control, var(--line-strong)));
+    border-radius: var(--field-radius, var(--radius));
+    background: var(--field-fill, var(--surface));
+    box-shadow: none;
+    transition: border-color var(--t-hover) var(--ease-out);
+    width: fit-content;
+    max-width: 100%;
+
+    &:focus-within {
+      outline: var(--focus-width, 2px) solid var(--focus, var(--accent));
+      outline-offset: -1px;
+      border-color: var(--focus, var(--accent));
+      box-shadow: none;
+    }
+
+    &[data-invalid],
+    &:has([aria-invalid="true"]) {
+      border-color: var(--status-critical);
+    }
+
+    &[data-size="sm"] { min-height: var(--control-h-sm); font-size: var(--text-sm); }
+    &[data-size="lg"] { min-height: 2.5rem; font-size: var(--text-md); }
+  }
+
+  .nx-segmented-input-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ink-muted);
+    flex-shrink: 0;
+  }
+
+  .nx-segmented-input-segments {
+    display: inline-flex;
+    align-items: center;
+    font-variant-numeric: tabular-nums;
+  }
+
+  :is([data-slot="date-input-segment"], [data-slot="time-input-segment"]):not([data-type="literal"]) {
+    width: auto;
+    min-width: 2.2ch;
+    padding-block: 0;
+    padding-inline: var(--space-1);
+    border: 0 !important;
+    border-radius: max(0px, calc(var(--radius) - 3px));
+    box-shadow: none !important;
+    outline: none;
+
+    &[data-type="year"],
+    &[data-segment="year"] {
+      min-width: 4.2ch;
+    }
+
+    &[data-type="dayPeriod"],
+    &[data-segment="dayPeriod"] {
+      min-width: 3ch;
+    }
+
+    &:focus {
+      background: var(--accent);
+      color: var(--on-accent);
+    }
+
+    &[data-placeholder] {
+      color: var(--ink-subtle);
+      &:focus {
+        color: var(--on-accent);
+      }
+    }
+  }
+
+  /* Calendar & DatePicker */
+  .nx-calendar {
+    display: inline-block;
+    padding: var(--space-4);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+
+    &[data-bordered] {
+      border: 1px solid var(--line);
+      box-shadow: var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent));
+    }
+  }
+
+  .nx-calendar-shell {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3h);
+  }
+
+  .nx-calendar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .nx-calendar-heading {
+    margin: 0;
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--ink);
+    letter-spacing: var(--track-title);
+  }
+
+  .nx-calendar-selects {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+  }
+
+  .nx-calendar-select {
+    height: 1.75rem;
+    padding-inline: var(--space-2h);
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    border: 1px solid var(--line);
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: var(--text-sm);
+    font-weight: 500;
+  }
+
+  .nx-calendar-nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    background: var(--surface);
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover:not(:disabled, [data-disabled]) {
+        background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+        color: var(--ink);
+      }
+    }
+  }
+
+  .nx-calendar-months {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-5);
+  }
+
+  .nx-calendar-grid {
+    border-collapse: collapse;
+  }
+
+  [data-slot="calendar-weekday"].nx-calendar-weekday {
+    font-size: var(--text-xs);
+    font-weight: 600;
+    color: var(--ink-subtle);
+    text-transform: uppercase;
+  }
+
+  [data-slot="calendar-day"].nx-calendar-day {
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    font-size: var(--text-sm);
+    font-weight: 450;
+    color: var(--ink);
+    transition: background-color var(--t-hover) var(--ease-out), color var(--t-hover) var(--ease-out);
+
+    &[data-outside-month] {
+      color: color-mix(in srgb, var(--ink-subtle) 65%, var(--surface));
+    }
+
+    &[data-today]:not([data-selected]) {
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent);
+      color: var(--accent-ink);
+      font-weight: 600;
+    }
+
+    &[data-in-range]:not([data-selection-start], [data-selection-end]) {
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+      border-radius: 0;
+    }
+
+    &:is([data-selected], [data-selection-start], [data-selection-end]) {
+      background: var(--accent);
+      color: var(--on-accent);
+      font-weight: 600;
+    }
+
+    &:is([data-disabled], [data-unavailable]) {
+      opacity: 0.35;
+      pointer-events: none;
+    }
+  }
+
+  /* DatePicker Control & Popover */
+  .nx-date-picker {
+    width: 100%;
+  }
+
+  .nx-date-picker-control {
+    gap: var(--space-2h);
+
+    @media (max-width: 420px) {
+      flex-wrap: wrap;
+      height: auto;
+      padding-block: var(--space-1);
+    }
+  }
+
+  .nx-date-picker-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 0;
+    border-radius: max(0px, calc(var(--radius) - 3px));
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+    flex-shrink: 0;
+
+    @media (hover: hover) {
+      &:hover {
+        background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+        color: var(--ink);
+      }
+    }
+  }
+
+  .nx-date-picker-input {
+    flex: 1 1 5.5rem;
+    min-width: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: var(--text-base);
+    font-variant-numeric: tabular-nums;
+    outline: none;
+
+    &::placeholder {
+      color: var(--ink-subtle);
+    }
+  }
+
+  .nx-date-picker-range-sep {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ink-subtle);
+    flex-shrink: 0;
+  }
+
+  .nx-date-picker-content {
+    padding: var(--space-4);
+  }
+
+  .nx-date-picker-popover-layout {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+
+    &[data-has-presets] {
+      @media (min-width: 560px) {
+        flex-direction: row;
+        align-items: stretch;
+      }
+    }
+  }
+
+  .nx-date-picker-presets {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1h);
+    min-width: 8.5rem;
+    padding-bottom: var(--space-3);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+
+    @media (min-width: 560px) {
+      padding-bottom: 0;
+      padding-inline-end: var(--space-4);
+      border-bottom: 0;
+      border-inline-end: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    }
+  }
+
+  .nx-date-picker-preset {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: var(--space-2h) var(--space-3);
+    border: 0;
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    background: transparent;
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+    font-family: var(--sans);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    text-align: start;
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+        background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+        color: var(--ink);
+      }
+    }
+
+    &[data-selected] {
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+    }
+  }
+
+  /* ColorPicker */
+  .nx-color-picker {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    width: 100%;
+    max-width: 18.5rem;
+    padding: var(--space-4);
+    border-radius: var(--radius-card);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent));
+  }
+
+  [data-slot="color-picker-area"].nx-color-area {
+    height: 9.5rem;
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  .nx-color-area-canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+
+  .nx-color-sliders {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  [data-slot="color-picker-slider"].nx-color-slider {
+    height: 0.6875rem;
+    border-radius: var(--pill-radius, 999px);
+    cursor: pointer;
+  }
+
+  .nx-color-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2h);
+  }
+
+  [data-slot="color-picker-swatch"].nx-color-current-swatch {
+    width: var(--control-h-sm);
+    height: var(--control-h-sm);
+    border-radius: max(0px, calc(var(--radius) - 2px));
+  }
+
+  .nx-color-hex-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: var(--control-h-sm);
+    padding-inline: var(--space-3);
+    border-radius: var(--field-radius, var(--radius));
+    border: var(--control-border-w, 1px) solid var(--field-edge, var(--line-control, var(--line-strong)));
+    background: var(--field-fill, var(--surface));
+    color: var(--ink);
+    font-family: var(--code);
+    font-size: var(--text-sm);
+    outline: none;
+
+    &:focus {
+      outline: var(--focus-width, 2px) solid var(--focus, var(--accent));
+      outline-offset: -1px;
+      border-color: var(--focus, var(--accent));
+      box-shadow: none;
+    }
+  }
+
+  .nx-color-eyedropper {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--control-h-sm);
+    height: var(--control-h-sm);
+    padding: 0;
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover:not(:disabled, [data-disabled]) {
+        background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+        color: var(--ink);
+      }
+    }
+
+    &[data-unsupported] {
+      display: none;
+    }
+  }
+
+  [data-slot="color-picker-swatches"].nx-color-swatches {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: var(--space-2h);
+    padding-top: var(--space-2);
+    border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  }
+
+  [data-slot="color-picker-swatch-item"].nx-color-swatch-item {
+    border-radius: max(0px, calc(var(--radius) - 3px));
+    transition: transform var(--t-press) var(--ease-out);
+
+    @media (hover: hover) {
+      &:hover {
+        transform: scale(1.08);
+      }
+    }
+
+    &[data-selected],
+    &[aria-checked="true"] {
+      box-shadow:
+        0 0 0 1.5px var(--surface),
+        0 0 0 3px var(--accent);
+    }
+  }
+
+  /* TriggerMenu */
+  .nx-trigger-menu-box {
+    position: relative;
+    width: 100%;
+  }
+
+  .nx-trigger-menu-textarea {
+    width: 100%;
+  }
+
+  /* === Forms Layout: FormSection, FormColumns, FormActions, Stepper, ReviewList === */
+  .nx-form-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    padding-block: var(--space-6);
+
+    &:first-child {
+      padding-top: 0;
+    }
+
+    &[data-bordered] + &[data-bordered] {
+      border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    }
+
+    &[data-layout="horizontal"] {
+      @media (min-width: 760px) {
+        display: grid;
+        grid-template-columns: minmax(13rem, 17.5rem) minmax(0, 1fr);
+        gap: var(--space-7);
+        align-items: start;
+      }
+    }
+  }
+
+  .nx-form-section-intro {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3h);
+  }
+
+  .nx-form-section-heading-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .nx-form-section-title {
+    margin: 0;
+    font-family: var(--heading-font, var(--sans));
+    font-size: var(--text-md);
+    font-weight: 600;
+    letter-spacing: var(--track-title);
+    color: var(--ink);
+    line-height: 1.35;
+  }
+
+  .nx-form-section-description {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    line-height: 1.5;
+  }
+
+  .nx-form-section-body {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    min-width: 0;
+  }
+
+  .nx-form-section-fields {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+  }
+
+  .nx-form-section-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: var(--space-3);
+    padding-top: var(--space-4);
+    border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  }
+
+  /* FormColumns / FormRow */
+  .nx-form-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-4h);
+
+    &[data-gap="sm"] { gap: var(--space-3); }
+    &[data-gap="lg"] { gap: var(--field-gap); }
+
+    &[data-align="start"] { align-items: start; }
+    &[data-align="center"] { align-items: center; }
+    &[data-align="end"] { align-items: end; }
+    &[data-align="stretch"] { align-items: stretch; }
+
+    &[data-columns="2"] {
+      @media (min-width: 560px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+
+    &[data-columns="3"] {
+      @media (min-width: 720px) {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+
+    &[data-columns="4"] {
+      @media (min-width: 560px) {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+      @media (min-width: 880px) {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+    }
+  }
+
+  /* FormActions */
+  .nx-form-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: var(--space-3);
+    padding-top: var(--space-5);
+
+    &[data-align="start"] { justify-content: flex-start; }
+    &[data-align="end"] { justify-content: flex-end; }
+    &[data-align="between"] { justify-content: space-between; }
+
+    &[data-bordered] {
+      border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    }
+
+    &[data-sticky] {
+      position: sticky;
+      inset-block-end: 0;
+      z-index: 10;
+      padding-block: var(--space-4);
+      background: var(--ground);
+    }
+  }
+
+  /* Stepper */
+
+  .nx-stepper-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1 1 0%;
+    min-width: 0;
+    gap: var(--space-3);
+
+    &:last-child {
+      flex: 0 1 auto;
+    }
+
+    &[data-disabled] {
+      opacity: 0.5;
+    }
+  }
+
+  .nx-stepper[data-orientation="vertical"] .nx-stepper-item {
+    flex-direction: column;
+    align-items: stretch;
+    padding-bottom: var(--space-6);
+
+    &:last-child {
+      padding-bottom: 0;
+    }
+  }
+
+  .nx-stepper-trigger {
+    display: inline-flex;
+    align-items: flex-start;
+    gap: var(--space-3h);
+    padding: var(--space-2);
+    border: 0;
+    border-radius: var(--radius);
+    background: transparent;
+    text-align: start;
+    color: inherit;
+    font: inherit;
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+        background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+      }
+    }
+  }
+
+  .nx-stepper-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+    padding-top: var(--space-1);
+  }
+
+  .nx-stepper-title {
+    font-size: var(--text-base);
+    font-weight: 500;
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+    line-height: 1.3;
+  }
+
+  .nx-stepper-item[data-status="current"] .nx-stepper-title {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .nx-stepper-description {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    line-height: 1.4;
+  }
+}
+}

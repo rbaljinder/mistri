@@ -10,7 +10,7 @@ afterEach(cleanup);
 
 function Typed({ valid }: { valid?: boolean }) {
   const [value, set] = useState('');
-  return <TextField label="Email" value={value} onChange={set} valid={valid} type="email" />;
+  return <TextField label="Email" value={value} onValueChange={set} valid={valid} type="email" />;
 }
 
 test('the label names the box, typing reports the text, and autofill is off unless asked', async () => {
@@ -24,12 +24,12 @@ test('the label names the box, typing reports the text, and autofill is off unle
 });
 
 test('a problem is said in the description and marks the box invalid; its line was already in the flow', () => {
-  const { rerender } = render(<TextField label="Email" value="" onChange={() => {}} hint="Where we write." />);
+  const { rerender } = render(<TextField label="Email" value="" onValueChange={() => {}} hint="Where we write." />);
   const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`);
   // The line a problem will stand on is kept while there is none.
   expect(slot('field-reserve')).toBeInTheDocument();
   expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-invalid');
-  rerender(<TextField label="Email" value="" onChange={() => {}} hint="Where we write." problem="Enter an email." />);
+  rerender(<TextField label="Email" value="" onValueChange={() => {}} hint="Where we write." problem="Enter an email." />);
   const box = screen.getByRole('textbox', { name: 'Email' });
   expect(box).toHaveAttribute('aria-invalid', 'true');
   expect(box).toHaveAccessibleDescription('Where we write. Enter an email.');
@@ -39,7 +39,7 @@ test('a problem is said in the description and marks the box invalid; its line w
 });
 
 test('reserve off lets the empty problem line go, as a Field does', () => {
-  render(<TextField label="Email" value="" onChange={() => {}} reserve={false} />);
+  render(<TextField label="Email" value="" onValueChange={() => {}} reserve={false} />);
   expect(document.querySelector('[data-slot="field-reserve"]')).toBeNull();
   expect(document.querySelector('[data-slot="field-error"]')).toBeNull();
 });
@@ -63,7 +63,7 @@ test('an optional word stands beside the label, outside its name, and a tip ride
       optional="(optional)"
       tip={{ text: 'Who pays you.', label: 'More information' }}
       value=""
-      onChange={() => {}}
+      onValueChange={() => {}}
     />,
   );
   expect(screen.getByRole('textbox', { name: 'Employer' })).toBeInTheDocument();
@@ -76,7 +76,7 @@ test('the box reports leaving it, takes a ref, and honors read-only and disabled
   const user = userEvent.setup();
   const blur = vi.fn();
   const ref = { current: null as HTMLInputElement | null };
-  render(<TextField label="Name" value="x" onChange={() => {}} onBlur={blur} inputRef={ref} readOnly />);
+  render(<TextField label="Name" value="x" onValueChange={() => {}} onBlur={blur} ref={ref} readOnly />);
   expect(ref.current).toBe(screen.getByRole('textbox'));
   await user.click(screen.getByRole('textbox'));
   await user.tab();
@@ -94,7 +94,7 @@ test('a masked box draws the mask and keeps the digits', async () => {
         label="Phone"
         mask={masks.phone}
         value={raw}
-        onChange={(next) => {
+        onValueChange={(next) => {
           seen.push(next);
           set(next);
         }}
@@ -115,7 +115,7 @@ test('a typed date shows its pattern as the placeholder and stays slashes and di
   const user = userEvent.setup();
   function Day() {
     const [raw, set] = useState('');
-    return <MaskedField label="Born" mask={masks.date} value={raw} onChange={set} />;
+    return <MaskedField label="Born" mask={masks.date} value={raw} onValueChange={set} />;
   }
   render(<Day />);
   const box = screen.getByRole('textbox', { name: 'Born' });
@@ -134,7 +134,7 @@ test('money is drawn with its symbol and the groups, and the value is the digits
         label="Income"
         symbol={symbol}
         value={raw}
-        onChange={(v, details) => {
+        onValueChange={(v, details) => {
           last(v, details);
           set(v);
         }}

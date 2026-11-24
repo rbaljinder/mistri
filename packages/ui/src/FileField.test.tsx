@@ -17,7 +17,7 @@ function Picker({ onPick = () => {} }: { onPick?: (file: File | null, details: C
         hint="A CSV."
         accept=".csv"
         value={file}
-        onChange={(f, details) => {
+        onValueChange={(f, details) => {
           onPick(f, details);
           set(f);
         }}
@@ -53,7 +53,7 @@ test('the chosen File is handed up, and setting the value to null clears the inp
 });
 
 test('a problem marks it invalid and joins its description; disabled is the input’s own', () => {
-  render(<FileField label="Contacts" value={null} onChange={() => {}} problem="Choose a file." disabled />);
+  render(<FileField label="Contacts" value={null} onValueChange={() => {}} problem="Choose a file." disabled />);
   const input = screen.getByLabelText('Contacts');
   expect(input).toHaveAttribute('aria-invalid', 'true');
   expect(input).toHaveAccessibleDescription('Choose a file.');
@@ -71,7 +71,7 @@ test('with `multiple` the whole choice is handed up as a list, and an empty list
           label="Exports"
           multiple
           value={files}
-          onChange={(next, details) => {
+          onValueChange={(next, details) => {
             pick(next, details);
             set(next);
           }}
@@ -95,7 +95,7 @@ test('with `multiple` the whole choice is handed up as a list, and an empty list
 });
 
 test('without `multiple` the input takes one file', () => {
-  render(<FileField label="Contacts" value={null} onChange={() => {}} />);
+  render(<FileField label="Contacts" value={null} onValueChange={() => {}} />);
   expect(screen.getByLabelText('Contacts')).not.toHaveAttribute('multiple');
 });
 
@@ -133,7 +133,7 @@ test('the input stays in the tab order, so a keyboard reader reaches the field',
 
 test('the words are the caller’s to say, for another language', () => {
   const { container } = render(
-    <FileField label="Exports" multiple value={[]} onChange={() => {}} chooseLabel="Elegir archivos" noneLabel="Ninguno" />,
+    <FileField label="Exports" multiple value={[]} onValueChange={() => {}} chooseLabel="Elegir archivos" noneLabel="Ninguno" />,
   );
   expect(container.querySelector('[data-slot="file-field"] button')).toHaveTextContent('Elegir archivos');
   expect(container.querySelector('[data-slot="file-field-names"]')).toHaveTextContent('Ninguno');
@@ -143,7 +143,7 @@ test('several chosen files are named together', async () => {
   const user = userEvent.setup();
   function Many() {
     const [files, set] = useState<File[]>([]);
-    return <FileField label="Exports" multiple value={files} onChange={set} />;
+    return <FileField label="Exports" multiple value={files} onValueChange={set} />;
   }
   const { container } = render(<Many />);
   expect(container.querySelector('[data-slot="file-field"] button')).toHaveTextContent('Choose files');

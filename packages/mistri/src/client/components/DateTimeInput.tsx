@@ -23,7 +23,7 @@ interface DateTimeInputProps {
   required?: boolean;
   disabled?: boolean;
   className?: string;
-  'aria-label'?: string;
+  ariaLabel?: string;
   'aria-invalid'?: AriaAttributes['aria-invalid'];
   'aria-describedby'?: string;
 }
@@ -48,7 +48,7 @@ export function DateTimeInput({ value, onChange, min, max, ...rest }: DateTimeIn
       timezone={zone}
       now={appNow()}
       value={draft}
-      onChange={(next) => {
+      onValueChange={(next) => {
         setDraft(next);
         const typed = next.trim();
         const sent = typed ? (wallTimeInstant(typed, zone) ?? next) : '';

@@ -43,14 +43,14 @@ function profile(value: unknown, owner: SessionIdentitySnapshot): AccountProfile
 async function request(owner: SessionIdentitySnapshot, name?: string): Promise<AccountProfile> {
   const saving = name !== undefined;
   assertSessionCurrent(owner);
-  if (owner.mode !== 'authenticated') throw new AccountProfileError(say('signInToView'), 'not_applied');
+  if (owner.mode !== 'authenticated' || !owner.accountId || !owner.appId) throw new AccountProfileError(say('signInToView'), 'not_applied');
   try {
-    const response = await fetchServer(`/api/auth/profile?${new URLSearchParams({ app: owner.appId! })}`, {
+    const response = await fetchServer(`/api/auth/profile?${new URLSearchParams({ app: owner.appId })}`, {
       method: saving ? 'POST' : 'GET',
       credentials: 'same-origin',
       cache: 'no-store',
       signal: AbortSignal.timeout(15_000),
-      headers: { 'x-mistri-account': owner.accountId!, ...(saving ? { 'content-type': 'application/json' } : {}) },
+      headers: { 'x-mistri-account': owner.accountId, ...(saving ? { 'content-type': 'application/json' } : {}) },
       ...(saving ? { body: JSON.stringify({ name }) } : {}),
     });
     if (sessionIdentity() === owner && response.status === 401) invalidateSession('expired');
@@ -96,7 +96,7 @@ export function saveAccountProfile(owner: SessionIdentitySnapshot, input: string
     Nothing changes until the links are followed, so the profile still reads the old address afterwards. */
 export async function requestEmailChange(owner: SessionIdentitySnapshot, newEmail: string): Promise<void> {
   assertSessionCurrent(owner);
-  if (owner.mode !== 'authenticated') throw new AccountProfileError(say('signInToView'), 'not_applied');
+  if (owner.mode !== 'authenticated' || !owner.accountId || !owner.appId) throw new AccountProfileError(say('signInToView'), 'not_applied');
   const address = newEmail.trim();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address) || address.length > 254)
     throw new AccountProfileError(say('enterAnEmailAddress'), 'not_applied');

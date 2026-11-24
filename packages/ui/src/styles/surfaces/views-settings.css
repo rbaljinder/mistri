@@ -1,0 +1,812 @@
+/* AccountSettingsView, and the views' own wrapping and touch targets at every width (the charts' rules are in
+   charts.css, the primitives' in primitives-in-views.css). */
+@layer m-surfaces {
+@layer views {
+  /* ======================================================================== */
+  /* 4. AccountSettingsView (src/views/AccountSettingsView.tsx)               */
+  /* ======================================================================== */
+
+  .nx-account-settings {
+    width: 100%;
+    min-width: 0;
+
+    &[data-layout='stacked'] {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-5);
+    }
+  }
+
+  .nx-account-panel-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4h);
+    padding-top: var(--space-2);
+  }
+
+  .nx-account-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4h);
+    padding: var(--space-5);
+    border-radius: var(--radius-card);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent));
+
+    /* `framed={false}`: inside a host's Card or Panel the sections are that box's contents, told apart by a rule
+       rather than each boxed again. */
+    .nx-account-settings[data-framed='false'] & {
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: transparent;
+      box-shadow: none;
+
+      & + & {
+        padding-top: var(--space-4h);
+        border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+      }
+    }
+  }
+
+  .nx-account-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3h);
+  }
+
+  .nx-account-card-title {
+    margin: 0;
+    font-family: var(--heading-font, var(--sans));
+    font-size: calc(15px * var(--type-k, 1));
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .nx-account-card-desc {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    line-height: 1.45;
+    max-width: 40rem;
+  }
+
+  .nx-account-profile-hero {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3h);
+    padding: var(--space-3h);
+    border-radius: var(--radius);
+    background: var(--raised);
+    border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  }
+
+  .nx-account-profile-meta {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+
+  .nx-account-profile-name {
+    font-size: var(--text-md);
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .nx-account-profile-sub {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+
+  .nx-account-form-grid,
+  .nx-account-token-create-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-3h);
+  }
+
+  @media (max-width: 640px) {
+    .nx-account-form-grid,
+    .nx-account-token-create-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  .nx-account-card-foot {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3h);
+    padding-top: var(--space-3h);
+    border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  }
+
+  .nx-account-foot-hint {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+
+  /* An action the host refused, said in the section it was taken in. */
+  .nx-account-error {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-4);
+    border: 1px solid color-mix(in srgb, var(--status-critical) 28%, transparent);
+    border-radius: var(--radius);
+    background: color-mix(in srgb, var(--status-critical) 12%, var(--surface));
+    color: var(--status-critical);
+    font-size: var(--text-sm);
+    line-height: 1.45;
+  }
+
+  .nx-account-security-rows {
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    overflow: hidden;
+    /* The rows read their own width (a phone, a narrow card), which the viewport does not say. */
+    container-type: inline-size;
+  }
+
+  .nx-account-security-row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3h);
+    padding: var(--space-3h) var(--space-4h);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+
+    &:last-child {
+      border-bottom: 0;
+    }
+
+    /* Narrow, the action goes under the copy it belongs to: beside it, the copy was squeezed until a long word ran
+       under the button. */
+    @container (max-width: 36rem) {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: start;
+
+      & > :not(.nx-account-security-icon, .nx-account-security-copy) {
+        grid-column: 2;
+        justify-self: start;
+      }
+    }
+  }
+
+  .nx-account-security-icon,
+  .nx-account-row-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.125rem;
+    height: 2.125rem;
+    border-radius: var(--radius);
+    background: var(--raised);
+    border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+    flex-shrink: 0;
+  }
+
+  .nx-account-security-copy,
+  .nx-account-row-copy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .nx-account-security-title-line,
+  .nx-account-row-title-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2h);
+  }
+
+  .nx-account-security-title,
+  .nx-account-row-title {
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .nx-account-security-sub {
+    margin: 0;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+
+  .nx-account-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+
+  .nx-account-list-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3h);
+    padding: var(--space-3h) var(--space-4h);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    background: var(--surface);
+
+    &:last-child {
+      border-bottom: 0;
+    }
+  }
+
+  .nx-account-row-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2h);
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+
+  .nx-account-mono,
+  .nx-account-domain-host {
+    font-family: var(--code);
+    font-size: var(--text-sm);
+  }
+
+  .nx-account-domain-host {
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  /* API Token Scopes & One-Time Secret Banner */
+  .nx-account-scopes-block {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .nx-account-scopes-label {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+  }
+
+  .nx-account-scopes-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .nx-account-scope-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    padding: var(--space-2h) var(--space-3h);
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+    cursor: pointer;
+    user-select: none;
+    transition:
+      border-color var(--t-hover) var(--ease-out),
+      background-color var(--t-hover) var(--ease-out);
+
+    &[data-checked] {
+      border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+      background: var(--accent-soft);
+      color: var(--ink);
+    }
+  }
+
+  .nx-account-token-scopes {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .nx-account-secret-banner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3h);
+    padding: var(--space-4h);
+    border-radius: var(--radius-card);
+    border: 1px solid color-mix(in srgb, var(--status-good) 28%, transparent);
+    background: color-mix(in srgb, color-mix(in srgb, var(--status-good) 12%, var(--surface)) 65%, var(--surface));
+  }
+
+  .nx-account-secret-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-3h);
+  }
+
+  .nx-account-secret-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    font-size: var(--text-base);
+    color: var(--status-good);
+  }
+
+  .nx-account-secret-warning {
+    margin: var(--space-2) 0 0;
+    font-size: var(--text-sm);
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+  }
+
+  .nx-account-secret-box {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+    padding: var(--space-2h) var(--space-3h);
+    border-radius: var(--radius);
+    border: 1px solid var(--line);
+    background: var(--surface);
+  }
+
+  .nx-account-secret-code {
+    font-family: var(--code);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink);
+    word-break: break-all;
+  }
+
+  /* Team Invite & Domain Bars */
+  .nx-account-invite-bar,
+  .nx-account-domain-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .nx-account-invite-email {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+
+  .nx-account-invite-role {
+    width: 9.5rem;
+    flex-shrink: 0;
+  }
+
+  .nx-account-member-info {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2h);
+    min-width: 0;
+  }
+
+  .nx-account-member-controls {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .nx-account-role-select {
+    width: 8.5rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .nx-review-progress-fill {
+      transition: none;
+    }
+  }
+
+  .nx-data-table-wrap,
+  .nx-data-table-surface,
+  .nx-review-queue-shell,
+  .nx-review-queue,
+  .nx-review-queue-inner,
+  .nx-review-split,
+  .nx-review-card,
+  .nx-review-card-body,
+  .nx-review-section {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .nx-page-header-tabs {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: visible;
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
+  }
+  .nx-page-header-tab {
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  /* AppShell Mobile Navigation Drawer: full viewport height with pinned footer & floating close */
+  .nx-shell-drawer-content {
+    display: flex;
+    flex-direction: column;
+    height: 100dvh;
+    max-height: 100dvh;
+    overflow: hidden;
+    position: relative;
+  }
+  .nx-shell-drawer-bar {
+    position: absolute;
+    top: var(--space-2);
+    right: var(--space-2);
+    z-index: 5;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+  .nx-sidebar-in-drawer {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: 100%;
+    width: 100%;
+    border-right: 0;
+  }
+  .nx-sidebar-in-drawer .nx-sidebar-top {
+    padding-right: var(--space-7);
+  }
+
+  /* Mobile & Compact Tablet Breakpoint (<= 768px) */
+  @media (max-width: 768px) {
+    .nx-app-shell:not([data-mobile]) > .nx-sidebar {
+      display: none;
+    }
+
+    /* GanttView keeps its two columns here: stacked, the sheet's names and the timeline's bars were two blocks and
+       no bar stood on its task's row. The sheet narrows by the view's own width (views-schedule.css). */
+  }
+
+  /* Phone Viewport Breakpoint (<= 640px — 390px / 375px / 320px) */
+  @media (max-width: 640px) {
+    .nx-page-header-tabs {
+      column-gap: var(--space-2);
+    }
+
+    /* TopBar: show active page crumb cleanly without parent trail truncation */
+    .nx-topbar {
+      height: 2.75rem;
+      padding-inline: var(--space-3h);
+      gap: var(--space-2);
+    }
+    .nx-topbar-actions [data-slot='button']:not([data-icon-only]) {
+      height: var(--control-h-sm);
+      min-height: var(--control-h-sm);
+      padding-inline: var(--space-3h);
+      font-size: var(--text-sm);
+    }
+    .nx-breadcrumbs > .nx-breadcrumb-sep {
+      display: none;
+    }
+
+    /* PageHeader & CardHeader: wrap action toolbars cleanly below copy */
+    .nx-page-header-main {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-3h);
+    }
+    .nx-page-header-actions {
+      width: 100%;
+      display: flex;
+      flex-wrap: wrap;
+    }
+    .nx-page-header-actions > .nx-segmented-control,
+    .nx-page-header-actions > [data-slot='segmented-control'] {
+      width: 100%;
+    }
+    .nx-page-header-actions > .nx-segmented-control [data-slot='segmented-control-item'],
+    .nx-page-header-actions > [data-slot='segmented-control'] [data-slot='segmented-control-item'] {
+      flex: 1 1 0%;
+      justify-content: center;
+      padding-inline: var(--space-1h);
+    }
+
+    /* FilterBar: full-width search + scrollable/wrapping chips */
+    .nx-filter-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-2);
+    }
+    .nx-filter-bar-left {
+      flex-wrap: wrap;
+      width: 100%;
+    }
+    .nx-filter-search {
+      flex: 1 1 100%;
+      width: 100%;
+      max-width: none;
+    }
+
+    /* KanbanBoard: stack lanes vertically on phone so cards never scroll sideways */
+    .nx-kanban-board {
+      flex-wrap: wrap;
+      overflow-x: hidden;
+      scroll-snap-type: none;
+      padding-bottom: var(--space-2);
+    }
+    .nx-kanban-lane {
+      flex: 1 1 100%;
+      min-width: 0;
+      max-width: 100%;
+    }
+    .nx-calendar-title-group {
+      width: 100%;
+      justify-content: space-between;
+      gap: var(--space-2);
+      min-width: 0;
+    }
+    .nx-calendar-title {
+      font-size: var(--text-md);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .nx-calendar-controls {
+      width: 100%;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+    .nx-calendar-day-cell {
+      min-height: 3.75rem;
+      padding: var(--space-1);
+    }
+
+    /* CSV Import, Review Queue & Account Settings mobile spacing */
+    .nx-csv-source-toolbar,
+    .nx-csv-step-footer,
+    .nx-csv-schema-bar,
+    .nx-csv-dryrun-controls,
+    .nx-review-header-top,
+    .nx-review-card-footer,
+    .nx-account-invite-bar,
+    .nx-account-domain-bar {
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--space-2h);
+    }
+    /* Stacked, the bar's main axis is the page's: the email's 14rem basis, a width beside the role, became 14rem of
+       height and stood a blank block between the two fields. */
+    .nx-account-invite-email {
+      flex: 0 0 auto;
+    }
+    .nx-account-invite-role {
+      width: 100%;
+    }
+    .nx-account-secret-code {
+      white-space: normal;
+      overflow-wrap: anywhere;
+    }
+
+    /* DataTable: responsive stacked record cards on phones (unless mobileLayout="scroll") */
+    .nx-data-table-surface:not([data-mobile-layout='scroll']) {
+      /* Stacked cards are several times a row's height, so the desktop cap cut the list off in the middle of a
+         card behind a second scrollbar; here the list is as tall as its cards and the page scrolls. A `maxHeight`
+         the host passes is an inline style and still holds. */
+      & .nx-table-scroll {
+        max-height: none;
+        overflow-x: hidden;
+      }
+      & .nx-table,
+      & .nx-table tbody {
+        display: block;
+        width: 100%;
+      }
+      & .nx-table-head {
+        display: block;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+
+        & tr,
+        & th {
+          display: block;
+          white-space: normal;
+        }
+      }
+      & .nx-table-group-row {
+        display: block;
+        width: 100%;
+      }
+      & .nx-table-group-cell {
+        display: block;
+        width: 100%;
+      }
+      & .nx-table-row {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+        gap: var(--space-2h) var(--space-3h);
+        height: auto;
+        padding: var(--space-4) var(--space-4h);
+
+        &:has(> .nx-table-cell-check) {
+          grid-template-columns: auto minmax(0, 1fr) auto;
+        }
+      }
+      & .nx-table-cell {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: var(--space-4);
+        grid-column: 1 / -1;
+        width: auto;
+        min-width: 0;
+        max-width: none;
+        padding: 0;
+        text-align: left;
+      }
+      & .nx-table-cell-check {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-start;
+        grid-column: 1;
+        grid-row: 1;
+        width: auto;
+        min-width: 0;
+        max-width: none;
+      }
+      & .nx-table-cell[data-primary] {
+        grid-column: 1;
+        grid-row: 1;
+        font-weight: 600;
+      }
+      & .nx-table-row:has(> .nx-table-cell-check) > .nx-table-cell[data-primary] {
+        grid-column: 2;
+      }
+      & .nx-table-cell-actions {
+        display: inline-flex;
+        align-items: center;
+        justify-content: flex-end;
+        grid-column: -2 / -1;
+        grid-row: 1;
+        width: auto;
+        min-width: 0;
+        max-width: none;
+      }
+      & .nx-table-cell:not([data-primary], .nx-table-cell-check, .nx-table-cell-actions, .nx-table-empty-cell)::before {
+        content: attr(data-label);
+        flex-shrink: 0;
+        font-family: var(--sans);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--ink-muted);
+      }
+      & .nx-table-cell:not([data-primary]) .nx-table-cell-inner,
+      & .nx-table-cell:not([data-primary]) .nx-table-cell-truncate {
+        flex: 0 1 auto;
+        min-width: 0;
+        text-align: right;
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        overflow-wrap: break-word;
+      }
+      & .nx-table-empty-cell {
+        display: block;
+        padding: var(--space-7) var(--space-5);
+      }
+    }
+
+    /* ReviewQueueView: stacked field-diff cards on phones so approvals never scroll sideways */
+    .nx-review-diff-table-wrap {
+      overflow-x: hidden;
+    }
+    .nx-review-diff-table {
+      display: block;
+      width: 100%;
+
+      & thead {
+        display: block;
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+
+        & tr,
+        & th {
+          display: block;
+          white-space: normal;
+        }
+      }
+      & tbody {
+        display: block;
+        width: 100%;
+      }
+      & tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-2h) var(--space-3);
+        padding: var(--space-3h) var(--space-4);
+        border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+      }
+      & tbody tr:last-child {
+        border-bottom: 0;
+      }
+      & td {
+        padding: 0;
+        border-bottom: 0;
+        min-width: 0;
+        max-width: 100%;
+      }
+      & .nx-review-diff-field {
+        flex: 1 1 100%;
+        white-space: normal;
+      }
+      & .nx-review-diff-arrow {
+        width: auto;
+      }
+      & .nx-review-diff-before,
+      & .nx-review-diff-after {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        word-break: break-word;
+        max-width: 100%;
+      }
+    }
+
+    .nx-review-shortcuts {
+      display: none;
+    }
+  }
+
+  /* Coarse Touch Pointer Ergonomics (40px+ targets & 16px input text floor to prevent iOS zoom) */
+  @media (pointer: coarse) {
+    .nx-filter-search-input,
+    .nx-split-search-input {
+      font-size: max(16px, calc(14px * var(--type-k, 1)));
+    }
+    .nx-button:not([data-size='xs']),
+    .nx-sidebar-item,
+    .nx-filter-add-btn {
+      min-height: 2.5rem;
+    }
+  }
+
+  /* Under a finger, and at a phone's width whatever the pointer says, a view's own small controls are 44px targets
+     (docs/design.md, Targets). A field cannot take a hit area, so the list's search is drawn at a target's height;
+     a legend's key grows by its padding; a lane's + and a card's grip keep what they draw and the area round them
+     answers for them, as the kit's own grips do (behaviors.css). */
+  @media (max-width: 760px), (pointer: coarse) {
+    .nx-filter-search {
+      /* The field inside is the target: it stands 44px between the frame's own edges. */
+      height: calc(2.75rem + 2 * var(--control-border-w, 1px));
+    }
+    .nx-kanban-header-add,
+    .nx-kanban-card-grip {
+      position: relative;
+
+      &::after {
+        position: absolute;
+        inset: 50% auto auto 50%;
+        width: 2.75rem;
+        height: 2.75rem;
+        translate: -50% -50%;
+        content: '';
+      }
+    }
+  }
+}
+}

@@ -97,8 +97,10 @@
         background-color var(--m-fast),
         border-color var(--m-fast);
 
-      &:hover {
+      @media (hover: hover) {
+        &:hover {
         background: var(--m-raised);
+      }
       }
 
       &:has([data-slot='radio'][data-checked]) {
@@ -108,8 +110,8 @@
       }
 
       &:has([data-slot='radio']:focus-visible) {
-        outline: 2px solid var(--ui-ring);
-        outline-offset: 2px;
+        outline: var(--focus-width, 2px) solid var(--focus, var(--ui-ring-border));
+        outline-offset: var(--focus-offset, 2px);
       }
     }
 
@@ -203,20 +205,11 @@
   [data-slot='field-required'] {
     margin-inline-start: var(--m-space-1);
     color: var(--m-critical);
+    font-weight: 600;
   }
 
   [data-slot='field-label'] [data-kind='help-tip'] {
     margin-inline-start: var(--m-space-2h);
-  }
-
-  /* A label said and not drawn. */
-  [data-slot='field-label'][data-hidden] {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
 
   /* The line under a field: its hint or its problem at the start, how much has been typed at the end. */
@@ -229,12 +222,6 @@
     & > :first-child {
       min-width: 0;
     }
-  }
-
-  /* A line kept for a problem that is not there yet, so the form does not move when it comes. */
-  [data-slot='field-reserve'] {
-    display: block;
-    height: 1.25rem;
   }
 
   [data-slot='field-count'] {
@@ -254,15 +241,48 @@
     }
   }
 
-  /* A cross that empties the field stands inside its end, and only while there is something to empty. */
-  [data-slot='input-group'][data-kind='clearable'] {
+  :is([data-slot='field-box'], [data-slot='input-group'], [data-slot='date-field']) {
     position: relative;
     display: flex;
+    align-items: center;
+    min-width: 0;
+    min-height: var(--form-control-h, var(--control-h));
+    box-sizing: border-box;
+    border: var(--control-border-w, 1px) solid var(--field-edge, var(--m-line-control));
+    border-radius: var(--field-radius, var(--m-radius));
+    background: var(--field-fill, var(--m-surface));
+
+    &:focus-within {
+      border-color: var(--focus, var(--m-accent));
+      outline: var(--focus-width, 2px) solid var(--focus, var(--m-accent));
+      outline-offset: -1px;
+      box-shadow: none;
+    }
+
+    &:is([data-invalid], :has([aria-invalid='true'])) {
+      border-color: var(--m-critical);
+    }
+
+    & [data-slot='input'] {
+      flex: 1 1 auto;
+      align-self: stretch;
+      min-width: 0;
+      height: auto;
+      min-height: 0;
+      margin-block: calc(-1 * var(--control-border-w, 1px));
+      border: 0;
+      background: transparent;
+      box-shadow: none;
+      outline: none;
+    }
+  }
+
+  /* A cross that empties the field stands inside its end, and only while there is something to empty. */
+  [data-slot='input-group'][data-kind='clearable'] {
     flex: 1;
 
     & [data-slot='input'] {
-      flex: 1;
-      padding-inline-end: var(--m-inset-icon);
+      padding-inline: var(--m-space-3h) var(--m-inset-icon);
     }
 
     & [data-slot='input-clear'] {
@@ -281,9 +301,11 @@
       color: var(--m-ink-subtle);
       cursor: pointer;
 
-      &:hover {
+      @media (hover: hover) {
+        &:hover {
         background: var(--m-raised);
         color: var(--m-ink);
+      }
       }
 
       & svg {
@@ -312,29 +334,6 @@
     }
   }
 
-  /* The calendar's head and foot: the month between its two arrows, and today beside the way to empty the field. */
-  [data-slot='calendar-head'] {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--m-space-2);
-
-    & [data-slot='calendar-heading'] {
-      margin: 0;
-      font-size: inherit;
-      font-weight: var(--m-weight-strong);
-      letter-spacing: 0;
-    }
-  }
-
-  [data-slot='calendar-foot'] {
-    display: flex;
-    justify-content: space-between;
-    margin-block-start: var(--m-space-2h);
-    padding-block-start: var(--m-space-2h);
-    border-block-start: 1px solid var(--m-line)
-  }
-
   [data-slot='slider-ends'] {
     display: flex;
     flex: 0 0 100%;
@@ -357,13 +356,6 @@
       width: 1rem;
       height: 1rem;
       color: var(--m-ink-muted);
-    }
-  }
-
-  @keyframes m-step {
-    from {
-      opacity: 0;
-      translate: 0.5rem 0;
     }
   }
 

@@ -160,16 +160,16 @@ export function AccountProfile({
           </div>
           <footer className="form-actions">
             {!embedded && (
-              <Button intent="secondary" onClick={onClose} disabled={phase === 'saving'}>
+              <Button variant="secondary" onClick={onClose} disabled={phase === 'saving'}>
                 {say('common.close')}
               </Button>
             )}
             {/* Nothing to save yet: a quiet key, not a greyed primary that reads as a fault. It fills once the name differs. */}
             <Button
-              intent={profileName(name) === data.name ? 'secondary' : 'primary'}
+              variant={profileName(name) === data.name ? 'secondary' : 'primary'}
               type="submit"
-              busy={phase === 'saving'}
-              busyLabel={say('common.saving')}
+              loading={phase === 'saving'}
+              loadingLabel={say('common.saving')}
               disabled={(phase !== 'idle' && phase !== 'saving') || profileName(name) === data.name}
             >
               {say('saveName')}
@@ -198,10 +198,10 @@ export function AccountProfile({
           <p className="note">{say('weSendALinkToTheNewAddress')}</p>
           <footer className="form-actions">
             <Button
-              intent="secondary"
+              variant="secondary"
               type="submit"
-              busy={emailPhase === 'sending'}
-              busyLabel={say('sending')}
+              loading={emailPhase === 'sending'}
+              loadingLabel={say('sending')}
               disabled={!newEmail.trim() || emailPhase === 'sending'}
             >
               {say('sendLink')}
@@ -213,7 +213,12 @@ export function AccountProfile({
       {data?.connectedClients && <ConnectedClients />}
       {message && <p role={uncertain || phase === 'failed' ? 'alert' : 'status'}>{message}</p>}
       {(uncertain || phase === 'failed') && (
-        <Button intent="secondary" busy={phase === 'checking'} busyLabel={say('common.checking')} onClick={() => void load(uncertain)}>
+        <Button
+          variant="secondary"
+          loading={phase === 'checking'}
+          loadingLabel={say('common.checking')}
+          onClick={() => void load(uncertain)}
+        >
           {say('checkCurrentProfile')}
         </Button>
       )}
@@ -224,7 +229,7 @@ export function AccountProfile({
     <Modal className="account-profile" ariaLabel={title} onClose={onClose} closeDisabled={phase === 'saving'} initialFocus={input}>
       <header>
         <h2>{title}</h2>
-        <Button intent="quiet" onClick={onClose} disabled={phase === 'saving'} aria-label={say('closeProfile')}>
+        <Button variant="ghost" onClick={onClose} disabled={phase === 'saving'} ariaLabel={say('closeProfile')}>
           ×
         </Button>
       </header>

@@ -10,13 +10,15 @@ import { Checkbox as Box, CheckboxIndicator } from '@ui-sdk/react/checkbox';
 import { FieldControl } from '@ui-sdk/react/field';
 import { createParts } from '@ui-sdk/react/primitive';
 import { Radio, RadioGroup } from '@ui-sdk/react/radio';
-import { useId, type AriaAttributes, type ComponentProps, type ReactNode } from 'react';
+import { useId, type AriaAttributes, type ComponentProps, type ReactNode, type Ref } from 'react';
 import type { FieldFrame } from './fieldFrame.js';
 import type { ChangeDetails } from './changeDetails.js';
+import type { ControlSize } from './internal/cx.js';
 import { Frame } from './internal/Frame.js';
 import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Option descriptor for `ChoiceCards`. */
 export interface ChoiceOption {
   value: string;
   label: string;
@@ -24,28 +26,35 @@ export interface ChoiceOption {
   icon?: ReactNode;
 }
 
+/** Props for the `YesNo` binary radio card pair. */
 export interface YesNoProps extends Omit<FieldFrame, 'label'> {
   /** The question. */
   label: ReactNode;
   value: 'yes' | 'no' | '';
-  onChange: (value: 'yes' | 'no', details: ChangeDetails<'select'>) => void;
+  onValueChange?: (value: 'yes' | 'no', details: ChangeDetails<'select'>) => void;
   /** The two words, in the caller's language. */
   yes: string;
   no: string;
+  ref?: Ref<HTMLDivElement>;
 }
 
 /** Two buttons answering a question. */
-/* Each radio is named by its word, by id, since the word stands beside the radio and not inside it. */
 function DefaultYesNo(props: YesNoProps): ReactNode {
   const id = useId();
+  const legacyChange = (props as { onChange?: (value: 'yes' | 'no', details: ChangeDetails<'select'>) => void }).onChange;
   return (
     <Frame {...props}>
       <RadioGroup
+        ref={props.ref}
         data-kind="cards"
         data-fit="pair"
         value={props.value === '' ? null : props.value}
         onValueChange={(next, details) => {
-          if (next === 'yes' || next === 'no') props.onChange(next, told('select', details));
+          if (next === 'yes' || next === 'no') {
+            const info = told('select', details);
+            props.onValueChange?.(next, info);
+            legacyChange?.(next, info);
+          }
         }}
       >
         {(['yes', 'no'] as const).map((answer) => (
@@ -61,27 +70,33 @@ function DefaultYesNo(props: YesNoProps): ReactNode {
   );
 }
 
+/** Props for `ChoiceCards` single-choice or multi-choice card group. */
 export interface ChoiceCardsProps extends FieldFrame {
-  options: ChoiceOption[];
-  value: string[];
-  onChange: (value: string[], details: ChangeDetails<'select'>) => void;
+  options: readonly ChoiceOption[];
+  value: readonly string[];
+  onValueChange?: (value: string[], details: ChangeDetails<'select'>) => void;
   /** Several may be on. */
   multiple?: boolean;
   /** The card that stands alone ("None"): choosing it clears the rest, and choosing another clears it. */
   exclusive?: string;
+  ref?: Ref<HTMLDivElement>;
 }
 
 /** Cards with an icon, a label and a box. One choice is a radio group; `multiple` a group of checkboxes. */
 function DefaultChoiceCards(props: ChoiceCardsProps): ReactNode {
   const id = useId();
+  const legacyChange = (props as { onChange?: (value: string[], details: ChangeDetails<'select'>) => void }).onChange;
+  const emit = (next: string[], details: ChangeDetails<'select'>) => {
+    props.onValueChange?.(next, details);
+    legacyChange?.(next, details);
+  };
   if (props.multiple)
     return (
       <Frame {...props}>
-        {/* The cards are the field's control: it hands them their id, what names and describes them and whether
-            they hold a problem, as it does a box. Drawn through the slot, so a kit's cards stand here too. */}
         <FieldControl
           render={
             <CheckCards
+              ref={props.ref}
               cards={props.options.map((option) => ({
                 key: option.value,
                 label: option.label,
@@ -91,9 +106,9 @@ function DefaultChoiceCards(props: ChoiceCardsProps): ReactNode {
               onToggle={(index, on, details) => {
                 const value = props.options[index]!.value;
                 const say: ChangeDetails<'select'> = { ...details, reason: 'select' };
-                if (value === props.exclusive) return props.onChange(on ? [value] : [], say);
+                if (value === props.exclusive) return emit(on ? [value] : [], say);
                 const rest = props.value.filter((other) => other !== value && other !== props.exclusive);
-                props.onChange(
+                emit(
                   on ? props.options.map((option) => option.value).filter((other) => other === value || rest.includes(other)) : rest,
                   say,
                 );
@@ -106,9 +121,10 @@ function DefaultChoiceCards(props: ChoiceCardsProps): ReactNode {
   return (
     <Frame {...props}>
       <RadioGroup
+        ref={props.ref}
         data-kind="cards"
         value={props.value[0] ?? null}
-        onValueChange={(next, details) => props.onChange(next === null ? [] : [String(next)], told('select', details))}
+        onValueChange={(next, details) => emit(next === null ? [] : [String(next)], told('select', details))}
       >
         {props.options.map((option) => (
           <label key={option.value} data-slot="choice" data-checked={props.value[0] === option.value ? '' : undefined}>
@@ -138,29 +154,27 @@ export interface CheckCard {
   on: boolean;
 }
 
+/** Props for the `CheckCards` roving-focus checkbox card group. */
 export interface CheckCardsProps {
   cards: readonly CheckCard[];
   /** The card at `index` turned on or off. */
   onToggle: (index: number, on: boolean, details: ChangeDetails<'toggle'>) => void;
   id?: string;
   disabled?: boolean;
+  ariaLabel?: string;
   'aria-labelledby'?: string;
   'aria-describedby'?: string;
   'aria-invalid'?: AriaAttributes['aria-invalid'];
-  /** How short every card's words are, so a wide page can set them side by side (`data-fit`; the page's stylesheet
-   * decides what that means): `short` is a label alone, `brief` a label and a line that fit half a column. */
+  /** How short every card's words are (`short` or `brief`). */
   fit?: 'short' | 'brief';
+  className?: string;
+  ref?: Ref<HTMLDivElement>;
 }
 
-/* Several cards, any of them on, as a UI SDK primitive: which are on is a value with a change. Each card is the
-   checkbox, saying `aria-checked`, and the square at its end is its picture. UI SDK's own checkbox is a Tab stop
-   each and says so in its slot, which a caller cannot take back; so the card is drawn here. */
 type CheckCardsReason = 'press';
 
 type CheckCardsOptions = {
-  /* The cards, in order, by their keys. */
   keys: string[];
-  /* The keys of the cards that are on. */
   value?: string[];
   onValueChange?: (value: string[], details: SdkChangeDetails<CheckCardsReason>) => void;
   disabled?: boolean;
@@ -172,7 +186,6 @@ const checkCards = definePrimitive({
   controlled: ['value'],
   state: (options: CheckCardsOptions) => ({
     value: (options.value ?? []) as string[],
-    /* The card the keyboard was last on. */
     cursor: null as string | null,
   }),
   sync: (options) => (options.value === undefined ? {} : { value: options.value }),
@@ -191,7 +204,6 @@ const checkCards = definePrimitive({
       walked(key: string) {
         if (context.store.get().cursor !== key) context.store.set({ cursor: key });
       },
-      /* Where a key takes the keyboard from a card, round the ends, or nowhere. */
       step(from: string, key: string): string | undefined {
         const all = keys();
         const at = all.indexOf(from);
@@ -231,7 +243,6 @@ const checkCards = definePrimitive({
             api.walked(to);
             el?.parentElement?.querySelector<HTMLElement>(`[data-slot="check-cards-card"][data-key="${CSS.escape(to)}"]`)?.focus();
           } else if (event.key === ' ') {
-            // Space is the box's own key; the page does not scroll under it.
             event.preventDefault();
             api.toggle(props.value, event);
           }
@@ -248,26 +259,21 @@ const checkCards = definePrimitive({
 
 const cardParts = createParts(checkCards, { root: 'div', card: 'div' });
 
-/**
- * Several cards, any of them on: full-width cards, each an icon, its words and a square at its end that fills when it
- * is on. They are one group to the keyboard, as radios are — one Tab stop (the card last moved to, else the first one
- * on, else the first), the arrows and Home and End move between them, and Space turns the one in hand on or off — and
- * each is a `checkbox` saying `aria-checked`, so a screen reader hears "checked" as it moves.
- */
-/* Whatever else it is handed goes on the group: a field that takes the cards as its control (ChoiceCards) gives
-   them a ref and its own attributes beside the props a caller names. */
 function DefaultCheckCards(props: CheckCardsProps): ReactNode {
-  const { cards, onToggle, disabled, fit, ...rest } = props as CheckCardsProps &
+  const { cards, onToggle, disabled, fit, ariaLabel, className, ref, ...rest } = props as CheckCardsProps &
     Omit<ComponentProps<'div'>, keyof CheckCardsProps | 'children'>;
+  const legacyAriaLabel = (rest as Record<string, unknown>)['aria-label'] as string | undefined;
   return (
     <cardParts.Root
       {...rest}
+      ref={ref}
+      className={className}
+      aria-label={ariaLabel ?? legacyAriaLabel}
       data-fit={fit}
       keys={cards.map((card) => card.key)}
       value={cards.filter((card) => card.on).map((card) => card.key)}
       disabled={disabled}
       onValueChange={(next, details) => {
-        // The primitive says the whole list; the caller hears the one card that moved.
         const index = cards.findIndex((card) => card.on !== next.includes(card.key));
         if (index >= 0) onToggle(index, !cards[index]!.on, told('toggle', details));
       }}
@@ -292,39 +298,81 @@ function DefaultCheckCards(props: CheckCardsProps): ReactNode {
   );
 }
 
+/** Props for the `Checkbox` control. */
 export interface CheckboxProps extends Omit<FieldFrame, 'label'> {
-  checked: boolean;
-  onChange: (on: boolean, details: ChangeDetails<'toggle'>) => void;
-  /** The text beside the box; it is the label, so it is a click target too. */
-  label: ReactNode;
+  value?: string;
+  checked?: boolean | 'indeterminate';
+  defaultChecked?: boolean;
+  indeterminate?: boolean;
+  onCheckedChange?: (on: boolean, details: ChangeDetails<'toggle'>) => void;
+  /** The text beside the box; it is the label, so it is a click target too. Omit for a standalone checkbox with `ariaLabel`. */
+  label?: ReactNode;
+  description?: ReactNode;
+  ariaLabel?: string;
+  size?: ControlSize;
   disabled?: boolean;
+  ref?: Ref<HTMLButtonElement>;
 }
 
-/** A checkbox beside its text. */
+/** Props for the `Consent` long-notice checkbox control. */
+export type ConsentProps = CheckboxProps;
+
+/** A checkbox beside its text, or standalone when `label` is omitted. */
 function DefaultCheckbox(props: CheckboxProps): ReactNode {
+  const isIndeterminate = props.indeterminate === true || props.checked === 'indeterminate';
+  const resolvedChecked = isIndeterminate ? 'indeterminate' : props.checked;
+  const legacyChange = (props as { onChange?: (on: boolean, details: ChangeDetails<'toggle'>) => void }).onChange;
+  const legacyAriaLabel = (props as Record<string, unknown>)['aria-label'] as string | undefined;
+  const resolvedAriaLabel = props.ariaLabel ?? legacyAriaLabel;
+  const handleToggle = (next: boolean | 'indeterminate', details: SdkChangeDetails<string>) => {
+    const info = told('toggle', details);
+    const bool = next === true;
+    props.onCheckedChange?.(bool, info);
+    legacyChange?.(bool, info);
+  };
+  const control = (
+    <Box
+      id={props.id}
+      ref={props.ref}
+      value={props.value}
+      checked={resolvedChecked}
+      defaultChecked={props.defaultChecked}
+      disabled={props.disabled}
+      data-size={props.size}
+      aria-label={props.label === undefined ? resolvedAriaLabel : props.ariaLabel}
+      aria-required={props.required || undefined}
+      className={props.label === undefined ? props.className : undefined}
+      onCheckedChange={handleToggle}
+    >
+      <CheckboxIndicator />
+    </Box>
+  );
+  if (props.label === undefined) {
+    return control;
+  }
   return (
-    <Frame {...props} check>
-      <Box
-        id={props.id}
-        checked={props.checked}
-        disabled={props.disabled}
-        aria-required={props.required || undefined}
-        onCheckedChange={(next, details) => props.onChange(next === true, told('toggle', details))}
-      >
-        <CheckboxIndicator />
-      </Box>
+    <Frame {...props} label={props.label} hint={props.hint ?? props.description} check>
+      {control}
     </Frame>
   );
 }
 
 /** A checkbox for a long notice: the paragraph is the label, in the body's weight. */
-function DefaultConsent(props: CheckboxProps): ReactNode {
+function DefaultConsent(props: ConsentProps): ReactNode {
   return <Checkbox {...props} className={['consent', props.className].filter(Boolean).join(' ')} />;
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const YesNo = slotted('YesNo', DefaultYesNo, { onChange: [1, 'select'] });
-export const ChoiceCards = slotted('ChoiceCards', DefaultChoiceCards, { onChange: [1, 'select'] });
+/** Framed Yes/No radio card pair for binary questions. */
+export const YesNo = slotted('YesNo', DefaultYesNo, { onValueChange: [1, 'select'] });
+
+/** Framed single-choice or multi-choice option cards with icons and exclusive option support. */
+export const ChoiceCards = slotted('ChoiceCards', DefaultChoiceCards, { onValueChange: [1, 'select'] });
+
+/** Roving-focus multi-select checkbox card group with single Tab stop and arrow-key navigation. */
 export const CheckCards = slotted('CheckCards', DefaultCheckCards, { onToggle: [2, 'toggle'] });
-export const Checkbox = slotted('Checkbox', DefaultCheckbox, { onChange: [1, 'toggle'] });
-export const Consent = slotted('Consent', DefaultConsent, { onChange: [1, 'toggle'] });
+
+/** Accessible checkbox control with optional indeterminate state, label, hint, and problem wiring. */
+export const Checkbox = slotted('Checkbox', DefaultCheckbox, { onCheckedChange: [1, 'toggle'] });
+
+/** Long-notice consent checkbox styled in body text weight. */
+export const Consent = slotted('Consent', DefaultConsent, { onCheckedChange: [1, 'toggle'] });

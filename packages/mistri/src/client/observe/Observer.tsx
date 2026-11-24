@@ -191,7 +191,7 @@ function Explain({ spanId }: { spanId: string }) {
   const explain = useMutation({ mutationFn: () => post<{ plan?: string[]; error?: string }>('/explain', { spanId }) });
   return (
     <div className="obs-explain">
-      <Button size="compact" className="obs-quiet" onClick={() => explain.mutate()} disabled={explain.isPending}>
+      <Button size="sm" className="obs-quiet" onClick={() => explain.mutate()} disabled={explain.isPending}>
         {explain.isPending ? say('explaining') : 'EXPLAIN'}
       </Button>
       {explain.error && <p className="obs-problem">{explain.error.message}</p>}
@@ -576,12 +576,12 @@ function Logs({ go }: { go: (next: string) => void }) {
   return (
     <div className="obs-logs">
       <div className="obs-filters">
-        <Dropdown ariaLabel={say('level')} items={levels()} value={level} onChange={setLevel} />
+        <Dropdown ariaLabel={say('level')} items={levels()} value={level} onValueChange={setLevel} />
         <Dropdown
           ariaLabel={say('source')}
           items={[{ value: '', label: say('everySource') }, ...(logs.data?.sources ?? []).map((name) => ({ value: name, label: name }))]}
           value={source}
-          onChange={setSource}
+          onValueChange={setSource}
         />
         <Dropdown
           ariaLabel={say('scope')}
@@ -590,7 +590,7 @@ function Logs({ go }: { go: (next: string) => void }) {
             { value: 'outside', label: say('outsideRequests') },
           ]}
           value={scope}
-          onChange={setScope}
+          onValueChange={setScope}
         />
         <input
           type="search"
@@ -775,14 +775,14 @@ function Access() {
             ariaLabel={say('app')}
             items={apps.map((each) => ({ value: each.id, label: each.name }))}
             value={chosen!.id}
-            onChange={setApp}
+            onValueChange={setApp}
           />
         )}
         <Dropdown
           ariaLabel={say('role')}
           items={[...chosen!.roles, 'public'].map((name) => ({ value: name, label: name }))}
           value={role || chosen!.roles[0] || 'public'}
-          onChange={setRole}
+          onValueChange={setRole}
         />
         <input
           className="obs-input"
@@ -805,7 +805,7 @@ function Access() {
           onChange={(event) => setCommand(event.target.value)}
           aria-label={say('command')}
         />
-        <Button type="submit" intent="primary" size="compact">
+        <Button type="submit" variant="primary" size="sm">
           {say('explain')}
         </Button>
       </form>
@@ -874,7 +874,7 @@ export function Observer() {
           </TabsList>
           <span className="obs-head-end">
             <span className="obs-faint">{say('devOnly')}</span>
-            <Button size="compact" className="obs-quiet" onClick={() => clear.mutate()}>
+            <Button size="sm" className="obs-quiet" onClick={() => clear.mutate()}>
               {say('clear')}
             </Button>
           </span>

@@ -1,7 +1,7 @@
 /** Existing DSL room, loaded only for the private Console App. All requests
  * use Console endpoints, never target-App transports that omit its fence. */
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Dropdown, Empty, Icon, Stack, useViewer } from '@mistriwork/mistri/ui';
+import { Button, Dropdown, EmptyState, Icon, Stack, useViewer } from '@mistriwork/mistri/ui';
 import { useAddressState } from '@mistriwork/mistri/page';
 import { useMessageLanguage } from '@mistriwork/kit/client/components/useMessageLanguage.js';
 import { say } from '../../copy/console/components/console/ConsoleRoom.js';
@@ -47,7 +47,7 @@ export default function ConsoleRoom({ props }: { props: { endpoint: string } }) 
     [flag, setFlag] = useAddressState('flag');
   const [target, setTarget] = useAddressState('target');
   const request = useMemo(() => consoleRequest(props.endpoint, viewer.account ?? ''), [props.endpoint, viewer.account]);
-  if (!viewer.signedIn || !viewer.account) return <Empty title={say('signIn')} />;
+  if (!viewer.signedIn || !viewer.account) return <EmptyState title={say('signIn')} />;
   // Closing refines this room. A pushed navigation remounts its owner before
   // the modal can hand focus back to the freshly authorized list.
   return (
@@ -224,7 +224,7 @@ export function ConsolePanel({
       {!catalog ? (
         <p role="status">{say('loadingApps')}</p>
       ) : !targets.length ? (
-        <Empty title={say('noTargets')} />
+        <EmptyState title={say('noTargets')} />
       ) : (
         <>
           <ConsoleHead
@@ -247,7 +247,7 @@ export function ConsolePanel({
                           label: item.label,
                         })),
                       ]}
-                      onChange={(value) => {
+                      onValueChange={(value) => {
                         selectFlag(undefined);
                         selectScope(value || undefined);
                       }}
@@ -286,7 +286,7 @@ export function ConsolePanel({
                     onChange={(event) => setQuery(event.target.value)}
                   />
                   {query && (
-                    <Button size="compact" intent="quiet" onClick={() => setQuery('')}>
+                    <Button size="sm" variant="ghost" onClick={() => setQuery('')}>
                       {say('clearSearch')}
                     </Button>
                   )}
@@ -345,12 +345,12 @@ export function ConsolePanel({
                       }
                       list={
                         !items.length ? (
-                          <Empty title={say('noFlags')} />
+                          <EmptyState title={say('noFlags')} />
                         ) : !visible.length ? (
                           query.trim() ? (
-                            <Empty title={say('noMatches')} />
+                            <EmptyState title={say('noMatches')} />
                           ) : (
-                            <Empty title={say('noneFiltered')} />
+                            <EmptyState title={say('noneFiltered')} />
                           )
                         ) : (
                           <FlagTable

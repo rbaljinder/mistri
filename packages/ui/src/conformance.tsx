@@ -296,7 +296,7 @@ function Typed({
       }}
       open={open}
       onOpenChange={setOpen}
-      inputProps={{ 'aria-label': 'Tree' }}
+      inputProps={{ ariaLabel: 'Tree' }}
       popupClassName="conformance-popup"
       listClassName="conformance-list"
       empty={empty}
@@ -342,7 +342,7 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
 
   it('ButtonLink is a link to its address with its words', async (mount) => {
     await mount(
-      <ButtonLink href="/files/report.csv" intent="primary">
+      <ButtonLink href="/files/report.csv" variant="primary">
         Download report
       </ButtonLink>,
     );
@@ -352,35 +352,35 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
 
   it('TextField is named by its label, shows its value, reports what is typed, and is disabled when told', async (mount) => {
     const changed = heard<[string, ChangeDetails?]>();
-    const { rerender } = await mount(<TextField label="Company" hint="As it is registered" value="Acme" onChange={changed} />);
+    const { rerender } = await mount(<TextField label="Company" hint="As it is registered" value="Acme" onValueChange={changed} />);
     showsText('As it is registered', 'TextField');
     const box = get('textbox', 'Company', 'TextField') as HTMLInputElement;
     check(box.value === 'Acme', `TextField: the box shows "${box.value}", not its value "Acme"`);
     await type(box, 'Acme Ltd');
-    check(changed.calls.at(-1)?.[0] === 'Acme Ltd', 'TextField: onChange was not told the typed value');
-    heardDetails(changed, 1, 'TextField: onChange');
-    await rerender(<TextField label="Company" value="Acme" onChange={changed} disabled />);
+    check(changed.calls.at(-1)?.[0] === 'Acme Ltd', 'TextField: onValueChange was not told the typed value');
+    heardDetails(changed, 1, 'TextField: onValueChange');
+    await rerender(<TextField label="Company" value="Acme" onValueChange={changed} disabled />);
     check((get('textbox', 'Company', 'TextField') as HTMLInputElement).disabled, 'TextField: disabled did not disable the box');
   });
 
   it('MaskedField shows its value through the mask and reports the raw value', async (mount) => {
     const changed = heard<[string, ChangeDetails?]>();
-    await mount(<MaskedField label="Phone" mask={masks.phone} value="5551234567" onChange={changed} />);
+    await mount(<MaskedField label="Phone" mask={masks.phone} value="5551234567" onValueChange={changed} />);
     const box = get('textbox', 'Phone', 'MaskedField') as HTMLInputElement;
     check(box.value === '555-123-4567', `MaskedField: the box shows "${box.value}", not the masked "555-123-4567"`);
     await type(box, '555-123-9');
-    check(changed.calls.at(-1)?.[0] === '5551239', 'MaskedField: onChange was not told the raw value');
-    heardDetails(changed, 1, 'MaskedField: onChange');
+    check(changed.calls.at(-1)?.[0] === '5551239', 'MaskedField: onValueChange was not told the raw value');
+    heardDetails(changed, 1, 'MaskedField: onValueChange');
   });
 
   it('MoneyField and SensitiveField are named by their labels and say the words they are given', async (mount) => {
     await mount(
       <>
-        <MoneyField label="Amount" value="1200" onChange={() => {}} />
+        <MoneyField label="Amount" value="1200" onValueChange={() => {}} />
         <SensitiveField
           label="Tax number"
           value="123456789"
-          onChange={() => {}}
+          onValueChange={() => {}}
           mask={masks.ssn}
           showLabel="Reveal it"
           hideLabel="Hide it"
@@ -396,17 +396,17 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     const agreed = heard<[boolean, ChangeDetails?]>();
     const { rerender } = await mount(
       <>
-        <Checkbox label="Send a copy" checked={false} onChange={ticked} />
-        <Consent label="I agree to the terms" checked={false} onChange={agreed} />
+        <Checkbox label="Send a copy" checked={false} onCheckedChange={ticked} />
+        <Consent label="I agree to the terms" checked={false} onCheckedChange={agreed} />
       </>,
     );
     await click(get('checkbox', 'Send a copy', 'Checkbox'));
     check(ticked.calls.at(-1)?.[0] === true, 'Checkbox: a click on an unchecked box did not report true');
     await click(get('checkbox', 'I agree to the terms', 'Consent'));
     check(agreed.calls.at(-1)?.[0] === true, 'Consent: a click on an unchecked box did not report true');
-    heardDetails(ticked, 1, 'Checkbox: onChange');
-    heardDetails(agreed, 1, 'Consent: onChange');
-    await rerender(<Checkbox label="Send a copy" checked onChange={ticked} disabled />);
+    heardDetails(ticked, 1, 'Checkbox: onCheckedChange');
+    heardDetails(agreed, 1, 'Consent: onCheckedChange');
+    await rerender(<Checkbox label="Send a copy" checked onCheckedChange={ticked} disabled />);
     const box = get('checkbox', 'Send a copy', 'Checkbox') as HTMLInputElement;
     check(box.disabled || box.getAttribute('aria-disabled') === 'true', 'Checkbox: disabled did not disable the box');
   });
@@ -417,8 +417,8 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     const toggled = heard<[number, boolean, ChangeDetails?]>();
     await mount(
       <>
-        <YesNo label="Is it urgent?" value="" onChange={answered} yes="Indeed" no="Not at all" />
-        <ChoiceCards label="Size" options={ITEMS} value={[]} onChange={chosen} />
+        <YesNo label="Is it urgent?" value="" onValueChange={answered} yes="Indeed" no="Not at all" />
+        <ChoiceCards label="Size" options={ITEMS} value={[]} onValueChange={chosen} />
         <CheckCards
           cards={[
             { key: 'a', label: 'Email me', on: false },
@@ -435,8 +435,8 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     check(chosen.calls.at(-1)?.[0]?.join() === 'high', 'ChoiceCards: picking a card did not report its value');
     await click(get('checkbox', 'Text me', 'CheckCards'));
     check(toggled.calls.at(-1)?.slice(0, 2).join() === '1,true', 'CheckCards: turning the second card on did not report (1, true)');
-    heardDetails(answered, 1, 'YesNo: onChange');
-    heardDetails(chosen, 1, 'ChoiceCards: onChange');
+    heardDetails(answered, 1, 'YesNo: onValueChange');
+    heardDetails(chosen, 1, 'ChoiceCards: onValueChange');
     heardDetails(toggled, 2, 'CheckCards: onToggle');
   });
 
@@ -455,14 +455,14 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
   });
 
   it('Slider is named by its label and shows its value', async (mount) => {
-    await mount(<Slider label="Budget" value={40} onChange={() => {}} min={0} max={100} />);
+    await mount(<Slider label="Budget" value={40} onValueChange={() => {}} min={0} max={100} />);
     showsText('Budget', 'Slider');
     showsText('40', 'Slider');
   });
 
   it('Dropdown says its choice, opens from the keyboard, reports a pick, closes on Escape, and is disabled when told', async (mount) => {
     const changed = heard<[string, ChangeDetails?]>();
-    const { rerender } = await mount(<Dropdown ariaLabel="Priority" items={ITEMS} value="low" onChange={changed} />);
+    const { rerender } = await mount(<Dropdown ariaLabel="Priority" items={ITEMS} value="low" onValueChange={changed} />);
     const trigger = get('button', 'Priority', 'Dropdown') as HTMLElement;
     showsText('Low', 'Dropdown', trigger);
     trigger.focus();
@@ -479,8 +479,8 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
     const option = await until(() => find('option', 'High'), 'Dropdown: a click on the button did not list the options');
     await click(option);
     check(changed.calls.at(-1)?.[0] === 'high', 'Dropdown: picking an option did not report its value');
-    heardDetails(changed, 1, 'Dropdown: onChange');
-    await rerender(<Dropdown ariaLabel="Priority" items={ITEMS} value="low" onChange={changed} disabled />);
+    heardDetails(changed, 1, 'Dropdown: onValueChange');
+    await rerender(<Dropdown ariaLabel="Priority" items={ITEMS} value="low" onValueChange={changed} disabled />);
     const off = get('button', 'Priority', 'Dropdown') as HTMLButtonElement;
     check(off.disabled || off.getAttribute('aria-disabled') === 'true', 'Dropdown: disabled did not disable its button');
   });
@@ -488,9 +488,9 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
   it('Select, MultiSelect and MultiDropdown are named and say their choices', async (mount) => {
     await mount(
       <>
-        <Select label="Stage" options={ITEMS} value="high" onChange={() => {}} />
-        <MultiSelect label="Tags" options={ITEMS} value={['low']} onChange={() => {}} />
-        <MultiDropdown ariaLabel="Levels" items={ITEMS} value={['high']} onChange={() => {}} />
+        <Select label="Stage" options={ITEMS} value="high" onValueChange={() => {}} />
+        <MultiSelect label="Tags" options={ITEMS} value={['low']} onValueChange={() => {}} />
+        <MultiDropdown ariaLabel="Levels" items={ITEMS} value={['high']} onValueChange={() => {}} />
       </>,
     );
     showsText('Stage', 'Select');
@@ -517,22 +517,30 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
   it('DateField shows its value, reports what is typed, names its calendar button with its words, and is disabled when told', async (mount) => {
     const changed = heard<[string, ChangeDetails?]>();
     const { rerender } = await mount(
-      <DateField id="due" aria-label="Due" words={DATE_WORDS} calendarIcon={null} value="2026-03-14" onChange={changed} locale="en-US" />,
+      <DateField
+        id="due"
+        ariaLabel="Due"
+        words={DATE_WORDS}
+        calendarIcon={null}
+        value="2026-03-14"
+        onValueChange={changed}
+        locale="en-US"
+      />,
     );
     const box = get('textbox', 'Due', 'DateField') as HTMLInputElement;
     check(box.value.length > 0, 'DateField: the box does not show its value');
     await type(box, '2026-04-01');
-    check(changed.calls.at(-1)?.[0] === '2026-04-01', 'DateField: onChange was not told the typed text');
-    heardDetails(changed, 1, 'DateField: onChange');
+    check(changed.calls.at(-1)?.[0] === '2026-04-01', 'DateField: onValueChange was not told the typed text');
+    heardDetails(changed, 1, 'DateField: onValueChange');
     get('button', 'Pick a day for', 'DateField');
     await rerender(
       <DateField
         id="due"
-        aria-label="Due"
+        ariaLabel="Due"
         words={DATE_WORDS}
         calendarIcon={null}
         value="2026-03-14"
-        onChange={changed}
+        onValueChange={changed}
         locale="en-US"
         disabled
       />,
@@ -641,7 +649,7 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
   it("popups opened inside a dialog are drawn inside it, in the dialog's focus trap", async (mount) => {
     await mount(
       <div role="dialog" aria-label="Enclosing" data-conformance-dialog="">
-        <Dropdown ariaLabel="Priority" items={ITEMS} value="low" onChange={() => {}} />
+        <Dropdown ariaLabel="Priority" items={ITEMS} value="low" onValueChange={() => {}} />
         <Menu run={() => {}} />
         <Typed pick={() => {}} />
       </div>,
@@ -705,7 +713,7 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
   });
 
   it('an open Dropdown, DropMenu and Typeahead hold to their ARIA patterns', async (mount) => {
-    const { rerender } = await mount(<Dropdown ariaLabel="Priority" items={ITEMS} value="low" onChange={() => {}} />);
+    const { rerender } = await mount(<Dropdown ariaLabel="Priority" items={ITEMS} value="low" onValueChange={() => {}} />);
     const trigger = get('button', 'Priority', 'Dropdown') as HTMLElement;
     trigger.focus();
     await press('ArrowDown', trigger);
@@ -745,8 +753,8 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
             { value: 'files', label: 'Files', children: <p>The files panel</p> },
           ]}
         />
-        <YesNo label="Billable" value="yes" onChange={() => {}} yes="Yes" no="No" />
-        <ChoiceCards label="Size" options={ITEMS} value={['low']} onChange={() => {}} />
+        <YesNo label="Billable" value="yes" onValueChange={() => {}} yes="Yes" no="No" />
+        <ChoiceCards label="Size" options={ITEMS} value={['low']} onValueChange={() => {}} />
         <Switch label="Notify me" checked onCheckedChange={() => {}} />
       </>,
     );
@@ -793,17 +801,24 @@ export function uiKitConformance(kit: UiKit, test: ConformanceTest): void {
 
   it('TextArea is named by its label, shows its value and reports what is typed', async (mount) => {
     const changed = heard<[string, ChangeDetails?]>();
-    await mount(<TextArea label="Notes" value="First line" onChange={changed} />);
+    await mount(<TextArea label="Notes" value="First line" onValueChange={changed} />);
     const box = get('textbox', 'Notes', 'TextArea') as HTMLTextAreaElement;
     check(box.value === 'First line', `TextArea: the box shows "${box.value}", not its value`);
     await type(box, 'First line and more');
-    check(changed.calls.at(-1)?.[0] === 'First line and more', 'TextArea: onChange was not told the typed text');
-    heardDetails(changed, 1, 'TextArea: onChange');
+    check(changed.calls.at(-1)?.[0] === 'First line and more', 'TextArea: onValueChange was not told the typed text');
+    heardDetails(changed, 1, 'TextArea: onValueChange');
   });
 
   it('FileField is a file input named by its label that takes the accept list, and says the words it is given', async (mount) => {
     await mount(
-      <FileField label="Contacts" accept=".csv" value={null} onChange={() => {}} chooseLabel="Pick a file" noneLabel="Nothing picked" />,
+      <FileField
+        label="Contacts"
+        accept=".csv"
+        value={null}
+        onValueChange={() => {}}
+        chooseLabel="Pick a file"
+        noneLabel="Nothing picked"
+      />,
     );
     const input = [...document.querySelectorAll<HTMLInputElement>('input[type="file"]')].find((one) => nameOf(one) === 'Contacts');
     check(input, 'FileField: no file input named by its label is drawn');

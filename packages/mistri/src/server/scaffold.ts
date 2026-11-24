@@ -1237,8 +1237,15 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
   for (const command of opts.brief?.commands ?? []) {
     const machine = described.find((info) => info.table.name === command.table)?.machine;
     const to = machine ? command.set[machine.column] : undefined;
-    const verb = to === undefined ? undefined : machine!.verbs.find((candidate) => candidate.to === to);
-    if (!verb) continue;
+    const drawn = to === undefined ? undefined : machine!.verbs.find((candidate) => candidate.to === to);
+    if (!drawn) continue;
+    /* A second command into the same state (`triage` and `assignSpecialist`, both to `triaged`) is a second verb beside
+       the first, from the same states: renaming the one verb again left the first command with no step and no button. */
+    let verb = drawn;
+    if (verbs.has(drawn.verb)) {
+      verb = { ...drawn, from: [] };
+      machine!.verbs.splice(machine!.verbs.findLastIndex((candidate) => candidate.to === to) + 1, 0, verb);
+    }
     verb.verb = command.id;
     /* A command asks what it needs through its own input and writes its own stamps: a fixed move's `reason` and
        `set` on the verb are refused beside one (appMachine.ts), so the draft leaves both to the handler. */
@@ -1256,6 +1263,9 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
     /* Added to the edges the vocabulary's order drew, never taken from them: a state left with no step out would not
        be a machine, and the command's own `when` already keeps the step to where the brief put it. */
     for (const state of from ?? []) if (state !== to && !verb.from.includes(state)) verb.from.push(state);
+    /* A second verb leaves the states its own condition names, since the first already leads out of the drawn ones;
+       with no condition the draft can read, the same states as the first. */
+    if (!verb.from.length) verb.from.push(...drawn.from);
     verbs.add(command.id);
   }
   for (const command of opts.brief?.commands ?? [])
@@ -1881,6 +1891,9 @@ function projectFiles({
     {
       compilerOptions: {
         target: 'ES2023',
+        /* A free-form page and a component are drawn in a browser: JSX and the DOM, so `include` can name them. */
+        lib: ['ES2023', 'DOM', 'DOM.Iterable'],
+        jsx: 'react-jsx',
         module: 'NodeNext',
         moduleResolution: 'NodeNext',
         strict: true,
@@ -1892,7 +1905,7 @@ function projectFiles({
            read "Cannot find module 'node:test'" in check's typecheck and `tsc`, about thirty errors after test init. */
         types: ['node'],
       },
-      include: ['**/*.ts'],
+      include: ['**/*.ts', '**/*.tsx'],
     },
     null,
     2,

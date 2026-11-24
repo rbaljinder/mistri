@@ -27,6 +27,9 @@ test('the title, intro, verbs and a way back, in the platform head classes', () 
   const back = screen.getByRole('link', { name: 'Back to All lists' });
   expect(back).toHaveAttribute('href', '/pick-lists');
   expect(head.querySelector('.dash-head-back')).toContainElement(back);
+  cleanup();
+  render(<PageHeader title="Order" back={{ label: 'Back to Work Orders', href: '/work-orders' }} />);
+  expect(screen.getByRole('link', { name: 'Back to Work Orders' })).toHaveAttribute('href', '/work-orders');
 });
 
 test('a ReactNode title, and nothing drawn for what is not given', () => {

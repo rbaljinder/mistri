@@ -143,9 +143,9 @@ test.describe('Atelier back office', () => {
           await page.setViewportSize({ width, height: 900 });
           await page.goto(`${sample.origin}/`);
           const strip = page.locator('.dash-strip').first();
-          /* Lumen's figures carry no mark (2d17bc18: the mark beside "To pick" was decoration), so its rows have none to
-             mix; the marks are drawn and hidden, and its figures still stand on one line. */
-          const marked = look !== 'lumen';
+          /* Lumen (`stat: 'icon'`), Mono, and Sage all draw the card's section mark,
+             so removing every other mark mixes marked and unmarked cards on one row. */
+          const marked = true;
           const mark = strip.locator('.home-card .dash-section-icon').first();
           await expect(mark).toBeAttached();
           if (marked) await expect(mark).toBeVisible();

@@ -1,6 +1,6 @@
 /* Brought by a tree list (TreeList.tsx), loaded only where a list is drawn as one. Tokens only. */
 @layer components {
-.tree-list { min-width: 0; }
+.tree-list { min-width: 0; max-height: 32rem; overflow-y: auto; }
 .tree-items { margin: 0; padding: var(--space-2) 0; list-style: none; }
 .tree-item {
   display: flex; align-items: center; gap: var(--space-2h); min-height: 32px; padding-inline-end: var(--space-4);

@@ -25,12 +25,19 @@ import { treeFiles } from '../scripts/workspace.mjs';
 /* Nothing is exempt wholesale: the ruler itself is the ui package's, outside
    these trees. diagram.js looked like a closed screen-pixel system and was
    not: its numbers end in an SVG transform, which is layout units. */
-const ALLOWLISTED_FILES = new Set();
+const ALLOWLISTED_FILES = new Set(['packages/ui/src/internal/ruler.ts']);
 
 const RAW = /\.getBoundingClientRect\(|window\.inner(?:Width|Height)\b/;
 
+const targets = [
+  ...treeFiles('src/client', { recursive: false }).filter((f) => f.rel.endsWith('.js')),
+  ...treeFiles('packages/ui/src', { recursive: true }).filter(
+    (f) => /\.(?:ts|tsx|js)$/.test(f.rel) && !/\.(?:test|spec|stories)\.[^.]+$/.test(f.rel) && !f.rel.endsWith('.d.ts'),
+  ),
+];
+
 const failures = [];
-for (const { path, rel: file } of treeFiles('src/client', { recursive: false }).filter((f) => f.rel.endsWith('.js'))) {
+for (const { path, rel: file } of targets) {
   if (ALLOWLISTED_FILES.has(file)) continue;
   const lines = readFileSync(path, 'utf8').split('\n');
   lines.forEach((line, i) => {

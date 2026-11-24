@@ -9,11 +9,11 @@ import {
   Choose,
   CommandButton,
   definePage,
-  Empty,
-  Grid,
-  List,
+  EmptyState,
   Metric,
+  PageGrid,
   Panel,
+  RecordList,
   Row,
   Rows,
   Scope,
@@ -45,26 +45,26 @@ function CheckIn(): ReactNode {
         sort="starts_at"
         limit={4}
         label={(lesson) => `${lesson.title} · ${format.dateTime(lesson.starts_at)}`}
-        empty={<Empty title="No classes coming up" description="Add one under Classes." />}
+        empty={<EmptyState title="No classes coming up" description="Add one under Classes." />}
       />
       {chosen === undefined ? (
         <Card>
-          <Empty title="Choose a class" description="Its guest list opens here, with a Check in for each party." />
+          <EmptyState title="Choose a class" description="Its guest list opens here, with a Check in for each party." />
         </Card>
       ) : (
         <Scope from="booking" where={{ class_session_id: chosen }}>
-          <Grid>
+          <PageGrid>
             <Metric title="Seats booked" where={{ status: { not: 'cancelled' } }} measure="sum party_size" width="third" />
             <Metric title="Arrived" where={{ status: 'checked_in' }} measure="sum party_size" width="third" />
             <Metric title="Still expected" where={{ status: 'booked' }} measure="sum party_size" width="third" />
             <Panel title="At the door" width="half">
-              <List
+              <RecordList
                 where={{ status: 'booked' }}
                 show={['guest_name', 'party_size']}
                 sort="guest_name"
                 limit={100}
-                label="Still expected"
-                empty={<Empty title="Everyone is in" description="No party booked for this class is still expected." />}
+                ariaLabel="Still expected"
+                empty={<EmptyState title="Everyone is in" description="No party booked for this class is still expected." />}
               >
                 {(booking) => (
                   <Row align="center">
@@ -72,10 +72,10 @@ function CheckIn(): ReactNode {
                       <strong>{booking.guest_name}</strong>
                       {booking.party_size > 1 ? ` · party of ${booking.party_size}` : ''}
                     </span>
-                    <CommandButton command="checkIn" row={booking} size="compact" done={`${booking.guest_name} is checked in.`} />
+                    <CommandButton command="checkIn" row={booking} size="sm" done={`${booking.guest_name} is checked in.`} />
                   </Row>
                 )}
-              </List>
+              </RecordList>
             </Panel>
             <Rows
               title="Arrived"
@@ -84,7 +84,7 @@ function CheckIn(): ReactNode {
               sort="checked_in_at desc"
               width="half"
             />
-          </Grid>
+          </PageGrid>
         </Scope>
       )}
     </Stack>

@@ -87,6 +87,14 @@ export function builtTarget(target) {
    types rather than importing them in Node. */
 export const BUNDLER_ONLY = {
   '@mistriwork/kit': (subpath) => subpath === '.' || subpath.startsWith('./client/'),
+  '@mistriwork/ui': (subpath) =>
+    subpath === './charts.js' ||
+    subpath === './primitives.js' ||
+    subpath === './views.js' ||
+    subpath === './styles/surfaces.css' ||
+    /* The bundles the App framework's entries load one by one: workspace-only, as the aggregate above is. */
+    subpath.startsWith('./styles/surfaces/') ||
+    subpath === './styles/ui-sdk-surfaces.css',
 };
 
 /** The host list's names, by package (scripts/boundary/entries.json `host.exports`). */

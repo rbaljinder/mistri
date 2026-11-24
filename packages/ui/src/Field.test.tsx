@@ -82,7 +82,7 @@ test('a control of several parts takes the wiring through a function', () => {
             ariaInvalid={control['aria-invalid']}
             ariaDescribedBy={control['aria-describedby']}
             value="design"
-            onChange={() => {}}
+            onValueChange={() => {}}
             items={[{ value: 'design', label: 'Design' }]}
           />
         )

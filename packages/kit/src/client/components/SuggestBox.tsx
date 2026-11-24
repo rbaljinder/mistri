@@ -28,7 +28,7 @@ interface SuggestBoxProps {
   onText: (text: string) => void;
   /** A suggestion taken: the box already says it. */
   onPick: (value: string) => void;
-  inputProps: InputHTMLAttributes<HTMLInputElement>;
+  inputProps: InputHTMLAttributes<HTMLInputElement> & { ariaLabel?: string };
   inputRef?: Ref<HTMLInputElement>;
 }
 
@@ -60,7 +60,7 @@ export function SuggestBox({ table, columns, standing = '', text, onText, onPick
   });
   /* What was typed, said back, is no suggestion. */
   const items = typed === '' ? [] : (answer.data ?? []).filter((item) => item.value.toLowerCase() !== typed.toLowerCase());
-  const { onKeyDown, ...rest } = inputProps;
+  const { onKeyDown, onChange: _onChange, inlist: _inlist, 'aria-label': rawAriaLabel, ariaLabel, ...rest } = inputProps;
   return (
     <Typeahead<Suggestion>
       text={text}
@@ -80,13 +80,14 @@ export function SuggestBox({ table, columns, standing = '', text, onText, onPick
         onText(item.value);
         onPick(item.value);
       }}
-      inputRef={inputRef}
+      ref={inputRef}
       autoHighlight={false}
       onHighlight={(item) => {
         lit.current = item;
       }}
       inputProps={{
         ...rest,
+        ariaLabel: ariaLabel ?? rawAriaLabel,
         autoComplete: 'off',
         onKeyDown: (e) => {
           /* A lit suggestion is the list's to take on Enter; the box searches only for what was typed. */

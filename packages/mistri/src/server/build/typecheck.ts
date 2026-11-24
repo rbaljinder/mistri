@@ -16,7 +16,7 @@
 import { spawn } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 
 /** The package.json a directory's modules are read under, and the type it says; undefined above every one. */
 export function nearestPackage(dir: string): { path: string; type?: unknown } | undefined {
@@ -62,6 +62,9 @@ const WITHOUT_TSCONFIG = [
   '--verbatimModuleSyntax',
   '--skipLibCheck',
 ];
+
+/* What `mistri check` writes beside the App, each registering the names a page is typed from. */
+const GENERATED_TYPES = ['mistri-schema.d.ts', 'mistri-commands.d.ts', 'mistri-components.d.ts'];
 
 /* TypeScript 7, the native compiler, is the minimum and the only one: there is no matrix of older compilers to keep
    working. It ships a `tsc` and no in-process JS API, so a check runs the `tsc` that is installed and reads the
@@ -130,13 +133,43 @@ export async function typecheckApp(appDir: string, files: string[]): Promise<Typ
           : WITHOUT_TSCONFIG),
         ...typescript.map((file) => (relative(appDir, file).startsWith('..') ? file : relative(appDir, file))),
       ];
-  const { code, output } = await run(ts.bin, args, appDir);
+  /* With a tsconfig the compiler checks what its `include` names, and a free-form page it leaves out (an include of .ts files alone
+     names no .tsx) was never read: a page's type error passed the check. So the run lists what it read, and each page
+     the list lacks is checked beside it, with the flags an App without a tsconfig gets. */
+  const first = await run(ts.bin, hasConfig && browser ? [...args, '--listFiles'] : args, appDir);
+  const read = new Set<string>();
+  const said: string[] = [];
+  for (const line of first.output.split(/\r?\n/)) {
+    if (hasConfig && browser && isAbsolute(line) && !/\(\d+,\d+\): error TS\d+/.test(line)) read.add(resolve(line));
+    else said.push(line);
+  }
+  const leftOut = hasConfig && browser ? typescript.filter((file) => file.endsWith('.tsx') && !read.has(resolve(file))) : [];
+  const second = leftOut.length
+    ? await run(
+        ts.bin,
+        [
+          '--noEmit',
+          '--pretty',
+          'false',
+          ...WITHOUT_TSCONFIG.map((flag, i) => (WITHOUT_TSCONFIG[i - 1] === '--lib' ? 'ES2023,DOM' : flag)),
+          '--jsx',
+          'react-jsx',
+          /* The generated types too: a page's reads and commands are typed from what they register. */
+          ...GENERATED_TYPES.filter((file) => existsSync(join(appDir, file))),
+          ...leftOut.map((file) => (relative(appDir, file).startsWith('..') ? file : relative(appDir, file))),
+        ],
+        appDir,
+      )
+    : undefined;
+  const code = first.code || (second?.code ?? 0);
+  const output = [said.join('\n').trim(), second?.output.trim() ?? ''].filter(Boolean).join('\n');
   /* Named from where the command ran, unless that climbs out of it: then the whole path, not a ladder of ../. */
   const near = relative(process.cwd(), tsconfig);
+  const config = near && !near.startsWith('..') ? near : tsconfig;
   const what = hasConfig
-    ? near && !near.startsWith('..')
-      ? near
-      : tsconfig
+    ? leftOut.length
+      ? `${config}, and ${leftOut.length} page${leftOut.length === 1 ? '' : 's'} its include leaves out`
+      : config
     : `${typescript.length} file${typescript.length === 1 ? '' : 's'}, no tsconfig.json`;
   return code === 0
     ? { status: 'passed', detail: `tsc ${ts.version}, ${what}` }

@@ -10,10 +10,9 @@ import { afterEach, describe, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { renderPage, renderSection } from './testing.js';
 import { definePage } from './page.js';
-import { Bars, Details, MiniBars, Person, Sparkline, Stat, Table, Tile, Value } from './kit.js';
+import { BreakdownList, DescriptionList, MiniBars, Person, Sparkline, StatCard, Table, Tile, Value, useNotice } from './index.js';
 import { UiHostContext, type UiHost } from './context.js';
 import { DateNav, stepDay } from './DateNav.js';
-import { useNotice } from './index.js';
 
 afterEach(cleanup);
 const drawn = (children: React.ReactNode, more: object = {}) =>
@@ -23,35 +22,33 @@ describe('Stat', () => {
   test('a delta is signed and toned by which way is good', () => {
     drawn(
       <>
-        <Stat label="Revenue" value="$1" delta={{ value: 12, good: 'up' }} />
-        <Stat label="Churn" value="3%" delta={{ value: -2, good: 'up' }} />
-        <Stat label="Wait" value="4m" delta={{ value: -1, good: 'down' }} />
+        <StatCard label="Revenue" value="$1" delta={{ value: 12, good: 'up' }} />
+        <StatCard label="Churn" value="3%" delta={{ value: -2, good: 'up' }} />
+        <StatCard label="Wait" value="4m" delta={{ value: -1, good: 'down' }} />
       </>,
     );
     const news = [...document.querySelectorAll('.kit-stat-change')];
     expect(news.map((each) => each.textContent)).toEqual(['+12', '−2', '−1']);
-    expect(news.map((each) => each.className)).toEqual([
-      'kit-stat-change kit-stat-good',
-      'kit-stat-change kit-stat-bad',
-      'kit-stat-change kit-stat-good',
-    ]);
+    expect(news[0]).toHaveClass('kit-stat-change', 'kit-stat-good');
+    expect(news[1]).toHaveClass('kit-stat-change', 'kit-stat-bad');
+    expect(news[2]).toHaveClass('kit-stat-change', 'kit-stat-good');
   });
 
   test('a delta names what it is measured against, after the change', () => {
-    drawn(<Stat label="Revenue" value="$1" delta={{ value: 12, good: 'up', against: 'vs last month' }} />);
-    expect(document.querySelector('.kit-stat-change')!.textContent).toBe('+12 vs last month');
-    expect(document.querySelector('.kit-stat-against')!.textContent).toBe(' vs last month');
+    drawn(<StatCard label="Revenue" value="$1" delta={{ value: 12, good: 'up', against: 'vs last month' }} />);
+    expect(document.querySelector('.nx-stat-delta')!.textContent).toBe('+12');
+    expect(document.querySelector('.kit-stat-against')!.textContent).toBe('vs last month');
   });
 
   test('with href the whole stat is a link', () => {
-    drawn(<Stat label="Open" value="14" href="/leads" />);
+    drawn(<StatCard label="Open" value="14" href="/leads" />);
     const link = screen.getByRole('link');
     expect(link.getAttribute('href')).toBe('/leads');
     expect(link.textContent).toContain('14');
   });
 
   test('a stat with none of the new props is as it was', () => {
-    drawn(<Stat label="Open" value="14" />);
+    drawn(<StatCard label="Open" value="14" />);
     expect(document.querySelector('a')).toBeNull();
     expect(document.querySelector('.kit-stat-change')).toBeNull();
   });
@@ -59,13 +56,13 @@ describe('Stat', () => {
 
 describe('Sparkline and MiniBars', () => {
   test('a sparkline names its values for a screen reader', () => {
-    drawn(<Sparkline values={[1, 3, 2, 5, 4]} label="Orders" />);
+    drawn(<Sparkline data={[1, 3, 2, 5, 4]} label="Orders" />);
     expect(document.querySelector('svg')?.getAttribute('aria-label')).toBe('trend: 1, 3, 2, 5, 4');
     expect(screen.getByRole('group', { name: 'Orders' })).not.toBeNull();
   });
 
   test('mini bars are drawn to the tallest, the highlight lit, and read out as a table', () => {
-    drawn(<MiniBars values={[2, 4, 1]} labels={['Mon', 'Tue', 'Wed']} highlight={1} />);
+    drawn(<MiniBars data={[2, 4, 1]} labels={['Mon', 'Tue', 'Wed']} highlight={1} />);
     const bars = [...document.querySelectorAll<HTMLElement>('.kit-minibars-bars > i')];
     expect(bars.map((bar) => bar.style.height)).toEqual(['50%', '100%', '25%']);
     expect(bars.map((bar) => bar.classList.contains('is-lit'))).toEqual([false, true, false]);
@@ -79,7 +76,7 @@ describe('Tile', () => {
   test('it is a button, says it is selected, and is a card, not a control', () => {
     const press = vi.fn();
     drawn(
-      <Tile onPress={press} selected>
+      <Tile onClick={press} selected>
         Chosen
       </Tile>,
     );
@@ -95,7 +92,7 @@ describe('Tile', () => {
     drawn(
       <>
         <Tile href="/a">Link</Tile>
-        <Tile onPress={press} disabled>
+        <Tile onClick={press} disabled>
           Off
         </Tile>
       </>,
@@ -116,7 +113,7 @@ describe('DateNav', () => {
 
   test('previous, next and a week at a time, and T goes to today unless a box is being typed in', () => {
     const seen: string[] = [];
-    drawn(<DateNav value="2026-11-13" onChange={(day) => seen.push(day)} step="week" />);
+    drawn(<DateNav value="2026-11-13" onValueChange={(day) => seen.push(day)} step="week" />);
     fireEvent.click(screen.getByRole('button', { name: 'Next week' }));
     fireEvent.click(screen.getByRole('button', { name: 'Previous week' }));
     expect(seen).toEqual(['2026-11-20', '2026-11-06']);
@@ -142,7 +139,7 @@ describe('useNotice', () => {
     function Raise() {
       const notice = useNotice();
       return (
-        <button type="button" onClick={() => notice({ text: 'Not that day', tone: 'error' })}>
+        <button type="button" onClick={() => notice({ text: 'Not that day', tone: 'critical' })}>
           go
         </button>
       );
@@ -150,6 +147,35 @@ describe('useNotice', () => {
     renderPage(definePage({ label: 'Desk', reads: [], commands: [], component: () => <Raise /> }), { announced });
     fireEvent.click(screen.getByRole('button', { name: 'go' }));
     expect(announced).toEqual([{ text: 'Not that day', tone: 'error' }]);
+  });
+
+  test("a warning is not said as an error, and the old word 'error' is not said as a success", () => {
+    const announced: { text: string; tone: 'ok' | 'error' | 'warning' }[] = [];
+    /* What a JavaScript page, or one that builds the notice untyped, still passes: the tone before the tones were unified. */
+    const legacy = 'error' as unknown as 'critical';
+    function Raise() {
+      const notice = useNotice();
+      return (
+        <>
+          <button type="button" onClick={() => notice({ text: 'Nearly full', tone: 'warning' })}>
+            warn
+          </button>
+          <button type="button" onClick={() => notice({ text: 'Refused', tone: legacy })}>
+            refuse
+          </button>
+          <button type="button" onClick={() => notice({ text: 'Saved' })}>
+            save
+          </button>
+        </>
+      );
+    }
+    renderPage(definePage({ label: 'Desk', reads: [], commands: [], component: () => <Raise /> }), { announced });
+    for (const name of ['warn', 'refuse', 'save']) fireEvent.click(screen.getByRole('button', { name }));
+    expect(announced).toEqual([
+      { text: 'Nearly full', tone: 'warning' },
+      { text: 'Refused', tone: 'error' },
+      { text: 'Saved', tone: 'ok' },
+    ]);
   });
 });
 
@@ -166,21 +192,6 @@ const leadHost = {
           : undefined,
 } as unknown as UiHost;
 const withLeads = (node: React.ReactNode) => render(<UiHostContext.Provider value={leadHost}>{node}</UiHostContext.Provider>);
-
-/* The phone's width, as the browser answers `(max-width: 600px)`; restored after each test. */
-function onAPhone() {
-  vi.spyOn(window, 'matchMedia').mockImplementation(
-    (query: string) =>
-      ({
-        matches: query.includes('max-width: 600px'),
-        media: query,
-        addEventListener() {},
-        removeEventListener() {},
-        addListener() {},
-        removeListener() {},
-      }) as never,
-  );
-}
 
 describe('Person', () => {
   afterEach(() => vi.restoreAllMocks());
@@ -203,12 +214,11 @@ describe('Person', () => {
     expect(document.querySelector('.kit-person-secondary')).toBeNull();
   });
 
-  test('the size asked for at a desk, the small disc on a phone', () => {
+  test('carries the size asked for and defaults to sm', () => {
     const { unmount } = withLeads(<Person name="Ada Stone" size="lg" />);
     expect(document.querySelector('.kit-person')).toHaveAttribute('data-size', 'lg');
     unmount();
-    onAPhone();
-    withLeads(<Person name="Ada Stone" size="lg" />);
+    withLeads(<Person name="Ada Stone" />);
     expect(document.querySelector('.kit-person')).toHaveAttribute('data-size', 'sm');
   });
 });
@@ -217,7 +227,7 @@ describe('Details', () => {
   const lead = { status: 'working', owner_name: 'Ada Stone', note: null };
 
   test("terms are the App's labels and values are dressed as their columns are, in the record page's grid", () => {
-    withLeads(<Details resource="lead" row={lead} fields={['status', 'owner_name', 'note']} />);
+    withLeads(<DescriptionList resource="lead" row={lead} fields={['status', 'owner_name', 'note']} />);
     const list = document.querySelector('dl')!;
     expect(list).toHaveClass('page-field-grid', 'kit-details', 'kit-details-wrap');
     expect([...list.querySelectorAll('dt')].map((term) => term.textContent)).toEqual(['Stage', 'Owner', 'note']);
@@ -227,7 +237,7 @@ describe('Details', () => {
 
   test('a pair the page worked out is drawn as given, and an empty one says so', () => {
     withLeads(
-      <Details
+      <DescriptionList
         resource="lead"
         row={lead}
         fields={[
@@ -242,7 +252,7 @@ describe('Details', () => {
   });
 
   test('columns fixes the count at a desk', () => {
-    withLeads(<Details resource="lead" row={lead} fields={['status']} columns={2} />);
+    withLeads(<DescriptionList resource="lead" row={lead} fields={['status']} columns={2} />);
     const list = document.querySelector('dl') as HTMLElement;
     expect(list).toHaveAttribute('data-columns', '2');
     expect(list.style.getPropertyValue('--page-field-columns')).toBe('repeat(2, minmax(0, 1fr))');
@@ -253,7 +263,7 @@ describe("a table's avatar column", () => {
   test("a disc before the cell's own name, the picture from the row's field, inside the row's one link", async () => {
     withLeads(
       <Table
-        label="Leads"
+        ariaLabel="Leads"
         rows={[{ id: 1, owner_name: 'Ada Stone', photo: '' }]}
         columns={[{ key: 'owner_name', label: 'Owner', avatar: 'photo' }]}
         onRowClick={() => {}}
@@ -269,7 +279,7 @@ describe("a table's avatar column", () => {
   test('a function of the row names the face itself', async () => {
     withLeads(
       <Table
-        label="Leads"
+        ariaLabel="Leads"
         rows={[{ id: 1, owner: 'Grace Hopper' }]}
         columns={[{ key: 'owner', label: 'Owner', avatar: (row) => ({ name: String(row.owner) }) }]}
       />,
@@ -301,8 +311,8 @@ describe("a status value under each of the looks' recipes", () => {
 describe('Bars', () => {
   test('a list of meters against the largest, each saying its group, its figure and its note', () => {
     drawn(
-      <Bars
-        label="By stage"
+      <BreakdownList
+        ariaLabel="By stage"
         format="money"
         items={[
           { key: 'lead', label: 'Lead', value: 1200, note: '4 deals' },

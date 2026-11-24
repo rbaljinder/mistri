@@ -51,7 +51,7 @@ test('a step header is one h1 with its lead and a decorative mark', () => {
   expect(screen.getByTestId('mark').parentElement).toHaveAttribute('aria-hidden', 'true');
 });
 
-test('the action bar runs Back and the primary, and a busy primary refuses a second press', async () => {
+test('the action bar runs Back and the primary, and a loading primary refuses a second press', async () => {
   const user = userEvent.setup();
   const back = vi.fn();
   const next = vi.fn();
@@ -60,7 +60,7 @@ test('the action bar runs Back and the primary, and a busy primary refuses a sec
   await user.click(screen.getByRole('button', { name: 'Continue' }));
   expect(back).toHaveBeenCalledTimes(1);
   expect(next).toHaveBeenCalledTimes(1);
-  rerender(<ActionBar primary={{ label: 'Continue', onClick: next, busy: true, busyLabel: 'Sending…' }} />);
+  rerender(<ActionBar primary={{ label: 'Continue', onClick: next, loading: true, loadingLabel: 'Sending…' }} />);
   expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Sending…' }));
   expect(next).toHaveBeenCalledTimes(1);

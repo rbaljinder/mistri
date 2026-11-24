@@ -1,0 +1,677 @@
+/* AppShell navigation rail, responsive mobile drawer, sticky topbar, and PageHeader chrome. */
+@layer m-surfaces {
+@layer views {
+  /* ======================================================================== */
+  /* 10. AppShell, Sidebar, TopBar & PageHeader (src/views/AppShell.tsx)      */
+  /* ======================================================================== */
+
+  .nx-app-shell {
+    /* Where the skip link is placed from. */
+    position: relative;
+    display: flex;
+    width: 100%;
+    min-height: 34rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--ground);
+    overflow: hidden;
+  }
+
+  .nx-sidebar {
+    display: flex;
+    flex-direction: column;
+    width: 15.25rem;
+    flex-shrink: 0;
+    border-right: 1px solid var(--line);
+    background: var(--raised);
+    transition: width var(--t-popover) var(--ease-out);
+
+    &[data-collapsed] {
+      width: 3.5rem;
+    }
+  }
+
+  .nx-sidebar-in-drawer {
+    width: 100%;
+    height: 100%;
+    border-right: 0;
+    background: transparent;
+  }
+
+  .nx-sidebar-top {
+    padding: var(--space-3h);
+  }
+
+  .nx-workspace-trigger {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: var(--space-3);
+    width: 100%;
+    height: 2.25rem;
+    padding-inline: var(--space-2h);
+    border: 1px solid transparent;
+    border-radius: var(--radius);
+    background: transparent;
+    box-shadow: none;
+    text-align: left;
+
+    @media (hover: hover) {
+      &:hover {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+      border-color: color-mix(in srgb, var(--line) 72%, transparent);
+    }
+    }
+
+    .nx-sidebar[data-collapsed] & {
+      justify-content: center;
+      padding-inline: 0;
+    }
+  }
+
+  .nx-workspace-logo {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    height: 1.5rem;
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: var(--text-xs);
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .nx-workspace-logo-sm {
+    width: 1.25rem;
+    height: 1.25rem;
+    font-size: var(--text-2xs);
+  }
+
+  .nx-workspace-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    line-height: 1.15;
+  }
+
+  .nx-workspace-name {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nx-workspace-plan {
+    font-size: var(--text-2xs);
+    color: var(--ink-muted);
+  }
+
+  .nx-workspace-caret {
+    color: var(--ink-subtle);
+    flex-shrink: 0;
+  }
+
+  .nx-workspace-menu {
+    min-width: 13.5rem;
+    padding: var(--space-2);
+  }
+
+  .nx-workspace-menu-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-height: 1.9375rem;
+    padding: var(--space-2) var(--space-3);
+    font-size: var(--text-sm);
+  }
+
+  .nx-workspace-menu-name {
+    flex: 1 1 auto;
+    font-weight: 500;
+  }
+
+  .nx-workspace-check {
+    color: var(--accent-ink);
+  }
+
+  .nx-sidebar-search-wrap {
+    padding: 0 var(--space-3h) var(--space-3);
+  }
+
+  .nx-sidebar-search-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2h);
+    width: 100%;
+    height: var(--control-h-sm);
+    padding-inline: var(--space-3);
+    border-radius: var(--control-radius, var(--radius));
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent));
+    color: var(--ink-muted);
+    font-family: var(--sans);
+    font-size: var(--text-sm);
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+      border-color: var(--line-strong);
+      color: var(--ink);
+    }
+    }
+
+    .nx-sidebar[data-collapsed] & {
+      justify-content: center;
+      padding-inline: 0;
+    }
+  }
+
+  .nx-sidebar-search-text {
+    flex: 1 1 auto;
+    text-align: left;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nx-sidebar-nav {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    flex: 1 1 auto;
+    padding: var(--space-2) var(--space-3h) var(--space-4);
+    overflow-y: auto;
+  }
+
+  .nx-sidebar-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .nx-sidebar-section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .nx-sidebar-section-head,
+  .nx-sidebar-section-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 1.375rem;
+    padding: 0 var(--space-2h);
+    border: 0;
+    border-radius: max(0px, calc(var(--radius) - 3px));
+    background: transparent;
+    color: var(--ink-subtle);
+    font-family: var(--sans);
+    font-size: var(--text-xs);
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-align: left;
+  }
+
+  .nx-sidebar-section-btn {
+    cursor: pointer;
+    @media (hover: hover) {
+      &:hover {
+      color: var(--ink);
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+    }
+    }
+  }
+
+  .nx-sidebar-section-caret {
+    transition: transform var(--t-hover) var(--ease-out);
+    &[data-closed] {
+      transform: rotate(-90deg);
+    }
+  }
+
+  .nx-sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    width: 100%;
+    height: 1.9375rem;
+    padding-inline: var(--space-3);
+    border: 0;
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    background: transparent;
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+    font-family: var(--sans);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    text-decoration: none;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color var(--t-hover) var(--ease-out), color var(--t-hover) var(--ease-out);
+
+    @media (hover: hover) {
+      &:hover:not(:disabled, [data-disabled]) {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+      color: var(--ink);
+    }
+    }
+
+    &[data-active] {
+      background: color-mix(in srgb, var(--ink) 9%, var(--surface));
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    &:is(:disabled, [data-disabled]) {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+
+    .nx-sidebar[data-collapsed] & {
+      justify-content: center;
+      padding-inline: 0;
+    }
+  }
+
+  .nx-sidebar-item-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-muted);
+    flex-shrink: 0;
+
+    .nx-sidebar-item[data-active] & {
+      color: var(--accent-ink);
+    }
+  }
+
+  .nx-sidebar-item-label {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nx-sidebar-item-count {
+    font-family: var(--code);
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
+
+    &[data-tone='accent'] { color: var(--accent-ink); }
+    &[data-tone='good'],
+    &[data-tone='success'] { color: var(--status-good); }
+    &[data-tone='warning'] { color: var(--status-warning); }
+    &[data-tone='info'] { color: var(--status-info); }
+    &[data-tone='critical'],
+    &[data-tone='danger'] { color: var(--status-critical); }
+  }
+
+  .nx-sidebar-footer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3h);
+    border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  }
+
+  .nx-sidebar-user-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+
+    .nx-sidebar[data-collapsed] & {
+      justify-content: center;
+    }
+  }
+
+  .nx-sidebar-user-info {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    min-width: 0;
+  }
+
+  .nx-sidebar-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.625rem;
+    height: 1.625rem;
+    border-radius: var(--pill-radius, 999px);
+    background: var(--accent-soft);
+    border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .nx-sidebar-avatar-fallback {
+    font-size: var(--text-2xs);
+    font-weight: 650;
+    color: var(--accent-ink);
+  }
+
+  .nx-sidebar-user-text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    line-height: 1.2;
+  }
+
+  .nx-sidebar-user-name {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nx-sidebar-user-sub {
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nx-sidebar-settings-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.625rem;
+    height: 1.625rem;
+    border: 0;
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+      color: var(--ink);
+    }
+    }
+  }
+
+  /* Mobile Drawer overrides */
+  .nx-shell-drawer-content {
+    width: min(17.5rem, 86vw);
+    max-height: 100dvh;
+    height: 100dvh;
+    padding: 0;
+    gap: 0;
+    background: var(--raised);
+  }
+
+  .nx-shell-drawer-bar {
+    display: flex;
+    justify-content: flex-end;
+    padding: var(--space-3) var(--space-3h) 0;
+  }
+
+  .nx-shell-drawer-close {
+    width: 1.75rem;
+    height: 1.75rem;
+    padding: 0;
+    border: 0;
+    background: transparent;
+  }
+
+  /* Main Stage, TopBar & PageHeader */
+  .nx-app-shell-stage {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    background: var(--surface);
+  }
+
+  .nx-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    height: 2.875rem;
+    padding-inline: var(--space-5);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .nx-topbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3h);
+    min-width: 0;
+  }
+
+  .nx-topbar-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid transparent;
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+      color: var(--ink);
+    }
+    }
+  }
+
+  .nx-breadcrumb-sep {
+    color: color-mix(in srgb, var(--ink-subtle) 65%, var(--surface));
+    flex-shrink: 0;
+  }
+
+  .nx-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2h);
+    flex-shrink: 0;
+  }
+
+  .nx-page-header {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    padding: 0 0 var(--space-4h);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    background: transparent;
+
+    .nx-app-shell-stage > & {
+      padding: var(--space-5) var(--space-6) 0;
+      background: var(--surface);
+
+      &:not(:has(.nx-page-header-tabs)) {
+        padding-bottom: var(--space-4h);
+      }
+    }
+
+    &:has(.nx-page-header-tabs) {
+      padding-bottom: 0;
+    }
+  }
+
+  .nx-page-header-main {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4h);
+  }
+
+  .nx-page-header-copy {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1h);
+    min-width: 0;
+  }
+
+  .nx-page-header-title-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .nx-page-header-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+  }
+
+  .nx-page-header-title {
+    margin: 0;
+    font-family: var(--heading-font, var(--sans));
+    font-size: var(--text-xl);
+    font-weight: 650;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    line-height: 1.25;
+  }
+
+  .nx-page-header-subtitle {
+    margin: 0;
+    font-size: var(--text-base);
+    color: var(--ink-muted);
+    line-height: 1.45;
+  }
+
+  .nx-page-header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  /* Inside an App the header is the kit's own head (`.dash-head`), whose verbs never shrink (`.applist-head-tools`,
+     written for a list's two or three): a page's own actions, a segmented control and three buttons at 390px, ran
+     off the page's edge. Here the row may narrow to the line it is on and wrap inside it. `!important` because the
+     kit's rule sits in a layer over this one; it is the only way to yield from under it, and it touches nothing
+     but a PageHeader's own row (`data-page-actions`, AppShell.tsx). */
+  .dash-head-actions[data-page-actions] {
+    flex-wrap: wrap;
+    flex-shrink: 1 !important;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .nx-page-header-tabs {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    overflow-x: auto;
+  }
+
+  .nx-page-header-tab {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    height: 2.125rem;
+    padding-inline: var(--space-3h);
+    border: 0;
+    background: transparent;
+    color: var(--ink-muted);
+    font-family: var(--sans);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: color var(--t-hover);
+
+    @media (hover: hover) {
+      &:hover:not(:disabled) {
+      color: var(--ink);
+    }
+    }
+
+    &[data-active] {
+      color: var(--ink);
+      font-weight: 600;
+
+      &::after {
+        position: absolute;
+        inset-inline: 0.375rem;
+        bottom: 0;
+        height: 2px;
+        border-radius: 2px 2px 0 0;
+        background: var(--accent);
+        content: '';
+      }
+    }
+
+    &:disabled {
+      opacity: 0.45;
+      pointer-events: none;
+    }
+  }
+
+  .nx-page-tab-icon {
+    display: inline-flex;
+  }
+
+  .nx-app-shell-main {
+    flex: 1 1 auto;
+    padding: var(--space-6) var(--space-6);
+    min-width: 0;
+    background: var(--ground);
+
+    /* Focused only by the skip link, which is its own announcement: a ring around the whole page says nothing. */
+    &:focus {
+      outline: none;
+    }
+  }
+
+  /* Out of sight until it has the keyboard's focus, then drawn over the shell's corner. */
+  .nx-skip-link {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    z-index: 60;
+    padding: var(--space-3) var(--space-4);
+    border-radius: var(--radius);
+    background: var(--surface);
+    color: var(--ink);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    box-shadow: var(--shadow-pop);
+
+    &:not(:focus-visible) {
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
+
+    &:focus-visible {
+      outline: var(--focus-width, 2px) solid var(--focus, var(--accent));
+      outline-offset: 2px;
+    }
+  }
+}
+}

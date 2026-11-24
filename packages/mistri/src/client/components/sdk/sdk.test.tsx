@@ -10,11 +10,14 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import * as ui from './index.js';
-import type * as PublicUi from '../../../../schema/ui.js';
-import { Dropdown } from '../../../../../kit/src/client/components/Dropdown.js';
+import * as primitives from './primitives.js';
+import * as charts from './charts.js';
+import * as views from './views.js';
+import * as page from './page.js';
+import { Dropdown, Tabs } from '@mistriwork/ui';
 import { SplitListDetail } from '../SplitListDetail.js';
 import { UI_EXPORTS } from '../../../shared/uiSdk.js';
-import { Card, Meter, Stat, Table, Value } from './kit.js';
+import { Card, Meter, StatCard, Table, Value } from './index.js';
 import { UiHostContext, type UiHost } from './context.js';
 import { fixtures, renderSection, renderValue } from './testing.js';
 import { FixtureSection } from './fixture.js';
@@ -26,19 +29,25 @@ describe('the SDK surface', () => {
     expect(Object.keys(ui).sort()).toEqual([...UI_EXPORTS].sort());
   });
 
-  test('public presentation primitives are the host implementations with matching props', () => {
-    const dropdown: typeof PublicUi.Dropdown = ui.Dropdown;
-    const split: typeof PublicUi.SplitListDetail = ui.SplitListDetail;
-    const internalDropdown: typeof Dropdown = dropdown;
-    const internalSplit: typeof SplitListDetail = split;
-    expect(internalDropdown).toBe(Dropdown);
-    expect(internalSplit).toBe(SplitListDetail);
+  test('public presentation primitives share identical function references across ui, page, primitives, charts, and views', () => {
+    expect(ui.Dropdown).toBe(Dropdown);
+    expect(page.Tabs).toBe(Tabs);
+    expect(page.PageHeader).toBe(views.PageHeader);
+    for (const [name, fn] of Object.entries(ui)) {
+      if (name in primitives) expect(fn).toBe((primitives as Record<string, unknown>)[name]);
+      if (name in charts) expect(fn).toBe((charts as Record<string, unknown>)[name]);
+      if (name in views) expect(fn).toBe((views as Record<string, unknown>)[name]);
+      expect((page as Record<string, unknown>)[name]).toBe(fn);
+    }
+    const { container } = render(<ui.SplitView list={<p>Items</p>} detail={<p>Selected</p>} selected />);
+    expect(container.querySelector('.split-list-detail')).not.toBeNull();
+    void SplitListDetail;
   });
 
   test("the split's layout props the host sets for itself are not on the public type", () => {
     // @ts-expect-error `expandList` belongs to the shell's own rooms.
-    const expand: Parameters<typeof PublicUi.SplitListDetail>[0] = { list: null, expandList: true };
-    expect(expand.list).toBeNull();
+    const expand: Parameters<typeof ui.SplitView>[0] = { list: null, detail: null, expandList: true };
+    expect('list' in expand && expand.list).toBeNull();
   });
 });
 
@@ -61,9 +70,9 @@ describe('the kit', () => {
     const { container } = withHost(
       <>
         <Card title="Totals">
-          <Stat label="Things" value="17" />
+          <StatCard label="Things" value="17" />
         </Card>
-        <Stat label="Alone" value="1" />
+        <StatCard label="Alone" value="1" />
       </>,
     );
     const stats = container.querySelectorAll('.kit-stat');
@@ -122,7 +131,7 @@ describe('the kit', () => {
     ];
 
     test("is the look's table: each cell a value, dressed as its column is, with a name for assistive technology", () => {
-      withHost(<Table label="Homes" columns={columns} rows={rows} />);
+      withHost(<Table ariaLabel="Homes" columns={columns} rows={rows} />);
       const table = screen.getByRole('table', { name: 'Homes' });
       expect(table.closest('.table-wrap')).not.toBeNull();
       expect(screen.getAllByRole('columnheader').map((head) => head.textContent)).toEqual(['Home', 'Status', 'Rent']);
@@ -131,17 +140,17 @@ describe('the kit', () => {
     });
 
     test('keeps every digit of an id past 2^53 a column draws', () => {
-      withHost(<Table label="Homes" columns={[{ key: 'id', label: 'Id' }]} rows={[{ id: '9007199254740993' }]} />);
+      withHost(<Table ariaLabel="Homes" columns={[{ key: 'id', label: 'Id' }]} rows={[{ id: '9007199254740993' }]} />);
       expect(screen.getByText('9007199254740993')).toBeInTheDocument();
     });
 
     test('sorts by the caller: a head is a button only with onSort, says which way it stands, and never reorders the rows', () => {
-      const { rerender } = withHost(<Table label="Homes" columns={columns} rows={rows} />);
+      const { rerender } = withHost(<Table ariaLabel="Homes" columns={columns} rows={rows} />);
       expect(screen.queryByRole('button')).toBeNull();
       const onSort = vi.fn();
       rerender(
         <UiHostContext.Provider value={host}>
-          <Table label="Homes" columns={columns} rows={rows} sort={{ key: 'rent', direction: 'desc' }} onSort={onSort} />
+          <Table ariaLabel="Homes" columns={columns} rows={rows} sort={{ key: 'rent', direction: 'desc' }} onSort={onSort} />
         </UiHostContext.Provider>,
       );
       expect(screen.getByRole('columnheader', { name: /Rent/ })).toHaveAttribute('aria-sort', 'descending');
@@ -158,7 +167,7 @@ describe('the kit', () => {
 
     test('links a row by its first cell, once for a click on it and once for a click beside it', () => {
       const onRowClick = vi.fn();
-      withHost(<Table label="Homes" columns={columns} rows={rows} onRowClick={onRowClick} />);
+      withHost(<Table ariaLabel="Homes" columns={columns} rows={rows} onRowClick={onRowClick} />);
       fireEvent.click(screen.getByRole('button', { name: 'Maple Court' }));
       expect(onRowClick).toHaveBeenCalledTimes(1);
       expect(onRowClick).toHaveBeenLastCalledWith(rows[0]);
@@ -175,7 +184,7 @@ describe('the kit', () => {
       const identityRows = [{ name: 'Maple Court', ref: 'EXT-0000000000000000000000000001', status: 'ready' }];
 
       test('draws a secondary line under the primary, and the weight is the primary line only', () => {
-        withHost(<Table label="Homes" columns={identity} rows={identityRows} />);
+        withHost(<Table ariaLabel="Homes" columns={identity} rows={identityRows} />);
         const secondary = screen.getByText('EXT-0000000000000000000000000001');
         expect(secondary).toHaveClass('kit-cell-secondary');
         expect(secondary).not.toHaveClass('kit-cell-primary-strong');
@@ -189,7 +198,7 @@ describe('the kit', () => {
       test('takes a function for the secondary and `emphasis` to turn the first column down', () => {
         withHost(
           <Table
-            label="Homes"
+            ariaLabel="Homes"
             columns={[{ key: 'name', label: 'Home', emphasis: 'normal', secondary: (row) => `#${String(row.name).length}` }]}
             rows={identityRows}
           />,
@@ -200,7 +209,7 @@ describe('the kit', () => {
 
       test('holds both lines in the one link, with no interactive element nested in it, and the copy button beside it', async () => {
         const onRowClick = vi.fn();
-        withHost(<Table label="Homes" columns={identity} rows={identityRows} onRowClick={onRowClick} />);
+        withHost(<Table ariaLabel="Homes" columns={identity} rows={identityRows} onRowClick={onRowClick} />);
         const link = screen.getByRole('button', { name: /Maple Court/ });
         expect(link).toHaveClass('kit-table-link');
         expect(link).toHaveTextContent('EXT-0000000000000000000000000001');
@@ -227,7 +236,7 @@ describe('the kit', () => {
     test('says its empty note under the head, and lets a column draw its own cell', () => {
       withHost(
         <Table
-          label="Homes"
+          ariaLabel="Homes"
           columns={[{ key: 'name', label: 'Home', render: (row) => <em>{String(row.name).toUpperCase()}</em> }]}
           rows={[] as Array<{ name: string }>}
           empty="No homes yet."
@@ -252,7 +261,7 @@ describe('the kit', () => {
   });
 
   test('a fluid meter stretches across what it is given; ariaLabel says other words than a string label', () => {
-    withHost(<Meter value={3} max={4} tone="warn" label="3/4" ariaLabel="Steps done" size="fluid" />);
+    withHost(<Meter value={3} max={4} tone="warning" label="3/4" ariaLabel="Steps done" fluid />);
     const meter = screen.getByRole('meter', { name: 'Steps done' });
     expect(meter).toHaveClass('meter-wrap', 'meter-warn', 'meter-fluid');
     expect(meter).not.toHaveAttribute('aria-valuetext');
@@ -431,12 +440,12 @@ describe('a value renderer in the page', () => {
 
 describe('the Segmented, Stat and Columns blocks', () => {
   test('Segmented is one radio group whose arrows move the choice', () => {
-    const onChange = vi.fn();
+    const onValueChange = vi.fn();
     render(
-      <ui.Segmented
-        label="Show"
+      <ui.SegmentedControl
+        ariaLabel="Show"
         value="all"
-        onChange={onChange}
+        onValueChange={onValueChange}
         options={[
           { value: 'all', label: 'All' },
           { value: 'late', label: 'Late', count: 3 },
@@ -447,13 +456,13 @@ describe('the Segmented, Stat and Columns blocks', () => {
     expect(screen.getByRole('radio', { name: /All/ })).toHaveAttribute('aria-checked', 'true');
     screen.getByRole('radio', { name: /All/ }).focus();
     fireEvent.keyDown(screen.getByRole('radio', { name: /All/ }), { key: 'ArrowRight' });
-    expect(onChange).toHaveBeenCalledWith('late');
+    expect(onValueChange).toHaveBeenCalledWith('late');
   });
 
-  test('Stat says its value and change, and Columns says every column in its table', () => {
+  test('Stat says its value and delta, and Columns says every column in its table', () => {
     const { container } = render(
       <>
-        <ui.Stat label="Events" value="1,204" change={{ text: '↑ 12% vs prior 30 d' }} trend={[1, 3, 2, 5]} />
+        <ui.StatCard label="Events" value="1,204" delta={{ value: '+12%', against: 'vs prior 30 d' }} trend={[1, 3, 2, 5]} />
         <ui.Columns
           series={[
             { key: 'a', label: 'Tracked' },
@@ -467,7 +476,8 @@ describe('the Segmented, Stat and Columns blocks', () => {
       </>,
     );
     expect(screen.getByText('1,204')).toBeInTheDocument();
-    expect(screen.getByText('↑ 12% vs prior 30 d')).toBeInTheDocument();
+    expect(screen.getByText('+12%')).toBeInTheDocument();
+    expect(screen.getByText('vs prior 30 d')).toBeInTheDocument();
     expect(screen.getAllByText('Tracked').length).toBeGreaterThan(0);
     expect(container.querySelectorAll('.chart-data tbody tr')).toHaveLength(2);
   });
@@ -550,11 +560,11 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
 
   test('Items is a named list of rows with no head, and says `empty` when it has none', () => {
     const { container, rerender } = render(
-      <ui.Items label="Open work" empty={<span>Nothing open</span>}>
-        <ui.Item lead={<i>!</i>} title="Call Ana" note="Due today" action={<button type="button">Done</button>} />
+      <ui.ItemList ariaLabel="Open work" empty={<span>Nothing open</span>}>
+        <ui.ItemRow leading={<i>!</i>} title="Call Ana" description="Due today" actions={<button type="button">Done</button>} />
         {null}
-        <ui.Item title="Send quote" />
-      </ui.Items>,
+        <ui.ItemRow title="Send quote" />
+      </ui.ItemList>,
     );
     expect(screen.getByRole('list', { name: 'Open work' })).toBeInTheDocument();
     expect(screen.getAllByRole('listitem')).toHaveLength(2);
@@ -562,9 +572,9 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
     expect(container.querySelector('.kit-item-note')?.textContent).toBe('Due today');
     expect(container.querySelector('.kit-item-lead')?.textContent).toBe('!');
     rerender(
-      <ui.Items label="Open work" empty={<span>Nothing open</span>}>
+      <ui.ItemList ariaLabel="Open work" empty={<span>Nothing open</span>}>
         {false}
-      </ui.Items>,
+      </ui.ItemList>,
     );
     expect(screen.queryByRole('list')).toBeNull();
     expect(screen.getByText('Nothing open')).toBeInTheDocument();
@@ -572,13 +582,13 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
 
   test('Items in groups are a list of lists, each under a head its own rows are named by', () => {
     const { container } = render(
-      <ui.Items
-        label="Work"
+      <ui.ItemList
+        ariaLabel="Work"
         empty={<span>Nothing open</span>}
         groups={[
-          { title: 'Overdue', count: 2, items: [<ui.Item key="a" title="Call Ana" />, <ui.Item key="b" title="Send quote" />] },
+          { title: 'Overdue', count: 2, items: [<ui.ItemRow key="a" title="Call Ana" />, <ui.ItemRow key="b" title="Send quote" />] },
           { title: 'Nothing here', items: [] },
-          { key: 'today', title: 'Today', items: <ui.Item title="Ring Sam" lead={<i>9:00</i>} /> },
+          { key: 'today', title: 'Today', items: <ui.ItemRow title="Ring Sam" leading={<i>9:00</i>} /> },
         ]}
       />,
     );
@@ -601,7 +611,7 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
   });
 
   test('Items whose groups all have no rows says `empty`', () => {
-    render(<ui.Items label="Work" empty={<span>Nothing open</span>} groups={[{ title: 'Overdue', items: null }]} />);
+    render(<ui.ItemList ariaLabel="Work" empty={<span>Nothing open</span>} groups={[{ title: 'Overdue', items: null }]} />);
     expect(screen.queryByRole('list')).toBeNull();
     expect(screen.getByText('Nothing open')).toBeInTheDocument();
   });
@@ -610,13 +620,13 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
     const { container } = render(
       <>
         <ui.Card title="In">
-          <ui.Items label="a">
-            <ui.Item title="One" />
-          </ui.Items>
+          <ui.ItemList ariaLabel="a">
+            <ui.ItemRow title="One" />
+          </ui.ItemList>
         </ui.Card>
-        <ui.Items label="b">
-          <ui.Item title="Two" />
-        </ui.Items>
+        <ui.ItemList ariaLabel="b">
+          <ui.ItemRow title="Two" />
+        </ui.ItemList>
       </>,
     );
     const [inside, alone] = container.querySelectorAll('.kit-items');
@@ -628,9 +638,9 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
     const open = vi.fn();
     const act = vi.fn();
     const { container } = render(
-      <ui.Items label="Rows">
-        <ui.Item title="Ana Ruiz" note="note" onClick={open} action={<button onClick={act}>Archive</button>} />
-      </ui.Items>,
+      <ui.ItemList ariaLabel="Rows">
+        <ui.ItemRow title="Ana Ruiz" description="note" onClick={open} actions={<button onClick={act}>Archive</button>} />
+      </ui.ItemList>,
     );
     // The title is the one target; the action's button is its own.
     expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Ana Ruiz', 'Archive']);
@@ -646,10 +656,10 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
 
   test('an Item with href is one link, and a plain Item is no target at all', () => {
     render(
-      <ui.Items label="Rows">
-        <ui.Item title="Lead 4" href="/leads/4" />
-        <ui.Item title="Plain" />
-      </ui.Items>,
+      <ui.ItemList ariaLabel="Rows">
+        <ui.ItemRow title="Lead 4" href="/leads/4" />
+        <ui.ItemRow title="Plain" />
+      </ui.ItemList>,
     );
     expect(screen.getByRole('link', { name: 'Lead 4' })).toHaveAttribute('href', '/leads/4');
     expect(screen.getAllByRole('link')).toHaveLength(1);
@@ -662,10 +672,10 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
     const host = { follow } as unknown as UiHost;
     render(
       <UiHostContext.Provider value={host}>
-        <ui.Items label="Rows">
-          <ui.Item title="Lead 4" note="note" href="/leads/4" />
-          <ui.Item title="Docs" href="https://example.com/docs" />
-        </ui.Items>
+        <ui.ItemList ariaLabel="Rows">
+          <ui.ItemRow title="Lead 4" description="note" href="/leads/4" />
+          <ui.ItemRow title="Docs" href="https://example.com/docs" />
+        </ui.ItemList>
       </UiHostContext.Provider>,
     );
     const lead = screen.getByRole('link', { name: 'Lead 4' });
@@ -678,7 +688,7 @@ describe('a Card with a count or an action, Items, Beside and the nav ground', (
     expect(fireEvent.click(screen.getByRole('link', { name: 'Docs' }))).toBe(true);
     expect(follow).toHaveBeenCalledTimes(2);
     cleanup();
-    render(<ui.Item title="Bare" href="/leads/5" />);
+    render(<ui.ItemRow title="Bare" href="/leads/5" />);
     expect(fireEvent.click(screen.getByRole('link', { name: 'Bare' }))).toBe(true);
   });
 
@@ -744,7 +754,7 @@ describe('the words and levels a page under the platform head needs', () => {
 
   test('Text and VisuallyHidden are in the ui entry the guide names them in', () => {
     const { container } = render(
-      <ui.Text tone="muted" size="sm">
+      <ui.Text muted size="sm">
         A note<ui.VisuallyHidden>, for the screen reader</ui.VisuallyHidden>
       </ui.Text>,
     );
@@ -774,7 +784,7 @@ describe('a Table whose box scrolls sideways', () => {
 
   test('is a focusable, named region while it scrolls (WCAG 2.1.1), and a plain box while it fits', async () => {
     measured(480, 300);
-    const { container, unmount } = render(<ui.Table label="Open visits" columns={columns} rows={rows} />);
+    const { container, unmount } = render(<ui.Table ariaLabel="Open visits" columns={columns} rows={rows} />);
     const box = await vi.waitFor(() => {
       const found = container.querySelector('.kit-table')!;
       expect(found).toHaveAttribute('tabindex', '0');
@@ -784,7 +794,7 @@ describe('a Table whose box scrolls sideways', () => {
     expect(screen.getByRole('region', { name: 'Open visits' })).toBe(box);
     unmount();
     measured(300, 300);
-    const fits = render(<ui.Table label="Open visits" columns={columns} rows={rows} />);
+    const fits = render(<ui.Table ariaLabel="Open visits" columns={columns} rows={rows} />);
     await Promise.resolve();
     expect(fits.container.querySelector('.kit-table')).not.toHaveAttribute('tabindex');
     expect(screen.queryByRole('region')).toBeNull();
@@ -806,7 +816,7 @@ describe('a Table whose box scrolls sideways', () => {
       render: (row: Deal) => row[key],
     }));
     const { container } = render(
-      <ui.Table label="Deals" columns={four} rows={[{ name: 'Acme renewal', owner: 'Ada', stage: 'Won', amount: '$900' }]} />,
+      <ui.Table ariaLabel="Deals" columns={four} rows={[{ name: 'Acme renewal', owner: 'Ada', stage: 'Won', amount: '$900' }]} />,
     );
     await vi.waitFor(() => expect(container.querySelectorAll('th')).toHaveLength(2));
     expect([...container.querySelectorAll('th')].map((th) => th.textContent)).toEqual(['Name', 'Owner']);

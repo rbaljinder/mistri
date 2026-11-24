@@ -179,7 +179,7 @@ export function ImportDialog({
   const problems = (report: ImportReport | undefined) =>
     report?.refused.length ? (
       <Button
-        intent="quiet"
+        variant="ghost"
         onClick={() =>
           download(`${stem(table.name)}-import-problems.csv`, importErrorCsv(file!.header, file!.rows, report.refused), 'text/csv')
         }
@@ -276,10 +276,10 @@ export function ImportDialog({
             </p>
           )}
           <div className="confirm-actions import-actions">
-            <Button intent="quiet" onClick={blankSheet}>
+            <Button variant="ghost" onClick={blankSheet}>
               {say('downloadABlankSheet')}
             </Button>
-            <Button intent="secondary" onClick={onClose}>
+            <Button variant="secondary" onClick={onClose}>
               {say('common.cancel')}
             </Button>
           </div>
@@ -320,7 +320,7 @@ export function ImportDialog({
                             disabled: mapping.some((name, other) => other !== index && name === field.name),
                           })),
                         ]}
-                        onChange={(next) => {
+                        onValueChange={(next) => {
                           setMapping(mapping.map((name, other) => (other === index ? next || null : name)));
                           setProblem('');
                         }}
@@ -338,7 +338,7 @@ export function ImportDialog({
           )}
           <div className="confirm-actions import-actions">
             <Button
-              intent="secondary"
+              variant="secondary"
               onClick={() => {
                 setStep('file');
                 setProblem('');
@@ -346,7 +346,7 @@ export function ImportDialog({
             >
               {say('common.back')}
             </Button>
-            <Button intent="primary" busy={busy} busyLabel={say('common.checking')} onClick={() => void check()}>
+            <Button variant="primary" loading={busy} loadingLabel={say('common.checking')} onClick={() => void check()}>
               {say('checkRows', { count: file.rows.length })}
             </Button>
           </div>
@@ -383,7 +383,7 @@ export function ImportDialog({
           <div className="confirm-actions import-actions">
             {problems(checked)}
             <Button
-              intent="secondary"
+              variant="secondary"
               onClick={() => {
                 setStep('columns');
                 setProblem('');
@@ -392,7 +392,7 @@ export function ImportDialog({
               {say('common.back')}
             </Button>
             {checked.ready > 0 && (
-              <Button intent="primary" busy={busy} busyLabel={say('importing')} onClick={() => void commit()}>
+              <Button variant="primary" loading={busy} loadingLabel={say('importing')} onClick={() => void commit()}>
                 {checked.refused.length ? say('importTheReadyRows', { count: checked.ready }) : say('importRows', { count: checked.ready })}
               </Button>
             )}
@@ -413,7 +413,7 @@ export function ImportDialog({
           )}
           <div className="confirm-actions import-actions">
             {problems(result)}
-            <Button intent="primary" onClick={onClose}>
+            <Button variant="primary" onClick={onClose}>
               {say('common.done')}
             </Button>
           </div>

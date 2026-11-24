@@ -24,8 +24,8 @@
 
     /* The keyboard is on the input, which is not seen: the ring is drawn on the button that stands for it. */
     & input[type='file']:focus-visible ~ [data-slot='button'] {
-      outline: 2px solid var(--ui-ring);
-      outline-offset: 2px;
+      outline: var(--focus-width, 2px) solid var(--focus, var(--ui-ring-border));
+      outline-offset: var(--focus-offset, 2px);
     }
 
     & [data-slot='button'] {
@@ -81,8 +81,8 @@
     }
 
     &:focus-visible {
-      outline: 2px solid var(--ui-ring);
-      outline-offset: 2px;
+      outline: var(--focus-width, 2px) solid var(--focus, var(--ui-ring-border));
+      outline-offset: var(--focus-offset, 2px);
     }
 
     &[data-checked] {
@@ -142,7 +142,7 @@
       appearance: none;
       width: 1.125rem;
       height: 1.125rem;
-      /* Centres the thumb on the 4px track: (4 - 18) / 2. */
+      /* off-scale: centres the 18px thumb on the 4px track: (4 - 18) / 2. */
       margin-top: -7px;
       border: 2px solid var(--m-accent);
       border-radius: 50%;
@@ -171,8 +171,8 @@
     }
 
     &:focus-visible {
-      outline: 2px solid var(--ui-ring);
-      outline-offset: 2px;
+      outline: var(--focus-width, 2px) solid var(--focus, var(--ui-ring-border));
+      outline-offset: var(--focus-offset, 2px);
     }
 
     &:disabled {

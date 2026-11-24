@@ -23,21 +23,11 @@ import {
   type Ref,
 } from 'react';
 import { Button } from '@ui-sdk/react/button';
-import {
-  Calendar,
-  CalendarDay,
-  CalendarGrid,
-  CalendarHeading,
-  CalendarNext,
-  CalendarPrevious,
-  CalendarWeekday,
-  CalendarWeekdays,
-  CalendarWeeks,
-  createCalendarController,
-} from '@ui-sdk/react/calendar';
+import { useFieldControl } from '@ui-sdk/react/field';
 import { Input } from '@ui-sdk/react/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@ui-sdk/react/popover';
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
+import type { DateFieldCalendarProps } from './internal/DateFieldCalendar.js';
 import {
   clampDate,
   dateBounds,
@@ -45,10 +35,8 @@ import {
   dateParts,
   dateTimeWithinBounds,
   dateWithinBounds,
-  FIRST_DATE,
   isPickerDate,
   isPickerDateTime,
-  LAST_DATE,
   splitDateTime,
   todayInZone,
   withDate,
@@ -56,6 +44,21 @@ import {
 import { popupContainer, useDialogContainer } from './internal/popups.js';
 import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
+
+let CalendarBody: ((props: DateFieldCalendarProps) => ReactNode) | undefined;
+let calendarLoad: Promise<(props: DateFieldCalendarProps) => ReactNode> | undefined;
+/* A load that failed (a deploy replaced the chunk, the network dropped) is forgotten, so the next press asks again:
+   kept, the rejected promise would answer every later open and the calendar could never be shown in this visit. */
+const warmCalendar = () =>
+  (calendarLoad ??= import('./internal/DateFieldCalendar.js').then(
+    (mod) => (CalendarBody = mod.DateFieldCalendar),
+    (cause: unknown) => {
+      calendarLoad = undefined;
+      throw cause;
+    },
+  ));
+/* Warming ahead of a press is a courtesy; its failure is the next open's to retry, not an unhandled rejection. */
+const prewarmCalendar = () => void warmCalendar().catch(() => undefined);
 
 /** What a date field says. A `format` is the locale's numeric date pattern ("MM/DD/YYYY"). */
 export interface DateFieldWords {
@@ -145,6 +148,7 @@ function readDate(text: string, mask: { order: string[] }): string | undefined {
   return isPickerDate(iso) ? iso : undefined;
 }
 
+/** Props for the `DateField` ISO date and wall-clock date-time picker control. */
 export interface DateFieldProps {
   id: string;
   words: DateFieldWords;
@@ -153,7 +157,7 @@ export interface DateFieldProps {
   value: string;
   /** Typed text is preserved, including an incomplete date; callers validate on commit. `day-press` is a day (or Clear,
       or Today) chosen in the calendar. */
-  onChange: (value: string, details: ChangeDetails<'input-change' | 'day-press'>) => void;
+  onValueChange?: (value: string, details: ChangeDetails<'input-change' | 'day-press'>) => void;
   /** Composite blur: never fired while focus moves between the input and calendar. */
   onBlur?: () => void;
   onKeyDown?: (event: KeyboardEvent<HTMLInputElement>) => void;
@@ -168,7 +172,7 @@ export interface DateFieldProps {
   firstDay?: number;
   className?: string;
   name?: string;
-  inputRef?: Ref<HTMLInputElement>;
+  ref?: Ref<HTMLInputElement>;
   placeholder?: string;
   /** A date and a wall-clock time (`YYYY-MM-DD HH:MM`, as the box says it; the `T` a datetime-local control writes is read too): the calendar
       picks the date and keeps the time typed. `min` and `max` then bound the whole value. */
@@ -178,11 +182,12 @@ export interface DateFieldProps {
   /** A popover's words (`trigger-press`, `outside-press`, `escape-key` …), `day-press` when a choice closed it, `open-key` for Alt+ArrowDown, and `disabled` when the
       field was disabled or its bounds stopped agreeing while it was open. */
   onOpenChange?: (open: boolean, details: ChangeDetails<DateFieldOpenReason>) => void;
-  'aria-label'?: string;
+  ariaLabel?: string;
   'aria-invalid'?: AriaAttributes['aria-invalid'];
   'aria-describedby'?: string;
 }
 
+/** Reasons reported to `DateField`'s `onOpenChange` callback. */
 export type DateFieldOpenReason =
   | 'trigger-hover'
   | 'trigger-focus'
@@ -202,49 +207,46 @@ const OPENS = new Set<string>(['trigger-hover', 'trigger-press', 'outside-press'
 const openReason = (said: string | undefined): DateFieldOpenReason =>
   said === 'imperative' ? 'imperative-action' : said && OPENS.has(said) ? (said as DateFieldOpenReason) : 'implicit';
 
-/* The month's two arrows. */
-function Caret({ to }: { to: 'left' | 'right' }) {
-  return (
-    <svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
-      <path d={to === 'left' ? 'M10 3.5L5.5 8l4.5 4.5' : 'M6 3.5L10.5 8 6 12.5'} strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
+/** A date field, or a date and a wall-clock time. No input is parsed as an instant or shifted by a timezone. */
+function DefaultDateField(props: DateFieldProps) {
+  const {
+    id,
+    words,
+    calendarIcon,
+    value,
+    onValueChange,
+    onBlur,
+    onKeyDown,
+    disabled,
+    required,
+    min,
+    max,
+    locale,
+    timezone,
+    now,
+    firstDay = 1,
+    className,
+    name,
+    ref,
+    placeholder,
+    withTime = false,
+    popupRef,
+    onOpenChange,
+    ariaLabel,
+    'aria-invalid': invalid,
+    'aria-describedby': describedBy,
+  } = props;
+  const legacyChange = (props as { onChange?: (value: string, details: ChangeDetails<'input-change' | 'day-press'>) => void }).onChange;
+  const legacyAriaLabel = (props as unknown as Record<string, unknown>)['aria-label'] as string | undefined;
+  const legacyRef = (props as { inputRef?: Ref<HTMLInputElement> }).inputRef;
+  const label = ariaLabel ?? legacyAriaLabel;
+  const targetRef = ref ?? legacyRef;
+  const emit = (next: string, details: ChangeDetails<'input-change' | 'day-press'>) => {
+    onValueChange?.(next, details);
+    legacyChange?.(next, details);
+  };
 
-/** A date field, or a date and a wall-clock time. No input is parsed as an instant or shifted by a timezone. The box
-    and the calendar are one field to whoever listens for its blur: `onBlur` is not said while the keyboard goes
-    between them, and is said once when it leaves both. */
-function DefaultDateField({
-  id,
-  words,
-  calendarIcon,
-  value,
-  onChange,
-  onBlur,
-  onKeyDown,
-  disabled,
-  required,
-  min,
-  max,
-  locale,
-  timezone,
-  now,
-  firstDay = 1,
-  className,
-  name,
-  inputRef,
-  placeholder,
-  withTime = false,
-  popupRef,
-  onOpenChange,
-  'aria-label': label,
-  'aria-invalid': invalid,
-  'aria-describedby': describedBy,
-}: DateFieldProps) {
-  // The calendar only ever sees the date; a wall time's clock stays in the box.
   const datePart = withTime ? (splitDateTime(value)?.date ?? value.slice(0, 10)) : value;
-  /* A range's two ends may for a moment be half typed or the wrong way round. The text stays editable, and the
-     calendar is shut until they agree. */
   const configuredBounds = useMemo(() => {
     try {
       return dateBounds(withTime ? min?.slice(0, 10) : min, withTime ? max?.slice(0, 10) : max);
@@ -256,6 +258,7 @@ function DefaultDateField({
   const today = todayInZone(now ?? new Date(), timezone);
   const seed = () => clampDate(isPickerDate(datePart) ? datePart : today, bounds);
   const [open, setOpenState] = useState(false);
+  const pendingOpen = useRef(false);
   const openCallback = useRef(onOpenChange);
   const blurCallback = useRef(onBlur);
   useLayoutEffect(() => {
@@ -263,16 +266,31 @@ function DefaultDateField({
     blurCallback.current = onBlur;
   });
   const setOpen = (next: boolean, details: ChangeDetails<DateFieldOpenReason>) => {
+    /* The page is told the calendar is open when it is, not when it was asked for: while its code loads there is nothing
+       on screen, and a load that fails or is called off never opened anything to report or to close. */
+    const calledOff = !next && pendingOpen.current && !open;
+    pendingOpen.current = next;
+    if (next && !CalendarBody) {
+      void warmCalendar().then(
+        () => {
+          if (!pendingOpen.current) return;
+          setOpenState(true);
+          openCallback.current?.(true, details);
+        },
+        () => {
+          pendingOpen.current = false;
+        },
+      );
+      return;
+    }
     setOpenState(next);
-    openCallback.current?.(next, details);
+    if (!calledOff) openCallback.current?.(next, details);
   };
   const group = useRef<HTMLSpanElement>(null);
-  /* A calendar opened inside a dialog is drawn inside it, so the dialog's focus trap and its stacking keep it as
-     their own; elsewhere it goes where every popup here does (internal/popups.ts). */
   const container = useDialogContainer(group);
   const trigger = useRef<HTMLButtonElement>(null);
   const input = useRef<HTMLInputElement>(null);
-  useImperativeHandle(inputRef, () => input.current!, []);
+  useImperativeHandle(targetRef, () => input.current!, []);
   const popup = useRef<HTMLDivElement | null>(null);
   const setPopup = useCallback(
     (node: HTMLDivElement | null) => {
@@ -281,20 +299,16 @@ function DefaultDateField({
     },
     [popupRef],
   );
-  const month = useMemo(() => createCalendarController(), []);
   const ownedFocus = useRef(false);
   const blurTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   useEffect(() => () => clearTimeout(blurTimer.current), []);
   const hint = useId();
-  /* A date alone is shown as the locale writes it and kept as ISO; what is being typed stays as typed until the
-     field is left, so a half-typed date is never rewritten under the caret. A date with a time stays ISO text. */
   const mask = useMemo(() => dateMask(locale), [locale]);
   const [draft, setDraft] = useState<string | null>(null);
   const read = (text: string) => (withTime ? readDateTime(text, mask) : readDate(text, mask));
   const shown =
     draft ??
     (withTime ? (isPickerDateTime(value) ? localeDateTime(value, mask) : value) : isPickerDate(value) ? localeText(value, mask) : value);
-  /* One format, the locale's, for the box, its placeholder and the hint a screen reader hears. */
   const pattern = withTime ? `${mask.hint} ${words.timePattern}` : mask.hint;
   useEffect(() => {
     if (draft !== null && value !== (read(draft) ?? draft)) setDraft(null);
@@ -308,17 +322,9 @@ function DefaultDateField({
   useEffect(() => {
     input.current?.setCustomValidity(!bad ? '' : withTime ? words.enterDateAndTime(pattern) : words.enterDate(pattern));
   }, [bad, withTime, pattern]); // eslint-disable-line react-hooks/exhaustive-deps
-  /* While the calendar is open and what bounds it moves under it, the month in view goes to where a day can still
-     be chosen, and the keyboard goes with it where it was on a day. */
   useLayoutEffect(() => {
     if (!open) return;
-    if (!configuredBounds || disabled) {
-      setOpen(false, changeDetails('disabled'));
-      return;
-    }
-    const next = seed();
-    if (month.getMonth() !== next.slice(0, 7)) month.setMonth(next.slice(0, 7));
-    if (popup.current?.querySelector('[data-slot="calendar-day"]:focus')) month.focus(next);
+    if (!configuredBounds || disabled) setOpen(false, changeDetails('disabled'));
   }, [value, min, max, disabled]); // eslint-disable-line react-hooks/exhaustive-deps
   const within = (node: Node | null) => Boolean(node && (group.current?.contains(node) || popup.current?.contains(node)));
   const commitBlur = () => {
@@ -329,7 +335,6 @@ function DefaultDateField({
   };
   const checkBlur = () => {
     clearTimeout(blurTimer.current);
-    // The focus a closing popup hands back lands a moment later; the field is left only if it is not there then.
     blurTimer.current = setTimeout(() => {
       if (!within(document.activeElement)) commitBlur();
     }, 0);
@@ -337,8 +342,6 @@ function DefaultDateField({
   const leave = (event: FocusEvent<HTMLSpanElement>) => {
     if (!event.relatedTarget) return checkBlur();
     clearTimeout(blurTimer.current);
-    // A pointer's focus leaves before the click it lands with: the draft is published now, so a button pressed
-    // outside (a filter's Apply) reads the new value.
     if (!within(event.relatedTarget)) commitBlur();
   };
   const changeOpen = (next: boolean, details: ChangeDetails<DateFieldOpenReason>) => {
@@ -353,27 +356,37 @@ function DefaultDateField({
   };
   const choose = (date: string, details: ChangeDetails<'day-press'>) => {
     setDraft(null);
-    // The keyboard goes back to the button before the day it was on is taken away, and before the caller hears the
-    // value: an enclosing dialog would see the focus fall to the page, and a caller may unmount the field.
     returnToTrigger();
-    onChange(withTime && date ? withDate(value, date) : date, details);
+    emit(withTime && date ? withDate(value, date) : date, details);
     changeOpen(false, details);
   };
   const shut = disabled || !configuredBounds;
+  const DrawnCalendar = CalendarBody;
+  const fieldProps = useFieldControl()?.props({}) as Record<string, unknown> | undefined;
+  const fieldId = typeof fieldProps?.id === 'string' && fieldProps.id ? fieldProps.id : undefined;
+  const fieldLabelledBy =
+    typeof fieldProps?.['aria-labelledby'] === 'string' && fieldProps['aria-labelledby'] ? fieldProps['aria-labelledby'] : undefined;
+  const fieldDescribedBy =
+    typeof fieldProps?.['aria-describedby'] === 'string' && fieldProps['aria-describedby'] ? fieldProps['aria-describedby'] : undefined;
+  const fieldInvalid = fieldProps?.['aria-invalid'] === true || fieldProps?.['aria-invalid'] === 'true';
+  const mergedDescribedBy = [describedBy, fieldDescribedBy && fieldDescribedBy !== describedBy ? fieldDescribedBy : undefined, hint]
+    .filter(Boolean)
+    .join(' ');
   return (
     <span
       ref={group}
       data-slot="date-field"
       data-kind={withTime ? 'with-time' : undefined}
-      // The caller's class is a box's, and the box here is the text and its button together.
       className={className}
+      onPointerEnter={prewarmCalendar}
       onFocus={() => {
         ownedFocus.current = true;
+        prewarmCalendar();
       }}
       onBlur={leave}
     >
       <Input
-        id={id}
+        id={id || fieldId}
         ref={input}
         name={name}
         type="text"
@@ -385,16 +398,14 @@ function DefaultDateField({
         spellCheck={false}
         aria-required={required}
         aria-label={label}
-        aria-invalid={invalid || bad || undefined}
-        aria-describedby={[describedBy, hint].filter(Boolean).join(' ')}
-        /* React's own change, not UI SDK's `onValueChange`: that one hears the `input` event alone, and a value
-           put in the box without one (a browser's autofill, a script that sets it and says `change`) would be
-           shown and never reported. */
+        aria-labelledby={label ? undefined : fieldLabelledBy}
+        aria-invalid={invalid || fieldInvalid || bad || undefined}
+        aria-describedby={mergedDescribedBy}
         onChange={(event) => {
           const text = event.target.value;
           const said = changeDetails('input-change', event);
           setDraft(text);
-          onChange(read(text) ?? text, said);
+          emit(read(text) ?? text, said);
         }}
         onKeyDown={(event) => {
           if (event.altKey && event.key === 'ArrowDown') {
@@ -404,9 +415,6 @@ function DefaultDateField({
           } else onKeyDown?.(event);
         }}
       />
-      {/* A date and a time has a clock of its own beside the text: the platform's time control, which a phone answers
-          with its wheel and a keyboard with its arrows, so nobody has to type "HH:MM" from a hint. It writes the
-          text's time and keeps its date; with no date yet it starts on today's. */}
       {withTime && words.time && (
         <input
           type="time"
@@ -417,22 +425,20 @@ function DefaultDateField({
           onChange={(event) => {
             const clock = event.target.value;
             if (!clock) {
-              onChange(isPickerDate(datePart) ? datePart : '', changeDetails('input-change', event));
+              emit(isPickerDate(datePart) ? datePart : '', changeDetails('input-change', event));
               return;
             }
             const day = isPickerDate(datePart) ? datePart : today;
-            onChange(`${day} ${clock}`, changeDetails('input-change', event));
+            emit(`${day} ${clock}`, changeDetails('input-change', event));
           }}
         />
       )}
-      {/* Read with the box and not seen: how a date is typed, and the key that opens the calendar. */}
       <span id={hint} data-slot="date-field-hint" data-kind="visually-hidden">
         {withTime ? words.dateAndTimeFormat(pattern) : words.dateFormat(pattern)} {words.openWithKeys}
       </span>
       <Popover
         open={open && !shut}
         onOpenChange={(next, details) => {
-          // Escape hands the keyboard back to the button; a press elsewhere leaves it where the press put it.
           if (!next && details.reason === 'escape-key') returnToTrigger();
           changeOpen(next, told(openReason(details.reason), details));
         }}
@@ -447,57 +453,25 @@ function DefaultDateField({
           align="end"
           sideOffset={6}
           container={container ?? popupContainer()}
-          // The keyboard starts on the day, not on the month's arrows, and where it goes on a close is said above.
           initialFocus={() => popup.current?.querySelector<HTMLElement>('[data-slot="calendar-day"][tabindex="0"]')}
           finalFocus="none"
-          // The calendar is called what the caller's words call it. UI SDK names a popover by its button, which
-          // here would say "Choose a date" for the dialog too, so the name it adds is taken off what it draws.
           render={(drawn) => <div {...drawn} aria-labelledby={undefined} />}
         >
-          <Calendar
-            controller={month}
-            value={isPickerDate(datePart) ? datePart : null}
-            defaultMonth={seed().slice(0, 7)}
-            min={bounds.min === FIRST_DATE ? undefined : bounds.min}
-            max={bounds.max === LAST_DATE ? undefined : bounds.max}
-            locale={locale}
-            timeZone={timezone}
-            today={today}
-            weekStartsOn={firstDay}
-            onValueChange={(next, details) => {
-              if (typeof next === 'string') choose(next, told('day-press', details));
-            }}
-          >
-            <CalendarPrevious aria-label={words.previousMonth}>
-              <Caret to="left" />
-            </CalendarPrevious>
-            <CalendarHeading />
-            <CalendarNext aria-label={words.nextMonth}>
-              <Caret to="right" />
-            </CalendarNext>
-            <CalendarGrid>
-              <CalendarWeekdays>{(index) => <CalendarWeekday index={index} />}</CalendarWeekdays>
-              <CalendarWeeks>
-                {(cell) =>
-                  cell.date === datePart ? (
-                    /* The day already chosen is no change to UI SDK's calendar, and is still an answer here: the
-                       reader opened the calendar, saw the day was right, and said so. */
-                    <CalendarDay
-                      value={cell.date}
-                      onClick={(event) => choose(cell.date, changeDetails('day-press', event))}
-                      onKeyDown={(event) => {
-                        if (event.key !== 'Enter' && event.key !== ' ') return;
-                        event.preventDefault();
-                        choose(cell.date, changeDetails('day-press', event));
-                      }}
-                    />
-                  ) : (
-                    <CalendarDay value={cell.date} />
-                  )
-                }
-              </CalendarWeeks>
-            </CalendarGrid>
-          </Calendar>
+          {DrawnCalendar && (
+            <DrawnCalendar
+              datePart={datePart}
+              seeded={seed()}
+              bounds={bounds}
+              locale={locale}
+              timezone={timezone}
+              today={today}
+              firstDay={firstDay}
+              previousMonth={words.previousMonth}
+              nextMonth={words.nextMonth}
+              popupRef={popup}
+              onChoose={choose}
+            />
+          )}
           <div data-slot="action-bar">
             <Button data-variant="quiet" data-size="sm" onClick={(event) => choose('', changeDetails('day-press', event))}>
               {words.clear}
@@ -517,5 +491,5 @@ function DefaultDateField({
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const DateField = slotted('DateField', DefaultDateField, { onChange: [1, 'input-change'], onOpenChange: [1, 'implicit'] });
+/** Editable ISO date or wall-clock date-time field paired with a lazy-loaded popover calendar. */
+export const DateField = slotted('DateField', DefaultDateField, { onValueChange: [1, 'input-change'], onOpenChange: [1, 'implicit'] });

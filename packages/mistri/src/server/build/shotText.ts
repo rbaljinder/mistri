@@ -43,6 +43,23 @@ export async function readPage(page: Page): Promise<PageText> {
   return page.evaluate(READ_PAGE) as Promise<PageText>;
 }
 
+/* The reads a free-form page asks by itself (`useRows`, `useRecord`, `useBreakdown`), under wherever the App is mounted. */
+const PAGE_READ = /\/api\/(?:view\/run|breakdown)$/;
+
+/**
+ * What a run says of a page's read the server could not read as written, or undefined for any other answer.
+ *
+ * A read asked with an operator the object form lacks (`where: { status: { in: [...] } }`) or a column the table
+ * lacks is answered 400, to that read alone, so the page still loads: one that draws `rows.data ?? []` shows an empty
+ * table, and without this nothing a run reports says the read was refused. A 401 or 403 is not this: a page may ask
+ * a read its reader is not served and draw the refusal (`optional: true`).
+ */
+export function refusedRead(status: number, pathname: string, body: unknown): string | undefined {
+  if (status !== 400 || !PAGE_READ.test(pathname)) return undefined;
+  const why = (body as { error?: unknown } | null)?.error;
+  return `a read was refused: ${typeof why === 'string' && why ? why : 'the server answered 400'}`;
+}
+
 /** One page, as the text `--text` prints: a heading line for the address, then only what the page has. */
 export function sayPage(path: string, text: PageText, errors: readonly string[], status?: number): string {
   const lines = [`${path}${status && status >= 400 ? ` (${status})` : ''}`];

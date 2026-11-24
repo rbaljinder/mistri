@@ -62,7 +62,7 @@ export function Picker({
           type: 'text',
           className: 'picker-input',
           placeholder,
-          'aria-label': ariaLabel,
+          ariaLabel,
           autoComplete: 'off',
           spellCheck: false,
         }}

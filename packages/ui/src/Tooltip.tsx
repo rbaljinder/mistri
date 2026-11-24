@@ -17,13 +17,14 @@
  * and otherwise where the page says its popups go.
  */
 import { Tooltip as Note, TooltipContent, TooltipTrigger } from '@ui-sdk/react/tooltip';
-import { useContext, useRef, type ReactNode } from 'react';
+import { useContext, useRef, type ReactNode, type Ref } from 'react';
 import type { ChangeDetails } from './changeDetails.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { describedTrigger, heard } from './internal/layers.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Props for the `Tooltip` hover-and-focus supplementary note. */
 export interface TooltipProps {
   /** The element the note belongs to; a button, a word, an icon. */
   trigger: ReactNode;
@@ -37,18 +38,23 @@ export interface TooltipProps {
       'trigger-hover' | 'trigger-focus' | 'trigger-press' | 'outside-press' | 'escape-key' | 'disabled' | 'imperative-action' | 'implicit'
     >,
   ) => void;
+  side?: 'top' | 'bottom' | 'left' | 'right';
+  align?: 'start' | 'center' | 'end';
   className?: string;
+  ref?: Ref<HTMLDivElement>;
 }
 
-function DefaultTooltip({ trigger, children, open, defaultOpen, onOpenChange, className }: TooltipProps) {
+function DefaultTooltip({ trigger, children, open, defaultOpen, onOpenChange, side, align, className, ref }: TooltipProps) {
   const anchor = useRef<HTMLButtonElement>(null);
   const container = useDialogContainer(anchor);
-  /* The layer is drawn outside the page that opened it; the page's scope goes with it (Modal.tsx). */
   const componentScope = useContext(ComponentStyleScope);
   return (
     <Note open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange && ((next, details) => onOpenChange(next, heard(details)))}>
       <TooltipTrigger render={describedTrigger(trigger)} ref={anchor} />
       <TooltipContent
+        ref={ref}
+        side={side}
+        align={align}
         className={className}
         data-component={componentScope}
         sideOffset={8}
@@ -61,5 +67,5 @@ function DefaultTooltip({ trigger, children, open, defaultOpen, onOpenChange, cl
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Accessible hover-and-focus tooltip note wired to its trigger's `aria-describedby`. */
 export const Tooltip = slotted('Tooltip', DefaultTooltip, { onOpenChange: [1, 'implicit'] });

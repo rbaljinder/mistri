@@ -247,7 +247,7 @@ export function LandingSearch({ section }: { section: Section<'search'> }) {
               <Dropdown
                 ariaLabel={field.label}
                 value={values[field.name] ?? ''}
-                onChange={(value) => set(field.name, value)}
+                onValueChange={(value) => set(field.name, value)}
                 items={[{ value: '', label: field.kind === 'max' ? say('noLimit') : say('common.any') }, ...(field.options ?? [])]}
               />
             )}

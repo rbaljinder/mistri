@@ -215,7 +215,7 @@ test("widths: a key's width is said in the caller's words where it gives them", 
   const heard: string[] = [];
   const host = draw(
     <Widths
-      say={(label, width) => (width === undefined ? `${label}: propia` : `${label}: ${width} px`)}
+      formatWidth={(label, width) => (width === undefined ? `${label}: propia` : `${label}: ${width} px`)}
       onValueChange={(next) => heard.push(JSON.stringify(next))}
     >
       {(widths) => (

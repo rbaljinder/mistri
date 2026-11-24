@@ -7,7 +7,6 @@ export const say = defineMessages({
     one: '{count} more character — open the row to read it',
     other: '{count} more characters — open the row to read it',
   },
-  summing: 'Summing',
   total: 'Total',
   noRowsMatch: 'No rows match.',
   thisTableIsEmpty: 'This table is empty.',

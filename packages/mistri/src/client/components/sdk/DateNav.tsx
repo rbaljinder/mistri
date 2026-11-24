@@ -5,7 +5,7 @@
  * by preventing the key first. `skip` says a day that is not stepped onto (a weekend, a closed day): stepping goes on
  * to the next day that is not skipped. Today is always reachable, skipped or not.
  */
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@mistriwork/ui/Button.js';
 import { DateField } from '@mistriwork/kit/client/components/DateField.js';
 import { addHostListener } from '@mistriwork/kit/client/shellHost.js';
@@ -31,10 +31,11 @@ export function stepDay(from: string, by: number, skip?: (day: string) => boolea
 
 export function DateNav({
   value,
-  onChange,
+  onValueChange,
   step = 'day',
   skip,
   label,
+  ariaLabel,
   locale,
   min,
   max,
@@ -42,13 +43,15 @@ export function DateNav({
 }: {
   /** The day, as `2026-11-14`. */
   value: string;
-  onChange: (day: string) => void;
+  onValueChange: (day: string) => void;
   /** What previous and next move by. */
   step?: 'day' | 'week';
   /** A day not to land on when stepping. */
   skip?: (day: string) => boolean;
-  /** What the group is called; the date field's own name. */
-  label?: string;
+  /** Optional visible caption rendered beside the date navigation controls. */
+  label?: ReactNode;
+  /** Accessible name for the group and date field; defaults to `label` (when text) or `'Date'`. */
+  ariaLabel?: string;
   locale?: string;
   min?: string;
   max?: string;
@@ -59,8 +62,8 @@ export function DateNav({
   const by = weekly ? 7 : 1;
   const [text, setText] = useState(value);
   useEffect(() => setText(value), [value]);
-  const latest = useRef({ onChange });
-  latest.current = { onChange };
+  const latest = useRef({ onValueChange });
+  latest.current = { onValueChange };
 
   useEffect(() => {
     const press = (event: KeyboardEvent) => {
@@ -69,40 +72,41 @@ export function DateNav({
       const target = event.target instanceof HTMLElement ? event.target : null;
       if (target?.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return;
       event.preventDefault();
-      latest.current.onChange(localToday());
+      latest.current.onValueChange(localToday());
     };
     return addHostListener(document, 'keydown', press);
   }, []);
 
-  const go = (days: number) => onChange(stepDay(value, days, skip));
+  const go = (days: number) => onValueChange(stepDay(value, days, skip));
   let previous = say('previousDay');
   let next = say('nextDay');
   if (weekly) {
     previous = say('previousWeek');
     next = say('nextWeek');
   }
-  const name = label ?? say('date');
+  const name = ariaLabel ?? (typeof label === 'string' ? label : say('date'));
   return (
     <div className={`kit-datenav${className ? ` ${className}` : ''}`} role="group" aria-label={name}>
-      <Button size="compact" aria-label={previous} onClick={() => go(-by)}>
+      {label !== undefined && label !== null && label !== false && <span className="kit-datenav-label">{label}</span>}
+      <Button size="sm" ariaLabel={previous} onClick={() => go(-by)}>
         {'‹'}
       </Button>
-      <Button size="compact" onClick={() => onChange(localToday())}>
+      <Button size="sm" onClick={() => onValueChange(localToday())}>
         {say('today')}
       </Button>
-      <Button size="compact" aria-label={next} onClick={() => go(by)}>
+      <Button size="sm" ariaLabel={next} onClick={() => go(by)}>
         {'›'}
       </Button>
       <DateField
         id={id}
-        aria-label={name}
+        ariaLabel={name}
         value={text}
         locale={locale}
         min={min}
         max={max}
-        onChange={(next) => {
-          setText(next);
-          if (DAY.test(next)) onChange(next);
+        onValueChange={(nextDay) => {
+          setText(nextDay);
+          if (DAY.test(nextDay)) onValueChange(nextDay);
         }}
       />
     </div>

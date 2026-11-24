@@ -1706,7 +1706,7 @@ function Pick({
         items={[{ value: '', label: sayCopy('any', { label }) }, ...items]}
         value={picks[column] ?? ''}
         ariaLabel={sayCopy('filter', { label })}
-        onChange={(value) => onChange(column, value)}
+        onValueChange={(value) => onChange(column, value)}
       />
     </span>
   );
@@ -1729,7 +1729,7 @@ function useNothing(plain: string): { text: string; detail?: string; action?: Re
     text: sayCopy('nothingInThisTimeWindow'),
     detail: offer.window.charAt(0).toUpperCase() + offer.window.slice(1),
     action: (
-      <Button intent="quiet" size="compact" onClick={offer.showAll}>
+      <Button variant="ghost" size="sm" onClick={offer.showAll}>
         {sayCopy('showAllTime')}
       </Button>
     ),

@@ -6,7 +6,7 @@
  * line; the host says how loudly (a polite status, an alert) through the
  * element's own attributes.
  */
-import { useState, type HTMLAttributes } from 'react';
+import { useEffect, useState, type HTMLAttributes } from 'react';
 import { Button } from '@mistriwork/ui/Button.js';
 import { outcomeTitle, type Outcome } from './outcomeModel.js';
 import { say } from '../copy/forms/components/CommandOutcome.js';
@@ -16,12 +16,17 @@ import './CommandOutcome.css';
 /** An address the command handed back, drawn to be read and copied: selectable text beside a Copy that says it worked. */
 function ResultLink({ url }: { url: string }) {
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
   return (
     <p className="command-outcome-link">
       <input data-slot="input" readOnly value={url} aria-label={say('copyLink')} onFocus={(event) => event.target.select()} />
       <Button
-        intent="secondary"
-        size="compact"
+        variant="secondary"
+        size="sm"
         onClick={() => {
           void copyLink(url).then(setCopied);
         }}
@@ -57,7 +62,7 @@ export function CommandOutcome({
       {outcome.state === 'done' && outcome.links?.map((url) => <ResultLink key={url} url={url} />)}
       {outcome.state === 'done' && outcome.changed && onOpen && (
         <p className="command-outcome-next">
-          <Button intent="quiet" size="compact" onClick={onOpen}>
+          <Button variant="ghost" size="sm" onClick={onOpen}>
             {say('openRecord', { label: outcome.changed.label })}
           </Button>
         </p>
@@ -65,7 +70,7 @@ export function CommandOutcome({
       {(outcome.state === 'refused' || outcome.state === 'unknown') && <p className="command-outcome-next">{outcome.next}</p>}
       {outcome.state === 'unknown' && onCheck && (
         <p className="command-outcome-check">
-          <Button intent="secondary" onClick={onCheck}>
+          <Button variant="secondary" onClick={onCheck}>
             {say('checkAgain')}
           </Button>
         </p>

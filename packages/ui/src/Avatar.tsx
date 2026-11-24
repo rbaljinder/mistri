@@ -5,20 +5,32 @@
  * initials are the first letters of the first two words of the name
  * ("Ada Lovelace" → "AL", "Ada" → "A"); the disc itself is decorative,
  * and a name that matters is said beside it by the caller, never by the
- * disc's title. Sizes are the house ones: `sm` 28px, `md` 36px, `lg` 48px.
+ * disc's title.
  */
 import { Avatar as Disc, AvatarFallback, AvatarImage } from '@ui-sdk/react/avatar';
+import type { ReactNode, Ref } from 'react';
+import { cx } from './internal/cx.js';
 import { slotted } from './internal/uiKitContext.js';
 
-export type AvatarSize = 'sm' | 'md' | 'lg';
+/** Visual size scale for `Avatar`. */
+export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
+/** Presence indicator status for `Avatar`. */
+export type AvatarStatus = 'online' | 'offline' | 'busy' | 'away';
+
+/** Props for the `Avatar` component. */
 export interface AvatarProps {
   /** The person's name, for the fallback initials. */
   name?: string;
   /** The picture's address; absent, the fallback shows at once. */
   src?: string;
+  alt?: string;
+  fallback?: ReactNode;
   size?: AvatarSize;
+  shape?: 'circle' | 'rounded';
+  status?: AvatarStatus;
   className?: string;
+  ref?: Ref<HTMLSpanElement>;
 }
 
 const graphemes = typeof Intl !== 'undefined' && 'Segmenter' in Intl ? new Intl.Segmenter(undefined, { granularity: 'grapheme' }) : null;
@@ -29,6 +41,7 @@ function firstLetter(word: string): string {
   return (first ?? '').toUpperCase();
 }
 
+/** Extract up to two grapheme-safe initials from a display name. */
 export function initialsOf(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
   if (!words.length) return '';
@@ -36,14 +49,22 @@ export function initialsOf(name: string): string {
   return firstLetter(words[0]!) + firstLetter(words[1]!);
 }
 
-function DefaultAvatar({ name, src, size = 'md', className }: AvatarProps) {
+function DefaultAvatar({ name, src, alt = '', fallback, size = 'md', shape = 'circle', status, className, ref }: AvatarProps) {
   return (
-    <Disc className={className} data-size={size}>
-      {src ? <AvatarImage src={src} alt="" /> : null}
-      <AvatarFallback aria-hidden="true">{name ? initialsOf(name) : ''}</AvatarFallback>
+    <Disc
+      ref={ref}
+      className={cx(status || shape === 'rounded' || size === 'xs' || size === 'xl' ? 'nx-avatar' : undefined, className)}
+      data-size={size}
+      data-shape={shape === 'rounded' ? 'rounded' : undefined}
+    >
+      {src ? <AvatarImage src={src} alt={alt} className="nx-avatar-img" /> : null}
+      <AvatarFallback aria-hidden="true" className="nx-avatar-fallback">
+        {fallback ?? (name ? initialsOf(name) : '')}
+      </AvatarFallback>
+      {status ? <span className="nx-avatar-status" data-status={status} aria-hidden="true" /> : null}
     </Disc>
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Person or entity avatar disc with image fallback to grapheme-safe initials and optional presence status dot. */
 export const Avatar = slotted('Avatar', DefaultAvatar);

@@ -3,14 +3,14 @@
  * window the reader picked. It only draws; the read is the placement's (urgentNow in app.ts), narrowed by the window.
  */
 import './UrgentQueue.css';
-import { Empty, useNavigate, type SectionProps } from '@mistriwork/mistri/ui';
+import { EmptyState, useNavigate, type SectionProps } from '@mistriwork/mistri/ui';
 import type { urgentNow } from '../app.ts';
 import type { Rows } from '../mistri-schema.d.ts';
 
 export default function UrgentQueue({ rows, period, section }: SectionProps<typeof urgentNow, Rows>) {
   const navigate = useNavigate();
   const said = period ? `Opened ${period}` : 'Opened any time';
-  if (!rows.urgent.length) return <Empty title="Nothing urgent" description={said} />;
+  if (!rows.urgent.length) return <EmptyState title="Nothing urgent" description={said} />;
   return (
     <div data-region={section.region}>
       <p className="c-urgent-queue-period">{said}</p>

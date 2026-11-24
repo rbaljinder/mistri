@@ -17,11 +17,12 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from '@ui-sdk/react/pagination';
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import type { ChangeDetails } from './changeDetails.js';
 import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Props for the `Pagination` page navigation bar. */
 export interface PaginationProps {
   /** The current page, 1-based. */
   page: number;
@@ -32,6 +33,8 @@ export interface PaginationProps {
   ariaLabel?: string;
   /** Every word the pager says, in the caller's language; any left out are English. */
   words?: Partial<PaginationWords>;
+  className?: string;
+  ref?: Ref<HTMLElement>;
 }
 
 interface PaginationWords {
@@ -55,16 +58,16 @@ export function paginationItems(page: number, pages: number): Array<number | 'â€
   return items;
 }
 
-/* A step is typed as the link it can be and drawn as a button here, where no page has an address: `disabled` is
-   the button's. */
 const shut = (at: boolean): object => (at ? { disabled: true } : {});
 
-function DefaultPagination({ page, pages, onPageChange, ariaLabel, words: given }: PaginationProps) {
+function DefaultPagination({ page, pages, onPageChange, ariaLabel, words: given, className, ref }: PaginationProps) {
   const words: PaginationWords = { pages: 'Pages', previous: 'Previous', next: 'Next', ...given };
   if (pages <= 1) return null;
   const current = Math.min(Math.max(page, 1), pages);
   return (
     <Pages
+      ref={ref}
+      className={className}
       aria-label={ariaLabel ?? words.pages}
       page={current}
       pageCount={pages}
@@ -75,8 +78,6 @@ function DefaultPagination({ page, pages, onPageChange, ariaLabel, words: given 
         {({ items }) => (
           <>
             <PaginationItem>
-              {/* An end with nowhere to go is disabled outright, and not only said to be, so the row keeps its shape
-                  and the keyboard passes it. */}
               <PaginationPrevious data-kind="words" {...shut(current === 1)}>
                 {words.previous}
               </PaginationPrevious>
@@ -98,5 +99,5 @@ function DefaultPagination({ page, pages, onPageChange, ariaLabel, words: given 
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Accessible 1-based page navigation bar with windowed page numbers, ellipses, and previous/next controls. */
 export const Pagination = slotted('Pagination', DefaultPagination, { onPageChange: [1, 'page-press'] });

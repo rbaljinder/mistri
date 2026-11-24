@@ -9,7 +9,7 @@
 import { toast } from '@mistriwork/kit/client/core.js';
 import { EvidenceItem } from './EvidenceList.js';
 import { queryClient } from '@mistriwork/kit/client/components/mount.js';
-import { AiMark } from '@mistriwork/kit/client/components/AiMark.js';
+import { AiBadge } from '@mistriwork/kit/client/components/AiMark.js';
 import { openProposalForm } from './sdk/proposalCommands.js';
 import type { UiCommandOutcome } from './sdk/context.js';
 import { PROPOSALS_KEY, type CommandProposal } from '../commandProposals.js';
@@ -64,7 +64,7 @@ export function ProposalEvidenceList({
   return (
     <div className="proposal-evidence">
       <h3 className="proposal-evidence-head">
-        <AiMark />
+        <AiBadge />
         <span>{say('evidence')}</span>
       </h3>
       {proposal.reason ? <p className="proposal-evidence-reason">{proposal.reason}</p> : null}

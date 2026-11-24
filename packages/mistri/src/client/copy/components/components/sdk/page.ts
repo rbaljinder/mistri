@@ -12,7 +12,7 @@ export const say = defineMessages({
   listNotYours: 'Your account does not open this list.',
   listForMembers: 'This list is for signed-in members.',
   listShowingFirst: 'Showing the first {count}.',
-  listNamesNoResource: '<List> reads no resource: give it `from`, or draw it inside a <Scope from>.',
+  listNamesNoResource: '<RecordList> reads no resource: give it `from`, or draw it inside a <Scope from>.',
   recordKeyOutside:
     'useRecordKey reads the record a page is a tab of, and "{label}" is not a record\'s tab: place it at pages/<list view>/[id]/<tab>.page.tsx.',
   recordKeyUnnamed:
@@ -20,6 +20,5 @@ export const say = defineMessages({
   recordKeyOther: 'useRecordKey("{resource}") on a tab of a "{table}" record: name the record\'s own resource, "{table}".',
   recordKeyUnread:
     'useRecordKey("{resource}"): "{label}" reads {map}. A record\'s tab reads its record\'s resource: add "{resource}" to its reads.',
-  backTo: 'Back to {label}',
   blocksUnregistered: '@mistriwork/mistri/page: no page has said how its blocks load.',
 });

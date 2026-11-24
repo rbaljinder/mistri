@@ -39,7 +39,7 @@ export function WriteConfirmDialog({ label, onDone }: { label: string; onDone: (
           {say('keepViewing')}
         </Button>
         <Button
-          intent="primary"
+          variant="primary"
           onClick={() => {
             finish(true);
             dialog.current?.close();

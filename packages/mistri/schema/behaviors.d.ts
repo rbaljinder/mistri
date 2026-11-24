@@ -30,8 +30,9 @@ export type Change<Reason extends string = string, More = unknown> = {
 /** What every part takes beside its element's own attributes. */
 export type PartProps<Tag extends keyof ReactTypes.JSX.IntrinsicElements, State = {}> = Omit<
   ReactTypes.ComponentProps<Tag>,
-  'className' | 'style' | 'children'
+  'className' | 'style' | 'children' | 'onChange' | 'aria-label' | 'inlist'
 > & {
+  ariaLabel?: string;
   className?: string | ((state: State) => string | undefined);
   style?: ReactTypes.CSSProperties | ((state: State) => ReactTypes.CSSProperties | undefined);
   /** Your own element, which receives the part's props, or a function of the props and the part's state. */
@@ -214,6 +215,7 @@ export const SpansSpan: Part<'div', { value: string }, { span: Span | undefined;
 export function SpansAxis(props: {
   step: number;
   /** Says a value: an hour, a date. */
+  formatValue?: (value: number) => ReactTypes.ReactNode;
   format?: (value: number) => ReactTypes.ReactNode;
   labels?: boolean;
   lines?: boolean;
@@ -312,7 +314,10 @@ export interface WidthsProps extends Omit<PartProps<'div', { widths: Record<stri
   /** How far an arrow key moves an edge; Shift moves it five times as far. */
   step?: number;
   /** What a screen reader hears when a key sets a width or gives one back (no width). English where unsaid. */
-  say?: (label: string, width: number | undefined) => string;
+  formatWidth?: (label: string, width: number | undefined) => string;
+  /** Accessible label for a column's resize handle. */
+  resizeLabel?: (label: string) => string;
+  words?: { resizeColumn?: (label: string) => string };
   children: (widths: Record<string, number>, sizing: string | null) => ReactTypes.ReactNode;
 }
 /** The widths. Lays nothing out. `data-sizing` while a bar is dragged. */

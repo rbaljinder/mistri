@@ -52,8 +52,13 @@ vi.mock('../RecordPageBody.js', () => ({
   RecordPageBody: ({ tableId, recordKey, pageId, sections, only }: Record<string, unknown>) =>
     handed('record')({ tableId, recordKey, pageId, sections, only }),
 }));
-vi.mock('../TreeList.js', () => ({ TreeList: ({ spec, entry }: Record<string, unknown>) => handed('tree')({ spec, entry }) }));
-vi.mock('../GanttList.js', () => ({ GanttList: ({ spec, entry }: Record<string, unknown>) => handed('gantt')({ spec, entry }) }));
+vi.mock('../TreeList.js', () => ({
+  TreeList: ({ spec, entry, limit }: Record<string, unknown>) => handed('tree')({ spec, entry, ...(limit === undefined ? {} : { limit }) }),
+}));
+vi.mock('../GanttList.js', () => ({
+  GanttList: ({ spec, entry, limit }: Record<string, unknown>) =>
+    handed('gantt')({ spec, entry, ...(limit === undefined ? {} : { limit }) }),
+}));
 vi.mock('./PresentedList.js', () => ({ PresentedList: handed('presented') }));
 vi.mock('../SplitListDetail.js', () => ({
   SplitListDetail: ({ list, detail, selected, detailTitle }: Record<string, ReactNode | boolean | string>) => (
@@ -103,7 +108,10 @@ vi.mock('../../../../../kit/src/client/components/PageSections.js', () => ({
   },
 }));
 
-const { Assistant, Board, Breakdown, Calendar, Chart, Gallery, Gantt, Metric, RecordCard, Rows, Split, Tabs, Timeline, Tree } =
+import { Tabs, UiSurfaceSeamContext } from '@mistriwork/ui';
+import { mistriSurfaceSeam } from './seam.js';
+
+const { Assistant, Board, Breakdown, Calendar, Chart, Gallery, Gantt, Metric, RecordCard, RecordSplit, Rows, Timeline, Tree } =
   await import('./blocks.js');
 
 afterEach(() => {
@@ -122,7 +130,12 @@ const frame: UiPageFrame = {
   get: (name) => (name === 'tab' ? 'closed' : name === 'pick' ? '2' : undefined),
   set: (...args) => mocks.set(...args),
 };
-const inPage = (block: ReactNode) => render(<UiPageContext.Provider value={frame}>{block}</UiPageContext.Provider>);
+const inPage = (block: ReactNode) =>
+  render(
+    <UiSurfaceSeamContext.Provider value={mistriSurfaceSeam}>
+      <UiPageContext.Provider value={frame}>{block}</UiPageContext.Provider>
+    </UiSurfaceSeamContext.Provider>,
+  );
 const json = async (id: string) => JSON.parse((await screen.findByTestId(id)).textContent ?? '');
 
 test("Metric, Chart and Rows hand the dashboard's section their DSL words, on the resource's table", async () => {
@@ -224,6 +237,9 @@ test("RecordCard draws the record's own page, with `show` as its one fields sect
     sections: [{ kind: 'fields', paths: ['name'] }],
   });
   cleanup();
+  inPage(<RecordCard from="ticket" record={{ id: 7 }} />);
+  expect((await json('record')).sections).toBeDefined();
+  cleanup();
   inPage(<Timeline from="task" record={{ id: 3 }} />);
   expect(await json('record')).toEqual({ tableId: 'task', recordKey: { id: 3 }, pageId: 'page-task', only: 'timeline' });
   cleanup();
@@ -232,37 +248,47 @@ test("RecordCard draws the record's own page, with `show` as its one fields sect
 });
 
 test("Tree and Gantt are a list's presentations, read by the presentation's own parser", async () => {
-  inPage(<Tree from="task" parent="parent_id" primary="name" query="status = open" />);
+  inPage(<Tree from="task" parent="parent_id" primary="name" query="status = open" limit={25} />);
   expect(await json('tree')).toEqual({
     spec: { kind: 'tree', parent: 'parent_id', primary: 'name' },
     entry: { kind: 'table', table: 'task', query: 'status = open' },
+    limit: 25,
   });
   cleanup();
-  inPage(<Gantt from="task" start="starts_on" end="due_on" primary="name" />);
-  expect((await json('gantt')).spec).toEqual({ kind: 'gantt', start: 'starts_on', end: 'due_on', primary: 'name' });
+  inPage(<Gantt from="task" start="starts_on" end="due_on" primary="name" limit={40} />);
+  expect(await json('gantt')).toMatchObject({
+    spec: { kind: 'gantt', start: 'starts_on', end: 'due_on', primary: 'name' },
+    limit: 40,
+  });
   cleanup();
   vi.spyOn(console, 'error').mockImplementation(() => {});
   inPage(<Gantt from="task" start="due_on" end="due_on" primary="name" />);
   expect(await screen.findByText(/"end" names "due_on", the same column as "start"/)).toBeTruthy();
 });
 
-test("Tabs open where the page param says and keep the tab picked in it; Assistant is the App's own", async () => {
-  inPage(
+test("Tabs open where the page param says, support width, and keep the tab picked in it; Assistant is the App's own", async () => {
+  const { container } = inPage(
     <Tabs
       param="tab"
+      width="half"
       tabs={[
         { key: 'open', label: 'Open', content: <p>Open work</p> },
         { key: 'closed', label: 'Closed', content: <p>Closed work</p> },
+        { key: 'archived', label: 'Archived', content: <p>Archived work</p> },
       ]}
     />,
   );
   expect(await screen.findByText('Closed work')).toBeTruthy();
-  await userEvent.click(screen.getByRole('button', { name: 'Open' }));
-  expect(mocks.set).toHaveBeenCalledWith('tab', 'open');
+  expect(container.querySelector('[data-width="half"]')).not.toBeNull();
+  await userEvent.click(screen.getByRole('tab', { name: 'Archived' }));
+  expect(mocks.set).toHaveBeenCalledWith('tab', 'archived');
+  await userEvent.click(screen.getByRole('tab', { name: 'Open' }));
+  expect(mocks.set).toHaveBeenCalledWith('tab', undefined);
   cleanup();
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  inPage(<Tabs param="view" tabs={[{ key: 'a', label: 'A', content: null }]} />);
-  expect(await screen.findByText(/keeps its tab in "view", which is not one of the page's params/)).toBeTruthy();
+  expect(() => inPage(<Tabs param="view" tabs={[{ key: 'a', label: 'A', content: null }]} />)).toThrow(
+    /The page "Board" keeps "tab", "pick" in its address; add "view" to its params/,
+  );
   cleanup();
   inPage(<Assistant conversation="c-1" />);
   expect(await json('assistant')).toEqual({ conversation: 'c-1' });
@@ -290,6 +316,9 @@ test('Board, Calendar and Gallery hand the list room their presentation, their q
     query: 'name != x',
     label: 'Calendar',
   });
+  cleanup();
+  inPage(<Gallery from="task" primary="name" />);
+  expect((await json('presented')).spec).toEqual({ kind: 'cards', primary: 'name' });
   cleanup();
   inPage(<Gallery from="task" image="name" primary="name" />);
   expect((await json('presented')).spec).toEqual({ kind: 'cards', image: 'name', primary: 'name' });
@@ -322,8 +351,8 @@ test('a presentation block refuses a drop the page did not declare, a missing wo
   expect(screen.queryByTestId('presented')).toBeNull();
 });
 
-test("Split lists the rows beside the picked record's own page, and keeps the pick in the page param it names", async () => {
-  inPage(<Split from="task" row={{ primary: 'name', lines: ['parent_id'] }} detail={['name']} param="pick" />);
+test("RecordSplit lists the rows beside the picked record's own page, and keeps the pick in the page param it names", async () => {
+  inPage(<RecordSplit from="task" row={{ primary: 'name', lines: ['parent_id'] }} detail={['name']} param="pick" />);
   const pick = await screen.findByRole('button', { name: /Pump/ });
   expect(pick).toHaveAttribute('aria-current', 'true');
   expect(await json('record')).toEqual({
@@ -336,16 +365,16 @@ test("Split lists the rows beside the picked record's own page, and keeps the pi
   expect(mocks.set).toHaveBeenCalledWith('pick', '1');
   cleanup();
   // Without a param the block holds the pick itself, and starts with nothing picked.
-  inPage(<Split from="task" row={{ primary: 'name' }} />);
+  inPage(<RecordSplit from="task" row={{ primary: 'name' }} />);
   await userEvent.click(await screen.findByRole('button', { name: /Boiler/ }));
   expect(await json('record')).toMatchObject({ recordKey: { id: 1 } });
   cleanup();
   vi.spyOn(console, 'error').mockImplementation(() => {});
-  inPage(<Split from="task" row={{ primary: 'name' }} param="view" />);
-  expect(await screen.findByText(/<Split> keeps its pick in "view", which is not one of the page's params/)).toBeTruthy();
+  inPage(<RecordSplit from="task" row={{ primary: 'name' }} param="view" />);
+  expect(await screen.findByText(/<RecordSplit> keeps its pick in "view", which is not one of the page's params/)).toBeTruthy();
 });
 
-test('Split says a refused read as a problem, never as an empty queue', async () => {
+test('RecordSplit says a refused read as a problem, never as an empty queue', async () => {
   const { useRows } = await import('./hooks.js');
   const refetch = vi.fn();
   vi.mocked(useRows).mockReturnValueOnce({
@@ -354,12 +383,12 @@ test('Split says a refused read as a problem, never as an empty queue', async ()
     error: new Error('This page does not declare the post table it reaches.'),
     refetch,
   } as never);
-  inPage(<Split from="task" row={{ primary: 'name' }} label="Open reports" />);
+  inPage(<RecordSplit from="task" row={{ primary: 'name' }} ariaLabel="Open reports" />);
   expect(await screen.findByText(/does not declare the post table/)).toBeTruthy();
   expect(screen.queryByRole('list', { name: 'Open reports' })).toBeNull();
 });
 
-test('a Split whose refresh fails keeps its rows and the record open beside them, with the problem above', async () => {
+test('a RecordSplit whose refresh fails keeps its rows and the record open beside them, with the problem above', async () => {
   const { useRows } = await import('./hooks.js');
   const original = vi.mocked(useRows).getMockImplementation();
   const rows = [
@@ -371,7 +400,7 @@ test('a Split whose refresh fails keeps its rows and the record open beside them
     vi.mocked(useRows).mockImplementation(
       () => ({ data: rows, isError: true, error: new Error('The queue could not be refreshed.'), refetch }) as never,
     );
-    inPage(<Split from="task" row={{ primary: 'name' }} label="Open reports" param="pick" />);
+    inPage(<RecordSplit from="task" row={{ primary: 'name' }} ariaLabel="Open reports" param="pick" />);
     expect(await screen.findByText(/could not be refreshed/)).toBeTruthy();
     expect(screen.getByRole('list', { name: 'Open reports' })).toBeTruthy();
     expect(await json('record')).toMatchObject({ recordKey: { id: 2 } });
@@ -379,7 +408,7 @@ test('a Split whose refresh fails keeps its rows and the record open beside them
     // A refusal is the grant gone, not a stale list: the rows it had go with it.
     const refused = Object.assign(new Error('You cannot read this queue.'), { status: 403 });
     vi.mocked(useRows).mockImplementation(() => ({ data: rows, isError: true, error: refused, refetch }) as never);
-    inPage(<Split from="task" row={{ primary: 'name' }} label="Open reports" param="pick" />);
+    inPage(<RecordSplit from="task" row={{ primary: 'name' }} ariaLabel="Open reports" param="pick" />);
     expect(await screen.findByText(/cannot read this queue/)).toBeTruthy();
     expect(screen.queryByRole('list', { name: 'Open reports' })).toBeNull();
   } finally {

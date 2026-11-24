@@ -17,7 +17,7 @@ import { resourceOf } from '@mistriwork/kit/client/components/appRooms.js';
 import { pluralOf, recordNoun } from '@mistriwork/engine/shared/appNoun.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { activeApp } from '../appState.js';
-import { Bars } from './sdk/kit.js';
+import { BreakdownList } from '@mistriwork/ui/charts.js';
 import { sayGroup } from './dashboardSay.js';
 import { TILE_FRESH, minuteTick } from './dashboardClock.js';
 
@@ -89,9 +89,9 @@ export function DashboardBars({ section, nothing }: { section: Section; nothing:
   const sayKey = namedGroups(data.data, keyName, sayGroup(section.table, section.by));
   const sayAlso = section.also && alsoName ? alsoSayer(section) : undefined;
   return (
-    <Bars
-      label={section.title}
-      say={sayRow}
+    <BreakdownList
+      ariaLabel={section.title}
+      formatValue={sayRow}
       items={rows.map((row) => ({
         key: String(row[keyName]),
         label: sayKey(row[keyName]),

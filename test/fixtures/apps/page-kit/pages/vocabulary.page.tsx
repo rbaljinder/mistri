@@ -4,10 +4,10 @@ import {
   Button,
   Card,
   FileField,
-  Item,
-  Items,
+  ItemRow,
+  ItemList,
   Loaded,
-  Segmented,
+  SegmentedControl,
   Skeleton,
   Stack,
   Text,
@@ -29,24 +29,24 @@ function Vocabulary() {
       railWidth="14rem"
       rail={
         <Card title="Rail" description="What goes with the column">
-          <Text tone="muted">A note in the rail.</Text>
+          <Text muted>A note in the rail.</Text>
         </Card>
       }
     >
       <Stack>
-        <Card title="Things" description="Everything we hold" tone="warn">
+        <Card title="Things" description="Everything we hold" tone="warning">
           <Loaded query={things} loading={<Skeleton lines={3} />} empty={null}>
             {(rows) => (
-              <Items label="Things">
+              <ItemList ariaLabel="Things">
                 {rows.map((row, at) => (
-                  <Item
+                  <ItemRow
                     key={String(row.id)}
                     title={String(row.name)}
-                    note="Held in the yard"
-                    lead={at === 0 ? '09:30' : undefined}
-                    tone={at === 1 ? 'bad' : undefined}
+                    description="Held in the yard"
+                    leading={at === 0 ? '09:30' : undefined}
+                    tone={at === 1 ? 'critical' : undefined}
                     href="/vocabulary?seen=1"
-                    action={
+                    actions={
                       at === 2 ? (
                         <>
                           <Button href="/vocabulary?accept=1">Accept the delivery</Button>
@@ -57,25 +57,25 @@ function Vocabulary() {
                     }
                   />
                 ))}
-              </Items>
+              </ItemList>
             )}
           </Loaded>
         </Card>
         <Card title="Controls">
-          <Segmented
-            label="Range"
+          <SegmentedControl
+            ariaLabel="Range"
             value={range}
-            onChange={setRange}
+            onValueChange={setRange}
             options={[
               { value: 'week', label: 'Week', count: 3 },
               { value: 'month', label: 'Month', count: 12 },
             ]}
           />
-          <Segmented
-            label="Stage"
+          <SegmentedControl
+            ariaLabel="Stage"
             className="vocabulary-stage"
             value={stage}
-            onChange={setStage}
+            onValueChange={setStage}
             options={[
               { value: 'all', label: 'All stages' },
               { value: 'new', label: 'New enquiries', count: 4 },
@@ -85,22 +85,22 @@ function Vocabulary() {
             ]}
           />
           <Button href="/vocabulary?opened=1">Open</Button>
-          <Button href="/vocabulary?intent=primary" intent="primary">
+          <Button href="/vocabulary?intent=primary" variant="primary">
             Go primary
           </Button>
-          <Button href="/vocabulary?intent=secondary" intent="secondary">
+          <Button href="/vocabulary?intent=secondary" variant="secondary">
             Go secondary
           </Button>
-          <Button href="/vocabulary?intent=quiet" intent="quiet">
+          <Button href="/vocabulary?intent=quiet" variant="ghost">
             Go quiet
           </Button>
-          <Button href="/vocabulary?intent=danger" intent="danger">
+          <Button href="/vocabulary?intent=danger" variant="danger">
             Go danger
           </Button>
-          <Button href="/vocabulary?intent=held" intent="primary" aria-disabled="true">
+          <Button href="/vocabulary?intent=held" variant="primary" aria-disabled="true">
             Go held
           </Button>
-          <FileField label="Attachment" value={file} onChange={setFile} />
+          <FileField label="Attachment" value={file} onValueChange={setFile} />
           <Skeleton height={24} width={160} />
         </Card>
       </Stack>

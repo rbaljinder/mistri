@@ -40,7 +40,7 @@ test('page-tab: a record tab named for a related list is refused; another word i
     mkdirSync(dirname(join(dir, 'pages', file)), { recursive: true });
     writeFileSync(
       join(dir, 'pages', file),
-      `import { definePage, Empty } from '@mistriwork/mistri/page';\nexport default definePage({ label: 'Tab', reads: ['account'], component: () => <Empty title="x" /> });\n`,
+      `import { definePage, EmptyState } from '@mistriwork/mistri/page';\nexport default definePage({ label: 'Tab', reads: ['account'], component: () => <EmptyState title="x" /> });\n`,
     );
   };
   mkdirSync(dir);

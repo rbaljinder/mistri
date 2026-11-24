@@ -10,7 +10,19 @@
  * forms on the pick list's page, so the board offers no other move.
  */
 import type { ReactNode } from 'react';
-import { Board, Choose, CommandButton, definePage, Empty, Grid, List, Panel, Scope, Stack, useFormat } from '@mistriwork/mistri/page';
+import {
+  Board,
+  Choose,
+  CommandButton,
+  definePage,
+  EmptyState,
+  PageGrid,
+  Panel,
+  RecordList,
+  Scope,
+  Stack,
+  useFormat,
+} from '@mistriwork/mistri/page';
 import './pick-board.css';
 
 const page = definePage({
@@ -35,15 +47,15 @@ function PickBoard(): ReactNode {
     <Stack>
       <Choose param="warehouse" name="Warehouse" all="All warehouses" from="warehouse" sort="name" label="name" />
       <Scope from="pick_list" where={{ status: { not: 'shipped' }, ...(warehouse === undefined ? {} : { warehouse_id: warehouse }) }}>
-        <Grid>
+        <PageGrid>
           <Panel title="Next to pick" width="full">
-            <List
+            <RecordList
               where={{ status: 'to_pick' }}
               show={['reference', 'ship_to', 'sales_order_id.ship_by', 'warehouse_id.name']}
               sort="sales_order_id.ship_by, released_at"
               limit={5}
-              label="Next to pick"
-              empty={<Empty title="Nothing to pick" description="Released orders arrive here as pick lists." />}
+              ariaLabel="Next to pick"
+              empty={<EmptyState title="Nothing to pick" description="Released orders arrive here as pick lists." />}
             >
               {(list) => (
                 <div className="c-page-pick-board-next">
@@ -57,7 +69,7 @@ function PickBoard(): ReactNode {
                   <CommandButton command="pickList" row={list} done={`${list.reference} is picked. It waits in To pack.`} />
                 </div>
               )}
-            </List>
+            </RecordList>
           </Panel>
           <Panel title="By stage" width="full">
             <Board
@@ -72,7 +84,7 @@ function PickBoard(): ReactNode {
               label="Open pick lists by stage"
             />
           </Panel>
-        </Grid>
+        </PageGrid>
       </Scope>
     </Stack>
   );

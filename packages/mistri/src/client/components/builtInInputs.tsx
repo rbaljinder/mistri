@@ -236,7 +236,7 @@ function JsonInput({ value, onChange, id, describedBy, invalid, disabled, requir
           {problem ? say('jsonProblem', { problem }) : ''}
         </span>
         <Button
-          intent="quiet"
+          variant="ghost"
           className="json-input-format"
           disabled={disabled || Boolean(problem) || !shown.trim()}
           onClick={() => change(JSON.stringify(JSON.parse(shown), null, 2))}
@@ -319,7 +319,7 @@ function ScanInput({ value, onChange, id, describedBy, invalid, disabled, requir
         />
         {can && (
           <Button
-            intent="quiet"
+            variant="ghost"
             className="scan-input-button"
             aria-pressed={open}
             disabled={disabled}
@@ -495,10 +495,10 @@ export function SignaturePad({
           <span className="signature-input-kept is-unseen">{say('signatureKept')}</span>
         )}
         <span className="signature-input-tools">
-          <Button ref={again} intent="quiet" disabled={disabled} onClick={() => setSigning(true)}>
+          <Button ref={again} variant="ghost" disabled={disabled} onClick={() => setSigning(true)}>
             {appWord('mistri.form.signAgain', say('signAgain'))}
           </Button>
-          <Button intent="quiet" disabled={disabled} onClick={() => onChange(null)}>
+          <Button variant="ghost" disabled={disabled} onClick={() => onChange(null)}>
             {say('removeSignature')}
           </Button>
         </span>
@@ -559,22 +559,22 @@ export function SignaturePad({
       <span className="signature-input-tools">
         {typed === null && (
           <>
-            <Button intent="quiet" disabled={disabled || !strokes.length} onClick={() => setStrokes((all) => all.slice(0, -1))}>
+            <Button variant="ghost" disabled={disabled || !strokes.length} onClick={() => setStrokes((all) => all.slice(0, -1))}>
               {say('undoStroke')}
             </Button>
-            <Button intent="quiet" disabled={disabled || !strokes.length} onClick={() => setStrokes([])}>
+            <Button variant="ghost" disabled={disabled || !strokes.length} onClick={() => setStrokes([])}>
               {say('clearSignature')}
             </Button>
           </>
         )}
-        <Button intent="quiet" disabled={disabled} onClick={() => setTyped(typed === null ? '' : null)}>
+        <Button variant="ghost" disabled={disabled} onClick={() => setTyped(typed === null ? '' : null)}>
           {say(typed === null ? 'typeInstead' : 'drawInstead')}
         </Button>
         <Button className="signature-input-keep" disabled={disabled || empty || !keeper || state === 'keeping'} onClick={() => void keep()}>
           {say(state === 'keeping' ? 'keepingSignature' : 'useSignature')}
         </Button>
         {value !== null && value !== '' && (
-          <Button intent="quiet" onClick={() => setSigning(false)}>
+          <Button variant="ghost" onClick={() => setSigning(false)}>
             {say('keepPrevious')}
           </Button>
         )}

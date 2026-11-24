@@ -521,9 +521,9 @@ function InvitationForm({
                 withTime
                 required
                 value={redeem}
-                aria-label={say('redeemBeforeLocalTime')}
+                ariaLabel={say('redeemBeforeLocalTime')}
                 max={localTime(Date.now() + session.maxRedemptionLifetimeMs)}
-                onChange={setRedeem}
+                onValueChange={setRedeem}
               />
             </label>
             <label className="administration-field">
@@ -533,9 +533,9 @@ function InvitationForm({
                 withTime
                 required
                 value={until}
-                aria-label={say('membershipValidUntilLocal')}
+                ariaLabel={say('membershipValidUntilLocal')}
                 max={localTime(Date.now() + session.maxMembershipLifetimeMs)}
-                onChange={setUntil}
+                onValueChange={setUntil}
               />
             </label>
           </>

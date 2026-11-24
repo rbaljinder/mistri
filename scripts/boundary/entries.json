@@ -39,6 +39,21 @@
       "source": "packages/mistri/src/client/components/sdk/behaviors.ts",
       "types": "packages/mistri/schema/behaviors.d.ts"
     },
+    "@mistriwork/mistri/primitives": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/client/components/sdk/primitives.ts",
+      "types": "packages/mistri/schema/primitives.d.ts"
+    },
+    "@mistriwork/mistri/charts": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/client/components/sdk/charts.ts",
+      "types": "packages/mistri/schema/charts.d.ts"
+    },
+    "@mistriwork/mistri/views": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/client/components/sdk/views.ts",
+      "types": "packages/mistri/schema/views.d.ts"
+    },
     "@mistriwork/mistri/commands": {
       "layer": "mistri",
       "source": "packages/mistri/src/server/commands.ts",

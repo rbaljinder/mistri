@@ -242,7 +242,7 @@ export function PageHead({
                 { value: page.id, label: sayPage(page), detail: sourceOf(page) },
                 ...items.map((p) => ({ value: p.id, label: sayPage(p), detail: sourceOf(p) })),
               ]}
-              onChange={(id) => {
+              onValueChange={(id) => {
                 if (id !== page.id) go({ ...entry, pageId: id }, 'replace');
               }}
               valueClassName="page-title"
@@ -275,7 +275,7 @@ export function PageHead({
         {key && changedElsewhere && !gone && <LiveUpdatedLine table={base} recordKey={key} />}
         {authoring && (
           <Button
-            size="compact"
+            size="sm"
             className="page-edit"
             title={page.source === 'saved' ? say('addRemoveAndReorder') : say('thisPageBelongsToTheFile')}
             onClick={onLayout}

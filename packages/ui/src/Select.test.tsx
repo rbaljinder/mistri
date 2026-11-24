@@ -23,7 +23,7 @@ function One({ start = '', onPick = () => {} }: { start?: string; onPick?: (v: s
       value={value}
       placeholder="Choose"
       problem={undefined}
-      onChange={(v, details) => {
+      onValueChange={(v, details) => {
         onPick(v, details);
         set(v);
       }}
@@ -70,7 +70,7 @@ test('Escape closes it and the focus is back on the button', async () => {
 });
 
 test('a problem marks the button invalid and joins its description', () => {
-  render(<Select label="Make" options={makes} value="" onChange={() => {}} problem="Choose a make." hint="Pick one." />);
+  render(<Select label="Make" options={makes} value="" onValueChange={() => {}} problem="Choose a make." hint="Pick one." />);
   const button = screen.getByRole('button', { name: /Make/ });
   expect(button).toHaveAttribute('aria-invalid', 'true');
   expect(button).toHaveAccessibleDescription('Pick one. Choose a make.');
@@ -84,7 +84,7 @@ function Many({ onPick = () => {} }: { onPick?: (v: string[], details: ChangeDet
       options={makes}
       value={value}
       placeholder="Choose"
-      onChange={(v, details) => {
+      onValueChange={(v, details) => {
         onPick(v, details);
         set(v);
       }}
@@ -138,7 +138,7 @@ test('a kit that draws only the Dropdown still hears what describes the field an
         problem="Choose a make"
         options={[{ value: 'a', label: 'Alfa Romeo' }]}
         value=""
-        onChange={() => {}}
+        onValueChange={() => {}}
       />
     </UiKitProvider>,
   );

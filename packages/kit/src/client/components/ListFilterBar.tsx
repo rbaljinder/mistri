@@ -552,7 +552,7 @@ function FacetPicker({ box, refinement, table, standing, unit, apply, owned, clo
         {typeof n === 'number' ? say('match', { n: formatNumber(n) }) : ''}
       </p>
       <div className="filter-pop-foot">
-        <Button intent="primary" size="compact" type="submit">
+        <Button variant="primary" size="sm" type="submit">
           {typeof n === 'number' ? say('showN', { n: formatNumber(n) }) : say('common.showResults')}
         </Button>
       </div>

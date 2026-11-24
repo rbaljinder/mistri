@@ -10,7 +10,7 @@ test.use({ servers: ['crm'] });
    Holdi…" stood over a detail line that wrapped whole beneath it (G187). */
 test("a row's name over its folded columns wraps whole rather than being cut", async ({ page }) => {
   test.setTimeout(LONG_MS);
-  await page.setViewportSize({ width: 820, height: 900 });
+  await page.setViewportSize({ width: 860, height: 900 });
   await page.goto(`${COMPASS}/opportunities`);
   await expect(page.locator('td.has-more').first()).toBeVisible({ timeout: 60_000 });
   await page.evaluate(() => document.fonts.ready);

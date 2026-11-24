@@ -16,12 +16,13 @@
  * themselves never shrink below their minimum, and a drag that would push
  * a neighbour below its minimum stops at that neighbour's edge.
  */
-import { Resizable as Group, ResizableHandle, ResizablePanel } from '@ui-sdk/react/resizable';
-import { Fragment, useState, type ReactNode } from 'react';
+import { Resizable as Group, ResizableHandle, ResizablePanel as Panel } from '@ui-sdk/react/resizable';
+import { Fragment, useState, type ReactNode, type Ref } from 'react';
 import type { ChangeDetails } from './changeDetails.js';
 import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Single pane definition for `Resizable`. */
 export interface ResizablePanel {
   /** The pane's accessible name, said by its handle's controls. */
   label?: string;
@@ -32,6 +33,7 @@ export interface ResizablePanel {
   children: ReactNode;
 }
 
+/** Props for the `Resizable` multi-pane split container. */
 export interface ResizableProps {
   panels: readonly ResizablePanel[];
   direction?: 'horizontal' | 'vertical';
@@ -42,6 +44,7 @@ export interface ResizableProps {
   /** Every word the handles say, in the caller's language; any left out are English. */
   words?: Partial<ResizableWords>;
   className?: string;
+  ref?: Ref<HTMLDivElement>;
 }
 
 interface ResizableWords {
@@ -65,13 +68,23 @@ function initialSizes(panels: readonly ResizablePanel[]): number[] {
 
 /* The sizes are shares of the whole, in the panes' order. A pane scrolls inside itself on purpose and says so
    (`data-scrolls`), for the check that looks for a page scrolling twice (gradeProbe.ts). */
-function DefaultResizable({ panels, direction = 'horizontal', sizes, onSizesChange, ariaLabel, words: given, className }: ResizableProps) {
+function DefaultResizable({
+  panels,
+  direction = 'horizontal',
+  sizes,
+  onSizesChange,
+  ariaLabel,
+  words: given,
+  className,
+  ref,
+}: ResizableProps) {
   const words = { ...ENGLISH, ...given };
   const [start] = useState(() => initialSizes(panels));
   if (panels.length < 2) return null;
   const name = (place: number) => panels[place]?.label ?? words.panel(place + 1);
   return (
     <Group
+      ref={ref}
       role="group"
       orientation={direction}
       aria-label={ariaLabel}
@@ -86,14 +99,14 @@ function DefaultResizable({ panels, direction = 'horizontal', sizes, onSizesChan
         <Fragment key={place}>
           {place > 0 && <ResizableHandle aria-label={words.resize(name(place - 1), name(place))} />}
           {/* A named pane has a role to be named by. */}
-          <ResizablePanel minSize={panel.minSize ?? 10} role="group" aria-label={panel.label} data-scrolls="">
+          <Panel minSize={panel.minSize ?? 10} role="group" aria-label={panel.label} data-scrolls="">
             {panel.children}
-          </ResizablePanel>
+          </Panel>
         </Fragment>
       ))}
     </Group>
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Multi-pane split layout with pointer-draggable and keyboard-navigable separator handles. */
 export const Resizable = slotted('Resizable', DefaultResizable, { onSizesChange: [1, 'resize'] });

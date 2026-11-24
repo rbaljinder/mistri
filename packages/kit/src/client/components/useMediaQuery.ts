@@ -4,7 +4,7 @@
  * share, so a breakpoint is asked of the browser the same way everywhere.
  */
 import { useSyncExternalStore } from 'react';
-import { PHONE_QUERY as PHONE_BAND } from '@mistriwork/ui/internal/ruler.js';
+import { PHONE_QUERY as PHONE_BAND } from '@mistriwork/ui';
 
 const watched = new Map<string, { subscribe: (listener: () => void) => () => void; snapshot: () => boolean }>();
 

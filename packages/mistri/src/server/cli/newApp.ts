@@ -118,6 +118,9 @@ export default defineApp({
     {
       compilerOptions: {
         target: 'ES2023',
+        /* A free-form page and a component are drawn in a browser: JSX and the DOM, so `include` can name them. */
+        lib: ['ES2023', 'DOM', 'DOM.Iterable'],
+        jsx: 'react-jsx',
         module: 'NodeNext',
         moduleResolution: 'NodeNext',
         strict: true,
@@ -127,7 +130,7 @@ export default defineApp({
         skipLibCheck: true,
         types: ['node'],
       },
-      include: ['**/*.ts'],
+      include: ['**/*.ts', '**/*.tsx'],
     },
     null,
     2,

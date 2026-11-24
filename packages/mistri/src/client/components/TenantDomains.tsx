@@ -39,12 +39,17 @@ type Reply = Record<string, unknown> & { error?: string };
 
 function Copyable({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 1500);
+    return () => clearTimeout(timer);
+  }, [copied]);
   return (
     <span className="domains-copyable">
       <code>{value}</code>
       <Button
-        size="compact"
-        aria-label={label}
+        size="sm"
+        ariaLabel={label}
         onClick={() => {
           void navigator.clipboard?.writeText(value).then(() => setCopied(true));
         }}
@@ -178,9 +183,9 @@ export function TenantDomains() {
                 <div className="domains-actions">
                   {domain.kind === 'custom' && domain.claimed && domain.status !== 'live' && (
                     <Button
-                      size="compact"
-                      busy={busy === `check:${domain.host}`}
-                      busyLabel={say('checking')}
+                      size="sm"
+                      loading={busy === `check:${domain.host}`}
+                      loadingLabel={say('checking')}
                       onClick={() => void check(domain.host)}
                     >
                       {say('check')}
@@ -188,15 +193,15 @@ export function TenantDomains() {
                   )}
                   {domain.status === 'live' && !domain.primary && (
                     <Button
-                      size="compact"
-                      busy={busy === `primary:${domain.host}`}
+                      size="sm"
+                      loading={busy === `primary:${domain.host}`}
                       onClick={() => void ask('/api/domains/primary', domain.host, `primary:${domain.host}`)}
                     >
                       {say('makePrimary')}
                     </Button>
                   )}
                   {domain.kind === 'custom' && domain.claimed && confirming !== domain.host && (
-                    <Button size="compact" intent="danger" onClick={() => setConfirming(domain.host)}>
+                    <Button size="sm" variant="danger" onClick={() => setConfirming(domain.host)}>
                       {say('remove')}
                     </Button>
                   )}
@@ -204,17 +209,17 @@ export function TenantDomains() {
                     <span className="domains-confirm" role="group" aria-label={say('confirmRemove', { host: domain.host })}>
                       <span>{say('confirmRemove', { host: domain.host })}</span>
                       <Button
-                        size="compact"
-                        intent="danger"
-                        busy={busy === `remove:${domain.host}`}
-                        busyLabel={say('removing')}
+                        size="sm"
+                        variant="danger"
+                        loading={busy === `remove:${domain.host}`}
+                        loadingLabel={say('removing')}
                         onClick={() =>
                           void ask('/api/domains/remove', domain.host, `remove:${domain.host}`).then(() => setConfirming(null))
                         }
                       >
                         {say('remove')}
                       </Button>
-                      <Button size="compact" onClick={() => setConfirming(null)}>
+                      <Button size="sm" onClick={() => setConfirming(null)}>
                         {say('cancel')}
                       </Button>
                     </span>
@@ -230,7 +235,7 @@ export function TenantDomains() {
           <p className="domains-dim">{say('full', { limit: listing.limit })}</p>
         ) : (
           <form className="domains-add" onSubmit={(event) => void add(event)}>
-            <Field label={say('host')} hint={say('hostHint', { limit: listing.limit })} size="compact">
+            <Field label={say('host')} hint={say('hostHint', { limit: listing.limit })} size="sm">
               <input
                 data-slot="input"
                 value={host}
@@ -242,7 +247,7 @@ export function TenantDomains() {
                 onChange={(event) => setHost(event.target.value)}
               />
             </Field>
-            <Button intent="primary" size="compact" type="submit" busy={busy === 'add'} busyLabel={say('adding')} disabled={!host.trim()}>
+            <Button variant="primary" size="sm" type="submit" loading={busy === 'add'} loadingLabel={say('adding')} disabled={!host.trim()}>
               {say('addAction')}
             </Button>
           </form>

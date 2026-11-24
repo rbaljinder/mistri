@@ -253,3 +253,25 @@ test('a hex in a plain data list is data; a hex in a style, a style object or a 
     [2, 3],
   );
 });
+
+test("an @import's path, a string and a comment are not class selectors; a class outside the component's own still warns", async () => {
+  // A field report: `@import url('./dispatch-tokens.css');` was answered `the class ".css" is not this component's`.
+  const { warnings } = await lint({
+    'tile.css': [
+      "@import url('./dispatch-tokens.css');",
+      '@import "./more.tokens.css" layer(tile.base) screen;',
+      '@import url(./bare.css);',
+      '@layer tile.base, tile.skin;',
+      '/* .legacy-note was here */',
+      '@media (min-width: 37.5em) {',
+      '  .c-tile::after { content: ".dot"; }',
+      '  .stranger { gap: 0.5rem; }',
+      '}',
+    ].join('\n'),
+  });
+  const classes = warnings.filter((w) => w.text.startsWith('the class "'));
+  assert.deepEqual(
+    classes.map((w) => [w.line, /^the class "([^"]+)"/.exec(w.text)![1]]),
+    [[8, '.stranger']],
+  );
+});

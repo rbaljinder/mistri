@@ -408,7 +408,7 @@ function Pager({ entry, data, at, range = false }: { entry: TableEntry; data: Ta
         ariaLabel={say('rowsPerPage')}
         value={String(size)}
         items={(PAGE_SIZES as number[]).map((n) => ({ value: String(n), label: String(n) }))}
-        onChange={(n) =>
+        onValueChange={(n) =>
           refine(() => {
             setPageSize(Number(n));
             render();
@@ -675,7 +675,7 @@ export function TableView({
       firstRow={firstRow}
       list={list}
       current={current}
-      dropColumns={embedded || beside}
+      dropColumns={(embedded || beside) && (sizing ?? 'fit') === 'fit'}
       editCell={editCell}
       {...(adornCell ? { adornCell } : {})}
     />

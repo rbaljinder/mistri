@@ -333,8 +333,8 @@ export function MultiStepForm<Field extends string = string>({
           primary={{
             label: primaryWords,
             onClick: () => void (last ? complete() : move('next')),
-            busy: pending,
-            busyLabel: last ? say('common.saving') : say('common.checking'),
+            loading: pending,
+            loadingLabel: last ? say('common.saving') : say('common.checking'),
           }}
         />
       </section>
@@ -378,16 +378,16 @@ export function MultiStepForm<Field extends string = string>({
       <div className="multi-step-actions form-actions">
         {leading}
         {current > 0 && (
-          <Button intent="quiet" className="multi-step-back" disabled={pending} onClick={() => void move('previous')}>
+          <Button variant="ghost" className="multi-step-back" disabled={pending} onClick={() => void move('previous')}>
             {previousLabel}
           </Button>
         )}
         {last ? (
-          <Button intent="primary" busy={pending} busyLabel={say('common.saving')} onClick={() => void complete()}>
+          <Button variant="primary" loading={pending} loadingLabel={say('common.saving')} onClick={() => void complete()}>
             {primaryWords}
           </Button>
         ) : (
-          <Button intent="primary" busy={pending} busyLabel={say('common.checking')} onClick={() => void move('next')}>
+          <Button variant="primary" loading={pending} loadingLabel={say('common.checking')} onClick={() => void move('next')}>
             {primaryWords}
           </Button>
         )}

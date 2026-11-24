@@ -616,10 +616,10 @@ function Confirm({ asking, onAnswer }: { asking: Asking; onAnswer: (yes: boolean
         </p>
       )}
       <div className="confirm-actions">
-        <Button intent="secondary" onClick={() => answer(false)}>
+        <Button variant="secondary" onClick={() => answer(false)}>
           {say('common.cancel')}
         </Button>
-        <Button intent="primary" onClick={() => answer(true)}>
+        <Button variant="primary" onClick={() => answer(true)}>
           {action.label}
         </Button>
       </div>

@@ -145,19 +145,21 @@ interface GanttListProps {
   referenceLabels?: Record<string, string>;
   /** Today, as a day number; a test holds it still. */
   today?: number;
+  limit?: number;
 }
 
-export function GanttList({ table, spec, entry, interactive = true, label, referenceLabels, today }: GanttListProps) {
+export function GanttList({ table, spec, entry, interactive = true, label, referenceLabels, today, limit }: GanttListProps) {
   const connection = state.activeConnection ?? null;
+  const maxRows = limit ?? LIMIT;
   const columns = [...new Set([...primaryKey(table), ...listPresentationColumns(spec), ...Object.values(referenceLabels ?? {})])];
   const filter = splitQuery(entry.query).filter;
   const text = `${table.id}${filter ? ` ${filter}` : ''} sort ${spec.start} show ${columns.join(', ')}`;
   const answer = useQuery({
-    queryKey: ['run', connection ?? '', 'gantt', text],
+    queryKey: ['run', connection ?? '', 'gantt', text, ...(limit === undefined ? [] : [limit])],
     queryFn: async () => {
       const data = (await api('/api/run', {
         q: text,
-        limit: LIMIT,
+        limit: maxRows,
         offset: 0,
         count: 'none',
         ...(connection ? ownedBy(connection) : {}),

@@ -10,8 +10,10 @@
  * meanwhile, so nothing moves. A page's icon weight, when it wears one beyond
  * the two every glyph carries, is lent the same way (`weighIconsWith`).
  */
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore, type CSSProperties, type Ref } from 'react';
+import type { AppIconName } from './iconNames.js';
 
+export type { AppIconName };
 /** A glyph's drawings: its paths in the regular weight, and in bold (for a logo). */
 export type IconGlyph = readonly [regular: readonly string[], bold: readonly string[]];
 /** The two weights every glyph keeps. */
@@ -94,18 +96,35 @@ const subscribe = (listener: () => void) => {
 };
 const version = () => known;
 
-export interface IconProps<Name extends string = string> {
+/** Props for the `Icon` vector glyph component. */
+export interface IconProps<Name extends AppIconName = AppIconName> {
   name: Name;
   /** Omit for decoration. Icon-only controls still need their own name. */
   label?: string;
+  /** Accessible name when the icon conveys standalone meaning. */
+  ariaLabel?: string;
   /** Relative sizes follow the surrounding typography and density. */
   size?: number | string;
   /** Omitted, the page's weight (`weighIconsWith`), regular unless it says another. */
   weight?: IconWeight;
   className?: string;
+  style?: CSSProperties;
+  ref?: Ref<SVGSVGElement>;
+  [dataAttribute: `data-${string}`]: string | undefined;
 }
 
-export function Icon<Name extends string = string>({ name, label, size = '1em', weight, className }: IconProps<Name>) {
+/** Renders a registered vector icon glyph on a 256×256 viewBox in `currentColor`. */
+export function Icon<Name extends AppIconName = AppIconName>({
+  name,
+  label,
+  ariaLabel,
+  size = '1em',
+  weight,
+  className,
+  style,
+  ref,
+  ...rest
+}: IconProps<Name>) {
   useSyncExternalStore(subscribe, version, version);
   const weights = weighting;
   useSyncExternalStore(weights.subscribe, weights.version, weights.version);
@@ -118,15 +137,18 @@ export function Icon<Name extends string = string>({ name, label, size = '1em', 
   useEffect(() => {
     if (!own) loadEveryGlyph();
   }, [own]);
-  const accessibleLabel = label?.trim() || undefined;
+  const accessibleLabel = (ariaLabel ?? label)?.trim() || undefined;
   return (
     <svg
+      {...rest}
+      ref={ref}
       xmlns="http://www.w3.org/2000/svg"
       width={size}
       height={size}
       fill="currentColor"
       viewBox="0 0 256 256"
       className={`mistri-icon${className ? ` ${className}` : ''}`}
+      style={style}
       role={accessibleLabel ? 'img' : undefined}
       aria-label={accessibleLabel}
       aria-hidden={accessibleLabel ? undefined : true}

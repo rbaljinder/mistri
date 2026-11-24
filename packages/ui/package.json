@@ -1,6 +1,6 @@
 {
   "name": "@mistriwork/ui",
-  "version": "1.0.0-rc.84",
+  "version": "1.0.0-rc.85",
   "description": "The standalone React primitives both shells are drawn with: Modal, DropMenu, Dropdown, Typeahead, Button, Field, Icon and DateField over UI SDK, Switch, Tabs, Drawer, Popover, Avatar, Pagination, Carousel, Resizable, ScrollArea and Tooltip, the form controls built on them (text, masked, money and sensitive boxes, listboxes, choices, slider, progress and action bar; Preview), the landing hero's blocks (badge, photo tiles, icon rows; Preview), their tokens and stylesheet, and the zoom-aware ruler their popups are placed by.",
   "homepage": "https://mistriwork.dev",
   "bugs": {
@@ -20,6 +20,10 @@
     "LICENSE"
   ],
   "type": "module",
+  "sideEffects": [
+    "**/*.css",
+    "./*.css"
+  ],
   "exports": {
     ".": {
       "mistri-built": {
@@ -47,10 +51,6 @@
     "./Choices.js": {
       "mistri-built": "./dist/Choices.js",
       "default": "./src/Choices.tsx"
-    },
-    "./internal/ComponentStyleScope.js": {
-      "mistri-built": "./dist/internal/ComponentStyleScope.js",
-      "default": "./src/internal/ComponentStyleScope.ts"
     },
     "./DateField.js": {
       "mistri-built": "./dist/DateField.js",
@@ -144,10 +144,6 @@
       "mistri-built": "./dist/Tooltip.js",
       "default": "./src/Tooltip.tsx"
     },
-    "./internal/datePickerModel.js": {
-      "mistri-built": "./dist/internal/datePickerModel.js",
-      "default": "./src/internal/datePickerModel.ts"
-    },
     "./controls.css": {
       "mistri-built": "./dist/controls.css",
       "default": "./src/controls.css"
@@ -159,14 +155,6 @@
     "./preferences.css": {
       "mistri-built": "./dist/preferences.css",
       "default": "./src/preferences.css"
-    },
-    "./internal/popups.js": {
-      "mistri-built": "./dist/internal/popups.js",
-      "default": "./src/internal/popups.ts"
-    },
-    "./internal/ruler.js": {
-      "mistri-built": "./dist/internal/ruler.js",
-      "default": "./src/internal/ruler.ts"
     },
     "./style.css": {
       "mistri-built": "./dist/style.css",
@@ -187,6 +175,46 @@
     "./conformance.js": {
       "mistri-built": "./dist/conformance.js",
       "default": "./src/conformance.tsx"
+    },
+    "./charts.js": {
+      "mistri-built": "./dist/charts.js",
+      "default": "./src/charts.ts"
+    },
+    "./charts/core.js": {
+      "mistri-built": "./dist/charts/core.js",
+      "default": "./src/charts/core.ts"
+    },
+    "./primitives.js": {
+      "mistri-built": "./dist/primitives.js",
+      "default": "./src/primitives.ts"
+    },
+    "./views.js": {
+      "mistri-built": "./dist/views.js",
+      "default": "./src/views.ts"
+    },
+    "./styles/surfaces.css": {
+      "mistri-built": "./dist/styles/surfaces.css",
+      "default": "./src/styles/surfaces.css"
+    },
+    "./styles/surfaces/base.css": {
+      "mistri-built": "./dist/styles/surfaces/base.css",
+      "default": "./src/styles/surfaces/base.css"
+    },
+    "./styles/surfaces/charts.css": {
+      "mistri-built": "./dist/styles/surfaces/charts.css",
+      "default": "./src/styles/surfaces/charts.css"
+    },
+    "./styles/surfaces/primitives.css": {
+      "mistri-built": "./dist/styles/surfaces/primitives.css",
+      "default": "./src/styles/surfaces/primitives.css"
+    },
+    "./styles/surfaces/views.css": {
+      "mistri-built": "./dist/styles/surfaces/views.css",
+      "default": "./src/styles/surfaces/views.css"
+    },
+    "./styles/ui-sdk-surfaces.css": {
+      "mistri-built": "./dist/styles/ui-sdk-surfaces.css",
+      "default": "./src/styles/ui-sdk-surfaces.css"
     },
     "./package.json": "./package.json"
   },

@@ -51,7 +51,7 @@ function Harness({
         }}
         open={open}
         onOpenChange={setOpen}
-        inputProps={{ 'aria-label': 'Search' }}
+        inputProps={{ ariaLabel: 'Search' }}
         fit={fit}
         popupRef={popupRef}
         popupClassName="test-popup"
@@ -174,12 +174,12 @@ test('a list is named by the label of a box that has no aria-label, as the box i
 });
 
 test("a box's own aria-label still names the list, ahead of its label", async () => {
-  render(<Labelled inputProps={{ 'aria-label': 'Find a tree' }} />);
+  render(<Labelled inputProps={{ ariaLabel: 'Find a tree' }} />);
   expect(await screen.findByRole('listbox', { name: 'Find a tree' })).toBeTruthy();
 });
 
 test('an empty message sits beside the list, not inside a listbox, and nothing matched leaves no listbox', async () => {
-  render(<Labelled inputProps={{ 'aria-label': 'Find a tree' }} empty="No tree by that name" />);
+  render(<Labelled inputProps={{ ariaLabel: 'Find a tree' }} empty="No tree by that name" />);
   await userEvent.setup().type(screen.getByRole('combobox'), 'zz');
   const status = await screen.findByText('No tree by that name');
   expect(status.closest('[role="listbox"]')).toBeNull();
@@ -191,7 +191,7 @@ test("with nothing matched, the empty message is drawn on the list's surface and
   const drawerEscape = vi.fn();
   render(
     <div onKeyDown={(e) => e.key === 'Escape' && drawerEscape()}>
-      <Labelled inputProps={{ 'aria-label': 'Find a tree' }} empty="No tree by that name" />
+      <Labelled inputProps={{ ariaLabel: 'Find a tree' }} empty="No tree by that name" />
     </div>,
   );
   const user = userEvent.setup();
@@ -229,7 +229,7 @@ function People({ heard = () => {} }: { heard?: (open: boolean, reason: string) 
           heard(next, details.reason);
           setOpen(next);
         }}
-        inputProps={{ 'aria-label': 'Owner' }}
+        inputProps={{ ariaLabel: 'Owner' }}
         popupClassName="people"
         listClassName="people-list"
       />

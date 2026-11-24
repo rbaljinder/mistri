@@ -106,7 +106,7 @@ export function DocumentRoom({ entry, document }: { entry: PageEntry | RowEntry;
       <div className="doc-bar">
         <span className="doc-bar-paper">{say('paper', { size: size === 'a4' ? say('a4') : say('letter') })}</span>
         <Button
-          intent="primary"
+          variant="primary"
           disabled={!page || Boolean(broken)}
           title={say('printTitle', { document: document.label.toLocaleLowerCase() })}
           onClick={() => window.print()}

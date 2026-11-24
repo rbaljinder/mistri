@@ -65,13 +65,13 @@ test('a failure after the profile step is completed by a retry under the same ke
   let first: unknown;
   await act(async () => void (first = await result.current.open(request)));
   expect(first).toBeNull();
-  expect(result.current).toMatchObject({ pending: false, result: null });
+  expect(result.current).toMatchObject({ isPending: false, result: null });
   expect(result.current.error?.message).toBe('The change is unconfirmed.');
 
   let second: unknown;
   await act(async () => void (second = await result.current.open(request)));
   expect(second).toEqual(opened);
-  expect(result.current).toMatchObject({ pending: false, error: null, result: opened });
+  expect(result.current).toMatchObject({ isPending: false, error: null, result: opened });
 
   const attempt = await profileAttempt(request.key);
   expect(runs).toEqual([

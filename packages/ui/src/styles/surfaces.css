@@ -1,0 +1,12 @@
+/* Composite views, charts, structured editors, and layout surfaces (@mistriwork/ui), dressed directly on Mistri's
+   house tokens (docs/design.md). Each sheet stands inside `@layer m-surfaces` (`base`, `components`, `views`).
+
+   This is all of it, for a page that wants every surface at once (`style.css` is that page). The four it imports are
+   what a page loads piece by piece instead, always in this order: `base.css` under everything, `charts.css` for a
+   chart, `primitives.css` for a control (over `charts.css`), `views.css` for a composite view (over both). A rule
+   sits in the lowest bundle whose components can draw the element it names, so no page waits on a sheet for a part
+   it does not draw. */
+@import './surfaces/base.css';
+@import './surfaces/charts.css';
+@import './surfaces/primitives.css';
+@import './surfaces/views.css';

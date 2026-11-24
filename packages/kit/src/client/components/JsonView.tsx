@@ -120,7 +120,7 @@ export function JsonView({
 }) {
   const locale = formatLocale();
   const [mode, setMode] = useState<'tree' | 'raw'>('tree');
-  const [wrap, setWrap] = useState(false);
+  const [wrap, setWrap] = useState(true);
   const [opening, setOpening] = useState<Opening>('auto');
   const [query, setQuery] = useState('');
   const asked = useDeferredValue(query.trim());
@@ -140,7 +140,7 @@ export function JsonView({
 
   useEffect(() => {
     if (!said) return;
-    const timer = setTimeout(() => setSaid(''), 1600);
+    const timer = setTimeout(() => setSaid(''), 1500);
     return () => clearTimeout(timer);
   }, [said]);
 
@@ -322,7 +322,7 @@ function CopyButton({ value, copy }: { value: object; copy: Tree['copy'] }) {
   const [said, setSaid] = useState<'copied' | 'refused' | null>(null);
   useEffect(() => {
     if (!said) return;
-    const timer = setTimeout(() => setSaid(null), 1600);
+    const timer = setTimeout(() => setSaid(null), 1500);
     return () => clearTimeout(timer);
   }, [said]);
   return (
@@ -432,7 +432,7 @@ function Actions({ value, path, name, active }: { value: unknown; path: string |
   const [done, setDone] = useState<'value' | 'path' | null>(null);
   useEffect(() => {
     if (!done) return;
-    const timer = setTimeout(() => setDone(null), 1600);
+    const timer = setTimeout(() => setDone(null), 1500);
     return () => clearTimeout(timer);
   }, [done]);
   const take = (what: 'value' | 'path') => (event: MouseEvent) => {

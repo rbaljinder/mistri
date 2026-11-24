@@ -4,7 +4,7 @@
  * while `left`, `translate` and a column's width are layout pixels; a page that hit-tests or drags by the one and
  * places by the other lands off by the zoom. This answers on the one ruler the shell measures with.
  */
-import { viewportBox, viewportScale } from '@mistriwork/ui/internal/ruler.js';
+import { viewportBox, viewportScale } from '@mistriwork/ui';
 
 export function layoutPoint(event: { clientX: number; clientY: number }, element: Element): { x: number; y: number } {
   const zoom = viewportScale();

@@ -116,6 +116,10 @@ const config: StorybookConfig = {
           { find: /^@mistriwork\/mistri\/ui\/testing$/, replacement: `${REPO}/packages/mistri/src/client/components/sdk/fixture.tsx` },
           { find: /^@mistriwork\/mistri\/ui$/, replacement: `${REPO}/packages/mistri/src/client/components/sdk/index.ts` },
           { find: /^@mistriwork\/mistri\/page$/, replacement: `${REPO}/packages/mistri/src/client/components/sdk/page.tsx` },
+          { find: /^@mistriwork\/mistri\/primitives$/, replacement: `${REPO}/packages/mistri/src/client/components/sdk/primitives.ts` },
+          { find: /^@mistriwork\/mistri\/charts$/, replacement: `${REPO}/packages/mistri/src/client/components/sdk/charts.ts` },
+          { find: /^@mistriwork\/mistri\/views$/, replacement: `${REPO}/packages/mistri/src/client/components/sdk/views.ts` },
+          { find: /^@mistriwork\/mistri\/behaviors$/, replacement: `${REPO}/packages/mistri/src/client/components/sdk/behaviors.ts` },
         ],
       },
       /* src/client and src/shared sit outside this package. */

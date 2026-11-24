@@ -26,30 +26,30 @@ import {
 } from '@ui-sdk/react/select';
 import { useFieldControl } from '@ui-sdk/react/field';
 import type { ChangeDetails } from './changeDetails.js';
+import { toDataTone, type Tone } from './internal/cx.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
+import { useSurfaceSeam } from './internal/surfaceSeam.js';
 import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Option item descriptor for `Dropdown` and `MultiDropdown`. */
 export interface DropdownItem {
   value: string;
   label: string;
   detail?: string;
   badge?: string;
   disabled?: boolean;
-  /** Colours the option's word; the five tones of a display rule. */
-  tone?: 'good' | 'warn' | 'bad' | 'info' | 'neutral';
+  /** Semantic tone colouring the option's label. */
+  tone?: Tone;
   swatches?: string[];
 }
 
-/** Why a dropdown's choice moved: an option pressed (or chosen by key); `autofill`, the browser putting back what the
-    hidden field held; or `sync`, every other way the value follows something else: a letter typed on the closed
-    button, a form reset, a chosen option that left the list. A `sync` with a key behind it says `keyboard`; with
-    nothing behind it, it is the page's own change. */
+/** Change details reported when a `Dropdown` or `MultiDropdown` value moves. */
 export type DropdownChange = ChangeDetails<'item-press' | 'autofill' | 'sync'>;
 
 interface DropdownBase {
-  items: DropdownItem[];
-  /** What a reader hears the list called; the kit's Dropdown supplies its catalog's word where a caller names none. */
+  items: readonly DropdownItem[];
+  /** What a reader hears the list called; falls back to the host seam's `select` word when unnamed. */
   ariaLabel?: string;
   ariaInvalid?: boolean;
   ariaDescribedBy?: string;
@@ -57,8 +57,8 @@ interface DropdownBase {
   ariaLabelledBy?: string;
   /** The button's id, so a field's `<label for>` names it (components/Field.tsx). */
   id?: string;
-  /** The button, for a form that needs to put focus on this control. */
-  buttonRef?: Ref<HTMLButtonElement>;
+  /** Ref forwarded to the trigger `<button>` element. */
+  ref?: Ref<HTMLButtonElement>;
   popupRef?: Ref<HTMLDivElement>;
   onOpenChange?: (
     open: boolean,
@@ -76,10 +76,12 @@ interface DropdownBase {
   ) => void;
   disabled?: boolean;
   readOnly?: boolean;
+  /** Wrapper class name on the `[data-slot="dropdown"]` container. */
+  className?: string;
   /** A class on the shown value — a page title that is also a picker. */
   valueClassName?: string;
   /** Things to do rather than pick, listed under a divider — "re-read the schema" beneath the databases. */
-  actions?: DropdownAction[];
+  actions?: readonly DropdownAction[];
   /** Classes on the button beside `dd-button`: a form's field wears `field-control` through it. */
   buttonClassName?: string;
   /** Classes on the list beside `dd-list`. */
@@ -90,15 +92,25 @@ interface DropdownBase {
   placeholder?: string;
 }
 
-export type DropdownProps = DropdownBase & { value: string; onChange: (value: string, details: DropdownChange) => void };
-/** `MultiDropdown`'s: the list of values taken and given, kept in the items' order. */
-export type MultiDropdownProps = DropdownBase & { value: string[]; onChange: (value: string[], details: DropdownChange) => void };
+/** Props for single-value `Dropdown`. */
+export type DropdownProps = DropdownBase & {
+  value: string;
+  onValueChange?: (value: string, details: DropdownChange) => void;
+};
+
+/** Props for multi-value `MultiDropdown`. */
+export type MultiDropdownProps = DropdownBase & {
+  value: readonly string[];
+  onValueChange?: (value: string[], details: DropdownChange) => void;
+};
+
 type DropdownInput = DropdownBase &
   (
-    | { multiple?: false; value: string; onChange: (value: string, details: DropdownChange) => void }
-    | { multiple: true; value: string[]; onChange: (value: string[], details: DropdownChange) => void }
+    | { multiple?: false; value: string; onValueChange?: (value: string, details: DropdownChange) => void }
+    | { multiple: true; value: readonly string[]; onValueChange?: (value: string[], details: DropdownChange) => void }
   );
 
+/** Non-selectable command row rendered beneath a separator inside `Dropdown`. */
 export interface DropdownAction {
   label: string;
   onSelect: () => void;
@@ -149,17 +161,11 @@ function Swatches({ colours }: { colours: string[] }) {
    place a part's role gives way. */
 function DropdownList(props: DropdownInput) {
   const { items, actions = [] } = props;
-  /* Where the list is drawn. A list portalled to the end of the body sits behind a modal <dialog>'s top layer, and
-     half the pickers here live in one, so inside a dialog the list is drawn into that dialog and keeps its stacking
-     context; elsewhere it goes where every floating surface here does (internal/popups.ts), which an embedded
-     shell names for itself. */
+  const seam = useSurfaceSeam();
   const root = useRef<HTMLSpanElement>(null);
   const dialog = useDialogContainer(root);
-  /* Nothing chosen: a value no item carries (a form's empty answer) reads as no selection, not as a stray one. An
-     item may itself be the empty value (a sort's "Default order"), and is then the one chosen. */
-  const chosen = props.multiple === true ? props.value : [props.value];
+  const chosen = props.multiple === true ? (props.value ?? []) : [props.value];
   const known = items.filter((item) => chosen.includes(item.value));
-  /* An action's row is pressed like an option's, and the press is refused before it becomes the value. */
   const run = (value: unknown, details: { cancel(): void }): boolean => {
     const picked = [value].flat().find((one) => typeof one === 'string' && one.startsWith(ACTION));
     if (typeof picked !== 'string') return false;
@@ -167,27 +173,35 @@ function DropdownList(props: DropdownInput) {
     actions[Number(picked.slice(ACTION.length))]?.onSelect();
     return true;
   };
-  /* A button named only by `ariaLabel` is named by it and then by the value it shows (WCAG 2.5.3, label in name):
-     its own label first, the shown value after, as a field's `ariaLabelledBy` names it with `valueId`. */
   const made = useId();
-  const buttonId = props.id ?? `dropdown-${made}`;
+  const fieldProps = useFieldControl()?.props({}) as Record<string, unknown> | undefined;
+  const inheritFieldLabel = !props.ariaLabel && !props.ariaLabelledBy;
+  const fieldId = inheritFieldLabel && typeof fieldProps?.id === 'string' && fieldProps.id ? fieldProps.id : undefined;
+  const fieldLabelledBy =
+    inheritFieldLabel && typeof fieldProps?.['aria-labelledby'] === 'string' && fieldProps['aria-labelledby']
+      ? fieldProps['aria-labelledby']
+      : undefined;
+  const fieldInvalid = fieldProps?.['aria-invalid'] === true || fieldProps?.['aria-invalid'] === 'true';
+  const effectiveAriaLabel = props.ariaLabel ?? (!props.ariaLabelledBy && !fieldLabelledBy ? seam?.defaultWords?.().select : undefined);
+  const buttonId = props.id ?? fieldId ?? `dropdown-${made}`;
   const shownId = props.valueId ?? `${buttonId}-value`;
-  const label = props.ariaLabelledBy?.split(' ')[0];
+  const effectiveLabelledBy =
+    props.ariaLabelledBy ?? (fieldLabelledBy ? `${fieldLabelledBy} ${shownId}` : effectiveAriaLabel ? `${buttonId} ${shownId}` : undefined);
+  const label = (props.ariaLabelledBy ?? fieldLabelledBy)?.split(' ')[0];
   const first = props.multiple === true ? undefined : known[0];
-  /* Inside a field UI SDK describes the trigger by the field's hint and problem itself. A Select hands the same
-     ids on as props (so a kit's Dropdown hears them too), and saying them twice would list each id twice. */
-  const wired = (useFieldControl()?.props({}) as Record<string, unknown> | undefined)?.['aria-describedby'];
+  const wired = fieldProps?.['aria-describedby'];
   const described = props.ariaDescribedBy && props.ariaDescribedBy === wired ? undefined : props.ariaDescribedBy;
+  const triggerRef = props.ref ?? (props as { buttonRef?: Ref<HTMLButtonElement> }).buttonRef;
   const trigger = (
     <SelectTrigger
       render={<button type="button" role="button" />}
       id={buttonId}
-      ref={props.buttonRef}
+      ref={triggerRef}
       className={props.buttonClassName}
-      aria-label={props.ariaLabelledBy ? undefined : props.ariaLabel}
-      aria-labelledby={props.ariaLabelledBy ?? (props.ariaLabel ? `${buttonId} ${shownId}` : undefined)}
+      aria-label={props.ariaLabelledBy || fieldLabelledBy ? undefined : effectiveAriaLabel}
+      aria-labelledby={effectiveLabelledBy}
       aria-describedby={described}
-      aria-invalid={props.ariaInvalid || undefined}
+      aria-invalid={props.ariaInvalid || fieldInvalid || undefined}
       title={first?.detail}
     >
       {first?.swatches?.length ? <Swatches colours={first.swatches} /> : null}
@@ -201,13 +215,10 @@ function DropdownList(props: DropdownInput) {
       ref={props.popupRef}
       className={props.listClassName}
       container={dialog ?? popupContainer()}
-      // The list is called what the button is, without the value the button also says: UI SDK names it by the
-      // whole button, so the name is put on what it draws.
-      render={(drawn) => <div {...drawn} aria-label={props.ariaLabel} aria-labelledby={props.ariaLabel ? undefined : label} />}
+      render={(drawn) => <div {...drawn} aria-label={effectiveAriaLabel} aria-labelledby={effectiveAriaLabel ? undefined : label} />}
     >
       {items.map((item) => (
-        // Named by its word alone, which is what a letter typed in the list looks for: not its detail and badge too.
-        <SelectItem key={item.value} value={item.value} label={item.label} disabled={item.disabled} data-tone={item.tone}>
+        <SelectItem key={item.value} value={item.value} label={item.label} disabled={item.disabled} data-tone={toDataTone(item.tone)}>
           {props.multiple === true && (
             <SelectItemIndicator keepMounted>
               <Tick />
@@ -232,22 +243,22 @@ function DropdownList(props: DropdownInput) {
     ((next: boolean, details: Parameters<typeof told>[1] & { reason?: string }) =>
       props.onOpenChange?.(next, told(openReason(details?.reason), details)));
   return (
-    <span ref={root} data-slot="dropdown">
+    <span ref={root} data-slot="dropdown" className={props.className || undefined}>
       {props.multiple === true ? (
         <Listbox
           multiple
-          value={props.value}
+          value={[...(props.value ?? [])]}
           disabled={props.disabled}
           readOnly={props.readOnly}
           onOpenChange={open}
           onValueChange={(next, details) => {
             if (run(next, details)) return;
             const picked = next.map(String);
-            // Kept in the items' order, whatever order they were chosen in.
-            props.onChange(
-              items.map((item) => item.value).filter((value) => picked.includes(value)),
-              told(changeReason(details.reason), details),
-            );
+            const ordered = items.map((item) => item.value).filter((value) => picked.includes(value));
+            const info = told(changeReason(details.reason), details);
+            const legacy = (props as { onChange?: (value: string[], details: DropdownChange) => void }).onChange;
+            props.onValueChange?.(ordered, info);
+            legacy?.(ordered, info);
           }}
         >
           {trigger}
@@ -261,7 +272,11 @@ function DropdownList(props: DropdownInput) {
           onOpenChange={open}
           onValueChange={(next, details) => {
             if (run(next, details)) return;
-            props.onChange(next === null ? '' : String(next), told(changeReason(details.reason), details));
+            const chosenValue = next === null ? '' : String(next);
+            const info = told(changeReason(details.reason), details);
+            const legacy = (props as { onChange?: (value: string, details: DropdownChange) => void }).onChange;
+            props.onValueChange?.(chosenValue, info);
+            legacy?.(chosenValue, info);
           }}
         >
           {trigger}
@@ -272,8 +287,10 @@ function DropdownList(props: DropdownInput) {
   );
 }
 
-const DROPDOWN_FILLS = { onChange: [1, 'item-press'], onOpenChange: [1, 'implicit'] } as const;
+const DROPDOWN_FILLS = { onValueChange: [1, 'item-press'], onOpenChange: [1, 'implicit'] } as const;
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Accessible single-select listbox popup with keyboard typeahead, swatches, and trailing actions. */
 export const Dropdown = slotted('Dropdown', DefaultDropdown, DROPDOWN_FILLS);
+
+/** Accessible multi-select listbox popup preserving item order and check indicators. */
 export const MultiDropdown = slotted('MultiDropdown', DefaultMultiDropdown, DROPDOWN_FILLS);

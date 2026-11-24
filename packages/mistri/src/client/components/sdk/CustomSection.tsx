@@ -14,7 +14,7 @@
  * refused any other placement as it loaded), and each of its reads is the
  * public grant's on the server.
  */
-import { ComponentStyleScope } from '@mistriwork/ui/internal/ComponentStyleScope.js';
+import { ComponentStyleScope, UiSurfaceSeamContext } from '@mistriwork/ui';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type ReactNode } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { api, primaryKey, state } from '@mistriwork/kit/client/core.js';
@@ -29,6 +29,7 @@ import { loadComponent } from './componentLoader.js';
 import { useComponentKey } from './componentKey.js';
 import { pageLoadKey, pageLoadPlace } from './hooks.js';
 import { rowsByPath } from './rows.js';
+import { mistriSurfaceSeam } from './seam.js';
 import { batchedBreakdown } from '@mistriwork/kit/client/breakdownBatch.js';
 import { breakdownText, measureText } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { windowBounds } from '@mistriwork/engine/shared/queryDates.js';
@@ -109,11 +110,13 @@ export function CustomBody({
   const Part = partFor(id, useComponentKey(id));
   return (
     <div className={className} data-component={id} ref={box}>
-      <ComponentStyleScope.Provider value={id}>
-        <UiSizeContext.Provider value={size}>
-          <Part {...given} />
-        </UiSizeContext.Provider>
-      </ComponentStyleScope.Provider>
+      <UiSurfaceSeamContext.Provider value={mistriSurfaceSeam}>
+        <ComponentStyleScope.Provider value={id}>
+          <UiSizeContext.Provider value={size}>
+            <Part {...given} />
+          </UiSizeContext.Provider>
+        </ComponentStyleScope.Provider>
+      </UiSurfaceSeamContext.Provider>
     </div>
   );
 }

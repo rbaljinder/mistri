@@ -64,12 +64,12 @@
      top bar folds its groups into Menu when they and the search's floor do not fit, and a 360px floor
      folded a six-group bar on an iPad, so the search gives way first, as in every look. */
   :root[data-look-bar='airy'] .app-mode .topbar .tn-search {
-    width: min(360px, 32vw);
-    min-height: 38px;
-    padding-inline: var(--space-4);
+    width: min(320px, 30vw);
+    min-height: 32px;
+    padding-inline: var(--space-3h);
     background: var(--surface);
     border: 1px solid var(--line);
-    border-radius: var(--control-radius, var(--radius-lg));
+    border-radius: var(--control-radius, var(--radius));
     box-shadow: var(--shadow-control);
     color: var(--ink-subtle);
   }
@@ -82,7 +82,7 @@
   }
   /* The menu: rows a control's height with room between, the current one a soft blue pill in the accent's ink. */
   :root[data-look-nav='pill'] #table-list {
-    padding-inline: var(--space-4);
+    padding-inline: var(--space-3h);
   }
   :root[data-look-nav='pill'] #table-list li {
     margin-bottom: var(--space-1);
@@ -91,12 +91,12 @@
      36px pill with its words pushed 12px in, out of line with a nested heading. */
   :root[data-look-nav='pill'] #table-list button:not(.nav-group-fold) {
     align-items: center;
-    min-height: 36px;
-    padding: 7px var(--space-4);
-    gap: var(--space-4);
+    min-height: 32px;
+    padding: var(--space-1h) var(--space-3h);
+    gap: var(--space-3h);
     border-radius: var(--radius);
     color: var(--nav-muted);
-    font: 400 var(--text-sm)/1.35 var(--sans);
+    font: 450 var(--text-sm)/1.35 var(--sans);
   }
   :root[data-look-nav='pill'] #table-list .nav-icon {
     width: var(--icon-ui);
@@ -265,6 +265,9 @@
   /* A dashboard's sections are white cards on the stone ground, and so are its stat cards. */
   :root[data-look-section='card'] .dash-body {
     --page-row-gap: 16px;
+    /* One gutter between cards, across as down: the areas' columns stood a layout step (32px) apart and their rows
+       and the figure cards 16px, so a row of cards read as two groups. */
+    --dash-column-gap: 16px;
   }
   :root[data-look-section='card'] .dash-body .page-section:not(.dash-strip, .dash-cards-section, .dash-banner) {
     --panel-pad-block: 18px;
@@ -277,6 +280,10 @@
   }
   :root[data-look-section='card'] .dash-body .page-section:not(.dash-strip) th {
     background: var(--table-head-ground, var(--surface));
+  }
+  /* A matrix's row name is a head in the body: it names its row and wears no head band. */
+  :root[data-look-section='card'] .dash-body .page-section:not(.dash-strip) th.matrix-row {
+    background: none;
   }
   :root[data-look-section='card'] .dash-body .page-section:not(.dash-strip) .dash-list .table-wrap {
     margin-inline: calc(-1 * var(--panel-pad-inline));
@@ -473,22 +480,22 @@
   }
   :root[data-look-chart='gradient'] .pbd-bar {
     background: var(--raised);
-    border-radius: 999px;
+    border-radius: var(--pill-radius, 999px);
   }
   :root[data-look-chart='gradient'] .pbd-fill {
-    border-radius: 999px;
+    border-radius: var(--pill-radius, 999px);
   }
 
   /* ---------- Tables ---------- */
   /* Heads on a band a step off the surface, ruled under, and rows divided by the faintest hairline. The band is
      what tells a card of rows from a card of anything else, and it stays over the rows as they scroll. */
-  :root[data-look-table='card'] th:where(:not([data-slot])) {
+  :root[data-look-table='card'] th:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     font: 500 var(--text-sm) var(--sans);
     color: var(--ink-muted);
     background: var(--table-head-ground);
     border-bottom: 1px solid var(--line);
   }
-  :root[data-look-table='card'] td:where(:not([data-slot])) {
+  :root[data-look-table='card'] td:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     font-size: var(--text-base);
     border-bottom-color: var(--row-rule);
   }
@@ -499,23 +506,41 @@
   :root[data-look-table='card'] .app-mode thead th {
     padding-block: var(--space-2h);
   }
-  :root[data-look-table='card'] tbody tr:hover td:where(:not([data-slot])) {
+  :root[data-look-table='card'] tbody tr:hover td:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     background: color-mix(in srgb, var(--accent-soft) 45%, var(--surface));
   }
   :root[data-look-table='card'] .grid-totals td {
     border-top: 1px solid var(--line);
   }
-  /* A list room's table is a white card on the ground, as every table in the references is. */
+  /* A list room's table is a white card on the ground, as every table in the references is. When it fits the pane,
+     keep overflow visible so the head stays sticky against .content (style.css) and round the corner cells instead. */
   :root[data-look-table='card'] .applist-room .result-table > .table-wrap,
   :root[data-look-table='card'] .applist-room > .table-wrap {
     background: var(--surface);
     border: var(--panel-border-width, 1px) solid var(--line);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
+  }
+  :root[data-look-table='card'] .applist-room :is(.result-table > .table-wrap, .table-wrap):not([data-fits]) {
     overflow: hidden;
   }
   :root[data-look-table='card'] .applist-room .table-wrap th {
     background: var(--table-head-ground);
+  }
+  :root[data-look-table='card'] .applist-room .table-wrap:not([data-stuck]) thead tr:first-child th:first-child {
+    border-start-start-radius: calc(var(--radius-lg) - var(--panel-border-width, 1px));
+  }
+  :root[data-look-table='card'] .applist-room .table-wrap:not([data-stuck]) thead tr:first-child th:last-child {
+    border-start-end-radius: calc(var(--radius-lg) - var(--panel-border-width, 1px));
+  }
+  :root[data-look-table='card'] .applist-room .table-wrap tbody tr:last-child td {
+    border-bottom-color: transparent;
+  }
+  :root[data-look-table='card'] .applist-room .table-wrap tbody tr:last-child td:first-child {
+    border-end-start-radius: calc(var(--radius-lg) - var(--panel-border-width, 1px));
+  }
+  :root[data-look-table='card'] .applist-room .table-wrap tbody tr:last-child td:last-child {
+    border-end-end-radius: calc(var(--radius-lg) - var(--panel-border-width, 1px));
   }
   /* A list read as a queue (a row and its two lines) and a list's records as summaries, which is how a phone reads
      a table, are the same card: ruled apart on the bare ground they were the lists of the look not held. */
@@ -549,7 +574,7 @@
   html:root[data-look-status='pill-dot'] .tone:not(.record-tag, .tone-neutral) {
     gap: var(--space-2h);
     padding: var(--space-1) var(--space-3h) var(--space-1) var(--space-3);
-    border-radius: 999px;
+    border-radius: var(--pill-radius, 999px);
     font-size: var(--text-sm);
     font-weight: 600;
     line-height: 1.5;
@@ -788,11 +813,11 @@
   /* A queue's row is the way to its record: the whole row opens it, and the one affordance left is a small chevron at
      its end. An outlined "Open pick list" on every row repeated the same word down the column, louder than the
      names it led to. The button keeps its accessible name; its hit area is stretched over the row. */
-  :root[data-look-table='quiet'] .queue-list > .queue-row {
+  :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list > .queue-row {
     position: relative;
     flex-wrap: nowrap;
   }
-  :root[data-look-table='quiet'] .queue-list .queue-open {
+  :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list .queue-open {
     position: static;
     align-self: center;
     width: 16px;
@@ -808,7 +833,7 @@
     color: var(--ink-subtle);
     opacity: 1;
   }
-  :root[data-look-table='quiet'] .queue-list .queue-open::before {
+  :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list .queue-open::before {
     content: '';
     display: block;
     width: 6px;
@@ -818,32 +843,34 @@
     border-right: 1.5px solid currentColor;
     transform: rotate(45deg);
   }
-  :root[data-look-table='quiet'] .queue-list .queue-open::after {
+  :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list .queue-open::after {
     content: '';
     position: absolute;
     inset: 0;
   }
-  :root[data-look-table='quiet'] .queue-list .queue-open:focus-visible {
+  :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list .queue-open:focus-visible {
     outline: none;
   }
-  :root[data-look-table='quiet'] .queue-list .queue-open:focus-visible::after {
+  :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list .queue-open:focus-visible::after {
     outline: var(--focus-width) solid var(--focus);
     outline-offset: -2px;
     border-radius: var(--radius);
   }
-  :root[data-look-table='quiet'] .queue-list > .queue-row:hover .queue-title {
-    color: var(--link);
+  @media (hover: hover) {
+    :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list > .queue-row:hover .queue-title {
+      color: var(--link);
+    }
+    :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list > .queue-row:hover .queue-open {
+      color: var(--ink);
+    }
   }
-  :root[data-look-table='quiet'] .queue-list > .queue-row:hover .queue-open {
-    color: var(--ink);
-  }
-  :root[data-look-table='quiet'] .queue-list > .queue-row :is(a, button):not(.queue-open) {
+  :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list > .queue-row :is(a, button):not(.queue-open) {
     position: relative;
     z-index: 1;
   }
   @container queue (max-width: 22rem) {
-    :root[data-look-table='quiet'] .queue-list > .queue-row { flex-wrap: nowrap; }
-    :root[data-look-table='quiet'] .queue-list .queue-content { flex-basis: auto; }
+    :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list > .queue-row { flex-wrap: nowrap; }
+    :root:is([data-look-table='quiet'], [data-look-table='card']) .queue-list .queue-content { flex-basis: auto; }
   }
 
   /* ---------- Activity ---------- */
@@ -918,6 +945,12 @@
     border-color: var(--ink-subtle);
   }
   :root[data-look-buttons='raised'] .applist-search-input:focus {
+    background: var(--surface);
+  }
+  /* The raised ground is the quiet filters' (below), which stand beside it as chips on that ground. Beside filter
+     keys on the surface with the same edge, the one grey field read as a field already focused: it is on the
+     surface as they are. */
+  :root[data-look-buttons='raised']:not([data-look-filters='quiet']) .applist-search-input {
     background: var(--surface);
   }
   /* `filters: 'quiet'`: a filter not yet asked for is a chip on the raised ground with no edge, a step darker under
@@ -1067,26 +1100,32 @@
   }
   /* No box of its own, but an edge kept in the ground's colour: a lane or an empty cell a card is carried over
      says so in the accent (TriageBoard.css), which a lane with no border at all could not. */
-  :root[data-look-board='strip'] .triage-lane {
-    border: 1px solid transparent;
-    border-radius: var(--radius);
-    background: transparent;
-    padding: 0;
-  }
-  :root[data-look-board='strip'] .triage-lane.is-over {
-    border-color: var(--accent);
+  @media (min-width: 721px) {
+    :root[data-look-board='strip'] .triage-lane {
+      border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+      border-radius: var(--radius-lg);
+      background: color-mix(in srgb, var(--raised) 58%, var(--ground));
+      padding: var(--space-2h);
+    }
+    :root[data-look-board='strip'] .triage-lane.is-over {
+      border-color: var(--accent);
+    }
+    :root[data-look-board='strip'] .triage-cell.is-empty:not(.is-over) {
+      border-color: transparent;
+      background: transparent;
+    }
   }
   /* The strip look keeps a stripe in the first 10px of the card; the drag grip (TriageBoard.css, drawn only where a
      pointer hovers) stands in the padding beside it. This is the look's rule, so it lives in the look's sheet. */
   :root[data-look-board='strip'] .triage-card.has-category[data-draggable='true']::after {
-    left: 12px;
+    left: 11px;
   }
   :root[data-look-board='strip'] :is(.triage-lane-head, .board-lane-head, .triage-lane-top) {
     align-items: center;
-    min-height: 36px;
+    min-height: 34px;
     box-sizing: border-box;
-    margin: 0 0 var(--space-3);
-    padding: var(--space-2) var(--space-4);
+    margin: 0 0 var(--space-2h);
+    padding: var(--space-1h) var(--space-3);
     border: 0;
     border-radius: var(--radius);
     background: var(--lane-strip);
@@ -1095,7 +1134,7 @@
     border-top: 0;
   }
   :root[data-look-board='strip'] :is(.triage-lane-label, .board-lane-head) {
-    font: 600 var(--text-base) var(--sans);
+    font: 600 var(--text-sm) var(--sans);
     color: var(--lane-ink);
   }
   html:root[data-look-board='strip'] :is(.triage-lane-head, .board-lane-head, .triage-lane-unfold) .tone {
@@ -1109,28 +1148,29 @@
     height: 7px;
   }
   :root[data-look-board='strip'] :is(.board-lane-count, .triage-lane-count) {
-    padding: 0 var(--space-1);
+    padding: 0 var(--space-2);
+    border-radius: var(--pill-radius, 999px);
     border: 0;
-    background: none;
-    font: 500 var(--text-sm)/1.6 var(--sans);
-    color: var(--ink-subtle);
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+    font: 600 var(--text-xs)/1.6 var(--sans);
+    color: var(--ink-muted);
   }
   :root[data-look-board='strip'] .triage-lane-count.is-over {
     color: color-mix(in srgb, var(--status-warning) 78%, var(--ink));
     font-weight: 600;
   }
   :root[data-look-board='strip'] .triage-lane-cards {
-    gap: var(--space-3);
+    gap: var(--space-2h);
     padding-top: 0;
   }
   :root[data-look-board='strip'] :is(.board-card, .triage-card) {
     position: relative;
     gap: var(--space-2);
-    --card-pad: var(--space-4h);
-    padding: var(--space-4) var(--space-4h);
+    --card-pad: var(--space-4);
+    padding: var(--space-3h) var(--space-4);
     background: var(--surface);
     border: var(--panel-border-width, 1px) solid var(--line);
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius);
     box-shadow: var(--shadow-card);
   }
   /* A declared category is what the card is: its colour is a stripe of its own, inset from the edge with rounded
@@ -1152,10 +1192,10 @@
   :root[data-look-board='strip'] :is(.board-card, .triage-card.has-category)::before {
     content: '';
     position: absolute;
-    left: 6px;
+    left: 5px;
     top: 10px;
     bottom: 10px;
-    width: 4px;
+    width: 3px;
     border-radius: 999px;
     background: var(--card-hue);
   }
@@ -1365,7 +1405,7 @@
   }
   :root[data-look-workflow='pills'] .workflow-steps li:is([data-passed], [aria-current='step']) {
     padding: var(--space-1) var(--space-3h) var(--space-1) var(--space-3);
-    border-radius: 999px;
+    border-radius: var(--pill-radius, 999px);
     font-weight: 600;
   }
   :root[data-look-workflow='pills'] .workflow-steps li[data-passed] {
@@ -1734,7 +1774,7 @@
   :root[data-look-table='quiet'] {
     --row-rule: color-mix(in srgb, var(--line) 72%, var(--surface));
   }
-  :root[data-look-table='quiet'] th:where(:not([data-slot])) {
+  :root[data-look-table='quiet'] th:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     font: 500 var(--text-sm) var(--sans);
     color: var(--ink-subtle);
     border-bottom: 1px solid var(--line);
@@ -1744,7 +1784,7 @@
   :root[data-look-table='quiet'] .app-mode tbody td {
     color: var(--ink);
   }
-  :root[data-look-table='quiet'] td:where(:not([data-slot])) {
+  :root[data-look-table='quiet'] td:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     font-size: var(--text-base);
     border-bottom-color: var(--row-rule);
   }
@@ -1755,7 +1795,7 @@
     --sk-row-h: 43px;
     --sk-head-h: 43.5px;
   }
-  :root[data-look-table='quiet'] tbody tr:hover td:where(:not([data-slot])) {
+  :root[data-look-table='quiet'] tbody tr:hover td:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     background: color-mix(in srgb, var(--ink) 2.5%, var(--surface));
   }
   :root[data-look-table='quiet'] .grid-totals td {
@@ -1865,10 +1905,10 @@
   :root[data-look-chart='line'] .pbd-bar {
     height: 6px;
     background: var(--raised);
-    border-radius: 999px;
+    border-radius: var(--pill-radius, 999px);
   }
   :root[data-look-chart='line'] .pbd-fill {
-    border-radius: 999px;
+    border-radius: var(--pill-radius, 999px);
   }
   :root[data-look-chart='line'] .spark-stroke {
     stroke-width: 1.5;
@@ -1946,7 +1986,7 @@
   }
   :root[data-look-buttons='raised'] .applist-count {
     padding: var(--space-1) var(--space-3);
-    border-radius: 999px;
+    border-radius: var(--pill-radius, 999px);
     background: var(--accent-soft);
     color: var(--accent-ink, var(--accent));
     font: 600 var(--text-sm)/1.4 var(--sans);
@@ -1965,14 +2005,13 @@
   :root[data-look-buttons='raised'] :is(.dash-title, .applist-title, .page-title, .signin-title) {
     letter-spacing: -0.022em;
   }
-  /* A strip's figure and a record's leading figures are in the heading's face (Manrope, manropeFace.css): the
+  /* A strip's figure and a record's leading figures are in the heading's face (Inter, interFace.css): the
      figure is the page's largest word after its title, and the two read as one hand. A table's figures keep theirs. */
   :root[data-look-stat='divided'] :is(.dash-strip .home-card-value, .page-field-summary .page-field > dd) {
     font-family: var(--heading-font, var(--sans));
     font-weight: 700;
     letter-spacing: -0.02em;
-    /* Its own figures, not the table's: Manrope's tabular set also widens the comma and the one, which reads
-       "$56, 130" at a figure's size, and a figure alone in its tile has no column to keep. */
+    /* Proportional figures for a standalone headline figure, since a figure alone in its tile has no column to keep. */
     font-variant-numeric: normal;
   }
   /* The door stands on the shell's ground, the form on a panel: the brand's tint is the first thing seen. */

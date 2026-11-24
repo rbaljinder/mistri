@@ -1,10 +1,9 @@
-/* Manrope, the face Lumen's headings and hero figures are set in, and any theme's that names it first
-   (themeRecipes.ts recipeAttributes): a sheet of its own, as interFace.css is the interface's, so a page that draws no
-   heading in it never asks for it. A stack that begins with the face brings this sheet; the server preloads the file
-   beside it where a heading leads with it (server/clientSurface.ts, SHEET_FACES, lookPreloads). */
-/* Why a second face: Lumen in Inter alone read as a template, the same title and figure every other product has
-   (docs/design.md, Lumen). Manrope is a geometric grotesque with open counters and figures that hold at a stat's
-   size, drawn for titles, section heads, the App's name and a strip's figures only; a sentence stays in Inter. Its
+/* Manrope, shipped as a sheet of its own for any theme that names it first (themeRecipes.ts recipeAttributes),
+   as interFace.css is for Inter, so a page that draws no heading in it never asks for it. A stack that begins with
+   the face brings this sheet; the server preloads the file beside it where a heading leads with it
+   (server/clientSurface.ts, SHEET_FACES, lookPreloads). */
+/* Manrope is a geometric grotesque with open counters and figures that hold at a stat's
+   size, drawn for titles, section heads, the App's name and a strip's figures. Its
    variable face, the Latin subset (25 KB, weights 200 to 800 in one file; SIL Open Font License, its text in
    fonts/Manrope-OFL.txt and dist/client/fonts/). `swap`, as Inter: the page is held until this sheet is in, and the
    fallback below is cut to Manrope's measure, so the swap barely moves a line. */

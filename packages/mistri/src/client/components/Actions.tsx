@@ -663,11 +663,11 @@ function RevokeLinksConfirm({
               : say('noOpenLinks', { label })}
       </p>
       <div className="confirm-actions">
-        <Button intent="secondary" onClick={() => answer(false)}>
+        <Button variant="secondary" onClick={() => answer(false)}>
           {live && !checking ? say('linksAreKept') : say('common.close')}
         </Button>
         {live && !checking ? (
-          <Button intent="primary" onClick={() => answer(true)}>
+          <Button variant="primary" onClick={() => answer(true)}>
             {say('revokeLinks')}
           </Button>
         ) : null}
@@ -694,7 +694,7 @@ function ActionButton({
 }) {
   return (
     <Button
-      intent={intent}
+      variant={intent === 'quiet' ? 'ghost' : intent}
       className="page-action"
       disabled={busy}
       title={
@@ -765,10 +765,10 @@ function Confirm({
         </tbody>
       </table>
       <div className="confirm-actions">
-        <Button intent="secondary" onClick={() => answer(false)}>
+        <Button variant="secondary" onClick={() => answer(false)}>
           {dismissLabel(action.label)}
         </Button>
-        <Button intent="primary" onClick={() => answer(true)}>
+        <Button variant="primary" onClick={() => answer(true)}>
           {action.submitLabel ?? action.label}
         </Button>
       </div>
@@ -828,10 +828,10 @@ export function ReasonForm({
           onChange={(event) => setText(event.target.value)}
         />
         <div className="confirm-actions">
-          <Button intent="secondary" onClick={() => answer(null)}>
+          <Button variant="secondary" onClick={() => answer(null)}>
             {dismissLabel(action.label)}
           </Button>
-          <Button intent="primary" type="submit" disabled={!text.trim()}>
+          <Button variant="primary" type="submit" disabled={!text.trim()}>
             {action.submitLabel ?? action.label}
           </Button>
         </div>

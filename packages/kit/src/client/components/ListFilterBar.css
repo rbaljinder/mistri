@@ -7,7 +7,7 @@
 .applist-search { display: inline-flex; flex: 0 1 17rem; min-width: 10rem; }
 .applist-search-input {
   box-sizing: border-box; width: 100%; min-height: var(--control-h-sm); margin: 0; padding: 0 var(--space-3h);
-  font: var(--text-base) var(--sans); color: var(--ink);
+  font: var(--text-sm) var(--sans); color: var(--ink);
   background: var(--ground);
   border: 1px solid var(--line-control); border-radius: var(--radius);
 }
@@ -24,18 +24,17 @@
    list. The caret stands in the box the set chip's × takes, so setting a filter adds the value's width alone. */
 .applist-add {
   display: inline-flex; align-items: center; gap: 0;
-  box-sizing: border-box; min-height: var(--control-h-sm); margin: 0; padding: 0 var(--space-1) 0 var(--space-3h);
+  box-sizing: border-box; min-height: var(--control-h-sm); margin: 0; padding: 0 var(--space-1) 0 var(--space-3);
   font: var(--text-sm) var(--sans); color: var(--ink-muted); white-space: nowrap;
-  background: transparent; cursor: pointer;
-  border: 1px solid var(--line-strong); border-radius: var(--pill-radius, 999px);
+  background: var(--surface); cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: var(--radius);
 }
-.applist-add-mark { min-width: 24px; text-align: center; color: var(--ink-subtle); font-size: var(--text-xs); line-height: 1; }
+.applist-add-mark { min-width: 20px; text-align: center; color: var(--ink-subtle); font-size: var(--text-xs); line-height: 1; }
 /* How many of the filters behind More are set: said on the button, so none narrows the rows unseen. */
 .applist-add-count {
   margin-left: var(--space-2); padding: 0 var(--space-2); border-radius: 999px;
   background: var(--accent-soft, var(--raised)); color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums;
 }
-.applist-add:hover, .applist-add[aria-expanded="true"] { color: var(--ink); border-color: var(--ink-muted); }
 /* The list's own control at the bar's end (ListColumns.tsx): a mark and a word, no edge until it is pointed at, so it
    reads apart from the filters before it. */
 .applist-columns {
@@ -44,8 +43,8 @@
   border: 0; border-radius: var(--radius); background: none; cursor: pointer;
   font: 500 var(--text-sm) var(--sans); color: var(--ink-muted); white-space: nowrap;
 }
-.applist-columns[aria-expanded="true"] { background: var(--raised); color: var(--ink); }
-@media (hover: hover) { .applist-columns:hover { background: var(--raised); color: var(--ink); } }
+:is(.applist-add, .applist-columns)[aria-expanded="true"] { background: var(--raised); color: var(--ink); border-color: var(--line-strong); }
+@media (hover: hover) { :is(.applist-add, .applist-columns):hover { background: var(--raised); color: var(--ink); border-color: var(--line-strong); } }
 .applist-columns:focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 1px; }
 /* The phone's one button for every picker is a control, not a place: a solid hairline. */
 .applist-sheet-open { padding-inline: var(--space-3h); color: var(--ink); }

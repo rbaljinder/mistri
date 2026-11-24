@@ -41,6 +41,13 @@ const at = (sheet: string) => SHEETS.get(sheet) ?? sheet;
 
 /** The sheets a page always loads: a menu value that names none lives in one of these. */
 const FIRST_SHEETS = ['themeFamilies.css', 'components/sdk/kit.css', 'styles/looks.css'];
+/* The on-demand entries' sheets (`@mistriwork/mistri/charts`, `/primitives`, `/views`) answer the recipes for the
+   `.nx-*` parts they bring, and arrive with those parts whatever look is worn: for a part of theirs they are always
+   loaded, so they may answer any value too (test/sdk-look-recipes.test.ts holds them to every value the kit dresses). */
+const PART_SHEETS = ['surfaces-base', 'surfaces-charts', 'surfaces-primitives', 'surfaces-views'].map(
+  (name) => `components/sdk/${name}.css`,
+);
+const ALWAYS_LOADED = [...FIRST_SHEETS, ...PART_SHEETS];
 
 const MENUS: Record<string, Record<string, string | null>> = {
   ...(RECIPE_MENU as Record<string, Record<string, string | null>>),
@@ -93,7 +100,7 @@ test('every data-look rule lives in the sheet its menu value names', () => {
     .filter((rule) => {
       // An always-loaded sheet may answer any value (kit.css keys a segment's fill off Mono's tabs); a look's sheet only its own.
       const named = MENUS[rule.part]![rule.value]!;
-      return named ? rule.sheet !== sheetFile(named) && !FIRST_SHEETS.includes(rule.sheet) : !FIRST_SHEETS.includes(rule.sheet);
+      return named ? rule.sheet !== sheetFile(named) && !ALWAYS_LOADED.includes(rule.sheet) : !ALWAYS_LOADED.includes(rule.sheet);
     });
   assert.deepEqual(
     misplaced.map((rule) => {
@@ -131,7 +138,7 @@ test('the sheets a menu names exist', () => {
   const named = new Set<string>();
   for (const menu of Object.values(MENUS)) for (const sheet of Object.values(menu)) if (sheet) named.add(sheetFile(sheet));
   for (const file of named) assert.ok(sheets.includes(file), `${file} is named by the menu and is not under src/client`);
-  for (const file of FIRST_SHEETS) assert.ok(sheets.includes(file), file);
+  for (const file of ALWAYS_LOADED) assert.ok(sheets.includes(file), file);
 });
 
 test('a pace is the five durations and nothing else: brisk a quarter quicker, still none at all', () => {
@@ -214,13 +221,14 @@ test('a face the kit ships is a sheet of its own: a theme set in it brings the f
   assert.ok(barlow.includes('barlow'));
   assert.ok(!barlow.includes('lumen') && !barlow.includes('workshop'), barlow.join());
   assert.ok(!recipeAttributes(set('probe', 'sage', 'Georgia, serif')).sheets.some((sheet) => sheet === 'inter' || sheet === 'barlow'));
-  // The looks the faces were made for are set in them, so they still bring theirs.
+  const manrope = recipeAttributes(set('probe', 'sage', 'Manrope, sans-serif')).sheets;
+  assert.ok(manrope.includes('manrope'));
+  // Workshop and Lumen are set in the faces made for them and bring theirs; Manrope stays an on-demand sheet for a theme that asks for it.
   assert.ok(recipeAttributes(themePreset('lumen')!).sheets.includes('inter'));
   assert.ok(recipeAttributes(themePreset('workshop')!).sheets.includes('barlow'));
   // And each face sheet exists, declaring the family its stack names.
   assert.match(readFileSync(at('interFace.css'), 'utf8'), /font-family: Inter;/);
   assert.match(readFileSync(at('barlowFace.css'), 'utf8'), /font-family: Barlow;/);
-  assert.ok(recipeAttributes(themePreset('lumen')!).sheets.includes('manrope'), "Lumen's headings bring their face");
   assert.match(readFileSync(at('manropeFace.css'), 'utf8'), /font-family: Manrope;/);
   // A worklist's tile is the section's mark, never the accent (a row in alarm wears its tone, DashboardBlocks.css): in the App's colour it would speak for what a colour
   // means (a warning sign in a green brand reads as fine, everything in an orange one as a warning).
