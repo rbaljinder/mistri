@@ -1,0 +1,459 @@
+/* Surface sub-layer order, base box-sizing, focus ring, badges, callouts, spinner, and reduced motion. */
+@layer m-surfaces {
+  @layer base, components, views;
+@layer base {
+  [class^="nx-"],
+  [class*=" nx-"],
+  [class^="nx-"] *,
+  [class*=" nx-"] * {
+    box-sizing: border-box;
+  }
+
+  :is([class^="nx-"], [class*=" nx-"]):is(button, input, select, textarea),
+  :is([class^="nx-"], [class*=" nx-"]) :is(button, input, select, textarea) {
+    font: inherit;
+  }
+
+  .nx-root {
+    color: var(--ink);
+    font-family: var(--sans);
+  }
+}
+
+@layer components {
+  /* === Focus Ring Standard === */
+  .nx-focusable:focus-visible {
+    outline: var(--focus-width, 2px) solid var(--focus, var(--accent));
+    outline-offset: var(--focus-offset, 2px);
+    box-shadow: none;
+  }
+
+  /* === Segmented Control === */
+  [data-slot="segmented-control"].nx-segmented-control {
+    position: relative;
+    display: inline-flex;
+    flex-wrap: wrap;
+    max-width: 100%;
+    align-items: center;
+    padding: var(--space-1h);
+    border-radius: var(--control-radius, var(--radius));
+    background: color-mix(in srgb, var(--raised) 76%, var(--ground));
+    border: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    gap: var(--space-1);
+  }
+
+  [data-slot="segmented-control-indicator"] {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  [data-slot="segmented-control-item"] {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-2h);
+    height: calc(var(--control-h) - 0.375rem);
+    padding-inline: var(--space-3h);
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--ink-muted);
+    font-family: var(--sans);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: max(2px, calc(var(--control-radius, var(--radius)) - 2px));
+    transition:
+      background-color var(--t-hover) var(--ease-out),
+      border-color var(--t-hover) var(--ease-out),
+      color var(--t-hover) var(--ease-out),
+      box-shadow var(--t-hover) var(--ease-out);
+
+    &:is([data-checked], [aria-checked="true"], [data-active], [aria-selected="true"]) {
+      background: var(--surface);
+      border-color: color-mix(in srgb, var(--line) 72%, transparent);
+      box-shadow: var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent));
+      color: var(--ink);
+      font-weight: 600;
+    }
+
+    @media (hover: hover) {
+      &:hover:not([data-disabled]) {
+        color: var(--ink);
+      }
+    }
+  }
+
+  /* === Cards & Surfaces === */
+  .nx-card {
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    /* A card's lift is the look's where one is worn (its `elevation`), the control's own shade otherwise. */
+    box-shadow: var(--nx-card-lift, var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent)));
+    overflow: hidden;
+
+    &[data-variant="subtle"] {
+      background: var(--raised);
+      box-shadow: none;
+    }
+
+    &[data-variant="elevated"] {
+      background: var(--surface);
+      box-shadow: var(--shadow-control, 0 1px 3px color-mix(in srgb, var(--ink) 8%, transparent));
+    }
+
+    &[data-variant="ghost"] {
+      background: transparent;
+      border-color: transparent;
+      box-shadow: none;
+    }
+
+    &[data-interactive] {
+      cursor: pointer;
+      transition:
+        border-color var(--t-hover) var(--ease-out),
+        box-shadow var(--t-hover) var(--ease-out),
+        transform var(--t-hover) var(--ease-out);
+
+      @media (hover: hover) {
+        &:hover {
+          border-color: var(--line-strong);
+          box-shadow: var(--nx-card-lift, var(--shadow-control, 0 1px 3px color-mix(in srgb, var(--ink) 8%, transparent)));
+        }
+      }
+    }
+  }
+
+  .nx-card-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-5) var(--space-5);
+
+    &[data-bordered] {
+      border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    }
+  }
+
+  .nx-card-title {
+    margin: 0;
+    font-family: var(--heading-font, var(--sans));
+    font-size: var(--text-md);
+    font-weight: 600;
+    letter-spacing: var(--track-title);
+    color: var(--ink);
+    line-height: 1.35;
+  }
+
+  .nx-card-description {
+    margin: var(--space-1h) 0 0;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    line-height: 1.45;
+  }
+
+  .nx-card-body {
+    padding: var(--space-5);
+    flex: 1 1 auto;
+
+    .nx-card-header:not([data-bordered]) + & {
+      padding-top: 0;
+    }
+
+    &[data-flush] {
+      padding: 0;
+    }
+  }
+
+  .nx-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
+    background: var(--raised);
+    border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+  }
+
+  /* === Badges, Status Dots & Kbd === */
+  .nx-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 1.375rem;
+    padding-inline: var(--space-3);
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+    font-size: var(--text-sm);
+    font-weight: 500;
+    line-height: 1;
+    white-space: nowrap;
+
+    &[data-pill] {
+      border-radius: var(--pill-radius, 999px);
+      padding-inline: var(--space-3);
+    }
+
+    &[data-tone="accent"] {
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+      border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+    }
+    &[data-tone="good"],
+    &[data-tone="success"] {
+      background: color-mix(in srgb, var(--status-good) 12%, var(--surface));
+      color: var(--status-good);
+      border-color: color-mix(in srgb, var(--status-good) 28%, transparent);
+    }
+    &[data-tone="warning"] {
+      background: color-mix(in srgb, var(--status-warning) 12%, var(--surface));
+      color: var(--status-warning);
+      border-color: color-mix(in srgb, var(--status-warning) 28%, transparent);
+    }
+    &[data-tone="critical"],
+    &[data-tone="danger"] {
+      background: color-mix(in srgb, var(--status-critical) 12%, var(--surface));
+      color: var(--status-critical);
+      border-color: color-mix(in srgb, var(--status-critical) 28%, transparent);
+    }
+    &[data-tone="info"] {
+      background: color-mix(in srgb, var(--status-info) 12%, var(--surface));
+      color: var(--status-info);
+      border-color: color-mix(in srgb, var(--status-info) 28%, transparent);
+    }
+  }
+
+  .nx-status-dot {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    font-size: var(--text-base);
+    white-space: nowrap;
+
+    /* A dot is round in every look: a look's pill corner squares a chip, never this. */
+    &::before {
+      content: "";
+      width: 0.4375rem;
+      height: 0.4375rem;
+      border-radius: 50%;
+      background: var(--ink-subtle);
+      flex-shrink: 0;
+    }
+
+    &[data-tone="accent"]::before { background: var(--accent); }
+    &[data-tone="good"]::before,
+    &[data-tone="success"]::before { background: var(--status-good); }
+    &[data-tone="warning"]::before { background: var(--status-warning); }
+    &[data-tone="critical"]::before,
+    &[data-tone="danger"]::before { background: var(--status-critical); }
+    &[data-tone="info"]::before { background: var(--status-info); }
+  }
+
+  .nx-kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    padding-inline: var(--space-2);
+    border-radius: max(0px, calc(var(--radius) - 3px));
+    border: 1px solid var(--line);
+    background: var(--raised);
+    box-shadow: inset 0 -1px 0 var(--line);
+    color: var(--ink-muted);
+    font-family: var(--code);
+    font-size: var(--text-xs);
+    font-weight: 500;
+    line-height: 1;
+  }
+
+  /* === Alerts / Callouts === */
+  .nx-alert {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-4);
+    padding: var(--space-4) var(--space-5);
+    border-radius: var(--radius-card);
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--ink);
+    font-size: var(--text-base);
+
+    &[data-tone="accent"],
+    &[data-tone="info"] {
+      background: color-mix(in srgb, var(--status-info) 12%, var(--surface));
+      border-color: color-mix(in srgb, var(--status-info) 28%, transparent);
+      & .nx-alert-icon { color: var(--status-info); }
+    }
+    &[data-tone="good"],
+    &[data-tone="success"] {
+      background: color-mix(in srgb, var(--status-good) 12%, var(--surface));
+      border-color: color-mix(in srgb, var(--status-good) 28%, transparent);
+      & .nx-alert-icon { color: var(--status-good); }
+    }
+    &[data-tone="warning"] {
+      background: color-mix(in srgb, var(--status-warning) 12%, var(--surface));
+      border-color: color-mix(in srgb, var(--status-warning) 28%, transparent);
+      & .nx-alert-icon { color: var(--status-warning); }
+    }
+    &[data-tone="critical"],
+    &[data-tone="danger"] {
+      background: color-mix(in srgb, var(--status-critical) 12%, var(--surface));
+      border-color: color-mix(in srgb, var(--status-critical) 28%, transparent);
+      & .nx-alert-icon { color: var(--status-critical); }
+    }
+  }
+
+  /* === Skeleton Shimmer === */
+  @keyframes nx-shimmer {
+    0% { opacity: 0.5; }
+    50% { opacity: 0.92; }
+    100% { opacity: 0.5; }
+  }
+
+  .nx-skeleton {
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    background: color-mix(in srgb, var(--ink) 9%, var(--surface));
+    border-radius: max(0px, calc(var(--radius) - 2px));
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .nx-skeleton:not([data-nx-motion="reduced"], [data-nx-motion="reduced"] *) {
+      /* motion-ok: continuous loading or status indicator loop */
+      animation: nx-shimmer 1.6s ease-in-out infinite;
+    }
+  }
+
+  /* === Visually Hidden === */
+  .nx-sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+
+  /* === Spinner === */
+  @keyframes nx-spin {
+    to { transform: rotate(360deg); }
+  }
+
+  .nx-spinner {
+    width: 0.9375rem;
+    height: 0.9375rem;
+    border-radius: var(--pill-radius, 999px);
+    border: 1.75px solid currentColor;
+    border-right-color: transparent;
+    flex-shrink: 0;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .nx-spinner:not([data-nx-motion="reduced"], [data-nx-motion="reduced"] *) {
+      /* motion-ok: continuous loading or status indicator loop */
+      animation: nx-spin 0.7s linear infinite;
+    }
+  }
+
+  /* === Forced Colors ===
+     The mode drops every background and shadow: a status dot is a background and a ring drawn as a shadow is gone, so
+     the dot is painted in the text's system color and the ring is an outline in the system's highlight. */
+  @media (forced-colors: active) {
+    .nx-status-dot::before {
+      forced-color-adjust: none;
+      background: CanvasText;
+    }
+    .nx-badge {
+      border-color: CanvasText;
+    }
+    .nx-focusable:focus-visible {
+      outline-color: Highlight;
+    }
+  }
+
+  /* === Reduced Motion (scoped to .nx-* surfaces) === */
+  @media (prefers-reduced-motion: reduce) {
+    :is([class^='nx-'], [class*=' nx-'], [class^='nx-'] *, [class*=' nx-'] *),
+    :is([class^='nx-'], [class*=' nx-'], [class^='nx-'] *, [class*=' nx-'] *)::before,
+    :is([class^='nx-'], [class*=' nx-'], [class^='nx-'] *, [class*=' nx-'] *)::after {
+      transition-duration: 0ms;
+      animation-duration: 0.01ms;
+      animation-iteration-count: 1;
+    }
+    .nx-skeleton,
+    .nx-spinner,
+    [data-status="indeterminate"] .nx-gauge-indicator,
+    .nx-status-dot[data-pulse]::before,
+    .nx-ai-cursor {
+      animation: none;
+    }
+  }
+  [data-nx-motion="reduced"] {
+    &,
+    & *,
+    &::before,
+    & *::before,
+    &::after,
+    & *::after {
+      transition-duration: 0ms;
+      animation-duration: 0.01ms;
+      animation-iteration-count: 1;
+    }
+    & .nx-skeleton,
+    & .nx-spinner,
+    & [data-status="indeterminate"] .nx-gauge-indicator,
+    & .nx-status-dot[data-pulse]::before,
+    & .nx-ai-cursor {
+      animation: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    :is([class^='nx-'], [class*=' nx-']) [data-slot='tabs-list'] {
+      flex-wrap: wrap;
+    }
+  }
+}
+
+@layer views {
+  @media (prefers-reduced-motion: reduce) {
+    :is([class^='nx-'], [class*=' nx-'], [class^='nx-'] *, [class*=' nx-'] *),
+    :is([class^='nx-'], [class*=' nx-'], [class^='nx-'] *, [class*=' nx-'] *)::before,
+    :is([class^='nx-'], [class*=' nx-'], [class^='nx-'] *, [class*=' nx-'] *)::after {
+      transition-duration: 0ms;
+      animation-duration: 0.01ms;
+      animation-iteration-count: 1;
+    }
+    .nx-ai-cursor {
+      animation: none;
+    }
+  }
+  [data-nx-motion="reduced"] {
+    &,
+    & *,
+    &::before,
+    & *::before,
+    &::after,
+    & *::after {
+      transition-duration: 0ms;
+      animation-duration: 0.01ms;
+      animation-iteration-count: 1;
+    }
+    & .nx-ai-cursor {
+      animation: none;
+    }
+  }
+}
+}

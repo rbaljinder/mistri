@@ -11,7 +11,7 @@
   [data-slot='dialog-content'][data-kind='sheet'] {
     width: min(30rem, calc(100% - 2rem));
     max-height: min(44rem, calc(100dvh - 4rem));
-    border-radius: calc(var(--m-radius) + min(4px, var(--m-radius)));
+    border-radius: var(--radius-card);
 
     &[data-size='lg'] {
       width: min(42rem, calc(100% - 2rem));
@@ -24,7 +24,7 @@
     height: calc(100dvh - 1rem);
     max-height: none;
     margin-block: var(--m-space-3);
-    border-radius: calc(var(--m-radius) + min(4px, var(--m-radius)));
+    border-radius: var(--radius-card);
   }
 
   [data-slot='drawer-content'][data-kind='sheet'][data-side='right'] {
@@ -89,12 +89,6 @@
   [data-slot='drawer-content'][data-kind='sheet'][data-beside] {
     border: 1px solid var(--m-line);
     box-shadow: var(--m-shadow-pop);
-  }
-
-  /* What stands under a panel beside the page steps aside by the panel's width, less the page's own gutter (a page
-     says how far its content already stands from the window's edge in --m-gutter). */
-  :root {
-    --m-beside: 31.25rem;
   }
 
   [data-slot='button'][data-kind='sheet-close'] {

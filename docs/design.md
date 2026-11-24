@@ -94,6 +94,11 @@ nothing to the first stylesheet
 (the move was proven by the same computed-style snapshot: no difference in
 any look, light or dark, at a desk or on a phone); a chart's rules
 travel the same way with the chunk that draws it (`components/Chart.css`).
+The on-demand entries (`@mistriwork/mistri/charts`, `/primitives`, `/views`) draw `.nx-*` parts no kit rule
+names, so the recipes are answered again for them, once per recipe value and in tokens, in `look` blocks of the
+entries' own sheets (`components/sdk/surfaces-*.css`): mostly properties the part reads (`--nx-…`), so a part's
+states keep their word, and only ever on an `.nx-*` part, because the sheet stays loaded when a reader walks on to
+a list (docs/theming.md lists which part wears which recipe; `test/sdk-look-recipes.test.ts` holds it).
 A later layer wins whatever its specificity, so no rule wins by out-specifying
 (`:root body …`) or out-loading another. A look rule that would reach a
 component it should not dress is scoped, not outranked. The layer change was
@@ -107,24 +112,24 @@ An App's own component (a custom section, a value renderer, an input, a
 list's rows or a whole room) is held to the same rules as the tool's. Its stylesheet is served inside `app` and
 under `@scope` of the component's own element, so it stands over the kit's control recipes and the looks (a `<button>` card keeps its own corner under a round-control look),
 `structure` still wins over it and nothing it writes leaks out. It draws with
-the public kit (`@mistriwork/mistri/ui`: `Card`, `Stack`, `Button`, `Value`, `Tone`,
-`Meter`, `Empty`, `Icon`, `Segmented`, `Stat`, `Columns`, `Table` (the look's table, so its head and hairlines are the platform's), whose own sheet `components/sdk/kit.css` is in the
+the public kit (`@mistriwork/mistri/ui`: `Card`, `Stack`, `Button`, `Value`, `StatusDot`, `Badge`,
+`Meter`, `EmptyState`, `Icon`, `SegmentedControl`, `StatCard`, `Columns`, `Table` (the look's table, so its head and hairlines are the platform's), whose own sheet `components/sdk/kit.css` is in the
 same layer) and with tokens only. `mistri check` warns on what these rules
 refuse — a literal colour or radius (a pill's `999px` and a circle's `50%`
 excepted), motion past 200ms or outside a
 reduced-motion guard, a shadow, a class outside `c-<id>-`, a popup placed by
 `getBoundingClientRect` — the way the theme diagnostics warn.
 
-### Which one: Segmented, Tabs or Select
+### Which one: SegmentedControl, Tabs or Select
 
 | Control | Use it to | Size of the set |
 | --- | --- | --- |
-| `Segmented` | Pick a value or filter within one view; the content below it is the same view, narrowed | 2 to 5 options |
+| `SegmentedControl` | Pick a value or filter within one view; the content below it is the same view, narrowed | 2 to 5 options |
 | `Tabs` | Switch between sibling panels of content, such as a record's related lists or sections | A handful of panels, each its own content |
 | `Select` | Choose from a big or open-ended set | Many options, or a list that grows |
 
-A record page with sibling panels uses `Tabs` (or `listTabs`), never `Segmented`.
-A page's `<Choose count>` is the exception to Segmented's five: it draws up to eight counted options as the list's tab row at a desk, because a count per option is what the list's own tabs are, the listbox past that, and the phone's own picker.
+A record page with sibling panels uses `Tabs` (or `listTabs`), never `SegmentedControl`.
+A page's `<Choose count>` is the exception to SegmentedControl's five: it draws up to eight counted options as the list's tab row at a desk, because a count per option is what the list's own tabs are, the listbox past that, and the phone's own picker.
 
 ## Tokens (packages/ui/src/tokens.css — the only source)
 
@@ -241,24 +246,19 @@ ink darker than its hairlines and still quieter than its text.
   a sheet of its own (`barlowFace.css`, about 65 KB together, SIL Open Font
   License) and the regular and the condensed bold are preloaded beside it,
   so only a page wearing Workshop fetches them; until they arrive Workshop
-  draws Arial cut to each face's measure, as Lumen does. Lumen is set in Inter, which ships
+  draws Arial cut to each face's measure, as Lumen does. Lumen is set in Inter,
+  its interface, headings, labels and figures alike, which ships
   as a sheet of its own (`interFace.css`, the variable face's Latin subset, 48
   KB) and is preloaded beside it, so only a page wearing Lumen fetches it and
   no first-paint bundle carries it. Named and not shipped, Inter drew only
   where it was installed, and a Lumen screen was set in a different face on
   every machine. Until it arrives Lumen draws Arial cut to Inter's measure
   (`size-adjust` and the ascent, descent and line-gap overrides), so the swap
-  neither rewraps a line nor moves a baseline. Lumen's headings are a second
-  face: Manrope (`manropeFace.css`, its variable face's Latin subset, 25 KB),
-  for a page's title, a section's head, the App's name and the figures of a
-  strip and of a record's summary, and nothing else; a sentence, a label and
-  a table stay in Inter. It is fetched and preloaded the same way, only by a
-  page whose headings lead with it, with Arial Bold cut to its measure while
-  it arrives. A figure in it wears its proportional numerals: alone in its
-  tile it has no column to keep, and Manrope's tabular set widens the comma.
-  One face for every word read as a template; the heading's face is the one
-  place Lumen is told from another product in Inter. No other face is
-  fetched or bundled.
+  neither rewraps a line nor moves a baseline. `manropeFace.css` (Manrope's
+  variable Latin subset, 25 KB) still ships in `@mistriwork/kit/client/fonts/`
+  with its own metric-matched Arial fallback, fetched and preloaded only by an
+  App whose own theme (`defineTheme`) names it. No other face is fetched or
+  bundled.
 - **Type**: three steps of heading — `--type-list-title` (20px, a list
   naming itself), `--type-record-title` (26px, a record or a dashboard;
   Mono takes 30px) and `--type-display` (32 to 44px with the
@@ -646,9 +646,9 @@ for titles, in sentence case, for a stat's figures, with tabular digits,
 and for the App's name, the one word it sets in capitals (the brand's
 stamp, over the menu it heads). Sections, tabs, column heads and labels are Barlow
 in sentence case, the labels a step under the base in the semibold and the
-muted ink, so a value is the darkest word in a table or a record. It shares
-Lumen's hairlines and divided strip of figures (`rules: 'hairline'`,
-`stat: 'divided'`: Lumen's exceptions). Everything else holds: fills and
+muted ink, so a value is the darkest word in a table or a record. It stands
+on hairlines and one divided strip of figures (`rules: 'hairline'`,
+`stat: 'divided'`). Everything else holds: fills and
 selection are the ink, and nothing is tinted but the menu's current entry.
 The hue is one restrained accent that reaches only the marks a reader takes
 for the brand color: the primary verb's fill (its words the ink, as a
@@ -692,7 +692,7 @@ open to another look or to an App's tokens.
 
 **How the looks lay a page out.** Beyond their dress, the looks differ in how a page is held: Sage is airy panels,
 Ledger a tight sheet whose tables are banded, Atelier open with no boxes, Graphite tight cards with raised head bands,
-Bloom airy tiles under a floating menu, Mono frames, Workshop and Lumen one ruled strip on an open page. A look's
+Bloom airy tiles under a floating menu, Mono frames, Lumen compact cards led by an icon, Workshop one ruled strip on an open page. A look's
 `rhythm` and its `blocks` say it; `test/theme-spec.test.ts` holds each look to its own.
 
 **Ledger's exceptions.** Ledger is a bookkeeper's desk, ported as it is
@@ -788,41 +788,37 @@ shell on a hairline and the control's shadow; a strip's figure is the heaviest t
 titles are tightened a step; and the sign-in form is a panel on the shell's ground, so a brand's tint is the first
 thing seen (lumenLook.css). With a theme's `brand` the shell's neutrals lean to the same hue (docs/theming.md).
 
-**Lumen's exceptions.** Lumen is flat, calm and modern, with its
-character in details: a faintly warm shell around white working surfaces,
-one confident accent, and elevation only on what floats. It takes these
-departures for itself and for an App theme that picks the same recipes
-(`stat: 'divided'`, `section: 'open'`, `fields: 'rail'`, `status:
-'quiet'`, `chart: 'line'`, `board: 'strip'`, `steps: 'strip'` and the rest
-of Lumen's picks in `themeLooks.ts`); each is one value on the menu, so the
-departure travels as a whole or not at all. *Hairlines, not the 2px rule*:
-a list, a section and a field group stand open on the ground, divided by
-the look's 1px hairline rather than the ink's 2px rule; a dashboard's
-figures and a record's summary in an App are each one ruled strip in the
-look's larger corner, a figure to a cell and a hairline between cells, so
-a row of figures is read as one thing apart from what is under it, and a
-figure's change is its number in its news's colour, never a chip (a public page keeps its figures on the page; on a phone a
-record's figures stand two to a row with the room's gap between, and each
-is its own hairline box). In
-the rail a card's facts hang from one 2px rule down their leading edge.
-Nothing on the page is
-lifted: a menu, a popover, a drawer and a dialog — what floats — carry
-the look's soft layered shadow (`--shadow-pop`, `--shadow-panel`, never a
-hard offset), and by night the shadow all but goes and the hairline
-carries the edge. *A dot for every status*: meaning is the tone's dot and
-its word, and the rest of a vocabulary a grey dot and its word, so a
-column of statuses scans as one; no status is boxed. *A chart's bare
-line*: a series is a 1.5px line with nothing under it, over an unbroken
-grid a shade lighter than a hairline, and points show only under the
-pointer. *The board card's stripe*: a board's lane is headed by a strip
-in its state's tint (grey for a value that says nothing), and a card with
-a category says its colour as a dot before its word on the card's line,
-so the colour never stands without a key, and carries a 4px bar at its left in that colour — a
-rounded bar inset from the card's edge, never the edge itself,
-and a mark of what the card is, never of what is current. A card with no
-category has no bar: its lane's tone is said once, on the strip, and a
-toned value of its own is a dot and its word on the card's line. *Radius 8/12*: the authored ceiling and
-its one larger step, as Sage's. Everything else holds: one primary action
+**Lumen's exceptions.** Lumen is calm and crisp, with its character in
+details: a cool, faintly tinted shell around white working cards, one
+confident accent, and a subtle lift on a card with the deeper one kept for
+what floats. It takes these departures for itself and for an App theme that
+picks the same recipes (`blocks: 'card'`, `stat: 'icon'`, `status:
+'pill-dot'`, `chart: 'gradient'`, `board: 'strip'`, `steps: 'strip'` and the
+rest of Lumen's picks in `themeLooks.ts`); each is one value on the menu, so
+the departure travels as a whole or not at all. *Cards on hairlines, not the
+2px rule*: a list, a section and a field group each stand in a bordered
+white card on the look's 1px hairline rather than under the ink's 2px rule;
+a dashboard's figures are cards of their own, each led by its icon in a
+tinted square, and a figure's change is its number in its news's colour,
+never a chip. A card carries the look's soft shadow (`--shadow-card`); a
+menu, a popover, a drawer and a dialog — what floats — carry the deeper
+layered one (`--shadow-pop`, `--shadow-panel`, never a hard offset), and by
+night the shadow all but goes and the hairline carries the edge. *A tinted
+pill for a status that means something*: a toned status is its dot and its
+word on a tint of its tone, and the rest of a vocabulary a grey dot and its
+word with no box, so the eye lands on the ones that ask for it. *A chart's
+line over its wash*: a series is a line with a gradient of its own hue
+fading under it, over an unbroken grid a shade lighter than a hairline, and
+points show only under the pointer. *The board card's stripe*: a board's
+lane is headed by a strip in its state's tint (grey for a value that says
+nothing), and a card with a category says its colour as a dot before its
+word on the card's line, so the colour never stands without a key, and
+carries a 4px bar at its left in that colour — a rounded bar inset from the
+card's edge, never the edge itself, and a mark of what the card is, never of
+what is current. A card with no category has no bar: its lane's tone is said
+once, on the strip, and a toned value of its own is a dot and its word on
+the card's line. *Radius 6*: a control's and a field's corner, with the
+panel's one larger step. Everything else holds: one primary action
 filled in the ink, Lumen's primary-action color, on every surface that draws one
 (Standing layout rules), the accent (a confident blue) kept for tabs underlined in it, the
 current room a soft pill of its tint, Inter shipped with
@@ -1482,8 +1478,10 @@ every look, so the picture it keeps reads on whatever page shows it.
   section's head in it is such a label, in the text face and sentence case
   whatever the look's section role says.
   Two boxes in the aside stand 20px apart, not the 40px section seam. On a
-  phone the card, the headline and the current card follow the summary, ahead
-  of the related lists they explain; the rail and the history stay last.
+  phone the headline and a `current()` card come up after the first main
+  section, ahead of the related lists they explain; this card, the
+  reference's, is context and stays under the lists with the rail, the
+  history and the notes.
 - On a phone, an App that shows no search keeps its menu beside the brand,
   as the list mark (named "Menu"); the brand's name is not what gives way.
 - Related-list tabs share the height of their visited panels, with a small
@@ -1884,9 +1882,10 @@ every look, so the picture it keeps reads on whatever page shows it.
   Stacked, every fact took two lines and a record's eight facts a screen. A record's
   aside, stacked under it, is more sections: its first takes the section
   rule, not a hairline of its own. Stacked, the aside follows the main work;
-  only a headline (the figure and its actions) comes up, after the first main
-  section, so the key facts and the verbs stay near the top while the cards,
-  properties and notes wait under the lists they explain.
+  only a headline (the figure and its actions) and a `current()` card (the one
+  row in force) come up, after the first main section, so the key facts and
+  the verbs stay near the top while a reference's `card()`, the properties,
+  the history and the notes wait under the lists.
 - A section's note ("Nothing to count yet.") starts on the section's edge, in
   the reader's words: an App never shows a table's name where its reader
   expects a sentence. There is one empty block and one problem block
@@ -2204,6 +2203,32 @@ found not to hold.
 - **Native controls follow the mode.** The root declares `color-scheme`
   with the theme, so a checkbox, a radio, a date's calendar and the window's
   scroll bar are drawn dark on a dark ground rather than as white squares.
+- **A stamp inside the page is an island of the other scheme.**
+  `data-theme="light"` on anything but the root (a preview, a printed sheet
+  in a dark page) moves every token dark mode moves back to its light value
+  and says `color-scheme: light`, whether the page is dark by its own stamp
+  or by the system's preference; `data-theme="dark"` does the reverse. The
+  names worked out from the palette (`--on-accent`, `--focus`, the field's
+  fill, the controls' `--m-*` and `--ui-*`) are worked out again on the
+  island, since a custom property is settled where it is written and an
+  island would otherwise inherit the page's answer. An island wears the base
+  palette, not the look's: a look writes its colours on the root for the
+  page's own scheme, and what only a look says (its bar, its rules, its
+  chart hues) stays the page's. `test/ui-tokens.test.ts` holds the light
+  island to every token the dark blocks move.
+- **Forced colours keep every cue.** Under a system contrast theme
+  (`forced-colors: active`) backgrounds and shadows are not drawn, so what a
+  fill said is said by an outline, which changes no size. A status pill
+  wears a 1px edge in the text's colour where the look draws a pill, and its
+  dot is the text's colour; what is current, selected, pressed or checked
+  (`aria-current`, `aria-selected`, `aria-pressed`, `aria-checked`, a
+  control's `data-checked` or `data-selected`: the current menu entry, a
+  split's picked row, the chosen tab or segment, a checked choice card)
+  wears a 2px inset ring in the text's colour; focus is the ring in the
+  system's `Highlight`, 4px on what is chosen, so current, focused and both
+  are three rings; a composite field wears it on its box, as it does the
+  house ring. The block is unlayered and last in the kit's stylesheet, so
+  no look undoes it.
 - **A field's edge reads at 3:1** on the field and on what it sits on (WCAG
   1.4.11). Every form control — a text box, a textarea, a Select's button, a
   picker, the query bar, a list's search box and the rail's boxes — outside a

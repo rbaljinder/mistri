@@ -40,7 +40,7 @@ import { sessionIdentity } from '../sessionIdentity.js';
 import { Dropdown, readsAsName } from './Dropdown.js';
 import { RecordPicker } from './RecordPicker.js';
 import { DateField } from './DateField.js';
-import { isPickerDate } from '@mistriwork/ui/internal/datePickerModel.js';
+import { isPickerDate, isPickerDateTime } from '@mistriwork/ui';
 import { appNow, formatClockZone, formatLocale, formatTimezone } from '../locale.js';
 import { InputSlot, columnInput } from './inputRenderers.js';
 import { appAssignedKey, autoKey, enteredNow, isRequired, platformWritten } from '@mistriwork/engine/shared/form.js';
@@ -51,7 +51,6 @@ import { Icon } from './Icon.js';
 import { isAppIcon, type AppIconName } from '@mistriwork/engine/shared/appIcons.js';
 import { onDemand, useArrived } from './onDemand.js';
 import type { FormScalar } from '@mistriwork/engine/shared/formValues.js';
-import { isPickerDateTime } from '@mistriwork/ui/internal/datePickerModel.js';
 import { defaultCurrency } from '../locale.js';
 import { wordFor, type DisplayRule } from './valueModel.js';
 import { majorText, minorToMajor, rowCurrency } from '@mistriwork/engine/shared/money.js';
@@ -752,7 +751,7 @@ function NewRecordFormBody({
   );
   const lede = app ? form?.description : say('emptyFieldsAreLeft');
   const cancel = (
-    <Button intent="secondary" onClick={onCancel} disabled={submission.phase === 'pending' || (retainUncertain && submission.locked)}>
+    <Button variant="secondary" onClick={onCancel} disabled={submission.phase === 'pending' || (retainUncertain && submission.locked)}>
       {submission.locked && submission.phase !== 'pending' && !retainUncertain ? say('common.close') : say('common.cancel')}
     </Button>
   );
@@ -1161,8 +1160,8 @@ export function PlatformControl({
         value={value}
         valueClassName={quietWhenEmpty}
         ariaLabel={`${spoken}${app ? '' : say('one', { allowed: allowed.join(', ') })}`}
-        onChange={onChange}
-        buttonRef={setControl}
+        onValueChange={onChange}
+        ref={setControl}
       />
     );
   }
@@ -1195,8 +1194,8 @@ export function PlatformControl({
         value={value}
         valueClassName={quietWhenEmpty}
         ariaLabel={`${spoken}${app ? '' : ` (${column.type})`}`}
-        onChange={onChange}
-        buttonRef={setControl}
+        onValueChange={onChange}
+        ref={setControl}
       />
     );
   }
@@ -1245,15 +1244,15 @@ export function PlatformControl({
     return (
       <DateField
         id={id ?? dateId}
-        inputRef={setControl}
+        ref={setControl}
         className="insert-input"
         value={value}
-        onChange={onChange}
+        onValueChange={onChange}
         withTime={kind === 'datetime'}
         /* Said as a prop too: the field draws its own box round the input, and the box wears the danger edge from
            what the field is told, not from an attribute put on the input after it is drawn. */
         aria-invalid={errorId ? true : undefined}
-        aria-label={app ? spoken : `${column.name} (${column.type})`}
+        ariaLabel={app ? spoken : `${column.name} (${column.type})`}
         /* A day's box, with or without a time, says the locale's pattern, as its hint does and as it reads what is typed
            (MM/DD/YYYY, and HH:MM after it for a moment, in en-US; ISO is read too): the field's own (DateField.tsx). */
         placeholder={said || undefined}
@@ -1387,10 +1386,10 @@ function NewRecordFrameFooter({
 }) {
   return (
     <div className={frame === 'page' ? 'form-actions' : app ? 'newpanel-foot' : 'confirm-actions'}>
-      <Button intent="secondary" onClick={onCancel} disabled={pending || (retainUncertain && locked)}>
+      <Button variant="secondary" onClick={onCancel} disabled={pending || (retainUncertain && locked)}>
         {locked && !pending && !retainUncertain ? say('common.close') : say('common.cancel')}
       </Button>
-      <Button intent="primary" type="submit" disabled={locked}>
+      <Button variant="primary" type="submit" disabled={locked}>
         {app ? say('common.add') : say('addRow')}
       </Button>
     </div>

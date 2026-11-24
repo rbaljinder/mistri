@@ -1,0 +1,938 @@
+/* Hierarchical TreeView, ActivityTimeline, CommentComposer, and master-detail SplitView. */
+@layer m-surfaces {
+@layer views {
+  /* ======================================================================== */
+  /* 7. TreeView (src/views/TreeView.tsx)                                     */
+  /* ======================================================================== */
+
+  .nx-tree-view {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3h);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    box-shadow: var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent));
+  }
+
+  .nx-tree-header {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+  }
+
+  .nx-tree-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    height: var(--control-h-sm);
+    border-radius: var(--field-radius, var(--radius));
+    border: var(--control-border-w, 1px) solid var(--field-edge, var(--line-control, var(--line-strong)));
+    background: var(--raised);
+
+    &:focus-within {
+      outline: var(--focus-width, 2px) solid var(--focus, var(--accent));
+      outline-offset: -1px;
+      background: var(--surface);
+      border-color: var(--focus, var(--accent));
+      box-shadow: none;
+    }
+  }
+
+  .nx-tree-search-icon {
+    margin-left: var(--space-3);
+    color: var(--ink-subtle);
+    flex-shrink: 0;
+  }
+
+  .nx-tree-search-input {
+    width: 100%;
+    height: 100%;
+    padding: 0 var(--space-3);
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: var(--text-sm);
+    outline: none;
+
+    &::-webkit-search-cancel-button {
+      display: none;
+    }
+  }
+
+  .nx-tree-search-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-right: var(--space-2);
+    border: 0;
+    border-radius: max(0px, calc(var(--radius) - 3px));
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+      color: var(--ink);
+    }
+    }
+  }
+
+  .nx-tree-root {
+    max-width: none;
+    width: 100%;
+    max-height: 32rem;
+    overflow-y: auto;
+  }
+
+  .nx-tree-row {
+    height: 1.9375rem;
+    gap: var(--space-2h);
+    padding-inline: calc(var(--space-2h) + (var(--tree-level, 1) - 1) * var(--space-5)) var(--space-3);
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    font-size: var(--text-base);
+
+    &:not([data-branch]) {
+      padding-inline-start: calc(var(--space-2h) + (var(--tree-level, 1) - 1) * var(--space-5));
+    }
+
+    @media (hover: hover) {
+      &:hover:not([data-disabled]) {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+    }
+    }
+
+    &:is([data-selected], [data-current]) {
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+    }
+  }
+
+  .nx-tree-chevron {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1rem;
+    height: 1rem;
+    rotate: 0deg;
+    transition: transform var(--t-hover) var(--ease-out);
+
+    &[data-expanded] {
+      transform: rotate(90deg);
+    }
+  }
+
+  .nx-tree-leaf-pad {
+    width: 1rem;
+    flex-shrink: 0;
+  }
+
+  .nx-tree-checkbox {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 0.875rem;
+    height: 0.875rem;
+    border-radius: 3px;
+    border: 1px solid var(--line-strong);
+    background: var(--surface);
+    color: var(--on-accent);
+    flex-shrink: 0;
+
+    &:is([data-checked], [data-indeterminate]) {
+      background: var(--accent);
+      border-color: var(--accent);
+    }
+  }
+
+  .nx-tree-node-icon {
+    display: inline-flex;
+    align-items: center;
+    color: var(--ink-muted);
+    flex-shrink: 0;
+
+    .nx-tree-row:is([data-selected], [data-current]) & {
+      color: currentColor;
+    }
+  }
+
+  .nx-tree-node-text {
+    flex: 1 1 auto;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nx-tree-match {
+    padding-inline: 1px;
+    border-radius: 2px;
+    background: color-mix(in srgb, var(--status-warning) 12%, var(--surface));
+    color: var(--status-warning);
+  }
+
+  .nx-tree-node-badge {
+    margin-left: auto;
+    height: 1.1875rem;
+    font-size: var(--text-xs);
+  }
+
+  .nx-tree-group[hidden] {
+    display: none;
+  }
+
+  .nx-tree-empty {
+    padding: var(--space-6) var(--space-4);
+    text-align: center;
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+
+  /* ======================================================================== */
+  /* 8. ActivityTimeline & CommentComposer (src/views/ActivityTimeline.tsx)   */
+  /* ======================================================================== */
+
+  .nx-activity-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-5);
+    width: 100%;
+  }
+
+  .nx-activity-timeline {
+    display: flex;
+    flex-direction: column;
+    max-height: 32rem;
+    overflow-y: auto;
+  }
+
+  .nx-activity-item {
+    display: grid;
+    grid-template-columns: 2rem minmax(0, 1fr);
+    gap: var(--space-3h);
+    outline: none;
+
+    &:focus-visible .nx-activity-comment-card,
+    &:focus-visible .nx-activity-event-row {
+      outline: var(--focus-width, 2px) solid var(--focus, var(--accent));
+      outline-offset: -1px;
+      border-radius: var(--radius);
+    }
+  }
+
+  .nx-activity-rail {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .nx-activity-marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+
+  .nx-activity-marker-event {
+    width: 1.5rem;
+    height: 1.5rem;
+    margin-top: var(--space-1);
+    border-radius: var(--pill-radius, 999px);
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--ink-muted);
+
+    &[data-tone='accent'] {
+      background: var(--accent-soft);
+      border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+      color: var(--accent-ink);
+    }
+    &[data-tone='good'],
+    &[data-tone='success'] {
+      background: color-mix(in srgb, var(--status-good) 12%, var(--surface));
+      border-color: color-mix(in srgb, var(--status-good) 28%, transparent);
+      color: var(--status-good);
+    }
+    &[data-tone='warning'] {
+      background: color-mix(in srgb, var(--status-warning) 12%, var(--surface));
+      border-color: color-mix(in srgb, var(--status-warning) 28%, transparent);
+      color: var(--status-warning);
+    }
+    &[data-tone='critical'],
+    &[data-tone='danger'] {
+      background: color-mix(in srgb, var(--status-critical) 12%, var(--surface));
+      border-color: color-mix(in srgb, var(--status-critical) 28%, transparent);
+      color: var(--status-critical);
+    }
+  }
+
+  .nx-activity-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: var(--pill-radius, 999px);
+    border: 1px solid var(--line);
+    background: var(--accent-soft);
+    overflow: hidden;
+  }
+
+  .nx-activity-avatar-fallback {
+    font-size: var(--text-2xs);
+    font-weight: 650;
+    color: var(--accent-ink);
+  }
+
+  .nx-activity-connector {
+    flex: 1 1 auto;
+    width: 1px;
+    min-height: 0.875rem;
+    margin-block: var(--space-2);
+    background: var(--line);
+  }
+
+  .nx-activity-event-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2) 0 var(--space-4h);
+    font-size: var(--text-sm);
+  }
+
+  .nx-activity-event-title {
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+  }
+
+  .nx-activity-author-inline {
+    color: var(--ink);
+    font-weight: 600;
+  }
+
+  .nx-activity-time {
+    font-size: var(--text-xs);
+    color: var(--ink-subtle);
+    white-space: nowrap;
+  }
+
+  .nx-activity-comment-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-bottom: var(--space-4h);
+    padding: var(--space-4) var(--space-4h);
+    border-radius: var(--radius-card);
+    border: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent));
+  }
+
+  .nx-activity-comment-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .nx-activity-comment-author {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .nx-activity-author-role {
+    font-weight: 450;
+    color: var(--ink-muted);
+  }
+
+  .nx-activity-comment-body {
+    font-size: var(--text-base);
+    line-height: 1.5;
+    color: var(--ink);
+    white-space: pre-wrap;
+  }
+
+  .nx-activity-mention {
+    padding: 1px var(--space-2);
+    border-radius: max(0px, calc(var(--radius) - 3px));
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+    font-weight: 550;
+  }
+
+  .nx-activity-attachments {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2h);
+  }
+
+  .nx-activity-attachment {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    padding: var(--space-2) var(--space-3);
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: var(--ink);
+    font-size: var(--text-sm);
+    text-decoration: none;
+
+    @media (hover: hover) {
+      &:hover {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+      border-color: var(--line-strong);
+    }
+    }
+  }
+
+  .nx-activity-attachment-size {
+    color: var(--ink-muted);
+    font-family: var(--code);
+    font-size: var(--text-xs);
+  }
+
+  .nx-activity-reactions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .nx-reaction-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 1.4375rem;
+    padding-inline: var(--space-2h);
+    border-radius: var(--pill-radius, 999px);
+    border: 1px solid var(--line);
+    background: var(--raised);
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+    font-size: var(--text-sm);
+    cursor: pointer;
+    transition: background-color var(--t-hover), border-color var(--t-hover);
+
+    @media (hover: hover) {
+      &:hover {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+    }
+    }
+
+    &[data-reacted] {
+      background: var(--accent-soft);
+      border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+      color: var(--accent-ink);
+    }
+  }
+
+  .nx-reaction-count {
+    font-family: var(--code);
+    font-size: var(--text-xs);
+    font-weight: 550;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .nx-reaction-add-btn {
+    width: 1.4375rem;
+    height: 1.4375rem;
+    padding: 0;
+    border-radius: var(--pill-radius, 999px);
+    border: 1px dashed var(--line-strong);
+    background: transparent;
+    color: var(--ink-muted);
+
+    @media (hover: hover) {
+      &:hover {
+      border-style: solid;
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+      color: var(--ink);
+    }
+    }
+  }
+
+  .nx-reaction-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+    padding: var(--space-2);
+  }
+
+  .nx-reaction-emoji-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 0;
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    background: transparent;
+    font-size: var(--text-lg);
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+      transform: scale(1.12);
+    }
+    }
+  }
+
+  /* CommentComposer & TriggerMenu */
+  .nx-comment-composer {
+    display: flex;
+    flex-direction: column;
+    border-radius: var(--radius-card);
+    border: var(--control-border-w, 1px) solid var(--field-edge, var(--line-control, var(--line-strong)));
+    background: var(--surface);
+    box-shadow: none;
+    overflow: hidden;
+    transition: border-color var(--t-hover);
+
+    &:focus-within {
+      outline: var(--focus-width, 2px) solid var(--focus, var(--accent));
+      outline-offset: -1px;
+      border-color: var(--focus, var(--accent));
+      box-shadow: none;
+    }
+  }
+
+  .nx-comment-textarea {
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    padding: var(--space-3h) var(--space-4h);
+    min-height: 4.5rem;
+    font-size: var(--text-base);
+    line-height: 1.5;
+    outline: none;
+  }
+
+  .nx-comment-composer-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    padding: var(--space-2h) var(--space-3h);
+    border-top: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    background: var(--raised);
+  }
+
+  .nx-comment-composer-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+
+  .nx-comment-tool-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: 1.625rem;
+    padding-inline: var(--space-2h);
+    border: 0;
+    border-radius: max(0px, calc(var(--radius) - 3px));
+    background: transparent;
+    color: var(--ink-muted);
+    font-family: var(--sans);
+    font-size: var(--text-sm);
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+      color: var(--ink);
+    }
+    }
+  }
+
+  .nx-comment-shortcut-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin-left: var(--space-2);
+  }
+
+  .nx-mention-popup {
+    min-width: 14.5rem;
+    padding: var(--space-2);
+  }
+
+  .nx-mention-item {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2h);
+    min-height: 2rem;
+    padding: var(--space-2) var(--space-3);
+    cursor: pointer;
+
+    &[hidden] {
+      display: none;
+    }
+  }
+
+  .nx-mention-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.25rem;
+    height: 1.25rem;
+    border-radius: var(--pill-radius, 999px);
+    background: var(--accent-soft);
+    flex-shrink: 0;
+  }
+
+  .nx-mention-avatar-fallback {
+    font-size: var(--text-2xs);
+    font-weight: 600;
+    color: var(--accent-ink);
+  }
+
+  .nx-mention-name {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: var(--ink);
+  }
+
+  .nx-mention-handle {
+    font-family: var(--code);
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+  }
+
+  .nx-mention-role {
+    margin-left: auto;
+    font-size: var(--text-xs);
+    color: var(--ink-subtle);
+  }
+
+  /* ======================================================================== */
+  /* 9. SplitView (src/views/SplitView.tsx)                                   */
+  /* ======================================================================== */
+
+  .nx-split-view {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 24rem;
+    max-height: 36rem;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    box-shadow: var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent));
+    overflow: hidden;
+  }
+
+  .nx-split-pick-root {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .nx-split-resizable {
+    flex: 1 1 auto;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .nx-split-panel {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding: 0;
+  }
+
+  .nx-split-handle {
+    background: var(--line);
+    transition: background-color var(--t-hover);
+
+    &[data-dragging] {
+      background: var(--accent);
+      width: 2px;
+    }
+    @media (hover: hover) {
+      &:hover {
+      background: var(--accent);
+      width: 2px;
+    }
+    }
+  }
+
+  .nx-split-master {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    background: var(--raised);
+  }
+
+  .nx-split-master-head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    padding: var(--space-3h) var(--space-4);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    background: var(--surface);
+  }
+
+  .nx-split-master-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .nx-split-master-title {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    font-size: var(--text-base);
+    font-weight: 600;
+    color: var(--ink);
+  }
+
+  .nx-split-search {
+    display: flex;
+    align-items: center;
+    height: 1.625rem;
+    border-radius: var(--field-radius, var(--radius));
+    border: var(--control-border-w, 1px) solid var(--field-edge, var(--line-control, var(--line-strong)));
+    background: var(--raised);
+
+    &:focus-within {
+      outline: var(--focus-width, 2px) solid var(--focus, var(--accent));
+      outline-offset: -1px;
+      background: var(--surface);
+      border-color: var(--focus, var(--accent));
+    }
+  }
+
+  .nx-split-search-icon {
+    margin-left: var(--space-2h);
+    color: var(--ink-subtle);
+  }
+
+  .nx-split-search-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 0 var(--space-2h);
+    border: 0;
+    background: transparent;
+    color: var(--ink);
+    font-size: var(--text-sm);
+    outline: none;
+
+    &::-webkit-search-cancel-button {
+      display: none;
+    }
+  }
+
+  .nx-split-search-clear {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.125rem;
+    height: 1.125rem;
+    margin-right: var(--space-2);
+    border: 0;
+    background: transparent;
+    color: var(--ink-muted);
+    cursor: pointer;
+  }
+
+  .nx-split-list {
+    flex: 1 1 auto;
+    margin: 0;
+    padding: var(--space-2h);
+    list-style: none;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+
+  .nx-split-option {
+    border-radius: var(--radius);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: background-color var(--t-hover) var(--ease-out), border-color var(--t-hover) var(--ease-out);
+
+    @media (hover: hover) {
+      &:hover {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+    }
+    }
+
+    &[data-picked] {
+      background: var(--surface);
+      border-color: var(--line);
+      box-shadow: var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 6%, transparent));
+    }
+  }
+
+  .nx-split-item-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1h);
+    padding: var(--space-3) var(--space-3h);
+  }
+
+  .nx-split-item-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+  }
+
+  .nx-split-item-heading {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    min-width: 0;
+  }
+
+  .nx-split-unread-dot {
+    width: 0.4375rem;
+    height: 0.4375rem;
+    border-radius: var(--pill-radius, 999px);
+    background: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .nx-split-item-code {
+    font-family: var(--code);
+    font-size: var(--text-xs);
+    color: var(--ink-muted);
+    flex-shrink: 0;
+  }
+
+  .nx-split-item-title {
+    font-size: var(--text-base);
+    font-weight: 550;
+    color: var(--ink);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nx-split-item-meta {
+    font-size: var(--text-xs);
+    color: var(--ink-subtle);
+    flex-shrink: 0;
+  }
+
+  .nx-split-item-subtitle {
+    font-size: var(--text-sm);
+    font-weight: 500;
+    color: color-mix(in srgb, var(--ink) 78%, var(--surface));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nx-split-item-bottom {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    margin-top: var(--space-1);
+  }
+
+  .nx-split-item-preview {
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .nx-split-pane {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    height: 100%;
+    min-height: 0;
+    max-height: 36rem;
+    overflow-y: auto;
+    background: var(--surface);
+    outline: none;
+  }
+
+  .nx-split-mobile-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-3) var(--space-4);
+    border-bottom: 1px solid color-mix(in srgb, var(--line) 72%, transparent);
+    background: var(--raised);
+  }
+
+  .nx-split-back-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2h);
+    height: 1.625rem;
+    padding-inline: var(--space-3);
+    border: 1px solid var(--line);
+    border-radius: max(0px, calc(var(--radius) - 2px));
+    background: var(--surface);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: var(--text-sm);
+    font-weight: 500;
+    cursor: pointer;
+
+    @media (hover: hover) {
+      &:hover {
+      background: color-mix(in srgb, var(--ink) 5%, var(--surface));
+    }
+    }
+  }
+
+  .nx-split-mobile-code {
+    font-family: var(--code);
+    font-size: var(--text-sm);
+    color: var(--ink-muted);
+  }
+
+  .nx-split-detail-body {
+    flex: 1 1 auto;
+    padding: var(--space-5) var(--space-6);
+    overflow-y: auto;
+  }
+
+  .nx-split-detail-empty,
+  .nx-split-list-empty {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    padding: var(--space-7);
+    color: var(--ink-muted);
+    font-size: var(--text-sm);
+  }
+
+  .nx-split-placeholder {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
+    text-align: center;
+  }
+
+}
+}

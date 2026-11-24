@@ -124,7 +124,7 @@
   :root:root:is([data-look-stat='ruled'], [data-look-stat='plain']) .app-mode .page-field-summary .page-field > dd :is(.num-value, .date-value) {
     font-family: inherit;
   }
-  :root[data-look-table='tinted'] tbody tr:hover td:where(:not([data-slot])) {
+  :root[data-look-table='tinted'] tbody tr:hover td:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     background: color-mix(in srgb, var(--accent) 4%, var(--surface));
   }
   :root[data-look-table='tinted'] .row-host .row-select {

@@ -64,6 +64,20 @@ test('the consumer fixture imports every entry', () => {
   }
 });
 
+test('the headless embed desk fixture imports only public @mistriwork/mistri/* entry points', () => {
+  const desk = readFileSync(join(root, 'test/fixtures/entries/embed-desk.tsx'), 'utf8');
+  assert.ok(!desk.includes('@mistriwork/ui'), 'embed-desk.tsx must import @mistriwork/mistri/* rather than @mistriwork/ui/*');
+  for (const name of [
+    '@mistriwork/mistri/react/headless',
+    '@mistriwork/mistri/ui',
+    '@mistriwork/mistri/charts',
+    '@mistriwork/mistri/primitives',
+    '@mistriwork/mistri/views',
+  ]) {
+    assert.ok(desk.includes(`from '${name}';`), `embed-desk.tsx does not import ${name}`);
+  }
+});
+
 test('the workspace root publishes nothing: each package under packages/ is published on its own', () => {
   const pkg = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { private?: boolean; bin?: unknown; exports?: unknown };
   assert.equal(pkg.private, true);

@@ -1,6 +1,18 @@
 /** The sales dashboard on the kit's parts: windowed figures against the window before, the open pipeline as bars, won
     revenue over the window and the largest open deals. The window is the page's one control, in its address. */
-import { Breakdown, Card, Chart, Grid, Metric, PageHeader, Scope, Stack, Table, definePage, useNavigate } from '@mistriwork/mistri/page';
+import {
+  Breakdown,
+  Card,
+  Chart,
+  Metric,
+  PageGrid,
+  PageHeader,
+  Scope,
+  Stack,
+  Table,
+  definePage,
+  useNavigate,
+} from '@mistriwork/mistri/page';
 
 const OPEN = 'stage != closed_won and stage != closed_lost';
 const WON = { query: 'stage = closed_won', over: 'close_date', window: 'window', previous: true, spark: true, width: 'third' } as const;
@@ -31,7 +43,7 @@ function SalesDashboard() {
     <Stack>
       <PageHeader title="Sales" description="Won revenue, against the window before." actions={<page.Choose param="window" />} />
       <Scope from="opportunity">
-        <Grid>
+        <PageGrid>
           <Metric {...WON} title="Won revenue" measure="sum amount" />
           <Metric {...WON} title="Deals won" />
           <Metric {...WON} title="Average deal" measure="avg amount" />
@@ -44,11 +56,11 @@ function SalesDashboard() {
             fill="window"
             width="half"
           />
-        </Grid>
+        </PageGrid>
       </Scope>
       <Card title="Largest open deals">
         <Table
-          label="Largest open deals"
+          ariaLabel="Largest open deals"
           rows={deals.data ?? []}
           rowKey={(row) => String(row.id)}
           columns={[

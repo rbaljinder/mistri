@@ -16,7 +16,7 @@
  * Overflow is measured, not assumed — on mount, on content change, and
  * whenever the box resizes.
  */
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type Ref } from 'react';
 import { slotted } from './internal/uiKitContext.js';
 import {
   ScrollArea as Scroller,
@@ -27,6 +27,7 @@ import {
   ScrollAreaViewport,
 } from '@ui-sdk/react/scroll-area';
 
+/** Props for the `ScrollArea` bounded scroll container. */
 export interface ScrollAreaProps {
   children: ReactNode;
   /** The scrollable region's accessible name ("Recent activity"). */
@@ -35,9 +36,10 @@ export interface ScrollAreaProps {
   /** A cap on the region's height, as a CSS length (for example "320px"). */
   maxHeight?: string;
   className?: string;
+  ref?: Ref<HTMLDivElement>;
 }
 
-function DefaultScrollArea({ children, ariaLabel, orientation = 'vertical', maxHeight, className }: ScrollAreaProps) {
+function DefaultScrollArea({ children, ariaLabel, orientation = 'vertical', maxHeight, className, ref }: ScrollAreaProps) {
   const vertical = orientation === 'vertical' || orientation === 'both';
   const horizontal = orientation === 'horizontal' || orientation === 'both';
   const viewportRef = useRef<HTMLDivElement>(null);
@@ -69,7 +71,7 @@ function DefaultScrollArea({ children, ariaLabel, orientation = 'vertical', maxH
     };
   }, [vertical, horizontal, children]);
   return (
-    <Scroller className={className}>
+    <Scroller ref={ref} className={className}>
       <ScrollAreaViewport
         ref={viewportRef}
         tabIndex={overflows ? 0 : -1}
@@ -99,5 +101,5 @@ function DefaultScrollArea({ children, ariaLabel, orientation = 'vertical', maxH
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Bounded scroll container with custom scrollbars and keyboard-focusable overflow viewport. */
 export const ScrollArea = slotted('ScrollArea', DefaultScrollArea);

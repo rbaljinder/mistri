@@ -144,16 +144,16 @@ export function AccountTrail({
         <nav className="account-admin-pager" aria-label={say('historyPages')}>
           <span>{range}</span>
           <Button
-            intent="secondary"
-            size="compact"
+            variant="secondary"
+            size="sm"
             disabled={page.offset === 0 || loading}
             onClick={() => void load(Math.max(0, page.offset - ACCOUNT_AUDIT_PAGE))}
           >
             {say('newer')}
           </Button>
           <Button
-            intent="secondary"
-            size="compact"
+            variant="secondary"
+            size="sm"
             disabled={page.offset + page.entries.length >= page.total || loading}
             onClick={() => void load(page.offset + ACCOUNT_AUDIT_PAGE)}
           >

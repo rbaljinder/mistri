@@ -23,7 +23,7 @@
  */
 import {
   Button,
-  Empty,
+  EmptyState,
   useCommand,
   useFile,
   useFormat,
@@ -110,7 +110,7 @@ export default function PostStream({ rows }: Props) {
      Read rows (`data`), not TanStack's isSuccess: a read holds only what UiQuery declares. */
   const newcomer = viewer.signedIn && react.granted && me.data !== undefined && mine === undefined;
   const join = () => openForm('join');
-  if (!rows.length) return <Empty title="No posts in this thread yet." />;
+  if (!rows.length) return <EmptyState title="No posts in this thread yet." />;
 
   const portraitOf = new Map((portraits.data ?? []).map((row) => [row.member_id, row.id]));
   const photosOf = (post: Post) => (photos.data ?? []).filter((row) => row.post_id === post.id);
@@ -204,10 +204,10 @@ export default function PostStream({ rows }: Props) {
                 )}
                 {newcomer && react.available({ id: post.id }) === true && (
                   <Button
-                    intent="secondary"
-                    size="compact"
+                    variant="secondary"
+                    size="sm"
                     className="c-post-stream-join"
-                    aria-label={`Join to react to ${name}'s post`}
+                    ariaLabel={`Join to react to ${name}'s post`}
                     onClick={join}
                   >
                     Join to react
@@ -217,9 +217,9 @@ export default function PostStream({ rows }: Props) {
               <div className="c-post-stream-actions">
                 {replyable && mine !== undefined && (
                   <Button
-                    intent="quiet"
-                    size="compact"
-                    aria-label={`Reply to ${name}`}
+                    variant="ghost"
+                    size="sm"
+                    ariaLabel={`Reply to ${name}`}
                     onClick={() => {
                       void reply.open({ id: post.thread_id }, undefined, { label: `Replying to ${name}` });
                     }}
@@ -228,15 +228,15 @@ export default function PostStream({ rows }: Props) {
                   </Button>
                 )}
                 {replyable && newcomer && (
-                  <Button intent="quiet" size="compact" aria-label={`Join to reply to ${name}`} onClick={join}>
+                  <Button variant="ghost" size="sm" ariaLabel={`Join to reply to ${name}`} onClick={join}>
                     Join to reply
                   </Button>
                 )}
                 {own && edit.granted && edit.available({ id: post.id }) === true && (
                   <Button
-                    intent="quiet"
-                    size="compact"
-                    aria-label="Edit your post"
+                    variant="ghost"
+                    size="sm"
+                    ariaLabel="Edit your post"
                     onClick={() => {
                       void edit.open({ id: post.id }, undefined, { label: 'Your post' });
                     }}
@@ -245,9 +245,9 @@ export default function PostStream({ rows }: Props) {
                   </Button>
                 )}
                 <Button
-                  intent="quiet"
-                  size="compact"
-                  aria-label={`Report ${name}'s post`}
+                  variant="ghost"
+                  size="sm"
+                  ariaLabel={`Report ${name}'s post`}
                   onClick={() => openForm('report-post', { post: String(post.id) })}
                 >
                   Report

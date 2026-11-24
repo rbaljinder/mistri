@@ -14,15 +14,16 @@
  */
 import { useContext, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { vocabularyWord } from '@mistriwork/engine/shared/model.js';
+import { Dropdown, TextField } from '@mistriwork/ui';
+import { SegmentedControl } from '@mistriwork/ui/primitives.js';
 import { DateField } from '@mistriwork/kit/client/components/DateField.js';
 import { FilterTabs, sayCount, type Counted } from '@mistriwork/kit/client/components/FilterTabs.js';
 import { PHONE_QUERY, useMediaQuery } from '@mistriwork/kit/client/components/useMediaQuery.js';
 import { choiceWord } from '@mistriwork/kit/client/components/valueModel.js';
 import { UiPageContext, UiParamKindsContext, UiScopeContext, useUiHost } from './context.js';
 import { useAddressState, useBreakdown, useRows } from './hooks.js';
-import { Dropdown, Loaded, Segmented } from './kit.js';
+import { Loaded } from './kit.js';
 import { joinRange, splitRange } from './paramKinds.js';
-import { TextField } from './pageControls.js';
 import { say } from '../../copy/components/components/sdk/paramControls.js';
 
 /** From this many options, or this many characters of them, a choice is a listbox rather than a row of segments. */
@@ -62,6 +63,7 @@ interface ChooseProps {
   label?: string | ((row: Readonly<Record<string, unknown>>) => string | null | undefined);
   /** Names the control for assistive technology; the param's name when absent. */
   name?: string;
+  ariaLabel?: string;
   /** Present, a first choice with this word that clears the param. A param is optional, so a control that may be left unset says so with it. */
   all?: string;
   empty?: ReactNode;
@@ -70,6 +72,7 @@ interface ChooseProps {
    * `from`, else the one resource the page reads); `{ of, by, where }` counts another resource by one of its columns.
    */
   count?: true | ChooseCount;
+  className?: string;
 }
 
 interface ChooseCount {
@@ -126,9 +129,9 @@ function Pick({
   const pick = (next: string) => onPick(next === ALL ? undefined : next);
   const short = items.length <= SEGMENTS_MOST && items.reduce((width, item) => width + item.label.length, 0) <= SEGMENTS_WIDTH;
   return short ? (
-    <Segmented label={name} value={value} options={items} onChange={pick} />
+    <SegmentedControl ariaLabel={name} value={value} options={items} onValueChange={pick} />
   ) : (
-    <Dropdown items={items} value={value} onChange={pick} ariaLabel={name} placeholder={say('choose')} />
+    <Dropdown items={items} value={value} onValueChange={pick} ariaLabel={name} placeholder={say('choose')} />
   );
 }
 
@@ -178,7 +181,7 @@ function PickCounted({
       <Dropdown
         items={items.map((item) => ({ value: item.value, label: worded(item) }))}
         value={value}
-        onChange={pick}
+        onValueChange={pick}
         ariaLabel={name}
         placeholder={say('choose')}
       />
@@ -291,20 +294,22 @@ function ChooseRows({
  * the list's tab row.
  */
 export function Choose(props: ChooseProps) {
-  const name = props.name ?? captioned(props.param);
+  const name = props.ariaLabel ?? props.name ?? captioned(props.param);
   const drawn = (tally?: Tally) =>
     props.from === undefined ? (
       <ChooseWords param={props.param} name={name} all={props.all} tally={tally} />
     ) : (
       <ChooseRows {...props} from={props.from} name={name} tally={tally} />
     );
-  return props.count === undefined ? (
-    drawn()
-  ) : (
-    <Counting param={props.param} count={props.count}>
-      {drawn}
-    </Counting>
-  );
+  const content =
+    props.count === undefined ? (
+      drawn()
+    ) : (
+      <Counting param={props.param} count={props.count}>
+        {drawn}
+      </Counting>
+    );
+  return props.className ? <div className={props.className}>{content}</div> : content;
 }
 
 /**
@@ -312,7 +317,21 @@ export function Choose(props: ChooseProps) {
  * 300 ms), or at once on leaving the box, replacing the entry rather than adding one; an address that changes by itself
  * (Back, a link) puts the box as it says.
  */
-export function Search({ param, name, placeholder, delay = 300 }: { param: string; name?: string; placeholder?: string; delay?: number }) {
+export function Search({
+  param,
+  name,
+  ariaLabel,
+  placeholder,
+  delay = 300,
+  className,
+}: {
+  param: string;
+  name?: string;
+  ariaLabel?: string;
+  placeholder?: string;
+  delay?: number;
+  className?: string;
+}) {
   const [current, set] = useAddressState(param);
   const [text, setText] = useState(current ?? '');
   const written = useRef(current ?? '');
@@ -331,15 +350,15 @@ export function Search({ param, name, placeholder, delay = 300 }: { param: strin
   }, [current]);
   useEffect(() => () => clearTimeout(timer.current), []);
   return (
-    <div className="kit-param-search">
+    <div className={className ? `kit-param-search ${className}` : 'kit-param-search'}>
       <TextField
-        label={name ?? captioned(param)}
+        label={ariaLabel ?? name ?? captioned(param)}
         labelHidden
         reserve={false}
         value={text}
         placeholder={placeholder ?? say('search')}
         inputMode="text"
-        onChange={(next) => {
+        onValueChange={(next) => {
           setText(next);
           clearTimeout(timer.current);
           timer.current = setTimeout(() => commit(next.trim()), delay);
@@ -351,10 +370,10 @@ export function Search({ param, name, placeholder, delay = 300 }: { param: strin
 }
 
 /**
- * A run of days in a param of kind `'date-range'` (`2026-11-01..2026-11-08`, either end open): `<DateRange param="period" />`.
+ * A run of days in a param of kind `'date-range'` (`2026-11-01..2026-11-08`, either end open): `<DateRange param="window" />`.
  * Two date fields; a day reaches the address once it is a whole date on the calendar, or cleared.
  */
-export function DateRange({ param, name }: { param: string; name?: string }) {
+export function DateRange({ param, name, ariaLabel, className }: { param: string; name?: string; ariaLabel?: string; className?: string }) {
   const [current, set] = useAddressState(param);
   const ids = [useId(), useId()];
   const read = (raw: string | undefined) => splitRange(raw) ?? (['', ''] as const);
@@ -376,25 +395,25 @@ export function DateRange({ param, name }: { param: string; name?: string }) {
     written.current = range;
     set(range);
   };
-  const caption = name ?? captioned(param);
+  const caption = ariaLabel ?? name ?? captioned(param);
   return (
-    <div className="kit-param-dates" role="group" aria-label={caption}>
+    <div className={className ? `kit-param-dates ${className}` : 'kit-param-dates'} role="group" aria-label={caption}>
       <DateField
         id={ids[0]}
-        aria-label={`${caption}, ${say('dateFrom')}`}
+        ariaLabel={`${caption}, ${say('dateFrom')}`}
         value={draft[0]}
         max={draft[1] || undefined}
-        onChange={(day) => change(0, day)}
+        onValueChange={(day) => change(0, day)}
       />
       <span className="kit-param-dash" aria-hidden="true">
         –
       </span>
       <DateField
         id={ids[1]}
-        aria-label={`${caption}, ${say('dateTo')}`}
+        ariaLabel={`${caption}, ${say('dateTo')}`}
         value={draft[1]}
         min={draft[0] || undefined}
-        onChange={(day) => change(1, day)}
+        onValueChange={(day) => change(1, day)}
       />
     </div>
   );

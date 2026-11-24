@@ -260,6 +260,16 @@ const readPosts = new Set([
   '/api/inbox/read',
   /* An App-wide pick kept for the person (http/chooseRoutes.ts): validated through this reader, written to a store of its own. */
   '/api/choose',
+  /* The assistant's routes are answered before this policy wraps a request (http/handler.ts OPEN_ROUTES,
+     http/assistantRoutes.ts), so these entries and the three GETs below decide nothing today: they record that the
+     routes were reviewed, should one ever be answered inside it. Each is the verified session's own conversations,
+     and what a turn reads is a request back through `handle`, under this policy. `rename` and `delete` change a
+     conversation in the assistant's store, never an App row; they are here as routes the policy lets through, not as reads. */
+  '/api/assistant/turn',
+  '/api/assistant/resolve',
+  '/api/assistant/acted',
+  '/api/assistant/rename',
+  '/api/assistant/delete',
 ]);
 const readGets = new Set([
   '/api/runtime',
@@ -276,6 +286,9 @@ const readGets = new Set([
   '/api/file',
   /* Live sync's stream: its authority is this context's, its probes reads in contexts of their own (live/liveRoute.ts). */
   '/api/live',
+  '/api/assistant',
+  '/api/assistant/conversation',
+  '/api/assistant/search',
 ]);
 
 /** An allowlist makes new HTTP routes opt in to the policy review, not out. */

@@ -9,7 +9,7 @@ afterEach(cleanup);
 
 function Typed(props: { problem?: string }) {
   const [value, set] = useState('');
-  return <TextArea label="Notes" hint="What happened." value={value} onChange={set} problem={props.problem} rows={5} />;
+  return <TextArea label="Notes" hint="What happened." value={value} onValueChange={set} problem={props.problem} rows={5} />;
 }
 
 test('the label names the box, typing reports the text across lines, and the box is the field control', async () => {

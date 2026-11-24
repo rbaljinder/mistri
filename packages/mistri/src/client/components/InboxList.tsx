@@ -238,7 +238,7 @@ export function InboxRoom() {
   );
   const markAllButton =
     unread > 0 ? (
-      <Button intent="quiet" size="compact" busy={marking} busyLabel={say('marking')} onClick={() => void markAll()}>
+      <Button variant="ghost" size="sm" loading={marking} loadingLabel={say('marking')} onClick={() => void markAll()}>
         {say('markAllRead')}
       </Button>
     ) : null;
@@ -309,7 +309,7 @@ export function InboxRoom() {
                   <NoticeText notice={notice} />
                 </button>
                 {!notice.read && (
-                  <Button intent="quiet" size="compact" className="inbox-mark" onClick={() => void mark({ ids: [notice.id] })}>
+                  <Button variant="ghost" size="sm" className="inbox-mark" onClick={() => void mark({ ids: [notice.id] })}>
                     {say('markRead')}
                     <span className="visually-hidden">: {notice.title}</span>
                   </Button>
@@ -321,10 +321,10 @@ export function InboxRoom() {
         {pages.hasNextPage && (
           <div className="inbox-more">
             <Button
-              intent="secondary"
-              size="compact"
-              busy={pages.isFetchingNextPage}
-              busyLabel={say('common.loading')}
+              variant="secondary"
+              size="sm"
+              loading={pages.isFetchingNextPage}
+              loadingLabel={say('common.loading')}
               onClick={() => void pages.fetchNextPage()}
             >
               {say('showOlder')}

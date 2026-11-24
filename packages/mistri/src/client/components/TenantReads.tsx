@@ -174,10 +174,10 @@ export function TenantReads() {
           label={say('resource')}
           options={[{ value: '', label: say('anyResource') }, ...(page?.resources ?? []).map((name) => ({ value: name, label: name }))]}
           value={draft.resource ?? ''}
-          onChange={(value: string) => setDraft({ ...draft, resource: value || undefined })}
+          onValueChange={(value: string) => setDraft({ ...draft, resource: value || undefined })}
           reserve={false}
         />
-        <Field label={say('record')} hint={say('recordHint')} size="compact">
+        <Field label={say('record')} hint={say('recordHint')} size="sm">
           <input
             data-slot="input"
             value={draft.record ?? ''}
@@ -187,7 +187,7 @@ export function TenantReads() {
             onChange={(event) => setDraft({ ...draft, record: event.target.value })}
           />
         </Field>
-        <Field label={say('from')} size="compact">
+        <Field label={say('from')} size="sm">
           <input
             data-slot="input"
             type="date"
@@ -195,7 +195,7 @@ export function TenantReads() {
             onChange={(event) => setDraft({ ...draft, from: event.target.value || undefined })}
           />
         </Field>
-        <Field label={say('to')} size="compact">
+        <Field label={say('to')} size="sm">
           <input
             data-slot="input"
             type="date"
@@ -204,12 +204,12 @@ export function TenantReads() {
           />
         </Field>
         <div className="reads-apply">
-          <Button intent="primary" size="compact" type="submit">
+          <Button variant="primary" size="sm" type="submit">
             {say('apply')}
           </Button>
           {filtered && (
             <Button
-              size="compact"
+              size="sm"
               onClick={() => {
                 setDraft({});
                 setFilters({});
@@ -224,7 +224,7 @@ export function TenantReads() {
         <p className="reads-person">
           <span>{say('person', { who: named ? who(named) : filters.actor })}</span>
           <Button
-            size="compact"
+            size="sm"
             onClick={() => {
               setDraft({ ...draft, actor: undefined });
               setFilters({ ...filters, actor: undefined });
@@ -266,7 +266,7 @@ export function TenantReads() {
         </ul>
       )}
       {page?.next !== undefined && (
-        <Button size="compact" busy={busy === 'older'} busyLabel={say('loadingOlder')} onClick={() => void older()}>
+        <Button size="sm" loading={busy === 'older'} loadingLabel={say('loadingOlder')} onClick={() => void older()}>
           {say('older')}
         </Button>
       )}

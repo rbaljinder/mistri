@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Segmented } from '../../packages/mistri/src/client/components/sdk/kit.js';
+import { SegmentedControl } from '../../packages/mistri/src/client/components/sdk/index.js';
 import { LayoutSwitch } from '../../packages/kit/src/client/components/LayoutSwitch.js';
 import { PresentationSwitch } from '../../packages/kit/src/client/components/PresentationSwitch.js';
 
@@ -17,10 +17,10 @@ function Switches() {
   return (
     <div style={{ display: 'grid', gap: 16, maxWidth: 520 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <Segmented
-          label="Range"
+        <SegmentedControl
+          ariaLabel="Range"
           value={range}
-          onChange={setRange}
+          onValueChange={setRange}
           options={[
             { value: '7d', label: '7 d' },
             { value: '30d', label: '30 d', count: 12 },
@@ -29,11 +29,11 @@ function Switches() {
         />
         <input className="insert-input" aria-label="Search" placeholder="Search" style={{ width: 160 }} />
       </div>
-      <Segmented
-        label="Status"
-        size="compact"
+      <SegmentedControl
+        ariaLabel="Status"
+        size="sm"
         value="all"
-        onChange={() => {}}
+        onValueChange={() => {}}
         options={[
           { value: 'all', label: 'All' },
           { value: 'attention', label: 'Needs attention' },

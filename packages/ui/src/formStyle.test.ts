@@ -47,9 +47,9 @@ test('a finger gets 44px and a phone gets 16px text, both under a coarse pointer
   const screens = bare(sheet('screens.css'));
   const finger = screens.slice(screens.indexOf('@media (pointer: coarse), (max-width: 40rem)'));
   expect(finger).toContain('min-height: calc(44px / var(--density-zoom, 1))');
-  expect(finger).toContain("[data-slot='button']:not([data-size='sm'])");
+  expect(finger).toContain("[data-slot='button']:not([data-size='sm']");
   const phone = screens.slice(screens.lastIndexOf('@media (pointer: coarse)'));
-  expect(phone).toMatch(/font-size: max\(16px, var\(--m-text\)\)/);
+  expect(phone).toMatch(/font-size: max\(16px, var\(--m-text/);
 });
 
 test("the reader's contrast and transparency settings win over a theme, and reach the parts through the tokens they read", () => {

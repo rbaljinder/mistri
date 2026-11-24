@@ -32,6 +32,9 @@
 .split-list-detail-list,
 .split-list-detail-pane { min-width: 0; }
 
+/* The list and the record beside it are as tall as what they hold, and the room's pane scrolls them both: capped,
+   each was a scroll bar of its own inside the pane's, cut mid-row over empty room (docs/design.md, Standing layout
+   rules: one scroll container per room). */
 .split-list-detail-pane {
   min-height: 16rem;
   border-left: 1px solid var(--line);

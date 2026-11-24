@@ -11,6 +11,7 @@
    A position is read while a pointer is over the track or the keyboard is on it, and none is when neither is.
    The last one read is kept, so the keyboard arrives where the reader left off. */
 import { type ChangeDetails, createChange, definePrimitive } from '@ui-sdk/core';
+import { viewportBox, viewportScale } from '../internal/ruler.js';
 
 export type ScrubReason = 'scrub' | 'move-key' | 'focus-in' | 'focus-out' | 'escape-key';
 
@@ -64,10 +65,13 @@ export const scrub = definePrimitive({
       set,
       now: () => context.store.get(),
       text: (index: number): string | undefined => context.options().text?.(index),
-      /* The position under a pointer. A share of the track's own box, so a zoomed page needs no correcting. */
+      /* The position under a pointer, measured through the zoom-aware layout ruler. */
       under(event: PointerEvent | MouseEvent, track: HTMLElement): number {
-        const box = track.getBoundingClientRect();
-        let share = vertical() ? (event.clientY - box.top) / (box.height || 1) : (event.clientX - box.left) / (box.width || 1);
+        const box = viewportBox(track);
+        const scale = viewportScale();
+        let share = vertical()
+          ? (event.clientY / scale - box.top) / (box.height || 1)
+          : (event.clientX / scale - box.left) / (box.width || 1);
         if (!vertical() && getComputedStyle(track).direction === 'rtl') share = 1 - share;
         share = Math.min(Math.max(share, 0), 1);
         const last = count() - 1;

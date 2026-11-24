@@ -22,7 +22,8 @@ import { heard } from './internal/layers.js';
 import { popupContainer, useDialogContainer } from './internal/popups.js';
 import { slotted } from './internal/uiKitContext.js';
 
-interface DropMenuProps {
+/** Props for the `DropMenu` trigger-and-popup menu control. */
+export interface DropMenuProps {
   /** The wrapper's class — where the stylesheet places the control. */
   className?: string;
   /** The trigger's classes, in place of the menu's own trigger, which is a secondary button: a trigger that has them
@@ -31,6 +32,8 @@ interface DropMenuProps {
   triggerTitle?: string;
   /** The trigger's accessible name, when its visible label is shared with another menu on the page. */
   triggerLabel?: string;
+  /** Accessible name for the trigger button when no visible text distinguishes it. */
+  ariaLabel?: string;
   label: ReactNode;
   /** The popup's classes, over the menu's own surface. */
   popupClassName?: string;
@@ -61,6 +64,7 @@ interface DropMenuProps {
       that answers once the page has drawn again: an element, `true` for the trigger, `false` to leave the focus be. */
   finalFocus?: boolean | RefObject<HTMLElement | null> | (() => boolean | HTMLElement | null | void);
   children: ReactNode;
+  ref?: Ref<HTMLDivElement>;
 }
 
 function DefaultDropMenu({
@@ -68,6 +72,7 @@ function DefaultDropMenu({
   triggerClassName,
   triggerTitle,
   triggerLabel,
+  ariaLabel,
   label,
   popupClassName,
   side = 'bottom',
@@ -78,8 +83,9 @@ function DefaultDropMenu({
   onOpenChange,
   finalFocus,
   children,
+  ref,
 }: DropMenuProps) {
-  const root = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement | null>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const popup = useRef<HTMLDivElement>(null);
   /* Inside a dialog the popup is drawn into that dialog, so it shares its
@@ -140,7 +146,15 @@ function DefaultDropMenu({
     // After every draw while open: the items are the caller's children, which arrive as a draw and nothing else.
   });
   return (
-    <div className={className || undefined} data-slot="drop-menu" ref={root}>
+    <div
+      className={className || undefined}
+      data-slot="drop-menu"
+      ref={(node) => {
+        root.current = node;
+        if (typeof ref === 'function') ref(node);
+        else if (ref) (ref as { current: HTMLDivElement | null }).current = node;
+      }}
+    >
       <Menu
         open={disabled ? false : open}
         onOpenChange={(next, details) => {
@@ -160,7 +174,7 @@ function DefaultDropMenu({
           /* A trigger given classes is the caller's to dress, whole: it wears none of the button's own (controls.css). */
           data-own={triggerClassName ? '' : undefined}
           title={triggerTitle}
-          aria-label={triggerLabel}
+          aria-label={ariaLabel ?? triggerLabel}
           disabled={disabled}
         >
           {label}
@@ -182,41 +196,38 @@ function DefaultDropMenu({
   );
 }
 
-/** A labelled run of items: a menu that changes several things says which each item changes. */
-function DefaultDropGroup({
-  className,
-  labelClassName,
-  label,
-  children,
-}: {
+/** Props for `DropGroup`. */
+export interface DropGroupProps {
   className?: string;
   labelClassName?: string;
   label: string;
   children: ReactNode;
-}) {
+  ref?: Ref<HTMLDivElement>;
+}
+
+/** A labelled run of items: a menu that changes several things says which each item changes. */
+function DefaultDropGroup({ className, labelClassName, label, children, ref }: DropGroupProps) {
   return (
-    <MenuGroup className={className}>
+    <MenuGroup ref={ref} className={className}>
       <MenuGroupLabel className={labelClassName}>{label}</MenuGroupLabel>
       {children}
     </MenuGroup>
   );
 }
 
-/** A rule between two runs of items, a separator to a screen reader. */
-function DefaultDropSeparator({ className }: { className?: string }) {
-  return <MenuSeparator className={className} />;
+/** Props for `DropSeparator`. */
+export interface DropSeparatorProps {
+  className?: string;
+  ref?: Ref<HTMLDivElement>;
 }
 
-/** An item drawn as a button, so `disabled` and the button styles hold. Closes the menu unless told not to. */
-function DefaultDropItem({
-  className,
-  disabled,
-  closeOnClick,
-  onClick,
-  title,
-  children,
-  ref,
-}: {
+/** A rule between two runs of items, a separator to a screen reader. */
+function DefaultDropSeparator({ className, ref }: DropSeparatorProps) {
+  return <MenuSeparator ref={ref} className={className} />;
+}
+
+/** Props for `DropItem`. */
+export interface DropItemProps {
   className?: string;
   disabled?: boolean;
   closeOnClick?: boolean;
@@ -224,7 +235,10 @@ function DefaultDropItem({
   title?: string;
   children: ReactNode;
   ref?: Ref<HTMLButtonElement>;
-}) {
+}
+
+/** An item drawn as a button, so `disabled` and the button styles hold. Closes the menu unless told not to. */
+function DefaultDropItem({ className, disabled, closeOnClick, onClick, title, children, ref }: DropItemProps) {
   return (
     <MenuItem
       render={<button type="button" />}
@@ -241,8 +255,11 @@ function DefaultDropItem({
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Button-triggered popup action menu with keyboard navigation and focus restoration. */
 export const DropMenu = slotted('DropMenu', DefaultDropMenu, { onOpenChange: [1, 'implicit'] });
+/** Labeled group of items inside a `DropMenu`. */
 export const DropGroup = slotted('DropGroup', DefaultDropGroup);
+/** Visual and accessible separator rule between `DropMenu` item groups. */
 export const DropSeparator = slotted('DropSeparator', DefaultDropSeparator);
+/** Action button item inside a `DropMenu`. */
 export const DropItem = slotted('DropItem', DefaultDropItem);

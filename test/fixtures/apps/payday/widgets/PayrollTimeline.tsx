@@ -8,7 +8,7 @@
  * a run opens as a peek through the platform's own navigation. Colours are
  * tokens, so every look and both modes dress it; nothing moves.
  */
-import { Button, Empty, Stack, Value, useFormat, useNavigate, useSectionSize, type SectionProps } from '@mistriwork/mistri/ui';
+import { Button, EmptyState, Stack, Value, useFormat, useNavigate, useSectionSize, type SectionProps } from '@mistriwork/mistri/ui';
 import type { Rows } from '../mistri-schema.d.ts';
 import type { payHistory } from '../features/payroll.ts';
 import './PayrollTimeline.css';
@@ -40,7 +40,7 @@ function RunList({ runs, current, open }: { runs: readonly Run[]; current: unkno
     <Stack as="ol" gap="tight" className="c-payroll-timeline-list">
       {runs.map((run) => (
         <li key={String(run.id)} className="c-payroll-timeline-item" aria-current={run.id === current ? 'true' : undefined}>
-          <Button intent="quiet" className="c-payroll-timeline-open" onClick={() => open(run)}>
+          <Button variant="ghost" className="c-payroll-timeline-open" onClick={() => open(run)}>
             {run.title}
           </Button>
           <span className="c-payroll-timeline-dates">
@@ -64,7 +64,7 @@ export default function PayrollTimeline({ record, rows, props }: Props) {
   const latest = rows.runs.length ? Math.max(...rows.runs.map((run) => day(run.pay_date))) : 0;
   const since = latest - props.months * 30.44;
   const runs = rows.runs.filter((run) => day(run.pay_date) >= since);
-  if (!runs.length) return <Empty title="No payroll runs to place yet." />;
+  if (!runs.length) return <EmptyState title="No payroll runs to place yet." />;
   const open = (run: Run) => openRecord('pay_run', { id: run.id }, { mode: 'drawer', label: String(run.title) });
   if (compact) return <RunList runs={runs} current={current} open={open} />;
 

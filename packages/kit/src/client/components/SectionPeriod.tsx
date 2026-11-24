@@ -17,7 +17,7 @@ export function SectionPeriod({ section, current, onPick }: { section: Section; 
         items={(section.windows ?? []).map((phrase) => ({ value: phrase, label: said(phrase) }))}
         value={current}
         ariaLabel={say('period', { title: section.title ?? section.table ?? say('thisSection') })}
-        onChange={onPick}
+        onValueChange={onPick}
       />
     </span>
   );

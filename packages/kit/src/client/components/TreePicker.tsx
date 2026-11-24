@@ -21,7 +21,7 @@ import './TreePicker.css';
 import { Fragment, useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Popover, PopoverContent } from '@ui-sdk/react/popover';
-import { viewportBox } from '@mistriwork/ui/internal/ruler.js';
+import { viewportBox } from '@mistriwork/ui';
 import { popupContainer, shellById } from '../shellHost.js';
 import { andQuery, quoteValue } from '@mistriwork/engine/shared/query.js';
 import { Icon } from './Icon.js';

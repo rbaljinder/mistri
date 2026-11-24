@@ -16,7 +16,7 @@ mistri check --app examples/apps/lintel --defaults
 
 | The column | Is drawn as |
 |---|---|
-| A number named like money (`price`, `total`, `fee`, `balance`, `hourly_rate`), or a `money` column | money in the App's currency |
+| A number named like money (`price`, `total`, `fee`, `balance`, `value` as in `deal_value`, `hourly_rate`), or a `money` column | money in the App's currency |
 | A number named like a percentage (`probability`, `progress`, `_rate`) | a percent with a bar |
 | A date named like a due date (`due_on`, `deadline`) | said from today: "in 3 days", "2 days ago" |
 | A number whose name says its unit (`_minutes`, `_days`, `sq_ft`, `mileage`) | the figure with its unit |
@@ -47,7 +47,7 @@ Whatever the App writes wins, one part at a time:
 ## Common mistakes
 
 - Writing out what the platform already does. `check` warns `restated`, and `mistri check --design --fix` deletes exactly those rules.
-- Naming a count like money (`value`, `total`) and wondering why it wears a currency. Declare `format: 'number'` for it.
+- Naming a count or a measurement like money (`value`, `total`, a gauge's `measured_value`) and wondering why it wears a currency. Declare `format: 'number'` for it; `mistri check --defaults` lists the column as "a number named like money".
 
 ## Related
 

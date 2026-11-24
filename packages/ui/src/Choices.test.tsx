@@ -9,7 +9,9 @@ afterEach(cleanup);
 
 function Question({ start = '' as 'yes' | 'no' | '' }) {
   const [value, set] = useState(start);
-  return <YesNo label="Do you own a home?" value={value} onChange={set} yes="Yes" no="No" problem={value ? undefined : 'Answer this.'} />;
+  return (
+    <YesNo label="Do you own a home?" value={value} onValueChange={set} yes="Yes" no="No" problem={value ? undefined : 'Answer this.'} />
+  );
 }
 
 test('the question names a radiogroup of two radios', () => {
@@ -51,7 +53,7 @@ test('single cards are a radiogroup; one choice replaces the last', async () => 
         labelHidden
         options={kinds}
         value={value}
-        onChange={(v, details) => {
+        onValueChange={(v, details) => {
           change(v, details);
           set(v);
         }}
@@ -78,7 +80,7 @@ test('several cards are a group of checkboxes; the exclusive card clears the res
         exclusive="none"
         options={kinds}
         value={value}
-        onChange={(v, details) => {
+        onValueChange={(v, details) => {
           change(v, details);
           set(v);
         }}
@@ -105,7 +107,7 @@ test('a checkbox is named by its text, which is a click target, and Space toggle
       <Checkbox
         label="Email me updates"
         checked={on}
-        onChange={(v, details) => {
+        onCheckedChange={(v, details) => {
           change(v, details);
           set(v);
         }}
@@ -121,7 +123,7 @@ test('a checkbox is named by its text, which is a click target, and Space toggle
 });
 
 test('a consent is a checkbox whose long paragraph is the label, in its own class, with a problem in its description', () => {
-  render(<Consent label="I agree to the terms and the privacy notice." checked={false} onChange={() => {}} problem="Required." />);
+  render(<Consent label="I agree to the terms and the privacy notice." checked={false} onCheckedChange={() => {}} problem="Required." />);
   const box = screen.getByRole('checkbox', { name: 'I agree to the terms and the privacy notice.' });
   expect(box).toHaveAccessibleDescription('Required.');
   expect(box).toHaveAttribute('aria-invalid', 'true');
@@ -133,7 +135,7 @@ test('several cards are one Tab stop: the arrows move, Space toggles, and each s
   const user = userEvent.setup();
   function Many() {
     const [value, set] = useState<string[]>(['truck']);
-    return <ChoiceCards label="Vehicles" multiple exclusive="none" options={kinds} value={value} onChange={set} />;
+    return <ChoiceCards label="Vehicles" multiple exclusive="none" options={kinds} value={value} onValueChange={set} />;
   }
   render(<Many />);
   const boxes = screen.getAllByRole('checkbox');

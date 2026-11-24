@@ -11,7 +11,7 @@
  * with serializable arguments, so a component could one day be hosted in a
  * frame behind the same SDK without a second contract.
  */
-import { createContext, useContext } from 'react';
+import { createContext, useContext, type MouseEvent } from 'react';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import type { ColumnMeta } from '@mistriwork/engine/shared/schema.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
@@ -330,6 +330,8 @@ export interface UiHost {
   deployment(): UiDeployment;
   /** The tenant's team and what the reader may do with it (`useTeam`): empty outside a tenant App. */
   team: import('../../teamTypes.js').TeamAccess;
+  /** The signed-in reader's own account profile (`useAccountProfile`): null when signed out. */
+  accountProfile: import('../../accountProfileTypes.js').AccountProfileAccess;
   /** The tenant's read audit as its admins read it (`useReadAudit`): empty outside a tenant App. */
   reads: import('../../readAuditTypes.js').ReadAuditAccess;
   /** The brand the reader sees now (UiBranding). */
@@ -339,8 +341,9 @@ export interface UiHost {
   subscribeLook(listener: () => void): () => void;
   /** Whether values are drawn in an App's words (a vocabulary's value as a word). */
   app: boolean;
-  /** Said in the page's live region, as the platform says a verb's outcome: a toast, read out by assistive technology. */
-  announce(text: string, tone: 'ok' | 'error'): void;
+  /** Said in the page's live region, as the platform says a verb's outcome: a toast, read out by assistive technology.
+      Only `error` stays until dismissed; a `warning` passes as `ok` does, under its own tone. */
+  announce(text: string, tone: 'ok' | 'error' | 'warning'): void;
   /** How a row of this resource is named, as a breadcrumb names it: its label column, else its key. */
   rowTitle(resource: string, row: Readonly<Record<string, unknown>>): string | undefined;
   /** One of the App's messages in the reader's words, its arguments filled; a key it lacks is said as itself. */
@@ -423,6 +426,21 @@ export function useUiHost(): UiHost {
   const host = useContext(UiHostContext) ?? pageHost;
   if (!host) throw new Error(say('uiIsDrawnByASection'));
   return host;
+}
+
+/** Follow an in-App `/` address in place through the `UiHost`, preserving modified/middle clicks and external URLs. */
+export function useFollow(
+  href: string | undefined,
+  onClick?: (event: MouseEvent<HTMLElement>) => void,
+): (event: MouseEvent<HTMLElement>) => void {
+  const host = useHostIfAny();
+  return (event: MouseEvent<HTMLElement>) => {
+    onClick?.(event);
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    if (!host || href === undefined || !href.startsWith('/') || href.startsWith('//')) return;
+    event.preventDefault();
+    host.follow(href);
+  };
 }
 
 /** How wide the section a component stands in is, measured; `compact` below a phone's width. */

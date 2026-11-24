@@ -11,12 +11,16 @@ const measures = new Map<string, TextMeasure>();
    and until its @font-face is on the page `fonts.check` says the font is loaded, there being no declared face to
    wait for. The fallback's widths were then kept under the font's name for the page's life, by whether the sheet
    beat the first measure. Whatever was kept is let go each time a face arrives. */
-globalThis.document?.fonts?.addEventListener?.('loadingdone', () => measures.clear());
+export function clearTextMeasures(): void {
+  measures.clear();
+}
+
+globalThis.document?.fonts?.addEventListener?.('loadingdone', clearTextMeasures);
 
 /** Whether `font` is set in faces that are loaded (or that no `@font-face` declares: a system face). */
 export function fontLoaded(font: string): boolean {
   try {
-    return globalThis.document?.fonts?.check(font) ?? true;
+    return globalThis.document?.fonts?.check(font, '0123456789Aa') ?? true;
   } catch {
     return true;
   }

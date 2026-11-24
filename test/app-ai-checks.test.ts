@@ -34,7 +34,7 @@ test("ai-text-bare: a label or title that says AI as a word is advised; the App'
   assert.deepEqual(aiTextWarnings(quiet as never, { a: { label: 'Mail the lead' } } as never), []);
 });
 
-test('ai-text-bare: markup that says AI outside <AiMark> is advised, in text, braces and a label', async (t: TestContext) => {
+test('ai-text-bare: markup that says AI outside <AiBadge> is advised, in text, braces and a label', async (t: TestContext) => {
   const lint = async (source: string) => {
     const dir = mkdtempSync(join(tmpdir(), 'mistri-ai-text-'));
     t.after(() => rmSync(dir, { recursive: true, force: true }));
@@ -48,7 +48,7 @@ test('ai-text-bare: markup that says AI outside <AiMark> is advised, in text, br
   assert.equal(bare[0].file, 'widgets/Note.tsx');
   assert.deepEqual(
     await lint(
-      'import { AiMark } from \'@mistriwork/mistri/ui\';\nexport default () => <div><AiMark>AI</AiMark><p>A said, a PAIR, an aim</p><Chip label="Draft" /></div>;\n',
+      'import { AiBadge } from \'@mistriwork/mistri/ui\';\nexport default () => <div><AiBadge>AI</AiBadge><p>A said, a PAIR, an aim</p><Chip label="Draft" /></div>;\n',
     ),
     [],
   );

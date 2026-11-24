@@ -16,16 +16,18 @@
  * stylesheet). A step button that disables under a focused finger
  * hands focus to the other step, never to nowhere.
  */
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type Ref, type SyntheticEvent } from 'react';
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Single slide definition for `Carousel`. */
 export interface CarouselSlide {
   /** The slide's short name, said after its number ("1 of 3: Studio"). */
   label?: string;
   children: ReactNode;
 }
 
+/** Props for the `Carousel` slide viewer. */
 export interface CarouselProps {
   slides: readonly CarouselSlide[];
   index?: number;
@@ -36,6 +38,7 @@ export interface CarouselProps {
   /** Every word the carousel says, in the caller's language; any left out are English. */
   words?: Partial<CarouselWords>;
   className?: string;
+  ref?: Ref<HTMLElement>;
 }
 
 interface CarouselWords {
@@ -67,10 +70,10 @@ const ENGLISH: CarouselWords = {
 /* One slide at a time, the others out of reach: only the slide in view is in the tab order and the tree. Drawn by
    hand on the carousel's parts, which the stylesheet dresses: UI SDK's own carousel is a scroller that keeps its
    neighbours beside the slide and chooses among them with tabs, which is another control with other names. */
-function DefaultCarousel({ slides, index, defaultIndex = 0, onIndexChange, ariaLabel, words: given, className }: CarouselProps) {
+function DefaultCarousel({ slides, index, defaultIndex = 0, onIndexChange, ariaLabel, words: given, className, ref }: CarouselProps) {
   const words = { ...ENGLISH, ...given };
   const [own, setOwn] = useState(defaultIndex);
-  const region = useRef<HTMLElement>(null);
+  const region = useRef<HTMLElement | null>(null);
   const previous = useRef<HTMLButtonElement>(null);
   const next = useRef<HTMLButtonElement>(null);
   /* The step the keyboard was last on, so one that disables under it is rescued even where the browser has
@@ -118,7 +121,11 @@ function DefaultCarousel({ slides, index, defaultIndex = 0, onIndexChange, ariaL
   };
   return (
     <section
-      ref={region}
+      ref={(node) => {
+        region.current = node;
+        if (typeof ref === 'function') ref(node);
+        else if (ref) (ref as { current: HTMLElement | null }).current = node;
+      }}
       data-slot="carousel"
       className={className || undefined}
       aria-roledescription="carousel"
@@ -219,5 +226,5 @@ function DefaultCarousel({ slides, index, defaultIndex = 0, onIndexChange, ariaL
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Accessible single-slide carousel with step buttons, dot indicators, and keyboard navigation. */
 export const Carousel = slotted('Carousel', DefaultCarousel, { onIndexChange: [1, 'navigate'] });

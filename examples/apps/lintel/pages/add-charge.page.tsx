@@ -9,7 +9,7 @@
  * typed stays in the page and never in the address.
  */
 import type { ReactNode } from 'react';
-import { Card, Choose, definePage, Empty, Stack } from '@mistriwork/mistri/page';
+import { Card, Choose, definePage, EmptyState, Stack } from '@mistriwork/mistri/page';
 
 const page = definePage({
   label: 'Add a charge',
@@ -35,11 +35,11 @@ function AddCharge(): ReactNode {
         sort="unit_id"
         name="Lease"
         label="unit_id.code"
-        empty={<Empty title="No current leases" description="A charge is added to a lease that is active or under notice." />}
+        empty={<EmptyState title="No current leases" description="A charge is added to a lease that is active or under notice." />}
       />
       {lease === undefined ? (
         <Card>
-          <Empty title="Choose a lease" description="The charge is asked here a step at a time, and added to that lease." />
+          <EmptyState title="Choose a lease" description="The charge is asked here a step at a time, and added to that lease." />
         </Card>
       ) : (
         <page.Steps

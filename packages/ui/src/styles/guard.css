@@ -41,7 +41,8 @@
   [data-slot='tabs-tab'],
   [data-slot='button'][data-variant='bare'],
   [data-slot='radio-group'][data-kind='cards'] [data-slot='radio'],
-  :is([data-slot='date-field'], [data-slot='adorned']) :is(input, button)[data-slot] {
+  :is([data-slot='date-field'], [data-slot='adorned']) :is(input, button)[data-slot],
+  :is([data-slot='field-box'], [data-slot='input-group']) :is(input, textarea) {
     border-radius: 0 !important;
   }
 
@@ -49,20 +50,18 @@
     border-radius: max(0px, calc(var(--ui-radius) - 2px)) !important;
   }
 
-  [data-slot='popover-trigger'][data-kind='help-tip'] {
-    border-radius: 999px !important;
-  }
-
   /* A form's bare input is given an edge and a height by mistri, and the date field a class of its own
-     (`insert-input`) with padding to match; the field is one box, and the input in it has none. */
+     (`insert-input`) with padding to match; every composite field is one box, and the input in it has none. */
   [data-slot='date-field'] {
     padding: 0 !important;
+  }
 
-    & [data-slot='input'] {
-      border: 0 !important;
-      background: transparent !important;
-      box-shadow: none !important;
-    }
+  :is([data-slot='field-box'], [data-slot='input-group'], [data-slot='date-field']) :is(input, textarea) {
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    outline: none !important;
+    min-height: 0 !important;
   }
 
   /* A calendar's cells are sized by the calendar: a look gives its tables' cells room above and below their

@@ -10,7 +10,7 @@
  * shade is the accent mixed into the surface by the fill, so every look and
  * both modes dress it.
  */
-import { Empty, useFormat, useNavigate, useSectionSize, type SectionProps } from '@mistriwork/mistri/ui';
+import { EmptyState, useFormat, useNavigate, useSectionSize, type SectionProps } from '@mistriwork/mistri/ui';
 import type { Rows } from '../mistri-schema.d.ts';
 import type { warehouseBins } from '../pages/warehouse.ts';
 import './BinMap.css';
@@ -71,7 +71,7 @@ export default function BinMap({ rows }: Props) {
   const { openRecord } = useNavigate();
   const format = useFormat();
   const bins = rows.bins;
-  if (!bins.length) return <Empty title="This warehouse has no bins yet." />;
+  if (!bins.length) return <EmptyState title="This warehouse has no bins yet." />;
   const open = (bin: Bin) => openRecord('bin', { id: bin.id }, { mode: 'drawer', label: String(bin.code) });
   const aisles = new Map<string, Map<number, Map<number, Bin>>>();
   const reserve: Array<[number, Bin]> = [];

@@ -545,6 +545,25 @@
       "browser": true
     },
     {
+      "id": "ui-primitives",
+      "surface": ["package: export ./primitives"],
+      "tests": [{ "file": "packages/ui/src/surfaces.test.tsx" }, { "file": "test/app-components.test.ts" }]
+    },
+    {
+      "id": "ui-charts",
+      "surface": ["package: export ./charts"],
+      "tests": [{ "file": "packages/ui/src/charts.test.tsx" }, { "file": "test/app-components.test.ts" }]
+    },
+    {
+      "id": "ui-views",
+      "surface": ["package: export ./views"],
+      "tests": [
+        { "file": "packages/ui/src/surfaces.test.tsx" },
+        { "file": "packages/mistri/src/client/components/sdk/accountProfile.test.tsx" },
+        { "file": "test/app-components.test.ts" }
+      ]
+    },
+    {
       "id": "component-examples",
       "surface": ["package: export ./ui/testing"],
       "tests": [{ "file": "packages/mistri/src/client/components/sdk/sdk.surfaces.test.tsx" }]

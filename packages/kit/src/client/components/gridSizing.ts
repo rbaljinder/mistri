@@ -213,7 +213,7 @@ export function columnSizeHint(
     column.chip || (column.title && !squeezeName)
       ? Math.max(body, headFloor)
       : column.title
-        ? Math.max(header, Math.min(minimum, SECONDARY_TEXT - 24))
+        ? Math.max(headFloor, Math.min(minimum, SECONDARY_TEXT - 24))
         : Math.max(headFloor, Math.min(body, CUT_FLOOR + (column.avatar ? AVATAR_WIDTH : 0)));
   return {
     minimum,
@@ -239,7 +239,7 @@ function sizeHints(
   cut = true,
 ): ReturnType<typeof columnSizeHint>[] {
   const hints = columns.map((column, index) => columnSizeHint(column, headChar, measure && ((text) => measure(text, index)), squeezeName));
-  return cut ? giveWay(hints, room) : hints;
+  return cut ? giveWay(hints, room, squeezeName) : hints;
 }
 
 /**
@@ -265,10 +265,15 @@ export function columnFloor(column: GridColumnSize, headChar = GRID_HEAD_CHAR, m
 /* Where the minima together run past the room, the heads wider than their columns' values give way first, the
    last first, and then the secondary text columns, the last first, down to their floors; the name, the chips and
    the figures never do. Where giving way would not spare the scroll, nothing is cut for it: a phone's table cut a
-   SKU to "BAG-FRB-…" and scrolled anyway. */
-function giveWay<T extends { minimum: number; least: number; head: number; wanted: number }>(hints: T[], room: number): T[] {
+   SKU to "BAG-FRB-…" and scrolled anyway — unless the grid is squeezed into a bounded Card or fit list (`squeeze`),
+   which may not scroll sideways and scales its kept columns to fit `room`. */
+function giveWay<T extends { minimum: number; least: number; head: number; wanted: number }>(
+  hints: T[],
+  room: number,
+  squeeze = false,
+): T[] {
   let over = hints.reduce((sum, hint) => sum + hint.minimum, 0) - room;
-  if (over <= 0 || hints.reduce((sum, hint) => sum + hint.least, 0) > room) return hints;
+  if (over <= 0 || (!squeeze && hints.reduce((sum, hint) => sum + hint.least, 0) > room)) return hints;
   const given = [...hints];
   const give = (most: (hint: T) => number, head: boolean) => {
     for (let i = given.length - 1; i >= 0 && over > 0; i--) {
@@ -283,6 +288,21 @@ function giveWay<T extends { minimum: number; least: number; head: number; wante
   };
   give((hint) => Math.min(hint.head, hint.minimum - hint.least), true);
   give((hint) => hint.minimum - hint.least, false);
+  if (squeeze && over > 0 && room > 0) {
+    const cellFloor = Math.max(24, Math.min(56, Math.floor(room / Math.max(1, given.length))));
+    const slack = given.map((hint) => Math.max(0, hint.minimum - cellFloor));
+    const totalSlack = slack.reduce((a, b) => a + b, 0);
+    if (totalSlack > 0) {
+      let left = Math.min(over, totalSlack);
+      for (let i = given.length - 1; i >= 0 && left > 0; i--) {
+        const share = i === 0 ? left : Math.min(slack[i]!, Math.ceil((over * slack[i]!) / totalSlack));
+        const less = Math.min(left, slack[i]!, share);
+        const nextMin = given[i]!.minimum - less;
+        given[i] = { ...given[i]!, minimum: nextMin, wanted: Math.max(nextMin, given[i]!.wanted - less) };
+        left -= less;
+      }
+    }
+  }
   return given;
 }
 
@@ -290,10 +310,11 @@ function giveWay<T extends { minimum: number; least: number; head: number; wante
  * The columns an embedded grid keeps in its width: a dashboard's list in half
  * a row cut "Sep 22, 202" behind a scroll bar. Past the width, columns are
  * left out from the end, as an aside's list says names rather than a table;
- * the row's name, the first column and its status always stay — a related
- * list beside an aside cut its status first, as the last column written,
- * which was the one a reader came to it for. Null when all fit, or before
- * the room is measured.
+ * the row's name and the first column always stay, and status columns stay
+ * while they fit `room` — a related list beside an aside cut its status first,
+ * as the last column written, which was the one a reader came to it for, while
+ * a narrow Card with three status chips must fold the excess rather than overflow.
+ * Null when all fit, or before the room is measured.
  */
 export function keepFitting(
   columns: GridColumnSize[],
@@ -310,8 +331,18 @@ export function keepFitting(
   let room = available - (expandable ? GRID_EXPANDER_WIDTH : 0) - (trailing ? GRID_TRAIL_WIDTH : 0);
   const hints = sizeHints(columns, room, headChar, measure, false, cut);
   if (hints.reduce((sum, hint) => sum + hint.minimum, 0) <= room) return null;
-  const kept = columns.map((column, index) => index === 0 || Boolean(column.title) || Boolean(column.status));
+  const squeezed = columns.map((column, index) => columnSizeHint(column, headChar, measure && ((text) => measure(text, index)), true));
+  const kept = columns.map((column, index) => index === 0 || Boolean(column.title));
+  let statusRoom = room - squeezed.reduce((sum, hint, index) => sum + (kept[index] ? hint.least : 0), 0);
   room -= hints.reduce((sum, hint, index) => sum + (kept[index] ? hint.minimum : 0), 0);
+  columns.forEach((column, index) => {
+    if (kept[index] || !column.status) return;
+    if (hints[index]!.minimum <= statusRoom) {
+      kept[index] = true;
+      statusRoom -= hints[index]!.minimum;
+      room -= hints[index]!.minimum;
+    }
+  });
   // In order, until one does not fit: a narrower column after it is not a reason to leave a gap.
   let full = false;
   hints.forEach((hint, index) => {

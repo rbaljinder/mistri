@@ -129,7 +129,7 @@ function IntegrationCard({ integration, editor, saved }: { integration: Integrat
       ) : null}
       {integration.channel ? <p className="integrations-form-note">{say('channel', { channel: integration.channel })}</p> : null}
       {integration.webhook ? (
-        <Field label={say('webhook')} hint={say('webhookHint')} size="compact">
+        <Field label={say('webhook')} hint={say('webhookHint')} size="sm">
           <input
             data-slot="input"
             className="integrations-form-address"
@@ -147,7 +147,7 @@ function IntegrationCard({ integration, editor, saved }: { integration: Integrat
             key={secret.name}
             label={readableName(secret.name)}
             hint={secret.least ? `${said}${secret.set ? '' : '.'} ${say('least', { count: String(secret.least) })}` : said}
-            size="compact"
+            size="sm"
           >
             <input
               data-slot="input"
@@ -175,13 +175,13 @@ function IntegrationCard({ integration, editor, saved }: { integration: Integrat
             {message || tested?.message}
           </p>
           {integration.canCheck ? (
-            <Button size="compact" disabled={busy} busy={testing} busyLabel={say('testing')} onClick={() => void test()}>
+            <Button size="sm" disabled={busy} loading={testing} loadingLabel={say('testing')} onClick={() => void test()}>
               {say('testConnection')}
             </Button>
           ) : null}
           {integration.secrets.some((secret) => secret.set) ? (
             <Button
-              size="compact"
+              size="sm"
               disabled={busy}
               onClick={() =>
                 setDraft(Object.fromEntries(integration.secrets.filter((secret) => secret.set).map((secret) => [secret.name, null])))
@@ -190,7 +190,7 @@ function IntegrationCard({ integration, editor, saved }: { integration: Integrat
               {say('remove')}
             </Button>
           ) : null}
-          <Button intent="primary" size="compact" type="submit" busy={busy} busyLabel={say('saving')} disabled={!changed.length}>
+          <Button variant="primary" size="sm" type="submit" loading={busy} loadingLabel={say('saving')} disabled={!changed.length}>
             {say('save')}
           </Button>
         </footer>

@@ -79,7 +79,7 @@ describe('the seam', () => {
   it('has a slot for every component the package draws, and a default for every slot', () => {
     // The whole package is loaded (the import above), so every slotted module has filled its default.
     expect(SLOT_NAMES.filter((name) => typeof defaultUiKit[name] !== 'function')).toEqual([]);
-    const NOT_DRAWN_BY_A_KIT = ['Icon', 'UiKitProvider'];
+    const NOT_DRAWN_BY_A_KIT = ['Icon', 'UiKitProvider', 'ComponentStyleScope', 'InCardContext', 'UiSurfaceSeamContext'];
     const components = Object.entries(everything)
       .filter(([name, value]) => /^[A-Z][a-z]/.test(name) && typeof value === 'function' && !NOT_DRAWN_BY_A_KIT.includes(name))
       .map(([name]) => name);
@@ -133,10 +133,10 @@ describe('the seam', () => {
   });
 
   it('dresses a default: the platform’s own control, handed to the kit with the props it was drawn with', () => {
-    const kit = defineUiKit({ Button: dress('Button', (Default, props) => <Default {...props} data-dressed="" size="large" />) });
+    const kit = defineUiKit({ Button: dress('Button', (Default, props) => <Default {...props} data-dressed="" size="lg" />) });
     const host = draw(
       <UiKitProvider kit={kit}>
-        <Button intent="primary">Save</Button>
+        <Button variant="primary">Save</Button>
       </UiKitProvider>,
     );
     const button = host.querySelector('button')!;

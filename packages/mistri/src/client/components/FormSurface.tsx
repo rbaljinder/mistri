@@ -653,14 +653,14 @@ export function FormSurface({
         {message && <p className="form-page-done-message">{message}</p>}
         {again && !attempt && form.input.length > 0 && (
           <p>
-            <Button intent="secondary" onClick={startAgain}>
+            <Button variant="secondary" onClick={startAgain}>
               {appWord('mistri.receipt.another', say('fillInAnother'))}
             </Button>
           </p>
         )}
         {onDismiss && (
           <div className="form-actions">
-            <Button intent="primary" onClick={onDismiss}>
+            <Button variant="primary" onClick={onDismiss}>
               {say('common.done')}
             </Button>
           </div>
@@ -749,10 +749,10 @@ export function FormSurface({
               <span className="intake-masked-line">
                 <span className="intake-masked-value">{maskedLast4(String(values[name]), field.mask)}</span>
                 <Button
-                  intent="secondary"
-                  size="compact"
+                  variant="secondary"
+                  size="sm"
                   disabled={pending}
-                  aria-label={appWord('mistri.form.changeNamed', say('change', { label: field.label }), { label: field.label })}
+                  ariaLabel={appWord('mistri.form.changeNamed', say('change', { label: field.label }), { label: field.label })}
                   onClick={() => {
                     change({ ...values, [name]: '' }, name);
                     setAsked((before) => new Set(before).add(name));
@@ -788,9 +788,9 @@ export function FormSurface({
                 <Heading id={`${id}-review-${index}`}>{step.label}</Heading>
                 {!open && (
                   <Button
-                    intent="quiet"
+                    variant="ghost"
                     disabled={pending}
-                    aria-label={appWord('mistri.form.changeNamed', say('change', { label: step.label }), { label: step.label })}
+                    ariaLabel={appWord('mistri.form.changeNamed', say('change', { label: step.label }), { label: step.label })}
                     onClick={() => setOpened((before) => new Set(before).add(step.id))}
                   >
                     {appWord('mistri.form.change', say('changeStep'))}
@@ -840,10 +840,10 @@ export function FormSurface({
             <div className="form-review-head">
               <h3 id={`${id}-review-${index}`}>{step.label}</h3>
               <Button
-                intent="quiet"
-                size="compact"
+                variant="ghost"
+                size="sm"
                 onClick={() => setCurrent(index)}
-                aria-label={appWord('mistri.form.changeNamed', say('change', { label: step.label }), { label: step.label })}
+                ariaLabel={appWord('mistri.form.changeNamed', say('change', { label: step.label }), { label: step.label })}
               >
                 {appWord('mistri.form.change', say('changeStep'))}
               </Button>
@@ -996,11 +996,11 @@ export function FormSurface({
               {guard}
               {said}
               <div className="form-actions">
-                <Button intent="primary" type="submit" busy={pending || attempt?.locked} busyLabel={say('common.submitting')}>
+                <Button variant="primary" type="submit" loading={pending || attempt?.locked} loadingLabel={say('common.submitting')}>
                   {submitLabel}
                 </Button>
                 {onDismiss && (
-                  <Button intent="secondary" disabled={pending} onClick={onDismiss}>
+                  <Button variant="secondary" disabled={pending} onClick={onDismiss}>
                     {say('common.cancel')}
                   </Button>
                 )}

@@ -1,6 +1,6 @@
 /** Aggregate evidence only; identities and conversion facts never reach this room. */
 import { useEffect, useRef, useState } from 'react';
-import { Button, Dropdown, Row, Stack, Tone } from '@mistriwork/mistri/ui';
+import { Button, Dropdown, Row, Stack, StatusDot } from '@mistriwork/mistri/ui';
 import type { ConsoleExperimentResult } from '../../../shared/consoleExperiment.js';
 import { Field } from '@mistriwork/ui/Field.js';
 import { JsonView } from '@mistriwork/kit/client/components/JsonView.js';
@@ -311,9 +311,11 @@ function Results({ data, request, id, revision }: { data: ConsoleExperiment; req
                         })}
                       </td>
                       <td>
-                        <Tone tone={comparison.guardrail === 'safe' ? 'good' : comparison.guardrail === 'breached' ? 'bad' : 'neutral'}>
+                        <StatusDot
+                          tone={comparison.guardrail === 'safe' ? 'good' : comparison.guardrail === 'breached' ? 'critical' : 'neutral'}
+                        >
                           {GUARDRAIL[comparison.guardrail as keyof typeof GUARDRAIL]?.() ?? comparison.guardrail}
-                        </Tone>
+                        </StatusDot>
                       </td>
                     </tr>
                   ))}
@@ -389,7 +391,7 @@ function Results({ data, request, id, revision }: { data: ConsoleExperiment; req
                   ariaLabel={say('winner')}
                   value={winner}
                   disabled={!permitted || busy || blocked}
-                  onChange={setWinner}
+                  onValueChange={setWinner}
                   items={[
                     { value: '', label: say('chooseWinner') },
                     ...result.declaration.arms.map((arm) => ({
@@ -409,7 +411,7 @@ function Results({ data, request, id, revision }: { data: ConsoleExperiment; req
               />
             </Field>
             <Row>
-              <Button type="submit" intent="primary" disabled={!permitted || busy || blocked}>
+              <Button type="submit" variant="primary" disabled={!permitted || busy || blocked}>
                 {say('applyWinner')}
               </Button>
             </Row>

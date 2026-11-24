@@ -7,7 +7,7 @@
  * d3's `ticks`), and the scale is widened to the step's multiples on either
  * side, so the highest figure never stands over the top rule.
  */
-interface NiceScale {
+export interface NiceScale {
   /** The scale's low end: a multiple of the step at or under the smallest figure. */
   min: number;
   /** The scale's high end: a multiple of the step at or over the largest figure. */

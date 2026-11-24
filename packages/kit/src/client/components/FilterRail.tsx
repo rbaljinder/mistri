@@ -29,7 +29,7 @@ import { appNow, defaultCurrency, formatLocale, formatNumber, formatTimezone } f
 import { DateField } from './DateField.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
-import { isPickerDate } from '@mistriwork/ui/internal/datePickerModel.js';
+import { isPickerDate } from '@mistriwork/ui';
 import { columnKind, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import { vocabularyWord } from '@mistriwork/engine/shared/model.js';
@@ -692,14 +692,14 @@ function DateFacet({ box, tail, table, set, onEnter, more }: FacetProps) {
           <label htmlFor={`${name}-from`}>{say('from')}</label>
           <DateField
             id={`${name}-from`}
-            aria-label={say('from')}
+            ariaLabel={say('from')}
             className="facet-input"
             value={from}
             max={isPickerDate(to) ? to : undefined}
             locale={formatLocale()}
             timezone={formatTimezone()}
             now={appNow()}
-            onChange={setFrom}
+            onValueChange={setFrom}
             onBlur={commit}
             onKeyDown={onKey}
           />
@@ -708,14 +708,14 @@ function DateFacet({ box, tail, table, set, onEnter, more }: FacetProps) {
           <label htmlFor={`${name}-to`}>{say('to')}</label>
           <DateField
             id={`${name}-to`}
-            aria-label={say('to')}
+            ariaLabel={say('to')}
             className="facet-input"
             value={to}
             min={isPickerDate(from) ? from : undefined}
             locale={formatLocale()}
             timezone={formatTimezone()}
             now={appNow()}
-            onChange={setTo}
+            onValueChange={setTo}
             onBlur={commit}
             onKeyDown={onKey}
           />
@@ -820,7 +820,7 @@ function RangeFacet({ box, tail, table, set, unit, onEnter, more }: FacetProps &
      fields in every look. The input is named by the word alone: the symbol
      and the unit beside it stay out of the label, and "Min$" is not a name. */
   const end = (which: 'min' | 'max', value: string, change: (value: string) => void) => (
-    <Field size="compact" className="facet-range-end" label={which === 'min' ? say('min') : say('max')}>
+    <Field size="sm" className="facet-range-end" label={which === 'min' ? say('min') : say('max')}>
       {(control) => (
         <span className="facet-affix">
           {symbol && (
@@ -960,7 +960,7 @@ export function FilterSheet({ refinement, onApply, onClose, ...rail }: SheetProp
       <FilterRail {...rail} refinement={draft} onChange={setDraft} status={typeof n === 'number' ? `${counted(n)} match` : undefined} />
       <div className="filter-sheet-foot">
         <Button onClick={onClose}>{say('common.cancel')}</Button>
-        <Button intent="primary" onClick={() => onApply(draft)}>
+        <Button variant="primary" onClick={() => onApply(draft)}>
           {typeof n === 'number' ? say('showCount', { count: counted(n) }) : say('common.showResults')}
         </Button>
       </div>

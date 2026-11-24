@@ -473,11 +473,11 @@ export function SignIn({
             {listed.map((provider) => (
               <Button
                 key={provider}
-                intent="secondary"
-                size="large"
+                variant="secondary"
+                size="lg"
                 block
                 className="signin-social"
-                busy={social.isPending}
+                loading={social.isPending}
                 onClick={() => social.mutate({ provider })}
               >
                 {MARKS[provider] && (
@@ -489,7 +489,7 @@ export function SignIn({
               </Button>
             ))}
             {organizations && (
-              <Button intent="secondary" size="large" block className="signin-social" onClick={() => go('work')}>
+              <Button variant="secondary" size="lg" block className="signin-social" onClick={() => go('work')}>
                 {say('workEmail')}
               </Button>
             )}
@@ -564,7 +564,7 @@ export function SignIn({
                   {/* Named "Show"/"Hide", not "Show password": the field's own name stays the only "Password" on the page.
                       Beside the field, not drawn over its right end: two controls in one box, one tapped for the other. */}
                   <Button
-                    intent="quiet"
+                    variant="ghost"
                     className="signin-reveal"
                     aria-pressed={revealed}
                     aria-controls="signin-password"
@@ -587,11 +587,11 @@ export function SignIn({
             </p>
             {/* Busy, not disabled: a disabled button drops the focus it holds, and a
                 refused sign-in left the reader on the page itself. submit refuses a second press. */}
-            <Button intent="primary" size="large" block type="submit" className="signin-submit" busy={credentials.isPending}>
+            <Button variant="primary" size="lg" block type="submit" className="signin-submit" loading={credentials.isPending}>
               {mode === 'up' ? say('createAccount') : say('common.signIn')}
             </Button>
             {mode === 'in' && (
-              <Button intent="quiet" className="signin-forgot" onClick={() => go('forgot')}>
+              <Button variant="ghost" className="signin-forgot" onClick={() => go('forgot')}>
                 {say('forgotPassword')}
               </Button>
             )}
@@ -619,7 +619,7 @@ export function SignIn({
                     onInput={clear('email')}
                   />
                 </Field>
-                <Button intent="primary" size="large" block type="submit" busy={recovery.isPending}>
+                <Button variant="primary" size="lg" block type="submit" loading={recovery.isPending}>
                   {say('sendResetLink')}
                 </Button>
               </form>
@@ -653,7 +653,7 @@ export function SignIn({
                 onInput={clear('confirm')}
               />
             </Field>
-            <Button intent="primary" size="large" block type="submit" busy={choosing.isPending}>
+            <Button variant="primary" size="lg" block type="submit" loading={choosing.isPending}>
               {say('changePassword')}
             </Button>
           </form>
@@ -674,7 +674,7 @@ export function SignIn({
                 onInput={clear('email')}
               />
             </Field>
-            <Button intent="primary" size="large" block type="submit" busy={realm.isPending || social.isPending}>
+            <Button variant="primary" size="lg" block type="submit" loading={realm.isPending || social.isPending}>
               {say('findMyOrganization')}
             </Button>
           </form>
@@ -685,13 +685,13 @@ export function SignIn({
           </p>
         )}
         {(mode === 'forgot' || mode === 'reset' || mode === 'work') && (
-          <Button intent="quiet" className="signin-flip" onClick={() => go('in')}>
+          <Button variant="ghost" className="signin-flip" onClick={() => go('in')}>
             {say('common.backToSign')}
           </Button>
         )}
         {claims && (mode === 'in' || mode === 'up') && (
           <Button
-            intent="quiet"
+            variant="ghost"
             className="signin-flip"
             onClick={() => {
               setClaimed(null);
@@ -702,7 +702,7 @@ export function SignIn({
           </Button>
         )}
         {mode !== 'in' && mode !== 'up' ? null : flips ? (
-          <Button intent="quiet" className="signin-flip" onClick={() => go(mode === 'up' ? 'in' : 'up')}>
+          <Button variant="ghost" className="signin-flip" onClick={() => go(mode === 'up' ? 'in' : 'up')}>
             {mode === 'up' ? say('haveAnAccountSign') : say('newHereCreateAnAccount')}
           </Button>
         ) : null}

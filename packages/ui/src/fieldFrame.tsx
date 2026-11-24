@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import type { AnswerKind } from './Field.js';
 import type { HelpTipProps } from './FormParts.js';
 
+/** Shared label, hint, problem, and sizing frame props inherited by form controls. */
 export interface FieldFrame {
   label: ReactNode;
   /** A sentence under the control that helps before anything goes wrong. */

@@ -46,7 +46,7 @@ import { selfInvocation } from './build.js';
 import { namesAccount, personEmails, shotAccount, shotRoleAccount, splitRoleEmail } from './shotAccount.js';
 import type { TenantShotAccount } from './shotTenant.js';
 import { asRoleRefusal, peopleRoles } from './shotRoles.js';
-import { readPage, sayPage } from './shotText.js';
+import { readPage, refusedRead, sayPage } from './shotText.js';
 import { inPage } from './gradeProbe.js';
 import { performSteps, STEP_FLAGS, stepOf, type ShotStep } from './shotSteps.js';
 import { MATRIX_MODES, MATRIX_SIZES, matrixFile, matrixIndex } from './shotMatrix.js';
@@ -944,6 +944,19 @@ async function capture(
   try {
     const page = await context.newPage();
     page.on('pageerror', (error) => errors.push(`page error: ${error.message.split('\n')[0]}`));
+    /* A read refused as written fails that read alone (shotText.ts `refusedRead`); its words are in the answer's body. */
+    const refusedReads: Promise<void>[] = [];
+    page.on('response', (answer) => {
+      if (answer.status() !== 400) return;
+      const pathname = new URL(answer.url()).pathname;
+      if (refusedRead(400, pathname, null) === undefined) return;
+      refusedReads.push(
+        answer
+          .json()
+          .catch(() => null)
+          .then((body) => void errors.push(refusedRead(400, pathname, body)!)),
+      );
+    });
     if (variant) await wearVariant(page, variant.theme);
     const status = await openShot(page, origin, shot.path, choice);
     if (status !== undefined && status >= 400) errors.push(`the server answered ${status}`);
@@ -953,6 +966,7 @@ async function capture(
       });
     const caught = await page.locator('[data-section-error]').count();
     if (caught) errors.push(`${caught} section${caught === 1 ? '' : 's'} could not be drawn`);
+    await Promise.all(refusedReads);
     /* --text: what the page says, instead of a picture of it. */
     if (!file) {
       text = sayPage(shot.path, await readPage(page), errors, status);

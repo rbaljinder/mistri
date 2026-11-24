@@ -7,7 +7,7 @@ afterEach(cleanup);
 
 function Budget({ format }: { format?: (n: number) => string }) {
   const [value, set] = useState(400);
-  return <Slider label="Monthly budget" min={150} max={1000} step={10} value={value} onChange={set} format={format} />;
+  return <Slider label="Monthly budget" min={150} max={1000} step={10} value={value} onValueChange={set} formatValue={format} />;
 }
 
 test('the native range is named by the label, says its value in words, and reads out in the box', () => {

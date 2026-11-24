@@ -50,7 +50,7 @@
   .multi-step-form[data-style='intake'] {
     --intake-h: max(var(--control-h), 44px);
   }
-  .multi-step-form[data-style='intake'] :is(.multi-step-panel, .intake-actions) { --control-h: var(--intake-h); }
+  .multi-step-form[data-style='intake'] :is(.multi-step-panel, .intake-actions) { --control-h: var(--intake-h); --form-control-h: var(--intake-h); }
   .multi-step-form[data-style='intake'] .command-fields { gap: var(--space-6); }
   .multi-step-form[data-style='intake'] [data-slot='columns'] { column-gap: var(--space-4); row-gap: var(--space-6); }
   .multi-step-form[data-style='intake'] [data-slot='field'] { gap: var(--space-3); }

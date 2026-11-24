@@ -1,0 +1,119 @@
+/* What every first-class Mistri UI surface stands on (charts, primitives and composite views): the surface sub-layers
+   and their shared parts, in `surfaces` (over `base`, under `kit`/`look`/`app`/`theme`). Every entry point loads
+   this first (sheetCharts.ts) and then only the sheets it draws from, so a page that draws one chart does not load the
+   pickers' and the views'. */
+@import '@mistriwork/ui/styles/surfaces/base.css' layer(surfaces);
+
+@layer base {
+  :where([class^='nx-'], [class*=' nx-']):is(button, input, select, textarea),
+  :where([class^='nx-'], [class*=' nx-']) :where(button, input, select, textarea) {
+    font: inherit;
+  }
+}
+
+/* The look, on the on-demand parts. A look is tokens and recipes (`data-look-<part>`, docs/theming.md); the kit's
+   sheets answer the recipes for the kit's own parts, by their own class names, and none of those rules can reach a
+   `.nx-*` part. These are the same answers for the parts every entry draws, said once per recipe VALUE in the look's
+   tokens, so a built-in look and an App's own theme dress a `DataTable`, a `StatCard` or a badge as they dress a
+   list, a dashboard's figure or a status. They stand in `look`, as every look's rules do, over the parts' own
+   drawing in `surfaces` and the page kit's in `components`; most say only a property the part reads
+   (`--nx-…`), so a part's states (a hovered row, a lane taking a card) keep their word. The charts', the
+   primitives' and the views' are in their own sheets beside this one. test/sdk-look-recipes.test.ts holds every
+   value the kit dresses to an answer here. */
+@layer look {
+  /* The type roles a look says (`type.roles`, themeFamilies.css): a label names a column or a figure, a figure is
+     the number itself. Each word in the attribute is a property the role says, so a role that says nothing sets
+     nothing and the part keeps its recipe's. Capitals take the caps tracking unless the role says its own; a size
+     said wins over the capitals' step, as in the kit's sheet. */
+  [data-type-label~='face'] {
+    --nx-label-face: var(--type-label-font);
+  }
+  [data-type-label~='upper'],
+  [data-type-label~='small-caps'] {
+    --nx-label-case: uppercase;
+    --nx-label-track: var(--type-label-tracking, var(--track-caps));
+    --nx-label-size: var(--text-xs);
+  }
+  [data-type-label~='tracking'] {
+    --nx-label-track: var(--type-label-tracking);
+  }
+  [data-type-label~='size'] {
+    --nx-label-size: var(--type-label-size);
+  }
+  [data-type-label~='weight'] {
+    --nx-label-weight: var(--type-label-weight);
+  }
+  [data-type-figure~='face'] {
+    --nx-figure-face: var(--type-figure-font);
+  }
+  [data-type-figure~='size'] {
+    --nx-figure-size: var(--type-figure-size);
+  }
+  [data-type-figure~='weight'] {
+    --nx-figure-weight: var(--type-figure-weight);
+  }
+  [data-type-figure~='tracking'] {
+    --nx-figure-track: var(--type-figure-tracking);
+  }
+
+  /* elevation: a card's lift is the look's card shadow (none where the look is flat). */
+  [data-theme-style] {
+    --nx-card-lift: var(--shadow-card, none);
+  }
+
+  /* ---------- status ----------
+     A badge in a status tone is a status, and wears the recipe a status wears in a list: a dot and its word in the
+     ink (`dot`, `quiet`), or a pill in the tone's tint (`pill`), with its dot (`pill-dot`). An untoned badge and one
+     in the accent are counts and tags, and stay chips. The mixes are the kit's own, which `check` measures. */
+  .nx-badge[data-tone='good'] {
+    --nx-tone: var(--status-good);
+  }
+  .nx-badge[data-tone='warning'] {
+    --nx-tone: var(--status-warning);
+  }
+  .nx-badge[data-tone='critical'] {
+    --nx-tone: var(--status-critical);
+  }
+  .nx-badge[data-tone='info'] {
+    --nx-tone: var(--status-info);
+  }
+  .nx-badge:is([data-tone='good'], [data-tone='warning'], [data-tone='critical'], [data-tone='info']) {
+    :is([data-look-status='dot'], [data-look-status='quiet']) & {
+      height: auto;
+      padding: 0;
+      border: 0;
+      background: none;
+      color: var(--ink);
+      font-weight: 400;
+      line-height: 1.7;
+      gap: var(--space-2h);
+    }
+    :is([data-look-status='pill'], [data-look-status='pill-dot']) & {
+      border: 0;
+      border-radius: var(--pill-radius, 999px);
+      background: color-mix(in srgb, currentColor 13%, transparent);
+      color: color-mix(in srgb, var(--nx-tone) 78%, var(--ink));
+      padding-inline: var(--space-3h);
+    }
+    [data-look-status='pill-dot'] & {
+      background: color-mix(in srgb, currentColor 11%, transparent);
+      font-weight: 600;
+      gap: var(--space-2h);
+    }
+    :is([data-look-status='dot'], [data-look-status='quiet'], [data-look-status='pill-dot']) &::before {
+      content: '';
+      flex: none;
+      width: 0.375rem;
+      height: 0.375rem;
+      border-radius: 50%;
+      background: currentColor;
+    }
+    :is([data-look-status='dot'], [data-look-status='quiet']) &::before {
+      background: var(--nx-tone);
+    }
+    [data-look-status='dot'] &::before {
+      width: 0.4375rem;
+      height: 0.4375rem;
+    }
+  }
+}

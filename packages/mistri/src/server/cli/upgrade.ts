@@ -2,7 +2,8 @@
  * `mistri upgrade`: an App's source brought to the names this mistri reads.
  *
  * The import of the package's old name becomes `@mistriwork/mistri/*`, and the keys and names the CHANGELOG renamed
- * are rewritten where they read the same wherever they stand (upgradeRenames.ts, the one table), as are the looks'
+ * are rewritten where they read the same wherever they stand (upgradeRenames.ts, the one table): a key, a type, a
+ * component an entry point exports under a new name and the props it took, as are the looks'
  * renamed tokens in sources and stylesheets. A rename is a text
  * edit at a token the file's own words place: this reads source as tokens, skipping strings, comments and templates,
  * and never as a parse, so it needs no TypeScript installed and cannot be fooled by a name inside a string. What it
@@ -20,6 +21,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { dirname, join, relative, resolve } from 'node:path';
 import { dependencyDeclarations } from './upgradeDependencies.js';
 import {
+  EXPORTS,
   GENERIC_TOKENS,
   KEYS,
   KIT_MODULES,
@@ -385,13 +387,41 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
     if (is(after, 'as') && is(after + 1, 'const')) after += 2;
     return (is(after, 'satisfies') || is(after, 'as')) && mistriAt(is(after + 2, '.') ? after + 3 : after + 1, true) !== undefined;
   };
-  /* A type mistri renamed, only where the file means mistri's: its import, and its uses under the name it was imported as. */
-  const renamedSites = new Set<number>();
+  /* The names the file writes as a tag (`<Tone …>`), where an expression can begin: what tells a component from a type of its name. */
+  const tags = new Set<string>();
+  for (let j = 0; j + 1 < tokens.length; j++) {
+    const before = tokens[j - 1];
+    if (is(j, '<') && tokens[j + 1]!.kind === 'id' && tokens[j + 1]!.start === tokens[j]!.end)
+      if (!before || (before.kind === 'punct' && !')]'.includes(before.text)) || before.text === 'return') tags.add(tokens[j + 1]!.text);
+  }
+  /** The row `module` now exports `name` by, when it is a component or type of an entry point's that was renamed. */
+  const exportRow = (module: string, name: string, local = name) =>
+    EXPORTS.find((each) => each.from === name && each.modules.includes(module) && (!each.tag || tags.has(local)));
+  /** The name `module` now exports `name` under, when it was renamed: a type anywhere in mistri, a component on its own entry points. */
+  const renamedExport = (module: string, name: string, local = name): string | undefined => {
+    if (!isMistriModule(module)) return undefined;
+    return Object.hasOwn(NAMES, name) ? NAMES[name] : exportRow(module, name, local)?.to;
+  };
+  /** Whether the word at `j` is a tag's name, opening or closing: the one place an everyday word is surely the component. */
+  const tagName = (j: number) =>
+    (is(j - 1, '<') && tokens[j - 1]!.end === tokens[j]!.start) ||
+    (is(j - 1, '/') && is(j - 2, '<') && tokens[j - 2]!.end === tokens[j - 1]!.start);
+  /* A name mistri renamed, only where the file means mistri's: its import, and its uses under the name it was imported as. */
+  const renamedSites = new Map<number, string>();
   const renamedLocals = new Map<string, string>();
   for (const [local, imported] of imports) {
-    if (!isMistriModule(imported.module) || !Object.hasOwn(NAMES, imported.name)) continue;
-    if (imported.at >= 0) renamedSites.add(imported.at);
-    if (local === imported.name) renamedLocals.set(local, NAMES[imported.name]!);
+    const to = renamedExport(imported.module, imported.name, local);
+    if (to === undefined) continue;
+    /* An everyday word (`Details`, `Items`) is also what a page says in its own text, which this reads as tokens like
+       any other: where the file writes the name anywhere but its import and its tags, the import keeps the file's
+       word for the new export (`DescriptionList as Details`) and nothing else is touched, so no heading is rewritten. */
+    const everyday = !Object.hasOwn(NAMES, imported.name) && exportRow(imported.module, imported.name, local)?.everyday === true;
+    const elsewhere =
+      everyday &&
+      local === imported.name &&
+      tokens.some((each, j) => each.kind === 'id' && each.text === local && j !== imported.at && !is(j - 1, '.') && !tagName(j));
+    if (imported.at >= 0) renamedSites.set(imported.at, elsewhere ? `${to} as ${local}` : to);
+    if (local === imported.name && !elsewhere) renamedLocals.set(local, to);
   }
   /* The calls a row names an object of: what is spread or computed into one of them can carry a renamed key unseen. */
   const guardedCalls = new Set(
@@ -613,15 +643,15 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
       }
     }
 
+    /* A member of a namespace import (`ui.Stat`) is renamed by the module the namespace stands for. */
     const spaced = is(t - 1, '.') ? mistriAt(t) : undefined;
     const newName = renamedSites.has(t)
-      ? NAMES[token.text]
+      ? renamedSites.get(t)
       : spaced !== undefined
-        ? Object.hasOwn(NAMES, spaced)
-          ? NAMES[spaced]
-          : undefined
-        : !is(t - 1, '.')
-          ? renamedLocals.get(token.text)
+        ? renamedExport(imports.get(tokens[t - 2]!.text)!.module, spaced, `${tokens[t - 2]!.text}.${spaced}`)
+        : !is(t - 1, '.') && !keyed
+          ? /* Not a key (`{ Item: … }`): the object's own word, whatever the file imports under it. */
+            renamedLocals.get(token.text)
           : undefined;
     if (newName !== undefined) {
       edits.push({ start: token.start, end: token.end, text: newName });
@@ -630,8 +660,8 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
     }
     for (const refused of REFUSED) {
       if (refused.context || refused.name !== token.text || is(t - 1, '.')) continue;
-      if (refused.imported) {
-        /* Only a name inside `import { … } from '<the App entry point>'`. */
+      if (refused.imported || refused.modules) {
+        /* Only a name inside `import { … } from '<one of its entry points>'`. */
         let open = t;
         while (open > 0 && !is(open, '{') && !is(open, ';')) open--;
         let close = t;
@@ -639,7 +669,7 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
         const module = tokens[close + 2];
         const importList = is(open, '{') && is(open - 1, 'import') && is(close + 1, 'from') && module?.kind === 'string';
         const entry = importList ? (renamedModule(module!.text) ?? module!.text) : '';
-        if (entry !== '@mistriwork/mistri/app') continue;
+        if (!(refused.modules ?? ['@mistriwork/mistri/app']).includes(entry)) continue;
       }
       refusals.push({ line: token.line, said: `${refused.name} ${refused.reason}` });
     }
@@ -660,7 +690,7 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
     /* The name the kit exports the component under: `Figure` imported as `Metric as Figure` is Metric, `Kit.Board` is Board. */
     const exported = imported!.name === '*' ? (name.length === 2 ? name[1]! : '') : name.length === 1 ? imported!.name : '';
     /* Only the props a component takes that were renamed: `<Value resource>` is still Value's own word. */
-    const renamedHere = componentRows.filter((each) => own || each.components?.includes(exported));
+    const renamedHere = componentRows.filter((each) => (own ? !each.kitOnly : each.components?.includes(exported)));
     const shown = name.join('.');
     for (j++; j < tokens.length; j++) {
       const token = tokens[j]!;
@@ -668,9 +698,12 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
       if (is(j, '{')) {
         /* `{...props}` among the attributes: any word could be in it. */
         if (kit && renamedHere.length && is(j + 1, '.') && is(j + 2, '.') && is(j + 3, '.')) {
+          const hidden = renamedHere.map((each) =>
+            each.from === each.to ? `\`${each.from}\` (its words changed)` : `\`${each.from}\` (now \`${each.to}\`)`,
+          );
           refusals.push({
             line: token.line,
-            said: `<${shown} {...spread}> spreads props into a kit component, so ${renamedHere.map((each) => `\`${each.from}\` (now \`${each.to}\`)`).join(', ')} may be in it; which it is takes a reader`,
+            said: `<${shown} {...spread}> spreads props into a kit component, so ${[...new Set(hidden)].join(', ')} may be in it; which it is takes a reader`,
           });
         }
         j = closeOf(j);
@@ -685,8 +718,18 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
       }
       const rename = renamedHere.find((each) => each.from === attribute);
       if (rename && kit) {
-        edits.push({ start: tokens[first]!.start, end: tokens[first]!.end, text: rename.to });
-        changes.push({ line: token.line, said: `<${shown} ${rename.from}> -> ${rename.to}` });
+        /* Through the attribute's last word: `aria-label` is three tokens. */
+        if (rename.to !== rename.from) {
+          edits.push({ start: tokens[first]!.start, end: tokens[j]!.end, text: rename.to });
+          changes.push({ line: token.line, said: `<${shown} ${rename.from}> -> ${rename.to}` });
+        }
+        const value = is(j + 1, '=') ? tokens[j + 2] : undefined;
+        const word =
+          value?.kind === 'string' && rename.values && Object.hasOwn(rename.values, value.text) ? rename.values[value.text] : undefined;
+        if (value && word !== undefined) {
+          edits.push({ start: value.start, end: value.end, text: word });
+          changes.push({ line: token.line, said: `<${shown} ${rename.to}="${value.text}"> -> "${word}"` });
+        }
       } else if (rename && own) {
         refusals.push({
           line: token.line,

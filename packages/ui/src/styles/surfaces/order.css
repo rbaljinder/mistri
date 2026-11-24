@@ -1,0 +1,7 @@
+/* The surface sub-layer order, said first by every bundle (`primitives.css`, `views.css`; `base.css` and `charts.css`
+   say it themselves). A page loads the bundles its imports need, in whatever order it reaches them, and a sub-layer
+   takes its place where it is first named: without this, a bundle arriving before `base.css` would put `views` under
+   `components`. */
+@layer m-surfaces {
+  @layer base, components, views;
+}

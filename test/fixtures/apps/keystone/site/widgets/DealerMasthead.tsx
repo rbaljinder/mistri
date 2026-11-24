@@ -59,10 +59,10 @@ export default function DealerMasthead({ record, rows }: Props) {
           {site.tagline && <p className="c-dealer-masthead-tagline">{site.tagline}</p>}
         </div>
         <div className="c-dealer-masthead-actions">
-          <Button intent="secondary" size="large" onClick={() => openView('inventory')}>
+          <Button variant="secondary" size="lg" onClick={() => openView('inventory')}>
             Shop inventory
           </Button>
-          <Button intent="secondary" size="large" onClick={() => openForm('apply', {})}>
+          <Button variant="secondary" size="lg" onClick={() => openForm('apply', {})}>
             Get pre-approved
           </Button>
         </div>

@@ -34,7 +34,7 @@ function Field({ blur = () => {}, min, max }: { blur?: () => void; min?: string;
   const [value, setValue] = useState('2026-09-13');
   return (
     <>
-      <DateField id="due" aria-label="Due" value={value} onChange={setValue} onBlur={blur} min={min} max={max} locale="en-US" />
+      <DateField id="due" ariaLabel="Due" value={value} onValueChange={setValue} onBlur={blur} min={min} max={max} locale="en-US" />
       <button type="button">Outside</button>
     </>
   );
@@ -86,7 +86,9 @@ test('bounds disable outside days and navigation and preserve typed invalid text
 
 function Stamp({ max, onOpen = () => {} }: { max?: string; onOpen?: (open: boolean, details: ChangeDetails) => void }) {
   const [value, setValue] = useState('2026-09-13T09:30');
-  return <DateField id="at" aria-label="At" value={value} onChange={setValue} withTime max={max} locale="en-US" onOpenChange={onOpen} />;
+  return (
+    <DateField id="at" ariaLabel="At" value={value} onValueChange={setValue} withTime max={max} locale="en-US" onOpenChange={onOpen} />
+  );
 }
 
 test('with a time, the calendar picks the date and keeps the time typed; the whole value is bounded', async () => {
@@ -149,7 +151,15 @@ test('locale captions, explicit-zone Today, Clear, and disabled/required inputs'
   const user = userEvent.setup(),
     change = vi.fn();
   const view = render(
-    <DateField id="date" aria-label="Date" value="2026-09-13" onChange={change} locale="fr-FR" timezone="Pacific/Kiritimati" required />,
+    <DateField
+      id="date"
+      ariaLabel="Date"
+      value="2026-09-13"
+      onValueChange={change}
+      locale="fr-FR"
+      timezone="Pacific/Kiritimati"
+      required
+    />,
   );
   expect(screen.getByRole('textbox')).toBeRequired();
   await user.click(screen.getByRole('button', { name: 'Choose date for Date' }));
@@ -166,14 +176,14 @@ test('locale captions, explicit-zone Today, Clear, and disabled/required inputs'
   }).formatToParts(new Date());
   const part = (type: string) => parts.find((p) => p.type === type)!.value;
   expect(change).toHaveBeenLastCalledWith(`${part('year')}-${part('month')}-${part('day')}`, expect.anything());
-  view.rerender(<DateField id="date" value="" onChange={change} disabled />);
+  view.rerender(<DateField id="date" value="" onValueChange={change} disabled />);
   expect(screen.getByRole('textbox')).toBeDisabled();
   expect(screen.getByRole('button', { name: 'Choose date' })).toBeDisabled();
 });
 
 test('changed bounds retain a day tab stop; malformed draft bounds disable selection without throwing', async () => {
   const user = userEvent.setup();
-  const props = { id: 'date', value: '2026-09-13', onChange: vi.fn(), locale: 'en-US' };
+  const props = { id: 'date', value: '2026-09-13', onValueChange: vi.fn(), locale: 'en-US' };
   const view = render(<DateField {...props} />);
   await user.click(screen.getByRole('button', { name: 'Choose date' }));
   await screen.findByRole('grid');
@@ -195,7 +205,7 @@ test('composite blur observes the last typed value through the current callback'
     const [value, setValue] = useState('');
     return (
       <>
-        <DateField id="draft" value={value} onChange={setValue} onBlur={() => committed(value)} />
+        <DateField id="draft" value={value} onValueChange={setValue} onBlur={() => committed(value)} />
         <button>Leave</button>
       </>
     );
@@ -248,7 +258,7 @@ test('outside Apply click sees the new composite blur value before submitting', 
         <DateField
           id="from"
           value={draft}
-          onChange={setDraft}
+          onValueChange={setDraft}
           onBlur={() => {
             applied = draft;
           }}
@@ -275,7 +285,7 @@ test('selection restores focus before publishing a value that can unmount the fi
       id="date"
       value="2026-09-13"
       locale="en-US"
-      onChange={(value) => {
+      onValueChange={(value) => {
         selected(value, document.activeElement?.getAttribute('aria-label'));
       }}
     />,
@@ -288,7 +298,7 @@ test('selection restores focus before publishing a value that can unmount the fi
 test('the day already chosen, pressed again, is chosen again and the calendar closes', async () => {
   const user = userEvent.setup(),
     change = vi.fn();
-  render(<DateField id="date" value="2026-09-13" locale="en-US" onChange={change} />);
+  render(<DateField id="date" value="2026-09-13" locale="en-US" onValueChange={change} />);
   const trigger = screen.getByRole('button', { name: 'Choose date' });
   await user.click(trigger);
   // The reader opened the calendar, saw the day was right, and said so: that is an answer, though no day changed.
@@ -304,7 +314,7 @@ test('the day already chosen, pressed again, is chosen again and the calendar cl
 });
 
 test('the box is described by how a date is typed and the key that opens the calendar', () => {
-  render(<DateField id="date" value="" locale="en-US" onChange={() => {}} aria-describedby="own" />);
+  render(<DateField id="date" value="" locale="en-US" onValueChange={() => {}} aria-describedby="own" />);
   const [own, hint] = screen.getByRole('textbox').getAttribute('aria-describedby')!.split(' ');
   expect(own).toBe('own');
   expect(document.getElementById(hint!)).toHaveTextContent('Date format: MM/DD/YYYY. Alt and Down arrow opens the calendar.');
@@ -316,9 +326,9 @@ test('a date and a time has a clock beside the text where the caller names one: 
     return (
       <Drawn
         id="at"
-        aria-label="At"
+        ariaLabel="At"
         value={value}
-        onChange={setValue}
+        onValueChange={setValue}
         withTime
         locale="en-US"
         now={new Date('2026-09-13T12:00:00Z')}
@@ -351,9 +361,9 @@ test('a date and a time is shown, hinted and read in the locale the date alone i
     return (
       <DateField
         id="at"
-        aria-label="At"
+        ariaLabel="At"
         value={value}
-        onChange={(next) => {
+        onValueChange={(next) => {
           seen.push(next);
           setValue(next);
         }}

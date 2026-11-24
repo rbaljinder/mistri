@@ -211,7 +211,7 @@ export function BrandingForm() {
       >
         {!editor && <p className="branding-form-note">{say('readOnly')}</p>}
         {allowed('name') && (
-          <Field label={say('name')} hint={say('nameHint')} problem={problemFor('name')} size="compact">
+          <Field label={say('name')} hint={say('nameHint')} problem={problemFor('name')} size="sm">
             <input
               data-slot="input"
               name="name"
@@ -224,7 +224,7 @@ export function BrandingForm() {
           </Field>
         )}
         {allowed('logo') && (
-          <Field label={say('logo')} hint={say('logoHint')} problem={problemFor('logo')} size="compact" group>
+          <Field label={say('logo')} hint={say('logoHint')} problem={problemFor('logo')} size="sm" group>
             {(control) => (
               <div className="branding-form-logo" {...control} role="group">
                 <span className="branding-form-logo-box">{logo ? <img src={logo} alt="" width={96} height={24} /> : say('noLogo')}</span>
@@ -235,16 +235,11 @@ export function BrandingForm() {
                   accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
                   onChange={(event) => void pick(event, setUpload)}
                 />
-                <Button intent="secondary" size="compact" disabled={disabled} onClick={() => file.current?.click()}>
+                <Button variant="secondary" size="sm" disabled={disabled} onClick={() => file.current?.click()}>
                   {say('chooseLogo')}
                 </Button>
                 {logo && (
-                  <Button
-                    intent="quiet"
-                    size="compact"
-                    disabled={disabled}
-                    onClick={() => setUpload(reply.branding.logo ? null : undefined)}
-                  >
+                  <Button variant="ghost" size="sm" disabled={disabled} onClick={() => setUpload(reply.branding.logo ? null : undefined)}>
                     {say('removeLogo')}
                   </Button>
                 )}
@@ -253,7 +248,7 @@ export function BrandingForm() {
           </Field>
         )}
         {allowed('logo') && logo && (
-          <Field label={say('darkLogo')} hint={say('darkLogoHint')} size="compact" group>
+          <Field label={say('darkLogo')} hint={say('darkLogoHint')} size="sm" group>
             {(control) => (
               <div className="branding-form-logo" {...control} role="group">
                 <span className="branding-form-logo-box branding-form-logo-box--dark">
@@ -266,13 +261,13 @@ export function BrandingForm() {
                   accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
                   onChange={(event) => void pick(event, setDarkUpload)}
                 />
-                <Button intent="secondary" size="compact" disabled={disabled} onClick={() => darkFile.current?.click()}>
+                <Button variant="secondary" size="sm" disabled={disabled} onClick={() => darkFile.current?.click()}>
                   {say('chooseLogo')}
                 </Button>
                 {darkLogo && (
                   <Button
-                    intent="quiet"
-                    size="compact"
+                    variant="ghost"
+                    size="sm"
                     disabled={disabled}
                     onClick={() => setDarkUpload(reply.branding.logoDark ? null : undefined)}
                   >
@@ -284,7 +279,7 @@ export function BrandingForm() {
           </Field>
         )}
         {allowed('logo') && (
-          <Field label={say('favicon')} hint={say('faviconHint')} problem={problemFor('logo')} size="compact" group>
+          <Field label={say('favicon')} hint={say('faviconHint')} problem={problemFor('logo')} size="sm" group>
             {(control) => (
               <div className="branding-form-logo" {...control} role="group">
                 <span className="branding-form-logo-box">
@@ -297,13 +292,13 @@ export function BrandingForm() {
                   accept="image/png,image/svg+xml,image/x-icon,.ico"
                   onChange={(event) => void pick(event, setIconUpload)}
                 />
-                <Button intent="secondary" size="compact" disabled={disabled} onClick={() => iconFile.current?.click()}>
+                <Button variant="secondary" size="sm" disabled={disabled} onClick={() => iconFile.current?.click()}>
                   {say('chooseLogo')}
                 </Button>
                 {tabIcon && (
                   <Button
-                    intent="quiet"
-                    size="compact"
+                    variant="ghost"
+                    size="sm"
                     disabled={disabled}
                     onClick={() => setIconUpload(reply.branding.favicon ? null : undefined)}
                   >
@@ -315,7 +310,7 @@ export function BrandingForm() {
           </Field>
         )}
         {allowed('accent') && (
-          <Field label={say('accent')} hint={say('accentHint')} problem={problemFor('accent')} size="compact" group>
+          <Field label={say('accent')} hint={say('accentHint')} problem={problemFor('accent')} size="sm" group>
             {(control) => (
               <div className="branding-form-accent" {...control} role="group">
                 <input
@@ -343,29 +338,29 @@ export function BrandingForm() {
           </Field>
         )}
         {allowed('preset') && (
-          <Field label={say('theme')} problem={problemFor('preset')} size="compact" group>
+          <Field label={say('theme')} problem={problemFor('preset')} size="sm" group>
             <Dropdown
               ariaLabel={say('theme')}
               disabled={disabled}
               value={draft.preset ?? reply.themes[0]!.id}
               items={reply.themes.map((item) => ({ value: item.id, label: item.label }))}
-              onChange={(next) => set({ preset: next, palette: undefined })}
+              onValueChange={(next) => set({ preset: next, palette: undefined })}
             />
           </Field>
         )}
         {allowed('palette') && chosen.palettes?.length ? (
-          <Field label={say('palette')} problem={problemFor('palette')} size="compact" group>
+          <Field label={say('palette')} problem={problemFor('palette')} size="sm" group>
             <Dropdown
               ariaLabel={say('palette')}
               disabled={disabled}
               value={draft.palette ?? chosen.defaultPalette ?? 'default'}
               items={[{ value: 'default', label: chosen.label }, ...chosen.palettes.map((item) => ({ value: item.id, label: item.label }))]}
-              onChange={(next) => set({ palette: next })}
+              onValueChange={(next) => set({ palette: next })}
             />
           </Field>
         ) : null}
         {allowed('radius') && (
-          <Field label={say('corner')} problem={problemFor('radius')} size="compact" group>
+          <Field label={say('corner')} problem={problemFor('radius')} size="sm" group>
             <Dropdown
               ariaLabel={say('corner')}
               disabled={disabled}
@@ -374,12 +369,12 @@ export function BrandingForm() {
                 { value: '', label: say('appDefault') },
                 ...RADII.map((radius) => ({ value: radius, label: radius === '0px' ? say('square') : radius })),
               ]}
-              onChange={(next) => set({ radius: next || undefined })}
+              onValueChange={(next) => set({ radius: next || undefined })}
             />
           </Field>
         )}
         {allowed('density') && (
-          <Field label={say('density')} problem={problemFor('density')} size="compact" group>
+          <Field label={say('density')} problem={problemFor('density')} size="sm" group>
             <Dropdown
               ariaLabel={say('density')}
               disabled={disabled}
@@ -390,12 +385,12 @@ export function BrandingForm() {
                 { value: 'comfortable', label: say('comfortable') },
                 { value: 'spacious', label: say('spacious') },
               ]}
-              onChange={(next) => set({ density: (next || undefined) as ThemeDensity | undefined })}
+              onValueChange={(next) => set({ density: (next || undefined) as ThemeDensity | undefined })}
             />
           </Field>
         )}
         {allowed('font') && (
-          <Field label={say('font')} problem={problemFor('font')} size="compact" group>
+          <Field label={say('font')} problem={problemFor('font')} size="sm" group>
             <Dropdown
               ariaLabel={say('font')}
               disabled={disabled}
@@ -404,7 +399,7 @@ export function BrandingForm() {
                 { value: '', label: say('appDefault') },
                 ...brandingFonts(declaration).map((font) => ({ value: font.id, label: font.id })),
               ]}
-              onChange={(next) => set({ font: next || undefined })}
+              onValueChange={(next) => set({ font: next || undefined })}
             />
           </Field>
         )}
@@ -414,8 +409,8 @@ export function BrandingForm() {
               {message}
             </p>
             <Button
-              intent="secondary"
-              size="compact"
+              variant="secondary"
+              size="sm"
               disabled={phase === 'saving'}
               onClick={() => {
                 setDraft({ ...reply.branding });
@@ -426,7 +421,7 @@ export function BrandingForm() {
             >
               {say('reset')}
             </Button>
-            <Button intent="primary" size="compact" type="submit" disabled={phase === 'saving' || problems.length > 0}>
+            <Button variant="primary" size="sm" type="submit" disabled={phase === 'saving' || problems.length > 0}>
               {phase === 'saving' ? say('saving') : say('save')}
             </Button>
           </footer>

@@ -14,8 +14,10 @@
 import * as React from 'react';
 import * as JsxRuntime from 'react/jsx-runtime';
 import * as ReactDOM from 'react-dom';
+import { installSurfaceSeam } from '@mistriwork/ui';
 import * as ui from './index.js';
 import * as page from './page.js';
+import { mistriSurfaceSeam } from './seam.js';
 import './kit.css';
 import {
   columnDisplay,
@@ -53,6 +55,7 @@ import {
 } from './context.js';
 import type { ResolvedBranding } from '../../../shared/branding.js';
 import { createTeamAccess } from '../../teamAccess.js';
+import { createAccountProfileAccess } from '../../accountProfileAccess.js';
 import { createReadAuditAccess } from '../../readAuditAccess.js';
 import { rowsByPath } from './rows.js';
 import { sayAppMessage } from './appMessage.js';
@@ -362,6 +365,7 @@ const pageHost: UiHost = {
   deployment,
   branding,
   team: createTeamAccess(),
+  accountProfile: createAccountProfileAccess(),
   reads: createReadAuditAccess(),
   token: (name) => getComputedStyle(root()).getPropertyValue(name).trim(),
   subscribeLook(listener) {
@@ -403,10 +407,13 @@ if (!(HOST_GLOBAL in globalThis)) {
         '@mistriwork/mistri/ui': ui,
         '@mistriwork/mistri/page': page,
       }),
-      /* What the page fetches when a component first asks (shared/uiSdk.ts, LAZY_HOST_MODULES): the behaviors are a
-         chunk of their own, which a page without a component built on one never downloads. */
+      /* What the page fetches when a component first asks (shared/uiSdk.ts, LAZY_HOST_MODULES): behaviors, primitives,
+         charts and views load as shared on-demand chunks with their shared stylesheet. */
       load: Object.freeze({
         '@mistriwork/mistri/behaviors': () => import('./behaviors.js'),
+        '@mistriwork/mistri/primitives': () => import('./primitives.js'),
+        '@mistriwork/mistri/charts': () => import('./charts.js'),
+        '@mistriwork/mistri/views': () => import('./views.js'),
       }),
     }),
     enumerable: false,
@@ -415,3 +422,4 @@ if (!(HOST_GLOBAL in globalThis)) {
   });
 }
 setPageHost(pageHost);
+installSurfaceSeam(mistriSurfaceSeam);

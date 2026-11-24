@@ -87,14 +87,16 @@ test('a role merges over the look’s, property by property', () => {
   assert.deepEqual(lumen.type, {
     base: '15px',
     roles: {
-      title: { size: '32px', weight: 700, tracking: '-0.02em' },
-      heading: { size: '24px', weight: 700, tracking: '-0.018em' },
-      section: { size: '16px', weight: 600, tracking: '-0.01em' },
+      title: { size: '32px', weight: 600, tracking: '-0.022em' },
+      heading: { size: '19px', weight: 600, tracking: '-0.018em' },
+      section: { size: '14px', weight: 600, tracking: '-0.01em' },
+      data: { features: ['tnum'] },
+      figure: { size: '24px', weight: 600, tracking: '-0.025em', features: ['tnum'] },
     },
   });
   // The title's weight is every heading's, and the face a theme preloads is the one at that weight.
   assert.equal(headingWeight(theme({ roles: { title: { weight: 700 } } })), 700);
-  assert.equal(headingWeight(themePreset('lumen')!), 700);
+  assert.equal(headingWeight(themePreset('lumen')!), 600);
   const served = theme({ font: { heading: 'Workshop, serif' }, roles: { title: { weight: 600 } } }, {});
   assert.equal(
     headingFace({
@@ -245,11 +247,11 @@ test("a theme's figures face: named, it is --figures-face; naming a data face al
   // Naming neither keeps the look's own.
   assert.equal(theme({ roles: { title: { weight: 600 } } }).fonts?.figures, themePreset('sage')!.fonts?.figures);
   assert.match(String(themePreset('sage')!.fonts?.figures), /^'IBM Plex Mono', 'IBM Plex Mono Fallback'/);
-  /* Bloom, Atelier and Graphite are the built-ins that set no data column in a monospace: a soft look's dates,
-     phone numbers and amounts are its sans, a printed table's are its text face, and an instrument's monospace is
-     for its labels and its readings, so a row is read in one face. Their digits are a column wide. Every other look
-     keeps Plex Mono. */
-  const inText = ['bloom', 'atelier', 'graphite'];
+  /* Lumen, Bloom, Atelier and Graphite are the built-ins that set no data column in a monospace: a slate look's and
+     a soft look's dates, phone numbers and amounts are its sans, a printed table's are its text face, and an
+     instrument's monospace is for its labels and its readings, so a row is read in one face. Their digits are a
+     column wide. Every other look keeps Plex Mono. */
+  const inText = ['lumen', 'bloom', 'atelier', 'graphite'];
   for (const preset of THEME_PRESETS)
     if (preset.fonts?.data && !inText.includes(preset.id)) assert.match(String(preset.fonts.figures), /IBM Plex Mono/, preset.id);
   for (const id of inText) assert.equal(themePreset(id)!.fonts?.figures, themePreset(id)!.fonts?.data, id);

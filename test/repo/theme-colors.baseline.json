@@ -1268,7 +1268,7 @@
   },
   {
     "file": "packages/ui/src/styles/m-tokens.css",
-    "context": ":root, body",
+    "context": ":root, body, [data-theme]:not(:root)",
     "property": "--m-shadow-control",
     "value": "0 1px 1px light-dark(rgb(23 23 26 / 0.05), rgb(0 0 0 / 0.3))",
     "reason": "shadow"
@@ -1277,7 +1277,7 @@
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--ground",
-    "value": "#fbfaf8",
+    "value": "#f8fafc",
     "reason": "palette"
   },
   {
@@ -1291,91 +1291,91 @@
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--raised",
-    "value": "#f3f1ed",
+    "value": "#f1f5f9",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--line",
-    "value": "#e2ded6",
+    "value": "#e2e8f0",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--line-strong",
-    "value": "#cbc5b9",
+    "value": "#cbd5e1",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--line-control",
-    "value": "#8d887f",
+    "value": "#64748b",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--ink",
-    "value": "#24211c",
+    "value": "#0f172a",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--ink-muted",
-    "value": "#6d675d",
+    "value": "#475569",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--ink-subtle",
-    "value": "#736c65",
+    "value": "#586475",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--accent",
-    "value": "#1d6a5a",
+    "value": "#2455df",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--shadow-pop",
-    "value": "0 6px 20px rgb(0 0 0 / 0.16)",
+    "value": "0 8px 24px rgb(0 0 0 / 0.14)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--shadow-panel",
-    "value": "0 10px 34px rgb(0 0 0 / 0.18)",
+    "value": "0 14px 36px rgb(0 0 0 / 0.18)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--shadow-modal",
-    "value": "0 18px 50px rgb(0 0 0 / 0.24)",
+    "value": "0 24px 56px rgb(0 0 0 / 0.24)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--scrim",
-    "value": "rgb(0 0 0 / 0.28)",
+    "value": "rgb(0 0 0 / 0.34)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--scrim-light",
-    "value": "rgb(0 0 0 / 0.14)",
+    "value": "rgb(0 0 0 / 0.16)",
     "reason": "palette"
   },
   {
@@ -1403,35 +1403,35 @@
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--accent-soft",
-    "value": "#1d6a5a14",
+    "value": "#2455df14",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--link",
-    "value": "#17594c",
+    "value": "#1d4ed8",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--status-warning",
-    "value": "#9a4b12",
+    "value": "#a14b08",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--status-critical",
-    "value": "#a12d2d",
+    "value": "#c92626",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--status-info",
-    "value": "#7a5cc0",
+    "value": "#087562",
     "reason": "palette"
   },
   {
@@ -1445,7 +1445,7 @@
     "file": "packages/ui/src/tokens.css",
     "context": ":root",
     "property": "--status-good",
-    "value": "#1f7a46",
+    "value": "#15803d",
     "reason": "palette"
   },
   {
@@ -1459,105 +1459,105 @@
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--ground",
-    "value": "#16181a",
+    "value": "#0c0e12",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--surface",
-    "value": "#1c1f22",
+    "value": "#13161c",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--raised",
-    "value": "#23272b",
+    "value": "#1b2028",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--line",
-    "value": "#2f343a",
+    "value": "#262c36",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--line-strong",
-    "value": "#454c54",
+    "value": "#3a4352",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--line-control",
-    "value": "#6e7378",
+    "value": "#707a8c",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--ink",
-    "value": "#e4e2dd",
+    "value": "#f1f5f9",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--ink-muted",
-    "value": "#9aa0a6",
+    "value": "#a0acc0",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--ink-subtle",
-    "value": "#979da4",
+    "value": "#96a2b6",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--accent",
-    "value": "#5fc9ad",
+    "value": "#85a6ff",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--accent-soft",
-    "value": "#5fc9ad1a",
+    "value": "#85a6ff1a",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--link",
-    "value": "#6fd4b8",
+    "value": "#94b2ff",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--status-warning",
-    "value": "#e0a05c",
+    "value": "#fbbf24",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--status-critical",
-    "value": "#e8756f",
+    "value": "#f87171",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--status-info",
-    "value": "#b39ae8",
+    "value": "#3cd2b5",
     "reason": "palette"
   },
   {
@@ -1571,196 +1571,350 @@
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--status-good",
-    "value": "#57b884",
+    "value": "#4ade80",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--shadow-pop",
-    "value": "0 6px 20px rgb(0 0 0 / 0.5)",
+    "value": "0 8px 24px rgb(0 0 0 / 0.5)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--shadow-panel",
-    "value": "0 10px 34px rgb(0 0 0 / 0.55)",
+    "value": "0 14px 36px rgb(0 0 0 / 0.6)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--shadow-modal",
-    "value": "0 18px 50px rgb(0 0 0 / 0.65)",
+    "value": "0 24px 56px rgb(0 0 0 / 0.7)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--scrim",
-    "value": "rgb(0 0 0 / 0.55)",
+    "value": "rgb(0 0 0 / 0.6)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
     "context": "@media (prefers-color-scheme: dark) > :root:not([data-theme=\"light\"])",
     "property": "--scrim-light",
-    "value": "rgb(0 0 0 / 0.35)",
+    "value": "rgb(0 0 0 / 0.38)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--ground",
-    "value": "#16181a",
+    "value": "#0c0e12",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--surface",
-    "value": "#1c1f22",
+    "value": "#13161c",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--raised",
-    "value": "#23272b",
+    "value": "#1b2028",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--line",
-    "value": "#2f343a",
+    "value": "#262c36",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--line-strong",
-    "value": "#454c54",
+    "value": "#3a4352",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--line-control",
-    "value": "#6e7378",
+    "value": "#707a8c",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--ink",
-    "value": "#e4e2dd",
+    "value": "#f1f5f9",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--ink-muted",
-    "value": "#9aa0a6",
+    "value": "#a0acc0",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--ink-subtle",
-    "value": "#979da4",
+    "value": "#96a2b6",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--accent",
-    "value": "#5fc9ad",
+    "value": "#85a6ff",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--accent-soft",
-    "value": "#5fc9ad1a",
+    "value": "#85a6ff1a",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--link",
-    "value": "#6fd4b8",
+    "value": "#94b2ff",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--status-warning",
-    "value": "#e0a05c",
+    "value": "#fbbf24",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--status-critical",
-    "value": "#e8756f",
+    "value": "#f87171",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--status-info",
-    "value": "#b39ae8",
+    "value": "#3cd2b5",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--ai",
     "value": "#e58bdc",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--status-good",
-    "value": "#57b884",
+    "value": "#4ade80",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--shadow-pop",
-    "value": "0 6px 20px rgb(0 0 0 / 0.5)",
+    "value": "0 8px 24px rgb(0 0 0 / 0.5)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--shadow-panel",
-    "value": "0 10px 34px rgb(0 0 0 / 0.55)",
+    "value": "0 14px 36px rgb(0 0 0 / 0.6)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--shadow-modal",
-    "value": "0 18px 50px rgb(0 0 0 / 0.65)",
+    "value": "0 24px 56px rgb(0 0 0 / 0.7)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--scrim",
-    "value": "rgb(0 0 0 / 0.55)",
+    "value": "rgb(0 0 0 / 0.6)",
     "reason": "palette"
   },
   {
     "file": "packages/ui/src/tokens.css",
-    "context": ":root[data-theme=\"dark\"]",
+    "context": ":root[data-theme=\"dark\"], [data-theme=\"dark\"]",
     "property": "--scrim-light",
-    "value": "rgb(0 0 0 / 0.35)",
+    "value": "rgb(0 0 0 / 0.38)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--ground",
+    "value": "#f8fafc",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--surface",
+    "value": "#ffffff",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--raised",
+    "value": "#f1f5f9",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--line",
+    "value": "#e2e8f0",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--line-strong",
+    "value": "#cbd5e1",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--line-control",
+    "value": "#64748b",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--ink",
+    "value": "#0f172a",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--ink-muted",
+    "value": "#475569",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--ink-subtle",
+    "value": "#586475",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--accent",
+    "value": "#2455df",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--accent-soft",
+    "value": "#2455df14",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--link",
+    "value": "#1d4ed8",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--status-warning",
+    "value": "#a14b08",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--status-critical",
+    "value": "#c92626",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--status-info",
+    "value": "#087562",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--ai",
+    "value": "#a62a9c",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--status-good",
+    "value": "#15803d",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--shadow-pop",
+    "value": "0 8px 24px rgb(0 0 0 / 0.14)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--shadow-panel",
+    "value": "0 14px 36px rgb(0 0 0 / 0.18)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--shadow-modal",
+    "value": "0 24px 56px rgb(0 0 0 / 0.24)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--scrim",
+    "value": "rgb(0 0 0 / 0.34)",
+    "reason": "palette"
+  },
+  {
+    "file": "packages/ui/src/tokens.css",
+    "context": "[data-theme=\"light\"]:not(:root)",
+    "property": "--scrim-light",
+    "value": "rgb(0 0 0 / 0.16)",
     "reason": "palette"
   }
 ]

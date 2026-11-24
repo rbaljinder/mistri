@@ -553,7 +553,7 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
           ariaLabel={label}
           value={shown ?? ''}
           items={[...(column.nullable ? [{ value: '', label: say('common.noValue') }] : []), ...values]}
-          onChange={onEdit}
+          onValueChange={onEdit}
           disabled={locked}
           readOnly={pendingWrite}
           popupRef={interaction.popupRef}
@@ -594,8 +594,8 @@ export function Editable({ table, row, column, recordKey, onSaved, app = false, 
         <DateField
           id={dateId}
           value={shown === null ? '' : String(shown)}
-          onChange={onEdit}
-          aria-label={label}
+          onValueChange={onEdit}
+          ariaLabel={label}
           disabled={locked}
           locale={formatLocale()}
           timezone={formatTimezone()}

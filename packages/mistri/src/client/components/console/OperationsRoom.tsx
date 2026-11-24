@@ -17,7 +17,18 @@
  * same list, history, Cancel (asked twice) and Retry, which wakes a live one.
  */
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Button, Dropdown, Empty, Row, Segmented, Stack, Stat, Tone, useSectionSize, useViewer } from '@mistriwork/mistri/ui';
+import {
+  Button,
+  Dropdown,
+  EmptyState,
+  Row,
+  SegmentedControl,
+  Stack,
+  StatCard,
+  StatusDot,
+  useSectionSize,
+  useViewer,
+} from '@mistriwork/mistri/ui';
 import { useAddressState } from '@mistriwork/mistri/page';
 import { useMessageLanguage } from '@mistriwork/kit/client/components/useMessageLanguage.js';
 import { say } from '../../copy/console/components/console/OperationsRoom.js';
@@ -41,7 +52,7 @@ type Section = 'jobs' | 'deliveries' | 'workflows' | 'stores';
 type View = 'work' | 'workflows' | 'stores';
 type Group = 'attention' | 'scheduled' | 'done';
 type Facet = Group | 'all';
-type ToneName = 'good' | 'warn' | 'bad' | 'info' | 'neutral';
+type ToneName = 'good' | 'warning' | 'critical' | 'info' | 'neutral';
 type Destination = { id: string; kind: 'job' | 'workflow' | 'webhook'; name: string };
 interface OperationsApp {
   id: string;
@@ -159,9 +170,9 @@ const STATE_WORD: Record<string, () => string> = {
 const STATE_TONE: Record<string, ToneName> = {
   scheduled: 'neutral',
   leased: 'info',
-  retry: 'warn',
-  failed: 'bad',
-  unknown: 'warn',
+  retry: 'warning',
+  failed: 'critical',
+  unknown: 'warning',
   succeeded: 'good',
   cancelled: 'neutral',
   pending: 'neutral',
@@ -217,8 +228,8 @@ const WF_TONE: Record<WorkflowState, ToneName> = {
   running: 'info',
   waiting: 'neutral',
   completed: 'good',
-  failed: 'bad',
-  diverged: 'bad',
+  failed: 'critical',
+  diverged: 'critical',
   cancelled: 'neutral',
 };
 const REDRIVABLE = new Set(['failed', 'unknown']);
@@ -260,7 +271,7 @@ export default function OperationsRoom({ props }: { props: { endpoint: string } 
   const [destination, setDestination] = useAddressState('destination'),
     [state, setState] = useAddressState('state');
   const [item, setItem] = useAddressState('item');
-  if (!viewer.signedIn || !viewer.account) return <Empty title={say('signIn')} />;
+  if (!viewer.signedIn || !viewer.account) return <EmptyState title={say('signIn')} />;
   return (
     <OperationsPanel
       key={viewer.account}
@@ -365,7 +376,7 @@ export function OperationsPanel({
       {!catalog ? (
         <p role="status">{say('loadingApps')}</p>
       ) : !apps.length ? (
-        <Empty title={say('noApps')} description={say('noAppsDetail')} />
+        <EmptyState title={say('noApps')} description={say('noAppsDetail')} />
       ) : (
         <>
           <ConsoleHead
@@ -517,15 +528,15 @@ function Metrics({ summary, at }: { summary: Summary | undefined; at: number | u
     : [];
   return (
     <section className="console-metrics" aria-label={say('health')}>
-      <Stat
+      <StatCard
         label={say('mAttention')}
         value={figure(now?.attention)}
         trend={trend('attention')}
-        change={now && { text: where.length ? where.join(' · ') : say('allClear'), ...(now.attention ? {} : { tone: 'good' as const }) }}
+        delta={now && { value: where.length ? where.join(' · ') : say('allClear'), ...(now.attention ? {} : { tone: 'good' as const }) }}
       />
-      <Stat label={say('mDead')} value={figure(now?.dead)} trend={trend('dead')} />
-      <Stat label={say('mRetrying')} value={figure(now?.retrying)} trend={trend('retrying')} />
-      <Stat label={say('mFlight')} value={figure(now?.flight)} trend={trend('flight')} />
+      <StatCard label={say('mDead')} value={figure(now?.dead)} trend={trend('dead')} />
+      <StatCard label={say('mRetrying')} value={figure(now?.retrying)} trend={trend('retrying')} />
+      <StatCard label={say('mFlight')} value={figure(now?.flight)} trend={trend('flight')} />
     </section>
   );
 }
@@ -557,7 +568,7 @@ function Facets({
       <Dropdown
         ariaLabel={say('show')}
         value={facet}
-        onChange={(value) => pick(value as Facet)}
+        onValueChange={(value) => pick(value as Facet)}
         items={options.map((option) => ({
           value: option.value,
           label: option.label,
@@ -566,12 +577,12 @@ function Facets({
       />
     </div>
   ) : (
-    <Segmented label={say('show')} size="compact" value={facet} onChange={pick} options={options} />
+    <SegmentedControl ariaLabel={say('show')} size="sm" value={facet} onValueChange={pick} options={options} />
   );
 }
 
 function StateTone({ state }: { state: string }) {
-  return <Tone tone={STATE_TONE[state] ?? 'neutral'}>{STATE_WORD[state]?.() ?? state}</Tone>;
+  return <StatusDot tone={STATE_TONE[state] ?? 'neutral'}>{STATE_WORD[state]?.() ?? state}</StatusDot>;
 }
 /** An outcome in words, its code beside them in the code face. */
 function Outcome({ code }: { code: string | null }) {
@@ -706,10 +717,10 @@ function BulkBar({ count, busy, onRedrive, onClear }: { count: number; busy: boo
   return (
     <Row gap="tight" className="console-bulk">
       <span className="console-caption">{say('selected', { count })}</span>
-      <Button size="compact" intent="primary" busy={busy} onClick={onRedrive}>
+      <Button size="sm" variant="primary" loading={busy} onClick={onRedrive}>
         {say('redriveSelected', { count })}
       </Button>
-      <Button size="compact" intent="quiet" onClick={onClear}>
+      <Button size="sm" variant="ghost" onClick={onClear}>
         {say('clearSelection')}
       </Button>
     </Row>
@@ -866,7 +877,7 @@ function WorkStream({
                 ...(jobs ? [{ value: 'jobs', label: say('jobs') }] : []),
                 ...destinations.map((entry) => ({ value: entry.id, label: `${entry.name} · ${kindWord(entry)}` })),
               ]}
-              onChange={(value) => choose({ destination: value || undefined })}
+              onValueChange={(value) => choose({ destination: value || undefined })}
             />
           </div>
         )}
@@ -895,7 +906,7 @@ function WorkStream({
         </p>
       ) : !rows.length ? (
         facet === 'attention' ? (
-          <Empty
+          <EmptyState
             title={say('nothingAttention')}
             description={
               recent &&
@@ -905,7 +916,7 @@ function WorkStream({
             }
           />
         ) : (
-          <Empty title={say('noWork')} />
+          <EmptyState title={say('noWork')} />
         )
       ) : (
         <Queue
@@ -986,10 +997,10 @@ function WorkStream({
                     <td className="console-act">
                       {REDRIVABLE.has(row.state) && (
                         <Button
-                          size="compact"
-                          intent="quiet"
-                          busy={busy === row.key}
-                          aria-label={say('redriveFor', { name: row.name })}
+                          size="sm"
+                          variant="ghost"
+                          loading={busy === row.key}
+                          ariaLabel={say('redriveFor', { name: row.name })}
                           onClick={() => void redrive([row.redrive], row.key)}
                         >
                           {say('redrive')}
@@ -1058,7 +1069,7 @@ function WorkDetail({
       </dl>
       {REDRIVABLE.has(row.state) && (
         <Row>
-          <Button intent="primary" busy={busy} onClick={onRedrive}>
+          <Button variant="primary" loading={busy} onClick={onRedrive}>
             {say('redrive')}
           </Button>
         </Row>
@@ -1137,27 +1148,27 @@ function Stores({
           {say('loading')}
         </p>
       ) : !held.length ? (
-        <Empty title={say('noStores')} />
+        <EmptyState title={say('noStores')} />
       ) : (
         <ul className="console-stores" aria-label={say('stores')}>
           {held.map((row) => {
-            const tone: ToneName = row.refused ? 'bad' : row.pending.length ? 'warn' : 'good';
+            const dotTone = row.refused ? 'bad' : row.pending.length ? 'warn' : 'good';
             return (
               <li key={`${row.database}:${row.id}`} className="console-store">
                 <span className="console-store-name">
-                  <span className="console-dot" data-tone={tone} aria-hidden="true" />
+                  <span className="console-dot" data-tone={dotTone} aria-hidden="true" />
                   <span className="console-key">{row.id || '—'}</span>
                 </span>
                 {row.title && <span className="console-caption">{row.title}</span>}
                 <span className="console-store-state">
                   {row.refused ? (
-                    <Tone tone="bad">{say('refusedStore', { reason: row.refused })}</Tone>
+                    <StatusDot tone="critical">{say('refusedStore', { reason: row.refused })}</StatusDot>
                   ) : row.pending.length ? (
-                    <Tone tone="warn">
+                    <StatusDot tone="warning">
                       {say('pending', { steps: row.pending.map((from) => say('versionStep', { from, to: from + 1 })).join(', ') })}
-                    </Tone>
+                    </StatusDot>
                   ) : (
-                    <Tone tone="good">{say('upToDate')}</Tone>
+                    <StatusDot tone="good">{say('upToDate')}</StatusDot>
                   )}
                   {row.id && !row.refused && (
                     <span className="console-num console-caption">{say('layoutVersion', { version: row.found ?? row.current })}</span>
@@ -1222,7 +1233,7 @@ function Workflows({
           {say('loading')}
         </p>
       ) : !instances.length ? (
-        <Empty
+        <EmptyState
           title={facet === 'attention' ? say('nothingAttention') : say('noInstances')}
           description={facet === 'attention' ? undefined : say('noInstancesDetail')}
         />
@@ -1277,7 +1288,7 @@ function Workflows({
                       </button>
                     </td>
                     <td className="console-work-state">
-                      <Tone tone={WF_TONE[row.state]}>{WF_WORD[row.state]()}</Tone>
+                      <StatusDot tone={WF_TONE[row.state]}>{WF_WORD[row.state]()}</StatusDot>
                     </td>
                     <td className="console-key console-work-outcome">{row.key}</td>
                     <td className="console-wide">{row.currentStep ?? <span className="console-faint">—</span>}</td>
@@ -1343,16 +1354,16 @@ function WorkflowDetail({
   }
   const stepStatus = (step: Step) =>
     step.status === 'completed' ? (
-      <Tone tone="good">{say('stepCompleted')}</Tone>
+      <StatusDot tone="good">{say('stepCompleted')}</StatusDot>
     ) : step.status === 'pending' ? (
-      <Tone tone="neutral">{say('stepPending')}</Tone>
+      <StatusDot tone="neutral">{say('stepPending')}</StatusDot>
     ) : (
-      <Tone tone="bad">{step.status === 'refused' ? say('stepRefused') : say('stepFailed')}</Tone>
+      <StatusDot tone="critical">{step.status === 'refused' ? say('stepRefused') : say('stepFailed')}</StatusDot>
     );
   return (
     <Stack className="console-detail">
       <Row gap="tight" align="baseline">
-        <Tone tone={WF_TONE[instance.state]}>{WF_WORD[instance.state]()}</Tone>
+        <StatusDot tone={WF_TONE[instance.state]}>{WF_WORD[instance.state]()}</StatusDot>
         <span className="console-caption">
           {say('startedAt', { version: instance.version, when: '' })}
           <When at={instance.createdAt} />
@@ -1377,7 +1388,7 @@ function WorkflowDetail({
       {(retryable || running) && (
         <Row gap="tight">
           {retryable && (
-            <Button intent="primary" busy={busy === 'retry'} busyLabel={say('retrying')} onClick={() => void act('retry')}>
+            <Button variant="primary" loading={busy === 'retry'} loadingLabel={say('retrying')} onClick={() => void act('retry')}>
               {say('retry')}
             </Button>
           )}
@@ -1385,28 +1396,28 @@ function WorkflowDetail({
               store's epoch lets only the newest run take a step, so waking one that was moving does no harm. */}
           {running && !asking && (
             <Button
-              intent="secondary"
+              variant="secondary"
               title={say('wakeHint')}
               disabled={busy !== undefined}
-              busy={busy === 'retry'}
-              busyLabel={say('waking')}
+              loading={busy === 'retry'}
+              loadingLabel={say('waking')}
               onClick={() => void act('retry')}
             >
               {say('wake')}
             </Button>
           )}
           {running && !asking && (
-            <Button intent="secondary" disabled={busy !== undefined} onClick={() => setAsking(true)}>
+            <Button variant="secondary" disabled={busy !== undefined} onClick={() => setAsking(true)}>
               {say('cancel')}
             </Button>
           )}
           {running && asking && (
             <>
               <span>{say('askCancel')}</span>
-              <Button intent="danger" onClick={() => void act('cancel')}>
+              <Button variant="danger" onClick={() => void act('cancel')}>
                 {say('confirmCancel')}
               </Button>
-              <Button intent="quiet" onClick={() => setAsking(false)}>
+              <Button variant="ghost" onClick={() => setAsking(false)}>
                 {say('keep')}
               </Button>
             </>

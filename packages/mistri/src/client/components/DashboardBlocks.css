@@ -80,9 +80,11 @@ a.dash-step-card { text-decoration: none; }
 .dash-steps-ended { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-1h) var(--space-4); margin: var(--space-3) 0 0; font: var(--text-sm)/1.4 var(--sans); color: var(--ink-muted); }
 /* Named as a record's strip names them (page.css, .workflow-outcomes), in the quietest ink. */
 .dash-steps-ended-label { color: var(--ink-subtle); }
-.dash-steps-ended-item { padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: none; }
+/* A name and its count a step apart, said as a gap: under a finger the item is a flex row for its 44px, and a flex
+   row drops the space between the two, which read "Wrapped0". */
+.dash-steps-ended-item { display: inline-flex; align-items: baseline; gap: var(--space-2); padding: 0; border: 0; background: none; font: inherit; color: inherit; text-decoration: none; }
 :is(button, a).dash-steps-ended-item { cursor: pointer; }
-@media (pointer: coarse) { :is(button, a).dash-steps-ended-item { display: inline-flex; align-items: center; min-height: 44px; } }
+@media (pointer: coarse) { :is(button, a).dash-steps-ended-item { align-items: center; min-height: 44px; } }
 @media (hover: hover) {
   :is(button, a).dash-steps-ended-item:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 }
@@ -114,6 +116,32 @@ a.dash-step-card { text-decoration: none; }
    indented twice. In structure because a look or a theme's section part dresses `.page-section` later than
    components; the title, where the Card names none, is drawn as the Card's own head. */
 @layer structure {
+  .kit-card-part {
+    flex: 1 1 100%;
+    min-width: 0;
+  }
+  .kit-card-part.width-half,
+  .kit-card-part:has(> .page-section.width-half),
+  :is(.kit-card, .kit-group) .page-body > .page-section.width-half {
+    flex-basis: calc(50% - var(--page-col-gap, var(--space-7)) / 2);
+  }
+  .kit-card-part.width-third,
+  .kit-card-part:has(> .page-section.width-third),
+  :is(.kit-card, .kit-group) .page-body > .page-section.width-third {
+    flex-basis: calc(33.333% - var(--page-col-gap, var(--space-7)) * 2 / 3);
+  }
+  .kit-card-part.width-two-thirds,
+  .kit-card-part:has(> .page-section.width-two-thirds),
+  :is(.kit-card, .kit-group) .page-body > .page-section.width-two-thirds {
+    flex-basis: calc(66.667% - var(--page-col-gap, var(--space-7)) / 3);
+  }
+  @media (max-width: 900px) {
+    .kit-card-part:is(.width-half, .width-third, .width-two-thirds),
+    .kit-card-part:has(> .page-section:is(.width-half, .width-third, .width-two-thirds)),
+    :is(.kit-card, .kit-group) .page-body > .page-section:is(.width-half, .width-third, .width-two-thirds) {
+      flex-basis: 100%;
+    }
+  }
   /* A divided-stat look frames the metric strip (.home-cards) rather than its tile, so the strip's box goes too. */
   .kit-card-part > .page-section,
   .kit-card-part > .page-section > .home-cards,
@@ -174,13 +202,19 @@ a.dash-step-card { text-decoration: none; }
 
   .matrix-host { margin-top: var(--space-3); }
   .matrix-wrap { overflow-x: auto; padding-bottom: var(--space-2); }
+  /* A matrix is as tall as its rows: a section's table is capped and scrolls inside itself (page.css), which cut a
+     folded matrix off mid-row behind a second scroll bar in its card. Ten rows at most, so it never needs the cap. */
+  .page-section .matrix-host .matrix-wrap { max-height: none; overflow-y: hidden; }
   .matrix-col { color: var(--ink-subtle); font-weight: 400; font-size: var(--text-xs); }
-  .matrix-row { text-align: left; color: var(--ink-muted); font-weight: 400; padding-left: 0; }
+  /* Over `.matrix th`, which sets every head right over its figures: a row's name starts its row. */
+  .matrix th.matrix-row { text-align: left; color: var(--ink-muted); font-weight: 400; padding-left: 0; }
   /* A cell's heat (Dashboard.tsx sets --heat, its share of the heaviest) tints it with the accent, from 6% up to the
      palette's heat top: the strongest tint its ink still reads on at 4.5:1 (appTheme.js, theme.ts heatTop), 62% where
      nothing measured one. The figure, and folded its column's name, are in the ink. */
+  /* A cell's floor is a count's width, not a sum's: at 4.5rem seven months of counts were 36rem and folded in a half
+     row that held them as a grid. A wider figure still makes its own column as wide as it needs. */
   .matrix-cell {
-    min-width: 4.5rem; border-radius: min(3px, var(--radius)); color: var(--ink);
+    min-width: 2.5rem; border-radius: min(3px, var(--radius)); color: var(--ink);
     --heat-fill: color-mix(in srgb, var(--accent) max(6%, var(--heat-top, 62%) * var(--heat, 0)), transparent);
   }
   .matrix-drill {
@@ -191,7 +225,7 @@ a.dash-step-card { text-decoration: none; }
   /* A matrix wider than its section is folded (Dashboard.tsx, useMatrixFold) rather than scrolled sideways: each row
      its name over its figures, each figure under its column's name, as many to a line as fit. The heads stay for a
      reader that hears them; to the eye each cell carries its own. */
-  .matrix-host[data-fold] .matrix-wrap { overflow-x: visible; }
+  .page-section .matrix-host[data-fold] .matrix-wrap, .matrix-host[data-fold] .matrix-wrap { overflow: visible; }
   .matrix-host[data-fold] :is(.matrix, .matrix tbody) { display: block; }
   .matrix-host[data-fold] .matrix thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .matrix-host[data-fold] .matrix tr {
@@ -258,8 +292,8 @@ a.dash-step-card { text-decoration: none; }
     background: var(--raised); color: var(--ink-muted);
   }
   /* A row in alarm says so on its tile: the tone's ink on a wash of it. The value at the row's end keeps its own. */
-  .dash-mini-mark[data-tone='bad'] { background: color-mix(in oklab, var(--status-critical) 12%, var(--surface)); color: var(--status-critical); }
-  .dash-mini-mark[data-tone='warn'] { background: color-mix(in oklab, var(--status-warning) 14%, var(--surface)); color: var(--status-warning); }
+  .dash-mini-mark[data-tone='bad'] { background: color-mix(in srgb, var(--status-critical) 12%, var(--surface)); color: var(--status-critical); }
+  .dash-mini-mark[data-tone='warn'] { background: color-mix(in srgb, var(--status-warning) 14%, var(--surface)); color: var(--status-warning); }
   .dash-worklist .dash-mini-name { font-weight: 600; }
   .dash-worklist .dash-mini-value { color: var(--ink); font-size: var(--text-base); }
   .dash-mini-caret { flex: none; color: var(--ink-subtle); }

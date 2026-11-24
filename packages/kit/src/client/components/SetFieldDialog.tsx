@@ -68,7 +68,7 @@ export function SetFieldDialog({
               id={control.id}
               value={column}
               items={columns.map((name) => ({ value: name, label: nameOf(name) }))}
-              onChange={(next) => {
+              onValueChange={(next) => {
                 setColumn(next);
                 setValue(null);
                 setProblem('');
@@ -100,10 +100,10 @@ export function SetFieldDialog({
         </Field>
       )}
       <div className="confirm-actions">
-        <Button intent="secondary" onClick={onClose}>
+        <Button variant="secondary" onClick={onClose}>
           {say('common.cancel')}
         </Button>
-        <Button intent="primary" onClick={apply}>
+        <Button variant="primary" onClick={apply}>
           {say('set', { column: nameOf(column) })}
         </Button>
       </div>

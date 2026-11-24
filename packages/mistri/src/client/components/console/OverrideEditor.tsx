@@ -61,7 +61,7 @@ function ValueEditor({
   label: string;
 }) {
   return detail.variants || detail.type === 'boolean' ? (
-    <Field size="compact" label={label}>
+    <Field size="sm" label={label}>
       {(control) => (
         <Dropdown
           id={control.id}
@@ -69,7 +69,7 @@ function ValueEditor({
           ariaDescribedBy={control['aria-describedby']}
           value={text}
           disabled={disabled}
-          onChange={setText}
+          onValueChange={setText}
           items={[
             { value: '', label: say('chooseValue') },
             ...(detail.variants ?? [true, false]).map((value) => ({
@@ -92,7 +92,7 @@ function ValueEditor({
       />
     </Field>
   ) : (
-    <Field size="compact" label={label}>
+    <Field size="sm" label={label}>
       <input
         type={detail.type === 'number' ? 'number' : 'text'}
         step="any"
@@ -209,8 +209,8 @@ export function OverrideEditor({
             <span className="console-count-pill">{draft.rules.length}</span>
           </h3>
           <Button
-            size="compact"
-            intent="quiet"
+            size="sm"
+            variant="ghost"
             disabled={disabled || draft.rules.length >= 64 || !declaredAudiences}
             onClick={() => {
               onChange({
@@ -243,37 +243,37 @@ export function OverrideEditor({
                   </span>
                   <span className="console-rule-tools">
                     <Button
-                      size="compact"
-                      intent="quiet"
+                      size="sm"
+                      variant="ghost"
                       aria-expanded={open === index}
-                      aria-label={say(open === index ? 'doneRule' : 'editRule', { number: index + 1 })}
+                      ariaLabel={say(open === index ? 'doneRule' : 'editRule', { number: index + 1 })}
                       onClick={() => setOpen(open === index ? undefined : index)}
                     >
                       {open === index ? say('done') : say('edit')}
                     </Button>
                     <Button
-                      size="compact"
-                      intent="quiet"
+                      size="sm"
+                      variant="ghost"
                       disabled={disabled || index === 0}
-                      aria-label={say('moveUp', { number: index + 1 })}
+                      ariaLabel={say('moveUp', { number: index + 1 })}
                       onClick={() => move(index, -1)}
                     >
                       <span aria-hidden="true">↑</span>
                     </Button>
                     <Button
-                      size="compact"
-                      intent="quiet"
+                      size="sm"
+                      variant="ghost"
                       disabled={disabled || index === draft.rules.length - 1}
-                      aria-label={say('moveDown', { number: index + 1 })}
+                      ariaLabel={say('moveDown', { number: index + 1 })}
                       onClick={() => move(index, 1)}
                     >
                       <span aria-hidden="true">↓</span>
                     </Button>
                     <Button
-                      size="compact"
-                      intent="quiet"
+                      size="sm"
+                      variant="ghost"
                       disabled={disabled}
-                      aria-label={say('removeRule', { number: index + 1 })}
+                      ariaLabel={say('removeRule', { number: index + 1 })}
                       onClick={() => {
                         onChange({
                           ...draft,
@@ -301,7 +301,7 @@ export function OverrideEditor({
         </h3>
         <div className="console-value-settings">
           <ValueEditor detail={detail} text={text} setText={setText} disabled={disabled} label={say('value')} />
-          <Field size="compact" label={say('rollout')} hint={say('rolloutHint')}>
+          <Field size="sm" label={say('rollout')} hint={say('rolloutHint')}>
             <input
               type="number"
               min="0"

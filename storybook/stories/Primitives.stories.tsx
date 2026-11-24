@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { Button, type ButtonIntent, type ButtonSize } from '@mistriwork/ui/Button.js';
+import { Button, type ButtonSize, type ButtonVariant } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
 import { Dropdown } from '../../packages/kit/src/client/components/Dropdown.js';
 import { DateField } from '../../packages/kit/src/client/components/DateField.js';
@@ -11,13 +11,13 @@ import { Typeahead } from '@mistriwork/ui/Typeahead.js';
 const meta = { title: 'Primitives', parameters: { layout: 'padded' } } satisfies Meta;
 export default meta;
 
-const INTENTS: ButtonIntent[] = ['primary', 'secondary', 'quiet', 'danger'];
-const SIZES: ButtonSize[] = ['compact', 'default', 'large'];
-const STATES = ['Rest', 'Pressed', 'Busy', 'Disabled'] as const;
-const WORDS: Record<ButtonIntent, string> = {
+const VARIANTS: Array<Extract<ButtonVariant, 'primary' | 'secondary' | 'ghost' | 'danger'>> = ['primary', 'secondary', 'ghost', 'danger'];
+const SIZES: ButtonSize[] = ['sm', 'md', 'lg'];
+const STATES = ['Rest', 'Pressed', 'Loading', 'Disabled'] as const;
+const WORDS: Record<(typeof VARIANTS)[number], string> = {
   primary: 'Save changes',
   secondary: 'Cancel',
-  quiet: 'Forgot password?',
+  ghost: 'Forgot password?',
   danger: 'Archive project',
 };
 
@@ -35,25 +35,24 @@ function ButtonGrid({ size }: { size: ButtonSize }) {
             {state}
           </span>
         ))}
-        {INTENTS.map((intent) => (
-          <div key={intent} style={{ display: 'contents' }}>
-            <span style={caption}>{intent}</span>
-            <Button intent={intent} size={size}>
-              {WORDS[intent]}
+        {VARIANTS.map((variant) => (
+          <div key={variant} style={{ display: 'contents' }}>
+            <span style={caption}>{variant}</span>
+            <Button variant={variant} size={size}>
+              {WORDS[variant]}
             </Button>
-            {/* Pressed is a toggle's "on", which only the secondary intent is. */}
-            {intent === 'secondary' ? (
-              <Button intent={intent} size={size} aria-pressed="true">
+            {variant === 'secondary' ? (
+              <Button variant={variant} size={size} aria-pressed="true">
                 Show archived
               </Button>
             ) : (
               <span style={caption}>—</span>
             )}
-            <Button intent={intent} size={size} busy busyLabel="Saving…">
-              {WORDS[intent]}
+            <Button variant={variant} size={size} loading loadingLabel="Saving…">
+              {WORDS[variant]}
             </Button>
-            <Button intent={intent} size={size} disabled>
-              {WORDS[intent]}
+            <Button variant={variant} size={size} disabled>
+              {WORDS[variant]}
             </Button>
           </div>
         ))}
@@ -73,10 +72,10 @@ export const Buttons: StoryObj = {
       ))}
       <section style={{ display: 'grid', gap: 12, maxWidth: 360 }}>
         <h2 style={{ margin: 0, font: '600 14px var(--sans)' }}>Full width</h2>
-        <Button intent="primary" size="large" block>
+        <Button variant="primary" size="lg" block>
           Sign in
         </Button>
-        <Button intent="secondary" size="large" block>
+        <Button variant="secondary" size="lg" block>
           Continue with GitHub
         </Button>
       </section>
@@ -93,12 +92,12 @@ export const ButtonFocus: StoryObj = {
     }, []);
     return (
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        <Button ref={first} intent="primary">
+        <Button ref={first} variant="primary">
           Save changes
         </Button>
-        <Button intent="secondary">Cancel</Button>
-        <Button intent="quiet">Forgot password?</Button>
-        <Button intent="danger">Archive project</Button>
+        <Button variant="secondary">Cancel</Button>
+        <Button variant="ghost">Forgot password?</Button>
+        <Button variant="danger">Archive project</Button>
       </div>
     );
   },
@@ -119,7 +118,7 @@ const SAID: Record<FieldState, { hint?: string; problem?: string }> = {
   disabled: {},
 };
 
-function Fields({ state, size = 'default' }: { state: FieldState; size?: 'compact' | 'default' }) {
+function Fields({ state, size = 'md' }: { state: FieldState; size?: 'sm' | 'md' }) {
   const [team, setTeam] = useState('design');
   const [date, setDate] = useState('2026-09-22');
   const [text, setText] = useState(state === 'rest' ? '' : 'Maya');
@@ -142,7 +141,7 @@ function Fields({ state, size = 'default' }: { state: FieldState; size?: 'compac
             ariaInvalid={c['aria-invalid']}
             ariaDescribedBy={c['aria-describedby']}
             value={team}
-            onChange={setTeam}
+            onValueChange={setTeam}
             disabled={disabled}
             items={TEAMS}
           />
@@ -153,7 +152,7 @@ function Fields({ state, size = 'default' }: { state: FieldState; size?: 'compac
           <DateField
             id={c.id}
             value={date}
-            onChange={setDate}
+            onValueChange={setDate}
             disabled={disabled}
             aria-invalid={c['aria-invalid']}
             aria-describedby={c['aria-describedby']}
@@ -196,7 +195,7 @@ export const FieldsAtRest: StoryObj = { render: () => <Fields state="rest" /> };
 export const FieldsWithHint: StoryObj = { render: () => <Fields state="hint" /> };
 export const FieldsWithProblem: StoryObj = { render: () => <Fields state="problem" /> };
 export const FieldsDisabled: StoryObj = { render: () => <Fields state="disabled" /> };
-export const FieldsCompact: StoryObj = { render: () => <Fields state="rest" size="compact" /> };
+export const FieldsCompact: StoryObj = { render: () => <Fields state="rest" size="sm" /> };
 
 /* A field and its actions, as a form closes: the actions 24px under the last
    field, and on a phone the width of the form. */
@@ -207,8 +206,8 @@ export const FieldsWithActions: StoryObj = {
         <input data-slot="input" defaultValue="Customer onboarding" />
       </Field>
       <div className="form-actions">
-        <Button intent="secondary">Cancel</Button>
-        <Button intent="primary" type="submit">
+        <Button variant="secondary">Cancel</Button>
+        <Button variant="primary" type="submit">
           Save
         </Button>
       </div>

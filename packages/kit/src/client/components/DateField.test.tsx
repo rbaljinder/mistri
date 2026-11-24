@@ -7,7 +7,7 @@ import { DateField } from './DateField.js';
 afterEach(cleanup);
 
 test("the field says the catalog's words and draws the kit's calendar icon", async () => {
-  render(<DateField id="due" aria-label="Due" value="2026-09-13" onChange={() => {}} locale="en-US" />);
+  render(<DateField id="due" ariaLabel="Due" value="2026-09-13" onValueChange={() => {}} locale="en-US" />);
   const trigger = screen.getByRole('button', { name: 'Choose date for Due' });
   expect(trigger.querySelector('svg.mistri-icon path')).not.toBeNull();
   expect(screen.getByRole('textbox', { name: 'Due' })).toHaveAccessibleDescription(

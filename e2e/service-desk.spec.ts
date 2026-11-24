@@ -183,8 +183,8 @@ test.describe('Service Atlas ITSM', () => {
       await expect(popup.getByRole('option')).toHaveCount(services.length);
       for (const { name } of services) await expect(popup.getByRole('option', { name: new RegExp(name) })).toBeVisible();
       await expect(popup).toHaveCSS('background-color', 'rgb(255, 255, 255)');
-      // The App's preset is Lumen and it names no radius of its own: Lumen's one radius is 8px.
-      await expect(popup).toHaveCSS('border-radius', '8px');
+      // The App's preset is Lumen and it names no radius of its own: Lumen's control radius is 6px.
+      await expect(popup).toHaveCSS('border-radius', '6px');
       await expect(popup).toHaveCSS('opacity', '1');
       const bounds = (await popup.boundingBox())!;
       const box = (await service.boundingBox())!;

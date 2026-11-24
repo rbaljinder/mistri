@@ -177,12 +177,12 @@ export function ChoiceControl({ app, name, choice }: ChoiceControlProps) {
                 </>
               )}
               onPick={(row) => pick(row.value)}
-              inputRef={input}
+              ref={input}
               inputProps={{
                 type: 'text',
                 className: 'picker-input choice-input',
                 placeholder: say('find', { thing: lower }),
-                'aria-label': say('find', { thing: lower }),
+                ariaLabel: say('find', { thing: lower }),
                 autoComplete: 'off',
                 spellCheck: false,
               }}

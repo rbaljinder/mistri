@@ -458,13 +458,13 @@ test("a matrix's heat stops where its ink would fade on the accent's tint (G186)
   assert.ok(heatTop({ accent: '#1c1a17', surface: '#ffffff', ink: '#1c1a17' }) < HEAT_TOP);
   // The Workbench's own dark palette (@mistriwork/ui's tokens.css) says its heat top beside its colors; it is the measured one.
   const sheet = readFileSync('packages/ui/src/tokens.css', 'utf8');
-  const dark = /:root\[data-theme="dark"\] \{(\s*--ground[^}]*)\}/.exec(sheet)![1]!;
+  const dark = /:root\[data-theme="dark"\](?:,\s*\[data-theme="dark"\])? \{(\s*--ground[^}]*)\}/.exec(sheet)![1]!;
   const token = (name: string) => new RegExp(`--${name}: ([^;]+);`).exec(dark)![1]!;
   assert.equal(
     token('heat-top'),
     `${Math.round(heatTop({ accent: token('accent'), surface: token('surface'), ink: token('ink') }) * 100)}%`,
   );
-  assert.equal((sheet.match(/--heat-top: 46%;/g) ?? []).length, 2, 'the media query and the stamped dark mode say it alike');
+  assert.equal((sheet.match(/--heat-top: 61%;/g) ?? []).length, 2, 'the media query and the stamped dark mode say it alike');
   // A color the check cannot read keeps the top rather than guessing.
   assert.equal(heatTop({ accent: 'oklch(60% 0.1 200)', surface: '#ffffff', ink: '#111111' }), HEAT_TOP);
 });

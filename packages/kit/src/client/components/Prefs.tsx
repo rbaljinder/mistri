@@ -91,7 +91,7 @@ function LanguageRow({ language }: { language: string }) {
       <Dropdown
         ariaLabel={message('preferences.language')}
         value={value}
-        onChange={(tag) => void pick(tag)}
+        onValueChange={(tag) => void pick(tag)}
         items={
           offered.length
             ? offered.map((tag) => ({ value: tag, label: ownName(tag) }))
@@ -155,7 +155,7 @@ export function PrefsRows({ part }: { part?: PrefsPart }) {
           <Dropdown
             ariaLabel={message('preferences.visualTheme')}
             value={visualThemeChoice()}
-            onChange={(v) => after(() => setVisualTheme(v))}
+            onValueChange={(v) => after(() => setVisualTheme(v))}
             items={visualThemeOptions().map((theme) => ({
               ...theme,
               swatches: [...theme.swatches],
@@ -169,7 +169,7 @@ export function PrefsRows({ part }: { part?: PrefsPart }) {
           <Dropdown
             ariaLabel={message('preferences.palette')}
             value={visualPaletteChoice()}
-            onChange={(v) => after(() => setVisualPalette(v))}
+            onValueChange={(v) => after(() => setVisualPalette(v))}
             items={visualPaletteOptions().map((palette) => ({ ...palette, swatches: [...palette.swatches] }))}
           />
         </Row>
@@ -182,7 +182,7 @@ export function PrefsRows({ part }: { part?: PrefsPart }) {
               ariaLabel={message('preferences.colorMode')}
               disabled={darkOnly}
               value={darkOnly ? 'dark' : themeChoice()}
-              onChange={(v) => after(() => setTheme(v))}
+              onValueChange={(v) => after(() => setTheme(v))}
               items={[
                 { value: 'system', label: message('preferences.system') },
                 { value: 'light', label: message('preferences.light') },
@@ -194,7 +194,7 @@ export function PrefsRows({ part }: { part?: PrefsPart }) {
             <Dropdown
               ariaLabel={message('preferences.density')}
               value={densityChoice() as string}
-              onChange={(v) => after(() => setDensity(v))}
+              onValueChange={(v) => after(() => setDensity(v))}
               items={[
                 { value: 'comfortable', label: message('preferences.comfortable'), detail: message('preferences.defaultHint') },
                 { value: 'spacious', label: message('preferences.spacious'), detail: message('preferences.spaciousHint') },
@@ -206,7 +206,7 @@ export function PrefsRows({ part }: { part?: PrefsPart }) {
             <Dropdown
               ariaLabel={message('preferences.typography')}
               value={typographyPreference() as string}
-              onChange={(v) => after(() => setTypography(v))}
+              onValueChange={(v) => after(() => setTypography(v))}
               items={[
                 { value: 'default', label: message('preferences.appDefault') },
                 { value: 'mono', label: message('preferences.mono'), detail: message('preferences.monoHint') },
@@ -222,7 +222,7 @@ export function PrefsRows({ part }: { part?: PrefsPart }) {
             <Dropdown
               ariaLabel={message('preferences.rowsPerList')}
               value={String(pageSize())}
-              onChange={(v) =>
+              onValueChange={(v) =>
                 after(() => {
                   setPageSize(Number(v));
                   render();
@@ -235,7 +235,7 @@ export function PrefsRows({ part }: { part?: PrefsPart }) {
             <Dropdown
               ariaLabel={message('preferences.rowsPerRelatedList')}
               value={String(related)}
-              onChange={(v) => {
+              onValueChange={(v) => {
                 setRelatedRows(Number(v));
                 render();
               }}

@@ -264,11 +264,11 @@ function DeleteConfirm({
       )}
       {blocked && <p className="delete-blocked">{say('theDatabaseWillRefuse')}</p>}
       <div className="confirm-actions">
-        <Button intent="secondary" onClick={onClose}>
+        <Button variant="secondary" onClick={onClose}>
           {say('common.cancel')}
         </Button>
         <Button
-          intent="danger"
+          variant="danger"
           onClick={() => {
             if (submitted.current || !current()) return;
             // Fail closed if the host cannot retain the pending operation. This

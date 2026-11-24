@@ -234,12 +234,12 @@
    related tab was a card, and a record page a stack of them (the refusal
    list's "a box round a table"); a dashboard's panel is the one ground a
    table stands on in white, and there it is rows (above). */
-  :root[data-look-table='hairline'] th:where(:not([data-slot])) {
+  :root[data-look-table='hairline'] th:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     border-bottom: 1px solid var(--line);
     font: 600 var(--text-sm) var(--sans);
     padding-block: var(--space-3h);
   }
-  :root[data-look-table='hairline'] td:where(:not([data-slot])) {
+  :root[data-look-table='hairline'] td:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
     font-size: var(--text-base);
   }
   /* A lane is a quiet tray that holds its head and its cards, each card a sheet on it: the tray says which cards are

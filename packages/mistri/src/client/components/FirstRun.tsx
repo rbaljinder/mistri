@@ -74,11 +74,11 @@ export function FirstRun({ section, done, fresh }: { section: Section; done: boo
               </span>
               {link &&
                 (done[i] ? (
-                  <ButtonLink intent="quiet" size="compact" {...link}>
+                  <ButtonLink variant="ghost" size="sm" {...link}>
                     {say('open')}
                   </ButtonLink>
                 ) : (
-                  <ButtonLink intent={i === next ? 'primary' : 'secondary'} size="compact" {...link}>
+                  <ButtonLink variant={i === next ? 'primary' : 'secondary'} size="sm" {...link}>
                     {adding ? say('common.add') : say('open')}
                   </ButtonLink>
                 ))}

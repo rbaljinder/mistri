@@ -12,6 +12,7 @@
  */
 import { noTeamAccess } from '../client/teamTypes.js';
 import { noReadAuditAccess } from '../client/readAuditTypes.js';
+import { noAccountProfileAccess } from '../client/accountProfileTypes.js';
 import type {
   UiAddress,
   UiCommandHandle,
@@ -468,6 +469,7 @@ export function embedHost({ surface, endpoint, authorization, navigator, basePat
     branding: () => ({ name: surface.label, logo: null, accent: null }),
     /* A headless surface has no tenant lease: an empty team that manages nothing, and no read audit to read. */
     team: noTeamAccess,
+    accountProfile: noAccountProfileAccess,
     reads: noReadAuditAccess,
     token: () => '',
     subscribeLook: () => () => {},

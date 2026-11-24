@@ -1,6 +1,6 @@
 ---
 title: Status & roadmap
-description: The 1.0.0-rc.84 scope, stable and preview features, current limitations and planned work.
+description: The 1.0.0-rc.85 scope, stable and preview features, current limitations and planned work.
 ---
 
 The scope of this release, stable and preview features, current limitations and planned work.
@@ -10,7 +10,7 @@ npx @mistriwork/mistri check --app .
 #   preview: This App uses Preview features (…). They work as documented and may change in any 1.x release.
 ```
 
-This site describes **mistri 1.0.0-rc.84**, a release candidate. Since rc.2, the first release under the mistri name,
+This site describes **mistri 1.0.0-rc.85**, a release candidate. Since rc.2, the first release under the mistri name,
 the App framework is split out of tablewalk, which stays the standalone database browser. A save is a fixed number of
 database round trips, the runtime forgets what it wrote about an App after the App's own retention windows, and on
 PostgreSQL the runtime lives in one schema named `mistri`. There is no upgrade from a tablewalk 0.9 App database.
@@ -71,7 +71,7 @@ stable.
 | [Custom components](/docs/custom-components/): `component()`, sections, value renderers, inputs, `customList()`, `useCommand`, `ui.csp`, public surfaces | Stable |
 | [Free-form pages](/docs/custom-components/#free-form-pages) (`definePage` from `@mistriwork/mistri/page`, `pages/*.page.tsx`), their loaders and blocks, and a role's `service` | Stable |
 | [Control kits](/docs/control-kits/) (`uiKit`, `defineUiKit` and `UiKitSlots` from `@mistriwork/mistri/page`, `@mistriwork/ui/conformance`) | Preview |
-| [The behaviors](/docs/behaviors/) a component is built on (`@mistriwork/mistri/behaviors`: `Sortable`, `Transfer`, `Days`, `Spans`, `Scrub`, `Pick`, `Turns`, `Widths`, `Editable`) | Preview |
+| [The behaviors](/docs/behaviors/) a component is built on (`@mistriwork/mistri/behaviors`: `Sortable`, `Transfer`, `Days`, `Spans`, `Scrub`, `Pick`, `Turns`, `Widths`, `Editable`) and the bundled views, charts and operational controls (`@mistriwork/mistri/views`, `@mistriwork/mistri/charts`, `@mistriwork/mistri/primitives`) | Preview |
 | [The assistant](/docs/assistant/) (`assistant()`): a panel that reads and proposes as the signed-in person, Claude via `ANTHROPIC_API_KEY`; on a tenant App, per customer once the platform owner turns it on, sending only the person's messages and the rows their own reads return | Stable |
 | [The assistant's page](/docs/assistant/) (`placement: [..., 'page']`), full screen, `starters`, and verbs on its record cards and table rows | Stable |
 
@@ -79,7 +79,7 @@ stable.
 
 | Feature | Status |
 | --- | --- |
-| The eight built-in looks: Workshop (the default, set in Barlow), Lumen (set in Inter, its headings in Manrope), Mono, Sage, Ledger (figures in IBM Plex Mono), Atelier (titles in the machine's book serif), Graphite and Bloom; `defineTheme`, `ui.theme` and `customThemes`; the twelve palettes every look offers; the theme validator in `mistri check` | Stable |
+| The eight built-in looks: Workshop (the default, set in Barlow), Lumen (set in Inter), Mono, Sage, Ledger (figures in IBM Plex Mono), Atelier (titles in the machine's book serif), Graphite and Bloom; `defineTheme`, `ui.theme` and `customThemes`; the twelve palettes every look offers; the theme validator in `mistri check` | Stable |
 | Tenant branding (`branding`, `brandingForm()`, the `branding` store) | Stable |
 
 ### Access, commands and data
@@ -151,6 +151,8 @@ and `package.json` are files, not entry points.
 | `@mistriwork/mistri/maintenance` | Operator steps: `provisionStores`, `applyMigrations`, inspect, redrive and prune | Stable |
 | `@mistriwork/mistri/react` | [Embed in a React app](/docs/embed-in-a-react-app/) | Stable |
 | `@mistriwork/mistri/react/next`, `/react/react-router`, `/react/tanstack-router` | The embed router adapters | Preview |
+| `@mistriwork/mistri/behaviors` | [The behaviors](/docs/behaviors/) a custom component is built on | Preview |
+| `@mistriwork/mistri/views`, `/charts`, `/primitives` | Bundled composite views, SVG charts and operational controls for custom pages | Preview |
 | `@mistriwork/mistri/openfeature` | An OpenFeature provider over the App's flags | Preview |
 | `@mistriwork/ui` (the root and each component path, `style.css`) | The [primitives](/docs/mistri-ui/) | Preview |
 | `@mistriwork/cloudflare` | The target `mistri deploy` rolls | Preview |
@@ -173,7 +175,7 @@ entry points above:
   "version": "1.0.0",
   "type": "module",
   "exports": { ".": "./src/index.ts" },
-  "peerDependencies": { "@mistriwork/mistri": "^1.0.0-rc.84" }
+  "peerDependencies": { "@mistriwork/mistri": "^1.0.0-rc.85" }
 }
 ```
 

@@ -12,6 +12,7 @@ import { useEffect, useRef, type ChangeEvent, type ReactNode, type Ref } from 'r
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import type { FieldFrame } from './fieldFrame.js';
 import { Frame } from './internal/Frame.js';
+import { useSurfaceSeam } from './internal/surfaceSeam.js';
 import { slotted } from './internal/uiKitContext.js';
 
 interface FileFieldBase extends FieldFrame {
@@ -19,56 +20,53 @@ interface FileFieldBase extends FieldFrame {
   accept?: string;
   name?: string;
   disabled?: boolean;
-  inputRef?: Ref<HTMLInputElement>;
+  ref?: Ref<HTMLInputElement>;
   /** The button's words, in the caller's language: "Choose file" ("Choose files" with `multiple`) unless said. */
   chooseLabel?: string;
   /** What the names say while there is no file: "No file chosen". */
   noneLabel?: string;
+  /** Localized strings for FileField controls. */
+  words?: { chooseFile?: string; chooseFiles?: string; noFileChosen?: string };
 }
 
-/**
- * One file by default: `value` is the chosen File (null while there is none) and `onChange` hands up one. With `multiple`
- * the picker takes several at once, `value` is a `File[]` (empty while there is none) and `onChange` hands up the whole
- * choice, in the order the browser gives it; the input itself says how many ("3 files"), so a page need not.
- */
+/** Props for single-file or multi-file `FileField`. */
 export type FileFieldProps = FileFieldBase &
   (
     | {
         multiple?: false;
         /** The chosen file; null while there is none. Set it to null to clear the choice. */
         value: File | null;
-        onChange: (file: File | null, details: ChangeDetails<'file-pick'>) => void;
+        onValueChange?: (file: File | null, details: ChangeDetails<'file-pick'>) => void;
       }
     | {
         multiple: true;
         /** The chosen files; empty while there are none. Set it to `[]` to clear the choice. */
-        value: File[];
-        onChange: (files: File[], details: ChangeDetails<'file-pick'>) => void;
+        value: readonly File[];
+        onValueChange?: (files: File[], details: ChangeDetails<'file-pick'>) => void;
       }
   );
 
 function DefaultFileField(props: FileFieldProps): ReactNode {
+  const seam = useSurfaceSeam();
+  const seamWords = seam?.defaultWords?.();
   const own = useRef<HTMLInputElement | null>(null);
-  // The input keeps its own files, so a page that clears the value (null, or an empty list) has to clear it too.
   const cleared = props.multiple ? props.value.length === 0 : props.value === null;
   useEffect(() => {
     if (cleared && own.current && own.current.value !== '') own.current.value = '';
   }, [cleared]);
   const chosen = props.value;
-  const names = Array.isArray(chosen) ? chosen.map((file) => file.name) : chosen ? [chosen.name] : [];
+  const names = Array.isArray(chosen) ? chosen.map((file) => file.name) : chosen ? [(chosen as File).name] : [];
   const said = names.join(', ');
+  const targetRef = props.ref ?? (props as { inputRef?: Ref<HTMLInputElement> }).inputRef;
   return (
     <Frame {...props}>
       <div data-slot="file-field">
-        {/* The browser's input, clipped and not removed: it is the control the label names and the keyboard reaches. It
-            is the field's control part, so the field hands it its id, its description and `aria-invalid` as it does a
-            control of UI SDK's. */}
         <FieldControl
           id={props.id}
           ref={(node: HTMLInputElement | null) => {
             own.current = node;
-            if (typeof props.inputRef === 'function') props.inputRef(node);
-            else if (props.inputRef) props.inputRef.current = node;
+            if (typeof targetRef === 'function') targetRef(node);
+            else if (targetRef) (targetRef as { current: HTMLInputElement | null }).current = node;
           }}
           data-kind="file"
           type="file"
@@ -80,11 +78,18 @@ function DefaultFileField(props: FileFieldProps): ReactNode {
           onChange={(event: ChangeEvent<HTMLInputElement>) => {
             const files = Array.from(event.target.files ?? []);
             const details = changeDetails('file-pick', event);
-            if (props.multiple === true) props.onChange(files, details);
-            else props.onChange(files[0] ?? null, details);
+            if (props.multiple === true) {
+              const legacy = (props as { onChange?: (files: File[], details: ChangeDetails<'file-pick'>) => void }).onChange;
+              props.onValueChange?.(files, details);
+              legacy?.(files, details);
+            } else {
+              const first = files[0] ?? null;
+              const legacy = (props as { onChange?: (file: File | null, details: ChangeDetails<'file-pick'>) => void }).onChange;
+              props.onValueChange?.(first, details);
+              legacy?.(first, details);
+            }
           }}
         />
-        {/* The pointer's way to it: out of the tab order and the tree, the input being the one control for both. */}
         <Button
           type="button"
           data-kind="file"
@@ -93,15 +98,18 @@ function DefaultFileField(props: FileFieldProps): ReactNode {
           disabled={props.disabled}
           onClick={() => own.current?.click()}
         >
-          {props.chooseLabel ?? (props.multiple ? 'Choose files' : 'Choose file')}
+          {props.chooseLabel ??
+            (props.multiple
+              ? (props.words?.chooseFiles ?? seamWords?.chooseFiles ?? 'Choose files')
+              : (props.words?.chooseFile ?? seamWords?.chooseFile ?? 'Choose file'))}
         </Button>
         <span data-slot="file-field-names" data-none={names.length ? undefined : ''} title={said || undefined}>
-          {said || (props.noneLabel ?? 'No file chosen')}
+          {said || (props.noneLabel ?? props.words?.noFileChosen ?? seamWords?.noFileChosen ?? 'No file chosen')}
         </span>
       </div>
     </Frame>
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const FileField = slotted('FileField', DefaultFileField, { onChange: [1, 'file-pick'] });
+/** Accessible browser file picker field with themed trigger button and selected file readout. */
+export const FileField = slotted('FileField', DefaultFileField, { onValueChange: [1, 'file-pick'] });

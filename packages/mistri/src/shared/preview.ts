@@ -39,6 +39,9 @@ export const PREVIEW_PATHS: readonly RegExp[] = [
 /** Whole package entry points that are Preview. */
 export const PREVIEW_ENTRIES: readonly string[] = [
   './behaviors', // the behaviors a component is built on: UI SDK, under them, is itself a beta
+  './primitives', // the primitives and editors built over UI SDK: UI SDK is in beta, so their slots may settle before 1.x
+  './charts', // the standalone chart components: proven alongside the composite views, free to settle together
+  './views', // the composite view components: proven on one sample App at 1.0, free to settle with the second
   './openfeature',
   './react/next', // the embed router adapters: one sample at most, each proven against its router's current version only
   './react/react-router',
@@ -83,11 +86,6 @@ export const PREVIEW_EXPORTS: readonly string[] = [
   './ui: Loaded',
   /* An App's control kit (`uiKit`): the slots are @mistriwork/ui's primitives, Preview as they are. */
   './page: defineUiKit',
-  './page: defaultUiKit',
-  './page: dress',
-  './page: extendUiKit',
-  './page: useComponentScope',
-  './page: usePopupHost',
   './page: SlotName',
   './page: SlotProps',
   './page: UiKit',

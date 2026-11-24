@@ -9,7 +9,7 @@
  * refused. On a phone each line is a card (ConsoleRoom.css).
  */
 import { useState, type ReactNode } from 'react';
-import { Button, Dropdown, Segmented, Tone, useSectionSize } from '@mistriwork/mistri/ui';
+import { Button, Dropdown, SegmentedControl, StatusDot, useSectionSize } from '@mistriwork/mistri/ui';
 import { useMessageLanguage } from '@mistriwork/kit/client/components/useMessageLanguage.js';
 import { say } from '../../copy/console/components/console/FlagTable.js';
 import { controlDraft, editedOverride, valueText } from './OverrideEditor.js';
@@ -74,16 +74,16 @@ export function FlagFilters({
           <Dropdown
             ariaLabel={say('view')}
             value={filter.view ?? 'all'}
-            onChange={(view) => onFilter({ ...filter, view: view as FlagView })}
+            onValueChange={(view) => onFilter({ ...filter, view: view as FlagView })}
             items={views.map((view) => ({ value: view, label: VIEW[view](), detail: String(count(view)) }))}
           />
         </div>
       ) : (
-        <Segmented
-          label={say('view')}
-          size="compact"
+        <SegmentedControl
+          ariaLabel={say('view')}
+          size="sm"
           value={filter.view ?? 'all'}
-          onChange={(view) => onFilter({ ...filter, view })}
+          onValueChange={(view) => onFilter({ ...filter, view })}
           options={(['all', 'on', 'off', 'rolling', 'cleanup'] as const).map((view) => ({
             value: view,
             label: VIEW[view](),
@@ -130,7 +130,7 @@ export const KIND = {
 /** A flag's state in a scope that is not the one open: a dot and its word, as every status here is said. */
 function ScopeState({ row }: { row: FlagRow | undefined }) {
   if (!row || row.disabled === undefined) return <span className="console-faint">—</span>;
-  return row.disabled ? <Tone tone="neutral">{say('off')}</Tone> : <Tone tone="good">{say('on')}</Tone>;
+  return row.disabled ? <StatusDot tone="neutral">{say('off')}</StatusDot> : <StatusDot tone="good">{say('on')}</StatusDot>;
 }
 
 /** One flag per line: key, kind, state per scope (a switch in the open scope where it can change), rollout, owner, last change. */
@@ -260,9 +260,9 @@ function FlagLine({
       </button>
     ) : known ? (
       on ? (
-        <Tone tone="good">{say('on')}</Tone>
+        <StatusDot tone="good">{say('on')}</StatusDot>
       ) : (
-        <Tone tone="neutral">{say('off')}</Tone>
+        <StatusDot tone="neutral">{say('off')}</StatusDot>
       )
     ) : (
       <span className="console-faint">{canOn ? '—' : canOff ? say('offOnly') : say('viewOnly')}</span>
@@ -409,10 +409,10 @@ function Confirm({
           autoFocus
         />
       </label>
-      <Button size="compact" intent={on ? 'primary' : 'danger'} type="submit" busy={busy}>
+      <Button size="sm" variant={on ? 'primary' : 'danger'} type="submit" loading={busy}>
         {on ? say('confirmOn') : say('confirmOff')}
       </Button>
-      <Button size="compact" intent="quiet" disabled={busy} onClick={cancel}>
+      <Button size="sm" variant="ghost" disabled={busy} onClick={cancel}>
         {say('keep')}
       </Button>
     </form>

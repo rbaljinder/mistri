@@ -11,7 +11,7 @@
    print — paper, last.
    A later layer wins whatever its specificity: nothing here out-specifies or
    out-loads another to win. */
-@layer base, components, kit, look, app, theme, structure, print;
+@layer ui-sdk-lazy, base, surfaces, components, kit, look, app, theme, structure, print;
 /* The tokens are @mistriwork/ui's (packages/ui/src), and so is what the controls wear (controls.css): each control is
    drawn over UI SDK and dressed by its `data-slot`, in layers of its own. Nested in base they stand under every rule
    written here: a dialog this stylesheet places by its class, a menu a component dresses and a control a toolbar
@@ -161,7 +161,7 @@ body {
    on the dark grounds and 4.4:1 on the Workbench's paper. */
 ::placeholder { color: var(--ink-subtle); opacity: 1; }
 
-button:where(:not([data-slot]), [data-own]) {
+button:where(:not([data-slot], [class^='nx-'], [class*=' nx-']), [data-own]) {
   font: inherit; font-size: var(--text-base);
   padding: var(--space-3) var(--space-4);
   border-radius: var(--radius);
@@ -171,7 +171,7 @@ button:where(:not([data-slot]), [data-own]) {
 }
 button.ghost { background: transparent; color: var(--ink-muted); border-color: var(--line-strong); }
 button.ghost[aria-pressed="true"] { color: var(--accent-ink); border-color: var(--accent); background: var(--accent-soft); }
-button:where(:not([data-slot]), [data-own]):focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
+button:where(:not([data-slot], [class^='nx-'], [class*=' nx-']), [data-own]):focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: var(--focus-offset); }
 /* In an App, whatever takes the keyboard's focus and names no ring of its own
    wears the house ring (docs/design.md, Access), not the browser's blue: at
    no specificity, so every rule that draws its own still does. The database
@@ -252,7 +252,7 @@ button:where(:not([data-slot]), [data-own]):focus-visible { outline: var(--focus
   background: var(--ground);
   border: 1px solid var(--line-control); border-radius: var(--radius);
 }
-#table-list { list-style: none; margin: 0; padding: 0 var(--space-2h) var(--space-4); overflow-y: auto; flex: 1; }
+#table-list { list-style: none; margin: 0; padding: var(--space-1h) var(--space-2h) var(--space-4); overflow-y: auto; flex: 1; }
 #table-list li { margin-bottom: 1px; }
 #table-list button {
   width: 100%; text-align: left;
@@ -837,8 +837,8 @@ body.app-nav-rail.sidebar-hidden #table-list li.nav-group:first-child { border-t
 }
 .table-wrap[data-more~="start"] { --fade-start: 24px; }
 .table-wrap[data-more~="end"] { --fade-end: 24px; }
-th:where(:not([data-slot])):first-child,td:where(:not([data-slot])):first-child { padding-left: var(--space-4h); }
-th:where(:not([data-slot])):last-child,td:where(:not([data-slot])):last-child { padding-right: var(--space-4h); }
+th:where(:not([data-slot], .nx-table *, .nx-csv-table *)):first-child,td:where(:not([data-slot], .nx-table *, .nx-csv-table *)):first-child { padding-left: var(--space-4h); }
+th:where(:not([data-slot], .nx-table *, .nx-csv-table *)):last-child,td:where(:not([data-slot], .nx-table *, .nx-csv-table *)):last-child { padding-right: var(--space-4h); }
 th:first-child .th-sort { padding-left: 0; }
 /* A room-level grid: the gutter moves from the edge cells to the wrap,
    so the scroll region stops 14px short of both edges instead of running
@@ -861,14 +861,14 @@ tbody tr:hover .pinned { background: var(--accent-soft); }
 /* One seam, on the rightmost frozen column, rather than a line per column. */
 .pinned-edge { box-shadow: 1px 0 0 var(--line-strong); }
 .table-wrap:not([data-scrolled]) .pinned-edge { box-shadow: none; }
-table:where(:not([data-slot])) { border-collapse: collapse; width: 100%; font: var(--text-sm) var(--mono); }
-th:where(:not([data-slot])),td:where(:not([data-slot])) {
+table:where(:not([data-slot], [class^='nx-'], [class*=' nx-'])) { border-collapse: collapse; width: 100%; font: var(--text-sm) var(--mono); }
+th:where(:not([data-slot], .nx-table *, .nx-csv-table *)),td:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
   text-align: left; padding: 5px var(--space-3h);
   border-bottom: 1px solid var(--line);
   white-space: nowrap; max-width: 30rem;
   overflow: hidden; text-overflow: ellipsis;
 }
-th:where(:not([data-slot])) {
+th:where(:not([data-slot], .nx-table *, .nx-csv-table *)) {
   position: sticky; top: 0;
   /* Above the pinned body cells, which carry `z-index: 1` so they float over
      the columns they freeze past. Without this, scrolling down slid the
@@ -977,7 +977,7 @@ th.sorted { color: var(--accent-ink); border-bottom-color: var(--accent); }
   /* A head whose label fills it (a sorted figure, a head wrapped to the least its column allows) has no bare side:
      the controls then lie over the label's end, and only while the head is hovered or focused, which is raised above
      its neighbours so they, not the neighbour, answer there. */
-  th:where(:not([data-slot])):has(> .th-controls):is(:hover, :focus-within) { z-index: 3; }
+  th:where(:not([data-slot], .nx-table *, .nx-csv-table *)):has(> .th-controls):is(:hover, :focus-within) { z-index: 3; }
   /* Stacked: the caret over the label's sort, the sort over the move buttons. Where a head's label fills it the moves
      are under the sort (reached by the keyboard) and the click meant for the sort sorts; the caret is the one control
      with no other way in, so it stays on top. The controls are their own stacking context, drawn on their head's
@@ -1115,7 +1115,7 @@ th .pk { color: var(--status-info); }
 th .fk { color: var(--accent-ink); }
 /* Only where a click goes somewhere. A pointer over a row that does nothing
    advertises an action the row does not have. */
-tbody tr:where(:not([data-slot])) { cursor: default; }
+tbody tr:where(:not([data-slot], .nx-table *, .nx-csv-table *)) { cursor: default; }
 tbody tr.clickable { cursor: pointer; }
 /* Under the keyboard as under the pointer: a row reached by Tab or the arrows says it opens the same way. */
 tbody tr.clickable:is(:hover, :focus-visible) { background: var(--accent-soft); }
@@ -1429,26 +1429,25 @@ td .ref { color: var(--link); text-decoration: underline; text-decoration-style:
   display: block;
   border-radius: min(3px, var(--radius));
   background: var(--raised);
-  background-image: linear-gradient(
-    90deg,
-    transparent 0%,
-    color-mix(in srgb, var(--ink-subtle) 12%, transparent) 50%,
-    transparent 100%
-  );
-  background-size: 240px 100%;
-  background-repeat: no-repeat;
-  animation: sk-sweep 1.25s linear infinite; /* motion-ok: a placeholder sweep is a wait, not decoration (rule 10) */
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .sk-bar:not([data-nx-motion='reduced'], [data-nx-motion='reduced'] *) {
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--ink-subtle) 12%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 240px 100%;
+    background-repeat: no-repeat;
+    animation: sk-sweep 1.25s linear infinite; /* motion-ok: a placeholder sweep is a wait, not decoration (rule 10) */
+  }
 }
 
 @keyframes sk-sweep {
   from { background-position: -240px 0; }
   to { background-position: calc(100% + 240px) 0; }
-}
-
-/* Motion is the decoration here, not the information — the shapes already say
-   what is coming, so removing the sweep costs nothing. */
-@media (prefers-reduced-motion: reduce) {
-  .sk-bar { animation: none; background-image: none; }
 }
 
 .sk-grid { padding: var(--space-2) var(--space-4) var(--space-4); }
@@ -1688,6 +1687,7 @@ button.danger { background: var(--status-critical); color: var(--surface); borde
 }
 .toast-ok { background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent-ink); }
 .toast-error { background: color-mix(in srgb, var(--status-critical) 12%, var(--surface)); color: var(--status-critical); }
+.toast-warning { background: color-mix(in srgb, var(--status-warning) 12%, var(--surface)); color: var(--status-warning); }
 body.app-mode .toast {
   top: auto; bottom: calc(20px + env(safe-area-inset-bottom, 0px));
   left: auto; right: 20px; transform: none; margin: 0;
@@ -1705,6 +1705,7 @@ body.app-mode .toast-icon {
 }
 body.app-mode .toast-ok .toast-icon { background: color-mix(in srgb, var(--status-good) 12%, var(--surface)); color: var(--status-good); }
 body.app-mode .toast-error .toast-icon { background: color-mix(in srgb, var(--status-critical) 12%, var(--surface)); color: var(--status-critical); }
+body.app-mode .toast-warning .toast-icon { background: color-mix(in srgb, var(--status-warning) 12%, var(--surface)); color: var(--status-warning); }
 body.app-mode .toast-action {
   min-height: 32px; padding: var(--space-2) var(--space-3); border: 0; border-radius: var(--radius);
   color: var(--ink); font: 600 var(--text-base)/20px var(--sans); text-decoration: underline; text-underline-offset: 3px;
@@ -2597,7 +2598,6 @@ body.editing-layout .record-heading > span { flex-basis: 100%; min-width: 0; ove
   .tpl { width: 100%; border-left: 0; }
   body.editing-layout .layout { padding-right: 0; }
 }
-.tpl-lede { margin: 0; color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.45; }
 
 /* ---------- agent console ---------- */
 
@@ -2733,9 +2733,13 @@ body.editing-layout .record-heading > span { flex-basis: 100%; min-width: 0; ove
 /* Reading a schema is a wait worth showing: a Postgres catalog query across
    sixty tables takes long enough to notice, and a remote database much
    longer. */
-.conn-dot.busy { background: var(--status-info); animation: conn-pulse 1s ease-in-out infinite; } /* motion-ok: a wait, not decoration (rule 10) */
+.conn-dot.busy { background: var(--status-info); }
+@media (prefers-reduced-motion: no-preference) {
+  .conn-dot.busy:not([data-nx-motion='reduced'], [data-nx-motion='reduced'] *) {
+    animation: conn-pulse 1s ease-in-out infinite; /* motion-ok: a wait, not decoration (rule 10) */
+  }
+}
 @keyframes conn-pulse { 50% { opacity: 0.25; } }
-@media (prefers-reduced-motion: reduce) { .conn-dot.busy { animation: none; } }
 
 .conn-name { display: flex; align-items: baseline; gap: var(--space-3); min-width: 0; }
 .conn-name-text {
@@ -3345,7 +3349,7 @@ tr.expanded > td { border-bottom-color: transparent; background: var(--accent-so
 .tenant-control-trigger > :last-child { flex: none; }
 /* Beside a top bar's tabs the name gives way before they fold into the menu: at 1280 a long name's 24rem folded a
    dealer's five tabs. It still grows with the window, and an ordinary name is whole at a desk. */
-body.app-topnav .topbar .tenant-control { max-width: clamp(16rem, 22vw, 24rem); }
+body.app-topnav .topbar .tenant-control { max-width: clamp(12rem, 18vw, 24rem); }
 /* The names scroll and the foot stays: a list of many tenants carried the
    foot off the bottom of the dialog. */
 .tenant-chooser-dialog {
@@ -3388,7 +3392,7 @@ body.tenant-suspended > :not(.tenant-renewal-overlay) * { visibility: hidden !im
 }
 .tenant-renewal-overlay[open] { display: grid; place-items: center; }
 .tenant-renewal-panel { width: 100%; max-width: 36rem; }
-.tenant-renewal-panel h1 { margin: 0 0 20px; font-size: 1.25rem; }
+.tenant-renewal-panel h1 { margin: 0 0 20px; font-size: var(--text-xl); }
 .tenant-renewal-panel p { color: var(--ink-muted); line-height: 1.5; margin: 0 0 20px; }
 .tenant-renewal-panel button[aria-disabled="true"] { opacity: 0.6; cursor: default; }
 
@@ -3468,7 +3472,7 @@ a.skip-link.skip-link { color: var(--nav-ink, var(--ink)); background: var(--nav
   .crumbs:has(> .crumb-note:empty) { display: none; }
   .page-layout { display: block; }
   .page-aside { border-left: 0; padding-left: 0; border-top: 1px solid var(--line); margin-top: var(--space-6); padding-top: var(--space-6); }
-  .page-section, .page-field, .page-sheet-row, .timeline-row, .pbd-row, .chart-stacked-row,tr:where(:not([data-slot])) { break-inside: avoid; }
+  .page-section, .page-field, .page-sheet-row, .timeline-row, .pbd-row, .chart-stacked-row,tr:where(:not([data-slot], .nx-table *, .nx-csv-table *)) { break-inside: avoid; }
   h1:where(:not([data-slot])),h2:where(:not([data-slot])),h3:where(:not([data-slot])), .page-section-head, .page-section-title { break-after: avoid; }
 }
 }
@@ -3478,3 +3482,19 @@ a.skip-link.skip-link { color: var(--nav-ink, var(--ink)); background: var(--nav
 td.face-data, .face-data, .face-data .prose { font-family: var(--mono); }
 td.face-ui, .face-ui, .face-ui .prose { font-family: var(--sans); }
 td.face-code, .face-code, .face-code .prose { font-family: var(--code); }
+
+/* Forced colours (a Windows contrast theme). The system drops every background and shadow there: a status pill is
+   its tint and its dot a background, and what is current, chosen or pressed is said by a fill. So a pill takes an
+   edge (themeFamilies.css, where a look's status is answered) and its dot the text's colour; what is chosen takes an inset ring in the text's colour, twice a control's own
+   edge; and focus is an outline in the system's highlight, twice as wide on what is chosen (the ring's width is said
+   there), so current, focused and both are three different rings. Unlayered and last: it stands over every look's
+   dress, and what is chosen is named under :where(), so the focus rule after it wins. An outline, not a border, so
+   nothing changes size; the offset stays the control's own. A composite field keeps its input's ring off (guard.css)
+   and wears it on its box: the box's is recoloured, not doubled. A popup that holds focus for its options is ringed
+   too: its shadow is gone, and the ring is its edge. */
+@media (forced-colors: active) {
+  .tone::before { forced-color-adjust: none; background: CanvasText; }
+  :where([aria-current]:not([aria-current='false']), [aria-selected='true'], [aria-pressed='true'], [aria-checked='true'], [data-checked], [data-selected]) { --focus-width: 4px; outline: 2px solid; outline-offset: -2px; }
+  :focus-visible { outline: var(--focus-width, 2px) solid Highlight; }
+  :has(> :is(input, textarea):focus-visible) { outline-color: Highlight; }
+}

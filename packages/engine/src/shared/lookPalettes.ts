@@ -132,6 +132,7 @@ export const LOOK_PALETTES: readonly LookPalette[] = [
        on its tinted paper and the cover's green sits beside them. */
     looks: {
       workshop: { light: { link: '#006d4a' } },
+      lumen: { light: { link: '#006d4a' } },
       ledger: {
         light: { accent: '#0f4d36', link: '#0f5a3f', soft: '#e0ece4', focus: '#3f8a6c', chart: '#0f6b4a' },
         dark: { accent: '#7cc4a0', link: '#8fd1ae', soft: '#183026', focus: '#5fa585', chart: '#5fbf92', rule: '#6fb592' },

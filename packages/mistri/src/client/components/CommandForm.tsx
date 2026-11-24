@@ -477,7 +477,7 @@ export function CommandForm({
           </ul>
           {onDeselect && (
             <Button
-              intent="secondary"
+              variant="secondary"
               onClick={() => {
                 if (current()) onDeselect(ineligible.map((target) => target.key));
               }}
@@ -565,18 +565,18 @@ export function CommandForm({
       </div>
       <div className="confirm-actions">
         {proposal && !operation ? (
-          <Button intent="secondary" busy={dismissing} onClick={() => void dismiss()}>
+          <Button variant="secondary" loading={dismissing} onClick={() => void dismiss()}>
             {say('dismiss')}
           </Button>
         ) : (
-          <Button intent="secondary" disabled={locked} onClick={close}>
+          <Button variant="secondary" disabled={locked} onClick={close}>
             {success ? say('common.done') : dismissLabel(verb)}
           </Button>
         )}
         {unknown && !untracked ? (
           <>
             <Button
-              intent="secondary"
+              variant="secondary"
               onClick={() => {
                 if (current()) send(operation!, 'status');
               }}
@@ -584,7 +584,7 @@ export function CommandForm({
               {say('checkResult')}
             </Button>
             <Button
-              intent="primary"
+              variant="primary"
               onClick={() => {
                 if (current()) send(operation!, 'execute');
               }}
@@ -593,12 +593,12 @@ export function CommandForm({
             </Button>
           </>
         ) : operation?.phase === 'error' || unknown || prepared.isError ? (
-          <Button intent="primary" onClick={review}>
+          <Button variant="primary" onClick={review}>
             {say('refreshAndReview')}
           </Button>
         ) : (
           !success && (
-            <Button intent="primary" type="submit" disabled={pending || !ready || prepared.isFetching}>
+            <Button variant="primary" type="submit" disabled={pending || !ready || prepared.isFetching}>
               {pending ? say('common.submitting') : (action.submitLabel ?? verb)}
             </Button>
           )

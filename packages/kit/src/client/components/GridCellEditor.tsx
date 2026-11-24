@@ -146,7 +146,7 @@ function PlatformControl({
         ariaDescribedBy={describedBy}
         popupRef={popupRef}
         items={[...(column.nullable ? [{ value: '', label: say('common.noValue') }] : []), ...items]}
-        onChange={change}
+        onValueChange={change}
       />
     );
   }
@@ -155,8 +155,8 @@ function PlatformControl({
       <DateField
         id={id ?? dateId}
         value={value ?? ''}
-        onChange={change}
-        aria-label={label}
+        onValueChange={change}
+        ariaLabel={label}
         aria-invalid={invalid || undefined}
         aria-describedby={describedBy}
         locale={formatLocale()}

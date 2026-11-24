@@ -217,7 +217,7 @@ function StartPanel({ s }: { s: ComposerSnapshot }) {
         <Dropdown
           ariaLabel={say('baseTable')}
           value={s.draft.base}
-          onChange={(id) => act.setBase(id)}
+          onValueChange={(id) => act.setBase(id)}
           items={tables.map((t) => ({
             value: t.id,
             label: t.id,
@@ -501,7 +501,7 @@ function SummariseMenu({ fk, child }: { fk: Fk; child: TableMeta }) {
         items={items}
         value=""
         ariaLabel={say('summarizeName', { name: child.name })}
-        onChange={(value) => {
+        onValueChange={(value) => {
           if (!value) return;
           const [fn, column] = value.split(':');
           act.addAggregate({ fn, via: `${fk.from.table}.${fk.from.columns.join('+')}`, column });

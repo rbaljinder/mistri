@@ -20,9 +20,9 @@ export default defineApp({
 import { defineUiKit, type UiKitSlots } from '@mistriwork/mistri/page';
 import './kit.css';
 
-const Button: UiKitSlots['Button'] = ({ intent = 'secondary', busy, busyLabel, type = 'button', className, disabled, children, ref, ...rest }) => (
-  <button {...rest} ref={ref} type={type} className={`my-button my-${intent} ${className ?? ''}`} disabled={disabled || busy} aria-busy={busy || undefined}>
-    {busy && busyLabel ? busyLabel : children}
+const Button: UiKitSlots['Button'] = ({ variant = 'secondary', loading, loadingLabel, type = 'button', className, disabled, children, ref, ...rest }) => (
+  <button {...rest} ref={ref} type={type} className={`my-button my-${variant} ${className ?? ''}`} disabled={disabled || loading} aria-busy={loading || undefined}>
+    {loading && loadingLabel ? loadingLabel : children}
   </button>
 );
 
@@ -58,20 +58,9 @@ The slots are everything [`@mistriwork/ui`](/docs/mistri-ui/) draws. A slot take
 | The landing's blocks | `Badge`, `PhotoTiles`, `IconRows` |
 
 - **The menu is one family.** `DropMenu`, `DropGroup`, `DropItem` and `DropSeparator` are drawn together or not at all.
-- **Dress a control instead of redrawing it.** `dress` hands you the platform's own control and the props it was drawn with, so a slot can change a size, add a class or wrap it and keep everything else:
-
-  ```tsx
-  import { defineUiKit, dress } from '@mistriwork/mistri/page';
-
-  export default defineUiKit({
-    Button: dress('Button', (Button, props) => <Button {...props} size="large" className={`brand ${props.className ?? ''}`} />),
-  });
-  ```
-
-- **Start from another kit.** `extendUiKit(theirs, { Button })` makes one kit of several, a later one's slots over an earlier one's, held to the same rules.
-- **A popup of your own** that is drawn outside its place in the tree asks `usePopupHost(triggerRef)` where to go (the dialog it was opened in, so it is not drawn behind it) and `useComponentScope()` for the name to carry as `data-component`, so the component that opened it can still style it.
+- **A slot is a whole component.** `defineUiKit` is what a page imports for a kit; the helpers that wrapped the platform's own control or joined kits (`dress`, `extendUiKit`, `defaultUiKit`) and the popup helpers (`usePopupHost`, `useComponentScope`) are no longer exported from `@mistriwork/mistri/page`, and `mistri upgrade` names each import of one. Write the slot as a component of your own that takes the slot's props, as the `Button` above does.
 - **A stylesheet imported by the kit** is served with it and placed in the `app` layer, page-wide, after the kit's control recipes and the looks. Map it onto the look's tokens (`var(--accent)`, `var(--radius)`, …) so a change of look still reaches your controls.
-- **A change callback takes its details second** (`onChange(value, details)`): `{ reason, source, event? }`, as the [primitives](/docs/mistri-ui/) give them. A kit may call it with the value alone; the platform fills the details in. If the kit gives them, they must have that shape.
+- **A change callback takes its details second** (`onValueChange(value, details)`, `onCheckedChange` for a checkbox or a switch): `{ reason, source, event? }`, as the [primitives](/docs/mistri-ui/) give them. A kit may call it with the value alone; the platform fills the details in. If the kit gives them, they must have that shape.
 - **What the platform relies on** — a `Modal`'s handle and its focus return, `onOpenChange`, a change's details, the `words` props, `disabled`, and drawing a popup inside the dialog that opened it — is checked by the conformance suite. Run it from your own tests:
 
 ```ts

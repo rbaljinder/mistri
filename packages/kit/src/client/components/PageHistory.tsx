@@ -30,7 +30,7 @@ import type { PageSection } from './pageModel.js';
 import { Empty } from './Notes.js';
 import { Value } from './Value.js';
 import { say } from '../copy/record/components/PageHistory.js';
-import { AiMark, aiWord } from './AiMark.js';
+import { AiBadge, aiWord } from './AiMark.js';
 import { pageBridge } from '../uiBridge.js';
 import type { ServedMachine } from '@mistriwork/engine/shared/servedApp.js';
 
@@ -234,7 +234,7 @@ function HistoryItem({ entry, base, names }: { entry: HistoryEntry; base: TableM
         <span className="history-by">
           {(entry.proposed || entry.maker === 'ai') && (
             <>
-              <AiMark quiet />{' '}
+              <AiBadge quiet />{' '}
             </>
           )}
           {whoWrote(entry)}

@@ -9,9 +9,10 @@ are drawn with, and the zoom-aware ruler a page measures by.
 
 The form controls are built on them (**Preview**: @mistriwork/ui is Preview at 1.0): `TextField`, `TextArea`, `MaskedField`,
 `MoneyField`, `SensitiveField`, `FileField`, `Select`, `MultiSelect`, `YesNo`, `ChoiceCards`, `Checkbox`, `Consent`, `Slider`,
-`HelpTip`, `ProgressBar`, `StepHeader`, `ActionBar`, `Columns` and `ReviewList`, with the `masks` they take
-(`phone`, `date`, `month`, `ssn`, `zip`, `money`). Each takes a value and an `onChange` and draws what it is told. A
-typed MM/DD/YYYY date is `MaskedField` with `masks.date` (and `isoDay` to read it); the calendar field is `DateField`.
+`HelpTip`, `ProgressBar`, `StepHeader`, `ActionBar`, `FormColumns` and `ReviewList`, with named masks (`phone`, `date`,
+`month`, `ssn`, `zip`, `digits`, `money`, `grouped`) or custom `Mask` pairs. Each takes a value and an `onValueChange`
+(or `onCheckedChange`) and draws what it is told. A typed MM/DD/YYYY date is `MaskedField` with `mask="date"`; the
+calendar field is `DateField`.
 The landing hero's blocks are in the same Preview: `Badge` (a few words and an optional icon in a pill), `PhotoTiles`
 (two to four photos in a mosaic, sized before they arrive) and `IconRows` (up to four rows of an icon and a line);
 the icons, the words and the image addresses are props.
@@ -39,19 +40,21 @@ import '@mistriwork/ui/style.css';
 import { Button, Modal } from '@mistriwork/ui';
 ```
 
-`style.css` is the tokens (`tokens.css`), what the controls wear
-(`controls.css`) and the answers to the reader's contrast and transparency
-settings (`preferences.css`) in a `mistri-ui` cascade layer, so any rule of the page's
-own wins over them. A page with a layered stylesheet of its own can take the
-files into a layer it names instead (`@import '@mistriwork/ui/tokens.css'
-layer(base);`). `controls.css` nests layers of its own inside whichever layer
-takes it, so every rule beside it in that layer stands over a control's default
-dress. An Icon draws the glyphs registered with `registerIcons`; a
-DateField says the `words` it is given, as do Carousel, Resizable and Pagination (a
-`words` object over English defaults). One rule names the rest: a name no one sees is
-`ariaLabel` (Modal, Tabs, Popover, Carousel, Resizable, ScrollArea, Pagination, Drawer),
-and `label` is only ever text drawn on the page. A Field's `optional` is the word drawn
-beside the label of a field that is not required.
+`style.css` is the single stylesheet for `@mistriwork/ui`: the tokens (`tokens.css`),
+what the controls wear (`controls.css` and `behaviors.css`), the answers to the
+reader's contrast and transparency settings (`preferences.css`) in a `mistri-ui`
+cascade layer, and the composite surface rules (`styles/surfaces.css`) in
+`mistri-ui-surfaces`, so any unlayered rule of the page's own wins over them. A
+page with a layered stylesheet of its own can take the files into a layer it
+names instead (`@import '@mistriwork/ui/tokens.css' layer(base);`). `controls.css`
+nests layers of its own inside whichever layer takes it, so every rule beside it
+in that layer stands over a control's default dress. An Icon draws the glyphs
+registered with `registerIcons`; a DateField says the `words` it is given, as do
+Carousel, Resizable and Pagination (a `words` object over English defaults). One
+rule names the rest: a name no one sees is `ariaLabel` (Modal, Tabs, Popover,
+Carousel, Resizable, ScrollArea, Pagination, Drawer), and `label` is only ever
+text drawn on the page. A Field's `optional` is the word drawn beside the label
+of a field that is not required.
 
 ## The behaviors
 
@@ -69,17 +72,27 @@ themselves (`sortable`, `transfer`, …) and `createParts` are exported beside
 the parts, for parts on elements of your choosing.
 
 `behaviors.css` gives the slots only what a behavior needs to work wherever it
-stands, and a plain grip. No control imports a behavior, so a page that draws
-none never loads either file. In an App, a component imports them from
+stands, and a plain grip. In an App, a component imports them from
 `@mistriwork/mistri/behaviors`
 ([guide](https://mistriwork.dev/docs/behaviors/)).
+
+## App surface modules
+
+Charts, composite views and operational controls built on these primitives ship
+in `@mistriwork/mistri` as lazy host modules (Preview), all dressed by the
+shared surface stylesheet:
+
+- `@mistriwork/mistri/views` — composite product views (`AppShell`, `DataTable`, `KanbanBoard`, `CardGridView`, `SplitView`, `CalendarView`, `GanttView`, `WaterfallView`, `TreeView`, `ActivityTimeline`, `ReviewQueueView`, `CsvImportWizard`, `AccountSettingsView`, `AiAssistantPanel`, `AiPromptComposer`, `AiProposalCard`, `DecisionChip`, `SignInCard`, `InviteAcceptCard`, `OAuthConsentCard`, `FilterBar`, `FileLightbox`, `AttachmentList`, `PhotoMosaic`, `MediaGallery`, `OnboardingChecklist`, `SpotlightTour`).
+- `@mistriwork/mistri/charts` — pure-SVG responsive chart components (`Sparkline`, `AreaChart`, `LineChart`, `BarChart`, `StackedBarChart`, `MiniBars`, `DonutChart`, `BreakdownList`, `FunnelChart`, `FunnelSteps`, `HeatmapMatrix`, `RadarChart`, `RadialGauge`).
+- `@mistriwork/mistri/primitives` — operational controls, pickers, `CommandPalette`, overlays, menus, layout primitives (`Grid`, `Stack`, `Row`, `Card`, `FormColumns`) and display primitives (`SegmentedControl`, `StatusDot`, `Badge`, `StatCard`, `EmptyState`, `DescriptionList`, `ItemList`, `ItemRow`, `FormattedValue`, `AiBadge`).
 
 ## Exports
 
 Its exports are its public API, and nothing else is: `@mistriwork/ui` (every
-primitive), each module by its path (`@mistriwork/ui/Button.js`,
-`@mistriwork/ui/behaviors/index.js`,
-`@mistriwork/ui/internal/datePickerModel.js`, …), and the five stylesheets.
+core primitive and the zoom-aware ruler), each primitive module by its path
+(`@mistriwork/ui/Button.js`, `@mistriwork/ui/behaviors/index.js`, …), and the
+stylesheets (`style.css`, `tokens.css`, `controls.css`, `behaviors.css`,
+`preferences.css`).
 
 Part of [mistri](https://mistriwork.dev);
 [source](https://github.com/rbaljinder/mistri/tree/main/packages/ui).

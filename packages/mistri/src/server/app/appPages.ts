@@ -110,16 +110,28 @@ export async function pageFiles(dir: string): Promise<string[]> {
 export async function readPageFiles(dir: string, files: readonly string[]): Promise<PageFile[]> {
   if (!files.length) return [];
   const read: PageFile[] = [];
+  /* The file each key came from: a folder's page and a dashed name meet on one key (pages/ops/dispatch.page.tsx and
+     pages/ops-dispatch.page.tsx are both `ops-dispatch`, as a tab pages/leads/[id]/map.page.tsx and pages/leads-map.page.tsx
+     are both `leads-map`), and a key is one view, one address and one compiled component. */
+  const keyed = new Map<string, string>();
   for (const file of files) {
     const at = `pages/${file}`;
     const tab = RECORD_TAB_FILE.exec(file);
-    if (file.includes('/') && !tab)
+    if ((file.includes('[') || file.includes(']')) && !tab)
       throw new Error(
         `[page-file] ${at} is misplaced: a page is pages/<path>.page.tsx, and a record's tab pages/<list view>/[id]/<tab>.page.tsx.`,
       );
     const record = tab ? { view: tab[1], tab: tab[2] } : undefined;
-    /* A tab's view key joins its list's and its word: one of the App's views, gated and recorded as any. */
-    const key = record ? `${record.view}-${record.tab}` : PAGE_FILE.exec(file)![1];
+    const rawPath = PAGE_FILE.exec(file)![1];
+    const parts = rawPath.split('/');
+    /* A tab's view key joins its list's and its word; a static folder path joins its valid segments with hyphens. */
+    const key = record ? `${record.view}-${record.tab}` : parts.every((part) => VIEW_KEY.test(part)) ? parts.join('-') : rawPath;
+    const other = keyed.get(key);
+    if (other !== undefined)
+      throw new Error(
+        `[page-file] ${other} and ${at} are both the page "${key}": a folder joins its page's name with a dash, so the two are one key and one address. Rename one of them.`,
+      );
+    keyed.set(key, at);
     const module = `./pages/${file}`;
     const decl: ComponentDecl = { id: pageComponentId(key), module, kind: 'page' };
     const code = await compilePageModule(dir, decl);
@@ -504,7 +516,7 @@ const BLOCK_NAMES: Readonly<
   action: { what: 'actions', on: new Set(['ActionButton']) },
 };
 /* The blocks that take a `show`, `query` or `sort` the host sends as one read of the resource they name. */
-const PATH_BLOCKS = new Set(['Rows', 'List', 'RecordCard']);
+const PATH_BLOCKS = new Set(['Rows', 'RecordList', 'RecordSplit', 'RecordCard']);
 /** What a JSX attribute is given: the expression inside its braces, or its quoted text. */
 function jsxAttribute(opening: AstNode, name: string): AstNode | undefined {
   const attribute = ((opening.attributes as AstNode[]) ?? []).find(
@@ -854,7 +866,7 @@ const TEXT_PROPS = new Set(['label', 'title', 'text', 'placeholder', 'aria-label
 const AI_WORD = /\bAI\b/;
 
 /**
- * The text in one source file's markup that says the word AI as a whole word, case-sensitive, outside `<AiMark>`: a
+ * The text in one source file's markup that says the word AI as a whole word, case-sensitive, outside `<AiBadge>`: a
  * JSX text, a string in braces, or a quoted `label`, `title`, `text`, `placeholder`, `aria-label`, `alt` or
  * `description`. Text an expression builds, or a helper returns, is not seen.
  */
@@ -889,7 +901,7 @@ export function aiWordsIn(parseAst: Parse, code: string, lang: 'ts' | 'tsx' | 'j
     let marked = inMark;
     if (here.type === 'JSXElement') {
       const tag = (here.openingElement as AstNode).name as AstNode;
-      if (tag.type === 'JSXIdentifier' && tag.name === 'AiMark') marked = true;
+      if (tag.type === 'JSXIdentifier' && tag.name === 'AiBadge') marked = true;
     }
     if (!marked) {
       if (here.type === 'JSXText') said(here, String(here.value ?? ''));
@@ -909,7 +921,7 @@ export function aiWordsIn(parseAst: Parse, code: string, lang: 'ts' | 'tsx' | 'j
 }
 
 /* The layout a form may sit in without being anything but the form: no text, no read, no other action. */
-const FORM_WRAPPERS = new Set(['Stack', 'Card', 'Panel', 'Grid', 'Columns', 'Page', 'Section']);
+const FORM_WRAPPERS = new Set(['Stack', 'Card', 'Panel', 'PageGrid', 'Grid', 'FormColumns', 'Columns', 'Page', 'Section']);
 
 /**
  * Whether a page's markup is one command form and nothing else: a single `<CommandForm>` (or `page.CommandForm`), in

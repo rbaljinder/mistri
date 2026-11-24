@@ -141,9 +141,9 @@ function EmailProof({ form, typed }: { form: string; typed: string }) {
           <div className="form-claim-actions">
             {sent && (
               <Button
-                intent="secondary"
-                size="compact"
-                busy={pending}
+                variant="secondary"
+                size="sm"
+                loading={pending}
                 onClick={() =>
                   void run(async () => {
                     await confirmEmailProof(form, email.trim(), code.trim());
@@ -155,9 +155,9 @@ function EmailProof({ form, typed }: { form: string; typed: string }) {
               </Button>
             )}
             <Button
-              intent={sent ? 'quiet' : 'secondary'}
-              size="compact"
-              busy={pending && !sent}
+              variant={sent ? 'ghost' : 'secondary'}
+              size="sm"
+              loading={pending && !sent}
               onClick={() =>
                 void run(async () => {
                   await sendEmailProof(form, email.trim());
@@ -500,17 +500,17 @@ export function SavedFormSurface({
               <>
                 <p className="form-page-done-message">{appWord('mistri.saved.claimWindow', say('claimWindow'))}</p>
                 <div className="form-claim-actions">
-                  <ButtonLink intent="primary" href={`${base}/claim?account=new`}>
+                  <ButtonLink variant="primary" href={`${base}/claim?account=new`}>
                     {appWord('mistri.saved.createAccount', say('createAnAccountToTrack'))}
                   </ButtonLink>
-                  <ButtonLink intent="secondary" href={`${base}/claim`}>
+                  <ButtonLink variant="secondary" href={`${base}/claim`}>
                     {appWord('mistri.saved.signInToAdd', say('signInToAdd'))}
                   </ButtonLink>
                 </div>
                 <Button
-                  intent="quiet"
-                  size="compact"
-                  busy={shared === 'burning'}
+                  variant="ghost"
+                  size="sm"
+                  loading={shared === 'burning'}
                   onClick={() => {
                     setShared('burning');
                     // Burned whether or not the answer arrives: the next person here must not inherit it.
@@ -531,7 +531,7 @@ export function SavedFormSurface({
         )}
         {onDismiss && (
           <div className="form-actions">
-            <Button intent="primary" onClick={onDismiss}>
+            <Button variant="primary" onClick={onDismiss}>
               {say('common.done')}
             </Button>
           </div>
@@ -563,14 +563,14 @@ export function SavedFormSurface({
             <div className="form-review-head">
               <h3 id={`${id}-review-${index}`}>{step.label}</h3>
               <Button
-                intent="quiet"
-                size="compact"
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   setFailure('');
                   setChanging(true);
                   setCurrent(index);
                 }}
-                aria-label={appWord('mistri.form.changeNamed', say('change', { label: step.label }), { label: step.label })}
+                ariaLabel={appWord('mistri.form.changeNamed', say('change', { label: step.label }), { label: step.label })}
               >
                 {appWord('mistri.form.change', say('changeStep'))}
               </Button>
@@ -642,8 +642,8 @@ export function SavedFormSurface({
             <>
               {' '}
               <Button
-                intent="quiet"
-                size="compact"
+                variant="ghost"
+                size="sm"
                 onClick={() => {
                   /* A submit sent and not yet known to have landed keeps its draft: discarding it could lose what the
                      server has already taken. Submit again (the same key) to learn how it ended. */
@@ -714,7 +714,7 @@ export function SavedFormSurface({
       {/* The draft is kept as it stands: closing the dialog loses nothing a step has saved. */}
       {onDismiss && (
         <div className="form-actions">
-          <Button intent="secondary" onClick={onDismiss}>
+          <Button variant="secondary" onClick={onDismiss}>
             {say('common.cancel')}
           </Button>
         </div>

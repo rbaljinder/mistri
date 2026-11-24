@@ -12,10 +12,10 @@ import { afterEach, describe, expect, test } from 'vitest';
 import * as react from 'react';
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { refreshViewportScale } from '@mistriwork/ui/internal/ruler.js';
+import { refreshViewportScale } from '@mistriwork/ui';
 import { React, useCommand, useLook, useSectionSize, useState } from './index.js';
 import type { UiCommandOutcome, UiCommandReview } from './context.js';
-import { definePage, Details, List, Modal, Person, Popover, TextField, Tooltip } from './page.js';
+import { definePage, DescriptionList, Modal, Person, Popover, RecordList, TextField, Tooltip } from './page.js';
 import { PAGE_EXPORTS, UI_EXPORTS } from '../../../shared/uiSdk.js';
 import { fixtures, renderPage, renderSection } from './testing.js';
 
@@ -118,7 +118,7 @@ describe('slots, widths and looks', () => {
   test('each slot is named: a dialog by its heading or its label, a field by its label, a popover by what it is for', async () => {
     function Amount() {
       const [amount, setAmount] = useState('');
-      return <TextField label="Amount" hint="In dollars." value={amount} onChange={setAmount} />;
+      return <TextField label="Amount" hint="In dollars." value={amount} onValueChange={setAmount} />;
     }
     renderSection(Amount, { component: { id: 'amount' } });
     expect(await screen.findByRole('textbox', { name: 'Amount' })).toHaveAccessibleDescription('In dollars.');
@@ -134,7 +134,7 @@ describe('slots, widths and looks', () => {
   });
 
   test("a person and a record's facts are named in both entries and drawn through the page entry, the disc a reader skips", async () => {
-    for (const name of ['Person', 'Details']) {
+    for (const name of ['Person', 'DescriptionList']) {
       expect(UI_EXPORTS).toContain(name);
       expect(PAGE_EXPORTS).toContain(name);
     }
@@ -142,7 +142,7 @@ describe('slots, widths and looks', () => {
       return (
         <>
           <Person name="Ada Stone" secondary="Acme" href="/people/7" />
-          <Details resource="lead" row={{ owner: 'Ada' }} fields={[{ label: 'Owner', value: 'Ada' }]} />
+          <DescriptionList resource="lead" row={{ owner: 'Ada' }} fields={[{ label: 'Owner', value: 'Ada' }]} />
         </>
       );
     }
@@ -170,7 +170,7 @@ describe('slots, widths and looks', () => {
       return (
         <section>
           <p>{`${look.look} ${look.mode}`}</p>
-          <TextField label="Name" value="Ana" onChange={() => {}} />
+          <TextField label="Name" value="Ana" onValueChange={() => {}} />
         </section>
       );
     }
@@ -235,9 +235,9 @@ describe('the states a page meets, as fixtures', () => {
     label: 'Desk',
     reads: ['booking'],
     component: () => (
-      <List from="booking" show={['guest_name']} sort="id" empty="Nobody booked.">
+      <RecordList from="booking" show={['guest_name']} sort="id" empty="Nobody booked.">
         {(row) => <span>{`${row.guest_name}`}</span>}
-      </List>
+      </RecordList>
     ),
   });
 
@@ -289,6 +289,22 @@ describe('the states a page meets, as fixtures', () => {
     expect(await screen.findByText('Settled.')).toBeInTheDocument();
     expect(checks).toBe(1);
     expect(view.commands).toHaveLength(1);
+  });
+
+  test('a run on its way is said by isPending, and by pending, the name it had', async () => {
+    const seen: string[] = [];
+    function Settle() {
+      const settle = useCommand('settle');
+      // `pending` is the deprecated spelling an App written before rc.85 calls: both answer for the same record.
+      seen.push(`${settle.isPending({ id: 1 })}/${settle.pending({ id: 1 })}/${settle.isPending({ id: 2 })}`);
+      return <button onClick={() => void settle.run({ id: 1 })}>Settle</button>;
+    }
+    renderSection(Settle, { component: { id: 'settle' } }, { viewer: SIGNED_IN, commands: { settle: { label: 'Settle' } } });
+    fireEvent.click(await screen.findByRole('button', { name: 'Settle' }));
+    await waitFor(() => expect(seen.at(-1)).toBe('false/false/false'));
+    expect(seen).toContain('true/true/false');
+    expect(seen).not.toContain('true/false/false');
+    expect(seen).not.toContain('false/true/false');
   });
 
   test('a review the record moved past is refused stale and shown again, never run over what nobody saw', async () => {

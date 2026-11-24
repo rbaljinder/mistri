@@ -89,7 +89,7 @@ describe('an optional read', () => {
   test('a page draws the refusal in its place, and a fixture refusal is the same refusal', async () => {
     function Desk(): ReactNode {
       const rows = page.useRows('booking', { optional: true });
-      return rows.refused ? <Text tone="muted">Not open to your role.</Text> : <p>{rows.data?.length ?? 'loading'} rows</p>;
+      return rows.refused ? <Text muted>Not open to your role.</Text> : <p>{rows.data?.length ?? 'loading'} rows</p>;
     }
     const page = definePage({ label: 'Desk', reads: ['booking'], component: Desk });
     const view = renderPage(page, { data: BOOKINGS, refused: { booking: 403 } });
@@ -104,15 +104,15 @@ describe('Text', () => {
     render(
       <>
         <Text>Plain</Text>
-        <Text tone="muted" size="sm">
+        <Text muted size="sm">
           Muted
         </Text>
-        <Text tone="danger">Danger</Text>
+        <Text tone="critical">Danger</Text>
       </>,
     );
-    expect(screen.getByText('Plain').className).toBe('kit-text');
-    expect(screen.getByText('Muted').className).toBe('kit-text kit-text-muted kit-text-sm');
-    expect(screen.getByText('Danger').className).toBe('kit-text kit-text-danger');
+    expect(screen.getByText('Plain')).toHaveClass('kit-text', 'nx-text');
+    expect(screen.getByText('Muted')).toHaveClass('kit-text', 'nx-text', 'kit-text-muted', 'kit-text-sm');
+    expect(screen.getByText('Danger')).toHaveClass('kit-text', 'nx-text', 'kit-text-danger');
   });
 });
 

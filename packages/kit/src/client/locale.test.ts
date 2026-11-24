@@ -105,6 +105,13 @@ describe('numbers', () => {
     expect(plain(formatBytes(1536))).toBe(kilo);
     expect(plain(formatBytes(12))).toBe(bytes);
   });
+
+  test('formatBytes scales through terabytes and petabytes and advances at 1024 on rounding', () => {
+    inLocale({ locale: 'en-US' });
+    expect(plain(formatBytes(9007199254740992))).toBe('8 PB');
+    expect(plain(formatBytes(1024 ** 4 * 2.5))).toBe('2.5 TB');
+    expect(plain(formatBytes(1023.9 * 1024))).toBe('1 MB');
+  });
 });
 
 describe('money', () => {

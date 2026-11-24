@@ -122,7 +122,7 @@ function StepUp({
               : appWord('mistri.status.offerText', say('weCanSendACode'))}
           </p>
           <div>
-            <Button intent="secondary" onClick={() => void ask()} busy={pending}>
+            <Button variant="secondary" onClick={() => void ask()} loading={pending}>
               {byEmail ? appWord('mistri.status.askEmail', say('emailMeACode')) : appWord('mistri.status.askText', say('sendMeACode'))}
             </Button>
           </div>
@@ -153,10 +153,10 @@ function StepUp({
             />
           </Field>
           <div className="form-claim-actions">
-            <Button intent="primary" type="submit" busy={pending}>
+            <Button variant="primary" type="submit" loading={pending}>
               {appWord('mistri.status.showDetails', say('showDetails'))}
             </Button>
-            <Button intent="quiet" size="compact" onClick={() => void ask()}>
+            <Button variant="ghost" size="sm" onClick={() => void ask()}>
               {appWord('mistri.status.sendAnother', say('sendAnotherCode'))}
             </Button>
           </div>
@@ -234,10 +234,10 @@ function FoundByEmail({ form, onAdded }: { form: string; onAdded: () => void }) 
               <li key={reference}>
                 <strong>{reference}</strong>
                 <span className="form-claim-actions">
-                  <Button intent="secondary" size="compact" busy={pending === reference} onClick={() => void yes(reference)}>
+                  <Button variant="secondary" size="sm" loading={pending === reference} onClick={() => void yes(reference)}>
                     {appWord('mistri.status.mine', say('yesItsMine'))}
                   </Button>
-                  <Button intent="quiet" size="compact" onClick={() => setDeclined((before) => [...before, reference])}>
+                  <Button variant="ghost" size="sm" onClick={() => setDeclined((before) => [...before, reference])}>
                     {say('common.no')}
                   </Button>
                 </span>
@@ -395,7 +395,7 @@ export function FormStatusSurface({
           </Field>
         ))}
         <div>
-          <Button intent="primary" type="submit" busy={pending && !answer}>
+          <Button variant="primary" type="submit" loading={pending && !answer}>
             {appWord('mistri.status.check', say('checkStatus'))}
           </Button>
         </div>
@@ -414,14 +414,14 @@ export function FormStatusSurface({
               ? onSignIn && (
                   <p className="form-page-done-message">
                     {appWord('mistri.status.signInToFollow', say('signInToAdd'))}{' '}
-                    <Button intent="quiet" size="compact" onClick={onSignIn}>
+                    <Button variant="ghost" size="sm" onClick={onSignIn}>
                       {appWord('mistri.status.signIn', say('signIn'))}
                     </Button>
                   </p>
                 )
               : mine !== undefined && (
                   <div>
-                    <Button intent="secondary" onClick={add} busy={pending}>
+                    <Button variant="secondary" onClick={add} loading={pending}>
                       {appWord('mistri.status.addToAccount', say('addToMyAccount'))}
                     </Button>
                   </div>

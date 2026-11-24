@@ -21,65 +21,48 @@
     }
 
     &[data-tone='good'] {
-      background: color-mix(in oklab, var(--m-good) 12%, var(--m-surface));
-      color: color-mix(in oklab, var(--m-good) 82%, var(--m-ink));
+      background: color-mix(in srgb, var(--m-good) 12%, var(--m-surface));
+      color: color-mix(in srgb, var(--m-good) 82%, var(--m-ink));
     }
 
     &[data-tone='warning'] {
-      background: color-mix(in oklab, var(--m-warning) 12%, var(--m-surface));
-      color: color-mix(in oklab, var(--m-warning) 82%, var(--m-ink));
+      background: color-mix(in srgb, var(--m-warning) 12%, var(--m-surface));
+      color: color-mix(in srgb, var(--m-warning) 82%, var(--m-ink));
     }
 
     &[data-tone='critical'] {
-      background: color-mix(in oklab, var(--m-critical) 12%, var(--m-surface));
-      color: color-mix(in oklab, var(--m-critical) 82%, var(--m-ink));
+      background: color-mix(in srgb, var(--m-critical) 12%, var(--m-surface));
+      color: color-mix(in srgb, var(--m-critical) 82%, var(--m-ink));
     }
 
-    &[data-tone='info'] {
+    &[data-tone='info'],
+    &[data-tone='accent'] {
       background: var(--m-accent-soft);
       color: var(--m-accent-ink);
     }
-  }
 
-  @keyframes m-arrive {
-    from {
-      opacity: 0;
-      scale: 0.6;
+    & .nx-badge-remove {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 0.9375rem;
+      height: 0.9375rem;
+      margin-inline-end: -0.25rem;
+      padding: 0;
+      border: 0;
+      border-radius: var(--m-radius-pill, 999px);
+      background: transparent;
+      color: currentColor;
+      opacity: 0.7;
+      cursor: pointer;
+
+      @media (hover: hover) {
+        &:hover {
+          opacity: 1;
+          background: color-mix(in oklab, var(--m-ink) 18%, transparent);
+        }
+      }
     }
-  }
-
-  /* More about a field: a small question mark that opens a few words. */
-  [data-slot='popover-trigger'][data-kind='help-tip'] {
-    display: inline-grid;
-    place-items: center;
-    width: 1.125rem;
-    height: 1.125rem;
-    min-width: 0;
-    padding: 0;
-    border: 0;
-    border-radius: 999px;
-    background: var(--m-raised);
-    box-shadow: none;
-    color: var(--m-ink-muted);
-    vertical-align: middle;
-
-    & svg {
-      width: 0.6875rem;
-      height: 0.6875rem;
-    }
-
-    &:hover,
-    &[data-open] {
-      background: var(--m-accent-soft);
-      color: var(--m-accent-ink);
-    }
-  }
-
-  [data-slot='popover-content'][data-kind='help-tip'] {
-    max-width: 18rem;
-    padding: var(--m-space-3h) var(--m-space-4);
-    color: var(--m-ink-muted);
-    line-height: var(--m-leading);
   }
 
   /* One step of a longer form: where the reader is, drawn as a thin bar that fills, over the step's name. */
@@ -376,7 +359,7 @@
     max-height: inherit;
 
     &:focus-visible {
-      outline: 2px solid var(--ui-ring);
+      outline: var(--focus-width, 2px) solid var(--focus, var(--ui-ring-border));
       outline-offset: -2px;
     }
   }
@@ -414,8 +397,10 @@
         border-color var(--m-fast),
         opacity var(--m-fast);
 
-      &:hover {
+      @media (hover: hover) {
+        &:hover {
         background: var(--m-raised);
+      }
       }
 
       &:has([data-slot='checkbox'][data-checked]) {

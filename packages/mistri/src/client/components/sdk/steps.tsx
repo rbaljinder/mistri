@@ -55,6 +55,7 @@ export interface StepsProps {
   done?: { title?: string; description?: string };
   /** How the run ended, once it applied. */
   onDone?: (outcome: UiCommandOutcome) => void;
+  className?: string;
 }
 
 /* What was typed, by page, command, record and reader: kept while the page is open so a step drawn again, Back and
@@ -74,7 +75,7 @@ const only = (fields: readonly AppCommandField[], values: CommandValues): Comman
 
 const CONTROLS = 'input:not([type="hidden"]):not(:disabled), textarea:not(:disabled), select:not(:disabled), button:not(:disabled)';
 
-export function Steps({ command, param, steps, record, done, onDone }: StepsProps) {
+export function Steps({ command, param, steps, record, done, onDone, className }: StepsProps) {
   const viewer = useViewer();
   const handle = useCommandHandle(command, viewer);
   const page = useContext(UiPageContext);
@@ -169,7 +170,7 @@ export function Steps({ command, param, steps, record, done, onDone }: StepsProp
   }, [shown, ready]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!handle.granted) return null;
-  if (!ready) return <section className="form-page" data-style="intake" aria-busy="true" />;
+  if (!ready) return <section className={className ? `form-page ${className}` : 'form-page'} data-style="intake" aria-busy="true" />;
 
   const submit = async (submission: string, input: CommandInputValue): Promise<FormReceipt> => {
     /* Quiet: the form says a refusal, beside its field, on its own line or on the step it opens, so a toast would have it
@@ -198,7 +199,7 @@ export function Steps({ command, param, steps, record, done, onDone }: StepsProp
   };
 
   return (
-    <div ref={root} className="page-steps">
+    <div ref={root} className={className ? `page-steps ${className}` : 'page-steps'}>
       <FormSurface
         key={draftKey}
         form={form}

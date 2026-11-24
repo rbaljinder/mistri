@@ -11,7 +11,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { go, state, toast } from '@mistriwork/kit/client/core.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
-import { AiMark, aiWord } from '@mistriwork/kit/client/components/AiMark.js';
+import { AiBadge, aiWord } from '@mistriwork/kit/client/components/AiMark.js';
 import { PROPOSALS_KEY, type CommandProposal, type ReviewList, type UnconfirmedMark } from '../commandProposals.js';
 import { pendingOn, unconfirmedOn } from '../proposalTargets.js';
 import { confirmProvenance } from '../proposalDecisions.js';
@@ -77,7 +77,7 @@ export function RecordProposalLine({
     <div className="record-ai-line" role="status">
       {proposals.length > 0 && (
         <p className="record-ai-item">
-          <AiMark />
+          <AiBadge />
           <span>{say('proposals', { count: proposals.length, labels })}</span>
           <span aria-hidden="true">·</span>
           <button type="button" className="record-ai-act" onClick={review}>
@@ -87,7 +87,7 @@ export function RecordProposalLine({
       )}
       {rowMark && (
         <p className="record-ai-item">
-          <AiMark quiet />
+          <AiBadge quiet />
           <span>{say('madeUnconfirmed', { maker: makerOf(rowMark) })}</span>
           <span aria-hidden="true">·</span>
           <button type="button" className="record-ai-act" disabled={confirm.busy} onClick={() => void confirm.run()}>
@@ -105,7 +105,7 @@ export function UnconfirmedFieldMark({ mark, recordKey }: { mark: UnconfirmedMar
   const confirm = useConfirm(mark, recordKey, mark.field ?? undefined);
   return (
     <span className="unconfirmed-mark" title={say('unconfirmedField', { field, maker: makerOf(mark) })}>
-      <AiMark quiet />
+      <AiBadge quiet />
       <button
         type="button"
         className="record-ai-act"

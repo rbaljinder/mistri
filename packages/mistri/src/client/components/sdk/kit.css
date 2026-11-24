@@ -39,21 +39,34 @@
   /* The card's inline padding as one token, so what lines up with its edge (a table's first and last cells) reads it. */
   .kit-card {
     --kit-card-pad: var(--space-5);
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
     padding: var(--space-4h) var(--kit-card-pad);
     border: 1px solid var(--line);
     border-radius: var(--radius-lg, var(--radius));
     background: var(--surface);
     color: var(--ink);
-    min-width: 0;
   }
   .kit-group {
+    box-sizing: border-box;
+    width: 100%;
     min-width: 0;
   }
-  /* A Card placed in a Grid has no width of its own, so it shares the row with its neighbours and wraps under a
+  /* A Card or Group placed in a Grid has no width of its own, so it shares the row with its neighbours and wraps under a
      third of a desk's pane. Left to its content, a card whose figures are tiles that grow from nothing (Bloom's
      bento) had no content width at all and drew 42px wide. */
-  .page-body > .kit-card {
+  .page-body > :is(.kit-card, .kit-group) {
     flex: 1 1 16rem;
+    min-width: 0;
+  }
+  .kit-card .page-body,
+  .kit-group .page-body {
+    width: 100%;
+    min-width: 0;
+    --page-col-gap: var(--space-6);
+    column-gap: var(--page-col-gap);
+    row-gap: var(--space-5);
   }
   .kit-card-title {
     margin: 0 0 var(--space-3h);
@@ -255,15 +268,25 @@
   }
   .kit-segmented {
     display: inline-flex;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
     max-width: 100%;
-    overflow-x: auto;
-    scrollbar-width: none;
     border: 1px solid var(--line-control, var(--line));
     border-radius: var(--radius);
     background: var(--surface);
     padding: var(--space-1);
     gap: var(--space-1);
+  }
+  .kit-segmented[data-block] {
+    display: flex;
+    width: 100%;
+  }
+  .kit-segmented[data-block] > .kit-segment {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+  .kit-segmented[data-orientation='vertical'] {
+    flex-direction: column;
+    align-items: stretch;
   }
   /* Folded: past four choices the row is wider than a phone, so there a native picker stands in its place (the radio group
      leaves the box and the accessibility tree with display: none, so one control is read, not two). */
@@ -454,9 +477,18 @@
     white-space: nowrap;
   }
   .kit-bars-figure {
+    display: inline-flex;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: var(--space-2);
     color: var(--ink);
     font-variant-numeric: tabular-nums;
     text-align: end;
+  }
+  .kit-bars-pct {
+    color: var(--ink-muted);
+    font-size: var(--text-xs);
+    font-variant-numeric: tabular-nums;
   }
   .kit-bars-note {
     color: var(--ink-muted);
@@ -509,23 +541,36 @@
   }
   /* Bars to the box's foot, in the look's first chart ink; the ones that are not the highlight stand quieter. */
   .kit-minibars {
+    position: relative;
     display: block;
     min-width: 0;
   }
   .kit-minibars-bars {
+    position: relative;
     display: flex;
     align-items: flex-end;
     gap: var(--space-1);
     height: 28px;
+  }
+  .kit-minibars-bars[data-signed] {
+    align-items: stretch;
   }
   .kit-minibars-bars > i {
     flex: 1 1 0;
     min-width: 2px;
     border-radius: calc(var(--radius-item, var(--radius)) / 4) calc(var(--radius-item, var(--radius)) / 4) 0 0;
     background: color-mix(in srgb, var(--chart-1, var(--accent)) 35%, transparent);
+    font-style: normal;
   }
   .kit-minibars-bars > i.is-lit {
     background: var(--chart-1, var(--accent));
+  }
+  .kit-minibars-zero {
+    position: absolute;
+    inset-inline: 0;
+    height: 1px;
+    background: var(--line);
+    pointer-events: none;
   }
   /* A tile is a card that is one control: the card's corner and lift (never a control's), the card's own hover, and
      the selected one marked by the accent rather than by weight. */
@@ -566,6 +611,10 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
+  }
+  .kit-datenav :is(button, [data-slot='button'], [data-slot='select-trigger']) {
+    min-height: var(--control-h-sm);
+    height: auto;
   }
   .kit-spark {
     --spark-ink: var(--chart-1, var(--accent));
@@ -809,6 +858,9 @@
     content: '\00b7' / '';
     padding-inline: 0.4em;
   }
+  .kit-table td:has(.kit-cell-secondary) {
+    white-space: normal;
+  }
   .kit-table-link:has(.kit-cell-secondary) {
     display: block;
     white-space: normal;
@@ -938,12 +990,18 @@
     flex-direction: column;
     min-width: 0;
   }
+  :is(.kit-person-name, .kit-person-secondary) {
+    min-width: 0;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
   .kit-person-name {
     font-size: var(--text-base);
     font-weight: 600;
     color: var(--ink);
     text-decoration: none;
-    overflow-wrap: anywhere;
   }
   .kit-person[data-size='lg'] .kit-person-name {
     font-size: var(--text-md);
@@ -962,7 +1020,6 @@
     font-size: var(--text-sm);
     font-weight: 400;
     color: var(--m-ink-muted, var(--ink-muted));
-    overflow-wrap: anywhere;
   }
 
   /* ---------- Details ---------- */

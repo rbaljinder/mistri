@@ -100,10 +100,10 @@ export function ConnectedClients() {
                   </span>
                 </div>
                 <Button
-                  intent="secondary"
-                  size="compact"
-                  busy={busy === grant.grantId}
-                  busyLabel={say('disconnecting')}
+                  variant="secondary"
+                  size="sm"
+                  loading={busy === grant.grantId}
+                  loadingLabel={say('disconnecting')}
                   disabled={busy !== null && busy !== grant.grantId}
                   aria-label={say('disconnectNamed', { client })}
                   onClick={() => void disconnect(grant)}

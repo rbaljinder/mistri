@@ -6,7 +6,8 @@
    They are said on the root and again on the body. A name that reads another is worked out where it is written,
    not where it is used, and the package's tokens are written in both places: a look and the reader's density on
    the root, an App's brand (its accent, its corner) and the reader's typeface on the body. Said on the root alone,
-   a button under a branded body would still be the look's colour.
+   a button under a branded body would still be the look's colour. A stamped island (`data-theme` on anything inside
+   the page: a light preview in a dark page) writes the palette a third time, so they are said there as well.
 
    The reader's own settings need no sheet of their own for the same reason: more contrast and less transparency
    are answered on the package's tokens (../preferences.css), the muted inks, the lines, the focus ring and the
@@ -16,7 +17,8 @@
    every `light-dark()` in these sheets follows what it says. */
 @layer m-tokens {
   :root,
-  body {
+  body,
+  [data-theme]:not(:root) {
     /* Paper, ink, the accent and the four statuses are this package's tokens (../tokens.css), under the names the
        parts read. A look and a palette write those, light and dark, so nothing here is a colour of its own. The
        page stands on the ground; controls, popups and the content pane on the surface. */
@@ -58,15 +60,12 @@
     --m-heading-weight: var(--heading-weight);
     --m-unit: 0.25rem;
     /* The base size, on the step a theme's type moves (`--type-k`, ../tokens.css). */
-    --m-text: calc(0.8125rem * var(--type-k, 1));
-    /* A list's row, in units, so density moves it with every control. */
-    --m-row: calc(var(--m-unit) * 10);
+    --m-text: var(--text-base);
 
     /* The space scale: every gap, margin and padding in the components' sheets is one of these. The steps are
        mistri's (docs/design.md, Space and text), in rem, with one it has not (5h, 20px). Under 16px a step is a
        control's own: an icon and its word, a field's inside. From 16px up it is the page's air, how far apart
-       things stand, and those steps and the seam between sections are what a theme's rhythm moves
-       (theme/looks.css). */
+       things stand, and those steps are what a theme's rhythm moves (theme/looks.css). */
     --m-space-1: 0.125rem;
     --m-space-1h: 0.1875rem;
     --m-space-2: 0.25rem;
@@ -80,14 +79,9 @@
     --m-space-6: 1.5rem;
     --m-space-7: 2rem;
     --m-space-8: 3rem;
-    --m-seam: 2.5rem;
-    /* Between two boxes that stand together (cards, panels, tiles), and from a box's edge to what is in it. A
-       look that draws a thing as a box gives it both, so nothing that becomes a box is left touching the next. */
     /* The room an icon or a key takes at a field's side. A control's own, so no rhythm moves it: a field whose
        words slid under its icon is what a tighter page must not cost. */
     --m-inset-icon: 2rem;
-    --m-gap-box: var(--m-space-4);
-    --m-pad-box: var(--m-space-5);
 
     /* The weights words are set in: five, by what they are for, so a theme whose face has no weight between the
        regular and the bold (Barlow, Helvetica, most faces a machine has) can say which of its own stands for
@@ -103,28 +97,21 @@
        text, and the box around it, and everything under that, lands on the pixel grid: a height of 19.5 puts
        every edge below it on a half pixel, where a hairline is drawn as two grey ones. A theme moves the scale
        here; nothing in the components' sheets names a size. */
-    --m-size-2xs: 0.6875rem;
-    --m-lead-2xs: 1rem;
-    --m-size-xs: 0.75rem;
+    --m-size-2xs: var(--text-xs);
+    --m-size-xs: var(--text-sm);
     --m-lead-xs: 1.125rem;
     --m-size-sm: var(--m-text);
     --m-lead-sm: 1.25rem;
-    --m-size-md: 0.875rem;
+    --m-size-md: var(--text-md);
     --m-lead-md: 1.25rem;
-    --m-size-lg: 0.9375rem;
+    --m-size-lg: calc(15px * var(--type-k, 1));
     --m-lead-lg: 1.375rem;
-    --m-size-xl: 1rem;
+    --m-size-xl: var(--text-lg);
     --m-lead-xl: 1.5rem;
-    --m-size-2xl: 1.125rem;
+    --m-size-2xl: calc(18px * var(--type-k, 1));
     --m-lead-2xl: 1.5rem;
-    --m-size-3xl: 1.25rem;
+    --m-size-3xl: var(--text-xl);
     --m-lead-3xl: 1.75rem;
-    --m-size-4xl: 1.375rem;
-    --m-lead-4xl: 1.75rem;
-    --m-size-5xl: 1.5rem;
-    --m-lead-5xl: 2rem;
-    --m-size-6xl: 1.75rem;
-    --m-lead-6xl: 2.25rem;
     /* What running text is set at where nothing says otherwise: a host puts it on its page. */
     --m-leading: var(--m-lead-sm);
 
@@ -134,7 +121,6 @@
     --m-mono: var(--code);
 
     /* Tracking by size: display type closes up, a title a little (packages/ui/src/tokens.css). */
-    --m-track-display: -0.024em;
     --m-track-title: -0.014em;
 
     /* Enter with ease-out, leave at once (docs/design.md, Motion). */

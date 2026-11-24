@@ -91,18 +91,18 @@
 /* The looks track their own type (the style.css tokens); where one sets a
    label in sentence case over a capitalised base rule, it sets the base's
    tracking back to normal with it. */
-:root[data-visual-theme] body { font-size: var(--text-md); }
 /* A switch keeps its round track: its ends are its shape, not a control's corner. */
-:root[data-visual-theme] button:where(:not([data-slot]), [data-own]),
-:root[data-visual-theme] input:where(:not([data-slot])):not([role=switch]),
+:root[data-visual-theme] button:where(:not([data-slot], [class^='nx-'], [class*=' nx-']), [data-own]),
+:root[data-visual-theme] input:where(:not([data-slot], [class^='nx-'], [class*=' nx-'])):not([role=switch]),
 :root[data-visual-theme] select,
-:root[data-visual-theme] textarea:where(:not([data-slot])) { border-radius: var(--radius); }
+:root[data-visual-theme] textarea:where(:not([data-slot], [class^='nx-'], [class*=' nx-'])) { border-radius: var(--radius); }
 /* Shape by role (docs/design.md, Shape): a popup is as square or as round
    as the controls it opens from, a row in it no rounder than 5px and never
    rounder than they are, and a panel or a dialog takes the look's larger
    step. The database browser's own corners are style.css's; these follow the
    look's --radius, and an App's authored one, wherever it lands on body. */
 :root[data-visual-theme] body {
+  font-size: var(--text-md);
   --radius-item: min(var(--radius), 5px);
   /* A popup stops at 12px: a theme's control may be 16px, and a menu that round loses its first row's corner. */
   --radius-pop: min(var(--radius), 12px);
@@ -123,15 +123,16 @@
   border-bottom-color: var(--nav-line);
   color: var(--nav-ink);
 }
-:root[data-visual-theme] .app-mode .topbar .brand-name { color: var(--nav-ink); }
+/* The brand's mark, where it is drawn in the text's colour, and the account are the bar's own ink too: on a dark bar
+   the page's dim text left the signed-in name all but unreadable. */
+:root[data-visual-theme] .app-mode .topbar :is(.brand-name, .brand, button.account) { color: var(--nav-ink); }
 :root[data-visual-theme] .app-mode .topbar .brand-mark { border-color: var(--nav-accent); }
-:root[data-visual-theme] .app-mode .topbar .brand-mark::after { background: var(--nav-accent); }
-:root[data-visual-theme] .app-mode .topbar .brand:hover .brand-name { color: var(--nav-accent); }
-:root[data-visual-theme] .app-mode .topbar :is(.tn-item, .tn-search, .icon-button, .mode, .brand-db, .tn-mobile-menu) {
+:root[data-visual-theme] .app-mode .topbar :is(.brand-mark, .tn-group.active > .tn-group-button)::after { background: var(--nav-accent); }
+:root[data-visual-theme] .app-mode .topbar .workspace-tab[aria-current="page"]::after { background: var(--nav-accent); }
+:root[data-visual-theme] .app-mode .topbar :is(.brand:hover .brand-name, .tn-group.active > .tn-group-button) { color: var(--nav-accent); }
+:root[data-visual-theme] .app-mode .topbar :is(.tn-item, .tn-search, .tn-caret, .icon-button, .mode, .brand-db, .tn-mobile-menu) {
   color: var(--nav-muted);
 }
-/* The brand's mark, where it is drawn in the text's colour, is the bar's ink as its name is. */
-:root[data-visual-theme] .app-mode .topbar .brand { color: var(--nav-ink); }
 :root[data-visual-theme] .app-mode .topbar .tn-mobile-menu:hover { color: var(--nav-ink); background: color-mix(in srgb, var(--nav-ink) 5%, transparent); }
 :root[data-visual-theme] .app-mode .topbar .tn-item:hover,
 :root[data-visual-theme] .app-mode .topbar .tn-item[aria-current="true"] {
@@ -140,14 +141,7 @@
 }
 :root[data-visual-theme] .app-mode .topbar .tn-search { background: color-mix(in srgb, var(--nav-ink) 3%, transparent); border-color: var(--nav-line); }
 :root[data-visual-theme] .app-mode .topbar .tn-search kbd { color: var(--nav-muted); border-color: var(--nav-line); }
-:root[data-visual-theme] .app-mode .topbar .tn-caret { color: var(--nav-muted); }
-/* The account is the bar's own ink too: on a dark bar the page's dim
-   text left the signed-in name all but unreadable. */
-:root[data-visual-theme] .app-mode .topbar button.account { color: var(--nav-ink); }
 :root[data-visual-theme] .app-mode .topbar button.account:hover { background: color-mix(in srgb, var(--nav-ink) 5%, transparent); }
-:root[data-visual-theme] .app-mode .topbar .tn-group.active > .tn-group-button { color: var(--nav-accent); }
-:root[data-visual-theme] .app-mode .topbar .tn-group.active > .tn-group-button::after { background: var(--nav-accent); }
-:root[data-visual-theme] .app-mode .topbar .workspace-tab[aria-current="page"]::after { background: var(--nav-accent); }
 :root[data-visual-theme] .app-mode .topbar .tn-group-button[aria-expanded="true"] { color: var(--nav-ink); background: color-mix(in srgb, var(--nav-ink) 7%, transparent); }
 :root[data-visual-theme] .app-mode .topbar .mode { background: transparent; border-color: var(--nav-line); }
 /* Danger is checked against the palette's surface, not an unrelated nav
@@ -158,8 +152,7 @@
    nav's accent (Mono) it was the fill's own colour and vanished. The
    item's ink is the colour that reads on its fill. */
 :root[data-visual-theme] .app-mode .topbar :is(.tn-item[aria-current="true"], .tn-group.active > .tn-group-button):focus-visible { outline-color: currentColor; }
-:root[data-visual-theme] .tn-item,
-:root[data-visual-theme] .tn-trigger { font: 550 var(--type-ui) var(--sans); padding-block: var(--space-3); }
+:root[data-visual-theme] .tn-item { font: 550 var(--type-ui) var(--sans); padding-block: var(--space-3); }
 :root[data-visual-theme] .tn-search { min-height: 32px; border-radius: var(--radius); }
 :root[data-visual-theme] .tn-pop { padding: var(--space-2h); }
 :root[data-visual-theme] .tn-popitem { min-height: 34px; font-family: var(--sans); }
@@ -181,8 +174,8 @@
 :root[data-visual-theme] .applist-head-row { align-items: center; }
 /* The head's actions are the control's own height, by their least height and no padding above and below: New's words
    on the base button's padding stood two pixels over Export beside it. */
-:root[data-visual-theme] .applist-head-row .applist-new { min-height: var(--control-h); padding-block: 0; padding-inline: var(--space-4h); font-weight: 600; }
-:root[data-visual-theme] .applist-head-row :is(.applist-import, .export-summary) { min-height: var(--control-h); padding-block: 0; padding-inline: var(--space-4h); }
+:root[data-visual-theme] .applist-head-row .applist-new { min-height: var(--control-h); padding: 0 var(--space-4h); font-weight: 600; }
+:root[data-visual-theme] .applist-head-row :is(.applist-import, .export-summary) { min-height: var(--control-h); padding: 0 var(--space-4h); }
 :root[data-visual-theme] .applist-field-label,
 :root[data-visual-theme] .page-field > dt { font: 500 var(--text-sm) var(--sans); text-transform: none; letter-spacing: normal; }
 :root[data-visual-theme] .applist-filterbar { margin-block: var(--space-5) var(--space-4); }
@@ -191,13 +184,12 @@
 :root[data-visual-theme] .tabs { gap: var(--space-4h); padding-top: var(--space-4); }
 :root[data-visual-theme] .tab { padding: var(--space-3) 0 var(--space-4); font-weight: 550; }
 :root[data-visual-theme] .tab:is([aria-selected="true"], [aria-pressed="true"]) { border-bottom-width: 3px; }
-:root[data-visual-theme] .app-mode .result-head { padding-top: var(--space-4); padding-bottom: var(--space-4); }
+:root[data-visual-theme] .app-mode .result-head { padding-block: var(--space-4); }
 :root[data-visual-theme] .app-mode table { font-family: var(--mono); font-variant-numeric: tabular-nums; }
 :root[data-visual-theme] .app-mode th { font-family: var(--sans); color: var(--ink-muted); font-weight: 600; }
 :root[data-visual-theme] .app-mode td { border-bottom-color: var(--line); }
-:root[data-visual-theme] .app-mode tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
 /* A grid's cells, not a control's: a calendar's month is a table too, and its days are sized by the calendar. */
-:root[data-visual-theme] .app-mode :is(td, th):where(:not([data-slot])) { padding-block: var(--space-3h); }
+:root[data-visual-theme] .app-mode :is(td, th):where(:not([data-slot], .nx-table *, .nx-csv-table *)) { padding-block: var(--space-3h); }
 :root[data-visual-theme] .app-mode { --sk-row-h: 45px; --sk-head-h: 45px; }
 /* Its placeholder rows are those heights exactly, from the table's own top. */
 :root[data-visual-theme] .app-mode .sk-grid { padding-top: 0; }
@@ -219,8 +211,7 @@
 /* A label on a record keeps its chip: it is a thing the record has, with
    its own ×, not a value said in a cell. */
 :root[data-visual-theme] .record-tag.tone { padding: 1px var(--space-3); border: 1px solid color-mix(in srgb, currentColor 30%, transparent); border-radius: 999px; background: color-mix(in srgb, currentColor 8%, transparent); font-size: var(--text-sm); line-height: 1.6; }
-:root[data-visual-theme] .pct-bar,
-:root[data-visual-theme] .pct-fill { border-radius: min(2px, var(--radius)); }
+:root[data-visual-theme] :is(.pct-bar, .pct-fill, .pbd-bar, .pbd-fill) { border-radius: min(2px, var(--radius)); }
 /* A named record in a record's fields, and in a card's facts, is a link, not a pill: "Kingsway Auto
    Center" in a rounded box read as a tag the car had, not the dealer it
    opens. The pill stays the Workbench's, where a bare key needs its table
@@ -243,6 +234,7 @@
 :root[data-visual-theme] .app-mode td.reflink { color: var(--ink); }
 :root[data-visual-theme] .app-mode td.reflink:is(:focus-visible, :focus-within) { color: var(--link); }
 @media (hover: hover) {
+  :root[data-visual-theme] .app-mode tbody tr:hover td { background: color-mix(in srgb, var(--ink) 3%, var(--surface)); }
   :root[data-visual-theme] .app-mode td.reflink:hover { color: var(--link); }
 }
 /* A true flag is a tick in the ink; a false one is an empty cell (Grid.tsx names it "No" for assistive technology), so
@@ -266,7 +258,7 @@
 :root[data-visual-theme] .dash-strip .home-card:nth-child(3) { border-top-color: var(--chart-tertiary); }
 :root[data-visual-theme] .dash-strip .home-card:nth-child(4) { border-top-color: var(--status-info); }
 :root[data-visual-theme] .home-card-label { color: var(--ink-muted); font-size: var(--text-base); font-weight: 550; }
-:root[data-visual-theme] .home-card-value { font: 650 calc(30px * var(--type-k))/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+:root[data-visual-theme] .home-card-value { font: 650 var(--text-xl)/1.2 var(--figures-face, var(--sans)); font-variant-numeric: tabular-nums; }
 :root[data-visual-theme] .dash-strip .home-card:hover { background: color-mix(in srgb, var(--accent) 3%, var(--surface)); }
 :root[data-visual-theme] .page-section-head { font: 600 var(--text-base) var(--sans); text-transform: none; letter-spacing: normal; margin-bottom: var(--space-5); }
 :root[data-visual-theme] .page-section { padding-top: var(--space-5); }
@@ -277,8 +269,6 @@
 :root[data-visual-theme] .chart-area { opacity: 0.055; }
 :root[data-visual-theme] .chart-legend li { padding-block: var(--space-2); }
 :root[data-visual-theme] .pbd-row { min-height: 28px; }
-:root[data-visual-theme] .pbd-bar,
-:root[data-visual-theme] .pbd-fill { border-radius: min(2px, var(--radius)); }
 :root[data-visual-theme] .board-lane { border: none; border-radius: 0; padding: 0 var(--space-3h) 0 0; }
 :root[data-visual-theme] .board-lane-head { min-height: 32px; font-weight: 600; }
 :root[data-visual-theme] .board-card { background: var(--ground); padding: var(--space-3h) var(--space-4); }
@@ -310,10 +300,21 @@
    not a button's. A picker's text box takes none: the ring is the picker's,
    around the whole field (below), and the box's own drew a second one inside it. */
 :root[data-visual-theme] :is(input, textarea, select):not(.palette-input, .picker-input):focus-visible,
-:root[data-visual-theme] :is([data-slot='select-trigger'], .record-picker-trigger):focus-visible { outline: var(--focus-width) solid var(--focus); outline-offset: 0; border-color: var(--focus); }
-:root[data-visual-theme] .metric-number { font-family: var(--mono); font-size: calc(29px * var(--type-k)); }
+:root[data-visual-theme] :is(.picker, [data-slot='field-box'], [data-slot='input-group'], [data-slot='date-field']):focus-within {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: -1px;
+  border-color: var(--focus);
+  box-shadow: none;
+}
+:root[data-visual-theme] :is([data-slot='select-trigger'], .record-picker-trigger):focus-visible {
+  outline: var(--focus-width) solid var(--focus);
+  outline-offset: var(--focus-offset, 2px);
+  box-shadow: none;
+}
+:root[data-visual-theme] .metric-number { font-family: var(--figures-face, var(--sans)); font-size: var(--text-xl); font-variant-numeric: tabular-nums; }
 /* A New form's switch is not a field box: the field's height and corners squashed its track into a rounded square. */
-:root[data-visual-theme] .insert-field :is(input:not(.picker-input, [role=switch]), textarea,[data-slot='select-trigger'], .record-picker-trigger, .picker) { min-height: 36px; border-radius: var(--field-radius); }
+:root[data-visual-theme] .insert-field
+  :is(input:not(.picker-input, [role=switch]), textarea, [data-slot='select-trigger'], .record-picker-trigger, .picker) { min-height: 36px; border-radius: var(--field-radius); }
 :root[data-visual-theme] .insert-field label { color: var(--ink-muted); }
 /* The navigation's colors dress the menu, under every bar recipe: the side menu, the phone's drawer and (below, in
    the bar's own rules) a top bar's menu stand on nav.ground with their entries in nav.ink and their headings, counts
@@ -349,7 +350,7 @@
   color: var(--nav-ink);
   border-color: color-mix(in srgb, var(--nav-ink) 45%, var(--nav-ground));
 }
-:root[data-visual-theme] .sidebar :is(.nav-group, .app-nav-group) { font-family: var(--sans); }
+:root[data-visual-theme] .sidebar .nav-group { font-family: var(--sans); }
 
 @media (max-width: 700px) {
   /* One phone gutter for every App, whichever menu it wears: beside the
@@ -395,7 +396,8 @@ body.type-mono { --mono: var(--code); --data-face: var(--code); }
 /* Code surfaces keep the code face; a textarea of prose (a description, a reason) keeps the interface's. */
 :root[data-visual-theme] .app-mode :is(.ddl, .explain, #query, .applist-filter, pre, .sql-input, .composer-text, .agent-json) { font-family: var(--code); }
 /* A list's search box, in the kit with every other field (moved from ListFilterBar.css, which stands in the base). */
-:root[data-visual-theme] .applist-search-input { background: var(--surface); border-radius: var(--field-radius); }
+:root[data-visual-theme] :is(.applist-search-input, [data-slot='select-trigger']) { background: var(--surface); }
+:root[data-visual-theme] .applist-search-input { border-radius: var(--field-radius); }
 
 /* ---------- The field (docs/design.md, Access and Forms) ----------
    Every field in an App is one control, whatever its family: a text box, a
@@ -407,39 +409,54 @@ body.type-mono { --mono: var(--code); --data-face: var(--code); }
    filled ground and dim ink with no pointer; invalid is the danger edge beside
    the written problem, and keeps the focus ring. Those two states are every
    look's to honour, so they stand in structure.css. */
-:root[data-visual-theme] [data-slot='select-trigger'] { background: var(--surface); }
-/* A picker is one field: the box is `.picker`, which holds its chips and its
-   words, and the text box inside it draws no edge of its own — dressed as a
-   field itself it was a 36px box inside a 42px one (B03/N02). */
+/* A picker or composite field box is one field: the outer box holds its chips,
+   icons, steppers, or segments, and guard.css keeps the inner input unframed (B03/N02). */
 :root[data-visual-theme] :is([data-slot='dialog-content'][data-kind='modal'], .form-page, .insert-form, .command-field, .insert-field, .signin-form, .front-search-form, .account-profile-field, .confirm,[data-slot='field'])
-  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"], [type="color"], [type="file"], .picker-input), textarea, select,[data-slot='select-trigger'], .picker, .record-picker-trigger),
+  :is(
+    input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"], [type="color"], [type="file"], .picker-input),
+    textarea,
+    select,
+    [data-slot='select-trigger'],
+    .picker,
+    .record-picker-trigger,
+    [data-slot='field-box'],
+    [data-slot='input-group'],
+    [data-slot='date-field']
+  ),
 :root[data-visual-theme] :is([data-slot='input'], [data-slot='textarea']) {
-  min-height: 36px; box-sizing: border-box; font-size: var(--text-md); font-family: var(--sans);
-  background: var(--surface); color: var(--ink);
-  border: 1px solid var(--line-control); border-radius: var(--field-radius, var(--radius));
+  min-height: var(--form-control-h, 36px); box-sizing: border-box; font-size: var(--text-md); font-family: var(--sans);
+  background: var(--field-fill, var(--surface)); color: var(--ink);
+  border: var(--control-border-w, 1px) solid var(--line-control); border-radius: var(--field-radius, var(--radius));
 }
 /* A finger's 44px, as forms.css asks of every field on a coarse pointer: the rule above sits in a later layer than that
    one and held the box at 36px on a phone (grade's small-target on the kit's own Search and TextField). */
 @media (pointer: coarse) {
   :root[data-visual-theme] :is([data-slot='dialog-content'][data-kind='modal'], .form-page, .insert-form, .command-field, .insert-field, .signin-form, .front-search-form, .account-profile-field, .confirm,[data-slot='field'])
-    :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"], [type="color"], [type="file"], .picker-input), select,[data-slot='select-trigger'], .record-picker-trigger),
-  :root[data-visual-theme] :is([data-slot='input'], [data-slot='textarea']):not(textarea) { min-height: max(36px, calc(44px / var(--density-zoom, 1))); }
+    :is(
+      input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"], [type="color"], [type="file"], .picker-input),
+      select,
+      [data-slot='select-trigger'],
+      .record-picker-trigger,
+      [data-slot='field-box'],
+      [data-slot='input-group'],
+      [data-slot='date-field']
+    ),
+  :root[data-visual-theme] [data-slot='input']:not(textarea) { min-height: max(36px, calc(44px / var(--density-zoom, 1))); }
 }
 /* One height whatever the family's own padding said: 7 + 20 + 7 and the edge
    is 36px, so a text box, a date and a Select stand level in a row (a form
-   page's text box was 36px and its date 41px). */
+   page's text box was 36px and its date 41px). Composite field boxes keep their own internal padding. */
 :root[data-visual-theme] :is([data-slot='dialog-content'][data-kind='modal'], .form-page, .insert-form, .command-field, .insert-field, .signin-form, .front-search-form, .account-profile-field, .confirm,[data-slot='field'])
-  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"], [type="color"], [type="file"], .picker-input), select,[data-slot='select-trigger'], .record-picker-trigger),
-:root[data-visual-theme] :is([data-slot='input'], [data-slot='textarea']):not(textarea) { padding-block: 7px; padding-left: var(--space-3h); line-height: 20px; }
+  :is(input:not([type="checkbox"], [type="radio"], [type="range"], [type="hidden"], [type="color"], [type="file"], .picker-input), select, [data-slot='select-trigger'], .record-picker-trigger),
+:root[data-visual-theme] [data-slot='input']:not(textarea) { padding-block: 7px; padding-left: var(--space-3h); line-height: 20px; }
 :root[data-visual-theme] :is([data-slot='dialog-content'][data-kind='modal'], .form-page, .insert-form, .command-field, .insert-field, .signin-form, .front-search-form, .account-profile-field, .confirm,[data-slot='field']) textarea { min-height: 72px; padding: var(--space-3) var(--space-3h); line-height: 1.45; }
 :root[data-visual-theme] .picker { padding-block: var(--space-1); padding-left: var(--space-3); font-family: var(--sans); }
 :root[data-visual-theme] .picker .picker-input { min-height: 0; border: 0; border-radius: 0; background: none; box-shadow: none; outline: none; font-size: var(--text-md); }
-/* The ring is the picker's, around the whole field, since its text box has no edge to hold one. */
-:root[data-visual-theme] .picker:focus-within { outline: var(--focus-width) solid var(--focus); outline-offset: 0; border-color: var(--focus); }
+/* The ring is the picker's, around the whole field (merged into the field ring rule above), since its text box has no edge to hold one. */
 /* The compact field: a filter's, a dense row's — 30px, 13px words. */
-:root[data-visual-theme] [data-slot='field'][data-size='compact'] :is(input:not([type="checkbox"], [type="radio"], .picker-input), select,[data-slot='select-trigger'], .picker,:is([data-slot='input'], [data-slot='textarea']):not(textarea)) { min-height: 30px; padding-block: var(--space-2); font-size: var(--text-base); }
-:root[data-visual-theme] [data-slot='field'][data-size='compact'] .picker { padding-block: 1px; }
-:root[data-visual-theme] [data-slot='field'][data-size='compact'] .picker .picker-input { font-size: var(--text-base); padding-block: 1px; }
+:root[data-visual-theme] [data-slot='field'][data-size='compact'] :is(input:not([type="checkbox"], [type="radio"], .picker-input), select, [data-slot='select-trigger'], .picker, [data-slot='field-box'], [data-slot='input-group'], [data-slot='date-field']) { min-height: 30px; font-size: var(--text-base); }
+:root[data-visual-theme] [data-slot='field'][data-size='compact'] :is(input:not([type="checkbox"], [type="radio"], .picker-input), select, [data-slot='select-trigger']) { padding-block: var(--space-2); }
+:root[data-visual-theme] [data-slot='field'][data-size='compact'] :is(.picker, .picker .picker-input) { font-size: var(--text-base); padding-block: 1px; }
 /* A field's label is text in every look, 13px in the text ink: a dialog's were
    11px in the faint ink beside a form's 13px (N04). */
 :root[data-visual-theme] [data-slot='field-label'] { font-family: var(--sans); color: var(--ink); }

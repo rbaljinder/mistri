@@ -6,28 +6,58 @@
  * is one labelable element that takes the id a caller gives it. Props only. Preview: @mistriwork/ui is Preview at 1.0.
  */
 import { FieldControl } from '@ui-sdk/react/field';
-import type { ChangeEvent, CSSProperties, ReactNode } from 'react';
+import type { ChangeEvent, CSSProperties, ReactNode, Ref } from 'react';
 import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import type { FieldFrame } from './fieldFrame.js';
 import { grouped } from './masks.js';
 import { Frame } from './internal/Frame.js';
+import { resolveLocale } from './internal/locale.js';
+import { useSurfaceSeam } from './internal/surfaceSeam.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Props for the `Slider` numeric range control. */
 export interface SliderProps extends FieldFrame {
   value: number;
-  onChange: (value: number, details: ChangeDetails<'slide'>) => void;
+  onValueChange?: (value: number, details: ChangeDetails<'slide'>) => void;
   min: number;
   max: number;
   step?: number;
-  /** How a number is said, in the box, at the ends and to assistive technology. Whole numbers with separators by default. */
-  format?: (n: number) => string;
+  /** Custom value formatter overriding `format` preset and default grouped integer readout. */
+  formatValue?: (n: number) => string;
+  /** Built-in numeric format preset (`'number' | 'money' | 'percent'`). */
+  format?: 'number' | 'money' | 'percent';
+  /** ISO currency code for `format="money"`, as `FormattedValue` and `LineItemsEditor` take theirs. Defaults to `'USD'`. */
+  currency?: string;
+  locale?: string;
   disabled?: boolean;
+  ref?: Ref<HTMLInputElement>;
+}
+
+function formatSliderPreset(n: number, preset: 'number' | 'money' | 'percent', locale?: string, currency = 'USD'): string {
+  const tag = resolveLocale(locale);
+  if (preset === 'percent') {
+    return new Intl.NumberFormat(tag, { style: 'percent', maximumFractionDigits: 1 }).format(n / 100);
+  }
+  if (preset === 'money') {
+    return new Intl.NumberFormat(tag, { style: 'currency', currency, maximumFractionDigits: 0 }).format(n);
+  }
+  return new Intl.NumberFormat(tag).format(n);
 }
 
 function DefaultSlider(props: SliderProps): ReactNode {
-  const say = props.format ?? grouped;
+  const seam = useSurfaceSeam();
+  const legacyFormat = (props as { format?: unknown }).format;
+  const say: (n: number) => string =
+    props.formatValue ??
+    (typeof legacyFormat === 'function'
+      ? (legacyFormat as (n: number) => string)
+      : props.format
+        ? (n: number) =>
+            /* A currency named on the slider is said as named; the host's preset takes no currency and would draw its own. */
+            (props.currency ? undefined : seam?.formatPreset?.(n, props.format!, props.locale)) ??
+            formatSliderPreset(n, props.format!, props.locale, props.currency)
+        : grouped);
   const span = props.max - props.min;
-  // The filled share of the track, for the stylesheet to draw (a range's own fill cannot be dressed everywhere).
   const share = span > 0 ? ((props.value - props.min) / span) * 100 : 0;
   return (
     <Frame {...props}>
@@ -36,6 +66,7 @@ function DefaultSlider(props: SliderProps): ReactNode {
       </div>
       <FieldControl
         id={props.id}
+        ref={props.ref}
         type="range"
         data-kind="range"
         min={props.min}
@@ -45,7 +76,13 @@ function DefaultSlider(props: SliderProps): ReactNode {
         disabled={props.disabled}
         aria-valuetext={say(props.value)}
         style={{ '--range-share': `${share}%` } as CSSProperties}
-        onChange={(event: ChangeEvent<HTMLInputElement>) => props.onChange(Number(event.target.value), changeDetails('slide', event))}
+        onChange={(event: ChangeEvent<HTMLInputElement>) => {
+          const next = Number(event.target.value);
+          const info = changeDetails('slide', event);
+          const legacy = (props as { onChange?: (value: number, details: ChangeDetails<'slide'>) => void }).onChange;
+          props.onValueChange?.(next, info);
+          legacy?.(next, info);
+        }}
       />
       <div data-slot="slider-ends" aria-hidden="true">
         <span>{say(props.min)}</span>
@@ -55,5 +92,5 @@ function DefaultSlider(props: SliderProps): ReactNode {
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const Slider = slotted('Slider', DefaultSlider, { onChange: [1, 'slide'] });
+/** Framed numeric range slider with live readout and labelled min/max bounds. */
+export const Slider = slotted('Slider', DefaultSlider, { onValueChange: [1, 'slide'] });

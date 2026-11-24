@@ -156,6 +156,24 @@ test('a rule that says what the conventions say is restated, and is the deletion
   assert.equal(report.find((row) => row.column === 'progress')?.overridden, false);
 });
 
+test("a number named _value is read as money, said by check --defaults, and the App's own format wins", () => {
+  // A field report: a gauge's `nominal_value` wore a currency. `value` is a ledger's word (deal_value, open_value), so the
+  // rule stays; what an author needs is to be told, and one line to say otherwise.
+  const gauge = {
+    id: 'gauge',
+    name: 'gauge',
+    schema: '',
+    isView: false,
+    columns: [col('id', 'INTEGER', { primaryKey: true, nullable: false }), col('nominal_value', 'REAL'), col('measured_value', 'REAL')],
+  } as TableMeta;
+  const gauges = { tables: [gauge], foreignKeys: [] } as unknown as DatabaseSchema;
+  const app = { resources: { gauge: { display: { measured_value: { format: 'number' } } } } };
+  const report = inferredReport(app as never, gauges);
+  const nominal = report.find((row) => row.column === 'nominal_value')!;
+  assert.deepEqual([nominal.rule, nominal.why, nominal.overridden], [{ format: 'money' }, 'a number named like money', false]);
+  assert.equal(report.find((row) => row.column === 'measured_value')?.overridden, true);
+});
+
 test("a vocabulary's schema DEFAULT is the form's start; a clock is the database's", () => {
   assert.deepEqual(inferredFormDefaults(workOrder), { status: 'booked' });
   assert.deepEqual(

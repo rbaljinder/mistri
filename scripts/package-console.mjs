@@ -18,10 +18,10 @@ const sdkExports = execFileSync(
     '-e',
     `
   import { createRequire } from 'node:module';
-  import { BEHAVIORS_EXPORTS, PAGE_EXPORTS, SERVED_MODULES, UI_EXPORTS } from ${JSON.stringify(new URL('../packages/mistri/dist/shared/uiSdk.js', import.meta.url).href)};
+  import { SDK_MODULE_EXPORTS, SERVED_MODULES } from ${JSON.stringify(new URL('../packages/mistri/dist/shared/uiSdk.js', import.meta.url).href)};
   const require = createRequire(${JSON.stringify(import.meta.url)});
   const exports = Object.fromEntries(SERVED_MODULES.map(module => [module,
-    module === '@mistriwork/mistri/ui' ? UI_EXPORTS : module === '@mistriwork/mistri/page' ? PAGE_EXPORTS : module === '@mistriwork/mistri/behaviors' ? BEHAVIORS_EXPORTS : Object.keys(require(module))
+    Object.hasOwn(SDK_MODULE_EXPORTS, module) ? SDK_MODULE_EXPORTS[module] : Object.keys(require(module))
       .filter(name => /^[A-Za-z_$][\\w$]*$/.test(name) && name !== 'default' && !name.startsWith('__'))]));
   console.log(JSON.stringify(exports));
 `,

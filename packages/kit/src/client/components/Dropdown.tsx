@@ -4,8 +4,10 @@
  * props and reads no catalog, so the shell's word for an unnamed list is
  * supplied here.
  */
-import { Dropdown as Listbox, type DropdownProps } from '@mistriwork/ui/Dropdown.js';
 import { say } from '../copy/shell/components/Dropdown.js';
+import { registerDefaultWords } from './surfaceSeam.js';
+
+registerDefaultWords(() => ({ select: say('select') }));
 
 /**
  * Whether a field's label can stand after "Choose": a short name ("Status", "Assigned to") can, a question
@@ -16,6 +18,4 @@ export function readsAsName(label: string): boolean {
   return !/[?？]/.test(label) && label.trim().split(/\s+/).length <= 2;
 }
 
-export function Dropdown(props: DropdownProps) {
-  return <Listbox {...props} ariaLabel={props.ariaLabel ?? say('select')} />;
-}
+export { Dropdown } from '@mistriwork/ui';

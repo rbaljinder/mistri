@@ -26,7 +26,7 @@ export function RecordGone({ base, spoken, className }: { base: TableMeta; spoke
       className={className}
       text={say('common.thatIsNoLonger', { spoken: name })}
       action={
-        <Button intent="secondary" onClick={() => go(tableView(base.id), 'push')}>
+        <Button variant="secondary" onClick={() => go(tableView(base.id), 'push')}>
           {say('backToTheList', { spoken: name })}
         </Button>
       }

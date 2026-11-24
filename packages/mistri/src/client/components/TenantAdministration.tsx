@@ -710,9 +710,9 @@ function OperationForm({
                 withTime
                 required
                 value={until}
-                aria-label={say('validUntilLocalTime')}
+                ariaLabel={say('validUntilLocalTime')}
                 max={localTime(Date.now() + view.session!.maxMembershipLifetimeMs)}
-                onChange={setUntil}
+                onValueChange={setUntil}
               />
             </label>
           </>

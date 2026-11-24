@@ -69,11 +69,6 @@ const ALLOWED = [
   { file: 'components/SignIn.tsx', text: 'oidc', reason: "a provider id's prefix sent to the server, never shown" },
   { file: '*', text: 'null', reason: "the database's NULL, drawn as the value itself" },
   {
-    file: 'components/ChartShapes.tsx',
-    text: '400 11px system-ui, sans-serif',
-    reason: "a heat map head's font, to measure its names with, never shown",
-  },
-  {
     file: 'components/sdk/uiKitLoader.ts',
     text: 'The UI kit {}',
     reason: "an App's control kit refused in the console, in the words its load gives the App's author; never drawn",
@@ -87,7 +82,6 @@ const ALLOWED = [
   { file: 'components/sdk/blocks.tsx', text: 'Chart', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Breakdown', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Rows', reason: "a block's component name, as the author writes it in JSX" },
-  { file: 'components/sdk/blocks.tsx', text: 'Tabs', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Timeline', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Tree', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Gantt', reason: "a block's component name, as the author writes it in JSX" },
@@ -95,7 +89,6 @@ const ALLOWED = [
   { file: 'components/sdk/blocks.tsx', text: 'Board', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Calendar', reason: "a block's component name, as the author writes it in JSX" },
   { file: 'components/sdk/blocks.tsx', text: 'Gallery', reason: "a block's component name, as the author writes it in JSX" },
-  { file: 'components/sdk/blocks.tsx', text: 'Split', reason: "a block's component name, as the author writes it in JSX" },
   { file: '*', text: 'SQL', reason: "the language's name" },
   {
     file: 'components/useGridGroups.ts',

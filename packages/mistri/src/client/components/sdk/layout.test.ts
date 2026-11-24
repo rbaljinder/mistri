@@ -4,7 +4,7 @@
  * one ruler (`viewportScale`), so the point is the same whatever the zoom.
  */
 import { afterEach, expect, test } from 'vitest';
-import { refreshViewportScale } from '@mistriwork/ui/internal/ruler.js';
+import { refreshViewportScale } from '@mistriwork/ui';
 import { layoutPoint } from './layout.js';
 
 afterEach(() => {

@@ -82,16 +82,16 @@ const guests = page.useRows('booking', { where: { status: ['booked', 'waiting'],
 const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}` : 'Start'; apply.open(), apply.goTo(step)
 
 // A read's loading, empty and failed states, as the platform says them (Preview).
-<Loaded query={guests} empty={<Empty title="Everyone is in" />}>
+<Loaded query={guests} empty={<EmptyState title="Everyone is in" />}>
   {(rows) => <ul>{rows.map((row) => <li key={row.id}>{row.guest_name}</li>)}</ul>}
 </Loaded>
 
-// One condition said once: every block inside reads under it, and a List draws a row each.
+// One condition said once: every block inside reads under it, and a RecordList draws a row each.
 <Scope from="booking" where={{ class_session_id: chosen }}>
   <Metric title="Arrived" where={{ status: 'checked_in' }} measure="sum party_size" />
-  <List where={{ status: 'booked' }} show={['guest_name']} sort="guest_name" empty="Everyone is in.">
+  <RecordList where={{ status: 'booked' }} show={['guest_name']} sort="guest_name" empty="Everyone is in.">
     {(booking) => <CommandButton command="checkIn" row={booking} done={`${booking.guest_name} is checked in.`} />}
-  </List>
+  </RecordList>
 </Scope>
 ```
 

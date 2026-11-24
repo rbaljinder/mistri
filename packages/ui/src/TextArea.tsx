@@ -9,9 +9,10 @@ import { changeDetails, type ChangeDetails } from './changeDetails.js';
 import { Frame } from './internal/Frame.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Props for the `TextArea` multi-line form control. */
 export interface TextAreaProps extends FieldFrame {
   value: string;
-  onChange: (value: string, details: ChangeDetails<'input-change'>) => void;
+  onValueChange?: (value: string, details: ChangeDetails<'input-change'>) => void;
   onBlur?: () => void;
   /** Lines the box shows before the reader stretches it. Default 3. */
   rows?: number;
@@ -21,17 +22,19 @@ export interface TextAreaProps extends FieldFrame {
   name?: string;
   disabled?: boolean;
   readOnly?: boolean;
-  inputRef?: Ref<HTMLTextAreaElement>;
+  monospace?: boolean;
+  ref?: Ref<HTMLTextAreaElement>;
   /** Something drawn under the box: a count, say. */
   after?: ReactNode;
 }
 
 function DefaultTextArea(props: TextAreaProps): ReactNode {
+  const targetRef = props.ref ?? (props as { inputRef?: Ref<HTMLTextAreaElement> }).inputRef;
   return (
     <Frame {...props}>
       <Textarea
         id={props.id}
-        ref={props.inputRef}
+        ref={targetRef}
         name={props.name}
         value={props.value}
         rows={props.rows ?? 3}
@@ -40,9 +43,14 @@ function DefaultTextArea(props: TextAreaProps): ReactNode {
         placeholder={props.placeholder}
         disabled={props.disabled}
         readOnly={props.readOnly}
+        data-monospace={props.monospace ? '' : undefined}
         aria-required={props.required || undefined}
-        // React's own change, as the text box hears it (TextField.tsx says why).
-        onChange={(event) => props.onChange(event.target.value, changeDetails('input-change', event))}
+        onChange={(event) => {
+          const info = changeDetails('input-change', event);
+          const legacy = (props as { onChange?: (value: string, details: ChangeDetails<'input-change'>) => void }).onChange;
+          props.onValueChange?.(event.target.value, info);
+          legacy?.(event.target.value, info);
+        }}
         onBlur={props.onBlur}
       />
       {props.after}
@@ -50,5 +58,5 @@ function DefaultTextArea(props: TextAreaProps): ReactNode {
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
-export const TextArea = slotted('TextArea', DefaultTextArea, { onChange: [1, 'input-change'] });
+/** Framed multi-line textarea wiring label, hint, problem, and optional monospace styling. */
+export const TextArea = slotted('TextArea', DefaultTextArea, { onValueChange: [1, 'input-change'] });

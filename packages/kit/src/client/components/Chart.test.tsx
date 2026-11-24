@@ -5,7 +5,18 @@
 import { afterEach, describe, expect, test } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { userEvent } from '@testing-library/user-event';
-import { BarChart, DonutChart, LineChart, Sparkline, StackedBars, axisMarks, namesAtEnds, periodTick, sliceRing } from './Chart.js';
+import {
+  BarChart,
+  DonutChart,
+  LineChart,
+  Sparkline,
+  StackedBars,
+  StackedColumns,
+  axisMarks,
+  namesAtEnds,
+  periodTick,
+  sliceRing,
+} from './Chart.js';
 import { installShell } from '../shellMode.js';
 import { groupLabel } from './valueModel.js';
 
@@ -270,8 +281,12 @@ describe('the line', () => {
     expect(picked).toEqual([]);
   });
 
-  test('one point is not a line', () => {
-    render(<LineChart rows={[{ key: 'a', value: 1 }]} />);
+  test('one point plots its dot cleanly; empty rows say there is not enough to draw', () => {
+    const { container } = render(<LineChart rows={[{ key: 'a', value: 1 }]} />);
+    expect(container.querySelectorAll('.chart-dot')).toHaveLength(1);
+    expect(container.querySelector('.chart-stroke')).toBeNull();
+    cleanup();
+    render(<LineChart rows={[]} />);
     expect(screen.getByText('Not enough points to draw a line.')).toBeInTheDocument();
   });
 
@@ -310,13 +325,13 @@ describe('a line with too little to join', () => {
     expect(container.querySelectorAll('.chart-data tr')).toHaveLength(3);
   });
 
-  test('one point is drawn, in the middle, where a line would say there is not enough to draw', () => {
+  test('one point is drawn in the middle whether or not dots was requested', () => {
     const one = [{ key: '2026-10-10', value: 4 }];
     const { container, rerender } = render(<LineChart rows={one} say={money} wide={600} dots />);
     expect(container.querySelectorAll('.chart-dot')).toHaveLength(1);
     rerender(<LineChart rows={one} say={money} wide={600} />);
-    expect(container.querySelector('.chart-dot')).toBeNull();
-    expect(container.textContent).toContain('Not enough points');
+    expect(container.querySelectorAll('.chart-dot')).toHaveLength(1);
+    expect(container.querySelector('.chart-stroke')).toBeNull();
   });
 
   test('a line that has enough is still a line', () => {
@@ -836,7 +851,7 @@ describe('stacked bars', () => {
 });
 
 describe('the spark', () => {
-  test('stretches a path across the card with a dot on the last point, or draws nothing under four points', () => {
+  test('stretches a path across the card with a dot on the last point, plots a single point as a dot, and draws nothing for empty data', () => {
     const rows = [
       { key: 'w1', value: 1 },
       { key: 'w2', value: 2 },
@@ -854,8 +869,16 @@ describe('the spark', () => {
     expect(container.querySelector('.spark-area')).toHaveAttribute('d', expect.stringMatching(/ L99\.0,28 L1\.0,28 Z$/));
     expect(screen.getByRole('img')).toHaveAttribute('aria-label', 'trend: $1, $2, $2, $3');
     cleanup();
+    const { container: single } = render(<Sparkline rows={[rows[0]]} say={money} />);
+    expect(single.querySelector('.spark-dot')).toHaveAttribute('d', 'M50.0,3.0 h0');
+    expect(single.querySelector('.spark-stroke')).toBeNull();
+    cleanup();
     const { container: short } = render(<Sparkline rows={rows.slice(0, 3)} />);
-    expect(short.innerHTML).toBe('');
+    expect(short.querySelector('.spark')).toHaveClass('spark-sparse');
+    expect(short.querySelectorAll('.spark-bar')).toHaveLength(3);
+    cleanup();
+    const { container: empty } = render(<Sparkline rows={[]} />);
+    expect(empty.innerHTML).toBe('');
   });
 
   test('under four periods above zero it is thin bars over a baseline, kept short, and a run of nothing draws none', () => {
@@ -906,6 +929,32 @@ describe('a line per series', () => {
     await userEvent.setup().selectOptions(container.querySelector('select.chart-series-pick') as HTMLSelectElement, 'email');
     expect(container.querySelectorAll('.chart-series-stroke')).toHaveLength(1);
     expect([...container.querySelectorAll('.chart-multi-legend .chart-legend-key')].map((n) => n.textContent)).toEqual(['email']);
+  });
+
+  test('plots dots cleanly when a multi-series chart has only one period, and preserves signed totals in StackedColumns', () => {
+    const onePeriod = [
+      { key: '2026-01', series: 'web', value: 10 },
+      { key: '2026-01', series: 'email', value: 4 },
+    ];
+    const { container } = render(<LineChart rows={onePeriod} say={money} wide={600} />);
+    expect(container.querySelectorAll('.chart-series-dot')).toHaveLength(2);
+    expect(container.querySelectorAll('.chart-series-stroke')).toHaveLength(0);
+    cleanup();
+    const { container: stacked } = render(
+      <StackedColumns
+        rows={[
+          { key: '2026-01', values: { gain: 10, refund: -4 } },
+          { key: '2026-02', values: { gain: 8, refund: -2 } },
+        ]}
+        series={[
+          { key: 'gain', label: 'Gain' },
+          { key: 'refund', label: 'Refund' },
+        ]}
+        say={money}
+      />,
+    );
+    expect([...stacked.querySelectorAll('.chart-columns-legend .chart-legend-value')].map((n) => n.textContent)).toEqual(['$18', '$-6']);
+    expect(stacked.querySelector('svg.chart-bars')?.getAttribute('aria-label')).toContain('$6');
   });
 
   test('three lines are named where they end, the key above hidden; more, or names too long for the width, keep it', () => {
@@ -1033,5 +1082,91 @@ describe('the buckets a window cuts through', () => {
   test('with no partial bucket nothing changes', () => {
     const { container } = render(<LineChart rows={weeks} say={money} wide={600} />);
     expect(container.querySelectorAll('.is-partial')).toHaveLength(0);
+  });
+});
+
+describe('a stacked chart narrower than its readout', () => {
+  /* The readout is one line of an SVG and cannot wrap: on a phone it ran off the plot's left edge. */
+  test('says the parts that hold something, then the total, and never more than the plot is wide', () => {
+    const series = ['Wedding', 'Conference', 'Gala', 'Launch', 'Workshop', 'Party'].map((label) => ({ key: label.toLowerCase(), label }));
+    const rows = [{ key: '2027-02', values: { wedding: 0, conference: 34950, gala: 9300, launch: 0, workshop: 0, party: 17350 } }];
+    const said = (wide: number) => {
+      const { container } = render(<StackedColumns rows={rows} series={series} say={money} wide={wide} />);
+      const text = container.querySelector('.chart-bar-tip text')!.textContent!;
+      cleanup();
+      return text;
+    };
+    expect(said(1200)).toContain('Wedding $0');
+    expect(said(480)).toMatch(/Conference \S+ · Gala \S+ · Party \S+$/);
+    expect(said(480)).not.toContain('Wedding');
+    expect(said(250)).toMatch(/^[^·]+ · \$61600$/);
+  });
+});
+
+describe('a measure as the shared chart rules read it', () => {
+  /* The dashboard's charts and the page charts read a value by one rule now (@mistriwork/ui/charts/core.js). Each of
+     these is a case where the dashboard's own copy said something else. */
+  const rowsOf = (container: HTMLElement) =>
+    [...container.querySelectorAll('table.chart-data tbody tr')].map((tr) => [...tr.children].map((cell) => cell.textContent));
+
+  test('a group with no measure is no bar, not a bar at zero', () => {
+    const { container } = render(
+      <BarChart
+        rows={[
+          { key: 'Won', value: 4 },
+          { key: 'Lost', value: null },
+          { key: 'Open', value: '' },
+          { key: 'Held', value: 0 },
+        ]}
+      />,
+    );
+    expect(container.querySelectorAll('.chart-bar')).toHaveLength(2);
+    expect(rowsOf(container)).toEqual([
+      ['Won', '4'],
+      ['Held', '0'],
+    ]);
+  });
+
+  test('a period nothing was measured in is still a point at zero between its neighbours', () => {
+    const { container } = render(
+      <LineChart
+        rows={[
+          { key: '2026-01', value: 3 },
+          { key: '2026-02', value: null },
+          { key: '2026-03', value: 5 },
+        ]}
+      />,
+    );
+    expect(rowsOf(container)).toEqual([
+      ['Jan 2026', '3'],
+      ['Feb 2026', '0'],
+      ['Mar 2026', '5'],
+    ]);
+  });
+
+  test('a count past 2^53 is said digit for digit by the bar, the line, the donut and the spark', () => {
+    const big = '9007199254740993';
+    const rows = [
+      { key: 'a', value: big },
+      { key: 'b', value: 2 },
+    ];
+    const bars = render(<BarChart rows={rows} />);
+    expect(rowsOf(bars.container)[0]).toEqual(['a', big]);
+    expect(bars.container.querySelector('.chart-bar title')).toHaveTextContent(`a: ${big}`);
+    cleanup();
+    const line = render(<LineChart rows={rows} />);
+    expect(rowsOf(line.container)[0]).toEqual(['a', big]);
+    expect(line.container.querySelector('svg')!.getAttribute('aria-label')).toContain(big);
+    cleanup();
+    const donut = render(<DonutChart rows={rows} />);
+    expect(donut.container.querySelector('.chart-legend-value')).toHaveTextContent(big);
+    cleanup();
+    const spark = render(<Sparkline rows={rows} />);
+    expect(spark.container.querySelector('svg')!.getAttribute('aria-label')).toContain(big);
+  });
+
+  test('a series too long to spread into Math.max still draws', () => {
+    const long = Array.from({ length: 200_000 }, (_, i) => ({ key: `k${i}`, value: i % 97 }));
+    expect(() => render(<Sparkline rows={long} />)).not.toThrow();
   });
 });

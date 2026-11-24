@@ -19,7 +19,7 @@ test('an action is listed after the options, runs on click, and never becomes th
         { value: 'a', label: 'app' },
         { value: 'b', label: 'billing' },
       ]}
-      onChange={onChange}
+      onValueChange={onChange}
       actions={[{ label: '↻ Re-read the schema', onSelect: reread }]}
     />,
   );
@@ -57,7 +57,7 @@ test('choosing an option reports it and closes; the arrows walk options and acti
         { value: 'a', label: 'app' },
         { value: 'b', label: 'billing' },
       ]}
-      onChange={onChange}
+      onValueChange={onChange}
       actions={[{ label: 'Re-read', onSelect: reread }]}
     />,
   );
@@ -89,7 +89,7 @@ test('optional ownership props expose the real portal and open state without cha
       value="a"
       items={[{ value: 'a', label: 'Alpha' }]}
       ariaLabel="Select"
-      onChange={change}
+      onValueChange={change}
       popupRef={popupRef}
       onOpenChange={open}
     />,
@@ -109,20 +109,24 @@ test('optional ownership props expose the real portal and open state without cha
   expect(popupRef.current).toBeNull();
 });
 
-test('each of the five tones styles its option through its own class', async () => {
+test('each of the six tones styles its option through its own data-tone', async () => {
   const user = userEvent.setup();
   render(
     <Dropdown
       ariaLabel="Tones"
       value="good"
-      items={(['good', 'warn', 'bad', 'info', 'neutral'] as const).map((tone) => ({ value: tone, label: tone, tone }))}
-      onChange={() => {}}
+      items={(['good', 'warning', 'critical', 'info', 'neutral', 'accent'] as const).map((tone) => ({
+        value: tone,
+        label: tone,
+        tone,
+      }))}
+      onValueChange={() => {}}
     />,
   );
   await user.click(screen.getByRole('button', { name: /^Tones\b/ }));
   const options = await screen.findAllByRole('option');
   // The tone is an attribute on the option, which the stylesheet dresses.
-  expect(options.map((o) => o.getAttribute('data-tone'))).toEqual(['good', 'warn', 'bad', 'info', 'neutral']);
+  expect(options.map((o) => o.getAttribute('data-tone'))).toEqual(['good', 'warning', 'critical', 'info', 'neutral', 'accent']);
 });
 
 test('pressing the option that is already chosen changes nothing', async () => {
@@ -138,7 +142,7 @@ test('pressing the option that is already chosen changes nothing', async () => {
           { value: 'a', label: 'app' },
           { value: 'b', label: 'billing' },
         ]}
-        onChange={(next, details) => {
+        onValueChange={(next, details) => {
           onChange(next, details);
           set(next);
         }}
@@ -165,7 +169,7 @@ test('a letter typed on the closed button moves the choice, and says it followed
         { value: 'a', label: 'app', detail: 'billing is next door' },
         { value: 'b', label: 'billing' },
       ]}
-      onChange={onChange}
+      onValueChange={onChange}
     />,
   );
   screen.getByRole('button', { name: /^Pick\b/ }).focus();

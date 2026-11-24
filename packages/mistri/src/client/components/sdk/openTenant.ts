@@ -30,7 +30,7 @@ interface UiOpenTenantInput {
 interface UiOpenTenant {
   /** Resolves with the opened tenant, or null when it did not open (`error` says why); send it again with the same key to complete it. */
   open(input: UiOpenTenantInput): Promise<AdministrationOpenTenantResult | null>;
-  pending: boolean;
+  isPending: boolean;
   error: Error | null;
   result: AdministrationOpenTenantResult | null;
 }
@@ -49,16 +49,16 @@ export async function profileAttempt(key: string): Promise<string> {
 
 export function useOpenTenant(ref: UiCommandRef): UiOpenTenant {
   const command = useCommand(ref);
-  const [state, setState] = useState<{ pending: boolean; error: Error | null; result: AdministrationOpenTenantResult | null }>({
-    pending: false,
+  const [state, setState] = useState<{ isPending: boolean; error: Error | null; result: AdministrationOpenTenantResult | null }>({
+    isPending: false,
     error: null,
     result: null,
   });
   const session = useRef<AdministrationSession | null>(null);
   const open = useCallback(
     async (request: UiOpenTenantInput): Promise<AdministrationOpenTenantResult | null> => {
-      setState({ pending: true, error: null, result: null });
-      const fail = (error: Error) => (setState({ pending: false, error, result: null }), null);
+      setState({ isPending: true, error: null, result: null });
+      const fail = (error: Error) => (setState({ isPending: false, error, result: null }), null);
       try {
         if (typeof request.key !== 'string' || !KEY.test(request.key)) return fail(new TypeError(say('keyIsInvalid')));
         const attempt = await profileAttempt(request.key);
@@ -82,7 +82,7 @@ export function useOpenTenant(ref: UiCommandRef): UiOpenTenant {
           tenant: request.tenant,
           invitation: request.invitation,
         });
-        setState({ pending: false, error: null, result });
+        setState({ isPending: false, error: null, result });
         return result;
       } catch (error) {
         // A session the door no longer honors is asked for again on the retry.
@@ -92,5 +92,5 @@ export function useOpenTenant(ref: UiCommandRef): UiOpenTenant {
     },
     [command],
   );
-  return { open, pending: state.pending, error: state.error, result: state.result };
+  return { open, isPending: state.isPending, error: state.error, result: state.result };
 }

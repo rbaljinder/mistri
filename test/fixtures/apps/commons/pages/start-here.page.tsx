@@ -12,12 +12,12 @@ import {
   Button,
   Cluster,
   definePage,
-  Empty,
-  Grid,
+  EmptyState,
   Icon,
-  List,
   Loaded,
+  PageGrid,
   Panel,
+  RecordList,
   Row,
   useDeployment,
   useFile,
@@ -66,11 +66,11 @@ function StartHere(): ReactNode {
             join to start threads, reply and react.
           </p>
           <Row gap="tight">
-            <Button intent="primary" onClick={() => nav.openView('latest')}>
+            <Button variant="primary" onClick={() => nav.openView('latest')}>
               Read the latest threads
             </Button>
             {signedIn ? (
-              <Button intent="secondary" onClick={() => nav.openView('boards')}>
+              <Button variant="secondary" onClick={() => nav.openView('boards')}>
                 Browse the boards
               </Button>
             ) : (
@@ -82,7 +82,7 @@ function StartHere(): ReactNode {
         </div>
         {photo && <img src={photo} alt="A workbench from above: a keyboard, a circuit board, two printed vases and a wooden box." />}
       </section>
-      <Grid>
+      <PageGrid>
         <Panel title="Busy right now" width="half">
           <Threads sort="last_activity desc" label="Busy right now" />
         </Panel>
@@ -90,7 +90,7 @@ function StartHere(): ReactNode {
           <Threads sort="replies desc, last_activity desc" label="Most to read" />
         </Panel>
         <Panel title="The boards" width="full">
-          <Loaded query={boards} empty={<Empty title="No boards yet" />} height={240}>
+          <Loaded query={boards} empty={<EmptyState title="No boards yet" />} height={240}>
             {(rows) => (
               <Cluster min="15rem">
                 {rows.map((board) => (
@@ -104,7 +104,7 @@ function StartHere(): ReactNode {
                     </button>
                     {/* Signed out, the form is not served: the hero's Join is the way in, so the card stays a way to read. */}
                     {signedIn && start.granted && (
-                      <Button intent="quiet" size="compact" onClick={() => void start.open({ board: board.id })}>
+                      <Button variant="ghost" size="sm" onClick={() => void start.open({ board: board.id })}>
                         Start a thread here
                       </Button>
                     )}
@@ -114,7 +114,7 @@ function StartHere(): ReactNode {
             )}
           </Loaded>
         </Panel>
-      </Grid>
+      </PageGrid>
     </div>
   );
 }
@@ -124,14 +124,14 @@ function Threads({ sort, label }: { sort: string; label: string }): ReactNode {
   const nav = useNavigate();
   const format = useFormat();
   return (
-    <List
+    <RecordList
       from="thread"
       query="listed"
       show={['id', 'title', 'board_id.name', 'author_id.display_name', 'replies', 'last_activity']}
       sort={sort}
       limit={5}
-      label={label}
-      empty={<Empty title="No threads yet" description="The first one starts the forum." />}
+      ariaLabel={label}
+      empty={<EmptyState title="No threads yet" description="The first one starts the forum." />}
     >
       {(thread) => (
         <button type="button" className="c-page-start-here-thread" onClick={() => nav.openRecord('thread', { id: thread.id })}>
@@ -148,7 +148,7 @@ function Threads({ sort, label }: { sort: string; label: string }): ReactNode {
           </span>
         </button>
       )}
-    </List>
+    </RecordList>
   );
 }
 

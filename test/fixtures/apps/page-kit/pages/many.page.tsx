@@ -1,6 +1,6 @@
 /** A page that asks nineteen lists on entry, as a field report's did: e2e/page-kit.spec.ts counts the requests they
     make, which the client batches into one (kit breakdownBatch.ts), each list still drawing its own rows. */
-import { Card, Grid, Text, definePage, useRows } from '@mistriwork/mistri/page';
+import { Card, PageGrid, Text, definePage, useRows } from '@mistriwork/mistri/page';
 
 const page = definePage({ label: 'Many reads', reads: ['thing', 'part', 'note', 'deal'], component: Many });
 export default page;
@@ -29,11 +29,11 @@ const ASKED = [
 
 function Many() {
   return (
-    <Grid>
+    <PageGrid>
       {ASKED.map((asked, at) => (
         <List key={at} at={at} resource={asked.resource} query={asked.query} />
       ))}
-    </Grid>
+    </PageGrid>
   );
 }
 

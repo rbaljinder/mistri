@@ -159,10 +159,10 @@ export function AttachmentList({ items, emptyText, empty, upload }: AttachmentLi
            aimed at, with the button inside it for everyone else. */
         <div className="attachments-add">
           <Button
-            intent="secondary"
-            size="compact"
-            busy={busy}
-            busyLabel={say('attaching')}
+            variant="secondary"
+            size="sm"
+            loading={busy}
+            loadingLabel={say('attaching')}
             onClick={() => input.current?.click()}
           >{`+ ${upload.label}`}</Button>
           <input
@@ -221,13 +221,13 @@ export function AttachmentList({ items, emptyText, empty, upload }: AttachmentLi
                     </span>
                     <span className="attachments-actions">
                       <ButtonLink
-                        intent="quiet"
-                        size="compact"
+                        variant="ghost"
+                        size="sm"
                         className="attachments-download"
                         href={item.href}
                         download={item.name}
                         onClick={saveOnLease(item)}
-                        aria-label={say('downloadName', { name: item.name })}
+                        ariaLabel={say('downloadName', { name: item.name })}
                       >
                         {say('download')}
                       </ButtonLink>
@@ -311,7 +311,7 @@ function RenameRow({ item, onDone }: { item: AttachmentItem; onDone: () => void 
         }
       }}
     >
-      <Field label={say('fileName')} size="compact" problem={problem}>
+      <Field label={say('fileName')} size="sm" problem={problem}>
         {/* The reader just asked to type here, so the box takes the focus. */}
         {/* oxlint-disable-next-line jsx-a11y/no-autofocus */}
         <input
@@ -325,10 +325,10 @@ function RenameRow({ item, onDone }: { item: AttachmentItem; onDone: () => void 
         />
       </Field>
       <span className="attachments-rename-actions">
-        <Button intent="primary" size="compact" type="submit" busy={busy} busyLabel={say('common.saving')}>
+        <Button variant="primary" size="sm" type="submit" loading={busy} loadingLabel={say('common.saving')}>
           {say('common.save')}
         </Button>
-        <Button intent="secondary" size="compact" onClick={onDone}>
+        <Button variant="secondary" size="sm" onClick={onDone}>
           {say('common.cancel')}
         </Button>
       </span>
@@ -367,10 +367,10 @@ function RemoveConfirm({ item, onClose }: { item: AttachmentItem; onClose: () =>
         </p>
       )}
       <div className="confirm-actions">
-        <Button ref={keep} intent="secondary" disabled={busy} onClick={() => dialog.current?.close()}>
+        <Button ref={keep} variant="secondary" disabled={busy} onClick={() => dialog.current?.close()}>
           {say('keep')}
         </Button>
-        <Button intent="danger" busy={busy} busyLabel={say('removing')} onClick={() => void remove()}>
+        <Button variant="danger" loading={busy} loadingLabel={say('removing')} onClick={() => void remove()}>
           {say('common.remove')}
         </Button>
       </div>

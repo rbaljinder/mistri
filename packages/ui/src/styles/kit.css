@@ -5,59 +5,52 @@
     display: flex;
     align-items: baseline;
     gap: 0.375rem;
-
-    &[data-kind='visually-hidden'] {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      overflow: hidden;
-      clip-path: inset(50%);
-      white-space: nowrap;
-    }
-  }
-
-  [data-slot='field-required'] {
-    color: var(--m-critical);
-    font-weight: 600;
   }
 
   /* The problem's line, kept while it is empty, so a problem that arrives moves nothing below it: the line is set at
      the problem's own size, or it is a line of the field's larger text and the problem, arriving, pulls up what is
      under it. */
   [data-slot='field-reserve'] {
+    display: block;
     min-height: 1.5em;
     margin: 0;
-    font-size: calc(var(--ui-font-size) - 0.0625rem);
+    font-size: var(--text-sm);
   }
 
   [data-slot='field']:has(> [data-slot='field-reserve'], > div > [data-slot='field-reserve']) [data-slot='field-error'] {
     min-height: 1.5em;
   }
 
-  [data-slot='popover-trigger'][data-kind='help-tip'] {
-    width: 1.125rem;
-    height: 1.125rem;
-    padding: 0;
-    border: 1px solid var(--m-line-control);
-    border-radius: 999px;
-    box-shadow: none;
-    color: var(--m-ink-muted);
-    font-size: 0.6875rem;
-    font-weight: 600;
-  }
-
   [data-slot='field-box'] {
-    position: relative;
-    display: flex;
-    align-items: center;
     width: 100%;
 
     & [data-slot='input'] {
       width: 100%;
+      padding-inline: var(--m-space-3h);
     }
 
     &[data-has-mark] [data-slot='input'] {
       padding-inline-end: 2rem;
+    }
+
+    & > :is(button, [data-slot='button']) {
+      flex: none;
+      height: auto;
+      min-height: calc(var(--control-h) - 6px);
+      margin-inline-end: var(--m-space-1);
+      padding-inline: var(--m-space-2h);
+      border: 0;
+      border-radius: max(0px, calc(var(--m-radius) - 2px));
+      background: transparent;
+      box-shadow: none;
+      color: var(--m-ink-muted);
+
+      @media (hover: hover) {
+        &:hover:not(:disabled, [data-disabled]) {
+          background: var(--m-raised);
+          color: var(--m-ink);
+        }
+      }
     }
   }
 
@@ -97,16 +90,12 @@
     gap: 0.375rem;
     margin: 0;
     color: var(--m-ink-muted);
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
 
   [data-slot='field'].consent [data-slot='field-label'] {
     font-weight: 400;
     line-height: 1.5;
-  }
-
-  [data-slot='button'][data-block] {
-    width: 100%;
   }
 
   [data-slot='button'][data-busy] {
@@ -116,9 +105,13 @@
 
   [data-slot='switch-row'] {
     display: inline-flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 0.625rem;
     min-width: 0;
+
+    &:has([data-slot='switch-description']) {
+      align-items: flex-start;
+    }
 
     & [data-slot='switch'] {
       flex: none;
@@ -130,6 +123,7 @@
     display: flex;
     flex-direction: column;
     gap: 0.125rem;
+    font-size: var(--m-text);
 
     & label {
       font-weight: 550;
@@ -142,17 +136,9 @@
   }
 
   [data-slot='slider-readout'] {
-    font-size: 1.25rem;
+    font-size: var(--text-xl);
     font-weight: 650;
     letter-spacing: var(--m-track-title);
-    font-variant-numeric: tabular-nums;
-  }
-
-  [data-slot='slider-ends'] {
-    display: flex;
-    justify-content: space-between;
-    color: var(--m-ink-subtle);
-    font-size: 0.75rem;
     font-variant-numeric: tabular-nums;
   }
 
@@ -208,50 +194,28 @@
 
   /* A date's text and its calendar button are one box, as a unit beside a number is. */
   [data-slot='date-field'] {
-    display: flex;
-    align-items: center;
     width: 100%;
-    /* The box is the field: the height, the edge and the fill every field has (./parts.css). At least that
-       height, and not exactly it: where a form gives its inputs more room, the box grows round the input. */
-    box-sizing: border-box;
+    max-width: 100%;
     height: auto;
-    min-height: var(--control-h);
-    border: var(--control-border-w) solid var(--ui-input);
-    border-radius: var(--ui-radius);
-    background: var(--field-fill);
 
-    &:focus-within {
-      border-color: var(--ui-ring-border);
-      outline: 2px solid var(--ui-ring);
-      outline-offset: 1px;
-    }
-
-    &:has([aria-invalid='true']) {
-      border-color: var(--ui-destructive);
+    & input::-webkit-calendar-picker-indicator {
+      display: none;
     }
 
     & [data-slot='input'] {
-      flex: 1;
-      align-self: stretch;
-      /* The date's text is never narrower than a full date and its padding ("MM/DD/YYYY" is ten characters): a form
-         that sets a date and a time in a box as wide as its answer left "MM/D" showing (a field report). */
-      min-width: calc(10ch + var(--m-space-6));
-      height: auto;
-      /* The box's edge is the input's own where a form sizes its inputs with their edge counted in. */
-      margin-block: calc(-1 * var(--control-border-w));
-      border: 0;
-      background: transparent;
-      outline: none;
+      flex: 1 1 6ch;
+      padding-inline: var(--m-space-3h);
       font-variant-numeric: tabular-nums;
     }
 
     /* A date and a time's clock: the platform's own control inside the box, ruled off from the text. */
     & > [data-slot='date-field-time'] {
-      flex: none;
+      flex: 0 1 auto;
+      min-width: 0;
       align-self: stretch;
       padding-inline: calc(var(--ui-spacing) * 2);
       border: 0;
-      border-inline-start: 1px solid var(--ui-input);
+      border-inline-start: 1px solid var(--m-line);
       background: transparent;
       color: inherit;
       font: inherit;
@@ -263,8 +227,12 @@
       flex: none;
       width: calc(var(--ui-spacing) * 6.5);
       height: calc(var(--ui-spacing) * 6.5);
+      min-height: 0;
       margin-inline-end: calc(var(--ui-spacing) * 0.5);
       padding: 0;
+      border: 0;
+      box-shadow: none;
+      background: transparent;
     }
   }
 
@@ -310,37 +278,43 @@
 
   [data-slot='option-label'] {
     flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   [data-slot='option-detail'] {
     color: var(--m-ink-subtle);
-    font-size: 0.75rem;
+    font-size: var(--text-sm);
   }
 
   [data-slot='option-badge'] {
     padding-inline: 0.375rem;
     border: 1px solid var(--m-line-strong);
-    border-radius: 999px;
+    border-radius: var(--pill-radius, 999px);
     color: var(--m-ink-muted);
-    font-size: 0.6875rem;
+    font-size: var(--text-xs);
   }
 
   [data-slot='select-item'][data-tone='good'] [data-slot='option-label'] {
     color: var(--m-good);
   }
-  [data-slot='select-item'][data-tone='warn'] [data-slot='option-label'] {
+  [data-slot='select-item'][data-tone='warning'] [data-slot='option-label'] {
     color: var(--m-warning);
   }
-  [data-slot='select-item'][data-tone='bad'] [data-slot='option-label'] {
+  [data-slot='select-item'][data-tone='critical'] [data-slot='option-label'] {
     color: var(--m-critical);
   }
   [data-slot='select-item'][data-tone='info'] [data-slot='option-label'] {
     color: var(--m-info);
   }
+  [data-slot='select-item'][data-tone='accent'] [data-slot='option-label'] {
+    color: var(--m-accent-ink);
+  }
 
   [data-slot='swatches'] {
     display: inline-flex;
-    gap: 2px;
+    gap: var(--space-1);
 
     & span {
       width: 0.625rem;
@@ -398,24 +372,24 @@
   [data-slot='avatar'][data-size='md'] {
     width: 2.25rem;
     height: 2.25rem;
-    font-size: 0.8125rem;
+    font-size: var(--text-base);
   }
 
   [data-slot='avatar'][data-size='lg'] {
     width: 3rem;
     height: 3rem;
-    font-size: 1rem;
+    font-size: var(--text-lg);
   }
 
   [data-slot='avatar'][data-size='sm'] {
     width: 1.75rem;
     height: 1.75rem;
-    font-size: 0.6875rem;
+    font-size: var(--text-xs);
   }
 
   /* A dialog that leaves a sliver of the page around it on a phone reads as a mistake, so it takes the screen. */
   [data-slot='dialog-content'][data-kind='modal'] {
-    border-radius: calc(var(--m-radius) + 4px);
+    border-radius: var(--radius-card);
 
     &[data-fullscreen='always'] {
       inset: 0;
@@ -444,13 +418,15 @@
     border-radius: var(--m-radius);
     background: none;
     color: var(--m-ink-muted);
-    font-size: calc(1.25rem * var(--type-k, 1));
+    font-size: var(--text-xl);
     line-height: 1;
     cursor: pointer;
 
-    &:hover:not(:disabled) {
+    @media (hover: hover) {
+      &:hover:not(:disabled) {
       color: var(--m-ink);
       background: var(--m-raised);
+    }
     }
 
     &:disabled {
@@ -475,10 +451,6 @@
     }
   }
 
-  [data-slot='drawer-content'][data-kind='sheet'] [data-slot='drawer-title'] {
-    margin: 0;
-  }
-
   /* What a caller puts in a drawer is its own; it is only kept apart, a field's gap between each. */
   [data-slot='drawer-content'][data-kind='sheet'] [data-slot='sheet-body'] {
     display: flex;
@@ -488,73 +460,5 @@
     & > p {
       margin: 0;
     }
-  }
-}
-
-/* `buttonClass`: the button's dress by class, for an element that must stay what it is and cannot be a
-   `ButtonLink` (kit/rest.tsx). The same tokens and sizes as the button's own. */
-@layer m-parts {
-  .ui-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--m-space-2h);
-    height: calc(var(--m-unit) * 8);
-    padding-inline: var(--m-space-4);
-    border: 1px solid var(--m-line-control);
-    border-radius: var(--m-radius-control, var(--m-radius));
-    background: var(--m-surface);
-    color: var(--m-ink);
-    font: inherit;
-    font-weight: var(--m-weight-medium);
-    text-decoration: none;
-    white-space: nowrap;
-    cursor: pointer;
-
-    &:hover {
-      background: var(--m-raised);
-    }
-
-    &:focus-visible {
-      outline: 2px solid var(--ui-ring);
-      outline-offset: 2px;
-    }
-  }
-
-  .ui-button-primary {
-    border-color: var(--m-primary);
-    background: var(--m-primary);
-    color: var(--m-on-primary);
-
-    &:hover {
-      background: color-mix(in oklab, var(--m-primary) 88%, var(--m-surface));
-    }
-  }
-
-  .ui-button-quiet {
-    border-color: transparent;
-    background: none;
-  }
-
-  .ui-button-danger {
-    border-color: var(--m-critical);
-    background: var(--m-critical);
-    color: var(--m-surface);
-  }
-
-  .ui-button-compact {
-    height: calc(var(--m-unit) * 6.5);
-    padding-inline: var(--m-space-3);
-    font-size: var(--m-size-xs);
-  }
-
-  .ui-button-large {
-    height: calc(var(--m-unit) * 10);
-    padding-inline: var(--m-space-5);
-  }
-
-  .ui-button-block {
-    display: flex;
-    width: 100%;
   }
 }

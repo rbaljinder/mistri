@@ -109,20 +109,22 @@ interface TreeListProps {
   interactive?: boolean;
   label?: string;
   referenceLabels?: Record<string, string>;
+  limit?: number;
 }
 
-export function TreeList({ table, spec, entry, interactive = true, label, referenceLabels }: TreeListProps) {
+export function TreeList({ table, spec, entry, interactive = true, label, referenceLabels, limit }: TreeListProps) {
   const connection = state.activeConnection ?? null;
+  const maxRows = limit ?? LIMIT;
   const key = primaryKey(table);
   const columns = [...new Set([...key, ...listPresentationColumns(spec), ...Object.values(referenceLabels ?? {})])];
   const filter = splitQuery(entry.query).filter;
   const text = `${table.id}${filter ? ` ${filter}` : ''} show ${columns.join(', ')}`;
   const answer = useQuery({
-    queryKey: ['run', connection ?? '', 'tree', text],
+    queryKey: ['run', connection ?? '', 'tree', text, ...(limit === undefined ? [] : [limit])],
     queryFn: async () => {
       const data = (await api('/api/run', {
         q: text,
-        limit: LIMIT,
+        limit: maxRows,
         offset: 0,
         count: 'none',
         ...(connection ? ownedBy(connection) : {}),
@@ -137,20 +139,22 @@ export function TreeList({ table, spec, entry, interactive = true, label, refere
   });
   /* The parent column names the record above by its key: a tree is over a single-column key. */
   const single = key.length === 1 ? key[0] : undefined;
+  const fetched = answer.data?.rows ?? [];
   const roots = useMemo(
     () =>
       forestOf(
-        answer.data?.rows ?? [],
+        fetched,
         (row) => (single === undefined || row[single] == null ? null : String(row[single])),
         (row) => (row[spec.parent] == null || row[spec.parent] === '' ? null : String(row[spec.parent])),
         (row) => String(namedCell(table, spec.primary, row, referenceLabels).value ?? sayCopy('untitled')),
         (row) => keyOf(table, row) as Record<string, unknown> | null,
       ),
-    [answer.data, single, spec, table, referenceLabels],
+    [fetched, single, spec, table, referenceLabels],
   );
-  /* Every root opens on its first level, so the tree reads as more than a list of tops. */
+  /* Small trees open their first level so they read as more than a list of tops; large trees stay folded until opened. */
   const [open, setOpen] = useState<ReadonlySet<string> | null>(null);
-  const opened = open ?? new Set(roots.filter((root) => root.children.length).map((root) => root.id));
+  const opened =
+    open ?? new Set(fetched.length <= 40 && roots.length <= 12 ? roots.filter((root) => root.children.length).map((root) => root.id) : []);
   const shown = shownOf(roots, opened);
   const [active, setActive] = useState<string>();
   const current = shown.find((node) => node.id === active) ?? shown[0];

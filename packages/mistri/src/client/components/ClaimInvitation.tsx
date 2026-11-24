@@ -139,13 +139,13 @@ export function ClaimInvitation({
         />
       </FormField>
       {/* Busy, not disabled, as on the sign-in form: a disabled button drops its focus. */}
-      <Button intent="primary" size="large" block type="submit" className="signin-submit" busy={busy}>
+      <Button variant="primary" size="lg" block type="submit" className="signin-submit" loading={busy}>
         {say('createAccountAndJoin')}
       </Button>
       <p className="signin-problem" role="alert" hidden={!problem || Boolean(problem.field)}>
         {problem && !problem.field ? problem.text : ''}
       </p>
-      <Button intent="quiet" className="signin-flip" onClick={onCancel}>
+      <Button variant="ghost" className="signin-flip" onClick={onCancel}>
         {say('common.backToSign')}
       </Button>
     </form>

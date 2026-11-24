@@ -1,5 +1,17 @@
 /** The leads list as a page, on the kit's parts: figures, a counted filter, a search and a table whose first cell is the person. */
-import { Button, Card, Cluster, Grid, Metric, PageHeader, Stack, Table, definePage, useHref, useNavigate } from '@mistriwork/mistri/page';
+import {
+  Button,
+  Card,
+  Cluster,
+  Metric,
+  PageGrid,
+  PageHeader,
+  Stack,
+  Table,
+  definePage,
+  useHref,
+  useNavigate,
+} from '@mistriwork/mistri/page';
 
 const STATUSES = ['new', 'working', 'qualified', 'converted', 'lost'] as const;
 
@@ -34,16 +46,16 @@ function Leads() {
         title="Leads"
         description="Everyone who might buy, from first touch to converted."
         actions={
-          <Button intent="primary" href={`${href.view('lead-records')}/new`}>
+          <Button variant="primary" href={`${href.view('lead-records')}/new`}>
             New lead
           </Button>
         }
       />
-      <Grid>
+      <PageGrid>
         <Metric title="Open leads" from="lead" query="status = new or status = working or status = qualified" width="third" />
         <Metric title="New this week" from="lead" query="created_on = last 7 days" over="created_on" previous spark width="third" />
         <Metric title="Qualified" from="lead" query="status = qualified" width="third" />
-      </Grid>
+      </PageGrid>
       <Card>
         <Stack>
           <Cluster min="16rem">
@@ -51,7 +63,7 @@ function Leads() {
             <page.Search param="q" placeholder="Search name or company" />
           </Cluster>
           <Table
-            label="Leads"
+            ariaLabel="Leads"
             rows={leads.data ?? []}
             rowKey={(row) => String(row.id)}
             columns={[
@@ -65,7 +77,7 @@ function Leads() {
             empty={leads.isPending ? null : phrase ? `No leads match “${phrase}”.` : 'No leads here yet.'}
           />
           {leads.page.hasMore ? (
-            <Button intent="secondary" size="compact" busy={leads.isFetching} onClick={() => leads.more()}>
+            <Button variant="secondary" size="sm" loading={leads.isFetching} onClick={() => leads.more()}>
               Show more
             </Button>
           ) : null}

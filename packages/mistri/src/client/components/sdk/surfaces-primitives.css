@@ -1,0 +1,412 @@
+/* `@mistriwork/mistri/primitives`' own sheet, over surfaces-base.css and surfaces-charts.css: UI SDK's surface-only slot
+   rules enter `ui-sdk-lazy` (under `base`), while the `.nx-*` controls enter `surfaces`. Visual-theme (`look`) and
+   `structure` rules for surface-only composite field boxes travel here on demand so Mistri's first-paint stylesheet
+   pays zero bytes for pickers and editors a page has not opened. */
+@import '@mistriwork/ui/styles/ui-sdk-surfaces.css' layer(ui-sdk-lazy);
+@import '@mistriwork/ui/styles/surfaces/primitives.css' layer(surfaces);
+
+@layer base {
+  @layer m-guard {
+    :is(
+        [data-slot='password-input'],
+        [data-slot='number-input-group'],
+        [data-slot='time-input'],
+        [data-slot='date-input'],
+        [data-slot='combobox-chips'],
+        [data-slot='token-input'],
+        .nx-token-input-box,
+        .nx-datetime-picker-box,
+        .nx-textarea-frame
+      )
+      :is(input, textarea) {
+      border: 0 !important;
+      box-shadow: none !important;
+      outline: none !important;
+      min-height: 0 !important;
+
+      &:not([data-slot='time-input-segment']:focus, [data-slot='date-input-segment']:focus) {
+        border-radius: 0 !important;
+        background: transparent !important;
+      }
+    }
+  }
+}
+
+@layer look {
+  :root[data-visual-theme]
+    :is(
+      [data-slot='password-input'],
+      [data-slot='number-input-group'],
+      [data-slot='time-input']:not(.nx-datetime-picker-box *),
+      [data-slot='date-input'],
+      [data-slot='combobox-chips'],
+      .nx-token-input-box,
+      [data-slot='token-input-editor']:not(.nx-token-input-box *),
+      .nx-datetime-picker-box,
+      .nx-textarea-frame
+    ):focus-within {
+    outline: var(--focus-width) solid var(--focus);
+    outline-offset: -1px;
+    border-color: var(--focus);
+    box-shadow: none;
+  }
+
+  :root[data-visual-theme] .nx-datetime-picker-box [data-slot='select-trigger'] {
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    outline: none;
+    min-height: 0;
+    padding-block: 0;
+  }
+
+  :root[data-visual-theme]
+    :is(
+      [data-slot='dialog-content'][data-kind='modal'],
+      .form-page,
+      .insert-form,
+      .command-field,
+      .insert-field,
+      .signin-form,
+      .front-search-form,
+      .account-profile-field,
+      .confirm,
+      [data-slot='field']
+    )
+    :is(
+      [data-slot='password-input'],
+      [data-slot='number-input-group'],
+      [data-slot='time-input']:not(.nx-datetime-picker-box *),
+      [data-slot='date-input'],
+      [data-slot='combobox-chips'],
+      .nx-token-input-box,
+      [data-slot='token-input-editor']:not(.nx-token-input-box *),
+      .nx-datetime-picker-box,
+      .nx-textarea-frame
+    ) {
+    min-height: var(--form-control-h, 36px);
+    box-sizing: border-box;
+    font-size: var(--text-md);
+    font-family: var(--sans);
+    background: var(--field-fill, var(--surface));
+    color: var(--ink);
+    border: var(--control-border-w, 1px) solid var(--line-control);
+    border-radius: var(--field-radius, var(--radius));
+  }
+
+  @media (pointer: coarse) {
+    :root[data-visual-theme]
+      :is(
+        [data-slot='dialog-content'][data-kind='modal'],
+        .form-page,
+        .insert-form,
+        .command-field,
+        .insert-field,
+        .signin-form,
+        .front-search-form,
+        .account-profile-field,
+        .confirm,
+        [data-slot='field']
+      )
+      :is(
+        [data-slot='password-input'],
+        [data-slot='number-input-group'],
+        [data-slot='time-input']:not(.nx-datetime-picker-box *),
+        [data-slot='date-input'],
+        [data-slot='combobox-chips'],
+        .nx-token-input-box,
+        [data-slot='token-input-editor']:not(.nx-token-input-box *),
+        .nx-datetime-picker-box
+      ) {
+      min-height: max(36px, calc(44px / var(--density-zoom, 1)));
+    }
+  }
+
+  :root[data-visual-theme]
+    :is(
+      [data-slot='password-input'],
+      [data-slot='number-input-group'],
+      [data-slot='time-input'],
+      [data-slot='date-input'],
+      [data-slot='combobox-chips'],
+      [data-slot='token-input'],
+      .nx-token-input-box,
+      .nx-datetime-picker-box
+    )
+    input:not([type='checkbox'], [type='radio']) {
+    padding-block: revert-layer;
+    padding-left: revert-layer;
+  }
+
+  :root[data-visual-theme] .nx-textarea-frame textarea {
+    padding: revert-layer;
+    line-height: revert-layer;
+  }
+
+  :root[data-visual-theme] [data-slot='field'][data-size='compact']
+    :is(
+      [data-slot='password-input'],
+      [data-slot='number-input-group'],
+      [data-slot='time-input']:not(.nx-datetime-picker-box *),
+      [data-slot='date-input'],
+      [data-slot='combobox-chips'],
+      .nx-token-input-box,
+      [data-slot='token-input-editor']:not(.nx-token-input-box *),
+      .nx-datetime-picker-box
+    ) {
+    min-height: 30px;
+    font-size: var(--text-base);
+  }
+}
+
+@layer structure {
+  :root[data-visual-theme]
+    :is(
+      [data-slot='password-input'],
+      [data-slot='number-input-group'],
+      [data-slot='time-input']:not(.nx-datetime-picker-box *),
+      [data-slot='date-input'],
+      [data-slot='combobox-chips'],
+      .nx-token-input-box,
+      [data-slot='token-input-editor']:not(.nx-token-input-box *),
+      .nx-datetime-picker-box,
+      .nx-textarea-frame
+    ):is([data-disabled], :has(:is(input, textarea):is(:disabled, [aria-disabled='true']))) {
+    background: var(--raised);
+    color: var(--ink-muted);
+    border-color: var(--line);
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  :root[data-visual-theme] :is(.form-page, .command-form, .insert-form-app)
+    :is(
+      [data-slot='password-input'],
+      [data-slot='number-input-group'],
+      [data-slot='time-input']:not(.nx-datetime-picker-box *),
+      [data-slot='date-input'],
+      [data-slot='combobox-chips'],
+      .nx-token-input-box,
+      [data-slot='token-input-editor']:not(.nx-token-input-box *),
+      .nx-datetime-picker-box,
+      .nx-textarea-frame
+    ):is([data-disabled], :has(:is(input, textarea):is(:disabled, [aria-disabled='true']))):not(.form-lines *) {
+    background: transparent;
+    border-style: dashed;
+    border-color: color-mix(in oklab, var(--ink) 22%, transparent);
+  }
+
+  :root[data-visual-theme]
+    :is(
+      [data-slot='password-input'],
+      [data-slot='number-input-group'],
+      [data-slot='time-input']:not(.nx-datetime-picker-box *),
+      [data-slot='date-input'],
+      [data-slot='combobox-chips'],
+      .nx-token-input-box,
+      [data-slot='token-input-editor']:not(.nx-token-input-box *),
+      .nx-datetime-picker-box,
+      .nx-textarea-frame
+    ):is([data-invalid], :has([aria-invalid='true']), [data-slot='field'][data-invalid] &) {
+    border-color: var(--status-critical);
+  }
+}
+
+/* The look on the primitives (surfaces-base.css says how these are written, and why here). */
+@layer look {
+  /* ---------- tabs: pill, inverted, underline, rule, tint, lifted ----------
+     `Tabs` wears the recipe by its slots where it is drawn plain (@mistriwork/ui's looks.css). With a count, an icon
+     or `fitted` it is drawn by the `.nx-tabs-*` rules, which stand over that sheet, so the recipe is said again for
+     them, as a list's tabs wear it (themeFamilies.css, sageLook.css, tilesLook.css). `underline` is its own drawing.
+     A `variant` the page asked for by name is the page's choice and is left alone.
+     Where the chosen tab is a box, the box is drawn behind the tab and not on it: a tab's own corner is held square
+     for every look (@mistriwork/ui's guard.css), so a box on the tab itself was a square pill. */
+  :is([data-look-tabs='pill'], [data-look-tabs='tint'], [data-look-tabs='inverted'], [data-look-tabs='lifted']) .nx-tabs-list:not([data-variant]) {
+    & > .nx-tabs-indicator {
+      display: none;
+    }
+    & > .nx-tabs-tab {
+      position: relative;
+      isolation: isolate;
+    }
+    & > .nx-tabs-tab[data-selected] {
+      background: none;
+      box-shadow: none;
+      color: var(--nx-tab-ink, var(--ink));
+    }
+    & > .nx-tabs-tab[data-selected]::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border-radius: var(--nx-tab-corner, var(--control-radius, var(--radius)));
+      background: var(--nx-tab-box);
+      box-shadow: var(--nx-tab-edge, none);
+    }
+  }
+  [data-look-tabs='pill'] .nx-tabs-list {
+    --nx-tab-box: var(--raised);
+    --nx-tab-edge: inset 0 0 0 1px var(--line-strong);
+  }
+  [data-look-tabs='tint'] .nx-tabs-list {
+    --nx-tab-box: var(--chosen, color-mix(in srgb, var(--accent) 14%, var(--surface)));
+  }
+  /* inverted: the block is the tab's own ground, not a box behind it, so what measures the words' contrast reads the
+     ink they stand on (`mistri grade` reads an element's ground, never a pseudo-element's). Its corner is the held
+     square one, which is Mono's. */
+  [data-look-tabs='inverted'] .nx-tabs-list:not([data-variant]) > .nx-tabs-tab[data-selected] {
+    background: var(--ink);
+    color: var(--ground);
+    &::before {
+      content: none;
+    }
+  }
+  /* lifted: the tabs are keys in a track, the chosen one lifted out of it, and no rule runs under a track. */
+  [data-look-tabs='lifted'] .nx-tabs-list {
+    --nx-tab-box: var(--surface);
+    --nx-tab-edge: 0 0 0 1px var(--line), var(--shadow-control, 0 1px 2px color-mix(in srgb, var(--ink) 8%, transparent));
+    --nx-tab-corner: var(--segment-corner, var(--radius));
+  }
+  [data-look-tabs='lifted'] .nx-tabs-list:not([data-variant]) {
+    width: fit-content;
+    border-bottom: 0;
+  }
+  /* rule: the chosen tab stands on a square rule in the link's ink. */
+  [data-look-tabs='rule'] .nx-tabs-list:not([data-variant]) > .nx-tabs-indicator {
+    border-radius: 0;
+    background: var(--link);
+  }
+
+  /* ---------- stat: plain, framed, topline, ruled, icon, panel, divided, bento ----------
+     `StatCard` is the SDK's figure. A dashboard's figures share a strip; these stand alone in whatever grid the page
+     gives them, so each value is said for one card: its box, its label and its figure. A card inside a `Card` is
+     already open on that card and keeps so. */
+  [data-look-stat] .nx-stat-card:not(.kit-stat-plain) {
+    padding: var(--space-5) var(--space-5h, 20px);
+    border: var(--panel-border-width, 1px) solid var(--line);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    box-shadow: none;
+  }
+  :is([data-look-stat='plain'], [data-look-stat='ruled'], [data-look-stat='divided']) .nx-stat-card:not(.kit-stat-plain) {
+    border: 0;
+    border-radius: 0;
+    background: none;
+  }
+  :is([data-look-stat='plain'], [data-look-stat='ruled']) .nx-stat-card:not(.kit-stat-plain) {
+    padding-inline: 0;
+  }
+  [data-look-stat='ruled'] .nx-stat-card:not(.kit-stat-plain) {
+    border-top: 2px solid var(--ink);
+  }
+  [data-look-stat='topline'] .nx-stat-card:not(.kit-stat-plain) {
+    border-top: 3px solid var(--chart-1);
+  }
+  /* divided: cells of one strip, a hairline between neighbours and none before the first. */
+  [data-look-stat='divided'] .nx-stat-card:not(.kit-stat-plain, :first-child) {
+    border-inline-start: 1px solid var(--line);
+  }
+  [data-look-stat='framed'] .nx-stat-card:not(.kit-stat-plain) {
+    border-color: var(--ink);
+  }
+  /* By night the ink is white, and a white frame outweighs the figure in it: the frame is half the ink there. */
+  @media (prefers-color-scheme: dark) {
+    [data-look-stat='framed']:not([data-theme='light']) .nx-stat-card:not(.kit-stat-plain) {
+      border-color: color-mix(in srgb, var(--ink) 45%, var(--surface));
+    }
+  }
+  [data-look-stat='framed'][data-theme='dark'] .nx-stat-card:not(.kit-stat-plain) {
+    border-color: color-mix(in srgb, var(--ink) 45%, var(--surface));
+  }
+  [data-look-stat='panel'] .nx-stat-card:not(.kit-stat-plain) {
+    border-color: transparent;
+    box-shadow: var(--shadow-card, none);
+  }
+  /* Where the look boxes its sections in cards a panel has no shade to stand apart by: it keeps its hairline. */
+  [data-look-stat='panel'][data-look-section='card'] .nx-stat-card:not(.kit-stat-plain) {
+    border-color: var(--line);
+    box-shadow: none;
+  }
+  [data-look-stat='icon'] .nx-stat-card:not(.kit-stat-plain) {
+    box-shadow: var(--shadow-card, none);
+  }
+  [data-look-stat='icon'] .nx-stat-icon {
+    justify-content: center;
+    align-items: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 50%;
+    background: color-mix(in srgb, var(--chart-1) 12%, var(--surface));
+    color: var(--chart-1);
+  }
+  [data-look-stat='bento'] .nx-stat-card:not(.kit-stat-plain) {
+    border: 0;
+    background: var(--raised);
+  }
+  /* A link's box says so on hover, where the recipe gives it an edge to say it with. */
+  @media (hover: hover) {
+    :is([data-look-stat='icon'], [data-look-stat='topline']) a.nx-stat-card:hover {
+      border-color: var(--line-strong);
+    }
+  }
+  /* The label and the figure: the recipe's, then the look's type roles over it (a role's face, size and weight win
+     over the family's; `divided`, `icon` and `bento` set their own label, in the role's case and tracking). */
+  [data-look-stat='divided'] {
+    --nx-stat-label-face: var(--sans);
+    --nx-stat-label-size: var(--text-sm);
+    --nx-stat-label-weight: 500;
+    --nx-stat-figure-size: calc(32px * var(--type-k));
+  }
+  [data-look-stat='icon'] {
+    --nx-stat-label-face: var(--sans);
+    --nx-stat-label-size: var(--text-xs);
+    --nx-stat-label-weight: 500;
+    --nx-stat-figure-size: calc(24px * var(--type-k));
+    --nx-stat-figure-weight: 700;
+  }
+  [data-look-stat='bento'] {
+    --nx-stat-label-face: var(--sans);
+    --nx-stat-label-size: var(--text-sm);
+    --nx-stat-label-weight: 500;
+  }
+  [data-look-stat] .nx-stat-label {
+    color: var(--ink-muted);
+    font-family: var(--nx-stat-label-face, var(--nx-label-face, var(--sans)));
+    font-size: var(--nx-stat-label-size, var(--nx-label-size, var(--text-base)));
+    font-weight: var(--nx-stat-label-weight, var(--nx-label-weight, 500));
+    letter-spacing: var(--nx-label-track, normal);
+    text-transform: var(--nx-label-case, none);
+  }
+  [data-look-stat] .nx-stat-value {
+    font-family: var(--nx-figure-face, var(--nx-stat-figure-face, var(--sans)));
+    font-size: var(--nx-figure-size, var(--nx-stat-figure-size, calc(30px * var(--type-k))));
+    font-weight: var(--nx-figure-weight, var(--nx-stat-figure-weight, 600));
+    letter-spacing: var(--nx-figure-track, var(--nx-stat-figure-track, var(--track-display)));
+    line-height: 1.15;
+    /* At a look's figure size a long number is wider than a narrow card, and the card clips what runs past it: the
+       figure takes a second line before it loses its last digits. */
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  /* divided: the figure is the heading's, heavy and tight, whatever face and weight the figure's role says; the
+     role still says its size (the kit's rule outweighs the role's the same way, lumenLook.css). */
+  [data-look-stat='divided'] .nx-stat-value {
+    font-family: var(--heading-font, var(--sans));
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.1;
+  }
+  /* The change is the news in its tone's ink beside what it is against, never a chip (a dashboard's is not). */
+  [data-look-stat] .nx-stat-delta.nx-stat-delta {
+    height: auto;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: color-mix(in srgb, var(--nx-tone, var(--ink-muted)) 78%, var(--ink));
+    font: 500 var(--text-sm) var(--sans);
+  }
+  [data-look-stat] .nx-stat-delta.nx-stat-delta::before {
+    content: none;
+  }
+}

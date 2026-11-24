@@ -103,7 +103,7 @@ export function AccountAdministration({ onClose }: { onClose: () => void }) {
           </h2>
         ) : whose ? (
           <Button
-            intent="quiet"
+            variant="ghost"
             onClick={() => {
               setPlace({ kind: 'account', id: whose.id });
               setSaid(null);
@@ -113,7 +113,7 @@ export function AccountAdministration({ onClose }: { onClose: () => void }) {
           </Button>
         ) : (
           <Button
-            intent="quiet"
+            variant="ghost"
             onClick={() => {
               setPlace({ kind: 'list' });
               setSaid(null);
@@ -122,7 +122,7 @@ export function AccountAdministration({ onClose }: { onClose: () => void }) {
             {say('allAccounts')}
           </Button>
         )}
-        <Button intent="quiet" onClick={onClose} aria-label={say('closeAccounts')}>
+        <Button variant="ghost" onClick={onClose} ariaLabel={say('closeAccounts')}>
           ×
         </Button>
       </header>
@@ -153,7 +153,7 @@ export function AccountAdministration({ onClose }: { onClose: () => void }) {
               />
             </form>
             <Button
-              intent="quiet"
+              variant="ghost"
               onClick={() => {
                 setSaid(null);
                 setPlace({ kind: 'trail' });
@@ -162,7 +162,7 @@ export function AccountAdministration({ onClose }: { onClose: () => void }) {
               {say('history')}
             </Button>
             <Button
-              intent="primary"
+              variant="primary"
               onClick={() => {
                 setSaid(null);
                 setPlace({ kind: 'new' });
@@ -222,8 +222,8 @@ export function AccountAdministration({ onClose }: { onClose: () => void }) {
                 {page.offset + 1}–{page.offset + page.accounts.length} {say('ofTotal', { total: page.total })}
               </span>
               <Button
-                intent="secondary"
-                size="compact"
+                variant="secondary"
+                size="sm"
                 disabled={page.offset === 0 || loading}
                 onClick={() => {
                   const from = Math.max(0, page.offset - ACCOUNTS_PAGE);
@@ -234,8 +234,8 @@ export function AccountAdministration({ onClose }: { onClose: () => void }) {
                 {say('previous')}
               </Button>
               <Button
-                intent="secondary"
-                size="compact"
+                variant="secondary"
+                size="sm"
                 disabled={page.offset + page.accounts.length >= page.total || loading}
                 onClick={() => {
                   const from = page.offset + ACCOUNTS_PAGE;
@@ -386,7 +386,7 @@ function AccountEditor({
         )}
         <dt>{say('changesLabel')}</dt>
         <dd>
-          <Button intent="quiet" size="compact" onClick={onHistory}>
+          <Button variant="ghost" size="sm" onClick={onHistory}>
             {say('viewHistory')}
           </Button>
         </dd>
@@ -407,7 +407,13 @@ function AccountEditor({
           </p>
         )}
         <div className="form-actions">
-          <Button intent="primary" type="submit" busy={busy === 'roles'} busyLabel={say('common.saving')} disabled={!chosen.length || same}>
+          <Button
+            variant="primary"
+            type="submit"
+            loading={busy === 'roles'}
+            loadingLabel={say('common.saving')}
+            disabled={!chosen.length || same}
+          >
             {say('saveRoles')}
           </Button>
         </div>
@@ -444,7 +450,7 @@ function AccountEditor({
             />
           </Field>
           <div className="form-actions">
-            <Button intent="secondary" type="submit" busy={busy === 'password'} busyLabel={say('setting')} disabled={!password}>
+            <Button variant="secondary" type="submit" loading={busy === 'password'} loadingLabel={say('setting')} disabled={!password}>
               {say('setPassword')}
             </Button>
           </div>
@@ -457,9 +463,9 @@ function AccountEditor({
             <>
               <p className="note">{say('deactivatingEndsTheirSessions')}</p>
               <Button
-                intent="danger"
-                busy={busy === 'active'}
-                busyLabel={say('deactivating')}
+                variant="danger"
+                loading={busy === 'active'}
+                loadingLabel={say('deactivating')}
                 onClick={() =>
                   void run('active', { operation: 'deactivate', accountId: account.id }, (next) =>
                     say('isDeactivatedAndSigned', { email: next.email }),
@@ -473,9 +479,9 @@ function AccountEditor({
             <>
               <p className="note">{say('reactivatingLetsThemSign')}</p>
               <Button
-                intent="secondary"
-                busy={busy === 'active'}
-                busyLabel={say('reactivating')}
+                variant="secondary"
+                loading={busy === 'active'}
+                loadingLabel={say('reactivating')}
                 onClick={() =>
                   void run('active', { operation: 'reactivate', accountId: account.id }, (next) =>
                     say('canSignInAgain', { email: next.email }),
@@ -574,7 +580,7 @@ function NewAccount({
         </Field>
       )}
       <div className="form-actions">
-        <Button intent="primary" type="submit" busy={busy} busyLabel={say('adding')}>
+        <Button variant="primary" type="submit" loading={busy} loadingLabel={say('adding')}>
           {say('addAccount')}
         </Button>
       </div>

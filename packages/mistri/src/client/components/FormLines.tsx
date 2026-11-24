@@ -875,8 +875,8 @@ export function LinesEditor({
         </table>
         <div className="form-lines-foot">
           <Button
-            intent="quiet"
-            size="compact"
+            variant="ghost"
+            size="sm"
             className="lines-add"
             disabled={rows.length >= max}
             onClick={() => {

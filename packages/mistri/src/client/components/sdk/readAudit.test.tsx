@@ -50,7 +50,7 @@ const paged = (): ReadAuditAccess & { asked: unknown[] } => {
 
 test('outside a tenant App the log is empty and nothing is wrong', async () => {
   const { result } = renderHook(() => useReadAudit(), { wrapper: wrapperFor() });
-  await waitFor(() => expect(result.current.loading).toBe(false));
+  await waitFor(() => expect(result.current.isPending).toBe(false));
   expect(result.current).toMatchObject({ reads: [], next: undefined, error: null });
 });
 
@@ -114,6 +114,6 @@ test("a reader outside the admins' gate hears the route's refusal and is given n
   expect(read).toHaveBeenCalledTimes(1);
   const { result } = renderHook(() => useReadAudit({ record: '7' }), { wrapper: wrapperFor({ read }) });
   await waitFor(() => expect(result.current.error).toBe(refused));
-  expect(result.current).toMatchObject({ reads: [], next: undefined, loading: false });
+  expect(result.current).toMatchObject({ reads: [], next: undefined, isPending: false });
   expect((result.current.error as Error & { status?: number }).status).toBe(403);
 });

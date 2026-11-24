@@ -255,8 +255,8 @@ export function HeldFilesInput({
         <div className="held-files-add">
           <Button
             id={id}
-            intent="secondary"
-            size="compact"
+            variant="secondary"
+            size="sm"
             disabled={off || room <= 0}
             aria-invalid={invalid || undefined}
             onClick={() => picker.current?.click()}
@@ -312,10 +312,10 @@ export function HeldFilesInput({
                   {info && <span className="held-files-meta">{formatBytes(info.size)}</span>}
                 </span>
                 <Button
-                  intent="quiet"
-                  size="compact"
+                  variant="ghost"
+                  size="sm"
                   disabled={disabled}
-                  aria-label={say('removeFile', { name: shown })}
+                  ariaLabel={say('removeFile', { name: shown })}
                   onClick={() => {
                     forgetHeldFile(held);
                     change(latest.current.filter((each) => each !== held));
@@ -337,7 +337,7 @@ export function HeldFilesInput({
                   <span className="held-files-name is-plain">{each.name}</span>
                   <ProgressBar value={percent} max={100} label={say('sending', { name: each.name, percent })} />
                 </span>
-                <Button intent="quiet" size="compact" onClick={each.abort}>
+                <Button variant="ghost" size="sm" onClick={each.abort}>
                   {say('cancel')}
                 </Button>
               </li>

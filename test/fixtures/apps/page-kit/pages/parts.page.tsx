@@ -3,12 +3,12 @@
     e2e/page-parts-themes.spec.ts reads it in every look, light and dark, at a desk and at a phone. */
 import {
   ActionButton,
-  Bars,
+  BreakdownList,
   Breakdown,
   Card,
-  Details,
-  Grid,
+  DescriptionList,
   Metric,
+  PageGrid,
   Person,
   Stack,
   Table,
@@ -46,7 +46,7 @@ function Parts() {
       <page.Choose param="stage" count all="All deals" />
       <Card title="Deals">
         <Table
-          label="Deals"
+          ariaLabel="Deals"
           rows={rows}
           rowKey={(row) => String(row.id)}
           columns={[
@@ -57,7 +57,7 @@ function Parts() {
           ]}
         />
       </Card>
-      <Grid>
+      <PageGrid>
         <Card>
           <Metric title="Won" from="deal" query="stage = won" measure="sum amount" over="closed_on" window="window" previous spark />
         </Card>
@@ -65,8 +65,8 @@ function Parts() {
           <Breakdown title="Pipeline by stage" from="deal" by="stage" measure="sum amount" shape="bars" also="count" format="money" />
         </Card>
         <Card title="By owner">
-          <Bars
-            label="Deal value by owner"
+          <BreakdownList
+            ariaLabel="Deal value by owner"
             format="money"
             items={[...byOwner].map(([owner, value]) => ({ key: owner, label: owner, value }))}
           />
@@ -75,7 +75,7 @@ function Parts() {
           {first ? (
             <Stack>
               <Person name={String(first.owner)} secondary={String(first.name)} size="md" />
-              <Details
+              <DescriptionList
                 resource="deal"
                 row={first}
                 fields={['stage', 'amount', 'closed_on', { label: 'Owner', value: String(first.owner) }]}
@@ -87,11 +87,11 @@ function Parts() {
         <Card title="Offered verbs">
           <Stack>
             {rows.slice(0, 4).map((row) => (
-              <ActionButton key={String(row.id)} action="markWon" row={row} unavailable="hide" intent="secondary" />
+              <ActionButton key={String(row.id)} action="markWon" row={row} unavailable="hide" variant="secondary" />
             ))}
           </Stack>
         </Card>
-      </Grid>
+      </PageGrid>
     </Stack>
   );
 }

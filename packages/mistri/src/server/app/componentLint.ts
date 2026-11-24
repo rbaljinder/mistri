@@ -254,17 +254,18 @@ function styleColors(text: string): number[] {
 /* A widget's role written by hand: the role promises keys, focus and states (arrows through a listbox, Escape out of a
    dialog, aria-selected on a tab) that the shipped primitive keeps and a hand-drawn one almost never does. A warning,
    since a role can be right, but the primitive named is nearly always what was meant. Only a component an App can import
-   is named (`@mistriwork/mistri/ui`, `/page`): a menu and a combobox have none there yet (DropMenu and Typeahead are
-   @mistriwork/ui's, which an App does not import), so those say so and name nothing. */
-const HAND_ROLES: Readonly<Record<string, string | undefined>> = {
+   is named: a menu's and a combobox's are `@mistriwork/mistri/primitives`' (Preview), never DropMenu or Typeahead by
+   @mistriwork/ui's names, which an App does not import. test/app-components.test.ts holds each name to that module's
+   published declarations. */
+export const HAND_ROLES: Readonly<Record<string, string>> = {
   listbox: 'Dropdown (or Select) from @mistriwork/mistri/ui',
   option: "Dropdown's options from @mistriwork/mistri/ui",
-  menu: undefined,
-  menuitem: undefined,
+  menu: 'DropdownMenu from @mistriwork/mistri/primitives',
+  menuitem: "DropdownMenu's items from @mistriwork/mistri/primitives",
   tab: 'Tabs from @mistriwork/mistri/page',
   tablist: 'Tabs from @mistriwork/mistri/page',
   dialog: 'Modal (or Drawer) from @mistriwork/mistri/page',
-  combobox: undefined,
+  combobox: 'Combobox from @mistriwork/mistri/primitives',
 };
 /* A JSX attribute: `role=` with nothing between the name and the sign, set off from what comes before it. Not the end of
    another name (`data-role=`, `aria-role=`, `row.role=`), not a declaration or a destructured default (`const role=`,
@@ -534,7 +535,7 @@ function cssFindings(
   /* A class that is not the component's own name-space would collide with the
      platform's or another component's once a look reaches it; the kit's own
      classes are drawn by the kit, not restyled. */
-  const selectors = text.replace(/\{[^{}]*\}/g, (body) => body.replace(/[^\n]/g, ' '));
+  const selectors = selectorText(text);
   for (const match of selectors.matchAll(/\.(-?[_a-zA-Z][\w-]*)/g)) {
     const name = match[1];
     if (prefixes.some((own) => name === own || name.startsWith(`${own}-`))) continue;
@@ -543,6 +544,20 @@ function cssFindings(
       `the class ".${name}" is not this component's: name its classes ${prefix}${sheet ? `, or "${sheet}-…" after the stylesheet` : ''}${packaged.length ? `, or ${packaged.join(' or ')} where the package's cssPrefix says so` : ''}, so no look or other component meets them`,
     );
   }
+}
+
+/* A sheet with everything a class selector cannot be in blanked, each character a space so an offset still names its
+   line: comments, strings and url(…) first (`@import url('./tokens.css');` holds a `.css`, and a path is not a class: a
+   field report), then a statement at-rule to its semicolon (`@import`, `@layer a, b;`, `@namespace`) and every
+   declaration block. A block at-rule's prelude (`@media (min-width: 37.5em)`) holds no class; one that takes a
+   selector (`@scope (.c-card)`) is still read. */
+function selectorText(text: string): string {
+  const blank = (part: string): string => part.replace(/[^\n]/g, ' ');
+  return text
+    .replace(/\/\*[\s\S]*?\*\/|"(?:\\[\s\S]|[^"\\\n])*"|'(?:\\[\s\S]|[^'\\\n])*'|\burl\(\s*[^'")]*\)/gi, blank)
+    .replace(/@[\w-]+[^;{}]*;/g, blank)
+    .replace(/@(?!scope\b)[\w-]+[^;{}]*(?=\{)/gi, blank)
+    .replace(/\{[^{}]*\}/g, blank);
 }
 
 /** What a free-form page declares, by its component's id: what its sources are held to (appPages.ts scanPageSource). */
@@ -675,12 +690,12 @@ export async function lintComponents(
         for (const page of links.pages) linked.add(page);
         unseen ||= links.unseen;
       }
-      /* The word AI is the App's to say once (`ai.label`, <AiMark/>), so a person who renames it renames it everywhere. */
+      /* The word AI is the App's to say once (`ai.label`, <AiBadge/>), so a person who renames it renames it everywhere. */
       if (parse && lang)
         for (const { line, text: said } of aiWordsIn(parse, raw, lang))
           warn(
             line,
-            `[ai-text-bare] "${said}" says AI as text: draw <AiMark/> from @mistriwork/mistri/ui, which says the App's ai.label ("AI" when absent) and its mark`,
+            `[ai-text-bare] "${said}" says AI as text: draw <AiBadge/> from @mistriwork/mistri/ui, which says the App's ai.label ("AI" when absent) and its mark`,
           );
       if (manifest && parse && lang && /\bdefinePage\s*\(/.test(text)) {
         const form = onlyCommandForm(parse, raw, lang);
@@ -724,9 +739,7 @@ export async function lintComponents(
           warn(
             i + 1,
             `[component-role] role="${role}" written by hand: its keys, focus and states are a primitive's work; ` +
-              (HAND_ROLES[role]
-                ? `draw ${HAND_ROLES[role]}`
-                : "an App's modules have no primitive for it yet, so prefer the native element that keeps them (a <button>, a <select>)"),
+              `draw ${HAND_ROLES[role]}`,
           );
         /* Motion said in a style prop is motion all the same. */
         const motion = /\b(transition|animation)(Duration)?\s*:\s*['"`]([^'"`]+)/.exec(line);

@@ -22,6 +22,7 @@ import {
   type SpansReason,
   stackSpans,
 } from '@ui-sdk/core';
+import { viewportBox, viewportScale } from '../internal/ruler.js';
 
 export type SpansChange = ChangeDetails<SpansReason> & { id: string; action: SpanAction };
 
@@ -161,7 +162,7 @@ export const spans = definePrimitive({
         const root = el.closest('[data-slot="spans"]');
         if (!root) return undefined;
         const all = [...root.querySelectorAll<HTMLElement>('[data-slot="spans-span"]')];
-        const here = el.getBoundingClientRect();
+        const here = viewportBox(el);
         const along = options().axis === 'y' ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
         const track = el.closest('[data-slot="spans-track"]');
         if (along.includes(key)) {
@@ -173,11 +174,10 @@ export const spans = definePrimitive({
         for (let at = tracks.indexOf(track as HTMLElement) + (forward ? 1 : -1); at >= 0 && at < tracks.length; at += forward ? 1 : -1) {
           const there = all.filter((span) => span.closest('[data-slot="spans-track"]') === tracks[at]);
           if (there.length === 0) continue;
-          const middle = (box: DOMRect) => (options().axis === 'y' ? box.top + box.height / 2 : box.left + box.width / 2);
+          const middle = (box: ReturnType<typeof viewportBox>) =>
+            options().axis === 'y' ? box.top + box.height / 2 : box.left + box.width / 2;
           return there.reduce((best, span) =>
-            Math.abs(middle(span.getBoundingClientRect()) - middle(here)) < Math.abs(middle(best.getBoundingClientRect()) - middle(here))
-              ? span
-              : best,
+            Math.abs(middle(viewportBox(span)) - middle(here)) < Math.abs(middle(viewportBox(best)) - middle(here)) ? span : best,
           );
         }
         return undefined;
@@ -228,7 +228,7 @@ export const spans = definePrimitive({
         focus: (_event, { api, key }) => api.focus(key),
         click: (event, { api, key }) => {
           // A press that carried the stretch somewhere is not a press on it.
-          if (event.detail !== 0 && Math.hypot(event.clientX - api.pressed.x, event.clientY - api.pressed.y) > 4) return;
+          if (event.detail !== 0 && Math.hypot(event.clientX - api.pressed.x, event.clientY - api.pressed.y) / viewportScale() > 4) return;
           api.pick(key, event);
         },
         keydown: (event, { api, key, el }) => {

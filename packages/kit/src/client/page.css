@@ -123,7 +123,7 @@
     border-left: 1px solid var(--line);
     padding-left: var(--space-6);
   }
-  /* A tablet (761–1100px, the ruler's band, @mistriwork/ui/internal/ruler) keeps a record's side column at 280px
+  /* A tablet (761–1100px, the ruler's band, @mistriwork/ui) keeps a record's side column at 280px
    beside the main one, as a desk does: stacked, the record's state and its history went a screen under the
    work. An archetype and a dashboard place their own regions and still stack there (below). */
   @media (min-width: 761px) and (max-width: 1100px) {
@@ -217,7 +217,8 @@
    too, and a sliver of vertical overflow (a row a pixel taller in another font, Lumen's card) let it take a wheel
    turned over it and keep it, so the record stopped short of its end (e2e/scrolling.spec.ts, on an iPad). */
   .page-section .table-wrap {
-    overflow-y: hidden;
+    max-height: 28rem;
+    overflow-y: auto;
   }
 
   /* No box.
@@ -772,11 +773,6 @@
   .page-action[hidden] {
     display: none;
   }
-  /* The host the action bar is drawn into: no box of its own, so its buttons
-   sit in the head's row like the Delete beside them. */
-  .page-actions {
-    display: contents;
-  }
   /* The toolbar shares the title's row, at its far end, on a wide screen;
    on a phone it is a row of its own under the name, starting where the
    name starts, instead of splitting across two lines. A record's head is
@@ -1029,6 +1025,10 @@
     min-height: 0;
     padding-block: 0;
   }
+  .root-current .inline-field-open .inline-edit-button {
+    height: auto;
+    align-self: stretch;
+  }
 
   .page-empty {
     margin: var(--space-2) 0 0;
@@ -1208,12 +1208,6 @@
     margin: 0;
   }
 
-  .pb-backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 85;
-    background: var(--scrim);
-  }
   .pb {
     position: fixed;
     top: 6vh;
@@ -3689,12 +3683,12 @@
   .page-aside .page-headline-action {
     flex: 1 1 100%;
   }
-  /* One column: what the aside says about the record's surroundings — the
-   offer card (the headline: the price and its actions), the card of the
-   record a reference names, the one current row — follows the photos and the
-   summary, ahead of the related lists it explains; the rest of the aside —
-   the properties rail, the history, the notes — follows the main work, as any
-   aside does stacked. Moving the whole aside up put a property rail and a
+  /* One column: what the aside says about the record itself — the offer card
+   (the headline: the price and its actions) and the one current row
+   (current()) — follows the first main section (the photos, the summary),
+   ahead of the related lists it explains; the rest of the aside — the card
+   of the record a reference names (card()), the properties rail, the
+   history, the notes — follows the main work, as any aside does stacked. Moving the whole aside up put a property rail and a
    history ahead of a lease's payments. The two bodies give
    up their boxes so their sections share one order. A grid rather than a
    flex column: its items fill the width however little they hold (a shut

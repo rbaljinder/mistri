@@ -17,14 +17,15 @@
  * (packages/mistri/schema/page.d.ts), and so a linter still sees them as hooks.
  *
  * It is the one import a page needs: everything `@mistriwork/mistri/ui` exports, and beside it the page's own — the
- * platform's command form and per-row buttons, `Scope` and `List`, the layout's `Grid` and `Panel`, the platform's
- * sections as components (blocks.tsx) and the house controls (pageControls.ts), each part loaded when a page first
- * draws one. In the page this module is the page's own, reached through the import map like `@mistriwork/mistri/ui`;
- * its value exports are `PAGE_EXPORTS` (shared/uiSdk.ts), of which `UI_EXPORTS` is a part.
+ * platform's command form and per-row buttons, `Scope` and `RecordList`, the layout's `PageGrid` and `Panel`, the
+ * platform's sections as components (blocks.tsx) and the house controls of `@mistriwork/ui`. In the page this module is
+ * the page's own, reached through the import map like `@mistriwork/mistri/ui`; its value exports are `PAGE_EXPORTS`
+ * (shared/uiSdk.ts), of which `UI_EXPORTS` is a part.
  */
 import { createContext, createElement, useContext, useMemo, type ComponentType, type ReactNode } from 'react';
+import { Button, installSurfaceSeam, type ButtonSize, type ButtonVariant } from '@mistriwork/ui';
 import { Refused } from '@mistriwork/kit/client/components/Notes.js';
-import { PageHeading } from '@mistriwork/kit/client/components/PageHeading.js';
+import { mistriSurfaceSeam } from './seam.js';
 import {
   resourceOfRow,
   useAction,
@@ -37,7 +38,7 @@ import {
   useRecord,
   useRows,
 } from './hooks.js';
-import { Button, Loaded } from './kit.js';
+import { Loaded } from './kit.js';
 import {
   scopedCondition,
   UiPageContext,
@@ -55,16 +56,17 @@ import { idKeyOf, paramKinds, paramValue, type ParamValue } from './paramKinds.j
 import { say } from '../../copy/components/components/sdk/page.js';
 
 export * from './index.js';
-export { Beside, Card, Cluster, Columns, Empty, Heading, Item, Items, Loaded, Row, Stack, Stat, Value } from './kit.js';
-export { Button };
 /* A page's place in its address, as written: `page.useParam` reads it through this hook and checks it against the
    param's kind; this one is for a module the page draws that is not the page itself (a widget, the Console's rooms). */
 export { useAddressState };
 /* A breakdown's empty periods put back as zero in the App's calendar, the filler a dashboard's charts use. */
 export { fillBuckets } from '@mistriwork/engine/shared/autoBucket.js';
-/* An App's control kit (Preview): its module imports these from here, so the kit and the page share the one seam,
-   and the two hooks a kit's own popups are placed and named by read the page's own contexts. */
-export { defineUiKit, defaultUiKit, dress, extendUiKit, useComponentScope, usePopupHost } from '@mistriwork/ui/UiKit.js';
+/* An App's control kit (Preview): its module imports `defineUiKit` from here so the kit and the page share the one seam. */
+export { defineUiKit } from '@mistriwork/ui';
+export { Avatar, CheckCards, DateField, Drawer, Modal, Pagination, Popover, Tabs, Tooltip } from '@mistriwork/ui';
+export { PageHeader } from '@mistriwork/ui/views.js';
+export { DateNav } from './DateNav.js';
+
 /* The platform's blocks (blocks.tsx): a part of their own, loaded when a page first draws one. They draw the
    platform's rooms, which reach this module again through the host, so the module that draws a free-form page hands
    in how they load (pageBlocks.ts) rather than this one importing them. */
@@ -80,18 +82,17 @@ export const Gantt = onDemand(blocks, 'Gantt');
 export const Board = onDemand(blocks, 'Board');
 export const Calendar = onDemand(blocks, 'Calendar');
 export const Gallery = onDemand(blocks, 'Gallery');
-export const Split = onDemand(blocks, 'Split');
+export const RecordSplit = onDemand(blocks, 'RecordSplit');
 export const Assistant = onDemand(blocks, 'Assistant');
-export const Tabs = onDemand(blocks, 'Tabs');
 export const Steps = onDemand(blocks, 'Steps');
 
 /* Controls bound to a param of the page (paramControls.tsx): the address is their state. A part of their own, fetched the
    first time a page draws one; the box they stand in holds a control's height (kit.css), so the part arrives in place. */
 const paramControls = () => import('./paramControls.js');
-function reserved<P extends object>(Part: ComponentType<P>): (props: P) => ReactNode {
-  return (props) => (
-    <div className="kit-param">
-      <Part {...props} />
+function reserved<P extends { className?: string }>(Part: ComponentType<P>): (props: P) => ReactNode {
+  return ({ className, ...rest }) => (
+    <div className={className ? `kit-param ${className}` : 'kit-param'}>
+      <Part {...(rest as P)} />
     </div>
   );
 }
@@ -99,74 +100,25 @@ export const Choose = reserved(onDemand(paramControls, 'Choose', { quiet: true }
 export const Search = reserved(onDemand(paramControls, 'Search', { quiet: true }));
 export const DateRange = reserved(onDemand(paramControls, 'DateRange', { quiet: true }));
 
-/* The rest of the house controls, as the shell dresses its own (pageControls.ts), the fields being the SDK's own
-   (index.ts): a part of their own with their rules, fetched the first time a page draws one, so a page that draws
-   none carries none. */
-const controls = () => import('./pageControls.js');
-export const Avatar = onDemand(controls, 'Avatar', { quiet: true });
-export const CheckCards = onDemand(controls, 'CheckCards', { quiet: true });
-export const DateField = onDemand(controls, 'DateField', { quiet: true });
-export const DateNav = onDemand(controls, 'DateNav', { quiet: true });
-export const Drawer = onDemand(controls, 'Drawer', { quiet: true });
-export const Modal = onDemand(controls, 'Modal', { quiet: true });
-export const Pagination = onDemand(controls, 'Pagination', { quiet: true });
-export const Popover = onDemand(controls, 'Popover', { quiet: true });
-export const Tooltip = onDemand(controls, 'Tooltip', { quiet: true });
-
 /** The page's grid: blocks and panels side by side by their `width`, wrapping as a dashboard's sections do. */
-export function Grid({ children }: { children?: ReactNode }) {
-  return <div className="page-body">{children}</div>;
-}
-
-/**
- * A head for a page that draws its own (`head: false`): the title, a line of intro, the page's verbs at the far end
- * (typically `<CommandForm>` buttons) and a way back, in the platform's own head markup, so it reads like every other
- * page's in every theme. The page's one h1 is the platform's (`head: false` keeps it for a screen reader), so this is
- * an h2. `back`: an address of this App, followed in place.
- *
- *   <PageHeader title="Pick walk" description="Lists due today" back={{ label: 'All lists', href: '/pick-lists' }}
- *     actions={<CommandForm command="releaseOrder" />} />
- */
-export function PageHeader({
-  title,
-  description,
-  actions,
-  back,
-}: {
-  title: ReactNode;
-  description?: ReactNode;
-  actions?: ReactNode;
-  back?: { label: string; href: string };
-}) {
-  return (
-    <PageHeading
-      level={2}
-      title={title}
-      description={description}
-      actions={actions}
-      back={
-        back ? (
-          <Button intent="quiet" size="compact" href={back.href}>
-            {say('backTo', { label: back.label })}
-          </Button>
-        ) : undefined
-      }
-    />
-  );
+export function PageGrid({ children, className }: { children?: ReactNode; className?: string }) {
+  return <div className={className ? `page-body ${className}` : 'page-body'}>{children}</div>;
 }
 
 /** A titled region of the grid, a dashboard section's box: `<Panel title="Open lines" width="half">…</Panel>`. */
 export function Panel({
   title,
   width = 'full',
+  className,
   children,
 }: {
   title?: ReactNode;
   width?: 'full' | 'half' | 'third' | 'two-thirds';
+  className?: string;
   children?: ReactNode;
 }) {
   return (
-    <section className={`page-section width-${width}`}>
+    <section className={`page-section width-${width}${className ? ` ${className}` : ''}`}>
       {title !== undefined && <h2 className="page-section-title">{title}</h2>}
       {children}
     </section>
@@ -300,24 +252,27 @@ export function CommandForm({
   command,
   record,
   label,
-  intent = 'secondary',
+  variant = 'secondary',
+  className,
   onDone,
 }: {
   command: string;
   record?: Readonly<Record<string, unknown>>;
   label?: ReactNode;
-  intent?: 'primary' | 'secondary' | 'quiet';
+  variant?: ButtonVariant;
+  className?: string;
   onDone?: (outcome: Awaited<ReturnType<ReturnType<typeof useCommand>['open']>>) => void;
 }) {
   const handle = useCommand(command);
   const key = record ?? {};
   if (!handle.granted) return null;
-  const busy = handle.pending(key);
+  const loading = handle.isPending(key);
   return (
     <Button
-      intent={intent}
-      busy={busy}
-      disabled={busy || handle.available(key) === false}
+      variant={variant}
+      className={className}
+      loading={loading}
+      disabled={loading || handle.available(key) === false}
       onClick={() => void handle.open(key).then((outcome) => onDone?.(outcome))}
     >
       {label ?? handle.label}
@@ -325,24 +280,23 @@ export function CommandForm({
   );
 }
 
-/* The resource a `List`'s rows are of, for a button on one of them to name its row from (a command no action offers
-   says none of its own). Not a Scope: blocks drawn in a row do not inherit the list's condition. */
+/* The resource a `RecordList`'s rows are of, for a button on one of them to name its row from (a command no action
+   offers says none of its own). Not a Scope: blocks drawn in a row do not inherit the list's condition. */
 const ListResource = createContext<string | undefined>(undefined);
 
 /* The row of a command that names none (`targets: 'none'`): its key is empty, as its form's submit sends it. */
 const NO_ROW: Readonly<Record<string, unknown>> = Object.freeze({});
 
-type ButtonIntent = 'primary' | 'secondary' | 'quiet' | 'danger';
-type ButtonSize = 'compact' | 'default' | 'large';
 interface RowButtonProps {
   row: Readonly<Record<string, unknown>>;
   label?: string;
-  intent?: ButtonIntent;
+  variant?: ButtonVariant;
   size?: ButtonSize;
   done?: string;
   onDone?: (outcome: UiCommandOutcome) => void;
   /** What a verb the row's state does not allow does: drawn held (`'disable'`, the default) or not drawn (`'hide'`). */
   unavailable?: 'disable' | 'hide';
+  className?: string;
 }
 
 /* What a command's and an action's button share: drawn only for a reader granted it, held while the row's state does
@@ -352,9 +306,10 @@ function RowButton({
   handle,
   row,
   label,
-  intent = 'secondary',
-  size = 'default',
+  variant = 'secondary',
+  size = 'md',
   unavailable = 'disable',
+  className,
   run,
 }: Omit<RowButtonProps, 'done' | 'onDone'> & { handle: ReturnType<typeof useCommand>; run: () => void }) {
   const host = useUiHost();
@@ -366,14 +321,15 @@ function RowButton({
   const said = label ?? handle.label;
   const resource = handle.resource ?? resourceOfRow(row) ?? listed ?? scope?.from;
   const title = resource ? host.rowTitle(resource, row) : undefined;
-  const busy = handle.pending(row);
+  const loading = handle.isPending(row);
   return (
     <Button
-      intent={intent}
+      variant={variant}
       size={size}
-      busy={busy}
-      disabled={busy || handle.available(row) === false}
-      aria-label={title ? `${said} ${title}` : said}
+      className={className}
+      loading={loading}
+      disabled={loading || handle.available(row) === false}
+      ariaLabel={title ? `${said} ${title}` : said}
       onClick={run}
     >
       {said}
@@ -420,7 +376,19 @@ export function ActionButton({ action, done, onDone, ...props }: RowButtonProps 
  * A block that names no `from` reads the Scope's resource under its condition, its own `where` and `query` added by
  * "and"; one that names another resource reads that one alone; a Scope inside another on the same resource narrows it.
  */
-export function Scope({ from, where, query, children }: { from: string; where?: unknown; query?: string; children?: ReactNode }) {
+export function Scope({
+  from,
+  where,
+  query,
+  className,
+  children,
+}: {
+  from: string;
+  where?: unknown;
+  query?: string;
+  className?: string;
+  children?: ReactNode;
+}) {
   const outer = useContext(UiScopeContext);
   // A condition written inline is a new object on every draw; what it says is what keeps the blocks' reads still.
   const said = JSON.stringify([from, where, query, outer]);
@@ -428,12 +396,14 @@ export function Scope({ from, where, query, children }: { from: string; where?: 
     const { where: conditions, query: text } = scopedCondition(outer, from, where, query);
     return { from, where: conditions, ...(text ? { query: text } : {}) };
   }, [said]); // eslint-disable-line react-hooks/exhaustive-deps
-  return <UiScopeContext.Provider value={scope}>{children}</UiScopeContext.Provider>;
+  return (
+    <UiScopeContext.Provider value={scope}>{className ? <div className={className}>{children}</div> : children}</UiScopeContext.Provider>
+  );
 }
 
-/* A row's React key: its key columns, which a `List` reads beside `show` (so they are the ones `show` did not name),
-   else the whole row. Never its index: a row that leaves the list (checked in, say) would hand its focused button to
-   the row after it. */
+/* A row's React key: its key columns, which a `RecordList` reads beside `show` (so they are the ones `show` did not
+   name), else the whole row. Never its index: a row that leaves the list (checked in, say) would hand its focused
+   button to the row after it. */
 function rowKey(row: Readonly<Record<string, unknown>>, show: readonly string[] | undefined): string {
   const names = Object.keys(row);
   const keys = show ? names.filter((name) => !show.includes(name)) : [];
@@ -441,11 +411,11 @@ function rowKey(row: Readonly<Record<string, unknown>>, show: readonly string[] 
 }
 
 /**
- * Rows drawn by the page, one at a time: `<List from="booking" where={{ status: 'booked' }} show={['guest_name']}>{(b) => …}</List>`.
+ * Rows drawn by the page, one at a time: `<RecordList from="booking" where={{ status: 'booked' }} show={['guest_name']}>{(b) => …}</RecordList>`.
  * The read's states are the platform's (Loaded's, and a note where the reader may not read it), so `children` draws
  * only rows; each row carries its key beside `show`, for a `CommandButton` on it.
  */
-export function List({
+export function RecordList({
   from,
   where,
   query,
@@ -453,7 +423,9 @@ export function List({
   sort,
   limit,
   empty,
+  ariaLabel,
   label,
+  className,
   children,
 }: {
   from?: string;
@@ -463,7 +435,9 @@ export function List({
   sort?: string;
   limit?: number;
   empty?: ReactNode;
+  ariaLabel?: string;
   label?: string;
+  className?: string;
   children: (row: Readonly<Record<string, unknown>>, index: number) => ReactNode;
 }) {
   const scope = useContext(UiScopeContext);
@@ -481,15 +455,20 @@ export function List({
   const status = (rows.error as { status?: number } | null)?.status;
   /* A context the server forgot, which entering again could not replace (tenantTransport.ts): the transport's own line
      says the page needs a reload; the person's role is not the reason. */
-  if (rows.data === undefined && status === 403 && (rows.error as { code?: string }).code === 'tenant_context_unavailable')
-    return <Refused text={(rows.error as Error).message} />;
-  if (rows.data === undefined && (status === 401 || status === 403))
-    return <Refused text={say(status === 401 ? 'listForMembers' : 'listNotYours')} />;
+  if (rows.data === undefined && status === 403 && (rows.error as { code?: string }).code === 'tenant_context_unavailable') {
+    const refusedNode = <Refused text={(rows.error as Error).message} />;
+    return className ? <div className={className}>{refusedNode}</div> : refusedNode;
+  }
+  if (rows.data === undefined && (status === 401 || status === 403)) {
+    const refusedNode = <Refused text={say(status === 401 ? 'listForMembers' : 'listNotYours')} />;
+    return className ? <div className={className}>{refusedNode}</div> : refusedNode;
+  }
+  const listLabel = ariaLabel ?? label;
   return (
     <Loaded query={rows} empty={empty}>
       {(data) => (
         <ListResource.Provider value={resource}>
-          <ul className="kit-stack kit-gap-tight" aria-label={label}>
+          <ul className={className ? `kit-stack kit-gap-tight ${className}` : 'kit-stack kit-gap-tight'} aria-label={listLabel}>
             {data.map((row, index) => (
               <li key={rowKey(row, show)}>{children(row, index)}</li>
             ))}
@@ -501,3 +480,5 @@ export function List({
     </Loaded>
   );
 }
+
+installSurfaceSeam(mistriSurfaceSeam);

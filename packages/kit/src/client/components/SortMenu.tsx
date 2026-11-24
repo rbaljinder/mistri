@@ -65,7 +65,7 @@ export function SortMenu({
         ariaLabel={say('sort')}
         value={at >= 0 ? String(at) : standing >= 0 && unsorted ? String(standing) : ''}
         items={standing >= 0 ? items : [{ value: '', label: say('defaultOrder') }, ...items]}
-        onChange={(value: string) =>
+        onValueChange={(value: string) =>
           onPick(withSort(query, value === '' || Number(value) === standing ? undefined : sorts[Number(value)]?.sort))
         }
       />

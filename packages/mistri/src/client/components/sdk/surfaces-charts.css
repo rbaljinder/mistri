@@ -1,0 +1,35 @@
+/* `@mistriwork/mistri/charts`' own sheet, over surfaces-base.css. The primitives and the views import it too: a
+   `StatCard` draws a `Sparkline`, and it must stand under their sheets wherever a page reaches it first. */
+@import '@mistriwork/ui/styles/surfaces/charts.css' layer(surfaces);
+
+/* The look on the charts (surfaces-base.css says how these are written, and why here). */
+@layer look {
+  /* ---------- chart: plain, wash, gradient, line ----------
+     `plain` is the charts' own drawing. The others say what the kit's charts say (lumenLook.css, sageLook.css): the
+     grid's rule, the line's weight, whether a series stands on a wash and whether every point is marked. A bar's
+     corner is cut into its path and is not a recipe's to move. */
+  [data-look-chart='line'] .nx-chart-gridline {
+    stroke: color-mix(in srgb, var(--line) 70%, var(--surface));
+    stroke-dasharray: none;
+  }
+  [data-look-chart='gradient'] .nx-chart-gridline {
+    stroke: var(--line);
+    stroke-dasharray: 3 4;
+  }
+  [data-look-chart='line'] .nx-chart-stroke {
+    stroke-width: 1.5px;
+  }
+  [data-look-chart='gradient'] .nx-chart-stroke {
+    stroke-width: 2.25px;
+  }
+  [data-look-chart='line'] .nx-chart-area {
+    display: none;
+  }
+  [data-look-chart='wash'] .nx-chart-area {
+    fill: var(--chart-1);
+    opacity: 0.14;
+  }
+  :is([data-look-chart='line'], [data-look-chart='gradient']) .nx-chart-dot {
+    opacity: 0;
+  }
+}

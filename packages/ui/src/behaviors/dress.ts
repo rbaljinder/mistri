@@ -22,6 +22,7 @@ function dress(from: Element, to: Element, whole = false): void {
    the stylesheet's are not the same pixels, which every drag has to answer for. */
 export function zoomOf(el: HTMLElement): number {
   const laid = el.offsetWidth;
+  // screen-px: divides screen width by offsetWidth to measure element zoom
   const zoom = laid ? el.getBoundingClientRect().width / laid : 1;
   return Math.abs(zoom - 1) < 0.005 ? 1 : zoom;
 }

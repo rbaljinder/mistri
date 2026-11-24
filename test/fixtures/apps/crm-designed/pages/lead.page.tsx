@@ -5,8 +5,8 @@ import {
   Beside,
   Button,
   Card,
-  Details,
-  Empty,
+  DescriptionList,
+  EmptyState,
   PageHeader,
   Person,
   Skeleton,
@@ -58,7 +58,7 @@ function Lead() {
   });
 
   if (lead.isPending || id === undefined) return <Skeleton lines={10} />;
-  if (!row) return <Empty title="No such lead" description="It may have been removed, or the link is from somewhere else." />;
+  if (!row) return <EmptyState title="No such lead" description="It may have been removed, or the link is from somewhere else." />;
 
   return (
     <Stack>
@@ -69,14 +69,14 @@ function Lead() {
         actions={
           <>
             {row.email ? (
-              <Button intent="secondary" href={`mailto:${row.email}`}>
+              <Button variant="secondary" href={`mailto:${row.email}`}>
                 Email
               </Button>
             ) : null}
-            <ActionButton action="markLost" row={row} intent="secondary" label="Mark lost" unavailable="hide" />
-            <ActionButton action="startWorking" row={row} intent="primary" label="Start working" unavailable="hide" />
-            <ActionButton action="markQualified" row={row} intent="primary" label="Mark qualified" unavailable="hide" />
-            <Button intent="quiet" href={href.record('lead-records', { id: row.id })}>
+            <ActionButton action="markLost" row={row} variant="secondary" label="Mark lost" unavailable="hide" />
+            <ActionButton action="startWorking" row={row} variant="primary" label="Start working" unavailable="hide" />
+            <ActionButton action="markQualified" row={row} variant="primary" label="Mark qualified" unavailable="hide" />
+            <Button variant="ghost" href={href.record('lead-records', { id: row.id })}>
               Edit
             </Button>
           </>
@@ -88,7 +88,7 @@ function Lead() {
         rail={
           <Stack>
             <Card title="Details">
-              <Details
+              <DescriptionList
                 resource="lead"
                 row={row}
                 fields={[
@@ -121,7 +121,7 @@ function Lead() {
           {account === undefined ? null : (
             <Card title="Opportunities" count={deals.data?.length}>
               <Table
-                label="Opportunities"
+                ariaLabel="Opportunities"
                 rows={deals.data ?? []}
                 rowKey={(deal) => String(deal.id)}
                 columns={[

@@ -507,7 +507,7 @@ body.first-run #db-label {
 }
 
 .welcome h1 {
-  font-size: 1.55rem;
+  font-size: var(--type-record-title, var(--text-xl));
   font-weight: 600;
   letter-spacing: -0.01em;
   margin: 0 0 0.75rem;
@@ -534,7 +534,7 @@ body.first-run #db-label {
 }
 
 .welcome-go {
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   padding: 0.6rem 1.15rem;
 }
 
@@ -548,7 +548,7 @@ body.first-run #db-label {
 }
 
 .welcome-connect {
-  font-size: 0.95rem;
+  font-size: var(--text-lg);
   padding: 0.6rem 1.15rem;
 }
 
@@ -556,7 +556,7 @@ body.first-run #db-label {
   flex-basis: 100%;
   margin: 0.35rem 0 0;
   color: var(--status-critical);
-  font-size: 0.86rem;
+  font-size: var(--text-md);
 }
 
 .welcome-assure {
@@ -566,7 +566,7 @@ body.first-run #db-label {
   border-radius: var(--radius);
   background: var(--raised);
   color: var(--ink-muted);
-  font-size: 0.86rem;
+  font-size: var(--text-md);
   line-height: 1.55;
 }
 
@@ -579,7 +579,7 @@ body.first-run #db-label {
 }
 
 .welcome-examples h2 {
-  font-size: 0.78rem;
+  font-size: var(--text-sm);
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -602,7 +602,7 @@ body.first-run #db-label {
   grid-template-columns: 11rem 1fr;
   gap: 0.75rem;
   align-items: baseline;
-  font-size: 0.86rem;
+  font-size: var(--text-md);
 }
 
 .welcome-ex-label { color: var(--ink-muted); }
@@ -610,7 +610,7 @@ body.first-run #db-label {
 .welcome-examples code,
 .welcome-config {
   font-family: var(--mono);
-  font-size: 0.82rem;
+  font-size: var(--text-base);
 }
 
 .welcome-examples .note { line-height: 1.6; margin: 0 0 1rem; }
@@ -643,7 +643,7 @@ body.first-run #db-label {
   border-left: 3px solid var(--status-critical);
   border-radius: var(--radius);
   background: var(--raised);
-  font-size: 0.86rem;
+  font-size: var(--text-md);
 }
 
 .welcome-trouble-head { margin: 0 0 0.5rem; }
@@ -659,7 +659,7 @@ body.first-run #db-label {
 
 .welcome-trouble li { display: grid; gap: 0.1rem; }
 
-.welcome-trouble-name { font-family: var(--mono); font-size: 0.8rem; color: var(--ink); }
+.welcome-trouble-name { font-family: var(--mono); font-size: var(--text-base); color: var(--ink); }
 .welcome-trouble-why { color: var(--ink-muted); line-height: 1.45; }
 
 /* ---------- preferences ---------- */
@@ -745,7 +745,7 @@ body.app-mode.page-bare .content { padding-inline: 0; }
 /* The refresh staging ground: rendered for real (fetches and chart
    measurement need layout) but out of sight and out of the page's flow. */
 /* The hosts React trees are drawn into: no box of their own. */
-.dash-host, .applist-host, .crumbs-host, .landing-host, .grid-host, .peek-host, .peekpanel-host, .palette-host, .help-host, .host-contents { display: contents; }
+.applist-host, .crumbs-host, .landing-host, .grid-host, .peek-host, .peekpanel-host, .palette-host, .help-host, .host-contents { display: contents; }
 /* A window's name is one word to the eye ("last 30 days"): it never wraps
    inside its pill. On a phone the row wraps between pills rather than
    squeezing each to a stack of words, or scrolling a control sideways inside
@@ -1211,7 +1211,7 @@ body.app-custom-gutter .topbar[data-header-width="content"] { --app-shell-outer-
 /* Without its title the list's count stands alone above the tabs, an orphan
    the tabs already say ("Open 3"); it goes with the title it belonged to. */
 .app-content-no-title .applist-count { display: none; }
-.app-content-no-title .applist-head { padding-top: 0; }
+.app-content-no-title .applist-head { padding-top: 0; &:has(.applist-head-tools, .applist-new, .applist-import) { padding-block: var(--space-3h); } }
 
 .tn-item {
   position: relative;
@@ -1361,9 +1361,6 @@ body.app-mode .sidebar[data-density="comfortable"] #table-list .nav-dot { width:
 .tn-search.compact { gap: 0; }
 .tn-search.compact .tn-search-key { display: none; }
 
-/* The way out, quiet at the end of the strip. */
-.tn-all { margin-left: var(--space-2h); color: var(--ink-subtle); font-size: var(--text-sm); }
-.tn-all:hover { color: var(--ink-muted); }
 
 /* Motion, by the doctrine in docs/design.md: popovers enter with a
    160ms ease-out settle from their origin; leaving is instant; reduced
@@ -1627,7 +1624,6 @@ body.app-mode .confirm:is(.insert-dialog, .command-form, .set-field-dialog) > h2
 /* The one AI mark (AiMark.tsx): the glyph at the text's cap height and the App's word, in --ai, at the size of the text
    it stands in, so a row's mark is a row's height. */
 .ai-mark { display: inline-flex; align-items: center; gap: .25em; color: var(--ai); font-weight: 500; white-space: nowrap; }
-.ai-mark-glyph { width: .9em; height: .9em; flex: none; fill: currentColor; }
 
 /* ---------- the record picker ---------- */
 
@@ -1890,7 +1886,7 @@ body.session-locked > :not(#session-lock) { display: none !important; }
   margin: 15vh auto;
   padding: 1rem;
 }
-#session-lock h1 { font-size: 1.5rem; }
+#session-lock h1 { font-size: var(--type-record-title, var(--text-xl)); }
 #session-lock p { line-height: 1.6; margin-block: 1rem 1.5rem; }
 .account { font-size: var(--text-sm); max-width: 14rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
@@ -2142,7 +2138,7 @@ body.app-mode th .pk { display: none; }
 .multi-step-count { flex: none; font-size: var(--text-sm); line-height: 1; color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* The stepper's step: the bar, then its name set tight, the step's one strong thing. */
 .multi-step-heading { display: grid; gap: var(--space-5); }
-.multi-step-heading h2 { margin: 0; font-size: 1.25rem; line-height: 1.15; letter-spacing: var(--track-display); text-wrap: balance; }
+.multi-step-heading h2 { margin: 0; font-size: var(--text-xl); line-height: 1.15; letter-spacing: var(--track-display); text-wrap: balance; }
 .multi-step-heading .multi-step-lead { margin: calc(var(--space-2) - var(--space-5)) 0 0; max-width: 60ch; font-size: var(--text-md); line-height: 1.5; color: var(--ink-muted); text-wrap: pretty; }
 /* A row of two fields (`show: [['a', 'b']]`) in a stepper is spaced as the fields around it are: forms.css gave it a
    16px gap both ways, so the pair stood closer than the stack above and below it. */

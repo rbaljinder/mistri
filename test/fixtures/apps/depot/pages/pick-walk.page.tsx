@@ -14,7 +14,7 @@
  * short; nothing here writes.
  */
 import type { ReactNode } from 'react';
-import { Button, Card, definePage, Empty, Loaded, Stack, type PageProps } from '@mistriwork/mistri/page';
+import { Button, Card, definePage, EmptyState, Loaded, Stack, type PageProps } from '@mistriwork/mistri/page';
 import { useFormat, useState } from '@mistriwork/mistri/ui';
 import './pick-walk.css';
 
@@ -38,7 +38,7 @@ type Waiting = PageProps<'pick-walk'>['data']['lists'][number];
 
 function Choose({ lists, onChoose }: { lists: readonly Waiting[]; onChoose: (list: Waiting) => void }): ReactNode {
   const format = useFormat();
-  if (!lists.length) return <Empty title="Nothing to pick" description="Released orders arrive here as pick lists." />;
+  if (!lists.length) return <EmptyState title="Nothing to pick" description="Released orders arrive here as pick lists." />;
   return (
     <Stack as="ul" gap="tight" className="c-page-pick-walk-lists">
       {lists.map((list) => (
@@ -86,7 +86,7 @@ function Walk({
         <p className="c-page-pick-walk-ref">
           {String(list.reference)} · {String(list.ship_to)}
         </p>
-        <Button intent="quiet" size="compact" onClick={onLeave}>
+        <Button variant="ghost" size="sm" onClick={onLeave}>
           All pick lists
         </Button>
       </div>
@@ -114,11 +114,11 @@ function Walk({
             </Stack>
           </Card>
           <div className="c-page-pick-walk-actions">
-            <Button intent="primary" size="large" block onClick={() => onStep(step + 1)}>
+            <Button variant="primary" size="lg" block onClick={() => onStep(step + 1)}>
               Picked ✓
             </Button>
             {step > 0 && (
-              <Button intent="quiet" onClick={() => onStep(step - 1)}>
+              <Button variant="ghost" onClick={() => onStep(step - 1)}>
                 Back a line
               </Button>
             )}
@@ -143,12 +143,12 @@ function Walk({
           {/* A reader who may not pick (a purchaser) walks the list and is offered no Pick. */}
           {pick.granted && (
             <Button
-              intent="primary"
-              size="large"
+              variant="primary"
+              size="lg"
               block
               disabled={available !== true || busy}
-              busy={busy}
-              busyLabel="Picking…"
+              loading={busy}
+              loadingLabel="Picking…"
               onClick={() => {
                 void pick.run({ id: list.id }, {}, { label: String(list.reference) }).then((outcome) => {
                   if (outcome.status === 'applied') onDone(`${String(list.reference)} is picked. It waits in To pack.`);
@@ -159,7 +159,7 @@ function Walk({
             </Button>
           )}
           {pick.granted && available === false && <p className="c-page-pick-walk-quiet">This list is no longer waiting to be picked.</p>}
-          <Button intent="quiet" onClick={() => onStep(Math.max(0, all.length - 1))}>
+          <Button variant="ghost" onClick={() => onStep(Math.max(0, all.length - 1))}>
             Back a line
           </Button>
         </div>
@@ -170,10 +170,10 @@ function Walk({
     <Loaded
       query={lines}
       empty={
-        <Empty
+        <EmptyState
           title="This pick list has no lines"
           action={
-            <Button intent="secondary" onClick={onLeave}>
+            <Button variant="secondary" onClick={onLeave}>
               All pick lists
             </Button>
           }
@@ -235,10 +235,10 @@ function PickWalk({ data }: PageProps<'pick-walk'>): ReactNode {
     <Loaded
       query={chosen}
       empty={
-        <Empty
+        <EmptyState
           title="That pick list is not here"
           action={
-            <Button intent="secondary" onClick={() => choose(undefined)}>
+            <Button variant="secondary" onClick={() => choose(undefined)}>
               All pick lists
             </Button>
           }

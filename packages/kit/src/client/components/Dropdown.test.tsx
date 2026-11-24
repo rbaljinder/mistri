@@ -7,8 +7,8 @@ afterEach(cleanup);
 test("a list its caller names nothing is called by the catalog's word, and a named one keeps its name", () => {
   render(
     <>
-      <Dropdown value="a" items={[{ value: 'a', label: 'Alpha' }]} onChange={() => {}} />
-      <Dropdown value="b" items={[{ value: 'b', label: 'Beta' }]} ariaLabel="Region" onChange={() => {}} />
+      <Dropdown value="a" items={[{ value: 'a', label: 'Alpha' }]} onValueChange={() => {}} />
+      <Dropdown value="b" items={[{ value: 'b', label: 'Beta' }]} ariaLabel="Region" onValueChange={() => {}} />
     </>,
   );
   expect(screen.getByRole('button', { name: /^Select\b/ })).toBeInTheDocument();

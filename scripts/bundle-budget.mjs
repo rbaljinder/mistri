@@ -173,6 +173,64 @@ export function localeSizes(client = CLIENTS.mistri) {
   return sizes;
 }
 
+/* What a free-form page fetches in stylesheets the first time it imports one of the on-demand entries
+   (`@mistriwork/mistri/charts`, `/primitives`, `/views`: packages/mistri/src/client/components/sdk), which is no
+   surface's first paint and was not held until rc.85. Until then every entry brought one sheet, all of it: 376,221
+   raw / 36,953 br for a page that drew one chart. rc.85 split it by entry (a chart's page loads the base and the
+   charts' sheet; a primitive's adds the primitives'; a view's adds the views'), and these are the first ceilings,
+   set on that build about 3% above the measure (raw / br): charts 28,311 / 4,420, primitives 204,133 / 23,354,
+   views 376,801 / 40,927. Each is the sum of the files that entry links, so the views' figure is the whole of it
+   and is 3,974 bytes heavier in brotli than the one sheet was: three files compress apart. The rule is BUDGET's.
+   Raised in the same release, on purpose: the entries' parts now wear the look's recipes (a `DataTable` the `table`
+   recipe, a `StatCard` `stat`, a `KanbanBoard` `board` and `lanes`, `Tabs`, a status badge, the charts), and those
+   rules travel in these sheets so the first stylesheet carries none (components/sdk/surfaces-*.css, `@layer look`).
+   That measured charts 31,278 / 4,882 (the base holds the type roles and the status recipe every entry reads),
+   primitives 212,501 / 24,538 and views 392,274 / 43,208: about 3,000 raw and 460 brotli for the charts, 8,400 and
+   1,180 for the primitives, 15,500 and 2,280 for the whole. Each ceiling is that measure and the same 3%. */
+export const ON_DEMAND_STYLE_BUDGET = {
+  charts: { raw: 32_200, br: 5_030 },
+  primitives: { raw: 218_700, br: 25_260 },
+  views: { raw: 403_900, br: 44_490 },
+};
+
+/* A selector only one of the four surface sheets holds, in the order the sheets stand in the cascade. They tie on
+   specificity across files, so the order they are linked in is which rule wins (sdk/sheetCharts.ts). */
+const SURFACE_SHEET_MARKS = ['.nx-root{', '.nx-heatmap{', '.nx-dialog-content', '.nx-kanban'];
+
+/**
+ * Each on-demand entry's stylesheets as the page links them (the build's preload list for that import, in order),
+ * their size, and whether they stand in the cascade's order.
+ */
+export function onDemandStyles(client = CLIENTS.mistri) {
+  const assets = join(client, 'assets');
+  const firstPaints = new Set(Object.keys(SURFACES).flatMap((surface) => firstPaint(surface, client).styles));
+  for (const file of readdirSync(assets).filter((name) => name.endsWith('.js'))) {
+    const text = readFileSync(join(assets, file), 'utf8');
+    if (!text.includes('@mistriwork/mistri/charts')) continue;
+    const table = /\.f=(\[[^\]]*\])/.exec(text);
+    if (!table) continue;
+    const deps = JSON.parse(table[1]);
+    const found = {};
+    for (const [, entry, list] of text.matchAll(
+      /import\([`"']\.\/(charts|primitives|views)-[\w-]{8}\.js[`"']\),__vite__mapDeps\(\[([\d,]*)\]\)/g,
+    )) {
+      const files = list
+        .split(',')
+        .map((at) => join(assets, deps[Number(at)]))
+        .filter((path) => path.endsWith('.css') && !firstPaints.has(path));
+      const marks = files.map((path) => SURFACE_SHEET_MARKS.findIndex((mark) => readFileSync(path, 'utf8').includes(mark)));
+      found[entry] = {
+        files,
+        raw: files.reduce((sum, path) => sum + statSync(path).size, 0),
+        br: files.reduce((sum, path) => sum + (existsSync(`${path}.br`) ? statSync(`${path}.br`) : statSync(path)).size, 0),
+        ordered: marks[0] === 0 && marks.every((mark, at) => mark >= 0 && (at === 0 || mark > marks[at - 1])),
+      };
+    }
+    if (Object.keys(ON_DEMAND_STYLE_BUDGET).every((entry) => found[entry])) return found;
+  }
+  throw new Error('The build names no on-demand charts, primitives and views entries with their stylesheets.');
+}
+
 /** A file and everything it imports statically, as the library build writes imports (`from "./x.js"`). */
 function staticClosure(roots) {
   const files = new Set();
@@ -320,6 +378,24 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
           );
       }
     }
+  const onDemand = onDemandStyles();
+  for (const entry of /** @type {Array<keyof typeof ON_DEMAND_STYLE_BUDGET>} */ (Object.keys(ON_DEMAND_STYLE_BUDGET))) {
+    for (const measure of /** @type {const} */ (['raw', 'br'])) {
+      const size = onDemand[entry][measure],
+        ceiling = ON_DEMAND_STYLE_BUDGET[entry][measure];
+      console.log(`mistri on-demand ${entry} style ${measure}: ${kb(size)} of ${kb(ceiling)} (${room(size, ceiling)})`);
+      if (size > ceiling)
+        over.push(
+          `the ${entry} entry's stylesheets are ${kb(size)} ${measure === 'br' ? 'in brotli' : 'raw'}, over their ${kb(ceiling)} target`,
+        );
+    }
+    if (!onDemand[entry].ordered) {
+      console.error(
+        `The ${entry} entry links its stylesheets out of the cascade's order (${onDemand[entry].files.map((file) => file.slice(ROOT.length + 1)).join(', ')}): base and charts, then primitives, then views. They tie on specificity across files, so another order changes which rule wins (packages/mistri/src/client/components/sdk/sheetCharts.ts).`,
+      );
+      process.exitCode = 1;
+    }
+  }
   if (!existsSync(join(EMBED, 'index.js'))) {
     console.error('Build @mistriwork/mistri/react first: npm run build.');
     process.exit(1);

@@ -789,7 +789,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
         text={<span className="empty-note-title">{say('noMatches')}</span>}
         detail={noMatchText}
         action={
-          <Button size="compact" onClick={() => applyNow.current(clearTo)}>
+          <Button size="sm" onClick={() => applyNow.current(clearTo)}>
             {say('common.clear')}
           </Button>
         }

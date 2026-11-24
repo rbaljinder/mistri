@@ -11,9 +11,11 @@
 import { Switch as Toggle, SwitchThumb } from '@ui-sdk/react/switch';
 import { useId, type ReactNode, type Ref } from 'react';
 import type { ChangeDetails } from './changeDetails.js';
+import type { ControlSize } from './internal/cx.js';
 import { told } from './internal/told.js';
 import { slotted } from './internal/uiKitContext.js';
 
+/** Props for the `Switch` toggle control. */
 export interface SwitchProps {
   /** The label beside the switch; its click toggles, as the switch's own does. */
   label?: ReactNode;
@@ -24,54 +26,84 @@ export interface SwitchProps {
   onCheckedChange?: (checked: boolean, details: ChangeDetails<'toggle'>) => void;
   disabled?: boolean;
   /** Working: pressed once already. Says so and refuses another press, keeping the focus. */
-  busy?: boolean;
+  loading?: boolean;
+  size?: ControlSize;
+  ariaLabel?: string;
+  controlPosition?: 'start' | 'end';
+  wrapperClassName?: string;
   id?: string;
   className?: string;
   ref?: Ref<HTMLButtonElement>;
 }
 
-function DefaultSwitch({
-  label,
-  description,
-  checked,
-  defaultChecked,
-  onCheckedChange,
-  disabled = false,
-  busy = false,
-  id,
-  className,
-  ref,
-}: SwitchProps) {
-  /* The label names the switch by its id; a caller who gives none gets
-     a generated one, never UI SDK's own, which the label cannot know. */
+function DefaultSwitch(props: SwitchProps) {
+  const {
+    label,
+    description,
+    checked,
+    defaultChecked,
+    onCheckedChange,
+    disabled = false,
+    loading = false,
+    size,
+    ariaLabel,
+    controlPosition = 'start',
+    wrapperClassName,
+    id,
+    className,
+    ref,
+  } = props;
+  const legacyBusy = Boolean((props as { busy?: boolean }).busy);
+  const legacyAriaLabel = (props as Record<string, unknown>)['aria-label'] as string | undefined;
+  const isLoading = loading || legacyBusy;
+  const resolvedAriaLabel = ariaLabel ?? legacyAriaLabel;
+
   const generatedId = useId();
   const switchId = id ?? generatedId;
+  const toggle = (
+    <Toggle
+      id={switchId}
+      ref={ref}
+      checked={checked}
+      defaultChecked={defaultChecked}
+      disabled={disabled}
+      data-size={size}
+      data-busy={isLoading ? '' : undefined}
+      aria-busy={isLoading || undefined}
+      aria-disabled={isLoading || undefined}
+      aria-label={label === undefined ? resolvedAriaLabel : ariaLabel}
+      onCheckedChange={(next, details) => {
+        if (isLoading) return details.cancel();
+        onCheckedChange?.(next, told('toggle', details));
+      }}
+    >
+      <SwitchThumb />
+    </Toggle>
+  );
+  const copy =
+    label !== undefined || description !== undefined ? (
+      <span data-slot="switch-copy">
+        {label !== undefined ? <label htmlFor={switchId}>{label}</label> : null}
+        {description !== undefined ? <span data-slot="switch-description">{description}</span> : null}
+      </span>
+    ) : null;
+  const rowClassName = [wrapperClassName, className].filter(Boolean).join(' ') || undefined;
   return (
-    <span data-slot="switch-row" className={className}>
-      <Toggle
-        id={switchId}
-        ref={ref}
-        checked={checked}
-        defaultChecked={defaultChecked}
-        disabled={disabled}
-        aria-disabled={busy || undefined}
-        onCheckedChange={(next, details) => {
-          // Refused in UI SDK's own words, so an uncontrolled switch does not move either.
-          if (busy) return details.cancel();
-          onCheckedChange?.(next, told('toggle', details));
-        }}
-      >
-        <SwitchThumb />
-      </Toggle>
-      {label !== undefined || description !== undefined ? (
-        <span data-slot="switch-copy">
-          {label !== undefined ? <label htmlFor={switchId}>{label}</label> : null}
-          {description !== undefined ? <span data-slot="switch-description">{description}</span> : null}
-        </span>
-      ) : null}
+    <span data-slot="switch-row" data-control-position={controlPosition === 'end' ? 'end' : undefined} className={rowClassName}>
+      {controlPosition === 'end' ? (
+        <>
+          {copy}
+          {toggle}
+        </>
+      ) : (
+        <>
+          {toggle}
+          {copy}
+        </>
+      )}
     </span>
   );
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Accessible boolean switch control with label, description, and focus-preserving loading state. */
 export const Switch = slotted('Switch', DefaultSwitch, { onCheckedChange: [1, 'toggle'] });

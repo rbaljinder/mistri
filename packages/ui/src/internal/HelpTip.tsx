@@ -11,10 +11,9 @@ import { popupContainer, useDialogContainer } from './popups.js';
 /* Help beside a label: a button that opens it, so it works under a finger and from the keyboard, and what it
    says is the button's description while it is open. UI SDK's tooltip is the note (its role, its place by the
    button, Escape), made to open on a press and stay; a press anywhere else closes it. */
-function DefaultHelpTip({ text, label, icon }: HelpTipProps): ReactNode {
+function DefaultHelpTip({ text, label, icon, className, ref }: HelpTipProps): ReactNode {
   const [open, setOpen] = useState(false);
-  const button = useRef<HTMLButtonElement>(null);
-  // Drawn where the page's other layers are: inside an enclosing dialog, else where the page says its popups go.
+  const button = useRef<HTMLButtonElement | null>(null);
   const container = useDialogContainer(button);
   useEffect(() => {
     if (!open) return undefined;
@@ -29,15 +28,23 @@ function DefaultHelpTip({ text, label, icon }: HelpTipProps): ReactNode {
       toggleable
       open={open}
       onOpenChange={(next, details) => {
-        // Pointing at the button is not asking: the note opens on a press, as a finger has to open it.
         if (next && details.reason !== 'trigger-press') return details.cancel();
         setOpen(next);
       }}
     >
-      <TooltipTrigger ref={button} aria-label={label} aria-expanded={open} data-kind="help-tip">
+      <TooltipTrigger
+        ref={(node: HTMLButtonElement | null) => {
+          button.current = node;
+          if (typeof ref === 'function') ref(node);
+          else if (ref) (ref as { current: HTMLButtonElement | null }).current = node;
+        }}
+        className={className}
+        aria-label={label}
+        aria-expanded={open}
+        data-kind="help-tip"
+      >
         {icon ?? <span aria-hidden="true">i</span>}
       </TooltipTrigger>
-      {/* A span, as the tip stands where a label or a line of text does, which a block may not stand in. */}
       <TooltipContent
         render={<span />}
         data-kind="help-tip"
@@ -53,6 +60,5 @@ function DefaultHelpTip({ text, label, icon }: HelpTipProps): ReactNode {
   );
 }
 
-/* The slot is made here, beside its default, so the frame that draws a field's tip draws the kit's where a kit has
-   one. FormParts.tsx hands the same component out. */
+/** Press-activated inline help button and note popover beside form field labels. */
 export const HelpTip = slotted('HelpTip', DefaultHelpTip);

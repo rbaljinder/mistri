@@ -7,7 +7,7 @@
  * Moderators' alone, as the Moderation queue is: a report is not public, so a member never reads this page.
  */
 import type { ReactNode } from 'react';
-import { definePage, Split } from '@mistriwork/mistri/page';
+import { definePage, RecordSplit } from '@mistriwork/mistri/page';
 
 const page = definePage({
   label: 'Report desk',
@@ -23,7 +23,7 @@ export default page;
 
 function ReportDesk(): ReactNode {
   return (
-    <Split
+    <RecordSplit
       from="report"
       where={{ status: 'open' }}
       sort="created_at"
@@ -31,7 +31,7 @@ function ReportDesk(): ReactNode {
       row={{ primary: 'post_id.body', lines: ['reason', 'details'] }}
       detail={['reason', 'status', 'created_at', 'details']}
       param="report"
-      label="Open reports"
+      ariaLabel="Open reports"
     />
   );
 }

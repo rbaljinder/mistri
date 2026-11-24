@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { after, test } from 'node:test';
 import { RENAMED_TABLES } from '../packages/mistri/src/shared/renamedWords.js';
 import { runUpgrade, upgradeSource } from '../packages/mistri/src/server/cli/upgrade.js';
-import { GENERIC_TOKENS, KEYS, NAMES, REFUSED, TOKENS, VALUES } from '../packages/mistri/src/server/cli/upgradeRenames.js';
+import { EXPORTS, GENERIC_TOKENS, KEYS, NAMES, REFUSED, TOKENS, VALUES } from '../packages/mistri/src/server/cli/upgradeRenames.js';
 
 const OLD_APP = `import { defineApp, table } from 'tablewalk/app';
 import { command } from "tablewalk/commands";
@@ -592,4 +592,154 @@ test('an App object with no mistri kind and no mistri type is left alone, and sa
   assert.equal(result.text, own);
   assert.deepEqual(result.refusals, []);
   assert.deepEqual(result.changes, []);
+});
+
+/* ---------- the UI entry points' renamed components and props ---------- */
+
+test('every renamed export is gone from the published surface under its old name and there under its new one', () => {
+  const surface = JSON.parse(readFileSync(new URL('./fixtures/public-surface.json', import.meta.url), 'utf8')) as {
+    sections: { package: Record<'public' | 'preview', string[]> };
+  };
+  const exported = new Set([...surface.sections.package.public, ...surface.sections.package.preview]);
+  const wrong: string[] = [];
+  for (const row of EXPORTS)
+    for (const module of row.modules) {
+      const entry = module.replace('@mistriwork/mistri', '.');
+      if (!exported.has(`${entry}: ${row.to}`)) wrong.push(`${entry} does not export ${row.to}`);
+      /* `Tone` is still exported, as the type: the row is told apart by its tag. */
+      if (!row.tag && exported.has(`${entry}: ${row.from}`)) wrong.push(`${entry} still exports ${row.from}`);
+    }
+  assert.deepEqual(wrong, []);
+  /* A second run finds nothing: no row's new name is another row's old one, but for the type that took the component's. */
+  for (const row of EXPORTS) assert.ok(row.to === 'Tone' || !EXPORTS.some((each) => each.from === row.to), row.to);
+  /* A prop row is not also a prop of the component under its new word, or the rewrite would never settle. */
+  for (const row of KEYS) if (row.kitOnly) assert.ok(row.from !== row.to || row.values, `${row.from} changes nothing`);
+});
+
+test('a renamed component is rewritten at its import and its tags, by the entry point it came from, with the props it took', () => {
+  const source = [
+    "import { Stat, Empty, Items, Item, Button, TextField, Checkbox, Sparkline, type DetailsField } from '@mistriwork/mistri/ui';",
+    "import { Grid, List, SplitListDetail, definePage } from '@mistriwork/mistri/page';",
+    "import { Field, Columns } from '@mistriwork/mistri/primitives';",
+    "import { Split } from './layout';",
+    'export default () => (',
+    '  <Grid>',
+    '    <Stat label="Open" value={4} say={money} />',
+    '    <Sparkline values={[1, 2, 3, 4]} say={money} />',
+    '    <Items label="Today" empty={<Empty title="Nothing yet" />}>',
+    '      <Item title="One" tone="warn" />',
+    '    </Items>',
+    '    <List from="task">{(row) => <Split onChange={pick}>{row.name}</Split>}</List>',
+    '    <SplitListDetail list={list} listLabel="Tasks" detailLabel="Task" />',
+    '    <Button intent="quiet" size="large" busy={saving} busyLabel="Saving" aria-label="Save">Save</Button>',
+    '    <Button intent={kind} size="sm" onClick={go} />',
+    '    <TextField label="Name" value={name} onChange={setName} />',
+    '    <Checkbox label="Agree" checked={on} onChange={setOn} />',
+    '    <Field label="x"><Columns /></Field>',
+    '  </Grid>',
+    ');',
+    'export const fields: DetailsField[] = [];',
+    '',
+  ].join('\n');
+  const result = upgradeSource(source);
+  assert.equal(
+    result.text,
+    [
+      "import { StatCard, EmptyState, ItemList, ItemRow, Button, TextField, Checkbox, Sparkline, type DescriptionField } from '@mistriwork/mistri/ui';",
+      "import { PageGrid, RecordList, SplitView, definePage } from '@mistriwork/mistri/page';",
+      "import { Field, Columns } from '@mistriwork/mistri/primitives';",
+      "import { Split } from './layout';",
+      'export default () => (',
+      '  <PageGrid>',
+      '    <StatCard label="Open" value={4} formatValue={money} />',
+      '    <Sparkline data={[1, 2, 3, 4]} formatValue={money} />',
+      '    <ItemList label="Today" empty={<EmptyState title="Nothing yet" />}>',
+      '      <ItemRow title="One" tone="warning" />',
+      '    </ItemList>',
+      '    <RecordList from="task">{(row) => <Split onChange={pick}>{row.name}</Split>}</RecordList>',
+      '    <SplitView list={list} listAriaLabel="Tasks" detailAriaLabel="Task" />',
+      '    <Button variant="ghost" size="lg" loading={saving} loadingLabel="Saving" ariaLabel="Save">Save</Button>',
+      '    <Button variant={kind} size="sm" onClick={go} />',
+      '    <TextField label="Name" value={name} onValueChange={setName} />',
+      '    <Checkbox label="Agree" checked={on} onCheckedChange={setOn} />',
+      '    <Field label="x"><Columns /></Field>',
+      '  </PageGrid>',
+      ');',
+      'export const fields: DescriptionField[] = [];',
+      '',
+    ].join('\n'),
+  );
+  /* A word as common as `onChange` on the App's own component is the App's: nothing is refused. */
+  assert.deepEqual(result.refusals, []);
+  assert.equal(upgradeSource(result.text).text, result.text);
+  assert.deepEqual(upgradeSource(result.text).changes, []);
+});
+
+test('an everyday name the page also says in its own words is renamed at the import alone, and no text is rewritten', () => {
+  const source = [
+    "import { Details, Stat, Empty } from '@mistriwork/mistri/page';",
+    'const parts = { Stat, Empty: null };',
+    'export default () => (',
+    '  <section>',
+    '    <h2>Details</h2>',
+    '    <Details resource="lead" row={row} fields={fields} />',
+    '    <Stat label="Open" value={1} />',
+    '    <Empty title="Nothing" />',
+    '  </section>',
+    ');',
+    '',
+  ].join('\n');
+  const result = upgradeSource(source);
+  assert.equal(
+    result.text,
+    source.replace('import { Details, Stat, Empty }', 'import { DescriptionList as Details, StatCard as Stat, EmptyState as Empty }'),
+  );
+  assert.deepEqual(result.refusals, []);
+  assert.equal(upgradeSource(result.text).text, result.text);
+});
+
+test('the Tone component is StatusDot where it is written as a tag, and the type ToneName is Tone; a second run leaves the type alone', () => {
+  const source = [
+    "import { Tone, type ToneName } from '@mistriwork/mistri/ui';",
+    "import * as ui from '@mistriwork/mistri/ui';",
+    'const tone: ToneName = ok ? "good" : "bad";',
+    'const other: ui.ToneName = "info";',
+    'export default () => <Tone tone="bad">Late</Tone>;',
+    '',
+  ].join('\n');
+  const result = upgradeSource(source);
+  assert.equal(
+    result.text,
+    [
+      "import { StatusDot, type Tone } from '@mistriwork/mistri/ui';",
+      "import * as ui from '@mistriwork/mistri/ui';",
+      'const tone: Tone = ok ? "good" : "bad";',
+      'const other: ui.Tone = "info";',
+      'export default () => <StatusDot tone="critical">Late</StatusDot>;',
+      '',
+    ].join('\n'),
+  );
+  /* What it wrote reads `Tone` as the type: nothing there is a tag, so nothing is renamed again. */
+  const again = upgradeSource(result.text);
+  assert.equal(again.text, result.text);
+  assert.deepEqual(again.changes, []);
+});
+
+test('a control-kit helper a page no longer exports is refused where it is imported from the page, and nowhere else', () => {
+  const result = upgradeSource(
+    [
+      "import { defineUiKit, dress, defaultUiKit } from '@mistriwork/mistri/page';",
+      'export default defineUiKit({ Button: dress(defaultUiKit.Button, { block: true }) });',
+      '',
+    ].join('\n'),
+  );
+  assert.deepEqual(
+    result.refusals.map((each) => each.line),
+    [1, 1],
+  );
+  assert.match(result.refusals[0]!.said, /^dress is no longer exported from `@mistriwork\/mistri\/page`/);
+  const own =
+    "import { definePage } from '@mistriwork/mistri/page';\nconst dress = { size: 12 };\nexport const usePopupHost = () => dress;\n";
+  assert.deepEqual(upgradeSource(own).refusals, []);
+  assert.equal(upgradeSource(own).text, own);
 });

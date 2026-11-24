@@ -486,3 +486,31 @@ describe('columnFloor', () => {
     expect(columnFloor({ ...base, label: 'Notes', kind: 'text', values: ['A long sentence of free text that may be cut'] })).toBe(0);
   });
 });
+
+describe('narrow Card fit sizing across wide monospace themes (Ledger 557px)', () => {
+  test('folds excess status chips and scales squeezed columns so a 557px Card never overflows', () => {
+    const mono = (text: string) => text.length * 9.5;
+    const orders = [
+      { label: 'ORDER NUMBER', headWidth: 104, kind: 'text', values: ['WO-2026-0418'] },
+      { label: 'SUMMARY', headWidth: 68, kind: 'text', title: true, values: ['Replace chiller condenser fan relay assembly'] },
+      { label: 'STATUS', headWidth: 58, kind: 'text', chip: true, status: true, values: ['Awaiting parts'] },
+      { label: 'PRIORITY', headWidth: 74, kind: 'text', chip: true, status: true, values: ['Critical'] },
+      { label: 'SLA STATE', headWidth: 82, kind: 'text', chip: true, status: true, values: ['At risk'] },
+      { label: 'SCHEDULED', headWidth: 82, kind: 'date', drawnDate: true, values: ['Nov 23, 2026'] },
+    ];
+    const kept = keepFitting(orders, 557, false, false, 8.5, mono)!;
+    expect(kept).not.toBeNull();
+    expect(kept[0]).toBe(true);
+    expect(kept[1]).toBe(true);
+    expect(kept.filter(Boolean).length).toBeLessThan(orders.length);
+    const drawn = orders.filter((_, index) => kept[index]);
+    const fit = fitGridColumns(drawn, 557, false, false, 8.5, mono, true);
+    expect(fit.width).toBeLessThanOrEqual(557);
+
+    // Even in an ultra-narrow 260px Card where col 0 + title exceed least, squeezed fit scales to <= 260px.
+    const tightKept = keepFitting(orders, 260, false, false, 8.5, mono)!;
+    const tightDrawn = orders.filter((_, index) => tightKept[index]);
+    const tightFit = fitGridColumns(tightDrawn, 260, false, false, 8.5, mono, true);
+    expect(tightFit.width).toBeLessThanOrEqual(260);
+  });
+});

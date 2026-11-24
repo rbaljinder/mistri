@@ -312,9 +312,9 @@ describe('loading', () => {
     mkdirSync(join(dir, 'pages'));
     writeFileSync(
       join(dir, 'pages', 'help.page.tsx'),
-      `import { definePage, Empty } from '@mistriwork/mistri/page';
+      `import { definePage, EmptyState } from '@mistriwork/mistri/page';
 export default definePage({ label: { message: 'ticket.plural' }, description: { message: 'ticket.open' },
-  reads: ['ticket'], component: () => <Empty title="x" /> });\n`,
+  reads: ['ticket'], component: () => <EmptyState title="x" /> });\n`,
     );
     const loaded = await loadApp(dir, { lock: 'report' });
     const help = (app: Pick<LoadedApp, 'app'>) => app.app.views.help as unknown as { label: string; description: string };

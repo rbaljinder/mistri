@@ -28,7 +28,7 @@ export const Switches: StoryObj = {
     <div style={{ display: 'grid', gap: 20, maxWidth: 420 }}>
       <Switch label="Notify me" description="A message when a task is assigned to you." defaultChecked />
       <Switch label="Weekly digest" description="One summary every Monday, nothing else." />
-      <Switch label="Syncing" description="Already pressed once; it refuses a second press." checked busy />
+      <Switch label="Syncing" description="Already pressed once; it refuses a second press." checked loading />
       <Switch label="Archived projects" disabled />
     </div>
   ),
@@ -57,12 +57,12 @@ export const DrawerSheet: StoryObj = {
     const [open, setOpen] = useState(false);
     return (
       <>
-        <Button intent="secondary" onClick={() => setOpen(true)}>
+        <Button variant="secondary" onClick={() => setOpen(true)}>
           Open filters
         </Button>
         <Drawer open={open} title="Filters" onOpenChange={setOpen}>
           <p style={{ marginTop: 0 }}>Only the filters live here; the list stays behind the scrim.</p>
-          <Button intent="primary" onClick={() => setOpen(false)}>
+          <Button variant="primary" onClick={() => setOpen(false)}>
             Apply
           </Button>
         </Drawer>
@@ -73,7 +73,7 @@ export const DrawerSheet: StoryObj = {
 
 export const PopoverLayer: StoryObj = {
   render: () => (
-    <Popover trigger={<Button intent="secondary">What is this?</Button>} defaultOpen>
+    <Popover trigger={<Button variant="secondary">What is this?</Button>} defaultOpen>
       <p style={{ margin: 0 }}>A layer anchored to its trigger: Escape or a click outside dismisses it.</p>
     </Popover>
   ),
@@ -172,7 +172,7 @@ export const ScrollAreaRegion: StoryObj = {
 export const TooltipNote: StoryObj = {
   render: () => (
     <div style={row}>
-      <Tooltip trigger={<Button intent="secondary">Save</Button>} defaultOpen>
+      <Tooltip trigger={<Button variant="secondary">Save</Button>} defaultOpen>
         Saves the record without leaving the page.
       </Tooltip>
       <p style={{ margin: 0, color: 'var(--ink-muted)' }}>Hover or focus the button; the note is extra, never the label.</p>

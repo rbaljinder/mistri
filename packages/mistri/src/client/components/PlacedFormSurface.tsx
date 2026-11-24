@@ -29,26 +29,26 @@ export function PlacedFormSurface({
         </p>
         <div className="form-actions">
           <Button
-            intent="primary"
+            variant="primary"
             onClick={() => void operation.check()}
-            busy={state.phase === 'pending'}
-            busyLabel={say('common.checking')}
+            loading={state.phase === 'pending'}
+            loadingLabel={say('common.checking')}
             disabled={!operation.canRecover()}
           >
             {say('placementCheckResult')}
           </Button>
           {operation.canRetry() && (
             <Button
-              intent="secondary"
+              variant="secondary"
               onClick={() => void operation.retry()}
-              busy={state.phase === 'pending'}
-              busyLabel={say('common.submitting')}
+              loading={state.phase === 'pending'}
+              loadingLabel={say('common.submitting')}
             >
               {say('placementRetry')}
             </Button>
           )}
           {onDismiss && (
-            <Button intent="secondary" onClick={onDismiss}>
+            <Button variant="secondary" onClick={onDismiss}>
               {say('common.close')}
             </Button>
           )}

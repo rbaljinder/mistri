@@ -11,12 +11,14 @@
  * picker — takes them through `children` as a function and puts them where
  * its focusable is.
  */
-import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode } from 'react';
+import { cloneElement, isValidElement, useId, type ReactElement, type ReactNode, type Ref } from 'react';
+import type { ControlSize } from './internal/cx.js';
 import { slotted } from './internal/uiKitContext.js';
 
 /** The short answers: a count, an amount, a day, a day and its time, a time of day. */
 export type AnswerKind = 'number' | 'money' | 'date' | 'datetime' | 'time';
 
+/** Accessibility attributes wired from `Field` onto its child control. */
 export interface FieldControlProps {
   id: string;
   'aria-describedby'?: string;
@@ -26,7 +28,8 @@ export interface FieldControlProps {
   'aria-labelledby'?: string;
 }
 
-interface FieldProps {
+/** Props for the `Field` form wrapper component. */
+export interface FieldProps {
   label: ReactNode;
   /** A sentence that helps before anything goes wrong. */
   hint?: ReactNode;
@@ -50,13 +53,14 @@ interface FieldProps {
   labelAside?: ReactNode;
   /** Keep the problem's line in the flow while it is empty, so a problem that arrives moves nothing below it. */
   reserve?: boolean;
-  /** Compact: a filter's or a dense row's size. */
-  size?: 'compact' | 'default';
+  /** Control size for dense rows or standard forms. */
+  size?: ControlSize;
   /** What kind of answer the control takes, where it is a short one: the control is only as wide as that answer
       (forms.css) and consecutive short fields share a row. Decided from the data, never measured, so no answer
       resizes its field. Absent for text and for a choice, which take the column. */
   kind?: AnswerKind;
   className?: string;
+  ref?: Ref<HTMLDivElement>;
   children: ReactElement<Record<string, unknown>> | ((control: FieldControlProps) => ReactNode);
 }
 
@@ -68,13 +72,14 @@ function DefaultField({
   id,
   group = false,
   check = false,
-  size = 'default',
+  size = 'md',
   kind,
   optional,
   labelAside,
   labelHidden = false,
   reserve = false,
   className,
+  ref,
   children,
 }: FieldProps) {
   const made = useId();
@@ -122,10 +127,11 @@ function DefaultField({
      said as `data-answer`. */
   return (
     <div
+      ref={ref}
       data-slot="field"
       data-kind={check ? 'check' : undefined}
       data-answer={kind}
-      data-size={size === 'compact' ? 'compact' : undefined}
+      data-size={size === 'sm' || size === 'xs' ? 'compact' : undefined}
       data-invalid={holdsProblem ? '' : undefined}
       data-required={required ? '' : undefined}
       className={className || undefined}
@@ -176,5 +182,5 @@ function joined(props: Record<string, unknown>, control: FieldControlProps): Par
   return described ? { 'aria-describedby': described } : {};
 }
 
-/* Slotted (UiKit.tsx): an App's control kit may draw its own in place of the default, with the same props. */
+/** Labeled form field wrapper that wires accessible label, hint, validation error, and required state to its control. */
 export const Field = slotted('Field', DefaultField);

@@ -24,7 +24,97 @@
  */
 import type * as ReactTypes from 'react';
 import type { AppIconName, PropValues, Register, SectionWidth } from './app.js';
+import type { EmptyStateSpec, Tone } from './kit.js';
 export type { SectionWidth };
+
+export {
+  AiBadge,
+  Badge,
+  Beside,
+  BreakdownList,
+  Button,
+  Card,
+  Checkbox,
+  ChoiceCards,
+  Cluster,
+  DescriptionList,
+  Dropdown,
+  EmptyState,
+  FileField,
+  Heading,
+  ItemList,
+  ItemRow,
+  Meter,
+  MiniBars,
+  Person,
+  Row,
+  SegmentedControl,
+  Select,
+  Skeleton,
+  Slider,
+  Sparkline,
+  SplitView,
+  Stack,
+  StatCard,
+  StatusDot,
+  Switch,
+  Text,
+  TextArea,
+  TextField,
+  VisuallyHidden,
+  YesNo,
+  type AiBadgeProps,
+  type BadgeProps,
+  type BesideProps,
+  type BreakdownItem,
+  type BreakdownListProps,
+  type ButtonProps,
+  type ButtonSize,
+  type ButtonVariant,
+  type CardProps,
+  type ChangeDetails,
+  type CheckboxProps,
+  type ChoiceCardsProps,
+  type ChoiceOption,
+  type ClusterProps,
+  type ControlSize,
+  type DescriptionField,
+  type DescriptionListProps,
+  type DropdownAction,
+  type DropdownChange,
+  type DropdownItem,
+  type DropdownProps,
+  type EmptyStateProps,
+  type EmptyStateSpec,
+  type FileFieldProps,
+  type HeadingProps,
+  type ItemListProps,
+  type ItemRowProps,
+  type MeterProps,
+  type MiniBarsProps,
+  type PersonProps,
+  type RowProps,
+  type SegmentedControlOption,
+  type SegmentedControlProps,
+  type SelectOption,
+  type SelectProps,
+  type SkeletonProps,
+  type SliderProps,
+  type SparklineProps,
+  type SplitViewItem,
+  type SplitViewProps,
+  type StackProps,
+  type StatCardDelta,
+  type StatCardProps,
+  type StatusDotProps,
+  type SwitchProps,
+  type TextAreaProps,
+  type TextFieldProps,
+  type TextProps,
+  type Tone,
+  type VisuallyHiddenProps,
+  type YesNoProps,
+} from './kit.js';
 
 /** Pass the generated `Flags<typeof manifest>` alias. These are evaluated
  * presentation values, never permission grants. Reads do not record exposure. @preview */
@@ -63,12 +153,11 @@ type Loaders = Register extends { loaders: infer V } ? V : never;
 export type LoaderData<L extends string> = [Loaders] extends [never]
   ? unknown
   : L extends keyof Loaders
-    ? Loaders[L] extends { readonly load: (...args: never[]) => infer R } ? Awaited<R> : unknown
+    ? Loaders[L] extends { readonly load: (...args: never[]) => infer R }
+      ? Awaited<R>
+      : unknown
     : unknown;
 
-/* A page's props live here rather than beside definePage: @mistriwork/mistri/page types its house controls from
-   @mistriwork/ui, which in a checkout is .tsx source, so the generated mistri-components.d.ts importing from there
-   failed the typecheck (TS6142) of an App whose tsconfig sets no jsx. ui.d.ts reaches only react. */
 /** What a page's component is drawn with, by the loader it names: the shape `definePage` holds a component to. */
 export interface LoaderPageProps<L extends string = never> {
   data: [L] extends [never] ? null : LoaderData<L>;
@@ -82,7 +171,9 @@ type PageLoaders = Register extends { pageLoaders: infer V } ? V : never;
 type LoaderOf<N extends string> = [PageLoaders] extends [never] ? string : N extends keyof PageLoaders ? Extract<PageLoaders[N], string> : never;
 /** What a page's component is drawn with, keyed by the page's own path (`pages/pick-walk.page.tsx` is
     `PageProps<'pick-walk'>`): its loader's result as `data`, whatever the loader is called, and its placement's props. */
-export type PageProps<N extends ([PageLoaders] extends [never] ? string : keyof PageLoaders & string) = never> = LoaderPageProps<[N] extends [never] ? never : LoaderOf<N>>;
+export type PageProps<N extends ([PageLoaders] extends [never] ? string : keyof PageLoaders & string) = never> = LoaderPageProps<
+  [N] extends [never] ? never : LoaderOf<N>
+>;
 
 /** One row as a component receives it: keyed by the paths it declared, each typed from the generated rows where the path is a column. */
 type Cell<Row, P> = Row extends object ? (P extends keyof Row ? Row[P] : unknown) : unknown;
@@ -114,12 +205,18 @@ export interface SectionProps<D, R = Record<string, Record<string, unknown>>, Ba
   /** The page's record, with exactly the declared `record` fields; undefined on a dashboard. */
   record: (D extends { record: readonly (infer P extends string)[] } ? RowAt<R, [Base] extends [never] ? never : Base, P> : never) | undefined;
   /** Each declared read, by its name: the rows the planner ran, each carrying exactly its `show`. */
-  rows: { readonly [K in keyof ReadsOf<D>]: ReadonlyArray<ReadsOf<D>[K] extends { from: infer F; show: readonly (infer P extends string)[] } ? RowAt<R, F, P> : never> };
+  rows: {
+    readonly [K in keyof ReadsOf<D>]: ReadonlyArray<
+      ReadsOf<D>[K] extends { from: infer F; show: readonly (infer P extends string)[] } ? RowAt<R, F, P> : never
+    >;
+  };
   /** Each declared aggregate read, by its name, exact over every row the reader may see (not the page of rows a `rows`
       read holds): one figure, or with a `by` a group for each value, as the server counted them under the reader's grants. */
-  figures: { readonly [K in keyof FiguresOf<D>]: FiguresOf<D>[K] extends { by: string }
-    ? ReadonlyArray<FigureGroup<FiguresOf<D>[K] extends { measure: infer M } ? M : string>>
-    : FigureValue<FiguresOf<D>[K] extends { measure: infer M } ? M : string> };
+  figures: {
+    readonly [K in keyof FiguresOf<D>]: FiguresOf<D>[K] extends { by: string }
+      ? ReadonlyArray<FigureGroup<FiguresOf<D>[K] extends { measure: infer M } ? M : string>>
+      : FigureValue<FiguresOf<D>[K] extends { measure: infer M } ? M : string>;
+  };
   /** The placement's props, checked against the declaration; a prop with a default is always there. */
   props: PropValues<PropsOf<D>>;
   section: { title?: string; width: SectionWidth; region: 'main' | 'aside' };
@@ -160,13 +257,13 @@ export interface ListProps<V, R = Record<string, Record<string, unknown>>> {
 
 /**
  * What an input component receives, standing where a form draws a field (`inputs`): the form's value — a
- * column's text in a record's form (null for none), the input's value in a command's form — and `onChange`
- * to hand one back. The form keeps it, says its problems beside it and sends it; what it must be is still
- * the form's rules and the server's to judge.
+ * column's text in a record's form (null for none), the input's value in a command's form — and `onValueChange`
+ * (or `onChange`) to hand one back. The form keeps it, says its problems beside it and sends it; what it must be
+ * is still the form's rules and the server's to judge.
  */
 export interface InputProps<V = string | number | boolean> {
   value: V | null;
-  onChange(value: V | null): void;
+  onValueChange(value: V | null): void;
   /** The control's id, which the field's label points at, and what describes it (the hint, the problem). */
   id: string;
   describedBy?: string;
@@ -190,261 +287,88 @@ export interface ValueProps<V = unknown, Row = Record<string, unknown>> {
   compact: boolean;
   /** The tone the rest of the column's display rule gives this value (`tone: { closed: 'good' }`), so a renderer
       can keep the colour the platform's pill would wear. */
-  tone?: ToneName;
+  tone?: Tone;
   /** The word the rule says this value as (`values`), where it says one. */
   word?: string;
 }
 
-/* ---------- the kit ---------- */
-
-type Children = { children?: ReactTypes.ReactNode };
-type Gap = 'tight' | 'field' | 'section';
-export type ToneName = 'good' | 'warn' | 'bad' | 'info' | 'neutral';
+/* ---------- Mistri schema-aware kit pieces ---------- */
 
 /** A display rule said in place, for `<Value display>` and a fixture's rules: the resource's `display` rule, as the DSL
     writes it (`bar: 5` fills against 5). */
 export type ValueDisplay = import('./app.js').Plain<import('./app.js').AppDisplayRule>;
 
-/** One box: a hairline and the surface. A card inside a card, or a Stat inside one, draws as a plain group. `count` is a
-    quiet number beside the title and `action` a slot at the title row's end (buttons, a menu): given either, the title
-    row is a header row. `ground="nav"` puts the box on the look's navigation ground: a Stat, Value, Meter, Table, Items,
-    Segmented or Empty inside it takes that ground's inks. Any element with `data-ground="nav"` is the same scope. The title is an h3; `level` makes it
-    an h2 or an h4 where the page's outline needs one (a card that is a section of a page under the platform's h1 is `level={2}`).
-    `description` is one quiet line under the title, what the part holds; `tone` says the title in a status ink, for a part about trouble. */
-export declare function Card(
-  props: Children & {
-    title?: ReactTypes.ReactNode; level?: 2 | 3 | 4; count?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode;
-    description?: ReactTypes.ReactNode; tone?: ToneName; ground?: 'nav'; className?: string;
-  },
-): ReactTypes.ReactElement;
-/** A main column beside a rail (notes, filters, facts). The rail is `railWidth` wide (a CSS length, `'20rem'` by default,
-    never past half the box) at the `side` edge (`'end'` by default); the main takes the rest. Where the box itself is
-    under 40rem wide (or `stackBelow`, a CSS length), or the main would be left under 24rem, it stacks, main first, and it never scrolls sideways. Cluster makes equal columns; this makes two unequal ones. */
-export declare function Beside(props: Children & { rail: ReactTypes.ReactNode; railWidth?: string; side?: 'start' | 'end'; stackBelow?: string; className?: string }): ReactTypes.ReactElement;
-/** Rows with no head row, each an `Item`. `label` names the list for assistive technology; `empty` is drawn when there are no rows.
-    `groups` draws the rows in runs, `{ title, count?, items, key? }` each, under a head that holds the top of the room while
-    its own rows pass beneath it (the next run's head takes its place); a run with no `Item`s is not drawn, and the lead
-    column is still one width down every run. */
-export declare function Items(
-  props: Children & {
-    label?: string; empty?: ReactTypes.ReactNode; className?: string;
-    groups?: readonly { key?: string; title: ReactTypes.ReactNode; count?: ReactTypes.ReactNode; items: ReactTypes.ReactNode }[];
-  },
-): ReactTypes.ReactElement | null;
-/** One row of `Items`: `lead` a slot before the text (icon, avatar, a time, a Value), `title` its words, `note` one quiet
-    line under it, `action` a slot at the row's end. The lead is one column the rows share, as wide as the widest, so a
-    time or a mark lines up down the list. `tone` puts a mark of that tone in the column, or says a `lead` in the tone's ink.
-    With `href` or `onClick` the title is the row's one link or button, reaching across the whole row, which answers a
-    pointer; a click inside `action` never opens the row. At a narrow width the action wraps under the note. */
-export declare function Item(props: {
-  lead?: ReactTypes.ReactNode; title: ReactTypes.ReactNode; note?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode;
-  tone?: ToneName; href?: string; onClick?: () => void;
-}): ReactTypes.ReactElement;
-/** Children one under another: a field's 20px apart (default), a section's 40px, or tight. */
-export declare function Stack(props: Children & { gap?: Gap; as?: 'div' | 'ul' | 'ol'; className?: string }): ReactTypes.ReactElement;
-/** Children side by side, wrapping where there is no room. `foot`: the page's actions at the screen's foot (a sticky
-    row of verbs on a phone), which a notice stands above instead of covering. */
-export declare function Row(
-  props: Children & { gap?: Gap; align?: 'start' | 'center' | 'baseline' | 'end'; foot?: boolean; className?: string },
-): ReactTypes.ReactElement;
-/** Children in a grid of equal columns, each as wide as `min` (a CSS length, `'16rem'` by default) where there is room
-    and fewer columns where there is not: it wraps, and never scrolls sideways. Three cards across at a desk, one on a phone. */
-export declare function Cluster(props: Children & { min?: string; gap?: Gap; className?: string }): ReactTypes.ReactElement;
-/** A line of words: `<Text tone="muted" size="sm">Not open to your role.</Text>`. The default is the page's ink, `muted` its secondary ink
-    (a note, a caption), `danger` the status colour of a refusal or a failure. It sets no layout of its own. */
-export declare function Text(props: { tone?: 'default' | 'muted' | 'danger'; size?: 'sm' | 'md'; children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
-/** Words only a screen reader hears: `<VisuallyHidden>, opens in a new tab</VisuallyHidden>`. Clipped, not `display: none`, so they stay announced and take no room. */
-export declare function VisuallyHidden(props: { children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
-/** The one mark for what a model made or proposed: a glyph and the App's word for AI (`ai: { label }` on the App, "AI" when absent), in the `--ai` ink. `quiet` keeps the glyph and leaves the word to screen readers. */
-export declare function AiMark(props: { quiet?: boolean; className?: string }): ReactTypes.ReactElement;
-/** A heading inside a section, whose own title is its h2. */
-export declare function Heading(props: Children & { level?: 3 | 4; className?: string }): ReactTypes.ReactElement;
-/** The platform's one button: 44px tall on a coarse pointer or at a phone's width. With `href` it is an `<a>` in the
-    button's dress (a new tab, a copied link, an address of this App followed in place); without, a `<button>`. */
-export declare function Button(props: (Omit<ReactTypes.ButtonHTMLAttributes<HTMLButtonElement>, 'type'> & {
-  intent?: 'primary' | 'secondary' | 'quiet' | 'danger';
-  size?: 'compact' | 'default' | 'large';
-  busy?: boolean;
-  busyLabel?: ReactTypes.ReactNode;
-  block?: boolean;
-  type?: 'button' | 'submit' | 'reset';
-  ref?: ReactTypes.Ref<HTMLButtonElement>;
-  href?: undefined;
-}) | (Omit<ReactTypes.AnchorHTMLAttributes<HTMLAnchorElement>, 'onClick'> & {
-  href: string;
-  intent?: 'primary' | 'secondary' | 'quiet' | 'danger';
-  size?: 'compact' | 'default' | 'large';
-  block?: boolean;
-  onClick?: () => void;
-  ref?: ReactTypes.Ref<HTMLAnchorElement>;
-})): ReactTypes.ReactElement;
-/** What a control's change callback hears second: why the value moved (`reason`, a word the callback's type lists), the
-    hand that moved it (`program` when the page did) and the DOM event behind it. As `@mistriwork/ui` says it. */
-export interface ChangeDetails<Reason extends string = string> {
-  reason: Reason;
-  source: 'pointer' | 'keyboard' | 'program';
-  event?: Event;
-}
-/** The platform's themed listbox, with optional actions beneath its choices. */
-export declare function Dropdown(props: {
-  items: Array<{ value: string; label: string; detail?: string; badge?: string; disabled?: boolean; tone?: ToneName; swatches?: string[] }>;
-  value: string;
-  onChange: (value: string, details: ChangeDetails<'item-press' | 'autofill' | 'sync'>) => void;
-  ariaLabel?: string;
-  ariaInvalid?: boolean;
-  ariaDescribedBy?: string;
-  id?: string;
-  buttonRef?: ReactTypes.Ref<HTMLButtonElement>;
-  popupRef?: ReactTypes.Ref<HTMLDivElement>;
-  onOpenChange?: (
-    open: boolean,
-    details: ChangeDetails<'trigger-press' | 'outside-press' | 'escape-key' | 'window-resize' | 'item-press' | 'focus-out' | 'list-navigation' | 'cancel-open' | 'implicit'>,
-  ) => void;
-  disabled?: boolean;
-  readOnly?: boolean;
-  valueClassName?: string;
-  actions?: Array<{ label: string; onSelect: () => void }>;
-}): ReactTypes.ReactElement;
-/** A collection beside its selected detail; on a phone, the detail uses the platform's modal. */
-export declare function SplitListDetail(props: {
-  list: ReactTypes.ReactNode;
-  detail?: ReactTypes.ReactNode;
-  detailActions?: ReactTypes.ReactNode;
-  selected?: boolean;
-  detailTitle?: string;
-  onCloseDetail?: () => void;
-  listLabel?: string;
-  detailLabel?: string;
+/** A value as the App draws it: name its resource and column and the App's display rule dresses it, or say one with `display`. */
+export declare function Value(props: {
+  value: unknown;
+  resource?: string;
+  column?: string;
+  display?: ValueDisplay;
+  compact?: boolean;
   className?: string;
 }): ReactTypes.ReactElement;
-/** A value as the App draws it: name its resource and column and the App's display rule dresses it, or say one with `display`. */
-export declare function Value(props: { value: unknown; resource?: string; column?: string; display?: ValueDisplay; compact?: boolean }): ReactTypes.ReactElement;
-/** A meaning as the looks say one: a dot and its word. */
-export declare function Tone(props: Children & { tone: ToneName }): ReactTypes.ReactElement;
-/** A share of a whole: `value` against `max` (100 by default) as a bar and its figure. `ariaLabel` names the meter where
-    `label` is not a string ("Seats taken"); `valueLabel` is the value as a screen reader says it ("12 of 40 seats");
-    `size: 'fluid'` stretches the bar across the width it is given in place of the short bar beside a figure. */
-export declare function Meter(props: {
-  value: number; max?: number; tone?: ToneName; label?: ReactTypes.ReactNode; ariaLabel?: string; valueLabel?: string; size?: 'fluid';
-}): ReactTypes.ReactElement;
-/** Groups as bars against the largest, in the order given: a label, the bar on Meter's track, the figure and a quiet note
-    ("4 deals"). Each row is a meter said whole ("Proposal: $120,000, 4 deals"); on a phone the label sits above its bar. */
-export declare function Bars(props: {
-  label?: string; items: ReadonlyArray<{ key: string; label: ReactTypes.ReactNode; value: number; note?: ReactTypes.ReactNode }>;
-  format?: 'number' | 'money' | 'percent'; say?: (value: number) => string; tone?: ToneName;
-}): ReactTypes.ReactElement;
-/** What a component says when it has nothing to draw. */
-export declare function Empty(props: { title: ReactTypes.ReactNode; description?: ReactTypes.ReactNode; action?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
-/* The platform's fields, drawn as the shell draws its own (their stylesheet is fetched with them): a label, a hint and a
-   problem wired to the control. Preview, as they are in @mistriwork/ui. Typed here by what a component passes (this file
-   reaches only react: see LoaderPageProps), and by the package's own types from `@mistriwork/mistri/page`. */
-type FieldFrame = {
-  label: ReactTypes.ReactNode; hint?: ReactTypes.ReactNode; problem?: ReactTypes.ReactNode; required?: boolean; labelHidden?: boolean;
-  optional?: ReactTypes.ReactNode; reserve?: boolean; id?: string; className?: string;
-};
-/** A text box in a field. */
-export declare function TextField(props: FieldFrame & {
-  value: string; onChange: (value: string, details: ChangeDetails<'input-change'>) => void; onBlur?: () => void; type?: 'text' | 'email' | 'tel' | 'url';
-  inputMode?: 'text' | 'email' | 'tel' | 'numeric' | 'url'; autoComplete?: string; placeholder?: string; name?: string;
-  disabled?: boolean; readOnly?: boolean; valid?: boolean; after?: ReactTypes.ReactNode; inputRef?: ReactTypes.Ref<HTMLInputElement>;
-}): ReactTypes.ReactElement;
-/** A box of several lines, in the same frame as TextField: a label, a hint and a problem wired to it. */
-export declare function TextArea(props: FieldFrame & {
-  value: string; onChange: (value: string, details: ChangeDetails<'input-change'>) => void; onBlur?: () => void; rows?: number; maxLength?: number;
-  autoComplete?: string; placeholder?: string; name?: string; disabled?: boolean; readOnly?: boolean; after?: ReactTypes.ReactNode;
-  inputRef?: ReactTypes.Ref<HTMLTextAreaElement>;
-}): ReactTypes.ReactElement;
-/** One choice from a list, in a field. */
-export declare function Select(props: FieldFrame & {
-  options: Array<{ value: string; label: string; detail?: string; badge?: string; disabled?: boolean }>;
-  value: string; onChange: (value: string, details: ChangeDetails<'item-press' | 'autofill' | 'sync'>) => void; placeholder?: string; disabled?: boolean;
-}): ReactTypes.ReactElement;
-/** A checkbox with its label. */
-export declare function Checkbox(props: Omit<FieldFrame, 'label'> & {
-  label: ReactTypes.ReactNode; checked: boolean; onChange: (on: boolean, details: ChangeDetails<'toggle'>) => void; disabled?: boolean;
-}): ReactTypes.ReactElement;
-/** Two choices, yes or no, as a pair. */
-export declare function YesNo(props: Omit<FieldFrame, 'label'> & {
-  label: ReactTypes.ReactNode; value: 'yes' | 'no' | ''; onChange: (value: 'yes' | 'no', details: ChangeDetails<'select'>) => void; yes: string; no: string;
-}): ReactTypes.ReactElement;
-/** A switch with its label. */
-export declare function Switch(props: {
-  label?: ReactTypes.ReactNode; description?: ReactTypes.ReactNode; checked?: boolean; defaultChecked?: boolean;
-  onCheckedChange?: (checked: boolean, details: ChangeDetails<'toggle'>) => void; disabled?: boolean; busy?: boolean; id?: string; className?: string;
-}): ReactTypes.ReactElement;
-/** A number on a range, said by `format`. */
-export declare function Slider(props: FieldFrame & {
-  value: number; onChange: (value: number, details: ChangeDetails<'slide'>) => void; min: number; max: number; step?: number; format?: (n: number) => string; disabled?: boolean;
-}): ReactTypes.ReactElement;
-/** Cards to choose from: one (`value` holds at most one key) or, with `multiple`, several; `exclusive` is the option that clears the rest. */
-export declare function ChoiceCards(props: FieldFrame & {
-  options: Array<{ value: string; label: string; icon?: ReactTypes.ReactNode }>; value: string[]; onChange: (value: string[], details: ChangeDetails<'select'>) => void;
-  multiple?: boolean; exclusive?: string;
-}): ReactTypes.ReactElement;
-/** A file chosen in the browser, handed up as a `File` (or null), or with `multiple` a `File[]`; nothing is sent. Drawn with the
-    kit's button and the chosen names; the label and the keyboard are the platform's. */
-export declare function FileField(props: FieldFrame & {
-  accept?: string; name?: string; disabled?: boolean; inputRef?: ReactTypes.Ref<HTMLInputElement>;
-  /** The button's words and what the names say with no file, in the reader's language where not said. */
-  chooseLabel?: string; noneLabel?: string;
-} & (
-  | { multiple?: false; value: File | null; onChange: (file: File | null, details: ChangeDetails<'file-pick'>) => void }
-  | { multiple: true; value: File[]; onChange: (files: File[], details: ChangeDetails<'file-pick'>) => void }
-)): ReactTypes.ReactElement;
-/** A placeholder block at the size what is coming will take (`height`, and `width` where it is not the box's); `lines`
-    draws that many, the last shorter, for a paragraph. For `<Loaded loading={…}>`; the wait is announced by what holds it. */
-export declare function Skeleton(props: { height?: number | string; width?: number | string; lines?: number }): ReactTypes.ReactElement;
+
 /** A read's states before its drawing, as every section says them: the platform's placeholder while it is asked (at
     `height`, the size the drawing takes, so nothing moves when it lands, or what `loading` draws instead: a `Skeleton`
     shaped like the drawing), `empty` (or the house sentence; `empty={null}` draws nothing) for no rows
     or no record, and the house problem with Try again when it could not be read. Then `children(data)`:
-    `<Loaded query={useRows('payment')} empty={<Empty title="No payments yet" />}>{(rows) => …}</Loaded>`. */
+    `<Loaded query={useRows('payment')} empty={{ title: 'No payments yet' }}>{(rows) => …}</Loaded>`. */
 export declare function Loaded<T>(props: {
-  query: { data: T | undefined; isError: boolean; error: Error | null; refetch(): unknown };
-  empty?: ReactTypes.ReactNode;
+  query: { data: T | undefined; isError: boolean; error: Error | null; refetch(): unknown; refused?: boolean };
+  empty?: EmptyStateSpec | ReactTypes.ReactNode;
   loading?: ReactTypes.ReactNode;
   height?: number | string;
+  className?: string;
   children: (data: NonNullable<T>) => ReactTypes.ReactNode;
 }): ReactTypes.ReactElement;
-/** One of the App's curated marks: the names a view's `icon` takes. Decoration unless it has a label. */
-export declare function Icon(props: { name: AppIconName; label?: string; size?: number | string }): ReactTypes.ReactElement;
-/** A few exclusive choices as one row of words, the chosen one filled; arrows move the choice. A choice may carry a count.
-    Past four choices, at a phone's width a native picker stands in the row's place; `className` is the App's own class. */
-export declare function Segmented<T extends string>(props: {
-  label: string; value: T; options: ReadonlyArray<{ value: T; label: ReactTypes.ReactNode; count?: number; name?: string }>;
-  onChange(value: T): void; size?: 'default' | 'compact'; className?: string;
+
+/** One of the App's curated marks: the names a view's `icon` takes. Decoration unless it has an accessible label. */
+export declare function Icon(props: {
+  name: AppIconName;
+  ariaLabel?: string;
+  label?: string;
+  size?: number | string;
+  className?: string;
 }): ReactTypes.ReactElement;
-/** A figure and what it counts: its label, its change against the period before (toned where the news is known) and, from four points, its trend.
-    `delta` says the change as a number and which way is good (`{ value: 12, good: 'up' }` is "+12" in the good ink); `change` is words of your own and wins
-    where both are given. With `href` the whole Stat is a link, followed in place for an address of this App. */
-export declare function Stat(props: {
-  label: ReactTypes.ReactNode; value: ReactTypes.ReactNode; change?: { text: ReactTypes.ReactNode; tone?: ToneName };
-  /** `against` says what the change is against, after it: "vs prior 90 days". */
-  delta?: { value: number | string; good?: 'up' | 'down'; against?: string };
-  trend?: ReadonlyArray<number | { key: string; value: number }>; href?: string; say?: (value: unknown) => string;
-}): ReactTypes.ReactElement;
-/** The shape of a run of numbers in the look's chart ink, spanning its container. Four values or more draw; a screen reader gets the values. @preview */
-export declare function Sparkline(props: { values: ReadonlyArray<number>; label?: string; say?: (value: unknown) => string }): ReactTypes.ReactElement;
-/** A few bars side by side, the tallest to the top of the box. `labels` name them for a screen reader (which gets a table of label and value);
-    `highlight` is the index of the one that stands out, the rest drawn quieter. @preview */
-export declare function MiniBars(props: {
-  values: ReadonlyArray<number>; labels?: ReadonlyArray<string>; highlight?: number; label?: string; say?: (value: unknown) => string;
-}): ReactTypes.ReactElement;
-/** A card that is one control: a button with `onPress`, a link with `href` (an address of this App is followed in place), toggled with `selected`.
+
+/** A card that is one control: a button with `onClick`, a link with `href` (an address of this App is followed in place), toggled with `selected`.
     Drawn with the card's corner and lift, not a control's. Its children are what the card holds, which must not be controls of their own. @preview */
-export declare function Tile(props: {
-  onPress?: () => void; href?: string; selected?: boolean; disabled?: boolean; children?: ReactTypes.ReactNode; className?: string;
-} & Omit<ReactTypes.ComponentProps<'button'>, 'onClick' | 'children' | 'type' | 'className' | 'disabled'>): ReactTypes.ReactElement;
+export declare function Tile(
+  props: {
+    onClick?: (event: ReactTypes.MouseEvent<HTMLElement>) => void;
+    href?: string;
+    selected?: boolean;
+    disabled?: boolean;
+    ariaLabel?: string;
+    children?: ReactTypes.ReactNode;
+    className?: string;
+    ref?: ReactTypes.Ref<HTMLElement>;
+  } & Omit<
+    ReactTypes.ComponentProps<'button'>,
+    'onClick' | 'children' | 'type' | 'className' | 'disabled' | 'aria-label' | 'onChange' | 'inlist' | 'ref'
+  >,
+): ReactTypes.ReactElement;
+
 /** Columns over periods (or any keys), each divided by series, with levels, the current column's parts in a pill and a legend. */
 export declare function Columns(props: {
-  rows: ReadonlyArray<{ key: string; values: Record<string, number> }>; series: ReadonlyArray<{ key: string; label: string }>;
-  say?: (value: unknown) => string; height?: number;
+  rows: ReadonlyArray<{ key: string; values: Record<string, number> }>;
+  series: ReadonlyArray<{ key: string; label: string }>;
+  formatValue?: (value: unknown) => string;
+  height?: number;
+  className?: string;
 }): ReactTypes.ReactElement;
+
 /** One column of a `Table`: the row field it reads, drawn through `Value` (name `resource` and `column` and the App's display rule dresses it). */
 export interface TableColumn<Row> {
-  key: string; label: ReactTypes.ReactNode; align?: 'left' | 'right';
-  resource?: string; column?: string; display?: ValueDisplay;
-  render?: (row: Row) => ReactTypes.ReactNode; sortable?: boolean;
+  key: string;
+  label: ReactTypes.ReactNode;
+  align?: 'left' | 'right';
+  tone?: Tone;
+  resource?: string;
+  column?: string;
+  display?: ValueDisplay;
+  render?: (row: Row) => ReactTypes.ReactNode;
+  sortable?: boolean;
   /** A second, quieter line under the value (a row field's key, or a function of the row): body weight, muted, wrapping. */
   secondary?: string | ((row: Row) => ReactTypes.ReactNode);
   /** Whether the primary line is emphasized: the first column's is `'strong'` unless said, any other's `'normal'`. */
@@ -455,26 +379,20 @@ export interface TableColumn<Row> {
       the cell's own value), or a function of the row. Initials stand in where there is no picture; the disc is decoration. */
   avatar?: string | ((row: Row) => { name: string; src?: string });
 }
+
 /** Rows in the look's own table. Sorting is the caller's: a head is a button once `onSort` is given and the table says which way it stands.
-    With `onRowClick` the first cell is the row's link and the whole row answers a pointer. `label` names the table for assistive technology. */
+    With `onRowClick` the first cell is the row's link and the whole row answers a pointer. `ariaLabel` names the table for assistive technology. */
 export declare function Table<Row extends Record<string, unknown>>(props: {
-  label: string; columns: ReadonlyArray<TableColumn<Row>>; rows: ReadonlyArray<Row>;
+  ariaLabel?: string;
+  label?: string;
+  columns: ReadonlyArray<TableColumn<Row>>;
+  rows: ReadonlyArray<Row>;
   rowKey?: (row: Row, index: number) => string | number;
-  sort?: { key: string; direction: 'asc' | 'desc' }; onSort?: (key: string) => void;
-  onRowClick?: (row: Row) => void; empty?: ReactTypes.ReactNode;
-}): ReactTypes.ReactElement;
-/** Someone, as a face and a name, with an optional second line (a role, an address) that wraps. Initials stand in where
-    there is no picture, and the face is decoration: the name is what is read. With `href` the name is a link. On a phone
-    the face is the small one. */
-export declare function Person(props: {
-  name: string; secondary?: ReactTypes.ReactNode; src?: string; href?: string; size?: 'sm' | 'md' | 'lg';
-}): ReactTypes.ReactElement;
-/** One of `Details`' fields: a column of the row, labeled and drawn as the App says, or a label and value of the page's own. */
-export type DetailsField = string | { label: ReactTypes.ReactNode; value: ReactTypes.ReactNode };
-/** A record's fields as a list of labels and values, dressed as a record page's: `<Details resource="ticket" row={row}
-    fields={['status', 'owner']} />`. A long value wraps; one column on a phone, two at a desk when `columns={2}`. */
-export declare function Details(props: {
-  resource: string; row: UiRow; fields: ReadonlyArray<DetailsField>; columns?: 1 | 2;
+  sort?: { key: string; direction: 'asc' | 'desc' };
+  onSort?: (key: string) => void;
+  onRowClick?: (row: Row) => void;
+  empty?: EmptyStateSpec | ReactTypes.ReactNode;
+  className?: string;
 }): ReactTypes.ReactElement;
 
 /* ---------- hooks ---------- */
@@ -494,9 +412,15 @@ export interface UiQuery<T> {
 }
 /** What an `optional: true` read adds to its result: the reader was refused it (a 401 or 403). That is neither an error
     (`isError` stays false, no toast, no error boundary) nor an empty result (`data` is undefined): draw the refusal in its place. A 500 stays an error. */
-export interface UiRefusable { refused: boolean }
+export interface UiRefusable {
+  refused: boolean;
+}
 /** How far a `useRows` read has paged: the page size, whether the server holds more, and `total` only where the server counted. */
-export interface UiRowsPage { limit: number; hasMore: boolean; total?: number }
+export interface UiRowsPage {
+  limit: number;
+  hasMore: boolean;
+  total?: number;
+}
 /** `useRows`' read: the rows read so far, with `page` and `more()`, which reads the next `limit` rows onto the end. */
 export interface UiRowsQuery<Row = UiRow> extends UiQuery<Row[]> {
   page: UiRowsPage;
@@ -505,25 +429,72 @@ export interface UiRowsQuery<Row = UiRow> extends UiQuery<Row[]> {
 export type UiRow = Readonly<Record<string, unknown>>;
 export type OpenMode = 'page' | 'drawer' | 'modal';
 /** Where `useNavigate().openView` opens a list: a tab by its label, the name box's phrase and the filter boxes by column. */
-export interface OpenViewOptions { tab?: string; search?: string; filters?: Readonly<Record<string, string>> }
+export interface OpenViewOptions {
+  tab?: string;
+  search?: string;
+  filters?: Readonly<Record<string, string>>;
+}
 
 /** Rows of one App resource, by the resource's name: `useRows('pay_run', { where: { status: 'review' }, show: ['title'], sort: 'pay_date desc', limit: 12 })`. `where` is a condition as an object, joined to `query` by "and".
     `enabled: false` asks nothing yet. On a free-form page, a resource is one of the page's `reads`. The first `limit` rows (20 unless said); `page.hasMore` and `more()` read on. */
-export declare function useRows(resource: string, options: { query?: string; where?: Readonly<Record<string, unknown>>; show?: readonly string[]; sort?: string; limit?: number; enabled?: boolean; optional: true }): UiRowsQuery & UiRefusable;
-export declare function useRows(resource: string, options?: { query?: string; where?: Readonly<Record<string, unknown>>; show?: readonly string[]; sort?: string; limit?: number; enabled?: boolean; optional?: false }): UiRowsQuery;
+export declare function useRows(
+  resource: string,
+  options: {
+    query?: string;
+    where?: Readonly<Record<string, unknown>>;
+    show?: readonly string[];
+    sort?: string;
+    limit?: number;
+    enabled?: boolean;
+    optional: true;
+  },
+): UiRowsQuery & UiRefusable;
+export declare function useRows(
+  resource: string,
+  options?: {
+    query?: string;
+    where?: Readonly<Record<string, unknown>>;
+    show?: readonly string[];
+    sort?: string;
+    limit?: number;
+    enabled?: boolean;
+    optional?: false;
+  },
+): UiRowsQuery;
 /** One record by its key: `useRecord('employee', { id: 4 }, ['name', 'title'])`. Null when there is none; not asked while the key is undefined. */
-export declare function useRecord(resource: string, key: Readonly<Record<string, unknown>> | undefined, show: readonly string[] | undefined, options: { optional: true }): UiQuery<UiRow | null> & UiRefusable;
-export declare function useRecord(resource: string, key: Readonly<Record<string, unknown>> | undefined, show?: readonly string[], options?: { optional?: false }): UiQuery<UiRow | null>;
+export declare function useRecord(
+  resource: string,
+  key: Readonly<Record<string, unknown>> | undefined,
+  show: readonly string[] | undefined,
+  options: { optional: true },
+): UiQuery<UiRow | null> & UiRefusable;
+export declare function useRecord(
+  resource: string,
+  key: Readonly<Record<string, unknown>> | undefined,
+  show?: readonly string[],
+  options?: { optional?: false },
+): UiQuery<UiRow | null>;
 /** A resource's rows grouped and measured: `useBreakdown('pay_stub', { by: 'status', measure: 'sum net' })`. Each row is keyed as the
     server names its columns: the groups by their paths (`status`, `day(moved_at)`), the measure as written (`count`, `sum(net)`). */
-export declare function useBreakdown<const B extends string>(resource: string, options: { by: B; measure?: string; query?: string; where?: Readonly<Record<string, unknown>>; limit?: number; optional: true }): UiQuery<UiBreakdownRow<B>[]> & UiRefusable;
-export declare function useBreakdown<const B extends string>(resource: string, options: { by: B; measure?: string; query?: string; where?: Readonly<Record<string, unknown>>; limit?: number; optional?: false }): UiQuery<UiBreakdownRow<B>[]>;
-/** A group's key as the server names its column: `day moved_at` is `day(moved_at)`. */
+export declare function useBreakdown<const B extends string>(
+  resource: string,
+  options: { by: B; measure?: string; query?: string; where?: Readonly<Record<string, unknown>>; limit?: number; optional: true },
+): UiQuery<UiBreakdownRow<B>[]> & UiRefusable;
+export declare function useBreakdown<const B extends string>(
+  resource: string,
+  options: { by: B; measure?: string; query?: string; where?: Readonly<Record<string, unknown>>; limit?: number; optional?: false },
+): UiQuery<UiBreakdownRow<B>[]>;
+/** A group's key as the server names its column: `day moved_at` is `day(created_at)`. */
 type BreakdownKey<P extends string> = P extends `${infer F} ${infer C}` ? `${F}(${C})` : P;
-type BreakdownKeys<B extends string> = B extends `${infer Head},${infer Rest}` ? BreakdownKey<Trim<Head>> | BreakdownKeys<Rest> : BreakdownKey<Trim<B>>;
+type BreakdownKeys<B extends string> = B extends `${infer Head},${infer Rest}`
+  ? BreakdownKey<Trim<Head>> | BreakdownKeys<Rest>
+  : BreakdownKey<Trim<B>>;
 type Trim<S extends string> = S extends ` ${infer T}` ? Trim<T> : S extends `${infer T} ` ? Trim<T> : S;
 /** One row of a breakdown: its groups by the keys `by` names, the first measure as `value` and the rows it stands for as `count`. */
-export type UiBreakdownRow<B extends string = string> = UiRow & { readonly [K in BreakdownKeys<B>]: unknown } & { readonly value: number; readonly count: number };
+export type UiBreakdownRow<B extends string = string> = UiRow & { readonly [K in BreakdownKeys<B>]: unknown } & {
+  readonly value: number;
+  readonly count: number;
+};
 /** Where a component may send the reader: a record, as a page, a peek or a dialog, or one of the App's views. */
 export declare function useNavigate(): {
   openRecord(resource: string, key: Readonly<Record<string, unknown>>, options?: { mode?: OpenMode; label?: string }): void;
@@ -543,8 +514,8 @@ export declare function useNavigate(): {
       such address, outside a tenant's own lease, or for a view no visitor opens. */
   publicLink(view: string): string | undefined;
 };
-/** Raises the platform's own notice, the one a verb's outcome is said in (a toast, read out by assistive technology). `tone` is `ok` (the default) or `error`. @preview */
-export declare function useNotice(): (notice: { text: string; tone?: 'ok' | 'error' }) => void;
+/** Raises the platform's own notice, the one a verb's outcome is said in (a toast, read out by assistive technology). @preview */
+export declare function useNotice(): (notice: { text: string; tone?: Tone }) => void;
 /**
  * The App's own addresses as strings, for an `<a href>` and for an embedding app's navigator: `useHref().record('leads', { id: 4 })`.
  * Each is the one canonical address the router reads back, built through the App's own address rules, so
@@ -597,7 +568,7 @@ export declare function useTeam(): {
   invitations: readonly { id: string; email: string; role: string; expiresAt: number }[];
   roles: readonly string[];
   canManage: boolean;
-  loading: boolean;
+  isPending: boolean;
   error: Error | null;
   /** Invite by email into a role; `token` is the one-time handoff the invitee is given, where the server returned one. */
   invite(email: string, role: string): Promise<{ token?: string }>;
@@ -643,7 +614,7 @@ export declare function useReadAudit(filters?: {
   }[];
   next: number | undefined;
   more(): void;
-  loading: boolean;
+  isPending: boolean;
   error: Error | null;
 };
 /** Open a tenant in one request from a platform App's own screen: `useOpenTenant('createClinicProfile')`. `open` runs that
@@ -660,7 +631,7 @@ export declare function useOpenTenant(command: string): {
       | { accountId: string; roles: readonly string[]; redeemUntil: number; validUntil: number }
       | { email: string; roles: readonly string[]; redeemUntil: number; validUntil: number };
   }): Promise<{ tenantId: string; version: string; invitation: { result: { receiptId: string }; token?: string } } | null>;
-  pending: boolean;
+  isPending: boolean;
   error: Error | null;
   result: { tenantId: string; version: string; invitation: { result: { receiptId: string }; token?: string } } | null;
 };
@@ -696,7 +667,13 @@ export interface CommandReview<Input extends string = string> {
     record is sent under, and the review it confirms. `attempt` is a UUID the component makes once per intent and keeps
     (in its address, say): a run sent again with it, after a reload, is the same run. A fresh key per run when not given.
     `quiet: true` returns a refusal as ever but shows no notice in the shell, for a page that says it in place itself. */
-export interface CommandRunOptions { label?: string; challenge?: string; attempt?: string; review?: CommandReview; quiet?: boolean }
+export interface CommandRunOptions {
+  label?: string;
+  challenge?: string;
+  attempt?: string;
+  review?: CommandReview;
+  quiet?: boolean;
+}
 /** Why a command cannot be run on a record: signed out, the reader's role not granted it, or its `when` not holding for the record now. */
 export type CommandUnavailable = 'signed-out' | 'not-granted' | 'unavailable';
 /** What a component hands a command's run: any of its declared inputs, by name (every name where the App is not typed). */
@@ -722,6 +699,9 @@ export declare function useCommand<const N extends import('./app.js').CommandNam
   available(record: Readonly<Record<string, unknown>>): boolean | undefined;
   /** Why it cannot be run on this record; undefined while it can be, and until the server has said. */
   reason(record: Readonly<Record<string, unknown>>): CommandUnavailable | undefined;
+  /** Whether a run on this record is on its way. */
+  isPending(record: Readonly<Record<string, unknown>>): boolean;
+  /** @deprecated Use `isPending`, the name every hook says it by; this one still answers the same. */
   pending(record: Readonly<Record<string, unknown>>): boolean;
   run(record: Readonly<Record<string, unknown>>, input?: CommandInput<N>, options?: CommandRunOptions): Promise<CommandOutcome<import('./app.js').CommandOutputOf<N>>>;
   open(record: Readonly<Record<string, unknown>>, input?: CommandInput<N>, options?: CommandRunOptions): Promise<CommandOutcome<import('./app.js').CommandOutputOf<N>>>;
@@ -746,7 +726,7 @@ export type MoneyParse = { minor: string; major: string } | { problem: string };
  */
 export declare function parseMoney(text: string, options: { currency: string; locale?: string; negative?: boolean }): MoneyParse;
 /** One input of a command, bound (`useField`). */
-export interface Field {
+export interface BoundField {
   /** What an App's input component receives in the platform's own form, for the control the component draws. */
   inputProps: InputProps & { context: 'command' };
   /** What the control last handed back, as text. */
@@ -772,7 +752,7 @@ export interface Field {
  * `useCommand(...).run`, where the server judges it again, and say a refusal's `fields[name]` beside it. For a reader not
  * served the command the control is drawn disabled.
  */
-export declare function useField<const N extends import('./app.js').CommandName>(command: N, name: import('./app.js').CommandInputName<N>): Field;
+export declare function useField<const N extends import('./app.js').CommandName>(command: N, name: import('./app.js').CommandInputName<N>): BoundField;
 /** A record a reference input offers, named as the platform's own picker names it. */
 export interface Option {
   key: string | number;
@@ -803,8 +783,8 @@ export interface Options {
  * where the platform's own picker reads them, under the reader's access and the input's filter. Typing searches (the
  * latest text wins), `more()` reads the next page, and `select(key)` holds a pick whose name is read by its key when it
  * is not on a page. A reader who has lost access is told the pick is not available, never that it does not exist; a
- * reader not granted the command is offered nothing. Draw the list with `Typeahead` from `@mistriwork/ui`, which keeps
- * the keyboard.
+ * reader not granted the command is offered nothing. Draw the list with `Typeahead` from `@mistriwork/mistri/primitives`,
+ * which keeps the keyboard.
  */
 export declare function useOptions<const N extends import('./app.js').CommandName>(command: N, name: import('./app.js').CommandInputName<N>): Options;
 /**
@@ -821,7 +801,7 @@ export declare function useOptions(resource: string, options?: { where?: Readonl
 export declare function useGranted(command: import('./app.js').CommandName): boolean;
 /**
  * One of the App's fixed actions, a machine's verb or `action(label, { set })`, by its id: `const start = useAction('startVisit')`. Held
- * as a command is (`granted`, `available`, `reason`, `pending`, `run`, `open`, the same outcome), but it is the record page's own
+ * as a command is (`granted`, `available`, `reason`, `isPending`, `run`, `open`, the same outcome), but it is the record page's own
  * button: `run(record)` writes the action's `set` to that record, by its key, through the update route, asking first when the
  * action says `confirm`. A record in a state the action does not leave is refused in words (`available` says so before the click),
  * and the server judges the write again. It takes no input, but for the reason an action asks: `run(record, { reason })`.
@@ -831,6 +811,9 @@ export declare function useAction(action: import('./app.js').ActionName): {
   granted: boolean;
   available(record: Readonly<Record<string, unknown>>): boolean | undefined;
   reason(record: Readonly<Record<string, unknown>>): CommandUnavailable | undefined;
+  /** Whether a run on this record is on its way. */
+  isPending(record: Readonly<Record<string, unknown>>): boolean;
+  /** @deprecated Use `isPending`, the name every hook says it by; this one still answers the same. */
   pending(record: Readonly<Record<string, unknown>>): boolean;
   run(record: Readonly<Record<string, unknown>>, input?: Readonly<{ reason?: string }>): Promise<CommandOutcome>;
   open(record: Readonly<Record<string, unknown>>, input?: Readonly<{ reason?: string }>): Promise<CommandOutcome>;
@@ -870,7 +853,12 @@ export declare function useFormat(): {
   relative(value: string): string | undefined;
 };
 /** The look the App wears for this reader, light or dark, and the density; redraws when any changes. `look` is `'tenant'` where a tenant's branding dresses the page; `preset` is then the App's theme it started from (`'workshop'`), and the look itself otherwise. */
-export declare function useLook(): { look: string; preset: string; mode: 'light' | 'dark'; density: 'compact' | 'comfortable' | 'spacious' };
+export declare function useLook(): {
+  look: string;
+  preset: string;
+  mode: 'light' | 'dark';
+  density: 'compact' | 'comfortable' | 'spacious';
+};
 /** Every design token a component may read — colors, faces, corners, type, motion — as `var(--accent)` in CSS or `useToken('--accent')` in script. `mistri check` warns about any other `var(--…)` a component does not declare itself. */
 export type Token =
   | '--ground'
@@ -983,3 +971,23 @@ export declare const tokens: readonly Token[];
 export declare function useToken(name: Token | (`--${string}` & {})): string;
 /** The section's measured width, and whether it is phone-narrow (below 420px). */
 export declare function useSectionSize(): { width: number; compact: boolean };
+
+/** The signed-in reader's own account profile (`useAccountProfile()`). */
+export interface AccountProfile {
+  accountId: string;
+  appId: string;
+  name: string;
+  email: string;
+  providers: string[];
+  emailChange?: true;
+  connectedClients?: true;
+}
+/** Reads and updates the signed-in reader's own account profile (`name`, `email`, `providers`). */
+export declare function useAccountProfile(): {
+  profile: AccountProfile | null;
+  isPending: boolean;
+  isSaving: boolean;
+  error: Error | null;
+  save(name: string): Promise<AccountProfile>;
+  changeEmail(newEmail: string): Promise<void>;
+};

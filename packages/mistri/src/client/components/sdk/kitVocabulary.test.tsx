@@ -7,8 +7,7 @@ import { useState } from 'react';
 import { afterEach, describe, expect, test } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { renderSection } from './testing.js';
-import { Button, Card, Item, Items, Loaded, Skeleton } from './kit.js';
-import { useViewer } from './index.js';
+import { Button, Card, ItemRow, ItemList, Loaded, Skeleton, useViewer } from './index.js';
 
 afterEach(cleanup);
 
@@ -18,17 +17,18 @@ const read = (data: unknown, more: object = {}) => ({ data, isError: false, erro
 describe('Card', () => {
   test('a description is one quiet line under the title, and a tone says the title in its ink', () => {
     drawn(
-      <Card title="Overdue" description="Nothing has moved in a week" tone="bad">
+      <Card title="Overdue" description="Nothing has moved in a week" tone="critical">
         body
       </Card>,
     );
-    expect(screen.getByRole('heading', { name: 'Overdue' }).className).toBe('kit-card-title kit-card-title-bad');
-    expect(screen.getByText('Nothing has moved in a week').className).toBe('kit-card-description');
+    expect(screen.getByRole('heading', { name: 'Overdue' })).toHaveClass('kit-card-title', 'kit-card-title-bad');
+    expect(screen.getByText('Nothing has moved in a week')).toHaveClass('kit-card-description');
   });
 
   test('with neither, the title is as it was', () => {
     drawn(<Card title="Plain" />);
-    expect(screen.getByRole('heading', { name: 'Plain' }).className).toBe('kit-card-title');
+    expect(screen.getByRole('heading', { name: 'Plain' })).toHaveClass('kit-card-title');
+    expect(screen.getByRole('heading', { name: 'Plain' })).not.toHaveClass('kit-card-title-bad');
     expect(document.querySelector('.kit-card-description')).toBeNull();
   });
 });
@@ -36,11 +36,11 @@ describe('Card', () => {
 describe('Item', () => {
   test('a tone alone is a mark in the lead column; beside a lead it says the lead in its ink', () => {
     drawn(
-      <Items label="Jobs">
-        <Item title="Marked" tone="warn" />
-        <Item title="Led" lead="09:30" tone="good" />
-        <Item title="Bare" />
-      </Items>,
+      <ItemList ariaLabel="Jobs">
+        <ItemRow title="Marked" tone="warning" />
+        <ItemRow title="Led" leading="09:30" tone="good" />
+        <ItemRow title="Bare" />
+      </ItemList>,
     );
     const [marked, led, bare] = screen.getAllByRole('listitem');
     expect(marked!.querySelector('.kit-item-lead-warn .kit-item-mark')).not.toBeNull();
@@ -53,9 +53,9 @@ describe('Item', () => {
     let opened = 0;
     let acted = 0;
     drawn(
-      <Items>
-        <Item title="Row" onClick={() => opened++} action={<button onClick={() => acted++}>Act</button>} />
-      </Items>,
+      <ItemList>
+        <ItemRow title="Row" onClick={() => opened++} actions={<button onClick={() => acted++}>Act</button>} />
+      </ItemList>,
     );
     fireEvent.click(screen.getByText('Act'));
     expect([opened, acted]).toEqual([0, 1]);
@@ -69,9 +69,9 @@ describe('Items', () => {
     drawn(
       <>
         <Card title="In">
-          <Items empty="Nothing in the card" />
+          <ItemList empty="Nothing in the card" />
         </Card>
-        <Items empty="Nothing alone" />
+        <ItemList empty="Nothing alone" />
       </>,
     );
     expect(screen.getByText('Nothing in the card').className).toBe('kit-items-empty kit-items-empty-flush');
@@ -132,12 +132,13 @@ describe('Skeleton', () => {
         </span>
       </>,
     );
-    const one = screen.getByTestId('one').querySelector<HTMLElement>('.kit-skeleton')!;
-    expect(one.getAttribute('aria-hidden')).toBe('true');
-    const bar = one.querySelector<HTMLElement>('.kit-skeleton-bar')!;
-    expect([bar.style.blockSize, bar.style.inlineSize]).toEqual(['32px', '120px']);
-    const bars = screen.getByTestId('many').querySelectorAll<HTMLElement>('.kit-skeleton-bar');
-    expect([...bars].map((b) => b.style.inlineSize)).toEqual(['', '', '60%']);
+    const bar = screen.getByTestId('one').querySelector<HTMLElement>('.kit-skeleton-bar')!;
+    expect(bar.getAttribute('aria-hidden')).toBe('true');
+    expect([bar.style.height, bar.style.width]).toEqual(['32px', '120px']);
+    const many = screen.getByTestId('many').querySelector<HTMLElement>('.kit-skeleton')!;
+    expect(many.getAttribute('aria-hidden')).toBe('true');
+    const bars = many.querySelectorAll<HTMLElement>('.kit-skeleton-bar');
+    expect([...bars].map((b) => b.style.width)).toEqual(['100%', '100%', '60%']);
   });
 });
 

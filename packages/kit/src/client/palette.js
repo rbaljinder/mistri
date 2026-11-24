@@ -18,7 +18,7 @@
  * it below something that merely contains the same letters.
  */
 import { createElement } from 'react';
-import { TABLET_QUERY } from '@mistriwork/ui/internal/ruler.js';
+import { TABLET_QUERY } from '@mistriwork/ui';
 import { message, subscribeMessages } from './messages.js';
 import { $, currentEntry, el, findTable, go, pageView, state, subscribeWalk, tableView, svgEl } from './core.js';
 import { allSavedFilters } from './views.js';

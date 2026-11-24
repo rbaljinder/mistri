@@ -23,7 +23,7 @@ import { compileComponents } from '../packages/mistri/src/server/app/appComponen
 import { componentsIndex } from '../packages/mistri/src/server/app/appBuild.js';
 import { withHead } from '../packages/engine/src/server/clientHttp.js';
 import { withHostPaths } from '../packages/mistri/src/server/http/componentRoutes.js';
-import { lintComponents } from '../packages/mistri/src/server/app/componentLint.js';
+import { HAND_ROLES, lintComponents } from '../packages/mistri/src/server/app/componentLint.js';
 import { componentCode } from '../packages/mistri/src/server/build/checkProblems.js';
 import { hostModuleSource } from '../packages/mistri/src/server/app/componentSdk.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
@@ -373,10 +373,33 @@ describe("mistri check's lints", () => {
       .map((finding) => `${finding.line} ${finding.text}`);
     assert.equal(roles.length, 3, roles.join('\n'));
     assert.match(roles[0]!, /^7 .*role="tablist" written by hand.*draw Tabs from @mistriwork\/mistri\/page/);
-    assert.match(roles[1]!, /^8 .*role="menu" written by hand.*no primitive for it yet/);
+    assert.match(roles[1]!, /^8 .*role="menu" written by hand.*draw DropdownMenu from @mistriwork\/mistri\/primitives/);
     assert.doesNotMatch(roles[1]!, /DropMenu|DropItem/);
-    assert.match(roles[2]!, /^9 .*role="combobox" written by hand.*no primitive for it yet/);
+    assert.match(roles[2]!, /^9 .*role="combobox" written by hand.*draw Combobox from @mistriwork\/mistri\/primitives/);
     assert.doesNotMatch(roles[2]!, /Typeahead/);
+  });
+
+  test('every primitive the role warning names is one its module publishes', () => {
+    // The table said a menu and a combobox had no primitive after `/primitives` shipped both: each name is read off the
+    // module's declarations, so a rename there fails here.
+    const published = new Map<string, string>();
+    const declared = (module: string): string => {
+      const file = module.replace('@mistriwork/mistri/', '');
+      if (!published.has(file)) published.set(file, readFileSync(join(ROOT, 'packages/mistri/schema', `${file}.d.ts`), 'utf8'));
+      return published.get(file)!;
+    };
+    for (const [role, advice] of Object.entries(HAND_ROLES)) {
+      const module = /@mistriwork\/mistri\/\w+$/.exec(advice)?.[0];
+      assert.ok(module, `role="${role}" names no module: ${advice}`);
+      const names = advice.match(/\b[A-Z]\w+/g) ?? [];
+      assert.ok(names.length > 0, `role="${role}" names no component: ${advice}`);
+      for (const name of names)
+        assert.match(
+          declared(module),
+          new RegExp(`^\\s*(?:export declare (?:function|const) )?${name}\\b`, 'm'),
+          `${module} does not publish ${name}`,
+        );
+    }
   });
 });
 
@@ -664,5 +687,129 @@ describe("an App's control kit (Preview)", () => {
     assert.match(loaded.components?.kit?.js ?? '', /^ui-kit-[0-9a-f]{12}\.js$/);
     assert.match(loaded.components!.files[loaded.components!.kit!.js], /data-kit/);
     assert.deepEqual(Object.keys(loaded.components!.entries), []);
+  });
+});
+
+describe('first-class host UI deduplication across custom pages', () => {
+  test('custom pages share host UI views/charts/primitives with zero per-page CSS duplication and resolve quoted, url(), layer, and media CSS @imports', async () => {
+    const at = dir('relay-pages', {
+      'pages/quoted.css': '.relay-badge { font-weight: 600; }\n',
+      'pages/quoted-url.css': '.relay-quoted-url { gap: var(--space-2); }\n',
+      'pages/bare-url.css': '.relay-bare-url { display: flex; }\n',
+      'pages/layered.css': '.relay-card { border-radius: var(--radius); }\n',
+      'pages/supports.css': '.relay-subgrid { grid-template-columns: subgrid; }\n',
+      'pages/media.css': '.relay-wide { grid-template-columns: 1fr 1fr; }\n',
+      'node_modules/acme-design/package.json': JSON.stringify({
+        name: 'acme-design',
+        version: '1.0.0',
+        exports: { './index.css': './index.css' },
+      }),
+      'node_modules/acme-design/tokens.css': '.acme-token { color: var(--ink); }\n',
+      'node_modules/acme-design/index.css': '@import "./tokens.css";\n.acme-box { padding: var(--space-2); }\n',
+      'pages/board.css': [
+        '/* @import "./does-not-exist.css"; */',
+        '@import "@mistriwork/ui/style.css";',
+        '@import "acme-design/index.css";',
+        '@import "./quoted.css";',
+        '@import url("./quoted-url.css");',
+        '@import url(./bare-url.css);',
+        '@import "./layered.css" layer(cards);',
+        '@import "./supports.css" supports(grid-template-columns: subgrid);',
+        "@import url('./media.css') /* keep ; safe */ (min-width: 640px);",
+        '.relay-board { display: grid; }',
+        '',
+      ].join('\n'),
+      'pages/board.page.tsx': [
+        "import '@mistriwork/ui/style.css';",
+        "import './board.css';",
+        "import { Button, definePage } from '@mistriwork/mistri/page';",
+        "import { KanbanBoard } from '@mistriwork/mistri/views';",
+        "import { AreaChart } from '@mistriwork/mistri/charts';",
+        "import { Alert } from '@mistriwork/mistri/primitives';",
+        "export default definePage({ label: 'Board', reads: [], component: () => <div className='relay-board'><Alert title='Ready' /><KanbanBoard columns={[]} cards={[]}>{() => <Button><AreaChart data={[]} xKey='x' series={[]} /></Button>}</KanbanBoard></div> });",
+      ].join('\n'),
+      'pages/inbox.page.tsx': [
+        "import { definePage, SplitView, useAccountProfile } from '@mistriwork/mistri/page';",
+        "import { ReviewQueueView } from '@mistriwork/mistri/views';",
+        "export default definePage({ label: 'Inbox', reads: [], component: () => { const a = useAccountProfile(); return <div data-user={a.profile?.name}><SplitView items={[]} renderItem={() => null} renderDetail={() => <ReviewQueueView items={[]} />} /></div>; } });",
+      ].join('\n'),
+    });
+    const compiled = (await compileComponents(
+      at,
+      new Map([
+        ['board', { id: 'board', module: './pages/board.page.tsx', kind: 'page' }],
+        ['inbox', { id: 'inbox', module: './pages/inbox.page.tsx', kind: 'page' }],
+      ]),
+      { minify: true },
+    ))!;
+    const boardJs = compiled.files[compiled.entries.board.js];
+    const boardCss = compiled.files[compiled.entries.board.css!];
+    assert.ok(Buffer.byteLength(boardJs, 'utf8') < 2048, `board JS is ${Buffer.byteLength(boardJs, 'utf8')} bytes (< 2 KB)`);
+    assert.match(boardJs, /@mistriwork\/mistri\/views/);
+    assert.match(boardJs, /@mistriwork\/mistri\/charts/);
+    assert.match(boardJs, /@mistriwork\/mistri\/primitives/);
+    assert.ok(
+      Buffer.byteLength(boardCss, 'utf8') < 1024,
+      `board CSS only carries the page's own rules (${Buffer.byteLength(boardCss, 'utf8')} B)`,
+    );
+    assert.match(boardCss, /\.acme-token/);
+    assert.match(boardCss, /\.acme-box/);
+    assert.match(boardCss, /\.relay-badge/);
+    assert.match(boardCss, /\.relay-quoted-url/);
+    assert.match(boardCss, /\.relay-bare-url/);
+    assert.match(boardCss, /@layer cards\s*\{[\s\S]*?\.relay-card/);
+    assert.match(boardCss, /@supports \(grid-template-columns:\s*subgrid\)\s*\{[\s\S]*?\.relay-subgrid/);
+    assert.match(boardCss, /@media \(min-width:\s*640px\)\s*\{[\s\S]*?\.relay-wide/);
+    assert.match(boardCss, /\.relay-board/);
+    assert.doesNotMatch(boardCss.replace(/\/\*[\s\S]*?\*\//g, ''), /@import/);
+    assert.equal(compiled.entries.inbox.css, undefined, 'inbox carries zero duplicated UI CSS');
+    assert.ok(Buffer.byteLength(compiled.files[compiled.entries.inbox.js], 'utf8') < 2048);
+  });
+
+  test('refuses remote URL and unresolved CSS @imports at compile time instead of emitting invalid nested @imports', async () => {
+    const remoteDir = dir('remote-css-import', {
+      'pages/bad.css': '@import "https://example.com/external.css";\n.x { color: var(--ink); }\n',
+      'pages/bad.page.tsx':
+        "import './bad.css';\nimport { definePage } from '@mistriwork/mistri/page';\nexport default definePage({ label: 'Bad', reads: [], component: () => <div className='x' /> });\n",
+    });
+    await assert.rejects(
+      compileComponents(remoteDir, new Map([['bad', { id: 'bad', module: './pages/bad.page.tsx', kind: 'page' }]])),
+      /cannot load an external URL/,
+    );
+
+    const missingDir = dir('missing-css-import', {
+      'pages/missing.css': '@import "./nope.css";\n.x { color: var(--ink); }\n',
+      'pages/missing.page.tsx':
+        "import './missing.css';\nimport { definePage } from '@mistriwork/mistri/page';\nexport default definePage({ label: 'Missing', reads: [], component: () => <div className='x' /> });\n",
+    });
+    await assert.rejects(
+      compileComponents(missingDir, new Map([['missing', { id: 'missing', module: './pages/missing.page.tsx', kind: 'page' }]])),
+      /could not be resolved/,
+    );
+  });
+
+  test("a host stylesheet a component's CSS names brings the entry that carries it, and no more than the code already imports", async () => {
+    const page = (imports: string, sheet: string) => ({
+      'pages/p.css': `@import "${sheet}";\n.x { color: var(--ink); }\n`,
+      'pages/p.page.tsx': `import './p.css';\nimport { definePage } from '@mistriwork/mistri/page';\n${imports}\nexport default definePage({ label: 'P', reads: [], component: () => <div className='x'>{String(typeof used)}</div> });\n`,
+    });
+    const leading = async (name: string, imports: string, sheet: string) => {
+      const compiled = (await compileComponents(
+        dir(name, page(imports, sheet)),
+        new Map([['p', { id: 'p', module: './pages/p.page.tsx', kind: 'page' }]]),
+      ))!;
+      return /^import "(@mistriwork\/mistri\/[a-z]+)";/.exec(compiled.files[compiled.entries.p.js])?.[1];
+    };
+    const chart = "import { AreaChart as used } from '@mistriwork/mistri/charts';";
+    const control = "import { Alert as used } from '@mistriwork/mistri/primitives';";
+    const none = 'const used = 1;';
+    /* Every surface at once is the views' entry, which stands on the other two; a chart's import does not bring it. */
+    assert.equal(await leading('sheet-all-chart', chart, '@mistriwork/ui/styles/surfaces.css'), '@mistriwork/mistri/views');
+    assert.equal(await leading('sheet-all-none', none, '@mistriwork/ui/style.css'), '@mistriwork/mistri/views');
+    assert.equal(await leading('sheet-sdk-chart', chart, '@mistriwork/ui/styles/ui-sdk-surfaces.css'), '@mistriwork/mistri/primitives');
+    assert.equal(await leading('sheet-charts-none', none, '@mistriwork/ui/styles/surfaces/charts.css'), '@mistriwork/mistri/charts');
+    /* The primitives' sheet stands on the charts', so a component that imports a primitive already has it. */
+    assert.equal(await leading('sheet-charts-control', control, '@mistriwork/ui/styles/surfaces/charts.css'), undefined);
+    assert.equal(await leading('sheet-primitives-control', control, '@mistriwork/ui/styles/surfaces/primitives.css'), undefined);
   });
 });

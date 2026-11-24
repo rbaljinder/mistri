@@ -1,7 +1,7 @@
 /**
  * `@mistriwork/mistri/page`: a free-form page of the App's own, one file each — `pages/<path>.page.tsx` in the App directory.
  *
- *   import { definePage, Empty, Stack, type PageProps } from '@mistriwork/mistri/page';
+ *   import { definePage, EmptyState, Stack, type PageProps } from '@mistriwork/mistri/page';
  *   const page = definePage({
  *     label: 'Pick walk', icon: 'list-checks', nav: { group: 'floor' },
  *     reads: ['pick_list'], commands: ['pickList'], params: { list: 'id' }, loader: 'pickWalk',
@@ -38,13 +38,13 @@ import type {
   AppCardsList,
   PageIcon,
   AppMessageRef,
-  AppSplitListDetail,
   CommandInputName,
   CommandName,
   CommandOutputOf,
   FormViewCommand,
   Register,
 } from './app.js';
+import type { EmptyStateSpec } from './kit.js';
 import type {
   CommandOutcome,
   CommandRefusal,
@@ -61,83 +61,61 @@ import type {
   UiRowsQuery,
 } from './ui.js';
 import type { GroupBy } from './query.js';
-/* Everything a custom component imports, so a page has one import path; `useRows` and `useRecord` are declared again
-   below, typed from the schema, and a module's own declaration stands over the one `export *` brings. */
+/* Everything a custom component imports, so a page has one import path; `useRows`, `useRecord` and `useHref` are declared
+   again below, typed from the schema, and a module's own declaration stands over the one `export *` brings. */
 export * from './ui.js';
-/* The house controls, drawn as the shell draws its own (the page loads their stylesheet with them). Preview, as they
-   are in @mistriwork/ui. */
+
 /** A day or a week at a time: previous, Today, next and the date field. `T` goes to today from anywhere on the page that is not a box
  * being typed in (a page with its own use for `T` prevents the key first). `skip` names days not to land on when stepping. @preview */
 export declare function DateNav(props: {
   /** The day, as `2026-11-14`. */
   value: string;
-  onChange: (day: string) => void;
+  onValueChange: (day: string) => void;
   step?: 'day' | 'week';
   skip?: (day: string) => boolean;
-  label?: string;
+  label?: ReactTypes.ReactNode;
+  ariaLabel?: string;
   locale?: string;
   min?: string;
   max?: string;
   className?: string;
 }): import('react').ReactElement;
+
 export {
   Avatar,
   CheckCards,
-  Checkbox,
-  ChoiceCards,
   DateField,
   Drawer,
-  FileField,
   Modal,
+  PageHeader,
   Pagination,
   Popover,
-  Select,
-  Slider,
-  Switch,
-  TextArea,
-  TextField,
+  Tabs,
   Tooltip,
-  YesNo,
   type AvatarProps,
   type AvatarSize,
   type CheckCard,
   type CheckCardsProps,
-  type CheckboxProps,
-  type ChoiceCardsProps,
-  type ChoiceOption,
   type DateFieldProps,
   type DrawerProps,
   type DrawerSide,
-  type FileFieldProps,
   type ModalHandle,
+  type ModalProps,
+  type PageHeaderProps,
   type PaginationProps,
   type PopoverProps,
-  type SliderProps,
-  type SwitchProps,
-  type TextAreaProps,
-  type TextFieldProps,
+  type TabItem,
+  type TabItemDefinition,
+  type TabsProps,
+  type TabsVariant,
   type TooltipProps,
-  type YesNoProps,
-} from '@mistriwork/ui';
+} from './kit.js';
+
 /**
  * An App's control kit (Preview): the module `uiKit` names exports `defineUiKit({ Button, Modal, … })`, each slot
- * drawn with the props the platform's own control takes; `defaultUiKit` holds those defaults, and `dress` draws one
- * with something changed, to dress rather than replace it. `extendUiKit` makes one kit of several. A kit whose own
- * popups are drawn outside their place in the tree asks `usePopupHost` where and `useComponentScope` under whose
- * name. `mistri check` refuses a slot name the kit does not have.
+ * drawn with the props the platform's own control takes. `mistri check` refuses a slot name the kit does not have.
  */
-export {
-  defineUiKit,
-  defaultUiKit,
-  dress,
-  extendUiKit,
-  useComponentScope,
-  usePopupHost,
-  type SlotName,
-  type SlotProps,
-  type UiKit,
-  type UiKitSlots,
-} from '@mistriwork/ui';
+export { defineUiKit, type SlotName, type SlotProps, type UiKit, type UiKitSlots } from './kit.js';
 
 /* ---------- what the App's generated types register ---------- */
 
@@ -165,12 +143,14 @@ type RecordTabName<V extends string> = [Registered<'tabs'>] extends [never]
     ? Extract<Registered<'tabs'>[V], string>
     : never;
 
+type KeyFieldValue<V> = number extends V ? V | `${bigint}` : V;
+
 /** The key that names one record of a resource, by its primary-key columns (`{ id: number }`); any object before the
     generated types say which columns those are. */
 export type RecordKey<T extends string> = [SchemaKeys] extends [never]
   ? Readonly<Record<string, unknown>>
   : T extends keyof SchemaKeys
-    ? { readonly [C in SchemaKeys[T] & string]: C extends keyof RowsOf<T> ? RowsOf<T>[C] : unknown }
+    ? { readonly [C in SchemaKeys[T] & string]: C extends keyof RowsOf<T> ? KeyFieldValue<RowsOf<T>[C]> : unknown }
     : Readonly<Record<string, unknown>>;
 
 /** A resource of the App, by its name: the generated schema's tables, or any name before there is one. */
@@ -216,7 +196,7 @@ type Reading<R extends string> = [R] extends [never] ? TableName : R;
 
 /**
  * One row as a read returns it: the paths `show` names, each typed from the generated rows (an id past 2^53
- * is a string — never run one through Number()), and the resource's key column(s), which `List` and `useRows` always
+ * is a string — never run one through Number()), and the resource's key column(s), which `RecordList` and `useRows` always
  * read beside `show`. Without `show`, every column of the resource. Any other column the read did not show is a type
  * error, because it is not there.
  */
@@ -227,7 +207,7 @@ export type PageRow<T extends string, S extends readonly string[] = readonly []>
       ? UiRow
       : { readonly [C in Extract<keyof KindsOf<T> | keyof RowsOf<T>, string>]: ValueIn<T, C> }
     : { readonly [P in S[number]]: ValueIn<Reading<T>, P> } & KeyOf<T>;
-/* The key column(s) a read adds beside `show`. Untyped where the resource is not one name (a List inside a Scope, without its own `from`: the runtime still sends the key) or the types are not generated. */
+/* The key column(s) a read adds beside `show`. Untyped where the resource is not one name (a RecordList inside a Scope, without its own `from`: the runtime still sends the key) or the types are not generated. */
 type KeyOf<T extends string> = [SchemaKeys] extends [never] ? {} : [T] extends [never] ? {} : RecordKey<T>;
 
 /* The value a condition compares a column with, by the column's kind: a number column takes a number or its digits
@@ -302,12 +282,21 @@ type ParamsDeclared = readonly Lowercase<string>[] | { readonly [name: string]: 
 /* An address's parameters are lower case (the server refuses others): a declared name that is not says so where it is written. */
 type LowercaseNames<PD> = PD extends readonly string[] ? unknown : { readonly [N in keyof PD]: N extends Lowercase<N & string> ? ParamKind : never };
 type ParamNames<PD> = PD extends readonly (infer Name extends string)[] ? Name : Extract<keyof PD, string>;
-type ParamKinds<PD> = PD extends readonly string[] ? { readonly [N in PD[number]]: 'text' } : PD;
+type ParamKinds<PD> = PD extends readonly string[]
+  ? { readonly [N in PD[number]]: 'text' }
+  : { readonly [N in ParamNames<PD>]: N extends keyof PD ? Extract<PD[N], ParamKind> : ParamKind };
 /** What a public command answers a public page (`run({}, input)`): the reference to quote and the receipt, never the input. */
-export interface PublicCommandReceipt { reference: string; receipt: { id: string; status: 'applied' } }
+export interface PublicCommandReceipt {
+  reference: string;
+  receipt: { id: string; status: 'applied' };
+}
 /* A public command runs only through a public page's door, which answers its receipt; any other, its declared `output`. */
 type PageCommandOutput<N extends string> = Register extends { commands: infer C }
-  ? N extends keyof C ? C[N] extends { public: true } ? PublicCommandReceipt : CommandOutputOf<N> : CommandOutputOf<N>
+  ? N extends keyof C
+    ? C[N] extends { public: true }
+      ? PublicCommandReceipt
+      : CommandOutputOf<N>
+    : CommandOutputOf<N>
   : CommandOutputOf<N>;
 /* A form's input names, by its view's command; any text where the generated file does not name the view. */
 type FormInput<View extends string> = [FormViewCommand<View>] extends [never] ? string : CommandInputName<FormViewCommand<View>>;
@@ -323,17 +312,31 @@ export interface PageCommand<Input extends string = string, Output = unknown> {
   /** Whether it is available on this record now; undefined until the server has said. */
   available(record: Readonly<Record<string, unknown>>): boolean | undefined;
   reason(record: Readonly<Record<string, unknown>>): CommandUnavailable | undefined;
+  /** Whether a run on this record is on its way. */
+  isPending(record: Readonly<Record<string, unknown>>): boolean;
+  /** @deprecated Use `isPending`, the name every hook says it by; this one still answers the same. */
   pending(record: Readonly<Record<string, unknown>>): boolean;
   /** Run it. On a public page, a public command is run through the page's own door as the public principal, whoever
       is signed in: `run({}, input)` — applied, its `output` is `{ reference, receipt }` and its `message` a thank-you
       naming the reference, for the page to show or to follow with `useNavigate()` — and `challenge` carries the token
       the page's human check gave, where the App names one (`auth.challenge`). */
-  run(record: Readonly<Record<string, unknown>>, input?: Readonly<Partial<Record<Input, unknown>>>, options?: CommandRunOptions): Promise<CommandOutcome<Output>>;
-  open(record: Readonly<Record<string, unknown>>, input?: Readonly<Partial<Record<Input, unknown>>>, options?: CommandRunOptions): Promise<CommandOutcome<Output>>;
+  run(
+    record: Readonly<Record<string, unknown>>,
+    input?: Readonly<Partial<Record<Input, unknown>>>,
+    options?: CommandRunOptions,
+  ): Promise<CommandOutcome<Output>>;
+  open(
+    record: Readonly<Record<string, unknown>>,
+    input?: Readonly<Partial<Record<Input, unknown>>>,
+    options?: CommandRunOptions,
+  ): Promise<CommandOutcome<Output>>;
   /** What a review shows before the person confirms (`{}` for a command that names no record): the values it starts
       from, `input` over them, and a token pinning a run to this revision. `run(record, input, { review })` then runs
       exactly that or is refused `code: 'stale'`, never retried; a run without one prepares again quietly. */
-  prepare(record?: Readonly<Record<string, unknown>>, input?: Readonly<Partial<Record<Input, unknown>>>): Promise<CommandReview<Input> | CommandRefusal>;
+  prepare(
+    record?: Readonly<Record<string, unknown>>,
+    input?: Readonly<Partial<Record<Input, unknown>>>,
+  ): Promise<CommandReview<Input> | CommandRefusal>;
   /** Whether the last review `prepare` gave still stands: false once a change to its record reaches the page; true without one. */
   reviewFresh: boolean;
   /** The choices one of its inputs offers, as served with the command. On a public page a choice from a table
@@ -366,11 +369,12 @@ export interface PageForm<Input extends string = string> {
   /** The draft holds saved steps not yet submitted. */
   dirty: boolean;
   expiresAt: string | null;
-  /** A submit was sent and its result is not known yet: `startOver()` refuses until it is. */
-  pending: boolean;
   /** How the form ended the last time this page opened it; null before. */
   outcome: PageFormOutcome | null;
+  /** The first read of the draft, with nothing to draw yet. */
   isPending: boolean;
+  /** A submit was sent and its result is not known yet: `startOver()` refuses until it is. */
+  isSubmitting: boolean;
   error: Error | null;
   isFetching: boolean;
   isStale: boolean;
@@ -380,7 +384,7 @@ export interface PageForm<Input extends string = string> {
   open(input?: Readonly<Partial<Record<Input, unknown>>>, options?: { at?: string }): Promise<PageFormOutcome>;
   /** The form opened at a step its draft has reached; never past the first not saved. */
   goTo(step: string): Promise<PageFormOutcome>;
-  /** The draft discarded, as the form's Start over does; false while a submit is pending, or without a draft. */
+  /** The draft discarded, as the form's Start over does; false while a submit is running, or without a draft. */
   startOver(): Promise<boolean>;
 }
 
@@ -396,26 +400,39 @@ export interface PageDefinition<
   LS extends string = never,
 > {
   (props: LoaderPageProps<L>): ReactTypes.ReactNode;
-  readonly definition: { readonly label: string | AppMessageRef; readonly reads: readonly R[]; readonly commands?: readonly C[];
-    readonly actions?: readonly A[]; readonly forms?: readonly F[]; readonly params?: readonly P[] | K; readonly loader?: L;
-    readonly loaders?: readonly LS[] };
+  readonly definition: {
+    readonly label: string | AppMessageRef;
+    readonly reads: readonly R[];
+    readonly commands?: readonly C[];
+    readonly actions?: readonly A[];
+    readonly forms?: readonly F[];
+    readonly params?: readonly P[] | K;
+    readonly loader?: L;
+    readonly loaders?: readonly LS[];
+  };
   /** One of the page's loaders by its name, `loader` or one of `loaders`: `page.useLoader('dueFigure')`, its `data` typed by what
       the loader returns. Each has its own query, loading state and refetch, and is read again after a command the page runs commits. */
   useLoader<const N extends L | LS>(name: N): UiQuery<LoaderData<N>>;
   /** Rows of one of the page's reads, each typed by what `show` names:
       `page.useRows('pick_list', { show: ['id', 'reference'], where: { status: 'to_pick' }, sort: 'reference' })`. */
-  useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(resource: T, options: RowsOptions<T, S> & { optional: true }): UiRowsQuery<PageRow<T, S>> & UiRefusable;
-  useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(resource: T, options?: RowsOptions<T, S> & { optional?: false }): UiRowsQuery<PageRow<T, S>>;
+  useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(
+    resource: T,
+    options: RowsOptions<T, S> & { optional: true },
+  ): UiRowsQuery<PageRow<T, S>> & UiRefusable;
+  useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(
+    resource: T,
+    options?: RowsOptions<T, S> & { optional?: false },
+  ): UiRowsQuery<PageRow<T, S>>;
   /** One record of one of the page's reads, by its key; null when there is none, not asked while the key is undefined. */
   useRecord<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(
     resource: T,
-    key: Readonly<Record<string, unknown>> | undefined,
+    key: RecordKey<T> | undefined,
     show: S | undefined,
     options: { optional: true },
   ): UiQuery<PageRow<T, S> | null> & UiRefusable;
   useRecord<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(
     resource: T,
-    key: Readonly<Record<string, unknown>> | undefined,
+    key: RecordKey<T> | undefined,
     show?: S,
     options?: { optional?: false },
   ): UiQuery<PageRow<T, S> | null>;
@@ -427,10 +444,16 @@ export interface PageDefinition<
       chart's is, held to the same check: a column or label path, a date in a period (`'day created_at'`), or
       several of those with commas (`'month closed_at, status'`). Each row carries its groups by those keys (`day(created_at)`),
       the first measure as `value` and the rows it stands for as `count`. */
-  useBreakdown<T extends R, const B extends string>(resource: T, options: { by: GroupBy<T, B>; measure?: string; query?: string; where?: Where<T>; limit?: number; fill?: BreakdownFill; optional: true }): UiQuery<UiBreakdownRow<B>[]> & UiRefusable;
-  useBreakdown<T extends R, const B extends string>(resource: T, options: { by: GroupBy<T, B>; measure?: string; query?: string; where?: Where<T>; limit?: number; fill?: BreakdownFill; optional?: false }): UiQuery<UiBreakdownRow<B>[]>;
+  useBreakdown<T extends R, const B extends string>(
+    resource: T,
+    options: { by: GroupBy<T, B>; measure?: string; query?: string; where?: Where<T>; limit?: number; fill?: BreakdownFill; optional: true },
+  ): UiQuery<UiBreakdownRow<B>[]> & UiRefusable;
+  useBreakdown<T extends R, const B extends string>(
+    resource: T,
+    options: { by: GroupBy<T, B>; measure?: string; query?: string; where?: Where<T>; limit?: number; fill?: BreakdownFill; optional?: false },
+  ): UiQuery<UiBreakdownRow<B>[]>;
   /** Where one of the page's file resources serves a row, for an `<img>`. */
-  useFile<T extends R>(resource: T): (key: Readonly<Record<string, unknown>>, options?: { thumbnail?: boolean }) => string | undefined;
+  useFile<T extends R>(resource: T): (key: RecordKey<T>, options?: { thumbnail?: boolean }) => string | undefined;
   /** One of the page's commands: `page.useCommand('pickList')`, its input typed by the command's declared inputs. */
   useCommand<const N extends C>(command: N): PageCommand<CommandInputName<N>, PageCommandOutput<N>>;
   /** One of the page's fixed actions, a machine's verb or `action(label, { set })` on a resource it reads: `page.useAction('startVisit')`.
@@ -470,12 +493,18 @@ export interface PageDefinition<
    text params. */
 type ParamsOfKind<P extends string, K, Kind> = { [N in P]: N extends keyof K ? ([K[N]] extends [Kind] ? N : never) : never }[P];
 type SortOf<T extends string> = ColumnPath<T> | `${ColumnPath<T>} asc` | `${ColumnPath<T>} desc`;
+/* A read's order. The column paths are offered where it is written, but any text is taken: an order may name several
+   keys (`'status, due_on desc'`) or a path past the first hop, which `SortOf` does not spell, so the type guides and
+   does not hold. A sort that names what the resource lacks is refused by the server, as an error of that read, and a
+   literal one by `mistri check` where it crosses into a table the page does not read. */
+type SortInput<T extends string> = SortOf<T> | (string & {});
 
 /** What every `Choose` takes. */
 export interface ChooseProps<P extends string = string, R extends string = ResourceName> {
   /** One of the page's `params`: the address is the control's state, so Back and a pasted link restore it. */
   param: P;
   /** Names the control for assistive technology; the param's name when absent. */
+  ariaLabel?: string;
   name?: string;
   /** Present, a first choice with this word that clears the param (a param is optional; the control says so only when asked). */
   all?: string;
@@ -487,6 +516,7 @@ export interface ChooseProps<P extends string = string, R extends string = Resou
    * column's display labels; a param with no words of its own offers the values the count finds.
    */
   count?: true | ChooseCount<R>;
+  className?: string;
 }
 /** What a counted `Choose` counts: the rows of `of`, grouped by its column `by`, under `where`. */
 export type ChooseCount<R extends string = ResourceName> = {
@@ -497,25 +527,29 @@ export interface ChooseRows<T extends string> {
   from: T;
   where?: Where<T>;
   query?: string;
-  sort?: SortOf<T>;
+  sort?: SortInput<T>;
   limit?: number;
   /** The column that is the param's value; `id` unless said. */
   value?: ColumnPath<T>;
   /** What an option says: a column path, or a function of the row (all its columns; a column that may be empty may be said as nothing). The value when absent. */
   label?: ColumnPath<T> | ((row: PageRow<T>) => string | null | undefined);
   /** Said instead of the control while the read has no rows. */
-  empty?: ReactTypes.ReactNode;
+  empty?: EmptyStateSpec | ReactTypes.ReactNode;
 }
 export interface SearchProps<P extends string = string> {
   param: P;
+  ariaLabel?: string;
   name?: string;
   placeholder?: string;
   /** Milliseconds of quiet before what is typed reaches the address; 300 unless said. */
   delay?: number;
+  className?: string;
 }
 export interface DateRangeProps<P extends string = string> {
   param: P;
+  ariaLabel?: string;
   name?: string;
+  className?: string;
 }
 
 /** What a read of rows asks: the paths it shows, its condition (`where`, `query` or both, joined by "and"), its order and
@@ -524,7 +558,7 @@ export interface RowsOptions<T extends string, S extends readonly string[] = rea
   show?: S;
   where?: Where<T>;
   query?: string;
-  sort?: string;
+  sort?: SortInput<T>;
   limit?: number;
   enabled?: boolean;
 }
@@ -581,8 +615,13 @@ export declare function definePage<
 
 /** A surface as `defineSurface` makes it: its declaration, typed to the App, for the server to read and a front end's types to follow. */
 export interface SurfaceDefinition<R extends string, C extends string = never, L extends string = never, F extends string = never> {
-  readonly definition: { readonly label: string | AppMessageRef; readonly reads: readonly R[]; readonly commands?: readonly C[];
-    readonly forms?: readonly F[]; readonly loader?: L };
+  readonly definition: {
+    readonly label: string | AppMessageRef;
+    readonly reads: readonly R[];
+    readonly commands?: readonly C[];
+    readonly forms?: readonly F[];
+    readonly loader?: L;
+  };
 }
 
 /**
@@ -641,13 +680,13 @@ export declare function useRows<T extends ResourceName, const S extends readonly
 /** One record by its key, typed by what `show` names; null when there is none, not asked while the key is undefined. */
 export declare function useRecord<T extends ResourceName, const S extends readonly ColumnPath<T>[] = readonly []>(
   resource: T,
-  key: Readonly<Record<string, unknown>> | undefined,
+  key: RecordKey<T> | undefined,
   show: S | undefined,
   options: { optional: true },
 ): UiQuery<PageRow<T, S> | null> & UiRefusable;
 export declare function useRecord<T extends ResourceName, const S extends readonly ColumnPath<T>[] = readonly []>(
   resource: T,
-  key: Readonly<Record<string, unknown>> | undefined,
+  key: RecordKey<T> | undefined,
   show?: S,
   options?: { optional?: false },
 ): UiQuery<PageRow<T, S> | null>;
@@ -655,19 +694,27 @@ export declare function useRecord<T extends ResourceName, const S extends readon
 /** A free-form page's place, kept in its address: `const [list, setList] = useAddressState('list')` for `/{app}/pick-walk?list=12`. The name
     is one of the page's `params` (`page.useParam` is this hook, typed to them; this one serves a module the page draws); a change refines the place the reader is on, unless
     `{ push: true }` makes it a step Back returns from. */
-export declare function useAddressState(name: string): [string | undefined, (value: string | number | undefined, options?: { push?: boolean }) => void];
+export declare function useAddressState(
+  name: string,
+): [string | undefined, (value: string | number | undefined, options?: { push?: boolean }) => void];
 
 /**
  * A command's own form, behind a button: `<CommandForm command="releaseOrder" />`, or on one record,
  * `<CommandForm command="pickList" record={{ id: 12 }} />`. The platform's dialog and the one pipeline; not drawn for a reader
  * who may not run the command. The command is one of the page's `commands`.
+ *
+ * `record` is the key of the record the command runs on. Nothing in the props says which resource that is (the command
+ * knows its target, the type of `command` does not), so `R` is never inferred: unsaid, `record` takes the key of any
+ * of the App's resources, and `<CommandForm<'pick_list'> … />` holds it to that one's. The server reads the key against
+ * the command's own target either way.
  */
-export declare function CommandForm(props: {
+export declare function CommandForm<const R extends ResourceName = ResourceName>(props: {
   command: CommandName;
-  record?: Readonly<Record<string, unknown>>;
+  record?: RecordKey<R>;
   label?: ReactTypes.ReactNode;
-  intent?: 'primary' | 'secondary' | 'quiet';
+  variant?: 'primary' | 'secondary' | 'soft' | 'outline' | 'ghost' | 'danger' | 'danger-soft';
   onDone?: (outcome: CommandOutcome) => void;
+  className?: string;
 }): ReactTypes.ReactElement | null;
 
 /** One step of a `<Steps>`: the command's inputs it asks, in order, and the words it is drawn with. */
@@ -687,18 +734,21 @@ export interface StepsStep<Input extends string = string> {
 }
 
 /** What `<Steps>` takes. */
-export interface StepsProps<N extends CommandName = CommandName, Param extends string = string> {
+export interface StepsProps<N extends CommandName = CommandName, Param extends string = string, R extends ResourceName = ResourceName> {
   /** One of the page's `commands`: the one that runs, once, at the end. */
   command: N;
   /** One of the page's `params`: the step open now, by its id; absent, the first. */
   param: Param;
   steps: readonly StepsStep<CommandInputName<N>>[];
-  /** The record the command runs on, for one an action offers; a command with no record names none. */
-  record?: Readonly<Record<string, unknown>>;
+  /** The record the command runs on, for one an action offers; a command with no record names none. `R` is not
+      inferred from the other props: unsaid, the key of any of the App's resources passes, and the server reads it
+      against the command's target. */
+  record?: RecordKey<R>;
   /** What is said once it has run; absent, "<label>: done." and what the command's own result said. */
   done?: { title?: string; description?: string };
   /** How the run ended, once it applied. */
   onDone?: (outcome: CommandOutcome) => void;
+  className?: string;
 }
 
 /**
@@ -716,34 +766,36 @@ export declare function Steps<const N extends CommandName>(props: StepsProps<N>)
 
 /**
  * One command on one row, as a button: `<CommandButton command="checkIn" row={booking} />`. Not drawn for a reader who
- * may not run it, disabled while the row's state does not allow it, busy while it runs. Its accessible name is its
+ * may not run it, disabled while the row's state does not allow it, loading while it runs. Its accessible name is its
  * label and the row's title ("Check in Morgan Lee"), so a list of them reads apart. Its outcome is said in the
  * platform's live region — `done` says it in the page's words — and a refusal is said there too. The row needs its
- * key (a `List`'s and a `useRows` read's rows both carry it); a command that names no row (`targets: 'none'`) takes
+ * key (a `RecordList`'s and a `useRows` read's rows both carry it); a command that names no row (`targets: 'none'`) takes
  * none: `<CommandButton command="postRent" />`. `page.useCommand` stays for what a button cannot say.
  */
 export declare function CommandButton(props: {
   command: CommandName;
-  row?: Readonly<Record<string, unknown>>;
+  row?: UiRow;
   label?: string;
-  intent?: 'primary' | 'secondary' | 'quiet' | 'danger';
-  size?: 'compact' | 'default' | 'large';
+  variant?: 'primary' | 'secondary' | 'soft' | 'outline' | 'ghost' | 'danger' | 'danger-soft';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   done?: string;
   onDone?: (outcome: CommandOutcome) => void;
   /** A verb the row's state does not allow: `'disable'` draws it held (the default), `'hide'` draws nothing. */
   unavailable?: 'disable' | 'hide';
+  className?: string;
 }): ReactTypes.ReactElement | null;
 /** One of the page's fixed actions on one row, as `CommandButton` draws a command: `<ActionButton action="startVisit" row={visit} />`. */
 export declare function ActionButton(props: {
   action: ActionName;
-  row: Readonly<Record<string, unknown>>;
+  row: UiRow;
   label?: string;
-  intent?: 'primary' | 'secondary' | 'quiet' | 'danger';
-  size?: 'compact' | 'default' | 'large';
+  variant?: 'primary' | 'secondary' | 'soft' | 'outline' | 'ghost' | 'danger' | 'danger-soft';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   done?: string;
   onDone?: (outcome: CommandOutcome) => void;
   /** A verb the row's state does not allow: `'disable'` draws it held (the default), `'hide'` draws nothing. */
   unavailable?: 'disable' | 'hide';
+  className?: string;
 }): ReactTypes.ReactElement | null;
 
 /**
@@ -756,25 +808,31 @@ export declare function Scope<const R extends ResourceName>(props: {
   from: R;
   where?: Where<R>;
   query?: string;
+  className?: string;
   children?: ReactTypes.ReactNode;
 }): ReactTypes.ReactElement;
 
 /**
- * Rows drawn by the page, one at a time: `<List from="booking" where={{ status: 'booked' }} show={['guest_name']}>{(b) => …}</List>`.
+ * Rows drawn by the page, one at a time: `<RecordList from="booking" where={{ status: 'booked' }} show={['guest_name']}>{(b) => …}</RecordList>`.
  * The read's states are the platform's — its placeholder while asked, `empty` (or the house sentence) for no rows, the
  * house problem with Try again where it could not be read, and a note where the reader may not read it — so `children`
  * draws only rows. Each row is typed by `show`, and also carries its key, for a `CommandButton` on it.
  */
-export declare function List<const R extends ResourceName = never, const S extends readonly ColumnPath<Reading<R>>[] = readonly []>(props: {
+export declare function RecordList<
+  const R extends ResourceName = never,
+  const S extends readonly ColumnPath<Reading<R>>[] = readonly [],
+>(props: {
   from?: R;
   where?: Where<R>;
   query?: string;
   show?: S;
-  sort?: string;
+  sort?: SortInput<Reading<R>>;
   limit?: number;
-  empty?: ReactTypes.ReactNode;
+  empty?: EmptyStateSpec | ReactTypes.ReactNode;
   /** Names the list for assistive technology. */
+  ariaLabel?: string;
   label?: string;
+  className?: string;
   children: (row: PageRow<R, S>, index: number) => ReactTypes.ReactNode;
 }): ReactTypes.ReactElement;
 
@@ -782,24 +840,14 @@ export declare function List<const R extends ResourceName = never, const S exten
 export type BlockWidth = 'full' | 'half' | 'third' | 'two-thirds';
 
 /** The page's grid: blocks and panels side by side by their `width`, wrapping as a dashboard's sections do. */
-export declare function Grid(props: { children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
-/** A head for a page that draws its own (`head: false`), in the platform's head markup: the title, a line of intro, the
-    page's verbs at the far end and a way back (an address of this App, followed in place). An h2: the page's one h1 is the platform's.
-    `<PageHeader title="Pick walk" actions={<CommandForm command="releaseOrder" />} back={{ label: 'All lists', href: '/pick-lists' }} />`. */
-export declare function PageHeader(props: {
-  title: ReactTypes.ReactNode;
-  description?: ReactTypes.ReactNode;
-  actions?: ReactTypes.ReactNode;
-  back?: { label: string; href: string };
-}): ReactTypes.ReactElement;
+export declare function PageGrid(props: { children?: ReactTypes.ReactNode; className?: string }): ReactTypes.ReactElement;
+
 /** A titled region of the grid: `<Panel title="Open lines" width="half">…</Panel>`. */
-export declare function Panel(props: { title?: ReactTypes.ReactNode; width?: BlockWidth; children?: ReactTypes.ReactNode }): ReactTypes.ReactElement;
-/** Tabs, each panel drawn the first time it is opened; `param` (one of the page's `params`) keeps the open tab in the
-    address: `<Tabs param="tab" tabs={[{ key: 'open', label: 'Open', content: <Rows … /> }]} />`. */
-export declare function Tabs(props: {
-  tabs: readonly { key: string; label: ReactTypes.ReactNode; content: ReactTypes.ReactNode }[];
-  param?: string;
-  label?: string;
+export declare function Panel(props: {
+  title?: ReactTypes.ReactNode;
+  width?: BlockWidth;
+  className?: string;
+  children?: ReactTypes.ReactNode;
 }): ReactTypes.ReactElement;
 
 /**
@@ -815,7 +863,6 @@ export declare function Choose<const T extends ResourceName>(props: ChooseProps 
 export declare function Choose(props: ChooseProps & { from?: undefined }): ReactTypes.ReactElement;
 /** A search box kept in a text param of the page, typed into after a pause and replacing the entry: `<Search param="q" />`. */
 export declare function Search(props: SearchProps): ReactTypes.ReactElement;
-/* rc.76 slice B: a breakdown's empty periods, filled. */
 /** Which empty periods a time breakdown fills with zero (`fill` on `Chart` and `page.useBreakdown`). */
 export type BreakdownFill = 'window' | 'observed' | false;
 /** Rows keyed by period with the empty periods put back as zero and marked `filled: true`, read in the App's zone:
@@ -845,10 +892,11 @@ export declare function Rows<const R extends ResourceName = never>(props: {
   where?: Where<R>;
   query?: string;
   show?: readonly ColumnPath<Reading<R>>[];
-  sort?: string;
+  sort?: SortInput<Reading<R>>;
   limit?: number;
   sizing?: 'fit' | 'scroll';
   width?: BlockWidth;
+  className?: string;
 }): ReactTypes.ReactElement;
 /** One number over a resource, `metric()`: `<Metric title="Open" from="ticket" query="status = open" compare="previous period" better="down" />`. */
 export declare function Metric<const R extends ResourceName = never>(props: {
@@ -864,13 +912,14 @@ export declare function Metric<const R extends ResourceName = never>(props: {
   target?: number | { from?: ResourceName; query?: string; measure?: string };
   width?: BlockWidth;
   /** The date column the figure is windowed on: with `window`, the figure is over the reader's pick, as a dashboard's is. */
-  over?: string;
+  over?: ColumnPath<Reading<R>>;
   /** The page param that holds the window, by name: `params: { window: ['last-30-days', 'this-quarter'] }`, `window="window"`. */
   window?: string;
   /** The change against the window before it ("vs previous 30 days"); none where the window has no length to step back by. */
   previous?: boolean;
   /** A small trend line over the window beside the figure; `false` leaves the figure alone. */
   spark?: boolean;
+  className?: string;
 }): ReactTypes.ReactElement;
 /** A chart, `chart()`: `<Chart title="Bookings" from="opportunity" by="month close_date" measure="sum amount" />`. */
 export declare function Chart<const R extends ResourceName = never>(props: {
@@ -881,7 +930,7 @@ export declare function Chart<const R extends ResourceName = never>(props: {
   query?: string;
   measure?: string;
   shape?: 'line' | 'bar' | 'donut' | 'stacked' | 'scatter' | 'heatmap' | 'waterfall' | 'treemap';
-  x?: string;
+  x?: ColumnPath<Reading<R>>;
   curve?: 'smooth' | 'straight';
   total?: string;
   target?: number;
@@ -895,6 +944,7 @@ export declare function Chart<const R extends ResourceName = never>(props: {
   /** The periods with no rows: `'window'` draws every period of the query's window as zero, `'observed'` only those
       between the first and last that hold rows, `false` none. A count or a sum only; `'window'` where the query has one. */
   fill?: BreakdownFill;
+  className?: string;
 }): ReactTypes.ReactElement;
 /** Groups measured as bars, `breakdown()`: `<Breakdown title="By priority" from="ticket" by="priority" measure="avg first_response_seconds" format="duration" />`. */
 export declare function Breakdown<const R extends ResourceName = never>(props: {
@@ -910,19 +960,25 @@ export declare function Breakdown<const R extends ResourceName = never>(props: {
   /** A short word said after each figure, like "days". */
   unit?: string;
   width?: BlockWidth;
-  /** `'bars'`: one labeled bar per group, in the column's declared order, as the `Bars` part draws them. */
+  /** `'bars'`: one labeled bar per group, in the column's declared order, as `BreakdownList` draws them. */
   shape?: 'bars';
   /** A second measure said beside each bar, like `count` for "4 deals". */
   also?: string;
+  className?: string;
 }): ReactTypes.ReactElement;
 /** One record as its page shows it, its name and verbs over its fields (or `show`'s): `<RecordCard from="account" record={{ id: 12 }} />`. */
 export declare function RecordCard<const R extends ResourceName>(props: {
   from: R;
-  record: Readonly<Record<string, unknown>>;
+  record: RecordKey<R>;
   show?: readonly ColumnPath<R>[];
+  className?: string;
 }): ReactTypes.ReactElement;
 /** A record's timeline, as its page declares it: `<Timeline from="ticket" record={{ id: 7 }} />`. */
-export declare function Timeline(props: { from: ResourceName; record: Readonly<Record<string, unknown>> }): ReactTypes.ReactElement;
+export declare function Timeline<const R extends ResourceName>(props: {
+  from: R;
+  record: RecordKey<R>;
+  className?: string;
+}): ReactTypes.ReactElement;
 /** Rows as a tree by a parent reference, the `tree()` presentation: `<Tree from="category" parent="parent_id" primary="name" />`. */
 export declare function Tree<const R extends ResourceName = never>(props: {
   from?: R;
@@ -932,6 +988,8 @@ export declare function Tree<const R extends ResourceName = never>(props: {
   /** One line said quietly beside the primary. */
   lines?: readonly [ColumnPath<Reading<R>>];
   query?: string;
+  limit?: number;
+  className?: string;
 }): ReactTypes.ReactElement;
 /** Rows as bars between two dates, the `gantt()` presentation: `<Gantt from="task" start="starts_on" end="due_on" primary="name" />`. */
 export declare function Gantt<const R extends ResourceName = never>(props: {
@@ -943,6 +1001,8 @@ export declare function Gantt<const R extends ResourceName = never>(props: {
   by?: ColumnPath<Reading<R>>;
   progress?: ColumnPath<Reading<R>>;
   query?: string;
+  limit?: number;
+  className?: string;
 }): ReactTypes.ReactElement;
 /** A list presentation's own words, as its DSL helper takes them, less the kind the block's name already says. */
 type PresentationWords<T> = { [K in keyof T as K extends string ? Exclude<K, 'kind'> : never]: T[K] };
@@ -951,10 +1011,12 @@ interface PresentedRows<R extends string> {
   from?: R;
   where?: Where<R>;
   query?: string;
-  sort?: string;
+  sort?: SortInput<Reading<R>>;
   limit?: number;
   /** The list's accessible name. */
+  ariaLabel?: string;
   label?: string;
+  className?: string;
 }
 /** Rows as lanes of cards by a column, the `board()` presentation: `<Board from="ticket" by="status" primary="title" />`. Dropping
     a card runs a verb the page declares (its `commands` and `actions`), with the refusal and the optimistic place a list's board has;
@@ -971,26 +1033,27 @@ export declare function Calendar<const R extends ResourceName = never>(
 ): ReactTypes.ReactElement;
 /** Rows as a grid of cards led by a picture, the `cards()` presentation: `<Gallery from="vehicle" image="photo_url" primary="title" />`. */
 export declare function Gallery<const R extends ResourceName = never>(
-  props: PresentedRows<R> &
-    Omit<PresentationWords<AppCardsList<ColumnPath<Reading<R>>>>, 'image'> & {
-      /** A column holding an image address, or the first file of a related file resource (`{ from, whose, sort }`). */
-      image: NonNullable<AppCardsList<ColumnPath<Reading<R>>>['image']>;
-    },
+  props: PresentedRows<R> & PresentationWords<AppCardsList<ColumnPath<Reading<R>>>>,
 ): ReactTypes.ReactElement;
 /** Rows in a queue beside the picked record's own page, the `split()` presentation. The pick is held in the page param `param`
     when it names one (a single-column key's value, so Back and a link keep it), else in the block. */
-export declare function Split<const R extends ResourceName = never>(props: {
+export declare function RecordSplit<const R extends ResourceName = never>(props: {
   from?: R;
   where?: Where<R>;
   query?: string;
-  sort?: string;
+  sort?: SortInput<Reading<R>>;
+  ariaLabel?: string;
   label?: string;
   param?: string;
-  row: { primary: ColumnPath<Reading<R>>; lines?: readonly [ColumnPath<Reading<R>>] | readonly [ColumnPath<Reading<R>>, ColumnPath<Reading<R>>] };
+  row: {
+    primary: ColumnPath<Reading<R>>;
+    lines?: readonly [ColumnPath<Reading<R>>] | readonly [ColumnPath<Reading<R>>, ColumnPath<Reading<R>>];
+  };
   /** The picked record's fields, in order. Absent, its fields as the schema has them. */
   detail?: readonly ColumnPath<Reading<R>>[];
   /** The list's page size, 1 to 200. */
   limit?: number;
+  className?: string;
 }): ReactTypes.ReactElement;
 /** The App's assistant, as its own page draws it (where the App declares one): `<Assistant />`. */
-export declare function Assistant(props: { conversation?: string }): ReactTypes.ReactElement | null;
+export declare function Assistant(props: { conversation?: string; className?: string }): ReactTypes.ReactElement | null;

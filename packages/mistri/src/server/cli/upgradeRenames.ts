@@ -2,7 +2,8 @@
  * What `mistri upgrade` rewrites, as data. The rows come from the CHANGELOG's "Renamed" tables and the 1.0 release
  * candidates' notes; a row is added here in the release that renames something, with the CHANGELOG line beside it.
  *
- * Only a rename that reads the same wherever it is written belongs in `KEYS` or `NAMES`. One whose old word still
+ * Only a rename that reads the same wherever it is written belongs in `KEYS` or `NAMES`; a component or type whose
+ * old name is an everyday word is an `EXPORTS` row, renamed only where it is imported from the entry points it names. One whose old word still
  * means something else in an App (a list's `head`, a list's `totals: [columns]`, `palette` as a variation) is
  * written with the context that tells them apart (`inside`, `call`, `kind`, `parent`, `shape`, `firstKey`,
  * `component`), and one a reader cannot be told apart by anything on the page goes to `REFUSED`, which names the line
@@ -75,6 +76,13 @@ interface KeyRename extends Guards {
   shape?: 'array' | 'object';
   /** Only when the object it names starts with one of these keys (`palette: { light, dark }`, not a variation). */
   firstKey?: readonly string[];
+  /**
+   * A component's prop only, and only on the kit's own tag: a word every App's own components take too (`onChange`,
+   * `size`), so one on a tag imported from the App's module says nothing about the kit and is not refused.
+   */
+  kitOnly?: boolean;
+  /** A component's prop whose words changed with it, or instead of it: `intent="quiet"` is `variant="ghost"`. Only a value written as a string is rewritten. */
+  values?: Readonly<Record<string, string>>;
   /** Where the CHANGELOG says so. */
   note: string;
 }
@@ -160,6 +168,7 @@ export const KEYS: readonly KeyRename[] = [
       'Board',
       'Calendar',
       'Gallery',
+      'RecordSplit',
       'Split',
     ],
     table: 'block',
@@ -184,10 +193,91 @@ export const KEYS: readonly KeyRename[] = [
     table: 'link',
     note: "A headline link's emphasis `kind` is `intent`, as a button says it: 'primary' or 'secondary'",
   },
+  /* The props the kit's components took before one vocabulary was said across the UI entry points. Each is listed
+     under the name the component had then and the one it has now, so a file half-upgraded by hand is finished; a row
+     is here only where the old word is not a prop of the new component, so a second run finds nothing. */
+  ...(
+    [
+      [
+        'intent',
+        'variant',
+        ['Button', 'CommandForm', 'CommandButton', 'ActionButton'],
+        "A button's `intent` is `variant`, and `'quiet'` is `'ghost'`",
+        { quiet: 'ghost' },
+      ],
+      [
+        'size',
+        'size',
+        ['Button', 'CommandButton', 'ActionButton'],
+        "A button's `size` is one of the control sizes: 'compact' is 'sm', 'default' is 'md', 'large' is 'lg'",
+        { compact: 'sm', default: 'md', large: 'lg' },
+      ],
+      [
+        'size',
+        'size',
+        ['Segmented', 'SegmentedControl'],
+        "A segmented control's `size` is one of the control sizes: 'compact' is 'sm', 'default' is 'md'",
+        { compact: 'sm', default: 'md' },
+      ],
+      ['busy', 'loading', ['Button', 'Switch'], 'A control at work says `loading`, not `busy`'],
+      ['busyLabel', 'loadingLabel', ['Button'], "A button's `busyLabel` is `loadingLabel`"],
+      ['aria-label', 'ariaLabel', ['Button', 'Tile'], "A control's accessible name is `ariaLabel`"],
+      [
+        'onChange',
+        'onValueChange',
+        [
+          'Dropdown',
+          'TextField',
+          'TextArea',
+          'Select',
+          'YesNo',
+          'Slider',
+          'ChoiceCards',
+          'FileField',
+          'DateField',
+          'DateNav',
+          'Segmented',
+          'SegmentedControl',
+        ],
+        "A control's change callback is `onValueChange`",
+      ],
+      ['onChange', 'onCheckedChange', ['Checkbox'], "A checkbox's change callback is `onCheckedChange`, as a switch's is"],
+      ['onPress', 'onClick', ['Tile'], "A tile's `onPress` is `onClick`"],
+      [
+        'say',
+        'formatValue',
+        ['Stat', 'StatCard', 'Bars', 'BreakdownList', 'Sparkline', 'MiniBars', 'Columns'],
+        'A figure is said by `formatValue`, not `say`',
+      ],
+      ['values', 'data', ['Sparkline', 'MiniBars'], "A sparkline's and a row of mini bars' `values` are `data`"],
+      /* Under its old name only: `SplitView` keeps `listLabel` and `detailLabel` as the panes' visible words. */
+      ['listLabel', 'listAriaLabel', ['SplitListDetail'], "A split view's `listLabel` is `listAriaLabel`"],
+      ['detailLabel', 'detailAriaLabel', ['SplitListDetail'], "A split view's `detailLabel` is `detailAriaLabel`"],
+      [
+        'tone',
+        'tone',
+        ['Item', 'ItemRow', 'Meter', 'Bars', 'BreakdownList', 'Tone', 'StatusDot'],
+        "A tone is one of `Tone`'s words: 'warn' is 'warning' and 'bad' is 'critical'",
+        { warn: 'warning', bad: 'critical' },
+      ],
+    ] as ReadonlyArray<readonly [string, string, readonly string[], string, Readonly<Record<string, string>>?]>
+  ).map(([from, to, components, note, values]) => ({
+    from,
+    to,
+    component: true,
+    kitOnly: true,
+    components,
+    note,
+    ...(values ? { values } : {}),
+  })),
 ];
 
-/** Where a kit component comes from: the one place an App imports the blocks. A package under this name is the kit's. */
-export const KIT_MODULES: readonly string[] = ['@mistriwork/mistri/ui', '@mistriwork/kit'];
+/**
+ * Where a kit component comes from: the entry points an App imports the kit's parts and the page's blocks from (a page
+ * has the one import path, `@mistriwork/mistri/page`, which carries everything `/ui` does). A package under one of
+ * these names is the kit's.
+ */
+export const KIT_MODULES: readonly string[] = ['@mistriwork/mistri/ui', '@mistriwork/mistri/page', '@mistriwork/kit'];
 
 /** A string value renamed under a key. */
 interface ValueRename {
@@ -211,12 +301,76 @@ export const NAMES: Readonly<Record<string, string>> = {
   TotalGroup: 'FigureGroup',
 };
 
+/**
+ * A component or type an entry point exports under a new name. Unlike a `NAMES` row its old word is an everyday one
+ * (`Item`, `List`, `Field`, `Grid`) that another entry point or package exports as something else, so it is renamed only
+ * where it is imported from one of `modules`.
+ */
+interface ExportRename {
+  from: string;
+  to: string;
+  modules: readonly string[];
+  /**
+   * Only in a file that writes it as a tag (`<Tone tone="good">`): the old name is still exported as something else
+   * (`Tone` is now the type `ToneName` was), and a tag is what tells the component from the type.
+   */
+  tag?: boolean;
+  /**
+   * The old name is a word a page also says in its text or names its own things by (`Details`, `Item`): it is rewritten
+   * through the file only where the file writes it as nothing but an import and tags, and otherwise the import alone
+   * is, keeping the file's word (`DescriptionList as Details`).
+   */
+  everyday?: boolean;
+  /** Where the CHANGELOG says so. */
+  note: string;
+}
+
+const UI = ['@mistriwork/mistri/ui', '@mistriwork/mistri/page'] as const;
+const PAGE = ['@mistriwork/mistri/page'] as const;
+
+export const EXPORTS: readonly ExportRename[] = [
+  ...(
+    [
+      ['Stat', 'StatCard', true],
+      ['Empty', 'EmptyState', true],
+      ['Items', 'ItemList', true],
+      ['Item', 'ItemRow', true],
+      ['Segmented', 'SegmentedControl', true],
+      ['Bars', 'BreakdownList', true],
+      ['Details', 'DescriptionList', true],
+      ['DetailsField', 'DescriptionField', false],
+      ['AiMark', 'AiBadge', false],
+      ['SplitListDetail', 'SplitView', false],
+    ] as const
+  ).map(([from, to, everyday]) => ({ from, to, modules: UI, everyday, note: `The kit's \`${from}\` is \`${to}\`` })),
+  { from: 'Field', to: 'BoundField', modules: UI, everyday: true, note: "`useField`'s return type `Field` is `BoundField`" },
+  {
+    from: 'Tone',
+    to: 'StatusDot',
+    modules: UI,
+    tag: true,
+    everyday: true,
+    note: "The kit's `Tone` component is `StatusDot`; `Tone` is the type of a tone",
+  },
+  {
+    from: 'ToneName',
+    to: 'Tone',
+    modules: [...UI, '@mistriwork/mistri/ui/testing'],
+    note: 'The type `ToneName` is `Tone`',
+  },
+  { from: 'Grid', to: 'PageGrid', modules: PAGE, everyday: true, note: "A page's `Grid` block is `PageGrid`" },
+  { from: 'List', to: 'RecordList', modules: PAGE, everyday: true, note: "A page's `List` block is `RecordList`" },
+  { from: 'Split', to: 'RecordSplit', modules: PAGE, everyday: true, note: "A page's `Split` block is `RecordSplit`" },
+];
+
 /** A name that cannot be rewritten by looking at it, with what to write instead. */
 interface Refusal {
   name: string;
   reason: string;
   /** Only as a name imported from the App entry point. */
   imported?: boolean;
+  /** Only as a name imported from one of these entry points: the word is an everyday one anywhere else (`dress`). */
+  modules?: readonly string[];
   /** Set: `name` is a property key, refused only where it stands as these words place it, not as a name anywhere. */
   context?: Guards;
   /** The table in shared/renamedWords.ts this row answers, when a loader refuses it. */
@@ -245,6 +399,13 @@ export const REFUSED: readonly Refusal[] = [
   ].map((name) => ({
     name,
     reason: 'is no longer exported; `provisionStores` from `@mistriwork/mistri/maintenance` makes the tenant stores',
+  })),
+  /* The control kit's helpers a page no longer imports: a kit is the slots `defineUiKit` is given, and nothing stands in for these. */
+  ...['dress', 'extendUiKit', 'defaultUiKit', 'usePopupHost', 'useComponentScope'].map((name) => ({
+    name,
+    modules: PAGE,
+    reason:
+      'is no longer exported from `@mistriwork/mistri/page`: a control kit is the slots `defineUiKit({ … })` is given, each a whole component, so write the slot as a component of the App',
   })),
   /* A key that is gone or moved has to be deleted or written elsewhere: no rewrite puts it right. */
   {

@@ -1,0 +1,12 @@
+/* The primitives' bundle (`@mistriwork/ui/primitives.js`): controls, pickers, overlays, menus, layout, display and the
+   structured editors. It stands on `base.css` and on `charts.css` (a `StatCard` draws a `Sparkline`), which a page loads
+   before it; a composite view loads this before `views.css`. The order below is the cascade's: keep it. */
+@import './order.css';
+@import './forms-inputs.css';
+@import './forms-pickers.css';
+@import './overlays-menus.css';
+@import './layout-display.css';
+@import './kit-standalone.css';
+@import './editors-inputs.css';
+@import './editors-system.css';
+@import './primitives-in-views.css';

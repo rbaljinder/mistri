@@ -17,10 +17,6 @@ const HELVETICA = '"Helvetica Neue", Helvetica, Arial, ui-sans-serif, sans-serif
     fetched only by a page set in it, never in the first paint; then Arial
     cut to Inter's measure while it arrives (docs/design.md, Faces). */
 export const INTER = `Inter, "Inter Fallback", ${SANS}`;
-/** Lumen's heading face: Manrope, for titles, section heads, the App's name and a strip's figures; shipped as a sheet
-    of its own (manropeFace.css), fetched only by a page whose headings lead with it, with Arial Bold cut to its measure
-    while it arrives. One line to change the look's heading face: `heading:` in Lumen's `font` below. */
-const MANROPE = `Manrope, "Manrope Fallback", ${INTER}`;
 /** Workshop's faces: Barlow for the interface and data, its semi-condensed bold for titles and labels, shipped with
     a sheet of their own (barlowFace.css) and fetched only by a page set in them; each with Arial cut to its measure
     while it arrives. */
@@ -276,33 +272,26 @@ const WRITTEN: readonly (HouseLook | VariantLook)[] = [
     },
   },
   {
-    // Flat, calm and modern, with character in its details: a warm, faintly
-    // tinted shell around white working surfaces, elevation only on what
-    // floats, one confident accent for the primary action, the current room,
-    // selection, focus, the main chart series and the current step; metrics
-    // in a divided strip, fields in a property rail, tables on hairlines
-    // anchored on the record's name, statuses as a dot and their word, a
-    // workflow as a track of segments, charts as a line in one hue's steps
-    // (lumenLook.css; docs/design.md, Lumen, for its exceptions). The chart
-    // palette keeps blue, violet, green, amber and pink at steps the dataviz
-    // checks pass, light and dark. Inter, shipped with the look. Its own
-    // blue is Cobalt; every other palette changes the accent family only —
-    // grounds, ink and structure stay Lumen's.
+    // Precision workspace: cool slate ground framing crisp white surface cards,
+    // elevation on cards and floating layers, one confident cobalt accent for
+    // primary actions, selection and lead series; separated stat tiles with
+    // sparklines, framed data tables, semantic pill-dot statuses and smooth
+    // gradient charts in Inter with lining tabular figures.
     id: 'lumen',
     label: 'Lumen',
     defaultPalette: 'cobalt',
     colors: {
       light: {
-        ground: '#ffffff',
+        ground: '#f8fafc',
         surface: '#ffffff',
-        raised: '#f5f4f2',
-        ink: '#1c1a17',
-        inkMuted: '#5c5852',
-        inkSubtle: '#726c64',
-        line: '#ebe8e4',
-        lineStrong: '#8f8a83',
-        lineControl: '#8f8a83',
-        primary: '#1c1a17',
+        raised: '#f1f5f9',
+        ink: '#0f172a',
+        inkMuted: '#475569',
+        inkSubtle: '#515e70',
+        line: '#e2e8f0',
+        lineStrong: '#7c899b',
+        lineControl: '#7c899b',
+        primary: '#0f172a',
         onPrimary: '#ffffff',
         status: {
           good: '#127a40',
@@ -311,29 +300,29 @@ const WRITTEN: readonly (HouseLook | VariantLook)[] = [
           info: '#2d4fd6',
         },
         nav: {
-          ground: '#fbfaf9',
-          ink: '#1c1a17',
-          muted: '#5c5852',
-          line: '#ebe8e4',
+          ground: '#f5f7fa',
+          ink: '#0f172a',
+          muted: '#475569',
+          line: '#e2e8f0',
         },
         rules: {
-          section: '#ebe8e4',
-          head: '#ebe8e4',
+          section: '#e2e8f0',
+          head: '#e2e8f0',
         },
         chart: ['#2557e0', '#9a6cf7', '#0e9a6c', '#d97706', '#e0428a', '#0e8fb0', '#a3510b', '#94a3b8'],
       },
       dark: {
-        ground: '#121110',
-        surface: '#161514',
-        raised: '#201f1d',
-        ink: '#eeece8',
-        inkMuted: '#b8b3ab',
-        inkSubtle: '#9f9a92',
-        line: '#2d2b27',
-        lineStrong: '#726d65',
-        lineControl: '#726d65',
-        primary: '#eeece8',
-        onPrimary: '#121110',
+        ground: '#0b0e14',
+        surface: '#111620',
+        raised: '#181f2c',
+        ink: '#edf2f7',
+        inkMuted: '#aeb9cc',
+        inkSubtle: '#94a1b6',
+        line: '#222a38',
+        lineStrong: '#647084',
+        lineControl: '#717d92',
+        primary: '#edf2f7',
+        onPrimary: '#0b0e14',
         status: {
           good: '#4ade80',
           warning: '#fbbf24',
@@ -341,51 +330,49 @@ const WRITTEN: readonly (HouseLook | VariantLook)[] = [
           info: '#91a8ff',
         },
         nav: {
-          ground: '#141312',
-          ink: '#eeece8',
-          muted: '#aaa59d',
-          line: '#262422',
+          ground: '#0d1118',
+          ink: '#edf2f7',
+          muted: '#a4b0c3',
+          line: '#1e2532',
         },
         rules: {
-          section: '#2d2b27',
-          head: '#2d2b27',
+          section: '#222a38',
+          head: '#222a38',
         },
         chart: ['#3559e6', '#9a78ec', '#12a678', '#c88317', '#e0559b', '#1597b9', '#d26b3b', '#6b7694'],
       },
     },
-    /* `pill` is said in every look: an App's stylesheet may read var(--pill-radius) (check accepts it), and a look that left it
-       unsaid gave that rule no value and square corners. Round is what the sheets draw a tag as already. */
-    shape: { radius: { control: '8px', field: '8px', pill: 'round' }, elevation: 'raised', border: { rule: '1px' } },
-    /* The page's name anchors it: 28px, tight; a list's name a step under, and a section's heading 16px, so the
-       page reads title, section, row at a glance. On a flat page the type is the hierarchy the boxes used to be. */
+    shape: {
+      radius: { control: '6px', field: '6px', pill: 'round' },
+      elevation: 'raised',
+      border: { rule: '1px' },
+    },
     type: {
-      font: { ui: INTER, data: INTER, heading: MANROPE, figures: FIGURES },
+      font: { ui: INTER, data: INTER, heading: INTER },
       roles: {
-        /* Manrope draws lighter than Inter at a given weight: a title at 600 read as a line of text, so the heading
-           roles stand a step heavier than they did in Inter, to the presence they had. */
-        title: { size: '28px', weight: 700, tracking: '-0.02em' },
-        heading: { size: '24px', weight: 700, tracking: '-0.018em' },
-        section: { size: '16px', weight: 600, tracking: '-0.01em' },
+        title: { size: '22px', weight: 600, tracking: '-0.022em' },
+        heading: { size: '19px', weight: 600, tracking: '-0.018em' },
+        section: { size: '14px', weight: 600, tracking: '-0.01em' },
+        data: { features: ['tnum'] },
+        figure: { size: '24px', weight: 600, tracking: '-0.025em', features: ['tnum'] },
       },
     },
     density: 'compact',
     recipes: {
-      // Open on the white surface, with two of its own: a record's fields in a property rail, a table of quiet rows.
-      blocks: 'open',
-      fields: 'rail',
-      table: 'quiet',
-      // Pills in the menu and a raised key on the windows' tray; a record's tabs apart, underlined on a hairline.
+      blocks: 'card',
+      stat: 'icon',
       current: 'pill',
       tabs: 'underline',
       bar: 'airy',
-      status: 'quiet',
+      status: 'pill-dot',
       board: 'strip',
-      chart: 'line',
+      chart: 'gradient',
       buttons: 'raised',
-      filters: 'quiet',
+      filters: 'solid',
       rules: 'hairline',
       avatar: 'round',
       banner: 'plain',
+      steps: 'strip',
     },
   },
   {
@@ -662,6 +649,7 @@ const WRITTEN: readonly (HouseLook | VariantLook)[] = [
       nav: 'wash',
       tabs: 'rule',
       bar: 'dark',
+      status: 'quiet',
       board: 'ruled',
       chart: 'plain',
       buttons: 'accent',

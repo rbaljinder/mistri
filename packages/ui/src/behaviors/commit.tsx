@@ -34,6 +34,8 @@ export type CommitProps<Value, Details = Change> = {
   onCommit?: (change: Committing<Value, Details>) => Promise<boolean>;
   /** How long keyboard steps are gathered into one commit, in milliseconds. */
   commitDelay?: number;
+  /** Localized strings for commit announcements. */
+  words?: { reverted?: string };
 };
 
 /** Said when a move is put back, to a screen reader: a caller's own sentence is the rejection's message. */
@@ -92,6 +94,7 @@ export function useCommit<Value, Details extends Change>({
   onValueChange,
   onCommit,
   commitDelay = 600,
+  words,
   moved,
 }: {
   value: Value | undefined;
@@ -115,8 +118,8 @@ export function useCommit<Value, Details extends Change>({
     confirmed: committed as Value | undefined,
     shown: committed as Value | undefined,
   });
-  const live = useRef({ committed, value, onValueChange, onCommit, commitDelay, moved, controlled });
-  live.current = { committed, value, onValueChange, onCommit, commitDelay, moved, controlled };
+  const live = useRef({ committed, value, onValueChange, onCommit, commitDelay, words, moved, controlled });
+  live.current = { committed, value, onValueChange, onCommit, commitDelay, words, moved, controlled };
   // While nothing is being asked about, what the page gives is what is committed.
   if (run.current.busy === 0 && !run.current.batch && !drawn) run.current.confirmed = committed;
 
@@ -146,7 +149,8 @@ export function useCommit<Value, Details extends Change>({
     r.shown = r.confirmed;
     setDrawn(null);
     setPending(new Set());
-    announce(why ? `${why}. ${REVERTED}` : REVERTED);
+    const revertedText = live.current.words?.reverted ?? REVERTED;
+    announce(why ? `${why}. ${revertedText}` : revertedText);
   };
 
   const flush = (): void => {

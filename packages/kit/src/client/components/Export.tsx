@@ -261,13 +261,13 @@ function ColumnChooser({
       <h2>{say('columnsToExport')}</h2>
       <p>{say('tickedColumnsAreWritten')}</p>
       <div className="col-actions">
-        <Button size="compact" onClick={() => setAll(columns.map((c) => c.name))}>
+        <Button size="sm" onClick={() => setAll(columns.map((c) => c.name))}>
           {say('common.all')}
         </Button>
-        <Button size="compact" onClick={() => setAll([])}>
+        <Button size="sm" onClick={() => setAll([])}>
           {say('none')}
         </Button>
-        <Button size="compact" onClick={() => setAll(displayed)}>
+        <Button size="sm" onClick={() => setAll(displayed)}>
           {say('asDisplayed')}
         </Button>
         <span className="col-count">
@@ -290,7 +290,7 @@ function ColumnChooser({
       <p className="confirm-params">{say('rememberedForThisTable')}</p>
       <div className="confirm-actions">
         <Button onClick={() => dialog.current?.close()}>{say('common.cancel')}</Button>
-        <Button intent="primary" onClick={use}>
+        <Button variant="primary" onClick={use}>
           {say('useTheseColumns')}
         </Button>
       </div>

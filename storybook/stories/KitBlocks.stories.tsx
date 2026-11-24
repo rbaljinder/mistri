@@ -8,17 +8,17 @@ import {
   Button,
   Card,
   Cluster,
-  Empty,
-  Item,
-  Items,
+  EmptyState,
+  ItemRow,
+  ItemList,
   Meter,
-  Segmented,
+  SegmentedControl,
   Stack,
-  Stat,
+  StatCard,
   Table,
-  Tone,
+  StatusDot,
   Value,
-} from '../../packages/mistri/src/client/components/sdk/kit.js';
+} from '../../packages/mistri/src/client/components/sdk/index.js';
 
 /* The page kit's row list, header row, main-beside-rail and nav-ground scope, drawn by the SDK's fixture host as an
    App's page draws them, so the visual matrix sees each in every look, light and dark, at a desk and a phone's width. */
@@ -32,32 +32,34 @@ const frame = (width: number, children: React.ReactNode) => (
 );
 
 const Work = () => (
-  <Items label="Open work" empty={<span>Nothing open.</span>}>
-    <Item
-      lead={<Tone tone="warn">Late</Tone>}
+  <ItemList ariaLabel="Open work" empty={<span>Nothing open.</span>}>
+    <ItemRow
+      leading={<StatusDot tone="warning">Late</StatusDot>}
       title="Call Ana Ruiz about the renewal"
-      note="Due yesterday. She asked for a quote with the longer term and the two extra seats, so it needs the new price list."
+      description="Due yesterday. She asked for a quote with the longer term and the two extra seats, so it needs the new price list."
       onClick={() => undefined}
-      action={
-        <Button intent="quiet" size="compact">
+      actions={
+        <Button variant="ghost" size="sm">
           Done
         </Button>
       }
     />
-    <Item
-      lead={<Tone tone="good">On time</Tone>}
+    <ItemRow
+      leading={<StatusDot tone="good">On time</StatusDot>}
       title="Send the signed lease"
-      note="Due Friday"
+      description="Due Friday"
       href="#lease"
-      action={<Value value={1250} display={{ format: 'money', currency: 'USD' }} compact />}
+      actions={<Value value={1250} display={{ format: 'money', currency: 'USD' }} compact />}
     />
-    <Item title="Order more keys" />
-  </Items>
+    <ItemRow title="Order more keys" />
+  </ItemList>
 );
 
 export const ItemsList: StoryObj = { render: () => frame(720, <Work />) };
 export const ItemsPhone: StoryObj = { render: () => frame(360, <Work />) };
-export const ItemsEmpty: StoryObj = { render: () => frame(480, <Items label="Open work" empty={<Empty title="Nothing open." />} />) };
+export const ItemsEmpty: StoryObj = {
+  render: () => frame(480, <ItemList ariaLabel="Open work" empty={<EmptyState title="Nothing open." />} />),
+};
 
 export const CardHeader: StoryObj = {
   render: () =>
@@ -68,7 +70,7 @@ export const CardHeader: StoryObj = {
           title="Open work"
           count={3}
           action={
-            <Button intent="quiet" size="compact">
+            <Button variant="ghost" size="sm">
               Add
             </Button>
           }
@@ -76,7 +78,7 @@ export const CardHeader: StoryObj = {
           <Work />
         </Card>
         <Card title="Quiet" count={0}>
-          <Items label="None" empty="Nothing here." />
+          <ItemList ariaLabel="None" empty="Nothing here." />
         </Card>
       </Cluster>,
     ),
@@ -89,7 +91,7 @@ export const CardHeaderPhone: StoryObj = {
         title="A long title that wraps on a phone"
         count={12}
         action={
-          <Button intent="quiet" size="compact">
+          <Button variant="ghost" size="sm">
             Add
           </Button>
         }
@@ -105,8 +107,8 @@ const Page = ({ side }: { side: 'start' | 'end' }) => (
     rail={
       <Card title="Facts">
         <Stack gap="tight">
-          <Stat label="Open" value="12" />
-          <Stat label="Late" value="3" change={{ text: '↑ 2 vs last week', tone: 'bad' }} />
+          <StatCard label="Open" value="12" />
+          <StatCard label="Late" value="3" delta={{ value: '↑ 2', tone: 'critical', against: 'vs last week' }} />
         </Stack>
       </Card>
     }
@@ -128,30 +130,30 @@ function Dark() {
       title="On the nav ground"
       count={4}
       action={
-        <Button intent="quiet" size="compact">
+        <Button variant="ghost" size="sm">
           Open
         </Button>
       }
     >
       <Stack>
-        <Segmented
-          label="Range"
+        <SegmentedControl
+          ariaLabel="Range"
           value={range}
-          onChange={setRange}
+          onValueChange={setRange}
           options={[
             { value: '7', label: '7 d' },
             { value: '30', label: '30 d', count: 4 },
           ]}
         />
         <Cluster min="9rem">
-          <Stat label="Leads" value="128" change={{ text: '↑ 12% vs prior', tone: 'good' }} trend={[3, 5, 4, 8, 7, 9]} />
-          <Stat label="Overdue" value="9" change={{ text: '↑ 3 vs prior', tone: 'bad' }} />
+          <StatCard label="Leads" value="128" delta={{ value: '↑ 12%', tone: 'good', against: 'vs prior' }} trend={[3, 5, 4, 8, 7, 9]} />
+          <StatCard label="Overdue" value="9" delta={{ value: '↑ 3', tone: 'critical', against: 'vs prior' }} />
         </Cluster>
         <Meter value={64} label="64%" tone="good" />
         <Value value="open" display={{ tone: { open: 'info' } }} />
         <Work />
         <Table
-          label="Leads"
+          ariaLabel="Leads"
           columns={[
             { key: 'name', label: 'Name' },
             { key: 'total', label: 'Total', align: 'right', display: { format: 'money', currency: 'USD' } },
@@ -162,7 +164,7 @@ function Dark() {
           ]}
           onRowClick={() => undefined}
         />
-        <Empty title="Nothing else here." />
+        <EmptyState title="Nothing else here." />
       </Stack>
     </Card>
   );

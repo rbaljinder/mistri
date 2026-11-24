@@ -24,6 +24,7 @@
     --form-well: transparent;
     --form-well-hover: transparent;
     --form-well-in: transparent;
+    --field-fill: transparent;
     --form-edge: var(--field-edge, var(--line-control));
     --form-edge-hover: color-mix(in oklab, var(--form-edge) 70%, var(--ink));
   }

@@ -227,4 +227,15 @@ test('a column is sized from its header with Alt and the arrows, and given back 
   // An arrow without Alt is not the column's: it is left for whatever else is listening.
   key(button, 'ArrowRight');
   expect(head().hasAttribute('data-sized')).toBe(false);
+
+  // Focusing the resize handle itself resizes with plain ArrowRight/ArrowLeft and resets with Home.
+  const resizeHandle = document.querySelector<HTMLElement>('[data-slot="widths-handle"]')!;
+  expect(resizeHandle.tabIndex).toBe(0);
+  expect(resizeHandle.getAttribute('aria-hidden')).toBeNull();
+  expect(resizeHandle.getAttribute('aria-label')).toBe('Resize Asking rent');
+  focus(resizeHandle);
+  key(resizeHandle, 'ArrowRight');
+  expect(head().hasAttribute('data-sized')).toBe(true);
+  key(resizeHandle, 'Home');
+  expect(head().hasAttribute('data-sized')).toBe(false);
 });

@@ -16,7 +16,7 @@
  * the route counts alongside.
  */
 import { useId, useMemo, useRef, type CSSProperties, type ReactNode } from 'react';
-import { Card, Columns, Dropdown, Empty, Segmented, Stack, useFormat, useSectionSize, useViewer } from '@mistriwork/mistri/ui';
+import { Card, Columns, Dropdown, EmptyState, SegmentedControl, Stack, useFormat, useSectionSize, useViewer } from '@mistriwork/mistri/ui';
 import { useAddressState } from '@mistriwork/mistri/page';
 import { useMessageLanguage } from '@mistriwork/kit/client/components/useMessageLanguage.js';
 import { say } from '../../copy/console/components/console/AnalyticsRoom.js';
@@ -98,7 +98,7 @@ export default function AnalyticsRoom({ props }: { props: { endpoint: string } }
     [funnel, setFunnel] = useAddressState('funnel');
   const only =
     event && event.includes(':') ? { kind: event.slice(0, event.indexOf(':')), name: event.slice(event.indexOf(':') + 1) } : undefined;
-  if (!viewer.signedIn || !viewer.account) return <Empty title={say('signIn')} />;
+  if (!viewer.signedIn || !viewer.account) return <EmptyState title={say('signIn')} />;
   return (
     <AnalyticsPanel
       key={viewer.account}
@@ -241,11 +241,11 @@ export function AnalyticsPanel({
   const chart = (
     <Card title={opened ? say('overTimeOne', { name: opened.name }) : say('overTime')}>
       {!data ? null : !(tracked + business) ? (
-        <Empty title={say('noEvents')} />
+        <EmptyState title={say('noEvents')} />
       ) : (
         <Columns
           rows={data.days.map((day) => ({ key: day.day, values: { tracked: day.tracked, business: day.business } }))}
-          say={number}
+          formatValue={number}
           series={[
             { key: 'tracked', label: say('trackedEvents') },
             { key: 'business', label: say('businessEvents') },
@@ -264,7 +264,7 @@ export function AnalyticsPanel({
       {!catalog ? (
         <p role="status">{say('loadingApps')}</p>
       ) : !apps.length ? (
-        <Empty title={say('noApps')} description={say('noAppsDetail')} />
+        <EmptyState title={say('noApps')} description={say('noAppsDetail')} />
       ) : (
         <>
           <ConsoleHead
@@ -281,7 +281,7 @@ export function AnalyticsPanel({
                   <Dropdown
                     ariaLabel={say('range')}
                     value={range}
-                    onChange={(next) => pickRange(next as Range)}
+                    onValueChange={(next) => pickRange(next as Range)}
                     items={[
                       { value: '7', label: say('last7') },
                       { value: '30', label: say('last30') },
@@ -291,15 +291,15 @@ export function AnalyticsPanel({
                   />
                 </div>
               ) : (
-                <Segmented
-                  label={say('range')}
-                  size="compact"
+                <SegmentedControl
+                  ariaLabel={say('range')}
+                  size="sm"
                   value={range}
-                  onChange={pickRange}
+                  onValueChange={pickRange}
                   options={[
-                    { value: '7', label: say('days7'), name: say('last7') },
-                    { value: '30', label: say('days30'), name: say('last30') },
-                    { value: '90', label: say('days90'), name: say('last90') },
+                    { value: '7', label: say('days7'), ariaLabel: say('last7') },
+                    { value: '30', label: say('days30'), ariaLabel: say('last30') },
+                    { value: '90', label: say('days90'), ariaLabel: say('last90') },
                     { value: 'custom', label: say('custom') },
                   ]}
                 />
@@ -398,7 +398,7 @@ export function AnalyticsPanel({
               ) : view === 'events' ? (
                 <TopEvents data={data} open={(row) => chooseEvent?.(row)} />
               ) : !data.funnels.length ? (
-                <Empty title={say('noFunnels')} />
+                <EmptyState title={say('noFunnels')} />
               ) : (
                 <Stack>
                   {data.funnels.length > 1 &&
@@ -407,16 +407,16 @@ export function AnalyticsPanel({
                         <Dropdown
                           ariaLabel={say('funnel')}
                           value={shownFunnel!.id}
-                          onChange={(id) => chooseFunnel?.(id)}
+                          onValueChange={(id) => chooseFunnel?.(id)}
                           items={data.funnels.map((entry) => ({ value: entry.id, label: entry.id }))}
                         />
                       </div>
                     ) : (
-                      <Segmented
-                        label={say('funnel')}
-                        size="compact"
+                      <SegmentedControl
+                        ariaLabel={say('funnel')}
+                        size="sm"
                         value={shownFunnel!.id}
-                        onChange={(id) => chooseFunnel?.(id)}
+                        onValueChange={(id) => chooseFunnel?.(id)}
                         options={data.funnels.map((entry) => ({ value: entry.id, label: entry.id }))}
                       />
                     ))}
@@ -462,7 +462,7 @@ function TopEvents({ data, open }: { data: Report; open(event: { kind: string; n
   useMessageLanguage();
   const format = useFormat();
   const previous = data.previous;
-  if (!data.names.length) return <Empty title={say('noEvents')} />;
+  if (!data.names.length) return <EmptyState title={say('noEvents')} />;
   return (
     <div className="console-scroll">
       <table className="console-table">

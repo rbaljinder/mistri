@@ -9,7 +9,7 @@
  * page, which the Accounts view links to.
  */
 import { useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Card, Empty, Stack, useViewer } from '@mistriwork/mistri/ui';
+import { Card, EmptyState, Stack, useViewer } from '@mistriwork/mistri/ui';
 import { useAddressState } from '@mistriwork/mistri/page';
 import { useMessageLanguage } from '@mistriwork/kit/client/components/useMessageLanguage.js';
 import { say } from '../../copy/console/components/console/GovernanceRoom.js';
@@ -133,7 +133,7 @@ export default function GovernanceRoom({ props }: { props: { endpoint: string } 
     [what, setWhat] = useAddressState('what'),
     [from, setFrom] = useAddressState('from'),
     [to, setTo] = useAddressState('to');
-  if (!viewer.signedIn || !viewer.account) return <Empty title={say('signIn')} />;
+  if (!viewer.signedIn || !viewer.account) return <EmptyState title={say('signIn')} />;
   return (
     <GovernancePanel
       key={viewer.account}
@@ -208,7 +208,7 @@ export function GovernancePanel({
       {!catalog ? (
         <p role="status">{say('loadingApps')}</p>
       ) : !apps.length ? (
-        <Empty title={say('noApps')} description={say('noAppsDetail')} />
+        <EmptyState title={say('noApps')} description={say('noAppsDetail')} />
       ) : (
         <>
           <ConsoleHead
@@ -385,7 +385,7 @@ function CommandLine({ row }: { row: CommandRow }) {
 }
 
 function AuditLog({ data, newer, older }: { data: { rows: AuditRow[]; next?: string }; newer?: () => void; older(cursor: string): void }) {
-  if (!data.rows.length) return <Empty title={say('noAudit')} description={say('noAuditDetail')} />;
+  if (!data.rows.length) return <EmptyState title={say('noAudit')} description={say('noAuditDetail')} />;
   return (
     <Stack gap="tight">
       <div className="console-scroll">

@@ -179,11 +179,11 @@ export function OAuthConsent({ view }: { view: ConsentView }) {
             {problem}
           </p>
           <div className="oauth-consent-actions">
-            <Button intent="secondary" size="large" type="submit" name="decision" value="deny" busy={sent}>
+            <Button variant="secondary" size="lg" type="submit" name="decision" value="deny" loading={sent}>
               {say('deny')}
             </Button>
             {allowable && (
-              <Button intent="primary" size="large" type="submit" name="decision" value="allow" busy={sent} onClick={allow}>
+              <Button variant="primary" size="lg" type="submit" name="decision" value="allow" loading={sent} onClick={allow}>
                 {say('allow')}
               </Button>
             )}

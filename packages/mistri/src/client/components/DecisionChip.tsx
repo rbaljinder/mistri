@@ -118,7 +118,7 @@ export default function DecisionChip({
         </span>
       </span>
       {handle.granted && (
-        <Button intent="quiet" size="compact" className="decision-chip-accept" busy={busy} onClick={() => void accept()}>
+        <Button variant="ghost" size="sm" className="decision-chip-accept" loading={busy} onClick={() => void accept()}>
           {say('accept')}
         </Button>
       )}

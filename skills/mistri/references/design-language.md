@@ -269,7 +269,8 @@ sections follow the period, and say "now" figures in their `query` without it.
 - A card inside a card, or a box round a table.
 - A tone on every column, or a tone map that is all `info`.
 - A hex color outside a `defineTheme`, a font file or a stylesheet; a custom
-  component draws with `@mistriwork/mistri/ui` and the look's tokens only.
+  component draws with `@mistriwork/mistri/ui` (or the Preview
+  `@mistriwork/mistri/primitives`, `/charts` and `/views`) and the look's tokens only.
 - Motion for decoration, pulsing, anything that moves on hover.
 - Fields grouped by type (Dates, Links); group by the noun in the form's `groups` (`mistri docs forms`).
 - A metric card alone on a row; more than two columns in an aside; a summary

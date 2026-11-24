@@ -2,7 +2,8 @@
    data-slot and its state attributes, never on a class or a generated id. */
 @layer m-parts {
   [data-slot='visually-hidden'],
-  [data-kind='visually-hidden'] {
+  [data-kind='visually-hidden'],
+  [data-slot='field-label'][data-hidden] {
     position: absolute;
     width: 1px;
     height: 1px;
@@ -45,8 +46,10 @@
     background: var(--m-primary);
     color: var(--m-on-primary);
 
-    &:hover:not([data-disabled]) {
-      background: color-mix(in oklab, var(--m-primary) 86%, var(--m-surface));
+    @media (hover: hover) {
+      &:hover:not([data-disabled]) {
+        background: color-mix(in srgb, var(--m-primary) 88%, var(--m-surface));
+      }
     }
   }
 
@@ -81,8 +84,10 @@
     box-shadow: none;
     color: var(--link, var(--m-accent-ink));
 
-    &:hover:not([data-disabled]) {
+    @media (hover: hover) {
+      &:hover:not([data-disabled]) {
       background: var(--m-raised);
+    }
     }
   }
 
@@ -117,23 +122,93 @@
     background-color: var(--field-fill);
   }
 
+  [data-slot]:is([data-variant='soft'], [data-variant='outline'], [data-variant='danger-soft']) {
+    box-shadow: none;
+  }
+
+  [data-slot][data-variant='soft'] {
+    border-color: transparent;
+    background: var(--m-accent-soft);
+    color: var(--m-accent-ink);
+
+    @media (hover: hover) {
+      &:hover:not([data-disabled]) {
+        background: color-mix(in srgb, var(--m-accent) 18%, var(--m-surface));
+      }
+    }
+  }
+
+  [data-slot][data-variant='outline'] {
+    border-color: var(--m-line-strong);
+    background: transparent;
+    color: var(--m-ink);
+
+    @media (hover: hover) {
+      &:hover:not([data-disabled]) {
+        background: var(--m-raised);
+      }
+    }
+  }
+
+  [data-slot][data-variant='danger-soft'] {
+    border-color: transparent;
+    background: color-mix(in srgb, var(--m-critical) 14%, var(--m-surface));
+    color: var(--m-critical);
+
+    @media (hover: hover) {
+      &:hover:not([data-disabled]) {
+        background: color-mix(in srgb, var(--m-critical) 22%, var(--m-surface));
+      }
+    }
+  }
+
+  :is([data-slot='input'], [data-slot='textarea'], [data-slot='autocomplete-input']):focus-visible {
+    outline: var(--focus-width, 2px) solid var(--focus, var(--m-accent));
+    outline-offset: -1px;
+    border-color: var(--focus, var(--m-accent));
+  }
+
   /* A least height, as the default size's is: a caller that sets a compact button in a line of text says
      `min-height: 0` and has a word, where a fixed height made the line a control tall. */
+  [data-slot][data-size='xs']:is([data-slot='button'], [data-slot$='-trigger']) {
+    height: auto;
+    min-height: calc(var(--ui-spacing) * 5.5);
+    padding-inline: calc(var(--ui-spacing) * 2);
+    font-size: var(--m-size-xs);
+  }
+
   [data-slot][data-size='sm']:is([data-slot='button'], [data-slot$='-trigger']) {
     height: auto;
-    min-height: calc(var(--ui-spacing) * 6.5);
+    min-height: var(--control-h-sm);
     padding-inline: calc(var(--ui-spacing) * 2.25);
-    font-size: calc(var(--ui-font-size) - 0.0625rem);
+    font-size: var(--text-sm);
   }
 
   [data-slot='button'][data-size='lg'] {
     height: calc(var(--ui-spacing) * 10);
     padding-inline: calc(var(--ui-spacing) * 4.5);
-    font-size: calc(var(--ui-font-size) + 0.0625rem);
+    font-size: var(--text-md);
+  }
+
+  [data-slot='button'][data-icon-only] {
+    width: var(--control-h);
+    padding-inline: 0;
+
+    &[data-size='xs'] {
+      width: calc(var(--ui-spacing) * 5.5);
+    }
+
+    &[data-size='sm'] {
+      width: var(--control-h-sm);
+    }
+
+    &[data-size='lg'] {
+      width: calc(var(--ui-spacing) * 10);
+    }
   }
 
   /* The label keeps its width while the button waits, so nothing beside it moves. */
-  [data-slot='button'][data-pending] {
+  [data-slot='button']:is([data-pending], [data-busy]) {
     cursor: progress;
     opacity: 0.72;
   }
@@ -157,7 +232,7 @@
 
   [data-slot='avatar'] {
     border-radius: 999px;
-    background: color-mix(in oklab, var(--m-accent) 14%, var(--m-surface));
+    background: color-mix(in srgb, var(--m-accent) 14%, var(--m-surface));
     color: var(--m-accent-ink);
     font-weight: var(--m-weight-bold);
 
@@ -198,7 +273,7 @@
   }
 
   :is([data-slot='dialog-title'], [data-slot='alert-dialog-title'], [data-slot='drawer-title']) {
-    font-size: 1.0625rem;
+    font-size: var(--text-lg);
     font-weight: var(--m-weight-heavy);
     letter-spacing: -0.012em;
   }
@@ -222,7 +297,7 @@
 
   /* A button that is one of a few ways to see the same thing says which is on by its ground, and by its state. */
   [data-slot='button'][aria-pressed='true']:not([data-variant]) {
-    border-color: color-mix(in oklab, var(--m-accent) 45%, var(--m-surface));
+    border-color: color-mix(in srgb, var(--m-accent) 45%, var(--m-surface));
     background: var(--m-accent-soft);
     color: var(--m-accent-ink);
   }
@@ -297,9 +372,11 @@
       color: var(--m-ink-muted);
       cursor: pointer;
 
-      &:hover {
+      @media (hover: hover) {
+        &:hover {
         background: var(--m-raised);
         color: var(--m-ink);
+      }
       }
     }
   }
@@ -325,7 +402,8 @@
     display: inline-flex;
     align-items: center;
     gap: var(--m-space-2h);
-    height: calc(var(--m-unit) * 9.5);
+    height: auto;
+    min-height: var(--control-h);
     padding: 0;
     border: 0;
     border-radius: 0;
@@ -336,14 +414,21 @@
     font-weight: var(--m-weight-medium);
     cursor: pointer;
 
-    &:hover {
-      color: var(--m-ink);
+    @media (hover: hover) {
+      &:hover {
+        color: var(--m-ink);
+      }
     }
 
     &[data-selected] {
       background: none;
       box-shadow: none;
       color: var(--m-ink);
+      font-weight: var(--m-weight-bold);
+
+      &:not(:has(~ [style])) {
+        box-shadow: inset 0 -2px 0;
+      }
     }
   }
 
@@ -372,16 +457,6 @@
     color: var(--m-warning);
   }
 
-  @keyframes m-wait {
-    from {
-      background-position: 120% 0;
-    }
-
-    to {
-      background-position: -80% 0;
-    }
-  }
-
   /* A button whose press is still running keeps its width and says so with a turning ring in place of a dimming:
      the reader pressed it, and it is working. */
   [data-slot='button'][data-pending] {
@@ -406,13 +481,14 @@
     }
 
     &:is([data-variant='solid'], [data-variant='destructive'])::after {
-      border-color: color-mix(in oklab, var(--m-surface) 80%, transparent);
+      border-color: color-mix(in srgb, var(--m-surface) 80%, transparent);
       border-block-start-color: transparent;
     }
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    [data-slot='button'][data-pending]::after {
+    [data-slot='button'][data-pending]:not([data-nx-motion='reduced'], [data-nx-motion='reduced'] *)::after {
+      /* motion-ok: continuous spinner loop while a button is pending */
       animation: m-turn 0.7s linear infinite;
     }
   }

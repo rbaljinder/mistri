@@ -355,7 +355,8 @@
   [data-slot='spans-span']:focus-visible,
   [data-slot='days-day']:focus-visible,
   [data-slot='pick-option']:focus-visible,
-  [data-slot='turns-name']:focus-visible {
+  [data-slot='turns-name']:focus-visible,
+  [data-slot='widths-handle']:focus-visible {
     outline: 2px solid var(--ui-ring-border);
     outline-offset: 1px;
   }

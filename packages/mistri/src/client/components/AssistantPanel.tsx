@@ -331,7 +331,7 @@ function RecordCard({ block, onFollow }: { block: Extract<AssistantBlock, { kind
           {editable && pageBridge.openPeek && (
             <Button
               className="page-action"
-              aria-label={say('editRecordLabel', { label: block.title })}
+              ariaLabel={say('editRecordLabel', { label: block.title })}
               onClick={() => pageBridge.openPeek!(block.table, { ...block.key }, block.title, 'modal')}
             >
               {say('editRecord')}
@@ -550,7 +550,7 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
             </label>
           )}
           <div className="assistant-proposal-actions">
-            <Button intent="primary" onClick={confirm} disabled={busy || (reasonColumn !== undefined && !reason.trim())}>
+            <Button variant="primary" onClick={confirm} disabled={busy || (reasonColumn !== undefined && !reason.trim())}>
               {proposal.kind === 'set' ? say('confirm') : say('review')}
             </Button>
             <Button onClick={() => (proposal.review ? void declineReview() : settled({ status: 'declined' }))} disabled={busy}>
@@ -1128,7 +1128,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
           {/* The room's conversations on a phone, where the rail is a sheet: the head's first control, as a drawer's is. */}
           {room && (
             <Button
-              size="compact"
+              size="sm"
               className="assistant-rail-toggle"
               aria-pressed={listing}
               title={say('conversations')}
@@ -1366,7 +1366,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
               {busy ? (
                 <Button onClick={() => stop.current?.abort()}>{say('stop')}</Button>
               ) : (
-                <Button intent={canSend ? 'primary' : 'secondary'} onClick={send} disabled={!canSend}>
+                <Button variant={canSend ? 'primary' : 'secondary'} onClick={send} disabled={!canSend}>
                   {say('send')}
                 </Button>
               )}

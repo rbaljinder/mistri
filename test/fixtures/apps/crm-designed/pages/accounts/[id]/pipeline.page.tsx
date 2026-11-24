@@ -5,7 +5,7 @@
  * is on comes from page.useRecordKey, typed by the account's key.
  */
 import type { ReactNode } from 'react';
-import { Breakdown, definePage, Empty, Grid, List, Metric, Panel, Row, Scope, useFormat } from '@mistriwork/mistri/page';
+import { Breakdown, definePage, EmptyState, Metric, PageGrid, Panel, RecordList, Row, Scope, useFormat } from '@mistriwork/mistri/page';
 
 const page = definePage({
   label: 'Pipeline',
@@ -30,19 +30,19 @@ function Pipeline(): ReactNode {
   const account = page.useRecordKey('account');
   return (
     <Scope from="opportunity" where={{ account_id: account.id }}>
-      <Grid>
+      <PageGrid>
         <Metric title="Open pipeline" where={OPEN} measure="sum amount" format="money" width="third" />
         <Metric title="Open deals" where={OPEN} measure="count" width="third" />
         <Metric title="Won" where={{ stage: 'closed_won' }} measure="sum amount" format="money" width="third" />
         <Breakdown title="Open by stage" where={OPEN} by="stage" measure="sum amount" format="money" width="half" />
         <Panel title="Closing next" width="half">
-          <List
+          <RecordList
             where={OPEN}
             show={['name', 'stage', 'amount', 'close_date']}
             sort="close_date"
             limit={8}
-            label="Open deals by close date"
-            empty={<Empty title="No open deals" description="Every deal with this account is won or lost." />}
+            ariaLabel="Open deals by close date"
+            empty={<EmptyState title="No open deals" description="Every deal with this account is won or lost." />}
           >
             {(deal) => (
               <Row align="center">
@@ -54,9 +54,9 @@ function Pipeline(): ReactNode {
                 </span>
               </Row>
             )}
-          </List>
+          </RecordList>
         </Panel>
-      </Grid>
+      </PageGrid>
     </Scope>
   );
 }

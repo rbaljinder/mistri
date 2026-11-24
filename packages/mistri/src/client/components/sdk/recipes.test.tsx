@@ -9,7 +9,7 @@ import { describe, expect, test, vi } from 'vitest';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { useState, type ReactNode } from 'react';
 import { fixtures, renderPage } from './testing.js';
-import { Button, Card, Cluster, definePage, Heading, Row, Stack, Table, Tone, useFormat, Value } from './page.js';
+import { Button, Card, Cluster, definePage, Heading, Row, Stack, Table, StatusDot, useFormat, Value } from './page.js';
 
 type Fields = Readonly<Record<string, unknown>>;
 
@@ -37,7 +37,7 @@ export function Progress({ steps, current }: { steps: readonly { label: string; 
       {steps.map((step, index) => (
         <li key={step.label} aria-current={index === current ? 'step' : undefined}>
           <Row align="baseline">
-            <Tone tone={index < current ? 'good' : index === current ? 'info' : 'neutral'}>{step.label}</Tone>
+            <StatusDot tone={index < current ? 'good' : index === current ? 'info' : 'neutral'}>{step.label}</StatusDot>
             {step.at && <span>{format.dateTime(step.at)}</span>}
           </Row>
         </li>
@@ -63,8 +63,8 @@ export function PickCards({
           <Stack gap="tight">
             <div>{option.detail}</div>
             <Button
-              size="compact"
-              intent={option.id === value ? 'primary' : 'secondary'}
+              size="sm"
+              variant={option.id === value ? 'primary' : 'secondary'}
               aria-pressed={option.id === value}
               onClick={() => onChange(option.id)}
             >
@@ -114,10 +114,10 @@ export function RevealCopy({ label, secret }: { label: string; secret: string })
   return (
     <Row align="center">
       <code aria-label={label}>{shown ? secret : '••••••••'}</code>
-      <Button size="compact" intent="quiet" aria-pressed={shown} onClick={() => setShown(!shown)}>
+      <Button size="sm" variant="ghost" aria-pressed={shown} onClick={() => setShown(!shown)}>
         {shown ? 'Hide' : 'Show'}
       </Button>
-      <Button size="compact" intent="quiet" onClick={() => void navigator.clipboard.writeText(secret).then(() => setCopied(true))}>
+      <Button size="sm" variant="ghost" onClick={() => void navigator.clipboard.writeText(secret).then(() => setCopied(true))}>
         Copy
       </Button>
       <span role="status">{copied ? 'Copied' : ''}</span>
@@ -130,7 +130,7 @@ export function Sheet({ title, children }: { title: string; children: ReactNode 
   return (
     <article className="c-sheet" aria-label={title}>
       <Row align="center" className="c-sheet-actions">
-        <Button size="compact" onClick={() => window.print()}>
+        <Button size="sm" onClick={() => window.print()}>
           Print
         </Button>
       </Row>

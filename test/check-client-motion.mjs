@@ -18,8 +18,8 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { relative } from 'node:path';
 import { treeFiles } from '../scripts/workspace.mjs';
 
-const files = [...treeFiles('src/client'), ...treeFiles('src', { recursive: false }).filter(({ pkg }) => pkg.dir === 'packages/ui')].filter(
-  ({ rel }) => rel.endsWith('.css'),
+const files = [...treeFiles('src/client'), ...treeFiles('src').filter(({ pkg }) => pkg.dir === 'packages/ui')].filter(
+  ({ rel }) => rel.endsWith('.css') && rel !== 'styles/ui-sdk.css' && rel !== 'styles/ui-sdk-surfaces.css',
 );
 
 const MOTION_PROP = /^(?:transition|transition-duration|transition-delay|animation|animation-duration)$/;

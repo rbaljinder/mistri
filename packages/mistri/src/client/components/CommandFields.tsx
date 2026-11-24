@@ -748,7 +748,7 @@ export function CommandFieldControl({
             : []),
           ...field.options.map((option, index) => ({ value: String(index), label: option.label })),
         ]}
-        onChange={(next) => {
+        onValueChange={(next) => {
           if (next !== '') onChange(field.options[Number(next)].value);
         }}
       />
@@ -758,14 +758,14 @@ export function CommandFieldControl({
     return (
       <DateField
         {...common}
-        aria-label={`${field.label}${field.required ? ' (required)' : ''}`}
+        ariaLabel={`${field.label}${field.required ? ' (required)' : ''}`}
         min={field.min}
         max={field.max}
         locale={formatLocale()}
         timezone={formatTimezone()}
         now={appNow()}
         value={String(value ?? '')}
-        onChange={onChange}
+        onValueChange={onChange}
       />
     );
   }
@@ -773,7 +773,7 @@ export function CommandFieldControl({
     return (
       <DateTimeInput
         {...common}
-        aria-label={`${field.label}${field.required ? ' (required)' : ''}`}
+        ariaLabel={`${field.label}${field.required ? ' (required)' : ''}`}
         min={field.min}
         max={field.max}
         value={typeof value === 'string' ? value : ''}
@@ -1264,10 +1264,10 @@ function RepeatRows({
               {say('rowLabel')} {index + 1}
             </span>
             <Button
-              intent="secondary"
-              size="compact"
+              variant="secondary"
+              size="sm"
               disabled={shared.disabled || rows.length <= min}
-              aria-label={say('removeRow', { index: index + 1, label: field.label })}
+              ariaLabel={say('removeRow', { index: index + 1, label: field.label })}
               onClick={() => {
                 keys.current.splice(index, 1);
                 // The row's held files leave with it: their ids are no longer in the input, and their previews are let go.
@@ -1297,7 +1297,7 @@ function RepeatRows({
       ))}
       <div className="command-repeat-actions">
         <Button
-          intent="secondary"
+          variant="secondary"
           disabled={shared.disabled || rows.length >= max}
           aria-label={say('addRowTo', { label: field.label })}
           onClick={() => onChange([...rows, blankCommandValues(field.fields)], path)}

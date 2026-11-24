@@ -48,11 +48,11 @@ const APP = {
   nav: ['tickets', 'contacts'],
 };
 
-const PAGE = `import { definePage, Empty } from '@mistriwork/mistri/page';
+const PAGE = `import { definePage, EmptyState } from '@mistriwork/mistri/page';
 export default definePage({
   label: 'Board',
   reads: ['ticket', 'crm.contacts'],
-  component: () => <Empty title="Board" />,
+  component: () => <EmptyState title="Board" />,
 });
 `;
 

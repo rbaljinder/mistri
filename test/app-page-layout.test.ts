@@ -99,7 +99,7 @@ test('page-layout: a mistri.json page, a document and a free-form page are told 
   mkdirSync(join(dir, 'pages'));
   writeFileSync(
     join(dir, 'pages', 'board.page.tsx'),
-    "import { definePage, Empty } from '@mistriwork/mistri/page';\nexport default definePage({ label: 'Board', reads: ['unit'], layout: 'article', component: () => <Empty title=\"x\" /> });\n",
+    "import { definePage, EmptyState } from '@mistriwork/mistri/page';\nexport default definePage({ label: 'Board', reads: ['unit'], layout: 'article', component: () => <EmptyState title=\"x\" /> });\n",
   );
   await assert.rejects(
     readPageFiles(dir, await pageFiles(dir)),

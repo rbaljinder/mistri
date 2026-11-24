@@ -101,6 +101,22 @@ test('an install of the kit names its client modules only where the host list do
   );
 });
 
+test('ui exports no ./internal/* subpaths and strips workspace-only surface barrels on publish so @mistriwork/mistri/* is the one path', () => {
+  const ui = read('packages/ui/package.json');
+  assert.deepEqual(
+    Object.keys(ui.exports).filter((subpath) => subpath.startsWith('./internal/')),
+    [],
+  );
+  const shipped = Object.keys(published(ui).exports);
+  for (const internalOnly of ['./charts.js', './primitives.js', './views.js', './styles/surfaces.css', './styles/ui-sdk-surfaces.css'])
+    assert.equal(shipped.includes(internalOnly), false, `${internalOnly} must not be published on @mistriwork/ui`);
+  assert.deepEqual(
+    shipped.filter((subpath) => subpath.startsWith('./styles/surfaces/')),
+    [],
+    'the per-entry surface bundles are workspace-only',
+  );
+});
+
 test('the App framework carries the release candidates and a link to the rest, not the whole changelog', () => {
   const whole = readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
   const carried = rcChangelog(whole);

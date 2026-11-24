@@ -1,8 +1,10 @@
-/* @mistriwork/ui's stylesheet, for a page drawn with the primitives alone: the tokens, what the controls wear, and
-   the answers to the reader's own settings. All of it stands in the `mistri-ui` layer, so any rule of the page's own,
-   in a later layer or in none, wins over it. The kit's stylesheet takes tokens.css and controls.css into its base
-   layer instead (packages/kit/src/client/style.css says why). */
-@layer mistri-ui;
+/* @mistriwork/ui's unified stylesheet: tokens, UI SDK controls, behaviors, reader accessibility preferences, and
+   composite views/surfaces. Everything stands inside cascade layers (`mistri-ui-sdk-surfaces`, `mistri-ui` and
+   `mistri-ui-surfaces`), so any rule of the host page's own, in a later layer or unlayered, wins over it. */
+@layer mistri-ui-sdk-surfaces, mistri-ui, mistri-ui-surfaces;
+@import './styles/ui-sdk-surfaces.css' layer(mistri-ui-sdk-surfaces);
 @import './tokens.css' layer(mistri-ui);
 @import './controls.css' layer(mistri-ui);
+@import './behaviors.css' layer(mistri-ui);
 @import './preferences.css' layer(mistri-ui);
+@import './styles/surfaces.css' layer(mistri-ui-surfaces);
