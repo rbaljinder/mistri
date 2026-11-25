@@ -6,10 +6,10 @@
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import { renamedAnyRows } from '@mistriwork/engine/shared/filter.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { ResourceReadError, readView, type ResourceReader } from '@mistriwork/engine/server/resourceReadOperations.js';
+import { ResourceReadError, readView, readViewCount, type ResourceReader } from '@mistriwork/engine/server/resourceReadOperations.js';
 import type { ViewDef } from '@mistriwork/engine/shared/view.js';
 import { chosenContext, type Chosen } from '../app/appChoices.js';
-import { zoneDay } from '../app/appStamps.js';
+import { zoneDay, zoned } from './currentZone.js';
 import { commandCatalog, createCommandDb, zonedCatalog, type ReadTable, type UntypedRow } from './commandDb.js';
 import { isBusinessCommandExecutionError } from './commandErrors.js';
 import { LOADER_RESULT_MOST, type PageLoader, type PageLoaderViewer } from './pageLoaders.js';
@@ -50,7 +50,7 @@ function readOnly(handle: ReadTable<UntypedRow>): ReadTable<UntypedRow> {
 export async function runPageLoader(options: {
   name: string;
   loader: PageLoader;
-  reader: Pick<Adapter, 'query' | 'count' | 'aggregate'> & Partial<Pick<Adapter, 'runView'>>;
+  reader: Pick<Adapter, 'query' | 'count' | 'aggregate'> & Partial<Pick<Adapter, 'runView' | 'countView'>>;
   schema: DatabaseSchema;
   /** A declared resource's table in `schema` (logicalResource for a qualified source). */
   logical?: (local: string) => string;
@@ -178,14 +178,24 @@ export async function runPageLoader(options: {
         }
       : {}),
   });
-  /* `.with(…)`: the rows of one table with the computed columns and rollups asked for, as a list of that table reads
-     them — one view through the reader the list reads through (resourceReadOperations.ts readView), so the SQL, the
-     grants and field projection, and the row policy are the list's own, in one statement. A name this reader's catalog
-     does not serve (an input its field grant hides) is refused as a list refuses it. */
+  /* `.with(…)` and rollup wheres: the rows (or count) of one non-elevated table with the computed columns and rollups
+     the reader is served, as a list of that table reads them — one view through the reader the list reads through
+     (resourceReadOperations.ts readView / readViewCount), so the SQL, the grants and field projection, and the row
+     policy are the list's own, in one statement. */
+  const viewFilterOf = (filter: Parameters<NonNullable<Parameters<typeof createCommandDb>[0]['readDerived']>>[0]['filter']) =>
+    filter.groups.length
+      ? { filter: { groups: filter.groups.map((group) => group.map(({ column, ...rest }) => ({ ...rest, path: column }))) } }
+      : {};
   const readDerived: NonNullable<Parameters<typeof createCommandDb>[0]['readDerived']> = async (request) => {
     if (!open) throw revoked();
+    if (lifted.has(request.table))
+      throw new PageLoaderRefused(
+        403,
+        'loader_refused',
+        `The loader "${options.name}" elevates "${request.table}", which reads its own stored columns only.`,
+      );
     const base = idOf(request.table)!;
-    const meta = tableNamed(schema, logical(request.table))!;
+    const meta = tableNamed(options.schema, logical(request.table))!;
     const served = (each: string) => Object.hasOwn(meta.rollups ?? {}, each) || Object.hasOwn(meta.computed ?? {}, each);
     const stray = request.names.find((each) => !served(each) || meta.columns.some((column) => column.name === each));
     if (stray !== undefined) {
@@ -200,14 +210,12 @@ export async function runPageLoader(options: {
       name: options.name,
       base,
       columns: [...meta.columns.map((column) => column.name), ...request.names].map((path) => ({ path })),
-      ...(request.filter.groups.length
-        ? { filter: { groups: request.filter.groups.map((group) => group.map(({ column, ...rest }) => ({ ...rest, path: column }))) } }
-        : {}),
+      ...viewFilterOf(request.filter),
       ...(request.orderBy.length ? { orderBy: request.orderBy.map((order) => ({ path: order.column, direction: order.direction })) } : {}),
       limit: request.limit,
     };
     try {
-      const read = await readView(reader as unknown as ResourceReader, schema, view, { limit: request.limit }, 'none');
+      const read = await readView(reader as unknown as ResourceReader, options.schema, view, { limit: request.limit }, 'none');
       if (!open) throw revoked();
       return { rows: read.result.rows as never };
     } catch (error) {
@@ -216,13 +224,44 @@ export async function runPageLoader(options: {
       throw error;
     }
   };
+  const countDerived: NonNullable<Parameters<typeof createCommandDb>[0]['countDerived']> = async (request) => {
+    if (!open) throw revoked();
+    if (lifted.has(request.table))
+      throw new PageLoaderRefused(
+        403,
+        'loader_refused',
+        `The loader "${options.name}" elevates "${request.table}", which counts its own stored columns only.`,
+      );
+    const base = idOf(request.table)!;
+    const meta = tableNamed(options.schema, logical(request.table))!;
+    const view: ViewDef = {
+      id: `loader:${options.name}`,
+      name: options.name,
+      base,
+      columns: [{ path: meta.columns[0]!.name }],
+      ...viewFilterOf(request.filter),
+    };
+    try {
+      const counted = await readViewCount(reader as unknown as ResourceReader, options.schema, view, undefined, { exact: true });
+      if (!open) throw revoked();
+      return counted.count;
+    } catch (error) {
+      if (error instanceof ResourceReadError && error.status !== 501)
+        throw new PageLoaderRefused(403, 'loader_refused', `The loader "${options.name}": ${error.message}`);
+      throw error;
+    }
+  };
+  const hasDerived = Boolean(loader.derived && Object.keys(loader.derived).length);
   const handles = createCommandDb({
     tx,
     catalog,
     read: loader.reads,
     write: [],
     now: () => options.now,
-    ...(loader.derived && Object.keys(loader.derived).length ? { derived: loader.derived, readDerived } : {}),
+    ...(lifted.size ? { elevated: lifted } : {}),
+    ...(hasDerived ? { derived: loader.derived } : {}),
+    ...(hasDerived || typeof reader.runView === 'function' ? { readDerived } : {}),
+    ...(typeof reader.countView === 'function' ? { countDerived } : {}),
     ...(options.chosen ? { chosen: options.chosen } : {}),
   });
   const db = Object.freeze(Object.fromEntries(Object.entries(handles).map(([name, handle]) => [name, readOnly(handle)])));
@@ -237,18 +276,20 @@ export async function runPageLoader(options: {
   let result: unknown;
   try {
     result = await Promise.race([
-      Promise.resolve().then(() =>
-        loader.load(
-          Object.freeze({
-            db: db as never,
-            params: Object.freeze({ ...options.params }),
-            viewer: options.viewer,
-            now: () => options.now,
-            today: () => zoneDay(options.now, options.timezone),
-            timezone: options.timezone ?? 'UTC',
-            chosen: chosenContext(options.chosen),
-            signal: controller.signal,
-          }),
+      Promise.resolve().then(
+        zoned(options.timezone, () =>
+          loader.load(
+            Object.freeze({
+              db: db as never,
+              params: Object.freeze({ ...options.params }),
+              viewer: options.viewer,
+              now: () => options.now,
+              today: () => zoneDay(options.now, options.timezone),
+              timezone: options.timezone ?? 'UTC',
+              chosen: chosenContext(options.chosen),
+              signal: controller.signal,
+            }),
+          ),
         ),
       ),
       timeUp,

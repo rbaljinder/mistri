@@ -15,7 +15,8 @@ export const views = {
   triage: listView('Triage', 'triage', { show: ['name', 'phone', 'note'], realm: 'platform' }),
   'post-notice': commandForm('Post a notice', 'postNotice', { realm: 'platform' }),
   // A visitor's: the request form a clinic publishes with its intake address.
-  'request-visit': commandForm('Request a visit', 'requestVisit', { public: true }),
+  // The note is the intake page's to send: the form asks the two a visitor types.
+  'request-visit': commandForm('Request a visit', 'requestVisit', { public: true, asks: ['name', 'phone'] }),
 };
 
 export const nav = [

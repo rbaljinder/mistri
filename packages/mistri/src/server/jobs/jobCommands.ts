@@ -13,7 +13,7 @@
  * so an attempt whose outcome was lost lands on the receipt that exists.
  */
 import { createHash } from 'node:crypto';
-import { appTime } from '@mistriwork/engine/server/http/clock.js';
+import { appClockOffset } from '@mistriwork/engine/server/http/clock.js';
 import { isProxy } from 'node:util/types';
 import { asBackgroundWork } from '@mistriwork/engine/adapters/writeLanes.js';
 import { AppAccessDenied } from '../app/appAccess.js';
@@ -104,7 +104,7 @@ function plan(job: CapturedJob, payloadJson: string): { runAt?: number; key: Com
   if (Object.keys(value).some((key) => !['runAt', 'key', 'input'].includes(key))) throw new Error();
   const runAt = dueAt(value.runAt);
   return {
-    ...(runAt === undefined ? {} : { runAt }),
+    ...(runAt === undefined ? {} : { runAt: Math.max(0, runAt - appClockOffset()) }),
     key: commandKey(value.key),
     input: value.input === undefined ? {} : JSON.parse(canonicalCommandJson(value.input)),
   };
@@ -194,8 +194,10 @@ export function jobHandlers(
     extra?: Readonly<Record<string, AnyJobDefinition>>;
     /** The store the runner claims from: a timer whose command is refused for good enqueues its `failed` job here. */
     store?: JobStore;
+    now?: () => number;
   }>,
 ): JobRegistry {
+  const realNow = options.now ?? Date.now;
   const handlers: Record<string, AnyJobDefinition> = {};
   /* The App's loader noted these declarations before the server listened (makerWrites.ts); noting them again is a
      no-op there, and covers a host opened without that loader. */
@@ -224,7 +226,7 @@ export function jobHandlers(
           const execution = {
             signal: context.signal,
             requestId: `job:${context.jobId}:${context.attempt}`,
-            now: () => appTime(context.now()),
+            now: () => new Date(context.now()),
             ...(job.timer
               ? {
                   timer: {
@@ -312,7 +314,7 @@ export function jobHandlers(
                     causationId: `${eventId}-failed`.slice(0, 128),
                   },
                 },
-                context.now(),
+                realNow(),
               );
               return Object.freeze({ refused: said.code, failed: records.id });
             }

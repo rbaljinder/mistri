@@ -71,7 +71,7 @@ export async function indexStep(
       return { note: 'skipped, PostgreSQL only: SQLite reads a table from a file, with no round trip to save.' };
     const indexes = await readPgIndexes(adapter);
     if (!indexes) return { note: 'skipped, the database would not list its indexes to this role.' };
-    const { schema } = await loadAppRuntimeResources(registry, app, connection.id);
+    const { schema } = await loadAppRuntimeResources(registry, app, connection.id, undefined, { deferApiCheck: true });
     /* A tenant App's ownership columns live in its policy module, which a request reads: with --policy, they are judged too. */
     let owners: Record<string, string> | undefined;
     if (app.auth?.rows === 'tenant' && policyFile) {

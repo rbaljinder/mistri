@@ -163,7 +163,9 @@ export async function pageQueryFailures(
     if (message !== undefined && !failures.some((each) => each.at === location!.at && each.message === message))
       failures.push({ ...location, message });
   };
-  const resources = await loadAppRuntimeResources(planningRegistry(registry, explainOn), app, connection);
+  const resources = await loadAppRuntimeResources(planningRegistry(registry, explainOn), app, connection, undefined, {
+    deferApiCheck: true,
+  });
   const schema = withRollups(app, resources.schema);
   const reader = resources.adapter;
   let sections = 0;

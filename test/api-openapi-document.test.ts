@@ -34,7 +34,7 @@ const schema: DatabaseSchema = {
   ],
 };
 const evidence = { connectionFor: () => 'private', writableConnection: () => true, transactionalConnection: () => true };
-function setup(options: { commands?: boolean; noteType?: 'text' | 'number' } = {}) {
+function setup(options: { commands?: boolean; noteType?: 'text' | 'number'; many?: boolean } = {}) {
   const commands = options.commands ?? true;
   const input = { note: { type: options.noteType ?? 'text', optional: true } } as const;
   const app = parseAppConfig(
@@ -54,7 +54,7 @@ function setup(options: { commands?: boolean; noteType?: 'text' | 'number' } = {
       version: 1,
       roles: ['editor'],
       resources: { item: { fields: ['id', 'revision'], sorts: [], filters: [] } },
-      commands: commands ? [{ id: 'edit', version: 1, target: 'item', input }] : [],
+      commands: commands ? [{ id: 'edit', version: 1, target: 'item', input, ...(options.many ? { targets: 'many' } : {}) }] : [],
     },
     ['editor'],
   )!;
@@ -63,6 +63,7 @@ function setup(options: { commands?: boolean; noteType?: 'text' | 'number' } = {
       source: 'business',
       target: 'item',
       input,
+      ...(options.many ? { targets: 'many' as const } : {}),
       output: shape({ ok: bool() }),
       handle() {
         return { ok: true };
@@ -133,4 +134,20 @@ test('comparison: unchanged is clean, adding commands is additive, changing or r
   const removed = compareApiOpenApiDocuments(f.composed(), setup({ commands: false }).composed());
   assert.ok(removed.findings.some((finding) => finding.change === 'operation-removed'));
   assert.equal(removed.requiresVersionBump, true);
+});
+
+test('a document that nests past the canonical depth names the limit, the path and what to change', () => {
+  /* A many command's body reached 17 levels and the walk refused it as a command request is refused, "The command
+     request is invalid.", which told the App's author nothing. */
+  assert.throws(
+    () => setup({ many: true }).composed(),
+    (error: Error) => {
+      assert.doesNotMatch(error.message, /command request is invalid/);
+      assert.match(error.message, /deeper than the 16 levels/);
+      assert.match(error.message, /at paths › \/item\/commands\/edit\/v1 › post › requestBody .* › targets › items/);
+      assert.match(error.message, /\[api-document-depth\]/);
+      assert.match(error.message, /Command "edit" takes many records.*take `targets: 'many'` off its entry in `api\.commands`/);
+      return true;
+    },
+  );
 });

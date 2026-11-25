@@ -139,6 +139,28 @@ actions it offers *now* — fixed actions whose `when` the record meets, the
 commands availability allows (`/api/commands/availability`) — so "log a call"
 on a lead starts from that lead's verbs.
 
+A page hands the panel the record the person is on (`useAssistant().open({
+about: { table, id }, text })`, `components/assistantDoor.ts`): the panel asks
+`/api/assistant/about`, which reads the record through the person's own
+`/api/run` (grants, field projection, row policy, the lease's tenant) and names
+it by its `recordLabel`, and the turn sends it as its `context` as a record
+page's would. A record the person could not open is refused there (404, the same
+answer for a row outside their rows, a table they are not granted and a record
+that is not there) and again by the turn, which reads it afresh: a turn whose
+context does not read is refused before the model is called, and a conversation
+it began is not kept. It needs `'record'` in `placement`; without it both routes
+answer 400, and `mistri check` warns (`component-assistant`).
+
+A resource's rollups and computed columns are columns to the model, as far as
+the person is served them (a field grant that hides one leaves it out of their
+`/api/schema`, so the assistant never names it): `describe` lists them as
+`derived`, a plain read (no `show`) and a record block read them beside the
+row's own columns by key, and a condition compares them as a list's filter does.
+Each result says what its figures are in (`formats`: money and its currency, kept
+in minor units or not, a percent, seconds, a unit), from the served display
+rules; a measure's column (`sum(fee)`) is in what its column is in, so a sum of
+cents is said as cents.
+
 The stable prefix (tools, then system) carries `cache_control`; what changes —
 the moment, the record in view — rides in the person's message, never the
 prefix. The moment is one line (`Now: Saturday 2026-02-28, 20:30

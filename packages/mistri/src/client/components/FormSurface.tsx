@@ -117,6 +117,8 @@ export interface FormPresentation {
   prefillable?: string[];
   /** The inputs the link supplies: read from the address like `prefillable`, never drawn, sent and judged by the command. */
   given?: string[];
+  /** The inputs it asks, when it names them (`asks`): the rest are not drawn, and are sent with their default. */
+  asks?: string[];
   /** The inputs drawn by the App's own input components, by the form (`inputs`); a field may name its own (`input`). */
   inputs?: Readonly<Record<string, { id: string }>>;
   /** A public form: where each input component it draws is served (http/formRoutes.ts), loaded as it is drawn. */
@@ -419,8 +421,8 @@ export function FormSurface({
   /* What the form asks: every input but those the link supplies, which are sent as they came and judged by the command
      alone. A link that left one out is refused on the form's own line, as no field on screen holds it. */
   const drawn = useMemo(
-    () => (form.given?.length ? fields.filter((field) => !form.given!.includes(field.name)) : fields),
-    [fields, form.given],
+    () => fields.filter((field) => !form.given?.includes(field.name) && (!form.asks || form.asks.includes(field.name))),
+    [fields, form.given, form.asks],
   );
   useEffect(() => draft?.keep(values), [values]);
   const [problems, setProblems] = useState<Record<string, string>>({});

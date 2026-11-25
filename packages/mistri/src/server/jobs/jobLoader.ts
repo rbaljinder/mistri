@@ -40,7 +40,7 @@ import {
   integrationNotifyProblems,
   integrationRoleProblems,
 } from '../integrations/integrationChecks.js';
-import { integrationEventCommands } from '../integrations/integrationDeclaration.js';
+import { integrationServiceCommands } from '../integrations/integrationDeclaration.js';
 import { serviceActor } from './jobAuthorization.js';
 import {
   capturedJobModule,
@@ -309,7 +309,7 @@ export function jobDeployment(
       sources.set(reference.id, commands[reference.id].source);
     }
   /* An integration's events run commands that write beside the stores, as mail's do. */
-  for (const { command: id } of integrationEventCommands(module.integrations))
+  for (const { command: id } of integrationServiceCommands(module.integrations))
     if (Object.hasOwn(commands, id)) sources.set(id, commands[id].source);
   /* A module of flows runners that wait for nothing, or of integrations no event maps, names no command of its own: its stores sit on the App's one source. */
   if (!sources.size && (module.integrations || [...module.workflows.values()].some((workflow) => workflow.flows))) {
@@ -462,9 +462,9 @@ export function jobGrantProblems(module: CapturedJobModule, app: AppDef): string
           `${person.map((role) => `"${role}"`).join(', ')} ${person.length === 1 ? 'is' : 'are'} not.`,
       );
   }
-  for (const { integration, event, runAs } of integrationEventCommands(module.integrations)) {
+  for (const { what, runAs } of integrationServiceCommands(module.integrations)) {
     const refusal = serviceRoleRefusal(app, module.principals.get(runAs)!);
-    if (refusal) problems.push(`principal "${runAs}" cannot run integrations.webhooks "${integration}" event "${event}": ${refusal}.`);
+    if (refusal) problems.push(`principal "${runAs}" cannot run ${what}: ${refusal}.`);
   }
   return problems;
 }
@@ -550,13 +550,11 @@ export async function prepareJobs(
   ];
   if (integrationProblem) refuse(integrationProblem);
   // An integration's webhook is an inbound endpoint: its principal reads its command's footprint, as a defineInbound's does.
-  for (const { integration, event, command, runAs } of integrationEventCommands(module.integrations)) {
+  for (const { what, command, runAs } of integrationServiceCommands(module.integrations)) {
     try {
       options.binding.authorize(command, serviceActor(app.id, runAs, module.principals.get(runAs)!));
     } catch {
-      refuse(
-        `principal "${runAs}" cannot run command "${command}" for integrations.webhooks "${integration}" event "${event}": its roles must read the command's whole footprint.`,
-      );
+      refuse(`principal "${runAs}" cannot run command "${command}" for ${what}: its roles must read the command's whole footprint.`);
     }
   }
   const lines = Object.freeze(describeJobs(module));

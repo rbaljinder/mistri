@@ -346,13 +346,18 @@ interface BulkCommands {
    * One record of a selection run on its own, as one click on that record runs the command (`bulk: 'each'`): prepared
    * for its revision, sent in its own transaction and answered alone. `uncertain` is an answer that did not arrive.
    */
-  runEach(action: AppCommandAction, key: Record<string, unknown>): Promise<{ kind: 'applied' | 'rejected' | 'uncertain'; message: string }>;
-  /** The command's form, which prepares, asks and sends once for the group. */
+  runEach(
+    action: AppCommandAction,
+    key: Record<string, unknown>,
+    input?: Readonly<Record<string, unknown>>,
+  ): Promise<{ kind: 'applied' | 'rejected' | 'uncertain'; message: string }>;
+  /** The command's form, which prepares, asks and sends once for the group (or hands its input to `runEach`). */
   Form: ComponentType<{
     action: AppCommandAction;
     owner: BulkCommandOwner;
     targets: Array<{ key: Record<string, unknown>; label: string }>;
     onDeselect: (keys: Array<Record<string, unknown>>) => void;
+    onSubmitEach?: (input: Record<string, unknown>) => void;
     noun: { one: string; many: string };
     label: string;
     onClose: (settled?: BulkCommandOperation) => void;

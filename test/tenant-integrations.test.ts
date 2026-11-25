@@ -71,7 +71,7 @@ const app = parseTestApp(
       roles: {
         staff: { realm: 'tenant', read: true, commands: ['chargeOrder', 'shipOrder'] },
         owner: { realm: 'tenant', read: true, commands: [] },
-        payments: { realm: 'tenant', read: true, service: true, commands: ['markPaid'] },
+        payments: { realm: 'tenant', read: true, service: true, commands: ['markPaid', 'recordText'] },
       },
     },
     views: { orders: { kind: 'list', from: 'orders' } },
@@ -88,7 +88,7 @@ const policy = defineAppTenantPolicy({
   resolveMembershipRows: () => ({ orders: true }),
   resolveRows: () => ({ orders: true }),
   resolvePlatformRows: () => ({ shop: true, orders: true }),
-  resultReferences: { chargeOrder: () => [], shipOrder: () => [], markPaid: () => [] },
+  resultReferences: { chargeOrder: () => [], shipOrder: () => [], markPaid: () => [], recordText: () => [] },
 });
 
 type Shipped = { orderId: string; phone: string; consent: boolean };
@@ -118,11 +118,29 @@ const commands = defineCommands({
     output: { parse: (value: unknown) => value as Shipped },
     effects: {
       notify: post<Shipped>('shop-hooks', (value) => ({ orderId: value.orderId })),
-      text: send<Shipped>('sms', (value) => ({ to: value.phone, text: `Order ${value.orderId} is on its way.`, consent: value.consent })),
+      text: send<Shipped>('sms', (value) => ({
+        to: value.phone,
+        text: `Order ${value.orderId} is on its way.`,
+        consent: value.consent,
+        reference: value.orderId,
+      })),
     },
     async handle({ db, record }) {
       await db.orders.update(record, { status: 'shipped', version: Number(record.version) + 1 });
       return { orderId: String(record.id), phone: String(record.phone), consent: Number(record.sms_consent) === 1 };
+    },
+  }),
+  // What became of an order's text (integrations.settled), kept on the order the text named.
+  recordText: defineCommand({
+    source: 'business',
+    target: 'orders',
+    targets: 'none',
+    input: { reference: { type: 'text' }, state: { type: 'text' }, reason: { type: 'text', optional: true } },
+    output,
+    async handle({ db }, input) {
+      const order = await db.orders.find({ id: String(input.reference) });
+      if (order) await db.orders.update(order, { text_state: `${input.state}${input.reason ? `:${input.reason}` : ''}` });
+      return {};
     },
   }),
   // The provider's "paid": run as the payments service, finding the order by its charge.
@@ -148,6 +166,7 @@ const jobs = defineJobs(
     integrations: {
       use: [fakepay()],
       webhooks: { fakepay: { runAs: 'payments', events: { paid: 'markPaid' } } },
+      settled: { runAs: 'payments', command: 'recordText' },
       editors: ['owner'],
     },
   },
@@ -157,7 +176,7 @@ const SCHEMA = `PRAGMA journal_mode=WAL; PRAGMA foreign_keys = ON;
   CREATE TABLE shop (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL);
   CREATE TABLE orders (id TEXT PRIMARY KEY NOT NULL, tenant_id TEXT NOT NULL REFERENCES shop(id), customer TEXT NOT NULL,
     phone TEXT NOT NULL, sms_consent INTEGER NOT NULL DEFAULT 0, amount INTEGER NOT NULL, status TEXT NOT NULL,
-    charge_id TEXT, version INTEGER NOT NULL DEFAULT 0);
+    charge_id TEXT, text_state TEXT, version INTEGER NOT NULL DEFAULT 0);
   INSERT INTO shop VALUES ('north', 'North Goods'), ('south', 'South Supply');
   INSERT INTO orders (id, tenant_id, customer, phone, sms_consent, amount, status) VALUES
     ('n1', 'north', 'ann', '+15550001', 1, 1200, 'open'), ('n2', 'north', 'ben', '+15550002', 0, 800, 'open'),
@@ -509,4 +528,10 @@ test("effects are delivered as their tenant: a member's command posts to the sho
       { tenant: 'north', recipient: '+15550002', state: 'suppressed', reason: 'no_consent' },
     ],
   );
+  /* Each text named its order, and the App was told, in the order's own tenant, what became of it: Ann's first was
+     sent and her second suppressed once she opted out; Ben's was never sent. */
+  assert.deepEqual(lab.rows("SELECT id, text_state FROM orders WHERE tenant_id = 'north' ORDER BY id"), [
+    { id: 'n1', text_state: 'suppressed:opted_out' },
+    { id: 'n2', text_state: 'suppressed:no_consent' },
+  ]);
 });

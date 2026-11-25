@@ -56,7 +56,6 @@ import { accessibleSchema } from '../app/appAccess.js';
 import { appSourceConnections, loadAppRuntimeResources } from '../app/appRuntimeResources.js';
 import { assertAppApiContext, readApiApp } from '../api/appApiValidation.js';
 import { apiExposesCommands } from '../../shared/appApi.js';
-import { checkApiReadCatalog } from '../api/apiReadCatalog.js';
 import { loadHttpAppPolicy } from '../policy/appPolicyHttp.js';
 import type { Options } from '@mistriwork/engine/server/cli/args.js';
 import type { CommandHost } from './commandHost.js';
@@ -273,10 +272,9 @@ export async function appOpenApi(
   const entry = loaded.app.sources
     ? appSourceConnections(registry, loaded.app).get(homeSourceOf(loaded.app)!)!
     : (source?.id ?? registry.active!);
-  const runtime = await loadAppRuntimeResources(registry, readApp, entry);
+  const runtime = await loadAppRuntimeResources(registry, readApp, entry, undefined, { deferApiCheck: true });
   const problems = appProblems(loaded, runtime.schema);
   if (problems.length) throw new Error(problems.join('\n'));
-  checkApiReadCatalog(readApp.api!, readApp, runtime.schema);
   /* A composite key is one path parameter, an object serialized the standard
      way (style simple, explode true: `id=7,part=a`); the document says so on
      the parameter, as the served one does. A generated client must be given
@@ -658,13 +656,17 @@ async function apiExportProblems(
   commands: BusinessCommandRegistry | undefined,
 ): Promise<string[]> {
   if (!app.app.api || isTenantApp(app.app)) return [];
+  const { apiEventProblems } = await import('../api/apiEventFeed.js');
+  const events = apiEventProblems(app.app, commands).map((problem) => `${app.path}: ${problem}`);
   const exposed = apiExposesCommands(app.app.api);
-  if (exposed && !commands) return [];
+  if (exposed && !commands) return events;
   try {
     await renderApiExport(registry, app.app, resources, 'decimal-string', exposed ? commands : undefined);
-    return [];
+    return events;
   } catch (error) {
-    return [`${app.path}: ${(error as Error).message}`];
+    // Every exposure's refusal of the run, each its own problem (api/apiRefusals.ts).
+    const { refusalsOf } = await import('../api/apiRefusals.js');
+    return [...events, ...(refusalsOf(error) ?? [(error as Error).message]).map((refusal) => `${app.path}: ${refusal}`)];
   }
 }
 
@@ -764,7 +766,9 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
     let lines: string[];
     let advice: string[] = [];
     try {
-      const resources = await loadAppRuntimeResources(registry, app.app, match?.id ?? registry.active!);
+      const resources = await loadAppRuntimeResources(registry, app.app, match?.id ?? registry.active!, undefined, {
+        deferApiCheck: true,
+      });
       const { schema } = resources;
       resolveAppAccess(app.app, schema, []);
       /* A signed-out visitor's reach is a fact of app.ts and the catalog too: a public field list that leaves out a

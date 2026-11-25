@@ -2310,6 +2310,13 @@ found not to hold.
   every answer is needed, so a star on each was noise. Elsewhere a theme may
   say `recipes.required: 'optional-word'` for the same. Pick one rule per
   form; a mix of both is noise. `aria-required` is said either way.
+- **A picked choice.** One of a yes-or-no pair, a row of words or a card
+  says it is picked by its edge and an accent tint, and in a pair or a row by
+  its words' weight too. Where a look's tint sits close to the field's fill a
+  theme says `recipes.choice: 'filled'`: the accent fill with its words in
+  the accent's own ink. No look wears it, so it is the brand sheet's
+  (`brandLook.css`), fetched only by a theme that picks it: no first
+  stylesheet carries it.
 - **A drawn checkbox.** The controls draw a checkbox in every theme: a box in
   the field fill and edge, its corner capped at 5px, the accent with a check
   when ticked. It keeps focus, disabled and forced-colors states. It was a

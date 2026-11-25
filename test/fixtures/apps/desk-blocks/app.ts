@@ -8,6 +8,7 @@
 import {
   action,
   calendar,
+  commandButton,
   component,
   custom,
   dashboard,
@@ -76,7 +77,7 @@ export default defineApp({
         label: 'Agent',
         read: true,
         write: ['visit', 'category'],
-        commands: ['reply', 'addNote', 'categorize'],
+        commands: ['reply', 'addNote', 'categorize', 'openDesk'],
         actions: { ticket: ['solve', 'reopen', 'hold'] },
       },
     },
@@ -105,9 +106,17 @@ export default defineApp({
     freezes: listView('Freezes', 'freeze', { show: ['name', 'starts_on', 'ends_on'] }),
     categories: listView('Categories', 'category', { presentation: tree('parent_id', 'name') }),
     schedule: listView('Schedule', 'visit', { presentation: calendar('starts_at', 'name', { span: 'week', end: 'ends_at' }) }),
-    desk: dashboard('Desk', [metric('Open tickets', 'ticket', { query: 'status != solved', over: 'opened_at' }), urgentNow], {
-      windows: ['last 7 days', 'last 30 days'],
-    }),
+    desk: dashboard(
+      'Desk',
+      [
+        metric('Open tickets', 'ticket', { query: 'status != solved', over: 'opened_at' }),
+        urgentNow,
+        commandButton('openDesk', { title: 'Opening', description: 'Start taking calls for the day.', label: 'Open the desk' }),
+      ],
+      {
+        windows: ['last 7 days', 'last 30 days'],
+      },
+    ),
   },
   pages: {
     ticket: page(

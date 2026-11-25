@@ -94,6 +94,7 @@ export function formPresentation(form: ServedForm): FormPresentation {
     // What an address (or `openForm(view, prefill)`) may start filled: without it a signed-in form starts blank whatever it is given.
     ...((form as { prefillable?: string[] }).prefillable ? { prefillable: (form as { prefillable?: string[] }).prefillable } : {}),
     ...((form as { given?: string[] }).given ? { given: (form as { given?: string[] }).given } : {}),
+    ...((form as { asks?: string[] }).asks ? { asks: (form as { asks?: string[] }).asks } : {}),
     ...((form as { inputs?: FormPresentation['inputs'] }).inputs
       ? { inputs: (form as { inputs?: FormPresentation['inputs'] }).inputs }
       : {}),

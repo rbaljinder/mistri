@@ -60,6 +60,7 @@ export { Columns, Icon, Loaded, Table, Tile, Value } from './kit.js';
 export {
   useAction,
   useAnalytics,
+  useAssistant,
   useBreakdown,
   useComposer,
   useCommand,

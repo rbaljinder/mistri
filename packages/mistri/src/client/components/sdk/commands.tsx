@@ -405,15 +405,19 @@ async function runCommand(
   key: Record<string, string | number>,
   input: Readonly<Record<string, unknown>> | undefined,
   options: UiCommandOptions,
+  parsedInput?: Readonly<Record<string, unknown>>,
 ): Promise<UiCommandOutcome> {
   const fields = action.command.input;
   const judging = readyToJudge(fields);
   if (judging) await judging;
   let values: Record<string, unknown>;
-  try {
-    values = commandInput(fields, prefilledCommandValues(fields, input ?? {}));
-  } catch {
-    return openForm(action, key, input, options);
+  if (parsedInput !== undefined) values = { ...parsedInput };
+  else {
+    try {
+      values = commandInput(fields, prefilledCommandValues(fields, input ?? {}));
+    } catch {
+      return openForm(action, key, input, options);
+    }
   }
   const owner = ownerFor(action, key);
   const before = commandOperations.get(owner);
@@ -908,8 +912,8 @@ export const bulkCommands = {
   useAvailability: useCommandAvailability,
   Form: CommandForm,
   /* `bulk: 'each'`: the one-record command, once for this record, quietly: the list says every answer together. */
-  async runEach(action: AppCommandAction, key: Record<string, unknown>) {
-    const outcome = await runCommand(action, key as Record<string, string | number>, {}, { quiet: true });
+  async runEach(action: AppCommandAction, key: Record<string, unknown>, input?: Readonly<Record<string, unknown>>) {
+    const outcome = await runCommand(action, key as Record<string, string | number>, input ?? {}, { quiet: true }, input);
     if (outcome.status === 'applied') return { kind: 'applied' as const, message: '' };
     if (outcome.status === 'unknown') return { kind: 'uncertain' as const, message: outcome.message };
     return {

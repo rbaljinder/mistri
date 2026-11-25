@@ -605,10 +605,10 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     const platformHost = raw.platformHost as ((host: string) => boolean) | undefined;
     if (raw.domains !== undefined && (typeof raw.domains !== 'object' || raw.domains === null)) return denyTenant();
     const domains = raw.domains as TenantDomainsService | undefined;
-    /* The tenant's read audit for its admins, where a resource audits its reads and the App names admins (the domains
-       editors, else the branding editors, as the Domains section judges): read through the deployment's fenced
-       reader, which takes the tenant as its own argument, with each reader named from the sign-in store. */
-    const readsEditors = domains?.editors ?? branding?.declaration.editors ?? [];
+    /* The tenant's read audit for its readers (`auth.tenancy.readAudit`, else the domains editors, else the branding
+       editors): read through the deployment's fenced reader, which takes the tenant as its own argument, with each
+       reader named from the sign-in store. */
+    const readsEditors = loaded.app.auth?.tenancy?.readAudit ?? domains?.editors ?? branding?.declaration.editors ?? [];
     const readsAudited = Object.entries(loaded.app.resources ?? {})
       .filter(([, resource]) => resource.audit?.reads === true)
       .map(([name]) => name);

@@ -44,6 +44,7 @@ See it in the sample (`examples/apps/tick/app.ts:42`).
 | `header` | `false` keeps it out of the record's action bar and menu; still granted, and run from a queue, a board or `useCommand` | `true` | Stable |
 | `command` | Run a [command](/docs/commands/) instead; it takes no `set` or `reason`. One that asks nothing runs on one click, or asks first with `confirm: true`; one with inputs asks them in its form | none | Stable |
 | `given` | A command action's inputs its page supplies, `given: ['step']` with `useCommand('checkStep').open(record, { step })`: its form does not draw them and sends what the page gave. A required one with no default needs `header: false` and no `bulk` (`[action-given]`) | none | Stable |
+| `asks` | The command inputs this action's form asks, when it does not ask every one: `asks: ['transcript']`. The rest are not drawn: a page sends them through the command (`useCommand('startNote').run(record, { transcript, template })`), or they take their default, or wait on their `when`. One the command requires with no default and no `when` is refused (`[command-asks]`) | every input | Stable |
 
 All keys: [the generated reference](/docs/dsl-resources/).
 

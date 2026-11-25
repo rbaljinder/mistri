@@ -11,6 +11,7 @@ import type { TenantOwnershipSnapshot } from '../tenant/tenantOwnership.js';
 import { tenantAuthoringSchema } from '../tenant/tenantVisibleFields.js';
 import { publicFormOf, scopedCommandCatalog } from './apiCommandCatalog.js';
 import { apiTokenRoles } from '../../shared/appApi.js';
+import { apiJudgment } from './apiRefusals.js';
 
 /** The operations a tenant token's scope is drawn from: reads, and commands
  * when the App exposes them. Only identity and eligibility — never grants. */
@@ -60,11 +61,14 @@ export function checkApiTenantCommandCatalog(app: AppDef, owned: TenantOwnership
   }
   const registry = defineCommands(declared),
     visible = tenantAuthoringSchema(owned);
-  for (const { command: ref } of api.commands) {
+  // Each exposed command judged on its own, and beside the shared catalog's, so one run says every refused one.
+  const judged = apiJudgment();
+  for (const { command: ref } of api.commands) judged.run(() => tenantCommand(ref));
+  function tenantCommand(ref: NonNullable<AppDef['api']>['commands'][number]['command']): void {
     const command = registry[ref.id],
       at = `api.commands.${ref.id}`;
     // Unregistered: the shared checks below name it.
-    if (!command) continue;
+    if (!command) return;
     // One membership's commands: the platform realm acts across tenants.
     if ((command.realm ?? 'tenant') !== 'tenant') fail(at, "a platform-realm command is not a tenant token's");
     // The runtime's own rule (bindTenantCommands), stated before publication.
@@ -91,5 +95,9 @@ export function checkApiTenantCommandCatalog(app: AppDef, owned: TenantOwnership
   // The App as its own source sees it: a platform-only source's tables are not
   // in this schema, so resolving the whole App's ceiling against it would
   // refuse a legitimate exposure. No command reaches that source either way.
-  return scopedCommandCatalog(api, tenantBusinessApp(app), owned.schema, registry, { ...tenantCommandEvidence(owned), managedOwnership });
+  const catalog = judged.run(() =>
+    scopedCommandCatalog(api, tenantBusinessApp(app), owned.schema, registry, { ...tenantCommandEvidence(owned), managedOwnership }),
+  );
+  judged.done();
+  return catalog!;
 }

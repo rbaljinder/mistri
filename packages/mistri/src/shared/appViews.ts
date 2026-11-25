@@ -114,6 +114,7 @@ import {
   firstRunSection,
   nameSectionWindows,
   parseActivitySection,
+  parseCommandSection,
   parseCustomDashSection,
   parseFindSection,
   integrationNames,
@@ -1647,6 +1648,7 @@ function parseDashboardView(
         s.kind !== 'find' &&
         s.kind !== 'branding' &&
         s.kind !== 'integrations' &&
+        s.kind !== 'command' &&
         s.from === undefined,
     )
   ) {
@@ -1763,7 +1765,7 @@ function parseDashSections(
       const kind = banner ? 'note' : authored;
       if (!(DASH_KINDS as readonly string[]).includes(authored)) {
         throw new Error(
-          `${here} has an unknown kind "${authored}". Use "metric", "breakdown", "rows", "chart", "note", "banner", "matrix", "funnel", "board", "firstRun", "custom", "activity", "find", "branding", "integrations" or "view", each written with its helper: metric(), breakdown(), rows(), chart(), note(), banner(), matrix(), funnel(), board(), firstRun(), custom(), activity(), find(), brandingForm(), integrationsForm(), embed().`,
+          `${here} has an unknown kind "${authored}". Use "metric", "breakdown", "rows", "chart", "note", "banner", "matrix", "funnel", "board", "firstRun", "custom", "activity", "find", "branding", "integrations", "command" or "view", each written with its helper: metric(), breakdown(), rows(), chart(), note(), banner(), matrix(), funnel(), board(), firstRun(), custom(), activity(), find(), brandingForm(), integrationsForm(), commandButton(), embed().`,
         );
       }
       if (kind === 'firstRun') {
@@ -1790,6 +1792,7 @@ function parseDashSections(
         throw new Error(`${here} (a ${sectionWord(authored)}) ${unknownKey(key, takes, keyHomesOf(key))}.`);
       }
       if (kind === 'custom') return parseCustomDashSection(s, here, data);
+      if (kind === 'command') return parseCommandSection(s, here);
       if (kind === 'activity') return parseActivitySection(s, here, data);
       if (kind === 'find') return parseFindSection(s, here, data);
       /* The tenant's own Branding form: what it may change is the App's `branding` (checked at the root). The

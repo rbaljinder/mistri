@@ -292,31 +292,36 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
   const rowPolicy = options.policy !== undefined;
   const releases: Array<() => void> = [];
   try {
-    const resources = await loadAppRuntimeResources(registry, app, owner, (id) => releases.push(registry.lease(id)));
+    const resources = await loadAppRuntimeResources(registry, app, owner, (id) => releases.push(registry.lease(id)), {
+      deferApiCheck: checkApp === true,
+    });
     appConnections = resources.connections;
     const writable = (id: string) => registry.configOf(id)?.writable === true;
-    // The feed's events are judged before any store is opened for them (apiEventFeed.ts).
+    // The feed's events are judged before any store is opened for them (apiEventFeed.ts); under `mistri check`, `checkApps` reports them with the rest.
     const [{ withApiWrites }, { apiEventProblems }] = await Promise.all([
       import('../api/apiGenericWrites.js'),
       import('../api/apiEventFeed.js'),
     ]);
     const eventProblems = apiEventProblems(app, commands);
-    if (eventProblems.length) throw new Error(eventProblems.join(' '));
+    if (!checkApp && eventProblems.length) throw new Error(eventProblems.join(' '));
     // Commands that declare events write into the App's attested event store; under a policy, through its scope.
     events = await appCommandEventsFor(app, commands, resources, locate, { attest: !aside });
     if (!rowPolicy) {
       await validateBusinessCommandStartup(app, commands, resources, writable, events, { attest: !aside });
       // Commands the App exposes to its API are checked against this
       // registry at startup, so a wrong exposure never waits for a request.
-      // Its generic writes and feed events are checked with them (apiGenericWrites.ts, apiEventFeed.ts).
-      const served = withApiWrites(app, resources.schema, commands);
-      const api = served.app.api;
-      if (api?.commands.length) {
-        checkApiCommandCatalog(api, served.app, resources.schema, served.registry!, {
-          connectionFor: resources.connectionFor,
-          writableConnection: writable,
-          transactionalConnection: (id) => !!commandsOf(resources.forConnection(id)).commandTransaction,
-        });
+      // Under `mistri check`, `checkApps` renders the whole API document so
+      // read, write, event and command refusals are reported together.
+      if (!checkApp) {
+        const served = withApiWrites(app, resources.schema, commands);
+        const api = served.app.api;
+        if (api?.commands.length) {
+          checkApiCommandCatalog(api, served.app, resources.schema, served.registry!, {
+            connectionFor: resources.connectionFor,
+            writableConnection: writable,
+            transactionalConnection: (id) => !!commandsOf(resources.forConnection(id)).commandTransaction,
+          });
+        }
       }
     }
     // Effects post to webhooks the config file names, from the event store beside the commands' source.
@@ -432,6 +437,15 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
           target: prepared.integrationTarget,
           // A held message's public link, said as an effect's is (below).
           publicLinks: async (view: string) => appPublicUrl(options.current(), view),
+          ...(prepared.module.integrations.settled && bind
+            ? {
+                settled: {
+                  version: commands[prepared.module.integrations.settled.command]?.version ?? 1,
+                  principals: prepared.module.principals,
+                  bind: (runAs: string) => bind(undefined, runAs),
+                },
+              }
+            : {}),
         });
       }
     }
@@ -470,6 +484,11 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
         for (const command of mapping.events.values()) runs(mapping.runAs, command);
       for (const mapping of prepared.module.integrations?.webhooks.values() ?? [])
         for (const command of mapping.events.values()) jobCommands = new Set([...jobCommands, command]);
+      const settled = prepared.module.integrations?.settled;
+      if (settled) {
+        runs(settled.runAs, settled.command);
+        jobCommands = new Set([...jobCommands, settled.command]);
+      }
       // A module of only inbound endpoints or integrations runs no jobs, and has no job store to open.
       if (prepared.deployment && prepared.module.jobs.size + prepared.module.workflows.size > 0 && !aside) {
         const opened = new Map<string, Webhook>();

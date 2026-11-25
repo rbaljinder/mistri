@@ -147,6 +147,7 @@ import { textRulesProblem } from '@mistriwork/engine/shared/textRules.js';
 import { servedDefined } from '@mistriwork/engine/shared/definedFields.js';
 import { flowsProblem } from './appFlows.js';
 import type { QueryPerson } from '@mistriwork/engine/shared/query.js';
+import { boundWindowEdges } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { autoKeyOf, withUnit } from '@mistriwork/engine/shared/autoBucket.js';
 import { PREVIOUS_PERIOD, hasWindowPhrase, previousPeriodQuery, withoutWindowPhrase } from './dashWindow.js';
 import { noteDeprecated } from './deprecations.js';
@@ -1143,6 +1144,10 @@ function wholeTarget(
  * number will run in, every list query through the real parser. Same
  * contract as a list view — carried with its reason, never dropped.
  */
+/** The window's edges a custom section's read is judged with at load: two days no App writes, so the served query
+    gives them back as `window.start` and `window.end`. */
+const JUDGED_EDGES = { start: '1001-01-01', end: '1001-01-02' } as const;
+
 function resolveDashboard(
   entry: AppDashboardView,
   schema: DatabaseSchema,
@@ -1198,6 +1203,11 @@ function resolveDashboard(
       /* A custom section's reads are rows sections in all but drawing: each is judged as one, and
        keeps what resolving one served (its table id, the query without its own window). */
       if (s.kind === 'custom') {
+        /* A read's query may name the window's edges (`starts_at >= window.start`), which the client binds as it asks
+           (CustomSection.tsx): judged here bound to two days nobody writes, and served as written. */
+        const edged = (query: string | undefined) => boundWindowEdges(query, JUDGED_EDGES);
+        const unedged = (query: string | undefined) =>
+          query?.replaceAll(JUDGED_EDGES.start, 'window.start').replaceAll(JUDGED_EDGES.end, 'window.end');
         const reads = s.reads ?? {},
           names = Object.keys(reads);
         const resolved = resolveSections(
@@ -1207,7 +1217,7 @@ function resolveDashboard(
               kind: 'rows',
               title: `${s.title ?? s.component?.id ?? 'custom'}, rows "${name}"`,
               table,
-              query,
+              query: edged(query),
               show,
               sort,
               limit,
@@ -1226,7 +1236,7 @@ function resolveDashboard(
               kind: by === undefined ? 'metric' : 'breakdown',
               title: `${s.title ?? s.component?.id ?? 'custom'}, figures "${name}"`,
               table,
-              query,
+              query: edged(query),
               measure,
               by,
               limit,
@@ -1245,7 +1255,7 @@ function resolveDashboard(
                         {
                           ...reads[name],
                           table: resolved[i].table ?? reads[name].table,
-                          ...(resolved[i].windowBase === undefined ? {} : { windowBase: resolved[i].windowBase }),
+                          ...(resolved[i].windowBase === undefined ? {} : { windowBase: unedged(resolved[i].windowBase) }),
                         },
                       ]),
                     ),
@@ -1259,7 +1269,7 @@ function resolveDashboard(
                         {
                           ...totals[name],
                           table: resolvedTotals[i].table ?? totals[name].table,
-                          ...(resolvedTotals[i].windowBase === undefined ? {} : { windowBase: resolvedTotals[i].windowBase }),
+                          ...(resolvedTotals[i].windowBase === undefined ? {} : { windowBase: unedged(resolvedTotals[i].windowBase) }),
                         },
                       ]),
                     ),
@@ -1268,8 +1278,9 @@ function resolveDashboard(
             }
           : s;
       }
-      /* The Branding and integrations blocks read the tenant's own settings, never a table. */
-      if (s.kind === 'branding' || s.kind === 'integrations') return s;
+      /* The Branding and integrations blocks read the tenant's own settings, and a command's button runs a command:
+         none of them reads a table. */
+      if (s.kind === 'branding' || s.kind === 'integrations' || s.kind === 'command') return s;
       const sTable = tableNamed(schema, s.table ?? '');
       if (!sTable) {
         dashError ??= `Section "${s.title ?? s.kind}": no table "${s.table}" on this connection.`;

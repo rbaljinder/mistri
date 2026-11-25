@@ -8,7 +8,14 @@ export const resources = {
   triage: { owner: 'platform', access: 'write' },
   patient: { owner: 'tenant', access: 'write' },
   // A targeted command is offered somewhere or prepared nowhere: its record's action is that place.
-  appointment: { owner: 'tenant', access: 'write', actions: { recordPayment: action('Record payment', { command: 'recordPayment' }) } },
+  appointment: {
+    owner: 'tenant',
+    access: 'write',
+    actions: {
+      recordPayment: action('Record payment', { command: 'recordPayment' }),
+      assignClinician: action('Assign clinician', { command: 'assignClinician' }),
+    },
+  },
   payment: { owner: 'tenant', access: 'write' },
   // A clinic's price list is its configuration: copied into a sandbox, and imported back.
   service: { owner: 'tenant', access: 'write', clone: 'config' },

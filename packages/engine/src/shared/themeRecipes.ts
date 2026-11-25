@@ -65,6 +65,10 @@ export const RECIPE_MENU = {
   required: { star: null, 'optional-word': null },
   formStep: { plain: null, ruled: null },
   actionBar: { plain: null, raised: null },
+  /* A picked choice (one of a yes-or-no pair, a row of words, a card): `tint` is the controls' own (forms.css); `filled`
+     no look wears, so it is the brand sheet's and fetched only by a theme that picks it, and no first stylesheet
+     carries it. */
+  choice: { tint: null, filled: 'brand' },
 } as const satisfies Record<keyof ThemeRecipes, Record<string, string | null>>;
 
 /** Recipe parts renamed before 1.0, refused with the new name: "head" is a table's column heads (`rules.head`). */

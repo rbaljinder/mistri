@@ -42,7 +42,7 @@ export function appCommandEventStore(appId: string, sourceId: string): CommandEv
  * App and source. A refusal carries no detail. */
 async function attestCommandEventStore(target: StoreTarget, binding: CommandEventStoreBinding): Promise<void> {
   if ('sqlite' in target) {
-    const db = new DatabaseSync(target.sqlite, { readOnly: true });
+    const db = new DatabaseSync(target.sqlite, { readOnly: true, timeout: 5000 });
     try {
       assertSqliteCommandEventStore(db, binding);
     } finally {

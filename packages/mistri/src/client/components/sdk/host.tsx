@@ -38,6 +38,7 @@ import { batchedBreakdown, batchedView } from '@mistriwork/kit/client/breakdownB
 import { sameReads } from '@mistriwork/kit/client/liveReads.js';
 import { densityChoice } from '@mistriwork/kit/client/density.js';
 import { fillComposer as fillPageComposer } from '@mistriwork/kit/client/components/composerDraft.js';
+import { assistantDoorOpen, openAssistantDoor } from '../assistantDoor.js';
 import { compileWhere } from '@mistriwork/engine/shared/pageWhere.js';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import { findTable, tableNamed, type ColumnMeta, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
@@ -313,6 +314,8 @@ const pageHost: UiHost = {
   fillComposer(text, mode) {
     return fillPageComposer(text, mode);
   },
+  assistantOffered: () => assistantDoorOpen(),
+  openAssistant: (handoff) => openAssistantDoor(handoff),
   fileAddress(resource, key, options = {}, drawn) {
     const table = tableOf(resource);
     /* A tenant's file is never a link (fileSource.ts): an <img> sends no lease, so the file route refuses it. It is

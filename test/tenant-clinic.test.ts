@@ -116,6 +116,38 @@ async function evidence(t: TestContext, engine: Engine) {
     assert.deepEqual(ids(after.value), ['ap-north-1']);
   });
 
+  await t.test("a clinician is one of the clinic's own active members, whoever sends the pick", async () => {
+    const colleague = await host.tenant('north', { roles: ['reception'], name: 'Cleo Clinician' });
+    const picked = await north.command('assignClinician', { id: 'ap-north-2' }, { clinician: colleague.account.accountId });
+    assert.ok(picked.ok, picked.ok ? '' : picked.message);
+    assert.equal((picked.value as { result: { clinician: string } }).result.clinician, colleague.account.accountId);
+    // Another clinic's member, and an account that is no member anywhere, are refused at the field.
+    for (const stranger of [south.account.accountId, 'no-such-account']) {
+      const refused = await north.command('assignClinician', { id: 'ap-north-2' }, { clinician: stranger });
+      assert.equal(refused.ok, false, stranger);
+      assert.equal(refused.ok ? undefined : refused.code, 'invalid_input');
+      assert.equal(refused.ok ? undefined : refused.field, 'clinician');
+      assert.equal(refused.ok ? undefined : refused.message, 'This is not a member of the team.');
+    }
+    // A request made by hand, past any form, is judged the same.
+    const prepared = await north.prepare('assignClinician', { id: 'ap-north-2' });
+    assert.ok(prepared.ok, prepared.ok ? '' : prepared.message);
+    const crafted = await north.request(`/api/commands/execute`, {
+      method: 'POST',
+      json: {
+        command: 'assignClinician',
+        commandVersion: 1,
+        key: { id: 'ap-north-2' },
+        expectedVersion: (prepared.value as { expectedVersion: unknown }).expectedVersion,
+        idempotencyKey: 'clinic-member-crafted-0001',
+        input: { clinician: south.account.accountId },
+      },
+    });
+    const said = await crafted.text();
+    assert.equal(crafted.status, 400, said);
+    assert.match(said, /"field":"clinician"/);
+  });
+
   await t.test("the platform reads every clinic's rows, and its command writes only the clinic it names", async () => {
     const clinics = await operator.rows('clinic');
     assert.ok(clinics.ok, clinics.ok ? '' : clinics.message);

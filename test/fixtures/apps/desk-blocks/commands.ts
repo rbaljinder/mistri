@@ -44,4 +44,16 @@ const categorize = defineCommand({
   },
 });
 
-export default defineCommands({ reply: say('reply'), addNote: say('internal'), categorize });
+/* A switch thrown from the desk's dashboard (commandButton): it names no ticket and asks nothing. */
+const openDesk = defineCommand({
+  source: desk,
+  target: 'ticket',
+  targets: 'none',
+  input: {},
+  output: shape({ message: literal('The desk is open.') }),
+  async handle() {
+    return { message: 'The desk is open.' as const };
+  },
+});
+
+export default defineCommands({ reply: say('reply'), addNote: say('internal'), categorize, openDesk });

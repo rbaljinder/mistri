@@ -212,7 +212,11 @@ export async function describeTenantPlatformSource(
       await adapter.close();
     }
   }
-  const db = new DatabaseSync(realpathSync(where.existingPath ?? denyTenant()), { readOnly: true, enableForeignKeyConstraints: true });
+  const db = new DatabaseSync(realpathSync(where.existingPath ?? denyTenant()), {
+    readOnly: true,
+    enableForeignKeyConstraints: true,
+    timeout: 5000,
+  });
   try {
     db.exec('BEGIN');
     const schema = platformSourceCatalog(readSqliteReadCatalog(db).schema, declaration).schema;

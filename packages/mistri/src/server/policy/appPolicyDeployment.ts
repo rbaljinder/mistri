@@ -44,6 +44,7 @@ import { contractDigest } from '../commands/commandContracts.js';
 import type { BusinessCommandBinding } from '../commands/businessCommandAccess.js';
 import { commandsOf } from '../stores/commandStores.js';
 import { appStoresOf } from '../stores/appStores.js';
+import { inZone } from '../commands/currentZone.js';
 import { appZone } from '../../shared/appZone.js';
 
 /** The suite creates one issuer/epoch before starting any App. Retained readers
@@ -397,7 +398,7 @@ export async function createAppPolicyDeployment<Request>(
           const span = startSpan('mistri.policy.rows', { childOnly: true });
           let rows: ReturnType<typeof policy.resolveRows>;
           try {
-            rows = withSpan(span, () => policy.resolveRows(principal, policyContext));
+            rows = withSpan(span, () => inZone(appZone(app.ui), () => policy.resolveRows(principal, policyContext)));
           } finally {
             if (!isPromise(rows!)) span.end();
           }

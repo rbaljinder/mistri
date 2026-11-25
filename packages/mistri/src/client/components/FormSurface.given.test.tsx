@@ -59,3 +59,19 @@ test('a done screen may leave out the reference and the way back to the App', as
   expect(screen.queryByText(/Your reference|Keep this reference/)).toBeNull();
   expect(screen.queryByRole('link', { name: /Back to/ })).toBeNull();
 });
+
+test('a form that names what it asks draws those alone, and sends the rest with their default', async () => {
+  const fields = [
+    { name: 'transcript', label: 'Transcript', type: 'text', required: true, maxLength: 2000 },
+    { name: 'template', label: 'Template', type: 'text', required: true, maxLength: 40, default: 'soap' },
+  ] as FormPresentation['input'];
+  const submit = vi.fn(async () => ({ receipt: { id: 'r1', status: 'applied' as const } }));
+  render(
+    <FormSurface form={{ id: 'note', label: 'Start a note', input: fields, asks: ['transcript'] }} appName="Clinic" submit={submit} />,
+  );
+  expect(screen.queryByLabelText(/Template/)).toBeNull();
+  fireEvent.change(screen.getByLabelText(/Transcript/), { target: { value: 'Patient says' } });
+  fireEvent.click(screen.getByRole('button', { name: /Submit/ }));
+  await vi.waitFor(() => expect(submit).toHaveBeenCalled());
+  expect(submit).toHaveBeenCalledWith(expect.any(String), { transcript: 'Patient says', template: 'soap' }, expect.anything());
+});

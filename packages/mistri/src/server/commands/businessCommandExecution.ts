@@ -4,7 +4,7 @@ import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { createHash, randomUUID } from 'node:crypto';
 import { isProxy } from 'node:util/types';
 import { inWriteLanes, recordLane } from '@mistriwork/engine/adapters/writeLanes.js';
-import { isSnapshotConflict, withSnapshotRead } from '@mistriwork/engine/adapters/snapshotRead.js';
+import { withSnapshotRead } from '@mistriwork/engine/adapters/snapshotRead.js';
 import { withWriteAhead, type WriteAhead } from '@mistriwork/engine/adapters/writeAhead.js';
 import {
   gathered,
@@ -29,11 +29,7 @@ import type { ProposalEvidence } from '../../adapters/commands/commandJournalTyp
 import { scopedAudit, splitAudit } from '../../adapters/commands/commandAuditParts.js';
 import { EffectBodyTooLarge, EffectProjectionRefused, type CommandEventBatch } from '../../adapters/events/commandEventTypes.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
-import { referencedBeneath, ScopeRefusal } from '@mistriwork/engine/adapters/scoped/scopedTransaction.js';
-import { lockTimedOut } from '@mistriwork/engine/adapters/writeLanes.js';
 import { AppAccessDenied } from '../app/appAccess.js';
-import { NarrowedRefusal } from '../app/appNarrowedWrites.js';
-import { AppValidationDenied, ConsumesRefused } from '../app/appValidationDenied.js';
 import { hasAppScopeCommandEventOwner, hasTenantCommandEventOwner, type BusinessCommandBinding } from './businessCommandAccess.js';
 import {
   AUDIT_REDACTED,
@@ -57,7 +53,7 @@ import { mayReadTargetColumn } from './commandActorColumns.js';
 import { rowRevision } from './commandRevision.js';
 import { NO_OUTPUT } from './commandShapes.js';
 import { preparesInitial } from './commandPrepareNeeds.js';
-import { zoneDay } from '../app/appStamps.js';
+import { zoneDay, zoned, zonedTransaction } from './currentZone.js';
 import { asMaker, claimProposal, settleProvenance, targetWrites } from './commandProvenance.js';
 import { createLookupSources, lookupResult } from './commandLookup.js';
 import { lookupHeldBy } from './commandLookupHold.js';
@@ -67,6 +63,7 @@ import { COMMAND_INPUT_LIMITS } from '../../shared/command.js';
 import { CommandInputRefusal } from '../../shared/commandInput.js';
 import { lineCell } from '../../shared/commandLineCell.js';
 import { definedAnswerBreak, sourcedChoiceBreak } from './commandDefined.js';
+import { memberBreak } from './commandMembers.js';
 import { projectCommandEvents, resolveCommandEffects } from './businessEvents.js';
 import { effectProjectionDb } from './commandEffects.js';
 import {
@@ -87,16 +84,17 @@ import {
   refusalReason,
   type RefusalKeepDb,
 } from './commandErrors.js';
+import { rethrowCommandFailure } from './commandFailure.js';
 import { commandLocale } from './commandLocale.js';
 import { attributeAction, currentWriteAttribution } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { evaluateCommandAvailability } from './commandAvailability.js';
-import { constraintColumns, writeFailureKind } from '@mistriwork/engine/server/constraints.js';
+import { writeFailureKind } from '@mistriwork/engine/server/constraints.js';
 import { placeFile, type FileScope, type PlacedFile } from '../files/fileStorage.js';
 import { lookupFileReader, stagedOwner, takeHeldFiles } from './stagedFiles.js';
 import type { CommandFileRule } from './businessCommandAuthorization.js';
 import { openSavedDraft, type SavedDraftRun } from '../forms/savedForms.js';
 import { currentSpan, errorCode, inSpan, tracing } from '@mistriwork/engine/adapters/telemetry/trace.js';
-import { authorFault, isFrozenRefusal, isRequestFault, refusalReasons } from '@mistriwork/engine/shared/refusal.js';
+import { refusalReasons } from '@mistriwork/engine/shared/refusal.js';
 import { AUDIT_TARGET_BYTES, auditRefusal, developerError, fileInsert, footprintFailure, withoutRevealed } from './commandWriteGuards.js';
 import { handlerNextNumber } from '../../adapters/commands/commandSequences.js';
 import { handlerLinks, mintQueued } from '../links/linkMint.js';
@@ -729,7 +727,7 @@ async function executeUntraced(
         lookupHeld = !options.statusOnly && (await lookupHeldBy(authorized, command, table, before, reader.own, now));
         const value = lookupHeld
           ? undefined
-          : await lookupRun(
+          : await zoned(authorized.timezone, lookupRun)(
               Object.freeze({
                 actor: authorized.actor,
                 requestId,
@@ -908,7 +906,7 @@ async function executeUntraced(
     const committed: BusinessCommandStatus = await inWriteLanes(lanes, () =>
       reading(() =>
         asMaker(madeAs, options.makerActor, options.proposalId, () =>
-          authorized.commandTransaction!(async (records, journal) => {
+          zonedTransaction(authorized)(async (records, journal) => {
             afterCommit.length = 0;
             transactionStarted = true;
             checkCancelled();
@@ -1631,8 +1629,8 @@ async function executeUntraced(
               const unanswered = await definedAnswerBreak(tx, catalog!, command, input, targets.length === 1 ? targets[0] : undefined);
               if (unanswered)
                 throw new BusinessCommandExecutionError('invalid_input', 'not_applied', unanswered.path, undefined, unanswered.reason);
-              /* A choice from a table's rows names a row this reader reads here and now (field.choice({ from })). */
-              const unsourced = await sourcedChoiceBreak(tx, command, input);
+              /* A pick from a table's rows names a row this reader reads here and now, and a member one of this tenant's. */
+              const unsourced = (await sourcedChoiceBreak(tx, command, input)) ?? (await memberBreak(command, input, authorized.members));
               if (unsourced)
                 throw new BusinessCommandExecutionError('invalid_input', 'not_applied', unsourced.path, undefined, unsourced.reason);
               checkCancelled();
@@ -2123,120 +2121,19 @@ async function executeUntraced(
         }
       }
     }
-    const outcome =
-      options.statusOnly || priorOutcomeUnknown
-        ? 'unknown'
-        : error instanceof CommandTransactionFailure
-          ? error.outcome
-          : transactionStarted
-            ? 'unknown'
-            : 'not_applied';
-    // Each refusal rebuilt here keeps the reason recorded under what it replaces.
-    if (isBusinessCommandExecutionError(cause))
-      throw recordRefusalCause(
-        new BusinessCommandExecutionError(
-          cause.code,
-          cause.outcome === 'unknown' || options.statusOnly ? 'unknown' : outcome,
-          cause.field,
-          refusedKey(cause.key ?? (cause.code === 'stale_record' ? conflictKey : undefined)),
-          refusalReason(cause, sayRefusal),
-        ),
-        cause,
-      );
-    if (cause instanceof AppAccessDenied) throw recordRefusalCause(new BusinessCommandExecutionError('forbidden', outcome), cause);
-    /* The row scope's own refusal is permanent for this request: said as forbidden, which names no row and no value,
-       where it fell through to temporarily_unavailable and sent a caller, a job or a workflow round a retry that
-       could never succeed. */
-    /* A delete refused while rows still point at it is the record's state, not the caller's grants: said in its own
-       sentence, which names only the rows the caller reads, or none (scopedTransaction.ts ReferencedRefusal). */
-    const referenced = referencedBeneath(cause);
-    if (referenced)
-      throw recordRefusalCause(
-        new BusinessCommandExecutionError('ineligible_state', outcome, undefined, undefined, referenced.message),
-        cause,
-      );
-    if (cause instanceof ScopeRefusal) throw recordRefusalCause(new BusinessCommandExecutionError('forbidden', outcome), cause);
-    if (cause instanceof CommandInputError) throw new BusinessCommandExecutionError('invalid_input', outcome, cause.field);
-    /* A write a narrowed resource's query does not allow (appNarrowedWrites.ts): the record's state, said in its own
-       sentence, where it fell through to temporarily_unavailable, a retry that could never succeed. */
-    /* A write a record's `frozen` condition refuses, met below the command's own checks (the App's rules over its
-       transaction): the record's state, said as 409 `frozen`, where it fell through to temporarily_unavailable. */
-    if (isFrozenRefusal(cause))
-      throw recordRefusalCause(new BusinessCommandExecutionError('frozen', outcome, undefined, undefined, cause.message), cause);
-    if (cause instanceof NarrowedRefusal)
-      throw recordRefusalCause(new BusinessCommandExecutionError('ineligible_state', outcome, undefined, undefined, cause.message), cause);
-    /* A handler's write the App's rules refused (a text rule, a row-defined
-       field): the input was wrong, not the server, so said as the field it
-       names. It fell through to temporarily_unavailable, a retry that could
-       never succeed. */
-    /* A line's `consumes` taking more than is left: said with the rule's own sentence, filled for this reader. */
-    if (cause instanceof ConsumesRefused)
-      throw recordRefusalCause(
-        new BusinessCommandExecutionError('consumes_refused', outcome, cause.fields[0], undefined, cause.sentence),
-        cause,
-      );
-    if (cause instanceof AppValidationDenied)
-      throw recordRefusalCause(
-        new BusinessCommandExecutionError('invalid_input', outcome, cause.fields[0], undefined, cause.reasons[cause.fields[0]]),
-        cause,
-      );
-    /* A request the handler built that can never succeed as written (a malformed filter, an aggregate naming a column
-       the table lacks, a sum SQLite cannot add exactly): the App author's to fix, never a retry. */
-    if (isRequestFault(cause)) throw authorFault(new BusinessCommandExecutionError('invalid_result', outcome), cause.message);
-    if (isWriteConflict(cause)) throw new BusinessCommandExecutionError('stale_record', outcome, undefined, refusedKey(conflictKey));
-    /* A snapshot command wrote or locked a row another transaction changed after its snapshot (PostgreSQL's 40001):
-       the record moved under it, said as a conditional write's conflict is, which a job or workflow retries. */
-    if (snapshot && isSnapshotConflict(cause))
-      throw new BusinessCommandExecutionError('stale_record', outcome, undefined, refusedKey(conflictKey));
-    /* An integrity rule the database enforced, recognized by the engine's own
-       code and never by its message (constraints.ts). A unique or exclusion
-       violation conflicts with a row already there, and a foreign key with one
-       that is not: the request was well formed and the state disagreed, so
-       both are the conflict refusals. Required and check are the values
-       themselves. All of them are permanent for this input, and calling them
-       temporarily_unavailable sent a caller round a retry loop that could
-       never end.
-
-       Only where nothing was hidden from this caller. Under a scoped
-       invocation the index that refused spans rows the row policy or the
-       tenant keeps invisible, so naming the conflict would answer a question
-       the caller is not allowed to ask — "is there an active reservation on
-       this vehicle in another dealership?" — from a refusal. Those keep the
-       value-free code (tenant-inventory pins it), and the reason is recorded
-       below for the owner instead.
-
-       What is deliberately left alone: an error carrying none of these codes —
-       a dropped connection, a statement timeout, a trigger raising its own
-       error — stays temporarily_unavailable, because a guess from its text
-       would be a worse lie than the vague code. And `outcome` is untouched
-       here: where the commit was attempted and its answer lost it is already
-       unknown, and it must stay unknown even for a constraint violation,
-       since "not applied" about a write that may have landed is the one
-       direction of lie this must never tell. */
-    // A lock wait that ran out (--lock-timeout) rolled back: said as what it is, for a retry.
-    if (outcome === 'not_applied' && lockTimedOut(cause))
-      throw recordRefusalCause(new BusinessCommandExecutionError('row_locked', outcome), cause);
-    const constraint = scoped ? undefined : writeFailureKind(cause);
-    if (constraint) {
-      /* The column the engine named, when it is one of the command's own inputs: the form marks that field, as a
-         record write's does (appErrors.ts). A column the input does not carry names nothing the reader typed. */
-      const broke = constraintColumns(cause);
-      const own = given && typeof given === 'object' && !Array.isArray(given) ? (given as Record<string, unknown>) : {};
-      const field = broke && !broke.parent ? broke.columns.find((column) => Object.hasOwn(own, column)) : undefined;
-      throw recordRefusalCause(
-        new BusinessCommandExecutionError(
-          constraint === 'unique' ? 'duplicate_record' : constraint === 'reference' ? 'ineligible_state' : 'invalid_input',
-          outcome,
-          field,
-        ),
-        cause,
-      );
-    }
-    /* The one refusal that says nothing about what went wrong, so it is the
-       one that most needs the trusted record: the driver error is kept on the
-       refusal where only an owner holding the reader can see it, and never
-       where a caller, a log line or JSON would. */
-    throw recordRefusalCause(new BusinessCommandExecutionError('temporarily_unavailable', outcome), cause);
+    rethrowCommandFailure({
+      error,
+      cause,
+      statusOnly: Boolean(options.statusOnly),
+      priorOutcomeUnknown,
+      transactionStarted,
+      scoped,
+      snapshot,
+      conflictKey,
+      given,
+      refusedKey,
+      sayRefusal,
+    });
   }
 }
 

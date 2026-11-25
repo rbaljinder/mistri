@@ -23,6 +23,7 @@ import { zoneColumnProblem } from '../packages/mistri/src/server/app/readerZone.
 import { menuFor, menuWhenProblems, sharedProfileProblems, visitorApp } from '../packages/mistri/src/server/app/appTenantProfile.js';
 import type { AppNavNode } from '../packages/mistri/src/shared/appModel.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
+import { currentZone } from '../packages/mistri/src/server/commands.js';
 import { parseTestApp } from './support/commandCatalog.js';
 import { dropDedicatedPostgresDatabase, openTenantEngine, TENANT_DIALECTS, type TenantDialect } from './support/tenantDialects.js';
 
@@ -94,6 +95,9 @@ const planned = parseTestApp(
 
 /* A command that stamps a ticket with the day its handler counts, and notes the zone it was handed. */
 const zonesSeen: string[] = [];
+/* What `currentZone()` says, by who asked it: a helper the handler calls (handed nothing), the lookup, the policy. */
+const ambient: Array<[string, string]> = [];
+const helperZone = () => currentZone();
 const registry = defineCommands({
   stampToday: defineCommand({
     source: 'business',
@@ -103,8 +107,13 @@ const registry = defineCommands({
     write: ['ticket'],
     input: { id: { type: 'text' } },
     output: { parse: (value: unknown) => value as { id: string } },
+    lookup: () => {
+      ambient.push(['lookup', currentZone()]);
+      return {};
+    },
     async handle({ db, today, timezone }, input) {
       zonesSeen.push(timezone);
+      ambient.push(['helper', helperZone()]);
       await db.ticket.insert({ id: String(input.id), opened_on: today() });
       return { id: String(input.id) };
     },
@@ -121,6 +130,7 @@ const policy = defineAppTenantPolicy({
   /* What each request's row scope was handed: the tenant's shared profile, read before it. */
   resolveRows: (_member, { tenant }) => {
     profilesSeen.push({ ...tenant });
+    ambient.push(['policy', currentZone()]);
     return rows;
   },
   resultReferences: { stampToday: () => [] },
@@ -571,5 +581,23 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       zonesSeen.length = 0;
       for (const tenant of ['north', 'south', 'west'] as const) await f.stamp(await f.open(tenant), `${tenant}-zoned`);
       assert.deepEqual(zonesSeen, [ZONES.north, ZONES.south, OWN]);
+    });
+
+    test("a helper the handler calls, its lookup and the row policy read the running tenant's zone with currentZone()", async (t) => {
+      const f = await fixture(t, dialect);
+      for (const tenant of ['north', 'south', 'west'] as const) {
+        const lease = await f.open(tenant);
+        ambient.length = 0;
+        await f.stamp(lease, `${tenant}-ambient`);
+        const zone = tenant === 'west' ? OWN : ZONES[tenant];
+        for (const who of ['policy', 'lookup', 'helper'])
+          assert.ok(
+            ambient.some(([asker, seen]) => asker === who && seen === zone),
+            `${tenant}: ${who} read ${JSON.stringify(ambient)}`,
+          );
+        assert.deepEqual([...new Set(ambient.map(([, seen]) => seen))], [zone], `${tenant}: one zone throughout`);
+      }
+      // Outside any run it is UTC, never the server's own zone.
+      assert.equal(currentZone(), 'UTC');
     });
   });

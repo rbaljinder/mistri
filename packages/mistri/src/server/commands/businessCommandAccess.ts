@@ -56,6 +56,9 @@ export interface AuthorizedBusinessCommand {
   readonly readsInCommand?: true;
   /** The App's `ui.timezone`, the wall clock its writes into zone-less timestamp columns are made in (UTC when absent). */
   readonly timezone?: string;
+  /** A tenant's own zone, read from `ui.timezone: { column }` for this request: what a channel message that names no
+      zone is held through quiet hours in (currentZone.ts). Absent where the zone is the App's. */
+  readonly ownZone?: string;
   /** The App's catalogs and `ui.locale` (commandLocale.ts), which `ctx.locale` is clamped to. */
   readonly words?: import('./commandLocale.js').CommandWords;
   /** The App's `ui.currency` (see businessCommandAuthorization.ts). */
@@ -90,6 +93,9 @@ export interface AuthorizedBusinessCommand {
   /** A tenant App's signed-in command, or a public submission placed with a tenant: the profile columns the App shares
    * with its members (`auth.tenancy.shared`), read once for this request. The runtime's, never a request's. */
   readonly tenant?: Readonly<Record<string, TenantValue>>;
+  /** Who of these accounts is an active member of the command's tenant (`field.member()`, commandMembers.ts). A tenant
+   * App's signed-in binding's, read from the tenant store; absent, a member input admits no id. */
+  readonly members?: import('./commandMembers.js').CommandMembers;
   assertTarget?(records: WriteTransaction, key: Readonly<Record<string, string | number>>): Promise<void>;
   assertResult?(records: WriteTransaction, key: Readonly<Record<string, string | number>>, result: unknown): Promise<void>;
   transaction<T>(run: (tx: WriteTransaction) => Promise<T>): Promise<T>;

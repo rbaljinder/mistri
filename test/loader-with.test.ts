@@ -52,6 +52,7 @@ const APP = {
         balance: { type: 'number', value: 'billed - paid' },
         flagged: { type: 'boolean', value: 'open_alerts > 0' },
       },
+      segments: { alerted: 'open_alerts > 0', flagged_west: 'flagged = true and region = west' },
     },
     alert: {},
   },
@@ -119,7 +120,17 @@ async function postgresWorld(): Promise<World> {
 }
 
 type Row = Record<string, unknown>;
-type Handle = { where(where?: unknown): { with(...names: string[]): PromiseLike<Row[]> & { orderBy(c: string): PromiseLike<Row[]> } } };
+type QueryChain = PromiseLike<Row[]> & {
+  where(where?: unknown): QueryChain;
+  orderBy(c: string, d?: 'asc' | 'desc'): QueryChain;
+  with(...names: string[]): QueryChain;
+};
+type Handle = {
+  where(where?: unknown, ...values: unknown[]): QueryChain;
+  find(where?: unknown): Promise<Row | undefined>;
+  count(where?: unknown): Promise<number>;
+  segment(name: string): QueryChain;
+};
 const json = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 
 function proofs(open: () => Promise<World>, label: string, skip: false | string = false) {
@@ -135,12 +146,19 @@ function proofs(open: () => Promise<World>, label: string, skip: false | string 
     /** The catalog the App serves a reader, as http/source.ts makes it: the reader's grants cut, then rollups and computed columns. */
     const served = async (cut?: (schema: DatabaseSchema) => DatabaseSchema) => {
       const full = await w.adapter.introspect();
-      return withRollups(app, cut ? cut(full) : full, NOW);
+      const base = cut ? cut(full) : full;
+      const rolled = withRollups(app, base, NOW);
+      return {
+        ...rolled,
+        tables: rolled.tables.map((t) =>
+          t.name === 'account' ? { ...t, segments: { alerted: 'open_alerts > 0', flagged_west: 'flagged = true and region = west' } } : t,
+        ),
+      };
     };
     const load = async (
       reads: string[],
       body: (db: Record<string, Handle>) => Promise<unknown>,
-      options: { schema?: DatabaseSchema; reader?: Pick<Adapter, 'query' | 'count' | 'aggregate' | 'runView'> } = {},
+      options: { schema?: DatabaseSchema; reader?: Pick<Adapter, 'query' | 'count' | 'aggregate' | 'runView' | 'countView'> } = {},
     ) =>
       runPageLoader({
         name: 'board',
@@ -282,6 +300,76 @@ function proofs(open: () => Promise<World>, label: string, skip: false | string 
         open.map((row) => Number(row.open_alerts)),
         [2, 0, 1],
       );
+    });
+
+    test('where, find, count and segment compare rollups and computed columns over rollups, scoped to the reader’s child rows', async () => {
+      const ids = (rows: Row[]) => rows.map((row) => Number(row.id));
+      const answer = (await load(['account'], async (db) => ({
+        byText: await db.account!.where('open_alerts > 0').orderBy('id'),
+        byTemplate: await db.account!.where`open_alerts >= ${2}`,
+        byObject: await db.account!.where({ open_alerts: { gt: 0 } }).orderBy('id'),
+        byZero: await db.account!.where({ open_alerts: 0 }),
+        byComputed: await db.account!.where('flagged = true').orderBy('id'),
+        found: await db.account!.find({ open_alerts: 2 }),
+        counted: await db.account!.count('open_alerts > 0'),
+        countedObject: await db.account!.count({ flagged: true }),
+        segmented: await db.account!.segment('alerted').orderBy('id'),
+        chained: await db.account!.segment('flagged_west').where({ billed: { gt: 20 } }),
+      }))) as Record<string, unknown>;
+      assert.deepEqual(ids(answer.byText as Row[]), [1, 3]);
+      // Unasked rollups are not projected onto the returned rows.
+      assert.equal(Object.hasOwn((answer.byText as Row[])[0]!, 'open_alerts'), false);
+      assert.deepEqual(ids(answer.byTemplate as Row[]), [1]);
+      assert.deepEqual(ids(answer.byObject as Row[]), [1, 3]);
+      assert.deepEqual(ids(answer.byZero as Row[]), [2]);
+      assert.deepEqual(ids(answer.byComputed as Row[]), [1, 3]);
+      assert.equal(Number((answer.found as Row)?.id), 1);
+      assert.equal(answer.counted, 2);
+      assert.equal(answer.countedObject, 2);
+      assert.deepEqual(ids(answer.segmented as Row[]), [1, 3]);
+      assert.deepEqual(ids(answer.chained as Row[]), [1]);
+
+      // Row policy on the rollup's child table narrows both where and count: if the reader may see no alerts, open_alerts is 0 everywhere.
+      const noAlerts = await w.adapter.scopeReads({ [w.id('account')]: true, [w.id('alert')]: false });
+      const scoped = (await load(
+        ['account'],
+        async (db) => ({
+          open: await db.account!.where('open_alerts > 0'),
+          clear: await db.account!.where({ open_alerts: 0 }).orderBy('id'),
+          counted: await db.account!.count('open_alerts > 0'),
+        }),
+        { reader: noAlerts as never },
+      )) as Record<string, unknown>;
+      assert.deepEqual(scoped.open, []);
+      assert.deepEqual(ids(scoped.clear as Row[]), [1, 2, 3]);
+      assert.equal(scoped.counted, 0);
+
+      // Field grant hiding alert.open hides open_alerts and flagged, so a loader where naming either is refused.
+      const hideOpen = (schema: DatabaseSchema) => {
+        const id = (table: string) => schema.tables.find((each) => each.name === table)!.id;
+        return accessibleSchema(schema, {
+          readable: new Set([id('account'), id('alert')]),
+          writable: new Set<string>(),
+          fields: new Map([[id('alert'), { read: new Set(['id', 'account_id']), write: new Set<string>() }]]),
+        });
+      };
+      const cutSchema = await served(hideOpen);
+      await assert.rejects(load(['account'], async (db) => db.account!.where('open_alerts > 0'), { schema: cutSchema }));
+      await assert.rejects(load(['account'], async (db) => db.account!.count('flagged = true'), { schema: cutSchema }));
+
+      // A command's db still refuses rollups in where, count and segment.
+      const catalog = commandCatalog(await served(), ['account'], (local) => w.id(local))!;
+      const tx = {
+        query: (request: never) => w.adapter.query({ ...(request as object), table: w.id('account') } as never),
+        count: async () => 0,
+      };
+      const cmdDb = createCommandDb({ tx: tx as never, catalog, read: ['account'], write: [], now: () => NOW }) as unknown as Record<
+        string,
+        Handle
+      >;
+      assert.throws(() => cmdDb.account!.segment('alerted'), /cannot be read here/);
+      await assert.rejects(async () => cmdDb.account!.where('open_alerts > 0'), /open_alerts/);
+      await assert.rejects(async () => cmdDb.account!.where({ open_alerts: 0 }), /rollup, which a where names only in a page's loader/);
     });
   });
 }

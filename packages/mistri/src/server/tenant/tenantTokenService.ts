@@ -132,7 +132,7 @@ export function createTenantTokenService(
       } else {
         const uri = pathToFileURL(path);
         uri.searchParams.set('mode', 'ro');
-        const db = new DatabaseSync(uri.href, { readOnly: true });
+        const db = new DatabaseSync(uri.href, { readOnly: true, timeout: 5000 });
         try {
           const rows = db.prepare(`SELECT store_id FROM main."${SQLITE_API_TOKEN_TABLES.meta}"`).all();
           id = rows.length === 1 ? rows[0].store_id : undefined;
@@ -164,7 +164,7 @@ export function createTenantTokenService(
         });
       const uri = pathToFileURL(path);
       uri.searchParams.set('mode', 'ro');
-      const db = new DatabaseSync(uri.href, { readOnly: true });
+      const db = new DatabaseSync(uri.href, { readOnly: true, timeout: 5000 });
       try {
         return db.prepare(sql(`main."${SQLITE_API_TOKEN_TABLES.token}"`, () => '?')).all(app.id, tenantId) as Array<
           Record<string, unknown>

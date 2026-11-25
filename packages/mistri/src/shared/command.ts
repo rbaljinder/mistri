@@ -289,7 +289,7 @@ export function fieldLabel(key: string): string {
 /** A declared pattern, matched whole: what the browser and the server both test a value against. */
 export const fieldPattern = (source: string): RegExp => new RegExp(`^(?:${source})$`);
 
-const FORMATS = new Set(['email', 'url', 'phone']);
+const FORMATS = new Set(['email', 'url', 'phone', 'member']);
 
 /** A rich text input's most characters of stored HTML, unless it says otherwise: room for a long note with a table in it. */
 const RICH_TEXT_FIELD_DEFAULT = 65_536;
@@ -675,7 +675,17 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
     }
     if (f.min !== undefined && f.max !== undefined && Number(f.min) > Number(f.max)) return fail(where, 'min must not exceed max');
     if (f.format !== undefined && (f.type !== 'text' || !FORMATS.has(f.format as string)))
-      return fail(where, 'format is "email", "url" or "phone", on a text field');
+      return fail(where, 'format is "email", "url", "phone" or "member", on a text field');
+    /* A member of the team (`field.member()`): an account id, picked from the team's names and judged by the server
+       against the command's tenant where it runs. The team is the signed-in tenant's, so never a visitor's, and one
+       value of the input itself, so the one place the server judges it holds every one. */
+    if (f.format === 'member') {
+      if (rules.publicForm) return fail(where, `input "${base.name}" names a member of the team; a public form has no team to name one of`);
+      if (rules.depth) return fail(where, 'a member of the team is a field of the input itself, not one inside a group');
+      const stray = ['min', 'pattern', 'case', 'mask', 'sensitive', 'placeholder'].find((key) => f[key] !== undefined);
+      if (stray !== undefined) return fail(where, `a member of the team is picked from the team's names; it takes no ${stray}`);
+      if (base.as !== undefined) return fail(where, "a member of the team is drawn as the team's names; it takes no as");
+    }
     if (f.pattern !== undefined) {
       if (typeof f.pattern !== 'string' || !f.pattern || f.pattern.length > 500)
         return fail(where, "pattern must be a regular expression's source, at most 500 characters");
@@ -694,7 +704,7 @@ function fieldShape(key: string, raw: unknown, where: string, rules: FieldRules)
       type: f.type,
       ...(f.min === undefined ? {} : { minLength: f.min as number }),
       ...(f.max === undefined ? {} : { maxLength: f.max as number }),
-      ...(f.format === undefined ? {} : { format: f.format as 'email' | 'url' | 'phone' }),
+      ...(f.format === undefined ? {} : { format: f.format as 'email' | 'url' | 'phone' | 'member' }),
       ...(f.pattern === undefined ? {} : { pattern: f.pattern as string }),
       ...(f.message === undefined ? {} : { message: caption(f.message, where, 200) }),
       ...(f.case === undefined ? {} : { case: f.case as 'upper' | 'lower' }),
@@ -1434,6 +1444,8 @@ export interface CommandCatalogEntry {
   readonly rules?: readonly DraftRule[];
   /** A form's command whose form prepares its starting values (`initial`, or `default: me`). */
   readonly prepares?: true;
+  /** A one-record command whose form prepares `initial()` from that record. */
+  readonly hasInitial?: true;
   /** What the command's form and button are called (`defineCommand({ label })`); left out, its name said as words. */
   readonly label?: string;
 }
@@ -1784,4 +1796,41 @@ export function commandInputProblem(
     }
   }
   return undefined;
+}
+
+/**
+ * The inputs an action's or a form view's form asks (`asks: ['transcript']`) [command-asks]: those alone are drawn; the
+ * rest are a page's to send (`useCommand(…).run`), or take their default, or wait on their `when`. One the command
+ * requires with no default and no `when` could be sent by no one through this form, so it is refused here rather than
+ * at the first send. `given` inputs are another's to fill (the page's, the address's), and never also asked.
+ */
+export function parseAsks(
+  raw: unknown,
+  input: readonly AppCommandField[],
+  given: readonly string[] | undefined,
+  here: string,
+): string[] | undefined {
+  if (raw === undefined) return undefined;
+  const names = input.map((field) => field.name);
+  if (!Array.isArray(raw) || !raw.length || raw.some((name) => typeof name !== 'string' || !name))
+    throw new Error(`${here} has an "asks" that is not a list of the command's input names, like asks: ['note'] [command-asks].`);
+  const asks = raw as string[];
+  const twice = asks.find((name, index) => asks.indexOf(name) !== index);
+  if (twice) throw new Error(`${here} asks "${twice}" twice [command-asks].`);
+  for (const name of asks) {
+    if (!names.includes(name))
+      throw new Error(
+        `${here} asks "${name}", which is not one of the command's inputs (${names.join(', ') || 'it has none'}) [command-asks].`,
+      );
+    if (given?.includes(name)) throw new Error(`${here} both asks and is given "${name}"; it is one or the other [command-asks].`);
+  }
+  for (const field of input) {
+    if (asks.includes(field.name) || given?.includes(field.name)) continue;
+    if (field.required !== true || field.default !== undefined || field.when !== undefined) continue;
+    throw new Error(
+      `${here} asks ${asks.map((name) => `"${name}"`).join(', ')} and leaves out "${field.name}", which the command requires with no default ` +
+        `and no "when": ask it, give it a default, or make it optional [command-asks].`,
+    );
+  }
+  return asks;
 }

@@ -218,3 +218,60 @@ test("bulk: 'each' runs a one-record command once per picked record, in order, a
   expect(await screen.findByText(/Bump: 2 applied/)).toBeTruthy();
   mocks.identity = { epoch: 1, mode: 'anonymous', tenantRequired: false };
 });
+
+test("bulk: 'each' with drawn inputs opens the command form once, then runs each picked record with those answers", async () => {
+  const runEach = vi.fn(async (_action: unknown, key: Record<string, unknown>, input?: Readonly<Record<string, unknown>>) =>
+    key.id === 3 ? { kind: 'rejected' as const, message: 'Locked.' } : { kind: 'applied' as const, message: String(input?.assignee ?? '') },
+  );
+  const noRuns = { subscribe: () => () => {}, version: () => 0, unresolvedGroups: () => [] };
+  const Form = ({
+    targets,
+    onSubmitEach,
+  }: {
+    targets: Array<{ key: Record<string, unknown>; label: string }>;
+    onSubmitEach?: (input: Record<string, unknown>) => void;
+  }) => (
+    <div role="dialog" aria-label="Assign">
+      <span>{targets.length} chosen</span>
+      <button type="button" onClick={() => onSubmitEach?.({ assignee: 'acct_7', note: 'Urgent' })}>
+        Submit each
+      </button>
+    </div>
+  );
+  installShell({
+    app: (() => ({ grantedCommands: ['assign'] })) as never,
+    slots: {
+      ...shell().slots,
+      bulkCommands: { operations: noRuns, useAvailability: (c: unknown[]) => c.map(() => true), runEach, Form } as never,
+    },
+  });
+  mocks.identity = { epoch: 1, mode: 'authenticated', appId: 'desk', tenantRequired: false };
+  const assign = {
+    id: 'assign',
+    label: 'Assign ticket',
+    bulk: 'each',
+    command: {
+      id: 'assign',
+      version: 1,
+      target: 'ticket',
+      input: [{ name: 'assignee', label: 'Assignee', type: 'text', required: true }],
+    },
+  } as unknown as AppAction;
+  draw([1, 2, 3].map(record), [assign]);
+  await userEvent.click(screen.getByRole('button', { name: 'pick all' }));
+  await userEvent.click(within(toolbar()!).getByRole('button', { name: 'Assign 3 tickets' }));
+  expect(runEach).not.toHaveBeenCalled();
+  const dialog = await screen.findByRole('dialog', { name: 'Assign' });
+  expect(within(dialog).getByText('3 chosen')).toBeTruthy();
+  await userEvent.click(within(dialog).getByRole('button', { name: 'Submit each' }));
+  await waitFor(() => expect(runEach).toHaveBeenCalledTimes(3));
+  expect(runEach.mock.calls.map(([, key, input]) => [key.id, input])).toEqual([
+    [1, { assignee: 'acct_7', note: 'Urgent' }],
+    [2, { assignee: 'acct_7', note: 'Urgent' }],
+    [3, { assignee: 'acct_7', note: 'Urgent' }],
+  ]);
+  expect(screen.queryByRole('dialog', { name: 'Assign' })).toBeNull();
+  expect(await screen.findByText(/Assign ticket: 2 applied/)).toBeTruthy();
+  expect(screen.getByText(/Ticket 3: Locked\./)).toBeTruthy();
+  mocks.identity = { epoch: 1, mode: 'anonymous', tenantRequired: false };
+});

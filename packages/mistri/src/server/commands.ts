@@ -22,6 +22,8 @@ export { field } from './commands/commandFields.js';
 export type { CommandInput, CommandInputOf } from '../shared/command.js';
 /* A refusal: the handler's one way to say no, typed `never`. */
 export { refuse } from './commands/commandErrors.js';
+/* The running chain's zone, wherever server code is below a command, a loader or a tenant's row policy. */
+export { currentZone } from './commands/currentZone.js';
 export type { RefusalCode, RefusalKeepDb, RefusalKeepTable } from './commands/commandErrors.js';
 /* The typed source a command names, and the `db` its handler reads and
    writes through: a row type, a read-only view of some tables for a helper,
@@ -69,7 +71,7 @@ export type { BusinessEvent, BusinessEventProjection } from './commands/business
 export { post } from './commands/commandEffects.js';
 export type { CommandEffect, EffectPayload, PostOptions } from './commands/commandEffects.js';
 /* A message on an integration's channel, after commit: consent, opt-out and quiet hours are core's. */
-export { send } from './commands/commandEffects.js';
+export { send, withdraw } from './commands/commandEffects.js';
 export type { ChannelMessageProjection } from './commands/commandEffects.js';
 export type { LookupSources, LookupTable } from './commands/commandLookup.js';
 /* The one-time steps a deployment runs on its stopped database — migrating the command journal, the

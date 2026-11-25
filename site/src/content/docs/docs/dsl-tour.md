@@ -41,9 +41,9 @@ snippet below is cut from those files ([run it](#run-it)). Tick
 ## Organizing a larger App
 
 An App with one folder per feature lists its modules in an index file, one
-line a module. There is no `import.meta.glob`: the App's loader, its build and
-TypeScript would each read it differently, so the list is written out and a
-test keeps it honest.
+line a module. There is no `import.meta.glob`, by design and not as a gap: the
+App's loader, its build and TypeScript would each read it differently, so the
+list is written out and a test keeps it honest.
 
 ```ts title="modules/index.ts"
 // One line a module; test/modules.test.ts fails when a folder is missing here.

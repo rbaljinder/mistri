@@ -14,7 +14,7 @@ import {
   Table,
   Timeline,
 } from '@mistriwork/mistri/page';
-import { definePage, useHref } from '@mistriwork/mistri/page';
+import { definePage, useAssistant, useHref } from '@mistriwork/mistri/page';
 
 const page = definePage({
   label: 'Lead',
@@ -31,6 +31,8 @@ export default page;
 function Lead() {
   const [id] = page.useParam('id');
   const href = useHref();
+  // The assistant about this lead, named as the App names it; drawn only where this reader is served one.
+  const assistant = useAssistant();
   const lead = page.useRecord('lead', id === undefined ? undefined : { id }, [
     'id',
     'name',
@@ -76,6 +78,11 @@ function Lead() {
             <ActionButton action="markLost" row={row} variant="secondary" label="Mark lost" unavailable="hide" />
             <ActionButton action="startWorking" row={row} variant="primary" label="Start working" unavailable="hide" />
             <ActionButton action="markQualified" row={row} variant="primary" label="Mark qualified" unavailable="hide" />
+            {assistant.offered ? (
+              <Button variant="ghost" onClick={() => assistant.open({ about: { table: 'lead', id: row.id } })}>
+                Ask about this lead
+              </Button>
+            ) : null}
             <Button variant="ghost" href={href.record('lead-records', { id: row.id })}>
               Edit
             </Button>

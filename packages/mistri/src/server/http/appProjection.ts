@@ -25,6 +25,7 @@ import {
   servedZone,
   withAvailableEmptyActions,
   withAvailablePageEmptyActions,
+  withGrantedCommandSections,
   withHome,
   withoutBrokenViews,
   withoutSignedInParts,
@@ -283,7 +284,7 @@ export async function appProjectionRoutes(ctx: RequestContext, source: ResolvedS
       sendRevalidated(
         res,
         answer({
-          ...app,
+          ...withGrantedCommandSections(app, grantedCommands),
           writableTables: policy!.writableTables(policyContext),
           ...(Object.keys(grantedActions).length ? { grantedActions } : {}),
           grantedCommands,
@@ -325,7 +326,7 @@ export async function appProjectionRoutes(ctx: RequestContext, source: ResolvedS
       sendRevalidated(
         res,
         answer({
-          ...app,
+          ...withGrantedCommandSections(app, commands?.appId === host.app.app.id ? grantedCommands : []),
           writableTables,
           ...(revokesLinks.length ? { revokesLinks } : {}),
           ...(grantedActions && Object.keys(grantedActions).length ? { grantedActions } : {}),

@@ -111,6 +111,38 @@ const plain = (text: unknown, most: number) =>
     .slice(0, most);
 const CHOICES_TO_MODEL = 20;
 
+/** A served display rule, as far as the model needs it to say a figure: what it is in, never how it is drawn. */
+interface ServedDisplay {
+  format?: string;
+  currency?: string | { column?: string };
+  minor?: boolean;
+  unit?: string;
+}
+
+/* The figures a column holds, in words: money and its currency (and whether it is kept in cents), a percent, seconds,
+   a unit. Without it a model told 12500 of a money column kept in cents said "$12,500", and one told a chart of dollars
+   said they were cents. Only what changes how a number is read is said; a date or a name needs nothing. */
+function figureWords(rule: ServedDisplay | undefined, currency: string | undefined): string | undefined {
+  if (!rule) return undefined;
+  const unit = typeof rule.unit === 'string' && rule.unit ? `, in "${rule.unit}"` : '';
+  if (rule.format === 'money') {
+    const code = typeof rule.currency === 'string' ? rule.currency.toUpperCase() : rule.currency?.column ? undefined : (currency ?? 'USD');
+    const said = code ? `money in ${code}` : `money in each row's currency (its "${(rule.currency as { column: string }).column}")`;
+    if (!rule.minor) return `${said}${unit}`;
+    let digits = 2;
+    try {
+      digits = new Intl.NumberFormat('en', { style: 'currency', currency: code ?? 'USD' }).resolvedOptions().maximumFractionDigits ?? 2;
+    } catch {
+      /* A code Intl does not know is said with two places, as the App draws it. */
+    }
+    const example = 12_500;
+    return `${said}, kept in minor units: ${example} is ${(example / 10 ** digits).toFixed(digits)}${code ? ` ${code}` : ''}${unit}`;
+  }
+  if (rule.format === 'percent') return `a percent, 0 to 100${unit}`;
+  if (rule.format === 'duration') return `seconds${unit}`;
+  return unit ? `a number${unit}` : undefined;
+}
+
 const quoted = (value: unknown): string => {
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   const text = String(value ?? '');
@@ -258,8 +290,8 @@ function makeContext(session: ToolSession) {
   const naming = async (table: TableMeta): Promise<string | undefined> =>
     lookupsOf({ schema: await catalogSchema(), resources: session.payload.resources }).naming(table);
   const said = (value: unknown) => (value === null || value === undefined || value === '' ? undefined : value);
-  /** One record by key, if this person can see it. */
-  const record = async (table: TableMeta, id: unknown, condition?: string) => {
+  /** One record by key, if this person can see it; `whole`, with the rollups and computed columns they are served. */
+  const record = async (table: TableMeta, id: unknown, condition?: string, whole = false) => {
     const [pk, ...more] = primaryKey(table);
     if (!pk || more.length) throw new ToolRefusal(`${table.id} has no single-column key to name a record by.`);
     if (id === undefined || id === null || id === '') throw new ToolRefusal('Name the record by its id.');
@@ -272,6 +304,13 @@ function makeContext(session: ToolSession) {
     if (label && name === undefined && !(label in rows[0])) {
       const named = await run(`${table.id} ${pk} = ${quoted(id)} show ${pk}, ${label} limit 1`, 1).catch(() => undefined);
       name = said(named?.rows[0]?.[label]);
+    }
+    /* A balance or a next visit is the record's as much as its name is: read beside it, as a list reads it. One that
+       cannot be read leaves the record as its own columns say it. */
+    const derived = whole ? derivedOf(table).filter((each) => !(each in rows[0])) : [];
+    if (derived.length) {
+      const more = await run(`${table.id} ${pk} = ${quoted(id)} show ${[pk, ...derived].join(', ')} limit 1`, 1).catch(() => undefined);
+      for (const each of derived) if (more?.rows[0] && each in more.rows[0]) rows[0][each] = more.rows[0][each];
     }
     const key = { [pk]: rows[0][pk] ?? id };
     const title = String(name ?? `${table.id} ${String(id)}`);
@@ -293,11 +332,43 @@ function makeContext(session: ToolSession) {
     }
     return verb;
   };
+  /* A table's rollups and computed columns, as this person's catalog serves them: one a field grant hides is not in it,
+     so it is never named, read or said here (GRANTED_DERIVED, engine schema.ts). They are read and compared like
+     columns, and never written. */
+  const derivedOf = (table: TableMeta): string[] => [...Object.keys(table.rollups ?? {}), ...Object.keys(table.computed ?? {})];
+  const displayOf = (table: string, column: string): ServedDisplay | undefined =>
+    (session.payload.resources[table] as { display?: Record<string, ServedDisplay> } | undefined)?.display?.[column];
+  /** What each of these columns' figures are in, for the ones whose rule says (figureWords); undefined when none does. A
+   * measure's column (`sum(fee)`) is in what its column is in; a count is a count. */
+  const formatsOf = (table: string, columns: readonly string[]): Record<string, string> | undefined => {
+    const currency = (session.payload.ui as { currency?: string } | undefined)?.currency;
+    const said = columns.flatMap((name) => {
+      const measured = /^(?:sum|avg|min|max)\(([^().]+)\)$/.exec(name)?.[1] ?? name;
+      const words = figureWords(displayOf(table, measured), currency);
+      return words ? [[name, words] as const] : [];
+    });
+    return said.length ? Object.fromEntries(said) : undefined;
+  };
   const servedAction = (resource: string, id: string) =>
     (session.payload.resources[resource] as { actions?: Array<Record<string, unknown>> } | undefined)?.actions?.find(
       (each) => each.id === id,
     );
-  return { ask, run, measure, record, naming, tableOf, addressOf, verbOf, servedAction, catalogSchema, read, evidenceRead };
+  return {
+    ask,
+    run,
+    measure,
+    record,
+    naming,
+    tableOf,
+    addressOf,
+    verbOf,
+    servedAction,
+    catalogSchema,
+    read,
+    evidenceRead,
+    derivedOf,
+    formatsOf,
+  };
 }
 type Context = ReturnType<typeof toolContext>;
 
@@ -409,14 +480,31 @@ async function describe(context: Context, session: ToolSession, input: Record<st
   }
   const resource = String(input.resource ?? '');
   const table = await context.tableOf(resource);
-  const fields = table.columns.map((column) => ({
-    name: column.name,
-    type: column.type,
-    ...(column.primaryKey ? { key: true } : {}),
-    ...(column.nullable ? {} : { required: true }),
-    ...(column.allowed ? { choices: column.allowed.slice(0, CHOICES_TO_MODEL) } : {}),
-    ...(column.references ? { references: column.references.table } : {}),
-  }));
+  const formats = context.formatsOf(table.id, [...table.columns.map((column) => column.name), ...context.derivedOf(table)]) ?? {};
+  const fields = [
+    ...table.columns.map((column) => ({
+      name: column.name,
+      type: column.type,
+      ...(column.primaryKey ? { key: true } : {}),
+      ...(column.nullable ? {} : { required: true }),
+      ...(column.allowed ? { choices: column.allowed.slice(0, CHOICES_TO_MODEL) } : {}),
+      ...(column.references ? { references: column.references.table } : {}),
+      ...(formats[column.name] ? { figures: formats[column.name] } : {}),
+    })),
+    /* Worked out by the App, read and compared like a column (`show owed`, `owed > 0`), never written. */
+    ...Object.entries(table.rollups ?? {}).map(([name, rollup]) => ({
+      name,
+      type: (rollup as { type?: string }).type ?? 'number',
+      derived: 'rollup',
+      ...(formats[name] ? { figures: formats[name] } : {}),
+    })),
+    ...Object.entries(table.computed ?? {}).map(([name, computed]) => ({
+      name,
+      type: (computed as { type?: string }).type ?? 'number',
+      derived: 'computed',
+      ...(formats[name] ? { figures: formats[name] } : {}),
+    })),
+  ];
   const changes = session.catalog.resources.find((each) => each.name === resource)?.verbs.map((verb) => `${resource}.${verb.id}`) ?? [];
   return { result: { resource, label: await context.naming(table), fields, changes }, label: `Looked at ${resource}` };
 }
@@ -428,9 +516,15 @@ async function query(context: Context, input: Record<string, unknown>) {
   /* A line with measures is a grouped read, which the query bar's route does not answer. */
   if (/\b(count|sum|avg|min|max)\b/i.test(q) && !/\bshow\b/i.test(q)) {
     const grouped = await context.measure(q, limit);
+    const formats = context.formatsOf(q.split(/\s+/)[0], grouped.columns);
     return {
       asked: { q, total: grouped.total ?? grouped.rows.length, evidence: [] as AskEvidence[] },
-      result: { columns: grouped.columns, rows: grouped.rows.slice(0, SHOWN_TO_MODEL), groups: grouped.total ?? grouped.rows.length },
+      result: {
+        columns: grouped.columns,
+        rows: grouped.rows.slice(0, SHOWN_TO_MODEL),
+        groups: grouped.total ?? grouped.rows.length,
+        ...(formats ? { formats } : {}),
+      },
       label: `Counted: ${q.split(/\s+/)[0]}`,
     };
   }
@@ -455,12 +549,33 @@ async function query(context: Context, input: Record<string, unknown>) {
       /* A name that cannot be read leaves the rows named by their keys. */
     }
   }
+  /* A plain read (no `show`) is the table's own columns; its rollups and computed columns are columns to the person
+     too (a list shows them), so they are read beside the rows, by key. One the person is not served is not named. */
+  const derived =
+    meta && pk && head.length && !/\bshow\b/i.test(q) && head.every((row) => row[pk] !== undefined)
+      ? context.derivedOf(meta).filter((name) => !columns.includes(name))
+      : [];
+  const worked = new Map<string, Record<string, unknown>>();
+  if (meta && pk && derived.length) {
+    try {
+      const more = await context.run(
+        `${meta.id} ${pk} in (${head.map((row) => quoted(row[pk])).join(', ')}) show ${[pk, ...derived].join(', ')} limit ${head.length}`,
+        head.length,
+      );
+      for (const row of more.rows) worked.set(String(row[pk]), row);
+    } catch {
+      /* What cannot be read is left out, as the person's own list would leave it. */
+    }
+  }
+  const read = worked.size ? derived : [];
   const shown = await Promise.all(
     head.map(async (row) => {
       const name = meta && pk && label ? (row[label] != null && row[label] !== '' ? row[label] : names.get(String(row[pk]))) : undefined;
       const said = meta && pk && row[pk] !== undefined ? (name ?? `${meta.id} ${String(row[pk])}`) : undefined;
       if (meta && pk && row[pk] !== undefined) context.read(meta.id, { [pk]: row[pk] }, said);
       const out = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, clipped(value)]));
+      const more = pk ? worked.get(String(row[pk])) : undefined;
+      for (const each of read) if (more && each in more) out[each] = clipped(more[each]);
       if (label && name !== undefined && !(label in row)) out.label = clipped(name);
       if (meta && pk && row[pk] !== undefined) {
         const address = await context.addressOf(meta.id, { [pk]: row[pk] });
@@ -472,12 +587,14 @@ async function query(context: Context, input: Record<string, unknown>) {
       return out;
     }),
   );
+  const formats = table ? context.formatsOf(table, [...columns, ...read]) : undefined;
   return {
     asked: { q, ...(table ? { resource: table } : {}), total: total ?? rows.length, evidence: cited },
     result: {
       ...(table ? { resource: table } : {}),
       total: total ?? rows.length,
-      columns,
+      columns: [...columns, ...read],
+      ...(formats ? { formats } : {}),
       rows: shown,
       ...(rows.length > shown.length ? { more: rows.length - shown.length } : {}),
     },
@@ -494,8 +611,9 @@ async function show(context: Context, session: ToolSession, input: Record<string
   const table = await context.tableOf(resource);
   const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 120) : undefined;
   if (kind === 'record') {
-    const found = await context.record(table, input.id);
+    const found = await context.record(table, input.id, undefined, true);
     if (!found) throw new ToolRefusal(`No ${resource} with that id is visible to this person.`);
+    const formats = context.formatsOf(table.id, Object.keys(found.row));
     const block: AssistantBlock = {
       kind: 'record',
       table: table.id,
@@ -511,6 +629,7 @@ async function show(context: Context, session: ToolSession, input: Record<string
         title: found.title,
         ...(found.address ? { address: found.address } : {}),
         values: Object.fromEntries(Object.entries(found.row).map(([name, value]) => [name, clipped(value)])),
+        ...(formats ? { formats } : {}),
       },
       label: `Showed ${found.title}`,
       block,
@@ -571,6 +690,7 @@ async function show(context: Context, session: ToolSession, input: Record<string
       }),
     );
     const matched = total ?? rows.length;
+    const formats = context.formatsOf(table.id, show);
     /* An empty table is not an answer: "No rows match." under a title said less than one sentence does, and sent
        the model looking again. Nothing is drawn; the model says so. */
     if (!rows.length)
@@ -588,6 +708,7 @@ async function show(context: Context, session: ToolSession, input: Record<string
         total: matched,
         drawn: rows.length,
         columns: show,
+        ...(formats ? { formats } : {}),
         ...(dropped.length ? { empty: `${dropped.join(', ')}: empty in every row, so not drawn` } : {}),
         first: told,
       },
@@ -600,7 +721,7 @@ async function show(context: Context, session: ToolSession, input: Record<string
   if (kind !== 'metric' && !by) throw new ToolRefusal(`A ${kind} takes by: the column it is drawn by.`);
   const shape =
     kind === 'chart' && typeof input.shape === 'string' && ['bar', 'line', 'donut'].includes(input.shape) ? input.shape : undefined;
-  const { rows } = await context.measure(
+  const { rows, columns } = await context.measure(
     `${table.id}${condition ? ` where ${condition}` : ''} ${measure ?? 'count'}${by ? ` by ${by}` : ''}`,
     50,
   );
@@ -624,8 +745,10 @@ async function show(context: Context, session: ToolSession, input: Record<string
     /* Asked for, the shape is kept; unasked, groups of a kind are bars and a calendar bucket ("month close_date") a line. */
     ...(kind === 'chart' ? { shape: shape ?? (by && /^(day|week|month|quarter|year)\s/.test(by) ? 'line' : 'bar') } : {}),
   };
+  /* The figures are what the measured column is in: a sum of money kept in cents is cents, said as such. */
+  const formats = context.formatsOf(table.id, columns.length ? columns : Object.keys(rows[0] ?? {}));
   return {
-    result: { shown: kind, values: rows.slice(0, 12) },
+    result: { shown: kind, values: rows.slice(0, 12), ...(formats ? { formats } : {}) },
     label: `Showed ${title ?? `${kind} of ${table.id}`}`,
     block: { kind: 'section', section } as AssistantBlock,
   };
@@ -801,17 +924,40 @@ export async function answerTool(session: ToolSession, name: string, input: unkn
 }
 
 /**
+ * The record a page hands the assistant (`useAssistant().open({ about })`): read as the person, so under their grants
+ * and their rows only, and named by the resource's `recordLabel`. Undefined when it is not a record they may open,
+ * which the route refuses: a page cannot point the assistant at what its reader could not open themselves.
+ */
+export async function aboutRecord(
+  session: ToolSession,
+  resource: string,
+  id: unknown,
+): Promise<{ resource: string; key: Record<string, unknown>; label: string; address?: string } | undefined> {
+  const context = toolContext(session);
+  try {
+    const table = await context.tableOf(resource);
+    const found = await context.record(table, id);
+    if (!found) return undefined;
+    return { resource: table.id, key: found.key, label: found.title, ...(found.address ? { address: found.address } : {}) };
+  } catch (error) {
+    if (error instanceof ToolRefusal) return undefined;
+    throw error;
+  }
+}
+
+/**
  * The open record, as the person's message names it: its label, and the
  * changes on offer for it now — each fixed action or command whose `when`
- * the record meets, of those the person may propose.
+ * the record meets, of those the person may propose. Undefined when it is not
+ * a record this person may open: the turn is refused, never answered as if
+ * about nothing.
  */
-export async function recordContext(session: ToolSession, resource: unknown, key: unknown): Promise<string | undefined> {
-  if (typeof resource !== 'string' || !key || typeof key !== 'object') return undefined;
+export async function recordContext(session: ToolSession, resource: string, key: Record<string, unknown>): Promise<string | undefined> {
   const context = toolContext(session);
   try {
     const table = await context.tableOf(resource);
     const [pk] = primaryKey(table);
-    const id = (key as Record<string, unknown>)[pk];
+    const id = key[pk];
     const found = await context.record(table, id);
     if (!found) return undefined;
     const offered: string[] = [];
@@ -823,7 +969,8 @@ export async function recordContext(session: ToolSession, resource: unknown, key
     }
     // The title is the row's text, quoted as JSON is: a quote or a line break in it cannot end it and speak as the person.
     return `Open record: ${resource}/${String(id)} ${JSON.stringify(String(found.title))}${found.address ? ` at ${found.address}` : ''}. Changes on offer for it now: ${offered.join(', ') || 'none'}.`;
-  } catch {
-    return undefined;
+  } catch (error) {
+    if (error instanceof ToolRefusal) return undefined;
+    throw error;
   }
 }

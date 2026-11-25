@@ -60,7 +60,8 @@ export interface CommandTextField extends FieldBase {
   min?: number;
   /** Most characters, after trimming: at most 65536. */
   max?: number;
-  /** An email address, a web address (http or https), or a phone number. Not with `as: 'color'`, which is its own format. */
+  /** An email address, a web address (http or https), or a phone number. Not with `as: 'color'`, which is its own format.
+      `'member'` is `field.member()`'s: an account id of an active member of the command's tenant. */
   format?: CommandTextFormat;
   /** A regular expression the whole value must match, as its source text: `field.text({ pattern: /[A-Z]+/ })` stores it so. */
   pattern?: string;
