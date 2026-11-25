@@ -174,6 +174,10 @@ names exactly one of `accountId` or `platformRole`: a `platformRole` rule admits
 every account whose active platform membership holds that platform-realm role, so
 a new operator is a platform membership, not a policy edit. Role rules may overlap;
 the rules matching one account, tenant and operation give their roles together.
+A rule with `tenants: 'all'` acts on any tenant named to it, and by design never
+lists the tenant table: Manage tenants offers only the tenants a rule names, so an
+operator who holds `'all'` alone sees none there and acts on a tenant by its id
+through the administration door, or is given a rule that names the ones to list.
 
 A role's `write` on a tenant table gives it Save and New there; Delete needs
 `authorizeDeletedRecord` as well; `mistri check` warns
