@@ -676,7 +676,9 @@ export interface CommandRunOptions {
 }
 /** Why a command cannot be run on a record: signed out, the reader's role not granted it, or its `when` not holding for the record now. */
 export type CommandUnavailable = 'signed-out' | 'not-granted' | 'unavailable';
-/** What a component hands a command's run: any of its declared inputs, by name (every name where the App is not typed). */
+/** What a component hands a command's run: any of its declared inputs, by name (every name where the App is not typed).
+    Each value is what a person would type, as the form sends it: a `field.money({ minor: true })` input is its major
+    amount (`255` or `'255.00'` for $255.00), never the cents the handler receives. An input left out takes its `default`. */
 export type CommandInput<N extends string> = Readonly<Partial<Record<import('./app.js').CommandInputName<N>, unknown>>>;
 /**
  * One of the App's commands, as its actions offer it, by name: `const react = useCommand('reactToPost')`. `run(record, input)` sends it when the

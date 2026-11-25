@@ -2,6 +2,7 @@
 import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { isIsoDate, STAGED_FILE_ID } from '../../shared/command.js';
 import { parseCommandInput } from '../../shared/commandInputParse.js';
+import { literalDefault } from '../../shared/commandInput.js';
 import { DEFINED_KEY, DEFINITIONS_MOST } from '@mistriwork/engine/shared/definedFields.js';
 import { RICH_TEXT_MOST } from '@mistriwork/engine/shared/richText.js';
 import { apiDateCodec } from './apiDateCodec.js';
@@ -287,7 +288,8 @@ function listSchema(fields: readonly Field[], within: string, undescribed: ApiIn
     // A field asked only where its `when` holds of the record: required there, which no fixed schema can say.
     const condition = (field as { when?: string }).when;
     const needed = (field as { required?: true }).required === true;
-    const asked = needed && condition === undefined;
+    // Left out, a field with a literal default takes it: a caller need not send it.
+    const asked = needed && condition === undefined && literalDefault(field as never) === undefined;
     const when = condition === undefined ? [] : [`Asked only where the record meets: ${condition}.${needed ? ' Required there.' : ''}`];
     try {
       if (field.type === 'group') {

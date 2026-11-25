@@ -19,3 +19,7 @@
 .intake-statement { font: var(--text-base) var(--sans); color: var(--ink); white-space: pre-line; overflow-wrap: anywhere; }
 .intake-buttons { flex-wrap: wrap; }
 .intake-choice-help { display: block; color: var(--ink-muted); font: var(--text-sm) var(--sans); }
+/* A choice's chosen value, in its drop-down: a table's row may be a long name, and on a phone it ran past its box. It
+   is cut short as its open list's rows are (@mistriwork/ui's `option-label`); the trigger's title is not needed, since
+   the list says it whole. Here, not in the controls' own sheet, which is first paint. */
+.intake-select [data-slot='select-value'] { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

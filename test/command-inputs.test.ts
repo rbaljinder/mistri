@@ -1388,3 +1388,60 @@ test('a time, stars, a scanned code and a color: asked as a column format is edi
     { path: 'hue', reason: 'format' },
   ]);
 });
+
+/* A field report: a command given its first field, `fieldHelpers.bool({ default: false })`, refused every caller that sent
+   no input, though the default could answer. */
+test('an input that leaves a field out takes its literal default; one a person emptied is still asked for', () => {
+  const fields = parseCommandInput(
+    {
+      force: fieldHelpers.bool({ default: false }),
+      channel: fieldHelpers.text({ default: 'counter' }),
+      tip: fieldHelpers.money({ minor: true, default: 2.5 }),
+      note: fieldHelpers.text({ optional: true, default: 'none' }),
+      on: fieldHelpers.date({ default: { auto: 'today' } }),
+    },
+    'pay',
+  );
+  const day = { on: '2026-03-01' };
+  assert.deepEqual(readCommandInput(fields, day, { currency: 'USD' }), {
+    force: false,
+    channel: 'counter',
+    tip: 250,
+    note: 'none',
+    on: '2026-03-01',
+  });
+  // What the browser sends keeps a minor amount as its major text, default or typed.
+  assert.equal(readCommandInput(fields, day, { currency: 'USD', wire: true }).tip, '2.50');
+  // Given, a value stands over its default.
+  assert.deepEqual(readCommandInput(fields, { ...day, force: true, channel: 'phone', tip: '1', note: 'x' }, { currency: 'USD' }), {
+    force: true,
+    channel: 'phone',
+    tip: 100,
+    note: 'x',
+    on: '2026-03-01',
+  });
+  // Emptied is not left out: a required box is asked for, and an optional one is absent.
+  assert.deepEqual(commandInputProblems(fields, { ...day, channel: '' }), [{ path: 'channel', reason: 'required' }]);
+  assert.equal('note' in readCommandInput(fields, { ...day, note: '' }, { currency: 'USD' }), false);
+  // A default only the form can work out answers for nobody: the field is still required of a caller.
+  assert.deepEqual(commandInputProblems(fields, {}), [{ path: 'on', reason: 'required' }]);
+  // Starting values (`partial`) are what was given, never filled in.
+  assert.deepEqual(readCommandInput(fields, {}, { partial: true }), {});
+});
+
+test('a field asked only where its `when` holds takes its default there, and is still not given where it is hidden', () => {
+  const command = defineCommand({
+    targets: 'none',
+    source: 'main',
+    target: 't',
+    input: { outcome: fieldHelpers.choice(['won', 'lost']), reason: fieldHelpers.text({ default: 'Price', when: "outcome = 'lost'" }) },
+    output: { parse: (value: unknown) => value },
+    handle: (): unknown => ({}),
+  });
+  const context = { actor: { id: 'a', appId: 'x', roles: [] }, commandId: 'c', version: 1 };
+  assert.deepEqual(parseRegisteredInput(command, { outcome: 'lost' }, context, { publicForm: false }), {
+    outcome: 'lost',
+    reason: 'Price',
+  });
+  assert.deepEqual(parseRegisteredInput(command, { outcome: 'won' }, context, { publicForm: false }), { outcome: 'won' });
+});

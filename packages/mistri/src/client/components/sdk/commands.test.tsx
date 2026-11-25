@@ -125,6 +125,15 @@ const installDesk = () =>
               { name: 'payee', type: 'group', label: 'Payee', fields: [{ name: 'name', type: 'text', label: 'Payee name' }] },
             ],
           },
+          // A payment kept in cents, of at most $500.00, with a channel that has a default.
+          pay: {
+            id: 'pay',
+            version: 1,
+            input: [
+              { name: 'amount_cents', type: 'money', label: 'Amount', required: true, minor: true, min: 0, max: 500 },
+              { name: 'channel', type: 'text', label: 'Channel', required: true, default: 'counter' },
+            ],
+          },
         },
         // A public page's public command, its choices from a table served with it (forms/formChoices.ts).
         publicCommands: {
@@ -159,7 +168,7 @@ beforeEach(() => {
   installDesk();
   calls.length = 0;
   toasts.length = 0;
-  granted = ['raise', 'markAllRead', 'checkStep', 'closeDeal', 'schedule', 'remind', 'transfer'];
+  granted = ['raise', 'markAllRead', 'checkStep', 'closeDeal', 'schedule', 'remind', 'transfer', 'pay'];
   answer = async () => ({ status: 'applied', receiptId: 'r-1' });
 });
 afterEach(() => {
@@ -380,6 +389,35 @@ test('the form a component opens keeps every value it was given, not only the pr
   void handle('transfer').run({}, { amount: 40, urgent: true });
   await vi.waitFor(() => expect(document.querySelectorAll('.form-dialog input[type="checkbox"]:checked')).not.toHaveLength(0));
   expect(calls).toEqual([]);
+});
+
+/* A field report: a page took `run` to read cents and `open` dollars. Both read what a person would type, which is
+   what the form sends; only the handler holds minor units. */
+test('run and open read a minor money input in its major unit, and its bounds too', async () => {
+  // $255.00 as a number or as typed: sent as the exact major text, which the server keeps as 25500 cents.
+  expect(await handle('pay').run({}, { amount_cents: 255 })).toEqual({ status: 'applied' });
+  expect(await handle('pay').run({}, { amount_cents: '255.5' })).toEqual({ status: 'applied' });
+  expect(calls.map((call) => (call.body.input as { amount_cents: unknown }).amount_cents)).toEqual(['255.00', '255.50']);
+  // 25500 is $25,500.00, never 25500 cents: over the field's $500.00, so nothing is sent and the form opens on it.
+  calls.length = 0;
+  /* The amount box of the pay form, whichever dialog an earlier test left behind. */
+  const amounts = () =>
+    [...document.querySelectorAll<HTMLInputElement>('.form-dialog input[inputmode="decimal"]')].map((input) =>
+      input.value.replace(/,/g, ''),
+    );
+  void handle('pay').run({}, { amount_cents: 25500 });
+  await vi.waitFor(() => expect(amounts().some((value) => /^25500(\.00)?$/.test(value))).toBe(true));
+  expect(calls).toEqual([]);
+  document.body.innerHTML = '';
+  // open lays the same reading over the form: 255 opens at $255, not $2.55.
+  void handle('pay').open({}, { amount_cents: 255 });
+  await vi.waitFor(() => expect(amounts().some((value) => /^255(\.00)?$/.test(value))).toBe(true));
+});
+
+test('an input left out of a run takes its default, and one given wins', async () => {
+  await handle('pay').run({}, { amount_cents: 1 });
+  await handle('pay').run({}, { amount_cents: 1, channel: 'phone' });
+  expect(calls.map((call) => (call.body.input as { channel: unknown }).channel)).toEqual(['counter', 'phone']);
 });
 
 test('a run whose answer never came is not known, never refused; check asks again under the same key', async () => {

@@ -256,6 +256,7 @@ function SourcedControl(props: IntakeControlProps) {
     return (
       <Dropdown
         id={id}
+        className="intake-select"
         ariaLabelledBy={`${id}-label`}
         ariaInvalid={props['aria-invalid'] === true || props['aria-invalid'] === 'true'}
         ariaDescribedBy={props['aria-describedby']}

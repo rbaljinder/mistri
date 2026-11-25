@@ -743,3 +743,91 @@ test('a control-kit helper a page no longer exports is refused where it is impor
   assert.deepEqual(upgradeSource(own).refusals, []);
   assert.equal(upgradeSource(own).text, own);
 });
+
+/* A field report: an upgrade to the release that renamed these left about thirty type errors it could have rewritten. */
+test("Text's own tones, a tab list's label and a field's inputRef are rewritten on the kit's tags, and on nothing else", () => {
+  const head = "import { Text, Tabs, TextArea, TextField } from '@mistriwork/mistri/page';\nimport { Note } from './note';\n";
+  const body = [
+    '<Text tone="muted" size="sm">Not open to your role.</Text>',
+    '<Text tone="danger">Overdue</Text>',
+    '<Text tone="default">Plain</Text>',
+    "<Tabs label=\"Sections\" tabs={[{ key: 'a', label: 'A', content: null }]} />",
+    '<TextArea label="Note" value={note} inputRef={box} />',
+    '<TextField label="Name" value={name} inputRef={first} />',
+    '<Note tone="muted" label="Mine" inputRef={mine} />',
+  ].join('\n');
+  const result = upgradeSource(`${head}export default () => (<>\n${body}\n</>);\n`);
+  assert.equal(
+    result.text,
+    `${head}export default () => (<>\n${[
+      '<Text muted size="sm">Not open to your role.</Text>',
+      '<Text tone="critical">Overdue</Text>',
+      '<Text>Plain</Text>',
+      "<Tabs ariaLabel=\"Sections\" tabs={[{ key: 'a', label: 'A', content: null }]} />",
+      '<TextArea label="Note" value={note} ref={box} />',
+      '<TextField label="Name" value={name} ref={first} />',
+      '<Note tone="muted" label="Mine" inputRef={mine} />',
+    ].join('\n')}\n</>);\n`,
+  );
+  assert.deepEqual(result.refusals, []);
+  assert.equal(upgradeSource(result.text).text, result.text, 'a second run finds nothing');
+});
+
+test("an input component's onChange from InputProps is onValueChange where it is destructured, keeping the name its body uses", () => {
+  const head = "import type { InputProps } from '@mistriwork/mistri/ui';\n";
+  const source =
+    `${head}export function Stars({ value, onChange, disabled }: InputProps<number>) {\n  return <button disabled={disabled} onClick={() => onChange(1)}>{value}</button>;\n}\n` +
+    `export const Plain = ({ onChange: set, id }: InputProps) => <input id={id} onChange={(event) => set(event.target.value)} />;\n` +
+    `export function Whole(props: InputProps) {\n  return <input onChange={(event) => props.onChange(event.target.value)} />;\n}\n` +
+    `export function Mine({ onChange }: { onChange(value: string): void }) {\n  return <input onChange={(event) => onChange(event.target.value)} />;\n}\n`;
+  const result = upgradeSource(source);
+  assert.equal(
+    result.text,
+    source
+      .replace('{ value, onChange, disabled }: InputProps<number>', '{ value, onValueChange: onChange, disabled }: InputProps<number>')
+      .replace('{ onChange: set, id }: InputProps', '{ onValueChange: set, id }: InputProps'),
+  );
+  // Read off a whole `props`, it is named by its line: another function's `props` may be its own.
+  assert.deepEqual(
+    result.refusals.map((each) => each.line),
+    [7],
+  );
+  assert.match(result.refusals[0]!.said, /props\.onChange .* now `onValueChange`/);
+  const again = upgradeSource(result.text);
+  assert.equal(again.text, result.text);
+  // The App's own `InputProps` is the App's.
+  const own = "import type { InputProps } from './types';\nexport const A = ({ onChange }: InputProps) => <input onChange={onChange} />;\n";
+  assert.equal(upgradeSource(own).text, own);
+  assert.deepEqual(upgradeSource(own).refusals, []);
+});
+
+test('an old word held in a variable or a map is named by its line where a kit prop takes it from an expression, and only while it is held', () => {
+  const head = "import { Badge, Button, StatusDot } from '@mistriwork/mistri/ui';\n";
+  const source =
+    `${head}const TONES = { late: 'bad', due: 'warn', paid: 'good' } as const;\n` +
+    `const kind = urgent ? 'quiet' : 'primary';\n` +
+    `export const A = ({ row }) => <StatusDot tone={TONES[row.status]} />;\n` +
+    `export const B = () => <Button intent={kind} size={dense ? 'compact' : 'default'}>Go</Button>;\n` +
+    `export const C = () => <Badge>{'bad'}</Badge>;\n`;
+  const result = upgradeSource(source);
+  // The prop is renamed; the words are a person's to place.
+  assert.match(result.text, /<Button variant=\{kind\}/);
+  assert.match(result.text, /'bad', due: 'warn'/);
+  const said = result.refusals.map((each) => `${each.line}: ${each.said}`);
+  assert.equal(said.filter((each) => /^2: 'bad' is held here.*'critical'/.test(each)).length, 1, said.join('\n'));
+  assert.equal(said.filter((each) => /^2: 'warn' is held here.*'warning'/.test(each)).length, 1, said.join('\n'));
+  assert.equal(said.filter((each) => /^3: 'quiet' is held here.*'ghost'/.test(each)).length, 1, said.join('\n'));
+  assert.equal(said.filter((each) => /^5: 'compact' is held here.*'sm'/.test(each)).length, 1, said.join('\n'));
+  // `'default'` is what a size says unsaid in any file: never named.
+  assert.equal(said.filter((each) => /'default' is held/.test(each)).length, 0, said.join('\n'));
+  // Changed by hand, a run finds nothing more to say.
+  const fixed = result.text
+    .replace("'bad', due: 'warn'", "'critical', due: 'warning'")
+    .replace("'quiet'", "'ghost'")
+    .replace("'compact'", "'sm'")
+    .replace("{'bad'}", "{'critical'}");
+  assert.deepEqual(upgradeSource(fixed).refusals, []);
+  // A file with no such prop holds the same words as its own.
+  const plain = `${head}const WORDS = ['bad', 'warn'];\nexport const A = () => <StatusDot tone="good" />;\n`;
+  assert.deepEqual(upgradeSource(plain).refusals, []);
+});

@@ -11,7 +11,7 @@
  */
 import type { AppCommandField } from '../../shared/command.js';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
-import { commandInputProblems, type CommandInputReason } from '../../shared/commandInput.js';
+import { commandInputProblems, literalDefault, type CommandInputReason } from '../../shared/commandInput.js';
 import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { brokenRules, draftHolds, readsRecord, withheldAnswer, withheldOptions } from '../../shared/commandDraft.js';
 import type { AnyBusinessCommand } from './businessCommands.js';
@@ -83,7 +83,7 @@ export function checkCommandStep(
     if (when === undefined || readsRecord(when)) continue;
     const shown = draftHolds(when, given, command.fields, now);
     const answered = Object.hasOwn(given, field.name) && !empty(given[field.name]);
-    if (shown && !answered && isRequired(field)) say(field.name, REASON_SENTENCES.required);
+    if (shown && !answered && isRequired(field) && literalDefault(field) === undefined) say(field.name, REASON_SENTENCES.required);
     if (!shown && Object.hasOwn(given, field.name)) say(field.name, REASON_SENTENCES.shape);
   }
   if (command.rules?.length) {

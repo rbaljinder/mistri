@@ -104,7 +104,7 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 </Scope>
 ```
 
-`<CommandButton command row />` and `<ActionButton action row />` are hidden where the reader is not granted them, held where the row's state does not allow them, busy while they run, named with the row's title ("Check in Morgan Lee"), and say the outcome aloud (`done` words it). `Modal`, `Drawer`, `Popover`, `Tooltip`, `TextField`, `DateField`, `Select`, `Choices`, `Switch`, `Slider`, `Pagination` and `Avatar` are the shell's own controls, dressed as it dresses them.
+`<CommandButton command row />` and `<ActionButton action row />` are hidden where the reader is not granted them, held where the row's state does not allow them, busy while they run, named with the row's title ("Check in Morgan Lee"), and say the outcome aloud (`done` words it). A `CommandButton`'s `values` are the command's input, as `run(row, values)` takes them: complete, the press sends it, and short of what the command asks, its form opens filled with them (`values={{ amount: owed }}` on a Take a payment button; a `minor` money input is its major amount). `Modal`, `Drawer`, `Popover`, `Tooltip`, `TextField`, `DateField`, `Select`, `Choices`, `Switch`, `Slider`, `Pagination` and `Avatar` are the shell's own controls, dressed as it dresses them.
 
 ## `pages`
 

@@ -354,8 +354,10 @@ export const pageLoadKey = (scope: readonly unknown[], view: string, loader: str
  * One of a page's loaders, by its name: `page.useLoader('dueFigure')`. Each loader has its own cache entry and its own
  * state, so a slow one does not hold another back, and it is asked again as the page's place in the address changes
  * and after a command the page runs commits, as the page's `data` and its rows are. `data` is undefined while it loads.
+ * `{ enabled: false }` asks nothing yet, for a page that settles a parameter after its first reads (which office, from
+ * the list of them): the loader runs once, with the place the page settled on, not once before it and again after.
  */
-export function useLoader(name: string): UseQueryResult<unknown> & UiReadState {
+export function useLoader(name: string, options: { enabled?: boolean } = {}): UseQueryResult<unknown> & UiReadState {
   const host = useUiHost();
   const frame = useContext(UiPageContext);
   if (!frame) throw new Error(say('useloaderOutsideAPage'));
@@ -375,6 +377,7 @@ export function useLoader(name: string): UseQueryResult<unknown> & UiReadState {
       queryKey: pageLoadKey(host.scope, frame.view, name, place),
       queryFn: async () => (await host.load(frame.view, place, name)) ?? null,
       placeholderData: keepPreviousData,
+      enabled: options.enabled ?? true,
     }),
   );
 }

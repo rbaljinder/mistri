@@ -107,4 +107,51 @@ describe('page.useLoader', () => {
     expect(await screen.findByText('slow: {"n":11}; fast: {"n":2}')).toBeInTheDocument();
     expect(asked.sort()).toEqual(['fast', 'fast', 'slow', 'slow']);
   });
+
+  /* A field report: a page that settles its office after its first reads ran its loader before and again after. */
+  test('a loader held with `enabled: false` asks nothing, and runs once with the place the page settles on', async () => {
+    const host = fixtureHost(NONE, {}, []);
+    const asked: Array<Record<string, string>> = [];
+    host.load = (_page, params) => {
+      asked.push({ ...params });
+      return Promise.resolve({ office: params.office });
+    };
+    let office: string | undefined;
+    const frame = (): UiPageFrame => ({
+      view: 'today',
+      label: 'Today',
+      reads: [],
+      commands: [],
+      params: ['office'],
+      loaders: ['asap'],
+      get: () => office,
+      set: () => {},
+    });
+    function Today() {
+      const asap = useLoader('asap', { enabled: office !== undefined });
+      return <p>{asap.data === undefined ? 'waiting' : JSON.stringify(asap.data)}</p>;
+    }
+    const client: QueryClient = fixtureClient();
+    const drawn = (
+      <SectionFrame host={host} id="today" width={960} client={client}>
+        <UiPageContext.Provider value={frame()}>
+          <Today />
+        </UiPageContext.Provider>
+      </SectionFrame>
+    );
+    const view = render(drawn);
+    expect(await screen.findByText('waiting')).toBeInTheDocument();
+    await act(async () => {});
+    expect(asked).toEqual([]);
+    office = 'north';
+    view.rerender(
+      <SectionFrame host={host} id="today" width={960} client={client}>
+        <UiPageContext.Provider value={frame()}>
+          <Today />
+        </UiPageContext.Provider>
+      </SectionFrame>,
+    );
+    expect(await screen.findByText('{"office":"north"}')).toBeInTheDocument();
+    expect(asked).toEqual([{ office: 'north' }]);
+  });
 });
