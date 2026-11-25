@@ -1268,8 +1268,9 @@ function resolveDashboard(
             }
           : s;
       }
-      /* The Branding and integrations blocks read the tenant's own settings, never a table. */
-      if (s.kind === 'branding' || s.kind === 'integrations') return s;
+      /* The Branding and integrations blocks read the tenant's own settings, and a command's button runs a command:
+         none of them reads a table. */
+      if (s.kind === 'branding' || s.kind === 'integrations' || s.kind === 'command') return s;
       const sTable = tableNamed(schema, s.table ?? '');
       if (!sTable) {
         dashError ??= `Section "${s.title ?? s.kind}": no table "${s.table}" on this connection.`;

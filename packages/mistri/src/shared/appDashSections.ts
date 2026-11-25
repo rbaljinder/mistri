@@ -11,6 +11,7 @@ import { slug } from '@mistriwork/engine/shared/slug.js';
 import { WIDTHS, type SectionWidth } from '@mistriwork/engine/shared/page.js';
 import { checkDeclaredResource, checkResourceSlot, type ParsedData } from './appResourceBlocks.js';
 import { componentPropValues, parseComponentDecl, parseDashReads, parseDashTotals } from '@mistriwork/engine/shared/appComponents.js';
+import { parseFormCommandReference } from './command.js';
 
 /** A new App's first steps, each a list view whose New form it opens: drawn until every step's
     table has a row, and alone while none has — next actions, not charts of nothing (Dashboard.tsx). */
@@ -247,6 +248,37 @@ export function parseActivitySection(s: Record<string, unknown>, at: string, dat
     ...(title === undefined ? {} : { title }),
     ...(s.icon === undefined ? {} : { icon: parseIcon(s.icon, at) }),
     ...(s.limit === undefined ? {} : { limit: s.limit as number }),
+    ...(s.width === undefined ? {} : { width: s.width as SectionWidth }),
+  };
+}
+
+/**
+ * A button that runs one of the App's commands, with its title and a sentence: a switch the owner throws once (turn
+ * texting on), which no record carries and no form asks anything for. The command names no record and needs no input
+ * [dashboard-command]: the button sends it as it is, so one with a required input could only be refused. Who may run
+ * it is the command's grant, judged where it runs; a reader without it is not drawn the section (Dashboard.tsx).
+ */
+export function parseCommandSection(s: Record<string, unknown>, at: string): AppDashSection {
+  allowKeys(s, SECTION_KEYS.command, `${at} (a command button)`, FIRST_RUN_RENAMED);
+  const reference = parseFormCommandReference(s.command, `${at}, "command"`, false);
+  const required = reference.input.find((field) => field.required === true);
+  if (required)
+    throw new Error(
+      `${at} runs "${reference.id}", which asks for "${required.name}": a dashboard's button sends no input, so run it from a form (commandForm), or make its inputs optional [dashboard-command].`,
+    );
+  const title = optionalText(s, 'title', at);
+  const text = optionalText(s, 'description', at);
+  const label = optionalText(s, 'label', at);
+  if (label !== undefined && label.length > 60) throw new Error(`${at} has a "label" longer than 60 characters: it is the button's words.`);
+  if (s.width !== undefined && !WIDTHS.includes(String(s.width) as SectionWidth))
+    throw new Error(`${at} has a "width" of "${String(s.width)}". Use ${WIDTHS.join(', ')}.`);
+  return {
+    kind: 'command',
+    command: reference.id,
+    ...(title === undefined ? {} : { title }),
+    ...(text === undefined ? {} : { text }),
+    ...(label === undefined ? {} : { label }),
+    ...(s.icon === undefined ? {} : { icon: parseIcon(s.icon, at) }),
     ...(s.width === undefined ? {} : { width: s.width as SectionWidth }),
   };
 }

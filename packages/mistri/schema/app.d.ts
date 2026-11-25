@@ -2230,11 +2230,28 @@ export interface IntegrationsDashSection extends DashSectionCommon {
   integrations?: readonly string[];
 }
 
+/** A button that runs one of the App's commands, under a title and a sentence: a switch an owner throws once (turn
+    texting on), which no record carries and no form asks anything for. The command names no record (`targets:
+    'none'`) and needs no input: `check` refuses one with a required input (`dashboard-command`), since the button sends
+    none. Drawn only for a reader granted the command, whose grant the server judges again where it runs; its outcome is
+    said as a page's `CommandButton` says it. */
+export interface CommandDashSection extends DashSectionCommon {
+  kind: 'command';
+  readonly [madeBy]: 'commandButton';
+  command: FormCommandName<false>;
+  /** The sentence under the title: what the button does, said before it is pressed. */
+  description?: string | AppMessageRef;
+  /** The button's words, at most 60 characters; the command's own name where not said. */
+  label?: string | AppMessageRef;
+  /** A curated mark in the section's heading row. */
+  icon?: AppIcon;
+}
+
 /** One section of a dashboard, by kind. */
 export type AppDashSection =
   | MetricDashSection | BreakdownDashSection | RowsDashSection | ChartDashSection
   | NoteDashSection | BannerDashSection | MatrixDashSection | FunnelDashSection | BoardDashSection | FirstRunDashSection | CustomDashSection | ActivityDashSection
-  | FindDashSection | BrandingDashSection | IntegrationsDashSection;
+  | FindDashSection | BrandingDashSection | IntegrationsDashSection | CommandDashSection;
 
 /** A list view drawn read-only inside a dashboard: the rows its room opens on, drawn as it draws them.
     Its "open →" opens that view's room, which it has even when nav does not list it. */
@@ -4540,6 +4557,11 @@ export declare function brandingForm(
 export declare function integrationsForm(
   title?: string | AppMessageRef, opts?: Omit<IntegrationsDashSection, Made | 'kind' | 'title'>,
 ): { kind: 'integrations'; readonly [madeBy]: 'integrationsForm'; title?: string | AppMessageRef } & Omit<IntegrationsDashSection, Made | 'kind' | 'title'>;
+/** dashboard section: a button that runs a command that names no record and asks nothing —
+    `commandButton('enableTexting', { title: 'Texting', description: 'Send reminders by text.', label: 'Turn on texting' })`. */
+export declare function commandButton<const Name extends FormCommandName<false>>(
+  command: Name, opts?: Omit<CommandDashSection, Made | 'kind' | 'command'>,
+): { kind: 'command'; readonly [madeBy]: 'commandButton'; command: Name } & Omit<CommandDashSection, Made | 'kind' | 'command'>;
 /** A dashboard's one box over several resources' records: `find('Find anything', ['article', 'catalog_item'], { placeholder: 'Search help and the catalog' })`. */
 export declare function find<const R extends readonly string[]>(
   title: string | AppMessageRef, resources: R, opts?: Omit<FindDashSection, Made | 'kind' | 'title' | 'resources'>,

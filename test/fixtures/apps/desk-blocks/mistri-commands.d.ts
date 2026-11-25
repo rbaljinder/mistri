@@ -11,6 +11,7 @@ type CommandModule = typeof import("./commands.ts").default;
 export type Commands = {
   addNote: { target: "ticket"; targets: "one"; input: "body"; output: CommandOutput<CommandModule["addNote"]> };
   categorize: { target: "ticket"; targets: "one"; input: "category"; output: CommandOutput<CommandModule["categorize"]> };
+  openDesk: { target: "ticket"; targets: "none"; input: never; output: CommandOutput<CommandModule["openDesk"]> };
   reply: { target: "ticket"; targets: "one"; input: "body"; output: CommandOutput<CommandModule["reply"]> };
 };
 

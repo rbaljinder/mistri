@@ -619,7 +619,12 @@ export interface AppDashSection {
     | 'activity'
     | 'find'
     | 'branding'
-    | 'integrations';
+    | 'integrations'
+    | 'command';
+  /** command: the command its button runs, one that names no record and needs no input (appDashSections.ts). */
+  command?: string;
+  /** command: the button's words; the command's own name where not said. */
+  label?: string;
   /** find: the resources one box searches by their records' names (config `resources`), served as table ids. */
   searched?: string[];
   /** integrations: the ones the settings form shows, by name, in this order (config `integrations`); every one without it. */
@@ -1443,6 +1448,7 @@ export const DASH_KINDS = [
   'find',
   'branding',
   'integrations',
+  'command',
 ] as const;
 /** How many changes an activity section draws before "Show more", at most, and how many one read answers. */
 export const ACTIVITY_MAX = 50;
@@ -1780,6 +1786,7 @@ export const SECTION_KEYS: Record<AppDashSection['kind'] | 'banner', readonly st
   find: ['kind', 'area', 'title', 'icon', 'resources', 'placeholder', 'width'],
   branding: ['kind', 'area', 'title', 'icon', 'width'],
   integrations: ['kind', 'area', 'title', 'icon', 'width', 'integrations'],
+  command: ['kind', 'area', 'title', 'description', 'icon', 'command', 'label', 'width'],
 };
 
 /** The keys a dashboard's embed of a list view takes (`{ kind: 'view', view }`). */

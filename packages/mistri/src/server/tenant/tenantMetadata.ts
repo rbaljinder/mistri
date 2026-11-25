@@ -14,6 +14,7 @@ import {
   servedZone,
   withAvailableEmptyActions,
   withAvailablePageEmptyActions,
+  withGrantedCommandSections,
   withHome,
   withoutBrokenViews,
   withoutSignedInParts,
@@ -509,7 +510,7 @@ function projectAfresh(
         )
       : [];
   const answer: AppPayloadApp = {
-    ...(signedOut ? withoutSignedInParts(served, schema) : served),
+    ...withGrantedCommandSections(signedOut ? withoutSignedInParts(served, schema) : served, [...granted]),
     ui: { ...servedLanguages(servedLocale(servedZone(served.ui, zone), locale), catalogLocales(app)), export: false },
     writableTables: [...(capabilities?.writable ?? [])],
     ...(revokesLinks.length ? { revokesLinks: [...revokesLinks] } : {}),

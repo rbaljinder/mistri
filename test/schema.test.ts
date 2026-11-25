@@ -805,7 +805,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // `constraints` (each `field`, `message`): eleven entries; `noOverlap`, `constraint` and `constraints` are new
     // names: 1814/537.
     // Unreleased: an action's and a form view's `asks`, the inputs its form asks (two entries, one new name): 1816/538.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1816, names: 538 });
+    // Unreleased: a dashboard's `commandButton` section (`kind`, `command`, `title`, `description`, `label`, `icon`,
+    // `area`, `width`: eight entries; every name was a key already): 1824/538.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1824, names: 538 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

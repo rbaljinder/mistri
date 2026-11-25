@@ -128,6 +128,9 @@ vi.mock('../../../../kit/src/client/components/TableRoom.js', async () => {
 // A first run asks whether a step's table takes a New record; the form's own module is not the dashboard's.
 vi.mock('../../../../kit/src/client/insert.js', () => ({ canInsert: () => true }));
 vi.mock('./BrandingForm.js', () => ({ BrandingForm: () => <div data-stub="branding-form" /> }));
+vi.mock('./DashboardCommand.js', () => ({
+  DashboardCommand: ({ section }: { section: { command: string } }) => <div data-stub="command" data-command={section.command} />,
+}));
 
 const { Dashboard } = await import('./Dashboard.js');
 const { boardSection, windowed, windowTitle, metricWindow, picked, rootSlot, parseRootSlot, orderGroups, barShare } =
@@ -1690,6 +1693,12 @@ describe('the dashboard blocks', () => {
       // The section stays mounted, so it is still asked and can come back; it is the area that is out of the grid.
       expect(areaNames()).toEqual(['mix', 'work', 'kpis']);
     });
+  });
+
+  test("a command's section is drawn as its button", async () => {
+    draw({ dashboard: { id: 'settings', label: 'Settings', sections: [{ kind: 'command', command: 'enableTexting', title: 'Texting' }] } });
+    await waitFor(() => expect(document.querySelector('[data-stub="command"]')).not.toBeNull());
+    expect(document.querySelector('[data-stub="command"]')?.getAttribute('data-command')).toBe('enableTexting');
   });
 
   test('a dashboard that is only the branding form does not say "Branding" twice', async () => {

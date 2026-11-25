@@ -155,6 +155,7 @@ const ActivityFeed = onDemand(() => import('./DashboardActivity.js'), 'ActivityF
 const FindSection = onDemand(() => import('./DashboardFind.js'), 'FindSection');
 const BrandingForm = onDemand(() => import('./BrandingForm.js'), 'BrandingForm');
 const IntegrationsForm = onDemand(() => import('./IntegrationsForm.js'), 'IntegrationsForm');
+const DashboardCommand = onDemand(() => import('./DashboardCommand.js'), 'DashboardCommand');
 /* A section's own period picker, with the rules of the heading row that holds it. */
 const SectionPeriod = onDemand(() => import('@mistriwork/kit/client/components/SectionPeriod.js'), 'SectionPeriod');
 
@@ -1956,7 +1957,8 @@ const Sections = memo(function Sections({
           </>
         );
       } else {
-        body = <List section={section} aside={aside} period={period} />;
+        body =
+          section.kind === 'command' ? <DashboardCommand section={section} /> : <List section={section} aside={aside} period={period} />;
       }
       const app = activeApp();
       const source = section.view && app ? viewRoom(app, section.view) : undefined;

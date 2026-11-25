@@ -5447,6 +5447,22 @@
             "area": { "$ref": "#/$defs/dashArea" },
             "width": { "enum": ["full", "two-thirds", "half", "third"] }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "command"],
+          "description": "A button that runs one of the App's commands: one that names no record and needs no input (check refuses one with a required input, dashboard-command). Drawn only for a reader granted the command.",
+          "properties": {
+            "kind": { "const": "command" },
+            "command": { "$ref": "#/$defs/commandName" },
+            "title": { "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+            "description": { "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "The sentence under the title: what the button does." },
+            "label": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 60 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "The button's words; the command's own name where not said." },
+            "icon": { "$ref": "#/$defs/appIcon", "description": "A curated mark in the section’s heading row." },
+            "area": { "$ref": "#/$defs/dashArea" },
+            "width": { "enum": ["full", "two-thirds", "half", "third"] }
+          }
         }
       ]
     },

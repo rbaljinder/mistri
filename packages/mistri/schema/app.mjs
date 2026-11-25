@@ -157,6 +157,8 @@ export const find = (title, resources, opts = {}) => ({ kind: 'find', title, res
 export const brandingForm = (title, opts = {}) => ({ kind: 'branding', ...(title === undefined ? {} : { title }), ...opts });
 /** dashboard section: the integrations' settings form, where admins enter their secrets — `integrationsForm('Integrations')`. */
 export const integrationsForm = (title, opts = {}) => ({ kind: 'integrations', ...(title === undefined ? {} : { title }), ...opts });
+/** dashboard section: a button that runs a command that names no record and asks nothing — `commandButton('enableTexting', { title })`. */
+export const commandButton = (command, opts = {}) => ({ kind: 'command', command, ...opts });
 /** A list view drawn read-only inside a dashboard, as its room draws it — `embed('projects', { width: 'half', limit: 6 })` —
     on a landing, as its cards, or on a record's page, given `whose`, its rows that point at the record. */
 export const embed = (view, opts = {}) => ({ kind: 'view', view, ...opts });
