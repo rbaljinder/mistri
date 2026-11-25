@@ -193,7 +193,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `branding.themes[][kind=theme].extends` | object | Stable | Start from a built-in look, or from a theme, and say only what differs. Without it, colors names ground, surface, ink and accent in both modes and the rest is derived. One of `atelier`, `bloom`, `graphite`, `ledger`, `lumen`, `mono`, `sage`, `workshop`. Used in `examples/apps/lintel/hearth.ts`. |
+| `branding.themes[][kind=theme].extends` | object | Stable | Start from a built-in look, or from a theme, and say only what differs. Without it, colors names ground, surface, ink and accent in both modes and the rest is derived. One of `atelier`, `bloom`, `gallery`, `graphite`, `ledger`, `lumen`, `mono`, `sage`, `workshop`. Used in `examples/apps/lintel/hearth.ts`. |
 
 ## `branding.themes[][kind=theme].extends[kind=theme]`
 
@@ -717,7 +717,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | --- | --- | --- | --- |
 | `ui.theme[kind=fromRecord].by` | `"host"` · `"tenant"` | Stable |  One of `host`, `tenant`. Used in `examples/apps/lintel/pages/resident.ts`. |
 | `ui.theme[kind=fromRecord].fallback` | object | Stable |  |
-| `ui.theme[kind=fromRecord].fallback.preset` | `"workshop"` · `"lumen"` · `"mono"` · `"sage"` · `"ledger"` · `"atelier"` · `"graphite"` · `"bloom"` | Stable |  One of `atelier`, `bloom`, `graphite`, `ledger`, `lumen`, `mono`, `sage`, `workshop`. Used in `examples/apps/tick/app.ts`. |
+| `ui.theme[kind=fromRecord].fallback.preset` | `"workshop"` · `"lumen"` · `"mono"` · `"sage"` · `"ledger"` · `"atelier"` · `"graphite"` · `"bloom"` · `"gallery"` | Stable |  One of `atelier`, `bloom`, `gallery`, `graphite`, `ledger`, `lumen`, `mono`, `sage`, `workshop`. Used in `examples/apps/tick/app.ts`. |
 | `ui.theme[kind=fromRecord].fields` | object | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `ui.theme[kind=fromRecord].fields.about` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
 | `ui.theme[kind=fromRecord].fields.accent` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
@@ -871,7 +871,7 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `theme.extends` | object | Stable | Start from a built-in look, or from a theme, and say only what differs. Without it, colors names ground, surface, ink and accent in both modes and the rest is derived. One of `atelier`, `bloom`, `graphite`, `ledger`, `lumen`, `mono`, `sage`, `workshop`. Used in `examples/apps/lintel/app.ts`. |
+| `theme.extends` | object | Stable | Start from a built-in look, or from a theme, and say only what differs. Without it, colors names ground, surface, ink and accent in both modes and the rest is derived. One of `atelier`, `bloom`, `gallery`, `graphite`, `ledger`, `lumen`, `mono`, `sage`, `workshop`. Used in `examples/apps/lintel/app.ts`. |
 
 ## `theme file: theme.extends[kind=theme]`
 

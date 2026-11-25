@@ -25,7 +25,8 @@
           "ledger",
           "atelier",
           "graphite",
-          "bloom"
+          "bloom",
+          "gallery"
         ]
       }
     },
@@ -45,7 +46,8 @@
             "ledger",
             "atelier",
             "graphite",
-            "bloom"
+            "bloom",
+            "gallery"
           ],
           "description": "A built-in look."
         },

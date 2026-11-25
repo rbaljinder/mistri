@@ -170,6 +170,7 @@ test("the picker offers the built-in looks, then the App's own themes", () => {
     'atelier',
     'graphite',
     'bloom',
+    'gallery',
   ]);
   app([CUSTOM]);
   expect(visualThemeOptions().map((theme) => theme.value)).toEqual([
@@ -181,6 +182,7 @@ test("the picker offers the built-in looks, then the App's own themes", () => {
     'atelier',
     'graphite',
     'bloom',
+    'gallery',
     'custom',
   ]);
 });

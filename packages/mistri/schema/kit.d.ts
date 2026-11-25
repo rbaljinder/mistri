@@ -1449,14 +1449,17 @@ export declare const Badge: typeof DefaultBadge;
 export declare const PhotoTiles: typeof DefaultPhotoTiles;
 /** Compact list of up to four accented icon-and-caption rows. */
 export declare const IconRows: typeof DefaultIconRows;
-/** Section heading outline level (`2`, `3`, or `4`). */
-export type HeadingLevel = 2 | 3 | 4;
+/** Section heading outline level (`1`, `2`, `3`, or `4`). */
+export type HeadingLevel = 1 | 2 | 3 | 4;
+/** Visual size scale for `Heading`. */
+export type HeadingSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'display';
 /** Props for the `Heading` typography component. */
 export interface HeadingProps extends CleanElementProps<'h3'> {
     level?: HeadingLevel;
+    size?: HeadingSize;
 }
-/** Section or subsection heading rendered at semantic level `h2`, `h3`, or `h4`. */
-export declare function Heading({ level, ariaLabel, className, children, ref, ...props }: HeadingProps): import("react").JSX.Element;
+/** Page, section, or subsection heading rendered at semantic level `h1`–`h4` in the active look's heading face. */
+export declare function Heading({ level, size, ariaLabel, className, children, ref, ...props }: HeadingProps): import("react").JSX.Element;
 /** Font size scale for `Text`. */
 export type TextSize = '2xs' | 'xs' | 'sm' | 'base' | 'md' | 'lg';
 /** Ink hierarchy level for `Text`. */
@@ -1614,6 +1617,61 @@ export interface ItemRowProps extends CleanElementProps<'li', 'title'> {
 }
 /** Single row of `ItemList` with leading slot/tone mark, single keyboard target on `title`, and isolated trailing actions. */
 export declare function ItemRow({ leading, lead, tone, leadTone, title, description, subtitle, note, meta, action, actions, trailing, onClick, href, selected, disabled, ariaLabel, className, ref, ...props }: ItemRowProps): import("react").JSX.Element;
+/** Props for the `Eyebrow` tracked uppercase kicker primitive. */
+export interface EyebrowProps extends CleanElementProps<'p'> {
+    as?: 'p' | 'span' | 'div';
+}
+/** Quiet tracked uppercase kicker in the look's accent ink for section heads, cards, and product/article eyebrows. */
+export declare function Eyebrow({ as, ariaLabel, className, children, ...props }: EyebrowProps): import("react").JSX.Element;
+/** Props for the `Figure` headline value primitive (price, rate, metric with optional struck-through comparison and sub-note). */
+export interface FigureProps extends CleanElementProps<'div'> {
+    /** Primary formatted value (e.g. `<Value resource="listing" column="price_cents" ... />`). */
+    value: ReactNode;
+    /** Optional prior/reference value rendered struck-through beside the primary figure. */
+    was?: ReactNode;
+    /** Optional quiet sub-figure or note below the primary line (e.g. monthly estimate or unit). */
+    note?: ReactNode;
+    /** Visual size scale (`'md'`, `'lg'`, or `'xl'`). */
+    size?: 'md' | 'lg' | 'xl';
+}
+/** Tabular headline value with optional struck-through comparison figure and supporting note. */
+export declare function Figure({ value, was, note, size, ariaLabel, className, ...props }: FigureProps): import("react").JSX.Element;
+/** Supported aspect ratios for `MediaCard`. */
+export type MediaAspect = '3/2' | '4/3' | '16/9' | '3/4' | '1/1';
+/** Props for the `MediaCard` visual card primitive. */
+export interface MediaCardProps extends CleanElementProps<'div', 'title'> {
+    /** Destination URL when the card navigates on click. */
+    href?: string;
+    /** Cover image URL (for example a row's hydrated `row.cover`). */
+    media?: string | null;
+    /** Accessible image alt text (defaults to string `title` when omitted). */
+    alt?: string;
+    /** Frame aspect ratio (`'3/2'` default). */
+    aspect?: MediaAspect;
+    /** Optional pill badge floated over the top-left corner of the media frame. */
+    badge?: ReactNode;
+    /** Quiet line above the title (maker, date, category, or author). */
+    eyebrow?: ReactNode;
+    /** Card title, rendered in the active look's heading face. */
+    title: ReactNode;
+    /** Optional short line below the title. */
+    subtitle?: ReactNode;
+    /** Optional primary figure in the card footer (price, rating, count). */
+    value?: ReactNode;
+    /** Optional struck-through comparison figure beside `value`. */
+    was?: ReactNode;
+    /** Optional quiet note beside or below `value` (e.g. `$78/mo`). */
+    note?: ReactNode;
+    /** Optional right-aligned footer caption (e.g. city, date, reading time). */
+    meta?: ReactNode;
+    /** Load the image eagerly (recommended for above-the-fold hero spotlights). */
+    priority?: boolean;
+}
+/**
+ * General-purpose visual card dressed by the active Mistri look: aspect-locked photograph with optional
+ * floating badge, serif/look heading title, and tabular footer figures — zero custom CSS required.
+ */
+export declare function MediaCard({ href, media, alt, aspect, badge, eyebrow, title, subtitle, value, was, note, meta, priority, ariaLabel, className, ...props }: MediaCardProps): import("react").JSX.Element;
 /** Display preset for `FormattedValue`. */
 export type ValueFormat = 'text' | 'number' | 'currency' | 'percent' | 'date' | 'datetime' | 'bytes' | 'id';
 /** Props for the `FormattedValue` inline scalar display. */

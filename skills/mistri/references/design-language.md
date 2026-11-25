@@ -20,6 +20,7 @@ Write `ui.theme` with the look and a palette, an accent or a theme with `brand`:
 | Read more than worked: a client's portal, a report, a catalogue | `preset: 'atelier'` | `mistri docs looks` |
 | A dense console people are in all day: operations, support, finance | `preset: 'graphite'` | `mistri docs looks` |
 | A friendly product people meet now and then: bookings, a members' area | `preset: 'bloom'` | `mistri docs looks` |
+| Editorial public site, curated catalog, gallery or storefront: warm linen ground, lifted white tiles, book-serif display headlines, accent primary buttons | `preset: 'gallery'` | [foundry/app.ts](../../../examples/apps/foundry/app.ts) |
 | A brand or a reading product with its own grounds and inks | a `defineTheme` in `theme.ts`, `extends` a built-in | `mistri docs themes` |
 | A tenant App whose tenants want their own logo and accent | `branding` plus a `brandingForm()` section | `mistri docs themes` |
 
@@ -287,3 +288,26 @@ record's label column, captions without `_at`/`_on`, a state's stamp
 (`ready_at` beside `ready`) and a form's start from the schema DEFAULT. Write a
 rule only where the App differs: `check --defaults` prints what each column is
 drawn by, and `check --design --fix` deletes a rule that restates one.
+
+## Custom pages: compose primitives, write little or no CSS
+
+A free-form page (`pages/<path>.page.tsx`) should look native to the App's active look — light, dark, and phone —
+without hand-rolling CSS cards, forms, or grids. Start from [foundry](../../../examples/apps/foundry/) (`preset: 'gallery'`,
+0 lines of custom CSS) and compose from `@mistriwork/mistri/page`:
+
+| Need | Primitive from `@mistriwork/mistri/page` |
+| --- | --- |
+| Split hero, filter rail, or detail + action rail | `Beside` (`rail`, `railWidth`, `side="start" \| "end"`, `stackBelow`) |
+| Responsive card grid | `Cluster` (`min`, `gap`) |
+| Vertical / horizontal rhythm | `Stack`, `Row` (`gap`, `align`, `justify`) |
+| Image-first item or feature card | `MediaCard` (`href`, `media`, `aspect`, `badge`, `eyebrow`, `title`, `value`, `was`, `note`, `meta`) |
+| Display headline, kicker, primary figure | `Heading` (`level={1..4}`, `size="xs" \| ... \| "2xl" \| "display"`), `Eyebrow`, `Figure` (`value`, `was`, `note`) |
+| Call-to-action links & buttons | `ButtonLink` (`href`, `variant="primary" \| "outline" \| "ghost"`), `Button`, `CommandButton` |
+| Panels, metadata, photo gallery, facets | `Card`, `DescriptionList`, `Photos` (`aspect`), `ListFilters`, `Value` (`resource`, `column`, `row`) |
+| Form controls (never raw `<input>`/`<select>`) | `TextField`, `TextArea`, `Select`, `Dropdown`, `Checkbox`, `Switch`, `ChoiceCards` |
+
+When a tiny layout tweak truly needs CSS, use only look tokens — never hex colors, pixel font scales, or custom box shadows:
+`--ground`, `--surface`, `--raised`, `--ink`, `--ink-muted`, `--accent`, `--accent-ink`, `--on-accent`, `--line`,
+`--line-strong`, `--radius`, `--radius-lg`, `--pill-radius`, `--shadow-card`, `--heading-font`, `--space-1`..`--space-8`.
+Verify with `npx @mistriwork/mistri check --app . --warnings` until there are 0 warnings.
+

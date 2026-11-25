@@ -10,7 +10,7 @@ compatibility: the mistri that installed it (mistri agent init) on Node 24, run 
 An App is `app.ts` (helpers from `@mistriwork/mistri/app`) over a database; the server draws every page and enforces
 who reads and writes what. This file is the loop and the rules; load a reference file when its step comes. Keys
 ship with the package: `npx @mistriwork/mistri docs` is an index, a line a page and what it answers; read only the page your
-task needs with `npx @mistriwork/mistri docs <topic>` (`app-dsl` indexes every key). The sample Apps the references and guides link, Tick, Lintel and Ladle, ship too: `node_modules/@mistriwork/mistri/examples/apps/`.
+task needs with `npx @mistriwork/mistri docs <topic>` (`app-dsl` indexes every key). The sample Apps the references and guides link, Tick, Lintel, Ladle and Foundry, ship too: `node_modules/@mistriwork/mistri/examples/apps/`.
 
 ## The loop: brief → scaffold → seed → check (`--defaults`, `--design --fix`) → dev → test init → grade
 
@@ -74,8 +74,9 @@ task needs with `npx @mistriwork/mistri docs <topic>` (`app-dsl` indexes every k
 - A `role=` written by hand in a custom component is almost always a bug: use the shipped primitive (`Dropdown`, `Select`, `Tabs`, `Modal`, `Drawer`); `mistri check` names it. A menu is `DropdownMenu` and a combobox `Combobox`, from `@mistriwork/mistri/primitives`.
 - A whole screen no view draws is a free-form page: `pages/<path>.page.tsx`, `definePage` from `@mistriwork/mistri/page`,
   declaring its `reads`, `commands`, `params` and `loader` (or `loaders`, read by name with `page.useLoader`); a condition is a `where` object, a row's verb a `<CommandButton command row />`; it writes only through those commands, never `fetch`.
+  **Compose pages from `@mistriwork/mistri/page` primitives, not raw HTML + custom CSS**: use `Beside`, `Cluster`, `Stack`, `Row`, `Card`, `MediaCard`, `Heading`, `Eyebrow`, `Figure`, `Text`, `Button`, `ButtonLink`, `Badge`, `DescriptionList`, `TextField`, `Select`, `Photos`, `ListFilters`, `Value`, and `CommandButton`. Pick a fitting base look (`preset: 'gallery'` for editorial public sites/catalogs, `preset: 'atelier'` for calm portals — see [foundry](../../../examples/apps/foundry/app.ts)), keep custom CSS at zero or minimal layout-only rules using Mistri look tokens (`var(--surface)`, `var(--ink)`, `var(--accent)`, `var(--line)`, `var(--space-*)`), and run `npx @mistriwork/mistri check --app . --warnings` until there are 0 warnings.
 - A branded public site, a flow the person's own React owns, or a route that is not a command takes the general
-  path, settled in step 2: [choices.md](references/choices.md#the-general-path), with Ladle as its sample.
+  path, settled in step 2: [choices.md](references/choices.md#the-general-path), with Ladle and Foundry as its samples.
 
 ## Reference files, loaded when the step needs them
 

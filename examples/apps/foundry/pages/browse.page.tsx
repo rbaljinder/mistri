@@ -1,14 +1,13 @@
 import type { ReactNode } from 'react';
 import {
-  Badge,
-  Card,
   Cluster,
   definePage,
   EmptyState,
+  Eyebrow,
   Heading,
   ListFilters,
   Loaded,
-  Row,
+  MediaCard,
   Stack,
   Text,
   useFormat,
@@ -16,7 +15,6 @@ import {
   useRows,
   Value,
 } from '@mistriwork/mistri/page';
-import './browse.page.css';
 
 const page = definePage({
   label: 'Collection',
@@ -47,10 +45,12 @@ function BrowsePage(): ReactNode {
   const href = useHref();
 
   return (
-    <Stack gap="section" className="c-page-browse-wrap">
+    <Stack gap="section">
       <Stack gap="tight">
-        <Badge>Foundry collection</Badge>
-        <Heading level={2}>Browse curated pieces</Heading>
+        <Eyebrow>Foundry collection</Eyebrow>
+        <Heading level={1} size="2xl">
+          Browse curated pieces
+        </Heading>
       </Stack>
 
       <ListFilters
@@ -99,37 +99,19 @@ function CollectionGrid({
         {() => (
           <Cluster min="18rem" gap="field">
             {rows.map((row) => (
-              <a key={row.id} href={href.page('item', { id: String(row.id) })} className="c-page-browse-link">
-                <Card flush interactive>
-                  <div className="c-page-browse-media">
-                    {row.cover ? <img src={row.cover} alt={row.title} className="c-page-browse-img" loading="lazy" /> : null}
-                  </div>
-                  <Card.Body>
-                    <Stack gap="tight">
-                      <Row justify="between" align="center">
-                        <Text size="sm" muted>
-                          {row.maker} · {row.year_made}
-                        </Text>
-                        <Badge pill>{row.condition}</Badge>
-                      </Row>
-                      <Heading level={4}>{row.title}</Heading>
-                      <Row justify="between" align="baseline">
-                        <Row gap="tight" align="baseline">
-                          <strong className="c-page-browse-price">
-                            <Value resource="listing" column="price_cents" value={row.price_cents} row={row} />
-                          </strong>
-                          <Text size="sm" muted>
-                            {fmt.money(Math.round(row.price_cents / 12), { minor: true, round: true })}/mo
-                          </Text>
-                        </Row>
-                        <Text size="sm" muted>
-                          {row.city}
-                        </Text>
-                      </Row>
-                    </Stack>
-                  </Card.Body>
-                </Card>
-              </a>
+              <MediaCard
+                key={row.id}
+                href={href.page('item', { id: String(row.id) })}
+                media={row.cover}
+                alt={row.title}
+                aspect="3/2"
+                badge={row.condition}
+                eyebrow={`${row.maker} · ${row.year_made} · ${row.category}`}
+                title={row.title}
+                value={<Value resource="listing" column="price_cents" value={row.price_cents} row={row} />}
+                note={`${fmt.money(Math.round(row.price_cents / 12), { minor: true, round: true })}/mo`}
+                meta={row.city}
+              />
             ))}
           </Cluster>
         )}

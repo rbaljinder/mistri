@@ -251,7 +251,7 @@ test("a theme's figures face: named, it is --figures-face; naming a data face al
      a soft look's dates, phone numbers and amounts are its sans, a printed table's are its text face, and an
      instrument's monospace is for its labels and its readings, so a row is read in one face. Their digits are a
      column wide. Every other look keeps Plex Mono. */
-  const inText = ['lumen', 'bloom', 'atelier', 'graphite'];
+  const inText = ['lumen', 'bloom', 'atelier', 'graphite', 'gallery'];
   for (const preset of THEME_PRESETS)
     if (preset.fonts?.data && !inText.includes(preset.id)) assert.match(String(preset.fonts.figures), /IBM Plex Mono/, preset.id);
   for (const id of inText) assert.equal(themePreset(id)!.fonts?.figures, themePreset(id)!.fonts?.data, id);

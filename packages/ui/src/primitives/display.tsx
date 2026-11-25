@@ -37,20 +37,24 @@ function renderEmptyNode(empty: EmptyStateSpec | ReactNode): ReactNode {
  * 1. Typography: Heading, Text, Code, Kbd, VisuallyHidden
  * ========================================================================== */
 
-/** Section heading outline level (`2`, `3`, or `4`). */
-export type HeadingLevel = 2 | 3 | 4;
+/** Section heading outline level (`1`, `2`, `3`, or `4`). */
+export type HeadingLevel = 1 | 2 | 3 | 4;
+
+/** Visual size scale for `Heading`. */
+export type HeadingSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl' | '2xl' | 'display';
 
 /** Props for the `Heading` typography component. */
 export interface HeadingProps extends CleanElementProps<'h3'> {
   level?: HeadingLevel;
+  size?: HeadingSize;
 }
 
-/** Section or subsection heading rendered at semantic level `h2`, `h3`, or `h4`. */
-export function Heading({ level = 3, ariaLabel, className, children, ref, ...props }: HeadingProps) {
-  const Tag = `h${level}` as 'h2' | 'h3' | 'h4';
-  const size = level === 2 ? 'lg' : level === 4 ? 'sm' : 'md';
+/** Page, section, or subsection heading rendered at semantic level `h1`–`h4` in the active look's heading face. */
+export function Heading({ level = 3, size, ariaLabel, className, children, ref, ...props }: HeadingProps) {
+  const Tag = `h${level}` as 'h1' | 'h2' | 'h3' | 'h4';
+  const resolvedSize: HeadingSize = size ?? (level === 1 ? 'display' : level === 2 ? 'lg' : level === 4 ? 'sm' : 'md');
   return (
-    <Tag ref={ref} aria-label={ariaLabel} data-size={size} className={cx('kit-heading nx-heading', className)} {...props}>
+    <Tag ref={ref} aria-label={ariaLabel} data-size={resolvedSize} className={cx('kit-heading nx-heading', className)} {...props}>
       {children}
     </Tag>
   );
@@ -898,5 +902,148 @@ export function ItemRow({
         )}
       </span>
     </li>
+  );
+}
+
+/* ============================================================================
+ * 7. Editorial & Public-Site Display: Eyebrow, Figure, MediaCard
+ * ========================================================================== */
+
+/** Props for the `Eyebrow` tracked uppercase kicker primitive. */
+export interface EyebrowProps extends CleanElementProps<'p'> {
+  as?: 'p' | 'span' | 'div';
+}
+
+/** Quiet tracked uppercase kicker in the look's accent ink for section heads, cards, and product/article eyebrows. */
+export function Eyebrow({ as = 'p', ariaLabel, className, children, ...props }: EyebrowProps) {
+  const Tag = as as 'p';
+  return (
+    <Tag aria-label={ariaLabel} className={cx('nx-eyebrow', className)} {...props}>
+      {children}
+    </Tag>
+  );
+}
+
+/** Props for the `Figure` headline value primitive (price, rate, metric with optional struck-through comparison and sub-note). */
+export interface FigureProps extends CleanElementProps<'div'> {
+  /** Primary formatted value (e.g. `<Value resource="listing" column="price_cents" ... />`). */
+  value: ReactNode;
+  /** Optional prior/reference value rendered struck-through beside the primary figure. */
+  was?: ReactNode;
+  /** Optional quiet sub-figure or note below the primary line (e.g. monthly estimate or unit). */
+  note?: ReactNode;
+  /** Visual size scale (`'md'`, `'lg'`, or `'xl'`). */
+  size?: 'md' | 'lg' | 'xl';
+}
+
+/** Tabular headline value with optional struck-through comparison figure and supporting note. */
+export function Figure({ value, was, note, size = 'lg', ariaLabel, className, ...props }: FigureProps) {
+  return (
+    <div aria-label={ariaLabel} data-size={size} className={cx('nx-figure', className)} {...props}>
+      <div className="nx-figure-line">
+        <span className="nx-figure-value">{value}</span>
+        {given(was) && <span className="nx-figure-was">{was}</span>}
+      </div>
+      {given(note) && <p className="nx-figure-note">{note}</p>}
+    </div>
+  );
+}
+
+/** Supported aspect ratios for `MediaCard`. */
+export type MediaAspect = '3/2' | '4/3' | '16/9' | '3/4' | '1/1';
+
+/** Props for the `MediaCard` visual card primitive. */
+export interface MediaCardProps extends Omit<CleanElementProps<'div'>, 'title'> {
+  /** Destination URL when the card navigates on click. */
+  href?: string;
+  /** Cover image URL (for example a row's hydrated `row.cover`). */
+  media?: string | null;
+  /** Accessible image alt text (defaults to string `title` when omitted). */
+  alt?: string;
+  /** Frame aspect ratio (`'3/2'` default). */
+  aspect?: MediaAspect;
+  /** Optional pill badge floated over the top-left corner of the media frame. */
+  badge?: ReactNode;
+  /** Quiet line above the title (maker, date, category, or author). */
+  eyebrow?: ReactNode;
+  /** Card title, rendered in the active look's heading face. */
+  title: ReactNode;
+  /** Optional short line below the title. */
+  subtitle?: ReactNode;
+  /** Optional primary figure in the card footer (price, rating, count). */
+  value?: ReactNode;
+  /** Optional struck-through comparison figure beside `value`. */
+  was?: ReactNode;
+  /** Optional quiet note beside or below `value` (e.g. `$78/mo`). */
+  note?: ReactNode;
+  /** Optional right-aligned footer caption (e.g. city, date, reading time). */
+  meta?: ReactNode;
+  /** Load the image eagerly (recommended for above-the-fold hero spotlights). */
+  priority?: boolean;
+}
+
+/**
+ * General-purpose visual card dressed by the active Mistri look: aspect-locked photograph with optional
+ * floating badge, serif/look heading title, and tabular footer figures — zero custom CSS required.
+ */
+export function MediaCard({
+  href,
+  media,
+  alt,
+  aspect = '3/2',
+  badge,
+  eyebrow,
+  title,
+  subtitle,
+  value,
+  was,
+  note,
+  meta,
+  priority = false,
+  ariaLabel,
+  className,
+  ...props
+}: MediaCardProps) {
+  const hasFoot = given(value) || given(was) || given(note) || given(meta);
+  const altText = alt ?? (typeof title === 'string' ? title : '');
+  const inner = (
+    <>
+      <div className="nx-media-card-frame" data-aspect={aspect}>
+        {media ? (
+          <img src={media} alt={altText} className="nx-media-card-img" loading={priority ? 'eager' : 'lazy'} decoding="async" />
+        ) : (
+          <div className="nx-media-card-placeholder" aria-hidden="true" />
+        )}
+        {given(badge) && <span className="nx-media-card-badge">{badge}</span>}
+      </div>
+      <div className="nx-media-card-body">
+        {given(eyebrow) && <p className="nx-media-card-eyebrow">{eyebrow}</p>}
+        <h3 className="nx-media-card-title">{title}</h3>
+        {given(subtitle) && <p className="nx-media-card-subtitle">{subtitle}</p>}
+        {hasFoot && (
+          <div className="nx-media-card-foot">
+            <div className="nx-media-card-values">
+              {given(value) && <span className="nx-media-card-value">{value}</span>}
+              {given(was) && <span className="nx-media-card-was">{was}</span>}
+              {given(note) && <span className="nx-media-card-note">{note}</span>}
+            </div>
+            {given(meta) && <span className="nx-media-card-meta">{meta}</span>}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  if (href) {
+    return (
+      <a href={href} data-slot="media-card" aria-label={ariaLabel} className={cx('nx-media-card', 'is-link', className)}>
+        {inner}
+      </a>
+    );
+  }
+  return (
+    <div data-slot="media-card" aria-label={ariaLabel} className={cx('nx-media-card', className)} {...props}>
+      {inner}
+    </div>
   );
 }

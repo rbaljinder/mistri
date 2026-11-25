@@ -4,6 +4,7 @@ A curated vintage marketplace (cameras, mid-century furniture, analog hi-fi, and
 
 ## What this sample demonstrates
 
+- **Editorial `gallery` base theme with zero custom CSS**: `ui.theme: { preset: 'gallery', accent: '#a83c17' }` gives warm linen ground, lifted white tiles, book-serif display headlines, rounded controls, and accent primary CTAs. All three custom pages compose Mistri's own primitives (`MediaCard`, `ButtonLink`, `Eyebrow`, `Figure`, `Heading`, `Beside`, `Cluster`, `Stack`, `Row`, `Card`, `DescriptionList`, `TextField`, `Photos`, `ListFilters`, `Value`, `CommandButton`) with **0 lines of custom CSS** and **0 `mistri check --warnings` warnings**.
 - **Public site shell (`ui.site`)**: signed-out visitors get a dedicated site header (brand mark, links, search box, primary CTA) and footer (`signIn: 'footer'`), completely separate from the signed-in curator desk's `nav`.
 - **First-paint SSR for custom public pages**: `pages/door.page.tsx`, `pages/browse.page.tsx`, and `pages/item.page.tsx` declare `public: true` and `head: false`, arriving pre-rendered with photographs, formatted prices, and site chrome in the initial HTML response.
 - **Cover photos on the row (`resources.listing.photos`)**: declaring `photos: { from: 'listing_photo', whose: 'listing_id', sort: 'position asc', aspect: '3/2' }` hydrates `row.cover` automatically on `useRows('listing')` and built-in card views.

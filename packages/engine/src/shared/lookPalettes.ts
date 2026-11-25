@@ -510,6 +510,7 @@ export function paletteColors(look: ThemeBase, palette: LookPalette, mode: 'ligh
       };
     }
     case 'bloom':
+    case 'gallery':
       /* The hue is the look: the primary button is filled in it, what is chosen sits on its tint. What is merely so
          (a step that is new or under way, a note) keeps the look's own blue, moved off the hue only where the palette
          is itself a blue (infoApart): the accent said twice read as one thing. What a colour warns of or confirms

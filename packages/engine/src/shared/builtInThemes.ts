@@ -1270,5 +1270,162 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
     "density": "compact",
     "rhythm": "airy",
     "base": "bloom"
+  },
+  {
+    "id": "gallery",
+    "label": "Gallery",
+    "light": p("#faf8f5 #ffffff #f3efe8 #e8e2d8 #b8afa2 #8c8377 #1c1917 #5c554d #736a60 #b33d0b #fdeee4 #b33d0b #d4612a - - #246642 #8a5800 #b82925 #2b5ea8 #ffffff #1c1917 #5c554d #e8e2d8 #b33d0b #f3efe8 #1c1917 #e8691f #a84423 #2b5ea8 #246642 #2a7f86 #9c6e18 #7b4a8c #857d73 #e8e2d8 #e8e2d8 1px - #b33d0b - - - #ffffff"),
+    "dark": p("#13110f #1c1916 #26221e #302b25 #5b5349 #82786c #f3eee7 #b7aea2 #998f83 #ff9d66 #3b2112 #ffb88f #d8743a - - #6ec493 #e5b558 #f28b82 #88b6f2 #1c1916 #f3eee7 #b7aea2 #302b25 #ffb88f #26221e #f3eee7 #f07a32 #88b6f2 #6ec493 #c79ad6 #ddb860 #6fc7cf #db9558 #90887e #302b25 #302b25 1px - #ff9d66 - - - #1c1916"),
+    "palettes": [
+      {
+        "id": "crimson",
+        "label": "Crimson",
+        "light": p("- - - - - - - - - #b42318 #fdecea #b42318 #d9534a - - - - - - - - - - #b42318 - - #d63a32 #2b5ea8 #a84423 #7b4a8c #9c6e18 #2a7f86 #246642 - - - - - #b42318"),
+        "dark": p("- - - - - - - - - #ff8f85 #3d1715 #ffaca5 #e06158 - - - - - - - - - - #ffaca5 - - #e5534b - - - - - - - - - - - #ff8f85")
+      },
+      {
+        "id": "safety",
+        "label": "Safety orange",
+        "light": p("-"),
+        "dark": p("-")
+      },
+      {
+        "id": "amber",
+        "label": "Amber",
+        "light": p("- - - - - - - - - #875a00 #fbf2dc #875a00 #b57a33 - - - - - - - - - - #875a00 - - #d97706 - - - #7b4a8c #857d73 #b85020 #2a7f86 - - - - #875a00"),
+        "dark": p("- - - - - - - - - #f4b24a #3a2a10 #fbcf86 #b07d2d - - - - - - - - - - #fbcf86 - - #c88317 - #e08363 #ddb860 #c79ad6 #6ec493 #90887e #6fc7cf - - - - #f4b24a")
+      },
+      {
+        "id": "moss",
+        "label": "Moss",
+        "light": p("- - - - - - - - - #436e10 #eef4e2 #436e10 #638f2a - - - - - - - - - - #436e10 - - #6b9e1f - - - #7b4a8c #857d73 #b85020 #2a7f86 - - - - #436e10"),
+        "dark": p("- - - - - - - - - #a6d468 #232f15 #bfe28f #7aa743 - - - - - - - - - - #bfe28f - - #8cbf45 - #e08363 #ddb860 #c79ad6 #db9558 #6fc7cf - - - - - #a6d468")
+      },
+      {
+        "id": "emerald",
+        "label": "Emerald",
+        "light": p("- - - - - - - - - #08734f #e4f6ed #08734f #36966f - - - - - - - - - - #08734f - - #0e9a6c - - - #9c6e18 #7b4a8c #b85020 - - - - - #08734f"),
+        "dark": p("- - - - - - - - - #4ad6a0 #0f3529 #7ee6bd #279771 - - - - - - - - - - #7ee6bd - - #12a678 - #e08363 #ddb860 #c79ad6 #db9558 #6fc7cf - - - - - #4ad6a0")
+      },
+      {
+        "id": "teal",
+        "label": "Teal",
+        "light": p("- - - - - - - - - #0b6f86 #e3f5f8 #0b6f86 #3c90a4 - - - - - #664da0 - - - - #0b6f86 - - #0e8fb0 - - - #9c6e18 #7b4a8c #b85020 - - - - - #0b6f86"),
+        "dark": p("- - - - - - - - - #4cc6db #0f3540 #79d6e6 #2a8a9c - - - - - #b7a7ec - - - - #79d6e6 - - #0c8ab0 #e08363 #88b6f2 #6ec493 #c79ad6 #ddb860 #6fc7cf #db9558 - - - - #4cc6db")
+      },
+      {
+        "id": "cobalt",
+        "label": "Cobalt",
+        "light": p("- - - - - - - - - #2d4fd6 #eef1fd #2d4fd6 #6880e0 - - - - - #196a7b - - - - #2d4fd6 - - #2557e0 - #7b4a8c - #9c6e18 #2a7f86 #b85020 - - - - - #2d4fd6"),
+        "dark": p("- - - - - - - - - #8aa1ff #1d2547 #91a8ff #5a73d6 - - - - - #5ec3db - - - - #91a8ff - - #4369f0 #e08363 #ddb860 - #6ec493 #90887e #6fc7cf #db9558 - - - - #8aa1ff")
+      },
+      {
+        "id": "violet",
+        "label": "Violet",
+        "light": p("- - - - - - - - - #6534d8 #f1ecff #6534d8 #8a6ee6 - - - - - #00708d - - - - #6534d8 - - #9a6cf7 - - - #9c6e18 #2a7f86 #b85020 - - - - - #6534d8"),
+        "dark": p("- - - - - - - - - #ad91ff #2a2154 #bea8ff #7c63cf - - - - - #5ec3db - - - - #bea8ff - - #9a78ec #e08363 #88b6f2 #6ec493 #90887e #ddb860 #6fc7cf #db9558 - - - - #ad91ff")
+      },
+      {
+        "id": "plum",
+        "label": "Plum",
+        "light": p("- - - - - - - - - #8a1f8f #f8eaf8 #8a1f8f #b65bbb - - - - - - - - - - #8a1f8f - - #b847c0 - - - #9c6e18 #2a7f86 #b85020 - - - - - #8a1f8f"),
+        "dark": p("- - - - - - - - - #e28cea #3a1840 #edaef2 #b366bb - - - - - - - - - - #edaef2 - - #d062d8 #e08363 #88b6f2 #6ec493 #90887e #ddb860 #6fc7cf #db9558 - - - - #e28cea")
+      },
+      {
+        "id": "rose",
+        "label": "Rose",
+        "light": p("- - - - - - - - - #b4185a #fdebf2 #b4185a #d0608f - - - - - - - - - - #b4185a - - #e0428a - - - - - - - - - - - #b4185a"),
+        "dark": p("- - - - - - - - - #f57ab9 #3e1631 #f9a6cf #bd5a8f - - - - - - - - - - #f9a6cf - - #e0559b - - - - - - - - - - - #f57ab9")
+      },
+      {
+        "id": "slate",
+        "label": "Slate",
+        "light": p("- - - - - - - - - #3f5670 #ebeff4 #3f5670 #6e8399 - - - - - #007569 - - - - #3f5670 - - #5f7690 - - - #9c6e18 #7b4a8c #b85020 - - - - - #3f5670"),
+        "dark": p("- - - - - - - - - #a8bbd2 #1f2733 #c2d0e1 #6f86a3 - - - - - #5ec8bb - - - - #c2d0e1 - - #8a9fba #e08363 #ddb860 - #6ec493 #90887e #6fc7cf #db9558 - - - - #a8bbd2")
+      },
+      {
+        "id": "ink",
+        "label": "Ink",
+        "light": p("- - - - - - - - - #1c1a17 #eeedeb #1c1a17 #726c64 - - - - - - - - - - #1c1a17 - - #2b2620 - - #9c6e18 #7b4a8c #857d73 #b85020 #2a7f86 - - - - #1c1a17"),
+        "dark": p("- - - - - - - - - #eeece8 #2a2826 #eeece8 #9f9a92 - - - - - - - - - - #eeece8 - - #d9d0c0 #e08363 #88b6f2 #6ec493 #c79ad6 #db9558 #6fc7cf - - - - - #eeece8")
+      }
+    ],
+    "defaultPalette": "safety",
+    "fonts": {
+      "ui": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "data": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "heading": "\"Iowan Old Style\", \"Palatino Linotype\", Palatino, \"Book Antiqua\", Georgia, serif",
+      "figures": "ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif"
+    },
+    "radius": {
+      "control": "999px",
+      "field": "10px",
+      "pill": "999px",
+      "panel": "16px"
+    },
+    "recipes": {
+      "nav": "quiet",
+      "bar": "plain",
+      "tabs": "rule",
+      "windows": "lifted",
+      "stat": "plain",
+      "section": "panel",
+      "fields": "panel",
+      "table": "open",
+      "status": "pill",
+      "board": "ruled",
+      "chart": "line",
+      "buttons": "accent",
+      "links": "name",
+      "rules": "hairline",
+      "avatar": "plain",
+      "workflow": "markers",
+      "banner": "plain",
+      "steps": "tinted",
+      "lanes": "plain",
+      "header": "plain",
+      "pane": "inset",
+      "filters": "quiet",
+      "required": "optional-word",
+      "formStep": "ruled",
+      "actionBar": "plain",
+      "choice": "tint"
+    },
+    "elevation": "soft",
+    "type": {
+      "roles": {
+        "title": {
+          "face": "heading",
+          "size": "34px",
+          "weight": 500,
+          "tracking": "-0.02em"
+        },
+        "heading": {
+          "face": "heading",
+          "size": "26px",
+          "weight": 500,
+          "tracking": "-0.015em"
+        },
+        "section": {
+          "face": "ui",
+          "size": "12px",
+          "weight": 600,
+          "case": "upper",
+          "tracking": "0.08em"
+        },
+        "figure": {
+          "face": "heading",
+          "size": "34px",
+          "weight": 500,
+          "tracking": "-0.015em",
+          "features": [
+            "lnum"
+          ]
+        }
+      }
+    },
+    "density": "compact",
+    "rhythm": "airy",
+    "base": "gallery"
   }
 ];

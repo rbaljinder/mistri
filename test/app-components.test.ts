@@ -23,7 +23,7 @@ import { compileComponents } from '../packages/mistri/src/server/app/appComponen
 import { componentsIndex } from '../packages/mistri/src/server/app/appBuild.js';
 import { withHead } from '../packages/engine/src/server/clientHttp.js';
 import { withHostPaths } from '../packages/mistri/src/server/http/componentRoutes.js';
-import { HAND_ROLES, lintComponents } from '../packages/mistri/src/server/app/componentLint.js';
+import { HAND_ROLES, lintComponents, NATIVE_CONTROLS } from '../packages/mistri/src/server/app/componentLint.js';
 import { componentCode } from '../packages/mistri/src/server/build/checkProblems.js';
 import { hostModuleSource } from '../packages/mistri/src/server/app/componentSdk.js';
 import { loadApp } from '../packages/mistri/src/server/app/apps.js';
@@ -399,6 +399,18 @@ describe("mistri check's lints", () => {
           new RegExp(`^\\s*(?:export declare (?:function|const) )?${name}\\b`, 'm'),
           `${module} does not publish ${name}`,
         );
+    }
+  });
+
+  test('warns on raw HTML controls in free-form pages and names published primitives', () => {
+    const pageDts = readFileSync(join(ROOT, 'packages/mistri/schema/page.d.ts'), 'utf8');
+    const kitDts = readFileSync(join(ROOT, 'packages/mistri/schema/kit.d.ts'), 'utf8');
+    const uiDts = readFileSync(join(ROOT, 'packages/mistri/schema/ui.d.ts'), 'utf8');
+    const published = `${pageDts}\n${uiDts}\n${kitDts}`;
+    for (const [tag, advice] of Object.entries(NATIVE_CONTROLS)) {
+      const names = advice.match(/\b[A-Z]\w+/g) ?? [];
+      assert.ok(names.length > 0, `<${tag}> names no primitive: ${advice}`);
+      for (const name of names) assert.match(published, new RegExp(`\\b${name}\\b`), `@mistriwork/mistri/page does not publish ${name}`);
     }
   });
 });

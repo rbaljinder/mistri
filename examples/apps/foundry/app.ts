@@ -106,7 +106,7 @@ export default defineApp({
   nav: ['inventory', 'sellers', 'consignments'],
   ui: {
     theme: {
-      preset: 'lumen',
+      preset: 'gallery',
       accent: '#A84423',
     },
     site: {

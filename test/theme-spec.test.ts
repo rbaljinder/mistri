@@ -162,6 +162,31 @@ const WORN: Record<string, Record<string, string>> = {
     filters: 'solid',
     actionBar: 'raised',
   },
+  gallery: {
+    nav: 'quiet',
+    bar: 'plain',
+    tabs: 'rule',
+    windows: 'lifted',
+    stat: 'plain',
+    section: 'panel',
+    fields: 'panel',
+    table: 'open',
+    status: 'pill',
+    board: 'ruled',
+    chart: 'line',
+    buttons: 'accent',
+    links: 'name',
+    rules: 'hairline',
+    avatar: 'plain',
+    workflow: 'markers',
+    banner: 'plain',
+    steps: 'tinted',
+    lanes: 'plain',
+    header: 'plain',
+    filters: 'quiet',
+    required: 'optional-word',
+    formStep: 'ruled',
+  },
 };
 const SHAPE: Record<string, { elevation: string; title?: string }> = {
   workshop: { elevation: 'flat', title: '28px' },
@@ -172,6 +197,7 @@ const SHAPE: Record<string, { elevation: string; title?: string }> = {
   atelier: { elevation: 'flat', title: '30px' },
   graphite: { elevation: 'hairline' },
   bloom: { elevation: 'soft', title: '30px' },
+  gallery: { elevation: 'soft', title: '34px' },
 };
 
 const spec = (extra: Record<string, unknown> = {}) => ({
@@ -615,7 +641,14 @@ test('a theme stands things apart at a rhythm: tight, house or airy, worn as one
   assert.equal(recipeAttributes(airy).attributes['data-look-rhythm'], 'airy');
   assert.equal(recipeAttributes(compileAppTheme(base, 'theme')).attributes['data-look-rhythm'], 'house');
   // Each built-in at its own: the instrument tight, the printed page and the tiles airy, the rest the platform's.
-  const worn: Record<string, string> = { graphite: 'tight', ledger: 'tight', atelier: 'airy', bloom: 'airy', sage: 'airy' };
+  const worn: Record<string, string> = {
+    graphite: 'tight',
+    ledger: 'tight',
+    atelier: 'airy',
+    bloom: 'airy',
+    sage: 'airy',
+    gallery: 'airy',
+  };
   for (const preset of THEME_PRESETS)
     assert.equal(recipeAttributes(preset).attributes['data-look-rhythm'], worn[preset.id] ?? 'house', preset.id);
   assert.deepEqual(parseThemes([airy], 'app')![0]!.rhythm, 'airy');

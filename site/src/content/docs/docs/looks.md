@@ -135,7 +135,7 @@ The type roles each look says (`type.roles`, [Theme recipes](/docs/theme-recipes
 
 | Key | What it does | Default | Status |
 | --- | --- | --- | --- | --- |
-| `ui.theme.preset` | `workshop`, `lumen`, `mono`, `sage`, `ledger`, `atelier`, `graphite`, `bloom`, or a registered look's id | `workshop` | Stable |
+| `ui.theme.preset` | `workshop`, `lumen`, `mono`, `sage`, `ledger`, `atelier`, `graphite`, `bloom`, `gallery`, or a registered look's id | `workshop` | Stable |
 | `ui.theme.palette` | One of twelve palettes every built-in look offers: `crimson`, `safety`, `amber`, `moss`, `emerald`, `teal`, `cobalt`, `violet`, `plum`, `rose`, `slate`, `ink` | Workshop and Atelier `safety`, Lumen `cobalt`, Ledger `emerald`, Graphite `teal`, Bloom `slate`, Mono and Sage `ink` | Stable |
 | `ui.theme.accent` | One color, or `{ light, dark }`; one color is mixed toward white on dark | the look's | Stable |
 | `ui.theme.radius`, `font` | Corners (Mono keeps its square ones) and the interface face | the look's | Stable |

@@ -161,6 +161,13 @@ Lintel's public side is this recipe. Look: Lumen or its own theme on Lumen
 - **Stock**: `editable` in the grid — [lintel/views.ts:51](../../../examples/apps/lintel/views.ts#L51).
 - **Values**: real photographs (a thumbnail on the card), `money` everywhere,
   a `slug` in each item's address.
+- **Public custom site (zero custom CSS)**: when a storefront, gallery or curated catalog needs an editorial front door,
+  custom browse layout and item detail page with its own brand header, follow Foundry Market
+  ([foundry/app.ts](../../../examples/apps/foundry/app.ts)): set `ui.theme: { preset: 'gallery', accent }`, configure
+  `ui.site` (`nav`, `search`, `cta`), attach `resources.*.photos` (so `row.cover` arrives automatically), and compose
+  `pages/*.page.tsx` (`head: false`) from `@mistriwork/mistri/page` primitives (`MediaCard`, `ButtonLink`, `Eyebrow`,
+  `Figure`, `Heading`, `Beside`, `Cluster`, `Stack`, `Row`, `Card`, `DescriptionList`, `TextField`, `Photos`,
+  `ListFilters`, `Value`, `CommandButton`) backed by atomic `db.<table>.claim()` commands — zero custom CSS files needed.
 
 ## Internal admin tool: people, requests, settings
 

@@ -9,6 +9,11 @@
   body.app-site .topbar-actions {
     display: none;
   }
+  body.app-site .free-page-body:not(.is-bare) {
+    max-width: 1220px;
+    margin-inline: auto;
+    padding-block: var(--space-6) var(--space-8);
+  }
   .site-header {
     display: flex;
     align-items: center;

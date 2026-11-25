@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
 import {
-  Badge,
   Beside,
-  Card,
+  ButtonLink,
   Cluster,
   definePage,
+  Eyebrow,
   Heading,
+  MediaCard,
   Row,
   Stack,
   Text,
@@ -14,7 +15,6 @@ import {
   useRows,
   Value,
 } from '@mistriwork/mistri/page';
-import './door.page.css';
 
 const page = definePage({
   label: 'Foundry Market',
@@ -54,112 +54,86 @@ function DoorPage(): ReactNode {
   const lead = rows[0];
 
   return (
-    <Stack gap="section" className="c-page-door-wrap">
+    <Stack gap="section">
       <Beside
         railWidth="32rem"
         gap="section"
         stackBelow="60rem"
         rail={
           lead ? (
-            <a href={href.page('item', { id: String(lead.id) })} className="c-page-door-link">
-              <Card flush interactive>
-                <div className="c-page-door-media">
-                  {lead.cover ? <img src={lead.cover} alt={lead.title} className="c-page-door-img" /> : null}
-                </div>
-                <Card.Body>
-                  <Row justify="between" align="baseline" gap="field">
-                    <Stack gap="tight">
-                      <Text size="sm" muted>
-                        {lead.maker} · {lead.year_made}
-                      </Text>
-                      <Heading level={3}>{lead.title}</Heading>
-                    </Stack>
-                    <Stack gap="tight" align="end">
-                      <strong className="c-page-door-price">
-                        <Value resource="listing" column="price_cents" value={lead.price_cents} row={lead} />
-                      </strong>
-                      <Text size="sm" muted>
-                        or {fmt.money(Math.round(lead.price_cents / 12), { minor: true, round: true })}/mo
-                      </Text>
-                    </Stack>
-                  </Row>
-                </Card.Body>
-              </Card>
-            </a>
+            <MediaCard
+              href={href.page('item', { id: String(lead.id) })}
+              media={lead.cover}
+              alt={lead.title}
+              aspect="3/2"
+              badge={lead.condition}
+              eyebrow={`${lead.maker} · ${lead.year_made}`}
+              title={lead.title}
+              value={<Value resource="listing" column="price_cents" value={lead.price_cents} row={lead} />}
+              note={`or ${fmt.money(Math.round(lead.price_cents / 12), { minor: true, round: true })}/mo`}
+              meta={lead.city}
+              priority
+            />
           ) : null
         }
       >
-        <Stack gap="field" className="c-page-door-hero">
-          <Badge>Verified independent workshops · Pacific Northwest & California</Badge>
-          <h1 className="c-page-door-title">Objects built to outlast every room they enter.</h1>
+        <Stack gap="field" justify="center">
+          <Eyebrow>Verified independent workshops · Pacific Northwest & California</Eyebrow>
+          <Heading level={1}>Objects built to outlast every room they enter.</Heading>
           <Text muted>
             Serviced rangefinders, restored Scandinavian seating, and bench-tested hi-fi. Every piece is photographed in studio,
             authenticated by its specialist, and held atomically the moment you claim it.
           </Text>
           <Row gap="field">
-            <a href={href.page('browse')} className="c-page-door-cta">
+            <ButtonLink href={href.page('browse')} variant="primary">
               Explore the collection
-            </a>
-            <a href="/form/consign" className="c-page-door-ghost">
+            </ButtonLink>
+            <ButtonLink href="/form/consign" variant="secondary">
               Sell a piece
-            </a>
+            </ButtonLink>
           </Row>
           <Row gap="tight" ariaLabel="Browse by category">
             {CATEGORIES.map((cat) => (
-              <a key={cat} href={href.page('browse', { q: `category = "${cat}"` })} className="c-page-door-link">
-                <Badge pill>{cat}</Badge>
-              </a>
+              <ButtonLink key={cat} href={href.page('browse', { q: `category = "${cat}"` })} variant="secondary" size="sm">
+                {cat}
+              </ButtonLink>
             ))}
           </Row>
         </Stack>
       </Beside>
 
       <Stack gap="field">
-        <Row justify="between" align="baseline">
+        <Row justify="between" align="end">
           <Stack gap="tight">
-            <Badge>Fresh from the bench</Badge>
-            <Heading level={2}>Available on Foundry now</Heading>
+            <Eyebrow>Fresh from the bench</Eyebrow>
+            <Heading level={2} size="xl">
+              Available on Foundry now
+            </Heading>
           </Stack>
-          <a href={href.page('browse')} className="c-page-door-more">
+          <ButtonLink href={href.page('browse')} variant="ghost" size="sm">
             Filter all {rows.length} pieces →
-          </a>
+          </ButtonLink>
         </Row>
 
         <Cluster min="19rem" gap="section">
           {rows.map((row) => (
-            <a key={row.id} href={href.page('item', { id: String(row.id) })} className="c-page-door-link">
-              <Card flush interactive>
-                <div className="c-page-door-media">
-                  {row.cover ? <img src={row.cover} alt={row.title} className="c-page-door-img" loading="lazy" /> : null}
-                </div>
-                <Card.Body>
-                  <Stack gap="tight">
-                    <Row justify="between" align="center">
-                      <Text size="sm" muted>
-                        {row.maker} · {row.year_made}
-                      </Text>
-                      <Badge pill>{row.category}</Badge>
-                    </Row>
-                    <Heading level={4}>{row.title}</Heading>
-                    <Row justify="between" align="baseline">
-                      <Row gap="tight" align="baseline">
-                        <strong className="c-page-door-price">
-                          <Value resource="listing" column="price_cents" value={row.price_cents} row={row} />
-                        </strong>
-                        {row.was_price_cents ? (
-                          <span className="c-page-door-was">
-                            <Value resource="listing" column="was_price_cents" value={row.was_price_cents} row={row} />
-                          </span>
-                        ) : null}
-                      </Row>
-                      <Text size="sm" muted>
-                        {row.city}
-                      </Text>
-                    </Row>
-                  </Stack>
-                </Card.Body>
-              </Card>
-            </a>
+            <MediaCard
+              key={row.id}
+              href={href.page('item', { id: String(row.id) })}
+              media={row.cover}
+              alt={row.title}
+              aspect="3/2"
+              badge={row.category}
+              eyebrow={`${row.maker} · ${row.year_made}`}
+              title={row.title}
+              value={<Value resource="listing" column="price_cents" value={row.price_cents} row={row} />}
+              was={
+                row.was_price_cents ? (
+                  <Value resource="listing" column="was_price_cents" value={row.was_price_cents} row={row} />
+                ) : undefined
+              }
+              meta={row.city}
+            />
           ))}
         </Cluster>
       </Stack>

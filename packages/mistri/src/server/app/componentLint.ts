@@ -291,6 +291,33 @@ function handRoles(line: string): string[] {
   return found;
 }
 
+/* Raw HTML form controls and definition lists on a free-form page: the look dresses Mistri's primitives (focus ring,
+   label association, dark mode, touch targets) rather than bare browser controls. Scoped to pages so a custom field
+   input widget can still wrap an HTML element when it needs to. */
+export const NATIVE_CONTROLS: Readonly<Record<string, string>> = {
+  input: 'TextField (or Checkbox / Switch / FileField) from @mistriwork/mistri/page',
+  textarea: 'TextArea from @mistriwork/mistri/page',
+  select: 'Select (or Dropdown) from @mistriwork/mistri/page',
+  dl: 'DescriptionList from @mistriwork/mistri/page',
+};
+const NATIVE_CONTROL = /<(input|textarea|select|dl)(?=[\s/>])/g;
+function nativeControls(line: string): string[] {
+  const found: string[] = [];
+  for (const match of line.matchAll(NATIVE_CONTROL)) {
+    const before = line.slice(0, match.index);
+    let open: string | null = null;
+    for (let i = 0; i < before.length; i++) {
+      const c = before[i]!;
+      if (open) {
+        if (c === '\\') i++;
+        else if (c === open) open = null;
+      } else if ((c === "'" || c === '"' || c === '`') && OPENS_STRING.test(before.slice(0, i))) open = c;
+    }
+    if (!open) found.push(match[1]!);
+  }
+  return found;
+}
+
 /**
  * Where a source names an icon: `<Icon name=…>`, an `icon=…` prop on a kit component and an `icon: …` key in what a prop is
  * given (`items={[{ label: 'Bell', icon: 'bell' }]}`). An `icon:` key anywhere else is an object of the author's own,
@@ -760,6 +787,13 @@ export async function lintComponents(
             `[component-role] role="${role}" written by hand: its keys, focus and states are a primitive's work; ` +
               `draw ${HAND_ROLES[role]}`,
           );
+        if (pages.has(id))
+          for (const tag of nativeControls(line))
+            warn(
+              i + 1,
+              `[component-native-control] <${tag}> written by hand on a page: the look dresses Mistri's primitives; ` +
+                `draw ${NATIVE_CONTROLS[tag]}`,
+            );
         /* Motion said in a style prop is motion all the same. */
         const motion = /\b(transition|animation)(Duration)?\s*:\s*['"`]([^'"`]+)/.exec(line);
         if (motion) {

@@ -1,5 +1,5 @@
 /** Built-in structural styles. Custom themes inherit one without changing app layout. */
-export type ThemeBase = 'workshop' | 'lumen' | 'mono' | 'sage' | 'ledger' | 'atelier' | 'graphite' | 'bloom';
+export type ThemeBase = 'workshop' | 'lumen' | 'mono' | 'sage' | 'ledger' | 'atelier' | 'graphite' | 'bloom' | 'gallery';
 
 /**
  * One mode's colors as a compiled theme holds them: `ThemeColors` flattened, each
