@@ -3174,6 +3174,17 @@
           "default": true,
           "description": "false keeps a tenant's members from reading who else is a member. Left out, any member reads the members' names and ids (never an address, a role or an invitation), which is what useTeam() lists for a reader who does not manage the team."
         },
+        "readAudit": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Tenant roles whose signed-in members read this tenant's read audit (Settings \u2192 Reads and useReadAudit()), where a resource has audit: { reads: true }. Left out, the roles that edit the tenant's domains, else its branding."
+        },
         "platform": {
           "type": "object",
           "additionalProperties": false,

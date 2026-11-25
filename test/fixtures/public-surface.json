@@ -193,6 +193,7 @@
         "app: auth.tenancy.platform.me.column",
         "app: auth.tenancy.platform.me.from",
         "app: auth.tenancy.profile",
+        "app: auth.tenancy.readAudit",
         "app: auth.tenancy.shared",
         "app: auth.tenancy.team",
         "app: branding",

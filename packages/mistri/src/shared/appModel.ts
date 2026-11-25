@@ -305,6 +305,9 @@ export interface AppTenancy {
   /** `false`: a tenant's members are not told who else is a member. Absent, any member reads the members' names and
       ids (never an address or a role), which is what `useTeam()` lists for a reader who does not manage the team. */
   team?: false;
+  /** Tenant roles whose signed-in members read this tenant's read audit (`Settings -> Reads` and `useReadAudit()`),
+      where a resource has `audit: { reads: true }`. Absent, the roles that edit its domains, else its branding. */
+  readAudit?: string[];
   /** Declares the platform realm; its label names the platform context ("Lender"). `me` is who the word is there,
       as `auth.me` says it in a tenant's: a row of the platform's table of its staff, by the column holding their
       account id. Absent, `me` in the platform realm is nobody's row. */

@@ -60,6 +60,7 @@ export function authorityReport(app: AppDef, origins?: AppOrigins, env: readonly
     for (const column of sorted(app.auth.tenancy?.shared ?? [])) fact(`auth tenant shared ${column}`);
     /* Said only when closed, so an App that says nothing keeps the lock it had: opening the team again is this line gone. */
     if (app.auth.tenancy?.team === false) fact('auth tenant team names closed');
+    for (const role of sorted(app.auth.tenancy?.readAudit ?? [])) fact(`auth tenant read-audit ${role}`);
   }
   // These are configured binding names, never resolved connection credentials.
   if (app.sources)

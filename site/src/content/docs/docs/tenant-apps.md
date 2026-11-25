@@ -575,8 +575,9 @@ ordinary not-found.
 
 ### Who read a tenant's records
 
-When a resource has `audit: { reads: true }`, a tenant's admins (the roles that
-edit its domains, else its branding) see Settings → Reads: who opened or listed
+When a resource has `audit: { reads: true }`, a tenant's admins (`auth.tenancy.readAudit`
+when named, else the roles that edit its domains, else its branding) see
+Settings → Reads and `useReadAudit()`: who opened or listed
 the organization's audited records, newest first, 50 at a time with Show older.
 Filter by person (click a name), resource, record and a day range; a record's
 id matches where it was opened and every list that returned it. The rows are the

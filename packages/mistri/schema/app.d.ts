@@ -1320,7 +1320,7 @@ export type AppRoleClaims = {
 };
 
 /** Tenancy vocabulary under `auth.rows: 'tenant'`: what one tenant is called, the platform-owned profile resource with one row per tenant (whose record name the chooser and the bar call each tenant by), and the platform realm with its label. */
-export interface AppTenancy<Resource extends string = string> {
+export interface AppTenancy<Resource extends string = string, Role extends string = string> {
   label?: string | AppMessageRef;
   profile?: Resource;
   /** Columns of the tenant's profile row its members read, at most 16 scalar ones: `tenant.country` in a query, a row
@@ -1330,6 +1330,9 @@ export interface AppTenancy<Resource extends string = string> {
       names and ids, never an address, a role or an invitation: what `useTeam()` lists for a reader who does not manage
       the team, where the App administers its tenants' members. */
   team?: boolean;
+  /** Tenant roles whose signed-in members read this tenant's read audit (`Settings → Reads` and `useReadAudit()`),
+      where a resource has `audit: { reads: true }`. Left out, the roles that edit the tenant's domains, else its branding. */
+  readAudit?: readonly Role[];
   platform?: {
     label: string | AppMessageRef;
     /** Who `me` is in the platform realm, as `auth.me` says it in a tenant's: the platform-owned resource its staff
@@ -1376,7 +1379,7 @@ export interface AppAuth<Resource extends string = string, Role extends string =
       command: the name of a verifier the commands module exports in `challenges` (`defineChallenges` from
       @mistriwork/mistri/commands; a provider such as Turnstile comes from its pack). A missing or refused token is a 403. */
   challenge?: string;
-  tenancy?: AppTenancy<Resource>;
+  tenancy?: AppTenancy<Resource, Role>;
   /** Who `me` is as a row: the table people are rows of and its column holding their sign-in email, so a condition
       like `owner_id = me` compares a reference to that table with the signed-in person's row. Without it, `me` is the
       signed-in account's email and compares with text columns only. In a tenant App `column` holds the account's id,
