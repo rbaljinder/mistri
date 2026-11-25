@@ -262,6 +262,12 @@ a sort by a timestamp column (`api-sort-type`), a view that names totals
 or one no role holds (`api-command-unheld`), is a check problem with its
 [code](/docs/check-codes/) and not a surprise at the first export.
 
+The document is held to 16 levels of nesting, the bound a command request is
+read under. Past it the refusal names the path that went deeper
+(`api-document-depth`); today a `targets: 'many'` command's body is the one
+that does, so expose that command without `targets: 'many'` in `api.commands`
+(its one-record route stays) until the bound is lifted.
+
 `compare-openapi` reports changes between two exported files: exit `0` when
 the version requirement is met, `1` when a needed version increase is missing,
 `2` for invalid input. It is a review aid, not a compatibility proof.

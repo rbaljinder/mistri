@@ -29,7 +29,8 @@ export class CommandInputError extends Error {
 
 /** The bound on one command request, envelope included. A text input may be 65,536 characters (up to four bytes each, and escaped), so the envelope holds eight times that. */
 export const MAX_COMMAND_BYTES = 524_288;
-const MAX_DEPTH = 16;
+/** How deep a value nests, its root at depth 0: a document a server renders through this walk (the App API's) is held to it too. */
+export const MAX_JSON_DEPTH = 16;
 const MAX_NODES = 10_000;
 /** Names that belong to Object.prototype, never to data. */
 export const reservedKeys: ReadonlySet<string> = new Set([...Object.getOwnPropertyNames(Object.prototype), 'prototype']);
@@ -57,7 +58,7 @@ export function snapshot(value: unknown, maxBytes: number): { json: string; valu
     append(JSON.stringify(text));
   };
   const visit = (item: unknown, depth: number): Json => {
-    if (++nodes > MAX_NODES || depth > MAX_DEPTH) return invalid();
+    if (++nodes > MAX_NODES || depth > MAX_JSON_DEPTH) return invalid();
     if (item === null) {
       append('null');
       return null;

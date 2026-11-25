@@ -5891,6 +5891,7 @@
         "analytics-unknown-step",
         "api-command-no-record",
         "api-command-unheld",
+        "api-document-depth",
         "api-event-unknown",
         "api-event-unsupported",
         "api-filter-type",

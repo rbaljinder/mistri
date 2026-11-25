@@ -4,7 +4,7 @@
  * own. A command path always contains `/commands/`, which no read path can
  * (`commands` is a reserved resource name), and command components have their
  * own prefixes, so a document splits back into its halves without guessing. */
-import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
+import { MAX_JSON_DEPTH, snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import type { AppDef } from '../../shared/appModel.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
@@ -26,7 +26,33 @@ const refuse = (): never => {
   throw new TypeError('The composed API document is unavailable.');
 };
 const object = (value: unknown): Json => (value && typeof value === 'object' && !Array.isArray(value) ? (value as Json) : refuse());
-const canonical = (value: unknown) => snapshot(value, 2_097_152).json;
+/** The first path in the document that nests past the canonical walk's depth, or none. */
+function tooDeep(value: unknown, path: readonly string[] = []): readonly string[] | undefined {
+  if (path.length > MAX_JSON_DEPTH) return path;
+  if (!value || typeof value !== 'object') return undefined;
+  for (const [key, child] of Object.entries(value)) {
+    const found = tooDeep(child, [...path, key]);
+    if (found) return found;
+  }
+  return undefined;
+}
+/* The document is spelled by the walk a command request is read by, which refuses past its depth with the request's
+   own sentence ("The command request is invalid."), so an App whose API nests too deep was told nothing it could act
+   on. Said here as the document's: the limit, the path, and what nests there. */
+const canonical = (value: unknown) => {
+  const deep = tooDeep(value);
+  if (deep) {
+    const where = deep.join(' › ');
+    const command = /^\/(?:[^/]+\/)*commands\/([^/]+)\/v\d+$/.exec(deep[0] === 'paths' ? deep[1] : '')?.[1];
+    throw new Error(
+      `The App's API document nests deeper than the ${MAX_JSON_DEPTH} levels a document is held to, at ${where} [api-document-depth]. ` +
+        (command && deep.includes('targets')
+          ? `Command "${command}" takes many records, and its body's keys nest past the limit: take \`targets: 'many'\` off its entry in \`api.commands\` (its one-record route stays), or leave it out of \`api.commands\`.`
+          : `Flatten what nests there, or leave it out of \`api\`.`),
+    );
+  }
+  return snapshot(value, 2_097_152).json;
+};
 const freeze = (value: unknown): void => {
   if (!value || typeof value !== 'object') return;
   Object.values(value).forEach(freeze);
