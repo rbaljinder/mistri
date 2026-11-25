@@ -66,6 +66,7 @@ import { COMMAND_INPUT_LIMITS } from '../../shared/command.js';
 import { CommandInputRefusal } from '../../shared/commandInput.js';
 import { lineCell } from '../../shared/commandLineCell.js';
 import { definedAnswerBreak, sourcedChoiceBreak } from './commandDefined.js';
+import { memberBreak } from './commandMembers.js';
 import { projectCommandEvents, resolveCommandEffects } from './businessEvents.js';
 import { effectProjectionDb } from './commandEffects.js';
 import {
@@ -1619,8 +1620,8 @@ async function executeUntraced(
               const unanswered = await definedAnswerBreak(tx, catalog!, command, input, targets.length === 1 ? targets[0] : undefined);
               if (unanswered)
                 throw new BusinessCommandExecutionError('invalid_input', 'not_applied', unanswered.path, undefined, unanswered.reason);
-              /* A choice from a table's rows names a row this reader reads here and now (field.choice({ from })). */
-              const unsourced = await sourcedChoiceBreak(tx, command, input);
+              /* A pick from a table's rows names a row this reader reads here and now, and a member one of this tenant's. */
+              const unsourced = (await sourcedChoiceBreak(tx, command, input)) ?? (await memberBreak(command, input, authorized.members));
               if (unsourced)
                 throw new BusinessCommandExecutionError('invalid_input', 'not_applied', unsourced.path, undefined, unsourced.reason);
               checkCancelled();

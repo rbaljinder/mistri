@@ -42,7 +42,7 @@ async function textingClinic() {
   edit(join(dir, 'commands.ts'), '  refuse,\n', '  refuse,\n  send,\n');
   edit(
     join(dir, 'commands.ts'),
-    'export default defineCommands({ recordPayment, bookRoom, postNotice, requestVisit });',
+    'export default defineCommands({ recordPayment, assignClinician, bookRoom, postNotice, requestVisit });',
     `export const remindPatient = defineCommand({
   source,
   target: 'appointment',
@@ -65,13 +65,15 @@ export const sweep = defineCommand({
     return { message: 'Swept.' as const };
   },
 });
-export default defineCommands({ recordPayment, bookRoom, postNotice, requestVisit, remindPatient, sweep });`,
+export default defineCommands({ recordPayment, assignClinician, bookRoom, postNotice, requestVisit, remindPatient, sweep });`,
   );
   edit(
     join(dir, 'app.ts'),
-    "reception: { label: 'Reception', realm: 'tenant', read: clinicReads, write: ['patient'], commands: ['recordPayment', 'bookRoom'] },",
-    `reception: { label: 'Reception', realm: 'tenant', read: clinicReads, write: ['patient'], commands: ['recordPayment', 'bookRoom', 'remindPatient'] },
-      sweeper: { label: 'Sweeper', realm: 'tenant', service: true, read: clinicReads, commands: ['sweep'] },`,
+    "        commands: ['recordPayment', 'assignClinician', 'bookRoom'],\n      },\n      operator: {",
+    `        commands: ['recordPayment', 'assignClinician', 'bookRoom', 'remindPatient'],
+      },
+      sweeper: { label: 'Sweeper', realm: 'tenant', service: true, read: clinicReads, commands: ['sweep'] },
+      operator: {`,
   );
   edit(
     join(dir, 'server', 'tenant-policy.ts'),

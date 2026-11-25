@@ -39,6 +39,7 @@ import { InputSlot, builtInInputId } from '@mistriwork/kit/client/components/inp
 import { appWord } from '@mistriwork/kit/client/messages.js';
 import { say } from '../copy/forms/components/CommandFields.js';
 import { ChoiceRadios } from './ChoiceRadios.js';
+import { MemberPicker } from './MemberPicker.js';
 import { useChoiceFill, useListFills, type ChoiceFill } from './choiceFill.js';
 import type { DefinedField } from '@mistriwork/engine/shared/definedFields.js';
 import type { HeldTarget } from './HeldFiles.js';
@@ -367,7 +368,12 @@ function submitted(fields: readonly AppCommandField[], values: CommandValues, wh
   return result;
 }
 
-const FORMAT_SENTENCES = { email: say('anEmailAddress'), url: say('aWebAddressStarting'), phone: say('aPhoneNumber') } as const;
+const FORMAT_SENTENCES = {
+  email: say('anEmailAddress'),
+  url: say('aWebAddressStarting'),
+  phone: say('aPhoneNumber'),
+  member: say('aMemberOfTheTeam'),
+} as const;
 /** A time's bound and a sibling time are said as a date's are: before, after, on or after. */
 const dated = (type: string) => type === 'date' || type === 'datetime' || type === 'time';
 
@@ -814,6 +820,19 @@ export function CommandFieldControl({
     );
   }
   if (field.type !== 'text') return null;
+  /* A member of the team: picked from the team's names, stored as their account id. */
+  if (field.format === 'member')
+    return (
+      <MemberPicker
+        id={id}
+        label={field.label}
+        value={value}
+        invalid={invalid}
+        describedBy={describedBy}
+        disabled={disabled}
+        onChange={onChange}
+      />
+    );
   // The format picks the keyboard; the shared reader still judges the value.
   const type = field.format === 'email' ? 'email' : field.format === 'url' ? 'url' : field.format === 'phone' ? 'tel' : 'text';
   return marked(
@@ -1055,7 +1074,7 @@ function FieldEntry({
     field.label
   );
   const radios = field.type === 'choice' && asRadios(field);
-  const listbox = field.type === 'choice' && !radios;
+  const listbox = (field.type === 'choice' && !radios) || (field.type === 'text' && field.format === 'member');
   const held = field.type === 'files' || field.type === 'signature';
   /* One Field: the label over the control, the help and then the problem
      under it, wired into the control's description. Radios and a listbox's

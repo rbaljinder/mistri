@@ -90,6 +90,9 @@ export interface AuthorizedBusinessCommand {
   /** A tenant App's signed-in command, or a public submission placed with a tenant: the profile columns the App shares
    * with its members (`auth.tenancy.shared`), read once for this request. The runtime's, never a request's. */
   readonly tenant?: Readonly<Record<string, TenantValue>>;
+  /** Who of these accounts is an active member of the command's tenant (`field.member()`, commandMembers.ts). A tenant
+   * App's signed-in binding's, read from the tenant store; absent, a member input admits no id. */
+  readonly members?: import('./commandMembers.js').CommandMembers;
   assertTarget?(records: WriteTransaction, key: Readonly<Record<string, string | number>>): Promise<void>;
   assertResult?(records: WriteTransaction, key: Readonly<Record<string, string | number>>, result: unknown): Promise<void>;
   transaction<T>(run: (tx: WriteTransaction) => Promise<T>): Promise<T>;

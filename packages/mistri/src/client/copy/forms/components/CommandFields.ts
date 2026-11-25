@@ -7,6 +7,7 @@ export const say = defineMessages({
   aWebAddressStarting: 'a web address, starting https://',
   aPhoneNumber: 'a phone number',
   aColor: 'a color, such as #1d6a5a',
+  aMemberOfTheTeam: 'a member of the team',
   theFormHasAnInput: 'The form has an input it does not ask for.',
   isRequired: '{label} is required.',
   answerThis: 'Please answer “{label}”',

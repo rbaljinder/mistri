@@ -3,6 +3,7 @@ import {
   defineCommand,
   defineCommands,
   defineSource,
+  field,
   literal,
   publicReference,
   publicReferencePattern,
@@ -39,6 +40,17 @@ export const recordPayment = defineCommand({
     await db.appointment.update(record, { status: 'paid' });
     return { payment: id, message: 'Payment recorded.' as const };
   },
+});
+
+/** Who sees the patient: a person on the clinic's team, picked by name. The server holds the pick to the clinic's own
+    active members, whoever sends it; the appointment itself is left as it was. */
+export const assignClinician = defineCommand({
+  source,
+  target: 'appointment',
+  read: ['appointment'],
+  input: { clinician: field.member({ label: 'Clinician' }) },
+  output: shape({ clinician: text(), message: literal('Clinician assigned.') }),
+  handle: (_context, value) => ({ clinician: value.clinician, message: 'Clinician assigned.' as const }),
 });
 
 /** A room for a time. Nothing here reads whether the room is free: the resource's `noOverlap` holds that, on every door. */
@@ -98,4 +110,4 @@ export const requestVisit = defineCommand({
   },
 });
 
-export default defineCommands({ recordPayment, bookRoom, postNotice, requestVisit });
+export default defineCommands({ recordPayment, assignClinician, bookRoom, postNotice, requestVisit });

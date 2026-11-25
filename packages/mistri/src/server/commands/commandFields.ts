@@ -77,6 +77,15 @@ export const field: {
   phone<const O extends FormatOptions = {}>(options?: O): CommandTextField & { type: 'text' } & Optional<O>;
   /** A web address, http or https. */
   url<const O extends FormatOptions = {}>(options?: O): CommandTextField & { type: 'text' } & Optional<O>;
+  /** A member of the team, as their account id: the form offers the team's names (what `useTeam()` reads for anyone on
+      the team), and the server refuses, at the field, an id that is not an active member of the command's tenant,
+      however it was sent. A tenant App's signed-in input only, and not where `auth.tenancy.team` is false. */
+  member<
+    const O extends Omit<CommandTextField, 'type' | 'format' | 'min' | 'pattern' | 'case' | 'mask' | 'sensitive' | 'placeholder' | 'as'> =
+      {},
+  >(
+    options?: O,
+  ): CommandTextField & { type: 'text'; format: 'member' } & Optional<O>;
   /** A number: `min`, `max`, `integer`, a `step` it is rounded to, `below`/`above` a sibling; `as: 'rating'` asks it as stars, `outOf` of them. */
   number<const O extends Omit<CommandNumberField, 'type'> = {}>(options?: O): CommandNumberField & Optional<O>;
   /** An amount of money in the App's currency (or the field's own `currency`), from 0 unless `min` says less, in cents unless `step` says otherwise; `minor: true` hands the command the exact minor units; `as: 'slider'` between `min` and `max`. */
@@ -163,6 +172,7 @@ export const field: {
   email: (options?: object) => spec('text', { format: 'email', max: 254, ...options }),
   phone: (options?: object) => spec('text', { format: 'phone', max: 40, ...options }),
   url: (options?: object) => spec('text', { format: 'url', max: 2048, ...options }),
+  member: (options?: object) => spec('text', { max: 128, ...options, format: 'member' }),
   number: (options?: object) => spec('number', options as Record<string, unknown>),
   money: (options?: object) => spec('money', options as Record<string, unknown>),
   month: (options?: object) => spec('month', options as Record<string, unknown>),

@@ -70,6 +70,10 @@ export interface TenantRequestScope {
   /** The tenant's shared profile columns (`auth.tenancy.shared`), read once for this request before its row scope:
    * what a handler's `tenant`, `tenant.<column>` and the person's zone read. Empty where the App shares none. */
   readonly tenant: Readonly<Record<string, TenantValue>>;
+  /** Which of these accounts is an active member of this request's tenant, in a role the deployment knows: what a
+   * command's `field.member()` input is judged by (commandMembers.ts). Read from the tenant store, outside any
+   * transaction, one membership at a time; nothing about any of them is told but whether it is one. */
+  members(accountIds: readonly string[]): Promise<ReadonlySet<string>>;
 }
 function delivered<T>(value: T | Promise<T>): T | Promise<T> {
   return isPromise(value)
@@ -466,6 +470,35 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
               return writer.appendReadAudit(row);
             },
             tenant: profile,
+            members: async (accountIds) => {
+              active();
+              outside = true;
+              const known = new Set(raw.roles as readonly string[]);
+              const found = new Set<string>();
+              for (const accountId of new Set(accountIds)) {
+                if (typeof accountId !== 'string' || !accountId || accountId.length > 1024 || accountId !== accountId.trim()) continue;
+                const row = await reader.readMembership({
+                  appId: admitted.appId,
+                  accountId,
+                  tenantId: admitted.tenantId,
+                  source: admitted.source,
+                  deployment: admitted.deployment,
+                });
+                active();
+                /* Active, in an active tenant, not past its term, holding a role this deployment still grants: the
+                   membership admission would admit, never an invitation, a revoked one or another tenant's. */
+                if (
+                  row?.accountId === accountId &&
+                  row.tenantId === admitted.tenantId &&
+                  row.status === 'active' &&
+                  row.tenantStatus === 'active' &&
+                  row.validUntil > now() &&
+                  row.roles.some((role) => known.has(role))
+                )
+                  found.add(accountId);
+              }
+              return found;
+            },
           });
           let result!: T;
           const completed = (value: T): T => {
