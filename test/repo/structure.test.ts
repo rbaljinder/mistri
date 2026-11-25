@@ -539,6 +539,8 @@ const CLIENT_CROSSINGS = [
   'ListSummary',
   // The server-sent event reader, React-free: live sync's stream (liveSync.ts) reads its frames with the assistant's.
   'assistantStream',
+  // Public site chrome (`ui.site`), mounted by appChrome.js in place of TopNav for signed-out visitors.
+  'SiteHeader',
 ];
 
 test('outside components/, the client crosses into it only where it was meant to', () => {
@@ -547,7 +549,13 @@ test('outside components/, the client crosses into it only where it was meant to
   const crossed = new Set<string>();
   const problems: string[] = [];
   for (const file of sources) {
-    if (!local(file).startsWith('src/client/') || local(file).includes('/components/') || /\.(test|spec)\./.test(file)) continue;
+    if (
+      !local(file).startsWith('src/client/') ||
+      local(file).includes('/components/') ||
+      local(file).includes('/ssr/') ||
+      /\.(test|spec)\./.test(file)
+    )
+      continue;
     for (const match of readFileSync(join(root, file), 'utf8').matchAll(IMPORT)) {
       const target = landing(file, match[1] ?? match[2]);
       if (!target?.includes('src/client/components/')) continue;

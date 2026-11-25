@@ -213,8 +213,8 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
       },
     };
     const compiledDoorJs = `
-      import { jsxs, jsx } from "react/jsx-runtime";
-      import { useRows, useFormat } from "@mistriwork/mistri/ui";
+      import { jsxs, jsx } from "/_mistri/sdk/cb6940da33/react-jsx-runtime.js";
+      import { useRows, useFormat } from "/_mistri/sdk/cb6940da33/page.js";
       export default function Door({ data }) {
         const { data: rows } = useRows("listing", { show: ["id", "title", "price"], limit: 6 });
         const fmt = useFormat();

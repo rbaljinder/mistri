@@ -89,7 +89,7 @@
     padding: var(--space-1h) var(--space-3h);
     border-radius: var(--radius);
     background: var(--accent);
-    color: var(--accent-ink);
+    color: var(--on-accent);
     font: 500 var(--text-base) var(--sans);
     text-decoration: none;
     white-space: nowrap;

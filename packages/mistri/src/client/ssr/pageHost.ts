@@ -24,7 +24,7 @@ import type { DashboardDef } from '@mistriwork/kit/client/components/dashboardMo
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import { viewOrder } from '../../shared/appModel.js';
 import { appAddressBook, recordSegments, viewAddress } from '../../shared/appAddress.js';
-import { HOST_MODULES, uiBreakdownText, uiRowsQuery, uiViewRunBody } from '../../shared/uiSdk.js';
+import { HOST_MODULES, SDK_PATH, uiBreakdownText, uiRowsQuery, uiViewRunBody } from '../../shared/uiSdk.js';
 import type { UiAddress, UiHost, UiPageFrame, UiRow } from '../components/sdk/context.js';
 import { rowsByPath } from '../components/sdk/rows.js';
 
@@ -66,22 +66,36 @@ function hashText(text: string): string {
   return `${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}_${text.length}`;
 }
 
-/** Rewrite static ESM imports of Mistri host modules to read from the SSR bundle's own module registry. */
+const HOST_BY_FILE = new Map<string, string>(Object.entries(HOST_MODULES).map(([spec, file]) => [file, spec]));
+
+function resolveHostSpec(spec: string): string | undefined {
+  if (Object.hasOwn(HOST_MODULES, spec)) return spec;
+  const idx = spec.indexOf(SDK_PATH);
+  if (idx !== -1) {
+    const rest = spec.slice(idx + SDK_PATH.length);
+    const file = rest.includes('/') ? rest.slice(rest.lastIndexOf('/') + 1) : rest;
+    return HOST_BY_FILE.get(file);
+  }
+  return undefined;
+}
+
+/** Rewrite static ESM imports of Mistri host modules (bare or compiled `/_mistri/sdk/...` URLs) to read from the SSR bundle's own module registry. */
 function rewriteHostImports(code: string): string {
-  const hostSet = new Set<string>(Object.keys(HOST_MODULES));
   const access = (spec: string) => `globalThis[Symbol.for('mistri.ssr.host')][${JSON.stringify(spec)}]`;
   let counter = 0;
-  /* Side-effect imports: `import "@mistriwork/mistri/views";` */
-  let out = code.replace(/(^|[\n;])\s*import\s+(['"])([^'"]+)\2\s*;?/g, (full, lead: string, _q: string, spec: string) =>
-    hostSet.has(spec) ? `${lead}/* ssr-host:${spec} */` : full,
-  );
+  /* Side-effect imports: `import "@mistriwork/mistri/views";` or `import "/_mistri/sdk/.../views.js";` */
+  let out = code.replace(/(^|[\n;])\s*import\s*(['"])([^'"]+)\2\s*;?/g, (full, lead: string, _q: string, spec: string) => {
+    const resolved = resolveHostSpec(spec);
+    return resolved ? `${lead}/* ssr-host:${resolved} */` : full;
+  });
   /* Binding imports: default, namespace, named, or default + named. */
   out = out.replace(
-    /(^|[\n;])\s*import\s+([\s\S]*?)\s+from\s+(['"])([^'"]+)\3\s*;?/g,
+    /(^|[\n;])\s*import(?:\s+|(?=[{*]))([\s\S]*?)\s*from\s*(['"])([^'"]+)\3\s*;?/g,
     (full, lead: string, clause: string, _q: string, spec: string) => {
-      if (!hostSet.has(spec)) return full;
+      const resolved = resolveHostSpec(spec);
+      if (!resolved) return full;
       const trimmed = clause.trim();
-      const mod = access(spec);
+      const mod = access(resolved);
       const ns = /^\*\s+as\s+([A-Za-z_$][\w$]*)$/.exec(trimmed);
       if (ns) return `${lead}const ${ns[1]} = ${mod};`;
       const destructure = (named: string) => named.replace(/\b([A-Za-z_$][\w$]*)\s+as\s+([A-Za-z_$][\w$]*)\b/g, '$1: $2');
@@ -115,7 +129,7 @@ export function loadSsrPageComponent(
   if (existing) return existing;
   const rewritten = rewriteHostImports(code);
   const url = `data:text/javascript;charset=utf-8,${encodeURIComponent(rewritten)}`;
-  const loaded = import(url).then((mod: { default?: ComponentType<Record<string, unknown>> }) => {
+  const loaded = import(/* @vite-ignore */ url).then((mod: { default?: ComponentType<Record<string, unknown>> }) => {
     if (typeof mod?.default !== 'function') throw new Error('Compiled page module has no default component export.');
     return mod.default;
   });
