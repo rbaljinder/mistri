@@ -563,6 +563,9 @@ async function servingOf(dir: string, loaded: LoadedApp, configFile: string | un
   if (configFile)
     for (const match of (await readFile(configFile, 'utf8').catch(() => '')).matchAll(/\$\{([A-Z_][A-Z0-9_]*)\}/g)) named.add(match[1]);
   for (const endpoint of jobs?.inbound.values() ?? []) named.add(endpoint.verify.secretEnv);
+  /* A module that lists integrations seals their secrets under this key, and the server refuses to start without
+     it: a command that calls one or sends on its channel made every test of the suite fail at its start. */
+  if (jobs?.integrations) named.add('MISTRI_SECRETS_KEY');
   return { args, ...(jobs ? { jobs } : {}), environment: [...named].sort() };
 }
 

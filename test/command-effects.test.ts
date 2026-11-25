@@ -41,6 +41,7 @@ import {
   EFFECT_LIMITS,
   effectIdempotencyKey,
   post,
+  send,
   webhookTransport,
 } from '../packages/mistri/src/server/commands/commandEffects.js';
 import { id, literal, shape } from '../packages/mistri/src/server/commands/commandShapes.js';
@@ -196,6 +197,29 @@ test("a post's projection is typed by the command's reads: its db has the tables
 test('an async projection is resolved before its batch is made; projected without that, it is refused, never stored as a promise', () => {
   const { slots } = captureCommandEffects({ crm: post<{ id: number }>('crm', async (out) => ({ id: out.id })) });
   assert.throws(() => projectCommandEvents(captureCommandEvents(slots), { id: 1 }));
+});
+
+test('a send() whose projection returns nothing sends no message, and one that returns a message still sends it', () => {
+  const { slots } = captureCommandEffects({
+    text: send<{ id: number; phone: string | null }>('sms', (out) =>
+      out.phone ? { to: out.phone, text: 'Shipped.', consent: true } : null,
+    ),
+  });
+  const events = captureCommandEvents(slots);
+  assert.deepEqual(projectCommandEvents(events, { id: 1, phone: null }), []);
+  const sent = projectCommandEvents(events, { id: 1, phone: '+15550001' });
+  assert.equal(sent.length, 1);
+  assert.deepEqual(JSON.parse(sent[0].payloadJson).body, { to: '+15550001', text: 'Shipped.', consent: true });
+  // undefined is nothing too; anything else that is not a message is still refused, a list among them.
+  const of = (value: unknown) =>
+    projectCommandEvents(captureCommandEvents(captureCommandEffects({ text: send('sms', () => value as never) }).slots), {});
+  assert.deepEqual(of(undefined), []);
+  assert.throws(() => of([]));
+  assert.throws(() => of(false));
+  // A post still returns its body: nothing is not one.
+  assert.throws(() =>
+    projectCommandEvents(captureCommandEvents(captureCommandEffects({ crm: post('crm', () => null as never) }).slots), {}),
+  );
 });
 
 test('post() takes envelope: false and per-call headers, and nothing else', () => {

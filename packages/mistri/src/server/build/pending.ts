@@ -30,7 +30,7 @@ import { randomBytes } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { basename, dirname, join, resolve } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { Registry, redact } from '@mistriwork/engine/server/connections.js';
 import { loadApp, type LoadedApp } from '../app/apps.js';
@@ -58,6 +58,107 @@ interface PendingCopy {
 
 const nothing = async () => {};
 
+/** What is pending and where: the App's database as `mistri migrate` resolves it, or why it cannot be said. */
+async function pendingPlan(
+  appDir: string,
+  rest: string[],
+  flags: { migrations?: string; table?: string },
+  sections: ConfigSections,
+  registry: Registry,
+) {
+  const opts = parseArgs(rest);
+  const config = await readStartupConfig(opts, registry, sections);
+  const argument = opts.target
+    ? registry.add({ name: redact(opts.target), url: opts.target, schemas: opts.schemas, source: 'argument' }).id
+    : undefined;
+  let loaded: LoadedApp | undefined;
+  try {
+    loaded = await loadApp(appDir, {
+      lock: 'report',
+      ...(opts.appEntry !== undefined ? { entry: opts.appEntry } : {}),
+      ...(config.appEnv[appDir] ? { env: config.appEnv[appDir] } : {}),
+    });
+  } catch (error) {
+    if (!(error instanceof AppProblems && error.partial))
+      return { refused: 'the App did not load; the validation step says why', lines: [] as string[] };
+    loaded = { path: appDir, dir: appDir, app: error.partial as AppDef, pages: [], sources: {} };
+  }
+  /* A database named alone is the App's, as serving names it after the App's connection beside one App: no config
+     holds a connection by the name the App binds, so the binding would only refuse it. */
+  const binding = appBinding(loaded.app);
+  const named = registry.configs().some((each) => each.id === binding.connection || each.name === binding.connection);
+  const bound = argument !== undefined && !named ? { schemas: binding.schemas } : binding;
+  const target = await resolveTarget(registry, config, { ...flags, argument, schemas: opts.schemas }, appDir, bound);
+  const status = await migrationStatus(target);
+  if (status.plan.problems.length)
+    return { refused: 'the migrations and the history disagree: mistri migrate status says how', lines: [...status.plan.problems] };
+  return { opts, config, argument, target, dialect: dialectOf(target.url), pending: status.plan.pending };
+}
+
+/**
+ * The test host's `pending` (testing/host.ts): the pending migrations applied to the database a test serves, in
+ * place, before the App starts on it. `check --pending` makes its own copy; a test already serves one, a SQLite
+ * file in its workspace, and that is the only database this will change: anything else (a file outside `within`, a
+ * PostgreSQL URL) is refused by name, since it may be the database someone develops on. Returns the scripts applied.
+ */
+export async function pendingInPlace(
+  appDir: string,
+  rest: string[],
+  flags: { migrations?: string; table?: string },
+  sections: ConfigSections,
+  within: string,
+): Promise<string[]> {
+  const registry = new Registry();
+  const log = console.log;
+  console.log = () => {};
+  try {
+    const plan = await pendingPlan(appDir, rest, flags, sections, registry);
+    if (plan.refused !== undefined) throw new Error([plan.refused, ...plan.lines].join('\n'));
+    const inside = plan.dialect === 'sqlite' ? relative(resolve(within), resolve(sqlitePath(plan.target.url))) : '..';
+    if (!inside || inside.startsWith('..') || isAbsolute(inside))
+      throw new Error(
+        `pending applies migrations to the test's own copy of the database, and "${plan.target.connection.name}" is not one: ` +
+          (plan.dialect === 'sqlite'
+            ? 'serve a copy in the workspace (workspace.copyConfig, or `database` without a config).'
+            : 'it is a PostgreSQL database, which a test shares. Migrate a scratch database (mistri migrate up) and point the test at it.'),
+      );
+    if (!plan.pending.length) return [];
+    const applied = await migrateUp(plan.target);
+    if (applied.failure || applied.refused || applied.status.plan.problems.length)
+      throw new Error(
+        applied.failure
+          ? `${applied.failure.file.script} failed on the test's copy: ${applied.failure.message}`
+          : [applied.refused ?? 'the migrations and the history disagree', ...applied.status.plan.problems].join('\n'),
+      );
+    return plan.pending.map((file) => file.script);
+  } finally {
+    console.log = log;
+    await registry.closeAll();
+  }
+}
+
+/** The scripts waiting to run on the App's database, for a check that failed without --pending (check.ts says
+ * the flag then). Nothing where that cannot be read: the hint is not worth a second refusal. */
+export async function pendingScripts(
+  appDir: string,
+  rest: string[],
+  flags: { migrations?: string; table?: string },
+  sections: ConfigSections,
+): Promise<string[]> {
+  const registry = new Registry();
+  const log = console.log;
+  console.log = () => {};
+  try {
+    const plan = await pendingPlan(appDir, rest, flags, sections, registry);
+    return plan.refused !== undefined ? [] : plan.pending.map((file) => file.script);
+  } catch {
+    return [];
+  } finally {
+    console.log = log;
+    await registry.closeAll();
+  }
+}
+
 export async function pendingCopy(
   appDir: string,
   rest: string[],
@@ -66,32 +167,13 @@ export async function pendingCopy(
   sections: ConfigSections,
 ): Promise<PendingCopy> {
   const refuse = (detail: string, lines: string[] = []): PendingCopy => ({ args: rest, status: 'failed', detail, lines, cleanup: nothing });
-  const opts = parseArgs(rest);
   const registry = new Registry();
   const log = console.log;
   console.log = () => {};
   try {
-    const config = await readStartupConfig(opts, registry, sections);
-    const argument = opts.target
-      ? registry.add({ name: redact(opts.target), url: opts.target, schemas: opts.schemas, source: 'argument' }).id
-      : undefined;
-    let loaded: LoadedApp | undefined;
-    try {
-      loaded = await loadApp(appDir, {
-        lock: 'report',
-        ...(opts.appEntry !== undefined ? { entry: opts.appEntry } : {}),
-        ...(config.appEnv[appDir] ? { env: config.appEnv[appDir] } : {}),
-      });
-    } catch (error) {
-      if (!(error instanceof AppProblems && error.partial)) return refuse('the App did not load; the validation step says why');
-      loaded = { path: appDir, dir: appDir, app: error.partial as AppDef, pages: [], sources: {} };
-    }
-    const target = await resolveTarget(registry, config, { ...flags, argument, schemas: opts.schemas }, appDir, appBinding(loaded.app));
-    const dialect = dialectOf(target.url);
-    const status = await migrationStatus(target);
-    if (status.plan.problems.length)
-      return refuse('the migrations and the history disagree: mistri migrate status says how', [...status.plan.problems]);
-    const pending = status.plan.pending;
+    const plan = await pendingPlan(appDir, rest, flags, sections, registry);
+    if (plan.refused !== undefined) return refuse(plan.refused, plan.lines);
+    const { opts, config, argument, target, dialect, pending } = plan;
     if (!pending.length)
       return {
         args: rest,

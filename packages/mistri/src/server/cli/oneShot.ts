@@ -649,7 +649,7 @@ async function commandContractCheck(
 }
 
 /** The export's own refusal as a check problem, for an ordinary App that declares an API; a tenant App's document
- * is judged against its policy's ownership (tenantApiExport.ts) and is not rendered here. A refusal the catalog
+ * is judged against its policy's ownership, where its check holds that (tenant/tenantFeatureApi.ts). A refusal the catalog
  * checks already said (the commands' startup) is not said twice. */
 async function apiExportProblems(
   registry: Registry,

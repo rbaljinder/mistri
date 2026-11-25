@@ -1,4 +1,4 @@
-/** Private subprocess owner for validation and test suite account/grant maintenance. */
+/** Private subprocess owner for validation, a test's pending migrations and test suite account/grant maintenance. */
 import { loadApp } from '../app/apps.js';
 import { changeSuiteGrant } from '../cli/suiteGrant.js';
 import { createTestSuiteAccount } from './accounts.js';
@@ -10,6 +10,18 @@ process.once('message', async (request: TestMaintenanceRequest) => {
     if (request.kind === 'validate') {
       const loaded = await loadApp(request.directory, { lock: 'enforce' });
       value = { id: loaded.app.id, name: loaded.app.name };
+    } else if (request.kind === 'pending') {
+      const [{ pendingInPlace }, { CONFIG_SECTIONS }] = await Promise.all([
+        import('../build/pending.js'),
+        import('../serviceConnections.js'),
+      ]);
+      value = await pendingInPlace(
+        request.directory,
+        request.args,
+        request.migrations === undefined ? {} : { migrations: request.migrations },
+        CONFIG_SECTIONS,
+        request.within,
+      );
     } else if (request.kind === 'account') {
       value = await createTestSuiteAccount(request.file, process.env as Record<string, string>, request.input);
     } else if (request.kind === 'grant') {

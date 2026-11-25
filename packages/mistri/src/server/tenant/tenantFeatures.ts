@@ -5,6 +5,7 @@
  * feature adds its own tenantFeature*.ts module and one line to each list it
  * needs; nothing here decides anything itself.
  */
+import { apiCheck } from './tenantFeatureApi.js';
 import { administrationJournalHook, administrationWriteCheck } from './tenantFeatureAdministration.js';
 import { cloneCheck, sandboxStoreHook } from './tenantFeatureClone.js';
 import { commandJournalHook, commandLookupCheck, commandReferencesCheck } from './tenantFeatureCommands.js';
@@ -41,6 +42,7 @@ export const TENANT_STARTUP_CHECKS: readonly TenantStartupCheck[] = Object.freez
   jobsCheck,
   integrationsCheck,
   cloneCheck,
+  apiCheck,
 ]);
 
 /** createTenantEnrollment runs every `declare`, then, in its snapshot, every

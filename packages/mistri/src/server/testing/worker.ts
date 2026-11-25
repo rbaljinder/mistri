@@ -9,6 +9,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 export type TestMaintenanceRequest =
   | { kind: 'validate'; directory: string }
+  | { kind: 'pending'; directory: string; args: string[]; migrations?: string; within: string }
   | { kind: 'account'; file: string; input: { name: string; email: string; password: string } }
   | { kind: 'grant'; file: string; input: { appId: string; subjectId: string; roles: readonly string[]; expectedRevision: number } };
 
@@ -24,7 +25,9 @@ export async function runTestMaintenance<T>(
   const home = await mkdtemp(join(tmpdir(), 'mistri-maintenance-'));
   const config = join(home, 'config');
   const absoluteRequest =
-    request.kind === 'validate' ? { ...request, directory: resolve(request.directory) } : { ...request, file: resolve(request.file) };
+    request.kind === 'validate' || request.kind === 'pending'
+      ? { ...request, directory: resolve(request.directory) }
+      : { ...request, file: resolve(request.file) };
   try {
     await mkdir(config);
     return await new Promise<T>((resolve, reject) => {
