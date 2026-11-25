@@ -9,7 +9,9 @@
  *   listed integration provides (`integration-channel-unknown`);
  * - a webhook event runs a registered command that names no record and is
  *   neither public nor the platform's, whose input the event's payload
- *   fills field for field (`integration-event-input`);
+ *   fills field for field (`integration-event-input`); a settled channel
+ *   message's command is held the same, and takes the settle's fields
+ *   (`integration-settled-input`);
  * - the principal it runs as holds service roles alone (`service: true`) and
  *   is granted the command (`integration-service-role`).
  */
@@ -17,7 +19,7 @@ import { appCommandGrants, logicalResource, type AppDef } from '../../shared/app
 import { CHANNEL_DESTINATION_PREFIX } from '../commands/commandEffects.js';
 import { getCommandEffects, getCommandEvents, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { describeShape, type ShapeDescriptor } from '../commands/commandShapes.js';
-import { integrationEventCommands, type CapturedIntegrations } from './integrationDeclaration.js';
+import { integrationEventCommands, integrationServiceCommands, type CapturedIntegrations } from './integrationDeclaration.js';
 import { EMAIL_CHANNEL } from '../../adapters/inbox/inbox.js';
 
 /** Problems a registry has against the declaration (undefined when the App lists none), in the registry's order. */
@@ -72,6 +74,25 @@ export function integrationCommandProblems(declared: CapturedIntegrations | unde
     const mismatch = payload ? inputMismatch(describeShape(payload), command.fields) : undefined;
     if (mismatch)
       problems.push(`[integration-event-input] ${at} runs command "${id}", whose input the event's payload does not fill: ${mismatch}.`);
+  }
+  const settled = declared?.settled;
+  if (settled) {
+    const at = 'integrations.settled';
+    const command = Object.hasOwn(registry, settled.command) ? registry[settled.command] : undefined;
+    if (!command) problems.push(`${at} runs command "${settled.command}", which the commands module does not register.`);
+    else {
+      if (command.public || command.realm === 'platform' || (command.targets ?? 'one') !== 'none')
+        problems.push(
+          `${at} runs command "${settled.command}", which is public, the platform's or names a record; a settled message's command ` +
+            "runs in the message's tenant with targets: 'none' and finds its rows itself, by the reference.",
+        );
+      const mismatch = settledMismatch(command.fields);
+      if (mismatch)
+        problems.push(
+          `[integration-settled-input] ${at} runs command "${settled.command}", whose input a settled message does not fill: ${mismatch}. ` +
+            'It is sent { reference, channel, state, message } and, where there is one, reason and providerId.',
+        );
+    }
   }
   return problems;
 }
@@ -219,12 +240,12 @@ export function integrationRoleProblems(
   for (const role of declared?.editors ?? [])
     if (!Object.hasOwn(roles, role) || roles[role].service === true)
       problems.push(`integrations.editors names "${role}", which is not a person's role in App "${app.id}": a service enters no secrets.`);
-  for (const { integration, event, command, runAs } of integrationEventCommands(declared)) {
+  for (const { what, command, runAs } of integrationServiceCommands(declared)) {
     const held = principals.get(runAs) ?? [];
     const person = held.filter((role) => !Object.hasOwn(roles, role) || roles[role].service !== true);
     if (person.length)
       problems.push(
-        `[integration-service-role] principal "${runAs}" runs integrations.webhooks "${integration}" event "${event}", so every role it holds is a service role ` +
+        `[integration-service-role] principal "${runAs}" runs ${what}, so every role it holds is a service role ` +
           `("service": true); ${person.map((role) => `"${role}"`).join(', ')} ${person.length === 1 ? 'is' : 'are'} not.`,
       );
     else if (!appCommandGrants(app, [...held]).has(command))
@@ -236,6 +257,18 @@ export function integrationRoleProblems(
 }
 
 type Field = Readonly<{ name: string; required?: boolean; type: string }>;
+/* What a settled message's command is sent (integrationSettled.ts): its reference, channel, state and message key
+   always, a reason and the provider's id where there is one. */
+const SETTLED_ALWAYS = ['reference', 'channel', 'state', 'message'];
+const SETTLED_SOMETIMES = ['reason', 'providerId'];
+/* The command takes any of a settle's fields and no other, and requires none that a settle may leave out. */
+function settledMismatch(fields: readonly Field[]): string | undefined {
+  const extra = fields.filter((field) => ![...SETTLED_ALWAYS, ...SETTLED_SOMETIMES].includes(field.name));
+  if (extra.length) return `the command takes ${extra.map((field) => `"${field.name}"`).join(', ')}, which a settle does not send`;
+  const missing = fields.filter((field) => field.required === true && SETTLED_SOMETIMES.includes(field.name));
+  if (missing.length) return `a settle may not carry ${missing.map((field) => `"${field.name}"`).join(', ')}, which the command requires`;
+  return undefined;
+}
 /* The payload's fields against the command's: every one it sends is an input, and every input the command requires is sent. */
 function inputMismatch(payload: ShapeDescriptor, fields: readonly Field[]): string | undefined {
   if (payload.kind !== 'object') return 'the payload is not an object of fields';

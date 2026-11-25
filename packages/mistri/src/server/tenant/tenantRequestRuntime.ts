@@ -1,4 +1,6 @@
 import { isPromise } from 'node:util/types';
+import { inZone } from '../commands/currentZone.js';
+import { appZone, readerZone, zoneColumn } from '../../shared/appZone.js';
 import { TransactionOperations, TransactionOutcomeUnknown, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure, TrialRolledBack, type CommandJournal } from '../../adapters/commands/commandJournal.js';
 import { declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape, type AppDef } from '../../shared/app.js';
@@ -294,7 +296,11 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
               const acting = actingPrincipal(request, principal);
               profile = await readSharedProfile(reader, app, principal.tenantId);
               active();
-              const authored = delivered(authoredRows(acting, Object.freeze({ tenant: profile }))),
+              /* The policy is the App's own code, and counts its day in this tenant's zone (`currentZone()`): the profile's
+                 `tenant.<column>` where `ui.timezone` names one, else the App's. A zone in a row its scope reads comes later. */
+              const named = zoneColumn(app.ui);
+              const zone = (named?.resource === 'tenant' ? readerZone(profile[named.column]) : undefined) ?? appZone(app.ui);
+              const authored = delivered(inZone(zone, () => authoredRows(acting, Object.freeze({ tenant: profile })))),
                 policy = isPromise(authored) ? await authored : authored;
               active();
               rows = composeTenantReadScope(

@@ -34,6 +34,8 @@ import {
   type IntegrationSettings,
 } from '../integrations/integrationRuntime.js';
 import { integrationEndpoints } from '../integrations/integrationInbound.js';
+import { SETTLED_PART } from '../integrations/integrationDeclaration.js';
+import { settledReporter } from '../integrations/integrationSettled.js';
 import { createInboundHost, InboundNoTenant, type InboundHost } from '../jobs/inboundHost.js';
 import type { ReadinessCheckInput } from '../operations/operations.js';
 import { openWebhook, type WebhookServiceConfig } from '../webhooks.js';
@@ -149,7 +151,22 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
     let timer: ReturnType<typeof setTimeout> | undefined;
     let stopping = false;
     let running: Promise<unknown> | undefined;
-    const sendDue = async () => (channels ? channels.sendDue() : false);
+    /* What the channels decided, then what the App is told of it (integrations.settled), in the message's own tenant. */
+    const settled = runtime && owned?.integrations.settled;
+    const reporter =
+      runtime && owned && settled
+        ? settledReporter({
+            runtime,
+            version: owned.commands[settled.command]?.version ?? 1,
+            principals: owned.principals,
+            bind: (tenant) => owned.deliver(SETTLED_PART, tenant),
+            ...(options.warn ? { warn: options.warn } : {}),
+          })
+        : undefined;
+    const sendDue = async () => {
+      const moved = channels ? await channels.sendDue() : false;
+      return (reporter ? await reporter.report() : false) || moved;
+    };
     const loop = () => {
       if (stopping) return;
       running = sendDue()

@@ -56,6 +56,9 @@ export interface AuthorizedBusinessCommand {
   readonly readsInCommand?: true;
   /** The App's `ui.timezone`, the wall clock its writes into zone-less timestamp columns are made in (UTC when absent). */
   readonly timezone?: string;
+  /** A tenant's own zone, read from `ui.timezone: { column }` for this request: what a channel message that names no
+      zone is held through quiet hours in (currentZone.ts). Absent where the zone is the App's. */
+  readonly ownZone?: string;
   /** The App's catalogs and `ui.locale` (commandLocale.ts), which `ctx.locale` is clamped to. */
   readonly words?: import('./commandLocale.js').CommandWords;
   /** The App's `ui.currency` (see businessCommandAuthorization.ts). */

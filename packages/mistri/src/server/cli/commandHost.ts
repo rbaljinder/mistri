@@ -432,6 +432,15 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
           target: prepared.integrationTarget,
           // A held message's public link, said as an effect's is (below).
           publicLinks: async (view: string) => appPublicUrl(options.current(), view),
+          ...(prepared.module.integrations.settled && bind
+            ? {
+                settled: {
+                  version: commands[prepared.module.integrations.settled.command]?.version ?? 1,
+                  principals: prepared.module.principals,
+                  bind: (runAs: string) => bind(undefined, runAs),
+                },
+              }
+            : {}),
         });
       }
     }
@@ -470,6 +479,11 @@ export async function hostAppCommands(options: AppCommandHostOptions): Promise<A
         for (const command of mapping.events.values()) runs(mapping.runAs, command);
       for (const mapping of prepared.module.integrations?.webhooks.values() ?? [])
         for (const command of mapping.events.values()) jobCommands = new Set([...jobCommands, command]);
+      const settled = prepared.module.integrations?.settled;
+      if (settled) {
+        runs(settled.runAs, settled.command);
+        jobCommands = new Set([...jobCommands, settled.command]);
+      }
       // A module of only inbound endpoints or integrations runs no jobs, and has no job store to open.
       if (prepared.deployment && prepared.module.jobs.size + prepared.module.workflows.size > 0 && !aside) {
         const opened = new Map<string, Webhook>();

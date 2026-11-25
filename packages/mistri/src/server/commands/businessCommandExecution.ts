@@ -56,7 +56,7 @@ import { mayReadTargetColumn } from './commandActorColumns.js';
 import { rowRevision } from './commandRevision.js';
 import { NO_OUTPUT } from './commandShapes.js';
 import { preparesInitial } from './commandPrepareNeeds.js';
-import { zoneDay } from '../app/appStamps.js';
+import { zoneDay, zoned, zonedTransaction } from './currentZone.js';
 import { asMaker, claimProposal, settleProvenance, targetWrites } from './commandProvenance.js';
 import { createLookupSources, lookupResult } from './commandLookup.js';
 import { lookupHeldBy } from './commandLookupHold.js';
@@ -718,7 +718,7 @@ async function executeUntraced(
         lookupHeld = !options.statusOnly && (await lookupHeldBy(authorized, command, table, before, reader.own, now));
         const value = lookupHeld
           ? undefined
-          : await lookupRun(
+          : await zoned(authorized.timezone, lookupRun)(
               Object.freeze({
                 actor: authorized.actor,
                 requestId,
@@ -897,7 +897,7 @@ async function executeUntraced(
     const committed: BusinessCommandStatus = await inWriteLanes(lanes, () =>
       reading(() =>
         asMaker(madeAs, options.makerActor, options.proposalId, () =>
-          authorized.commandTransaction!(async (records, journal) => {
+          zonedTransaction(authorized)(async (records, journal) => {
             afterCommit.length = 0;
             transactionStarted = true;
             checkCancelled();

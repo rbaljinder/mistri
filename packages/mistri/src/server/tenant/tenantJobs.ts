@@ -62,7 +62,7 @@ import { isWorkflowJob, WORKFLOW_JOB_VERSION, workflowJobId } from '../workflows
 import { flowRunnersOf, tenantFlowChangeReader } from '../workflows/flowChanges.js';
 import { flowCommandId, flowCommandProblems, withFlowCommands } from '../workflows/flowCommand.js';
 import { flowCommandOf } from '../commands/flowCommandBrand.js';
-import { integrationEventCommands } from '../integrations/integrationDeclaration.js';
+import { integrationServiceCommands, SETTLED_PART } from '../integrations/integrationDeclaration.js';
 import {
   integrationCommandProblems,
   integrationFormProblems,
@@ -155,9 +155,9 @@ export function tenantJobDeployment(
   }
   const [integrationProblem] = integrationCommandProblems(module.integrations, options.commands);
   if (integrationProblem) refuse(integrationProblem);
-  for (const { command } of integrationEventCommands(module.integrations))
+  for (const { what, command } of integrationServiceCommands(module.integrations))
     if (options.commands[command].source !== owner.source.id)
-      refuse(`integrations.webhooks runs command "${command}", which is not on the tenant App's source "${owner.source.id}".`);
+      refuse(`${what} runs command "${command}", which is not on the tenant App's source "${owner.source.id}".`);
   // A link's reply box answers the record the link opened, in the words a requester types: one text `body`.
   const reply = module.mail?.links?.reply;
   if (reply) {
@@ -327,11 +327,9 @@ function tenantJobProblems(
   problems.push(...integrationRoleProblems(module.integrations, module.principals, app));
   problems.push(...integrationNotifyProblems(module.integrations, app));
   problems.push(...integrationFormProblems(module.integrations, app));
-  for (const { runAs, integration } of integrationEventCommands(module.integrations)) {
+  for (const { runAs, what } of integrationServiceCommands(module.integrations)) {
     if (module.principals.get(runAs)!.some((role) => !Object.hasOwn(roles, role) || roles[role].realm === 'platform'))
-      problems.push(
-        `principal "${runAs}" runs integrations.webhooks "${integration}", which is one tenant's, so every role it holds must be a tenant-realm role.`,
-      );
+      problems.push(`principal "${runAs}" runs ${what}, which is one tenant's, so every role it holds must be a tenant-realm role.`);
   }
   const attachments = module.mail?.receive?.attachments;
   if (attachments !== undefined) {
@@ -388,13 +386,11 @@ export function assertTenantJobs(
       refuse(`principal "${runAs}" cannot run mail ${what} command "${id}": its roles must read the command's whole footprint.`);
     }
   }
-  for (const { integration, event, command, runAs } of integrationEventCommands(module.integrations)) {
+  for (const { what, command, runAs } of integrationServiceCommands(module.integrations)) {
     try {
       authorizer.authorize(command, serviceActor(app.id, runAs, module.principals.get(runAs)!));
     } catch {
-      refuse(
-        `principal "${runAs}" cannot run command "${command}" for integrations.webhooks "${integration}" event "${event}": its roles must read the command's whole footprint.`,
-      );
+      refuse(`principal "${runAs}" cannot run command "${command}" for ${what}: its roles must read the command's whole footprint.`);
     }
   }
   assertTenantFlows(module, app, registry, owned, connection);
@@ -787,6 +783,21 @@ export function bindTenantJobs(options: TenantJobsOptions) {
         roles,
         grants: validation ? { ...access, validation } : access,
         commands: new Set(mapping.events.values()),
+      }),
+    );
+  }
+  /* A settled channel message is a part of its own too: one command, as its principal, in the message's tenant. */
+  const settled = module.integrations?.settled;
+  if (settled) {
+    const roles = module.principals.get(settled.runAs)!,
+      access = resolveAppAccess(app, ownership.schema, [...roles]);
+    mailParts.set(
+      SETTLED_PART,
+      Object.freeze({
+        runAs: settled.runAs,
+        roles,
+        grants: validation ? { ...access, validation } : access,
+        commands: new Set([settled.command]),
       }),
     );
   }

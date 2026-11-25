@@ -21,6 +21,7 @@
  * is never read, and nothing it says reaches a transaction. A system that
  * has something to report calls a command.
  */
+import { chainZone } from './currentZone.js';
 import { createHash } from 'node:crypto';
 import { isPromise, isProxy } from 'node:util/types';
 import {
@@ -236,7 +237,12 @@ export interface ChannelMessageProjection {
   /** Whether the App holds the recipient's consent to be sent this (a box they ticked, a reply they sent).
       Without it nothing is sent, unless they opted in on the channel itself (a "START"). */
   readonly consent: boolean;
-  /** The recipient's IANA time zone, which their quiet hours are read in; the App's own when left out. */
+  /** The App's own name for this message (an order's id, a reminder's row): at most 200 characters. It is kept with the
+      message, handed to the channel's package, and sent to the App's `integrations.settled` command, with the
+      outcome, when the message is sent, held, suppressed or fails. */
+  readonly reference?: string;
+  /** The recipient's IANA time zone, which their quiet hours are read in. Left out: the tenant's own zone where
+      `ui.timezone` names a column of it (`currentZone()`), else the quiet hours' own. */
   readonly timezone?: string;
 }
 /** The effect destination a channel's messages go to; no webhook may be named so. */
@@ -267,7 +273,11 @@ export function send<Output>(
     destination,
     project: (output) => {
       const message: unknown = Reflect.apply(project, undefined, [output]);
-      return message === null || message === undefined ? null : channelBody(message);
+      if (message === null || message === undefined) return null;
+      const body = channelBody(message);
+      // A message that names no zone is held through its tenant's night, where the tenant has a zone of its own.
+      const own = body.timezone === undefined ? chainZone() : undefined;
+      return own === undefined ? body : { ...body, timezone: own };
     },
     skips: true,
   });
@@ -278,10 +288,10 @@ export function send<Output>(
 export function channelBody(value: unknown): EffectPayload {
   const message = value as Partial<ChannelMessageProjection> | null;
   if (!message || typeof message !== 'object' || Array.isArray(message) || isProxy(message))
-    throw new TypeError('A channel message is { to, text, consent, timezone? }.');
+    throw new TypeError('A channel message is { to, text, consent, timezone?, reference? }.');
   const keys = Object.keys(message);
-  if (keys.some((key) => !['to', 'text', 'consent', 'timezone'].includes(key)))
-    throw new TypeError('A channel message is { to, text, consent, timezone? }.');
+  if (keys.some((key) => !['to', 'text', 'consent', 'timezone', 'reference'].includes(key)))
+    throw new TypeError('A channel message is { to, text, consent, timezone?, reference? }.');
   if (typeof message.to !== 'string' || !message.to.trim() || message.to.length > 320)
     throw new TypeError("A channel message's to is the recipient's address.");
   if (typeof message.text !== 'string' || !message.text.trim() || message.text.length > 2000)
@@ -290,11 +300,17 @@ export function channelBody(value: unknown): EffectPayload {
     throw new TypeError("A channel message says whether the App holds the recipient's consent: consent: true.");
   if (message.timezone !== undefined && (typeof message.timezone !== 'string' || message.timezone.length > 64))
     throw new TypeError("A channel message's timezone is an IANA zone.");
+  if (
+    message.reference !== undefined &&
+    (typeof message.reference !== 'string' || !message.reference.trim() || message.reference.length > 200)
+  )
+    throw new TypeError("A channel message's reference is the App's own name for it, from 1 to 200 characters.");
   return {
     to: message.to.trim(),
     text: message.text,
     consent: message.consent,
     ...(message.timezone === undefined ? {} : { timezone: message.timezone }),
+    ...(message.reference === undefined ? {} : { reference: message.reference.trim() }),
   };
 }
 

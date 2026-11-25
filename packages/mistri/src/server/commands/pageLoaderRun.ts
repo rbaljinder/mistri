@@ -9,7 +9,7 @@ import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schem
 import { ResourceReadError, readView, type ResourceReader } from '@mistriwork/engine/server/resourceReadOperations.js';
 import type { ViewDef } from '@mistriwork/engine/shared/view.js';
 import { chosenContext, type Chosen } from '../app/appChoices.js';
-import { zoneDay } from '../app/appStamps.js';
+import { zoneDay, zoned } from './currentZone.js';
 import { commandCatalog, createCommandDb, zonedCatalog, type ReadTable, type UntypedRow } from './commandDb.js';
 import { isBusinessCommandExecutionError } from './commandErrors.js';
 import { LOADER_RESULT_MOST, type PageLoader, type PageLoaderViewer } from './pageLoaders.js';
@@ -237,18 +237,20 @@ export async function runPageLoader(options: {
   let result: unknown;
   try {
     result = await Promise.race([
-      Promise.resolve().then(() =>
-        loader.load(
-          Object.freeze({
-            db: db as never,
-            params: Object.freeze({ ...options.params }),
-            viewer: options.viewer,
-            now: () => options.now,
-            today: () => zoneDay(options.now, options.timezone),
-            timezone: options.timezone ?? 'UTC',
-            chosen: chosenContext(options.chosen),
-            signal: controller.signal,
-          }),
+      Promise.resolve().then(
+        zoned(options.timezone, () =>
+          loader.load(
+            Object.freeze({
+              db: db as never,
+              params: Object.freeze({ ...options.params }),
+              viewer: options.viewer,
+              now: () => options.now,
+              today: () => zoneDay(options.now, options.timezone),
+              timezone: options.timezone ?? 'UTC',
+              chosen: chosenContext(options.chosen),
+              signal: controller.signal,
+            }),
+          ),
         ),
       ),
       timeUp,

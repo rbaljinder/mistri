@@ -14,6 +14,8 @@ import { channelTransports } from './integrationChannels.js';
 import type { CapturedIntegrations } from './integrationDeclaration.js';
 import { createIntegrationRuntime, registerIntegrationRuntime, type IntegrationRuntime } from './integrationRuntime.js';
 import { causeText } from '../observe/failureCause.js';
+import { settledReporter } from './integrationSettled.js';
+import type { JobCommandBinding } from '../jobs/jobCommands.js';
 import type { PublicLinkRender } from '../links/publicLink.js';
 
 /* Held messages are looked at every half minute: quiet hours end on the minute, and nobody waits on a held text. */
@@ -37,6 +39,12 @@ export async function openAppIntegrations(
     now?: () => number;
     /** How a public link in a held message is said. */
     publicLinks?: PublicLinkRender;
+    /** Where `integrations.settled`'s command runs: its version, the module's principals and the job binding. */
+    settled?: Readonly<{
+      version: number;
+      principals: ReadonlyMap<string, readonly string[]>;
+      bind: (runAs: string) => Promise<JobCommandBinding>;
+    }>;
   }>,
 ): Promise<AppIntegrations> {
   const { appId, declared } = options;
@@ -50,7 +58,18 @@ export async function openAppIntegrations(
     ...(options.publicLinks ? { publicLinks: options.publicLinks } : {}),
   });
   const withdraw = registerIntegrationRuntime(runtime);
-  const channels = channelTransports(runtime);
+  const sent = channelTransports(runtime);
+  const reporter = options.settled
+    ? settledReporter({ runtime, ...options.settled, bind: (_tenant, runAs) => options.settled!.bind(runAs) })
+    : undefined;
+  // What the channels decided, then what the App is told of it (integrations.settled).
+  const channels = Object.freeze({
+    sendDue: async () => {
+      const moved = await sent.sendDue();
+      return (reporter ? await reporter.report() : false) || moved;
+    },
+    transport: sent.transport,
+  });
   let timer: ReturnType<typeof setTimeout> | undefined;
   let stopping = false;
   let running: Promise<unknown> | undefined;

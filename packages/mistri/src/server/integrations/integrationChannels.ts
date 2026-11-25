@@ -113,6 +113,7 @@ interface Message {
   readonly text: string;
   readonly consent: boolean;
   readonly timezone?: string;
+  readonly reference?: string;
 }
 
 /** The channel's sender over a runtime: the delivery transport for its effects, and the loop that sends what quiet hours held. */
@@ -167,6 +168,7 @@ export function channelSender(runtime: IntegrationRuntime, channel: string) {
           to: row.recipient,
           text,
           idempotencyKey: row.key,
+          ...(row.reference ? { reference: row.reference } : {}),
         }),
         Object.freeze({ signal }),
       )) as { id?: unknown } | null;
@@ -226,6 +228,7 @@ export function channelSender(runtime: IntegrationRuntime, channel: string) {
         dueAt: null,
         attempts: 0,
         at: now,
+        ...(message.reference === undefined ? {} : { reference: message.reference }),
       };
       return decide(row, message.consent, message.timezone, publication.signal);
     };
