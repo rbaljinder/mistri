@@ -386,10 +386,12 @@ command's id; never a support visit's id or a row's key.
 | `resources.*.at.*.after` | string | Stable | Come due this long past the instant: '2 days'. |
 | `resources.*.at.*.before` | string | Stable | Come due this long ahead of the instant: '24 hours'. |
 | `resources.*.at.*.command` | string | Stable | A command, by its name in the App's commands module (defineCommands). The server fills in its input, target and version from the registration; mistri-commands.d.ts types the names. Used in `examples/apps/lintel/app.ts`. |
+| `resources.*.at.*.failed` | string | Stable | The command run on the record, with the refusal as its text inputs `code` and `message`, once `command` is refused for good there or runs out of attempts. |
 | `resources.*.at.*.when` | string | Stable | Query-language conditions over the record's own columns the record must meet then: "status = 'open'". Used in `examples/apps/tick/app.ts`. |
 | `resources.*.at.*[].after` | string | Stable | Come due this long past the instant: '2 days'. |
 | `resources.*.at.*[].before` | string | Stable | Come due this long ahead of the instant: '24 hours'. |
 | `resources.*.at.*[].command` | string | Stable | A command, by its name in the App's commands module (defineCommands). The server fills in its input, target and version from the registration; mistri-commands.d.ts types the names. Used in `examples/apps/lintel/app.ts`. |
+| `resources.*.at.*[].failed` | string | Stable | The command run on the record, with the refusal as its text inputs `code` and `message`, once `command` is refused for good there or runs out of attempts. |
 | `resources.*.at.*[].when` | string | Stable | Query-language conditions over the record's own columns the record must meet then: "status = 'open'". Used in `examples/apps/tick/app.ts`. |
 
 ## `resources.*.audit`

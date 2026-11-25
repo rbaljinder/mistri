@@ -350,7 +350,9 @@ It sets both limits for that command: the most changes the audit keeps for one
 target, and the most rows one call takes. The 4 MiB the audit keeps for one
 target stays whatever the number says, and a command over either is refused with
 the number and, when it has not declared one, `maxChanges`. `mistri check`
-refuses a `maxChanges` outside 1 to 16,384 when the App loads.
+refuses a `maxChanges` outside 1 to 16,384 when the App loads. Work past the
+ceiling is a row per item and a timer that runs a command on each:
+[work larger than one command](/docs/events-and-jobs/#work-larger-than-one-command).
 
 Bytes go into a row only through `insertFile`, under the file resource's
 rules: its name, type and size columns are filled, and a file over its

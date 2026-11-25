@@ -41,6 +41,8 @@ import type { JobEnqueueInput } from '../packages/mistri/src/adapters/jobs/jobSt
 import { PgConnectionManager } from '../packages/engine/src/adapters/postgresPool.js';
 import { readSqliteScopeCatalog } from '../packages/engine/src/adapters/scoped/sqliteScopeCatalog.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
+import { refuse } from '../packages/mistri/src/server/commands/businessCommandExecution.js';
+import { field } from '../packages/mistri/src/server/commands/commandFields.js';
 import type { JobHost } from '../packages/mistri/src/server/jobs/jobHost.js';
 import { capturedJobModule, defineJob, defineJobs, JobDeclarationError } from '../packages/mistri/src/server/jobs/jobModule.js';
 import { provisionStores, tenantJobPolicies } from '../packages/mistri/src/server/maintenance.js';
@@ -83,6 +85,8 @@ const contracts = {
   resolve: { target: 'ticket' },
   warn: { target: 'ticket' },
   breach: { target: 'ticket' },
+  charge: { target: 'ticket' },
+  shelve: { target: 'ticket' },
   audit: { target: 'review', realm: 'platform' },
   tally: { target: 'review', targets: 'none', realm: 'platform' },
 };
@@ -146,7 +150,15 @@ const policy = defineAppTenantPolicy({
   resolveMembershipRows: () => ({ ticket: true }),
   resolveRows: () => ({ ticket: true }),
   resolvePlatformRows: () => ({ dealer: true, ticket: true, review: true }),
-  resultReferences: { resolve: () => [], warn: () => [], breach: () => [], audit: () => [], tally: () => [] },
+  resultReferences: {
+    resolve: () => [],
+    warn: () => [],
+    breach: () => [],
+    charge: () => [],
+    shelve: () => [],
+    audit: () => [],
+    tally: () => [],
+  },
 });
 
 const output = { parse: (value: unknown) => value as Record<string, unknown> };
@@ -179,6 +191,32 @@ const commands = defineCommands({
     output,
     async handle({ db, record }) {
       await db.ticket.update(record, { status: 'breached' });
+      return {};
+    },
+  }),
+  // Work queued on a ticket: charged when its time comes, and refused in the handler's own words where it cannot be.
+  charge: defineCommand({
+    source: 'business',
+    target: 'ticket',
+    input: {},
+    output,
+    async handle({ db, record }) {
+      if (Number(record.warned) < 0) refuse('The card on file was declined.');
+      await db.ticket.update(record, { status: 'breached' });
+      return {};
+    },
+  }),
+  // What a timer's `failed` runs: the refusal, kept on the record it was about.
+  shelve: defineCommand({
+    source: 'business',
+    target: 'ticket',
+    input: { code: field.text(), message: field.text() },
+    output,
+    async handle({ db, record }, input) {
+      await db.ticket.update(record, {
+        status: 'shelved',
+        note: `${input.code}: ${input.message}`,
+      });
       return {};
     },
   }),
@@ -226,7 +264,7 @@ const SCHEMA = {
     CREATE TABLE dealer (id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL);
     CREATE TABLE ticket (tenant_id TEXT NOT NULL REFERENCES dealer(id), number INTEGER NOT NULL,
       status TEXT NOT NULL DEFAULT 'open', warn_at TIMESTAMP, due_at TIMESTAMP, warned INTEGER NOT NULL DEFAULT 0,
-      PRIMARY KEY (tenant_id, number));
+      note TEXT, PRIMARY KEY (tenant_id, number));
     CREATE INDEX ticket_status ON ticket (tenant_id, status, warn_at);
     CREATE TABLE review (id TEXT PRIMARY KEY NOT NULL, status TEXT NOT NULL DEFAULT 'pending', due_at TIMESTAMP, note TEXT);`,
   // A zone-less warning and a zoned due time: each cutoff is read on its own column's clock.
@@ -234,7 +272,7 @@ const SCHEMA = {
     CREATE TABLE public.dealer (id text PRIMARY KEY, name text NOT NULL);
     CREATE TABLE public.ticket (tenant_id text NOT NULL REFERENCES public.dealer(id), number integer NOT NULL,
       status text NOT NULL DEFAULT 'open', warn_at timestamp, due_at timestamptz, warned integer NOT NULL DEFAULT 0,
-      PRIMARY KEY (tenant_id, number));
+      note text, PRIMARY KEY (tenant_id, number));
     CREATE INDEX ticket_status ON public.ticket (tenant_id, status, warn_at);
     CREATE TABLE public.review (id text PRIMARY KEY, status text NOT NULL DEFAULT 'pending', due_at timestamptz, note text);`,
 };
@@ -508,6 +546,98 @@ for (const { dialect, skip } of ENGINES)
       await nextSweep(host, clock, lab);
       assert.equal((await receipts(lab, 'warn')).length, 2, 'the new instant ran once');
       assert.deepEqual(await tickets(lab), { 'north/1': 'open:2', 'north/2': 'resolved:0' });
+    });
+
+    test('a timer with failed keeps each refused record’s refusal on it, in its own tenant, and works through the rest at once', async (t) => {
+      /* Work queued as rows: each ticket is charged when due_at comes; one north ticket's card is declined. More of
+         north's are due than one sweep takes of a tenant, so the rest are reached by the sweeps that follow at once. */
+      const queued = parseTestApp(
+        (() => {
+          const base = manifest({
+            clock: {
+              realm: 'tenant',
+              read: true,
+              commands: ['warn', 'breach', 'charge', 'shelve'],
+            },
+          });
+          const states = {
+            ...base.resources.ticket.machine.states,
+            open: {
+              on: {
+                resolve: 'resolved',
+                breach: 'breached',
+                charge: 'breached',
+                shelve: 'shelved',
+              },
+            },
+            shelved: { final: true },
+          };
+          const ticketAt = {
+            due_at: {
+              command: 'charge',
+              when: "status = 'open'",
+              failed: 'shelve',
+            },
+          };
+          const queue = {
+            ...base.resources.ticket,
+            machine: { ...base.resources.ticket.machine, states },
+            at: ticketAt,
+          };
+          return { ...base, resources: { ...base.resources, ticket: queue } };
+        })(),
+        'tenant-timers-queued.ts',
+        contracts,
+      );
+      const count = DUE_TIMER_CAP * 2 + 5;
+      const lab = await openLab(
+        t,
+        dialect,
+        seedTickets(
+          ...Array.from({ length: count }, (_, index) => ticket('north', index + 1, FUTURE, PAST)),
+          ticket('south', 1, FUTURE, PAST),
+        ),
+      );
+      await lab.rows('UPDATE ticket SET warned = -1 WHERE number = 3');
+      const clock = { now: Date.now() },
+        host = await hostOf(t, await enroll(t, lab, queued), clock);
+      // No minute passes: `until` never moves the clock as far as the next sweep.
+      await until(host, clock, async () => (await lab.rows("SELECT 1 AS n FROM ticket WHERE status = 'open'")).length === 0);
+      const ended = await lab.rows(
+        'SELECT tenant_id, status, COUNT(*) AS n FROM ticket GROUP BY tenant_id, status ORDER BY tenant_id, status',
+      );
+      assert.deepEqual(
+        ended.map((row) => [String(row.tenant_id), String(row.status), Number(row.n)]),
+        [
+          ['north', 'breached', count - 1],
+          ['north', 'shelved', 1],
+          ['south', 'breached', 1],
+        ],
+      );
+      // The refusal is the record's: the handler's own sentence, under its code, written by the service in its tenant.
+      assert.deepEqual(
+        (await lab.rows("SELECT tenant_id, number, note FROM ticket WHERE status = 'shelved' ORDER BY tenant_id")).map((row) => ({
+          ...row,
+        })),
+        [
+          {
+            tenant_id: 'north',
+            number: 3,
+            note: 'ineligible_state: The card on file was declined.',
+          },
+        ],
+      );
+      assert.deepEqual(await receipts(lab, 'shelve'), [{ realm: 'tenant', tenant_id: 'north', actor_id: 'service:sla-clock' }]);
+      // Nothing is left failed for an operator: the refusal was the App's to keep, and each run is done.
+      assert.ok((await jobs(lab)).every((row) => row.state === 'succeeded'));
+      // A later sweep runs nothing again; the shelved ticket, put right and given a new instant, is charged once more.
+      await nextSweep(host, clock, lab);
+      assert.equal((await receipts(lab, 'charge')).length, count);
+      await lab.rows(`UPDATE ticket SET status = 'open', warned = 0, note = NULL, due_at = '2021-01-01 09:00:00' WHERE status = 'shelved'`);
+      await nextSweep(host, clock, lab);
+      await until(host, clock, async () => (await lab.rows("SELECT 1 AS n FROM ticket WHERE status = 'open'")).length === 0);
+      assert.equal((await receipts(lab, 'charge')).length, count + 1);
+      assert.deepEqual(await lab.rows("SELECT 1 AS n FROM ticket WHERE status <> 'breached'"), []);
     });
 
     test('a suspended tenant’s due records do not fire, and fire once it is active again', async (t) => {

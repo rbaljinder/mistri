@@ -796,7 +796,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // name): 1799/532.
     // 1.0.0-rc.86: an assistant starter's `roles` and the assistant's `limits.steps` (two entries; both names were
     // keys already): 1801/532.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1801, names: 532 });
+    // A timer's `failed`, the command that keeps its refusal on the record (one entry, one new name): 1802/533.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1802, names: 533 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

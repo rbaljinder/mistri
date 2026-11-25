@@ -86,12 +86,15 @@ export interface MachineState<State extends string = string, Column extends stri
   final?: true | { readonly freeze: true };
 }
 /** A timer at an instant (`AppResource.at`): the command it runs, the conditions the record must meet then, and how
-    long `before` or `after` the instant it comes due (one of them; the instant itself when neither). */
+    long `before` or `after` the instant it comes due (one of them; the instant itself when neither). `failed` names
+    the command run on the record once `command` is refused for good there, or runs out of attempts: it is given the
+    refusal as its text inputs `code` and `message`, so a row queued for work keeps its own failure. */
 export interface AppAtTimer {
   command: CommandName;
   when?: string;
   before?: Duration;
   after?: Duration;
+  failed?: CommandName;
 }
 /** A record's state machine over one column. `since` names a timestamp column the server stamps whenever the state
     changes, which `after` timers count from. */

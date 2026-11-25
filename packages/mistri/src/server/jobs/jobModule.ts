@@ -110,6 +110,9 @@ export interface MachineTimer {
   readonly when?: string;
   /** An `at` timer's distance from the instant, as authored (`before-24 hours`): it names the job, so two timers on one column stay two. */
   readonly offset?: string;
+  /** The job (an `at` timer's, by id) whose refusal this one records: it runs the timer's `failed` command on the same
+   * stay, enqueued by that job's handler (jobCommands.ts) and never by the sweep. */
+  readonly failedOf?: string;
 }
 
 const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
@@ -117,7 +120,7 @@ const capital = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 export function saidTimer(timer: MachineTimer, command: string): string {
   return timer.at === undefined
     ? `the machine of "${timer.resource}" runs "${command}" after ${timer.after} in "${timer.state}"`
-    : `"${timer.resource}" runs "${command}" ${timer.ms ? timer.after : `at ${timer.at}`}${timer.when === undefined ? '' : ` when ${timer.when}`}`;
+    : `"${timer.resource}" runs "${command}" ${timer.ms ? timer.after : `at ${timer.at}`}${timer.when === undefined ? '' : ` when ${timer.when}`}${timer.failedOf === undefined ? '' : ' once its timer is refused (failed)'}`;
 }
 
 /** A service principal: the App roles it holds, by name. */
@@ -358,6 +361,8 @@ export interface CapturedJob {
   readonly realm?: 'tenant' | 'platform';
   /* A machine timer's (appMachine.ts `after`): the records that have stayed in a state this long. */
   readonly timer?: MachineTimer;
+  /** An `at` timer's with `failed`: the job, by id, that records on the record why this one's command was refused. */
+  readonly failed?: string;
   readonly runAs: string;
   readonly command: JobCommandReference;
   /** A decision's job (decide/decisionModule.ts): the decisions it runs, which its own handler answers. */
@@ -856,6 +861,9 @@ export function capturedJobModule(value: unknown): CapturedJobModule {
   return captured ?? fail('The jobs module must export a defineJobs result by default.');
 }
 
+/** The job that runs an `at` timer's `failed` command: the timer's own id, marked, within a job id's length. */
+const failedTimerJobId = (timer: string): string => `${timer.slice(0, 57)}-failed`;
+
 /**
  * The module with the App's machine timers as jobs of its own (`after-<resource>-<state>-<n>`),
  * each run as the first principal whose roles are granted its command: a timer's guards are
@@ -863,17 +871,21 @@ export function capturedJobModule(value: unknown): CapturedJobModule {
  */
 export function withMachineTimers(
   module: CapturedJobModule,
-  timers: readonly (MachineTimer & { command: string })[],
+  timers: readonly (MachineTimer & { command: string; failed?: string })[],
   granted: (roles: readonly string[], command: string) => boolean,
 ): CapturedJobModule {
   if (!timers.length) return module;
   const jobs = new Map(module.jobs);
+  const principal = (timer: MachineTimer, command: string): string => {
+    const runAs = [...module.principals].find(([, roles]) => granted(roles, command))?.[0];
+    return (
+      runAs ??
+      fail(`${capital(saidTimer(timer, command))}, and no principal of the jobs module is granted it. Grant it to a principal's role.`)
+    );
+  };
   timers.forEach((timer, index) => {
-    const runAs = [...module.principals].find(([, roles]) => granted(roles, timer.command))?.[0];
-    if (!runAs)
-      fail(
-        `${capital(saidTimer(timer, timer.command))}, and no principal of the jobs module is granted it. Grant it to a principal's role.`,
-      );
+    const { command, failed, ...rest } = timer;
+    const runAs = principal(rest, command);
     const id = (
       timer.at
         ? `at-${timer.resource}-${timer.at}${timer.offset ? `-${timer.offset}` : ''}`
@@ -881,11 +893,33 @@ export function withMachineTimers(
     )
       .replace(/[^A-Za-z0-9_-]/g, '-')
       .slice(0, 64);
-    const { command, ...rest } = timer;
+    /* A timer's `failed` is a job of its own, so its command is granted, pinned, placed and fenced as every timer's
+       is; it shares the stay, and only the timer's handler enqueues it. */
+    const failedId = failed === undefined ? undefined : failedTimerJobId(id);
     jobs.set(
       id,
-      Object.freeze({ id, version: 1, runAs: runAs!, command: Object.freeze({ id: command, version: 1 }), timer: Object.freeze(rest) }),
+      Object.freeze({
+        id,
+        version: 1,
+        runAs,
+        command: Object.freeze({ id: command, version: 1 }),
+        timer: Object.freeze(rest),
+        ...(failedId === undefined ? {} : { failed: failedId }),
+      }),
     );
+    if (failed !== undefined && failedId !== undefined) {
+      const records = Object.freeze({ ...rest, failedOf: id });
+      jobs.set(
+        failedId,
+        Object.freeze({
+          id: failedId,
+          version: 1,
+          runAs: principal(records, failed),
+          command: Object.freeze({ id: failed, version: 1 }),
+          timer: records,
+        }),
+      );
+    }
   });
   const next = Object.freeze({ ...module, jobs });
   captures.add(next);

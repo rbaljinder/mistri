@@ -258,7 +258,11 @@
               "description": "Query-language conditions over the record's own columns the record must meet then: \"status = 'open'\"."
             },
             "before": { "$ref": "#/$defs/duration", "description": "Come due this long ahead of the instant: '24 hours'." },
-            "after": { "$ref": "#/$defs/duration", "description": "Come due this long past the instant: '2 days'." }
+            "after": { "$ref": "#/$defs/duration", "description": "Come due this long past the instant: '2 days'." },
+            "failed": {
+              "$ref": "#/$defs/commandName",
+              "description": "The command run on the record, with the refusal as its text inputs `code` and `message`, once `command` is refused for good there or runs out of attempts."
+            }
           }
         }
       ]

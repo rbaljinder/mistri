@@ -5,6 +5,12 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
+## Unreleased
+
+- Work larger than one command is a row per item and a timer that runs a command on each. A resource's timer at an instant takes `failed`, the command run on the record when the timer's command is refused for good or its attempts are spent: `at: { queued_at: { command: 'postLine', when: "state = 'waiting'", failed: 'failLine' } }`. It is given the refusal as its text inputs `code` and `message`, so each row keeps its own failure where a person reads it and arms it again with a new instant; the job is then done, and nothing is left failed for an operator. Startup and `mistri check` refuse a `failed` command that does not take both (`at-failed`). Ordinary and tenant Apps alike, each run in its row's tenant.
+- Rows due on a timer are worked through without waiting for the minute. Once a sweep's page of new runs is done the host reads the next at once, so a few thousand queued rows take as long as their commands, not a page a minute. A sweep that finds only what it found before still waits the minute.
+- `host.runJob` runs a resource's timer too (`at-<resource>-<column>`, the id `mistri check` prints): it sweeps now and runs every due record, page after page, and answers `{ state, code, ran }`.
+
 ## 1.0.0-rc.86
 
 Field-report fixes after a re-check of every open gap against rc.85: hosted PostgreSQL and the as-of clock, fewer client round trips, command inputs, the tooling's tenant paths, and the page kit and assistant. Two things an App may notice: after a command a page reads again only what the command could have changed, and a PostgreSQL connection silent for 60 seconds while a statement waits is closed (`pool.queryTimeoutMs`).

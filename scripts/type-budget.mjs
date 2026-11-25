@@ -236,10 +236,13 @@ const require = createRequire(join(ROOT, 'package.json'));
    instantiations, so the cost is the per-handle reads, not the subquery; taking it back means passing the reads as a
    name lookup the methods do not carry. Ignition's three rise to about 1.5% above; the rest hold.
    rc.76: an App declaration takes `redirects` (old address → new), one member read once; nothing per table.
-   Compass measures 104,602 symbols (2 past); its symbols rise to about 1.5% above, the rest hold. */
+   Compass measures 104,602 symbols (2 past); its symbols rise to about 1.5% above, the rest hold.
+   A timer at an instant takes `failed` (the command that keeps its refusal on the record), one optional member read
+   once; nothing per table. Compass measures 106,201 symbols (1 past); its symbols rise to about 1.5% above, the
+   rest hold. */
 export const BUDGET = {
   synthetic: { types: 184_400, instantiations: 991_600, symbols: 488_400 },
-  compass: { types: 32_500, instantiations: 149_000, symbols: 106_200 },
+  compass: { types: 32_500, instantiations: 149_000, symbols: 107_800 },
   ignition: { types: 69_700, instantiations: 254_100, symbols: 205_900 },
 };
 

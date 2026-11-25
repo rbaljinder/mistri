@@ -167,6 +167,19 @@ function classified(error: unknown): Error {
 }
 const settled = (result: BusinessCommandResult) => Object.freeze({ receiptId: result.receiptId, replayed: result.replayed });
 
+/* What a timer's `failed` command is told: the refusal's code, and its sentence as a person reads it — the handler's
+   own reason where it gave one (`refuse('The claim is already paid')`), else the code's fixed words. */
+const MESSAGE_MAX = 300;
+function refusalSaid(error: unknown): { code: string; message: string } | undefined {
+  if (error instanceof AppAccessDenied) return { code: 'forbidden', message: 'Not available to this account.' };
+  if (!isBusinessCommandExecutionError(error)) return undefined;
+  return { code: error.code, message: error.message.slice(0, MESSAGE_MAX) };
+}
+/** A refusal this attempt ends on: one the command will repeat, or any, once the attempts are spent. */
+const ended = (error: unknown, context: JobContext): boolean =>
+  error instanceof AppAccessDenied ||
+  (isBusinessCommandExecutionError(error) && (!RETRIED.has(error.code) || context.attempt >= context.maxAttempts));
+
 /** What binds one attempt's command: over the App loaded now, or, on a tenant
  * App, as the attempt's service principal for the tenant its job names. */
 export type JobAttemptBinding = (context: JobContext, job: CapturedJob) => Promise<JobCommandBinding>;
@@ -179,6 +192,8 @@ export function jobHandlers(
     bind: JobAttemptBinding;
     /** Handlers the host adds beside the module's jobs: a workflow's advance (workflows/workflowHost.ts). */
     extra?: Readonly<Record<string, AnyJobDefinition>>;
+    /** The store the runner claims from: a timer whose command is refused for good enqueues its `failed` job here. */
+    store?: JobStore;
   }>,
 ): JobRegistry {
   const handlers: Record<string, AnyJobDefinition> = {};
@@ -272,6 +287,35 @@ export function jobHandlers(
               }),
             );
           } catch (error) {
+            /* A timer with `failed`, refused for good on this stay: the refusal is the record's to keep, so its
+               `failed` job is enqueued under the stay's key — once, however often this attempt is tried — and this
+               job is done. A stay the record has left is refused as ineligible, and its `failed` job will be too
+               (the same stay guards it), so nothing is written on a record that moved on. */
+            const said = job.failed === undefined ? undefined : refusalSaid(error);
+            const records = job.failed === undefined ? undefined : options.module.jobs.get(job.failed);
+            if (said && records && options.store && ended(error, context)) {
+              await options.store.enqueue(
+                {
+                  job: records.id,
+                  version: records.version,
+                  idempotencyKey: `failed-${createHash('sha256').update(`${records.id}\n${eventId}`).digest('hex').slice(0, 48)}`,
+                  input: {
+                    key: input.key,
+                    input: said,
+                    since: input.since!,
+                  },
+                  provenance: {
+                    appId: options.appId,
+                    actorId: `service:${records.runAs}`,
+                    ...(context.provenance.tenantId === undefined ? {} : { tenantId: context.provenance.tenantId }),
+                    correlationId: context.provenance.correlationId ?? eventId,
+                    causationId: `${eventId}-failed`.slice(0, 128),
+                  },
+                },
+                context.now(),
+              );
+              return Object.freeze({ refused: said.code, failed: records.id });
+            }
             throw classified(error);
           } finally {
             bound?.release();
