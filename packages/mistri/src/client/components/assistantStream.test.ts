@@ -90,3 +90,23 @@ test('words are runs of text with three marks; a link is followed only inside th
   // Markup in the model's words stays words.
   expect(wordsOf('<img src=x onerror=alert(1)>')).toEqual([{ list: false, lines: [[{ text: '<img src=x onerror=alert(1)>' }]] }]);
 });
+
+test('a Markdown table in the words is a table of runs, with the words around it kept', () => {
+  expect(wordsOf('Here:\n| Who | Owes |\n|---|:-:|\n| [Ada](/clinic/patients/1) | **$125** |\n| Ben \\| Co | |\nThat is all.')).toEqual([
+    { list: false, lines: [[{ text: 'Here:' }]] },
+    {
+      list: false,
+      lines: [],
+      table: {
+        head: [[{ text: 'Who' }], [{ text: 'Owes' }]],
+        rows: [
+          [[{ text: 'Ada', link: '/clinic/patients/1' }], [{ text: '$125', mark: 'strong' }]],
+          [[{ text: 'Ben | Co' }], []],
+        ],
+      },
+    },
+    { list: false, lines: [[{ text: 'That is all.' }]] },
+  ]);
+  // Pipes that are not a table stay words.
+  expect(wordsOf('a | b')).toEqual([{ list: false, lines: [[{ text: 'a | b' }]] }]);
+});

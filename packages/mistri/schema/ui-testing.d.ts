@@ -32,7 +32,8 @@ export type Navigation =
   | { kind: 'view'; view: string; tab?: string }
   | { kind: 'form'; view: string; prefill: Readonly<Record<string, string | number>>; at?: string }
   | { kind: 'address'; href: string }
-  | { kind: 'composer'; text: string; mode?: 'reply' | 'note' };
+  | { kind: 'composer'; text: string; mode?: 'reply' | 'note' }
+  | { kind: 'assistant'; about?: { table: string; id: string | number }; text?: string };
 
 /** A command a component ran or opened, recorded instead of sent. */
 export interface CommandCall { command: string; mode: 'run' | 'open'; key: Readonly<Record<string, unknown>>; input?: Readonly<Record<string, unknown>> }
@@ -55,6 +56,9 @@ export interface FixtureCatalog {
 export interface RenderOptions {
   /** The App's catalog: what a row is titled by (a record button's name, a breadcrumb) and a resource's picker keys by. Without it the host guesses: `title`, `name`, `label`, `subject`, then `id`. */
   catalog?: FixtureCatalog;
+  /** Whether the App serves the reader an assistant, for `useAssistant`: offered unless false. An opening is recorded
+      in `navigations` as `{ kind: 'assistant', about, text }`. */
+  assistant?: boolean;
   /** Evaluated values only; these fixtures never grant access or record exposure. */
   flags?: Readonly<Record<string, FlagValue>>;
   data?: Fixtures;

@@ -296,6 +296,11 @@ export interface UiHost {
   publicLink(view: string): string | undefined;
   /** Puts words in the page's timeline composer, never sending them; false when the page draws none. */
   fillComposer(text: string, mode?: 'reply' | 'note'): boolean;
+  /** Whether the App serves this reader an assistant: its panel's door is in the App bar. */
+  assistantOffered(): boolean;
+  /** Opens the assistant's panel about a record (read and named by the server as this reader) with words in its box,
+      never sending them; false where the App serves this reader no assistant. */
+  openAssistant(handoff: { about?: { table: string; id: string | number }; text?: string }): boolean;
   /** Where a file resource's row is served, inline: its smaller copy with `thumbnail`. Undefined while it is read first
       (a tenant App reads a file on its lease, into a blob): `drawn` is called when it has an address. */
   fileAddress(

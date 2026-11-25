@@ -14,6 +14,9 @@
  * from the palette's "Ask" and from a list's verbs, which this door draws
  * there, since it is the one part that is mounted wherever the App's
  * assistant is on and nowhere else.
+ *
+ * A page opens it too (`useAssistant().open`, assistantDoor.ts), handing it the
+ * record the person is on and words for the box.
  */
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -25,6 +28,7 @@ import { addPaletteSource } from '@mistriwork/kit/client/palette.js';
 import { say } from '../copy/shell/components/AssistantTrigger.js';
 import { shellQuery } from '@mistriwork/kit/client/shellHost.js';
 import { activeApp } from '../appState.js';
+import { holdAssistantDoor, type AssistantHandoff } from './assistantDoor.js';
 
 const AssistantPanel = onDemand(() => import('./AssistantPanel.js'), 'AssistantPanel', { quiet: true });
 
@@ -52,9 +56,22 @@ export function AssistantTrigger({ app, record }: { app: string; record: boolean
   const [open, setOpen] = useState(false);
   // Counts the Asks: each one is a fresh panel (AssistantPanel's key).
   const [ask, setAsk] = useState(0);
+  // What a page handed the panel last, counted so the same hand-off twice is taken twice.
+  const [handoff, setHandoff] = useState<(AssistantHandoff & { at: number }) | undefined>();
+  useEffect(
+    () =>
+      holdAssistantDoor((handed) => {
+        void AssistantPanel.ready();
+        setAsk(0);
+        setHandoff((was) => ({ ...handed, at: (was?.at ?? 0) + 1 }));
+        setOpen(true);
+      }),
+    [],
+  );
   useEffect(() => {
     const opened = () => {
       void AssistantPanel.ready();
+      setHandoff(undefined);
       setAsk((was) => was + 1);
       setOpen(true);
     };
@@ -93,6 +110,7 @@ export function AssistantTrigger({ app, record }: { app: string; record: boolean
         onFocus={() => void AssistantPanel.ready()}
         onClick={() => {
           setAsk(0);
+          setHandoff(undefined);
           setOpen((was) => !was);
         }}
       >
@@ -103,9 +121,11 @@ export function AssistantTrigger({ app, record }: { app: string; record: boolean
           app={app}
           record={record}
           {...(ask ? { ask } : {})}
+          {...(handoff ? { handoff } : {})}
           onClose={() => {
             setOpen(false);
             setAsk(0);
+            setHandoff(undefined);
             shellQuery<HTMLElement>('.assistant-trigger')?.focus();
           }}
         />

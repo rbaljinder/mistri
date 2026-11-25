@@ -141,6 +141,12 @@
 .assistant-text p:last-child, .assistant-text ul:last-child { margin-bottom: 0; }
 .assistant-text ul { padding-left: var(--space-5); }
 .assistant-text code { font: var(--text-sm) var(--mono); padding: 0 var(--space-1h); background: var(--raised); border-radius: min(3px, var(--radius)); }
+/* A table the model wrote in words: drawn as one, scrolling sideways in its own box rather than widening the panel. */
+.assistant-words-table { overflow-x: auto; margin: 0 0 var(--space-2h); }
+.assistant-words-table:last-child { margin-bottom: 0; }
+.assistant-words-table table { border-collapse: collapse; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.assistant-words-table th, .assistant-words-table td { padding: var(--space-1) var(--space-2h); border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; overflow-wrap: normal; }
+.assistant-words-table th { color: var(--ink-muted); font-weight: 600; }
 .assistant-steps { color: var(--ink-muted); font-size: var(--text-sm); }
 .assistant-steps summary { cursor: pointer; width: fit-content; color: var(--ink-subtle); }
 .assistant-steps summary:hover { color: var(--ink-muted); }

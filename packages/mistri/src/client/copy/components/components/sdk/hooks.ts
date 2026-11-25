@@ -17,6 +17,8 @@ export const say = defineMessages({
   addressPage: 'the page "{path}"',
   addressHome: "the App's home",
   noAddressFor: 'The App has no address for {what}: name a view, record or page it declares.',
+  assistantAbout: "useAssistant().open's about names a record by its table and its id, a string or a number.",
+  assistantText: "useAssistant().open's text is the words put in the box, a string.",
   noCommands: 'no commands',
   noActions: 'no actions',
   noParameters: 'no parameters',

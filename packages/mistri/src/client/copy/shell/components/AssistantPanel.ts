@@ -36,6 +36,7 @@ export const say = defineMessages({
   couldNotAnswer: 'The assistant could not answer: {message}',
   connectionLost: 'The connection to the server dropped before the answer finished.',
   couldNotOpen: 'This conversation could not be opened: {message}',
+  couldNotTell: 'The assistant was not told about that record: {message}',
   noModel: 'The assistant is not set up on this server yet.',
   close: 'Close the assistant',
   newRecord: 'New {resource}',

@@ -75,6 +75,34 @@ starters: ['Which tickets are mine?', { text: 'Summarize this ticket', records: 
 
 And one for a manager is offered to managers only, wherever it is placed: `{ text: 'Who is behind this week?', roles: ['manager'] }`. `mistri check` refuses a role the App does not declare.
 
+## From a page
+
+A page or a custom section hands the assistant what the person is on with `useAssistant()` from
+`@mistriwork/mistri/ui` (or `/page`):
+
+```tsx
+const assistant = useAssistant();
+{assistant.offered && (
+  <Button onClick={() => assistant.open({ about: { table: 'visit', id: visit.id }, text: 'Check out this visit' })}>Ask</Button>
+)}
+```
+
+The panel opens about that record, named by the resource's `recordLabel`, with `text` in the box for the person to edit
+and send; nothing is sent. The record is read as the person, so a page cannot point the assistant at a record they could
+not open: the panel says it was refused and is about nothing. `offered` is false, and `open` does nothing, where the
+person is not offered the assistant. `about` needs `'record'` in `placement`; `mistri check` warns
+(`component-assistant`) where it is missing, or where the App has no assistant.
+
+## What it knows of a record
+
+A resource's rollups and computed columns are columns to the assistant: it lists them, reads them with the record's own
+columns, compares them in a condition (`owed > 0`) and shows them on a record. Each figure it reads comes with what it is
+in, from the column's display rule (money and its currency, kept in cents or not, a percent, a unit), and so does a
+breakdown's measure, so a sum of dollars is not called cents. One a role's field grant hides is hidden from the
+assistant too.
+
+The model's words may hold a table; the panel draws it as a table.
+
 The assistant is told the day, the time and the zone with each question (the App's `ui.timezone`, or the zone the person's tenant names), names records by the resource's `recordLabel`, and draws no block for a read that came back empty.
 When the model provider refuses a call, the person reads a plain sentence and the server's log names the status and the provider's error type; a spent credit balance is said there as such.
 

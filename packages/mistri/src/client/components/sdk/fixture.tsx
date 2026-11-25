@@ -74,7 +74,8 @@ export type Navigation =
   | { kind: 'view'; view: string; tab?: string; search?: string; filters?: Readonly<Record<string, string>> }
   | { kind: 'address'; href: string }
   | { kind: 'form'; view: string; prefill: Readonly<Record<string, string | number>>; at?: string }
-  | { kind: 'composer'; text: string; mode?: 'reply' | 'note' };
+  | { kind: 'composer'; text: string; mode?: 'reply' | 'note' }
+  | { kind: 'assistant'; about?: { table: string; id: string | number }; text?: string };
 
 /** A command a component ran or opened, recorded instead of sent. */
 export interface CommandCall {
@@ -107,6 +108,9 @@ export interface FixtureCatalog {
 export interface RenderOptions {
   /** The App's catalog: what a row is titled by (`rowTitle`) and a resource's picker keys by. Without it, a guess: `title`, `name`, `label`, `subject`, then `id`. */
   catalog?: FixtureCatalog;
+  /** Whether the App serves the reader an assistant, for `useAssistant`: offered unless false. An opening is recorded
+      in `navigations` as `{ kind: 'assistant', about, text }`. */
+  assistant?: boolean;
   /** Evaluated values only; omitted fixtures leave the flags reader unready. */
   flags?: Readonly<Record<string, AppFlagValue>>;
   /** Where `useAnalytics().emit` calls are collected, for a test to read. */
@@ -637,6 +641,17 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     /* A fixture page draws one composer, so a fill lands: the test reads what was put there. */
     fillComposer: (text, mode) => {
       navigations.push({ kind: 'composer', text, ...(mode ? { mode } : {}) });
+      return true;
+    },
+    /* A fixture's App offers its assistant unless the test says not (`assistant: false`): an opening is recorded. */
+    assistantOffered: () => options.assistant !== false,
+    openAssistant: (handoff) => {
+      if (options.assistant === false) return false;
+      navigations.push({
+        kind: 'assistant',
+        ...(handoff.about ? { about: { table: handoff.about.table, id: handoff.about.id } } : {}),
+        ...(handoff.text !== undefined ? { text: handoff.text } : {}),
+      });
       return true;
     },
     fileAddress: (resource, key, { thumbnail } = {}) =>

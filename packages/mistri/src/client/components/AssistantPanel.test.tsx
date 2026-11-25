@@ -670,3 +670,69 @@ test('a panel opened without Ask is the chat: its turn names no mode', async () 
   expect(bodies()[0][1]).not.toHaveProperty('mode');
   expect(screen.queryByRole('region', { name: 'Ran' })).toBeNull();
 });
+
+test('a page hands the panel a record: it is named as the server reads it, its words wait in the box, and the turn is about it', async () => {
+  const user = userEvent.setup();
+  const base = fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url, init) => {
+    if (String(url) === '/api/assistant/about') return json({ resource: 'lead', key: { id: 127 }, label: 'Margot Fontaine' });
+    return base(url, init);
+  });
+  draw(
+    <AssistantPanel app="compass" record onClose={() => {}} handoff={{ about: { table: 'lead', id: 127 }, text: 'Check out', at: 1 }} />,
+  );
+  expect(await screen.findByText('About Margot Fontaine')).toBeInTheDocument();
+  const box = screen.getByRole('textbox', { name: 'Message the assistant' });
+  // Filled, never sent: the only request so far is the record's.
+  expect(box).toHaveValue('Check out');
+  expect(bodies()).toEqual([['/api/assistant/about', { app: 'compass', resource: 'lead', id: 127 }]]);
+  await user.type(box, ' this lead{Enter}');
+  expect(await screen.findByRole('region', { name: 'Proposed change' })).toBeInTheDocument();
+  expect(bodies()[1]).toEqual([
+    '/api/assistant/turn',
+    { app: 'compass', text: 'Check out this lead', context: { resource: 'lead', key: { id: 127 } } },
+  ]);
+});
+
+test('a record the reader cannot open is said, and the panel is about nothing', async () => {
+  const base = fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url, init) => {
+    if (String(url) === '/api/assistant/about')
+      return json({ error: 'That record is not one you can open, so the assistant cannot be told about it.' }, 404);
+    return base(url, init);
+  });
+  draw(<AssistantPanel app="compass" record onClose={() => {}} handoff={{ about: { table: 'lead', id: 9 }, at: 1 }} />);
+  expect(await screen.findByRole('alert')).toHaveTextContent(
+    'The assistant was not told about that record: That record is not one you can open, so the assistant cannot be told about it.',
+  );
+  expect(screen.queryByText(/^About /)).not.toBeInTheDocument();
+});
+
+test('a table the model writes in words is drawn as a table', async () => {
+  const user = userEvent.setup();
+  const base = fetcher.getMockImplementation()!;
+  fetcher.mockImplementation(async (url, init) => {
+    if (String(url) === '/api/assistant/turn')
+      return events(
+        ['conversation', { id: 'c1', title: 'Production', person: 1 }],
+        ['text', { delta: 'By provider:\n| Provider | Production |\n| --- | ---: |\n| Dr. Ode | $1,200 |\n| Dr. Park | $900 |' }],
+        ['done', { state: 'idle', tokens: 4 }],
+      );
+    return base(url, init);
+  });
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.type(screen.getByRole('textbox', { name: 'Message the assistant' }), 'production?{Enter}');
+  const table = await screen.findByRole('table');
+  expect(
+    within(table)
+      .getAllByRole('columnheader')
+      .map((cell) => cell.textContent),
+  ).toEqual(['Provider', 'Production']);
+  expect(
+    within(table)
+      .getAllByRole('cell')
+      .map((cell) => cell.textContent),
+  ).toEqual(['Dr. Ode', '$1,200', 'Dr. Park', '$900']);
+  expect(screen.getByText('By provider:')).toBeInTheDocument();
+  expect(screen.queryByText(/\| Provider/)).not.toBeInTheDocument();
+});

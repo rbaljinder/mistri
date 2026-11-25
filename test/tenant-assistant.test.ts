@@ -45,6 +45,14 @@ after(() => setAssistantModel(undefined));
 
 const SCRIPT: AssistantScript = {
   turns: [
+    {
+      when: 'worked out',
+      steps: [
+        { tools: [{ name: 'describe', input: { resource: 'lead' } }] },
+        { tools: [{ name: 'query', input: { q: 'lead stake >= 0' } }] },
+        { text: 'There.' },
+      ],
+    },
     { when: 'chosen leads', steps: [{ tools: [{ name: 'query', input: { q: 'lead id = chosen.site' } }] }, { text: 'At that site.' }] },
     { when: 'leads', steps: [{ tools: [{ name: 'query', input: { q: 'lead' } }] }, { text: 'Here they are.' }] },
     {
@@ -73,6 +81,8 @@ async function assistantFixture(
   commands?: { registry: BusinessCommandRegistry; manifest: (raw: Record<string, any>) => void; resultReferences: Record<string, unknown> },
   /** Declare `choose: { site: lead }`, for the tests of the picks a chat request carries. */
   choose = false,
+  /** More of the manifest, as a test needs it. */
+  shape?: (raw: Record<string, any>) => void,
 ) {
   setAssistantModel(undefined);
   const tenantPolicy: Record<string, unknown> = commands ? { resultReferences: commands.resultReferences } : {};
@@ -81,6 +91,7 @@ async function assistantFixture(
       Object.assign(raw, { assistant: declared });
       if (choose) Object.assign(raw, { choose: { site: { from: 'lead', label: 'name' } } });
       commands?.manifest(raw);
+      shape?.(raw);
     },
     tenantPolicy,
     ...(commands ? { commands: commands.registry } : {}),
@@ -625,6 +636,50 @@ for (const { dialect, skip } of TENANT_DIALECTS) {
       await h.assistant(sam, south, '/api/assistant/turn', { text: 'rename the north lead' });
       assert.equal(await count(f, COMMAND_JOURNAL_TABLES.proposal), 1);
       assert.equal(runs, 0);
+    },
+  );
+
+  test(
+    `${dialect}: a page hands the assistant a lead of the lease's tenant only, and a computed column is a column to it`,
+    { skip },
+    async (t) => {
+      const h: Harness = await assistantFixture(t, dialect, undefined, {}, undefined, false, (raw) => {
+        raw.resources.lead = {
+          ...raw.resources.lead,
+          computed: { stake: { type: 'number', value: 'version * 100' } },
+          display: { stake: { format: 'money', minor: true } },
+        };
+      });
+      const { f, requests } = h,
+        { sam } = f.accounts;
+      applied(await h.setSwitch('north', true));
+      const north = await h.lease(sam, 'north');
+      // North's own lead is named for the panel; South's, asked from North's lease, is refused, never read as nothing.
+      const own = await h.assistant(sam, north, '/api/assistant/about', { resource: 'lead', id: 'n1' });
+      assert.equal(own.status, 200, JSON.stringify(own.body));
+      assert.deepEqual({ key: own.body.key, label: own.body.label }, { key: { id: 'n1' }, label: 'North lead' });
+      const foreign = await h.assistant(sam, north, '/api/assistant/about', { resource: 'lead', id: 's1' });
+      assert.equal(foreign.status, 404);
+      const turn = await h.assistant(sam, north, '/api/assistant/turn', { text: 'hi', context: { resource: 'lead', key: { id: 's1' } } });
+      assert.equal(turn.status, 404);
+      assert.equal(requests.length, 0);
+
+      const asked = await h.assistant(sam, north, '/api/assistant/turn', { text: 'what is worked out?' });
+      assert.equal(asked.status, 200, JSON.stringify(asked.body));
+      const [described, read] = requests
+        .at(-1)!
+        .messages.flatMap((message) =>
+          typeof message.content === 'string'
+            ? []
+            : message.content.filter((block) => block.type === 'tool_result').map((block) => JSON.parse(String(block.content))),
+        );
+      assert.deepEqual(
+        described.fields.find((field: { name: string }) => field.name === 'stake'),
+        { name: 'stake', type: 'number', derived: 'computed', figures: 'money in USD, kept in minor units: 12500 is 125.00 USD' },
+      );
+      assert.equal(read.total, 1, JSON.stringify(read));
+      assert.equal(read.rows[0].stake, 0);
+      assert.ok(read.columns.includes('stake'));
     },
   );
 }

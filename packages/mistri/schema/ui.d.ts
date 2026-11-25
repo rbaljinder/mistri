@@ -538,6 +538,15 @@ export declare function useHref(): {
     Reply or Internal note, where the page offers it) for the reader to edit and send. It never sends; it answers false
     when the page draws no composer. */
 export declare function useComposer(): { fill(text: string, options?: { mode?: 'reply' | 'note' }): boolean };
+/** The App's assistant, from a page: `open({ about: { table, id }, text })` opens its panel about the record the person
+    is on, named by the resource's `recordLabel`, with `text` in the box for them to edit and send (it never sends). The
+    server reads the record as the reader: one they could not open is refused, and the panel says so. `open` answers
+    false, and `offered` is false, where the App serves this reader no assistant (none declared, not their role, no model
+    on the server); `about` needs `'record'` in the assistant's `placement`. */
+export declare function useAssistant(): {
+  readonly offered: boolean;
+  open(options?: { about?: { table: string; id: string | number }; text?: string }): boolean;
+};
 /** A pointer event's position inside an element, in layout pixels, from the element's top-left: `layoutPoint(event, column)`.
     The density zoom makes client coordinates and a drawn box differ from the pixels a page styles in; this is the one ruler the shell
     measures with, so hit-testing and dragging place what they find where the pointer is. */

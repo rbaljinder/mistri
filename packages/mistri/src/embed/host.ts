@@ -394,6 +394,9 @@ export function embedHost({ surface, endpoint, authorization, navigator, basePat
     }),
     publicLink: () => undefined,
     fillComposer: () => false,
+    /* An embedding app draws no shell, so there is no panel to open. */
+    assistantOffered: () => false,
+    openAssistant: () => false,
     fileAddress(name, key, options = {}) {
       const { table } = resource(name);
       const query = new URLSearchParams({ app, table: table.id, key: JSON.stringify(key), inline: '1' });

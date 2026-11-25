@@ -1811,6 +1811,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
         schema,
         messages,
         unpreparedCommands(loaded.app, loaded.commands?.registry),
+        loaded.app.assistant ? { placement: loaded.app.assistant.placement } : null,
       );
       const said = (finding: { file: string; line: number; text: string }) =>
         `${shown(join(appDir, finding.file))}:${finding.line}  ${finding.text}`;

@@ -576,6 +576,40 @@ export function useComposer(): { fill(text: string, options?: { mode?: 'reply' |
 }
 
 /**
+ * The App's assistant, from a page: `open({ about: { table, id }, text })` opens its panel about the record the
+ * person is on, named by the resource's `recordLabel`, with `text` in the box for them to edit and send (it never
+ * sends). The record is read by the server as the reader: one they could not open is refused, and the panel says so.
+ * `open` answers false, and `offered` is false, where the App serves this reader no assistant (none declared, not their
+ * role, no model on the server), so a page draws its button only where it does something.
+ */
+export function useAssistant(): {
+  offered: boolean;
+  open(options?: { about?: { table: string; id: string | number }; text?: string }): boolean;
+} {
+  const host = useUiHost();
+  return {
+    offered: host.assistantOffered(),
+    open: (options = {}) => {
+      const { about, text } = options;
+      if (about !== undefined) {
+        const id = about?.id;
+        if (
+          typeof about?.table !== 'string' ||
+          !about.table ||
+          !(typeof id === 'string' || (typeof id === 'number' && Number.isFinite(id)))
+        )
+          throw new Error(say('assistantAbout'));
+      }
+      if (text !== undefined && typeof text !== 'string') throw new Error(say('assistantText'));
+      return host.openAssistant({
+        ...(about ? { about: { table: about.table, id: about.id } } : {}),
+        ...(text !== undefined ? { text } : {}),
+      });
+    },
+  };
+}
+
+/**
  * Where a file resource's row is served, for an `<img>`: `useFile('member_avatar')({ id: 4 }, { thumbnail: true })`.
  * In a tenant App the file is read on the reader's lease first, so the address is undefined until it lands, and the
  * component draws again then.

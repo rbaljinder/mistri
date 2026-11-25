@@ -94,6 +94,7 @@ import {
 import { Button } from '@mistriwork/ui/Button.js';
 import { EvidenceItem } from './EvidenceList.js';
 import { assistantApi, assistantOwner } from './assistantRequest.js';
+import type { AssistantHandoff } from './assistantDoor.js';
 import { ConversationList, DeleteConversation, RenameField, type ConversationSummary } from './ConversationList.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { CommandForm } from './CommandForm.js';
@@ -160,7 +161,30 @@ function Words({ text, onFollow }: { text: string; onFollow: (address: string) =
   return (
     <>
       {wordsOf(text).map((paragraph, p) =>
-        paragraph.list ? (
+        'table' in paragraph ? (
+          <div key={p} className="assistant-words-table">
+            <table>
+              <thead>
+                <tr>
+                  {paragraph.table.head.map((cell, c) => (
+                    <th key={c} scope="col">
+                      {draw(cell)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {paragraph.table.rows.map((row, r) => (
+                  <tr key={r}>
+                    {row.map((cell, c) => (
+                      <td key={c}>{draw(cell)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : paragraph.list ? (
           <ul key={p}>
             {paragraph.lines.map((line, l) => (
               <li key={l}>{draw(line)}</li>
@@ -235,7 +259,11 @@ function CardValue({
 }) {
   if (column?.references && table && value !== null && value !== undefined && String(value) !== '')
     return <RefJump references={column.references} value={value} label={label} table={table} column={name} row={row} />;
-  return <Value col={column} value={value} tableId={tableId} compact links={false} />;
+  /* A rollup or computed column is no column of the table's, and is dressed by its own rule all the same: a balance kept
+     in cents is said as money, not as 12500. */
+  return (
+    <Value col={column ?? ({ name, type: '' } as TableMeta['columns'][number])} value={value} tableId={tableId} compact links={false} />
+  );
 }
 
 function RecordCard({ block, onFollow }: { block: Extract<AssistantBlock, { kind: 'record' }>; onFollow: (address: string) => void }) {
@@ -650,6 +678,8 @@ interface AssistantProps {
   conversation?: string;
   /** Opened to Ask (the palette's, a list's): a fresh conversation whose turns read and show what they read. */
   ask?: boolean;
+  /** What a page handed it (`useAssistant().open`): the record the person is on, words for the box. `at` counts them. */
+  handoff?: AssistantHandoff & { at: number };
 }
 
 /** What an Ask read: the line it ran, in the App's query language, and the rows it read there, each opening as its
@@ -673,7 +703,19 @@ function AskRead({ read }: { read: Extract<PanelItem, { type: 'query' }> }) {
 }
 
 /** The trigger's panel, beside the page or full screen over its content. */
-export function AssistantPanel({ app, record, onClose, ask }: { app: string; record: boolean; onClose: () => void; ask?: number }) {
+export function AssistantPanel({
+  app,
+  record,
+  onClose,
+  ask,
+  handoff,
+}: {
+  app: string;
+  record: boolean;
+  onClose: () => void;
+  ask?: number;
+  handoff?: AssistantHandoff & { at: number };
+}) {
   /* Another customer, or another person, is another history: the panel starts again in it. Each Ask (`ask` counts
      them) starts again too, on a fresh conversation. */
   return (
@@ -684,6 +726,7 @@ export function AssistantPanel({ app, record, onClose, ask }: { app: string; rec
       mode="panel"
       onClose={onClose}
       ask={Boolean(ask)}
+      {...(handoff ? { handoff } : {})}
     />
   );
 }
@@ -697,7 +740,11 @@ export function AssistantRoom({ conversation }: { conversation?: string }) {
   );
 }
 
-function Assistant({ app, record, mode, onClose, conversation: addressed, ask }: AssistantProps) {
+/* Where the person is, as a string: a record a page handed the panel is its context while they stay there. */
+const spotOf = (entry: ReturnType<typeof useWalk>[number] | undefined): string =>
+  JSON.stringify(entry ? [entry.kind, entry.table, entry.key, entry.view, entry.pageId] : null);
+
+function Assistant({ app, record, mode, onClose, conversation: addressed, ask, handoff }: AssistantProps) {
   const room = mode === 'page';
   const owner = assistantOwner();
   const [conversation, setConversation] = useState<string | null>(
@@ -734,16 +781,23 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
   const queryClient = useQueryClient();
   const walk = useWalk();
   const top = walk[walk.length - 1];
+  /* The record a page handed the panel (useAssistant().open({ about })), read and named by the server as this
+     person; it is the context while they stay where they handed it, and the open record's place is its own again
+     once they move. */
+  const [handed, setHanded] = useState<{ resource: string; key: Record<string, unknown>; label: string; spot: string } | null>(null);
+  const spot = spotOf(top);
   const context =
-    record && (top?.kind === 'row' || top?.kind === 'page') && top.table && top.key
-      ? { resource: top.table, key: top.key, label: top.label ?? top.table }
-      : undefined;
+    handed && handed.spot === spot
+      ? { resource: handed.resource, key: handed.key, label: handed.label }
+      : record && (top?.kind === 'row' || top?.kind === 'page') && top.table && top.key
+        ? { resource: top.table, key: top.key, label: top.label ?? top.table }
+        : undefined;
   /* The App's starters for where the person is: its bare lines everywhere, a scoped one in its view's room or on a
      record of its table (appAssistant.ts). The room is the walk's top: a list's view, a dashboard's or a form's page. */
   const starters = startersHere((activeApp() as AppPayloadApp | null)?.assistant?.starters, {
     ...(top?.kind === 'table' && top.view ? { view: top.view } : {}),
     ...(top?.kind === 'page' && !top.key ? { view: dashViewKey(top.pageId) ?? formViewKey(top.pageId) } : {}),
-    ...((top?.kind === 'row' || top?.kind === 'page') && top.table && top.key ? { record: top.table } : {}),
+    ...(context ? { record: context.resource } : {}),
   });
 
   const conversations = useQuery({
@@ -782,6 +836,39 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened.isError, room]);
   useEffect(() => () => stop.current?.abort(), []);
+  /* A page's hand-off: words in the box, never sent, and the record asked of the server as this person. One they may
+     not open is refused there and said here; the panel is not quietly about nothing. */
+  useEffect(() => {
+    if (!handoff) return;
+    if (typeof handoff.text === 'string') {
+      setEditing(null);
+      setText(handoff.text);
+      box.current?.focus();
+    }
+    const about = handoff.about;
+    if (!about) return;
+    setHanded(null);
+    let current = true;
+    void (async () => {
+      try {
+        const found = (await assistantApi('/api/assistant/about', { app, resource: about.table, id: about.id })) as {
+          resource: string;
+          key: Record<string, unknown>;
+          label: string;
+        };
+        if (!current) return;
+        setHanded({ resource: found.resource, key: found.key, label: found.label, spot });
+        setWithRecord(true);
+      } catch (error) {
+        if (current) setProblem({ text: say('couldNotTell', { message: error instanceof Error ? error.message : String(error) }) });
+      }
+    })();
+    return () => {
+      current = false;
+    };
+    // Each hand-off once, where the person was when it was made.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoff]);
   useEffect(() => {
     if (!listing) box.current?.focus();
   }, [conversation, listing]);
