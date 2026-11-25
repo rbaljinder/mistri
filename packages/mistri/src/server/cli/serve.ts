@@ -618,6 +618,34 @@ export async function startServing(
        served at the time, so a reload that adds or drops an assistant is followed. */
     if (serving.apps.some((host) => host.app.app.assistant) && assistantModel())
       stopAssistantPurge = purgeOnSchedule(() => track(purgeAppAssistants(registry, serving.apps, Date.now())));
+    /* A `noOverlap` on PostgreSQL is the database's to hold (appDataRules.ts): an App whose table lacks the
+       exclusion constraint does not serve, with the statement to run. Served without it, a rule that held in
+       development on SQLite would be nothing at all here. */
+    for (const host of serving.apps) {
+      if (!Object.values(host.app.app.resources ?? {}).some((resource) => resource.noOverlap?.length)) continue;
+      const entry = appEntrypoint(host, registry);
+      if (!entry) continue;
+      const releases: Array<() => void> = [];
+      let unheld: string[];
+      try {
+        const { loadAppRuntimeResources } = await import('../app/appRuntimeResources.js');
+        const { unheldNoOverlap } = await import('../app/appDataRuleChecks.js');
+        const resources = await track(
+          loadAppRuntimeResources(registry, host.app.app, entry, (owner) => releases.push(registry.lease(owner))),
+        );
+        unheld = await track(unheldNoOverlap(host.app.app, resources, async (id) => (await registry.open(id)).adapter));
+      } catch {
+        // A source that cannot be opened is the start's own refusal to make, where it opens it.
+        unheld = [];
+      } finally {
+        for (const release of releases.reverse()) release();
+      }
+      if (stopping) return undefined;
+      if (unheld.length) {
+        for (const problem of unheld) console.error(`App error: ${problem}`);
+        throw new Error(unheld[0]);
+      }
+    }
     /* Email: a notify rule that mails needs the config's email service, and
      its outbox is sent from here, after each write commits (email/outbox.ts). */
     for (const host of serving.apps) {

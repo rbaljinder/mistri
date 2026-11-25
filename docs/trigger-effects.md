@@ -27,6 +27,14 @@ rc.11 builds the part that needs no new authority (`scopeTriggers.ts`,
   outside it fails closed. On PostgreSQL the function's version is read again
   before `COMMIT`, because `CREATE OR REPLACE FUNCTION` takes no lock the pinned
   table conflicts with.
+  There is no declaration that marks a trigger check-only, and none is
+  planned: a trigger that reads other rows (a double-booking guard's
+  `EXISTS (SELECT … FROM booking …)`) is outside the grammar, and nothing
+  mistri can read proves a PL/pgSQL body writes nothing. The case that asked
+  for one is met another way. A resource's `noOverlap`
+  (`packages/mistri/src/shared/appDataRules.ts`) is held on PostgreSQL by an
+  exclusion constraint, which is no trigger and blocks nothing here, and its
+  refusal is said beside a field through the resource's `constraints` map.
 - **`mistri check`** names each command whose writes reach a blocking trigger
   (`[command-trigger]`).
 

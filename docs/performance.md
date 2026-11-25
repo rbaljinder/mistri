@@ -131,7 +131,20 @@ unintended statement fails a test.
   alone), the member's tenants and, for someone in one tenant or whose link or tab
   names one, the lease and the boot: the runtime, the App, its pages and schema and
   the first room's reads on one context. A list or a record settles in one round
-  where it took six or seven (`e2e/tenant-boot-budget.spec.ts`). Where the entry
+  where it took six or seven (`e2e/tenant-boot-budget.spec.ts`). On PostgreSQL
+  the entry is nine round trips whatever the App declares
+  (`test/postgres-tenant-flights.test.ts`): discovery's three looks at the
+  person's memberships, the platform's riding the second; one message for the
+  tenants' names, which of them are sandboxes and the entered tenant's
+  addresses; the lease's two admissions and its fence; and the boot's snapshot
+  with its release fence. The bell's count is asked after it, by the bell.
+  A free-form page's loads are read on the boot's snapshot (its `loader`,
+  and the named loaders its browser saw it ask as it last opened), where the
+  page asked each once the entry had answered: a second wait, and two round
+  trips a load.
+  A reload takes its tab's released context back with no discovery and
+  no admission but the boot's own snapshot (`reenter`): three round trips.
+  Where the entry
   is not answered so, the page asks who-am-I as before. A record's references
   are read on one snapshot, its row and then every count at once.
 - **No catalog on a warm write.** A command's transaction checks one epoch

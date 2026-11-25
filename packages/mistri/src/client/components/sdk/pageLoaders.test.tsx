@@ -33,6 +33,28 @@ describe('page.useLoader', () => {
     expect(await screen.findByText('due: 4, fetching: false')).toBeInTheDocument();
   });
 
+  test('a named loader notes whether it asked as its page opened, for the next entry to read it ahead; a held one and the page’s own data are not', async () => {
+    const { pageLoadHints } = await import('../../pageLoadHints.js');
+    const { herePath } = await import('@mistriwork/kit/client/addressMount.js');
+    localStorage.clear();
+    const page = definePage({
+      label: 'Board',
+      reads: ['ticket'],
+      loader: 'board',
+      loaders: ['dueFigure', 'office'],
+      component: () => {
+        const own = page.useLoader('board');
+        const due = page.useLoader('dueFigure');
+        const office = page.useLoader('office', { enabled: false });
+        return <p>{`noted ${own.isPending} ${due.isPending} ${office.fetchStatus}`}</p>;
+      },
+    });
+    renderPage(page, { data: NONE, loaded: { lines: 2 }, loaders: { dueFigure: { n: 3 }, office: { n: 1 } } });
+    expect(await screen.findByText('noted false false idle')).toBeInTheDocument();
+    expect(pageLoadHints(herePath())).toEqual({ loaders: ['dueFigure'] });
+    localStorage.clear();
+  });
+
   test('the loader the page calls its own answers `loaded`, and the same cache entry serves both', async () => {
     const page = definePage({
       label: 'Board',

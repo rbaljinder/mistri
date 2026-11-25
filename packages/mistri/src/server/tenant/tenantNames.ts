@@ -17,7 +17,7 @@ import { withLabelTemplates, type AppDef } from '../../shared/app.js';
 import { LABEL_SEGMENT, parseLabelTemplate } from '@mistriwork/engine/shared/recordLabel.js';
 import { labelPath, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { denyTenant } from '@mistriwork/engine/server/evidence.js';
-import { intakeProfileKey } from './tenantIntakeModel.js';
+import { intakeProfileKey, literal } from './tenantIntakeModel.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
 
 /** At most this many tenants are named in one read: a support choice list is two hundred. */
@@ -80,6 +80,17 @@ const quoted = (name: string) => `"${name.replaceAll('"', '""')}"`;
  * `tenant` and each column the name reads as `c0`, `c1`…; one parameter per
  * tenant on SQLite, one array on PostgreSQL. */
 export function tenantNamesQuery(owned: TenantOwnershipSnapshot, plan: TenantNamePlan, count: number): string {
+  return namesQuery(owned, plan, count, '$1::text[]');
+}
+/** `tenantNamesQuery` on PostgreSQL as one statement without parameters, each id a literal: parameter-free so it can
+ * ride in the message that begins its snapshot and ends it (tenantReadSource.ts `readTenantMarks`), where the read in
+ * its turn was a flight and its COMMIT another before a chooser could draw. The ids are tenant selectors, checked by
+ * the caller (`namesLookup`), and written as any string is (`literal`). */
+export function tenantNamesStatement(owned: TenantOwnershipSnapshot, plan: TenantNamePlan, tenants: readonly string[]): string {
+  if (owned.schema.dialect !== 'postgres') return denyTenant();
+  return namesQuery(owned, plan, tenants.length, `ARRAY[${tenants.map(literal).join(', ')}]::text[]`);
+}
+function namesQuery(owned: TenantOwnershipSnapshot, plan: TenantNamePlan, count: number, among: string): string {
   if (!Number.isSafeInteger(count) || count < 1 || count > TENANT_NAMES_MAX) return denyTenant();
   const physical = owned.resources[owned.profile ?? denyTenant()] ?? denyTenant();
   const select = plan.columns.map((column, index) => `${quoted(column)} AS c${index}`).join(', ');
@@ -90,7 +101,7 @@ export function tenantNamesQuery(owned: TenantOwnershipSnapshot, plan: TenantNam
   const dot = physical.indexOf('.');
   if (dot < 1) return denyTenant();
   return `SELECT ${quoted(plan.key)}::text AS tenant, ${select} FROM ${quoted(physical.slice(0, dot))}.${quoted(physical.slice(dot + 1))}
-    WHERE ${quoted(plan.key)}::text = ANY($1::text[])`;
+    WHERE ${quoted(plan.key)}::text = ANY(${among})`;
 }
 
 /** Each asked tenant's name from its row, said as the template says it; a

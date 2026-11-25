@@ -572,12 +572,24 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
       Object.keys(addressColumns).length
         ? discovery.readTenantAddresses({ tenantId, columns: addressColumns })
         : Promise.resolve(Object.freeze({}));
+    /* An arrival's marks in one snapshot (`readTenantMarks`): the names and sandboxes above, of the same tenants, and
+       where `entering` names the tenant the arrival is about to enter, that tenant's addresses, which its App payload
+       would otherwise ask on a snapshot of its own once it is in. Each part is what its own function above reads. */
+    const marks = (tenants: readonly string[], entering?: string) =>
+      discovery.readTenantMarks({
+        names: { template: profileTemplate, tenants },
+        ...(cloning ? { sandboxes: tenants } : {}),
+        ...(entering !== undefined && Object.keys(addressColumns).length
+          ? { addresses: { tenantId: entering, columns: addressColumns } }
+          : {}),
+      });
     const enrollment = Object.freeze({
       deployment: runtime,
       discover: bootstrap.read,
       names,
       sandboxes,
       addresses,
+      marks,
       retire,
       experimentConversionAuthority(options: Omit<Parameters<typeof createTenantExperimentConversionAuthority>[0], 'reader'>) {
         if (conversionAuthorityRetired) return denyTenant();

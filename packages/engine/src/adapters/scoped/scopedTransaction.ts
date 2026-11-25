@@ -176,6 +176,25 @@ export const uniqueRefusal = (table: Pick<TableMeta, 'id'>, columns: readonly st
     `A unique rule on "${table.id}"${columns ? ` (${columns.map((column) => JSON.stringify(column)).join(', ')})` : ''} refused the write, and the row it conflicts with may be outside the principal's rows.`,
   );
 
+/**
+ * The scope's refusal of a unique or exclusion rule, still carrying the name of the constraint that refused and its
+ * table: the two names PostgreSQL's error holds, and nothing of its detail, which quotes the row it met. The
+ * refusal says what it said; a layer above that knows the App declared a refusal for that constraint by name
+ * (mistri's `constraints` and `noOverlap`) may say the App's fixed words instead.
+ */
+function namingConstraint(refusal: ScopeRefusal, error: unknown): ScopeRefusal {
+  const { constraint, table } = (error ?? {}) as {
+    constraint?: unknown;
+    table?: unknown;
+  };
+  if (typeof constraint === 'string' && constraint)
+    Object.defineProperties(refusal, {
+      constraint: { value: constraint, enumerable: false },
+      ...(typeof table === 'string' && table ? { table: { value: table, enumerable: false } } : {}),
+    });
+  return refusal;
+}
+
 /** A table's triggers as a refusal names them: `the trigger "audit_order"`, `the triggers "a", "b"`. */
 export const triggerNames = (names: readonly string[]): string =>
   `the trigger${names.length === 1 ? '' : 's'} ${names.map((name) => JSON.stringify(name)).join(', ')}`;
@@ -970,7 +989,8 @@ export function createScopedTransaction(
         // With a scope present, a table it does not name has no rows the principal reads (shared/rowScope.ts).
         const rule = scope === undefined ? true : Object.hasOwn(scope, table.id) ? scope[table.id] : false;
         const sqlite = typeof (error as { errcode?: unknown }).errcode === 'number';
-        if (!columns || !rows.every((row) => uniqueConflictSeen(rule, columns, row, sqlite))) throw uniqueRefusal(table, columns);
+        if (!columns || !rows.every((row) => uniqueConflictSeen(rule, columns, row, sqlite)))
+          throw namingConstraint(uniqueRefusal(table, columns), error);
       }
       throw error;
     });

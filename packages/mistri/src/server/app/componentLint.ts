@@ -597,7 +597,8 @@ export function pageManifestsOf(app: { views: AppDef['views']; nav?: AppDef['nav
               view.sections[0].component.id,
               {
                 key,
-                reads: view.page.reads,
+                /* An optional read is one the page may ask, as any of its reads: who is refused it is the run's to say. */
+                reads: [...view.page.reads, ...(view.page.optionalReads ?? [])],
                 commands: view.page.commands,
                 actions: view.page.actions ?? [],
                 loaders: [view.page.loader, ...(view.page.loaders ?? [])].filter((name): name is string => name !== undefined),

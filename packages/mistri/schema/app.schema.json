@@ -258,7 +258,11 @@
               "description": "Query-language conditions over the record's own columns the record must meet then: \"status = 'open'\"."
             },
             "before": { "$ref": "#/$defs/duration", "description": "Come due this long ahead of the instant: '24 hours'." },
-            "after": { "$ref": "#/$defs/duration", "description": "Come due this long past the instant: '2 days'." }
+            "after": { "$ref": "#/$defs/duration", "description": "Come due this long past the instant: '2 days'." },
+            "failed": {
+              "$ref": "#/$defs/commandName",
+              "description": "The command run on the record, with the refusal as its text inputs `code` and `message`, once `command` is refused for good there or runs out of attempts."
+            }
           }
         }
       ]
@@ -1655,6 +1659,20 @@
         }
       }
     },
+    "noOverlap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["from", "to"],
+      "properties": {
+        "by": { "type": "array", "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" }, "description": "The columns that scope the rule, each compared for equality: the chair, the provider. In a tenant App the tenant is always part of it." },
+        "from": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "Where a row's range starts." },
+        "to": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "Where a row's range stops: the range is half-open and ends just before it." },
+        "when": { "type": "string", "minLength": 1, "description": "Rows the rule holds for, as conditions comparing the row's own columns with fixed values: \"status != cancelled\"." },
+        "field": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "The column the refusal is put beside; from when absent." },
+        "message": { "description": "What a refused write says, as written; it is never filled from a row.", "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 300 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "constraint": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_$]{0,62}$", "description": "The name of the PostgreSQL exclusion constraint that holds the rule; <table>_no_overlap when absent." }
+      }
+    },
     "consumes": {
       "type": "object",
       "additionalProperties": false,
@@ -2359,6 +2377,24 @@
         "restocks": {
           "description": "consumes the other way round, on a line that brings stock in (a receipt, a return to stock): an insert adds by to the balance, an edit moves the difference, and a delete takes it back out, refused where what it brought in has been used since. One, or a list.",
           "oneOf": [{ "$ref": "#/$defs/consumes" }, { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/consumes" } }]
+        },
+        "noOverlap": {
+          "description": "Rows of this resource that may not overlap: among rows equal on every by column, no two may hold ranges [from, to) that meet. Held on every write and refused beside from in the rule's message. PostgreSQL holds it with an exclusion constraint the App's migration adds, which mistri check prints and holds the App to; on SQLite the App's write reads for a row that meets it. One, or a list.",
+          "oneOf": [{ "$ref": "#/$defs/noOverlap" }, { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/noOverlap" } }]
+        },
+        "constraints": {
+          "type": "object",
+          "description": "Database constraints said as a field's refusal, each by the name the database gives it: a write the constraint refuses is refused beside field in message, where it would have been constraint_failed. The words are said as written and never carry a value.",
+          "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_$]{0,62}$" },
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["field", "message"],
+            "properties": {
+              "field": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "The resource's own column the refusal is put beside." },
+              "message": { "description": "What a refused write says: fixed words, never a value.", "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 300 }, { "$ref": "page.schema.json#/$defs/messageRef" }] }
+            }
+          }
         },
         "defined": {
           "type": "object",
@@ -3115,6 +3151,11 @@
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
           },
           "description": "Columns of the tenant's profile row its members read, scalar ones only: tenant.country in a query, a row scope, a when or a handler's tenant. Read once per request; a tenant with no row reads nulls. Needs profile."
+        },
+        "team": {
+          "type": "boolean",
+          "default": true,
+          "description": "false keeps a tenant's members from reading who else is a member. Left out, any member reads the members' names and ids (never an address, a role or an invitation), which is what useTeam() lists for a reader who does not manage the team."
         },
         "platform": {
           "type": "object",

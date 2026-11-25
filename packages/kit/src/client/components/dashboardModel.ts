@@ -172,6 +172,8 @@ export interface DashboardDef {
   /** A free-form page (definePage): what its component reads and runs, the address parameters it keeps its place in, and its loader. */
   page?: {
     reads: string[];
+    /** What the page reads only with `optional: true`; one this reader is not granted is not in their catalog. */
+    optionalReads?: string[];
     commands: string[];
     actions?: string[];
     params: string[];

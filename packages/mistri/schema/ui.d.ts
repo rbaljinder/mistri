@@ -562,9 +562,15 @@ export declare function useDeployment(): {
 };
 /** The current tenant's team: its members and pending invitations, the roles the reader may place people in, and whether
     they may change the team (`canManage`, the grant the administration and invitation routes enforce). Read through the page's
-    query cache; each action refreshes it. An empty, non-managing team outside a tenant App. The server judges every request. */
+    query cache; each action refreshes it. An empty, non-managing team outside a tenant App. The server judges every request.
+    `read` says which list this is. `'administration'`: the reader manages the team, and each member has an `email` and a
+    `role`. `'names'`: the reader is a member who does not, and is told each member's `name`, `initials`, `id` and `account`
+    and which one is `you`, with `email` and `role` empty: enough for "assign this to a person", and no more. `'none'`:
+    neither was answered (not a tenant's member, or the App says `auth.tenancy.team: false`). `account` is the id
+    `useViewer().account` and a command's `actor.id` say, so it is what a pick is stored by. */
 export declare function useTeam(): {
-  members: readonly { id: string; name: string; email: string; role: string; you: boolean }[];
+  members: readonly { id: string; account: string; name: string; initials: string; email: string; role: string; you: boolean }[];
+  read: 'administration' | 'names' | 'none';
   invitations: readonly { id: string; email: string; role: string; expiresAt: number }[];
   roles: readonly string[];
   canManage: boolean;

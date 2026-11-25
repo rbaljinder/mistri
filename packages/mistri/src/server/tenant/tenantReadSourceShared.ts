@@ -122,6 +122,13 @@ export interface TenantReadSource {
   /** The platform realm's twins: its membership, its revalidation, and reads
    * under the platform scope (across tenants, unnamed tables denied). */
   readPlatformMembership(lookup: PlatformMembershipLookup): Promise<PlatformMembershipRecord | null>;
+  /** `readMemberships` and `readPlatformMembership` of one account in one snapshot: discovery's second look at the
+   * account's tenants, and whether the platform realm is open to it, which it asked beside that look on a snapshot of
+   * its own. Each is read and judged as its own method reads and judges it. Admits nobody. */
+  readMembershipsWithPlatform(
+    lookup: TenantMembershipListLookup,
+    platform: PlatformMembershipLookup,
+  ): Promise<Readonly<{ memberships: readonly TenantMembershipRecord[]; platform: PlatformMembershipRecord | null }>>;
   assertPlatformCurrent(evidence: PlatformMembershipEvidence): Promise<void>;
   scopePlatformReads(evidence: PlatformMembershipEvidence, rows: RowScope): Promise<ScopedReads>;
   /** `scopePlatformReads` without its snapshot, as `bindReads` is `scopeReads`
@@ -185,6 +192,11 @@ export interface TenantReadSource {
    * address's shape that resolves back to this tenant alone. For the tenant's
    * own lease to show; admits nobody. */
   readTenantAddresses(lookup: TenantAddressesLookup): Promise<TenantAddresses>;
+  /** What an arrival asks before anyone is admitted, in one snapshot: `readTenantNames` of its tenants, and where
+   * asked `readSandboxes` of them and `readTenantAddresses` of the one tenant being entered. Each part reads what its
+   * own method reads, checked as that method checks it, and nothing else; admits nobody. A caller releases a part
+   * only where it would have released that method's answer. */
+  readTenantMarks(lookup: TenantMarksLookup): Promise<TenantMarks>;
   /** The columns of a tenant's profile row its members read (`auth.tenancy.shared`), by column, once per request:
    * the platform's own read of the row (as the names and addresses are), no App resource read and no grant. Those
    * columns and nothing else of the row; a missing row reads as every column null. Admits nobody. */
@@ -256,6 +268,19 @@ export function intakeResolutionByTenant(tenantId: string, anchor: (id: string) 
 export interface TenantNamesLookup {
   readonly template: string | undefined;
   readonly tenants: readonly string[];
+}
+/** An arrival's marks (`readTenantMarks`): the tenants to name, those to ask the sandbox store of, and the one whose
+ * own addresses are read. */
+export interface TenantMarksLookup {
+  readonly names: TenantNamesLookup;
+  readonly sandboxes?: readonly string[];
+  readonly addresses?: TenantAddressesLookup;
+}
+export interface TenantMarks {
+  readonly names: Readonly<Record<string, string>>;
+  readonly sandboxes: ReadonlySet<string>;
+  /** Present where the lookup asked for them. */
+  readonly addresses?: TenantAddresses;
 }
 /** The lookup's plan and its ids, or undefined when there is nothing to read. */
 export function namesLookup(

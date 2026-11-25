@@ -370,7 +370,7 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     ]);
     /* tenancy says what a tenant is called, its profile table, the profile's columns its members read (`shared`) and
        the platform realm. */
-    assert.deepEqual(props(a.tenancy), ['label', 'platform', 'profile', 'shared']);
+    assert.deepEqual(props(a.tenancy), ['label', 'platform', 'profile', 'shared', 'team']);
     assert.equal(a.tenancy.additionalProperties, false);
     assert.deepEqual(props(a.tenancy.properties.platform), ['label', 'me']);
     assert.deepEqual(a.auth.properties.tenancy, { $ref: '#/$defs/tenancy' });
@@ -796,7 +796,13 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // name): 1799/532.
     // 1.0.0-rc.86: an assistant starter's `roles` and the assistant's `limits.steps` (two entries; both names were
     // keys already): 1801/532.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1801, names: 532 });
+    // A timer's `failed`, the command that keeps its refusal on the record (one entry, one new name): 1802/533.
+    // Unreleased: `auth.tenancy.team`, whether a tenant's members read who else is a member (one entry, one new
+    // name): 1803/534.
+    // Unreleased: a resource's `noOverlap` (`by`, `from`, `to`, `when`, `field`, `message`, `constraint`) and
+    // `constraints` (each `field`, `message`): eleven entries; `noOverlap`, `constraint` and `constraints` are new
+    // names: 1814/537.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1814, names: 537 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

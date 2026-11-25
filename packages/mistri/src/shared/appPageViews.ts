@@ -39,6 +39,7 @@ const PAGE_VIEW_KEYS = [
   'favorite',
   'component',
   'reads',
+  'optionalReads',
   'commands',
   'actions',
   'params',
@@ -99,6 +100,15 @@ export function parsePageView(
     checkResourceSlot(resource, `${at}, "reads"`, ctx.data);
     checkDeclaredResource(resource, `${at}, "reads"`, ctx.data);
   }
+  for (const resource of page.optionalReads ?? []) {
+    checkResourceSlot(resource, `${at}, "optionalReads"`, ctx.data);
+    checkDeclaredResource(resource, `${at}, "optionalReads"`, ctx.data);
+  }
+  /* A signed-out visitor holds no role a read could be optional by: a public page reads what `auth.public` opens, all of it. */
+  if (v.public === true && page.optionalReads?.length)
+    throw new Error(
+      `[page-public] ${at} is public and names "optionalReads": a public page reads only what "auth.public" opens, and every visitor reads all of it.`,
+    );
   for (const command of page.commands) {
     if (!isRegisteredCommand(command)) {
       throw new Error(`[page-commands] ${at} runs the command "${command}", which the commands module does not register.`);
@@ -173,6 +183,7 @@ export function parsePageView(
       ],
       page: {
         reads: page.reads,
+        ...(page.optionalReads ? { optionalReads: page.optionalReads } : {}),
         commands: page.commands,
         ...(page.actions.length ? { actions: page.actions } : {}),
         params: page.params,
@@ -277,7 +288,7 @@ function pageFormCoverage(forms: readonly FormView[], roles: readonly string[] |
  */
 function pageRoles(
   v: Record<string, unknown>,
-  page: { reads: string[]; commands: string[] },
+  page: { reads: string[]; optionalReads?: string[]; commands: string[] },
   at: string,
   ctx: ContentContext,
 ): string[] | undefined {
@@ -310,6 +321,17 @@ function pageRoles(
       );
     }
   };
+  /* An optional read (`optionalReads`) is no part of who is offered the page: a role without the grant opens the page
+     and that read answers `refused`, before anything is read (http/pageLoad.ts). One that no offered role is granted
+     is a read nobody could make: a mistake, as a command no offered role may run is. */
+  const someoneReads = (offered: readonly string[]) => {
+    const dead = (page.optionalReads ?? []).find((resource) => !offered.some((role) => reads(grants[role], resource)));
+    if (dead !== undefined) {
+      throw new Error(
+        `[page-coverage] ${at} names "${dead}" in "optionalReads", which no role it is offered to is granted. Grant it to one, or leave it out.`,
+      );
+    }
+  };
   const named = parseOpenRoles(v.roles, at, ctx.auth);
   if (named) {
     for (const role of named) {
@@ -317,11 +339,12 @@ function pageRoles(
       if (missing !== undefined) {
         throw new Error(
           `[page-coverage] ${at} is offered to the role "${role}", which is not granted "${missing}". ` +
-            'Every role a page names reads all it reads: grant it, or leave the role out.',
+            `Every role a page names reads all its "reads": grant it, leave the role out, or move "${missing}" to "optionalReads" and read it with { optional: true }.`,
         );
       }
     }
     runnable(named);
+    someoneReads(named);
     return named;
   }
   const able = Object.keys(grants).filter((role) => !grants[role].service && unread(grants[role]) === undefined);
@@ -331,5 +354,6 @@ function pageRoles(
     );
   }
   runnable(able);
+  someoneReads(able);
   return able;
 }

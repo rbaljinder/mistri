@@ -192,6 +192,42 @@ test('replace and revoke listings enforce the complete existing role set, never 
   assert.deepEqual(stored(f), before);
 });
 
+/* The members' own read of who is on the team (tenantTeamRoute.ts): no administration session stands behind it, so
+   it is held to the least a picker needs. One tenant's active members, by two ids each, and nothing of a row's roles,
+   status or end date; never another tenant's member, an invited or revoked one, or a tenant that is not active. */
+test("the team read lists one tenant's active members by their ids alone, and nothing of any other row", async (t) => {
+  const f = await tenantAdministrationFixture(t);
+  tenant(f);
+  tenant(f, 'private-tenant');
+  tenant(f, 'closed-tenant', 'closed');
+  member(f, 'm-one', { accountId: f.users.target.accountId });
+  member(f, 'm-two', { accountId: f.users.outsider.accountId, roles: ['manager'] });
+  member(f, 'c-invited', { status: 'invited' });
+  member(f, 'd-revoked', { status: 'revoked' });
+  member(f, 'e-unknown-role', { roles: ['retired-role'] });
+  member(f, 'g-other-tenant', { tenantId: 'private-tenant' });
+  member(f, 'h-closed', { tenantId: 'closed-tenant' });
+  const admin = await open(f),
+    before = stored(f);
+  const team = await admin.service.team('north', ['reader', 'manager'], 100);
+  assert.deepEqual(plain(team), [
+    { membershipId: 'm-one', accountId: f.users.target.accountId },
+    { membershipId: 'm-two', accountId: f.users.outsider.accountId },
+  ]);
+  assert.doesNotMatch(JSON.stringify(team), /roles|reader|manager|status|validUntil|version|@/);
+  assert.deepEqual(plain(await admin.service.team('private-tenant', ['reader', 'manager'], 100)), [
+    { membershipId: 'g-other-tenant', accountId: 'account-g-other-tenant' },
+  ]);
+  assert.deepEqual(plain(await admin.service.team('closed-tenant', ['reader', 'manager'], 100)), []);
+  assert.deepEqual(plain(await admin.service.team('unborn', ['reader', 'manager'], 100)), []);
+  assert.deepEqual(plain(await admin.service.team('north', ['reader', 'manager'], 1)), [
+    { membershipId: 'm-one', accountId: f.users.target.accountId },
+  ]);
+  await assert.rejects(admin.service.team('north', ['reader'], 0), TenantAdministrationFailure);
+  await assert.rejects(admin.service.team('not a tenant id', ['reader'], 10), TenantAdministrationFailure);
+  assert.deepEqual(stored(f), before, 'a read writes nothing');
+});
+
 test('filtering precedes LIMIT and lookahead; hidden rows cannot truncate pages or leak a continuation', async (t) => {
   const f = await tenantAdministrationFixture(t);
   tenant(f);

@@ -57,7 +57,18 @@ export function tenantReadBody(body: Readonly<Record<string, unknown>> | undefin
 interface TenantBootRequest {
   readonly path: string;
   readonly search: string;
+  /** Loaders this browser saw the page at that address ask as it last opened (client pageLoadHints.ts), beside its
+   * `loader`: a wish for them to be read with the page. The host reads only those the page itself lists, for a
+   * reader it serves the page to (server http/firstPaintRooms.ts `pageLoads`). */
+  readonly loaders?: readonly string[];
 }
+
+/** The most loaders a boot is asked to read with its page, and the longest name (a load's own bound, http/pageLoad.ts). */
+export const TENANT_BOOT_LOADERS_MOST = 8;
+const loaderNames = (value: unknown): value is string[] =>
+  Array.isArray(value) &&
+  value.length <= TENANT_BOOT_LOADERS_MOST &&
+  value.every((name) => typeof name === 'string' && name.length > 0 && name.length <= 64 && !/\p{Cc}/u.test(name));
 
 /**
  * A person's tenants, and the page in the one they work in, in one request (`POST /api/tenant/enter`).
@@ -81,6 +92,10 @@ interface TenantEnterRequest {
   readonly tenant?: string;
   /** The context this browser tab's last page let go (client tenantBrowser.ts `keep`), to resume where it is that tenant's. */
   readonly kept?: { readonly tenantId: string; readonly tabId: string };
+  /** A reload's: take the kept context back and read its page's boot on it, with no discovery (tenantEnter.ts
+   * `reenterTenant`). Said only beside `kept`, and only by a page that holds the person's tenants from its tab's last
+   * entry (client tenantTransport.ts): the answer names no tenants. */
+  readonly reenter?: true;
 }
 
 const enterId = (value: unknown): value is string =>
@@ -88,16 +103,19 @@ const enterId = (value: unknown): value is string =>
 
 /** Whether an enter request says what it may: a plannable address, and at most a named tenant and a kept context. */
 export function tenantEnterRequest(input: Readonly<Record<string, unknown>>, appId: string): TenantEnterRequest | undefined {
-  const { path, search, tenant, kept, ...rest } = input;
+  const { path, search, loaders, tenant, kept, reenter, ...rest } = input;
   if (Object.keys(rest).length) return undefined;
-  const page = tenantBootRequest({ path, search }, appId);
+  if (reenter !== undefined && (reenter !== true || kept === undefined)) return undefined;
+  const page = tenantBootRequest({ path, search, ...(loaders === undefined ? {} : { loaders }) }, appId);
   if (!page || (tenant !== undefined && (!enterId(tenant) || tenant === PLATFORM_TENANT_ID))) return undefined;
   const named = tenant === undefined ? {} : { tenant: tenant as string };
   if (kept !== undefined) {
     if (!kept || typeof kept !== 'object' || Array.isArray(kept)) return undefined;
     const { tenantId, tabId, ...other } = kept as Record<string, unknown>;
     if (Object.keys(other).length || !enterId(tenantId) || tenantId === PLATFORM_TENANT_ID || !enterId(tabId)) return undefined;
-    return { page, ...named, kept: { tenantId, tabId } };
+    /* A reload re-enters the tenant its tab kept: a link naming another is a choice, answered by discovery. */
+    if (reenter && tenant !== undefined && tenant !== tenantId) return undefined;
+    return { page, ...named, kept: { tenantId, tabId }, ...(reenter ? { reenter: true as const } : {}) };
   }
   return { page, ...named };
 }
@@ -135,8 +153,13 @@ export function enteredTenant(
 
 /** Whether a boot request says an address it can plan: two strings within the bound, the path the App's own. */
 export function tenantBootRequest(input: Readonly<Record<string, unknown>>, appId: string): TenantBootRequest | undefined {
-  const { path, search } = input;
+  const { path, search, loaders } = input;
   if (typeof path !== 'string' || typeof search !== 'string' || path.length + search.length > TENANT_BOOT_ADDRESS_MOST) return undefined;
+  let wished: string[] = [];
+  if (loaders !== undefined) {
+    if (!loaderNames(loaders)) return undefined;
+    wished = [...loaders];
+  }
   if (/\p{Cc}/u.test(path + search) || path.includes('#') || search.includes('#')) return undefined;
   if (search !== '' && !search.startsWith('?')) return undefined;
   const first = path.split('/').filter(Boolean)[0];
@@ -146,7 +169,7 @@ export function tenantBootRequest(input: Readonly<Record<string, unknown>>, appI
   } catch {
     return undefined;
   }
-  return path.startsWith('/') && named === appId ? { path, search } : undefined;
+  return path.startsWith('/') && named === appId ? { path, search, ...(wished.length ? { loaders: wished } : {}) } : undefined;
 }
 
 /**

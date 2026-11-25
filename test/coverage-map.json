@@ -75,6 +75,11 @@
       ]
     },
     {
+      "id": "declared-data-rules",
+      "surface": ["dsl: app: resources.*.noOverlap", "dsl: app: resources.*.constraints"],
+      "tests": [{ "file": "test/app-data-rules.test.ts" }, { "file": "test/tenant-no-overlap.test.ts" }]
+    },
+    {
       "id": "row-defined-fields",
       "risk": "R5",
       "surface": ["dsl: app: resources.*.defined"],

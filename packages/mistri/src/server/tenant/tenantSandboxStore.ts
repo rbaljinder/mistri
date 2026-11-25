@@ -292,6 +292,15 @@ const record = (row: Record<string, CloneValue>): SandboxRecord =>
   });
 const table = (session: SandboxSession, name: string) => runtimeTable(session.dialect, name);
 
+/** `sandboxRows(…).among` on PostgreSQL as one statement without parameters, to ride in the message that begins a
+ * snapshot (tenantReadSource.ts `readTenantMarks`). It names the store's table, so it is sent only where the store's
+ * layout was attested on that database: a missing table would fail the whole message. `literal` writes a string. */
+export function sandboxAmongStatement(appId: string, tenantIds: readonly string[], literal: (value: string) => string): string {
+  if (!tenantIds.length) return denyTenant();
+  // A tenant id is [a-z0-9_-] (parseTenantSelector): a comma never splits one.
+  return `SELECT tenant_id FROM ${runtimeTable('postgres', T.tenant)} WHERE app = ${literal(appId)} AND tenant_id = ANY(string_to_array(${literal(tenantIds.join(','))}, ','))`;
+}
+
 /** The App's sandbox rows, on a session whose store the caller has attested. */
 export function sandboxRows(session: SandboxSession, appId: string) {
   const tenants = table(session, T.tenant),

@@ -139,6 +139,22 @@ proof and membership admission, and only a released context resumes, once, so a
 context another page holds is never shared. A reader who reloads all morning
 holds one context, not one per load.
 
+A reload in a tab that holds the person's tenants from its last entry asks
+`/api/tenant/enter` with `reenter`: the host takes the tab's released context
+back with no discovery and no admission of its own (`tenantContexts.ts`
+`reclaim`: the session proven, the tab its own, released, unexpired and in the
+tenant kept) and answers the page's boot on it, three round trips where an
+entry is nine. The lease is trusted as every request on it is, and no more: the
+boot's snapshot fences the lease's evidence (the membership's and tenant's
+versions, the roles) against the store before any read, so a member removed,
+whose roles changed or whose tenant was suspended is refused there, as their
+next request on the lease would have been, the answer carries nothing and the
+context is let go; signed out or signed in as another session, the session
+check refuses first. A context the host no longer holds (a restart, a deploy),
+one another page took back, or one past its grace is entered as any request is,
+in the same request. The chooser and the bar offer the tab's last discovery's
+tenants, and ask discovery again once the bar has drawn.
+
 A record page is one request (`/api/pages/compose`): the host plans the page and
 asks each of its reads through its own read route on the one context the
 request holds — one admission, each read in its own operation's snapshot under
@@ -150,10 +166,27 @@ A first page is one request past the lease (`/api/boot`,
 `packages/mistri/src/shared/tenantBoot.ts`). An ordinary App's page arrives
 with its first answers in it; a tenant App's cannot, because its reads need the
 lease the page opens. So once the lease is open the shell asks for the page in
-one read on it: the host answers the runtime, the App, its pages, its schema
-and the bell's count, plans the room the address opens as an ordinary App's
+one read on it: the host answers the runtime, the App, its pages and its
+schema, plans the room the address opens as an ordinary App's
 first page plans it (a natural key's record found by its key first), and asks
-each of the room's reads through its own route on the one context. Each answer
+each of the room's reads through its own route on the one context. The bell's
+count is not among them: reading it takes a second round trip behind the first
+(the notices, then whether their records are still the reader's to see), which
+the whole page would wait on, so the bell asks for itself once the bar has
+drawn, and its count is laid over its corner without moving anything.
+
+A free-form page's loads are among the room's reads
+(`http/firstPaintRooms.ts` `pageLoads`). Its `loader` is planned from the
+address, at the place the page will ask it (the parameters the page keeps, and
+of those the ones the loader says it reads). A named loader is planned only
+when the request names it: a page may hold one back
+(`useLoader(name, { enabled: false })`), which only its own code says, so each
+`useLoader` notes in the browser whether it asked as its page was first drawn
+(`client/pageLoadHints.ts`) and the next entry at that address names those that
+did. The name is a wish: the load goes through `/api/pages/load`'s own route
+on the lease, which finds the page among those the reader is served and the
+loader in that page's own list. An App with `choose` plans no loads, since a
+loader may read picks the entry request does not carry. Each answer
 is keyed by the request it answers, and the shell's requests take them once;
 anything the boot did not carry, or a refusal in a read's own words, the page
 asks itself. A boot that fails fences nothing, and a support lease is answered
@@ -1089,8 +1122,15 @@ What differs from SQLite:
 - **Tenant-local uniqueness** is attested from `pg_index` by the SQLite rule:
   every unique index on a tenant-owned table includes the ownership column
   under a deterministic collation, except the primary key of a single opaque
-  `text`, `varchar` or `uuid` identifier. Expression keys and exclusion
-  constraints refuse.
+  `text`, `varchar` or `uuid` identifier. Expression keys refuse. An
+  exclusion constraint is admitted where it holds within one tenant: the
+  ownership column is one of its keys, compared with `=` under a deterministic
+  collation, and it is not `DEFERRABLE`; its other keys may be expressions,
+  such as the range of two columns. That is what holds a resource's
+  `noOverlap` under several writers
+  ([Rows that may not overlap](../site/src/content/docs/docs/no-overlap.md)),
+  and `mistri check` prints the statement. Any other exclusion constraint
+  refuses.
 - **The fence** is row locks held to COMMIT rather than a file-wide writer
   lock: a revocation waits for an in-flight business commit, and a business
   write waits for an in-flight revocation and then refuses. It is the write's

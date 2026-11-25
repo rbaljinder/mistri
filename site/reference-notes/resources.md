@@ -89,6 +89,26 @@ that must refuse an oversell is `consumes`; a figure that is only read is a
 rollup. `check` warns when a command also writes the balance
 (`consumes-written`).
 
+## Rows that may not overlap
+
+```ts
+booking: {
+  noOverlap: { by: ['chair_id'], from: 'starts_at', to: 'ends_at', when: 'status != cancelled', message: 'That chair is taken then.' },
+  constraints: { booking_fee_positive: { field: 'fee', message: 'A fee is more than zero.' } },
+},
+```
+
+Among rows equal on every `by` column, no two may hold ranges `[from, to)` that
+meet; a row `when` does not match, or with an empty end, is outside the rule. A
+write that would break it is refused beside `from` in `message`, on every door.
+PostgreSQL holds it with an exclusion constraint the App's migration adds:
+`check` prints the statement, and the App does not start without it
+(`no-overlap-constraint`). On SQLite the App's write reads for a row that meets
+it. `constraints` says any database constraint's refusal, by the constraint's
+name, beside a field in fixed words where the write answered
+`constraint_failed`. The words never carry a value. See
+[Rows that may not overlap](/docs/no-overlap/).
+
 ## Row-defined fields
 
 ```ts

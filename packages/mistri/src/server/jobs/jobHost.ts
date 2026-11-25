@@ -172,9 +172,11 @@ export interface JobHost {
    * A job at times run once now, as its next slot would run it — the same runner, principal and grants, at the
    * host's clock, a manual run as `mistri jobs run` enqueues one (jobManualRun.ts) — and the attempt's end: for a
    * test (testing/host.ts `runJob`), never on a schedule's behalf. A job per tenant runs for the tenant named, as
-   * that tenant's slot would; a job on the platform takes none.
+   * that tenant's slot would; a job on the platform takes none. A timer (`at-<resource>-<column>`) is swept now
+   * instead, and every record it finds due is run, page after page: `ran` says how many, and the state is the first
+   * run's that did not succeed.
    */
-  runNow(job: string, timeoutMs?: number, tenantId?: string): Promise<Readonly<{ state: string; code: string | null }>>;
+  runNow(job: string, timeoutMs?: number, tenantId?: string): Promise<Readonly<{ state: string; code: string | null; ran?: number }>>;
   stop(): Promise<void>;
 }
 
@@ -434,6 +436,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
       module,
       appId: deployment.appId,
       bind: options.bind,
+      store: jobs,
       ...(workflows || builtIn.length || options.decide
         ? {
             extra: {
@@ -561,7 +564,16 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     }
     if (!stopping && flowTail && (await flowTail.tick())) worked = true;
     if (!stopping && (await enqueueSlots())) worked = true;
-    if (!stopping && (await runner.tick()).status === 'ran') worked = true;
+    if (!stopping) {
+      const { status } = await runner.tick();
+      if (status === 'ran') worked = true;
+      /* The page a sweep found has been worked through: the next cycle reads the page after it. */
+      else if (status === 'idle' && pending) {
+        pending = false;
+        more = 2;
+        worked = true;
+      }
+    }
     if (!stopping) await refresh(!worked);
     return worked;
   }
@@ -587,14 +599,27 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
      moment it entered the state — whichever process sees it first. The
      timer's command runs only from that state (its verb), so a record that
      moved on meanwhile is refused and the job ends. */
-  const timers = options.sweep ? [...module.jobs.values()].filter((job) => job.timer) : [];
+  // A timer's `failed` job is its handler's to enqueue (jobCommands.ts), never the sweep's.
+  const timers = options.sweep ? [...module.jobs.values()].filter((job) => job.timer && job.timer.failedOf === undefined) : [];
   let swept = Number.NEGATIVE_INFINITY;
-  async function sweepTimers(): Promise<boolean> {
+  /* The last sweep found runs the store had not seen: rows queued for work come a page a sweep, so once the runner
+     has nothing left to claim the next page is read at once rather than a minute on. A sweep that finds only what
+     it found before (a warning that leaves its record due) waits the minute, so nothing here spins: two sweeps at
+     once at most, since a sweep's page moves on (commandHost.ts, tenantDueTimers.ts) and the one after a full page
+     can come back empty while rows remain before it. */
+  let more = 0;
+  /** A sweep's new runs are not yet worked through. */
+  let pending = false;
+  /** One sweep: of every timer when its minute has come, or of `only` now. The runs it enqueued that are new. */
+  async function sweepTimers(only?: (typeof timers)[number]): Promise<string[]> {
     const at = now();
-    if (!timers.length || at - swept < SWEEP_MS) return false;
-    swept = at;
-    let enqueued = false;
-    for (const job of timers) {
+    const fresh: string[] = [];
+    if (only === undefined) {
+      if (!timers.length || (at - swept < SWEEP_MS && more <= 0)) return fresh;
+      swept = at;
+      more = Math.max(0, more - 1);
+    }
+    for (const job of only === undefined ? timers : [only]) {
       let due: Awaited<ReturnType<NonNullable<typeof options.sweep>>>;
       try {
         /* Which rows are due is App logic, as of its clock (http/clock.ts); when to sweep stays real. */
@@ -610,7 +635,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
           .digest('hex')
           .slice(0, 48)}`;
         try {
-          await jobs.enqueue(
+          const accepted = await jobs.enqueue(
             {
               job: job.id,
               version: job.version,
@@ -626,13 +651,13 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
             },
             at,
           );
-          enqueued = true;
+          if (!accepted.replayed) fresh.push(accepted.id);
         } catch {
           /* Unavailable now: the next sweep asks again, under the same key. */
         }
       }
     }
-    return enqueued;
+    return fresh;
   }
   type TimedJob = (typeof timed)[number];
   /** One slot's runs, each carrying its tenant (none: once, on the platform); throws when the store is unavailable. */
@@ -726,7 +751,10 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     return enqueued;
   }
   async function enqueueSlots(): Promise<boolean> {
-    let enqueued = await sweepTimers();
+    let enqueued = (await sweepTimers()).length > 0;
+    if (enqueued) pending = true;
+    // A sweep at once that found nothing new still has its second to come: the next cycle follows without a wait.
+    else if (more > 0) enqueued = true;
     for (const job of timed) {
       const at = now();
       if (job.every!.tenantZone || job.every!.column !== undefined) {
@@ -867,6 +895,35 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
       /* A job per tenant has no run of its own: each is one tenant's, which the runner refuses without its tenant,
          so the test names it here rather than reading a refusal off a run that could never succeed. */
       const declared = module.jobs.get(name);
+      /* A timer (`at-<resource>-<column>`, `after-…`): its sweep now, and every run it finds, until a sweep finds
+         nothing new — the rows queued behind an `at`, worked through as the host would over its next minutes. */
+      const timer = timers.find((job) => job.id === name);
+      if (timer) {
+        const deadline = Date.now() + timeoutMs;
+        const ids: string[] = [];
+        for (let empty = 0; empty < 2;) {
+          const fresh = await sweepTimers(timer);
+          empty = fresh.length ? 0 : empty + 1;
+          ids.push(...fresh);
+          for (;;) {
+            if (Date.now() > deadline) throw new Error(`Jobs: "${name}" did not finish within ${timeoutMs}ms.`);
+            if (await tick()) continue;
+            const open = await jobs.standing(now());
+            // Nothing is due now: what is left waits for a retry's backoff, which a test reads as not done.
+            if (open.waitingSince === null || open.waitingSince > open.at) break;
+            await new Promise((done) => setTimeout(done, 25));
+          }
+        }
+        let ended: Readonly<{ state: string; code: string | null }> = {
+          state: 'succeeded',
+          code: null,
+        };
+        for (const id of ids) {
+          const found = await findRun(jobs, timer.id, id);
+          if (found && found.state !== 'succeeded' && ended.state === 'succeeded') ended = { state: found.state, code: found.lastCode };
+        }
+        return Object.freeze({ ...ended, ran: ids.length });
+      }
       if (declared?.every && declared.realm === 'tenant' && tenantId === undefined)
         throw new JobDeclarationError(`Jobs: "${name}" runs per tenant: name the tenant, host.runJob('${name}', { tenant }).`);
       const job = jobToRun(module, name, tenantId !== undefined);

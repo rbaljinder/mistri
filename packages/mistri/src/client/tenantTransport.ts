@@ -32,6 +32,7 @@ import {
   enteredTenant,
   type TenantBatchRead,
 } from '../shared/tenantBoot.js';
+import { pageLoadHints } from './pageLoadHints.js';
 import { readKey } from '@mistriwork/engine/shared/firstPaint.js';
 import { gatheringReads } from '@mistriwork/kit/client/readGathering.js';
 import { PAGE_HEADER } from '@mistriwork/engine/shared/pageRoutes.js';
@@ -93,6 +94,8 @@ const reads = new Set([
   '/api/domains/primary',
   // Its read audit, for its admins (server tenantReadsRoute.ts): the lease names the tenant.
   '/api/reads',
+  // Its members by name, for any member (server tenantTeamRoute.ts): the lease names the tenant.
+  '/api/team',
   // A dealer's own log of support visits into it: a read on the dealer's
   // ordinary tenant lease, which the selector below addresses like any other.
   SUPPORT_LOG_PATH,
@@ -417,13 +420,48 @@ function discovered(
   if (new Set(result).size !== result.length) throw unavailable();
   // What each is called, for the chooser and the bar to say (tenantNames.ts).
   replaceTenantNames(named, sandboxed);
+  noteChoices(snapshot, value.memberships, value.platform === true);
   // The platform realm is one more choice, under its reserved id.
   const platform = value.platform === true;
   return { tenants: Object.freeze(platform ? [...result, PLATFORM_TENANT_ID] : result), memberships: result, platform };
 }
 
+/* The person's tenants as this tab's last discovery said them, by App and account: what a reload re-entered with no
+   discovery (`reenter`, server tenantEnter.ts) offers in its chooser and bar until discovery answers again. Words for
+   choices, never a grant: each choice is admitted when it is made. */
+const CHOICES = 'mistri.tenant-choices';
+function noteChoices(snapshot: SessionIdentitySnapshot, memberships: readonly unknown[], platform: boolean): void {
+  try {
+    sessionStorage.setItem(CHOICES, JSON.stringify({ appId: snapshot.appId, accountId: snapshot.accountId, memberships, platform }));
+  } catch {
+    /* Without storage a reload enters through discovery, as it did. */
+  }
+}
+function heldChoices(appId: string, accountId?: string): { accountId: string; memberships: unknown[]; platform: boolean } | undefined {
+  try {
+    const value = JSON.parse(sessionStorage.getItem(CHOICES) ?? 'null') as Record<string, unknown> | null;
+    return value &&
+      value.appId === appId &&
+      typeof value.accountId === 'string' &&
+      (accountId === undefined || value.accountId === accountId) &&
+      Array.isArray(value.memberships)
+      ? { accountId: value.accountId, memberships: value.memberships, platform: value.platform === true }
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+/* Whether this tab can re-enter `kept` with no discovery: it holds the person's tenants, that one among them. */
+function reentersKept(appId: string, requested: string | undefined, kept: { readonly tenantId: string } | undefined): boolean {
+  if (!kept || (requested !== undefined && requested !== kept.tenantId)) return false;
+  const held = heldChoices(appId);
+  return Boolean(held?.memberships.some((member) => object(member) && member.tenantId === kept.tenantId));
+}
+
 /** What entering answered: the choices, and where the person was entered without being asked, the lease and its boot. */
 export interface TenantEntry {
+  /** Entered by a reload with no discovery: the choices are this tab's last discovery's, to be asked again. */
+  readonly reentered?: true;
   readonly tenants: readonly string[];
   readonly lease?: TenantContextReply;
   /** The page's boot on that lease (shared/tenantBoot.ts), when the host could read it. */
@@ -460,6 +498,7 @@ export async function enterTenant(
   const { value, response } = await request(snapshot, `${TENANT_ENTER_PATH}?${new URLSearchParams({ app: snapshot.appId! })}`, {
     path: page.path,
     search: page.search,
+    ...pageLoadHints(page.path),
     ...(requested === undefined ? {} : { tenant: requested }),
     ...(kept ? { kept: { tenantId: kept.tenantId, tabId: kept.tabId } } : {}),
   });
@@ -474,6 +513,7 @@ function entryOf(
   requested: string | undefined,
   kept: { readonly tenantId: string; readonly tabId: string } | undefined,
 ): TenantEntry {
+  if (value.reentered === true) return reentryOf(value, response, snapshot, requested, kept);
   const found = discovered(value, snapshot, true);
   if (!('entered' in value)) return { tenants: found.tenants };
   const entered = value.entered;
@@ -493,6 +533,56 @@ function entryOf(
   )
     throw unavailable();
   return { tenants: found.tenants, lease, ...(object(entered.boot) ? { boot: entered.boot } : {}) };
+}
+
+/**
+ * A reload's entry (`reenter`): the kept context taken back and its boot, with no discovery. Taken only where it is
+ * that very context, in the tenant this tab kept, for the account whose choices this tab holds; the choices are
+ * those, said as discovery said them.
+ */
+function reentryOf(
+  value: Record<string, unknown>,
+  response: Response,
+  snapshot: SessionIdentitySnapshot,
+  requested: string | undefined,
+  kept: { readonly tenantId: string; readonly tabId: string } | undefined,
+): TenantEntry {
+  const held = heldChoices(snapshot.appId!, snapshot.accountId ?? undefined);
+  const entered = value.entered;
+  if (
+    !kept ||
+    !held ||
+    (requested !== undefined && requested !== kept.tenantId) ||
+    value.status !== 'ready' ||
+    value.appId !== snapshot.appId ||
+    value.accountId !== snapshot.accountId ||
+    Object.keys(value).some((key) => !['status', 'appId', 'accountId', 'reentered', 'entered', 'whoami'].includes(key)) ||
+    !object(entered) ||
+    Object.keys(entered).some((key) => key !== 'context' && key !== 'boot') ||
+    !object(entered.boot)
+  )
+    throw unavailable();
+  const found = discovered(
+    {
+      status: 'ready',
+      appId: snapshot.appId,
+      accountId: snapshot.accountId,
+      memberships: held.memberships,
+      ...(held.platform ? { platform: true } : {}),
+    },
+    snapshot,
+    false,
+  );
+  const lease = context(entered.context, snapshot, response);
+  if (
+    lease.tenantId !== kept.tenantId ||
+    lease.tabId !== kept.tabId ||
+    lease.realm !== undefined ||
+    lease.revision < 1 ||
+    enteredTenant(found.memberships, found.platform, { named: requested, kept: kept.tenantId }) !== kept.tenantId
+  )
+    throw unavailable();
+  return { reentered: true, tenants: found.tenants, lease, boot: entered.boot };
 }
 
 /** The page's first request, held for the look that follows who-am-I (`enterTenant`). */
@@ -525,6 +615,23 @@ export async function enterFirst(
 ): Promise<Record<string, unknown> | undefined> {
   firstEntry = undefined;
   if (requested === PLATFORM_TENANT_ID) return undefined;
+  /* A reload in a tab that holds the person's tenants asks to take its kept context back with no discovery. Where the
+     host cannot, it enters the page as it always did in the same request; where it refuses the context (its boot
+     was refused), the page enters afresh in a second. */
+  if (reentersKept(appId, requested, kept)) {
+    const me = await enterFirstAs(appId, page, requested, kept, true);
+    if (me) return me;
+  }
+  return enterFirstAs(appId, page, requested, kept, false);
+}
+
+async function enterFirstAs(
+  appId: string,
+  page: { readonly path: string; readonly search: string },
+  requested: string | undefined,
+  kept: { readonly tenantId: string; readonly tabId: string } | undefined,
+  reenter: boolean,
+): Promise<Record<string, unknown> | undefined> {
   const sent = { path: page.path, search: page.search, tenant: requested, kept };
   let response: Response;
   let value: unknown;
@@ -537,8 +644,11 @@ export async function enterFirst(
       body: JSON.stringify({
         path: page.path,
         search: page.search,
+        /* The named loaders the page there asked as it last opened, to be read with it (pageLoadHints.ts). */
+        ...pageLoadHints(page.path),
         ...(requested === undefined ? {} : { tenant: requested }),
         ...(kept ? { kept: { tenantId: kept.tenantId, tabId: kept.tabId } } : {}),
+        ...(reenter ? { reenter: true } : {}),
       }),
     });
     value = await response.json();
@@ -551,6 +661,9 @@ export async function enterFirst(
   /* Signed out, the answer is who-am-I's alone: no lease was taken, and the page draws what it drew. */
   if (me.signedIn !== true) return me.signedIn === false && value.status === 'signed_out' ? me : undefined;
   if (me.tenant !== true || typeof me.accountId !== 'string' || response.headers.get(names.account) !== me.accountId) return undefined;
+  /* Re-entered, only for the account whose choices this tab holds: else the page enters afresh. Not re-entered, the
+     host entered it as any other request (a context it no longer holds), and that answer is the page's. */
+  if (reenter && value.reentered === true && !heldChoices(appId, me.accountId)) return undefined;
   firstEntry = { value, response, me, sent };
   return me;
 }
@@ -707,7 +820,7 @@ export async function tenantBootReply(
   const snapshot = captureSessionIdentity();
   const owner = selected(snapshot);
   const address = `${TENANT_BOOT_PATH}?${new URLSearchParams({ app: owner.appId, ...selector(owner.tenantId) })}`;
-  const { response, value } = await request(snapshot, address, { path, search }, owner, undefined, true, undefined);
+  const { response, value } = await request(snapshot, address, { path, search, ...pageLoadHints(path) }, owner, undefined, true, undefined);
   return response.ok && currentLease(snapshot, owner) && owns(response.headers, owner) ? { value, owner } : undefined;
 }
 /** An answer the boot carried, read on `owner`'s context: taken only on that same context. */

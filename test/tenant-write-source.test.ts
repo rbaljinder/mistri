@@ -408,9 +408,11 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       ],
       ...(postgres
         ? [
+            // An exclusion constraint holds within one tenant only where it compares the tenant's column, as each statement runs.
+            ['exclusion constraint across tenants', 'ALTER TABLE db_item ADD CONSTRAINT exclusive_name EXCLUDE USING btree (name WITH =)'],
             [
-              'exclusion constraint',
-              'ALTER TABLE db_item ADD CONSTRAINT exclusive_name EXCLUDE USING btree (tenant_id WITH =, name WITH =)',
+              'deferrable exclusion constraint',
+              'ALTER TABLE db_item ADD CONSTRAINT exclusive_name EXCLUDE USING btree (tenant_id WITH =, name WITH =) DEFERRABLE',
             ],
             ['case-folding opaque key', `ALTER TABLE db_note ALTER COLUMN id TYPE text COLLATE ${CASE_INSENSITIVE}`],
             ['case-folding ownership column', `ALTER TABLE db_note ALTER COLUMN tenant_id TYPE text COLLATE ${CASE_INSENSITIVE}`],
@@ -423,6 +425,24 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         assert.equal(await f.name(), 'Original');
       });
     }
+
+    /* What holds an App's `noOverlap` (shared/appDataRules.ts): two rows it finds in conflict are one tenant's. */
+    test(
+      "an exclusion constraint that compares the tenant column is one tenant's, and the source opens",
+      { skip: !postgres },
+      async (t) => {
+        const f = await fixture(
+          t,
+          dialect,
+          'ALTER TABLE db_item ADD CONSTRAINT exclusive_name EXCLUDE USING btree (tenant_id WITH =, name WITH =)',
+        );
+        const source = await f.open();
+        for (const tenantId of ['north', 'south'])
+          await source.transaction(await f.evidence(tenantId), allow, (tx) =>
+            tx.insert({ table: 'item', values: { id: `${tenantId}-excluded`, name: 'One per tenant' } }),
+          );
+      },
+    );
 
     for (const [label, violate] of [
       ['cross-tenant update key', (tx: WriteTransaction) => tx.update({ ...changed, key: { id: 'south-row' } })],

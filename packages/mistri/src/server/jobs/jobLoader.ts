@@ -58,7 +58,7 @@ import { decisionCommandProblems, describeDecisions } from '../decide/decisionCh
 
 /** The App's timers: each machine state's wait (appMachine.ts `after`), counted from the machine's `since`, and each
  * resource's instant (appAt.ts `at`), due once the column's time has come and its `when` holds. */
-export function machineTimers(app: AppDef): (MachineTimer & { command: string })[] {
+export function machineTimers(app: AppDef): (MachineTimer & { command: string; failed?: string })[] {
   return Object.entries(app.resources ?? {}).flatMap(([resource, def]) => {
     const machine = def.machine;
     /* An `at` timer is one whose stay is the instant itself: due once it has come, and once per instant the column holds. */
@@ -81,6 +81,7 @@ export function machineTimers(app: AppDef): (MachineTimer & { command: string })
           : {}),
       ...(timer.when === undefined ? {} : { when: timer.when }),
       command: timer.command,
+      ...(timer.failed === undefined ? {} : { failed: timer.failed }),
     }));
     if (!machine) return at;
     return [
@@ -103,6 +104,17 @@ export function machineTimers(app: AppDef): (MachineTimer & { command: string })
       ),
       ...at,
     ];
+  });
+}
+
+/** Whether a timer's `failed` command declares what it is told: `code`, the refusal's, and `message`, its sentence, as text. */
+function takesRefusal(command: { readonly input?: unknown }): boolean {
+  const input = command.input;
+  if (!input || typeof input !== 'object') return false;
+  const fields = input as Record<string, { type?: unknown } | undefined>;
+  return ['code', 'message'].every((name) => {
+    const type = Object.hasOwn(fields, name) ? fields[name]?.type : undefined;
+    return type === 'text' || type === 'textarea';
   });
 }
 
@@ -239,6 +251,12 @@ export function jobDeployment(
     if (job.timer) {
       if (runs.targets === 'none')
         refuse(`${saidTimer(job.timer, job.command.id)}; a timer's command acts on the record, so it names one.`);
+      /* A timer's `failed` command is told why in words, and a command refuses an input it does not declare. */
+      if (job.timer.failedOf !== undefined && !takesRefusal(runs))
+        refuse(
+          `${saidTimer(job.timer, job.command.id)}, and "${job.command.id}" does not declare the text inputs "code" and "message" [at-failed]: ` +
+            `it is given the refusal's code and its sentence, to keep on the record.`,
+        );
       continue;
     }
     const from = command(job.from!, `job "${job.id}" starts on command`);
@@ -605,7 +623,7 @@ export function describeJobs(module: CapturedJobModule): string[] {
   return [
     ...[...module.jobs.values()].map((job) =>
       job.timer
-        ? `jobs: ${job.id}@${job.version} ${job.timer.at ? `${job.timer.ms ? job.timer.after : `at ${job.timer.at}`} in ${job.timer.resource}${job.timer.when === undefined ? '' : ` when ${job.timer.when}`}` : `after ${job.timer.after} in ${job.timer.resource} "${job.timer.state}"`} → ${pinned(job.command)} as ${job.runAs}`
+        ? `jobs: ${job.id}@${job.version} ${job.timer.at ? `${job.timer.ms ? job.timer.after : `at ${job.timer.at}`} in ${job.timer.resource}${job.timer.when === undefined ? '' : ` when ${job.timer.when}`}` : `after ${job.timer.after} in ${job.timer.resource} "${job.timer.state}"`}${job.timer.failedOf === undefined ? '' : `, once ${job.timer.failedOf} is refused`} → ${pinned(job.command)} as ${job.runAs}`
         : job.every
           ? `jobs: ${job.id}@${job.version} every ${job.every.column === undefined ? '' : `${job.every.column}, else `}"${job.every.text}" (${job.every.tenantZone ? "each tenant's zone" : job.every.timezone})${job.realm === 'tenant' ? ' per tenant' : job.realm === 'platform' ? ' on the platform' : ''} → ${pinned(job.command)} as ${job.runAs}`
           : `jobs: ${job.id}@${job.version} on ${job.event!.name}@${job.event!.version} (${pinned(job.from!)}) → ${pinned(job.command)} as ${job.runAs}`,

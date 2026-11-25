@@ -43,6 +43,15 @@ CREATE TABLE service (
 );
 CREATE TABLE visit_request (id TEXT NOT NULL PRIMARY KEY, clinic_id TEXT NOT NULL REFERENCES clinic (id), name TEXT NOT NULL, phone TEXT NOT NULL, note TEXT);
 CREATE TABLE notice (id TEXT NOT NULL PRIMARY KEY, clinic_id TEXT NOT NULL REFERENCES clinic (id), body TEXT NOT NULL);
+CREATE TABLE room_booking (
+  id TEXT NOT NULL PRIMARY KEY,
+  clinic_id TEXT NOT NULL REFERENCES clinic (id),
+  room TEXT NOT NULL,
+  starts_at TIMESTAMP NOT NULL,
+  ends_at TIMESTAMP NOT NULL,
+  status TEXT NOT NULL DEFAULT 'booked' CHECK (status IN ('booked', 'cancelled')),
+  CONSTRAINT room_booking_runs_forward CHECK (ends_at > starts_at)
+);
 CREATE TABLE triage (id TEXT NOT NULL PRIMARY KEY, name TEXT NOT NULL, phone TEXT NOT NULL, note TEXT);
 CREATE INDEX patient_clinic ON patient (clinic_id);
 CREATE INDEX appointment_clinic ON appointment (clinic_id);
@@ -52,6 +61,16 @@ CREATE INDEX payment_appointment ON payment (appointment_id);
 CREATE INDEX service_clinic ON service (clinic_id);
 CREATE INDEX visit_request_clinic ON visit_request (clinic_id);
 CREATE INDEX notice_clinic ON notice (clinic_id);
+CREATE INDEX room_booking_clinic ON room_booking (clinic_id);
+`;
+
+/* What holds the App's `noOverlap` on room_booking under several writers, where only the database can: one room, one
+   time, within a clinic. `mistri check` prints this statement when the declared rule has no constraint behind it.
+   SQLite has no such constraint; there the App's write layer reads for a meeting booking in the write's transaction. */
+const ROOM_FREE = `
+CREATE EXTENSION IF NOT EXISTS btree_gist;
+ALTER TABLE room_booking ADD CONSTRAINT room_booking_no_overlap
+  EXCLUDE USING gist (clinic_id WITH =, room WITH =, tsrange(starts_at, ends_at) WITH &&) WHERE (status <> 'cancelled');
 `;
 
 const quote = (value) => (value === null ? 'NULL' : typeof value === 'number' ? String(value) : `'${String(value).replaceAll("'", "''")}'`);
@@ -81,9 +100,17 @@ function rows() {
     { id: 'sv-north-internal', clinic_id: 'north', name: 'North staff screening', price_cents: 0, published: 0 },
     { id: 'sv-south-checkup', clinic_id: 'south', name: 'South check-up', price_cents: 9000, published: 1 },
   ];
-  return [insert('clinic', clinics), insert('patient', patients), insert('appointment', appointments), insert('service', services)].join(
-    '\n',
-  );
+  const bookings = [
+    { id: 'rb-north-1', clinic_id: 'north', room: 'A', starts_at: '2026-11-02 09:00:00', ends_at: '2026-11-02 10:00:00', status: 'booked' },
+    { id: 'rb-south-1', clinic_id: 'south', room: 'A', starts_at: '2026-11-02 09:00:00', ends_at: '2026-11-02 10:00:00', status: 'booked' },
+  ];
+  return [
+    insert('clinic', clinics),
+    insert('patient', patients),
+    insert('appointment', appointments),
+    insert('service', services),
+    insert('room_booking', bookings),
+  ].join('\n');
 }
 
 /** A new SQLite file with the clinic's tables and rows. */
@@ -98,5 +125,5 @@ export function seedSqlite(file) {
 
 /** The clinic's tables and rows in an empty PostgreSQL database, through a `pg` client the caller connected. */
 export async function seedPostgres(client) {
-  await client.query(`${TABLES}\n${rows()}`);
+  await client.query(`${TABLES}\n${ROOM_FREE}\n${rows()}`);
 }

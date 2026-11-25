@@ -79,6 +79,8 @@ export type TestReadAudit = StoredReadAudit;
 export interface TestJobRun {
   state: string;
   code: string | null;
+  /** A timer's (`at-<resource>-<column>`): how many records it found due and ran. */
+  ran?: number;
 }
 /** What `host.service(tenant, role).run` names beside the command and its input. */
 export interface TestServiceRunOptions {
@@ -447,7 +449,9 @@ function setup(url: string, control: string) {
     /**
      * A job at times (`every`) run once now, as its next slot would run it: the same principal, grants and command,
      * on the server's clock. Resolves when its first attempt ends, with how it ended. A tenant App's job per tenant
-     * runs for the `tenant` named, as that tenant's slot would; a job on the platform takes none.
+     * runs for the `tenant` named, as that tenant's slot would; a job on the platform takes none. A resource's timer
+     * (`at-<resource>-<column>`, the id `mistri check` prints) is swept now instead and every record it finds due is
+     * run, page after page, each its own command: `ran` says how many, and the state is the first that did not succeed.
      */
     runJob: (job: string, options: { timeoutMs?: number; tenant?: string } = {}): Promise<TestJobRun> =>
       ask<TestJobRun>(

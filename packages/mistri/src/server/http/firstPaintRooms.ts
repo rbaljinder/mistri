@@ -26,6 +26,7 @@ import {
 } from '@mistriwork/engine/shared/listQuestion.js';
 import { LIST_PAGE_SIZE, NAV_COUNT_LIMIT } from '@mistriwork/engine/shared/reads.js';
 import { RECORD_COMPOSE_PATH } from '@mistriwork/engine/shared/recordReads.js';
+import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import type { PageDef } from '@mistriwork/engine/shared/page.js';
 import { andQuery, quoteValue } from '@mistriwork/engine/shared/query.js';
 import {
@@ -105,6 +106,61 @@ export function roomReads(input: RoomInput): RoomPlan {
     dashboardReads(input, rules, parsed.target.view, plan);
   if (parsed.kind === 'record' && !parsed.natural) recordReads(input, parsed, plan);
   return plan;
+}
+
+/* A free-form page's manifest as the payload serves it (shared/appModel.ts AppPageManifest): what its loads read. */
+type LoadedPage = {
+  params?: readonly string[];
+  loader?: string;
+  loaders?: readonly string[];
+  loaderParams?: Record<string, readonly string[]>;
+};
+
+/**
+ * The loads a free-form page asks as it opens (`POST /api/pages/load`), for the page the address opens: its `loader`,
+ * whose result is the page's `data` and which it always asks, and of its other `loaders` only those in `named`. The
+ * server cannot tell which of those a page holds back (`useLoader(name, { enabled: false })`), so it plans none by
+ * itself: the page's browser says which it asked as it last opened (client pageLoadHints.ts), and a name the page
+ * does not list is no load at all.
+ *
+ * Each is asked as the page asks it (client sdk/hooks.ts `pageLoadPlace`): the parameters the address says, of those
+ * the page keeps, and of those the ones the loader says it reads. An answer is taken only by the very request it
+ * answers, so a place read otherwise here is a read the page makes itself, never a wrong one; a value the address
+ * cannot carry whole in a page's slot (a `;`) plans nothing.
+ */
+export function pageLoads(input: RoomInput, named: readonly string[] = []): RoomRead[] {
+  const { payload } = input;
+  const segments = input.path.split('/').filter(Boolean).slice(1);
+  let key: string | undefined;
+  if (!segments.length) key = payload.home !== undefined && !listView(payload, payload.home) ? payload.home : undefined;
+  else {
+    const parsed = readRoom(input, segments);
+    if (parsed?.kind === 'route' && parsed.target.kind === 'dashboard') key = parsed.target.view;
+  }
+  const page =
+    key !== undefined && Object.hasOwn(payload.views, key) ? (payload.views[key] as unknown as { page?: LoadedPage }).page : undefined;
+  if (key === undefined || !page) return [];
+  const said = new URLSearchParams(input.search);
+  const place: Record<string, string> = {};
+  for (const name of page.params ?? []) {
+    const value = said.get(name);
+    if (value === null) continue;
+    if (value.includes(';')) return [];
+    place[name] = value;
+  }
+  const placeOf = (loader: string) => {
+    const read = page.loaderParams && Object.hasOwn(page.loaderParams, loader) ? page.loaderParams[loader] : undefined;
+    return read ? Object.fromEntries(Object.entries(place).filter(([name]) => read.includes(name))) : place;
+  };
+  const loaders = [
+    ...(page.loader === undefined ? [] : [page.loader]),
+    ...named.filter((name, at) => name !== page.loader && page.loaders?.includes(name) && named.indexOf(name) === at),
+  ];
+  return loaders.map((loader) => ({
+    method: 'POST' as const,
+    target: PAGE_LOAD_PATH,
+    body: { page: key, params: placeOf(loader), loader },
+  }));
 }
 
 /** What an address's segments past the App open, read as the client's rooms read them (appAddress.ts). */

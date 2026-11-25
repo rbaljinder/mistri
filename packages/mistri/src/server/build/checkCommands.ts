@@ -4,6 +4,7 @@ import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { genericWriteOf } from '../commands/genericWriteBrand.js';
 import { flowCommandOf } from '../commands/flowCommandBrand.js';
 import { callerMustRead, type BusinessCommandRegistry } from '../commands/businessCommands.js';
+import type { PageLoader } from '../commands/pageLoaders.js';
 import { appCommandGrants, logicalResource, resolveAppAccess, type AppDef } from '../../shared/app.js';
 
 /**
@@ -31,6 +32,42 @@ export function commandElevations(app: AppDef, commands: BusinessCommandRegistry
         `command "${id}" reads ${tables.map((table) => `"${table}"`).join(', ')} under its own authority` +
         (blind.length ? `, for role${blind.length === 1 ? '' : 's'} ${blind.map((role) => `"${role}"`).join(', ')}` : '')
       );
+    });
+}
+
+/**
+ * Every read a page's loader makes under the App's authority rather than its reader's (`defineLoader({ elevate })`),
+ * beside the commands' in `check --design`: which tables, on which pages, and which roles those pages are offered to
+ * would not read them otherwise. A loader no page names never runs, and is not listed.
+ */
+export function loaderElevations(
+  app: AppDef,
+  loaders: Readonly<Record<string, PageLoader>> | undefined,
+  schema: DatabaseSchema | undefined,
+): string[] {
+  return Object.entries(loaders ?? {})
+    .filter(([, loader]) => loader.elevate?.read.length)
+    .flatMap(([name, loader]) => {
+      const tables = loader.elevate!.read.map((local) => (loader.source ? logicalResource(app, loader.source, local) : local));
+      const pages = Object.entries(app.views).filter(
+        ([, view]) => 'sections' in view && view.page && [view.page.loader, ...(view.page.loaders ?? [])].includes(name),
+      );
+      if (!pages.length) return [];
+      const offered = [...new Set(pages.flatMap(([, view]) => (view as { roles?: string[] }).roles ?? []))];
+      const blind = schema
+        ? offered.filter((role) => {
+            try {
+              const readable = resolveAppAccess(app, schema, [role]).readable;
+              return tables.some((table) => !readable.has(table));
+            } catch {
+              return false;
+            }
+          })
+        : [];
+      return [
+        `loader "${name}" (${pages.map(([key]) => `page "${key}"`).join(', ')}) reads ${tables.map((table) => `"${table}"`).join(', ')} under its own authority` +
+          (blind.length ? `, for role${blind.length === 1 ? '' : 's'} ${blind.map((role) => `"${role}"`).join(', ')}` : ''),
+      ];
     });
 }
 

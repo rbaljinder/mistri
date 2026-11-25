@@ -476,10 +476,16 @@ test('a resource runs a command at an instant the record keeps, and a state take
   assert.throws(resourceAt({ 'moved at': 'expire' }), /"moved at": name a date or timestamp column/);
   assert.throws(
     resourceAt({ moved_at: { command: 'expire', every: 'day' } }),
-    /has no "every". A timer takes command, when, and before or after/,
+    /has no "every". A timer takes command, when, before or after, and failed/,
   );
   assert.throws(resourceAt({ moved_at: { command: 'expire', when: ' ' } }), /has a "when" that is not conditions/);
   assert.throws(resourceAt({}), /"at" is not \{ due_at: 'aCommand' \}/);
+  // A timer's failed is another of the App's commands: the one that keeps the refusal on the record.
+  assert.throws(
+    resourceAt({ moved_at: { command: 'expire', failed: 'expier' } }),
+    /failed "expier": name another of the App's commands.*\[at-failed\]/,
+  );
+  assert.throws(resourceAt({ moved_at: { command: 'expire', failed: 'expire' } }), /\[at-failed\]/);
   // A timer may come due a while before or after its instant, and a column with several takes a list.
   const offsets = parseAppConfig(
     {

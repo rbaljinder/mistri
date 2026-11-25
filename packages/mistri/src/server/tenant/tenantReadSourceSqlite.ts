@@ -108,6 +108,8 @@ import {
   intakeResolution,
   intakeResolutionByTenant,
   type TenantNamesLookup,
+  type TenantMarks,
+  type TenantMarksLookup,
   namesLookup,
   sources,
   refusedBefore,
@@ -403,6 +405,24 @@ export function openSqliteTenantReadSource(
         return refusedBefore(error);
       }
     };
+    /* The names and a tenant's own addresses, each read in the snapshot its caller holds (`invoke`). */
+    const namesOf = (query: TenantNamesLookup): Readonly<Record<string, string>> => {
+      const asked = namesLookup(owned, query);
+      if (!asked) return Object.freeze({});
+      const rows = db.prepare(tenantNamesQuery(owned, asked.plan, asked.tenants.length)).all(...asked.tenants);
+      return tenantNamesOf(asked.plan, rows as Record<string, unknown>[], asked.tenants);
+    };
+    const addressesOf = (query: TenantAddressesLookup): TenantAddresses => {
+      const { tenantId, columns } = captureAddressesLookup(owned, query);
+      const found: Record<string, string> = {};
+      for (const [kind, column] of Object.entries(columns)) {
+        if (column === undefined) continue;
+        const address = heldAddress(db.prepare(tenantAddressQuery(owned, column)).all(tenantId) as Record<string, unknown>[]);
+        const own = address && tenantOwnAddress(tenantId, address, db.prepare(intakeAddressQuery(owned, column)).all(address));
+        if (own) found[kind] = own;
+      }
+      return Object.freeze(found) as TenantAddresses;
+    };
     const source: TenantReadSource = Object.freeze({
       ownership: owned,
       readMembership: (lookup: TenantMembershipLookup) => invoke(lookup, (query) => readSqliteTenantMembershipSnapshot(db, owner, query)),
@@ -448,6 +468,17 @@ export function openSqliteTenantReadSource(
       lastWave: () => {},
       readPlatformMembership: (lookup: PlatformMembershipLookup) =>
         invoke(lookup, (query) => readSqlitePlatformMembershipSnapshot(db, owner, query)),
+      readMembershipsWithPlatform: (lookup: TenantMembershipListLookup, platform: PlatformMembershipLookup) =>
+        invoke({ lookup, platform }, (query) =>
+          Object.freeze({
+            memberships: readSqliteTenantMembershipsSnapshot(db, owner, query.lookup, () => {
+              const instant = now();
+              active();
+              return instant;
+            }),
+            platform: readSqlitePlatformMembershipSnapshot(db, owner, query.platform),
+          }),
+        ),
       assertPlatformCurrent: (evidence: PlatformMembershipEvidence) => invoke(evidence, currentPlatform),
       // The source recomposes the platform scope itself: whatever a runtime
       // passes, a table the platform policy does not name stays denied.
@@ -535,24 +566,19 @@ export function openSqliteTenantReadSource(
           const value = captureIntakeTenantLookup(query, owner);
           return intakeResolutionByTenant(value.tenantId, (id) => readSqliteIntakeAnchor(db, owner, id));
         }),
-      readTenantNames: (lookup: TenantNamesLookup) =>
-        invoke(lookup, (query) => {
-          const asked = namesLookup(owned, query);
-          if (!asked) return Object.freeze({});
-          const rows = db.prepare(tenantNamesQuery(owned, asked.plan, asked.tenants.length)).all(...asked.tenants);
-          return tenantNamesOf(asked.plan, rows as Record<string, unknown>[], asked.tenants);
-        }),
-      readTenantAddresses: (lookup: TenantAddressesLookup) =>
-        invoke(lookup, (query) => {
-          const { tenantId, columns } = captureAddressesLookup(owned, query);
-          const found: Record<string, string> = {};
-          for (const [kind, column] of Object.entries(columns)) {
-            if (column === undefined) continue;
-            const address = heldAddress(db.prepare(tenantAddressQuery(owned, column)).all(tenantId) as Record<string, unknown>[]);
-            const own = address && tenantOwnAddress(tenantId, address, db.prepare(intakeAddressQuery(owned, column)).all(address));
-            if (own) found[kind] = own;
-          }
-          return Object.freeze(found) as TenantAddresses;
+      readTenantNames: (lookup: TenantNamesLookup) => invoke(lookup, namesOf),
+      readTenantAddresses: (lookup: TenantAddressesLookup) => invoke(lookup, addressesOf),
+      /* The three reads in the one snapshot `invoke` holds: on PostgreSQL they are one round trip (tenantReadSource.ts). */
+      readTenantMarks: (lookup: TenantMarksLookup) =>
+        invoke(lookup, async (query): Promise<TenantMarks> => {
+          const tenants = query.sandboxes === undefined ? [] : sandboxLookup(query.sandboxes);
+          const rows = sqliteSandboxSession(db);
+          return Object.freeze({
+            names: namesOf(query.names),
+            sandboxes:
+              tenants.length && (await sandboxStorePresent(rows)) ? await sandboxRows(rows, owner.appId).among(tenants) : new Set<string>(),
+            ...(query.addresses === undefined ? {} : { addresses: addressesOf(query.addresses) }),
+          });
         }),
       // Always a tenant's: `@platform` fails the selector.
       readTenantProfile: (lookup: TenantProfileLookup) =>

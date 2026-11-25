@@ -217,17 +217,17 @@ export function createTenantBootstrap<Request>(options: TenantBootstrapOptions<R
         if (second === null || second.id !== first.id || second.who !== first.who || second.role !== first.role) return denyTenant();
         if (guard) await guarded();
         // Whether a platform context is open to the account: advisory, as the
-        // tenant list is; opening one is its own admission. Asked beside the
+        // tenant list is; opening one is its own admission. Asked in the
         // second snapshot, under the same two verifications either way: one
-        // after the other they were one more round trip before a chooser.
-        const [final, held] = await Promise.all([
-          reader.readMemberships(lookup),
+        // after the other they were one more round trip before a chooser, and
+        // beside each other on a snapshot apiece, one more on every arrival.
+        const { memberships: final, platform: held } =
           platformRoles === undefined
-            ? undefined
-            : reader.readPlatformMembership(
+            ? { memberships: await reader.readMemberships(lookup), platform: undefined }
+            : await reader.readMembershipsWithPlatform(
+                lookup,
                 captureTenantData({ realm: 'platform' as const, appId, accountId: first.id, source, deployment }),
-              ),
-        ]);
+              );
         validate(final, check());
         if (!sameMemberships(initial, final)) return denyTenant();
         let platform = false;

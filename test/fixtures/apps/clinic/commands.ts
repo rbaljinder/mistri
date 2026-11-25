@@ -41,6 +41,25 @@ export const recordPayment = defineCommand({
   },
 });
 
+/** A room for a time. Nothing here reads whether the room is free: the resource's `noOverlap` holds that, on every door. */
+export const bookRoom = defineCommand({
+  source,
+  target: 'room_booking',
+  targets: 'none',
+  write: ['room_booking'],
+  input: {
+    room: { label: 'Room', type: 'text', max: 20 },
+    starts_at: { label: 'From', type: 'text', max: 30 },
+    ends_at: { label: 'To', type: 'text', max: 30 },
+  },
+  output: shape({ booking: text(), message: literal('Room booked.') }),
+  async handle({ db }, value) {
+    const id = `rb-${randomUUID()}`;
+    await db.room_booking.insert({ id, room: value.room, starts_at: value.starts_at, ends_at: value.ends_at, status: 'booked' });
+    return { booking: id, message: 'Room booked.' as const };
+  },
+});
+
 /** The platform's notice into one clinic, shaped as the tenant docs' seedDesk: the clinic it acts in is an input. */
 export const postNotice = defineCommand({
   realm: 'platform',
@@ -79,4 +98,4 @@ export const requestVisit = defineCommand({
   },
 });
 
-export default defineCommands({ recordPayment, postNotice, requestVisit });
+export default defineCommands({ recordPayment, bookRoom, postNotice, requestVisit });

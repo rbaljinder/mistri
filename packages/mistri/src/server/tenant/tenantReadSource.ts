@@ -1,4 +1,4 @@
-import { postgresSandboxSession, sandboxRows, sandboxStorePresent } from './tenantSandboxStore.js';
+import { postgresSandboxSession, sandboxAmongStatement, sandboxRows, sandboxStorePresent } from './tenantSandboxStore.js';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { TransactionOutcomeUnknown, type ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import type { PostgresAdapter, PostgresReadSnapshot } from '@mistriwork/engine/adapters/postgres.js';
@@ -77,6 +77,7 @@ import {
   tenantOwnAddress,
   tenantOwnAddressesStatement,
   ownAddressResolution,
+  literal,
   type TenantAddresses,
   type TenantAddressesLookup,
   type TenantProfileLookup,
@@ -105,7 +106,7 @@ import {
   type TenantLinkLookup,
 } from './tenantLinkModel.js';
 import { dueTimersPlan, type DueTimersQuery } from './tenantDueTimers.js';
-import { tenantNamesOf, tenantNamesQuery } from './tenantNames.js';
+import { tenantNamesOf, tenantNamesQuery, tenantNamesStatement } from './tenantNames.js';
 import { readPostgresActiveTenants, readPostgresIntakeAnchor } from './tenantStorePostgres.js';
 import { postgresTenantHostOps } from './tenantHostStore.js';
 import {
@@ -132,6 +133,8 @@ import {
   intakeResolution,
   intakeResolutionByTenant,
   type TenantNamesLookup,
+  type TenantMarks,
+  type TenantMarksLookup,
   namesLookup,
   sources,
   refusedBefore,
@@ -153,6 +156,8 @@ type Snapshot = PostgresReadSnapshot & {
   readonly fenced?: Readonly<{ evidence: TenantMembershipEvidence; rows: Promise<readonly Record<string, unknown>[]>; ahead: boolean }>;
   /** The rows of the statement the snapshot was begun with (`on`'s `lead`), read once its catalog had stood. */
   readonly lead?: readonly Record<string, unknown>[];
+  /** The rows of every statement it was begun with, in the order asked: `lead` is the first. */
+  readonly leads?: readonly (readonly Record<string, unknown>[])[];
   /** For a fenced snapshot asked ahead: the reader itself, for a reserved store's read (the inbox's), sent at once
    * behind the BEGIN still in flight and answered only once the catalog has stood. `client` waits to send. */
   readonly behind?: PgQuery;
@@ -165,6 +170,12 @@ interface StoreLedger {
   keep(store: string): void;
   forget(): void;
 }
+/* The statements a snapshot begins with (`on`'s `lead`): one, or several chosen once the snapshot's database is known,
+   by the stores attested on it — a statement that names a reserved store's table rides only where that store's layout
+   stands attested, since a table that is not there fails the whole message. None chosen, the snapshot begins without. */
+type Lead = string | ((stores: StoreLedger | undefined) => readonly string[] | undefined);
+/* The sandbox store in a snapshot's ledger of attested stores (`attestedStore`). */
+const SANDBOX_STORE = 'sandbox';
 
 /**
  * The PostgreSQL counterpart of openSqliteTenantReadSource: the same source
@@ -449,7 +460,7 @@ export async function openPostgresTenantReadSource(
       target: Target,
       work: (snapshot: Snapshot) => Promise<T>,
       fence?: TenantMembershipEvidence,
-      lead?: string,
+      asked?: Lead,
       /* The fence's membership is the snapshot's whole question (assertCurrent): nothing else is read on it. */
       alone = false,
       /* What the row policy reads under the backstop (tenantConnections.ts): the tenant this snapshot is for, `null`
@@ -478,7 +489,16 @@ export async function openPostgresTenantReadSource(
       const membership = fence === undefined ? undefined : postgresTenantMembershipStatement(owner, fence);
       lent.set(pool, (lent.get(pool) ?? 0) + 1);
       let flight: Attesting | undefined;
+      /* The ledger a chosen lead was chosen by: a statement of it that fails as a moved store fails one forgets them. */
+      let chosenBy: StoreLedger | undefined;
       try {
+        let leads: readonly string[] | undefined;
+        if (typeof asked === 'function') {
+          chosenBy = standing === undefined ? undefined : ledgerOf(target, pool, standing);
+          leads = asked(chosenBy);
+          if (!leads?.length) leads = undefined;
+        } else if (asked !== undefined) leads = [asked];
+        const lead = leads?.join('; ');
         if (standing === undefined && target.attesting === undefined) {
           let settle!: () => void;
           const done = new Promise<void>((resolve) => {
@@ -495,7 +515,7 @@ export async function openPostgresTenantReadSource(
         if (question !== undefined && standing !== undefined) {
           const answered = await pool.readSnapshot(
             async (lease): Promise<T | typeof MOVED> => {
-              if (lease.prologue?.length !== 2) return denyTenant();
+              if (lease.prologue?.length !== 1 + (membership !== undefined ? 1 : leads!.length)) return denyTenant();
               if (target.attested !== standing) return MOVED;
               const rows = lease.prologue[1]!.rows;
               const result = await work(
@@ -505,7 +525,7 @@ export async function openPostgresTenantReadSource(
                   execute: lease.execute,
                   ...(membership !== undefined
                     ? { fenced: Object.freeze({ evidence: fence!, rows: Promise.resolve(rows), ahead: true }) }
-                    : { lead: rows }),
+                    : { lead: rows, leads: lease.prologue.slice(1).map((answer) => answer.rows) }),
                 }),
               );
               active();
@@ -585,7 +605,7 @@ export async function openPostgresTenantReadSource(
           return await pool.readSnapshot(
             async (lease) => {
               const begun = standing === undefined ? 2 : 1;
-              if (lease.prologue?.length !== begun + 1) return denyTenant();
+              if (lease.prologue?.length !== begun + leads!.length) return denyTenant();
               const store = await assertCatalog(
                 Object.freeze({ ...lease, prologue: lease.prologue.slice(0, begun) }),
                 target,
@@ -599,6 +619,7 @@ export async function openPostgresTenantReadSource(
                   describe: lease.describe,
                   execute: lease.execute,
                   lead: rows,
+                  leads: lease.prologue.slice(begun).map((answer) => answer.rows),
                   ...(standing === undefined ? {} : { stores: ledgerOf(target, pool, standing) }),
                 }),
               );
@@ -671,6 +692,7 @@ export async function openPostgresTenantReadSource(
         );
       } catch (error) {
         if (schemaMoved(error)) target.attested = target.checked = undefined;
+        if (chosenBy && suspectsStores(error)) chosenBy.forget();
         if (error instanceof TransactionOutcomeUnknown) renew(target, pool);
         throw error;
       } finally {
@@ -689,7 +711,7 @@ export async function openPostgresTenantReadSource(
       target: Target,
       work: (snapshot: Snapshot) => Promise<T>,
       fence?: TenantMembershipEvidence,
-      lead?: string,
+      lead?: Lead,
       alone = false,
       tenant?: string | null,
     ): Promise<T> => {
@@ -709,7 +731,7 @@ export async function openPostgresTenantReadSource(
     const snapshot = async <T>(
       work: (snapshot: Snapshot) => Promise<T>,
       fence?: TenantMembershipEvidence,
-      lead?: string,
+      lead?: Lead,
       alone = false,
       route?: Route,
     ): Promise<T> => {
@@ -727,7 +749,7 @@ export async function openPostgresTenantReadSource(
       work: (captured: A, lease: Snapshot) => R | Promise<R>,
       fence?: (captured: A) => TenantMembershipEvidence,
       /* The statement the snapshot begins with, its rows the work's `lease.lead` (`on`). */
-      lead?: (captured: A) => string,
+      lead?: (captured: A) => Lead,
       /* The fence's membership is all the work reads (`on`'s `alone`). */
       alone = false,
       /* Where the snapshot reads (`snapshot`'s `route`). Left out, a backstop's adapter refuses before anything is sent. */
@@ -765,6 +787,41 @@ export async function openPostgresTenantReadSource(
       const instant = now();
       active();
       return instant;
+    };
+    /* A tenant's own addresses from `tenantOwnAddressesStatement`'s rows: each kind's held address, where it resolves
+       back to this tenant alone. */
+    const ownAddresses = (lookup: TenantAddressesLookup, rows: readonly Record<string, unknown>[]): TenantAddresses => {
+      const found: Record<string, string> = {};
+      for (const kind of Object.keys(lookup.columns)) {
+        if (lookup.columns[kind as keyof typeof lookup.columns] === undefined) continue;
+        const own = rows.filter((row) => row.kind === kind);
+        const address = heldAddress(own);
+        const mine = address && tenantOwnAddress(lookup.tenantId, address, ownAddressResolution(own));
+        if (mine) found[kind] = mine;
+      }
+      return Object.freeze(found) as TenantAddresses;
+    };
+    /* What an arrival's marks ask (`readTenantMarks`), each part checked as its own read checks it, and the
+       statements they are sent as, in the one order their answers are read in: names, addresses, sandboxes. Asked
+       with the sandbox store unattested, no statement at all: the store's layout is read first, on the snapshot. */
+    const marksAsked = (query: TenantMarksLookup) => {
+      const names = namesLookup(owned, query.names);
+      const addresses = query.addresses === undefined ? undefined : captureAddressesLookup(owned, query.addresses);
+      const tenants = query.sandboxes === undefined ? [] : sandboxLookup(query.sandboxes);
+      const sandboxes = tenants.length ? tenants : undefined;
+      return {
+        names,
+        addresses,
+        sandboxes,
+        statements: (sandboxStoreAttested: boolean): readonly string[] | undefined =>
+          sandboxes && !sandboxStoreAttested
+            ? undefined
+            : [
+                ...(names ? [tenantNamesStatement(owned, names.plan, names.tenants)] : []),
+                ...(addresses ? [tenantOwnAddressesStatement(owned, addresses) ?? denyTenant()] : []),
+                ...(sandboxes ? [sandboxAmongStatement(owner.appId, sandboxes, literal)] : []),
+              ],
+      };
     };
     const current = async (lease: Snapshot, evidence: TenantMembershipEvidence) => {
       /* Read as the snapshot began, where it was begun for this evidence; asked in its turn otherwise. */
@@ -1350,6 +1407,31 @@ export async function openPostgresTenantReadSource(
           false,
           () => null,
         ),
+      /* Both statements in the message that begins the snapshot, each answer judged as its own read judges it: the
+         two were asked at once on a snapshot apiece, a round trip and a reader more on every arrival. */
+      readMembershipsWithPlatform: (lookup: TenantMembershipListLookup, platform: PlatformMembershipLookup) => {
+        let asked: { readonly sql: string; readonly instant: number } | undefined;
+        return invoke(
+          { lookup, platform },
+          (query, lease) => {
+            if (lease.leads?.length !== 2) return denyTenant();
+            return Object.freeze({
+              memberships: postgresTenantMembershipsRows(owner, query.lookup, lease.leads[0]!, asked!.instant, clock),
+              platform: postgresPlatformMembershipRows(owner, query.platform, lease.leads[1]!),
+            });
+          },
+          undefined,
+          (query) => {
+            const statements = [
+              (asked = postgresTenantMembershipsStatement(owner, query.lookup, clock)).sql,
+              postgresPlatformMembershipStatement(owner, query.platform),
+            ];
+            return () => statements;
+          },
+          false,
+          () => null,
+        );
+      },
       /* The platform's realm reads every tenant's rows its scope reaches, so it reads as the owner. */
       assertPlatformCurrent: (evidence: PlatformMembershipEvidence) =>
         invoke(
@@ -1536,17 +1618,23 @@ export async function openPostgresTenantReadSource(
           () => OWNER,
         ),
       /* What the platform and the jobs read across tenants by design (docs/postgresql.md): as the owner. */
+      /* The names in the message that begins the snapshot (`lead`), as the addresses below: one round trip, where
+         the read behind its BEGIN and the COMMIT after it were two. */
       readTenantNames: (lookup: TenantNamesLookup) =>
         invoke(
           lookup,
           async (query, lease) => {
             const asked = namesLookup(owned, query);
             if (!asked) return Object.freeze({});
-            const { rows } = await lease.client.query(tenantNamesQuery(owned, asked.plan, asked.tenants.length), [asked.tenants]);
+            const rows =
+              lease.lead ?? (await lease.client.query(tenantNamesQuery(owned, asked.plan, asked.tenants.length), [asked.tenants])).rows;
             return tenantNamesOf(asked.plan, rows, asked.tenants);
           },
           undefined,
-          undefined,
+          (query) => () => {
+            const asked = namesLookup(owned, query);
+            return asked && [tenantNamesStatement(owned, asked.plan, asked.tenants)];
+          },
           false,
           () => OWNER,
         ),
@@ -1555,20 +1643,67 @@ export async function openPostgresTenantReadSource(
       readTenantAddresses: (lookup: TenantAddressesLookup) =>
         invoke(
           lookup,
-          (query, lease) => {
-            const { tenantId, columns } = captureAddressesLookup(owned, query);
-            const found: Record<string, string> = {};
-            for (const kind of Object.keys(columns)) {
-              if (columns[kind as keyof typeof columns] === undefined) continue;
-              const rows = (lease.lead ?? denyTenant()).filter((row) => row.kind === kind);
-              const address = heldAddress(rows);
-              const own = address && tenantOwnAddress(tenantId, address, ownAddressResolution(rows));
-              if (own) found[kind] = own;
-            }
-            return Object.freeze(found) as TenantAddresses;
-          },
+          (query, lease) => ownAddresses(captureAddressesLookup(owned, query), lease.lead ?? denyTenant()),
           undefined,
           (query) => tenantOwnAddressesStatement(owned, captureAddressesLookup(owned, query)) ?? denyTenant(),
+          false,
+          () => OWNER,
+        ),
+      /* What an arrival asks before anyone is admitted, in one message: the names, the entered tenant's addresses
+         and which of the tenants are sandboxes, each the statement its own read sends, behind one BEGIN and ended by
+         one COMMIT (`lead`). Each on a snapshot of its own was a flight for the names and one for their COMMIT, one
+         for the addresses, and four for the sandboxes (the store's layout, its version, the rows, the COMMIT): seven
+         before a chooser could draw, on every page load. The sandbox statement names the store's table, so it rides
+         only where the store's layout stands attested on this database (`Lead`); until then, and wherever the
+         catalog is attested afresh, the three are asked on the snapshot in their turn, the store attested in full. */
+      readTenantMarks: (lookup: TenantMarksLookup) =>
+        invoke(
+          lookup,
+          async (query, lease): Promise<TenantMarks> => {
+            const asked = marksAsked(query);
+            let nameRows: readonly Record<string, unknown>[] = [];
+            let addressRows: readonly Record<string, unknown>[] = [];
+            let sandboxes: ReadonlySet<string> = new Set<string>();
+            if (lease.leads) {
+              const answers = [...lease.leads];
+              if (answers.length !== asked.statements(true)?.length) return denyTenant();
+              if (asked.names) nameRows = answers.shift()!;
+              if (asked.addresses) addressRows = answers.shift()!;
+              if (asked.sandboxes) sandboxes = new Set(answers.shift()!.map((row) => String(row.tenant_id)));
+            } else {
+              const names = asked.names;
+              [nameRows, addressRows, sandboxes] = await Promise.all([
+                names
+                  ? lease.client
+                      .query(tenantNamesQuery(owned, names.plan, names.tenants.length), [names.tenants])
+                      .then((answer) => answer.rows)
+                  : nameRows,
+                asked.addresses
+                  ? lease.client.query(tenantOwnAddressesStatement(owned, asked.addresses) ?? denyTenant()).then((answer) => answer.rows)
+                  : addressRows,
+                asked.sandboxes
+                  ? (async () => {
+                      const rows = postgresSandboxSession(lease.client);
+                      if (!(await sandboxStorePresent(rows))) return new Set<string>();
+                      const found = await sandboxRows(rows, owner.appId).among(asked.sandboxes!);
+                      /* Attested in full just now, on this snapshot: the next arrival's statement may name it. */
+                      lease.stores?.keep(SANDBOX_STORE);
+                      return found;
+                    })()
+                  : sandboxes,
+              ]);
+            }
+            return Object.freeze({
+              names: asked.names ? tenantNamesOf(asked.names.plan, nameRows, asked.names.tenants) : Object.freeze({}),
+              sandboxes,
+              ...(asked.addresses ? { addresses: ownAddresses(asked.addresses, addressRows) } : {}),
+            });
+          },
+          undefined,
+          (query) => (stores) => {
+            const asked = marksAsked(query);
+            return asked.statements(stores?.has(SANDBOX_STORE) === true);
+          },
           false,
           () => OWNER,
         ),

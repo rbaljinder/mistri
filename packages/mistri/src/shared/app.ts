@@ -61,6 +61,7 @@ export { zonedNow } from './appZone.js';
 export { segmentProblems, servedSegments } from './appSegments.js';
 import { tabNameProblem } from './appSegments.js';
 export { appConsumesRules } from './appConsumes.js';
+export { appDataRules } from './appDataRules.js';
 import { ANYONE, andQuery, expandSegments, parseQuery, saidAt, topLevelConditions } from '@mistriwork/engine/shared/query.js';
 import { funnelChains, funnelText } from '@mistriwork/engine/shared/funnel.js';
 import { parseViewQuery, resolvePath, tryResolvePath } from '@mistriwork/engine/shared/view.js';
@@ -1543,6 +1544,11 @@ function resolveDashboard(
               if (!table) problems.push(`The page reads "${name}", which this connection does not have or this reader cannot read.`);
               return table?.id ?? name;
             }),
+            /* An optional read is no gate: one this reader's catalog lacks stays by its name, so the page knows the read
+               is its own to ask, and the server answers it `refused` (http/pageLoad.ts). */
+            ...(entry.page.optionalReads
+              ? { optionalReads: entry.page.optionalReads.map((name) => tableNamed(schema, name)?.id ?? name) }
+              : {}),
             // A record's tab is matched to the record page by its table's id, as the page's reads are.
             ...(entry.page.record
               ? { record: { ...entry.page.record, table: tableNamed(schema, entry.page.record.table)?.id ?? entry.page.record.table } }

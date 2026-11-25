@@ -6,6 +6,10 @@
  * account with no grant on this tenant sees a team it cannot manage (`canManage: false`, nothing listed that the
  * routes would not list it). Nothing here is authority; every request is judged on the server.
  *
+ * A reader those routes list nothing for (a member who does not manage the team) is read the members' names instead,
+ * over the tenant's own lease (/api/team, server tenantTeamRoute.ts): a name and the ids a pick is stored by, never
+ * an address or a role. `read` says which of the two a team is, or that neither answered.
+ *
  * Outside a tenant App (no tenant lease) the team is empty and nothing is requested.
  */
 import { captureAccountIdentity, type SessionIdentitySnapshot } from '@mistriwork/kit/client/sessionIdentity.js';
@@ -17,7 +21,8 @@ import {
   listAdministrationTenants,
   openAdministration,
 } from './tenantAdministration.js';
-import { EMPTY_TEAM, type TeamAccess, type TeamRead } from './teamTypes.js';
+import { api } from '@mistriwork/kit/client/core.js';
+import { EMPTY_TEAM, initialsOf, type TeamAccess, type TeamMember, type TeamRead } from './teamTypes.js';
 import { executeInvitation, listInvitations, listInvitationTargets, openInvitationIssuer } from './tenantInvitations.js';
 import { say } from './copy/tenancy/teamAccess.js';
 
@@ -137,20 +142,48 @@ export function createTeamAccess(): TeamAccess {
     return (held = next);
   };
 
+  /* The members' names, for a reader the administration lists nothing for. Each row is read field by field: whatever
+     else a reply carried is not passed on. A refusal, or an App that keeps no such read, is no list. */
+  const names = async (): Promise<TeamMember[] | null> => {
+    let reply: unknown;
+    try {
+      reply = await api('/api/team', {});
+    } catch {
+      return null;
+    }
+    const rows = (reply as { members?: unknown } | null)?.members;
+    if (!Array.isArray(rows)) return null;
+    return rows.flatMap((row: { id?: unknown; account?: unknown; name?: unknown; you?: unknown }) => {
+      if (typeof row?.id !== 'string' || typeof row.account !== 'string') return [];
+      const name = typeof row.name === 'string' ? row.name : '';
+      return [{ id: row.id, account: row.account, name, initials: initialsOf(name), email: '', role: '', you: row.you === true }];
+    });
+  };
+
   const read = async (): Promise<TeamRead> => {
     const now = await load();
     if (!now) return EMPTY_TEAM;
     const roles = [...new Set([...now.adminRoles.replace, ...now.inviteRoles.issue, ...now.adminRoles.revoke, ...now.inviteRoles.reissue])];
+    const canManage =
+      now.adminRoles.replace.length + now.adminRoles.revoke.length + now.inviteRoles.issue.length + now.inviteRoles.revoke.length > 0;
+    /* The administration's list where the reader manages; the members' names where they do not. A manager is never
+       read the narrower list in its place: what the administration lists them is what they may act on. */
+    const listed = canManage ? null : await names();
     return {
-      members: [...now.members.values()]
-        .filter((member) => member.status === 'active')
-        .map((member) => ({
-          id: member.membershipId,
-          name: member.name ?? '',
-          email: member.email ?? '',
-          role: member.roles[0] ?? '',
-          you: member.accountId === now.owner.accountId,
-        })),
+      read: canManage ? 'administration' : listed ? 'names' : 'none',
+      members:
+        listed ??
+        [...now.members.values()]
+          .filter((member) => member.status === 'active')
+          .map((member) => ({
+            id: member.membershipId,
+            account: member.accountId,
+            name: member.name ?? '',
+            initials: initialsOf(member.name ?? ''),
+            email: member.email ?? '',
+            role: member.roles[0] ?? '',
+            you: member.accountId === now.owner.accountId,
+          })),
       invitations: [...now.pairs.values()].map((pair) => ({
         id: pair.invitation.invitationId,
         email: pair.email ?? '',
@@ -158,8 +191,7 @@ export function createTeamAccess(): TeamAccess {
         expiresAt: pair.invitation.redeemUntil,
       })),
       roles,
-      canManage:
-        now.adminRoles.replace.length + now.adminRoles.revoke.length + now.inviteRoles.issue.length + now.inviteRoles.revoke.length > 0,
+      canManage,
     };
   };
 

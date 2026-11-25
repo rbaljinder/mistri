@@ -14,6 +14,12 @@ import { commandCatalog, createCommandDb, zonedCatalog, type ReadTable, type Unt
 import { isBusinessCommandExecutionError } from './commandErrors.js';
 import { LOADER_RESULT_MOST, type PageLoader, type PageLoaderViewer } from './pageLoaders.js';
 
+/** The App's own reader and catalog, for a loader's elevated tables alone. */
+export interface ElevatedReads {
+  readonly reader: Pick<Adapter, 'query'> & Partial<Pick<Adapter, 'count' | 'aggregate'>>;
+  readonly schema: DatabaseSchema;
+}
+
 /** Why a loader's run was refused, with the status the route answers. */
 export class PageLoaderRefused extends Error {
   constructor(
@@ -56,10 +62,44 @@ export async function runPageLoader(options: {
   timezone?: string;
   /** The App's `choose` as this request proved it (app/appChoices.ts); absent where it declares none. */
   chosen?: Chosen;
+  /**
+   * The App's own reader and catalog for the tables the loader elevates (`defineLoader({ elevate })`): what a
+   * command's handler reads its footprint through, and in a tenant App the member's tenant and row scope still. Only
+   * the elevated tables are read through it; absent, a loader that elevates is refused before it starts.
+   */
+  elevated?: ElevatedReads;
 }): Promise<unknown> {
-  const { loader, reader, schema } = options;
+  const { loader, reader } = options;
   const logical = options.logical ?? ((local: string) => local);
+  const lifted = new Set(loader.elevate?.read ?? []);
+  const above = options.elevated;
+  if (lifted.size && !above)
+    throw new PageLoaderRefused(403, 'loader_refused', `The loader "${options.name}" elevates a read, and no read is elevated here.`);
+  /* One catalog for the loader's handles: the reader's own, with each elevated table as the App reads it. A table is
+     in one or the other by the loader's declaration alone, never by which catalog happens to hold it. */
+  const liftedIds = new Set<string>();
+  for (const local of lifted) {
+    const id = tableNamed(above!.schema, logical(local))?.id;
+    if (id === undefined)
+      throw new PageLoaderRefused(403, 'page_undeclared', `The loader "${options.name}" reads what this reader cannot.`);
+    liftedIds.add(id);
+  }
+  const schema: DatabaseSchema = lifted.size
+    ? {
+        ...options.schema,
+        tables: [
+          ...options.schema.tables.filter((table) => !liftedIds.has(table.id)),
+          ...above!.schema.tables.filter((table) => liftedIds.has(table.id)),
+        ],
+        foreignKeys: [
+          ...options.schema.foreignKeys.filter((fk) => !liftedIds.has(fk.from.table) && !liftedIds.has(fk.to.table)),
+          ...above!.schema.foreignKeys.filter((fk) => liftedIds.has(fk.from.table) || liftedIds.has(fk.to.table)),
+        ],
+      }
+    : options.schema;
   const idOf = (local: string) => tableNamed(schema, logical(local))?.id;
+  /* Whose authority a read of `local` is under: the App's for a table the loader elevates, the reader's for every other. */
+  const through = (local: string) => (lifted.has(local) ? above!.reader : reader);
   const found = loader.reads.every((name) => idOf(name) !== undefined)
     ? commandCatalog(schema, loader.reads, (name) => idOf(name)!)
     : undefined;
@@ -76,18 +116,45 @@ export async function runPageLoader(options: {
       throw new PageLoaderRefused(403, 'page_undeclared', `The loader "${options.name}" reads what this reader cannot.`);
     return id;
   };
-  const named = (filter: Parameters<Adapter['count']>[1]) => (filter ? { filter: renamedAnyRows(filter, child) } : {});
+  /* One statement is read under one authority: a condition on another table's rows (`any`, `no`, `in`), at any depth,
+     never carries the reader into an elevated table, nor the App's authority into a table the reader's grants and row
+     scope narrow. Judged on the loader's own names, before anything is asked. */
+  const oneAuthority = (base: string, filter: Parameters<Adapter['count']>[1]): void => {
+    if (!lifted.size) return;
+    for (const condition of filter?.groups.flat() ?? []) {
+      const via = condition.any?.via;
+      const other = condition.within?.table ?? (via === undefined ? undefined : via.slice(0, via.lastIndexOf('.')));
+      if (other === undefined) continue;
+      if (lifted.has(other) !== lifted.has(base))
+        throw new PageLoaderRefused(
+          403,
+          'loader_refused',
+          `The loader "${options.name}" asks "${base}" about its "${other}" rows, and only one of the two is elevated: read each on its own.`,
+        );
+      oneAuthority(base, condition.any?.filter);
+    }
+  };
+  const named = (base: string, filter: Parameters<Adapter['count']>[1]) => {
+    oneAuthority(base, filter);
+    return filter ? { filter: renamedAnyRows(filter, child) } : {};
+  };
   /* Only these, and only while it runs: no transaction, no writer, no other table. */
   const tx = Object.freeze({
     query: async (request: Parameters<Adapter['query']>[0]) => {
       if (!open) throw revoked();
-      const result = await reader.query({ ...request, table: idOf(request.table)!, ...named(request.filter) });
+      const result = await through(request.table).query({
+        ...request,
+        table: idOf(request.table)!,
+        ...named(request.table, request.filter),
+      });
       if (!open) throw revoked();
       return result;
     },
     count: async (table: string, filter?: Parameters<Adapter['count']>[1]) => {
       if (!open) throw revoked();
-      const result = await reader.count(idOf(table)!, renamedAnyRows(filter, child));
+      const source = through(table);
+      if (!source.count) throw new PageLoaderRefused(403, 'loader_refused', `The loader "${options.name}" cannot count "${table}" here.`);
+      const result = await source.count(idOf(table)!, named(table, filter).filter);
       if (!open) throw revoked();
       return result;
     },
@@ -96,7 +163,15 @@ export async function runPageLoader(options: {
       ? {
           aggregate: async (request: Parameters<NonNullable<Adapter['aggregate']>>[0]) => {
             if (!open) throw revoked();
-            const result = await reader.aggregate!({ ...request, table: idOf(request.table)! });
+            const source = through(request.table);
+            if (!source.aggregate)
+              throw new PageLoaderRefused(
+                403,
+                'loader_refused',
+                `The loader "${options.name}" cannot sum or group "${request.table}" here.`,
+              );
+            oneAuthority(request.table, request.filter);
+            const result = await source.aggregate({ ...request, table: idOf(request.table)! });
             if (!open) throw revoked();
             return result;
           },

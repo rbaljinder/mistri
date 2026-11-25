@@ -33,6 +33,8 @@ import { servedFlows } from './flowRecord.js';
 import { AppValidationDenied } from './appValidationDenied.js';
 import { appConsumesRules } from '../../shared/appConsumes.js';
 import type { ConsumesWriteRule } from './appConsumes.js';
+import { appDataRules } from '../../shared/appDataRules.js';
+import type { ConstraintWriteRule, NoOverlapWriteRule } from './appDataRules.js';
 
 /**
  * A New form's narrowed picker (`form.fields.<ref>.where`), held on every
@@ -168,6 +170,8 @@ type AppWriteRule =
   | FlowWriteRule
   | MessageWriteRule
   | ConsumesWriteRule
+  | NoOverlapWriteRule
+  | ConstraintWriteRule
   | WorkedWriteRule;
 export type AppValidationRules = ReadonlyMap<string, readonly AppWriteRule[]>;
 
@@ -221,8 +225,9 @@ function workedOut(
   if (out !== null && typeof out === 'object') return 'day' in out ? out.day : out.instant.toISOString();
   return out;
 }
-/* Held around the write itself (appConsumes.ts moveConsumed), never on the post-image. */
-const isConsumes = (rule: AppWriteRule): rule is ConsumesWriteRule => 'kind' in rule && rule.kind === 'consumes';
+/* Held around the write itself (appConsumes.ts moveConsumed; appDataRules.ts for a declared data rule), never on the post-image. */
+const isConsumes = (rule: AppWriteRule): rule is ConsumesWriteRule | NoOverlapWriteRule | ConstraintWriteRule =>
+  'kind' in rule && (rule.kind === 'consumes' || rule.kind === 'noOverlap' || rule.kind === 'constraint');
 
 /** Every rich text and JSON column the App's display rules declare, by table id. A column this catalog lacks is left out. */
 function appRichTextRules(schema: DatabaseSchema, app: AppDef): Map<string, Array<RichTextWriteRule | JsonWriteRule>> {
@@ -365,6 +370,7 @@ export function compileAppDefinitionValidation(schema: DatabaseSchema, app: AppD
   const flows = appFlowRules(schema, app);
   const derived = appDerivedRules(schema, app);
   const consumed = appConsumesRules(app, schema).rules;
+  const declared = declaredDataRules(schema, app);
   const words = app.ui.messages?.source && tableNamed(schema, app.ui.messages.from);
   if (
     !resourceValidation(app) &&
@@ -375,6 +381,7 @@ export function compileAppDefinitionValidation(schema: DatabaseSchema, app: AppD
     !flows.size &&
     !derived.size &&
     !consumed.size &&
+    !declared.size &&
     !words
   )
     return undefined;
@@ -399,6 +406,7 @@ export function compileAppDefinitionValidation(schema: DatabaseSchema, app: AppD
       table,
       Object.freeze([...(rules.get(table) ?? []), ...moved.map((rule) => Object.freeze({ kind: 'consumes' as const, rule }))]),
     );
+  for (const [table, held] of declared) rules.set(table, Object.freeze([...(rules.get(table) ?? []), ...held]));
   if (words)
     rules.set(
       words.id,
@@ -407,13 +415,34 @@ export function compileAppDefinitionValidation(schema: DatabaseSchema, app: AppD
   return rules;
 }
 
+/* The App's `noOverlap` rules and named constraints as write rules (appDataRules.ts), by table. */
+function declaredDataRules(schema: DatabaseSchema, app: AppDef): Map<string, Array<NoOverlapWriteRule | ConstraintWriteRule>> {
+  const { overlaps, constraints } = appDataRules(app, schema);
+  const found = new Map<string, Array<NoOverlapWriteRule | ConstraintWriteRule>>();
+  for (const [table, rules] of overlaps)
+    found.set(
+      table,
+      rules.map((rule) => Object.freeze({ kind: 'noOverlap' as const, rule })),
+    );
+  for (const [table, named] of constraints)
+    found.set(table, [
+      ...(found.get(table) ?? []),
+      ...[...named].map(([name, refusal]) => Object.freeze({ kind: 'constraint' as const, name, refusal })),
+    ]);
+  return found;
+}
+
 /** Only the App's `consumes` rules, as write rules: what a command's own transaction holds (businessCommandLoader.ts). */
 export function consumesValidation(schema: DatabaseSchema, app: AppDef): AppValidationRules | undefined {
   const { rules } = appConsumesRules(app, schema);
-  if (!rules.size) return undefined;
-  return new Map(
+  const declared = declaredDataRules(schema, app);
+  if (!rules.size && !declared.size) return undefined;
+  const held = new Map<string, readonly AppWriteRule[]>(
     [...rules].map(([table, moved]) => [table, Object.freeze(moved.map((rule) => Object.freeze({ kind: 'consumes' as const, rule })))]),
   );
+  /* And its declared data rules (appDataRules.ts): a command's write meets `noOverlap` and a named constraint as a form's does. */
+  for (const [table, rules] of declared) held.set(table, Object.freeze([...(held.get(table) ?? []), ...rules]));
+  return held;
 }
 
 /**

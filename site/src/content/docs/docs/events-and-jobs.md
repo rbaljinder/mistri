@@ -151,6 +151,67 @@ appointment: {
 },
 ```
 
+A timer may name the command that records a failure:
+`at: { queued_at: { command: 'postLine', when: "state = 'waiting'", failed: 'failLine' } }`.
+When `postLine` is refused for good on a record (any refusal a retry would
+repeat, or its attempts spent), `failLine` runs on the same record as a
+principal granted it, with the refusal as its two text inputs: `code`
+(`ineligible_state`, `invalid_input`, …) and `message`, the sentence a person
+would have read, the handler's own where it said one. The job is then done:
+the refusal is the record's to keep, and nothing is left failed for an
+operator. A record that left its `when` or took a new instant meanwhile gets
+neither command. Startup and `mistri check` refuse a `failed` command that does
+not declare both inputs (`at-failed`).
+
+### Work larger than one command
+
+One command is one transaction with a
+[ceiling on its changes](/docs/commands/#how-many-rows-a-command-may-change).
+Work past that (a payer's advice of thousands of lines, a batch over every
+open account) is a row per item and a timer that runs one command on each:
+
+```ts
+// The resource: one row per item, due as soon as it is queued.
+advice_line: {
+  at: { queued_at: { command: 'postLine', when: "state = 'waiting'", failed: 'failLine' } },
+},
+
+// The command that starts the work queues the rows, in its own transaction.
+await db.advice_line.insertMany(lines.map((line) => ({ advice_id: record.id, claim: line.claim, amount: line.amount, queued_at: { auto: 'now' } })));
+
+// One item: its own transaction, receipt and audit, as the jobs module's principal.
+postLine: defineCommand({ target: 'advice_line', write: ['ledger'], input: {},
+  async handle({ db, record }) {
+    await db.ledger.insert({ claim: record.claim, amount: record.amount });
+    await db.advice_line.update(record, { state: 'done' });
+  } }),
+
+// What a refusal leaves on its row.
+failLine: defineCommand({ target: 'advice_line', input: { code: field.text(), message: field.text() },
+  async handle({ db, record }, input) {
+    await db.advice_line.update(record, { state: 'failed', refusal: input.message });
+  } }),
+```
+
+- **Each item once.** A row is run once for the instant it holds, whatever is
+  retried or swept again, and a unique key on the rows (`UNIQUE (advice_id,
+  claim)`) refuses the same item queued twice. The item's command marks its row
+  in the transaction that does the work, so the two cannot disagree.
+- **Progress.** The rows are the progress: a list of them with a tab per state,
+  a related list on the record that queued them, and counts on a dashboard, all
+  read as any rows are, under the reader's row access.
+- **Failures and retries.** A failed row keeps its refusal. A command a person
+  runs on it (`retryLine`) puts it back to `waiting` with a new `queued_at`,
+  which arms the timer once more.
+- **Who runs it.** The first principal of the jobs module granted the command,
+  as every timer; keep who queued the row in a column the command stamps
+  (`{ auto: 'me' }`). In a tenant App each run is in its row's tenant.
+- **When.** The first rows start within a minute; from then the host reads the
+  next page (a hundred rows, or twenty a tenant) as soon as the last is worked
+  through, without waiting for the minute.
+- **In a test.** `host.runJob('at-advice_line-queued_at')` sweeps the timer now
+  and runs every due row: `{ state, code, ran }`.
+
 ### A signed callback: inbound
 
 ```ts title="examples/apps/lintel/jobs.ts"

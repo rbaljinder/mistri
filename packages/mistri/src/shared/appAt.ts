@@ -14,6 +14,12 @@
  * day ahead and another two hours ahead are two timers on `starts_at`, each
  * once per instant, so a rescheduled appointment is reminded again and the
  * old instant is never due.
+ *
+ * A timer may name the command that records a failure (`failed: 'markFailed'`):
+ * when its own command is refused for good on a record, or runs out of
+ * attempts, that command runs on the record with why (`{ code, message }`),
+ * so rows queued for work each keep their own outcome where a person can read
+ * it and arm them again (jobs/jobCommands.ts).
  */
 
 import { DURATION_WORDS, parseDuration } from '@mistriwork/engine/shared/duration.js';
@@ -27,6 +33,8 @@ export interface AppAtTimer {
   /** How long before or after the instant the timer comes due, in the duration grammar: `'24 hours'`. At most one of them. */
   before?: string;
   after?: string;
+  /** The command run on the record, with why, once `command` is refused for good there: the row keeps its own failure. */
+  failed?: string;
 }
 
 /** The signed distance from a timer's instant to when it comes due: negative `before` it, positive `after`. */
@@ -35,7 +43,7 @@ export function atOffsetMs(timer: Pick<AppAtTimer, 'before' | 'after'>): number 
   return timer.after === undefined ? 0 : (parseDuration(timer.after) ?? 0);
 }
 
-const KEYS = new Set(['command', 'when', 'before', 'after']);
+const KEYS = new Set(['command', 'when', 'before', 'after', 'failed']);
 const COLUMN = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const isRecord = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
@@ -69,7 +77,7 @@ function parseTimer(value: unknown, column: string, where: string, isCommand: (c
   const spec = typeof value === 'string' ? { command: value } : value;
   if (!isRecord(spec)) throw new Error(`${where} is a command's name, { command, when, before or after }, or a list of them.`);
   for (const key of Object.keys(spec))
-    if (!KEYS.has(key)) throw new Error(`${where} has no "${key}". A timer takes command, when, and before or after.`);
+    if (!KEYS.has(key)) throw new Error(`${where} has no "${key}". A timer takes command, when, before or after, and failed.`);
   if (typeof spec.command !== 'string' || !isCommand(spec.command))
     throw new Error(`${where} runs ${JSON.stringify(spec.command)}, which is not one of the App's commands. A timer runs a command.`);
   if (spec.when !== undefined && (typeof spec.when !== 'string' || !spec.when.trim()))
@@ -77,6 +85,11 @@ function parseTimer(value: unknown, column: string, where: string, isCommand: (c
   if (spec.before !== undefined && spec.after !== undefined)
     throw new Error(
       `${where} comes due both before and after "${column}" [at-offset]. A timer is one time: keep one, or make two timers in a list.`,
+    );
+  if (spec.failed !== undefined && (typeof spec.failed !== 'string' || !isCommand(spec.failed) || spec.failed === spec.command))
+    throw new Error(
+      `${where}, failed ${JSON.stringify(spec.failed)}: name another of the App's commands, which records on the record why ` +
+        `"${spec.command}" was refused there [at-failed].`,
     );
   const side = spec.before !== undefined ? 'before' : spec.after !== undefined ? 'after' : undefined;
   const wait = side === undefined ? undefined : spec[side];
@@ -87,5 +100,6 @@ function parseTimer(value: unknown, column: string, where: string, isCommand: (c
     command: spec.command,
     ...(typeof spec.when === 'string' ? { when: spec.when.trim() } : {}),
     ...(side === undefined ? {} : { [side]: (wait as string).trim() }),
+    ...(typeof spec.failed === 'string' ? { failed: spec.failed } : {}),
   };
 }

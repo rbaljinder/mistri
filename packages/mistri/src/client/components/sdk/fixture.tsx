@@ -250,6 +250,7 @@ export interface AuthoredList {
 export interface AuthoredPage {
   label: string;
   reads: readonly string[];
+  optionalReads?: readonly string[];
   commands?: readonly string[];
   actions?: readonly string[];
   /** Its address parameters: names, or each name with its kind (`{ class: 'id' }`). */
@@ -859,6 +860,7 @@ function useFixturePage(declaration: AuthoredPage, address: Record<string, strin
       view: 'page',
       label: declaration.label,
       reads: declaration.reads,
+      ...(declaration.optionalReads ? { optionalReads: declaration.optionalReads } : {}),
       commands: declaration.commands ?? [],
       actions: declaration.actions ?? [],
       params: Array.isArray(declaration.params) ? declaration.params : Object.keys(declaration.params ?? {}),

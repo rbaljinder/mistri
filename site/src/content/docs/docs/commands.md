@@ -350,7 +350,9 @@ It sets both limits for that command: the most changes the audit keeps for one
 target, and the most rows one call takes. The 4 MiB the audit keeps for one
 target stays whatever the number says, and a command over either is refused with
 the number and, when it has not declared one, `maxChanges`. `mistri check`
-refuses a `maxChanges` outside 1 to 16,384 when the App loads.
+refuses a `maxChanges` outside 1 to 16,384 when the App loads. Work past the
+ceiling is a row per item and a timer that runs a command on each:
+[work larger than one command](/docs/events-and-jobs/#work-larger-than-one-command).
 
 Bytes go into a row only through `insertFile`, under the file resource's
 rules: its name, type and size columns are filled, and a file over its
@@ -559,7 +561,7 @@ command reads one under its own authority:
 `read: ['rate_card'], elevate: { read: ['rate_card'] }`. The handler reads it
 whole; the caller sees only the declared `output`, never the rows. An
 elevation never makes a command an [App API](/docs/app-api/) operation for a
-role that cannot read the table, and `mistri check --design` lists every one. A table the command only adds to may be elevated too, to read that log's earlier lines (`write: ['visit_note'], elevate: { read: ['visit_note'] }`): the role still cannot change or remove what is there.
+role that cannot read the table, and `mistri check --design` lists every one. A [page's loader](/docs/custom-components/#free-form-pages) takes the same `elevate`, for a read that needs one table above its reader and writes nothing. A table the command only adds to may be elevated too, to read that log's earlier lines (`write: ['visit_note'], elevate: { read: ['visit_note'] }`): the role still cannot change or remove what is there.
 
 A table in `write` beside the target is not a read grant, and needs none: a
 role that cannot read it may still run the command, which may only add rows

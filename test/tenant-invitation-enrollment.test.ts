@@ -288,6 +288,7 @@ for (const mode of ['omitted', 'administration', 'invitations', 'both'] as const
       'deployment',
       'discover',
       'experimentConversionAuthority',
+      'marks',
       'names',
       'retire',
       'sandboxes',

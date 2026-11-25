@@ -86,12 +86,15 @@ export interface MachineState<State extends string = string, Column extends stri
   final?: true | { readonly freeze: true };
 }
 /** A timer at an instant (`AppResource.at`): the command it runs, the conditions the record must meet then, and how
-    long `before` or `after` the instant it comes due (one of them; the instant itself when neither). */
+    long `before` or `after` the instant it comes due (one of them; the instant itself when neither). `failed` names
+    the command run on the record once `command` is refused for good there, or runs out of attempts: it is given the
+    refusal as its text inputs `code` and `message`, so a row queued for work keeps its own failure. */
 export interface AppAtTimer {
   command: CommandName;
   when?: string;
   before?: Duration;
   after?: Duration;
+  failed?: CommandName;
 }
 /** A record's state machine over one column. `since` names a timestamp column the server stamps whenever the state
     changes, which `after` timers count from. */
@@ -225,6 +228,35 @@ export type AppTab =
     table's rows are asked: a tab, a metric's source (`'work_order.overdue'`), a rollup's `segment`, a query bar. It may
     name another segment; it only ever narrows, under the reader's grants and row scope. */
 export type AppSegment = string | { query: string; label?: string | AppMessageRef };
+
+/** Rows that may not overlap: among rows equal on every `by` column, no two may hold ranges that meet. A range is
+    half-open, `[from, to)`: one that ends at ten and one that starts at ten do not meet. A row with an empty `by`,
+    `from` or `to`, or whose range is empty, is outside the rule. */
+export interface AppNoOverlap<Column extends string = string> {
+  /** The columns that scope the rule, each compared for equality: the chair, the provider. In a tenant App the
+      tenant is always part of it. Absent or empty, no two rows of the resource may meet. */
+  by?: readonly Column[];
+  /** Where a row's range starts, and where it stops (the range ends just before `to`): two date columns, two
+      timestamps or two numbers, of one type. */
+  from: Column;
+  to: Column;
+  /** Rows the rule holds for, as query-language conditions comparing the row's own columns with fixed values:
+      `'status != cancelled'`. A row it does not match blocks nothing and is blocked by nothing. */
+  when?: string;
+  /** The column the refusal is put beside; `from` when absent. */
+  field?: Column;
+  /** What a refused write says, as written (it is never filled from a row). "This overlaps another record." when absent. */
+  message?: string | AppMessageRef;
+  /** The name of the PostgreSQL exclusion constraint that holds the rule; `<table>_no_overlap` when absent. */
+  constraint?: string;
+}
+
+/** What a write a named database constraint refuses says, and beside which column. */
+export interface AppConstraintRefusal<Column extends string = string> {
+  field: Column;
+  /** Said as written: fixed words, never a value of the row written or of the row it met. */
+  message: string | AppMessageRef;
+}
 
 /** A child row that uses up a number on the record it points at: `{ column: 'part_id.on_hand', by: 'quantity' }`. An
     insert takes `by` (1 if absent) from the balance in the same transaction, refused with `message` below zero; a
@@ -1039,6 +1071,17 @@ export interface AppResource<Column extends string = string, Page extends string
       what it brought in has been used since. So Receive stock is a New form on the receipt line, not a command:
       `stock_receipt: { restocks: { column: 'part_id.on_hand', by: 'quantity' } }`. One, or a list. */
   restocks?: AppConsumes | readonly AppConsumes[];
+  /** Rows of this resource that may not overlap, one chair or one person at one time:
+      `noOverlap: { by: ['chair_id'], from: 'starts_at', to: 'ends_at', when: 'status != cancelled' }`. Held on every
+      write, whichever door it came through, and refused beside `from` in the rule's `message`. PostgreSQL holds it
+      with an exclusion constraint the App's migration adds (`mistri check` prints the statement and refuses the App
+      without it); on SQLite the App's write reads for a row that meets it. One, or a list. */
+  noOverlap?: AppNoOverlap<Column> | readonly AppNoOverlap<Column>[];
+  /** Database constraints said as a field's refusal, each by the name the database gives it:
+      `constraints: { booking_runs_forward: { field: 'ends_at', message: 'A booking ends after it starts.' } }`. A write
+      the constraint refuses, through a form or a command's handler, is refused beside `field` in those words where it
+      would have been `constraint_failed`. The words are said as written, in a tenant App too: they never carry a value. */
+  constraints?: Readonly<Record<string, AppConstraintRefusal<Column>>>;
   /** Row-defined fields: a JSON column whose keys are defined by another resource's rows, which people edit at runtime
       — `{ specs: { from: 'attribute', per: 'category_id' } }`. Each definition row has `key`, `label` and `type` (text,
       textarea, number, money, date, datetime, bool, choice or choices), and may have `options` (one per line),
@@ -1283,6 +1326,10 @@ export interface AppTenancy<Resource extends string = string> {
   /** Columns of the tenant's profile row its members read, at most 16 scalar ones: `tenant.country` in a query, a row
       scope, a `when` or a handler's `tenant`. Read once per request; a tenant with no row reads nulls. Needs `profile`. */
   shared?: readonly string[];
+  /** `false`: a tenant's members are not told who else is a member. Left out, any member of a tenant reads its members'
+      names and ids, never an address, a role or an invitation: what `useTeam()` lists for a reader who does not manage
+      the team, where the App administers its tenants' members. */
+  team?: boolean;
   platform?: {
     label: string | AppMessageRef;
     /** Who `me` is in the platform realm, as `auth.me` says it in a tenant's: the platform-owned resource its staff

@@ -83,6 +83,7 @@ import {
   refuseUpdateMatches,
   runsOfColumns,
   sameTable,
+  type TableConstraint,
 } from './adapter.js';
 import { compileAggregate } from '../shared/aggregate.js';
 import { readExactly, summed } from '../shared/decimals.js';
@@ -323,6 +324,55 @@ export class SqliteAdapter implements Adapter {
       const generated = this.db.prepare('SELECT name FROM pragma_table_xinfo(?) WHERE hidden IN (2, 3)').all(table.name);
       const trigger = readSqliteTrigger(String(row.name), row.sql, new Set(generated.map((column) => fold(String(column.name)))));
       found.set(table.id, [...(found.get(table.id) ?? []), trigger]);
+    }
+    return found;
+  }
+
+  /**
+   * Each table's constraints by the name a refused write can carry: a named CHECK (`CHECK constraint failed: <name>`)
+   * and what a trigger raises (`RAISE(ABORT, '<name>')`). A unique index is listed too and marked unnamed: SQLite
+   * reports it by its columns, never by its name. Read from the schema's own text, on the reader.
+   */
+  async constraints(): Promise<ReadonlyMap<string, readonly TableConstraint[]>> {
+    const fold = (name: string) => name.replace(/[A-Z]/g, (char) => char.toLowerCase());
+    const tables = new Map((await this.introspect()).tables.filter((table) => !table.isView).map((table) => [fold(table.name), table]));
+    const found = new Map<string, TableConstraint[]>();
+    const add = (table: unknown, constraint: TableConstraint) => {
+      const meta = tables.get(fold(String(table)));
+      if (meta && !found.get(meta.id)?.some((item) => item.name === constraint.name && item.kind === constraint.kind))
+        found.set(meta.id, [...(found.get(meta.id) ?? []), constraint]);
+    };
+    const unquoted = (name: string) => name.replace(/^["`[]|["`\]]$/g, '');
+    const rows = this.db
+      .prepare("SELECT type, name, tbl_name, sql FROM main.sqlite_schema WHERE type IN ('table', 'index', 'trigger') ORDER BY name")
+      .all();
+    for (const row of rows) {
+      const sql = typeof row.sql === 'string' ? row.sql : '';
+      if (row.type === 'table')
+        for (const match of sql.matchAll(
+          /\bCONSTRAINT\s+("[^"]+"|`[^`]+`|\[[^\]]+\]|[A-Za-z_][\w$]*)\s+(CHECK|UNIQUE|PRIMARY\s+KEY|FOREIGN\s+KEY|REFERENCES)\b/gi,
+        )) {
+          const word = match[2]!.toUpperCase();
+          const kind = word === 'CHECK' ? 'check' : word === 'UNIQUE' || word.startsWith('PRIMARY') ? 'unique' : 'reference';
+          add(row.name, {
+            name: unquoted(match[1]!),
+            kind,
+            named: kind === 'check',
+          });
+        }
+      else if (row.type === 'index' && /^\s*CREATE\s+UNIQUE\b/i.test(sql))
+        add(row.tbl_name, {
+          name: String(row.name),
+          kind: 'unique',
+          named: false,
+        });
+      else if (row.type === 'trigger')
+        for (const match of sql.matchAll(/\bRAISE\s*\(\s*(?:ABORT|FAIL|ROLLBACK)\s*,\s*'((?:[^']|'')*)'\s*\)/gi))
+          add(row.tbl_name, {
+            name: match[1]!.replaceAll("''", "'"),
+            kind: 'trigger',
+            named: true,
+          });
     }
     return found;
   }

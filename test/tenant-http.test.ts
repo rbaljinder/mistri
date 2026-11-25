@@ -2086,6 +2086,111 @@ test('enter enters only a sole membership, and refuses whatever discovery, open 
   denied(await enter({}, 'bob'));
 });
 
+/* A reload re-enters its tab's kept context with no discovery (`reenter`, tenantEnter.ts): the lease is trusted as
+   every request on it is, and no more, so each way a member loses the tenant refuses it no later than their next
+   request on the lease did, and nothing of the tenant is in the answer. */
+test('a reload re-enters its kept context with its boot and no discovery, and loses it as its next request would', async (t) => {
+  const f = await fixture(t);
+  const at = `/api/tenant/enter?app=${appId}`;
+  const reenter = (lease: Context, cookie = 'alice', more: Record<string, unknown> = {}) =>
+    f.call(
+      at,
+      { path: `/${appId}`, search: '', kept: { tenantId: lease.tenantId, tabId: lease.tabId }, reenter: true, ...more },
+      { cookie: `fixture=${cookie}` },
+    );
+  const release = async (lease: Context, cookie = 'alice') =>
+    assert.equal((await f.call(`/api/tenant/context/release?app=${appId}`, assertion(lease), { cookie: `fixture=${cookie}` })).status, 200);
+  const taken = (reply: Answer) => object(object(reply.body.entered).context) as Context;
+  /* Kept and let go: taken back, the same context and window, with its boot and no tenants. This host says no
+     who-am-I (its options have none); the server's does, from the session proven here. */
+  const first = await f.open('north');
+  await release(first);
+  const back = await reenter(first);
+  assert.equal(back.status, 200, back.text);
+  noPrivate(back);
+  assert.deepEqual(Object.keys(back.body).sort(), ['accountId', 'appId', 'entered', 'reentered', 'status']);
+  assert.equal(back.body.accountId, 'alice');
+  assert.deepEqual(taken(back), first);
+  owned(back, first);
+  assert.ok(
+    Object.keys(object(object(object(back.body.entered).boot).reads)).some((key) =>
+      key.startsWith(`GET /api/app?app=${appId}&tenant=north`),
+    ),
+  );
+  owned(await f.data('/api/query', first, { table: 'item' }), first);
+  /* Held again, not let go: taken back once; the next is entered through discovery, a context of its own. */
+  const twice = await reenter(first);
+  assert.equal(twice.status, 200, twice.text);
+  assert.equal('reentered' in twice.body, false);
+  assert.notEqual(taken(twice).tabId, first.tabId);
+  /* A context this host never held (a restart, a deploy): entered through discovery as any request. */
+  const unknown = await reenter({ ...first, tabId: 'tab-from-another-host' });
+  assert.equal(unknown.status, 200, unknown.text);
+  assert.equal('reentered' in unknown.body, false);
+  /* Another account's let-go context is not this one's to take back. */
+  const bobs = await f.open('north', 'bob');
+  await release(bobs, 'bob');
+  const stolen = await reenter(bobs);
+  assert.equal('reentered' in stolen.body, false);
+  assert.notEqual(taken(stolen).tabId, bobs.tabId);
+  /* A link naming another tenant is a choice, not a reload's; and a re-entry names the context it takes back. */
+  assert.equal((await reenter(first, 'alice', { tenant: 'south' })).status, 400);
+  assert.equal((await f.call(at, { path: `/${appId}`, search: '', reenter: true }, { cookie: 'fixture=alice' })).status, 400);
+
+  /* Signed out, and signed in again as another session: the session check refuses first, and nothing is taken back. */
+  const signedOut = await f.open('north');
+  await release(signedOut);
+  const session = f.sessions.alice;
+  f.sessions.alice = null;
+  const out = await reenter(signedOut);
+  assert.equal(out.status, 200, out.text);
+  assert.equal(out.body.status, 'signed_out');
+  assert.equal('entered' in out.body, false);
+  f.sessions.alice = { ...session!, sessionId: 'session-secret-alice-2' };
+  const other = await reenter(signedOut);
+  assert.equal('reentered' in other.body, false);
+  assert.notEqual(taken(other).tabId, signedOut.tabId);
+  f.sessions.alice = session;
+
+  /* Roles changed, the tenant suspended, the member removed: each a version the lease's evidence no longer matches.
+     The boot's snapshot refuses it, the answer carries nothing, and the context is let go again; the page then
+     enters through discovery and hears why there. */
+  const refusedWhole = (reply: Answer) => {
+    denied(reply);
+    assert.equal('entered' in reply.body, false, reply.text);
+    assert.doesNotMatch(reply.text, /North item/);
+  };
+  const roles = await f.open('north');
+  await release(roles);
+  await f.maintenance((admin) => admin.putMembership({ ...f.grant, roles: ['viewer'], expectedVersion: '1' }).then(() => {}));
+  refusedWhole(await reenter(roles));
+  denied(await f.data('/api/query', roles, { table: 'item' }));
+  const suspended = await f.open('north');
+  await release(suspended);
+  await f.maintenance((admin) => admin.putTenant({ tenantId: 'north', status: 'suspended', expectedVersion: '1' }).then(() => {}));
+  refusedWhole(await reenter(suspended));
+  await f.maintenance((admin) => admin.putTenant({ tenantId: 'north', status: 'active', expectedVersion: '2' }).then(() => {}));
+  const removed = await f.open('north');
+  await release(removed);
+  await f.maintenance((admin) =>
+    admin.putMembership({ ...f.grant, roles: ['viewer'], status: 'revoked', expectedVersion: '2' }).then(() => {}),
+  );
+  refusedWhole(await reenter(removed));
+  /* Asked again, as the page asks once refused, it is discovery's: north is gone, and the one tenant left is entered. */
+  const after = await f.call(
+    at,
+    { path: `/${appId}`, search: '', kept: { tenantId: 'north', tabId: removed.tabId } },
+    { cookie: 'fixture=alice' },
+  );
+  assert.equal(after.status, 200, after.text);
+  assert.deepEqual(
+    (after.body.memberships as { tenantId: string }[]).map((member) => member.tenantId),
+    ['south'],
+  );
+  assert.equal(taken(after).tenantId, 'south');
+  assert.doesNotMatch(after.text, /North item/);
+});
+
 test("a bounded count passes the tenant allowlist, stays the tenant's own, and says capped past its bound", async (t) => {
   const f = await fixture(t),
     a = await f.open();
@@ -4138,6 +4243,12 @@ function fenceDoors(): Record<string, Door> {
         ),
       },
     },
+    '/api/team': {
+      elsewhere: [
+        'tenant-member-gaps.test.ts',
+        "any member reads the team's names and ids on their lease, and never an address, a role or another tenant's member",
+      ],
+    },
     '/api/domains': {
       lease: { body: {}, also: here("a tenant's domains are its own: another tenant's hostname is refused as one nobody holds") },
     },
@@ -4948,6 +5059,10 @@ test("every method of the tenant read and write sources is answered by a cross-t
       ],
       lastWave: ['postgres-bounded-reads.test.ts', 'a bounded read asked after the last wave is refused, and the request with it'],
       readPlatformMembership: platformRead,
+      readMembershipsWithPlatform: [
+        'tenant-marks.test.ts',
+        "the memberships with the platform's are what each read answers alone, each for the account asked",
+      ],
       assertPlatformCurrent: platformFence,
       scopePlatformReads: platformRead,
       bindPlatformReads: dialects(
@@ -4972,6 +5087,10 @@ test("every method of the tenant read and write sources is answered by a cross-t
         'names are read for the asked tenants only, said as the template says them, and a blank one is none',
       ],
       readTenantAddresses: ['tenant-boot.test.ts', "one role's answers are never another's, nor one clinic's another's"],
+      readTenantMarks: [
+        'tenant-marks.test.ts',
+        'the marks are what the names, the sandboxes and the addresses each answer alone, and name nothing that was not asked',
+      ],
       readTenantProfile: [
         'tenant-profile-zone.test.ts',
         "tenant.<column> in a query and resolveRows read the asking tenant's own profile, and an unshared column is refused",

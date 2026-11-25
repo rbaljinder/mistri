@@ -11,6 +11,7 @@ import type { AppDef } from '../../shared/app.js';
 import type { VerifiedSessionInstance } from '../auth/auth.js';
 import { getTenantHostIntent } from '../http/tenantHosts.js';
 import type { captureTenantEnrollment } from './tenantEnrollment.js';
+import type { TenantAddresses } from './tenantIntakeModel.js';
 import type { TenantDiscovery } from './tenantRequestParts.js';
 import { exposed } from './tenantWire.js';
 
@@ -25,6 +26,18 @@ type Proving = {
   readonly enrollment: ReturnType<typeof captureTenantEnrollment<IncomingMessage>>['enrollment'];
   readonly app: Pick<AppDef, 'id'>;
 };
+
+/**
+ * An arrival that may enter a tenant in the same request (`/api/tenant/enter`). `tenant` says which of the tenants
+ * discovery's first snapshot found it would enter, if any; that tenant's own addresses are then read in the names'
+ * message (tenantEnrollment.ts `marks`) and handed to `addresses`, still on their way: undefined where the read
+ * failed. They are the arrival's to release only once it is admitted to that very tenant, where its App payload
+ * would have read them.
+ */
+export interface TenantEntering {
+  readonly tenant: (tenantIds: readonly string[]) => string | undefined;
+  readonly addresses: (tenantId: string, read: Promise<TenantAddresses | undefined>) => void;
+}
 
 export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive, now, enrollment, app }: Proving) {
   const verified = async (req: IncomingMessage): Promise<VerifiedSessionInstance | null> => {
@@ -69,6 +82,7 @@ export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive,
     req: IncomingMessage,
     seen?: (tenantIds: readonly string[]) => void,
     proved?: (proof: VerifiedSessionInstance | null) => void,
+    entering?: TenantEntering,
   ): Promise<TenantDiscovery> => {
     const proof = await verified(req);
     proved?.(proof);
@@ -77,11 +91,29 @@ export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive,
        snapshots that confirm them, rather than after: two more round trips before the chooser could draw. Said only
        of the tenants discovery answers with, and asked again where those are not the ones asked. */
     let early: { ids: readonly string[]; marks: Promise<readonly [Readonly<Record<string, string>>, ReadonlySet<string>]> } | undefined;
-    const marksOf = (ids: readonly string[]) =>
+    const apart = (ids: readonly string[]) =>
       Promise.all([
         enrollment.names(ids).catch((): Readonly<Record<string, string>> => ({}) /* ids only */),
         enrollment.sandboxes(ids),
       ] as const);
+    /* The two in one message, with the entered tenant's addresses where the arrival enters one (`marks`): each on a
+       snapshot of its own was two to six round trips of every page load. A message is one answer, so one part that
+       cannot be read fails them all; each is then asked apart, as it was, and fails or is left out as it always did. */
+    const marksOf = (ids: readonly string[], entered?: string) => {
+      const read = enrollment.marks(ids, entered);
+      if (entered !== undefined)
+        entering!.addresses(
+          entered,
+          read.then(
+            (marks) => marks.addresses,
+            () => undefined,
+          ),
+        );
+      return read.then(
+        (marks) => [marks.names, marks.sandboxes] as const,
+        () => apart(ids),
+      );
+    };
     const discovered = await enrollment.discover(
       req,
       async () => {
@@ -95,7 +127,13 @@ export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive,
       },
       (ids) => {
         if (ids.length) {
-          early = { ids, marks: marksOf(ids) };
+          let entered: string | undefined;
+          try {
+            entered = entering?.tenant(ids);
+          } catch {
+            /* The caller's own: the marks are asked as if it had named none. */
+          }
+          early = { ids, marks: marksOf(ids, entered !== undefined && ids.includes(entered) ? entered : undefined) };
           early.marks.catch(() => {});
         }
         seen?.(ids);
@@ -139,10 +177,16 @@ export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive,
     req: IncomingMessage,
     seen?: (tenantIds: readonly string[]) => void,
     proved?: (proof: VerifiedSessionInstance | null) => void,
+    entering?: TenantEntering,
   ): Promise<TenantDiscovery> => {
     const intent = getTenantHostIntent(req);
-    if (!intent) return discoverAll(req, seen, proved);
-    const found = await discoverAll(req, seen && ((ids) => seen(ids.filter((id) => id === intent.tenant))), proved);
+    if (!intent) return discoverAll(req, seen, proved, entering);
+    const found = await discoverAll(
+      req,
+      seen && ((ids) => seen(ids.filter((id) => id === intent.tenant))),
+      proved,
+      entering && { ...entering, tenant: (ids) => entering.tenant(ids.filter((id) => id === intent.tenant)) },
+    );
     if (found.status !== 'ready') return found;
     const { platform: _platform, ...rest } = found;
     return { ...rest, memberships: found.memberships.filter((member) => member.tenantId === intent.tenant) };

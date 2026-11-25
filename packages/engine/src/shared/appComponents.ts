@@ -499,6 +499,8 @@ interface PageDecl {
   component: ComponentDecl;
   /** The resources the page reads, which gate it: a reader who cannot read one of them is not offered it. */
   reads: string[];
+  /** Resources the page reads only with `optional: true`: a reader not granted one is still offered the page, and that read answers `refused`. */
+  optionalReads?: string[];
   /** The commands the page runs; any other is refused, in the browser and by the server. */
   commands: string[];
   /** The fixed actions it runs (a machine's verbs, `action(label, { set })`) on the resources it reads: they are not commands, so they are named apart. */
@@ -558,6 +560,18 @@ export function parsePage(raw: Record<string, unknown>, at: string): PageDecl {
       `[page-reads] ${at} has no "reads": the resources the page reads — reads: ['pick_list', 'order_line'], or reads: [] for none. A page reads nothing it does not declare.`,
     );
   }
+  /* `optionalReads: ['visit_note']`: what the page reads only where its reader may (`{ optional: true }` on the hook), so
+     it is no part of who is offered the page. One list or the other: a read is the page's own or it is optional. */
+  const optionalReads = raw.optionalReads === undefined ? [] : raw.optionalReads;
+  if (!words(optionalReads) || (raw.optionalReads !== undefined && !optionalReads.length))
+    throw new Error(
+      `[page-reads] ${at} has "optionalReads" that are not a list of resources: optionalReads: ['visit_note'], each read with { optional: true }.`,
+    );
+  const twice = optionalReads.map((name) => name.trim()).find((name) => reads.some((read) => read.trim() === name));
+  if (twice !== undefined)
+    throw new Error(
+      `[page-reads] ${at} names "${twice}" in "reads" and in "optionalReads": a read every reader of the page makes is in "reads", one only some may make is in "optionalReads".`,
+    );
   const commands = raw.commands === undefined ? [] : raw.commands;
   if (!words(commands))
     throw new Error(`[page-commands] ${at} has "commands" that are not a list of command names: commands: ['pickList'].`);
@@ -597,6 +611,7 @@ export function parsePage(raw: Record<string, unknown>, at: string): PageDecl {
   return {
     component,
     reads: [...new Set(reads.map((name) => name.trim()))],
+    ...(optionalReads.length ? { optionalReads: [...new Set(optionalReads.map((name) => name.trim()))] } : {}),
     commands: [...new Set(commands.map((name) => name.trim()))],
     actions: [...new Set(actions.map((name) => name.trim()))],
     params: [...new Set(params as string[])],

@@ -302,6 +302,9 @@ export interface AppTenancy {
   /** Columns of the tenant's profile row its members read, as `tenant.<column>` in queries, row scopes, `when` and
       handlers. Read once per request; a tenant with no row reads nulls. Needs `profile`. */
   shared?: string[];
+  /** `false`: a tenant's members are not told who else is a member. Absent, any member reads the members' names and
+      ids (never an address or a role), which is what `useTeam()` lists for a reader who does not manage the team. */
+  team?: false;
   /** Declares the platform realm; its label names the platform context ("Lender"). `me` is who the word is there,
       as `auth.me` says it in a tenant's: a row of the platform's table of its staff, by the column holding their
       account id. Absent, `me` in the platform realm is nobody's row. */
@@ -833,6 +836,8 @@ export interface AppDashboardView extends ServedDashboardView {
 /** What a free-form page declares it reads, runs, keeps in its address and loads: its manifest, held to on both sides. */
 interface AppPageManifest {
   reads: string[];
+  /** What it reads only with `optional: true`: no part of who is offered it; a reader not granted one is answered `refused`. */
+  optionalReads?: string[];
   commands: string[];
   /** The fixed actions it runs on what it reads; left out when it runs none. */
   actions?: string[];
@@ -1126,8 +1131,36 @@ export interface ResourceDef {
   consumes?: AppConsumes[];
   /** The parent balances a row of this resource adds to (a receipt's line, a return): `consumes` the other way round. */
   restocks?: AppConsumes[];
+  /** Rows of this resource that may not overlap (appDataRules.ts): within the same `by`, no two rows' `[from, to)`
+      meet. Held by an exclusion constraint on PostgreSQL and by the App's write layer on SQLite. */
+  noOverlap?: AppNoOverlap[];
+  /** Named database constraints said as a field's refusal (appDataRules.ts): the constraint's name → the column the
+      message is put beside and its fixed words. */
+  constraints?: Record<string, AppConstraintRefusal>;
   /** Capability links by name (appLinks.ts): one record, its declared columns and commands, to whoever holds the link. */
   links?: Record<string, import('./appLinks.js').AppLinkDef>;
+}
+
+/**
+ * One `noOverlap` rule: among rows equal on every `by` column, no two may hold ranges `[from, to)` that meet. `when`
+ * (query-language conditions over the row's own stored columns) leaves a row out of the rule altogether.
+ */
+export interface AppNoOverlap {
+  by: string[];
+  from: string;
+  to: string;
+  when?: string;
+  /** The column the refusal is put beside; `from` when absent. */
+  field?: string;
+  message?: string;
+  /** The PostgreSQL exclusion constraint's name; `<table>_no_overlap` when absent. */
+  constraint?: string;
+}
+
+/** What a named database constraint's refusal says, and beside which column: fixed words, never a value. */
+export interface AppConstraintRefusal {
+  field: string;
+  message: string;
 }
 
 /** A segment as authored: its conditions in the query language, and what a tab over it is called. */

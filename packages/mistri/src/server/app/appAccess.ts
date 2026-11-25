@@ -23,6 +23,7 @@ import type { AppValidationRules } from './appValidation.js';
 import type { AppTransitionRules } from './appTransitions.js';
 import type { AppUpdateAction } from '../../shared/app.js';
 import { consumesImage, consumesOf, moveConsumed } from './appConsumes.js';
+import { holdNoOverlap, noOverlapOf, sayingDeclared } from './appDataRules.js';
 import { auditQueryRead, auditViewRead, type AuditedAccess } from '../readAudit.js';
 import { byKeyAdapter } from './publicByKey.js';
 import { randomUUID } from 'node:crypto';
@@ -127,6 +128,21 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
     const reader = operationAccess.reader?.() ?? operationAccess;
     return reader.readable.has(table) && (reader.fields?.get(table)?.read.has(column) ?? true) && !reader.internal?.get(table)?.has(column);
   };
+  /* The App's declared data rules (appDataRules.ts) around one write of a row: a constraint the database refused
+     by is said as the App's refusal for it, and on SQLite a `noOverlap` rule is read for once the row is stored. */
+  const declared = async <R extends { key?: Record<string, string | number>; affected?: number }>(
+    operationAccess: ResourceAccess,
+    table: string,
+    write: () => Promise<R>,
+    keyOf: (result: R) => Record<string, string | number> | undefined,
+    written?: readonly string[],
+  ): Promise<R> => {
+    const result = await sayingDeclared(full, operationAccess.validation, table, write);
+    const rules = noOverlapOf(operationAccess.validation, table);
+    const key = rules.length ? keyOf(result) : undefined;
+    if (key) await holdNoOverlap(writer, full, rules, table, key, written);
+    return result;
+  };
   /* An update that writes a line's reference or amount moves the balance by
      the change: the line is locked first, so its before-image is the one the
      write replaces. */
@@ -151,6 +167,25 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
     const { row: _moved, ...said } = result;
     return said;
   };
+  /* An update under those rules: judged of the row as stored, and only where it wrote a column a rule reads. */
+  const declaredUpdate = (
+    operationAccess: ResourceAccess,
+    request: UpdateRequest,
+    write: () => Promise<Awaited<ReturnType<WriteTransaction['update']>>>,
+  ) =>
+    declared(
+      operationAccess,
+      request.table,
+      write,
+      (result) =>
+        result.affected === 1
+          ? {
+              ...request.key,
+              ...keyValues(full, request.table, result.applied),
+            }
+          : undefined,
+      Object.keys(request.values ?? {}),
+    );
   /* The action's own columns are the write's authority, not the role's field
      grants; the row, its key and what the action's `when` reads must still be
      the principal's to read, and every other check an update gets still runs. */
@@ -208,7 +243,11 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
     };
     return judged
       .then(async (since) =>
-        consumedUpdate(operationAccess, request, async () => write(await stamped(since, await richTextCleaned(operationAccess, request)))),
+        consumedUpdate(operationAccess, request, async () =>
+          declaredUpdate(operationAccess, request, async () =>
+            write(await stamped(since, await richTextCleaned(operationAccess, request))),
+          ),
+        ),
       )
       .then(async (result) => {
         if (result.affected === 1 && operationAccess.validation?.has(request.table)) {
@@ -233,7 +272,20 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
     insert: (request, operationAccess, server, write = (filled) => writer.insert(filled)) => {
       const insert = (cleaned: InsertRequest, initial?: InsertRequest['values']) => {
         const keyed = withFilledKey(full, cleaned);
-        return write(initial ? carryServerRequest(cleaned, { ...keyed, values: { ...keyed.values, ...initial } }) : keyed);
+        return declared(
+          operationAccess,
+          request.table,
+          () =>
+            write(
+              initial
+                ? carryServerRequest(cleaned, {
+                    ...keyed,
+                    values: { ...keyed.values, ...initial },
+                  })
+                : keyed,
+            ),
+          (result) => result.key,
+        );
       };
       /* A value the form takes from a referenced record (`{ from: 'service_id.price' }`), left out, is read here. */
       const filledIn = richTextCleaned(operationAccess, request).then(async (said) => {
@@ -296,7 +348,9 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
       return judged
         .then(async (since) =>
           consumedUpdate(operationAccess, request, async () =>
-            write(await stamped(since, await richTextCleaned(operationAccess, request))),
+            declaredUpdate(operationAccess, request, async () =>
+              write(await stamped(since, await richTextCleaned(operationAccess, request))),
+            ),
           ),
         )
         .then(async (result) => {
@@ -337,6 +391,21 @@ function appWriteRules(full: DatabaseSchema, writer: WriteTransaction, checks: R
       })();
     },
   };
+}
+
+/* The key columns an update moved, as written: the row is read back by where it now is. */
+function keyValues(full: DatabaseSchema, table: string, applied: Record<string, unknown> | undefined): Record<string, string | number> {
+  const keys = new Set(
+    full.tables
+      .find((item) => item.id === table)
+      ?.columns.filter((column) => column.primaryKey)
+      .map((column) => column.name),
+  );
+  return Object.fromEntries(
+    Object.entries(applied ?? {}).filter(
+      (entry): entry is [string, string | number] => keys.has(entry[0]) && (typeof entry[1] === 'string' || typeof entry[1] === 'number'),
+    ),
+  );
 }
 
 /** Request-owned facade. Every executable method checks the server-resolved grant. */

@@ -27,6 +27,8 @@ import {
   formatWholeMoney,
 } from '@mistriwork/kit/client/locale.js';
 import { minorFigure } from '@mistriwork/engine/shared/money.js';
+import { herePath } from '@mistriwork/kit/client/addressMount.js';
+import { notePageLoad } from '../../pageLoadHints.js';
 import {
   UiPageContext,
   UiSizeContext,
@@ -114,12 +116,22 @@ export function useAnalytics(): { emit(name: string, fields?: Readonly<Record<st
    for a reader who cannot read it — and it is the page's read, so the
    request says which page asks. Outside a page a component may name any
    resource. */
-export function useDeclared(resource: string): string | undefined {
+export function useDeclared(resource: string, optional = false): string | undefined {
   const page = useContext(UiPageContext);
   if (page && !page.reads.includes(resource)) {
-    throw new Error(say('thePageReadsIsNotOne', { label: page.label, map: page.reads.map((name) => `"${name}"`).join(', '), resource }));
+    /* An optional read (`optionalReads`) is the page's to ask only as one: some reader of the page is refused it. */
+    if (!page.optionalReads?.includes(resource))
+      throw new Error(say('thePageReadsIsNotOne', { label: page.label, map: page.reads.map((name) => `"${name}"`).join(', '), resource }));
+    if (!optional) throw new Error(say('thePageReadsOptionally', { label: page.label, resource }));
   }
   return page?.view;
+}
+
+/* An optional read of a resource this reader's catalog does not hold (a page's `optionalReads`, for a role without the
+   grant): refused, and nothing is asked of the server, which would refuse it before reading (http/pageLoad.ts). */
+function useClosed(resource: string, optional: boolean): boolean {
+  const host = useUiHost();
+  return optional && host.served?.(resource) === false;
 }
 
 /**
@@ -191,8 +203,10 @@ export function useRows(
   options: UiRowsOptions & { enabled?: boolean; optional?: boolean } = {},
 ): UiRowsQuery & UiRefusable {
   const host = useUiHost();
-  const declared = useDeclared(resource);
-  const { enabled = true, optional = false, offset: _offset, ...rest } = options;
+  const { enabled: wanted = true, optional = false, offset: _offset, ...rest } = options;
+  const declared = useDeclared(resource, optional);
+  const closed = useClosed(resource, optional);
+  const enabled = wanted && !closed;
   /* A row always carries its key columns beside `show`, as a `List`'s do: whether `row.id` is there never depends on
      what `show` happened to name. The read is the reader's own, so no column is widened past what `show` could name. */
   const asked = declared ? { ...rest, keys: true, page: declared } : { ...rest, keys: true };
@@ -214,11 +228,12 @@ export function useRows(
   }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
   const failedOver = query.isRefetchError || query.isFetchNextPageError;
   /* Under `optional` a refusal is a state to draw, never a failure: no error, no rows kept from before the grant went. */
-  const refused = optional && query.isError && refusedRead(query.error);
+  const refused = closed || (optional && query.isError && refusedRead(query.error));
   return {
     data: refused ? undefined : data,
     refused,
-    isPending: query.isPending,
+    /* A closed read is never asked, so it is settled as it stands: refused, not waiting. */
+    isPending: query.isPending && !closed,
     isFetching: query.isFetching,
     isError: query.isError && !refused,
     error: refused ? null : query.error,
@@ -231,12 +246,18 @@ export function useRows(
 }
 
 /* A read that may be refused, as `optional: true` says it: a 401 or 403 is `refused`, never an error, and keeps no data. */
-function optionally<T>(result: UseQueryResult<T> & UiReadState, optional: boolean): UseQueryResult<T> & UiReadState & UiRefusable {
-  const refused = optional && result.isError && refusedRead(result.error);
+function optionally<T>(
+  result: UseQueryResult<T> & UiReadState,
+  optional: boolean,
+  closed = false,
+): UseQueryResult<T> & UiReadState & UiRefusable {
+  const refused = closed || (optional && result.isError && refusedRead(result.error));
   if (!refused) return { ...result, refused: false };
   return {
     ...result,
     refused,
+    /* A closed read is never asked, so it is settled as it stands: refused, not waiting. */
+    ...(closed ? { isPending: false, isLoading: false } : {}),
     data: undefined,
     isError: false,
     isRefetchError: false,
@@ -269,16 +290,18 @@ export function useRecord(
   options: { optional?: boolean } = {},
 ): UseQueryResult<UiRow | null> & UiReadState & UiRefusable {
   const host = useUiHost();
-  const page = useDeclared(resource);
+  const page = useDeclared(resource, options.optional === true);
+  const closed = useClosed(resource, options.optional === true);
   return optionally(
     withReadState(
       useQuery({
         queryKey: ['mistri-ui', 'record', ...host.scope, resource, key, show, page],
         queryFn: async () => (await host.record(resource, key!, show, page ? { page } : {})) ?? null,
-        enabled: key !== undefined,
+        enabled: key !== undefined && !closed,
       }),
     ),
     options.optional === true,
+    closed,
   );
 }
 
@@ -315,8 +338,9 @@ export function useBreakdown(
   options: UiBreakdownOptions & { optional?: boolean },
 ): UseQueryResult<UiBreakdownRow[]> & UiReadState & UiRefusable {
   const host = useUiHost();
-  const page = useDeclared(resource);
   const { optional = false, fill, ...rest } = options;
+  const page = useDeclared(resource, optional);
+  const closed = useClosed(resource, optional);
   const measure = withCount(rest.measure);
   const asked = { ...rest, ...(measure === undefined ? {} : { measure }), ...(page ? { page } : {}) };
   const groups = rest.by.split(',').length;
@@ -335,9 +359,11 @@ export function useBreakdown(
         queryKey: ['mistri-ui', 'breakdown', ...host.scope, resource, asked],
         queryFn: () => host.breakdown(resource, asked),
         select: typed,
+        enabled: !closed,
       }),
     ),
     optional,
+    closed,
   );
 }
 
@@ -382,6 +408,12 @@ export function useLoader(name: string, options: { enabled?: boolean } = {}): Us
     );
   }
   const place = pageLoadPlace(frame, name);
+  /* Whether it asked as it was first drawn, noted for the page's next entry to read it ahead or leave it held
+     (pageLoadHints.ts). The page's `data` is not noted: the host reads that unasked. */
+  const first = useRef(options.enabled ?? true);
+  useEffect(() => {
+    if (name !== frame.loader) notePageLoad(herePath(), name, first.current);
+  }, [name, frame.loader]);
   return withReadState(
     useQuery({
       queryKey: pageLoadKey(host.scope, frame.view, name, place),

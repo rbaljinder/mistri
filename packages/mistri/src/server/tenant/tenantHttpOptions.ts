@@ -14,6 +14,7 @@ import type { TenantIntegrations } from './tenantIntegrations.js';
 import type { TenantLook } from './tenantLook.js';
 import type { TenantPreferences } from './tenantPreferences.js';
 import type { TenantReadsService } from './tenantReadsRoute.js';
+import type { TenantTeamService } from './tenantTeamRoute.js';
 import type { TenantSearch } from './tenantSearch.js';
 import type { TenantSupport } from './tenantSupportOperations.js';
 import type { TenantTokenService } from './tenantTokenService.js';
@@ -40,6 +41,9 @@ export interface TenantHttpOptions {
   /** The tenant's read audit for its own admins (tenantReadsRoute.ts), when a resource audits its reads and the App
       names admins (domains or branding editors). */
   readonly reads?: TenantReadsService;
+  /** The tenant's members by name, for any of its members (tenantTeamRoute.ts), where the App administers its tenants'
+      members and has not turned the read off (`auth.tenancy.team: false`). */
+  readonly team?: TenantTeamService;
   /** The integrations' settings screen (tenantIntegrations.ts), when the jobs module lists integrations. */
   readonly integrations?: NonNullable<TenantIntegrations['settings']>;
   /** Whether a tenant has the App's assistant (tenantAssistant.ts): its switch is on and a model is set up. */

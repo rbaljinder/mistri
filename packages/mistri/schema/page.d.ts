@@ -402,11 +402,13 @@ export interface PageDefinition<
   K extends { readonly [N in P]?: ParamKind } = { readonly [N in P]: 'text' },
   F extends string = never,
   LS extends string = never,
+  O extends string = never,
 > {
   (props: LoaderPageProps<L>): ReactTypes.ReactNode;
   readonly definition: {
     readonly label: string | AppMessageRef;
     readonly reads: readonly R[];
+    readonly optionalReads?: readonly O[];
     readonly commands?: readonly C[];
     readonly actions?: readonly A[];
     readonly forms?: readonly F[];
@@ -420,8 +422,9 @@ export interface PageDefinition<
       so it runs once with the place the page settled on (`page.useLoader('asap', { enabled: office !== undefined })`). */
   useLoader<const N extends L | LS>(name: N, options?: { enabled?: boolean }): UiQuery<LoaderData<N>>;
   /** Rows of one of the page's reads, each typed by what `show` names:
-      `page.useRows('pick_list', { show: ['id', 'reference'], where: { status: 'to_pick' }, sort: 'reference' })`. */
-  useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(
+      `page.useRows('pick_list', { show: ['id', 'reference'], where: { status: 'to_pick' }, sort: 'reference' })`.
+      One of its `optionalReads` is read with `optional: true` alone, and says `refused` for a reader not granted it. */
+  useRows<T extends R | O, const S extends readonly ColumnPath<T>[] = readonly []>(
     resource: T,
     options: RowsOptions<T, S> & { optional: true },
   ): UiRowsQuery<PageRow<T, S>> & UiRefusable;
@@ -430,7 +433,7 @@ export interface PageDefinition<
     options?: RowsOptions<T, S> & { optional?: false },
   ): UiRowsQuery<PageRow<T, S>>;
   /** One record of one of the page's reads, by its key; null when there is none, not asked while the key is undefined. */
-  useRecord<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(
+  useRecord<T extends R | O, const S extends readonly ColumnPath<T>[] = readonly []>(
     resource: T,
     key: RecordKey<T> | undefined,
     show: S | undefined,
@@ -450,7 +453,7 @@ export interface PageDefinition<
       chart's is, held to the same check: a column or label path, a date in a period (`'day created_at'`), or
       several of those with commas (`'month closed_at, status'`). Each row carries its groups by those keys (`day(created_at)`),
       the first measure as `value` and the rows it stands for as `count`. */
-  useBreakdown<T extends R, const B extends string>(
+  useBreakdown<T extends R | O, const B extends string>(
     resource: T,
     options: { by: GroupBy<T, B>; measure?: string; query?: string; where?: Where<T>; limit?: number; fill?: BreakdownFill; optional: true },
   ): UiQuery<UiBreakdownRow<B>[]> & UiRefusable;
@@ -585,6 +588,7 @@ export declare function definePage<
   const A extends ActionName = never,
   const F extends string = never,
   const LS extends LoaderName = never,
+  const O extends ResourceName = never,
 >(definition: {
   label: string | AppMessageRef;
   icon?: PageIcon;
@@ -603,6 +607,10 @@ export declare function definePage<
       public landing page, and `auth.public` bounds what it reads and runs as for any public page. A bare page draws no head, so it takes no `head`. */
   layout?: 'bare';
   reads: readonly R[];
+  /** Resources it reads only where its reader may, each with `{ optional: true }` on the hook (`page.useRows('visit_note', { optional: true })`):
+      a role the page is offered to need not be granted one, and for a reader without the grant that read says `refused`
+      and nothing is read. Not on a public page, and never one of `reads`. */
+  optionalReads?: readonly O[];
   commands?: readonly C[];
   /** The fixed actions it runs (a machine's verbs, `action(label, { set })`) on what it reads; commands are named in `commands`. Not on a public page. */
   actions?: readonly A[];
@@ -617,7 +625,7 @@ export declare function definePage<
       its own result, loading state and refetch. */
   loaders?: readonly LS[];
   component: (props: LoaderPageProps<L>) => ReactTypes.ReactNode;
-}): PageDefinition<R, C, ParamNames<PD>, L, A, ParamKinds<PD>, F, LS>;
+}): PageDefinition<R, C, ParamNames<PD>, L, A, ParamKinds<PD>, F, LS, O>;
 
 /** A surface as `defineSurface` makes it: its declaration, typed to the App, for the server to read and a front end's types to follow. */
 export interface SurfaceDefinition<R extends string, C extends string = never, L extends string = never, F extends string = never> {

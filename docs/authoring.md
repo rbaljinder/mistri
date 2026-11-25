@@ -1117,6 +1117,17 @@ receipts a retry or a status request reveals are the declared output, as for
 any command. `mistri check --design` lists every elevation and the granted
 roles that would not read the table otherwise, so each is a reviewed decision.
 
+A page's loader takes the same declaration, `defineLoader({ reads: ['visit',
+'note'], elevate: { read: ['note'] }, load })`, for a read that needs one table
+above its reader and writes nothing. The elevated table is read through the
+App's own reader (in a tenant App, the member's tenant and row scope with only
+the role's table grant left out) and every other table as the reader; one
+statement stays under one authority, so a condition on another table's rows
+never crosses between them. It is refused where a command's is, in the same
+words under `auth.rows: 'policy'`, and also on a public page, on a surface,
+on a page a platform role is offered and over a resource that audits its
+reads. `check --design` lists it beside the commands.
+
 A command has no version in its source. `authority.lock` records each
 command's contract digest and version (`contract assignReviewer v1 …`); a
 contract change is breaking only once something durable depends on it — an

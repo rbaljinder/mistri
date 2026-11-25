@@ -318,7 +318,7 @@ function tenantOwnAddressQuery(owned: TenantOwnershipSnapshot, column: string): 
 }
 /* A string as a PostgreSQL literal, as tenantStorePostgres.ts writes one: quotes doubled, and backslashes doubled
    under E'' so the value reads the same whatever standard_conforming_strings says; a NUL is refused. */
-function literal(value: string): string {
+export function literal(value: string): string {
   if (typeof value !== 'string' || value.includes('\0')) return denyTenant();
   const text = `'${value.replace(/'/g, "''").replace(/\\/g, '\\\\')}'`;
   return value.includes('\\') ? ` E${text}` : text;

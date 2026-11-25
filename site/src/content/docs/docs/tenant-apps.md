@@ -46,7 +46,7 @@ auth: {
 | Part                    | What it does                                                                                                | Status |
 | ----------------------- | ----------------------------------------------------------------------------------------------------------- | ------ |
 | `auth.rows: 'tenant'`   | Scopes every row by tenant membership                                                                       | Stable |
-| `auth.tenancy`          | `label` (what a tenant is called), `profile` (its one-row table), `platform` (the realm above)              | Stable |
+| `auth.tenancy`          | `label` (what a tenant is called), `profile` (its one-row table), `platform` (the realm above), `team` (`false`: members do not read who else is a member; left out, they read each other's names through [`useTeam()`](/docs/custom-components/#the-tenants-team)) | Stable |
 | A role's `realm`        | `'tenant'` or `'platform'`; every role says one once a platform is declared                                 | Stable |
 | A resource's `owner`    | `'tenant'` (each tenant's own), `'global'` (read by all, never written), `'platform'` (no tenant reads it)  | Stable |
 | `defineAppTenantPolicy` | The server-only policy: ownership columns, rows, administration, invitations, support, intake, public reads | Stable |

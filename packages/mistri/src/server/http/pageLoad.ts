@@ -26,9 +26,9 @@ import { appForRoles } from '../../shared/appViewRoles.js';
 import { appZone } from '../../shared/appUi.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
-import { strayRead } from './tablesReached.js';
+import { strayRead, tablesReached } from './tablesReached.js';
 import { READS_HEADER, readTables } from '../live/liveReads.js';
-import { PageLoaderRefused, runPageLoader } from '../commands/pageLoaderRun.js';
+import { PageLoaderRefused, runPageLoader, type ElevatedReads } from '../commands/pageLoaderRun.js';
 import { readChosen, type StoredPicks } from '../app/appChoices.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 
@@ -105,6 +105,13 @@ export async function pageLoad(options: {
   chosenHeader?: string | string[];
   /** What the person has stored for a name the header leaves out (app/appPreferences.ts). */
   chosenStored?: StoredPicks;
+  /**
+   * The App's own reader and catalog for the tables a loader elevates (`defineLoader({ elevate })`), asked with those
+   * tables by their catalog names: an ordinary App's own connection, a tenant member's tenant and row scope without
+   * the role's table grant. Absent (a row-policy App, the platform realm, a support visit, a visitor), a loader that
+   * elevates is refused.
+   */
+  elevated?: (tables: readonly string[]) => ElevatedReads | undefined;
 }): Promise<LoadReply> {
   const { app, body, schema, surface } = options;
   if (!surface && (typeof body.page !== 'string' || body.page.length > 64))
@@ -137,6 +144,21 @@ export async function pageLoad(options: {
       return { status: 400, body: { error: `"${param}" is not a parameter's text.` } };
     params[param] = value;
   }
+  /* A loader's `elevate` is held to where a command's is (pageLoaderCheck.ts refuses each of these when the App is
+     loaded), and again here, where the read would be made: never under a row policy, for a visitor, on a public page
+     or a surface, and only over resources the App declares. */
+  let elevated: ElevatedReads | undefined;
+  if (loader.elevate) {
+    const lifted = loader.elevate.read.map((local) => (loader.source ? logicalResource(app, loader.source, local) : local));
+    const declared = lifted.every((resource) => Object.hasOwn(app.resources ?? {}, resource));
+    elevated =
+      app.auth?.rows === 'policy' || surface || view.page.public || !options.signedIn || !declared ? undefined : options.elevated?.(lifted);
+    if (!elevated)
+      return {
+        status: 403,
+        body: { error: `The loader "${name}" elevates a read, and no read is elevated here.`, code: 'loader_refused' },
+      };
+  }
   /* A loader that says the parameters it reads is handed those alone: the page keys it by them (client hooks.ts
      pageLoadPlace), so one it read without saying would be a value the page never asked it again for. */
   if (loader.params) for (const param of Object.keys(params)) if (!loader.params.includes(param)) delete params[param];
@@ -152,6 +174,7 @@ export async function pageLoad(options: {
       now: clockNow(),
       timezone: appZone(app.ui, options.zone),
       chosen: await readChosen(app, schema, options.reader, options.chosenHeader, options.chosenStored),
+      ...(elevated ? { elevated } : {}),
     });
     const logical = loader.source ? (local: string) => logicalResource(app, loader.source!, local) : (local: string) => local;
     let reads: readonly string[] | undefined;
@@ -197,6 +220,18 @@ export function pageManifestRefusal(options: {
       ? undefined
       : refuse(`The page "${key}" runs ${view.page.commands.join(', ') || 'no commands'}; "${String(stray)}" is not one of them.`);
   }
-  const stray = strayRead(options.schema, view.page.reads, path, body);
-  return stray === undefined ? undefined : refuse(`The page "${key}" reads ${view.page.reads.join(', ')}; "${stray}" is not one of them.`);
+  const optional = view.page.optionalReads ?? [];
+  const declared = optional.length ? [...view.page.reads, ...optional] : view.page.reads;
+  const stray = strayRead(options.schema, declared, path, body);
+  if (stray !== undefined) return refuse(`The page "${key}" reads ${declared.join(', ')}; "${stray}" is not one of them.`);
+  /* An optional read (`optionalReads`) by a reader who is not granted it: refused here, before the read's route is
+     reached, so nothing is asked of the database and the answer is the same whether the table holds rows or none.
+     Their catalog does not have the table, which is how it is told; the page draws the refusal (`refused`). */
+  const schema = options.schema;
+  if (schema && optional.length) {
+    const closed = (tablesReached(schema, path, body) ?? []).find((asked) => optional.includes(asked) && !tableNamed(schema, asked));
+    if (closed !== undefined)
+      return { status: 403, body: { error: `"${closed}" is not open to your role.`, code: 'forbidden', outcome: 'not_applied' } };
+  }
+  return undefined;
 }

@@ -872,6 +872,12 @@ export async function checkApps(opts: Options, registry: Registry, loadedApps: L
           )
         ).map((warning) => `${app.path}: ${warning}`),
       );
+      /* Its declared data rules against the database's own constraints (appDataRuleChecks.ts): a named constraint
+         the table lacks, and what a `noOverlap` held on SQLite will need on PostgreSQL. */
+      const { dataRuleFindings } = await import('../app/appDataRuleChecks.js');
+      const rules = await dataRuleFindings(app.app, resources, async (id) => (await registry.open(id)).adapter, declared);
+      lines.push(...rules.problems.map((problem) => `${app.path}: ${problem}`));
+      advice.push(...rules.warnings.map((warning) => `${app.path}: ${warning}`));
       /* Its decisions' inputs against the schema served, and their contracts against decisions.lock. */
       if (decisions.size && commandRegistry && app === loadedApps[0]) {
         const { checkDecisions, decisionLockDirectory } = await import('../decide/decisionCheck.js');
