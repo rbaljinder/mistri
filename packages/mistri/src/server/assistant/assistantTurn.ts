@@ -13,7 +13,8 @@
  */
 import { DEFAULT_ASSISTANT_STEPS, type AppAssistant } from '../../shared/appAssistant.js';
 import type { AssistantOwner, AssistantStore, ConversationState, StoredEvent } from '../../adapters/assistant/assistantStore.js';
-import type { AssistantModel, ModelBlock, ModelMessage, ModelRefusal, ModelTool, ModelUsage } from './assistantModel.js';
+import type { AssistantModel, ModelBlock, ModelMessage, ModelTool, ModelUsage } from './assistantModel.js';
+import type { ModelRefusal } from './assistantModelRefusal.js';
 import { answerTool, runningLabel, type DisplayItem, type Proposal, type ToolSession } from './assistantTools.js';
 import { estimateTokens } from './assistantCatalog.js';
 

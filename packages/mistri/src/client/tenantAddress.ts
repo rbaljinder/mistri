@@ -1,3 +1,4 @@
+/** A tenant session's in-App addresses: the one place a page's address gains the tenant's selector, whatever the mount. */
 import { inside, shownUnplaced } from '@mistriwork/kit/client/addressMount.js';
 import { sessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { shell } from '@mistriwork/kit/client/shellMode.js';
