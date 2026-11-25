@@ -260,6 +260,7 @@ test('only genuine active enrollment supplies frozen source-derived options and 
     'deployment',
     'discover',
     'experimentConversionAuthority',
+    'marks',
     'names',
     'retire',
     'sandboxes',

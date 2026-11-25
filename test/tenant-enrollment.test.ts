@@ -121,6 +121,7 @@ test('real enrollment opens one genuine deployment plus independent discovery wi
     'deployment',
     'discover',
     'experimentConversionAuthority',
+    'marks',
     'names',
     'retire',
     'sandboxes',
