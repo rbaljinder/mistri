@@ -938,3 +938,23 @@ test("an action's given input is not drawn, and is sent as the page filled it", 
     expect(api.mock.calls.find((call) => call[0].endsWith('/execute'))?.[1].input).toEqual({ reason: 'North desk', step: 'intake' }),
   );
 });
+
+test('an action that names what it asks draws those alone, and sends the rest with their default', async () => {
+  const input: AppCommandField[] = [
+    { name: 'reason', label: 'Reason', type: 'textarea', required: true, maxLength: 500 },
+    { name: 'template', label: 'Template', type: 'text', required: true, default: 'soap' },
+    { name: 'note', label: 'Note', type: 'text' },
+  ];
+  draw({ actions: [{ ...action, command: { ...action.command, input }, asks: ['reason'] }] });
+  const { user, dialog } = await open();
+  expect(within(dialog).queryByLabelText(/Template/)).toBeNull();
+  expect(within(dialog).queryByLabelText(/Note/)).toBeNull();
+  await user.type(within(dialog).getByLabelText('Reason (required)'), 'North desk');
+  await user.click(within(dialog).getByRole('button', { name: 'Assign reviewer' }));
+  await vi.waitFor(() =>
+    expect(api.mock.calls.find((call) => call[0].endsWith('/execute'))?.[1].input).toMatchObject({
+      reason: 'North desk',
+      template: 'soap',
+    }),
+  );
+});

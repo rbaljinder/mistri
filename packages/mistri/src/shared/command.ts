@@ -1793,3 +1793,40 @@ export function commandInputProblem(
   }
   return undefined;
 }
+
+/**
+ * The inputs an action's or a form view's form asks (`asks: ['transcript']`) [command-asks]: those alone are drawn; the
+ * rest are a page's to send (`useCommand(…).run`), or take their default, or wait on their `when`. One the command
+ * requires with no default and no `when` could be sent by no one through this form, so it is refused here rather than
+ * at the first send. `given` inputs are another's to fill (the page's, the address's), and never also asked.
+ */
+export function parseAsks(
+  raw: unknown,
+  input: readonly AppCommandField[],
+  given: readonly string[] | undefined,
+  here: string,
+): string[] | undefined {
+  if (raw === undefined) return undefined;
+  const names = input.map((field) => field.name);
+  if (!Array.isArray(raw) || !raw.length || raw.some((name) => typeof name !== 'string' || !name))
+    throw new Error(`${here} has an "asks" that is not a list of the command's input names, like asks: ['note'] [command-asks].`);
+  const asks = raw as string[];
+  const twice = asks.find((name, index) => asks.indexOf(name) !== index);
+  if (twice) throw new Error(`${here} asks "${twice}" twice [command-asks].`);
+  for (const name of asks) {
+    if (!names.includes(name))
+      throw new Error(
+        `${here} asks "${name}", which is not one of the command's inputs (${names.join(', ') || 'it has none'}) [command-asks].`,
+      );
+    if (given?.includes(name)) throw new Error(`${here} both asks and is given "${name}"; it is one or the other [command-asks].`);
+  }
+  for (const field of input) {
+    if (asks.includes(field.name) || given?.includes(field.name)) continue;
+    if (field.required !== true || field.default !== undefined || field.when !== undefined) continue;
+    throw new Error(
+      `${here} asks ${asks.map((name) => `"${name}"`).join(', ')} and leaves out "${field.name}", which the command requires with no default ` +
+        `and no "when": ask it, give it a default, or make it optional [command-asks].`,
+    );
+  }
+  return asks;
+}

@@ -441,6 +441,12 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=form].abandoned` | `"purge"` · `"keep"` | Stable | An expired draft: 'purge' (the default) removes the root and the rows that point at it; 'keep' leaves them for follow-up. One of `keep`, `purge`. |
 
+## `views.*[kind=form].asks`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=form].asks` | array | Stable | The command's inputs this form asks, when not every one: only these are drawn; the rest a page sends, or take their default, or wait on their when. One required with no default and no when is refused (command-asks). Never also given, never on a form saved each step. |
+
 ## `views.*[kind=form].command`
 
 | Key | Type | Status | What it does |

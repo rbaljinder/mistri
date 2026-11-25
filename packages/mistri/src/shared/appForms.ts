@@ -15,7 +15,7 @@ import { parseRoutePath } from './appAddress.js';
 import { parseRealm, type AppFormView } from './appModel.js';
 import { allowKeys, isRecord } from '@mistriwork/engine/shared/model.js';
 import { commandInputAt, parseInputs } from '@mistriwork/engine/shared/appComponents.js';
-import { parseFormCommandReference } from './command.js';
+import { parseAsks, parseFormCommandReference } from './command.js';
 import { FORM_STYLES, parseAppForm } from './formRules.js';
 import { parseIcon } from '@mistriwork/engine/shared/appIcons.js';
 import { linkColumns, parseFormLink, parseFormSave, parseSavedSteps, parseStatusCheck, type AppFormSave } from './appSavedForms.js';
@@ -36,6 +36,7 @@ export const FORM_VIEW_KEYS = [
   'public',
   'prefillable',
   'given',
+  'asks',
   'resume',
   'draft',
   'abandoned',
@@ -161,6 +162,9 @@ export function parseFormView(e: Record<string, unknown>, at: string): AppFormVi
     if (new Set(given).size !== given.length) throw new Error(`${at} has a "given" that names one input twice.`);
     if (given.length === command.input.length) throw new Error(`${at} is given every input the command takes; a form asks for something.`);
   }
+  /* The inputs it asks, where it names them; the rest are a page's or their default's ([command-asks]). */
+  if (e.asks !== undefined && saved) throw new Error(`${at} saves each step, and takes no "asks": each step's command asks what it takes.`);
+  const asks = parseAsks(e.asks, command.input, given, at);
   let steps: AppFormView['steps'];
   if (saved) {
     if (e.steps === undefined) throw new Error(`${at} saves each step and names none: steps: [step('About you', 'startApplication'), …].`);
@@ -194,11 +198,13 @@ export function parseFormView(e: Record<string, unknown>, at: string): AppFormVi
         if (!inputs.has(field)) throw new Error(`${at}: step "${step.label}" names "${field}", which the command does not take.`);
         if (given?.includes(field))
           throw new Error(`${at}: step "${step.label}" names "${field}", which the form is given and never asks.`);
+        if (asks && !asks.includes(field))
+          throw new Error(`${at}: step "${step.label}" names "${field}", which the form's "asks" leaves out.`);
       }
     }
     const owned = new Set(parsed.flatMap((step) => step.fields));
     for (const field of command.input) {
-      if (!owned.has(field.name) && !given?.includes(field.name))
+      if (!owned.has(field.name) && !given?.includes(field.name) && (!asks || asks.includes(field.name)))
         throw new Error(`${at}: the command input "${field.name}" belongs to no step. Every input is asked on exactly one step.`);
     }
     steps = parsed.map((step) => ({ ...step, fields: [...step.fields] }));
@@ -266,6 +272,7 @@ export function parseFormView(e: Record<string, unknown>, at: string): AppFormVi
     ...(path === undefined ? {} : { path }),
     ...(prefillable ? { prefillable } : {}),
     ...(given ? { given } : {}),
+    ...(asks ? { asks } : {}),
     ...(icon === undefined ? {} : { icon }),
     ...(e.realm === undefined ? {} : { realm: parseRealm(e.realm, at) }),
     ...(steps === undefined ? {} : { steps }),

@@ -59,7 +59,7 @@ import {
   type AppNoun,
 } from '@mistriwork/engine/shared/model.js';
 import { parseIcon, type AppIconName } from '@mistriwork/engine/shared/appIcons.js';
-import { isRegisteredCommand, parseCommandReference, registeredCommand } from './command.js';
+import { isRegisteredCommand, parseAsks, parseCommandReference, registeredCommand } from './command.js';
 import { machineActions, parseMachine } from './appMachine.js';
 import { parseResourceAt } from './appAt.js';
 import { ROLLUP_FNS, type RollupFn } from '@mistriwork/engine/shared/rollups.js';
@@ -1770,6 +1770,7 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
         'reason',
         'inputs',
         'given',
+        'asks',
         ...(derived ? ['labels', 'move'] : []),
       ],
       here,
@@ -1820,6 +1821,7 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
         );
       }
       const given = parseGiven(a, command, here);
+      const asks = parseAsks(a.asks, command.input, given, here);
       /* A machine's verb is offered from the states that leave (the machine wrote that condition). Any other button is
          offered where the command is, narrowed by the action's own `when` where it has one: the command's says where it
          may run, the action's where this button is worth drawing (a tenant's verbs that do not apply to it). */
@@ -1845,11 +1847,13 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
         ...header,
         ...(inputs ? { inputs } : {}),
         ...(given ? { given } : {}),
+        ...(asks ? { asks } : {}),
       };
     }
     if (a.inputs !== undefined) throw new Error(`${here} names "inputs", which only a command's form draws; a fixed update asks nothing.`);
     if (a.given !== undefined)
       throw new Error(`${here} names "given", which only a command's form leaves undrawn; a fixed update asks nothing.`);
+    if (a.asks !== undefined) throw new Error(`${here} names "asks", which only a command's form reads; a fixed update asks nothing.`);
     if (!a.set || typeof a.set !== 'object' || Array.isArray(a.set) || !Object.keys(a.set).length) {
       throw new Error(
         `${here} has no "set" — the column → value it writes, like { "status": "working" } — and no "command": write it with action(label, { set }) or action(label, { command }).`,

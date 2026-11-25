@@ -1399,6 +1399,16 @@
               "type": "string",
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
             }
+          },
+          "asks": {
+            "type": "array",
+            "description": "The command's inputs this action's form asks, when not every one: only these are drawn; the rest a page sends, or take their default, or wait on their when. One required with no default and no when is refused (command-asks).",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
           }
         }
       }
@@ -6273,6 +6283,16 @@
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
           },
           "description": "The command's inputs the link supplies (?unit=12): filled from the address, never drawn, on a step, on the review or on the done screen, and judged by the command like anything typed. Text, number, date or choice inputs, never also prefillable, never on a form saved each step."
+        },
+        "asks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "description": "The command's inputs this form asks, when not every one: only these are drawn; the rest a page sends, or take their default, or wait on their when. One required with no default and no when is refused (command-asks). Never also given, never on a form saved each step."
         },
         "resume": {
           "type": "object",

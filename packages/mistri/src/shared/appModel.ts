@@ -490,6 +490,8 @@ export interface AppFormView<Field extends string = string> extends ServedFormVi
   prefillable?: string[];
   /** The inputs the link supplies (`?unit=12`): filled from the address, never drawn, judged by the command like the rest. */
   given?: string[];
+  /** The inputs it asks, when it names them: the rest are not drawn and take their default (`command-asks`). */
+  asks?: string[];
   /** Command input → the App's own input component, drawn in place of the platform's control. Never on a public form. */
   inputs?: Record<string, import('@mistriwork/engine/shared/appComponents.js').ComponentDecl>;
   /** Saved on every step into the App's real tables (appSavedForms.ts): a public form only. */

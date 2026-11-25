@@ -317,9 +317,11 @@ export function CommandForm({
   const fields = useMemo(() => askedFields(action.command.input, record), [action.command.input, record]);
   /* An action's `given` inputs are its page's to fill (useCommand(…).open(record, { step })): not drawn, still sent,
      since `fields` is what the submit reads. */
+  /* An action that names what it `asks` draws those alone: the rest take their default or wait on their `when`, still
+     in the draft and so still sent. */
   const drawn = useMemo(
-    () => (action.given?.length ? fields.filter((field) => !action.given!.includes(field.name)) : fields),
-    [fields, action.given],
+    () => fields.filter((field) => !action.given?.includes(field.name) && (!action.asks || action.asks.includes(field.name))),
+    [fields, action.given, action.asks],
   );
   /* Another command applied to this record after this form prepared it: the
      revision it holds is one it knows is old, and submitting it could only
@@ -450,7 +452,8 @@ export function CommandForm({
      Counted from the command's whole input, not what prepare leaves asked, so the box does not change frame (and
      remount, losing what was typed) when a `when` answer arrives. A page's `given` inputs are not drawn, so not counted. */
   const asked = [...commandFieldsDeep(action.command.input)].filter(
-    ({ field, path }) => field.type !== 'group' && !action.given?.includes(path),
+    ({ field, path }) =>
+      field.type !== 'group' && !action.given?.includes(path) && (!action.asks || action.asks.includes(path.split(/[.[]/)[0])),
   ).length;
   const drawer = proposal !== undefined || formFrame(undefined, asked) === 'page';
   const dismiss = async () => {

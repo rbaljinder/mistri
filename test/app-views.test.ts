@@ -901,6 +901,51 @@ describe('the resource owns its New form and its actions', () => {
     );
   });
 
+  test('a command action that names the inputs it asks leaves the rest to a page, a default or a when', () => {
+    const app = (
+      action: Record<string, unknown>,
+      input: Record<string, unknown> = { transcript: { type: 'textarea' }, template: { type: 'text', optional: true } },
+    ) =>
+      parse({
+        resources: { task: { access: 'write', actions: { scribe: { label: 'Scribe', command: { ...REF, input }, ...action } } } },
+        views: { all: LIST },
+        home: 'all',
+        nav: ['all'],
+      });
+    const asks = (parsed: ReturnType<typeof app>) =>
+      (parsed.resources?.task.actions?.[0] as { asks?: readonly string[] } | undefined)?.asks;
+    assert.deepEqual(asks(app({ asks: ['transcript'] })), ['transcript']);
+    assert.deepEqual(
+      asks(app({ asks: ['transcript'] }, { transcript: { type: 'textarea' }, template: { type: 'text', default: 'soap' } })),
+      ['transcript'],
+    );
+    assert.deepEqual(
+      asks(
+        app({ asks: ['transcript'] }, { transcript: { type: 'textarea' }, template: { type: 'text', when: 'transcript is not empty' } }),
+      ),
+      ['transcript'],
+    );
+    assert.throws(
+      () => app({ asks: ['template'] }),
+      /asks "template" and leaves out "transcript", which the command requires with no default and no "when".*\[command-asks\]/,
+    );
+    assert.throws(
+      () => app({ asks: ['nope'] }),
+      /asks "nope", which is not one of the command's inputs \(transcript, template\) \[command-asks\]/,
+    );
+    assert.throws(() => app({ asks: ['transcript'], given: ['transcript'], header: false }), /both asks and is given "transcript"/);
+    assert.throws(
+      () =>
+        parse({
+          resources: { task: { access: 'write', actions: { done: { label: 'Done', set: { done: true }, asks: ['step'] } } } },
+          views: { all: LIST },
+          home: 'all',
+          nav: ['all'],
+        }),
+      /names "asks", which only a command's form reads/,
+    );
+  });
+
   test("a command action's given inputs are its own, and a required one with no default is only a page's to open", () => {
     const app = (action: Record<string, unknown>, input: Record<string, unknown> = { step: { type: 'text' }, note: { type: 'text' } }) =>
       parse({

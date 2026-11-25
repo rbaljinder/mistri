@@ -2466,6 +2466,11 @@ export interface AppFormView<Field extends string = string> {
       that leaves a required one out gets its refusal on the form's line. Text, number, date or choice inputs, never
       also `prefillable`, never on a form saved each step. */
   given?: readonly Field[];
+  /** The inputs this form asks, when it does not ask every one (`asks: ['transcript']`): only these are drawn, on its
+      page and its steps. The rest are a page's to send through the command (`useCommand(name).run`), or take their
+      default, or wait on their `when`; one the command requires with no default and no `when` is refused by `check`
+      (`command-asks`). Never also `given`, never on a form saved each step. */
+  asks?: readonly Field[];
   /** A form's input drawn by the App's own input component, in place of the platform's control; a public form's page loads
       it too, and the value is still the field's kind's to judge on the server. An input in a group is named by its path (`trade.vin`), and in a repeating group stands in every row; `check` refuses a
       path the command does not take. */

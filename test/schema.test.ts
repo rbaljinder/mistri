@@ -464,9 +464,11 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     );
     assert.deepEqual(a.landingAction.properties.intent.enum, [...LANDING_ACTION_INTENTS]);
     /* Commands are names; their inputs and targets come from the server registry. `given` (rc.39): the inputs the
-       action's page gives, hidden from its form. */
+       action's page gives, hidden from its form. `asks` (1.0): the inputs its form asks, the rest left to a page or
+       a default. */
     assert.equal(a.actions.additionalProperties.properties.command.$ref, '#/$defs/commandName');
     assert.deepEqual(props(a.actions.additionalProperties), [
+      'asks',
       'bulk',
       'command',
       'confirm',
@@ -802,7 +804,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // Unreleased: a resource's `noOverlap` (`by`, `from`, `to`, `when`, `field`, `message`, `constraint`) and
     // `constraints` (each `field`, `message`): eleven entries; `noOverlap`, `constraint` and `constraints` are new
     // names: 1814/537.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1814, names: 537 });
+    // Unreleased: an action's and a form view's `asks`, the inputs its form asks (two entries, one new name): 1816/538.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1816, names: 538 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {
