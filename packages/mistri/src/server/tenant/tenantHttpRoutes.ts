@@ -104,7 +104,7 @@ export const TENANT_METADATA_POSTS: ReadonlySet<string> = new Set([
 ]);
 export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = {
   [PAGE_LOAD_PATH]: ['page', 'params', 'loader'],
-  [TENANT_BOOT_PATH]: ['path', 'search', 'reads'],
+  [TENANT_BOOT_PATH]: ['path', 'search', 'loaders', 'reads'],
   '/api/pages/plan': ['page', 'key'],
   '/api/pages/compose': ['page', 'key', 'rows', 'tab'],
   '/api/references': ['table', 'key'],
@@ -157,7 +157,7 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/import': ['table', 'view', 'name', 'csv', 'mapping', 'mode', 'skipRefused'],
   '/api/revert': ['confirm', 'expectedId', 'limit'],
   '/api/tenant/context/open': [],
-  [TENANT_ENTER_PATH]: ['path', 'search', 'tenant', 'kept'],
+  [TENANT_ENTER_PATH]: ['path', 'search', 'loaders', 'tenant', 'kept'],
   '/api/tenant/context/switch': ['tabId', 'expectedContext', 'expectedRevision'],
   '/api/tenant/context/renew': ['tabId', 'expectedContext', 'expectedRevision'],
   '/api/tenant/context/recover': ['tabId'],

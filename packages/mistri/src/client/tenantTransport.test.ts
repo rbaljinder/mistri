@@ -1039,6 +1039,47 @@ test("the page's boot answers each read it carries once, on the context it was r
   expect(fetcher).toHaveBeenCalledTimes(3);
 });
 
+test("a page's load comes with its entry: one request where the entry and then the load were two, and a held loader is not asked for", async () => {
+  session.establishTenantSelection(proof());
+  const { readKey } = await import('@mistriwork/engine/shared/firstPaint.js');
+  const hints = await import('./pageLoadHints.js');
+  localStorage.clear();
+  /* As the page was last drawn there: `figure` asked as it opened, `office` held back until a parameter settled. */
+  hints.notePageLoad('/desk/today', 'figure', true);
+  hints.notePageLoad('/desk/today', 'office', true);
+  hints.notePageLoad('/desk/today', 'office', false);
+  const load = (loader: string) => ({ page: 'today', params: {}, loader });
+  const carried = {
+    reads: {
+      [readKey('POST', '/api/pages/load?app=desk&tenant=north', load('today'))]: { body: { data: { lines: 2 } }, reads: 'item' },
+      [readKey('POST', '/api/pages/load?app=desk&tenant=north', load('figure'))]: { body: { data: { n: 3 } } },
+    },
+    items: {},
+  };
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce(reply(carried))
+    .mockImplementation(async () => reply({ data: 'asked' }));
+  vi.stubGlobal('fetch', fetcher);
+  await boot.loadTenantBoot('/desk/today', '');
+  /* The page's `loader` is the host's to read unasked; of the others, only the one the page asked as it opened is named. */
+  expect(JSON.parse(fetcher.mock.calls[0][1].body)).toEqual({ path: '/desk/today', search: '', loaders: ['figure'] });
+  /* The page draws, and asks its loads as it always did (sdk/host.tsx `load`): answered with no request, one wait in all. */
+  expect(await transport.tenantReadApi('/api/pages/load', load('today'), 'desk')).toEqual({ data: { lines: 2 } });
+  expect(await transport.tenantReadApi('/api/pages/load', load('figure'), 'desk')).toEqual({ data: { n: 3 } });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  /* The held loader, once the page lets it go, and a load at another place, are asked: a second wait, theirs alone. */
+  expect(await transport.tenantReadApi('/api/pages/load', load('office'), 'desk')).toEqual({ data: 'asked' });
+  expect(await transport.tenantReadApi('/api/pages/load', { ...load('figure'), params: { who: 'ada' } }, 'desk')).toEqual({
+    data: 'asked',
+  });
+  expect(fetcher).toHaveBeenCalledTimes(3);
+  /* An address with nothing noted says no loaders, as before. */
+  await boot.loadTenantBoot('/desk/items', '');
+  expect(JSON.parse(fetcher.mock.calls.at(-1)![1].body)).toEqual({ path: '/desk/items', search: '' });
+  localStorage.clear();
+});
+
 test('a boot that does not attest the lease, or is refused, carries nothing and fences nothing', async () => {
   session.establishTenantSelection(proof());
   const { readKey } = await import('@mistriwork/engine/shared/firstPaint.js');

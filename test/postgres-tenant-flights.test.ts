@@ -20,6 +20,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, test, type TestContext } from 'node:test';
 import { setServerTiming } from '../packages/engine/src/adapters/telemetry/serverTiming.js';
 import { postgresDescriptionCounts } from '../packages/engine/src/adapters/postgres.js';
@@ -128,6 +129,19 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
   const app = {
     ...loaded.app,
     auth: { ...loaded.app.auth!, store: relay.route(authStore.url) },
+    /* A free-form page, which Ignition has none of: its data is one loader's and it runs another by name
+       (bulkCommandsModule `loaders`), each a read of the dealership's leads. Shaped as a parsed page is
+       (shared/appPageViews.ts); its component is never drawn here. */
+    views: {
+      ...loaded.app.views,
+      pulse: {
+        label: 'Pulse',
+        sections: [
+          { kind: 'custom', component: { id: 'page-pulse', module: './pages/pulse.page.tsx', kind: 'page' }, props: {}, width: 'full' },
+        ],
+        page: { reads: ['lead'], commands: [], params: ['status'], loader: 'pulse', loaders: ['pulseCount'] },
+      },
+    } as typeof loaded.app.views,
     resources: {
       ...loaded.app.resources,
       lead: {
@@ -140,7 +154,9 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
       vehicle: { ...loaded.app.resources!.vehicle!, access: 'write', ...(CLONING ? { clone: 'config' as const } : {}) },
     },
   };
-  const served = { ...loaded, app } as typeof loaded;
+  /* A page's loaders are the App's own, beside its commands (tenantStartup.ts): the Pulse page's, from the module below. */
+  const { loaders } = (await import(pathToFileURL(commandsFile).href)) as { loaders: (typeof loaded)['loaders'] };
+  const served = { ...loaded, app, loaders } as typeof loaded;
   await provisionPostgresInbox((lending.target as { postgres: string }).postgres);
   if (CLONING) {
     /* A clone's new tenant is born without a code, which Ignition's dealers must have (tenantFeatureClone.ts). */
@@ -265,7 +281,17 @@ const bulkCommandsModule = () => {
 import ignition from ${at('./fixtures/apps/ignition/commands.ts')};
 import { disqualifyOutput } from ${at('./fixtures/apps/ignition/leads.ts')};
 import { defineCommand, defineCommands, field } from ${at('../packages/mistri/src/server/commands.ts')};
+import { defineLoader, defineLoaders } from ${at('../packages/mistri/src/server/commands/pageLoaders.ts')};
 let run = 0;
+/* The Pulse page's loaders (deploy): its data, the leads in the state its address says, and their count by name. */
+export const loaders = defineLoaders({
+  pulse: defineLoader({ reads: ['lead'], load: async ({ db, params }) => ({
+    leads: (await db.lead.where(params.status ? { status: params.status } : {}).orderBy('id')).map((row) => row.id),
+  }) }),
+  pulseCount: defineLoader({ reads: ['lead'], params: ['status'], load: async ({ db, params }) => ({
+    n: (await db.lead.where(params.status ? { status: params.status } : {})).length,
+  }) }),
+});
 export default defineCommands({
   ...ignition,
   disqualifyLead: defineCommand({
@@ -348,6 +374,14 @@ const BUDGETS: Record<string, number> = {
      visibility read waited on its notices. Marked for cloning, the sandboxes were four more: the store's layout, its
      version, its rows and a COMMIT.) */
   enter: 9,
+  /* Entering at a free-form page: the same nine, with the page's loads in them. Its `loader` and the named loader its
+     browser says it asked last time are read on the boot's snapshot, their first reads behind its BEGIN beside the
+     App's own, so a load of one wave of reads costs the entry no flight; one that reads in turns costs a flight a
+     turn past the first. Asked by the page once the entry had answered, each was a request of its own, two flights
+     (`pages/load`), and the page's second wait. */
+  'enter (page)': 9,
+  // a page's load asked alone: BEGIN with the membership and its reads; the COMMIT with the fence
+  'pages/load': 2,
   /* The same for a page reloaded in its tab, which resumes the context that tab kept where the first opens one: a
      resume is admitted as an open is. */
   'enter (kept)': 9,
@@ -545,6 +579,16 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
         if (entered.status === 200) lease = entered.body.entered.context;
         return entered;
       },
+      'pages/load': () => read('/api/pages/load', { page: 'pulse', params: { status: 'new' }, loader: 'pulse' }),
+      'enter (page)': async () => {
+        const entered = await f.call(
+          '/api/tenant/enter?app=ignition',
+          { path: '/ignition/pulse', search: '?status=new', loaders: ['pulseCount'] },
+          identity,
+        );
+        if (entered.status === 200) lease = entered.body.entered.context;
+        return entered;
+      },
       /* A reload: the page says which context its tab kept (client tenantBrowser.ts `keep`), and the host resumes it. */
       'enter (kept)': async () => {
         const entered = await f.call(
@@ -591,6 +635,16 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
       t.diagnostic(line);
       if (PRINT) console.log(`${line} ${answer.text.slice(0, 300)}\n${byFlight(answer.statements)}`);
     }
+    /* The entry at the page carried both loads, each as the page's own request answers it. */
+    const pageLoads = Object.entries(measured['enter (page)']!.body.entered.boot.reads as Record<string, { body: { data: unknown } }>)
+      .filter(([key]) => key.startsWith('POST /api/pages/load?'))
+      .map(([, carried]) => carried.body.data);
+    const loadedAlone = (await requests['pages/load']!()).body.data as { leads: string[] };
+    assert.ok(loadedAlone.leads.length > 0, 'new leads for the page to read');
+    assert.deepEqual(
+      pageLoads.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+      [loadedAlone, { n: loadedAlone.leads.length }].sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b))),
+    );
     /* The App database's flights are what a batch's size could grow; a session read on the sign-in store is paid
        once per window, and a 200-row run on a loaded machine is slow enough to land on one. */
     const appFlights = (answer: Answer): number => answer.flights.app ?? 0;

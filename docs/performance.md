@@ -138,6 +138,10 @@ unintended statement fails a test.
   tenants' names, which of them are sandboxes and the entered tenant's
   addresses; the lease's two admissions and its fence; and the boot's snapshot
   with its release fence. The bell's count is asked after it, by the bell.
+  A free-form page's loads are read on the boot's snapshot (its `loader`,
+  and the named loaders its browser saw it ask as it last opened), where the
+  page asked each once the entry had answered: a second wait, and two round
+  trips a load.
   Where the entry
   is not answered so, the page asks who-am-I as before. A record's references
   are read on one snapshot, its row and then every count at once.

@@ -19,6 +19,7 @@ import { namedCommands, parseTestApp } from './support/commandCatalog.js';
  * CREATEDB) and resets every `__mistri_*` table and its fixtures there.
  */
 import assert from 'node:assert/strict';
+import { canonicalText } from '../packages/engine/src/shared/recordReadKeys.js';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
@@ -134,12 +135,13 @@ const DERIVED = [
 
 /* A free-form page whose loader reads items, one whose loader tries to write one, and one whose loader reads tasks by an
    in-subquery on items. */
-const pageView = (key: string, reads = ['item']) => ({
+const pageView = (key: string, reads = ['item'], more: { loader?: string; loaders?: string[]; params?: string[] } = {}) => ({
   kind: 'page',
   label: key,
   component: { id: `page-${key}`, module: `./pages/${key}.page.tsx`, kind: 'page' },
   reads,
   loader: key,
+  ...more,
 });
 const manifest = (store: string, mentions: boolean | 'email' = false, pages = false, derived = false) => ({
   id: appId,
@@ -195,11 +197,13 @@ const manifest = (store: string, mentions: boolean | 'email' = false, pages = fa
           fan: pageView('fan'),
           within: pageView('within', ['task', 'item']),
           figures: pageView('figures'),
+          /* Its data is the board's; `echo` it runs by name, and keeps `who` in its address. */
+          pair: pageView('pair', ['item'], { loader: 'board', loaders: ['echo'], params: ['who', 'view'] }),
         }
       : {}),
   },
   home: 'items',
-  nav: ['items', 'tasks', ...(pages ? ['board', 'scribble', 'fan', 'within', 'figures'] : [])],
+  nav: ['items', 'tasks', ...(pages ? ['board', 'scribble', 'fan', 'within', 'figures', 'pair'] : [])],
 });
 const policyModule = (extra = '', mentions: boolean | 'email' = false, derived = false) => `export default {
   kind: 'tenant', appId: ${JSON.stringify(appId)}, storeId: ${JSON.stringify(binding.storeId)},
@@ -217,6 +221,7 @@ ${
     ? `import { defineLoader, defineLoaders } from ${JSON.stringify(new URL('../packages/mistri/src/server/commands/pageLoaders.ts', import.meta.url).href)};
 export const loaders = defineLoaders({
   board: defineLoader({ reads: ['item'], load: async ({ db }) => ({ items: (await db.item.where({}).orderBy('id')).map((row) => row.name) }) }),
+  echo: defineLoader({ reads: ['item'], params: ['who'], load: async ({ db, params }) => ({ who: params.who ?? null, items: (await db.item.where({}).orderBy('id')).map((row) => row.name) }) }),
   scribble: defineLoader({ reads: ['item'], load: async ({ db }) => db.item.update({ id: 'north-item' }, { name: 'WRITTEN' }) }),
   fan: defineLoader({ reads: ['item'], load: async ({ db }) => ({
     names: (await Promise.all(Array.from({ length: ${FAN} }, () => db.item.where({}).orderBy('id')))).map((rows) => rows.map((row) => row.name).join()),
@@ -335,6 +340,9 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     /* A page's component module is the App directory's to compile; the loader is the commands module's. The pages'
        views are the parsed manifest's, grafted on, so the host serves the loaders the commands module exports. */
     const paged = patch.pages ? parseTestApp(manifest('./auth.db', patch.mentions, true, patch.derived), 'pg pages') : undefined;
+    /* What loading an authored App puts on a page from the loaders it names (pageLoaderCheck.ts), said here by hand:
+       the parameters `echo` reads. */
+    if (paged) (paged.views.pair as unknown as { page: { loaderParams?: Record<string, string[]> } }).page.loaderParams = { echo: ['who'] };
     const loaded = paged ? { ...read, app: { ...read.app, views: paged.views, nav: paged.nav } } : read;
     const connection: ConnectionConfig = {
       id: binding.source.connection,
@@ -939,6 +947,55 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     assert.equal(wrote.body.code, 'loader_refused');
     assert.deepEqual(await items(), before);
     refused(await f.data('/api/pages/load', { ...south, ...f.signedIn(ada) }, { page: 'board' }));
+  });
+
+  test("a boot at a free-form page's address carries its loader's answer as the page's own request has it, a named loader only when asked, and never one the page does not list", async (t) => {
+    const f = await fixture(t, { pages: true }),
+      ada = await f.signup('Ada'),
+      bob = await f.signup('Bob');
+    await f.grant(ada, 'north');
+    await f.grant(bob, 'south');
+    const north = await f.open(ada, 'north'),
+      south = await f.open(bob, 'south');
+    /* The loads a boot carried, by the request each answers: the page, its place and the loader. */
+    const carried = async (context: Context, path: string, search = '', loaders?: string[]) => {
+      const reply = await f.data('/api/boot', context, { path: `/${appId}/${path}`, search, ...(loaders ? { loaders } : {}) });
+      assert.equal(reply.status, 200, reply.text);
+      return Object.fromEntries(
+        Object.entries(reply.body.reads as Record<string, { body: unknown }>)
+          .filter(([key]) => key.startsWith('POST /api/pages/load?'))
+          .map(([key, read]) => [key.slice(key.indexOf('\u0000') + 1), read.body]),
+      );
+    };
+    const asked = (page: string, loader: string, params: Record<string, string> = {}) => canonicalText({ page, params, loader });
+    /* The page's `loader`, read on the lease: each member's own tenant, as its own request answers. */
+    assert.deepEqual(await carried(north, 'board'), { [asked('board', 'board')]: { data: { items: ['North item'] } } });
+    assert.deepEqual(await carried(south, 'board'), { [asked('board', 'board')]: { data: { items: ['South item'] } } });
+    assert.deepEqual((await f.data('/api/pages/load', north, { page: 'board', params: {}, loader: 'board' })).body, {
+      data: { items: ['North item'] },
+    });
+    /* A loader that is refused is not carried: the page asks, and hears why. */
+    assert.deepEqual(await carried(north, 'scribble'), {});
+    /* A list's address has no loads; nor has a page asked with a value its slot cannot carry. */
+    assert.deepEqual(await carried(north, 'items'), {});
+    assert.deepEqual(await carried(north, 'pair', '?who=a;b'), {});
+    /* A named loader is a page's to hold back (`useLoader(name, { enabled: false })`): unasked, it is not read. Its
+       data is asked at the page's whole place, of the parameters the page keeps and no other the address says. */
+    assert.deepEqual(await carried(north, 'pair', '?who=ada&view=wide&stray=1'), {
+      [asked('pair', 'board', { who: 'ada', view: 'wide' })]: { data: { items: ['North item'] } },
+    });
+    /* Asked, it is read at the parameters it says it reads; a loader of another page, or of none, is no load. */
+    assert.deepEqual(await carried(north, 'pair', '?who=ada&view=wide', ['echo', 'fan', 'ghost', 'echo']), {
+      [asked('pair', 'board', { who: 'ada', view: 'wide' })]: { data: { items: ['North item'] } },
+      [asked('pair', 'echo', { who: 'ada' })]: { data: { who: 'ada', items: ['North item'] } },
+    });
+    assert.deepEqual(await carried(south, 'pair', '', ['echo']), {
+      [asked('pair', 'board')]: { data: { items: ['South item'] } },
+      [asked('pair', 'echo')]: { data: { who: null, items: ['South item'] } },
+    });
+    /* More names than a page could list, or one that is no name, is no boot. */
+    assert.equal((await f.data('/api/boot', north, { path: `/${appId}/pair`, search: '', loaders: Array(9).fill('echo') })).status, 400);
+    assert.equal((await f.data('/api/boot', north, { path: `/${appId}/pair`, search: '', loaders: [7] })).status, 400);
   });
 
   test("a tenant page loader's .with reads the computed column and rollup a tenant list shows, counted in its own tenant only", async (t) => {

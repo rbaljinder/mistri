@@ -157,7 +157,20 @@ each of the room's reads through its own route on the one context. The bell's
 count is not among them: reading it takes a second round trip behind the first
 (the notices, then whether their records are still the reader's to see), which
 the whole page would wait on, so the bell asks for itself once the bar has
-drawn, and its count is laid over its corner without moving anything. Each answer
+drawn, and its count is laid over its corner without moving anything.
+
+A free-form page's loads are among the room's reads
+(`http/firstPaintRooms.ts` `pageLoads`). Its `loader` is planned from the
+address, at the place the page will ask it (the parameters the page keeps, and
+of those the ones the loader says it reads). A named loader is planned only
+when the request names it: a page may hold one back
+(`useLoader(name, { enabled: false })`), which only its own code says, so each
+`useLoader` notes in the browser whether it asked as its page was first drawn
+(`client/pageLoadHints.ts`) and the next entry at that address names those that
+did. The name is a wish: the load goes through `/api/pages/load`'s own route
+on the lease, which finds the page among those the reader is served and the
+loader in that page's own list. An App with `choose` plans no loads, since a
+loader may read picks the entry request does not carry. Each answer
 is keyed by the request it answers, and the shell's requests take them once;
 anything the boot did not carry, or a refusal in a read's own words, the page
 asks itself. A boot that fails fences nothing, and a support lease is answered

@@ -32,6 +32,7 @@ import {
   enteredTenant,
   type TenantBatchRead,
 } from '../shared/tenantBoot.js';
+import { pageLoadHints } from './pageLoadHints.js';
 import { readKey } from '@mistriwork/engine/shared/firstPaint.js';
 import { gatheringReads } from '@mistriwork/kit/client/readGathering.js';
 import { PAGE_HEADER } from '@mistriwork/engine/shared/pageRoutes.js';
@@ -462,6 +463,7 @@ export async function enterTenant(
   const { value, response } = await request(snapshot, `${TENANT_ENTER_PATH}?${new URLSearchParams({ app: snapshot.appId! })}`, {
     path: page.path,
     search: page.search,
+    ...pageLoadHints(page.path),
     ...(requested === undefined ? {} : { tenant: requested }),
     ...(kept ? { kept: { tenantId: kept.tenantId, tabId: kept.tabId } } : {}),
   });
@@ -539,6 +541,8 @@ export async function enterFirst(
       body: JSON.stringify({
         path: page.path,
         search: page.search,
+        /* The named loaders the page there asked as it last opened, to be read with it (pageLoadHints.ts). */
+        ...pageLoadHints(page.path),
         ...(requested === undefined ? {} : { tenant: requested }),
         ...(kept ? { kept: { tenantId: kept.tenantId, tabId: kept.tabId } } : {}),
       }),
@@ -709,7 +713,7 @@ export async function tenantBootReply(
   const snapshot = captureSessionIdentity();
   const owner = selected(snapshot);
   const address = `${TENANT_BOOT_PATH}?${new URLSearchParams({ app: owner.appId, ...selector(owner.tenantId) })}`;
-  const { response, value } = await request(snapshot, address, { path, search }, owner, undefined, true, undefined);
+  const { response, value } = await request(snapshot, address, { path, search, ...pageLoadHints(path) }, owner, undefined, true, undefined);
   return response.ok && currentLease(snapshot, owner) && owns(response.headers, owner) ? { value, owner } : undefined;
 }
 /** An answer the boot carried, read on `owner`'s context: taken only on that same context. */

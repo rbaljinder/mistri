@@ -78,7 +78,8 @@ import { RECORD_LINKS_PATH, RECORD_LINKS_REVOKE_PATH } from '../http/recordLinkR
 import type { RecordLinksRequest } from './tenantLinkRevoke.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { tenantSessionDiscovery } from './tenantDiscovery.js';
-import type { TenantAddresses } from './tenantIntakeModel.js';
+import { pageLoads } from '../http/firstPaintRooms.js';
+import { enterTenant, type AddressesAhead } from './tenantEnter.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
 import { tenantElevatedReaderOf, withBoundedReads, type TenantReadContext } from './tenantReadRuntime.js';
 import type { PlatformReadContext } from './tenantPlatformReadRuntime.js';
@@ -145,7 +146,6 @@ import { itemKey, readKey, type FirstPaintData } from '@mistriwork/engine/shared
 import {
   TENANT_BOOT_PATH,
   TENANT_ENTER_PATH,
-  enteredTenant,
   tenantBatchRequest,
   tenantBootRequest,
   tenantEnterRequest,
@@ -385,8 +385,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             found: TenantDiscovery;
             lease: TenantContextReply;
             whoami?: Record<string, unknown>;
-            /* The entered tenant's own addresses, read in discovery's names message (tenantDiscovery.ts `TenantEntering`). */
-            addresses?: { tenantId: string; read: Promise<TenantAddresses | undefined> };
+            addresses?: AddressesAhead;
           }
         | undefined;
       const selected =
@@ -518,105 +517,35 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         return send(req, res, 200, found);
       }
       if (path === TENANT_ENTER_PATH) {
-        /* The person's tenants, and where they are entered without being asked, the lease and the page's boot on it,
-           in one request (shared/tenantBoot.ts). Nothing here is a new proof: each step is the function its own
-           route runs, in the order the page asked them, and each refuses what that route refuses. */
+        /* The person's tenants, and where they are entered without being asked, the lease (tenantEnter.ts). */
         const asked = tenantEnterRequest(input, app.id) ?? invalid();
-        /* A lease in `tenantId`, in the page's own order (client tenantBrowser.ts `contextFor`): this tab's kept
-           context resumed where it is that tenant's, else a new one. A refusal is no lease: the page then asks to
-           open one itself, and hears why in that route's words. */
-        const leaseIn = async (tenantId: string): Promise<TenantContextReply | undefined> => {
-          if (asked.kept?.tenantId === tenantId) {
-            try {
-              return await contexts.resume(req, [tenantId], { tabId: asked.kept.tabId });
-            } catch {
-              /* Gone, expired, or held by another page: a new one. */
-            }
-          }
-          return contexts.open(req, [tenantId], {}).catch(() => undefined);
-        };
-        /* A lease the answer will not carry is let go at once, as a page leaving lets its own go. */
-        const letGo = async (pending: Promise<TenantContextReply | undefined> | undefined) => {
-          const lease = await pending;
-          if (lease)
-            await contexts
-              .release(req, { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision })
-              .catch(() => {});
-        };
-        /* The tenant the page has reason to expect — the link's, the one this tab kept, or else the one discovery's
-           first snapshot finds — is opened beside the rest of discovery rather than after it: opening is its own
-           admission, exactly what the page could ask of `/open` for any tenant without asking discovery first, and
-           nothing of the tenant is read before discovery has answered that it is the person's one. Where it is not,
-           the lease is let go unseen. */
-        const named = asked.tenant ?? asked.kept?.tenantId;
-        const onHost = getTenantHostIntent(req);
-        const hint = onHost && named !== onHost.tenant ? undefined : named;
-        let ahead = hint === undefined ? undefined : { tenantId: hint, lease: leaseIn(hint) };
-        let found: TenantDiscovery;
-        /* Who-am-I, said as its own route says it (tenantAuthenticatedHttp.ts `whoamiAnswer`): the page's first
-           request is this one, and holds back every other until it knows whose session it is. A signed-out
-           request is answered as who-am-I answers it, and the page draws the sign-in it always drew. */
-        let who: Record<string, unknown> | undefined;
-        let proof: VerifiedSessionInstance | null | undefined;
-        /* The addresses of the tenant being entered, asked in the message that names the person's tenants rather than
-           by the App payload on a snapshot of its own. Which tenant is the rule `ahead` follows: the one the page
-           expects, else the only one found; and only ever one of the person's own, which discovery's first snapshot
-           just read. Nothing of them is said until the boot below is admitted to that tenant on its lease. */
-        let addressesAhead: { tenantId: string; read: Promise<TenantAddresses | undefined> } | undefined;
-        try {
-          /* Named nowhere, the tenant is the one discovery's first snapshot finds, where it finds one. */
-          found = await discoverFor(
-            req,
-            (ids) => {
-              if (ahead === undefined && ids.length === 1) ahead = { tenantId: ids[0]!, lease: leaseIn(ids[0]!) };
-            },
-            (proved) => {
-              proof = proved;
-            },
-            {
-              tenant: (ids) => hint ?? (ids.length === 1 ? ids[0] : undefined),
-              addresses: (tenantId, read) => {
-                addressesAhead = { tenantId, read };
-              },
-            },
-          );
-          /* The session discovery proved is the one who-am-I says, not another look at the store. */
-          who = proof === undefined ? undefined : await whoami?.(req, expectedAccounts.get(req), proof);
-        } catch (error) {
-          await letGo(ahead?.lease);
-          throw error;
-        }
-        const sole =
-          found.status === 'ready'
-            ? enteredTenant(
-                (found.memberships ?? []).map((member) => member.tenantId),
-                found.platform === true,
-                { named: asked.tenant, kept: asked.kept?.tenantId },
-              )
-            : undefined;
-        if (ahead && ahead.tenantId !== sole) await letGo(ahead.lease);
-        const lease = sole === undefined ? undefined : ahead?.tenantId === sole ? await ahead.lease : await leaseIn(sole);
-        assertActive();
-        if (lease && (lease.tenantId !== sole || lease.realm !== undefined || req.aborted || res.destroyed)) {
-          await letGo(Promise.resolve(lease));
-          return denyTenant();
-        }
-        if (!lease) return send(req, res, 200, who ? { ...found, whoami: who } : found);
+        const entered = await enterTenant({
+          req,
+          asked,
+          contexts,
+          discoverFor,
+          whoami: async (proof) => whoami?.(req, expectedAccounts.get(req), proof),
+          assertActive,
+          gone: () => req.aborted || res.destroyed,
+        });
+        const { lease, sole } = entered;
+        if (!lease || sole === undefined)
+          return send(req, res, 200, entered.whoami ? { ...entered.found, whoami: entered.whoami } : entered.found);
         /* Entered: the page's boot on that lease, answered by the boot's own branch below as a `/api/boot` request
            bearing the lease would be — its tenant as the selector, its tab, context and revision as the assertion,
            the address as the boot's — so each of its reads is admitted on the lease and gated as its own request. */
-        parseTenantSelector([sole!]);
-        exposed(headers.tenant, sole!);
+        parseTenantSelector([sole]);
+        exposed(headers.tenant, sole);
         entering = {
-          found,
+          found: entered.found,
           lease,
-          ...(who ? { whoami: who } : {}),
-          ...(addressesAhead?.tenantId === sole ? { addresses: addressesAhead } : {}),
+          ...(entered.whoami ? { whoami: entered.whoami } : {}),
+          ...(entered.addresses ? { addresses: entered.addresses } : {}),
         };
         control = false;
-        selectors = [sole!];
+        selectors = [sole];
         assertion = { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision };
-        input = { path: asked.page.path, search: asked.page.search };
+        input = { path: asked.page.path, search: asked.page.search, ...(asked.page.loaders ? { loaders: asked.page.loaders } : {}) };
         path = TENANT_BOOT_PATH;
       }
       if (control) {
@@ -1680,8 +1609,21 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 itemAnswers[itemKey(kind, app.id, key)] = { body };
               });
               /** The reads the room at the page's address asks, planned from `payload`. */
-              const askRoom = (payload: AppPayloadApp, pages: RoomInput['pages']) =>
-                plannedRoom({ app: app.id, path: page!.path, search: page!.search, payload, schema, pages, me: {}, visitor: false });
+              /* With the room, the loads a free-form page asks as it opens (http/firstPaintRooms.ts `pageLoads`): its
+                 `loader`, and those of its `loaders` the page's browser says it asked last time. The page asked them
+                 once the entry had answered, a second wait as long as the first before it could draw (a field
+                 report). Each goes through the load's own route (`one`), on this lease: the page found among those
+                 this reader is served, the loader in that page's own list, its reads in this lease's catalog under
+                 its grants and row scope. Not where the App keeps picks (`choose`): a loader may read them, the tab
+                 says its own in a header this request does not carry, and an answer read under other picks is not
+                 the page's. */
+              const askRoom = (payload: AppPayloadApp, pages: RoomInput['pages']) => {
+                const room = { app: app.id, path: page!.path, search: page!.search, payload, schema, pages, me: {}, visitor: false };
+                return Promise.all([
+                  plannedRoom(room),
+                  ...(app.choose ? [] : pageLoads(room, page!.loaders).map((load) => ask(load.method, load.target, load.body))),
+                ]);
+              };
               /* The room's reads leave with the App's rather than after them. Its plan needs the App's payload, and
                what that payload reads — the tenant's words and locale, its branding, its assistant's switch, its
                addresses — moves no read the room asks; so the room is planned first from the App as this context

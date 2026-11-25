@@ -27,6 +27,8 @@ import {
   formatWholeMoney,
 } from '@mistriwork/kit/client/locale.js';
 import { minorFigure } from '@mistriwork/engine/shared/money.js';
+import { herePath } from '@mistriwork/kit/client/addressMount.js';
+import { notePageLoad } from '../../pageLoadHints.js';
 import {
   UiPageContext,
   UiSizeContext,
@@ -406,6 +408,12 @@ export function useLoader(name: string, options: { enabled?: boolean } = {}): Us
     );
   }
   const place = pageLoadPlace(frame, name);
+  /* Whether it asked as it was first drawn, noted for the page's next entry to read it ahead or leave it held
+     (pageLoadHints.ts). The page's `data` is not noted: the host reads that unasked. */
+  const first = useRef(options.enabled ?? true);
+  useEffect(() => {
+    if (name !== frame.loader) notePageLoad(herePath(), name, first.current);
+  }, [name, frame.loader]);
   return withReadState(
     useQuery({
       queryKey: pageLoadKey(host.scope, frame.view, name, place),
