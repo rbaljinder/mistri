@@ -5,6 +5,8 @@ export const say = defineMessages({
   reviewNotOffered: '{label} has no record revision to review; run it as it is.',
   visitorUnavailable: 'Visitor experiments are unavailable in this component host.',
   thePageReadsIsNotOne: 'The page "{label}" reads {map}; "{resource}" is not one of them. Add it to the page\'s reads.',
+  thePageReadsOptionally:
+    'The page "{label}" names "{resource}" in its optionalReads: read it with `optional: true`, and draw `refused` for a reader who is not granted it.',
   thePageRunsIsNotOne:
     'The page "{label}" runs {map}; "{command}" is not one of them. Add it to the `commands` list of its definePage. Declaring grants nothing: useCommand(\'{command}\').granted then says whether this reader may run it.',
   thePageRunsActionIsNotOne: 'The page "{label}" runs {map}; "{action}" is not one of them. Add it to the page\'s actions.',

@@ -60,7 +60,7 @@ import { documentedFix } from './checkCodes.js';
 import { connectionBudgets, deployFindings } from './checkDeploy.js';
 import { schemaChanges } from './schemaChanges.js';
 import { readAuditUnrecordable } from './checkReadAudit.js';
-import { commandElevations, commandUnreadable, publicCommandRemovals } from './checkCommands.js';
+import { commandElevations, commandUnreadable, loaderElevations, publicCommandRemovals } from './checkCommands.js';
 import { publicLinkCallProblems } from '../links/publicLink.js';
 import { asDeployFinding, migrationsToJudge } from './deployMigrations.js';
 import { migrationFindings } from './migrationSafety.js';
@@ -1906,13 +1906,19 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
          roles would not read them otherwise. Listed, never a warning — an
          elevation is a decision, and this is where it is seen. */
       if (design) {
-        const lines = commandElevations(loaded.app, loaded.commands?.registry ?? {}, schema);
+        const byCommands = commandElevations(loaded.app, loaded.commands?.registry ?? {}, schema);
+        // A page's loader that elevates is listed with them: the same decision, made for a read.
+        const byLoaders = loaderElevations(loaded.app, loaded.loaders, schema);
+        const lines = [...byCommands, ...byLoaders];
+        const counted = (n: number, noun: string) => `${n} ${noun}${n === 1 ? '' : 's'}`;
         // An App that elevates nothing has nothing to review: no step.
         if (lines.length)
           steps.push({
             name: 'elevations',
             status: 'passed',
-            detail: `${lines.length} command${lines.length === 1 ? '' : 's'} read${lines.length === 1 ? 's' : ''} above the caller`,
+            detail: byLoaders.length
+              ? `${counted(byCommands.length, 'command')} and ${counted(byLoaders.length, 'loader')} read above the caller`
+              : `${lines.length} command${lines.length === 1 ? '' : 's'} read${lines.length === 1 ? 's' : ''} above the caller`,
             lines,
           });
       }

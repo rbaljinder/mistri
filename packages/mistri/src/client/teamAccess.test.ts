@@ -17,6 +17,8 @@ const invites = vi.hoisted(() => ({
   listInvitations: vi.fn(),
   executeInvitation: vi.fn(),
 }));
+const core = vi.hoisted(() => ({ api: vi.fn() }));
+vi.mock('@mistriwork/kit/client/core.js', () => core);
 vi.mock('./tenantAdministration.js', () => admin);
 vi.mock('./tenantInvitations.js', () => invites);
 const { createTeamAccess } = await import('./teamAccess.js');
@@ -41,6 +43,14 @@ const pair = {
 beforeEach(() => {
   vi.clearAllMocks();
   identity.current = owner;
+  /* The members' own read of who is on the team, as the tenant host answers it (tenantTeamRoute.ts). */
+  core.api.mockResolvedValue({
+    members: [
+      { id: 'mem-1', account: 'eve', name: 'Eve Adams', you: true },
+      { id: 'mem-2', account: 'bo', name: 'Bo', you: false },
+      { id: 'mem-3', account: 'nameless', name: '', you: false },
+    ],
+  });
   admin.openAdministration.mockResolvedValue({ context: 'c', expiresAt: Date.now() + 600_000, maxMembershipLifetimeMs: 1e9 });
   admin.listAdministrationTenants.mockResolvedValue({
     items: [
@@ -89,20 +99,57 @@ test('it lists members and invitations, marks the reader, and says they may mana
   const read = await createTeamAccess().read();
   expect(read.canManage).toBe(true);
   expect([...read.roles].sort()).toEqual(['admin', 'reader']);
+  expect(read.read).toBe('administration');
   expect(read.members).toEqual([
-    { id: 'mem-1', name: 'Eve', email: 'eve@example.test', role: 'admin', you: true },
-    { id: 'mem-2', name: 'Bo', email: '', role: 'reader', you: false },
+    { id: 'mem-1', account: 'eve', name: 'Eve', initials: 'E', email: 'eve@example.test', role: 'admin', you: true },
+    { id: 'mem-2', account: 'bo', name: 'Bo', initials: 'B', email: '', role: 'reader', you: false },
   ]);
+  // A manager is read the administration's list, never the narrower one in its place.
+  expect(core.api).not.toHaveBeenCalled();
   expect(read.invitations).toEqual([{ id: 'inv-1', email: 'new@example.test', role: 'reader', expiresAt: 50 }]);
 });
 
 test('an account with no grant on this tenant sees a team it cannot manage', async () => {
   admin.openAdministration.mockResolvedValue(null);
   invites.openInvitationIssuer.mockResolvedValue(null);
-  expect(await createTeamAccess().read()).toEqual({ members: [], invitations: [], roles: [], canManage: false });
+  /* A field report: this was an empty team, so a member who is not a manager could not list people to assign work to.
+     They are read the members' names now, and nothing the administration's list says beside a name. */
+  const read = await createTeamAccess().read();
+  expect(core.api).toHaveBeenCalledWith('/api/team', {});
+  expect(read).toEqual({
+    read: 'names',
+    members: [
+      { id: 'mem-1', account: 'eve', name: 'Eve Adams', initials: 'EA', email: '', role: '', you: true },
+      { id: 'mem-2', account: 'bo', name: 'Bo', initials: 'B', email: '', role: '', you: false },
+      { id: 'mem-3', account: 'nameless', name: '', initials: '', email: '', role: '', you: false },
+    ],
+    invitations: [],
+    roles: [],
+    canManage: false,
+  });
   const team = createTeamAccess();
   await expect(team.remove('mem-2')).rejects.toThrow();
   expect(admin.executeAdministration).not.toHaveBeenCalled();
+});
+
+test('the narrow read passes on a name and two ids of each member, whatever else a reply carried', async () => {
+  admin.openAdministration.mockResolvedValue(null);
+  invites.openInvitationIssuer.mockResolvedValue(null);
+  core.api.mockResolvedValue({
+    members: [
+      { id: 'mem-2', account: 'bo', name: 'Bo', you: false, email: 'bo@example.test', role: 'admin', roles: ['admin'], status: 'active' },
+    ],
+  });
+  const read = await createTeamAccess().read();
+  expect(read.members).toEqual([{ id: 'mem-2', account: 'bo', name: 'Bo', initials: 'B', email: '', role: '', you: false }]);
+  expect(JSON.stringify(read)).not.toMatch(/bo@example\.test|admin|active/);
+});
+
+test('an App that keeps no members read, or a refusal, is no list: the team says so', async () => {
+  admin.openAdministration.mockResolvedValue(null);
+  invites.openInvitationIssuer.mockResolvedValue(null);
+  core.api.mockRejectedValue(Object.assign(new Error('Not found.'), { status: 404 }));
+  expect(await createTeamAccess().read()).toEqual({ read: 'none', members: [], invitations: [], roles: [], canManage: false });
 });
 
 test('outside a tenant lease nothing is requested', async () => {
@@ -110,6 +157,7 @@ test('outside a tenant lease nothing is requested', async () => {
   expect((await createTeamAccess().read()).canManage).toBe(false);
   expect(admin.openAdministration).not.toHaveBeenCalled();
   expect(invites.openInvitationIssuer).not.toHaveBeenCalled();
+  expect(core.api).not.toHaveBeenCalled();
 });
 
 test('each action is the intent the routes take, at the versions just read', async () => {

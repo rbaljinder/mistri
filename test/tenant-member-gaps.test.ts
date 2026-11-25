@@ -22,8 +22,10 @@ import { provisionSqliteRecordHistory } from '../packages/mistri/src/adapters/hi
 import { defineAppTenantPolicy } from '../packages/mistri/src/server/policy/appTenantPolicy.js';
 import type { VerifiedSessionInstance } from '../packages/mistri/src/server/auth/auth.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
+import { defineLoader, defineLoaders } from '../packages/mistri/src/server/commands/pageLoaders.js';
 import { createTenantEnrollment } from '../packages/mistri/src/server/tenant/tenantEnrollment.js';
 import { createTenantHttpServer } from '../packages/mistri/src/server/tenant/tenantHttp.js';
+import type { TenantTeamService } from '../packages/mistri/src/server/tenant/tenantTeamRoute.js';
 import { tenantAuthoringSchema } from '../packages/mistri/src/server/tenant/tenantVisibleFields.js';
 import type { TenantOwnershipSnapshot } from '../packages/mistri/src/server/tenant/tenantOwnership.js';
 import { createSqliteTenantAdministration, provisionSqliteTenantStore } from '../packages/mistri/src/server/tenant/tenantStore.js';
@@ -43,7 +45,7 @@ const object = (value: unknown): Record<string, unknown> => {
 /** What `peek` found for each id it was given, thrown or returned: a command's typed get, seen from outside. */
 const peeked: Record<string, unknown> = {};
 
-async function fixture(t: TestContext, memberRoles: string[] = ['employee']) {
+async function fixture(t: TestContext, memberRoles: string[] = ['employee'], extra: { team?: TenantTeamService } = {}) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-gaps-')),
     path = join(directory, 'business.db');
   const db = new DatabaseSync(path);
@@ -134,8 +136,17 @@ async function fixture(t: TestContext, memberRoles: string[] = ['employee']) {
           component: { id: 'page-browse', module: './pages/browse.page.tsx', kind: 'page' },
           reads: ['ticket'],
         },
+        // A page both roles open: the people beside a ticket are read only by the role that may read them.
+        roster: {
+          kind: 'page',
+          label: 'Roster',
+          component: { id: 'page-roster', module: './pages/roster.page.tsx', kind: 'page' },
+          reads: ['ticket'],
+          optionalReads: ['person'],
+          loaders: ['assignees', 'peekPeople'],
+        },
       },
-      nav: ['tickets', 'raise', 'intake', 'browse'],
+      nav: ['tickets', 'raise', 'intake', 'browse', 'roster'],
       home: 'tickets',
     },
     'desk fixture',
@@ -252,7 +263,23 @@ async function fixture(t: TestContext, memberRoles: string[] = ['employee']) {
   });
   const session: VerifiedSessionInstance = { identity: { id: 'eve', who: 'Eve' }, sessionId: 'session-eve', expiresAt: 20000 };
   const bound = { host: '127.0.0.1', port: 0 };
-  owner = createTenantHttpServer({ app, enrollment, bound, verifySessionInstance: () => session });
+  /* Two loaders of the roster page that read `person`, which the clerk's role is not granted: one says so
+     (`elevate`), one does not. */
+  const loaders = defineLoaders({
+    assignees: defineLoader({
+      reads: ['ticket', 'person'],
+      elevate: { read: ['person'] },
+      load: async ({ db: records }) => ({
+        tickets: await records.ticket.count(),
+        people: (await records.person.where({}).orderBy('id')).map((row) => String(row.last)),
+      }),
+    }),
+    peekPeople: defineLoader({
+      reads: ['ticket', 'person'],
+      load: async ({ db: records }) => ({ people: (await records.person.where({})).map((row) => String(row.last)) }),
+    }),
+  }) as never;
+  owner = createTenantHttpServer({ app, enrollment, bound, loaders, ...extra, verifySessionInstance: () => session });
   owner.server.listen(0, bound.host);
   await once(owner.server, 'listening');
   const address = owner.server.address();
@@ -282,7 +309,7 @@ async function fixture(t: TestContext, memberRoles: string[] = ['employee']) {
       'x-mistri-lease-revision': String(value.revision),
       'x-mistri-account': value.accountId,
     });
-  return { db, open, data, path, app };
+  return { db, open, data, path, app, port: bound.port };
 }
 
 const ok = (reply: Answer) => {
@@ -536,6 +563,124 @@ test("a tenant page's read of a table its page does not declare is refused, as i
   const carried = Object.entries(object(ok(boot).reads));
   assert.equal(carried.length, 1, boot.text);
   assert.doesNotMatch(boot.text, /Lovelace/);
+});
+
+/* A page's optional read (definePage `optionalReads`): the page is the clerk's to open though the clerk reads no
+   person, and that one read is refused on the lease's own catalog before any read is asked of the tenant's rows. */
+test("a tenant page's optional read is refused for the member's role that is not granted it, and answered for the one that is", async (t) => {
+  const page = { 'x-mistri-page': 'roster' };
+  const clerk = await fixture(t, ['clerk']),
+    north = await clerk.open();
+  ok(await clerk.data('/api/view/run', north, readsOf('ticket'), page));
+  const refused = await clerk.data('/api/view/run', north, readsOf('person'), page);
+  assert.equal(refused.status, 403, refused.text);
+  assert.equal(refused.body.code, 'forbidden');
+  assert.doesNotMatch(refused.text, /Lovelace|Turing|rows/);
+  // The same words whether the read could match a row or none.
+  const none = await clerk.data(
+    '/api/view/run',
+    north,
+    { view: { base: 'person', filter: { groups: [[{ path: 'id', op: '=', value: 'no-such-person' }]] } } },
+    page,
+  );
+  assert.equal(none.status, 403, none.text);
+  assert.equal(none.text, refused.text);
+  // Carried in a boot batch, it is not answered there either.
+  const boot = await clerk.data('/api/boot', north, { reads: [{ method: 'POST', path: '/api/view/run', body: readsOf('person') }] }, page);
+  assert.doesNotMatch(boot.text, /Lovelace|Turing/);
+  const employee = await fixture(t),
+    desk = await employee.open();
+  const read = ok(await employee.data('/api/view/run', desk, readsOf('person'), page));
+  assert.match(JSON.stringify(read), /Lovelace/);
+});
+
+/* A loader's `elevate` in a tenant App: the table is read without the role's table grant, and under nothing wider.
+   The member's tenant and row scope still bind it, so another tenant's rows are no nearer than they were. */
+test("a tenant loader's elevated read is of the member's own tenant, and a loader without elevate still reads nothing of the table", async (t) => {
+  const f = await fixture(t, ['clerk']),
+    north = await f.open();
+  const loaded = await f.data('/api/pages/load', north, { page: 'roster', loader: 'assignees' });
+  assert.equal(loaded.status, 200, loaded.text);
+  assert.deepEqual(object(loaded.body.data), { tickets: 1, people: ['Lovelace', 'Turing'] });
+  assert.doesNotMatch(loaded.text, /Hopper/, "another tenant's person is not read");
+  // The negative: the same read without `elevate` is refused, and says nothing of the table's rows.
+  const refused = await f.data('/api/pages/load', north, { page: 'roster', loader: 'peekPeople' });
+  assert.equal(refused.status, 403, refused.text);
+  assert.equal(refused.body.code, 'page_undeclared');
+  assert.doesNotMatch(refused.text, /Lovelace|Turing|Hopper/);
+  // The role's own reads are what they were: the elevation is the loader's, not the member's.
+  const own = await f.data('/api/view/run', north, readsOf('person'));
+  assert.doesNotMatch(own.text, /Lovelace|Turing/);
+  assert.notEqual(own.status, 200);
+  // In the other tenant, the same loader reads that tenant's people and none of this one's.
+  const south = await f.open('south');
+  const there = await f.data('/api/pages/load', south, { page: 'roster', loader: 'assignees' });
+  assert.equal(there.status, 200, there.text);
+  assert.deepEqual(object(there.body.data).people, ['Hopper']);
+});
+
+/* The members' read of who is on the team (`useTeam()` for a reader who does not manage it, a field report): any
+   member of the tenant, on their own lease, is told each member's name and the ids a pick is stored by. The store's
+   rows and the sign-in store's hold more (an address, roles, a status), and none of it is passed on. */
+test("any member reads the team's names and ids on their lease, and never an address, a role or another tenant's member", async (t) => {
+  const asked: string[] = [];
+  /* What the stores would hand the route, with everything a row could carry beside its ids. */
+  const stored: Record<string, Array<Record<string, unknown>>> = {
+    north: [
+      { membershipId: 'north-eve', accountId: 'eve', roles: ['clerk'], status: 'active', validUntil: 10000, email: 'eve@example.test' },
+      { membershipId: 'north-ada', accountId: 'ada', roles: ['owner'], status: 'active', validUntil: 10000, email: 'ada@example.test' },
+      { membershipId: 'north-nameless', accountId: 'nameless', roles: ['employee'], status: 'active', validUntil: 10000 },
+    ],
+    south: [{ membershipId: 'south-grace', accountId: 'grace', roles: ['owner'], status: 'active', validUntil: 10000 }],
+  };
+  const team: TenantTeamService = {
+    members: async (tenantId) => (asked.push(tenantId), (stored[tenantId] ?? []) as never),
+    names: async (ids) =>
+      new Map(
+        [
+          ['eve', 'Eve Moneypenny'],
+          ['ada', 'Ada Lovelace'],
+          ['grace', 'Grace Hopper'],
+        ].filter(([id]) => ids.includes(id!)) as never,
+      ),
+  };
+  const f = await fixture(t, ['clerk'], { team }),
+    north = await f.open();
+  const read = await f.data('/api/team', north, {});
+  assert.equal(read.status, 200, read.text);
+  assert.deepEqual(read.body, {
+    members: [
+      { id: 'north-eve', account: 'eve', name: 'Eve Moneypenny', you: true },
+      { id: 'north-ada', account: 'ada', name: 'Ada Lovelace', you: false },
+      // A member the sign-in store keeps no name for is listed with none, never by an address.
+      { id: 'north-nameless', account: 'nameless', name: '', you: false },
+    ],
+  });
+  // The negative: nothing administrative is in the answer, however much the stores' rows held.
+  assert.doesNotMatch(read.text, /@|email|roles|"role"|owner|clerk|employee|status|validUntil|invit|Hopper|grace/i);
+  // The tenant is the lease's: a body or a query naming another is not what is read.
+  assert.deepEqual(asked, ['north']);
+  const named = await f.data('/api/team', north, { tenantId: 'south' });
+  assert.notEqual(named.status, 200, 'the route takes no tenant from the request');
+  assert.doesNotMatch(named.text, /Hopper|grace/);
+  assert.deepEqual(asked, ['north']);
+  // Signed out of the lease, there is no team to read.
+  const bare = await fetch(new URL(`/api/team?app=desk&tenant=north`, `http://127.0.0.1:${f.port}`), {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  });
+  assert.notEqual(bare.status, 200);
+  assert.doesNotMatch(await bare.text(), /Moneypenny|Lovelace/);
+});
+
+test('an App that keeps no team read answers a member nothing of who else is a member', async (t) => {
+  // `auth.tenancy.team: false`, or an App that administers no members: the host is given no team service at all.
+  const f = await fixture(t, ['clerk']),
+    north = await f.open();
+  const read = await f.data('/api/team', north, {});
+  assert.notEqual(read.status, 200, read.text);
+  assert.doesNotMatch(read.text, /members/);
 });
 
 test('a role granted a command that reads a table it cannot read is told which table, in a tenant App', async (t) => {

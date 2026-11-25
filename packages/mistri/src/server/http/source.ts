@@ -201,7 +201,8 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
         who: string | undefined;
         account: string | undefined;
         unproven: boolean;
-        catalog: NonNullable<Parameters<typeof lookupPerson>[4]>;
+        /* The App's own catalog and reader, before any grant: who `me` is, and what a loader's elevated tables are read through. */
+        catalog: NonNullable<Parameters<typeof lookupPerson>[4]> & { reader: Partial<Pick<Adapter, 'count' | 'aggregate'>> };
       }
     | undefined;
   let access: ResourceAccess | undefined;

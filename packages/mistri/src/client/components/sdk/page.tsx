@@ -137,6 +137,7 @@ const FIELDS = [
   'nav',
   'roles',
   'reads',
+  'optionalReads',
   'commands',
   'actions',
   'params',

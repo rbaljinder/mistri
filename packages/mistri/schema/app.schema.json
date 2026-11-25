@@ -3120,6 +3120,11 @@
           },
           "description": "Columns of the tenant's profile row its members read, scalar ones only: tenant.country in a query, a row scope, a when or a handler's tenant. Read once per request; a tenant with no row reads nulls. Needs profile."
         },
+        "team": {
+          "type": "boolean",
+          "default": true,
+          "description": "false keeps a tenant's members from reading who else is a member. Left out, any member reads the members' names and ids (never an address, a role or an invitation), which is what useTeam() lists for a reader who does not manage the team."
+        },
         "platform": {
           "type": "object",
           "additionalProperties": false,

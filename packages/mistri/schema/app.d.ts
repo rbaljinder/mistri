@@ -1286,6 +1286,10 @@ export interface AppTenancy<Resource extends string = string> {
   /** Columns of the tenant's profile row its members read, at most 16 scalar ones: `tenant.country` in a query, a row
       scope, a `when` or a handler's `tenant`. Read once per request; a tenant with no row reads nulls. Needs `profile`. */
   shared?: readonly string[];
+  /** `false`: a tenant's members are not told who else is a member. Left out, any member of a tenant reads its members'
+      names and ids, never an address, a role or an invitation: what `useTeam()` lists for a reader who does not manage
+      the team, where the App administers its tenants' members. */
+  team?: boolean;
   platform?: {
     label: string | AppMessageRef;
     /** Who `me` is in the platform realm, as `auth.me` says it in a tenant's: the platform-owned resource its staff

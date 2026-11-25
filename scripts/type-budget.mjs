@@ -239,7 +239,11 @@ const require = createRequire(join(ROOT, 'package.json'));
    Compass measures 104,602 symbols (2 past); its symbols rise to about 1.5% above, the rest hold.
    A timer at an instant takes `failed` (the command that keeps its refusal on the record), one optional member read
    once; nothing per table. Compass measures 106,201 symbols (1 past); its symbols rise to about 1.5% above, the
-   rest hold. */
+   rest hold.
+   Who may read what. `definePage` takes `optionalReads` (one more type parameter on the page and its
+   definition, read by the three optional overloads), `auth.tenancy` takes `team`, `useTeam()` says `read` and each
+   member's `account` and `initials`, and `defineLoader` takes `elevate`: members read once each, nothing per table.
+   Compass measures 106,209 symbols (9 past); its symbols rise to about 1.5% above that, the rest hold. */
 export const BUDGET = {
   synthetic: { types: 184_400, instantiations: 991_600, symbols: 488_400 },
   compass: { types: 32_500, instantiations: 149_000, symbols: 107_800 },

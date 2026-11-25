@@ -101,13 +101,19 @@ export function parseAuthGrants(
     }
   }
   let tenancy:
-    | { label?: string; profile?: string; shared?: string[]; platform?: { label: string; me?: { from: string; column: string } } }
+    | {
+        label?: string;
+        profile?: string;
+        shared?: string[];
+        team?: false;
+        platform?: { label: string; me?: { from: string; column: string } };
+      }
     | undefined;
   if (raw.tenancy !== undefined) {
     const here = `${at}, "tenancy"`;
     if (rows !== 'tenant') throw new Error(`${here} describes a tenant App's tenants; it needs "rows": "tenant".`);
-    if (!isRecord(raw.tenancy)) throw new Error(`${here} is not an object { label?, profile?, shared?, platform? }.`);
-    allowKeys(raw.tenancy, ['label', 'profile', 'shared', 'platform'], here);
+    if (!isRecord(raw.tenancy)) throw new Error(`${here} is not an object { label?, profile?, shared?, team?, platform? }.`);
+    allowKeys(raw.tenancy, ['label', 'profile', 'shared', 'team', 'platform'], here);
     const name = (value: unknown, key: string): string => {
       if (typeof value !== 'string' || !value.trim() || value.trim().length > 60)
         throw new Error(`${here} has a "${key}" that is not a name of 1 to 60 characters.`);
@@ -137,6 +143,15 @@ export function parseAuthGrants(
         );
       if (new Set(shared).size !== shared.length) throw new Error(`${here} names a column twice in "shared".`);
       tenancy.shared = [...(shared as string[])];
+    }
+    /* `team: false`: a tenant's members are not told who else is a member (tenantTeamRoute.ts). Absent or true, they
+       read each other's names, as a record's history already names who changed it. */
+    if (given.team !== undefined) {
+      if (typeof given.team !== 'boolean')
+        throw new Error(
+          `${here} has a "team" that is not true or false: false keeps a tenant's members from reading who else is a member (useTeam() then lists the team only for a reader who manages it).`,
+        );
+      if (given.team === false) tenancy.team = false;
     }
     if (given.platform !== undefined) {
       if (!isRecord(given.platform)) throw new Error(`${here} has a "platform" that is not an object { label, me? }.`);

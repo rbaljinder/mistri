@@ -9,6 +9,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import { fixtureHost, SectionFrame, type FixtureCatalog, type Navigation } from './fixture.js';
 import { board, calendar, fixtures, renderPage, renderSection } from './testing.js';
 import { definePage, Text } from './page.js';
+import { UiPageContext } from './context.js';
 import { useBreakdown, useHref, useNavigate, useRecord, useRows } from './index.js';
 import { useOptions, type UiOptions } from './options.js';
 
@@ -96,6 +97,63 @@ describe('an optional read', () => {
     expect(await screen.findByText('Not open to your role.')).toBeInTheDocument();
     await view.refresh({ refused: {} });
     expect(await screen.findByText('2 rows')).toBeInTheDocument();
+  });
+
+  test("a page's optional read the reader's catalog does not hold is refused and never asked; read plainly, it is a mistake", async () => {
+    const asked: string[] = [];
+    const seen: Record<string, unknown> = {};
+    function Schedule(): ReactNode {
+      const notes = page.useRows('note', { optional: true });
+      const note = page.useRecord('note', { id: 1 }, undefined, { optional: true });
+      const groups = page.useBreakdown('note', { by: 'status', optional: true });
+      Object.assign(seen, { notes, note, groups });
+      return notes.refused ? <Text muted>No note for your role.</Text> : <p>{notes.data?.length ?? 'loading'} notes</p>;
+    }
+    const page = definePage({ label: 'Schedule', reads: ['booking'], optionalReads: ['note'], component: Schedule } as never) as never as {
+      useRows: typeof useRows;
+      useRecord: typeof useRecord;
+      useBreakdown: typeof useBreakdown;
+    };
+    const host = fixtureHost(BOOKINGS, {}, []);
+    host.served = (resource) => resource !== 'note';
+    for (const name of ['rows', 'record', 'breakdown'] as const) {
+      const read = host[name] as (...args: unknown[]) => Promise<unknown>;
+      host[name] = (async (...args: unknown[]) => (asked.push(String(args[0])), read(...args))) as never;
+    }
+    const frame = {
+      view: 'page',
+      label: 'Schedule',
+      reads: ['booking'],
+      optionalReads: ['note'],
+      commands: [],
+      params: [],
+      get: () => undefined,
+      set: () => {},
+    };
+    const draw = (node: ReactNode) =>
+      render(
+        <SectionFrame host={host} id="optional-page" width={960}>
+          <UiPageContext.Provider value={frame}>{node}</UiPageContext.Provider>
+        </SectionFrame>,
+      );
+    draw(<Schedule />);
+    expect(await screen.findByText('No note for your role.')).toBeInTheDocument();
+    for (const name of ['notes', 'note', 'groups'])
+      expect(seen[name]).toMatchObject({ refused: true, isPending: false, isError: false, error: null, data: undefined });
+    expect(asked).toEqual([]);
+    cleanup();
+    // Read without `optional`, the page's own declaration is broken: said in words, not drawn as an empty list.
+    function Plain(): ReactNode {
+      (page.useRows as (resource: string) => unknown)('note');
+      return null;
+    }
+    const quiet = console.error;
+    console.error = () => {};
+    try {
+      expect(() => draw(<Plain />)).toThrow(/names "note" in its optionalReads: read it with `optional: true`/);
+    } finally {
+      console.error = quiet;
+    }
   });
 });
 

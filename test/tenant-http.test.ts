@@ -4138,6 +4138,12 @@ function fenceDoors(): Record<string, Door> {
         ),
       },
     },
+    '/api/team': {
+      elsewhere: [
+        'tenant-member-gaps.test.ts',
+        "any member reads the team's names and ids on their lease, and never an address, a role or another tenant's member",
+      ],
+    },
     '/api/domains': {
       lease: { body: {}, also: here("a tenant's domains are its own: another tenant's hostname is refused as one nobody holds") },
     },

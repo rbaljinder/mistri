@@ -561,7 +561,7 @@ command reads one under its own authority:
 `read: ['rate_card'], elevate: { read: ['rate_card'] }`. The handler reads it
 whole; the caller sees only the declared `output`, never the rows. An
 elevation never makes a command an [App API](/docs/app-api/) operation for a
-role that cannot read the table, and `mistri check --design` lists every one. A table the command only adds to may be elevated too, to read that log's earlier lines (`write: ['visit_note'], elevate: { read: ['visit_note'] }`): the role still cannot change or remove what is there.
+role that cannot read the table, and `mistri check --design` lists every one. A [page's loader](/docs/custom-components/#free-form-pages) takes the same `elevate`, for a read that needs one table above its reader and writes nothing. A table the command only adds to may be elevated too, to read that log's earlier lines (`write: ['visit_note'], elevate: { read: ['visit_note'] }`): the role still cannot change or remove what is there.
 
 A table in `write` beside the target is not a read grant, and needs none: a
 role that cannot read it may still run the command, which may only add rows

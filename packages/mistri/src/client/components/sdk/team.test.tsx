@@ -19,16 +19,17 @@ const wrapperFor = (team?: TeamAccess) => {
 };
 
 const read: TeamRead = {
-  members: [{ id: 'm1', name: 'Eve', email: 'eve@example.test', role: 'admin', you: true }],
+  members: [{ id: 'm1', account: 'acct-eve', name: 'Eve', initials: 'E', email: 'eve@example.test', role: 'admin', you: true }],
   invitations: [{ id: 'i1', email: 'new@example.test', role: 'reader', expiresAt: 5 }],
   roles: ['admin', 'reader'],
   canManage: true,
+  read: 'administration',
 };
 
 test('outside a tenant App the team is empty and manages nothing', async () => {
   const { result } = renderHook(() => useTeam(), { wrapper: wrapperFor() });
   await waitFor(() => expect(result.current.isPending).toBe(false));
-  expect(result.current).toMatchObject({ members: [], invitations: [], roles: [], canManage: false, error: null });
+  expect(result.current).toMatchObject({ members: [], invitations: [], roles: [], canManage: false, read: 'none', error: null });
   await expect(result.current.invite('a@b.test', 'reader')).rejects.toThrow();
 });
 
@@ -46,7 +47,8 @@ test('it says the team, and every action reaches the access and reads the team a
   const { result } = renderHook(() => useTeam(), { wrapper: wrapperFor(team) });
   await waitFor(() => expect(result.current.members).toHaveLength(1));
   expect(result.current).toMatchObject({ canManage: true, roles: ['admin', 'reader'], isPending: false });
-  expect(result.current.members[0]).toEqual({ id: 'm1', name: 'Eve', email: 'eve@example.test', role: 'admin', you: true });
+  expect(result.current.members[0]).toEqual(read.members[0]);
+  expect(result.current.read).toBe('administration');
   const before = reads;
   await act(async () => {
     expect(await result.current.invite('new@example.test', 'reader')).toEqual({ token: 't' });

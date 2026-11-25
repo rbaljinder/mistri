@@ -68,6 +68,20 @@ export function keepTenantDraftReader(context: object, make: () => DraftReader):
   draftReads.set(context, () => (made ??= make()));
 }
 
+/* What a page loader's elevated tables are read through (`defineLoader({ elevate })`, commands/pageLoaderRun.ts), by
+   the context, as the draft reader is: this member's tenant and their whole row scope, membership and authored, exactly
+   as their own reads are bound, with the role's table grant alone left out, and only over the tables the loader
+   names. So it reads what a command's handler reads of its footprint in this tenant (tenantCommands.ts), and never a
+   row of another tenant or one the row policy hides from this member. A member's context only: the platform realm,
+   a support visit and a visitor keep none, and a loader that elevates is refused there. */
+type ElevatedReader = {
+  readonly schema: DatabaseSchema;
+  readonly reader: Pick<Adapter, 'query' | 'count'> & Partial<Pick<Adapter, 'aggregate'>>;
+};
+const elevatedReads = new WeakMap<object, (tables: readonly string[]) => ElevatedReader>();
+export const tenantElevatedReaderOf = (context: object, tables: readonly string[]): ElevatedReader | undefined =>
+  elevatedReads.get(context)?.(tables);
+
 /* Set by the host around a request whose reads are all its context's own and bounded — a list, its counts, the inbox
    (tenantHttp.ts) — and claimed by the first context it opens; `live` while that context runs. */
 const boundedRequest = new AsyncLocalStorage<{ claimed: boolean; live: boolean }>();
@@ -633,6 +647,42 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                           async (value) => withoutDiagnostics(await reader.query(value)),
                           (value) => assertStructuredReadFilter(value.filter, 'column'),
                         ),
+                    },
+                  };
+                });
+                elevatedReads.set(context, (tables) => {
+                  for (const id of tables) resource(id);
+                  const lifted = authorizeResources(
+                    resources,
+                    tenantVisibleFields(ownership, { readable: new Set(tables), writable: new Set<string>(), rows }),
+                    assertActive,
+                  );
+                  const above = lifted.adapter;
+                  return {
+                    schema: captureScopeCatalog(lifted.schema),
+                    reader: {
+                      query: (input) =>
+                        track(
+                          input,
+                          async (value) => withoutDiagnostics(await above.query(value)),
+                          (value) => assertStructuredReadFilter(value.filter, 'column'),
+                        ),
+                      count: (table, filter, limit) =>
+                        track(
+                          { table, filter, limit },
+                          (value) => above.count(value.table, value.filter, value.limit),
+                          (value) => assertStructuredReadFilter(value.filter, 'column'),
+                        ),
+                      ...(above.aggregate
+                        ? {
+                            aggregate: (request: AggregateRequest) =>
+                              track(
+                                request,
+                                (value) => above.aggregate!(value),
+                                (value) => assertStructuredReadFilter(value.filter, 'column'),
+                              ),
+                          }
+                        : {}),
                     },
                   };
                 });

@@ -302,6 +302,9 @@ export interface AppTenancy {
   /** Columns of the tenant's profile row its members read, as `tenant.<column>` in queries, row scopes, `when` and
       handlers. Read once per request; a tenant with no row reads nulls. Needs `profile`. */
   shared?: string[];
+  /** `false`: a tenant's members are not told who else is a member. Absent, any member reads the members' names and
+      ids (never an address or a role), which is what `useTeam()` lists for a reader who does not manage the team. */
+  team?: false;
   /** Declares the platform realm; its label names the platform context ("Lender"). `me` is who the word is there,
       as `auth.me` says it in a tenant's: a row of the platform's table of its staff, by the column holding their
       account id. Absent, `me` in the platform realm is nobody's row. */
@@ -833,6 +836,8 @@ export interface AppDashboardView extends ServedDashboardView {
 /** What a free-form page declares it reads, runs, keeps in its address and loads: its manifest, held to on both sides. */
 interface AppPageManifest {
   reads: string[];
+  /** What it reads only with `optional: true`: no part of who is offered it; a reader not granted one is answered `refused`. */
+  optionalReads?: string[];
   commands: string[];
   /** The fixed actions it runs on what it reads; left out when it runs none. */
   actions?: string[];

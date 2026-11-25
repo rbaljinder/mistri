@@ -56,6 +56,7 @@ export function FreePage({
     view: dashboard.id,
     label: dashboard.label,
     reads: page.reads,
+    ...(page.optionalReads ? { optionalReads: page.optionalReads } : {}),
     commands: page.commands,
     ...(page.actions ? { actions: page.actions } : {}),
     params: page.params,

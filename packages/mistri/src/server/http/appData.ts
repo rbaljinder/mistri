@@ -185,6 +185,9 @@ export const APP_DATA: DataHooks = {
         ...(surface ? { surface } : {}),
         chosenHeader: req.headers[CHOICE_HEADER],
         chosenStored: await storedForPerson(ctx.registry, source.selectedHost, identity.id),
+        /* A loader's elevated tables are read as a command's handler reads its footprint: through the App's own
+           catalog and reader (source.ts `whole`), which a row-policy App does not have. */
+        ...(source.appReader ? { elevated: () => source.appReader } : {}),
       });
       tellLoaderReads(res, reply);
       send(res, reply.status, reply.body);

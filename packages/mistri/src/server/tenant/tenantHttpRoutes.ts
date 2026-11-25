@@ -98,6 +98,7 @@ export const TENANT_METADATA_POSTS: ReadonlySet<string> = new Set([
   '/api/domains/remove',
   '/api/domains/primary',
   '/api/reads',
+  '/api/team',
   PAGE_LOAD_PATH,
   TENANT_BOOT_PATH,
 ]);
@@ -135,6 +136,7 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/domains/remove': ['host'],
   '/api/domains/primary': ['host'],
   '/api/reads': ['actor', 'resource', 'record', 'since', 'until', 'before'],
+  '/api/team': [],
   '/api/query': ['table', 'filter', 'columns', 'orderBy', 'limit', 'offset'],
   '/api/count': ['table', 'filter', 'exactCount', 'countLimit'],
   '/api/counts': ['items', 'countLimit'],

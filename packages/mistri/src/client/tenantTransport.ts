@@ -93,6 +93,8 @@ const reads = new Set([
   '/api/domains/primary',
   // Its read audit, for its admins (server tenantReadsRoute.ts): the lease names the tenant.
   '/api/reads',
+  // Its members by name, for any member (server tenantTeamRoute.ts): the lease names the tenant.
+  '/api/team',
   // A dealer's own log of support visits into it: a read on the dealer's
   // ordinary tenant lease, which the selector below addresses like any other.
   SUPPORT_LOG_PATH,

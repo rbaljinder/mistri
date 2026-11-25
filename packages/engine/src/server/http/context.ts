@@ -139,7 +139,10 @@ export interface ResolvedSource {
   readonly publicScope: { appId: string } | { connection: string };
   readonly publicDefinition: <T extends { connection?: string }>(definition: T) => T;
   /** The App's own reader of its declared resources, before any grant or row narrows it: for the server's own questions about rows this reader may not see (a draft's owner), never for what it is sent. */
-  readonly appReader?: { readonly schema: DatabaseSchema; readonly reader: Pick<Adapter, 'query'> };
+  readonly appReader?: {
+    readonly schema: DatabaseSchema;
+    readonly reader: Pick<Adapter, 'query'> & Partial<Pick<Adapter, 'count' | 'aggregate'>>;
+  };
   /** Who `me` is for this request, through the reader it is given (server/app/appMe.ts). */
   readonly person?: (reader: Adapter) => Promise<QueryPerson>;
   /** This reader's zone, where `ui.timezone` reads one (readerZone.ts); read through `appZone`. */

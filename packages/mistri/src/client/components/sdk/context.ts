@@ -277,6 +277,8 @@ export interface UiHost {
   /* A read the reader may not make rejects with an error carrying `status` 401 or 403: that is all `optional: true`
      reads to say `refused` (hooks.ts), so a host surfaces a refusal as it always has and adds nothing. */
   rows(resource: string, options: UiRowsOptions): Promise<UiRowsPage>;
+  /** Whether this reader's catalog holds the resource. A host that cannot say leaves it out, and the read is asked. */
+  served?(resource: string): boolean;
   record(resource: string, key: Readonly<Record<string, unknown>>, show?: readonly string[], asking?: UiAsking): Promise<UiRow | undefined>;
   /** A free-form page's loader, run on the server for this reader: what the page is drawn with. `loader` names one of
       the page's `loaders`; without it the page's own `loader` runs. */
@@ -362,6 +364,8 @@ export interface UiPageFrame {
   view: string;
   label: string;
   reads: readonly string[];
+  /** What it declared it reads only with `optional: true` (`optionalReads`): a reader not granted one is told `refused`. */
+  optionalReads?: readonly string[];
   commands: readonly string[];
   /** The fixed actions it declared it runs (`useAction`), on the resources it reads. */
   actions?: readonly string[];

@@ -79,7 +79,7 @@ import type { RecordLinksRequest } from './tenantLinkRevoke.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { tenantSessionDiscovery } from './tenantDiscovery.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
-import { withBoundedReads, type TenantReadContext } from './tenantReadRuntime.js';
+import { tenantElevatedReaderOf, withBoundedReads, type TenantReadContext } from './tenantReadRuntime.js';
 import type { PlatformReadContext } from './tenantPlatformReadRuntime.js';
 import type { SupportReadContext } from './tenantSupportReadRuntime.js';
 import { tenantRetirement } from './tenantRetirement.js';
@@ -162,6 +162,7 @@ import { brandingTenant, scopedRecordBranding, withRecordBranding, closeRecordBr
 import type { TenantDomainsService } from '../http/customDomains.js';
 import { tenantDomainsRoute } from './tenantDomainsRoute.js';
 import { tenantReadsRoute, type TenantReadsService } from './tenantReadsRoute.js';
+import { tenantTeamRoute, type TenantTeamService } from './tenantTeamRoute.js';
 import { leaseAssertion, ownerHeadersRefused, tenantSelectors } from './tenantLeaseRequest.js';
 import { flagHttpRequest } from '../flags/httpRuntime.js';
 import { APP_FLAG_VALUES_PATH } from '../../shared/appFlagValues.js';
@@ -198,6 +199,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
     'branding',
     'domains',
     'reads',
+    'team',
     'integrations',
     'assistant',
     'readerName',
@@ -216,6 +218,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
   const domainsRoute = tenantDomains && tenantDomainsRoute(tenantDomains, tenantBranding);
   if (raw.reads !== undefined && (typeof raw.reads !== 'object' || raw.reads === null)) return denyTenant();
   const readsRoute = raw.reads ? tenantReadsRoute(raw.reads as TenantReadsService) : undefined;
+  if (raw.team !== undefined && (typeof raw.team !== 'object' || raw.team === null)) return denyTenant();
+  const teamRoute = raw.team ? tenantTeamRoute(raw.team as TenantTeamService) : undefined;
   const search = raw.search as TenantHttpOptions['search'];
   const assistantSwitch = raw.assistant as TenantHttpOptions['assistant'];
   if (raw.readerName !== undefined && (typeof raw.readerName !== 'function' || isProxy(raw.readerName))) return denyTenant();
@@ -927,6 +931,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   chosenHeader: req.headers[CHOICE_HEADER],
                   chosenStored,
                   toldFrom: servedBaseOf(schema),
+                  /* A loader's elevated tables, read in this member's tenant and row scope without the role's table
+                     grant (tenantReadRuntime.ts): a member's own context only, never the platform realm's or a visit's. */
+                  ...(platform || onSupport ? {} : { elevated: (tables: readonly string[]) => tenantElevatedReaderOf(context, tables) }),
                 }),
               );
               tellLoaderReads(asked.told ?? res, loaded);
@@ -1208,6 +1215,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               }
             }
             if (readsRoute?.serves(path)) return await readsRoute.answer(input, context.principal, { platform, onSupport });
+            if (teamRoute?.serves(path)) return await teamRoute.answer(context.principal, { platform, onSupport });
             if (domainsRoute?.serves(path)) {
               const answered = await domainsRoute.answer(path, input, context.principal, { platform, onSupport }, () => verified(req));
               return answered;

@@ -206,6 +206,14 @@ const pageHost: UiHost = {
   },
   /* One row past the page is asked for and dropped: whether there are more is then the server's answer, where a
      full page would only say there might be. No total is asked for (`count: 'none'`), so none is reported. */
+  served(resource) {
+    try {
+      tableOf(resource);
+      return true;
+    } catch {
+      return false;
+    }
+  },
   async rows(resource, { where, query, show, sort, limit, page, keys, offset }) {
     const table = tableOf(resource);
     const paths = keys && show?.length ? [...new Set([...show, ...(primaryKey(table) as string[])])] : show;

@@ -138,6 +138,9 @@ export interface TenantAdministration {
   open(request: IncomingMessage, input: { readonly expectedAccount: string }): Promise<AdministrationSession | null>;
   tenants(request: IncomingMessage, input: AdministrationPageRequest): Promise<AdministrationTenantPage>;
   memberships(request: IncomingMessage, input: AdministrationMembershipPageRequest): Promise<AdministrationMembershipPage>;
+  /** A tenant's active members whose roles are all among `roles`, by membership id, at most `limit`: for the tenant
+      host's own read of who is on the team (tenantTeamRoute.ts), which has admitted its reader as a member first. */
+  team(tenantId: string, roles: readonly string[], limit: number): Promise<readonly { membershipId: string; accountId: string }[]>;
   execute(request: IncomingMessage, input: AdministrationRequest): Promise<AdministrationResult>;
   /** Assistant tokens by tenant and day, for an account that may set some tenant's assistant as an operator. */
   usage(request: IncomingMessage, input: AdministrationUsageRequest): Promise<AdministrationUsagePage>;
@@ -1383,6 +1386,46 @@ async function openAdministration(
         throw new TenantAdministrationFailure('not_applied');
       }
     };
+    /* A tenant's active members, for the members' own read of who is on the team (tenantTeamRoute.ts). No
+       administration session, policy grant or receipt stands behind it, as none stands behind a directory's write
+       below: the caller is the tenant host, which has already admitted the reader as a member of this tenant on a
+       lease, and the route there answers a name and two ids of each row and nothing else. The store's own list, so
+       the engines agree: active members only, each of whose roles is one the deployment still knows. */
+    const team = (
+      tenantId: string,
+      roles: readonly string[],
+      limit: number,
+    ): Promise<readonly { membershipId: string; accountId: string }[]> =>
+      tracked(async () => {
+        try {
+          tenantIdentifier(tenantId, 128);
+          parseTenantSelector([tenantId]);
+          const known = [...new Set(captureTenantData(roles) as string[])];
+          for (const role of known) tenantIdentifier(role);
+          if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1024) return denyTenant();
+          return await queue.run(() =>
+            maintenance<readonly { membershipId: string; accountId: string }[]>(
+              (session) =>
+                attested(session, () => {
+                  clock();
+                }),
+              async (session, _operations, assertCurrent) => {
+                const tenant = await opened().readTenant(session, tenantId);
+                assertCurrent();
+                if (tenant?.status !== 'active') return [];
+                const rows = await opened().listMemberships(session, tenantId, '', true, known, limit);
+                assertCurrent();
+                return rows.map((row) => {
+                  if (typeof row.membershipId !== 'string' || typeof row.accountId !== 'string') return denyTenant();
+                  return { membershipId: row.membershipId, accountId: row.accountId };
+                });
+              },
+            ),
+          );
+        } catch {
+          throw new TenantAdministrationFailure('not_applied');
+        }
+      });
     /* What the assistant cost, by tenant and day: the platform owner's bill, so an operator's alone (a tenant's own
        admin may turn its assistant off, and reads no counts), and only for the tenants its grant names. */
     const usage = async (request: IncomingMessage, input: AdministrationUsageRequest): Promise<AdministrationUsagePage> => {
@@ -2166,6 +2209,7 @@ async function openAdministration(
       open,
       tenants,
       memberships,
+      team,
       usage,
       decisionUsage,
       importPlan,

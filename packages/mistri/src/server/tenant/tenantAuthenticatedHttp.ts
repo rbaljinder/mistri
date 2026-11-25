@@ -66,6 +66,7 @@ import {
 import { nativeAccountEmailOf, nativeAccountProfileOf, nativeMailAccount } from '../auth/authAccounts.js';
 import { auditsReads } from './tenantReadAudit.js';
 import type { TenantReadsService } from './tenantReadsRoute.js';
+import { tenantTeamService } from './tenantTeamRoute.js';
 import { expandEnvReferences } from '@mistriwork/engine/server/auth/credentials.js';
 import { doorRefusal, writes, type Bound, type ProxyRange } from '@mistriwork/engine/server/http/trust.js';
 import { frontDoor } from '@mistriwork/engine/server/http/frontDoor.js';
@@ -632,6 +633,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             },
           })
         : undefined;
+    /* The tenant's members by name, for any of its members: `useTeam()` for a reader who does not manage the team. */
+    const team = tenantTeamService(loaded.app, administration, (id) => nativeAccountProfileOf(raw.auth as AppAuthRuntime, id));
     if (
       raw.suiteBase !== undefined &&
       (typeof raw.suiteBase !== 'string' || (raw.suiteBase !== '' && !/^\/[^?#]*[^/?#]$/.test(raw.suiteBase)))
@@ -838,6 +841,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       ...(branding ? { branding } : {}),
       ...(domains ? { domains } : {}),
       ...(reads ? { reads } : {}),
+      ...(team ? { team } : {}),
       /* A member's picks (`choose`), kept beside the tenant source and scoped to the tenant (tenantPreferences.ts). */
       ...(pickedAt ? { preferences: tenantPreferences(loaded.app, () => preferencesAt(loaded.app, pickedAt)) } : {}),
       ...(integrations?.settings ? { integrations: integrations.settings } : {}),

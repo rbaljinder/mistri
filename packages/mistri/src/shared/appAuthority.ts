@@ -58,6 +58,8 @@ export function authorityReport(app: AppDef, origins?: AppOrigins, env: readonly
     if (app.auth.tenancy?.profile) fact(`auth tenant profile ${app.auth.tenancy.profile}`);
     // A column of the tenant row put in front of its members is one added line in review.
     for (const column of sorted(app.auth.tenancy?.shared ?? [])) fact(`auth tenant shared ${column}`);
+    /* Said only when closed, so an App that says nothing keeps the lock it had: opening the team again is this line gone. */
+    if (app.auth.tenancy?.team === false) fact('auth tenant team names closed');
   }
   // These are configured binding names, never resolved connection credentials.
   if (app.sources)

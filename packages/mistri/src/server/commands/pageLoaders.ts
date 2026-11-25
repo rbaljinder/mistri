@@ -18,7 +18,19 @@
  *   reads: ['invoice', 'invoice.balance', 'invoice.open_alerts'],
  *   load: async ({ db }) => ({ rows: await db.invoice.where({ status: 'open' }).with('balance', 'open_alerts').limit(20) }),
  *
- * A loader is a reader, never a writer, and never anyone but the person the
+ * A loader that must read one table its reader's role is not granted, for a
+ * purpose the App declares (the desk proposing a next visit from a note's
+ * follow-up asks, not the note), says so as a command does:
+ *
+ *   reads: ['visit', 'note'], elevate: { read: ['note'] },
+ *
+ * `note` is then read under the App's own authority, as a command's handler
+ * reads its footprint, and every other table as the reader. What it read
+ * there reaches the reader only as what `load` returns. It is refused where a
+ * command's `elevate` is (`auth.rows: 'policy'`), on a public page and on a
+ * surface, and `mistri check --design` lists each one.
+ *
+ * Otherwise a loader is a reader, never a writer, and never anyone but the person the
  * page is drawn for:
  *
  *   - its `db` is the command `db`'s read-only handle (commandDb.ts) over the
@@ -89,6 +101,8 @@ export interface PageLoader<Result = unknown, Src = string, R extends string = s
   readonly reads: readonly R[];
   /** The computed columns and rollups it may ask for with `.with`, by table. */
   readonly derived: Readonly<Record<string, readonly string[]>>;
+  /** Tables of `reads` read under the App's own authority, not the reader's (`defineLoader({ elevate })`). */
+  readonly elevate?: { readonly read: readonly string[] };
   readonly source?: string;
   /** The address parameters it reads, where it says them: it is handed these alone, and the page runs it again only
       when one of them moves. Undefined for a loader that says none: it is handed every one, and runs on any. */
@@ -99,7 +113,7 @@ export interface PageLoader<Result = unknown, Src = string, R extends string = s
 }
 
 const made = new WeakSet<object>();
-const LOADER_KEYS = new Set(['reads', 'source', 'params', 'timeout', 'load']);
+const LOADER_KEYS = new Set(['reads', 'elevate', 'source', 'params', 'timeout', 'load']);
 const NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
 /**
@@ -114,6 +128,11 @@ const NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
  * `params` in its context holds those alone, so one it did not say is not
  * there to read. Left out, it reads any of them and runs when any moves;
  * `params: []` is a loader no parameter runs again.
+ *
+ * `elevate: { read: ['note'] }` names tables of `reads` the loader reads under
+ * the App's own authority, as a command's `elevate` does: a role the page is
+ * offered to need not read them, and the page need not name them in its own
+ * reads. What `load` reads there reaches the reader only as what it returns.
  */
 export function defineLoader<
   Result,
@@ -123,6 +142,11 @@ export function defineLoader<
   const P extends readonly string[] = readonly string[],
 >(definition: {
   readonly reads: R;
+  /** Tables of `reads` read under the App's own authority, not the reader's: `elevate: { read: ['rate_card'] }`.
+      A role offered the page need not read them; what `load` reads there reaches the reader only as what it returns.
+      Refused where a command's is: under `auth.rows: 'policy'`, on a public page and on a surface.
+      `mistri check --design` lists each one. */
+  readonly elevate?: { readonly read: readonly ReadTableOf<R[number]>[] };
   readonly source?: Src;
   readonly params?: P;
   readonly timeout?: `${number} second` | `${number} seconds`;
@@ -163,8 +187,10 @@ export function defineLoader<
       throw new TypeError(`A loader's reads name "${entry}", a computed column or rollup of "${table}": list "${table}" in reads too.`);
     (derived[table] ??= []).push(name);
   }
+  const elevate = Object.hasOwn(definition, 'elevate') ? elevateOption(definition.elevate, tables, derived) : undefined;
   const loader = Object.freeze({
     reads: Object.freeze([...tables]),
+    ...(elevate ? { elevate } : {}),
     derived: Object.freeze(
       Object.fromEntries(Object.entries(derived).map(([table, names]) => [table, Object.freeze([...new Set(names)])])),
     ),
@@ -175,6 +201,35 @@ export function defineLoader<
   });
   made.add(loader);
   return loader as unknown as PageLoader<Awaited<Result>, Src, ReadTableOf<R[number]>>;
+}
+
+/*
+ * `elevate: { read: [...] }`, in a command's shape and a command's words (businessCommands.ts elevateOption): tables
+ * of the loader's `reads` it reads under the App's authority. Each is named in `reads` as well, since the typed `db`
+ * is built from `reads`, so `elevate` only says whose authority a read is under, never a second footprint. A
+ * computed column or rollup of an elevated table is not read: `.with` is answered by the reader's own list SQL.
+ */
+function elevateOption(
+  value: unknown,
+  reads: ReadonlySet<string>,
+  derived: Readonly<Record<string, readonly string[]>>,
+): { readonly read: readonly string[] } {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new TypeError('Loader elevate must be a plain object.');
+  for (const key of Object.keys(value))
+    if (key !== 'read') throw new TypeError(`Loader elevate has an unknown option: ${key}. It takes read.`);
+  const read = (value as { read?: unknown }).read;
+  if (!Array.isArray(read) || read.some((name) => typeof name !== 'string' || !name))
+    throw new TypeError('Loader elevate read must be a list of table names.');
+  if (!read.length)
+    throw new TypeError('Loader elevate read names no table: name the tables of reads the loader reads above the reader, or drop elevate.');
+  for (const table of read as string[]) {
+    if (!reads.has(table)) throw new TypeError(`Loader elevate read names "${table}", which is not in its reads; add it to reads.`);
+    if (Object.hasOwn(derived, table))
+      throw new TypeError(
+        `Loader elevate read names "${table}", and its reads ask for "${table}.${derived[table]![0]}": an elevated read is of the table's own columns. Drop the computed column or rollup, or the elevation.`,
+      );
+  }
+  return Object.freeze({ read: Object.freeze([...new Set(read as string[])]) });
 }
 
 /** The App's loaders by name: `export const loaders = defineLoaders({ pickWalk })` in its commands module. */

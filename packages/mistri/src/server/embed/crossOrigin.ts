@@ -133,6 +133,7 @@ const NOT_FOR_BEARERS = [
   '/api/branding/save',
   '/api/domains',
   '/api/reads',
+  '/api/team',
   '/api/console',
   '/api/connections',
   '/api/sql',
