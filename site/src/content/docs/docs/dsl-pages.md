@@ -391,6 +391,9 @@ const apply = page.useForm('apply'); // apply.dirty ? `Continue at ${apply.step}
 | `pages.*.sections[][kind=list].kind` |  | Stable |  One of `list`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `pages.*.sections[][kind=list].limit` | integer | Stable | Rows to a page; with group, the rows to a group (at most 50). |
 | `pages.*.sections[][kind=list].near` | object | Stable | Number columns kept within ± this fraction of the record's value (0.25 is ±25%); the first is also the order, closest first. |
+| `pages.*.sections[][kind=list].open` | object | Stable | Open a named custom page when a related record is clicked instead of its default record page. Used in `examples/apps/tick/app.ts`. |
+| `pages.*.sections[][kind=list].open.page` | string | Stable | Key of the custom page to open for a record. |
+| `pages.*.sections[][kind=list].open.param` | string | Stable | Query parameter carrying the record key when the page is addressed by query param rather than a path segment. |
 | `pages.*.sections[][kind=list].opens` | string | Stable | On a current() card only: the reference column of from whose record the card opens, named by that record (a link table's far side). A plain list has none. |
 | `pages.*.sections[][kind=list].presentation` | object | Stable | "gallery": a related list over a resource whose rows are image files, drawn as a lead photo, thumbnails and a lightbox. A cards object: the rows as cards, in the list view's cards grammar. The one current row as a card is a section of its own, kind current. One of `gallery`. Used in `examples/apps/tick/app.ts`. |
 | `pages.*.sections[][kind=list].presentation[kind=cards].badge` | string | Stable |  Used in `examples/apps/lintel/pages/maintenance_request.ts`. |

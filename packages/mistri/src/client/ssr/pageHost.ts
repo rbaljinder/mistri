@@ -331,6 +331,8 @@ export function createSsrPageHost(input: SsrPageInput, queryClient: QueryClient)
       }) as never,
     publicLink: () => undefined,
     fillComposer: () => false,
+    assistantOffered: () => false,
+    openAssistant: () => false,
     fileAddress,
     command(ref) {
       const pub = app.publicCommands && Object.hasOwn(app.publicCommands, ref) ? app.publicCommands[ref] : undefined;

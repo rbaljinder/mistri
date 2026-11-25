@@ -140,8 +140,10 @@ export const EMBED_BUDGET = {
      each saved step and submit, and the per-answer choice narrowing the server serves.
      Raised at rc.76 (measured about 139,980 / 37,070, 2026-11-20): the kit parts a custom page reaches for without
      drawing them — Bars, a figure's `delta.against`, and the chart's bucket fill (bucketFill, windowed()) in the SDK.
-     A front end that draws its own pages imports them statically, so they belong in this entry, not on demand. */
-  headless: { raw: 144_000, br: 38_200 },
+     A front end that draws its own pages imports them statically, so they belong in this entry, not on demand.
+     Raised at rc.89 (measured about 144,130 / 38,300): `useAssistant()` from rc.88 plus `useFormat().column` / `round`,
+     `cover` photo hydration in `useRows`/`useRecord`, and `open: { page, param? }` target routing in the headless SDK. */
+  headless: { raw: 148_500, br: 39_500 },
   adapter: { raw: 3_600, br: 1_400 },
   /* Moved with the first paint's, for the same reason (see BUDGET): the controls are drawn over UI SDK, and the
      shell carries their script and their sheets as scoped text. Measured 762,581 / 102,604, from 657,900 / 93,000.

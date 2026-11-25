@@ -769,6 +769,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | --- | --- | --- | --- |
 | `views.*[kind=landing].sections[][kind=view].kind` |  | Stable |  One of `view`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
 | `views.*[kind=landing].sections[][kind=view].limit` | integer | Stable |  |
+| `views.*[kind=landing].sections[][kind=view].open` | object | Stable | Open a named custom page when a card is clicked, overriding the embedded list view's open target. Used in `examples/apps/tick/app.ts`. |
+| `views.*[kind=landing].sections[][kind=view].open.page` | string | Stable | Key of the custom page to open for a record. |
+| `views.*[kind=landing].sections[][kind=view].open.param` | string | Stable | Query parameter carrying the record key when the page is addressed by query param rather than a path segment. |
 | `views.*[kind=landing].sections[][kind=view].sort` | string | Stable | One column and a direction, like "listed_on desc". |
 | `views.*[kind=landing].sections[][kind=view].view` | string | Stable | A list view with a cards presentation, over a resource auth.public reads. Used in `examples/apps/lintel/app.ts`. |
 
@@ -920,7 +923,9 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
-| `views.*[kind=list].open` | `"page"` · `"drawer"` · `"modal"` | Stable | How rows open: the full page (default), a drawer over the list, or a modal. Not beside a split, which opens its own rows. One of `drawer`, `modal`, `page`. Used in `examples/apps/tick/app.ts`. |
+| `views.*[kind=list].open` | object | Stable | How rows open: the full page (default), a drawer over the list, a modal, or a named custom page ({ page, param? }). Not beside a split, which opens its own rows. One of `drawer`, `modal`, `page`. Used in `examples/apps/tick/app.ts`. |
+| `views.*[kind=list].open.page` | string | Stable | Key of the custom page to open for a record. |
+| `views.*[kind=list].open.param` | string | Stable | Query parameter carrying the record key when the page is addressed by query param rather than a path segment. |
 
 ## `views.*[kind=list].opens`
 

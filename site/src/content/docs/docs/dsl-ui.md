@@ -670,6 +670,31 @@ variant folder, `messages/<kind>/<locale>.ts`, by a shared profile column. See
 | `ui.shell.sidebar.footer.title` | string | Stable | A non-blank workspace name. |
 | `ui.shell.width` | `"full"` · `"wide"` · `"narrow"` | Stable |  One of `full`, `narrow`, `wide`. Used in `examples/apps/tick/app.ts`. |
 
+## `ui.site`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `ui.site` | object | Stable | Public site header and footer chrome worn by signed-out public pages, separate from the operator desk navigation. |
+| `ui.site.cta` | object | Stable | Primary call-to-action button in the public site header. |
+| `ui.site.cta.href` | string | Stable | External URL (https://, mailto:, tel:) or root-relative path. |
+| `ui.site.cta.label` | string | Stable |  |
+| `ui.site.cta.view` | string | Stable | Public view or custom page key inside this App. Used in `examples/apps/lintel/app.ts`. |
+| `ui.site.footer` | object | Stable | Site-specific footer shown on public site pages. Used in `examples/apps/lintel/app.ts`. |
+| `ui.site.footer.links` | array | Stable |  Used in `examples/apps/lintel/pages/unit.ts`. |
+| `ui.site.footer.links[].href` | string | Stable | External URL (https://, mailto:, tel:) or root-relative path. |
+| `ui.site.footer.links[].label` | string | Stable |  |
+| `ui.site.footer.links[].view` | string | Stable | Public view or custom page key inside this App. Used in `examples/apps/lintel/app.ts`. |
+| `ui.site.footer.text` | string | Stable |  Used in `examples/apps/lintel/views.ts`. |
+| `ui.site.links` | array | Stable | Primary navigation links in the public site header. Used in `examples/apps/lintel/pages/unit.ts`. |
+| `ui.site.links[].href` | string | Stable | External URL (https://, mailto:, tel:) or root-relative path. |
+| `ui.site.links[].label` | string | Stable |  |
+| `ui.site.links[].view` | string | Stable | Public view or custom page key inside this App. Used in `examples/apps/lintel/app.ts`. |
+| `ui.site.search` | object | Stable | Header search box submitting to a public list view or search page. Used in `examples/apps/tick/app.ts`. |
+| `ui.site.search.param` | string | Stable |  |
+| `ui.site.search.placeholder` | string | Stable |  |
+| `ui.site.search.view` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
+| `ui.site.signIn` | `"header"` · `"footer"` · `false` | Stable | Where to place the Sign in link for staff/members: in the header, in the footer, or hidden (default footer). One of `footer`, `header`, `false`. |
+
 ## `ui.theme`
 
 | Key | Type | Status | What it does |

@@ -521,6 +521,7 @@ command's id; never a support visit's id or a row's key.
 | `resources.*.display.*.minor` |  | Stable | With "money": the integer column holds minor units (cents), said and edited in the currency's own decimals — 1999 is $19.99, ¥1,999, 1.999 KWD. One of `true`. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.display.*.outOf` | integer | Stable | With format rating: the stars of its scale (5 when unsaid). |
 | `resources.*.display.*.ring` |  | Stable | With format percent: the value as a small ring filled against 100. One of `true`. |
+| `resources.*.display.*.round` |  | Preview | With "money": rounds to the nearest whole major unit ("$679" for 67917 cents). For monthly estimates or headline figures. A CSV export stays exact. One of `true`. |
 | `resources.*.display.*.scan` |  | Stable | A code typed or read by the camera where the browser can read codes; takes no format. One of `true`. |
 | `resources.*.display.*.signature` |  | Stable | On a column that points at a file resource: a signature drawn or typed, kept as a PNG row of it and drawn as the picture; takes no format. One of `true`. |
 | `resources.*.display.*.slider` | object | Stable | A number edited by dragging along its range, the figure beside it: { min: 0, max: 10 }. |
@@ -791,6 +792,16 @@ command's id; never a support visit's id or a row's key.
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `resources.*.page` | string | Stable | The page this resource's records open through, only when two pages share its base. |
+
+## `resources.*.photos`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `resources.*.photos` | object | Stable | Declares the child file resource that holds this resource's photographs, exposing a synthetic cover column on every row read. |
+| `resources.*.photos.aspect` | string | Stable | Default aspect ratio for galleries and cards (e.g. "3/2", "3/4", "16/9"). |
+| `resources.*.photos.from` | string | Stable | The child file resource whose rows hold the photographs. Used in `examples/apps/lintel/app.ts`. |
+| `resources.*.photos.sort` | string | Stable | Which photograph leads as cover: one column and an optional direction, like "position" or "created_at desc". |
+| `resources.*.photos.whose` | string | Stable | The reference column on the child resource pointing back to this resource. Used in `examples/apps/lintel/resources.ts`. |
 
 ## `resources.*.physical`
 
