@@ -180,4 +180,29 @@
   html:root:is([data-look-lanes='tag'], [data-look-lanes='plain']) :is(.triage-lane-head, .board-lane-head, .triage-lane-unfold) .tone[class]::before {
     display: none;
   }
+  /* A picked choice filled in the accent, its words in the accent's own ink (recipes.choice: 'filled'): in a look whose
+     accent is pale the tint read as barely different from the field's own fill on a phone. The ring and the tick
+     stand on the accent, so they are drawn the other way round. */
+  :root[data-look-choice='filled']
+    :is(
+      [data-slot='radio-group'][data-kind='cards'] [data-slot='choice']:has([data-slot='radio'][data-checked]),
+      [data-slot='check-cards'] [data-slot='choice']:has([data-slot='checkbox'][data-checked])
+    ) {
+    border-color: var(--m-accent);
+    background: var(--m-accent);
+    box-shadow: none;
+    color: var(--m-on-accent);
+  }
+  :root[data-look-choice='filled'] [data-slot='choice']:has([data-slot='radio'][data-checked], [data-slot='checkbox'][data-checked]) :is([data-slot='choice-icon'], [data-slot='choice-hint']) {
+    color: inherit;
+  }
+  :root[data-look-choice='filled'] [data-slot='radio-group'][data-kind='cards'] [data-slot='choice']:has([data-slot='radio'][data-checked])::before {
+    border-color: var(--m-on-accent);
+    background: radial-gradient(circle, var(--m-accent) 0 0.1875rem, var(--m-on-accent) 0.21875rem);
+  }
+  :root[data-look-choice='filled'] [data-slot='check-cards'] [data-slot='checkbox'][data-checked] {
+    border-color: var(--m-on-accent);
+    background: var(--m-on-accent);
+    color: var(--m-accent);
+  }
 }

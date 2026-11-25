@@ -353,6 +353,10 @@ export interface ThemeRecipes {
   formStep?: 'plain' | 'ruled';
   /** A form's sticky action bar: a hairline over the page, or raised on the surface with a soft lift. */
   actionBar?: 'plain' | 'raised';
+  /** A picked choice — one of a yes-or-no pair, a row of words or a card: on a tint of the accent with an accent edge,
+      or filled in the accent with its words in the accent's own ink, which reads at a glance where the tint sits
+      close to the field's fill. */
+  choice?: 'tint' | 'filled';
 }
 
 /**

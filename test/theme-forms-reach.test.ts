@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { recipeAttributes } from '../packages/engine/src/shared/themeRecipes.js';
 import { EDGELESS_FIELD_DELTA, themeTypeWarnings, themeWarnings } from '../packages/engine/src/shared/theme.js';
 import { shapeTokens } from '../packages/engine/src/shared/themeTokens.js';
@@ -118,4 +119,23 @@ test('the form recipes are on the menu, default to the plain forms, and are worn
   /* A checkbox was a part until the controls drew the box themselves: a theme that still says it is told it is gone. */
   assert.equal('data-look-checkbox' in plain, false);
   refuse({ recipes: { checkbox: 'drawn' } }, /theme\.recipes\.checkbox is off the menu: it chose nothing/);
+});
+
+/* A field report: a picked yes-or-no button in a look whose accent tint sat close to the field's fill read as barely
+   picked on a phone, and no theme could say otherwise. */
+test('a picked choice is a recipe: tint by default, or filled in the accent, from a sheet only a theme that picks it fetches', () => {
+  const plain = recipeAttributes(wear({}));
+  assert.equal(plain.attributes['data-look-choice'], 'tint');
+  const worn = recipeAttributes(wear({ recipes: { choice: 'filled' } }));
+  assert.equal(worn.attributes['data-look-choice'], 'filled');
+  // No look wears it, so its rule is the brand sheet's, fetched for this theme and in no first stylesheet.
+  assert.ok(worn.sheets.includes('brand') && !plain.sheets.includes('brand'));
+  const brand = readFileSync(new URL('../packages/kit/src/client/brandLook.css', import.meta.url), 'utf8');
+  assert.match(
+    brand,
+    /:root\[data-look-choice='filled'\][\s\S]*?\[data-slot='radio'\]\[data-checked\][\s\S]*?background: var\(--m-accent\);[\s\S]*?color: var\(--m-on-accent\);/,
+  );
+  const controls = readFileSync(new URL('../packages/ui/src/styles/looks.css', import.meta.url), 'utf8');
+  assert.doesNotMatch(controls, /data-look-choice/);
+  refuse({ recipes: { choice: 'bold' } }, /theme\.recipes\.choice is not on the menu: pick one of tint, filled/);
 });

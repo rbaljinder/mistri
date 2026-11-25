@@ -1032,6 +1032,7 @@ export const RECIPE_REGIONS: Readonly<Record<RecipePart, readonly string[]>> = {
   required: ["[data-slot='field'][data-required]", "[data-slot='field']"],
   formStep: ['.intake-head'],
   actionBar: ['.intake-actions', "[data-slot='action-bar']"],
+  choice: ["[data-slot='radio-group'][data-kind='cards']", "[data-slot='check-cards']"],
   banner: ['.page-section.dash-banner', '.dashboard-note.is-banner'],
   steps: ['.dash-steps', ':has(> .dash-step)'],
   lanes: ['.board-list', '.dash-board', '.triage-board'],
