@@ -54,7 +54,7 @@ import {
 import type { WorkflowShape } from '../workflows/workflowProbe.js';
 import { accessibleSchema } from '../app/appAccess.js';
 import { appSourceConnections, loadAppRuntimeResources } from '../app/appRuntimeResources.js';
-import { readApiApp } from '../api/appApiValidation.js';
+import { assertAppApiContext, readApiApp } from '../api/appApiValidation.js';
 import { apiExposesCommands } from '../../shared/appApi.js';
 import { loadHttpAppPolicy } from '../policy/appPolicyHttp.js';
 import type { Options } from '@mistriwork/engine/server/cli/args.js';
@@ -81,9 +81,7 @@ export async function appTypes(registry: Registry, app: LoadedApp): Promise<stri
   const scope = app.app.connection;
   const source = scope ? registry.list().find((connection) => connection.id === scope || connection.name === scope) : undefined;
   if (scope && !source) throw new Error(`App "${app.app.name}" names connection "${scope}", which is not configured.`);
-  const { schema: whole } = await loadAppRuntimeResources(registry, app.app, source?.id ?? registry.active!, undefined, {
-    deferApiCheck: true,
-  });
+  const { schema: whole } = await loadAppRuntimeResources(registry, app.app, source?.id ?? registry.active!);
   return typesOfApp(
     app.app,
     whole,
@@ -266,6 +264,7 @@ export async function appOpenApi(
   // described separately below, so they check the App with commands projected
   // out. Tenant and multi-source refusals still apply; a row-policy App's document is its catalog's, as served.
   const readApp = readApiApp(loaded.app);
+  assertAppApiContext(readApp);
   const scope = loaded.app.connection;
   const matches = scope ? registry.list().filter((connection) => connection.id === scope || connection.name === scope) : [];
   if (scope && matches.length !== 1) throw new Error(`App "${loaded.app.name}" names an unconfigured or ambiguous connection.`);

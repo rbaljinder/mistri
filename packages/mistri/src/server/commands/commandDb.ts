@@ -1421,10 +1421,12 @@ function tableHandle(
       const compiled = compileParts(parts);
       if (compiled.orderBy.length || compiled.limit !== undefined)
         authorMistake(`${name}: an aggregate's where says which rows; leave "sort" and "limit" out of it.`);
-      if (asksAboutRows(compiled.filter) || compiled.view)
+      if (asksAboutRows(compiled.filter))
         authorMistake(
-          `${name}: a sum or a group reads rows by their own columns; read the rows with an "any"/"no", "in" or rollup where, or count them.`,
+          `${name}: a sum or a group reads rows by their own columns; read the rows with an "any"/"no" or an "in" where, or count them.`,
         );
+      if (compiled.view)
+        authorMistake(`${name}: a sum or a group reads rows by their own columns; read the rows with a rollup where, or count them.`);
       const orderBy = groupOrder.map((o) => ({ name: plan.orderName(o.name), direction: o.direction }));
       if (compiled.none) return grouped ? [] : [plan.decode({})];
       /* Fail closed: a transaction that cannot say an aggregate under its scope (an HTTP source, a facade that

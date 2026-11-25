@@ -118,9 +118,10 @@ export function openSqliteAuthStore(path: string, fence: () => void): AuthStoreH
      password asynchronously, and then inserts — a shared-to-reserved upgrade SQLite refuses at once (`SQLITE_BUSY`,
      ignoring `busy_timeout`) whenever two processes make accounts together. Taking the write lock up front lets every
      other writer wait out `timeout` cleanly while keeping `database instanceof DatabaseSync`. */
-  const rawPrepare = database.prepare.bind(database);
   Object.defineProperty(database, 'prepare', {
-    value: (sql: string) => rawPrepare(!database.isTransaction && /^\s*begin\s*;?\s*$/i.test(sql) ? 'BEGIN IMMEDIATE' : sql),
+    value(this: DatabaseSync, sql: string) {
+      return DatabaseSync.prototype.prepare.call(this, !this.isTransaction && /^\s*begin\s*;?\s*$/i.test(sql) ? 'BEGIN IMMEDIATE' : sql);
+    },
     configurable: true,
     writable: true,
   });
