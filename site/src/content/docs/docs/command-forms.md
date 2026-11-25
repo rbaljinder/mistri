@@ -256,7 +256,9 @@ The handler loops over `records`. Any refusal refuses the whole request and
 names the record it is about. Before submitting, the form lists the records
 that no longer match `when`, with **Deselect ineligible**. Public and
 event-recording commands cannot target many. For a result per record, use a
-fixed [action](/docs/actions/) with `bulk: true`, which writes each on its own.
+fixed [action](/docs/actions/) with `bulk: true`, or a one-record command with
+`bulk: 'each'` (which opens its form once when it asks inputs and runs each
+record in its own transaction).
 
 ## Common mistakes
 

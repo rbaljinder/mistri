@@ -1357,8 +1357,15 @@
             "description": "A column this action asks a reason for and writes with its set. Required when the action runs; not with bulk or a command."
           },
           "bulk": {
-            "type": "boolean",
-            "description": "May run on a selection, App-wide: a queue offers it for its selection. A fixed update is one ordinary write per selected record, with results per record; a command must declare targets: many and runs the whole selection as one atomic request."
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "const": "each"
+              }
+            ],
+            "description": "May run on a selection, App-wide: a list offers it for its selection. A fixed update is one ordinary write per selected record, with results per record; a command with `targets: 'many'` takes `true` and runs the whole selection as one atomic request; a one-record command takes `'each'` and runs once per selected record, opening its form once when it draws inputs."
           },
           "header": {
             "type": "boolean",

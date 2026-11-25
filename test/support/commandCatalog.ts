@@ -24,6 +24,7 @@ function contract(raw: Raw, publicForm: boolean): CommandCatalogEntry {
     ...(raw.realm === undefined ? {} : { realm: raw.realm as 'tenant' | 'platform' }),
     ...(publicForm ? { public: true as const } : {}),
     ...(typeof raw.when === 'string' ? { when: raw.when } : {}),
+    ...(raw.hasInitial === true || raw.initial !== undefined ? { hasInitial: true as const } : {}),
     input: parseCommandInput(raw.input ?? {}, `command "${String(raw.id)}"`, { publicForm }),
   });
 }

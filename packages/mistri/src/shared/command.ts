@@ -1444,6 +1444,8 @@ export interface CommandCatalogEntry {
   readonly rules?: readonly DraftRule[];
   /** A form's command whose form prepares its starting values (`initial`, or `default: me`). */
   readonly prepares?: true;
+  /** A one-record command whose form prepares `initial()` from that record. */
+  readonly hasInitial?: true;
   /** What the command's form and button are called (`defineCommand({ label })`); left out, its name said as words. */
   readonly label?: string;
 }

@@ -104,6 +104,7 @@ export function appCommandCatalog(registry: BusinessCommandRegistry, app: Pick<A
         input: command.fields,
         ...(command.rules?.length ? { rules: command.rules } : {}),
         ...(formPrepares(command) ? { prepares: true as const } : {}),
+        ...(registeredInitial(command) !== undefined ? { hasInitial: true as const } : {}),
         ...(command.label === undefined ? {} : { label: command.label }),
       }),
     ]),

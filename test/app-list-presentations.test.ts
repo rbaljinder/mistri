@@ -383,12 +383,70 @@ test('bulk is a boolean; a command action offers it only when its registered com
     () => parse({ actions: { assign: { label: 'Assign', command: { ...command, targets: 'one' }, bulk: true } } }),
     /targets: 'many'/,
   );
-  /* 'each' runs a one-record command over every picked record, one after another. */
+  /* 'each' runs a one-record command over every picked record, opening its form once when it draws inputs,
+     and refusing inputs that read a single target record, prepare from the tenant or reader, or spend held files. */
   assert.doesNotThrow(() => parse({ actions: { assign: { label: 'Assign', command, bulk: 'each' } } }));
+  assert.doesNotThrow(() =>
+    parse({
+      actions: {
+        assign: {
+          label: 'Assign',
+          command: { ...command, id: 'assignTo', input: { to: { type: 'text' }, note: { type: 'textarea', optional: true } } },
+          bulk: 'each',
+        },
+      },
+    }),
+  );
   assert.throws(() => parse({ actions: { assign: { label: 'Assign', command: { ...command, targets: 'many' }, bulk: 'each' } } }), /each/);
   assert.throws(
-    () => parse({ actions: { assign: { label: 'Assign', command: { ...command, input: { to: { type: 'text' } } }, bulk: 'each' } } }),
-    /each/,
+    () =>
+      parse({
+        actions: { assign: { label: 'Assign', command: { ...command, id: 'assignInit', hasInitial: true }, bulk: 'each' } },
+      }),
+    /initial values/,
+  );
+  assert.throws(
+    () =>
+      parse({
+        actions: {
+          assign: {
+            label: 'Assign',
+            command: { ...command, id: 'assignFile', input: { photo: { type: 'files', from: 'attachment' } } },
+            bulk: 'each',
+          },
+        },
+      }),
+    /takes files/,
+  );
+  assert.throws(
+    () =>
+      parse({
+        actions: {
+          assign: {
+            label: 'Assign',
+            command: { ...command, id: 'assignRec', input: { note: { type: 'text', default: { record: 'title' } } } },
+            bulk: 'each',
+          },
+        },
+      }),
+    /from prepare/,
+  );
+  assert.throws(
+    () =>
+      parse({
+        actions: {
+          assign: {
+            label: 'Assign',
+            command: {
+              ...command,
+              id: 'assignRef',
+              input: { line: { type: 'reference', from: 'tasks', by: 'id', labelColumn: 'title', query: 'parent_id = record.id' } },
+            },
+            bulk: 'each',
+          },
+        },
+      }),
+    /record\.id/,
   );
   assert.throws(
     () => parse({ actions: { assign: { label: 'Assign', command: { ...command, targets: 'many' }, bulk: 'yes' } } }),
@@ -576,7 +634,7 @@ test("JSON schema offers the list kinds and names a bulk action's command", () =
     for (const value of ['', ' ', 'a.b.c', '.name', 'name.']) assert.equal(pattern.test(value), false);
   }
   const action = json.$defs.actions.additionalProperties;
-  assert.equal(action.properties.bulk.type, 'boolean');
+  assert.deepEqual(action.properties.bulk.oneOf, [{ type: 'boolean' }, { const: 'each' }]);
   const commandBranch = action.oneOf[1];
   // A command sets nothing itself; one that asks nothing may confirm, judged at load against its input.
   assert.deepEqual(commandBranch.not.required, ['set']);

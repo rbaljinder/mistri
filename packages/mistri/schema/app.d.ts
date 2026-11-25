@@ -4360,8 +4360,8 @@ export type ActionSet<Set> = { -readonly [K in keyof Set]: Set[K] } & { readonly
 export declare function action<const L extends string | AppMessageRef, const Name extends CommandOn>(
   label: L, options: Omit<CommandAction<Name>, 'label' | 'command' | 'bulk'> & { command: Name;
     /** `true`: offered for a queue selection when the command declares `targets: 'many'` (one request, all or none).
-        `'each'`: a command that names one record and asks nothing runs once per selected record, each in its own
-        transaction and each answered on its own. */
+        `'each'`: a command that names one record runs once per selected record, opening its form once when it draws
+        inputs, each record in its own transaction and answered on its own. */
     bulk?: TakesMany<Name> extends true ? boolean : false | 'each' },
 ): CommandAction<Name, L> & MadeBy<'action'>;
 export declare function action<const L extends string | AppMessageRef, const O extends Omit<AppUpdateAction<string | AppMessageRef>, 'id' | 'label' | 'set'> & { set: Readonly<Record<string, ActionSetValue>> }>(

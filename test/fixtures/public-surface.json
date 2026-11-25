@@ -1368,6 +1368,7 @@
         "app: resources.*.actions",
         "app: resources.*.actions.*.asks",
         "app: resources.*.actions.*.bulk",
+        "app: resources.*.actions.*.bulk = \"each\"",
         "app: resources.*.actions.*.command",
         "app: resources.*.actions.*.confirm",
         "app: resources.*.actions.*.given",
