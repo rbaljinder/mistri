@@ -42,6 +42,7 @@ import {
   type QueryPerson,
 } from '@mistriwork/engine/shared/query.js';
 import { nearest } from '@mistriwork/engine/shared/suggest.js';
+import { rollupColumnMeta, type Rollup } from '@mistriwork/engine/shared/rollups.js';
 import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
 import {
   columnKind,
@@ -475,8 +476,10 @@ interface Compiled {
   readonly none: boolean;
   readonly orderBy: { column: string; direction: 'asc' | 'desc' }[];
   readonly limit?: number;
+  /** True when the where names a rollup (or a computed column reading one), so the read runs through readView / readViewCount. */
+  readonly view?: true;
 }
-/* ---------- computed columns in a handler's where ---------- */
+/* ---------- computed columns and rollups in a where ---------- */
 
 /** A computed column read as its column would be, so an operator object over it compiles as one over a column. */
 const COMPUTED_COLUMN_TYPE: Readonly<Record<ComputedType, string>> = { boolean: 'boolean', number: 'numeric', date: 'date', text: 'text' };
@@ -486,12 +489,23 @@ function computedOf(table: CommandTable): Readonly<Record<string, ComputedColumn
   return table.derived?.parse.tables[0]?.computed ?? table.meta.computed;
 }
 
+/** The rollups the table is served to this reader: read in a page loader's where, count and segment. */
+function rollupsOf(table: CommandTable): Readonly<Record<string, Rollup>> | undefined {
+  return table.derived?.parse.tables[0]?.rollups ?? table.meta.rollups;
+}
+
 /* A name said as a word of its own: never part of a longer word or a path. */
 const nameIn = (text: string, name: string): boolean => new RegExp(`(?<![\\w.])${name}(?![\\w.])`).test(text);
 
 /** Whether a where in the query language names one of the table's computed columns. */
 function namesComputed(table: CommandTable, text: string): boolean {
   const declared = computedOf(table);
+  return !!declared && Object.keys(declared).some((name) => !Object.hasOwn(table.kinds, name) && nameIn(text, name));
+}
+
+/** Whether a where in the query language names one of the table's rollups. */
+function namesRollup(table: CommandTable, text: string): boolean {
+  const declared = rollupsOf(table);
   return !!declared && Object.keys(declared).some((name) => !Object.hasOwn(table.kinds, name) && nameIn(text, name));
 }
 
@@ -544,8 +558,9 @@ export function compileWhere(
   me?: QueryPerson,
   /** `columnValues` admits a column on a condition's right (`qty < reorder_at`): only for a `when`, which commandWhen.ts
       judges once the row is read. `anyRows` admits `any`/`no` over a declared child: only for a handle's `db`, whose reads
-      reach the child through the same transaction (compileAnyWhere); everywhere else one is refused as it always was. */
-  options: { columnValues?: boolean; anyRows?: boolean } = {},
+      reach the child through the same transaction (compileAnyWhere); everywhere else one is refused as it always was.
+      `rollups` admits the table's served rollups (and computed columns reading them) in a page loader's non-elevated reads. */
+  options: { columnValues?: boolean; anyRows?: boolean; rollups?: boolean } = {},
 ): Compiled {
   if (where === undefined) return { filter: { groups: [] }, none: false, orderBy: [] };
   if (typeof where === 'string' || isTemplate(where)) {
@@ -553,8 +568,13 @@ export function compileWhere(
       typeof where === 'string'
         ? where
         : where.reduce((out, part, index) => out + part + (index < values.length ? quoted(values[index]) : ''), '');
-    if (options.anyRows && (anyConditions(splitClauseTail(text).head).length || namesComputed(table, text)))
-      return compileAnyWhere(table, text, now);
+    if (
+      options.anyRows &&
+      (anyConditions(splitClauseTail(text).head).length ||
+        namesComputed(table, text) ||
+        (options.rollups === true && namesRollup(table, text)))
+    )
+      return compileAnyWhere(table, text, now, options.rollups === true);
     const schema: DatabaseSchema = { label: table.name, dialect: 'sqlite', tables: [table.meta], foreignKeys: [], readAt: '' };
     const { query, errors } = parseQuery(`${table.name} ${text}`, {
       schema,
@@ -575,6 +595,10 @@ export function compileWhere(
   const computedKeys = declared ? Object.keys(where).filter((key) => Object.hasOwn(declared, key) && !Object.hasOwn(table.kinds, key)) : [];
   if (computedKeys.length && !options.anyRows)
     throw new Error(`${table.name}: "${computedKeys[0]}" is a computed column, which a where names only in a handler's db.`);
+  const rollups = rollupsOf(table);
+  const rollupKeys = rollups ? Object.keys(where).filter((key) => Object.hasOwn(rollups, key) && !Object.hasOwn(table.kinds, key)) : [];
+  if (rollupKeys.length && !options.rollups)
+    throw new Error(`${table.name}: "${rollupKeys[0]}" is a rollup, which a where names only in a page's loader.`);
   /* A column tested against another table's rows (`customer_id: { in: { from: 'customer', where } }`) is carried as a
      condition of its own (`Condition.within`); the rest of the where is read as it would be without it. A path through
      a reference (`'customer_id.region': 'west'`) is that same test, written from the row's side. */
@@ -603,28 +627,39 @@ export function compileWhere(
     };
   }
   /* An operator object is the page-side condition (engine/shared/pageWhere.ts), compiled by the one compiler into the
-     language's text and read as text is: one vocabulary, the same refusals. A computed column's key goes the same way,
-     typed as its column would be, so its text is read where the computed columns are names (compileAnyWhere). */
-  if (computedKeys.length || Object.values(where).some((value) => value !== null && typeof value === 'object' && !Array.isArray(value))) {
+     language's text and read as text is: one vocabulary, the same refusals. A computed column's or rollup's key goes
+     the same way, typed as its column would be, so its text is read where those names are resolved (compileAnyWhere). */
+  if (
+    computedKeys.length ||
+    rollupKeys.length ||
+    Object.values(where).some((value) => value !== null && typeof value === 'object' && !Array.isArray(value))
+  ) {
     // An empty list matches nothing here too, as it does without an operator beside it; the rest is still read first,
     // so a column or operator that is not there is refused all the same.
     const empty = Object.entries(where).filter(([, value]) => Array.isArray(value) && !value.length);
-    const meta = computedKeys.length
-      ? {
-          ...table.meta,
-          columns: [
-            ...table.meta.columns,
-            ...computedKeys.map((name) => ({ name, type: COMPUTED_COLUMN_TYPE[declared![name].type], nullable: true, primaryKey: false })),
-          ],
-        }
-      : table.meta;
+    const meta =
+      computedKeys.length || rollupKeys.length
+        ? {
+            ...table.meta,
+            columns: [
+              ...table.meta.columns,
+              ...computedKeys.map((name) => ({
+                name,
+                type: COMPUTED_COLUMN_TYPE[declared![name].type],
+                nullable: true,
+                primaryKey: false,
+              })),
+              ...rollupKeys.map((name) => rollupColumnMeta(name, rollups![name])),
+            ],
+          }
+        : table.meta;
     const compiled = compilePageWhere(
       empty.length ? Object.fromEntries(Object.entries(where).filter(([, value]) => !(Array.isArray(value) && !value.length))) : where,
       meta,
     );
     if ('error' in compiled) throw new Error(`${table.name}: ${compiled.error}`);
     for (const [column] of empty)
-      if (!Object.hasOwn(table.kinds, column) && !computedKeys.includes(column))
+      if (!Object.hasOwn(table.kinds, column) && !computedKeys.includes(column) && !rollupKeys.includes(column))
         throw new Error(`${table.name}: "${column}" is not one of its columns.`);
     if (empty.length) return { filter: { groups: [] }, none: true, orderBy: [] };
     return compileWhere(table, compiled.text, now, [], me, options);
@@ -739,7 +774,7 @@ function compileInRows(table: CommandTable, column: string, value: InRowsValue, 
  * child's own table, read as this table is — by the same transaction, under the same scope or none. A reference path
  * (`customer_id.name`) stays refused here, in the child's conditions too.
  */
-function compileAnyWhere(table: CommandTable, text: string, now: Date): Compiled {
+function compileAnyWhere(table: CommandTable, text: string, now: Date, allowRollups = false): Compiled {
   const world = table.declared;
   const reads = world?.tables.map((each) => each.name) ?? [table.name];
   const { head } = splitClauseTail(text);
@@ -750,13 +785,21 @@ function compileAnyWhere(table: CommandTable, text: string, now: Date): Compiled
         `${table.name}: "${word} ${child}" asks about ${child}, which is not among the tables this handle reads (${reads.join(', ')}); declare it in read or write.`,
       );
   }
-  /* The language reads this table's computed columns as names (each written as its expression, servedComputed) and
-     no other table's, nor any rollup: a child's conditions read its stored columns, as its EXISTS writes them. */
+  /* The language reads this table's computed columns as names (each written as its expression, servedComputed) and,
+     in a page loader's non-elevated reads, its served rollups too; a child's conditions read its stored columns. */
   const declared = computedOf(table);
   const computed = Object.fromEntries(Object.entries(declared ?? {}).filter(([name]) => !Object.hasOwn(table.kinds, name)));
+  const rollups = allowRollups
+    ? Object.fromEntries(Object.entries(rollupsOf(table) ?? {}).filter(([name]) => !Object.hasOwn(table.kinds, name)))
+    : {};
   const bare = (meta: TableMeta): TableMeta => {
     const { rollups: _rollups, computed: _computed, ...rest } = meta;
-    return meta.name === table.name && Object.keys(computed).length ? { ...rest, computed } : rest;
+    if (meta.name !== table.name) return rest;
+    return {
+      ...rest,
+      ...(Object.keys(computed).length ? { computed } : {}),
+      ...(Object.keys(rollups).length ? { rollups } : {}),
+    };
   };
   const schema: DatabaseSchema = {
     label: table.name,
@@ -775,23 +818,47 @@ function compileAnyWhere(table: CommandTable, text: string, now: Date): Compiled
     return path;
   };
   const used: Record<string, { type: ComputedType; expr: ComputedNode }> = {};
+  let usesView = false;
   const isComputed = (name: string): boolean => Object.hasOwn(computed, name);
+  const isRollup = (name: string): boolean => Object.hasOwn(rollups, name);
   const inner = (filter: Filter | undefined): void => {
     for (const group of filter?.groups ?? [])
       for (const c of group)
-        if (isComputed(own(c.column)))
-          throw new Error(`${table.name}: "${c.column}" is a computed column, which a where names of the row it reads, not inside "any".`);
+        if (isComputed(own(c.column)) || isRollup(c.column))
+          throw new Error(
+            `${table.name}: "${c.column}" is a ${isRollup(c.column) ? 'rollup' : 'computed column'}, which a where names of the row it reads, not inside "any".`,
+          );
   };
-  /* A condition on a computed column: its expression goes with the filter, the condition names it. Compared with a
-     value only; one compared with another column, or set in order, is refused rather than read some other way. */
+  /* A condition on a computed column or a rollup: a plain computed column goes with the filter (`Filter.computed`),
+     while a rollup (or a computed column that reads one) marks the read for `readView` / `readViewCount`. */
   const condition = (path: string): string => {
-    if (!isComputed(own(path))) return path;
-    used[path] ??= servedComputed(table, path, computed[path], now);
+    const column = own(path);
+    if (isRollup(column)) {
+      usesView = true;
+      return path;
+    }
+    if (!isComputed(column)) return path;
+    const def = computed[column];
+    if (allowRollups && def.reads.some((read) => isRollup(read))) {
+      for (const read of def.reads) {
+        if (read.includes('.'))
+          throw new Error(
+            `${table.name}: "${column}" reads "${read}" through a reference, and a where reads a computed column of the row's own columns.`,
+          );
+        if (!Object.hasOwn(table.kinds, read) && !isRollup(read))
+          throw new Error(`${table.name}: "${column}" reads "${read}", which is not one of ${table.name}'s columns or rollups.`);
+      }
+      if (readsMe(def.expr))
+        throw new Error(`${table.name}: "${column}" says "me", and a handler's where is handed no one; write actor.email.`);
+      usesView = true;
+      return path;
+    }
+    used[path] ??= servedComputed(table, path, def, now);
     return path;
   };
   const compared = (path: string, other: string): string => {
-    if (isComputed(path) || isComputed(own(other)))
-      throw new Error(`${table.name}: a computed column in a where is compared with a value, not with another column.`);
+    if (isComputed(path) || isComputed(own(other)) || isRollup(path) || isRollup(other))
+      throw new Error(`${table.name}: a computed column or rollup in a where is compared with a value, not with another column.`);
     return other;
   };
   const groups = parsed.filter.groups.map((group) =>
@@ -813,11 +880,14 @@ function compileAnyWhere(table: CommandTable, text: string, now: Date): Compiled
     filter: { groups, ...(Object.keys(used).length ? { computed: used } : {}) },
     none: false,
     orderBy: parsed.orderBy.map((order) => {
-      if (isComputed(own(order.path)))
-        throw new Error(`${table.name}: "${order.path}" is a computed column, and a handler's read is ordered by its columns.`);
+      if (isComputed(own(order.path)) || isRollup(order.path))
+        throw new Error(
+          `${table.name}: "${order.path}" is a ${isRollup(order.path) ? 'rollup' : 'computed column'}, and a handler's read is ordered by its columns.`,
+        );
       return { column: order.path, direction: order.direction };
     }),
     ...(parsed.limit === undefined ? {} : { limit: parsed.limit }),
+    ...(usesView ? { view: true as const } : {}),
   };
 }
 
@@ -1123,7 +1193,9 @@ interface CommandDbOptions {
   readonly chosen?: Readonly<Record<string, string | number | null>>;
   /** The computed columns and rollups each table's `.with` may ask for, by local table name: a loader's declared reads. */
   readonly derived?: Readonly<Record<string, readonly string[]>>;
-  /** Reads rows with those names beside them, in one statement (pageLoaderRun.ts); absent, `.with` is refused. */
+  /** Tables of `read` elevated above the reader (`defineLoader({ elevate })`): read by stored columns only, never as a view. */
+  readonly elevated?: ReadonlySet<string>;
+  /** Reads rows with derived names beside them or under a rollup filter, in one statement (pageLoaderRun.ts); absent, `.with` is refused. */
   readonly readDerived?: (request: {
     readonly table: string;
     readonly names: readonly string[];
@@ -1131,6 +1203,8 @@ interface CommandDbOptions {
     readonly orderBy: readonly { column: string; direction: 'asc' | 'desc' }[];
     readonly limit: number;
   }) => Promise<{ readonly rows: readonly Readonly<Record<string, unknown>>[] }>;
+  /** Counts rows under a rollup filter, in one statement (pageLoaderRun.ts); absent, only stored/inline computed columns count. */
+  readonly countDerived?: (request: { readonly table: string; readonly filter: Filter }) => Promise<number>;
 }
 
 const isConstant = (value: unknown): value is WriteConstant =>
@@ -1273,6 +1347,8 @@ function tableHandle(
   const name = table.name;
   /* No one is signed in to a handler's where (`me` stays refused), but the request's choices are its to read. */
   const who: QueryPerson | undefined = options.chosen ? { email: null, chosen: options.chosen } : undefined;
+  const canView = Boolean(options.readDerived) && !options.elevated?.has(name);
+  const handleOptions = canView ? Object.freeze({ anyRows: true, rollups: true }) : HANDLE;
   const rows = async (
     compiled: Compiled,
     limit: number,
@@ -1280,9 +1356,11 @@ function tableHandle(
     withNames: readonly string[] = [],
   ): Promise<UntypedRow[]> => {
     if (compiled.none) return [];
-    if (withNames.length) {
+    if (withNames.length || compiled.view) {
       if (compiled.filter.groups.flat().some((condition) => condition.any || condition.within))
-        authorMistake(`${name}: a read with .with takes a where over the row's own columns and computed columns, not "any" or "in".`);
+        authorMistake(
+          `${name}: a read ${withNames.length ? 'with .with' : 'naming a rollup'} takes a where over the row's own columns, computed columns and rollups, not "any" or "in".`,
+        );
       const found = await options.readDerived!({ table: name, names: withNames, filter: compiled.filter, orderBy, limit });
       return found.rows.map((row) => normalizeRow(table, row) as UntypedRow);
     }
@@ -1300,7 +1378,7 @@ function tableHandle(
      the limit of each kept. */
   type Part = { readonly where: unknown; readonly values: readonly unknown[] };
   const compileParts = (parts: readonly Part[]): Compiled => {
-    const compiled = parts.map((part) => compileWhere(table, part.where, now(), part.values, who, HANDLE));
+    const compiled = parts.map((part) => compileWhere(table, part.where, now(), part.values, who, handleOptions));
     if (compiled.length === 1) return compiled[0];
     const filled = compiled.map((each) => each.filter.groups).filter((groups) => groups.length);
     const groups = filled.reduce<Condition[][]>((all, next) => all.flatMap((left) => next.map((right) => [...left, ...right])), [[]]);
@@ -1311,6 +1389,7 @@ function tableHandle(
       none: compiled.some((each) => each.none),
       orderBy: compiled.flatMap((each) => each.orderBy),
       ...(limits.length ? { limit: Math.min(...limits) } : {}),
+      ...(compiled.some((each) => each.view) ? { view: true as const } : {}),
     };
   };
   const queryOver = (parts: Part[]): Query<UntypedRow> => {
@@ -1342,9 +1421,9 @@ function tableHandle(
       const compiled = compileParts(parts);
       if (compiled.orderBy.length || compiled.limit !== undefined)
         authorMistake(`${name}: an aggregate's where says which rows; leave "sort" and "limit" out of it.`);
-      if (asksAboutRows(compiled.filter))
+      if (asksAboutRows(compiled.filter) || compiled.view)
         authorMistake(
-          `${name}: a sum or a group reads rows by their own columns; read the rows with an "any"/"no" or an "in" where, or count them.`,
+          `${name}: a sum or a group reads rows by their own columns; read the rows with an "any"/"no", "in" or rollup where, or count them.`,
         );
       const orderBy = groupOrder.map((o) => ({ name: plan.orderName(o.name), direction: o.direction }));
       if (compiled.none) return grouped ? [] : [plan.decode({})];
@@ -1413,7 +1492,11 @@ function tableHandle(
         if (!tail) return refuse('invalid_input');
         filter = { ...compiled.filter, groups: continueGroups(compiled.filter.groups, tail) as Condition[][] };
       }
-      const found = await rows({ filter, none: compiled.none, orderBy: [] }, (size as number) + 1, paged);
+      const found = await rows(
+        { filter, none: compiled.none, orderBy: [], ...(compiled.view ? { view: true } : {}) },
+        (size as number) + 1,
+        paged,
+      );
       const shown = found.slice(0, size as number);
       const last = shown.at(-1);
       return found.length > shown.length && last
@@ -1439,9 +1522,9 @@ function tableHandle(
         return query;
       },
       with(...names) {
-        if (!options.readDerived)
+        if (!canView)
           authorMistake(
-            `${name}: .with reads a computed column or rollup, which a page's loader does; a command's db reads stored columns.`,
+            `${name}: .with reads a computed column or rollup, which a page's loader does on a non-elevated table; a command's db reads stored columns.`,
           );
         for (const each of names as readonly unknown[]) {
           const allowed = options.derived?.[name];
@@ -1528,7 +1611,7 @@ function tableHandle(
       return found[0] ?? refuse('not_found');
     },
     async find(where) {
-      const found = await rows(compileWhere(table, where, now(), [], who, HANDLE), 2);
+      const found = await rows(compileWhere(table, where, now(), [], who, handleOptions), 2);
       if (found.length > 1) throw new Error(`${name}: find matched several rows; narrow the where, or use where().`);
       return found[0];
     },
@@ -1557,17 +1640,30 @@ function tableHandle(
       const expanded = expandSegments(segment, segments);
       if (expanded.error) throw new Error(`${name}: ${expanded.error.message}`);
       try {
-        compileWhere(table, expanded.text, now(), [], who, HANDLE);
+        compileWhere(table, expanded.text, now(), [], who, handleOptions);
       } catch (error) {
         throw new Error(
-          `${name}: the segment "${segment}" cannot be read here: ${(error as Error).message.replace(`${name}: `, '')} A handler reads a table's own columns and the tables it declares, not its rollups or paths.`,
+          `${name}: the segment "${segment}" cannot be read here: ${(error as Error).message.replace(`${name}: `, '')} ${
+            canView
+              ? "A loader reads a table's columns, computed columns, rollups and the tables it declares, not paths or me."
+              : "A handler reads a table's own columns and the tables it declares, not its rollups or paths."
+          }`,
         );
       }
       return queryOver([{ where: expanded.text, values: [] }]);
     },
     async count(where) {
-      const compiled = compileWhere(table, where, now(), [], who, HANDLE);
-      return compiled.none ? 0 : tx.count(name, compiled.filter);
+      const compiled = compileWhere(table, where, now(), [], who, handleOptions);
+      if (compiled.none) return 0;
+      if (compiled.view) {
+        if (compiled.filter.groups.flat().some((condition) => condition.any || condition.within))
+          authorMistake(
+            `${name}: a count naming a rollup takes a where over the row's own columns, computed columns and rollups, not "any" or "in".`,
+          );
+        if (!options.countDerived) authorMistake(`${name}: this handle cannot count rows by a rollup here.`);
+        return options.countDerived({ table: name, filter: compiled.filter });
+      }
+      return tx.count(name, compiled.filter);
     },
     async readFile(given) {
       return (await fileOf(given, 'readFile')).file;

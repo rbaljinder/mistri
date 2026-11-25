@@ -457,6 +457,7 @@ export async function readViewCount(
   schema: DatabaseSchema,
   input: ViewDef,
   countLimit?: unknown,
+  options?: { exact?: boolean },
 ): Promise<CountResult> {
   const { references: _requested, ...given } = snapshotScopedData(input);
   checkedTable(schema, given.base, {});
@@ -476,11 +477,11 @@ export async function readViewCount(
   if (!view.computed) delete view.computed;
   if (!view.expressions) delete view.expressions;
   if (!view.tagged) delete view.tagged;
-  const bound = countLimitOf(countLimit) ?? DEFAULT_COUNT_LIMIT;
+  const bound = options?.exact ? countLimitOf(countLimit) : (countLimitOf(countLimit) ?? DEFAULT_COUNT_LIMIT);
   const { countView } = capture(reader, { viewCount: true });
   if (!countView) throw new ResourceReadError(501, `${schema.dialect} connections cannot count views in this build.`);
-  const n = await countView(snapshotScopedData(view), bound + 1);
-  return n > bound ? { count: bound, exact: true, capped: true } : { count: n, exact: true };
+  const n = await countView(snapshotScopedData(view), bound === undefined ? undefined : bound + 1);
+  return bound !== undefined && n > bound ? { count: bound, exact: true, capped: true } : { count: n, exact: true };
 }
 
 /** A count read one past its bound, said the way `counted` says it: the bound, and `capped`. */
