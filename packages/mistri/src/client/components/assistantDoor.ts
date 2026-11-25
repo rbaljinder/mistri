@@ -15,12 +15,28 @@ export interface AssistantHandoff {
 }
 
 let held: ((handoff: AssistantHandoff) => void) | null = null;
+const listeners = new Set<() => void>();
+const notify = () => {
+  for (const listener of [...listeners]) listener();
+};
 
 /** The door takes the slot while it is mounted; the returned function gives it back. */
 export function holdAssistantDoor(open: (handoff: AssistantHandoff) => void): () => void {
   held = open;
+  notify();
   return () => {
-    if (held === open) held = null;
+    if (held === open) {
+      held = null;
+      notify();
+    }
+  };
+}
+
+/** Subscribes to the door mounting and leaving (`useSyncExternalStore`). */
+export function subscribeAssistantDoor(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
   };
 }
 

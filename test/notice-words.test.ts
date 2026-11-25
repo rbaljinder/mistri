@@ -309,22 +309,28 @@ for (const id of ['inbox', 'integrations'] as const)
         const where = await scratch(engine, `${id}_words_up`),
           fresh = await scratch(engine, `${id}_words_fresh`);
         try {
+          const targetVersion = id === 'integrations' ? 3 : 2;
           const v1 = fixtureFiles(id, engine).find((file) => file.version === 1)!;
           await applyFixture(engine, where.url, readFileSync(v1.path, 'utf8'));
           await withDb(where.url, async (db) => {
             await seed(engine, db);
             const [status] = await storeStatuses(db, layouts);
             assert.equal(status.found, 1);
-            assert.deepEqual(status.pending, [1]);
+            assert.deepEqual(status.pending, id === 'integrations' ? [1, 2] : [1]);
           });
           await assert.rejects(attest(engine, where.url), /migrate stores up/);
           const done = await withDb(where.url, (db) => upgradeStores(db, where.url, layouts));
           assert.deepEqual(done.failed, []);
           assert.deepEqual(
             done.applied.map((each) => [each.id, each.from, each.to]),
-            [[id, 1, 2]],
+            id === 'integrations'
+              ? [
+                  [id, 1, 2],
+                  [id, 2, 3],
+                ]
+              : [[id, 1, 2]],
           );
-          assert.deepEqual(await attest(engine, where.url), { version: 2, provisioned: false });
+          assert.deepEqual(await attest(engine, where.url), { version: targetVersion, provisioned: false });
           await PROVISION[id][engine]!(fresh.url);
           assert.deepEqual(await describeUrl(where.url), await describeUrl(fresh.url));
           await withDb(where.url, async (db) => {

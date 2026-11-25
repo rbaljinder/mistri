@@ -153,17 +153,18 @@ test('MISTRI_JOBS=off: a tenant host schedules nothing, so a look leaves the dat
       db.close();
     }
   };
-  const serve = (environment: Record<string, string> = {}) =>
+  const serve = (environment: Record<string, string> = {}, jobs?: 'manual') =>
     startTestApp({
       workspace,
       directory: dir,
       config,
       args: ['--policy', 'server/tenant-policy.ts', '--commands', 'commands.ts', '--jobs', 'jobs.ts'],
       environment: { ...KEYS, ...environment },
+      ...(jobs ? { jobs } : {}),
     });
   /* A run in the store: a host that finds one catches up the slot it missed at its next start, so the two starts
      below differ at once rather than at the next minute. */
-  const first = await serve();
+  const first = await serve({}, 'manual');
   await first.tenant('north', { roles: ['reception'] });
   // A tenant's job is admitted while its tenant and the platform are both active.
   await first.platform({ roles: ['operator'] });

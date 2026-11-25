@@ -146,7 +146,7 @@ test('a declaration is fields keyed by name: labels from keys, required unless o
     [one(group({ x: { type: 'text' } }, { repeat: { min: 3, max: 2 } })), /repeat min/],
     [{ 'two words': { type: 'text' } }, /logical identifier/],
     [[{ name: 'f', label: 'F', type: 'text' }], /an object of fields keyed by name/],
-    [one({ type: 'text', format: 'fax' }), /"email", "url" or "phone"/],
+    [one({ type: 'text', format: 'fax' }), /"email", "url", "phone" or "member"/],
     [one({ type: 'textarea', format: 'email' }), /on a text field/],
     [one({ type: 'text', pattern: '[' }), /not a regular expression/],
     [one({ type: 'text', message: 'Nothing to say it about.' }), /give one/],

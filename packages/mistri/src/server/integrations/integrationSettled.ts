@@ -98,25 +98,45 @@ export function settledReporter(
 
   return Object.freeze({
     async report(): Promise<boolean> {
-      const rows = await runtime.store.unsettled(runtime.appId, PAGE);
       let told = false;
-      for (const row of rows) {
-        if (!row.reference) {
+      const blockedTenants = new Set<string>();
+      const deferredKeys = new Set<string>();
+      for (let page = 0; page < 16; page++) {
+        const rows = await runtime.store.unsettled(runtime.appId, PAGE, [...blockedTenants]);
+        if (!rows.length) break;
+        let sawBlocked = false;
+        let progressed = false;
+        for (const row of rows) {
+          if (blockedTenants.has(row.tenant) || deferredKeys.has(row.key)) continue;
+          if (!row.reference) {
+            await runtime.store.settled(runtime.appId, row.key, row.state);
+            progressed = true;
+            continue;
+          }
+          try {
+            await tell(row);
+          } catch (error) {
+            if (error === LATER) {
+              blockedTenants.add(row.tenant);
+              sawBlocked = true;
+              continue;
+            }
+            const code = error instanceof AppAccessDenied ? 'forbidden' : isBusinessCommandExecutionError(error) ? error.code : undefined;
+            if (code === undefined || !FINAL.has(code)) {
+              deferredKeys.add(row.key);
+              await runtime.store.deferSettled(runtime.appId, row.key, row.state, runtime.now());
+              progressed = true;
+              continue;
+            }
+            warn(
+              `integrations.settled command "${settled.command}" refused message ${row.key} (${row.state}): ${code}. It is not offered again.`,
+            );
+          }
           await runtime.store.settled(runtime.appId, row.key, row.state);
-          continue;
+          told = true;
+          progressed = true;
         }
-        try {
-          await tell(row);
-        } catch (error) {
-          if (error === LATER) continue;
-          const code = error instanceof AppAccessDenied ? 'forbidden' : isBusinessCommandExecutionError(error) ? error.code : undefined;
-          if (code === undefined || !FINAL.has(code)) continue;
-          warn(
-            `integrations.settled command "${settled.command}" refused message ${row.key} (${row.state}): ${code}. It is not offered again.`,
-          );
-        }
-        await runtime.store.settled(runtime.appId, row.key, row.state);
-        told = true;
+        if (!sawBlocked && (!progressed || rows.length < PAGE)) break;
       }
       return told;
     },

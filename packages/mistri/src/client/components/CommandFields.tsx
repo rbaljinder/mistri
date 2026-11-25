@@ -827,6 +827,7 @@ export function CommandFieldControl({
         id={id}
         label={field.label}
         value={value}
+        optional={!field.required}
         invalid={invalid}
         describedBy={describedBy}
         disabled={disabled}

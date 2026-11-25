@@ -133,8 +133,10 @@ test('a picked choice is a recipe: tint by default, or filled in the accent, fro
   const brand = readFileSync(new URL('../packages/kit/src/client/brandLook.css', import.meta.url), 'utf8');
   assert.match(
     brand,
-    /:root\[data-look-choice='filled'\][\s\S]*?\[data-slot='radio'\]\[data-checked\][\s\S]*?background: var\(--m-accent\);[\s\S]*?color: var\(--m-on-accent\);/,
+    /:root\[data-look-choice='filled'\][\s\S]*?\[data-slot='radio'\]\[data-checked\][\s\S]*?\[data-slot='check-cards-card'\]\[data-checked\][\s\S]*?background: var\(--m-accent\);[\s\S]*?color: var\(--m-on-accent\);/,
   );
+  assert.match(brand, /\.intake-choice-help/);
+  assert.match(brand, /\[data-slot='check-cards-card'\]\[data-checked\] \[data-slot='checkbox'\]\[data-checked\]/);
   const controls = readFileSync(new URL('../packages/ui/src/styles/looks.css', import.meta.url), 'utf8');
   assert.doesNotMatch(controls, /data-look-choice/);
   refuse({ recipes: { choice: 'bold' } }, /theme\.recipes\.choice is not on the menu: pick one of tint, filled/);

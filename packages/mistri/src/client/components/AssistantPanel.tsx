@@ -840,6 +840,8 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
      not open is refused there and said here; the panel is not quietly about nothing. */
   useEffect(() => {
     if (!handoff) return;
+    setListing(false);
+    setProblem(null);
     if (typeof handoff.text === 'string') {
       setEditing(null);
       setText(handoff.text);

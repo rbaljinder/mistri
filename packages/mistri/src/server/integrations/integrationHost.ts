@@ -71,23 +71,46 @@ export async function openAppIntegrations(
     transport: sent.transport,
   });
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let started = false;
   let stopping = false;
+  let woken = false;
   let running: Promise<unknown> | undefined;
   const loop = () => {
+    timer = undefined;
     if (stopping) return;
+    woken = false;
     running = channels
       .sendDue()
       .catch((cause) => console.error(`mistri: held channel messages could not be sent; they are tried again shortly: ${causeText(cause)}`))
       .finally(() => {
         running = undefined;
-        if (!stopping) timer = setTimeout(loop, HELD_MS);
+        if (!stopping && started) timer = setTimeout(loop, woken ? 0 : HELD_MS);
       });
+  };
+  const wake = () => {
+    if (!started || stopping || !reporter) return;
+    if (running) {
+      woken = true;
+      return;
+    }
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(loop, 0);
+  };
+  const wakingTransport: typeof channels.transport = (channel, routed) => {
+    const inner = channels.transport(channel, routed);
+    if (!inner) return undefined;
+    return async (publication) => {
+      const outcome = await inner(publication);
+      if (outcome === 'accepted') wake();
+      return outcome;
+    };
   };
   return Object.freeze({
     runtime,
-    channel: channels.transport,
+    channel: wakingTransport,
     sendDue: () => channels.sendDue(),
     start() {
+      started = true;
       if (!timer && !running && !stopping) timer = setTimeout(loop, HELD_MS);
     },
     async stop() {

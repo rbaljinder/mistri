@@ -7,6 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api } from '@mistriwork/kit/client/core.js';
+import { captureAccountIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { Dropdown, readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
 import { say } from '../copy/forms/components/MemberPicker.js';
 
@@ -16,32 +17,44 @@ interface Named {
   readonly you: boolean;
 }
 
-/* One read of the team a page: every member field of every form opened on it lists the same people. */
-let asked: Promise<readonly Named[] | null> | undefined;
+/* One read of the team per session and tenant: switching tenants or signing in as someone else never shows the last team's names. */
+let asked: { readonly owner: string; readonly read: Promise<readonly Named[] | null> } | undefined;
+
+function ownerKey(): string {
+  const owner = captureAccountIdentity();
+  return `${owner.epoch}\n${owner.accountId ?? ''}\n${owner.tenant?.tenantId ?? ''}`;
+}
 
 /** The team's names, or null where the App keeps no such read (no tenant, `auth.tenancy.team: false`) or it failed. */
-function readTeamNames(): Promise<readonly Named[] | null> {
-  asked ??= (async () => {
-    try {
-      const rows = ((await api('/api/team', {})) as { members?: unknown } | null)?.members;
-      if (!Array.isArray(rows)) return null;
-      return rows.flatMap((row: { account?: unknown; name?: unknown; you?: unknown }) =>
-        typeof row?.account === 'string'
-          ? [
-              {
-                account: row.account,
-                name: typeof row.name === 'string' ? row.name : '',
-                you: row.you === true,
-              },
-            ]
-          : [],
-      );
-    } catch {
-      asked = undefined;
-      return null;
-    }
-  })();
-  return asked;
+function readTeamNames(owner: string): Promise<readonly Named[] | null> {
+  if (asked?.owner !== owner) {
+    let entry: typeof asked;
+    const read = (async () => {
+      try {
+        const rows = ((await api('/api/team', {})) as { members?: unknown } | null)?.members;
+        if (!Array.isArray(rows)) {
+          if (asked === entry) asked = undefined;
+          return null;
+        }
+        return rows.flatMap((row: { account?: unknown; name?: unknown; you?: unknown }) =>
+          typeof row?.account === 'string'
+            ? [
+                {
+                  account: row.account,
+                  name: typeof row.name === 'string' ? row.name : '',
+                  you: row.you === true,
+                },
+              ]
+            : [],
+        );
+      } catch {
+        if (asked === entry) asked = undefined;
+        return null;
+      }
+    })();
+    entry = asked = { owner, read };
+  }
+  return asked.read;
 }
 
 /** Test-only: forget the page's read. */
@@ -53,6 +66,7 @@ export function MemberPicker({
   id,
   label,
   value,
+  optional,
   invalid,
   describedBy,
   disabled,
@@ -61,21 +75,24 @@ export function MemberPicker({
   id: string;
   label: string;
   value: unknown;
+  optional?: boolean;
   invalid?: boolean;
   describedBy?: string;
   disabled?: boolean;
   onChange: (value: string) => void;
 }) {
+  const owner = ownerKey();
   const [team, setTeam] = useState<readonly Named[] | null | undefined>(undefined);
   useEffect(() => {
     let current = true;
-    void readTeamNames().then((read) => {
+    setTeam(undefined);
+    void readTeamNames(owner).then((read) => {
       if (current) setTeam(read);
     });
     return () => {
       current = false;
     };
-  }, []);
+  }, [owner]);
   const people = team ?? [];
   const chosen = typeof value === 'string' ? value : '';
   /* A pick the list does not hold (a starting value, someone since gone) is still said, by its id, until changed. */
@@ -86,6 +103,14 @@ export function MemberPicker({
       label: person.you ? say('memberYou', { name: person.name || say('memberUnnamed') }) : person.name || say('memberUnnamed'),
     })),
   ];
+  const emptyLabel =
+    team === null
+      ? say('noTeamToList')
+      : chosen && optional
+        ? say('memberNone')
+        : readsAsName(label)
+          ? say('choosePlaceholder', { label: label.toLowerCase() })
+          : say('chooseOne');
   return (
     <Dropdown
       id={id}
@@ -95,24 +120,9 @@ export function MemberPicker({
       disabled={disabled || team === null}
       value={chosen}
       valueClassName={chosen ? undefined : 'is-empty'}
-      items={[
-        ...(chosen
-          ? []
-          : [
-              {
-                value: '',
-                label:
-                  team === null
-                    ? say('noTeamToList')
-                    : readsAsName(label)
-                      ? say('choosePlaceholder', { label: label.toLowerCase() })
-                      : say('chooseOne'),
-              },
-            ]),
-        ...items,
-      ]}
+      items={[...(chosen && !optional ? [] : [{ value: '', label: emptyLabel }]), ...items]}
       onValueChange={(next) => {
-        if (next !== '') onChange(next);
+        if (next !== '' || optional) onChange(next);
       }}
     />
   );

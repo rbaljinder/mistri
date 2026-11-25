@@ -28,6 +28,7 @@ import {
 } from '@mistriwork/kit/client/locale.js';
 import { minorFigure } from '@mistriwork/engine/shared/money.js';
 import { herePath } from '@mistriwork/kit/client/addressMount.js';
+import { subscribeAssistantDoor } from '../assistantDoor.js';
 import { notePageLoad } from '../../pageLoadHints.js';
 import {
   UiPageContext,
@@ -587,8 +588,13 @@ export function useAssistant(): {
   open(options?: { about?: { table: string; id: string | number }; text?: string }): boolean;
 } {
   const host = useUiHost();
+  const offered = useSyncExternalStore(
+    subscribeAssistantDoor,
+    () => host.assistantOffered(),
+    () => false,
+  );
   return {
-    offered: host.assistantOffered(),
+    offered,
     open: (options = {}) => {
       const { about, text } = options;
       if (about !== undefined) {

@@ -7,4 +7,5 @@ export const say = defineMessages({
   noTeamToList: 'The team cannot be listed here',
   choosePlaceholder: 'Choose {label}',
   chooseOne: 'Choose one',
+  memberNone: 'None',
 });

@@ -154,6 +154,56 @@ test('each state a named message settles in runs the App’s settled command onc
   assert.deepEqual(log().at(-1), { reference: 'order-7', state: 'sent', reason: null, provider_id: sent.id });
   assert.equal(await reporter.report(), false);
   assert.equal(log().length, 3);
+
+  // Thirty-five unsettled rows of a suspended tenant never starve an active tenant behind them.
+  let suspended = true;
+  const multiTenantReporter = settledReporter({
+    runtime,
+    version: 1,
+    principals,
+    bind: async (tenant) => {
+      if (tenant === 'suspended' && suspended) throw new Error('tenant suspended');
+      return { binding, release: () => {} };
+    },
+    warn: (message) => assert.fail(message),
+  })!;
+  for (let i = 0; i < 35; i++) {
+    await store.putMessage({
+      app: 'shop',
+      key: `sus-${i}`,
+      tenant: 'suspended',
+      channel: 'sms',
+      recipient: '+15550099',
+      text: 'Hold',
+      state: 'sent',
+      reason: null,
+      providerId: `p-${i}`,
+      dueAt: null,
+      attempts: 1,
+      at: clock.now + i,
+      reference: `sus-ref-${i}`,
+    });
+  }
+  await store.putMessage({
+    app: 'shop',
+    key: 'active-1',
+    tenant: 'active',
+    channel: 'sms',
+    recipient: '+15550011',
+    text: 'Go',
+    state: 'sent',
+    reason: null,
+    providerId: 'p-active',
+    dueAt: null,
+    attempts: 1,
+    at: clock.now + 100,
+    reference: 'active-order',
+  });
+  assert.equal(await multiTenantReporter.report(), true);
+  assert.deepEqual(log().at(-1), { reference: 'active-order', state: 'sent', reason: null, provider_id: 'p-active' });
+  suspended = false;
+  assert.equal(await multiTenantReporter.report(), true);
+  assert.equal(log().filter((row) => String(row.reference).startsWith('sus-ref-')).length, 35);
 });
 
 test('check holds the settled command to what a settle sends, and the declaration to a principal and a channel', () => {

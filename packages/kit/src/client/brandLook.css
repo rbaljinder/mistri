@@ -186,21 +186,26 @@
   :root[data-look-choice='filled']
     :is(
       [data-slot='radio-group'][data-kind='cards'] [data-slot='choice']:has([data-slot='radio'][data-checked]),
-      [data-slot='check-cards'] [data-slot='choice']:has([data-slot='checkbox'][data-checked])
+      [data-slot='check-cards-card'][data-checked]
     ) {
     border-color: var(--m-accent);
     background: var(--m-accent);
     box-shadow: none;
     color: var(--m-on-accent);
   }
-  :root[data-look-choice='filled'] [data-slot='choice']:has([data-slot='radio'][data-checked], [data-slot='checkbox'][data-checked]) :is([data-slot='choice-icon'], [data-slot='choice-hint']) {
+  :root[data-look-choice='filled']
+    :is(
+      [data-slot='choice']:has([data-slot='radio'][data-checked], [data-slot='checkbox'][data-checked]),
+      [data-slot='check-cards-card'][data-checked]
+    )
+    :is([data-slot='choice-icon'], [data-slot='choice-hint'], .intake-choice-help, [data-slot='choice-label'] svg) {
     color: inherit;
   }
   :root[data-look-choice='filled'] [data-slot='radio-group'][data-kind='cards'] [data-slot='choice']:has([data-slot='radio'][data-checked])::before {
     border-color: var(--m-on-accent);
     background: radial-gradient(circle, var(--m-accent) 0 0.1875rem, var(--m-on-accent) 0.21875rem);
   }
-  :root[data-look-choice='filled'] [data-slot='check-cards'] [data-slot='checkbox'][data-checked] {
+  :root[data-look-choice='filled'] [data-slot='check-cards-card'][data-checked] [data-slot='checkbox'][data-checked] {
     border-color: var(--m-on-accent);
     background: var(--m-on-accent);
     color: var(--m-accent);

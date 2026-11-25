@@ -104,6 +104,18 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
       withdraw = registerIntegrationRuntime(runtime);
     }
     const channels = runtime ? channelTransports(runtime) : undefined;
+    let wake = () => {};
+    const wakingTransport: NonNullable<typeof channels>['transport'] | undefined = channels
+      ? (channel, routed) => {
+          const inner = channels.transport(channel, routed);
+          if (!inner) return undefined;
+          return async (publication) => {
+            const outcome = await inner(publication);
+            if (outcome === 'accepted') wake();
+            return outcome;
+          };
+        }
+      : undefined;
     if (deployment) {
       const webhooks = new Map<string, Webhook>();
       for (const { webhook } of deployment.destinations) {
@@ -122,7 +134,7 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
         deployment,
         target,
         webhooks,
-        ...(channels ? { channels: channels.transport } : {}),
+        ...(wakingTransport ? { channels: wakingTransport } : {}),
         ...(options.now ? { now: options.now } : {}),
         ...(options.links ? { links: options.links } : {}),
         ...(options.publicLinks ? { publicLinks: options.publicLinks } : {}),
@@ -149,7 +161,9 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
       });
     }
     let timer: ReturnType<typeof setTimeout> | undefined;
+    let started = false;
     let stopping = false;
+    let woken = false;
     let running: Promise<unknown> | undefined;
     /* What the channels decided, then what the App is told of it (integrations.settled), in the message's own tenant. */
     const settled = runtime && owned?.integrations.settled;
@@ -168,13 +182,24 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
       return (reporter ? await reporter.report() : false) || moved;
     };
     const loop = () => {
+      timer = undefined;
       if (stopping) return;
+      woken = false;
       running = sendDue()
         .catch(() => options.warn?.('held channel messages could not be sent; they are tried again shortly.'))
         .finally(() => {
           running = undefined;
-          if (!stopping) timer = setTimeout(loop, HELD_MS);
+          if (!stopping && started) timer = setTimeout(loop, woken ? 0 : HELD_MS);
         });
+    };
+    wake = () => {
+      if (!started || stopping || !reporter) return;
+      if (running) {
+        woken = true;
+        return;
+      }
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(loop, 0);
     };
     const base = (options.webhookBase ?? '').replace(/\/+$/, '');
     const live = runtime;
@@ -196,6 +221,7 @@ export async function openTenantIntegrations<Request = IncomingMessage>(
       },
       readiness: () => effects?.readiness() ?? [],
       start() {
+        started = true;
         effects?.start();
         if (channels && !timer && !running) timer = setTimeout(loop, HELD_MS);
       },

@@ -335,9 +335,11 @@ export interface IntegrationStore {
   message(app: string, key: string): Promise<MessageRow | undefined>;
   putMessage(row: MessageRow): Promise<void>;
   /** Messages with a reference whose state the App's `integrations.settled` command has not been told yet, oldest first. */
-  unsettled(app: string, limit: number): Promise<readonly MessageRow[]>;
+  unsettled(app: string, limit: number, skipTenants?: readonly string[]): Promise<readonly MessageRow[]>;
   /** The App was told the message is in `state`: it is not told again unless the message moves on. */
   settled(app: string, key: string, state: MessageRow['state']): Promise<void>;
+  /** A settle report could not run yet: move it behind every unsettled row so others do not wait behind it. */
+  deferSettled(app: string, key: string, state: MessageRow['state'], now: number): Promise<void>;
   /** Held messages whose quiet hours are over, oldest first: one channel's, or every channel's. */
   due(app: string, now: number, limit: number, channel?: string): Promise<readonly MessageRow[]>;
   /** How many messages one tenant's writes sent on a channel since a moment, to one recipient or to anyone: what the email
@@ -626,17 +628,33 @@ function openSqliteIntegrationStore(existingPath: string): IntegrationStore {
         ).run(row.at - KEEP_MS);
       });
     },
-    async unsettled(app, limit) {
-      return read(() =>
-        db
-          .prepare(`SELECT * FROM "${t.message}" WHERE app = ? AND settle = 1 ORDER BY at LIMIT ?`)
-          .all(app, limit)
-          .map((row) => messageOf(row as Record<string, unknown>)),
-      );
+    async unsettled(app, limit, skipTenants) {
+      return read(() => {
+        const skipped = skipTenants?.length ? skipTenants : undefined;
+        const filter = skipped ? ` AND tenant NOT IN (${skipped.map(() => '?').join(', ')})` : '';
+        return db
+          .prepare(`SELECT * FROM "${t.message}" WHERE app = ? AND settle = 1${filter} ORDER BY at LIMIT ?`)
+          .all(app, ...(skipped ?? []), limit)
+          .map((row) => messageOf(row as Record<string, unknown>));
+      });
     },
     async settled(app, key, state) {
       write(() => {
         db.prepare(`UPDATE "${t.message}" SET settle = NULL WHERE app = ? AND key = ? AND state = ?`).run(app, key, state);
+      });
+    },
+    async deferSettled(app, key, state, now) {
+      write(() => {
+        const latest = Number(
+          (db.prepare(`SELECT COALESCE(MAX(at), 0) AS m FROM "${t.message}" WHERE app = ? AND settle = 1`).get(app) as { m?: unknown })
+            ?.m ?? 0,
+        );
+        db.prepare(`UPDATE "${t.message}" SET at = ? WHERE app = ? AND key = ? AND state = ? AND settle = 1`).run(
+          Math.max(now, latest) + 1,
+          app,
+          key,
+          state,
+        );
       });
     },
     async due(app, now, limit, channel) {
@@ -879,13 +897,27 @@ async function openPostgresIntegrationStore(url: string): Promise<IntegrationSto
         ],
       );
     },
-    async unsettled(app, limit) {
-      return (await query(`SELECT * FROM ${table(t.message)} WHERE app = $1 AND settle = 1 ORDER BY at LIMIT $2`, [app, limit])).map(
-        messageOf,
-      );
+    async unsettled(app, limit, skipTenants) {
+      const skipped = skipTenants?.length ? skipTenants : undefined;
+      return (
+        await query(
+          skipped
+            ? `SELECT * FROM ${table(t.message)} WHERE app = $1 AND settle = 1 AND NOT (tenant = ANY($3::text[])) ORDER BY at LIMIT $2`
+            : `SELECT * FROM ${table(t.message)} WHERE app = $1 AND settle = 1 ORDER BY at LIMIT $2`,
+          skipped ? [app, limit, [...skipped]] : [app, limit],
+        )
+      ).map(messageOf);
     },
     async settled(app, key, state) {
       await query(`UPDATE ${table(t.message)} SET settle = NULL WHERE app = $1 AND key = $2 AND state = $3`, [app, key, state]);
+    },
+    async deferSettled(app, key, state, now) {
+      await query(
+        `UPDATE ${table(t.message)}
+            SET at = GREATEST($4::bigint, COALESCE((SELECT MAX(at) FROM ${table(t.message)} WHERE app = $1 AND settle = 1), 0)) + 1
+          WHERE app = $1 AND key = $2 AND state = $3 AND settle = 1`,
+        [app, key, state, now],
+      );
     },
     /* Every process of a deployment (replicas, --workers) runs the held-message loop, so a page is leased as it is
        read: the rows taken move their due moment past the time a page of sends can take, and another process's look
