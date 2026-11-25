@@ -47,6 +47,7 @@ import {
   type BusinessCommandActor,
 } from './businessCommands.js';
 import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow, type WriteTable } from './commandDb.js';
+import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
 import { auditCommandRead, type CommandReadAudit, type ReadAuditSink } from '../readAudit.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
 import { compileWhen, failingCondition, recordPartHolds, type DerivedFailure, whenHolds, whenPerson } from './commandWhen.js';
@@ -412,7 +413,7 @@ async function executeUntraced(
     // signed-in form runs the command, decides whether an empty key is
     // admitted; the authorizer then proves the principal whole or refuses it.
     const publicActor = !!actor && typeof actor === 'object' && Object.getOwnPropertyDescriptor(actor, 'kind')?.value === 'public';
-    const creates = (command: string): boolean => publicActor || binding.creates?.(command) === true;
+    const creates = (command: string): boolean => (binding.creates ? binding.creates(command) === true : publicActor);
     const request = parseCommandEnvelope(rawRequest, { creating: creates });
     const creating = creates(request.command);
     // Named in a refusal's recorded reason, where an inner write's own `request` shadows this one.
@@ -430,11 +431,22 @@ async function executeUntraced(
       creating &&
       (list.expectedVersions[0] !== 0 ||
         (publicActor
-          ? authorized.command.public !== true || authorized.actor.kind !== 'public'
+          ? authorized.command.public !== true || authorized.actor.kind !== 'public' || authorized.keyColumns.length !== 0
           : // A signed-in form's, or a job's that runs at its times (`every`), never a public principal's.
             authorized.command.public === true ||
             (authorized.actor.kind !== undefined && authorized.actor.kind !== 'service') ||
             authorized.keyColumns.length !== 0))
+    )
+      throw new AppAccessDenied();
+    /* A public visitor acting on an existing record (`public: true, targets: 'one'`) names exactly one record. */
+    if (
+      !creating &&
+      publicActor &&
+      (authorized.command.public !== true ||
+        authorized.command.targets !== 'one' ||
+        authorized.actor.kind !== 'public' ||
+        list.multi ||
+        list.keys.length !== 1)
     )
       throw new AppAccessDenied();
     /* A link's holder runs on the one record the link was minted for, and on nothing else: the authorizer proved the
@@ -831,7 +843,7 @@ async function executeUntraced(
             await targets();
             const operations = new TransactionOperations(true);
             const accept = <Request, Result>(request: Request, run: (request: Request) => Promise<Result>, read = false) => {
-              const copy = scoped ? snapshotScopedData(request) : structuredClone(request);
+              const copy = carryServerRequest(request, scoped ? snapshotScopedData(request) : structuredClone(request));
               return read ? operations.read(() => run(copy)) : operations.run(() => run(copy));
             };
             const tx: WriteTransaction = Object.freeze<WriteTransaction>({
@@ -1012,7 +1024,7 @@ async function executeUntraced(
             ): Promise<Result> => {
               // Capture before joining the queue: handlers still own their arguments.
               try {
-                const snapshot = scoped ? snapshotScopedData(request) : structuredClone(request);
+                const snapshot = carryServerRequest(request, scoped ? snapshotScopedData(request) : structuredClone(request));
                 return read ? operations.read(() => run(snapshot)) : operations.run(() => run(snapshot));
               } catch (error) {
                 return operations.run(async () => {
@@ -1460,7 +1472,7 @@ async function executeUntraced(
                taken before the row is normalized, as prepare takes it. A job
                names none: it acts on the row as it is. */
                   let movedSince = false;
-                  if (authorized.actor.kind !== 'service') {
+                  if (authorized.actor.kind !== 'service' && authorized.actor.kind !== 'public') {
                     const revision = rowRevision(found!.rows[0], authorized.versionField);
                     if (revision === undefined) {
                       throw recordRefusalCause(
@@ -2159,7 +2171,10 @@ async function executeUntraced(
        never succeed. */
     /* A line's `consumes` taking more than is left: said with the rule's own sentence, filled for this reader. */
     if (cause instanceof ConsumesRefused)
-      throw recordRefusalCause(new BusinessCommandExecutionError('consumes_refused', outcome, undefined, undefined, cause.sentence), cause);
+      throw recordRefusalCause(
+        new BusinessCommandExecutionError('consumes_refused', outcome, cause.fields[0], undefined, cause.sentence),
+        cause,
+      );
     if (cause instanceof AppValidationDenied)
       throw recordRefusalCause(
         new BusinessCommandExecutionError('invalid_input', outcome, cause.fields[0], undefined, cause.reasons[cause.fields[0]]),

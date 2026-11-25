@@ -107,6 +107,7 @@ export const RESOURCE_BLOCK_KEYS = [
   'at',
   'file',
   'tags',
+  'photos',
   'search',
   'page',
   'view',
@@ -602,6 +603,27 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
           tags[verb] = command;
         }
         resource.tags = tags;
+      }
+      if (raw.photos !== undefined) {
+        const declared = plainRecord(raw.photos, `${at}, "photos"`, 'an object { from, whose, sort?, aspect? }');
+        allowKeys(declared, ['from', 'whose', 'sort', 'aspect'], `${at}, "photos"`);
+        const from = declared.from;
+        const whose = declared.whose;
+        if (typeof from !== 'string' || !from.trim()) throw new Error(`${at}, "photos" "from" must name the file resource of photographs.`);
+        if (typeof whose !== 'string' || !whose.trim() || whose.includes('.'))
+          throw new Error(`${at}, "photos" "whose" must name the reference column on "${from.trim()}".`);
+        const sort = declared.sort;
+        if (sort !== undefined && (typeof sort !== 'string' || !sort.trim()))
+          throw new Error(`${at}, "photos" "sort" must name a column (optionally followed by asc or desc).`);
+        const aspect = declared.aspect;
+        if (aspect !== undefined && (typeof aspect !== 'string' || !/^\d+\s*\/\s*\d+$/.test(aspect.trim())))
+          throw new Error(`${at}, "photos" "aspect" must be a ratio like "3/2", "4/3", "16/9" or "3/4".`);
+        resource.photos = {
+          from: from.trim(),
+          whose: whose.trim(),
+          ...(typeof sort === 'string' ? { sort: sort.trim() } : {}),
+          ...(typeof aspect === 'string' ? { aspect: aspect.trim().replace(/\s+/g, '') } : {}),
+        };
       }
       if (raw.page !== undefined) {
         if (typeof raw.page !== 'string' || !raw.page.trim()) throw new Error(`${at} has a "page" that is not a page id.`);
@@ -1230,6 +1252,7 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     'currency',
     'minor',
     'whole',
+    'round',
     'unit',
     'tone',
     'bar',
@@ -1405,6 +1428,11 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     if (r.whole !== true) throw new Error(`${at} has a "whole" that is not true; money said without whole-amount cents says whole: true.`);
     if (r.format !== 'money') throw new Error(`${at} has "whole", which only format "money" carries: { format: 'money', whole: true }.`);
   }
+  /* Round is for estimates (like a monthly figure): rounds to whole major units even when cents are non-zero. */
+  if (r.round !== undefined) {
+    if (r.round !== true) throw new Error(`${at} has a "round" that is not true; money rounded to whole units says round: true.`);
+    if (r.format !== 'money') throw new Error(`${at} has "round", which only format "money" carries: { format: 'money', round: true }.`);
+  }
   /* The bar's scale is its value: `bar: true` for a percent, which fills
      against 100, and `bar: 5` for any other number, filled against 5. */
   let max: number | undefined;
@@ -1478,6 +1506,7 @@ function parseDisplayRule(value: unknown, at: string): AppDisplayRule {
     ...(currencyColumn ? { currencyColumn } : {}),
     ...(r.minor === true ? { minor: true as const } : {}),
     ...(r.whole === true ? { whole: true as const } : {}),
+    ...(r.round === true ? { round: true as const } : {}),
     ...(r.unit === undefined ? {} : { unit: (r.unit as string).trim() }),
     ...(r.tone === undefined ? {} : { tone: r.tone as AppDisplayRule['tone'] }),
     ...(r.bar === undefined ? {} : { bar: true }),

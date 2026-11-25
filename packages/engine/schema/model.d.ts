@@ -261,6 +261,10 @@ export interface AppFormCommandReference {
   readonly enabledBy?: AppFlagGate;
   id: string;
   version: number;
+  /** Target table name when a public command targets an existing record (`targets: 'one'`). */
+  recordTarget?: string;
+  /** `'one'` when a public command acts on an existing record (e.g., a machine verb shared by public and staff). */
+  targets?: 'one';
   input: AppCommandField[];
   rules?: AppCommandRule[];
   /** Its signed-in form prepares its starting values as it opens: the command declares `initial`, or an input starts

@@ -292,7 +292,7 @@ function parseLandingSection(raw: unknown, at: string, rooms: LandingRooms): Lan
       };
     }
     case 'view': {
-      allowKeys(o, ['kind', 'title', 'view', 'limit', 'sort'], here);
+      allowKeys(o, ['kind', 'title', 'view', 'limit', 'sort', 'open'], here);
       const [view, list] = openList(o, here, rooms);
       if (list.presentation?.kind !== 'cards') {
         throw new Error(
@@ -308,12 +308,22 @@ function parseLandingSection(raw: unknown, at: string, rooms: LandingRooms): Lan
       if (o.sort !== undefined && (typeof o.sort !== 'string' || !SORT.test(o.sort.trim()))) {
         throw new Error(`${here} has a "sort" that is not one column and a direction, like "listed_on desc".`);
       }
+      let open: import('@mistriwork/engine/shared/servedApp.js').OpenPageTarget | undefined;
+      if (o.open !== undefined) {
+        const openObj = landingObject(o.open, `${here}.open`);
+        allowKeys(openObj, ['page', 'param'], `${here}.open`);
+        if (typeof openObj.page !== 'string' || !openObj.page.trim()) throw new Error(`${here}.open.page must name a public page key.`);
+        if (openObj.param !== undefined && (typeof openObj.param !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(openObj.param)))
+          throw new Error(`${here}.open.param must be a parameter name like "id".`);
+        open = { page: openObj.page.trim(), ...(typeof openObj.param === 'string' ? { param: openObj.param } : {}) };
+      }
       return {
         kind: 'view',
         ...titled(),
         view,
         ...(o.limit === undefined ? {} : { limit: o.limit as number }),
         ...(o.sort === undefined ? {} : { sort: (o.sort as string).trim() }),
+        ...(open ? { open } : {}),
       };
     }
     case 'search':

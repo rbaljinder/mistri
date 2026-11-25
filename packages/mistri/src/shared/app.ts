@@ -176,7 +176,7 @@ export type { AppCardsImageFrom, AppCardsList } from '@mistriwork/engine/shared/
 export { orderAppPages, parseAppPage, parseAppPages } from './appPages.js';
 export { listPresentationColumns } from '@mistriwork/engine/shared/appListColumns.js';
 export { checkResourceSlot, sourceScopeOf } from './appResourceBlocks.js';
-export { appFileRules, appTagRules, type AppFileRule, type AppTagRule } from './appResourceRules.js';
+export { appCoverRules, appFileRules, appTagRules, type AppFileRule, type AppTagRule } from './appResourceRules.js';
 import { resolveDisplay } from './appDisplayResolve.js';
 import { parseAppRetention } from './appRetention.js';
 export { resolveDisplay } from './appDisplayResolve.js';
@@ -2074,6 +2074,7 @@ export function resolveResources(app: AppDef, schema: DatabaseSchema): { resourc
       ...(resource.slug ? { slug: true as const } : {}),
       ...(resource.file && files.has(table.id) ? { file: browserFile(resource.file) } : {}),
       ...(tagRules.has(table.id) ? { tags: tagRules.get(table.id) } : {}),
+      ...(resource.photos ? { photos: resource.photos } : {}),
       ...(resource.favorite ? { favorite: true as const } : {}),
       ...(resource.frozen === undefined ? {} : { frozen: resource.frozen }),
       ...(resource.noun ? { noun: resource.noun } : {}),

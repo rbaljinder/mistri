@@ -20,6 +20,7 @@ import {
   type AppUi,
 } from './appModel.js';
 import { allowKeys, isRecord, keyHomesOf } from '@mistriwork/engine/shared/model.js';
+import type { AppSite, AppSiteFooter, AppSiteLink, AppSiteSearch } from '@mistriwork/engine/shared/servedApp.js';
 import { THEME_BASES, type ThemeDefinition } from '@mistriwork/engine/shared/theme.js';
 import type { ThemeAudiences } from '@mistriwork/engine/shared/themeResolve.js';
 import { themePreset } from '@mistriwork/engine/shared/themePresets.js';
@@ -50,6 +51,7 @@ export const UI_KEYS = [
   'timezone',
   'currency',
   'footer',
+  'site',
   'logo',
   'csp',
   'appSwitcher',
@@ -169,6 +171,7 @@ export function parseUi(raw: unknown, where: string): AppUi {
      — a marketplace whose listing pages end in nothing looks unfinished. Same
      shape, one parser (appLanding.parseFooter). */
   const footer = raw.footer === undefined ? undefined : parseFooter(raw.footer, `${where}: ui.footer`);
+  const site = raw.site === undefined ? undefined : parseSite(raw.site, `${where}: ui.site`);
   const logo =
     raw.logo === undefined ? undefined : isRecord(raw.logo) ? parseLogoImage(raw.logo, where) : parseIcon(raw.logo, `${where}: ui`, 'logo');
   /* An App's own theme is `defineTheme(...)`, registered in ui.customThemes and compiled there over the built-in it
@@ -222,6 +225,7 @@ export function parseUi(raw: unknown, where: string): AppUi {
   return {
     ...(appSwitcher === undefined ? {} : { appSwitcher }),
     ...(footer === undefined ? {} : { footer }),
+    ...(site === undefined ? {} : { site }),
     ...(logo === undefined ? {} : { logo }),
     ...(theme === undefined ? {} : { theme }),
     ...(branding === undefined ? {} : { branding }),
@@ -726,4 +730,94 @@ function parseLogoImage(raw: Record<string, unknown>, where: string): AppLogoIma
   }
   if (!out.src) throw new Error(`${where}: ui.logo.src is required: the picture the bar draws.`);
   return out;
+}
+
+const SITE_KEYS = ['links', 'search', 'cta', 'signIn', 'footer'] as const;
+
+function parseSiteLink(raw: unknown, where: string): AppSiteLink {
+  if (!isRecord(raw)) throw new Error(`${where} must be an object { label, view } or { label, href }.`);
+  for (const key of Object.keys(raw)) {
+    if (key !== 'label' && key !== 'view' && key !== 'href') throw new Error(`${where} ${unknownKey(key, ['label', 'view', 'href'])}.`);
+  }
+  if (typeof raw.label !== 'string' || !raw.label.trim() || raw.label.trim().length > 60)
+    throw new Error(`${where} must have a non-empty "label" of at most 60 characters.`);
+  const hasView = raw.view !== undefined;
+  const hasHref = raw.href !== undefined;
+  if (hasView === hasHref) throw new Error(`${where} must name either "view" or "href", not both or neither.`);
+  if (hasView && (typeof raw.view !== 'string' || !raw.view.trim())) throw new Error(`${where}.view must name a view or page key.`);
+  if (hasHref) {
+    if (typeof raw.href !== 'string' || !raw.href.trim()) throw new Error(`${where}.href must be a URL or path.`);
+    const href = raw.href.trim();
+    if (!/^(https:\/\/|mailto:|tel:|\/(?!\/))/i.test(href))
+      throw new Error(`${where}.href "${href}" must start with https://, mailto:, tel:, or /.`);
+  }
+  return {
+    label: raw.label.trim(),
+    ...(hasView ? { view: (raw.view as string).trim() } : {}),
+    ...(hasHref ? { href: (raw.href as string).trim() } : {}),
+  };
+}
+
+/** Public site chrome (`ui.site`): header links, search, CTA, Sign in placement, and optional site footer, separate from desk `nav`. */
+function parseSite(raw: unknown, where: string): AppSite {
+  if (!isRecord(raw)) throw new Error(`${where} must be an object { links?, search?, cta?, signIn?, footer? }.`);
+  for (const key of Object.keys(raw)) {
+    if (!(SITE_KEYS as readonly string[]).includes(key)) throw new Error(`${where} ${unknownKey(key, [...SITE_KEYS])}.`);
+  }
+  let links: AppSiteLink[] | undefined;
+  if (raw.links !== undefined) {
+    if (!Array.isArray(raw.links) || raw.links.length > 8)
+      throw new Error(`${where}.links must be an array of at most 8 site navigation links.`);
+    links = raw.links.map((item, i) => parseSiteLink(item, `${where}.links[${i}]`));
+  }
+  let search: AppSiteSearch | undefined;
+  if (raw.search !== undefined) {
+    if (!isRecord(raw.search)) throw new Error(`${where}.search must be an object { view, param?, placeholder? }.`);
+    for (const key of Object.keys(raw.search)) {
+      if (key !== 'view' && key !== 'param' && key !== 'placeholder')
+        throw new Error(`${where}.search ${unknownKey(key, ['view', 'param', 'placeholder'])}.`);
+    }
+    if (typeof raw.search.view !== 'string' || !raw.search.view.trim())
+      throw new Error(`${where}.search.view must name the public search page or list view.`);
+    if (raw.search.param !== undefined && (typeof raw.search.param !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(raw.search.param)))
+      throw new Error(`${where}.search.param must be a parameter name like "q" or "search".`);
+    if (raw.search.placeholder !== undefined && (typeof raw.search.placeholder !== 'string' || raw.search.placeholder.trim().length > 80))
+      throw new Error(`${where}.search.placeholder must be text of at most 80 characters.`);
+    search = {
+      view: raw.search.view.trim(),
+      ...(typeof raw.search.param === 'string' ? { param: raw.search.param } : {}),
+      ...(typeof raw.search.placeholder === 'string' ? { placeholder: raw.search.placeholder.trim() } : {}),
+    };
+  }
+  const cta = raw.cta === undefined ? undefined : parseSiteLink(raw.cta, `${where}.cta`);
+  const signIn = raw.signIn;
+  if (signIn !== undefined && signIn !== 'header' && signIn !== 'footer' && signIn !== false) {
+    throw new Error(`${where}.signIn must be "header", "footer", or false.`);
+  }
+  let footer: AppSiteFooter | undefined;
+  if (raw.footer !== undefined) {
+    if (!isRecord(raw.footer)) throw new Error(`${where}.footer must be an object { text?, links? }.`);
+    for (const key of Object.keys(raw.footer)) {
+      if (key !== 'text' && key !== 'links') throw new Error(`${where}.footer ${unknownKey(key, ['text', 'links'])}.`);
+    }
+    if (raw.footer.text !== undefined && (typeof raw.footer.text !== 'string' || raw.footer.text.trim().length > 200))
+      throw new Error(`${where}.footer.text must be text of at most 200 characters.`);
+    let footerLinks: AppSiteLink[] | undefined;
+    if (raw.footer.links !== undefined) {
+      if (!Array.isArray(raw.footer.links) || raw.footer.links.length > 12)
+        throw new Error(`${where}.footer.links must be an array of at most 12 footer links.`);
+      footerLinks = raw.footer.links.map((item, i) => parseSiteLink(item, `${where}.footer.links[${i}]`));
+    }
+    footer = {
+      ...(typeof raw.footer.text === 'string' && raw.footer.text.trim() ? { text: raw.footer.text.trim() } : {}),
+      ...(footerLinks?.length ? { links: footerLinks } : {}),
+    };
+  }
+  return {
+    ...(links ? { links } : {}),
+    ...(search ? { search } : {}),
+    ...(cta ? { cta } : {}),
+    ...(signIn === 'header' || signIn === 'footer' || signIn === false ? { signIn } : {}),
+    ...(footer && (footer.text || footer.links?.length) ? { footer } : {}),
+  };
 }

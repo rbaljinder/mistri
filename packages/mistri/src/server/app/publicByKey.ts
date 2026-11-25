@@ -76,6 +76,9 @@ export function byKeyAdapter(underlying: Adapter, full: DatabaseSchema, access: 
       refuseByKey(tags.through);
       refuseByKey(tags.to);
     }
+    for (const cover of Object.values(view.covered ?? {})) {
+      refuseByKey(cover.from);
+    }
   };
   const queryFor = (input: QueryRequest): QueryRequest => {
     const request = carryServerRequest(input, requestData(input));

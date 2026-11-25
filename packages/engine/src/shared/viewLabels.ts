@@ -25,6 +25,7 @@ import { rollupColumnMeta, type ComputedPath, type Rollup } from './rollups.js';
 import { compileComputed, computedColumnMeta, type ComputedPath as ExpressionPath, type ValueKind } from './computed.js';
 import { aggregateInput, columnKind, isFlagColumn } from './schema.js';
 import { TAGS_COLUMN, tagsColumnMeta, type TagPath } from './tagLists.js';
+import { COVER_COLUMN, coverColumnMeta, type CoverPath } from './coverPhotos.js';
 import type { ScopedRelations } from './rowScope.js';
 
 /** The comparisons a JSON key answers as a number when it is given one (SqlStyle.jsonKey). */
@@ -272,6 +273,40 @@ export function viewPaths(schema: DatabaseSchema, view: ViewDef, plan: JoinPlan,
     const rows = tagRows(path, tags);
     return `(SELECT ${tagPairs(style, rows.label, rows.tone)} FROM ${rows.from} WHERE ${rows.on})`;
   };
+  /* A record's lead photograph key (coverPhotos.ts): pinned by the server from the catalog, never from a request. */
+  const coverAt = (path: string): CoverPath | undefined => {
+    if (view.covered && Object.hasOwn(view.covered, path)) return view.covered[path];
+    if (labelPrefix(path) !== undefined || path.split('.').pop() !== COVER_COLUMN) return undefined;
+    const found = tryResolvePath(schema, view.base, path).resolved;
+    return found?.cover ? { ...found.cover, on: path.split('.').slice(0, -1).join('.') } : undefined;
+  };
+  const coverKey = (path: string, cover: CoverPath): string => {
+    const { table } = prefixHops(cover.on);
+    if (cover.on) plain(at(cover.on, table.columns[0].name));
+    const photos = findTable(schema, cover.from);
+    const has = (t: TableMeta | undefined, ...names: (string | undefined)[]) =>
+      Boolean(t && names.every((name) => !name || t.columns.some((c) => c.name === name)));
+    if (!has(photos, cover.whose, cover.photoKey, cover.sort) || !table.columns.some((c) => c.name === cover.key)) {
+      throw new PathError(
+        `"${path}" reads cover photos from "${cover.from}", which this catalog does not read whole.`,
+        path,
+        COVER_COLUMN,
+        0,
+      );
+    }
+    const source = relations ? relations.table(cover.from) : plan.relationOf(cover.from);
+    const q = style.quote;
+    const alias = q(plan.subAlias(photos!.name));
+    const on = `${alias}.${q(cover.whose)} = ${q(plan.aliasOfPrefix(cover.on))}.${q(cover.key)}`;
+    const dir = cover.sortDir === 'desc' ? 'DESC' : 'ASC';
+    const order: string[] = [];
+    if (cover.sort) {
+      if (photos!.columns.find((c) => c.name === cover.sort)?.nullable) order.push(`${alias}.${q(cover.sort)} IS NULL ASC`);
+      order.push(`${alias}.${q(cover.sort)} ${dir}`);
+    }
+    if (cover.sort !== cover.photoKey) order.push(`${alias}.${q(cover.photoKey)} ASC`);
+    return `(SELECT ${alias}.${q(cover.photoKey)} FROM ${source} ${alias} WHERE ${on} ORDER BY ${order.join(', ')} LIMIT 1)`;
+  };
   /* `tags has (a, b)`: the record has a link row to a tag named any of them. */
   /* One key of a JSON column (`specs.capacity`, definedFields.ts): the column
      qualified as any column at its prefix is, read through the style. */
@@ -365,6 +400,11 @@ export function viewPaths(schema: DatabaseSchema, view: ViewDef, plan: JoinPlan,
       const { table, hops, hopNames } = prefixHops(tags.on);
       return { path, hops, hopNames, table, column: tagsColumnMeta(), tags };
     }
+    const cover = labelPrefix(path) === undefined ? coverAt(path) : undefined;
+    if (cover) {
+      const { table, hops, hopNames } = prefixHops(cover.on);
+      return { path, hops, hopNames, table, column: coverColumnMeta(), cover };
+    }
     const prefix = labelPrefix(path);
     if (prefix === undefined) return resolvePath(schema, view.base, path);
     const { table, parts } = template(path, prefix);
@@ -396,7 +436,9 @@ export function viewPaths(schema: DatabaseSchema, view: ViewDef, plan: JoinPlan,
       const computed = computedAt(path);
       if (computed) return rollup(path, computed);
       const tags = tagsAt(path);
-      return tags ? tagList(path, tags) : plain(path);
+      if (tags) return tagList(path, tags);
+      const cover = coverAt(path);
+      return cover ? coverKey(path, cover) : plain(path);
     }
     const { table, parts } = template(path, prefix);
     const literal = (text: string) => `'${text.replace(/'/g, "''")}'`;
@@ -507,7 +549,7 @@ export function withViewLabels(schema: DatabaseSchema, view: ViewDef): ViewDef {
  * A computed column's own reads come with it, a rollup among them too.
  */
 export function withViewComputed(schema: DatabaseSchema, view: ViewDef): ViewDef {
-  const { computed: _given, expressions: _written, tagged: _tagged, ...rest } = view;
+  const { computed: _given, expressions: _written, tagged: _tagged, covered: _covered, ...rest } = view;
   const paths = [
     ...(view.columns ?? []).map((c) => c.path),
     ...(view.filter?.groups ?? []).flatMap((group) => group.flatMap((c) => [c.path, ...(c.other === undefined ? [] : [c.other])])),
@@ -516,6 +558,7 @@ export function withViewComputed(schema: DatabaseSchema, view: ViewDef): ViewDef
   const computed: Record<string, ComputedPath> = {};
   const expressions: Record<string, ExpressionPath> = {};
   const tagged: Record<string, TagPath> = {};
+  const covered: Record<string, CoverPath> = {};
   const pin = (path: string, depth = 0): void => {
     if (typeof path !== 'string' || Object.hasOwn(computed, path) || Object.hasOwn(expressions, path) || labelPrefix(path) !== undefined)
       return;
@@ -523,6 +566,7 @@ export function withViewComputed(schema: DatabaseSchema, view: ViewDef): ViewDef
     const on = path.split('.').slice(0, -1).join('.');
     if (resolved?.rollup) computed[path] = { ...resolved.rollup, on: resolved.rollupAt ?? on };
     if (resolved?.tags) tagged[path] = { ...resolved.tags, on };
+    if (resolved?.cover) covered[path] = { ...resolved.cover, on };
     if (resolved?.computed && depth === 0) {
       expressions[path] = { ...resolved.computed, on };
       for (const read of resolved.computed.reads) pin(on ? `${on}.${read}` : read, depth + 1);
@@ -534,5 +578,6 @@ export function withViewComputed(schema: DatabaseSchema, view: ViewDef): ViewDef
     ...(Object.keys(computed).length ? { computed } : {}),
     ...(Object.keys(expressions).length ? { expressions } : {}),
     ...(Object.keys(tagged).length ? { tagged } : {}),
+    ...(Object.keys(covered).length ? { covered } : {}),
   };
 }

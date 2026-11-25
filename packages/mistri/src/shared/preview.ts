@@ -22,7 +22,7 @@ export const PREVIEW_PATHS: readonly RegExp[] = [
   /^resources\.[^.]+\.display\.[^.]+\.(copy|timezone)( = true)?$/, // a value's copy button; the zone a date is read in
   /^resources\.[^.]+\.display\.[^.]+\.format = "address"$/,
   /* Two money knobs that overlap `ui: MoneyFormat`: one money vocabulary is chosen after 1.0. */
-  /^resources\.[^.]+\.display\.[^.]+\.whole( = true)?$/,
+  /^resources\.[^.]+\.display\.[^.]+\.(whole|round)( = true)?$/,
   /\[kind=metric\]\.figure( = .*)?$/,
   /\[kind=fields\]\.empty( = .*)?$/, // rc.16: a block of fields leaves out what the record does not have
   /\[kind=headline\]\.subtitle( = .*)?$/, // rc.16: a headline's second line, read from a column of the record

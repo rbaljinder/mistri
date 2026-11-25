@@ -1532,6 +1532,10 @@
           "const": true,
           "description": "With \"money\": a whole amount is said without its minor digits (\"$24,495\"); an amount with cents still shows them (\"$24,495.50\"). For a listing price. A CSV export stays exact."
         },
+        "round": {
+          "const": true,
+          "description": "With \"money\": rounds to the nearest whole major unit (\"$679\" for 67917 cents). For monthly estimates or headline figures. A CSV export stays exact."
+        },
         "unit": {
           "type": "string",
           "minLength": 1,
@@ -2681,6 +2685,37 @@
         "slug": {
           "type": "boolean",
           "description": "true follows a numeric id with the record's name on public pages (/forecourt/vehicles/1-2021-toyota-corolla). Only the id is read back."
+        },
+        "photos": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "from",
+            "whose"
+          ],
+          "description": "Declares the child file resource that holds this resource's photographs, exposing a synthetic cover column on every row read.",
+          "properties": {
+            "from": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "description": "The child file resource whose rows hold the photographs."
+            },
+            "whose": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+              "description": "The reference column on the child resource pointing back to this resource."
+            },
+            "sort": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*( (asc|desc|ASC|DESC))?$",
+              "description": "Which photograph leads as cover: one column and an optional direction, like \"position\" or \"created_at desc\"."
+            },
+            "aspect": {
+              "type": "string",
+              "pattern": "^[1-9][0-9]*\\s*/\\s*[1-9][0-9]*$",
+              "description": "Default aspect ratio for galleries and cards (e.g. \"3/2\", \"3/4\", \"16/9\")."
+            }
+          }
         },
         "inputs": {
           "type": "object",
@@ -4200,12 +4235,19 @@
           "description": "Cells edited in place where the reader may write the column (Enter or F2 opens, Enter saves, Esc cancels, Tab saves and moves on), and a selection's \"Set field\u2026\". true offers every shown column the reader may write; a list, only those: shown local columns (a reference shown by its record's name, owner_id.name, is edited as owner_id, with a picker), never the key, a document, a file's columns or the resource's machine column. A grid only, on a resource with access 'write'."
         },
         "open": {
-          "enum": [
-            "page",
-            "drawer",
-            "modal"
+          "oneOf": [
+            {
+              "enum": [
+                "page",
+                "drawer",
+                "modal"
+              ]
+            },
+            {
+              "$ref": "#/$defs/openPage"
+            }
           ],
-          "description": "How rows open: the full page (default), a drawer over the list, or a modal. Not beside a split, which opens its own rows."
+          "description": "How rows open: the full page (default), a drawer over the list, a modal, or a named custom page ({ page, param? }). Not beside a split, which opens its own rows."
         },
         "opens": {
           "type": "string",
@@ -5900,6 +5942,10 @@
               "type": "string",
               "pattern": "^[A-Za-z_][A-Za-z0-9_]*( (asc|desc|ASC|DESC))?$",
               "description": "One column and a direction, like \"listed_on desc\"."
+            },
+            "open": {
+              "$ref": "#/$defs/openPage",
+              "description": "Open a named custom page when a card is clicked, overriding the embedded list view's open target."
             }
           }
         },
@@ -7135,6 +7181,10 @@
           "$ref": "#/$defs/appFooter",
           "description": "The App's footer, drawn under every room."
         },
+        "site": {
+          "$ref": "#/$defs/appSite",
+          "description": "Public site header and footer chrome worn by signed-out public pages, separate from the operator desk navigation."
+        },
         "logo": {
           "oneOf": [
             { "$ref": "#/$defs/appIcon" },
@@ -7583,6 +7633,132 @@
         }
       },
       "description": "A line of small print and a row of links. Under ui it is drawn beneath every room of the App; a landing with none of its own wears it."
+    },
+    "openPage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "page"
+      ],
+      "properties": {
+        "page": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+          "description": "Key of the custom page to open for a record."
+        },
+        "param": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$",
+          "description": "Query parameter carrying the record key when the page is addressed by query param rather than a path segment."
+        }
+      },
+      "description": "Open a named custom page for this record instead of the default record page."
+    },
+    "appSiteLink": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label"
+      ],
+      "oneOf": [
+        {
+          "required": [
+            "view"
+          ]
+        },
+        {
+          "required": [
+            "href"
+          ]
+        }
+      ],
+      "properties": {
+        "label": {
+          "type": "string",
+          "pattern": "\\S",
+          "maxLength": 60
+        },
+        "view": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,63}$",
+          "description": "Public view or custom page key inside this App."
+        },
+        "href": {
+          "type": "string",
+          "pattern": "^(https://|mailto:|tel:|/(?!/))",
+          "maxLength": 500,
+          "description": "External URL (https://, mailto:, tel:) or root-relative path."
+        }
+      }
+    },
+    "appSite": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Public site header and footer chrome for signed-out public pages, independent of the operator shell.",
+      "properties": {
+        "links": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "$ref": "#/$defs/appSiteLink"
+          },
+          "description": "Primary navigation links in the public site header."
+        },
+        "search": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "view"
+          ],
+          "description": "Header search box submitting to a public list view or search page.",
+          "properties": {
+            "view": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]{0,63}$"
+            },
+            "param": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_-]*$"
+            },
+            "placeholder": {
+              "type": "string",
+              "pattern": "\\S",
+              "maxLength": 80
+            }
+          }
+        },
+        "cta": {
+          "$ref": "#/$defs/appSiteLink",
+          "description": "Primary call-to-action button in the public site header."
+        },
+        "signIn": {
+          "enum": [
+            "header",
+            "footer",
+            false
+          ],
+          "description": "Where to place the Sign in link for staff/members: in the header, in the footer, or hidden (default footer)."
+        },
+        "footer": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Site-specific footer shown on public site pages.",
+          "properties": {
+            "text": {
+              "type": "string",
+              "pattern": "\\S",
+              "maxLength": 200
+            },
+            "links": {
+              "type": "array",
+              "maxItems": 12,
+              "items": {
+                "$ref": "#/$defs/appSiteLink"
+              }
+            }
+          }
+        }
+      }
     },
     "componentProp": {
       "oneOf": [

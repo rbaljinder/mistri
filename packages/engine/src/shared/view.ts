@@ -81,6 +81,7 @@ import {
 import { viewPaths, withViewComputed, withViewLabels } from './viewLabels.js';
 import { rollupColumnMeta } from './rollups.js';
 import { TAGS_COLUMN, tagsColumnMeta } from './tagLists.js';
+import { COVER_COLUMN, coverColumnMeta } from './coverPhotos.js';
 import { computedColumnMeta } from './computed.js';
 import { withViewReferences } from './declaredReferences.js';
 export { withViewComputed, withViewLabels } from './viewLabels.js';
@@ -726,6 +727,13 @@ export function parseViewQuery(
     new RegExp(`(?<![\\w.$])${TAGS_COLUMN}(?![\\w$])`).test(scanned)
   )
     extra.push(tagsColumnMeta());
+  if (
+    base.cover &&
+    !added.has(COVER_COLUMN) &&
+    !base.columns.some((c) => c.name === COVER_COLUMN) &&
+    new RegExp(`(?<![\\w.$])${COVER_COLUMN}(?![\\w$])`).test(scanned)
+  )
+    extra.push(coverColumnMeta());
 
   /* Aggregate aliases join the synthetic table so `sort invoices desc`
      parses — and only sort. A WHERE runs before the SELECT list exists, so

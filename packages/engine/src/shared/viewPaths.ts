@@ -10,6 +10,7 @@ import { LABEL_SEGMENT } from './recordLabel.js';
 import { rollupColumnMeta, type ComputedPath, type Rollup } from './rollups.js';
 import { computedColumnMeta, type ComputedColumn, type ComputedPath as ExpressionPath } from './computed.js';
 import { TAGS_COLUMN, tagsColumnMeta, type TagPath, type TagSet } from './tagLists.js';
+import { COVER_COLUMN, coverColumnMeta, type CoverPath, type CoverPhotoSet } from './coverPhotos.js';
 import { DEFINED_KEY, definedColumnMeta } from './definedFields.js';
 
 /* ---------- the model ---------- */
@@ -173,6 +174,11 @@ export interface ViewDef {
    */
   tagged?: Record<string, TagPath>;
   /**
+   * The record cover photo keys its paths name (coverPhotos.ts), by path: filled from the
+   * App's catalog like `tagged`, so an adapter writes the same subquery; a request never supplies them.
+   */
+  covered?: Record<string, CoverPath>;
+  /**
    * The App's declared references (soft keys) the view may walk, as edges of
    * the catalog it is compiled against (declaredReferences.ts). Attached by
    * the App's resource layer, where a catalog that is the database's own
@@ -274,15 +280,17 @@ export interface ResolvedPath {
   computed?: ComputedColumn;
   /** Set when the path ends on the record's tags (tagLists.ts). */
   tags?: TagSet;
+  /** Set when the path ends on the record's cover photo key (coverPhotos.ts). */
+  cover?: CoverPhotoSet;
   /** Set when the path reads one key of a JSON column (`specs.capacity`, definedFields.ts): the column and the key. */
   jsonKey?: { column: string; key: string };
 }
 
 /** The type of the column a path lands on, where it is that column itself: undefined for a rollup, a computed column,
- * a record's tags or a JSON key, which are expressions, and for a path that does not resolve. */
+ * a record's tags, cover or a JSON key, which are expressions, and for a path that does not resolve. */
 export function plainType(schema: DatabaseSchema, base: string, path: string): string | undefined {
   const { resolved } = tryResolvePath(schema, base, path);
-  if (!resolved || resolved.rollup || resolved.computed || resolved.tags || resolved.jsonKey) return undefined;
+  if (!resolved || resolved.rollup || resolved.computed || resolved.tags || resolved.cover || resolved.jsonKey) return undefined;
   return resolved.column.type;
 }
 
@@ -442,6 +450,8 @@ function resolvePathFresh(schema: DatabaseSchema, baseId: string, path: string):
   if (computed) return { path: raw, hops, hopNames, table, column: computedColumnMeta(last, computed), computed };
   if (!column && last === TAGS_COLUMN && table.tags)
     return { path: raw, hops, hopNames, table, column: tagsColumnMeta(), tags: table.tags };
+  if (!column && last === COVER_COLUMN && table.cover)
+    return { path: raw, hops, hopNames, table, column: coverColumnMeta(), cover: table.cover };
   if (!column) {
     const suggestion = nearest(
       last,

@@ -10,12 +10,13 @@
  * the list, so Enter searches for what was typed, and a lit or clicked
  * suggestion fills the box and searches for it.
  */
-import { useEffect, useRef, useState, type InputHTMLAttributes, type Ref } from 'react';
+import { useContext, useEffect, useRef, useState, type InputHTMLAttributes, type Ref } from 'react';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { state } from '../core.js';
 import { batchedBreakdown } from '../breakdownBatch.js';
 import { Typeahead } from '@mistriwork/ui/Typeahead.js';
 import { SUGGEST_MOST, SUGGEST_WAIT_MS, rankSuggestions, suggestText, suggestionsOf, type Suggestion } from './suggestModel.js';
+import { FilterPageContext } from './filterPageContext.js';
 
 interface SuggestBoxProps {
   /** The list's table, by id. */
@@ -33,6 +34,7 @@ interface SuggestBoxProps {
 }
 
 export function SuggestBox({ table, columns, standing = '', text, onText, onPick, inputProps, inputRef }: SuggestBoxProps) {
+  const page = useContext(FilterPageContext);
   const typed = text.trim();
   const [asked, setAsked] = useState(typed);
   useEffect(() => {
@@ -43,12 +45,14 @@ export function SuggestBox({ table, columns, standing = '', text, onText, onPick
   const lit = useRef<Suggestion | undefined>(undefined);
   const answer = useQuery<Suggestion[]>({
     /* In the list's query family, so a write that refreshes the rows refreshes what is suggested. */
-    queryKey: ['run', state.activeConnection ?? '', 'suggest', table, columns.join(','), standing, asked],
+    queryKey: ['run', state.activeConnection ?? '', 'suggest', page ?? '', table, columns.join(','), standing, asked],
     queryFn: async () =>
       rankSuggestions(
         await Promise.all(
           columns.map(async (column) =>
-            suggestionsOf(await batchedBreakdown({ text: suggestText(table, column, asked, standing), limit: SUGGEST_MOST })),
+            suggestionsOf(
+              await batchedBreakdown({ text: suggestText(table, column, asked, standing), limit: SUGGEST_MOST, ...(page ? { page } : {}) }),
+            ),
           ),
         ),
         asked,

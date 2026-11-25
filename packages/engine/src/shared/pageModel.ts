@@ -286,6 +286,8 @@ export interface PageList {
   similar?: PageSimilar;
   /** A `current()` card's reference column whose record it opens in place of its own row (a link table's far side). */
   opens?: string;
+  /** Open a clicked row in a named custom page (`{ page: 'car', param?: 'id' }`) instead of the desk's record page. */
+  open?: import('./servedApp.js').OpenPageTarget;
   /**
    * Written as `embed(view, { whose })`: the key of the App list view this
    * section draws, its rows narrowed to those pointing at the record. The

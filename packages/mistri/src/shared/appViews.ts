@@ -27,6 +27,7 @@
  * under its own.
  */
 import { namesTab, tabKey, tabSlug } from '@mistriwork/engine/shared/addressParams.js';
+import type { OpenTarget } from '@mistriwork/engine/shared/servedApp.js';
 import { filterAddressWord, listFilterKey } from '@mistriwork/engine/shared/listFilters.js';
 import { parseViewImport } from './appImport.js';
 import { LABEL_SEGMENT } from '@mistriwork/engine/shared/recordLabel.js';
@@ -575,6 +576,63 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     const view = views.get(key);
     return view?.kind === 'dashboard' && view.view.page?.public === true;
   });
+  /* Views linked by the public site chrome (`ui.site`) are reached from every public page. */
+  const rawSite = isRecord(a.ui) && isRecord(a.ui.site) ? a.ui.site : undefined;
+  const siteKeys: string[] = [];
+  if (rawSite) {
+    const headerLinks = Array.isArray(rawSite.links) ? rawSite.links.filter(isRecord) : [];
+    for (const link of headerLinks) {
+      if (typeof link.view === 'string') {
+        if (!views.has(link.view)) across.push(`${where}: ui.site.links names "${link.view}", which is not a view this App declares.`);
+        else siteKeys.push(link.view);
+      }
+    }
+    if (isRecord(rawSite.search) && typeof rawSite.search.view === 'string') {
+      if (!views.has(rawSite.search.view))
+        across.push(`${where}: ui.site.search names "${rawSite.search.view}", which is not a view this App declares.`);
+      else siteKeys.push(rawSite.search.view);
+    }
+    if (isRecord(rawSite.cta) && typeof rawSite.cta.view === 'string') {
+      if (!views.has(rawSite.cta.view))
+        across.push(`${where}: ui.site.cta names "${rawSite.cta.view}", which is not a view this App declares.`);
+      else siteKeys.push(rawSite.cta.view);
+    }
+    if (isRecord(rawSite.footer) && Array.isArray(rawSite.footer.links)) {
+      for (const link of rawSite.footer.links.filter(isRecord)) {
+        if (typeof link.view === 'string') {
+          if (!views.has(link.view))
+            across.push(`${where}: ui.site.footer.links names "${link.view}", which is not a view this App declares.`);
+          else siteKeys.push(link.view);
+        }
+      }
+    }
+  }
+  /* List views and landing embeds that open a named custom page (`open: { page }`) must name a declared page view. */
+  const openPageKeys: string[] = [];
+  for (const list of ofKind('list')) {
+    if (typeof list.view.open === 'object') {
+      const target = views.get(list.view.open.page);
+      if (!target || target.kind !== 'dashboard') {
+        across.push(`${list.at} has open.page "${list.view.open.page}", which is not a page view this App declares.`);
+      } else {
+        openPageKeys.push(list.view.open.page);
+      }
+    }
+  }
+  for (const { landing } of landings) {
+    for (const section of landing.sections ?? []) {
+      if (section.kind === 'view' && section.open) {
+        const target = views.get(section.open.page);
+        if (!target || target.kind !== 'dashboard') {
+          across.push(
+            `${where}: landing embed "${section.view}" has open.page "${section.open.page}", which is not a page view this App declares.`,
+          );
+        } else {
+          openPageKeys.push(section.open.page);
+        }
+      }
+    }
+  }
   const reachable = new Set([
     ...navKeys,
     ...rules.map((rule) => rule.view),
@@ -585,6 +643,8 @@ export function parseContent(a: Record<string, unknown>, where: string, ctx: Con
     ...pageFormKeys,
     ...publicPageKeys,
     ...recordTabKeys,
+    ...siteKeys,
+    ...openPageKeys,
   ]);
   for (const key of reachable) {
     const view = views.get(key);
@@ -792,8 +852,22 @@ function parseListView(v: Record<string, unknown>, at: string, data: ParsedData)
     throw new Error(`${at}: "quickAdd" must be true (inline resources.${table}.form, or the schema's New form) or false.`);
   }
   if (v.open === 'peek') throw new Error(`${at} has an "open" of "peek", which is now "drawer", as the New form's is.`);
-  if (v.open !== undefined && !(OPEN_MODES as readonly unknown[]).includes(v.open)) {
-    throw new Error(`${at} has an "open" of "${String(v.open)}". Use "page", "drawer" or "modal".`);
+  let openTarget: OpenTarget | undefined;
+  if (v.open !== undefined) {
+    if ((OPEN_MODES as readonly unknown[]).includes(v.open)) {
+      openTarget = v.open as (typeof OPEN_MODES)[number];
+    } else if (isRecord(v.open)) {
+      for (const key of Object.keys(v.open)) {
+        if (key !== 'page' && key !== 'param') throw new Error(`${at} "open" ${unknownKey(key, ['page', 'param'])}.`);
+      }
+      if (typeof v.open.page !== 'string' || !v.open.page.trim())
+        throw new Error(`${at} has "open.page" that is not a non-empty page key.`);
+      if (v.open.param !== undefined && (typeof v.open.param !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(v.open.param)))
+        throw new Error(`${at} has "open.param" that is not a parameter name like "id".`);
+      openTarget = { page: v.open.page.trim(), ...(typeof v.open.param === 'string' ? { param: v.open.param } : {}) };
+    } else {
+      throw new Error(`${at} has an "open" of "${String(v.open)}". Use "page", "drawer", "modal", or { page, param? }.`);
+    }
   }
   if (v.filters !== undefined && !Array.isArray(v.filters)) throw new Error(`${at} has "filters" that are not a list of column names.`);
   /* A filter across a reference or over the rows that point at the record is held as the words its condition
@@ -1067,7 +1141,7 @@ function parseListView(v: Record<string, unknown>, at: string, data: ParsedData)
     ...(v.density === undefined ? {} : { density: v.density as 'comfortable' | 'compact' }),
     ...(v.rowActions === true ? { rowActions: true as const } : {}),
     ...(editable ? { editable } : {}),
-    ...(v.open === undefined ? {} : { open: v.open as AppListView['open'] }),
+    ...(openTarget === undefined ? {} : { open: openTarget }),
     ...(v.opens === undefined ? {} : { opens: (v.opens as string).trim() }),
     ...(v.sizing === undefined ? {} : { sizing: parseTableSizing(v.sizing, at) }),
     ...(actions ? { actions } : {}),

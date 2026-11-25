@@ -212,6 +212,9 @@ export interface TableMeta {
   /** An App's tags on this table's records, where it serves them to this reader: read as `tags`, beside `columns`
       for the reason rollups are (tagLists.ts). */
   tags?: TagSet;
+  /** An App's lead photograph rule on this table's records, where it serves it to this reader: read as `cover`,
+      beside `columns` for the reason tags and rollups are (coverPhotos.ts). */
+  cover?: import('./coverPhotos.js').CoverPhotoSet;
   /** An App's segments on this table (appSegments.ts): a name and the conditions it stands for, which the query
       language reads as a word (`overdue and mine`) and writes inline. Set on an App's catalog only, and served to a
       reader only where every column they name is one the reader may read. */

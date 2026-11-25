@@ -118,7 +118,7 @@ for (const [name, patch] of Object.entries({
   'duplicate resource': { write: ['loan_application', 'loan_application'] },
   'duplicate read resource': { read: ['reviewer', 'reviewer'] },
   'target qualified by another source': { target: 'applicants.loan_application' },
-  'a public command that names a record': { public: true, targets: 'one' },
+  'a public command that targets many': { public: true, targets: 'many' },
   'targets that is not one, many or none': { targets: 'all' },
   'when on a command that names no record': { targets: 'none', when: 'status = submitted' },
   'when that is not text': { when: 42 },

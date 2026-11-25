@@ -231,8 +231,13 @@ test('check: a public page runs only public commands that make their record, and
   assert.throws(() => parseTestApp(page(['logEnrolment']), 'x', CONTRACTS), /\[page-commands\].*"logEnrolment", which is not public/);
   assert.throws(
     () => parseTestApp(page(['assign']), 'x', { ...CONTRACTS, assign: { public: true, target: 'enrolment' } }),
-    /\[page-commands\].*"assign", which names a record/,
+    /\[page-commands\].*"assign" on "enrolment", which is not in auth\.public\.read/,
   );
+  assert.throws(
+    () => parseTestApp(page(['bulkDesk']), 'x', { ...CONTRACTS, bulkDesk: { public: true, target: 'desk', targets: 'many' } }),
+    /\[page-commands\].*"bulkDesk", which targets many records/,
+  );
+  assert.ok(parseTestApp(page(['claimDesk']), 'x', { ...CONTRACTS, claimDesk: { public: true, target: 'desk', targets: 'one' } }));
   // A signed-in page keeps its rule: its commands are granted to roles.
   assert.ok(parseTestApp(RAW, 'x', CONTRACTS));
 });

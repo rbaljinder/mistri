@@ -187,3 +187,76 @@ export function appTagRules(app: AppDef, schema: DatabaseSchema): { rules: Map<s
   }
   return { rules, problems };
 }
+
+/**
+ * The resources whose records carry photographs (`photos: { from, whose, sort?, aspect? }`): resolved against the
+ * reader's catalog so `cover` rides on rows in a single SQL statement, and silently omitted where the reader cannot
+ * read the photo resource or its key/sort columns.
+ */
+export function appCoverRules(
+  app: AppDef,
+  schema: DatabaseSchema,
+): { rules: Map<string, import('@mistriwork/engine/shared/coverPhotos.js').CoverPhotoSet>; problems: string[] } {
+  const exact = grantsByRole(app);
+  const find = (name: string) => (exact ? schema.tables.find((candidate) => candidate.id === name) : tableNamed(schema, name));
+  const files = appFileRules(app, schema).rules;
+  const rules = new Map<string, import('@mistriwork/engine/shared/coverPhotos.js').CoverPhotoSet>();
+  const problems: string[] = [];
+  for (const [name, resource] of Object.entries(app.resources ?? {})) {
+    const photos = resource.photos;
+    if (!photos) continue;
+    const table = find(name);
+    if (!table) continue;
+    const from = find(photos.from);
+    if (!from) {
+      problems.push(`resources "${name}": photos from "${photos.from}" is not a table.`);
+      continue;
+    }
+    const before = problems.length;
+    const fileRule = files.get(from.id);
+    if (!fileRule) problems.push(`resources "${name}": photos from "${photos.from}" must declare "file" on that resource.`);
+    const pks = primaryKey(from);
+    if (pks.length !== 1)
+      problems.push(`resources "${name}": photos from "${photos.from}" needs a single-column primary key for its cover photo.`);
+    const fk = schema.foreignKeys.find(
+      (candidate) =>
+        candidate.from.table === from.id &&
+        candidate.to.table === table.id &&
+        candidate.from.columns.length === 1 &&
+        candidate.from.columns[0] === photos.whose,
+    );
+    if (!fk) {
+      problems.push(`resources "${name}": photos whose "${photos.whose}" on ${from.name} does not reference ${table.name}.`);
+    } else if (fk.stitched) {
+      problems.push(
+        `resources "${name}": photos need ${from.name} and ${table.name} in one database; the reference crosses to another source.`,
+      );
+    }
+    let sortCol: string | undefined;
+    let sortDir: 'asc' | 'desc' | undefined;
+    if (photos.sort !== undefined) {
+      const parts = photos.sort.trim().split(/\s+/);
+      sortCol = parts[0];
+      const rawDir = parts[1]?.toLowerCase();
+      if (parts.length > 2 || (rawDir !== undefined && rawDir !== 'asc' && rawDir !== 'desc')) {
+        problems.push(`resources "${name}": photos sort "${photos.sort}" must be "<column>" or "<column> asc|desc".`);
+      } else if (!from.columns.some((c) => c.name === sortCol)) {
+        problems.push(`resources "${name}": photos sort "${sortCol}" is not a column of ${from.name}.`);
+      } else if (rawDir === 'asc' || rawDir === 'desc') {
+        sortDir = rawDir;
+      }
+    }
+    if (problems.length > before || !fk || !pks.length) continue;
+    rules.set(table.id, {
+      from: from.id,
+      whose: fk.from.columns[0],
+      key: fk.to.columns[0],
+      photoKey: pks[0],
+      ...(sortCol ? { sort: sortCol } : {}),
+      ...(sortDir ? { sortDir } : {}),
+      ...(fileRule?.thumbnail ? { thumbnail: true as const } : {}),
+      ...(photos.aspect ? { aspect: photos.aspect } : {}),
+    });
+  }
+  return { rules, problems };
+}

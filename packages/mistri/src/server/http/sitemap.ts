@@ -148,6 +148,7 @@ async function sitemap(ctx: RequestContext, origin: string): Promise<string | nu
     .filter((row) => {
       if (row.path === home) return true;
       const target = book.routes.get(decodeURIComponent(row.path.slice(under.length + 1)));
+      if (target?.kind === 'dashboard' && target.recordTable) return false;
       return target?.kind === 'list' || target?.kind === 'dashboard';
     })
     .map((row) => row.path);
@@ -162,10 +163,17 @@ async function sitemap(ctx: RequestContext, origin: string): Promise<string | nu
     if (byKey.has(tableId)) continue;
     const table = findTable(schema, tableId);
     const target = book.routes.get(route.segment);
+    const customRecord = target?.kind === 'dashboard' && target.recordTable === tableId;
     /* A record a list or a page shows; a bare table's rows (a photo's, a log's) are not a page anyone reads. */
-    if (!table || route.parent || !said.has(`${under}/${route.segment}`) || (target?.kind !== 'list' && target?.kind !== 'page')) continue;
-    const view =
-      target?.kind === 'list' ? (app.views[target.view] as { query?: string; tabs?: Array<{ query?: string }> } | undefined) : undefined;
+    if (
+      !table ||
+      route.parent ||
+      (!said.has(`${under}/${route.segment}`) && !customRecord) ||
+      (target?.kind !== 'list' && target?.kind !== 'page' && !customRecord)
+    )
+      continue;
+    const listViewKey = target?.kind === 'list' ? target.view : customRecord ? target.listView : undefined;
+    const view = listViewKey ? (app.views[listViewKey] as { query?: string; tabs?: Array<{ query?: string }> } | undefined) : undefined;
     records.push({
       segment: route.segment,
       table,

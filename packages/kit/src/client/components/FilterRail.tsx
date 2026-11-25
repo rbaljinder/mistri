@@ -21,10 +21,11 @@
  * draft, applied by the sheet's own button, because each navigation redraws
  * the list the sheet is covering.
  */
-import { Fragment, useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
 import { api, columnDisplay, findTable, labelColumn, state } from '../core.js';
 import { batchedBreakdown } from '../breakdownBatch.js';
+import { FilterPageContext } from './filterPageContext.js';
 import { appNow, defaultCurrency, formatLocale, formatNumber, formatTimezone } from '../locale.js';
 import { DateField } from './DateField.js';
 import { Button } from '@mistriwork/ui/Button.js';
@@ -357,14 +358,15 @@ interface Count {
 
 /** A facet's values and how many rows each would add, under everything else the list asks. */
 function useCounts(table: TableMeta, refinement: string, column: string, labelPath: string | undefined, standing: string) {
+  const page = useContext(FilterPageContext);
   const text = facetCountText(table.id, refinement, column, labelPath, standing);
   return useQuery<Count[]>({
     /* In the list's own query family, so a write that refreshes the rows refreshes the counts. */
-    queryKey: ['run', state.activeConnection ?? '', 'facet', text],
+    queryKey: ['run', state.activeConnection ?? '', 'facet', page ?? '', text],
     queryFn: async () => {
       /* With the rail's other facets, in one request (breakdownBatch.ts):
          a rail of eleven facets was eleven requests queued on one connection. */
-      const data = (await batchedBreakdown({ text, limit: MOST })) as {
+      const data = (await batchedBreakdown({ text, limit: MOST, ...(page ? { page } : {}) })) as {
         columns?: string[];
         rows?: Array<Record<string, unknown>>;
         errors?: unknown[];
@@ -460,10 +462,10 @@ function ValuesFacet({ box, tail, table, refinement, standing, set, more }: Face
 }
 
 /* One count of the list's records, asked of a breakdown in the rail's batch; null until known. */
-const recordCount = (text: string) => ({
-  queryKey: ['run', state.activeConnection ?? '', 'facet', text],
+const recordCount = (text: string, page?: string) => ({
+  queryKey: ['run', state.activeConnection ?? '', 'facet', page ?? '', text],
   queryFn: async (): Promise<number> => {
-    const data = (await batchedBreakdown({ text, limit: 1 })) as {
+    const data = (await batchedBreakdown({ text, limit: 1, ...(page ? { page } : {}) })) as {
       columns?: string[];
       rows?: Array<Record<string, unknown>>;
       errors?: unknown[];
@@ -486,6 +488,7 @@ const recordCount = (text: string) => ({
  * records, once each, under everything else the list asks.
  */
 function HasValuesFacet({ box, tail, table, refinement, standing, set }: FacetProps) {
+  const page = useContext(FilterPageContext);
   const [all, setAll] = useState(false);
   const has = box.has!;
   const allowed = (box.meta as { allowed?: string[] } | undefined)?.allowed;
@@ -494,10 +497,10 @@ function HasValuesFacet({ box, tail, table, refinement, standing, set }: FacetPr
   const labelPath = box.kind === 'ref' && naming ? `${has.asks}.${naming}` : undefined;
   const text = hasValuesText(has.child, has.asks, labelPath);
   const held = useQuery<Count[]>({
-    queryKey: ['run', state.activeConnection ?? '', 'facet', text],
+    queryKey: ['run', state.activeConnection ?? '', 'facet', page ?? '', text],
     enabled: !allowed?.length,
     queryFn: async () => {
-      const data = (await batchedBreakdown({ text, limit: MOST })) as {
+      const data = (await batchedBreakdown({ text, limit: MOST, ...(page ? { page } : {}) })) as {
         columns?: string[];
         rows?: Array<Record<string, unknown>>;
         errors?: unknown[];
@@ -519,7 +522,9 @@ function HasValuesFacet({ box, tail, table, refinement, standing, set }: FacetPr
   const listed: Count[] = allowed?.length ? allowed.map((value) => ({ value, count: 0 })) : [...(held.data ?? [])];
   for (const value of ticked) if (!listed.some((c) => c.value === value)) listed.push({ value, count: 0 });
   const shown = all || listed.length <= SHORT + SLACK ? listed : listed.filter((c, i) => i < SHORT || ticked.includes(c.value));
-  const counts = useQueries({ queries: shown.map((c) => recordCount(hasCountText(table.id, refinement, box.column, standing, c.value))) });
+  const counts = useQueries({
+    queries: shown.map((c) => recordCount(hasCountText(table.id, refinement, box.column, standing, c.value), page)),
+  });
   const rule = columnDisplay(has.child, has.asks) as DisplayRule | null;
   const toggle = (value: string, on: boolean) => {
     const next = on ? [...ticked, value] : ticked.filter((v) => v !== value);
@@ -561,7 +566,8 @@ function HasValuesFacet({ box, tail, table, refinement, standing, set }: FacetPr
 
 /* One of their segments (`any opportunity where open`): a yes, as a flag's facet is, with how many records it shows. */
 function HasSegmentFacet({ box, table, refinement, standing, set }: FacetProps) {
-  const count = useQuery(recordCount(hasCountText(table.id, refinement, box.column, standing)));
+  const page = useContext(FilterPageContext);
+  const count = useQuery(recordCount(hasCountText(table.id, refinement, box.column, standing), page));
   const on = holdsCondition(refinement, box.column);
   return (
     <div className="facet" data-column={box.column}>
@@ -581,15 +587,16 @@ function HasSegmentFacet({ box, table, refinement, standing, set }: FacetProps) 
  * or not a record in view has it, as a vocabulary's value is.
  */
 function TagsFacet({ box, tail, table, set }: FacetProps) {
+  const page = useContext(FilterPageContext);
   const tags = table.tags;
   // A list its definition spells out (a row-defined `choices` field, DefinedFields.tsx) offers those options, uncounted.
   const options = (box.meta as { allowed?: readonly string[] } | undefined)?.allowed;
   const text = tags ? `${tags.to} count by ${tags.label} sort ${tags.label}` : '';
   const listing = useQuery<string[]>({
-    queryKey: ['run', state.activeConnection ?? '', 'facet', text],
+    queryKey: ['run', state.activeConnection ?? '', 'facet', page ?? '', text],
     enabled: Boolean(tags) && !options,
     queryFn: async () => {
-      const data = (await batchedBreakdown({ text, limit: MOST })) as {
+      const data = (await batchedBreakdown({ text, limit: MOST, ...(page ? { page } : {}) })) as {
         columns?: string[];
         rows?: Array<Record<string, unknown>>;
         errors?: unknown[];
@@ -727,11 +734,15 @@ function DateFacet({ box, tail, table, set, onEnter, more }: FacetProps) {
 
 /** The shape a plain column's facet takes, judged once from its values over the view's standing rows. */
 function useFacetShape(table: TableMeta, column: string, standing: string, numeric: boolean, bare = false) {
+  const page = useContext(FilterPageContext);
   const text = facetShapeText(table.id, column, standing);
   return useQuery<AutoShape>({
-    queryKey: ['run', state.activeConnection ?? '', 'facet-shape', text, bare],
+    queryKey: ['run', state.activeConnection ?? '', 'facet-shape', page ?? '', text, bare],
     queryFn: async () => {
-      const data = (await batchedBreakdown({ text, limit: MOST + 1 })) as { rows?: unknown[]; errors?: unknown[] };
+      const data = (await batchedBreakdown({ text, limit: MOST + 1, ...(page ? { page } : {}) })) as {
+        rows?: unknown[];
+        errors?: unknown[];
+      };
       if (data.errors?.length) throw new Error(say('couldNotCountTheValues'));
       const distinct = data.rows?.length ?? 0;
       /* A name with nothing to list has no checklist to offer: it stays the box that searches it. */

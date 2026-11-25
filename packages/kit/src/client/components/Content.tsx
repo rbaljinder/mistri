@@ -22,6 +22,9 @@
 import { Fragment, useLayoutEffect } from 'react';
 import { currentEntry, paintVersion, renderCrumbs, roomVersion } from '../core.js';
 import { shell } from '../shellMode.js';
+import { shellBody } from '../shellHost.js';
+import { shownUnplaced } from '../addressMount.js';
+import { message } from '../messages.js';
 import { syncHash } from '../url.js';
 import { appListFor, type ListSpec } from './appListModel.js';
 import {
@@ -100,15 +103,32 @@ export function Content({ onHome }: { onHome: () => void }) {
      by each room — and inside the frame, so it takes the content's width
      rather than the window's. A landing standing alone draws its own (LandingSurface); one drawn as this
      pane's home is told not to (PublicHome), so there is one footer either way. */
-  const footer = shell().inApp() ? shell().app()?.ui.footer : undefined;
-  const withFooter = footer ? (
-    <>
-      {body}
-      <AppFooter footer={footer} />
-    </>
-  ) : (
-    body
-  );
+  const app = shell().inApp() ? shell().app() : undefined;
+  const isVisitor = shellBody().classList.contains('public-visitor');
+  const siteFooter = isVisitor ? app?.ui.site?.footer : undefined;
+  const footer = siteFooter
+    ? {
+        ...(siteFooter.text ? { text: siteFooter.text } : {}),
+        ...(siteFooter.links?.length
+          ? {
+              links: siteFooter.links.map((link) => ({
+                label: link.label,
+                href: link.href ?? shownUnplaced(`/${encodeURIComponent(app!.id)}/${encodeURIComponent(link.view ?? '')}`),
+              })),
+            }
+          : {}),
+      }
+    : app?.ui.footer;
+  const footerSignIn = app?.ui.site?.signIn === 'footer' && isVisitor ? shownUnplaced(`/${encodeURIComponent(app.id)}/sign-in`) : undefined;
+  const withFooter =
+    footer || footerSignIn ? (
+      <>
+        {body}
+        <AppFooter footer={footer} signInHref={footerSignIn} signInLabel={footerSignIn ? message('common.signIn') : undefined} />
+      </>
+    ) : (
+      body
+    );
   return framed ? (
     <div
       className={`app-content-frame${frame?.heading === false ? ' app-content-no-title' : ''}`}

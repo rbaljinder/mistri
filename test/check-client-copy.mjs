@@ -121,6 +121,20 @@ const ALLOWED = [
     text,
     reason: 'a refusal the server reads and answers by sending the page without its drawing; no person sees it',
   })),
+  ...[
+    "globalThis[Symbol.for('mistri.ssr.host')][{}]",
+    '{}/* ssr-host:{} */',
+    '{}const {} = {};',
+    '{}const {} = {}; const {} = {}.default ?? {}; const {} = {};',
+    '{}const {} = {}; const {} = {}.default ?? {};',
+    'Compiled page module has no default component export.',
+    'Unknown resource "{}" during SSR.',
+    'Could not read {}',
+  ].map((text) => ({
+    file: 'ssr/pageHost.ts',
+    text,
+    reason: 'SSR ESM host-import rewrite templates and internal Node-only errors caught by publicRender.ts; no person sees them',
+  })),
   {
     file: 'components/TreePicker.tsx',
     text: '{} {} count as children by {}',

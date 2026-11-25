@@ -676,3 +676,7 @@ export const Assistant = block(
 /* `<Steps>` (steps.tsx): a command's form over several steps, its stepper and the intake style's sheets loaded with
    it, so a page that draws none carries none. */
 export const Steps = onDemand(() => import('./steps.js'), 'Steps', { quiet: true });
+/* `<Photos>` (photos.tsx): one record's photographs (lead image, thumb strip, lightbox, aspect ratio) over `kit/Gallery`. */
+export const Photos = onDemand(() => import('./photos.js'), 'Photos', { quiet: true });
+/* `<ListFilters>` (filters.tsx): mounts the list's facet rail/bar, suggestions, and sort menu for a custom search page. */
+export const ListFilters = onDemand(() => import('./filters.js'), 'ListFilters', { quiet: true });

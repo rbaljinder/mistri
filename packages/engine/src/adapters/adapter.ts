@@ -154,6 +154,22 @@ export function isWriteConflict(error: unknown): error is WriteConflict {
   return error instanceof WriteConflict || (error instanceof Error && (error as { [conflictBrand]?: unknown })[conflictBrand] === true);
 }
 
+const conditionalExpects = new WeakSet<object>();
+
+/**
+ * Mark an update's `expected` map as a command handler's explicit compare-and-swap predicate (`db.<table>.claim()`),
+ * which may guard a subset or different set of readable columns than `values` modifies.
+ */
+export function conditionalExpected<T extends object>(expected: T): T {
+  conditionalExpects.add(expected);
+  return expected;
+}
+
+/** Whether an update's `expected` map came from a trusted server conditional claim (`db.<table>.claim()`). */
+export function isConditionalExpected(expected: unknown): boolean {
+  return typeof expected === 'object' && expected !== null && conditionalExpects.has(expected);
+}
+
 /** A transaction acknowledgement could not establish whether writes landed.
  * Never inherit Refusal or driver constraint codes: callers must not turn a
  * failed rollback of a rejected operation into permission to retry it. */

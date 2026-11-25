@@ -337,6 +337,7 @@ function physicalView(view: ViewDef, catalog: AppResourceCatalog): ViewDef {
     ...(view.computed ? { computed: renamedComputed(narrowedComputed(view, catalog), toPhysical).computed } : {}),
     // A record's tags name their link and tag tables by id: renamed the same way.
     ...(view.tagged ? { tagged: physicalTags(view.tagged, toPhysical) } : {}),
+    ...(view.covered ? { covered: physicalCovers(view.covered, toPhysical) } : {}),
     ...(filter ? { filter: physicalAny(filter, catalog) } : {}),
   };
 }
@@ -382,6 +383,11 @@ function physicalTags(tagged: NonNullable<ViewDef['tagged']>, toPhysical: (id: s
   return Object.fromEntries(
     Object.entries(tagged).map(([path, tags]) => [path, { ...tags, through: toPhysical(tags.through), to: toPhysical(tags.to) }]),
   );
+}
+
+/** A record's cover photo names its photo table by id: renamed the same way. */
+function physicalCovers(covered: NonNullable<ViewDef['covered']>, toPhysical: (id: string) => string): NonNullable<ViewDef['covered']> {
+  return Object.fromEntries(Object.entries(covered).map(([path, cover]) => [path, { ...cover, from: toPhysical(cover.from) }]));
 }
 
 /** Internal identity-only facade over an already bound physical capability. */

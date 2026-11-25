@@ -91,20 +91,31 @@ export function roomReads(input: RoomInput): RoomPlan {
   const rules: ListRules = { schema, resources: payload.resources };
   menuCounts(input, plan);
   const segments = input.path.split('/').filter(Boolean).slice(1);
-  /* The App's root is its home (client Content.tsx): a list as it opens, or a dashboard as it opens. */
+  /* The App's root is its home (client Content.tsx): a list as it opens, a dashboard, or a free-form page. */
   if (!segments.length) {
     const home = payload.home;
     if (home === undefined) return plan;
     if (listView(payload, home)) listReads(input, rules, home, plan, true);
-    else if (!input.search) dashboardReads(input, rules, home, plan);
+    else {
+      if (!input.search) dashboardReads(input, rules, home, plan);
+      for (const load of pageLoads(input, [], { scoped: true })) plan.reads.push(load);
+    }
     return plan;
   }
   const parsed = readRoom(input, segments);
   if (!parsed) return plan;
   if (parsed.kind === 'route' && parsed.target.kind === 'list') listReads(input, rules, parsed.target.view, plan);
-  if (parsed.kind === 'route' && parsed.target.kind === 'dashboard' && !input.search)
-    dashboardReads(input, rules, parsed.target.view, plan);
-  if (parsed.kind === 'record' && !parsed.natural) recordReads(input, parsed, plan);
+  if (parsed.kind === 'route' && parsed.target.kind === 'dashboard') {
+    if (!input.search) dashboardReads(input, rules, parsed.target.view, plan);
+    for (const load of pageLoads(input, [], { scoped: true })) plan.reads.push(load);
+  }
+  if (parsed.kind === 'record' && !parsed.natural) {
+    if (parsed.target.kind === 'dashboard') {
+      for (const load of pageLoads(input, [], { scoped: true })) plan.reads.push(load);
+    } else {
+      recordReads(input, parsed, plan);
+    }
+  }
   return plan;
 }
 
@@ -128,14 +139,23 @@ type LoadedPage = {
  * answers, so a place read otherwise here is a read the page makes itself, never a wrong one; a value the address
  * cannot carry whole in a page's slot (a `;`) plans nothing.
  */
-export function pageLoads(input: RoomInput, named: readonly string[] = []): RoomRead[] {
+export function pageLoads(input: RoomInput, named: readonly string[] = [], options: { scoped?: boolean } = {}): RoomRead[] {
   const { payload } = input;
   const segments = input.path.split('/').filter(Boolean).slice(1);
   let key: string | undefined;
+  let routePlace: Record<string, string> | undefined;
   if (!segments.length) key = payload.home !== undefined && !listView(payload, payload.home) ? payload.home : undefined;
   else {
     const parsed = readRoom(input, segments);
     if (parsed?.kind === 'route' && parsed.target.kind === 'dashboard') key = parsed.target.view;
+    else if (parsed?.kind === 'record' && parsed.target.kind === 'dashboard' && !parsed.natural) {
+      key = parsed.target.view;
+      const pkVal = Object.values(parsed.key)[0];
+      if (pkVal !== undefined && pkVal !== null) {
+        const param = parsed.target.recordParam ?? Object.keys(parsed.key)[0] ?? 'id';
+        routePlace = { [param]: String(pkVal) };
+      }
+    }
   }
   const page =
     key !== undefined && Object.hasOwn(payload.views, key) ? (payload.views[key] as unknown as { page?: LoadedPage }).page : undefined;
@@ -143,7 +163,7 @@ export function pageLoads(input: RoomInput, named: readonly string[] = []): Room
   const said = new URLSearchParams(input.search);
   const place: Record<string, string> = {};
   for (const name of page.params ?? []) {
-    const value = said.get(name);
+    const value = said.get(name) ?? routePlace?.[name] ?? null;
     if (value === null) continue;
     if (value.includes(';')) return [];
     place[name] = value;
@@ -159,7 +179,7 @@ export function pageLoads(input: RoomInput, named: readonly string[] = []): Room
   return loaders.map((loader) => ({
     method: 'POST' as const,
     target: PAGE_LOAD_PATH,
-    body: { page: key, params: placeOf(loader), loader },
+    body: { page: key, params: placeOf(loader), loader, ...(options.scoped ? { app: input.app } : {}) },
   }));
 }
 

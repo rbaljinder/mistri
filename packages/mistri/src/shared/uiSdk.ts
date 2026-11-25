@@ -158,6 +158,8 @@ const PAGE_ONLY = [
   'Board',
   'Calendar',
   'Gallery',
+  'Photos',
+  'ListFilters',
   'RecordSplit',
   'Assistant',
   'Choose',

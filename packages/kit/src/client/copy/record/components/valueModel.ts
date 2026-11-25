@@ -5,4 +5,6 @@ export const say = defineMessages({
   textOfMax: '{text} of {max}',
   starsOf: '{stars} of {outOf} stars',
   signed: 'Signed',
+  yes: 'Yes',
+  no: 'No',
 });

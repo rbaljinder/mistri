@@ -18,6 +18,7 @@
  * instead of the first start.
  */
 import { TAGS_COLUMN } from '@mistriwork/engine/shared/tagLists.js';
+import { COVER_COLUMN } from '@mistriwork/engine/shared/coverPhotos.js';
 import { rollupColumnMeta } from '@mistriwork/engine/shared/rollups.js';
 import {
   columnKind,
@@ -171,6 +172,7 @@ export function typesForSchema(
             ...Object.keys(t.rollups ?? {}),
             ...Object.keys(t.computed ?? {}),
             ...(t.tags ? [TAGS_COLUMN] : []),
+            ...(t.cover ? [COVER_COLUMN] : []),
           ]
             .map((name) => JSON.stringify(name))
             .join(' | ') || 'never'
@@ -251,6 +253,7 @@ export function typesForSchema(
           ...Object.entries(t.computed ?? {}).map(([name, computed]) => `${key(name)}: '${computed.type}'`),
           // A record's tags (tagLists.ts): asked with `has`, any value a label.
           ...(t.tags ? [`${key(TAGS_COLUMN)}: 'other'`] : []),
+          ...(t.cover ? [`${key(COVER_COLUMN)}: 'other'`] : []),
         ].join('; ')} };`,
     ),
     '};',

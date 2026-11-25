@@ -167,10 +167,11 @@ export function publicPageCommands(
     if (!isPublicCommandPage(view)) continue;
     for (const id of view.page.commands) {
       const command = registry && Object.hasOwn(registry, id) ? registry[id] : undefined;
-      if (!command || command.public !== true || command.targets !== 'none' || served[id]) continue;
+      if (!command || command.public !== true || command.targets === 'many' || served[id]) continue;
       served[id] = {
         id,
         version: command.version,
+        ...(command.targets === 'one' ? { recordTarget: command.target, targets: 'one' as const } : {}),
         input: structuredClone(command.fields) as AppFormCommandReference['input'],
         ...(command.label === undefined ? {} : { label: command.label }),
         ...(command.rules?.length ? { rules: structuredClone(command.rules) as AppFormCommandReference['rules'] } : {}),

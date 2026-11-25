@@ -303,6 +303,7 @@ export declare function Value(props: {
   value: unknown;
   resource?: string;
   column?: string;
+  row?: Readonly<Record<string, unknown>>;
   display?: ValueDisplay;
   compact?: boolean;
   className?: string;
@@ -841,6 +842,8 @@ export interface MoneyFormat {
   minor?: boolean;
   /** Without the minor digits where they are all zero: "$24,495", and "$24,495.50" still. */
   whole?: boolean;
+  /** Round to whole major units ("$679" for 679.17), for estimated figures like monthly payments. */
+  round?: boolean;
   /** Compact from a thousand ("$27.9K"), for a figure meant to be glanced at; put the exact one in its title. */
   compact?: boolean;
 }
@@ -859,6 +862,8 @@ export declare function useFormat(): {
   dateTime(value: string, options?: { timezone?: string; style?: 'short' }): string;
   /** "in 3 days", "yesterday"; undefined for a value that is not a date. */
   relative(value: string): string | undefined;
+  /** Format a column's value using its resource's display rule (minor units, currency, unit word, values, empty). */
+  column(resource: string, column: string, value: unknown, row?: Readonly<Record<string, unknown>>): string;
 };
 /** The look the App wears for this reader, light or dark, and the density; redraws when any changes. `look` is `'tenant'` where a tenant's branding dresses the page; `preset` is then the App's theme it started from (`'workshop'`), and the look itself otherwise. */
 export declare function useLook(): {

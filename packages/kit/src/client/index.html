@@ -7,6 +7,10 @@
     <style>
       html[data-starting], html[data-starting] body { background: var(--startup-ground, #fff) !important; }
       html[data-starting] body > :not(#startup-status):not(noscript):not(script) { visibility: hidden !important; }
+      /* A server-rendered public custom page (`data-ssr="page"`) arrives drawn with its photographs and site chrome,
+         so it is shown immediately on first paint rather than hidden behind the startup skeleton. */
+      html[data-starting]:has(#content[data-ssr="page"]) #startup-status { display: none !important; }
+      html[data-starting]:has(#content[data-ssr="page"]) #content[data-ssr="page"] { visibility: visible !important; }
       /* The server's drawing of a public room (ssr/PublicRoom.tsx) is for a crawler and a reader without scripts; a
          scripted reader never sees it, since the room replaces it whole behind the veil. Its pictures are lazy, and a lazy
          picture that is not rendered is not fetched: hidden only, the twenty a list drew were fetched and resized

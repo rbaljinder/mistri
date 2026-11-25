@@ -30,7 +30,7 @@ import { fontRoute } from './fontRoutes.js';
 import { brandRoute } from './brandRoutes.js';
 import { pwaRoute } from './pwaRoutes.js';
 import { pwaUrls } from '../app/appPwa.js';
-import { uiKitHref } from '../app/appComponents.js';
+import { pageAssetHref, uiKitHref } from '../app/appComponents.js';
 import { publicHead, type ShellHead } from './publicHead.js';
 import { personAddress } from './personAddress.js';
 import { redirectedTo } from '../../shared/appRedirects.js';
@@ -656,6 +656,7 @@ async function serveShell(ctx: RequestContext): Promise<void> {
   const served = servedHost?.app.app;
   /* Its control kit (Preview), preloaded and installed before the first render; an App without one says nothing. */
   const uiKit = served ? uiKitHref(served.id, servedHost.app.components, (href) => outward(ctx.mount, href)) : undefined;
+  const pageAsset = served ? pageAssetFor(served, servedHost.app.components, ctx.path, (href) => outward(ctx.mount, href)) : undefined;
   const named = served?.name;
   /* Who the page is drawn for, so its first paint is guessed in their theme (ui.theme.for, themeResolve.ts). */
   const audience = { public: ctx.identity.id === undefined, roles: sessionRoles(ctx.identity.role) };
@@ -663,7 +664,23 @@ async function serveShell(ctx: RequestContext): Promise<void> {
   const mount = { base: ctx.mount.base, json: mountJson(ctx.mount) };
   /* A public page's content pane drawn on the server (publicRender.ts); a placed form owns a fresh token and never is. */
   const worn = branding && !branding.private ? branding.value.content.name : undefined;
-  const pane = placedFormPage ? undefined : publicPane(ctx.path, head?.page?.room, mount, worn);
+  const pane = placedFormPage
+    ? undefined
+    : publicPane(
+        ctx.path,
+        head?.page?.room,
+        mount,
+        worn,
+        served && servedHost.app.components && audience.public
+          ? {
+              appId: served.id,
+              search: ctx.url.search,
+              components: servedHost.app.components,
+              read: ssrLoopback(ctx, pages),
+              visitor: audience.public,
+            }
+          : undefined,
+      );
   const { page: _page, site: _site, headline: _headline, ...shellHead } = head ?? {};
   /* `?embed=frame`: an App's page in a host's iframe (clientHttp.ts withFrameAncestors), framed only by the origins listed for it. */
   const framed =
@@ -695,6 +712,7 @@ async function serveShell(ctx: RequestContext): Promise<void> {
     mount,
     path: ctx.path,
     ...(uiKit ? { uiKit } : {}),
+    ...(pageAsset ? { pageAsset } : {}),
     looks: lookSheetsFor(served?.ui, audience, branding?.value.theme),
     faces: lookFacesFor(served?.ui, audience, branding?.value.theme),
     appFaces: appFaceHead(served?.ui, (href) => outward(ctx.mount, href), audience, branding?.value.theme),
@@ -875,5 +893,74 @@ function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMe
       ...(typeof account === 'string' ? { account } : {}),
       carriable: !reply.hasHeader('set-cookie') && !reply.hasHeader('x-mistri-search'),
     };
+  };
+}
+
+/** Resolve the compiled JS/CSS asset for a free-form page matching this path, for `<head>` preloading. */
+function pageAssetFor(
+  served: { id: string; views: Readonly<Record<string, unknown>>; home?: readonly { view: string; when?: unknown }[] },
+  components: Parameters<typeof pageAssetHref>[1],
+  path: string,
+  outwardFn: (inside: string) => string,
+): { id: string; js: string; css?: string } | undefined {
+  if (!components) return undefined;
+  const segments = path.split('/').filter(Boolean).slice(1);
+  let matched: unknown;
+  if (!segments.length) {
+    const homeKey = served.home?.find((rule) => !rule.when)?.view ?? served.home?.[0]?.view;
+    if (homeKey && Object.hasOwn(served.views, homeKey)) matched = served.views[homeKey];
+  } else {
+    const first = decodeSegment(segments[0] ?? '');
+    for (const [key, view] of Object.entries(served.views)) {
+      const v = view as { path?: string; page?: unknown };
+      if (!v?.page) continue;
+      if ((v.path ?? key) === first) {
+        matched = v;
+        break;
+      }
+    }
+  }
+  const sections = (matched as { sections?: Array<{ component?: { id?: string } }> } | undefined)?.sections;
+  const componentId = sections?.[0]?.component?.id;
+  return componentId ? pageAssetHref(served.id, components, componentId, outwardFn) : undefined;
+}
+
+/** In-process loopback reader for SSR of public custom pages, forwarding per-page headers like `x-mistri-page`. */
+function ssrLoopback(ctx: GatedContext, pages: PageDef[]) {
+  return async (
+    method: 'GET' | 'POST',
+    target: string,
+    body?: unknown,
+    headers?: Record<string, string>,
+  ): Promise<{ status: number; body: unknown }> => {
+    if (ctx.res.destroyed) return { status: 503, body: {} };
+    const request = loopbackRequest(ctx.req, method, target, body as Record<string, unknown> | undefined);
+    if (headers) {
+      for (const [name, value] of Object.entries(headers)) request.headers[name.toLowerCase()] = value;
+    }
+    inheritTenantHostIntent(ctx.req, request);
+    const reply = new CapturedReply();
+    try {
+      await handle(request, reply.asResponse(), new URL(target, 'http://localhost'), {
+        registry: ctx.registry,
+        views: ctx.configViews,
+        configPath: ctx.configPath,
+        bound: ctx.bound,
+        queries: ctx.configQueries,
+        pages,
+        layouts: ctx.configLayouts,
+        apps: ctx.appHosts,
+        commands: ctx.commands,
+        policy: ctx.policy,
+        policyUnavailable: ctx.policyUnavailable,
+        diagnostics: ctx.diagnostics,
+        jobs: ctx.jobs,
+        mount: ctx.mount,
+      });
+    } catch {
+      return { status: 500, body: {} };
+    }
+    const answer = reply.answer();
+    return answer ? { status: answer.status, body: answer.body } : { status: 500, body: {} };
   };
 }

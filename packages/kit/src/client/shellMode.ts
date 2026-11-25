@@ -136,6 +136,7 @@ export interface ShellMode {
     label: string,
     records?: unknown,
     list?: unknown,
+    open?: unknown,
   ): boolean | 'row' | { under: object };
   /** Begin reading the page a press on a record opens (recordPress.ts); null where nothing reads ahead. */
   prefetchRecord: ((pageId: string, tableId: string, key: Record<string, unknown>) => void) | null;

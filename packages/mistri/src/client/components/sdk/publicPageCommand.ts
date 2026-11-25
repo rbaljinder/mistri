@@ -12,6 +12,8 @@
 import type { AppFormCommandReference } from '../../../shared/command.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
 import { publicPlacement } from '@mistriwork/kit/client/addressMount.js';
+import { state } from '@mistriwork/kit/client/core.js';
+import { tableNamed } from '@mistriwork/engine/shared/schema.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { commandInput, prefilledCommandValues, readyToJudge } from '../CommandFields.js';
 import type { UiCommandHandle, UiCommandOptions, UiCommandOutcome } from './context.js';
@@ -50,7 +52,7 @@ export function publicPageCommand(page: string, id: string, reference: AppFormCo
   let ticket: Promise<Ticket | undefined> = askTicket(page);
   const label = reference.label ?? humanName(id);
 
-  const send = async (input: Record<string, unknown>, submission: string, options: UiCommandOptions) => {
+  const send = async (input: Record<string, unknown>, submission: string, options: UiCommandOptions, target?: Record<string, unknown>) => {
     let held = await ticket;
     if (!held) held = await (ticket = askTicket(page));
     if (!held) return { status: 0, body: {} as Record<string, unknown> };
@@ -69,7 +71,7 @@ export function publicPageCommand(page: string, id: string, reference: AppFormCo
         'x-mistri-ticket': held.ticket,
         ...(options.challenge ? { 'x-mistri-challenge': options.challenge } : {}),
       },
-      body: JSON.stringify({ input, submission }),
+      body: JSON.stringify({ input, submission, ...(target ? { target } : {}) }),
     });
     const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
     return { status: res.status, body };
@@ -83,21 +85,22 @@ export function publicPageCommand(page: string, id: string, reference: AppFormCo
     submission: string,
     options: UiCommandOptions,
     checking: boolean,
+    target?: Record<string, unknown>,
   ): Promise<UiCommandOutcome> => {
     const said = options.label || label;
     const unknown = (message = say('publicNotKnown', { label: said })): UiCommandOutcome => ({
       status: 'unknown',
       message,
-      check: (again) => deliver(input, submission, { ...options, ...again }, true),
+      check: (again) => deliver(input, submission, { ...options, ...again }, true, target),
     });
     let answer: Awaited<ReturnType<typeof send>>;
     try {
-      answer = await send(input, submission, options);
+      answer = await send(input, submission, options, target);
       /* A ticket the server no longer takes (a restart, a day open): asked again, and the run sent once more under the
          same submission key, so it can never be two. */
       if (answer.status === 403 && answer.body.code === 'ticket_refused') {
         ticket = askTicket(page);
-        answer = await send(input, submission, options);
+        answer = await send(input, submission, options, target);
       }
     } catch {
       // Sent, and no answer came: whether it ran is not known, and only the same submission asked again can say.
@@ -123,8 +126,20 @@ export function publicPageCommand(page: string, id: string, reference: AppFormCo
     return { status: 'refused', message };
   };
 
+  const targetKey = (record: Readonly<Record<string, unknown>>): Record<string, unknown> | undefined => {
+    if (reference.targets !== 'one') return undefined;
+    const table = reference.recordTarget && state.schema ? tableNamed(state.schema, reference.recordTarget) : undefined;
+    const pk = table?.columns.filter((c) => c.primaryKey).map((c) => c.name);
+    if (pk?.length) {
+      const key: Record<string, unknown> = {};
+      for (const col of pk) if (Object.hasOwn(record, col)) key[col] = record[col];
+      if (Object.keys(key).length === pk.length) return key;
+    }
+    return Object.keys(record).length ? { ...record } : undefined;
+  };
+
   const run = async (
-    _record: Readonly<Record<string, unknown>>,
+    record: Readonly<Record<string, unknown>>,
     given?: Readonly<Record<string, unknown>>,
     options: UiCommandOptions = {},
   ): Promise<UiCommandOutcome> => {
@@ -138,7 +153,7 @@ export function publicPageCommand(page: string, id: string, reference: AppFormCo
     } catch (error) {
       return { status: 'refused', message: (error as Error).message };
     }
-    return deliver(input, submission, options, false);
+    return deliver(input, submission, options, false, targetKey(record));
   };
 
   return { label, granted: true, available: async () => true, run, open: run };

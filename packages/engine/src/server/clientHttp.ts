@@ -203,6 +203,8 @@ interface ShellTitle {
    * the first paint. Never the Workbench's.
    */
   uiKit?: { js: string; css?: string };
+  /** A custom `definePage`'s compiled module and stylesheet, preloaded in `<head>` so first paint arrives styled and without a JS waterfall. */
+  pageAsset?: { id: string; js: string; css?: string };
   /** The App declared `ui.microphone`: its pages may ask for the microphone, from this origin alone (`pagePermissions`). */
   microphone?: true;
   /** The scheme that look says (clientSurface.ts lookSchemeFor), said in the page so it is dark from its first paint. */
@@ -416,6 +418,11 @@ export function withHead(html: string, head: ShellTitle | undefined): string {
         `  <link rel="modulepreload" crossorigin href="${escapeHtml(kit.js)}">\n${css}` +
         `  <meta name="mistri-ui-kit" content="${escapeHtml(kit.js)}"${kit.css ? ` data-css="${escapeHtml(kit.css)}"` : ''}>\n  </head>`,
     );
+  }
+  if (head!.pageAsset && !head!.workbench) {
+    const asset = head!.pageAsset;
+    const css = asset.css ? `  <link rel="stylesheet" href="${escapeHtml(asset.css)}" data-component-css="${escapeHtml(asset.id)}">\n` : '';
+    out = out.replace(/<\/head>/i, () => `  <link rel="modulepreload" crossorigin href="${escapeHtml(asset.js)}">\n${css}  </head>`);
   }
   if (!head?.title && !head?.canonical) return out;
   /* Replaced by a function, never a replacement string: a string's `$&`,

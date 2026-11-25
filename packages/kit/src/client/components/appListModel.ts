@@ -115,7 +115,7 @@ export interface ListSpec {
   /** What one of its records is called, and several: its resource's noun. */
   noun?: AppNoun;
   error?: string;
-  open?: 'page' | 'drawer' | 'modal';
+  open?: import('@mistriwork/engine/shared/servedApp.js').OpenTarget;
   /** A reference column whose record a row opens instead of the row (rowOpens.ts). */
   opens?: string;
   /** A split list's authored page size: the view's, like its show clause —

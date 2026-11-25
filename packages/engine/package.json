@@ -932,6 +932,10 @@
       "mistri-built": "./dist/shared/tableSizing.js",
       "default": "./src/shared/tableSizing.ts"
     },
+    "./shared/coverPhotos.js": {
+      "mistri-built": "./dist/shared/coverPhotos.js",
+      "default": "./src/shared/coverPhotos.ts"
+    },
     "./shared/tagLists.js": {
       "mistri-built": "./dist/shared/tagLists.js",
       "default": "./src/shared/tagLists.ts"

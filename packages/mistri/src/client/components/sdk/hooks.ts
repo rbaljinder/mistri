@@ -27,6 +27,7 @@ import {
   formatWholeMoney,
 } from '@mistriwork/kit/client/locale.js';
 import { minorFigure } from '@mistriwork/engine/shared/money.js';
+import { formatColumnValue } from '@mistriwork/kit/client/components/valueModel.js';
 import { herePath } from '@mistriwork/kit/client/addressMount.js';
 import { notePageLoad } from '../../pageLoadHints.js';
 import {
@@ -34,6 +35,7 @@ import {
   UiSizeContext,
   type UiPageFrame,
   type UiAddress,
+  useHostIfAny,
   useUiHost,
   type OpenMode,
   type UiOpenViewOptions,
@@ -211,8 +213,10 @@ export function useRows(
      what `show` happened to name. The read is the reader's own, so no column is widened past what `show` could name. */
   const asked = declared ? { ...rest, keys: true, page: declared } : { ...rest, keys: true };
   const limit = rest.limit ?? ROWS_LIMIT;
+  const queryKey = ['mistri-ui', 'rows', ...host.scope, resource, asked] as const;
+  host.ssrPrefetch?.(queryKey, () => host.rows(resource, asked), enabled, true);
   const query = useInfiniteQuery({
-    queryKey: ['mistri-ui', 'rows', ...host.scope, resource, asked],
+    queryKey,
     queryFn: ({ pageParam }) => host.rows(resource, pageParam ? { ...asked, offset: pageParam } : asked),
     initialPageParam: 0,
     /* The next page starts where the rows read so far end: a refresh re-reads every page from the first. */
@@ -292,12 +296,16 @@ export function useRecord(
   const host = useUiHost();
   const page = useDeclared(resource, options.optional === true);
   const closed = useClosed(resource, options.optional === true);
+  const queryKey = ['mistri-ui', 'record', ...host.scope, resource, key, show, page] as const;
+  const enabled = key !== undefined && !closed;
+  const queryFn = async () => (await host.record(resource, key!, show, page ? { page } : {})) ?? null;
+  host.ssrPrefetch?.(queryKey, queryFn, enabled);
   return optionally(
     withReadState(
       useQuery({
-        queryKey: ['mistri-ui', 'record', ...host.scope, resource, key, show, page],
-        queryFn: async () => (await host.record(resource, key!, show, page ? { page } : {})) ?? null,
-        enabled: key !== undefined && !closed,
+        queryKey,
+        queryFn,
+        enabled,
       }),
     ),
     options.optional === true,
@@ -353,11 +361,14 @@ export function useBreakdown(
     (rows: UiRow[]) => filledHookRows(rows, { by, measure: written, query, fill }).map((row) => typedRow(row as UiRow, groups)),
     [by, written, query, fill, groups],
   );
+  const queryKey = ['mistri-ui', 'breakdown', ...host.scope, resource, asked] as const;
+  const queryFn = () => host.breakdown(resource, asked);
+  host.ssrPrefetch?.(queryKey, queryFn, !closed);
   return optionally(
     withReadState(
       useQuery({
-        queryKey: ['mistri-ui', 'breakdown', ...host.scope, resource, asked],
-        queryFn: () => host.breakdown(resource, asked),
+        queryKey,
+        queryFn,
         select: typed,
         enabled: !closed,
       }),
@@ -414,12 +425,16 @@ export function useLoader(name: string, options: { enabled?: boolean } = {}): Us
   useEffect(() => {
     if (name !== frame.loader) notePageLoad(herePath(), name, first.current);
   }, [name, frame.loader]);
+  const queryKey = pageLoadKey(host.scope, frame.view, name, place);
+  const queryFn = async () => (await host.load(frame.view, place, name)) ?? null;
+  const enabled = options.enabled ?? true;
+  host.ssrPrefetch?.(queryKey, queryFn, enabled);
   return withReadState(
     useQuery({
-      queryKey: pageLoadKey(host.scope, frame.view, name, place),
-      queryFn: async () => (await host.load(frame.view, place, name)) ?? null,
+      queryKey,
+      queryFn,
       placeholderData: keepPreviousData,
-      enabled: options.enabled ?? true,
+      enabled,
     }),
   );
 }
@@ -894,6 +909,8 @@ interface UiMoneyFormat {
   minor?: boolean;
   /** Without the minor digits where they are all zero: "$24,495", and "$24,495.50" still. */
   whole?: boolean;
+  /** Round to whole major units ("$679" for 679.17), for estimated figures like monthly payments. */
+  round?: boolean;
   /** Compact from a thousand ("$27.9K"), for a figure meant to be glanced at; put the exact one in its title. */
   compact?: boolean;
 }
@@ -906,17 +923,19 @@ const COMPACT_FROM = 1000;
  * digit (never through Number()), minor units read exactly. A currency code alone is `{ currency }`.
  */
 function sayMoney(value: number | string, options: string | UiMoneyFormat = {}): string {
-  const { currency, minor, whole, compact } = typeof options === 'string' ? { currency: options } : options;
+  const { currency, minor, whole, round, compact } = typeof options === 'string' ? { currency: options } : options;
   const code = currency || defaultCurrency();
   const major = minor ? minorFigure(value, code) : value;
   if (major === undefined) return String(value);
   if (compact && Math.abs(Number(major)) >= COMPACT_FROM)
     return formatMoney(Number(major), code, { notation: 'compact', maximumFractionDigits: 1 });
+  if (round) return formatMoney(major, code, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   return whole ? formatWholeMoney(major, code) : formatMoney(major, code);
 }
 
 /** Figures in the App's locale, currency and timezone (`ui.locale`, `ui.currency`, `ui.timezone`), as every built-in section says them. */
 export function useFormat() {
+  const host = useHostIfAny();
   return {
     /** The App's day (`ui.timezone`, in a tenant App the reader's tenant's own): the zone a page reckons "today" in, as the built-in calendar does. Undefined where the App names none, so `Intl` uses the reader's own. */
     timezone: formatTimezone(),
@@ -936,6 +955,11 @@ export function useFormat() {
     },
     /** "in 3 days", "yesterday"; undefined for a value that is not a date. */
     relative: (value: string) => formatRelativeDay(value) ?? undefined,
+    /** One column's value formatted as its resource's display rule draws it (money, minor units, unit word, values, empty). */
+    column: (resource: string, column: string, value: unknown, row?: Readonly<Record<string, unknown>>) => {
+      const known = host?.column(resource, column);
+      return formatColumnValue(known?.meta, known?.rule, value, row);
+    },
   };
 }
 

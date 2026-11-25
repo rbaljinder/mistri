@@ -1055,6 +1055,37 @@ export declare function Calendar<const R extends ResourceName = never>(
 export declare function Gallery<const R extends ResourceName = never>(
   props: PresentedRows<R> & PresentationWords<AppCardsList<ColumnPath<Reading<R>>>>,
 ): ReactTypes.ReactElement;
+/** One record's photographs as a lead image, thumbnail strip, and lightbox, with a configurable aspect ratio (`3/2`, `3/4`, `16/9`, `4/3`, `1/1`):
+    `<Photos from="vehicle_photo" whose="vehicle_id" record={car} sort="position" aspect="3/2" />`. */
+export declare function Photos<const R extends ResourceName = never>(props: {
+  from: R;
+  whose: ColumnPath<Reading<R>>;
+  record: Readonly<Record<string, unknown>> | string | number | null | undefined;
+  sort?: SortInput<Reading<R>>;
+  aspect?: string;
+  alt?: ColumnPath<Reading<R>>;
+  caption?: ColumnPath<Reading<R>>;
+  label?: string;
+  empty?: string;
+  limit?: number;
+  className?: string;
+}): ReactTypes.ReactElement;
+/** Mount the list's full filter engine (facets with live counts, numeric min/max with minor-unit money conversion,
+    text suggestions, sort menu, and URL query sync) on a custom page, handing `{ query, sort, refinement, clear }`
+    to `children` so the page queries the server via `useRows(from, { query, sort })` and renders its own cards. */
+export declare function ListFilters<const R extends ResourceName = never>(props: {
+  from: R;
+  filters: readonly ColumnPath<Reading<R>>[];
+  suggest?: Readonly<Record<string, readonly ColumnPath<Reading<R>>[]>>;
+  sorts?: readonly { label: string; sort: SortInput<Reading<R>> }[];
+  sort?: SortInput<Reading<R>>;
+  standing?: string;
+  param?: string;
+  layout?: 'bar' | 'rail';
+  label?: string;
+  className?: string;
+  children: (state: { query: string; sort: string | undefined; refinement: string; clear: () => void }) => ReactTypes.ReactNode;
+}): ReactTypes.ReactElement;
 /** Rows in a queue beside the picked record's own page, the `split()` presentation. The pick is held in the page param `param`
     when it names one (a single-column key's value, so Back and a link keep it), else in the block. */
 export declare function RecordSplit<const R extends ResourceName = never>(props: {

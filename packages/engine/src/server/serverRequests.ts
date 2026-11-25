@@ -6,7 +6,11 @@
  * write. A WeakSet of the objects themselves, so nothing that arrives as data —
  * JSON, a copy, a request rebuilt from one — is ever in it.
  */
+import { conditionalExpected, isConditionalExpected } from '../adapters/adapter.js';
+
 const serverRequests = new WeakSet<object>();
+
+export { conditionalExpected, isConditionalExpected };
 
 /** Mark a request, or a write's values, as the server's own. */
 export function serverRequest<T extends object>(request: T): T {
@@ -22,12 +26,19 @@ export function isServerRequest(request: unknown): boolean {
   return typeof values === 'object' && values !== null && serverRequests.has(values);
 }
 
-/** A layer that copies a request (a tenant lease's captured data) carries the server's mark to its copy. */
+/** A layer that copies a request (a tenant lease's captured data) carries the server's marks to its copy. */
 export function carryServerRequest<T>(from: unknown, to: T): T {
-  if (isServerRequest(from) && typeof to === 'object' && to !== null) {
-    serverRequests.add(to);
-    const values = (to as { values?: unknown }).values;
-    if (typeof values === 'object' && values !== null) serverRequests.add(values);
+  if (typeof to === 'object' && to !== null) {
+    if (isServerRequest(from)) {
+      serverRequests.add(to);
+      const values = (to as { values?: unknown }).values;
+      if (typeof values === 'object' && values !== null) serverRequests.add(values);
+    }
+    const fromExpected = typeof from === 'object' && from !== null ? (from as { expected?: unknown }).expected : undefined;
+    const toExpected = (to as { expected?: unknown }).expected;
+    if (isConditionalExpected(fromExpected) && typeof toExpected === 'object' && toExpected !== null) {
+      conditionalExpected(toExpected);
+    }
   }
   return to;
 }

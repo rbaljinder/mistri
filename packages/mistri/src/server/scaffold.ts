@@ -40,6 +40,7 @@ import {
 } from '@mistriwork/engine/shared/schema.js';
 import { autoKey, isRequired } from '@mistriwork/engine/shared/form.js';
 import {
+  appCoverRules,
   appFileRules,
   appRollupRules,
   appTagRules,
@@ -1729,6 +1730,7 @@ export function scaffoldApp(physicalSchema: DatabaseSchema, opts: ScaffoldOption
     problems.push(...appTransitionRules(parsed, schema).problems);
     problems.push(...appFileRules(parsed, schema, { strict: true }).problems);
     problems.push(...appTagRules(parsed, schema).problems);
+    problems.push(...appCoverRules(parsed, schema).problems);
     problems.push(...resolveDisplay(parsed, served).warnings);
     const parsedPages = parseAppPages(app, 'the scaffold');
     for (const page of parsedPages) {

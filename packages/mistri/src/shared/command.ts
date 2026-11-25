@@ -1558,7 +1558,8 @@ export function parseExposedCommandReference(raw: unknown, where: string): AppCo
  */
 export function parseFormCommandReference(raw: unknown, where: string, publicForm: boolean): AppFormCommandReference {
   const [id, entry] = registered(raw, where);
-  if (entry.targets !== 'none')
+  const publicRecordTarget = publicForm && entry.public === true && entry.targets === 'one';
+  if (entry.targets !== 'none' && !publicRecordTarget)
     return fail(
       where,
       `names "${id}", which acts on an existing record; a form's command creates records and names none (targets: 'none')`,
@@ -1573,6 +1574,7 @@ export function parseFormCommandReference(raw: unknown, where: string, publicFor
   return {
     id,
     version: entry.version,
+    ...(publicRecordTarget ? { recordTarget: entry.target, targets: 'one' as const } : {}),
     ...commandGate(entry),
     input: served(entry.input),
     ...(entry.rules?.length ? { rules: structuredClone(entry.rules) as DraftRule[] } : {}),

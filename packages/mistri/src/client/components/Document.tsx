@@ -246,14 +246,10 @@ function PaperValue({ col, value, tableId, row }: { col: Column | undefined; val
   if (rule?.format === 'money' && figure && maskedText(rule, value) === undefined) {
     const currency = rowCurrency(rule, row, rule.currency || defaultCurrency());
     const major = rule.minor ? (minorFigure(value, currency) ?? value) : value;
-    return (
-      <span className="num-value">
-        {(rule.whole ? formatWholeMoney : formatMoney)(major as number | string, currency, { maximumFractionDigits: undefined }).replace(
-          /^-/,
-          '−',
-        )}
-      </span>
-    );
+    const text = rule.round
+      ? formatMoney(major as number | string, currency, { minimumFractionDigits: 0, maximumFractionDigits: 0 })
+      : (rule.whole ? formatWholeMoney : formatMoney)(major as number | string, currency, { maximumFractionDigits: undefined });
+    return <span className="num-value">{text.replace(/^-/, '−')}</span>;
   }
   /* A status is its word on paper: a chip's tint is the screen's, and a printed page wears none of it. */
   const dress = dressFor(rule, value);

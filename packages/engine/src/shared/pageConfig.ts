@@ -4,6 +4,7 @@
  * there is one, the fix; nothing is skipped.
  */
 import { isMessageRef, parseCaption } from './appMessages.js';
+import type { OpenPageTarget } from './servedApp.js';
 import { parseTableSizing } from './tableSizing.js';
 import { parseRelatedCreate } from './relatedCreate.js';
 import { parseListEmpty } from './listEmpty.js';
@@ -168,6 +169,7 @@ export const PAGE_SECTION_KEYS: Record<PageSection['kind'] | 'view' | 'header' |
     'same',
     'near',
     'opens',
+    'open',
     'rowActions',
     'actions',
     'primary',
@@ -1110,6 +1112,17 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
     listActions = (s.actions as string[]).map((id) => id.trim());
     if (new Set(listActions).size !== listActions.length) throw new Error(`${at} has "actions" naming one action twice.`);
   }
+  let openPage: OpenPageTarget | undefined;
+  if (s.open !== undefined) {
+    if (typeof s.open !== 'object' || s.open === null || Array.isArray(s.open))
+      throw new Error(`${at} has an "open" that is not { page, param? }.`);
+    const openObj = s.open as Record<string, unknown>;
+    allowKeys(openObj, ['page', 'param'], `${at}.open`);
+    if (typeof openObj.page !== 'string' || !openObj.page.trim()) throw new Error(`${at}.open.page must name a page key.`);
+    if (openObj.param !== undefined && (typeof openObj.param !== 'string' || !/^[A-Za-z_][A-Za-z0-9_-]*$/.test(openObj.param)))
+      throw new Error(`${at}.open.param must be a parameter name like "id".`);
+    openPage = { page: openObj.page.trim(), ...(typeof openObj.param === 'string' ? { param: openObj.param } : {}) };
+  }
   return {
     kind: 'list',
     ...placement,
@@ -1133,6 +1146,7 @@ function parseSection(entry: unknown, at: string, config: boolean): PageSection 
     filter,
     limit: s.presentation === 'card' ? 1 : (s.limit as number | undefined),
     ...(typeof s.opens === 'string' ? { opens: s.opens.trim() } : {}),
+    ...(openPage ? { open: openPage } : {}),
     orderBy: parseSort(s.sort, at),
     ...(s.create === undefined ? {} : s.create === false ? { noCreate: true as const } : { create: parseRelatedCreate(s.create, at) }),
     ...(s.empty === undefined || emptyMode ? {} : { empty: parseListEmpty(s.empty, at) }),

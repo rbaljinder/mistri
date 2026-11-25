@@ -70,6 +70,7 @@ sayUnknownIcons(() => appFollowsSaves() || /** @type {{ __mistriAuthoring?: bool
    layout. Keep their menus and styles with the control that actually draws. */
 const AccountControl = onDemand(() => import('./components/AccountControl.js'), 'AccountControl', { quiet: true });
 const TopNav = onDemand(() => import('./components/TopNav.js'), 'TopNav', { quiet: true });
+const SiteHeader = onDemand(() => import('./components/SiteHeader.js'), 'SiteHeader', { quiet: true });
 const ChoiceControl = onDemand(() => import('./components/ChoiceControl.js'), 'ChoiceControl', { quiet: true });
 
 /* A tenant App's flows — choosing a tenant, its links, its history, the
@@ -291,6 +292,8 @@ export function retireLook(me) {
 export async function showAccount(me, kit) {
   try {
     if (!me.signedIn && me.public === true && typeof me.appId === 'string' && !shellQuery('.account-sign-in')) {
+      /* An App with `ui.site` draws its own public site header and chooses where (or whether) Sign in stands. */
+      if (activeApp()?.ui.site) return;
       const link = document.createElement('a');
       link.className = 'ghost account-sign-in';
       // The door is a member's: it leaves the visitor's public address behind.
@@ -388,13 +391,15 @@ export function appMenuShell() {
      nothing to draw it wears the top shell — the brand, the search and the
      account stay, the menu goes. */
   const rooms = Boolean(app && Object.keys(app.views).length);
-  const noMenu = Boolean(app && rooms && !app.nav.length);
-  /* A signed-out visitor of an App that opens pages to the public is shown a storefront, not the staff shell with
-     its menu emptied: the brand, the public entries as links and Sign in (docs/design.md, public pages). Shell selection
-     only; the look is the App's own. */
-  const placement = isPublicVisitor() ? 'top' : shellPlacement(app);
-  const mobileDrawer = Boolean(app && rooms && !noMenu && placement !== 'top' && compactAppNavigation.matches);
+  const site = Boolean(appMode && rooms && isPublicVisitor() && app?.ui.site);
+  const noMenu = Boolean(app && rooms && !app.nav.length && !site);
+  /* A signed-out visitor of an App that opens pages to the public is shown a public site, not the staff shell with
+     its menu emptied: when `ui.site` is configured, it wears its own site header (`app-site`)
+     with the desk's `nav` nowhere on it; otherwise it falls back to the top bar. */
+  const placement = site || isPublicVisitor() ? 'top' : shellPlacement(app);
+  const mobileDrawer = Boolean(app && rooms && !noMenu && !site && placement !== 'top' && compactAppNavigation.matches);
   const topMode = Boolean(app && rooms && (placement === 'top' || noMenu) && !mobileDrawer);
+  shellBody().classList.toggle('app-site', site);
   shellBody().classList.toggle('app-hide-menu', appMode && noMenu);
   /* The App's own public is given no search across every table (kit audience.ts): a list they may search has its own box. */
   shellBody().classList.toggle('app-hide-search', appMode && (!headerSearchShown(app?.ui.shell?.search) || personFacing()));
@@ -403,7 +408,7 @@ export function appMenuShell() {
   shellBody().classList.toggle('app-topnav', topMode);
   shellBody().classList.toggle('app-mobile-nav', mobileDrawer);
   /* The bar in the sidebar (`ui.shell.header`, the default): at a desk, where the side menu is drawn. A phone's
-     drawer, the top placement, a signed-out visitor's storefront and `header: 'bar'` keep the bar (sidebarShell.js). */
+     drawer, the top placement, a signed-out visitor's site and `header: 'bar'` keep the bar (sidebarShell.js). */
   /* An App with workspaces keeps the bar across the window: their tabs stand in it, after the mark, where a sidebar's head is too narrow for five. */
   const workspaced = Boolean(app?.nav.some((node) => 'group' in node && node.workspace));
   const sidebarHead = Boolean(appMode && rooms && !noMenu && !topMode && !mobileDrawer && !workspaced && headerInSidebar(app?.ui.shell));
@@ -425,10 +430,11 @@ export function appMenuShell() {
   renderWorkspaces(workspaces, app);
   /* The bar holds tabs, the top placement's or the workspaces': what stands beside them gives way to them (style.css,
      the tenant chooser's long name). */
-  shellBody().classList.toggle('app-tabs', topMode || workspaces);
+  shellBody().classList.toggle('app-tabs', (topMode && !site) || workspaces);
   const topnav = $('topnav');
   topnav.hidden = !(topMode || mobileDrawer);
-  if (topMode || mobileDrawer) renderTopNav(topnav, app, mobileDrawer);
+  if (site) mount(topnav, createElement(SiteHeader, { app, site: app.ui.site }));
+  else if (topMode || mobileDrawer) renderTopNav(topnav, app, mobileDrawer);
   else unmount(topnav);
   return !(topMode || mobileDrawer);
 }

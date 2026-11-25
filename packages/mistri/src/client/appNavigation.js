@@ -15,12 +15,12 @@
  * keyboard behaviour with it.
  */
 import { setMessageScope } from '@mistriwork/kit/client/messages.js';
-import { api, findTable, refsFrom, state } from '@mistriwork/kit/client/core.js';
+import { api, findTable, go, pageView, refsFrom, state } from '@mistriwork/kit/client/core.js';
 import { appColumnLabel } from './appLabels.js';
 import { activeApp, appLoadError, appSaveMode, inAppMode, setAppCache } from './appState.js';
 import { openPeek } from '@mistriwork/kit/client/peekpanel.js';
 import { appListFor } from './applist.js';
-import { homeRoom, isListRoom, resourceOf } from '@mistriwork/kit/client/components/appRooms.js';
+import { dashPageId, homeRoom, isListRoom, resourceOf } from '@mistriwork/kit/client/components/appRooms.js';
 import { appAddress, appStackFrom, listParams, needsNaturalKey, viewEntryFromAddress } from './publicAddress.js';
 import { registerIcons } from '@mistriwork/kit/client/components/Icon.js';
 import { yesNoRule } from '@mistriwork/kit/client/yesNoRule.js';
@@ -226,14 +226,38 @@ function figures() {
    to the drawer — a glance, not a step of the walk. Decided per click by
    the view the walk is actually on (modules included), so two views
    over one table may open two different ways. */
-/** @param {string} tableId @param {any} key @param {string} label @param {any} [records] @param {any} [list] */
-function openRecord(tableId, key, label, records, list) {
+/** @param {string} tableId @param {any} key @param {string} label @param {any} [records] @param {any} [list] @param {any} [explicitOpen] */
+function openRecord(tableId, key, label, records, list, explicitOpen) {
   if (!inAppMode()) return false;
   /* The top of the walk may be the split's own selected row, whose query is
      no clue; the view it was opened from (`view`) still is. */
   const here = state.stack?.at(-1);
   const home = homeView();
   const entry = appListFor(tableId, here?.query, here?.view ?? home);
+  const pageTarget =
+    explicitOpen && typeof explicitOpen === 'object' && typeof explicitOpen.page === 'string'
+      ? explicitOpen
+      : entry?.open && typeof entry.open === 'object' && typeof entry.open.page === 'string'
+        ? entry.open
+        : null;
+  if (pageTarget) {
+    const app = activeApp();
+    if (app && Object.hasOwn(app.views, pageTarget.page)) {
+      const param = pageTarget.param || Object.keys(key ?? {})[0] || 'id';
+      const val = key && Object.hasOwn(key, param) ? key[param] : Object.values(key ?? {})[0];
+      const body = val !== undefined && val !== null ? `${encodeURIComponent(param)}=${encodeURIComponent(String(val))}` : '';
+      go(
+        {
+          ...pageView(dashPageId(pageTarget.page), label),
+          rootBody: body,
+          table: tableId,
+          key,
+        },
+        'push',
+      );
+      return true;
+    }
+  }
   if (entry?.presentation?.kind === 'split') {
     /* A pick at the root stands the split's own list under the row, as its
        address does (`/desk/inbox/7`), so the pick opens beside the list

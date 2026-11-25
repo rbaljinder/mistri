@@ -320,8 +320,8 @@ export interface BusinessCommandLookupContext extends CommandContextBase {
   readonly records?: readonly UntypedRow[];
 }
 
-/** A public command names no record (`public: true` implies `targets: 'none'`). */
-type Names<Many, Pub> = [Pub] extends [true] ? 'none' : Many;
+/** A public command defaults to naming no record (`targets: 'none'`), unless it declares `targets: 'one'`. */
+type Names<Many, Pub> = [Pub] extends [true] ? ([Many] extends ['one'] ? 'one' : 'none') : Many;
 type RecordPart<Row, Many> = [Many] extends ['none']
   ? object
   : [Many] extends ['many']
@@ -1177,10 +1177,11 @@ export function defineCommand<
   const validate = Object.hasOwn(value, 'validate') ? validateOption(value.validate) : undefined;
   if (Object.hasOwn(value, 'targets') && !['one', 'many', 'none'].includes(value.targets as string))
     fail('Command targets must be "one", "many" or "none".');
-  // A command names an existing record unless it says it names none: a form's command. A public one is one.
-  if (value.public === true && value.targets !== undefined && value.targets !== 'none')
-    fail('A public command runs from a public form and names no record: drop its targets.');
-  const names = value.targets !== 'none' && value.public !== true;
+  // A command names an existing record unless it says it names none: a form's command. A public one defaults to none,
+  // and may say targets: 'one' to share a record transition (such as a state-machine verb) between public visitors and staff.
+  if (value.public === true && value.targets === 'many')
+    fail("A public command cannot target many records: leave targets out (defaults to 'none') or use 'one'.");
+  const names = value.public === true ? value.targets === 'one' : value.targets !== 'none';
   if (Object.hasOwn(value, 'availability') && !names)
     fail("Command availability judges existing target records; a command with targets: 'none' names none.");
   if (Object.hasOwn(value, 'public') && value.public !== true) fail('Command public must be true when present.');
@@ -1416,7 +1417,7 @@ export function defineCommand<
     ...(Object.hasOwn(value, 'lookup') ? { lookup: value.lookup as BusinessCommand<Input, Output, I>['lookup'] } : {}),
     ...(value.public === true ? { public: true as const } : {}),
     ...(value.public === true
-      ? { targets: 'none' as const }
+      ? { targets: (value.targets ?? 'none') as 'one' | 'none' }
       : value.targets === undefined
         ? {}
         : { targets: value.targets as 'one' | 'many' | 'none' }),

@@ -1439,10 +1439,13 @@ every look, so the picture it keeps reads on whatever page shows it.
   star and no page-size choice, keep the count beside the title (how many homes
   there are is the storefront's own fact), and a Sort whose default
   is one of its choices names it ("Newest listings", never "Default order").
-  Staff, signed in, keep all of it. The shell is the storefront's too: a
-  signed-out visitor gets the top bar (brand, the public entries as links,
-  Sign in), never the staff sidebar with its menu emptied. Shell selection
-  only; the look is the App's own.
+  Staff, signed in, keep all of it. The shell is the public site's too: a
+  signed-out visitor gets either the App's own site chrome (`ui.site`:
+  brand, public navigation links, optional search, CTA, optional site footer,
+  and Sign in placed in the header, footer, or omitted — with the desk's `nav`
+  nowhere on it) or, without one, the top bar (brand, the public entries as
+  links, Sign in), never the staff sidebar with its menu emptied. Shell
+  selection only; the look is the App's own.
 - **A place that has nothing to show says so one way.** An empty list, a
   refused room and a failed read share one block (`Empty`, `Refused`,
   `Problem` in Notes.tsx): a mark, one 14px line in the muted ink, an optional

@@ -53,7 +53,14 @@ function timestampPaths(paths: readonly string[], typed: RowsBase | undefined): 
   for (const path of paths) {
     try {
       const resolved = resolvePath(typed.schema, typed.base, path);
-      if (!resolved.rollup && !resolved.computed && !resolved.tags && !resolved.jsonKey && isTimestampColumn(resolved.column.type))
+      if (
+        !resolved.rollup &&
+        !resolved.computed &&
+        !resolved.tags &&
+        !resolved.cover &&
+        !resolved.jsonKey &&
+        isTimestampColumn(resolved.column.type)
+      )
         found.add(path);
     } catch {
       /* A path the schema cannot resolve is the server's to refuse; it is read as it came. */

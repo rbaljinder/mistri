@@ -21,6 +21,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 import type { WriteWording } from '@mistriwork/engine/server/http/writeRefusal.js';
 import {
+  appCoverRules,
   appFileRules,
   appTagRules,
   appTransitionRules,
@@ -1224,6 +1225,7 @@ export function appProblems(loaded: LoadedApp, schema: DatabaseSchema): string[]
   const files = appFileRules(loaded.app, schema, { strict: true });
   problems.push(...files.problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
   problems.push(...appTagRules(loaded.app, schema).problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
+  problems.push(...appCoverRules(loaded.app, schema).problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
   problems.push(...resolveDisplay(loaded.app, schema).warnings.map((w) => `${manifest}: ${locateProblem(loaded.origins, w)}`));
   problems.push(...valueLabelFindings(loaded.app).problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
   problems.push(...appCeilingWarnings(loaded.app, schema).map((w) => `${manifest}: ${w}`));

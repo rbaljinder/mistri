@@ -472,7 +472,9 @@ function anatomyHints(app: AppDef, pages: readonly PageDef[], table: string): An
         };
         const card = shown.presentation;
         if (shown.table !== of.id || card?.kind !== 'cards' || !card.value || card.value.includes('.')) return [];
-        const image = card.image;
+        const photos = resource(of.id)?.photos;
+        const image =
+          card.image ?? (photos ? { from: photos.from, whose: photos.whose, ...(photos.sort ? { sort: photos.sort } : {}) } : undefined);
         if (!image || typeof image !== 'object' || 'about' in image) return [];
         return [
           {

@@ -27,6 +27,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { foldConstants, readsMe, type ComputedColumn, type ComputedNode, type ComputedType } from '@mistriwork/engine/shared/computed.js';
+import { conditionalExpected } from '@mistriwork/engine/server/serverRequests.js';
 import { declaredScale, exactAverage, formatDecimal, parseDecimal } from '@mistriwork/engine/shared/decimals.js';
 import { continueGroups, keysetAfter, keysetOrder } from '@mistriwork/engine/shared/keysetPage.js';
 import { FORBIDDEN_ANSWER_NAMES } from '@mistriwork/engine/shared/aggregate.js';
@@ -295,6 +296,16 @@ export interface WriteTable<Row, Moves extends object = Readonly<Record<string, 
   insert(values: Written<Row>, options?: WriteOptions): Promise<Row>;
   /** Writes `changes` guarded by the row's values for those columns, bumping its revision: the new row, or `stale_record`. */
   update(row: Row, changes: Written<Row>, options?: WriteOptions): Promise<Row>;
+  /**
+   * Conditionally updates one row only while every column in `where` still holds its expected value: one atomic
+   * guarded UPDATE (`WHERE pk = ? AND ...`). Returns the updated row when it committed, or `null` when the row is
+   * gone or no longer matches `where` (never throws `stale_record`), so a handler can refuse on a specific field.
+   */
+  claim(
+    row: Row | Record<string, string | number> | string | number,
+    spec: { readonly where: Partial<Row>; readonly set: Written<Row> },
+    options?: WriteOptions,
+  ): Promise<Row | null>;
   /** Removes the row by its key, or `stale_record` when it is gone. */
   remove(row: Row): Promise<void>;
   /**
@@ -1661,6 +1672,53 @@ function tableHandle(
       }
       if (result.affected !== 1) return stale(request.key);
       return normalizeRow(table, { ...row, ...request.values, ...result.applied }) as UntypedRow;
+    },
+    async claim(row, spec, written) {
+      if (!spec || typeof spec !== 'object' || Array.isArray(spec)) throw new TypeError(`${name}: claim takes { where, set }.`);
+      const guard = spec.where as Record<string, unknown> | undefined;
+      if (!guard || typeof guard !== 'object' || Array.isArray(guard) || !Object.keys(guard).length)
+        throw new Error(`${name}: claim requires a non-empty "where" object of expected column values.`);
+      const key =
+        (typeof row === 'string' || typeof row === 'number') && table.key.length === 1
+          ? canonicalKey(table, { [table.key[0]]: row })
+          : keyOf(row);
+      if (!key) throw new Error(`${name}: claim needs a row or its primary key (${table.key.join(', ')}).`);
+      const values = await changed(spec.set);
+      if (!Object.keys(values).length) throw new Error(`${name}: claim requires at least one column in "set".`);
+      const expected: Record<string, Value> = {};
+      for (const [column, val] of Object.entries(guard)) {
+        if (!Object.hasOwn(table.kinds, column)) throw new Error(`${name}: "${column}" is not one of its columns.`);
+        if (table.meta.columns.some((meta) => meta.name === column && isJsonType(meta.type)))
+          throw new Error(`${name}: claim cannot guard JSON column "${column}".`);
+        expected[column] = (val ?? null) as Value;
+      }
+      const revision = options.versionField;
+      const isRowObj = Boolean(row && typeof row === 'object' && !Array.isArray(row));
+      if (revision && Object.hasOwn(table.kinds, revision) && !Object.hasOwn(values, revision) && isRowObj) {
+        const current = (row as Record<string, unknown>)[revision];
+        if (typeof current === 'number' && Number.isSafeInteger(current) && current < Number.MAX_SAFE_INTEGER) {
+          values[revision] = current + 1;
+          if (!Object.hasOwn(expected, revision)) expected[revision] = current;
+        }
+      }
+      const words = wordsOf(name, written);
+      const request: UpdateRequest = { table: name, key, expected: conditionalExpected(expected), values, ...(words ? { words } : {}) };
+      let result: Awaited<ReturnType<WriteTransaction['update']>>;
+      try {
+        result = await writer.update(request);
+      } catch (error) {
+        if (isWriteConflict(error)) return null;
+        throw error;
+      }
+      if (result.affected !== 1) return null;
+      const hasAllColumns = isRowObj && Object.keys(table.kinds).every((column) => Object.hasOwn(row as Record<string, unknown>, column));
+      if (hasAllColumns) {
+        return normalizeRow(table, { ...(row as Record<string, unknown>), ...request.values, ...result.applied }) as UntypedRow;
+      }
+      const reread = await tx.query({ table: name, filter: keyFilter(key), limit: 1, offset: 0 });
+      return reread.rows[0]
+        ? (normalizeRow(table, reread.rows[0]) as UntypedRow)
+        : (normalizeRow(table, { ...key, ...request.values, ...result.applied }) as UntypedRow);
     },
     async insertMany(given) {
       if (!Array.isArray(given)) throw new TypeError(`${name}: insertMany takes an array of rows.`);

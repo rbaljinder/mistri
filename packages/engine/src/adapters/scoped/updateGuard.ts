@@ -1,4 +1,4 @@
-import { Refusal, type SqlFragment, type SqlStyle, type UpdateRequest } from '../adapter.js';
+import { isConditionalExpected, Refusal, type SqlFragment, type SqlStyle, type UpdateRequest } from '../adapter.js';
 import { comparableType, isJsonType } from '../../shared/schema.js';
 
 /** Appended to a complete primary-key WHERE, with values bound after its parameters. */
@@ -13,11 +13,18 @@ export function buildUpdateGuard(
   const expected = request.expected;
   if (!expected || typeof expected !== 'object' || Array.isArray(expected))
     throw new Refusal('Expected values must be an object containing exactly the fields being updated.');
+  const conditional = isConditionalExpected(expected);
   /* A JSON column is written whole and compares on no engine, so its
-     original value may be left out (a command's update leaves it out). */
-  const columns = Object.keys(request.values).filter((column) => Object.hasOwn(expected, column) || !isJsonType(types[column] ?? ''));
-  if (Object.keys(expected).length !== columns.length || !columns.every((column) => Object.hasOwn(expected, column))) {
+     original value may be left out (a command's update leaves it out).
+     A handler's `claim()` carries an explicit compare-and-swap predicate on specific columns. */
+  const columns = conditional
+    ? Object.keys(expected)
+    : Object.keys(request.values).filter((column) => Object.hasOwn(expected, column) || !isJsonType(types[column] ?? ''));
+  if (!conditional && (Object.keys(expected).length !== columns.length || !columns.every((column) => Object.hasOwn(expected, column)))) {
     throw new Refusal('Expected values must contain exactly the fields being updated.');
+  }
+  if (conditional && !columns.length) {
+    throw new Refusal('Expected values must name at least one column to guard.');
   }
   const params: unknown[] = [];
   const checks = columns.map((column) => {

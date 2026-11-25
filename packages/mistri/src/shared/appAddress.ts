@@ -88,6 +88,7 @@ interface ViewLike {
   path?: string;
   query?: string;
   presentation?: { kind?: string };
+  open?: import('@mistriwork/engine/shared/servedApp.js').OpenTarget;
   sections?: unknown;
   command?: unknown;
   /** A free-form page's manifest: one with a `record` is a record's tab, said under it. */
@@ -139,6 +140,10 @@ export type RouteTarget =
       freeForm?: true;
       /** A free-form page's parameters it keeps its place in (`?list=12&line=3`). */
       params?: string[];
+      /** When a list opens records into this free-form page (`open: { page }`), the table, param, and list it serves. */
+      recordTable?: string;
+      recordParam?: string;
+      listView?: string;
     }
   | { kind: 'form'; view: string }
   | { kind: 'page'; page: string; table: string }
@@ -359,7 +364,21 @@ export function appAddressBook(input: AddressBookInput): AddressBook {
       lists.find((key) => !input.views[key].query) ??
       lists[0];
     let route: RecordRoute | undefined;
-    if (view) route = { segment: book.views.get(view)!, table: table.id, target: { kind: 'list', view, table: table.id } };
+    if (view) {
+      const openSpec = input.views[view]?.open;
+      const openPageKey = openSpec && typeof openSpec === 'object' ? openSpec.page : undefined;
+      const openPageSeg = openPageKey ? book.views.get(openPageKey) : undefined;
+      const openPageTarget = openPageSeg ? book.routes.get(openPageSeg) : undefined;
+      if (openPageSeg && openPageTarget?.kind === 'dashboard' && openPageTarget.freeForm) {
+        openPageTarget.recordTable = table.id;
+        openPageTarget.recordParam =
+          openSpec && typeof openSpec === 'object' && openSpec.param ? openSpec.param : (primaryKeyOf(table)[0] ?? 'id');
+        openPageTarget.listView = view;
+        route = { segment: openPageSeg, table: table.id, target: openPageTarget };
+      } else {
+        route = { segment: book.views.get(view)!, table: table.id, target: { kind: 'list', view, table: table.id } };
+      }
+    }
     const page = book.defaultPage.get(table.id);
     if (!route && page && book.pages.has(page))
       route = { segment: book.pages.get(page)!, table: table.id, target: { kind: 'page', page, table: table.id } };
@@ -548,6 +567,11 @@ export function readAppSegments(book: AddressBook, raw: readonly string[]): Pars
   if (target.kind === 'assistant') {
     const id = raw.length === 2 ? decode(raw[1]) : undefined;
     return id ? { kind: 'conversation', target, id } : undefined;
+  }
+  if (target.kind === 'dashboard' && target.recordTable) {
+    const read = readKey(book, target.recordTable, raw[1]);
+    if (!read || raw.length > 2) return undefined;
+    return { kind: 'record', target, table: target.recordTable, ...read };
   }
   if (
     target.kind === 'dashboard' ||

@@ -173,7 +173,7 @@ export interface AppListView {
   /** How this list's rows open: the full page (default), a drawer over
       the list, or a modal, centred; both glanced and dismissed, the page
       one click away. */
-  open?: (typeof OPEN_MODES)[number];
+  open?: import('@mistriwork/engine/shared/servedApp.js').OpenTarget;
   /** A reference column whose record a row opens instead of the row: a join table's list opens what each row is about. A grid only. */
   opens?: string;
   sizing?: TableSizing;
@@ -1095,6 +1095,8 @@ export interface ResourceDef {
   import?: import('./appImportDeclaration.js').AppImportDef;
   /** The records carry tags, rows of `to` linked through `through` (appTagRules). */
   tags?: AppTagsDef;
+  /** Where this resource's photographs live (`photos: { from, whose, sort?, aspect? }`): drives `cover`, cards, and `<Photos>`. */
+  photos?: { from: string; whose: string; sort?: string; aspect?: string };
   /** Search through a search provider's connection: the columns the index holds. */
   search?: AppSearchDef;
   /** The record's states and verbs (appMachine.ts): its column moves only along the graph, on every door, and its
@@ -1245,6 +1247,8 @@ export interface AppUi {
   /** The App's footer, drawn under every room: a line of small print and a
       row of links. The landing wears it too. */
   footer?: LandingFooter;
+  /** Public site chrome worn by signed-out visitors, separate from the desk's `nav` and `ui.shell.placement`. */
+  site?: import('@mistriwork/engine/shared/servedApp.js').AppSite;
   /** Decorative brand mark drawn beside the App name: an icon, or the App's own picture. The name remains its
       accessible label. */
   logo?: AppIconName | AppLogoImage;

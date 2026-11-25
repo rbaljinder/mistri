@@ -310,9 +310,11 @@ async function placed(ctx: RequestContext, rest: string[]): Promise<ShellHead | 
   const title = name ?? Object.values(parsed.key).join(' · ');
   /* The way back up, to the list the record is addressed under, where the visitor may open it. */
   const home = route ? book.routes.get(route.segment) : undefined;
-  const list = home?.kind === 'list' ? (app.views[home.view] as { label?: string } | undefined) : undefined;
+  const listKey = home?.kind === 'list' ? home.view : home?.kind === 'dashboard' ? home.listView : undefined;
+  const listSeg = listKey ? book.views.get(listKey) : route?.segment;
+  const list = listKey ? (app.views[listKey] as { label?: string } | undefined) : undefined;
   const up =
-    route && list?.label ? { href: outward(ctx.mount, `/${encodeURIComponent(app.id)}/${route.segment}`), label: list.label } : undefined;
+    listSeg && list?.label ? { href: outward(ctx.mount, `/${encodeURIComponent(app.id)}/${listSeg}`), label: list.label } : undefined;
   return {
     ...titled(title),
     canonical,

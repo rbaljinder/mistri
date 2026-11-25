@@ -47,7 +47,29 @@ function Chevron({ back }: { back?: boolean }) {
   );
 }
 
-export function Gallery({ items, label, emptyText }: { items: GalleryItem[]; label: string; emptyText: string }) {
+function aspectStyle(aspect: string | undefined): Record<string, string> | undefined {
+  if (!aspect) return undefined;
+  const match = /^(\d+)\s*\/\s*(\d+)$/.exec(aspect.trim());
+  if (!match) return undefined;
+  const w = Number(match[1]);
+  const h = Number(match[2]);
+  if (!w || !h) return undefined;
+  return { '--gallery-aspect': `${w} / ${h}`, '--gallery-ratio': String(w / h) };
+}
+
+export function Gallery({
+  items,
+  label,
+  emptyText,
+  aspect,
+  className,
+}: {
+  items: GalleryItem[];
+  label: string;
+  emptyText: string;
+  aspect?: string;
+  className?: string;
+}) {
   const [current, setCurrent] = useState(0);
   const [viewing, setViewing] = useState<number | null>(null);
   const lead = useRef<HTMLButtonElement>(null);
@@ -64,8 +86,15 @@ export function Gallery({ items, label, emptyText }: { items: GalleryItem[]; lab
     setCurrent(to);
     thumbs.current[to]?.focus();
   };
+  const ratio = aspectStyle(aspect);
   return (
-    <div className="gallery" role="group" aria-label={label}>
+    <div
+      className={className ? `gallery ${className}` : 'gallery'}
+      role="group"
+      aria-label={label}
+      data-aspect={ratio ? aspect!.trim() : undefined}
+      style={ratio}
+    >
       <div className="gallery-stage">
         <div className={`gallery-lead${items.length > 1 ? ' has-steps' : ''}`}>
           <picture>

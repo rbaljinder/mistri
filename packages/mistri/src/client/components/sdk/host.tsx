@@ -40,7 +40,8 @@ import { densityChoice } from '@mistriwork/kit/client/density.js';
 import { fillComposer as fillPageComposer } from '@mistriwork/kit/client/components/composerDraft.js';
 import { compileWhere } from '@mistriwork/engine/shared/pageWhere.js';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
-import { tableNamed, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { findTable, tableNamed, type ColumnMeta, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { COVER_COLUMN } from '@mistriwork/engine/shared/coverPhotos.js';
 import { HOST_GLOBAL, uiBreakdownText, uiRowsQuery, uiViewRunBody } from '../../../shared/uiSdk.js';
 import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
@@ -90,7 +91,10 @@ async function viewRows(
   where?: unknown,
   offset?: number,
 ): Promise<UiRow[]> {
-  const paths = show?.length ? [...show] : table.columns.map((column) => column.name);
+  const basePaths = show?.length ? [...show] : table.columns.map((column) => column.name);
+  const attachCover =
+    Boolean(table.cover) && !table.columns.some((column) => column.name === COVER_COLUMN) && !basePaths.includes(COVER_COLUMN);
+  const paths = attachCover ? [...basePaths, COVER_COLUMN] : basePaths;
   const body = {
     ...uiViewRunBody(table.id, table.name, paths, query, limit),
     /* Sent as written, not compiled here: the server judges it against the columns this reader is served. */
@@ -106,7 +110,18 @@ async function viewRows(
   if (refusal) throw new Error(say('theRowsOfRefused', { name: table.name, reason: refusal }));
   /* Said of the same tables as the answer they were read out of (liveReads.ts): what is made of them below says so
      too, so the read is filed by them and asked again only when one changes (liveInvalidate.ts, commandRefresh.ts). */
-  return sameReads(rowsByPath(paths, got, say('theRowsOfCould', { name: table.name }), { schema: state.schema, base: table.id }), got);
+  const rows = rowsByPath(paths, got, say('theRowsOfCould', { name: table.name }), { schema: state.schema, base: table.id });
+  const cover = table.cover;
+  if (cover && (attachCover || basePaths.includes(COVER_COLUMN))) {
+    for (const row of rows) {
+      const raw = row[COVER_COLUMN];
+      row[COVER_COLUMN] =
+        raw === null || raw === undefined
+          ? null
+          : (pageHost.fileAddress(cover.from, { [cover.photoKey]: raw }, cover.thumbnail ? { thumbnail: true } : undefined) ?? null);
+    }
+  }
+  return sameReads(rows, got);
 }
 
 /* A resource's own records as a picker's choices (`useOptions('country')`): the ordinary read of the resource — the
@@ -354,10 +369,11 @@ const pageHost: UiHost = {
   },
   subscribeViewer: (listener) => subscribeSessionIdentity(listener),
   column(resource, name) {
-    const table = state.schema ? (tableNamed(state.schema, resource) as TableMeta | undefined) : undefined;
+    const schema = state.schema;
+    const table = schema ? (tableNamed(schema, resource) as TableMeta | undefined) : undefined;
     if (!table) return undefined;
     return {
-      meta: table.columns.find((column) => column.name === name),
+      meta: resolveColumnMeta(schema, table, name),
       rule: columnDisplay(table.id, name) as DisplayRule | null,
       label: (columnLabel(table.id, name) as string | null) ?? name,
     };
@@ -395,6 +411,36 @@ const pageHost: UiHost = {
       args,
     ),
 };
+
+/** Resolve metadata for a stored column, computed column, rollup, or dotted FK path so formatters keep type/name hints. */
+function resolveColumnMeta(schema: DatabaseSchema, start: TableMeta, path: string): ColumnMeta | undefined {
+  const parts = path.split('.');
+  let table: TableMeta | undefined = start;
+  for (let i = 0; i < parts.length - 1; i++) {
+    const col = table.columns.find((c) => c.name === parts[i]);
+    const fk = schema.foreignKeys.find(
+      (each) => each.from.table === table!.id && each.from.columns.length === 1 && each.from.columns[0] === parts[i],
+    );
+    const targetId = col?.references?.table ?? fk?.to.table;
+    if (!targetId) return undefined;
+    table = findTable(schema, targetId);
+    if (!table) return undefined;
+  }
+  const leaf = parts[parts.length - 1];
+  const stored = table.columns.find((c) => c.name === leaf);
+  if (stored) return stored;
+  const computed = table.computed && Object.hasOwn(table.computed, leaf) ? table.computed[leaf] : undefined;
+  if (computed) {
+    const type = computed.type === 'text' ? 'text' : 'numeric';
+    return { name: leaf, type, nullable: true, primaryKey: false };
+  }
+  const rollup = table.rollups && Object.hasOwn(table.rollups, leaf) ? table.rollups[leaf] : undefined;
+  if (rollup) {
+    const type = rollup.fn === 'latest' ? 'text' : 'numeric';
+    return { name: leaf, type, nullable: true, primaryKey: false };
+  }
+  return undefined;
+}
 
 /* The page's modules, for the host modules a component's bare imports reach.
    Frozen: a component may read them, and none may swap one for another. */

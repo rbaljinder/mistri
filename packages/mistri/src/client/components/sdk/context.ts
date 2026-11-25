@@ -274,6 +274,8 @@ export interface UiHost {
   readonly analytics: { emit(name: string, fields?: Readonly<Record<string, string | number | boolean>>): void };
   /** The identity the query cache keys on, so one reader's rows are never another's. */
   scope: readonly unknown[];
+  /** Server-side prefetch collector used only by the SSR host to warm React Query before final render; undefined in the browser. */
+  ssrPrefetch?(queryKey: readonly unknown[], queryFn: () => Promise<unknown>, enabled?: boolean, infinite?: boolean): void;
   /* A read the reader may not make rejects with an error carrying `status` 401 or 403: that is all `optional: true`
      reads to say `refused` (hooks.ts), so a host surfaces a refusal as it always has and adds nothing. */
   rows(resource: string, options: UiRowsOptions): Promise<UiRowsPage>;

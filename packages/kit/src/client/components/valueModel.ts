@@ -26,7 +26,7 @@ import {
   sayNearDay,
   withPercentSign,
 } from '../locale.js';
-import { minorFigure } from '@mistriwork/engine/shared/money.js';
+import { minorFigure, rowCurrency } from '@mistriwork/engine/shared/money.js';
 import { dateComparison, dateComparisonHolds } from '@mistriwork/engine/shared/queryDates.js';
 export { yesNoRule } from '../yesNoRule.js';
 import { unitWord } from '@mistriwork/engine/shared/unitWord.js';
@@ -58,6 +58,8 @@ export interface DisplayRule {
   minor?: true;
   /** Money said without its minor digits where it has none to say: "$24,495", but "$24,495.50" (a listing price). */
   whole?: true;
+  /** Money rounded to whole major units ("$679" for 679.17), for estimates like monthly figures. */
+  round?: true;
   tone?: Record<string, string>;
   bar?: boolean;
   max?: number;
@@ -152,7 +154,27 @@ const exactFigure = (value: unknown) =>
  * is read to settle something, and "$5,917" beside "$5,917.40" reads as two kinds of figure.
  */
 function moneyText(rule: DisplayRule, value: number | string): string {
+  if (rule.round) return formatMoney(value, rule.currency, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   return rule.whole ? formatWholeMoney(value, rule.currency) : formatMoney(value, rule.currency);
+}
+
+/**
+ * Plain-text formatting of a column value under its resource's display rule: money (with minor units, row currency,
+ * whole/round), numbers with units, vocabularies, dates, masks, and empty words — without requiring a JSX `<Value>`.
+ */
+export function formatColumnValue(
+  col: ColumnMeta | undefined,
+  rule: DisplayRule | null | undefined,
+  value: unknown,
+  row?: Readonly<Record<string, unknown>>,
+): string {
+  if (value === null || value === undefined || value === '') return rule?.empty ?? '—';
+  const effective = rule?.currencyColumn && row ? { ...rule, currency: rowCurrency(rule, row, rule.currency ?? '') || undefined } : rule;
+  const dress = dressFor(effective, value);
+  if (dress) return 'label' in dress ? dress.label : dress.text;
+  const said = sayValue(col, value);
+  if (said.kind === 'boolean') return said.on ? say('yes') : say('no');
+  return said.text;
 }
 
 /**

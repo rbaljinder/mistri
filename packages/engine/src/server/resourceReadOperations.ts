@@ -471,11 +471,13 @@ export async function readViewCount(
     computed: pinned.computed,
     expressions: pinned.expressions,
     tagged: pinned.tagged,
+    covered: pinned.covered,
   };
   if (!view.labels) delete view.labels;
   if (!view.computed) delete view.computed;
   if (!view.expressions) delete view.expressions;
   if (!view.tagged) delete view.tagged;
+  if (!view.covered) delete view.covered;
   const bound = countLimitOf(countLimit) ?? DEFAULT_COUNT_LIMIT;
   const { countView } = capture(reader, { viewCount: true });
   if (!countView) throw new ResourceReadError(501, `${schema.dialect} connections cannot count views in this build.`);
@@ -510,11 +512,13 @@ export async function readView(
     computed: pinned.computed,
     expressions: pinned.expressions,
     tagged: pinned.tagged,
+    covered: pinned.covered,
   };
   if (!view.labels) delete view.labels;
   if (!view.computed) delete view.computed;
   if (!view.expressions) delete view.expressions;
   if (!view.tagged) delete view.tagged;
+  if (!view.covered) delete view.covered;
   const page = snapshotScopedData(pagination);
   const limit = clampLimit(page.limit ?? view.limit);
   const offset = clampOffset(page.offset);

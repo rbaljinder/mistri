@@ -1333,6 +1333,10 @@
           "type": "string",
           "minLength": 1,
           "description": "On a current() card only: the reference column of from whose record the card opens, named by that record (a link table's far side). A plain list has none."
+        },
+        "open": {
+          "$ref": "app.schema.json#/$defs/openPage",
+          "description": "Open a named custom page when a related record is clicked instead of its default record page."
         }
       },
       "required": [

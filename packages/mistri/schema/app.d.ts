@@ -621,6 +621,9 @@ export interface AppDisplayRule {
       ("$24,495.50"): the option never hides money. Every screen, a document and the server-drawn public page say it so;
       a CSV export stays exact. @preview */
   whole?: true;
+  /** For "money": round to whole major units — "$679" for 679.17 — for estimated figures such as a monthly payment:
+      `est_monthly: { format: 'money', minor: true, round: true }`. Use `whole: true` when cents should only drop if zero. @preview */
+  round?: true;
   /** With "number", "money" or no format on a numeric column: the unit said after the figure — "mi", "kg", "/mo" (a leading slash joins
       without a space: "$242/mo"). At most 12 characters. */
   unit?: string | AppMessageRef;
@@ -919,6 +922,9 @@ export interface AppResource<Column extends string = string, Page extends string
       named, the picker runs them instead of writing link rows, for a reader granted them; they need not
       also be the resource's actions. */
   tags?: { through: string; to: string; toneOf?: string; add?: CommandName; remove?: CommandName };
+  /** Where this resource's photographs live (`photos: { from: 'vehicle_photo', whose: 'vehicle_id', sort: 'position', aspect: '3/2' }`):
+      puts `cover` on rows returned by `useRows`/`useRecord`, defaults card and related-list images, and feeds `<Photos>`. */
+  photos?: { from: string; whose: string; sort?: string; aspect?: string };
   /** Search through a search provider: `fields` are the columns the index holds — or one step along a
       reference, `'requester.name'`, whose value each document copies and follows — and `connection`
       names the provider's connection. The list's filter box, reference pickers and the palette ask it
@@ -1785,8 +1791,8 @@ export interface AppListView<Table extends string = string, Column extends strin
       document, a file's columns or a machine's column, which its verbs move. Every cell is
       the record form's update, checked the same way on the server. A grid only, on a resource with access 'write'. */
   editable?: true | readonly Column[];
-  /** How rows open: the full page (default), a drawer over the list, or a modal. Not beside a split, which opens its own rows. */
-  open?: 'page' | 'drawer' | 'modal';
+  /** How rows open: the full page (default), a drawer over the list, a modal, or a named custom page (`{ page: 'car', param?: 'id' }`). Not beside a split, which opens its own rows. */
+  open?: 'page' | 'drawer' | 'modal' | { page: string; param?: string };
   /** A reference column whose record a row opens, in place of the row itself: a list of a join table such as
       `ticket_watcher` opens the ticket each row is about (`opens: 'ticket_id'`). A grid only. */
   opens?: Column;
@@ -2385,7 +2391,7 @@ export type TextSection = { kind: 'text'; readonly [madeBy]: 'text'; title?: str
 export type CallToActionSection<Form extends string = string> = { kind: 'callToAction'; readonly [madeBy]: 'callToAction'; title: string | AppMessageRef; description?: string | AppMessageRef; actions: readonly LandingAction<Form>[] };
 export type ContactSection = { kind: 'contact'; readonly [madeBy]: 'contact'; title?: string | AppMessageRef; items: readonly LandingLink[] };
 /** A list view drawn as its cards, read through `auth.public`: at most `limit` (1–12), the first by `sort`. */
-export type LandingViewSection = { kind: 'view'; readonly [madeBy]: 'embed'; title?: string | AppMessageRef; view: string; limit?: number; sort?: string };
+export type LandingViewSection = { kind: 'view'; readonly [madeBy]: 'embed'; title?: string | AppMessageRef; view: string; limit?: number; sort?: string; open?: { page: string; param?: string } };
 /** A search over a list view: one to six of its own `filters`, submitted as that list's conditions. */
 export type LandingSearchSection = { kind: 'search'; readonly [madeBy]: 'search'; title?: string | AppMessageRef } & NonNullable<LandingHero['search']>;
 export type LandingSection<Form extends string = string> =
@@ -2697,6 +2703,8 @@ export interface ListSection extends SectionCommon {
       A cards object: the rows as cards, in the list view's own cards grammar. The one current row as a card is a
       section of its own, `current()`. */
   presentation?: 'gallery' | (AppCardsList & { primary: string });
+  /** Open a clicked row in a named custom page (`{ page: 'car', param?: 'id' }`) instead of the desk's record page. */
+  open?: { page: string; param?: string };
   from: string;
   /** The from rows *whose* named column (or path to one) is this record. Absent when the list is matched by
       `same`. */
@@ -3591,6 +3599,22 @@ export interface AppUi {
   /** The App's footer, drawn under every room: a line of small print and a
       row of links. The landing wears it too. */
   footer?: LandingFooter;
+  /** Public site chrome worn by signed-out visitors on every public page (except `layout: 'bare'`),
+      completely separate from the operator desk's `nav` and `ui.shell.placement`. Suitable for any custom
+      public site (marketing, editorial, directory, docs, portfolio, booking site, or storefront).
+      Define header links to public pages/lists or external URLs, an optional search bar, an optional
+      primary CTA, an optional site footer, and where (or whether) the Sign in link appears
+      (`'header' | 'footer' | false`). */
+  site?: {
+    links?: readonly ({ view: string; label: string } | { href: string; label: string })[];
+    search?: { view: string; param?: string; placeholder?: string };
+    cta?: { view: string; label: string } | { href: string; label: string };
+    signIn?: 'header' | 'footer' | false;
+    footer?: {
+      text?: string;
+      links?: readonly ({ view: string; label: string } | { href: string; label: string })[];
+    };
+  };
   /** Decorative brand mark drawn beside the App name: an App icon, or the App's own picture (`{ src, dark, mark }`).
       The name remains its accessible label. */
   logo?: AppIcon | AppLogoImage;

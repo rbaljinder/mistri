@@ -764,6 +764,37 @@ export function scanPageSource(
             `<${block} from="${own ?? around?.from}">`,
           );
       }
+      /* `<Choose param="..." count />` without an enclosing `<Scope>` or explicit `count={{ of, by }}` cannot tell which
+         resource to count when the page reads more than one (or none); catch it at `mistri check` time instead of letting
+         it throw during render and blank the section. */
+      if (block === 'Choose') {
+        const countAttr = ((node.attributes as AstNode[]) ?? []).find(
+          (each) => each.type === 'JSXAttribute' && (each.name as AstNode).name === 'count',
+        );
+        if (countAttr) {
+          const countVal = countAttr.value as AstNode | null | undefined;
+          const expr = countVal?.type === 'JSXExpressionContainer' ? resolved(countVal.expression as AstNode) : countVal;
+          const isShorthandTrue = countVal === null || (expr?.type === 'Literal' && expr.value === true);
+          if (isShorthandTrue) {
+            const at = typeof node.start === 'number' ? node.start : -1;
+            const around = scopes.find((scope) => scope.start <= at && at < scope.end);
+            if (!around && manifest.reads.length !== 1) {
+              const paramName = literal(jsxAttribute(node, 'param')) ?? '';
+              const readsList = manifest.reads.length ? manifest.reads.map((r) => `"${r}"`).join(', ') : 'none';
+              scan.undeclared.push({
+                line: lineOf(countAttr.start as number | undefined),
+                text: `[page-choose-count] <Choose${paramName ? ` param="${paramName}"` : ''} count> needs one resource to count, and page "${manifest.key}" reads ${readsList}: put it in a <Scope from="..."> or pass count={{ of: '${manifest.reads[0] ?? 'resource'}', by: '${paramName || 'column'}' }}`,
+              });
+            }
+          } else if (expr?.type === 'ObjectExpression') {
+            const ofProp = (expr.properties as AstNode[]).find(
+              (prop) =>
+                prop.type === 'Property' && !prop.computed && ((prop.key as AstNode).name === 'of' || (prop.key as AstNode).value === 'of'),
+            );
+            if (ofProp) hold('reads', '<Choose count.of>', resolved(ofProp.value as AstNode), ofProp.start as number | undefined);
+          }
+        }
+      }
     }
   });
   return scan;

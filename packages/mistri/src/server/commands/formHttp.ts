@@ -129,8 +129,9 @@ export function publicFormParts(app: AppDef, compiled: CompiledComponents | unde
 }
 
 /** The members a door's submission may carry beside its input and key: the stock form's decoy, which a person never
-    sees and so never fills. A ticket and a challenge's token travel as headers, read before the body is. */
-type SubmissionExtra = 'trap';
+    sees and so never fills, and for a `targets: 'one'` public command, the target record's primary key (`target`).
+    A ticket and a challenge's token travel as headers, read before the body is. */
+type SubmissionExtra = 'trap' | 'target';
 
 /** The submission body: exactly the input and the client's submission key, and the extra members this door reads. */
 export function parseSubmission(
@@ -236,16 +237,21 @@ export async function dispatchPublicFormHttp(options: {
 }): Promise<PublicSubmissionReply> {
   const { req, res, registry, app, commands, connection, key, command, events } = options;
   const captureFlags = options.captureFlags;
+  const targetsRecord = commands[command.id]?.targets === 'one';
+  const extra: SubmissionExtra[] = [...(options.extra ?? []), ...(targetsRecord ? (['target'] as const) : [])];
   const releases: Array<() => void> = [];
   try {
     return await dispatchPublicFormSubmissionHttp({
       req,
       res,
       locale: requestLocale(app, { visitor: true, req, asked: askedLocale(req) }),
-      ...(options.extra ? { extra: options.extra } : {}),
+      ...(extra.length ? { extra } : {}),
       ...(options.admit ? { admit: options.admit } : {}),
       ...(options.tooLarge ? { tooLarge: options.tooLarge } : {}),
-      submit: async ({ input, submission }, execution) => {
+      submit: async ({ input, submission, target }, execution) => {
+        if (targetsRecord && (!target || typeof target !== 'object' || Array.isArray(target) || !Object.keys(target).length)) {
+          throw new CommandInputError('target');
+        }
         const resources = await loadAppRuntimeResources(registry, app, connection, (owner) => releases.push(registry.lease(owner)));
         const { binding } = bindHttpBusinessCommands(
           app,
@@ -264,7 +270,7 @@ export async function dispatchPublicFormHttp(options: {
           {
             command: command.id,
             commandVersion: command.version,
-            key: {},
+            key: targetsRecord ? (target as Record<string, unknown>) : {},
             expectedVersion: 0,
             idempotencyKey: submission,
             input,
@@ -301,7 +307,7 @@ export async function dispatchPublicFormSubmissionHttp(options: {
   req: IncomingMessage;
   res: ServerResponse;
   submit: (
-    submission: { input: unknown; submission: string },
+    submission: { input: unknown; submission: string; target?: unknown },
     execution: { signal: AbortSignal; requestId?: string; locale?: string },
   ) => Promise<BusinessCommandResult>;
   /** The visitor's locale, as their door resolved it (readerLocale.ts `requestLocale`): the command's `ctx.locale`. */
@@ -331,7 +337,7 @@ export async function dispatchPublicFormSubmissionHttp(options: {
       ...(typeof res.getHeader('x-request-id') === 'string' ? { requestId: String(res.getHeader('x-request-id')) } : {}),
       ...(options.locale ? { locale: options.locale } : {}),
     };
-    const result = await submit({ input, submission }, execution);
+    const result = await submit({ input, submission, ...(Object.hasOwn(extra, 'target') ? { target: extra.target } : {}) }, execution);
     const reference = (result.result as { reference?: unknown } | null)?.reference;
     // The receipt is durable either way; a handler that returned no
     // reference has left the applicant nothing to quote, which is its bug.

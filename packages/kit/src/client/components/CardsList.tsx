@@ -52,14 +52,36 @@ const literal = (value: unknown) => (typeof value === 'number' ? String(value) :
  * With `about`, the files are the record that reference names (a saved car's
  * car), asked by the reference's value on each row.
  */
+function resolvedCardImage(table: TableMeta, spec: AppCardsList): AppCardsList['image'] {
+  if (spec.image !== undefined) return spec.image;
+  if (spec.media === 'icon' || !table.cover) return undefined;
+  return {
+    from: table.cover.from,
+    whose: table.cover.whose,
+    ...(table.cover.sort ? { sort: `${table.cover.sort}${table.cover.sortDir ? ` ${table.cover.sortDir}` : ''}` } : {}),
+  };
+}
+
 function useLeadFiles(
   table: TableMeta,
   spec: AppCardsList,
   rows: Array<Record<string, unknown>>,
 ): (row: Record<string, unknown>) => string | undefined {
-  const image = typeof spec.image === 'object' ? spec.image : undefined;
+  const effectiveImage = resolvedCardImage(table, spec);
+  const image = typeof effectiveImage === 'object' ? effectiveImage : undefined;
   const from = image ? (findTable(image.from) as TableMeta | undefined) : undefined;
   const connection = state.activeConnection ?? null;
+  /* When the resource's cover photo already arrived on every row (from SQL `cover` or `useRows`), skip the extra
+     `/api/run` lookup and build the inline URL directly. */
+  const cover = table.cover;
+  const inlineCover =
+    Boolean(cover) &&
+    Boolean(image) &&
+    !image!.about &&
+    image!.from === cover!.from &&
+    image!.whose === cover!.whose &&
+    rows.length > 0 &&
+    rows.every((row) => Object.hasOwn(row, 'cover'));
   const foreignKeys = (state.schema?.foreignKeys ?? []) as Array<{
     from: { table: string; columns: string[] };
     to: { table: string; columns: string[] };
@@ -76,11 +98,12 @@ function useLeadFiles(
       : undefined;
   // The row's own column holding that record's key: the key itself, or the reference to it.
   const target = reference ? (image?.about ?? reference.to.columns[0]) : undefined;
-  const owners = target ? [...new Set(rows.map((row) => row[target]).filter((value) => value !== null && value !== undefined))] : [];
+  const owners =
+    !inlineCover && target ? [...new Set(rows.map((row) => row[target]).filter((value) => value !== null && value !== undefined))] : [];
   const keys = from ? primaryKey(from) : [];
   const sort = image?.sort ? cardsImageSort(image.sort) : undefined;
   const text =
-    image && from && owners.length && keys.length
+    !inlineCover && image && from && owners.length && keys.length
       ? `${from.id} ${image.whose} in (${owners.map(literal).join(', ')}) sort ${image.whose}${sort ? `, ${sort.column} ${sort.direction}` : ''} show ${[...new Set([...keys, image.whose])].join(', ')}`
       : '';
   const answer = useQuery({
@@ -103,14 +126,22 @@ function useLeadFiles(
     },
   });
   const lead = new Map<string, string>();
-  if (image && from) {
+  if (!inlineCover && image && from) {
     for (const row of answer.data ?? []) {
       const owner = String(row[image.whose]);
       if (!lead.has(owner))
         lead.set(owner, inlineFileAddress(from.id, Object.fromEntries(keys.map((column) => [column, row[column]])), connection, 'thumb'));
     }
   }
-  return (row) => (target ? lead.get(String(row[target])) : undefined);
+  return (row) => {
+    if (inlineCover && cover) {
+      const raw = row.cover;
+      if (raw === null || raw === undefined || raw === '') return undefined;
+      if (typeof raw === 'string' && (/^https?:\/\//i.test(raw) || raw.startsWith('/') || raw.startsWith('blob:'))) return raw;
+      return inlineFileAddress(cover.from, { [cover.photoKey]: raw }, connection, cover.thumbnail ? 'thumb' : undefined);
+    }
+    return target ? lead.get(String(row[target])) : undefined;
+  };
 }
 
 interface CardsListProps {
@@ -127,6 +158,8 @@ interface CardsListProps {
   order?: ListOrder;
   /** A reference column → the fetched path its record's name is read from (appListModel's referenceNames). */
   referenceLabels?: Record<string, string>;
+  /** Optional custom page target (`{ page, param? }`) opened when a card is clicked instead of the record page. */
+  open?: import('@mistriwork/engine/shared/servedApp.js').OpenPageTarget;
 }
 
 /* Cards stand in columns where the room is wide enough: a drop lands left or right of a card, not above it. */
@@ -142,6 +175,7 @@ export function CardsList({
   list,
   order,
   referenceLabels,
+  open,
 }: CardsListProps) {
   useMessageLanguage();
   const leadOf = useLeadFiles(table, spec, rows);
@@ -166,7 +200,7 @@ export function CardsList({
   const ordering = useListOrder({ table, rows, order, interactive, title: titleOf, across: inColumns });
   // A card another person just changed wears the grid's fading tint (docs/design.md, rule 11).
   const changedRows = useChangedRows(table.id, rows, (row) => keyOf(table, row) as Record<string, unknown> | null);
-  const image = spec.image;
+  const image = resolvedCardImage(table, spec);
   const records: Array<{ key: Record<string, unknown>; label?: string }> = rows.flatMap((row) => {
     const key = keyOf(table, row) as Record<string, unknown> | null;
     return key ? [{ key, label: titleOf(row) }] : [];
@@ -239,8 +273,11 @@ export function CardsList({
     estimate: 280,
   });
   const listRef = useListRef(win, ordering.zone.ref);
+  const cardAspect = table.cover?.aspect
+    ? ({ '--cards-aspect': table.cover.aspect.replace('/', ' / ') } as Record<string, string>)
+    : undefined;
   return (
-    <div className="cards">
+    <div className="cards" style={cardAspect}>
       <ul className="cards-grid" aria-label={label ?? say('cards')} {...ordering.zone} ref={listRef}>
         {win.before > 0 && <li className="cards-spacer" aria-hidden="true" style={{ height: `${win.before}px` }} />}
         {win.indices.map((index) => {
@@ -300,7 +337,7 @@ export function CardsList({
                         data-order-focus=""
                         aria-keyshortcuts={ordering.shortcuts}
                         data-opens={opensRecord(table.id, key)}
-                        onClick={() => void openRecord(table.id, key, title, 'push', { records, list })}
+                        onClick={() => void openRecord(table.id, key, title, 'push', { records, list, ...(open ? { open } : {}) })}
                       >
                         {title}
                       </button>

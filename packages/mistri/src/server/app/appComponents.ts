@@ -575,6 +575,25 @@ export function uiKitHref(
   return { js: at(kit.js), ...(kit.css ? { css: at(kit.css) } : {}) };
 }
 
+/** The compiled module source for one compiled component id (sourcemap comment stripped), for server-side rendering of public custom pages. */
+export function componentCode(compiled: CompiledComponents | undefined, id: string): string | undefined {
+  const entry = compiled && Object.hasOwn(compiled.entries, id) ? compiled.entries[id] : undefined;
+  return entry ? compiled?.files[entry.js]?.replace(/\n\/\/# sourceMappingURL=.*\n$/, '\n') : undefined;
+}
+
+/** Where a compiled page component's JS and CSS are served, for `<head>` preloading (clientHttp.ts `pageAsset`). */
+export function pageAssetHref(
+  appId: string,
+  compiled: CompiledComponents | undefined,
+  id: string,
+  outward: (inside: string) => string,
+): { id: string; js: string; css?: string } | undefined {
+  const entry = compiled && Object.hasOwn(compiled.entries, id) ? compiled.entries[id] : undefined;
+  if (!entry) return undefined;
+  const at = (file: string) => outward(`/${encodeURIComponent(appId)}/${COMPONENTS_SEGMENT}/${file}`);
+  return { id, js: at(entry.js), ...(entry.css ? { css: at(entry.css) } : {}) };
+}
+
 /** Where each component is served, for the App payload: `/{app}/_components/<file>`, the inside address the page says where its App is mounted (client addressMount.js). */
 export function componentHrefs(
   appId: string,

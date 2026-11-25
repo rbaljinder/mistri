@@ -10,6 +10,7 @@ import { EmptyState, StatusDot } from '@mistriwork/ui/primitives.js';
 import { Icon as PlatformIcon } from '@mistriwork/kit/client/components/Icon.js';
 import { Problem } from '@mistriwork/kit/client/components/Notes.js';
 import { Dressed, Said } from '@mistriwork/kit/client/components/Dressed.js';
+import { rowCurrency } from '@mistriwork/engine/shared/money.js';
 import { authoredDisplay, dressFor, maskedText, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import { CopyValue } from '@mistriwork/kit/client/components/CopyValue.js';
 import { StackedColumns } from '@mistriwork/kit/client/components/Chart.js';
@@ -32,6 +33,7 @@ export function Value({
   value,
   resource,
   column,
+  row,
   display,
   compact = false,
   className,
@@ -39,17 +41,23 @@ export function Value({
   value: unknown;
   resource?: string;
   column?: string;
+  row?: Readonly<Record<string, unknown>>;
   display?: Omit<DisplayRule, 'bar' | 'max'> & { bar?: boolean | number };
   compact?: boolean;
   className?: string;
 }) {
   const host = useUiHost();
   const known = resource && column ? host.column(resource, column) : undefined;
+  const baseRule = authoredDisplay(display) ?? known?.rule ?? null;
   if (value === null || value === undefined || value === '') {
-    return <span className={className ? `null ${className}` : 'null'}>—</span>;
+    return <span className={className ? `null ${className}` : 'null'}>{baseRule?.empty ?? '—'}</span>;
   }
-  const rule = authoredDisplay(display) ?? known?.rule ?? null;
-  const drawn = <DrawnValue value={value} rule={rule} known={known} authored={display !== undefined} compact={compact} />;
+  const rule =
+    baseRule?.currencyColumn && row
+      ? { ...baseRule, currency: rowCurrency(baseRule, row, baseRule.currency ?? '') || undefined }
+      : baseRule;
+  const inner = <DrawnValue value={value} rule={rule} known={known} authored={display !== undefined} compact={compact} />;
+  const drawn = rule?.face ? <span className={`face-${rule.face}`}>{inner}</span> : inner;
   /* A rule's `copy` is the record's copy button (CopyValue), never for a value a mask hides. */
   if (!rule?.copy || maskedText(rule, value) !== undefined) {
     return className ? <span className={className}>{drawn}</span> : drawn;

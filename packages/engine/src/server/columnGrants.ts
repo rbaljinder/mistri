@@ -34,7 +34,7 @@ import { GRANTED_DERIVED, isJsonType, type DatabaseSchema, type ForeignKey } fro
 import { impliedEdges } from '../shared/declaredReferences.js';
 import { unformedColumns } from '../shared/form.js';
 import type { RowScope } from '../shared/rowScope.js';
-import { isServerRequest } from './serverRequests.js';
+import { carryServerRequest, isConditionalExpected, isServerRequest } from './serverRequests.js';
 
 /**
  * A reader reaching past its grant. Its name is the App's, where most
@@ -585,6 +585,11 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
       assertFields(tags.to, [tags.tagKey, tags.label, ...(tags.tone ? [tags.tone] : [])]);
     }
   };
+  const assertCovers = (covered?: ViewDef['covered']) => {
+    for (const cover of Object.values(covered ?? {})) {
+      assertFields(cover.from, [cover.whose, cover.photoKey, ...(cover.sort ? [cover.sort] : [])]);
+    }
+  };
   /* `any opportunity where stage = won` reads the rows that point at the record (view.ts): their table, the
      reference they point through, and every column their conditions name — through readable references, as a
      path anywhere is — must be this reader's, or the list would answer a question about rows they cannot read.
@@ -600,7 +605,7 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
       for (const inner of condition.any.filter?.groups.flat() ?? []) {
         for (const path of [inner.column, ...(inner.other === undefined ? [] : [inner.other])]) {
           const { resolved } = tryResolvePath(schema, child, path);
-          if (!resolved || resolved.rollup || resolved.computed || resolved.tags) throw new AppAccessDenied();
+          if (!resolved || resolved.rollup || resolved.computed || resolved.tags || resolved.cover) throw new AppAccessDenied();
           for (const hop of resolved.hops) {
             assertFields(hop.from.table, hop.from.columns);
             assertFields(hop.to.table, hop.to.columns);
@@ -633,6 +638,7 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
     assertRollups(view.computed);
     assertExpressions(view.base, view.expressions, view.computed);
     assertTags(view.tagged);
+    assertCovers(view.covered);
     assertAnyRows(view.filter);
     if (view.lanes) assertFields(view.base, [view.lanes.by]);
     // Validate against the pruned graph before the underlying full catalog can
@@ -819,7 +825,7 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
     return written.then((result) => readableResult(operation, request.table, result));
   };
   const updateVia = (input: UpdateRequest, write: WriteTransaction['update']): Promise<UpdateResult> => {
-    const request = jsonWritten(full, requestData(input));
+    const request = carryServerRequest(input, jsonWritten(full, requestData(input)));
     const operation = capture(grant);
     /* An append-only table is in `writable` so its rows can be made, and edited by nothing generic: what answers an
        update to a table the principal does not write (a granted fixed action) answers it, else it is refused. */
@@ -837,7 +843,7 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
     keyFields(request.table, request.key);
     if (request.expected !== undefined) {
       recordFields(request.table, request.expected, 'read');
-      if (!expectedCovers(full, request)) throw new AppAccessDenied();
+      if (!isConditionalExpected(input.expected) && !expectedCovers(full, request)) throw new AppAccessDenied();
     }
     assertRelatedWrites(request.table, Object.keys(request.values));
     return (product?.update ? product.update(request, operation, write) : (async () => write(request))()).then((result) =>

@@ -98,11 +98,14 @@ export function said(rule: AppDisplayRule | undefined, value: unknown, ui: AppPa
       const figure = (rule as { minor?: true }).minor ? minorToMajor(value, currency) : majorText(value, currency);
       if (figure !== undefined) {
         const options: Intl.NumberFormatOptions = { style: 'currency', currency, signDisplay: 'negative' };
-        /* `whole: true` drops the minor digits only where they are zeros (locale.ts formatWholeMoney). */
-        const fraction = new Intl.NumberFormat(locale, options)
-          .formatToParts(figure as Intl.StringNumericLiteral)
-          .find((part) => part.type === 'fraction')?.value;
-        const whole = (rule as { whole?: true }).whole && !/[^0]/.test(fraction ?? '');
+        /* `round: true` rounds to whole major units; `whole: true` drops the minor digits only where they are zeros (locale.ts formatWholeMoney). */
+        const round = Boolean((rule as { round?: true }).round);
+        const fraction = round
+          ? undefined
+          : new Intl.NumberFormat(locale, options)
+              .formatToParts(figure as Intl.StringNumericLiteral)
+              .find((part) => part.type === 'fraction')?.value;
+        const whole = round || Boolean((rule as { whole?: true }).whole && !/[^0]/.test(fraction ?? ''));
         return withUnit(
           new Intl.NumberFormat(locale, whole ? { ...options, minimumFractionDigits: 0, maximumFractionDigits: 0 } : options).format(
             figure as Intl.StringNumericLiteral,
@@ -196,8 +199,10 @@ async function leadImages(reading: PublicReading, image: AppCardsImageFrom, owne
   return found;
 }
 
-/** The first card presentation in the App that draws this table's photos from a file resource: where a record's pictures come from. */
+/** Where a record's pictures come from: the resource's declared `photos`, else the first card presentation over this table. */
 function imageSourceFor(app: AppPayloadApp, table: string): AppCardsImageFrom | undefined {
+  const photos = app.resources[table]?.photos;
+  if (photos) return { from: photos.from, whose: photos.whose, ...(photos.sort ? { sort: photos.sort } : {}) };
   for (const view of Object.values(app.views)) {
     const list = view as { table?: string; presentation?: AppCardsList };
     const image = list.presentation?.kind === 'cards' ? list.presentation.image : undefined;

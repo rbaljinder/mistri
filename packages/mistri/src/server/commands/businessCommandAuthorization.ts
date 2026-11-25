@@ -597,12 +597,12 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
   const rootCeiling = resourceCeiling(app);
   const rootRead = new Set(rootCeiling.read),
     rootWrite = new Set(rootCeiling.write);
-  /* A public command is reachable only through a public form, under a
-     public principal with no role. Granting it to a role would put a
-     record-creating verb behind a session it was never designed for;
-     refused at bind time. */
+  /* A public command that creates records (targets: 'none') runs only through a
+     public door under a public principal with no role. A public command that
+     targets one existing record (targets: 'one') may also be granted to staff
+     roles so one state-machine verb serves both visitors and operators. */
   for (const [id, command] of Object.entries(registry)) {
-    if (command.public && allGranted.has(id)) {
+    if (command.public && command.targets === 'none' && allGranted.has(id)) {
       invalid(`Command "${id}" is public and cannot also be granted to a role.`);
     }
   }
@@ -622,12 +622,11 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
       if (registry[id]?.public === true) publicForms.set(view, (publicForms.get(view) ?? new Set()).add(id));
   }
   /* A command that names no record (`targets: 'none'`) creates its rows: a
-     signed-in form's, or a job's that runs at a time rather than on a record.
-     Its envelope carries an empty key, and nothing else's may. A public one
-     is the public principal's alone. */
+     signed-in form's, a public form's, or a job's that runs at a time rather
+     than on a record. Its envelope carries an empty key, and nothing else's may. */
   const creating = new Set(
     Object.entries(registry)
-      .filter(([, command]) => command.targets === 'none' && command.public !== true)
+      .filter(([, command]) => command.targets === 'none')
       .map(([id]) => id),
   );
   /* What a role granted the command must still read of its target, whatever
@@ -750,7 +749,7 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
          - a generic write never names a column only commands change.
        A public command never runs under a role, so a role's rule on the
        table it creates rows in is the point. */
-      if (!command.public) judgedColumnsReadable(id, command);
+      if (!command.public || command.targets === 'one') judgedColumnsReadable(id, command);
       /* Named with the rule: a command reads and writes only within the
        resources' own ceilings, and its target is always written. */
       for (const table of read) {
@@ -1175,10 +1174,19 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
       let lookupTables = binding.lookup?.reader;
       if (identity.kind === 'public') {
         /* No role, so no grant and no role ceiling: the command must be
-           public and be the one the public form names. Its reads were bounded
-           by the root ceiling at bind time; that is all a public handler gets. */
+           public and be the one the public form or page names. Its reads were
+           bounded by the root ceiling at bind time; that is all a public handler gets. */
         if (binding.command.public !== true || publicForms.get(identity.form!)?.has(id) !== true) throw new AppAccessDenied();
-        issueTargetUnreadable(identity);
+        if (binding.command.targets === 'one') {
+          /* A public command that targets one record may only target a resource open in auth.public.read;
+             its refusal messages may only mention columns the public visitor is already allowed to read. */
+          const visitor = publicAccess();
+          if (!visitor.readable.has(binding.resource)) throw new AppAccessDenied();
+          const seen = visitor.fields?.get(binding.resource)?.read;
+          if (seen) issueTargetColumns(identity, seen);
+        } else {
+          issueTargetUnreadable(identity);
+        }
         /* A tenant App's public lookup shows the visitor what it finds, so it reads what a visitor may (`auth.public`),
            never the command's own reads: a table the public grant does not open, or opens only by a record's key, is
            refused (tenantIntakePages.ts says so at startup), and every table it reads is narrowed to the visitor's
@@ -1208,8 +1216,9 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         // A generic write is granted where the role's editor could make the change; a flow's own command, to its runner alone.
         const generic = genericWriteOf(binding.command);
         const flow = flowCommandOf(binding.command);
+        const publicOnly = binding.command.public === true && binding.command.targets === 'none';
         if (
-          binding.command.public === true ||
+          publicOnly ||
           !(flow
             ? identity.kind === 'service' && identity.id === `service:${flow.runAs}`
             : generic
@@ -1217,8 +1226,8 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
               : granted(identity.roles, id))
         )
           /* An ordinary command the roles simply do not hold says so, by the label the App shows for it; the rest
-             (a flow's, a public one, a generic write) keep the fixed sentence. */
-          throw !flow && !generic && binding.command.public !== true
+             (a flow's, a public-only one, a generic write) keep the fixed sentence. */
+          throw !flow && !generic && !publicOnly
             ? sayRefusal(new AppAccessDenied(), `Your role has no grant for "${commandLabel(app, id)}".`)
             : new AppAccessDenied();
         if (identity.kind === 'service' && serviceRoleRefusal(app, identity.roles)) throw new AppAccessDenied();
@@ -1295,9 +1304,9 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         command: binding.command,
         resource: binding.resource,
         actor: identity,
-        // A form's command creates its rows: the envelope names no key. A
-        // signed-in form's is still granted like any command, above.
-        keyColumns: identity.kind === 'public' || creating.has(id) ? Object.freeze([]) : binding.keyColumns,
+        // A creating command (`targets: 'none'`) creates its rows: the envelope names no key.
+        // A `targets: 'one'` command (including a public record transition) carries the target's primary key.
+        keyColumns: creating.has(id) ? Object.freeze([]) : binding.keyColumns,
         connection: binding.connection,
         read: binding.read,
         write: binding.write,

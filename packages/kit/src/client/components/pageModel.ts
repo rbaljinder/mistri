@@ -30,6 +30,8 @@ export interface PageSection {
   action?: import('@mistriwork/engine/shared/appLinks.js').AppLinkAction;
   /** An embed: the key of the list view this related list draws. */
   view?: string;
+  /** Custom page target when clicking a related record (`open: { page, param? }`). */
+  open?: import('@mistriwork/engine/shared/servedApp.js').OpenPageTarget;
   /** A custom section: the author's component, the record's fields it reads, its named reads and props. */
   component?: import('@mistriwork/engine/shared/appComponents.js').ComponentDecl;
   record?: string[];

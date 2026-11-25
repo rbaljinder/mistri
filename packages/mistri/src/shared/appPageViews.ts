@@ -141,8 +141,12 @@ export function parsePageView(
         throw new Error(
           `[page-commands] ${at} is public and runs "${command}", which is not public: a public page runs only commands that say public: true.`,
         );
-      if (entry.targets !== 'none')
-        throw new Error(`[page-commands] ${at} is public and runs "${command}", which names a record; a public command makes its own.`);
+      if (entry.targets === 'many')
+        throw new Error(
+          `[page-commands] ${at} is public and runs "${command}", which targets many records; a public command targets one or none.`,
+        );
+      if (entry.targets === 'one' && !(ctx.auth?.public?.read ?? []).includes(entry.target))
+        throw new Error(`[page-commands] ${at} is public and runs "${command}" on "${entry.target}", which is not in auth.public.read.`);
     }
     if (page.commands.length && !ctx.auth)
       throw new Error(`[page-commands] ${at} runs public commands, and a public command needs "auth" (with "auth.public").`);

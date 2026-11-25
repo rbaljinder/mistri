@@ -802,7 +802,11 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // Unreleased: a resource's `noOverlap` (`by`, `from`, `to`, `when`, `field`, `message`, `constraint`) and
     // `constraints` (each `field`, `message`): eleven entries; `noOverlap`, `constraint` and `constraints` are new
     // names: 1814/537.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1814, names: 537 });
+    // Unreleased: public custom-site capabilities — `ui.site` (`links`, `search`, `cta`, `signIn`, `footer`),
+    // `resources.*.photos` (`from`, `whose`, `sort`, `aspect`), `display.*.round`, and `open: { page, param? }` on
+    // list views, landing embeds, and related sections: twenty-four entries; `site`, `cta`, `signIn`, `photos`,
+    // `aspect`, `round` are new names: 1838/543.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1838, names: 543 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {
@@ -820,7 +824,7 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     assert.deepEqual(a.assistant.properties.placement.items.enum, [...ASSISTANT_PLACEMENTS]);
     assert.deepEqual(a.assistant.properties.effort.enum, [...ASSISTANT_EFFORTS]);
     assert.deepEqual(dashKind('metric').properties.better.enum, [...BETTER]);
-    assert.deepEqual(a.listView.properties.open.enum, [...OPEN_MODES]);
+    assert.deepEqual(a.listView.properties.open.oneOf[0].enum, [...OPEN_MODES]);
     assert.deepEqual(a.ui.properties.shell.properties.placement.oneOf[0].enum, [...PLACEMENTS]);
     assert.deepEqual(a.auth.properties.rows.enum, [...ROW_SCOPES]);
     assert.deepEqual(a.roleGrant.properties.operations.items.enum, [...AUTHORED_OPERATIONS]);

@@ -177,6 +177,15 @@ export interface LandingFooter {
   links?: LandingLink[];
 }
 
+/** Opening a record into a named custom page (`open: { page: 'car', param?: 'id' }`). */
+export interface OpenPageTarget {
+  page: string;
+  param?: string;
+}
+
+/** How a list or related section opens a clicked record: its record page, drawer, modal, or a named custom page. */
+export type OpenTarget = 'page' | 'drawer' | 'modal' | OpenPageTarget;
+
 export type LandingSection =
   | { kind: 'features'; title?: string; items: LandingItem[] }
   | { kind: 'steps'; title?: string; items: LandingItem[] }
@@ -185,7 +194,7 @@ export type LandingSection =
   | { kind: 'callToAction'; title: string; description?: string; actions: LandingAction[] }
   | { kind: 'contact'; title?: string; items: LandingLink[] }
   /** A list view's rows as its cards, read through `auth.public`: the few `sort` puts first. */
-  | { kind: 'view'; title?: string; view: string; limit?: number; sort?: string }
+  | { kind: 'view'; title?: string; view: string; limit?: number; sort?: string; open?: OpenPageTarget }
   /** A search over a list view: its own filters, submitted as that list's conditions. */
   | ({ kind: 'search'; title?: string } & LandingSearch);
 
@@ -295,6 +304,8 @@ export interface AppDisplayRule {
   minor?: true;
   /** For "money": the minor digits are left off a whole amount ("$24,495"); an amount with cents keeps them. */
   whole?: true;
+  /** For "money": round to whole major units ("$679" for 679.17), for estimated figures like monthly payments. */
+  round?: true;
   /** With "number", "money" or no format on a numeric column: the unit said after the figure — "mi", "kg", "/mo" (a leading slash
       joins without a space: "$242/mo"). At most 12 characters. */
   unit?: string;
@@ -616,6 +627,8 @@ export interface ServedResource {
   file?: AppFileDef;
   /** Its records carry tags, as appTagRules resolved them: chips under the record's title. */
   tags?: AppTagRule;
+  /** Where this resource's photographs live (`photos: { from, whose, sort?, aspect? }`): drives `cover`, cards, and `<Photos>`. */
+  photos?: { from: string; whose: string; sort?: string; aspect?: string };
   /** Column → its text rule (textRules.ts), for the columns this catalog has: said under the field as it is typed. */
   text?: Record<string, TextRule>;
   /** JSON column → the resolved table whose rows define its fields, and the column that picks them (definedFields.ts). */
@@ -664,10 +677,46 @@ export interface ServedFormView {
 /** Whether a view is a command form: the one kind of view that runs a command. */
 export const isServedForm = (view: object): view is ServedFormView => Object.hasOwn(view, 'command');
 
-/** The chrome as the shared client reads it: the shell's settings, the footer, export and the language row. The
+/** One link in a public site header or footer (`ui.site.links`, `ui.site.cta`, `ui.site.footer.links`): opens a public view/page or an href. */
+export interface AppSiteLink {
+  /** A view or public page key in this App. */
+  view?: string;
+  /** An explicit https:, mailto:, tel:, or App-relative href. */
+  href?: string;
+  label: string;
+}
+
+/** A public site header search box (`ui.site.search`): submits into a public search page or list view. */
+export interface AppSiteSearch {
+  /** The public page or list view key that handles the search. */
+  view: string;
+  /** Query parameter name on a free-form page (defaults to `'q'`, or list search when targeting a list view). */
+  param?: string;
+  placeholder?: string;
+}
+
+/** Optional public site footer (`ui.site.footer`): tagline/copyright and public view or external links. */
+export interface AppSiteFooter {
+  text?: string;
+  links?: AppSiteLink[];
+}
+
+/** Public site chrome worn by signed-out visitors (`ui.site`), completely separate from the operator desk's `nav` and `ui.shell.placement`. Works for any custom public site (editorial, directory, portfolio, docs, portal, booking site, or storefront). */
+export interface AppSite {
+  links?: AppSiteLink[];
+  search?: AppSiteSearch;
+  cta?: AppSiteLink;
+  /** Where the Sign in link stands for visitors: `'header'` (default), `'footer'`, or `false` to omit it from public site chrome. */
+  signIn?: 'header' | 'footer' | false;
+  /** Optional site footer shown on public pages (overrides `ui.footer` for signed-out visitors when present). */
+  footer?: AppSiteFooter;
+}
+
+/** The chrome as the shared client reads it: the shell's settings, the public site chrome, the footer, export and the language row. The
     App serves more (appPayload.ts ServedUi). */
 interface ServedAppUi {
   shell?: Omit<AppShell, 'new'> & { new?: ServedShellNew[] };
+  site?: AppSite;
   footer?: LandingFooter;
   export?: boolean;
   localeRow?: { table: string; key: Record<string, string | number>; column: string };

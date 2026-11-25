@@ -17,20 +17,28 @@ import type { LandingLink } from '@mistriwork/engine/shared/servedApp.js';
 import { safeHref } from './LandingSurface.js';
 import './AppFooter.css';
 
-export function AppFooter({ footer }: { footer: { text?: string; links?: LandingLink[] } }) {
-  const links = footer.links ?? [];
-  if (!footer.text && !links.length) return null;
+export function AppFooter({
+  footer,
+  signInHref,
+  signInLabel,
+}: {
+  footer?: { text?: string; links?: LandingLink[] };
+  signInHref?: string;
+  signInLabel?: string;
+}) {
+  const links = footer?.links ?? [];
+  if (!footer?.text && !links.length && !signInHref) return null;
   return (
     <footer className="app-footer">
-      {footer.text && <p className="app-footer-text">{footer.text}</p>}
-      {links.length ? (
+      {footer?.text && <p className="app-footer-text">{footer.text}</p>}
+      {links.length || signInHref ? (
         <ul className="app-footer-links">
           {links.map((link, index) => {
-            const href = safeHref(link.href);
+            const href = link.href.startsWith('/') && !link.href.startsWith('//') ? link.href : safeHref(link.href);
             return (
               <li key={index}>
                 {href ? (
-                  <a href={href} rel="noreferrer noopener">
+                  <a href={href} {...(href.startsWith('/') ? {} : { rel: 'noreferrer noopener' })}>
                     {link.label}
                   </a>
                 ) : (
@@ -39,6 +47,11 @@ export function AppFooter({ footer }: { footer: { text?: string; links?: Landing
               </li>
             );
           })}
+          {signInHref && signInLabel && (
+            <li>
+              <a href={signInHref}>{signInLabel}</a>
+            </li>
+          )}
         </ul>
       ) : null}
     </footer>

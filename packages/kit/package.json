@@ -137,9 +137,33 @@
       "mistri-built": "./dist/client/components/FilePreview.js",
       "default": "./src/client/components/FilePreview.tsx"
     },
+    "./client/components/FilterBoxes.js": {
+      "mistri-built": "./dist/client/components/FilterBoxes.js",
+      "default": "./src/client/components/FilterBoxes.tsx"
+    },
+    "./client/components/FilterRail.js": {
+      "mistri-built": "./dist/client/components/FilterRail.js",
+      "default": "./src/client/components/FilterRail.tsx"
+    },
     "./client/components/FilterTabs.js": {
       "mistri-built": "./dist/client/components/FilterTabs.js",
       "default": "./src/client/components/FilterTabs.tsx"
+    },
+    "./client/components/filterPageContext.js": {
+      "mistri-built": "./dist/client/components/filterPageContext.js",
+      "default": "./src/client/components/filterPageContext.ts"
+    },
+    "./client/components/Gallery.js": {
+      "mistri-built": "./dist/client/components/Gallery.js",
+      "default": "./src/client/components/Gallery.tsx"
+    },
+    "./client/components/ListFilterBar.js": {
+      "mistri-built": "./dist/client/components/ListFilterBar.js",
+      "default": "./src/client/components/ListFilterBar.tsx"
+    },
+    "./client/components/SortMenu.js": {
+      "mistri-built": "./dist/client/components/SortMenu.js",
+      "default": "./src/client/components/SortMenu.tsx"
     },
     "./client/components/Grid.js": {
       "mistri-built": "./dist/client/components/Grid.js",
@@ -160,6 +184,10 @@
     "./client/components/Landing.js": {
       "mistri-built": "./dist/client/components/Landing.js",
       "default": "./src/client/components/Landing.tsx"
+    },
+    "./client/components/AppFooter.js": {
+      "mistri-built": "./dist/client/components/AppFooter.js",
+      "default": "./src/client/components/AppFooter.tsx"
     },
     "./client/components/LandingSurface.js": {
       "mistri-built": "./dist/client/components/LandingSurface.js",

@@ -549,9 +549,31 @@ function sayEntry(book: AddressBook, entry: Entry): Said | undefined {
         : undefined;
     const dash = dashViewKey(entry.pageId);
     if (dash !== undefined && book.views.has(dash)) {
-      const params = dashboardParams(entry.rootBody).toString();
+      const seg = book.views.get(dash)!;
+      const target = book.routes.get(seg);
+      const parsedParams = dashboardParams(entry.rootBody);
+      if (target?.kind === 'dashboard' && target.recordTable) {
+        const paramName = target.recordParam ?? 'id';
+        const rawId = parsedParams.get(paramName);
+        if (rawId !== null && rawId !== '') {
+          const tableMeta = book.tables.get(target.recordTable);
+          const pkCol = tableMeta?.columns.find((c) => c.primaryKey)?.name ?? paramName;
+          const segments = recordSegments(book, target.recordTable, {
+            key: entry.key ?? { [pkCol]: rawId },
+            natural: entry.address,
+            via: seg,
+            slug: isPublicVisitor() ? addressSlug(knownName({ ...entry, key: entry.key ?? { [pkCol]: rawId } })) : undefined,
+          });
+          if (segments) {
+            parsedParams.delete(paramName);
+            const restSearch = parsedParams.toString();
+            return { segments, ...(restSearch ? { search: restSearch } : {}) };
+          }
+        }
+      }
+      const params = parsedParams.toString();
       if (entry.tab === 'home' && app?.home === dash) return { segments: [], search: params };
-      return { segments: [encodeURIComponent(book.views.get(dash)!)], search: params };
+      return { segments: [encodeURIComponent(seg)], search: params };
     }
     const form = formViewKey(entry.pageId);
     if (form !== undefined) return book.views.has(form) ? { segments: [encodeURIComponent(book.views.get(form)!)] } : undefined;
@@ -769,6 +791,27 @@ export function appStackFrom(hash: string): { connection: string; stack: Entry[]
     const room = listRoom(target.view);
     if (!room || room.table !== parsed.table) return { connection, stack: [row], slugged: parsed.slugged };
     return { connection, stack: [...listEntryFor(target), { ...row, view: target.view }], slugged: parsed.slugged };
+  }
+  if (target.kind === 'dashboard' && target.recordTable) {
+    const param = target.recordParam ?? Object.keys(parsed.key)[0] ?? 'id';
+    const val = Object.hasOwn(parsed.key, param) ? parsed.key[param] : Object.values(parsed.key)[0];
+    const params = new URLSearchParams(search);
+    if (val !== undefined && val !== null) params.set(param, String(val));
+    const body = [...params.entries()].map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join(';');
+    return {
+      connection,
+      stack: [
+        {
+          kind: 'page',
+          pageId: dashPageId(target.view),
+          table: parsed.table,
+          key: parsed.key,
+          label: row.label,
+          rootBody: body,
+        },
+      ],
+      slugged: parsed.slugged,
+    };
   }
   if (target.kind === 'page' && !parsed.natural) {
     return {

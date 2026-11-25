@@ -84,9 +84,14 @@ export function LandingCards({ section }: { section: Section<'view'> }) {
   if (!answer.data || !cardsHere) return null;
   if (!answer.data.length) return <p className="front-note">{say('nothingToShowHere')}</p>;
   const more = viewLink(section.view);
+  const openTarget =
+    section.open ??
+    (typeof (spec as { open?: unknown }).open === 'object'
+      ? (spec as { open?: import('@mistriwork/engine/shared/servedApp.js').OpenPageTarget }).open
+      : undefined);
   return (
     <>
-      <CardsList table={table} rows={answer.data} spec={cards} label={section.title ?? spec.label} />
+      <CardsList table={table} rows={answer.data} spec={cards} label={section.title ?? spec.label} open={openTarget} />
       {more && (
         <p className="front-more">
           <a href={more.href} onClick={more.onClick}>

@@ -35,8 +35,9 @@ import { appZone, zonedNow } from './appZone.js';
 import { servedSegments } from './appSegments.js';
 import { computedColumnMeta, computedReads, foldConstants, readsMe, type ComputedNode } from '@mistriwork/engine/shared/computed.js';
 import { parseComputed } from '@mistriwork/engine/shared/computedParse.js';
-import { appTagRules } from './appResourceRules.js';
+import { appCoverRules, appTagRules } from './appResourceRules.js';
 import { TAGS_COLUMN } from '@mistriwork/engine/shared/tagLists.js';
+import { COVER_COLUMN } from '@mistriwork/engine/shared/coverPhotos.js';
 
 /** A sum and an avg read numbers; a min and a max read numbers or dates. */
 const numbersOnly = (fn: string) => fn === 'sum' || fn === 'avg';
@@ -567,7 +568,20 @@ export function appCatalog(
         }),
       }
     : rolled;
-  return withUnions(app, grantedComputed(withComputed(app, withTags, now, me, zone, symbolic)));
+  /* A record's lead photograph key reads as `cover` (coverPhotos.ts), where this catalog reads the photo resource,
+     its key and its sort column: a reader who cannot is served none. */
+  const covered = Object.values(app.resources ?? {}).some((resource) => resource.photos) ? appCoverRules(app, withTags).rules : undefined;
+  const withCovers = covered?.size
+    ? {
+        ...withTags,
+        tables: withTags.tables.map((table) => {
+          const rule = covered.get(table.id);
+          if (!rule || table.columns.some((column) => column.name === COVER_COLUMN)) return table;
+          return { ...table, cover: rule };
+        }),
+      }
+    : withTags;
+  return withUnions(app, grantedComputed(withComputed(app, withCovers, now, me, zone, symbolic)));
 }
 
 /* A reader's field grant may name a table's rollups and computed columns (appAccess.ts); pruning marks the ones it

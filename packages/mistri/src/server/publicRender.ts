@@ -2,14 +2,16 @@
  * Public pages drawn on the server: which addresses get their content pane
  * as HTML, from what, and the renderer that draws it.
  *
- * A public form, the landing at `/{app}/welcome` and a signed-out visitor's
- * list or record are what a search engine and a link preview fetch, and
+ * A public form, the landing at `/{app}/welcome`, a signed-out visitor's
+ * list or record, and a public custom `definePage({ public: true })` are what
+ * a search engine, a link preview, and a first-time visitor fetch, and
  * the shell is one static page. So for those, and only those, the page
  * arrives with its content pane drawn (client/ssr/render.tsx): the landing
  * and the form from the very answer the page's data block carries
  * (http/firstPaint.ts), which the client then takes over in place; a room
- * from the words http/publicPage.ts read under the public grant. A
- * signed-in reader's pages stay the client's to draw.
+ * from the words http/publicPage.ts read under the public grant; and a public
+ * custom page from its compiled component, first-paint answers, and loopback
+ * public reads. A signed-in reader's pages stay the client's to draw.
  *
  * The renderer is client code, so the server never imports it: from the
  * build it is dist/ssr/render.js (config/vite.ssr.config.ts, React inside); under
@@ -21,14 +23,39 @@
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { FROM_SOURCE, SOURCE_CLIENT, devClient } from '@mistriwork/engine/server/devclient.js';
 import { readKey } from '@mistriwork/engine/shared/firstPaint.js';
+import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { CLIENT_FILES } from './clientFiles.js';
 import type { PublicRoom } from '../shared/publicDocument.js';
+import type { AppPayloadApp } from '../shared/appPayload.js';
+import { appAddressBook, readAppSegments } from '../shared/appAddress.js';
+import { viewOrder } from '../shared/appModel.js';
+import { componentCode, type CompiledComponents } from './app/appComponents.js';
+
+type PublicPageReader = (
+  method: 'GET' | 'POST',
+  target: string,
+  body?: unknown,
+  headers?: Record<string, string>,
+) => Promise<{ status: number; body: unknown }>;
 
 /** What the renderer is asked to draw (client ssr/render.tsx, PublicRenderInput). */
 type RenderInput =
   | { kind: 'landing'; mount: string; app: unknown; landing: unknown }
   | { kind: 'form'; mount: string; app: unknown; form: unknown }
-  | { kind: 'room'; mount: string; room: PublicRoom };
+  | { kind: 'room'; mount: string; room: PublicRoom }
+  | {
+      kind: 'page';
+      mount: string;
+      app: AppPayloadApp;
+      schema: DatabaseSchema;
+      viewKey: string;
+      dashboard: unknown;
+      page: unknown;
+      place: Record<string, string>;
+      code: string;
+      answers?: Readonly<Record<string, { body: unknown }>>;
+      read: PublicPageReader;
+    };
 
 /** A content pane the server drew, and which kind it is (`data-ssr` on the pane). */
 export interface DrawnPane {
@@ -82,6 +109,76 @@ const decoded = (segment: string) => {
   }
 };
 
+interface PublicPageContext {
+  appId: string;
+  search: string;
+  components?: CompiledComponents;
+  read: PublicPageReader;
+  /** True only when the current request is a signed-out visitor (never SSR a signed-in user's view). */
+  visitor: boolean;
+}
+
+/** Resolve which public custom `definePage` (if any) a path opens, along with its initial address params. */
+function resolvePublicCustomPage(
+  app: AppPayloadApp,
+  schema: DatabaseSchema,
+  path: string,
+  search: string,
+):
+  | {
+      viewKey: string;
+      dashboard: Record<string, unknown>;
+      page: Record<string, unknown>;
+      componentId: string;
+      place: Record<string, string>;
+    }
+  | undefined {
+  const segments = path.split('/').filter(Boolean).slice(1);
+  let viewKey: string | undefined;
+  let routePlace: Record<string, string> | undefined;
+  if (!segments.length) {
+    viewKey = app.home;
+  } else {
+    const book = appAddressBook({
+      views: app.views as never,
+      order: viewOrder(app),
+      resources: app.resources,
+      pages: app.pages ?? [],
+      tables: schema.tables,
+      inbox: app.inbox === true,
+      assistant: app.assistant?.page === true,
+      directory: app.directory !== undefined,
+      projected: true,
+    });
+    const parsed = readAppSegments(book, segments);
+    if (parsed?.kind === 'route' && parsed.target.kind === 'dashboard') {
+      viewKey = parsed.target.view;
+    } else if (parsed?.kind === 'record' && parsed.target.kind === 'dashboard' && !parsed.natural) {
+      viewKey = parsed.target.view;
+      const pkVal = Object.values(parsed.key)[0];
+      if (pkVal !== undefined && pkVal !== null) {
+        const param = parsed.target.recordParam ?? Object.keys(parsed.key)[0] ?? 'id';
+        routePlace = { [param]: String(pkVal) };
+      }
+    }
+  }
+  if (!viewKey || !Object.hasOwn(app.views, viewKey)) return undefined;
+  const view = app.views[viewKey] as unknown as Record<string, unknown>;
+  if (!Array.isArray(view.sections)) return undefined;
+  const page = view.page as { public?: true; params?: readonly string[] } | undefined;
+  if (page?.public !== true) return undefined;
+  const sections = view.sections;
+  const componentId = (sections[0] as { component?: { id?: string } } | undefined)?.component?.id;
+  if (!componentId) return undefined;
+  const said = new URLSearchParams(search);
+  const place: Record<string, string> = {};
+  for (const name of page.params ?? []) {
+    const value = said.get(name) ?? routePlace?.[name] ?? null;
+    if (value !== null && !value.includes(';')) place[name] = value;
+  }
+  return { viewKey, dashboard: { id: viewKey, ...view }, page: page as Record<string, unknown>, componentId, place };
+}
+
 /**
  * How this page's content pane is drawn on the server, if it is: a function
  * of the page's carried answers (by request, as firstPaint.ts keys them),
@@ -93,8 +190,9 @@ export function publicPane(
   mount: { base: string; json: string },
   /** The name the page's public branding wears (a tenant's saved name), which the client says over the App's. */
   worn?: string,
+  /** Context for rendering a public custom `definePage` on the server. */
+  customPage?: PublicPageContext,
 ): ((answers: Readonly<Record<string, { body: unknown }>> | undefined) => Promise<DrawnPane | undefined>) | undefined {
-  if (room) return () => draw({ kind: 'room', mount: mount.json, room }, mount.base);
   const welcome = WELCOME.exec(path);
   if (welcome) {
     const app = decoded(welcome[1]);
@@ -123,5 +221,43 @@ export function publicPane(
       return draw({ kind: 'form', mount: mount.json, app: named, form: found.form }, mount.base);
     };
   }
+  /* Public custom `definePage({ public: true })` takes precedence over plain PublicRoom fallback when the route
+     targets a compiled public custom page (including record-bound custom pages like `/car/1-1969-ford-mustang`). */
+  if (customPage?.visitor && customPage.components) {
+    return async (answers) => {
+      const scoped = (route: string) => `${route}?${new URLSearchParams({ app: customPage.appId })}`;
+      const appPayload = answers?.[readKey('GET', scoped('/api/app'))]?.body as { app?: AppPayloadApp; appId?: string } | undefined;
+      const schemaPayload = answers?.[readKey('GET', scoped('/api/schema'))]?.body as DatabaseSchema | undefined;
+      const servedApp = appPayload?.appId === customPage.appId ? appPayload.app : undefined;
+      if (servedApp && schemaPayload) {
+        const resolved = resolvePublicCustomPage(servedApp, schemaPayload, path, customPage.search);
+        if (resolved) {
+          const code = componentCode(customPage.components, resolved.componentId);
+          if (code) {
+            const namedApp = worn ? { ...servedApp, name: worn } : servedApp;
+            const drawn = await draw(
+              {
+                kind: 'page',
+                mount: mount.json,
+                app: namedApp,
+                schema: schemaPayload,
+                viewKey: resolved.viewKey,
+                dashboard: resolved.dashboard,
+                page: resolved.page,
+                place: resolved.place,
+                code,
+                answers,
+                read: customPage.read,
+              },
+              mount.base,
+            );
+            if (drawn) return drawn;
+          }
+        }
+      }
+      return room ? draw({ kind: 'room', mount: mount.json, room }, mount.base) : undefined;
+    };
+  }
+  if (room) return () => draw({ kind: 'room', mount: mount.json, room }, mount.base);
   return undefined;
 }

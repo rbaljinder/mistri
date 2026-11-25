@@ -919,7 +919,8 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
                         table && keyColumns.length
                           ? (row) => {
                               const record = recordForRow(row, data.columns ?? []);
-                              if (record.key) void openRecord(table.id, record.key, record.label);
+                              if (record.key)
+                                void openRecord(table.id, record.key, record.label, 'push', section.open ? { open: section.open } : {});
                             }
                           : undefined
                       }
@@ -962,7 +963,7 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
               )
             ) : cards && table ? (
               cardRows.length ? (
-                <CardsList table={table} rows={cardRows} spec={cards} label={section.title ?? spoken(table.name)} />
+                <CardsList table={table} rows={cardRows} spec={cards} label={section.title ?? spoken(table.name)} open={section.open} />
               ) : (
                 <Empty className="page-group-empty" text={nothingYet} />
               )
@@ -1064,7 +1065,8 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
                           table && keyColumns.length
                             ? (row) => {
                                 const record = recordForRow(row);
-                                if (record.key) void openRecord(table.id, record.key, record.label);
+                                if (record.key)
+                                  void openRecord(table.id, record.key, record.label, 'push', section.open ? { open: section.open } : {});
                               }
                             : undefined
                         }

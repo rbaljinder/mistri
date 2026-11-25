@@ -95,6 +95,7 @@ function walkTables(schema: DatabaseSchema, base: string, asked: ReadonlySet<str
       reached.add(table.tags.through);
       reached.add(table.tags.to);
     }
+    if (table.cover) reached.add(table.cover.from);
     for (const rollup of Object.values(table.rollups ?? {}))
       for (const read of rollupReads(rollup)) {
         reached.add(read.table);
