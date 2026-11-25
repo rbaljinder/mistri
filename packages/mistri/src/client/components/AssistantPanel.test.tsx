@@ -736,3 +736,46 @@ test('a table the model writes in words is drawn as a table', async () => {
   expect(screen.getByText('By provider:')).toBeInTheDocument();
   expect(screen.queryByText(/\| Provider/)).not.toBeInTheDocument();
 });
+
+test('the side panel drags, steps with the keyboard, remembers its width per person and App, and resets on double-click', async () => {
+  window.localStorage.removeItem('mistri.assistant.width.compass.ada');
+  window.localStorage.removeItem('mistri.assistant.expanded.compass.ada');
+  const user = userEvent.setup();
+  const { fireEvent } = await import('@testing-library/react');
+  const first = draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  const panel = screen.getByRole('complementary', { name: 'Assistant' });
+  const handle = screen.getByRole('separator', { name: 'Resize the assistant' });
+  expect(handle).toHaveAttribute('aria-valuenow', '512');
+  expect(panel.style.getPropertyValue('--assistant-width')).toBe('');
+
+  // Dragging the left edge 120px leftward widens the panel from 512px to 632px and persists it.
+  fireEvent.pointerDown(handle, { pointerId: 1, button: 0, clientX: 500 });
+  fireEvent.pointerMove(handle, { pointerId: 1, clientX: 380 });
+  fireEvent.pointerUp(handle, { pointerId: 1 });
+  expect(panel.style.getPropertyValue('--assistant-width')).toBe('632px');
+  expect(window.localStorage.getItem('mistri.assistant.width.compass.ada')).toBe('632');
+
+  // Reopening restores the remembered width; ArrowRight narrows by 24px; Home clamps to the 384px floor; double-click resets.
+  first.unmount();
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  const reopened = screen.getByRole('complementary', { name: 'Assistant' });
+  const reopenedHandle = screen.getByRole('separator', { name: 'Resize the assistant' });
+  expect(reopened.style.getPropertyValue('--assistant-width')).toBe('632px');
+
+  fireEvent.keyDown(reopenedHandle, { key: 'ArrowRight' });
+  expect(reopened.style.getPropertyValue('--assistant-width')).toBe('608px');
+  fireEvent.keyDown(reopenedHandle, { key: 'ArrowLeft', shiftKey: true });
+  expect(reopened.style.getPropertyValue('--assistant-width')).toBe('672px');
+  fireEvent.keyDown(reopenedHandle, { key: 'Home' });
+  expect(reopened.style.getPropertyValue('--assistant-width')).toBe('384px');
+
+  fireEvent.doubleClick(reopenedHandle);
+  expect(reopened.style.getPropertyValue('--assistant-width')).toBe('');
+  expect(window.localStorage.getItem('mistri.assistant.width.compass.ada')).toBeNull();
+
+  // Full screen removes the side-panel resize handle until stepped back.
+  await user.click(screen.getByRole('button', { name: 'Full screen' }));
+  expect(screen.queryByRole('separator', { name: 'Resize the assistant' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Full screen' }));
+  expect(screen.getByRole('separator', { name: 'Resize the assistant' })).toBeInTheDocument();
+});

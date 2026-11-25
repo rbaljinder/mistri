@@ -5,7 +5,7 @@
 @layer components {
 .assistant-panel {
   position: fixed; top: 0; right: 0; bottom: 0; z-index: 75;
-  width: min(28rem, 100vw);
+  width: min(var(--assistant-width, 32rem), 100vw);
   display: flex;
   background: var(--surface); color: var(--ink);
   border-left: 1px solid var(--line-strong);
@@ -17,6 +17,20 @@
     @starting-style { transform: translateX(24px); opacity: 0; }
   }
 }
+/* The side panel's leading edge, dragged or stepped to widen or narrow it; no transition, so it lands where put. */
+.assistant-resize {
+  position: absolute; top: 0; bottom: 0; left: -3px; z-index: 2; width: 6px;
+  cursor: col-resize; touch-action: none;
+}
+.assistant-resize::after {
+  content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px;
+  background: var(--accent); opacity: 0;
+}
+.assistant-resize:focus-visible { outline: none; }
+.assistant-resize:focus-visible::after { opacity: 1; }
+@media (hover: hover) {
+  .assistant-resize:hover::after { opacity: 0.6; }
+}
 /* Full screen: the content column, beside the App's menu (its left edge measured, AssistantPanel.tsx). The page
    beneath is not moved — the panel is fixed and only its own edge changes — and the change is not animated: a press
    that is undone as often as it is made earns no motion (motion doctrine, rule 2). */
@@ -25,7 +39,7 @@
 @media (max-width: 640px) {
   /* Both edges, not 100vw: the density zoom on the root scales a vw, and the panel would stand past the screen. */
   .assistant-panel { left: 0; width: auto; border-left: 0; }
-  .assistant-expand { display: none; }
+  .assistant-expand, .assistant-resize { display: none; }
 }
 .assistant-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 

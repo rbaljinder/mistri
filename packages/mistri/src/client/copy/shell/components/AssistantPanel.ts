@@ -39,6 +39,7 @@ export const say = defineMessages({
   couldNotTell: 'The assistant was not told about that record: {message}',
   noModel: 'The assistant is not set up on this server yet.',
   close: 'Close the assistant',
+  resize: 'Resize the assistant',
   newRecord: 'New {resource}',
   expand: 'Full screen',
   collapse: 'Back to the side panel',

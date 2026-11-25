@@ -55,6 +55,7 @@ import {
   labelPath,
   state,
   viewportBox,
+  viewportScale,
   viewportSize,
   writeAllowed,
 } from '@mistriwork/kit/client/core.js';
@@ -611,8 +612,19 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
   );
 }
 
-/* Full screen is a per-person preference, kept on this device: the panel opens the way it was last left. */
+/* Full screen and side-panel width are per-person preferences, kept on this device: the panel opens the way it was last left. */
 const expandedKey = (app: string) => `mistri.assistant.expanded.${app}.${sessionIdentity().accountId ?? 'local'}`;
+const widthKey = (app: string) => `mistri.assistant.width.${app}.${sessionIdentity().accountId ?? 'local'}`;
+const PANEL_WIDTH_DEFAULT = 512;
+const PANEL_WIDTH_MIN = 384;
+const PANEL_WIDTH_MAX = 832;
+function panelCeiling(): number {
+  const vw = viewportSize().width;
+  return vw > 0 ? Math.max(PANEL_WIDTH_MIN, Math.min(PANEL_WIDTH_MAX, Math.floor(vw * 0.75))) : PANEL_WIDTH_MAX;
+}
+function clampPanelWidth(px: number): number {
+  return Math.round(Math.min(panelCeiling(), Math.max(PANEL_WIDTH_MIN, px)));
+}
 function readExpanded(app: string): boolean {
   try {
     return window.localStorage.getItem(expandedKey(app)) === '1';
@@ -624,6 +636,22 @@ function writeExpanded(app: string, on: boolean): void {
   try {
     if (on) window.localStorage.setItem(expandedKey(app), '1');
     else window.localStorage.removeItem(expandedKey(app));
+  } catch {
+    /* Remembered where the browser lets it be; the panel works either way. */
+  }
+}
+function readPanelWidth(app: string): number | null {
+  try {
+    const raw = Number(window.localStorage.getItem(widthKey(app)));
+    return Number.isFinite(raw) && raw > 0 ? clampPanelWidth(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function writePanelWidth(app: string, width: number | null): void {
+  try {
+    if (width === null) window.localStorage.removeItem(widthKey(app));
+    else window.localStorage.setItem(widthKey(app), String(Math.round(width)));
   } catch {
     /* Remembered where the browser lets it be; the panel works either way. */
   }
@@ -772,6 +800,8 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [deletingOpen, setDeletingOpen] = useState(false);
   const [expanded, setExpanded] = useState(() => !room && readExpanded(app));
+  const [panelWidth, setPanelWidth] = useState<number | null>(() => (room ? null : readPanelWidth(app)));
+  const resizeDrag = useRef<{ startX: number; startWidth: number; prevWidth: number | null } | null>(null);
   const onPhone = usePhone();
   const wide = room || (expanded && !onPhone);
   const stop = useRef<AbortController | null>(null);
@@ -921,6 +951,21 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     addHostListener(window, 'resize', place);
     return () => removeHostListener(window, 'resize', place);
   }, [room, wide]);
+  /* The side panel's chosen width, clamped to the window as it narrows; absent, the stylesheet's 32rem stands. */
+  useLayoutEffect(() => {
+    const panel = frame.current;
+    if (room || !panel) return;
+    if (wide || panelWidth === null) {
+      panel.style.removeProperty('--assistant-width');
+      return;
+    }
+    const fit = () => {
+      panel.style.setProperty('--assistant-width', `${clampPanelWidth(panelWidth)}px`);
+    };
+    fit();
+    addHostListener(window, 'resize', fit);
+    return () => removeHostListener(window, 'resize', fit);
+  }, [room, wide, panelWidth]);
   /* The room stands from where it begins to the foot of the window, so the composer sits at the bottom. */
   useLayoutEffect(() => {
     const panel = frame.current;
@@ -1205,6 +1250,73 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       aria-label={say('assistant')}
       onKeyDown={onPanelKey}
     >
+      {!room && !wide && !onPhone && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={say('resize')}
+          title={say('resize')}
+          tabIndex={0}
+          aria-valuenow={panelWidth ?? PANEL_WIDTH_DEFAULT}
+          aria-valuemin={PANEL_WIDTH_MIN}
+          aria-valuemax={panelCeiling()}
+          className="assistant-resize"
+          onPointerDown={(event) => {
+            if (event.pointerType === 'mouse' && event.button !== 0) return;
+            const panel = frame.current;
+            const current = panel
+              ? Math.round(viewportBox(panel).width) || panelWidth || PANEL_WIDTH_DEFAULT
+              : (panelWidth ?? PANEL_WIDTH_DEFAULT);
+            resizeDrag.current = { startX: event.clientX, startWidth: current, prevWidth: panelWidth };
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+              /* A renderer without capture still delivers the moves to the handle. */
+            }
+          }}
+          onPointerMove={(event) => {
+            const drag = resizeDrag.current;
+            if (!drag) return;
+            const next = clampPanelWidth(drag.startWidth + (drag.startX - event.clientX) / viewportScale());
+            setPanelWidth(next);
+            writePanelWidth(app, next);
+          }}
+          onPointerUp={() => {
+            resizeDrag.current = null;
+          }}
+          onPointerCancel={() => {
+            const drag = resizeDrag.current;
+            if (!drag) return;
+            resizeDrag.current = null;
+            setPanelWidth(drag.prevWidth);
+            writePanelWidth(app, drag.prevWidth);
+          }}
+          onDoubleClick={() => {
+            setPanelWidth(null);
+            writePanelWidth(app, null);
+          }}
+          onKeyDown={(event) => {
+            if (event.altKey && event.key === 'Backspace') {
+              event.preventDefault();
+              setPanelWidth(null);
+              writePanelWidth(app, null);
+              return;
+            }
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
+            event.preventDefault();
+            const step = event.shiftKey ? 64 : 24;
+            const base = panelWidth ?? PANEL_WIDTH_DEFAULT;
+            const next =
+              event.key === 'Home'
+                ? PANEL_WIDTH_MIN
+                : event.key === 'End'
+                  ? panelCeiling()
+                  : clampPanelWidth(base + (event.key === 'ArrowLeft' ? step : -step));
+            setPanelWidth(next);
+            writePanelWidth(app, next);
+          }}
+        />
+      )}
       {room && (
         <nav className="assistant-rail" aria-label={say('conversations')}>
           {list}
