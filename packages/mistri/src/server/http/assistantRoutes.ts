@@ -24,7 +24,7 @@ import type { AssistantOwner, AssistantStore } from '../../adapters/assistant/as
 import type { AppDef } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import type { AppHost } from '../app/apps.js';
-import { catalogFromPayload, mayRunAction, systemPrompt, toolSpecs } from '../assistant/assistantCatalog.js';
+import { catalogFromPayload, mayRunAction, nowLine, systemPrompt, toolSpecs } from '../assistant/assistantCatalog.js';
 import { assistantModel } from '../assistant/assistantModel.js';
 import { assistantStoreFor, storeUnavailableReply } from '../assistant/assistantStores.js';
 import { recordContext, type ToolSession } from '../assistant/assistantTools.js';
@@ -357,8 +357,11 @@ export async function answerAssistant(
         : undefined;
     if (cutFrom !== undefined) await store.truncate(owner, conversation!.id, cutFrom, at);
     if (text !== undefined) {
+      /* When it is, for this person: said with their words, not in the system prompt, which is the same for every
+         call of a conversation so its cached prefix holds. Without it "tomorrow" and "this month" were the model's guess. */
+      const said = [nowLine(payload.ui?.timezone), line].filter(Boolean).join('\n');
       // A fresh conversation's first words, or an edited or retried turn's again (the cut above removed them).
-      await store.append(owner, conversation!.id, [{ kind: 'person', body: { text, ...(line ? { context: line } : {}) } }], 'idle', at);
+      await store.append(owner, conversation!.id, [{ kind: 'person', body: { text, context: said } }], 'idle', at);
     }
     const emit = stream(res);
     const after = await store.events(owner, conversation!.id);

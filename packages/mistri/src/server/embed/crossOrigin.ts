@@ -22,7 +22,8 @@ import { ownOrigin, vouchForOrigin } from '@mistriwork/engine/server/http/trust.
 
 /** What the client reads off an App's answers (core.js), a tenant App's lease headers among them. */
 /* `mistri-reads`: a cross-origin embed files its queries by the tables they read, as the App's own pages do (live/liveReads.ts). */
-const EXPOSED = [...new Set(['x-mistri-search', 'mistri-reads', ...Object.values(TENANT_HTTP_HEADERS)])].join(', ');
+/* `mistri-writes`: and asks again, after a command, only the ones over a table it wrote (commands/commandWrites.ts). */
+const EXPOSED = [...new Set(['x-mistri-search', 'mistri-reads', 'mistri-writes', ...Object.values(TENANT_HTTP_HEADERS)])].join(', ');
 
 /** What a server's auth runtime says of the hosts that sign people in to it (auth.ts). */
 interface EmbedDoor {

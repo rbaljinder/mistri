@@ -35,6 +35,7 @@ import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { batchedBreakdown, batchedView } from '@mistriwork/kit/client/breakdownBatch.js';
+import { sameReads } from '@mistriwork/kit/client/liveReads.js';
 import { densityChoice } from '@mistriwork/kit/client/density.js';
 import { fillComposer as fillPageComposer } from '@mistriwork/kit/client/components/composerDraft.js';
 import { compileWhere } from '@mistriwork/engine/shared/pageWhere.js';
@@ -68,19 +69,7 @@ import { publicFormAddress } from '../../../shared/appAddress.js';
 import { createPageAppFlags } from '../../appFlags.js';
 import { pageAnalyticsBeacon } from '../../analyticsBeacon.js';
 import { navFollow, shellRoot } from '@mistriwork/kit/client/shellHost.js';
-import { shell } from '@mistriwork/kit/client/shellMode.js';
-
-/** An in-App address as the shell writes it for this session: a tenant's carries its selector. Anything it cannot read stays as given. */
-function tenantQualified(href: string): string {
-  const { tenant } = sessionIdentity();
-  const qualify = shell().tenantLinks?.qualify;
-  if (!tenant || !qualify) return href;
-  try {
-    return qualify(href, tenant.appId, tenant.tenantId);
-  } catch {
-    return href;
-  }
-}
+import { tenantQualified } from '../../tenantAddress.js';
 
 function tableOf(resource: string): TableMeta {
   const table = state.schema ? (tableNamed(state.schema, resource) as TableMeta | undefined) : undefined;
@@ -115,7 +104,9 @@ async function viewRows(
      page with several reads otherwise shows a parser's words with nothing to tell which of them they belong to. */
   const refusal = (got as { errors?: Array<{ message?: string }> } | null)?.errors?.[0]?.message;
   if (refusal) throw new Error(say('theRowsOfRefused', { name: table.name, reason: refusal }));
-  return rowsByPath(paths, got, say('theRowsOfCould', { name: table.name }), { schema: state.schema, base: table.id });
+  /* Said of the same tables as the answer they were read out of (liveReads.ts): what is made of them below says so
+     too, so the read is filed by them and asked again only when one changes (liveInvalidate.ts, commandRefresh.ts). */
+  return sameReads(rowsByPath(paths, got, say('theRowsOfCould', { name: table.name }), { schema: state.schema, base: table.id }), got);
 }
 
 /* A resource's own records as a picker's choices (`useOptions('country')`): the ordinary read of the resource — the
@@ -220,7 +211,7 @@ const pageHost: UiHost = {
     const paths = keys && show?.length ? [...new Set([...show, ...(primaryKey(table) as string[])])] : show;
     const size = limit ?? 20;
     const got = await viewRows(table, paths, uiRowsQuery(query, sort), size + 1, page, where, offset);
-    return { rows: got.slice(0, size), more: got.length > size };
+    return sameReads({ rows: got.slice(0, size), more: got.length > size }, got);
   },
   async record(resource, key, show, asking = {}) {
     const table = tableOf(resource);
@@ -228,7 +219,8 @@ const pageHost: UiHost = {
     const where = keyed.map((column) => `${column} = ${quote(String(key[column]))}`).join(' and ');
     /* The key rides beside `show`, as a read's rows carry it: the record's type says it is there. */
     const paths = show?.length ? [...new Set([...show, ...keyed])] : show;
-    return (await viewRows(table, paths, where, 1, asking.page))[0];
+    const rows = await viewRows(table, paths, where, 1, asking.page);
+    return sameReads(rows[0], rows);
   },
   async breakdown(resource, { by, measure, query, limit, page, where }) {
     const table = tableOf(resource);
@@ -240,7 +232,7 @@ const pageHost: UiHost = {
     /* A page's breakdown rides with that page's other reads, under its name, so the server holds the batch to the
        page's manifest as it would the one read. */
     const got = await batchedBreakdown<{ rows?: UiRow[] }>({ text, limit, ...(page ? { page } : {}) });
-    return got.rows ?? [];
+    return sameReads(got.rows ?? [], got);
   },
   async load(page, params, loader) {
     /* A tenant's lease answers a refusal as a reply, not a throw (tenantTransport.ts): it is the page's error either way. */
@@ -249,7 +241,8 @@ const pageHost: UiHost = {
       error?: unknown;
     };
     if (typeof got.error === 'string') throw new Error(got.error);
-    return got.data;
+    /* Filed with the tables its loader declares (the reply's `mistri-reads`): a command that wrote none of them leaves it (commandRefresh.ts). */
+    return sameReads(got.data, got);
   },
   openRecord(resource, key, options = {}) {
     const table = tableOf(resource);

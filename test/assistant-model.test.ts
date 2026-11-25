@@ -102,6 +102,35 @@ test('a streamed reply is read whole: text as it arrives, a tool call’s input,
   ]);
 });
 
+test('a spent balance is named to the operator, and the person is told only that the assistant is unavailable', async () => {
+  const refuses = (status: number, body: unknown) =>
+    (async () => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })) as typeof fetch;
+  const failure = async (status: number, body: unknown) => {
+    try {
+      await anthropicModel('sk-test', refuses(status, body)).stream(request, () => {}, new AbortController().signal);
+    } catch (error) {
+      return error as Error & { operator?: string };
+    }
+    throw new Error('the call was not refused');
+  };
+  const spent = await failure(400, {
+    type: 'error',
+    error: { type: 'invalid_request_error', message: 'Your credit balance is too low to access the Anthropic API.' },
+  });
+  assert.equal(spent.name, 'ModelUnavailable');
+  assert.equal(spent.message, 'The assistant is unavailable right now.');
+  assert.match(spent.operator!, /400 invalid_request_error/);
+  assert.match(spent.operator!, /credit or quota is spent.*ANTHROPIC_API_KEY/);
+  // Any other bad request keeps its status for the person, and the log gets the provider's error type, never its message.
+  const bad = await failure(400, {
+    type: 'error',
+    error: { type: 'invalid_request_error', message: 'messages.2: "Ada Park" is not valid' },
+  });
+  assert.equal(bad.message, 'The model could not be reached (400).');
+  assert.equal(bad.operator, 'the model provider refused the call (400 invalid_request_error)');
+  assert.doesNotMatch(`${bad.message} ${bad.operator}`, /Ada/);
+});
+
 test('the key goes in a header to the API alone, and a refused key or a busy model is said plainly', async () => {
   const seen: Array<{ url: string; headers: Record<string, string> }> = [];
   const answer = (status: number) =>

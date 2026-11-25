@@ -8,7 +8,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
-import { startersHere } from '../packages/mistri/src/shared/appAssistant.js';
+import { startersFor, startersHere } from '../packages/mistri/src/shared/appAssistant.js';
 import { servedApp } from '../packages/mistri/src/shared/appPayload.js';
 import type { DatabaseSchema } from '../packages/engine/src/shared/schema.js';
 
@@ -129,4 +129,35 @@ test('assistant.confirm is refused: every write it proposes waits for the person
       (error.problems ?? [error.message]).some((problem) => /assistant\.confirm is gone: every write .* Delete it\./.test(problem)),
   );
   assert.equal(Object.hasOwn(parseAppConfig(raw(['Hi']), 'test').assistant!, 'confirm'), false);
+});
+
+test('a starter may name the roles it is offered to, and check holds them to the declared roles', () => {
+  const auth = { roles: { agent: { read: true }, manager: { read: true } } };
+  const withRoles = (starters: unknown, more: Record<string, unknown> = {}) => ({ ...raw(starters), auth, ...more });
+  const starters = [
+    'Which tickets are mine?',
+    { text: 'Who is behind this week?', roles: ['manager'] },
+    { text: 'Reassign this ticket', records: ['incident'], roles: ['manager'] },
+  ];
+  const app = parseAppConfig(withRoles(starters), 'test');
+  assert.deepEqual(app.assistant?.starters, starters);
+  // A manager is served theirs with no role list; one that named only roles is a bare line again.
+  assert.deepEqual(startersFor(servedApp(app, SCHEMA).assistant?.starters, ['manager']), [
+    'Which tickets are mine?',
+    'Who is behind this week?',
+    { text: 'Reassign this ticket', records: ['public.incident'] },
+  ]);
+  assert.deepEqual(startersFor(servedApp(app, SCHEMA).assistant?.starters, ['agent']), ['Which tickets are mine?']);
+  assert.throws(
+    () => parseAppConfig(withRoles([{ text: 'Who is behind?', roles: ['owner'] }]), 'test'),
+    /starters\[0\]\.roles names "owner", which is not one of the App's roles \(agent, manager\)/,
+  );
+  assert.throws(() => parseAppConfig(raw([{ text: 'Who is behind?', roles: ['manager'] }]), 'test'), /declares no "auth" with roles/);
+  // Six in one place is counted as one person is offered them: seven lines, four of them a role's own, crowd nobody.
+  const lines = (role: string, n: number) => Array.from({ length: n }, (_, i) => ({ text: `${role} question ${i}`, roles: [role] }));
+  assert.doesNotThrow(() => parseAppConfig(withRoles(['One', 'Two', 'Three', ...lines('agent', 3), ...lines('manager', 3)]), 'test'));
+  assert.throws(
+    () => parseAppConfig(withRoles(['One', 'Two', 'Three', ...lines('agent', 4)]), 'test'),
+    /offers 7 starters everywhere to role "agent"/,
+  );
 });

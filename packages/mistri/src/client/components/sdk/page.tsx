@@ -339,7 +339,7 @@ function RowButton({
 
 /**
  * One command on one row: `<CommandButton command="checkIn" row={booking} />`, or a command that names no row
- * (`targets: 'none'`), with none: `<CommandButton command="postRent" />`. Its outcome is said in the page's live
+ * (`targets: 'none'`), with none: `<CommandButton command="postRent" />`. `values` fill its input. Its outcome is said in the page's live
  * region — in `done`'s words when given — and a refusal in the server's (the command's run says it). The hook
  * (`useCommand`) stays for what a button cannot say.
  */
@@ -348,13 +348,16 @@ export function CommandButton({
   done,
   onDone,
   row = NO_ROW,
+  values,
   ...props
-}: Omit<RowButtonProps, 'row'> & { command: string; row?: RowButtonProps['row'] }) {
+}: Omit<RowButtonProps, 'row'> & { command: string; row?: RowButtonProps['row']; values?: Readonly<Record<string, unknown>> }) {
   const handle = useCommand(command);
   const host = useUiHost();
   const label = props.label ?? handle.label;
+  /* `values` are the run's input, as `run(row, values)` takes them: complete, the command is sent; short of what it
+     asks, its form opens filled with them (a Take a payment button beside the amount owed). */
   const run = () =>
-    void handle.run(row, undefined, { label }).then((outcome) => {
+    void handle.run(row, values, { label }).then((outcome) => {
       if (outcome.status === 'applied') host.announce(done ?? outcome.message ?? say('commandDone', { label }), 'ok');
       onDone?.(outcome);
     });

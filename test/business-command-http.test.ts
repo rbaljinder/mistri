@@ -21,6 +21,7 @@ import {
   loadBusinessCommands,
   validateBusinessCommandStartup,
 } from '../packages/mistri/src/server/commands/businessCommandLoader.js';
+import { hearingWrites, tellWrites, writesHeader } from '../packages/mistri/src/server/commands/commandWrites.js';
 import { parseTestApp } from './support/commandCatalog.js';
 import { VALIDATE, validating } from './support/validation.js';
 
@@ -53,6 +54,8 @@ async function fixture(
       started?: () => void;
       wait?: Promise<void>;
       fail?: boolean | string;
+      /** The handler works its answer out and writes nothing. */
+      idle?: boolean;
     };
   }) => Promise<void>,
   migrated = true,
@@ -112,6 +115,7 @@ async function fixture(
     started: undefined as (() => void) | undefined,
     wait: undefined as Promise<void> | undefined,
     fail: false as boolean | string,
+    idle: false,
   };
   const commands = defineCommands({
     assign: defineCommand({
@@ -136,6 +140,7 @@ async function fixture(
         await control.wait;
         if (typeof control.fail === 'string') refuse(control.fail);
         if (control.fail) refuse('reviewer_unavailable');
+        if (control.idle) return { version: Number(record.version) };
         const { version } = await db.loan.update(record, { reviewer: input.reviewer });
         return { version: Number(version), sql: 'PRIVATE SQL MUST BE PROJECTED' };
       },
@@ -235,6 +240,59 @@ test('HTTP prepare, execute and exact status use safe versioned DTOs and persist
     assert.equal(f.control.calls, 1);
     assert.equal(f.control.sessions, 4);
   });
+});
+
+/* What the page that ran a command reads again (client commandRefresh.ts): the reads over a table the run wrote, which
+   the answer names in the ids a read's own `mistri-reads` names; none after a run that wrote nothing; and everything
+   where the answer cannot say, as after a replay, whose run is not this request's. */
+test('HTTP execute says which tables the run wrote, nothing for a run that wrote none, and stays silent on a replay', async () => {
+  await fixture(async (f) => {
+    const read = await fetch(`${f.base}/api/query`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-mistri-account': account.id },
+      body: JSON.stringify({ table: 'loan', limit: 1 }),
+    });
+    assert.equal(read.status, 200, await read.clone().text());
+    const reads = (read.headers.get('mistri-reads') ?? '').split(',').map(decodeURIComponent);
+    const applied = await post(f.base, 'execute', request());
+    assert.equal(applied.status, 200, JSON.stringify(applied.body));
+    const wrote = applied.headers.get('mistri-writes');
+    assert.match(wrote ?? '', /^tables=[^,]+$/);
+    // The one table it wrote, by the id the list over it was filed under.
+    assert.ok(reads.includes(decodeURIComponent(wrote!.slice('tables='.length))), `${wrote} is not among ${reads.join(', ')}`);
+    assert.equal(Object.hasOwn(applied.body, 'wrote'), false);
+    const replay = await post(f.base, 'execute', request());
+    assert.equal(replay.body.replayed, true);
+    assert.equal(replay.headers.get('mistri-writes'), null);
+    assert.equal((await post(f.base, 'status', request())).headers.get('mistri-writes'), null);
+    f.control.idle = true;
+    const idle = await post(f.base, 'execute', request({ expectedVersion: 1, idempotencyKey: 'assignment-request-0002' }));
+    assert.equal(idle.status, 200, JSON.stringify(idle.body));
+    assert.equal(idle.headers.get('mistri-writes'), 'tables=');
+    f.control.fail = true;
+    const refused = await post(f.base, 'execute', request({ expectedVersion: 1, idempotencyKey: 'assignment-request-0003' }));
+    assert.notEqual(refused.status, 200);
+    assert.equal(refused.headers.get('mistri-writes'), null);
+  });
+});
+
+test("a route says a run's tables only with that run's own fresh answer, and never for an App that accepts a trigger", async () => {
+  const plain = { resources: { loan: {} } } as never;
+  await hearingWrites(async (heard) => {
+    tellWrites('r-1', ['loan', 'a,b']);
+    tellWrites('r-2', []);
+    assert.equal(writesHeader(plain, heard, { receiptId: 'r-1', replayed: false }), 'tables=a%2Cb,loan');
+    assert.equal(writesHeader(plain, heard, { receiptId: 'r-2', replayed: false }), 'tables=');
+    // Another run's receipt, a replay, or an answer that is no receipt: nothing is said.
+    assert.equal(writesHeader(plain, heard, { receiptId: 'r-3', replayed: false }), undefined);
+    assert.equal(writesHeader(plain, heard, { receiptId: 'r-1', replayed: true }), undefined);
+    assert.equal(writesHeader(plain, heard, { status: 'not_found' }), undefined);
+    // A trigger the App accepts writes rows the run's statements did not: what the run wrote is not all that changed.
+    const triggered = { resources: { loan: { triggers: ['loan_totals'] } } } as never;
+    assert.equal(writesHeader(triggered, heard, { receiptId: 'r-1', replayed: false }), undefined);
+  });
+  // Outside a route that is hearing, a run's word goes nowhere, and throws nothing.
+  assert.doesNotThrow(() => tellWrites('r-9', ['loan']));
 });
 
 /* What a review token pins (sdk/commands.tsx): the run is sent for the revision the person was shown, so another

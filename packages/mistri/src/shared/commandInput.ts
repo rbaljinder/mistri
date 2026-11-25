@@ -178,6 +178,16 @@ function readMinorMoney(
   return { value: Number.isSafeInteger(+minor) ? +minor : minor };
 }
 
+/**
+ * A field's literal default (`default: false`, `default: 'counter'`), which an input that leaves the field out takes:
+ * a caller that sends nothing for it is answered as if it had sent this. A default read from the record, the tenant
+ * or the clock (`{ record }`, `{ tenant }`, `{ auto }`) is the form's to fill where it opens, and is none here.
+ */
+export function literalDefault(field: AppCommandField): string | number | boolean | undefined {
+  const start = field.type === 'group' ? undefined : (field as { default?: unknown }).default;
+  return typeof start === 'string' || typeof start === 'number' || typeof start === 'boolean' ? start : undefined;
+}
+
 function readValue(
   field: Exclude<AppCommandField, { type: 'group' | 'lines' }>,
   value: unknown,
@@ -388,7 +398,12 @@ function readList(fields: readonly AppCommandField[], raw: unknown, within: stri
       continue;
     }
     if (field.type !== 'group') {
-      const read = readValue(field, value, path, state);
+      /* Left out, a field takes its literal default, read as an answer is (a minor amount's default is in its major
+         unit, as one typed is). Only left out: a box a person emptied is still theirs to be asked for. A field asked
+         only where its `when` holds waits for whoever judges that (the server: businessCommands.ts), since a field
+         its condition hides must not be given. */
+      const start = value === undefined && !state.partial && field.when === undefined ? literalDefault(field) : undefined;
+      const read = readValue(field, start ?? value, path, state);
       if ('value' in read) result[field.name] = read.value;
       continue;
     }

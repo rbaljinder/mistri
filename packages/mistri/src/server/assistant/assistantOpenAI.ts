@@ -16,6 +16,7 @@
  * model name is the App's own (`assistant.model`), as Anthropic's is.
  */
 import type { AssistantModel, ModelBlock, ModelMessage, ModelUsage } from './assistantModel.js';
+import { modelRefused } from './assistantModelRefusal.js';
 
 /** The reply, as AssistantModel's stream returns it. */
 type ModelReply = Awaited<ReturnType<AssistantModel['stream']>>;
@@ -90,6 +91,7 @@ export function openaiBody(request: Parameters<AssistantModel['stream']>[0]): Re
             type: 'function',
             function: { name: tool.name, description: tool.description, parameters: tool.input_schema },
           })),
+          ...(request.answerOnly ? { tool_choice: 'none' } : {}),
         }
       : {}),
   };
@@ -205,16 +207,7 @@ export function openaiModel(key: string, fetchImpl: typeof fetch = fetch, deadli
       body: JSON.stringify(openaiBody(request)),
       signal,
     });
-    if (!response.ok || !response.body) {
-      const status = response.status;
-      throw new ModelUnavailable(
-        status === 401 || status === 403
-          ? "The assistant's model key was refused. The operator sets OPENAI_API_KEY."
-          : status === 429
-            ? 'The model is busy. Try again in a moment.'
-            : `The model could not be reached (${status}).`,
-      );
-    }
+    if (!response.ok || !response.body) throw await modelRefused(response, 'OPENAI_API_KEY');
     return readOpenAIStream(response.body, onText);
   }
 }

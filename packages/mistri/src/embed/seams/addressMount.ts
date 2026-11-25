@@ -23,6 +23,11 @@ export function shown(internal: string): string {
   return outward(binding().address, internal);
 }
 
+/** `shown`'s inverse, for an address the shell was handed: the host's address read back inside. */
+export function inside(external: string): string | undefined {
+  return inward(binding().address, external);
+}
+
 /* A tenant's public address (`?via=`) places a visitor who arrived on the
    App's own page. An embedded shell has no such visitor: the host signs its
    reader in through the Provider, and the query string it reads is the host's

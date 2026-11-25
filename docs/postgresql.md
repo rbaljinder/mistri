@@ -9,7 +9,8 @@ Each configured PostgreSQL database opens up to three pools lazily, on first use
 | ----------------------------- | -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | ----------------- |
 | Maximum connections           | The database browser 4, an App as many as its writers and at least 10, by default; `pool.read` or `--read-pool`, 1 to 64 | An App: twice the cores, 4 to 16, by default; `pool.write` or `--write-pool`, 1 to 64. The database browser: 1 | 1                 |
 | Queue wait                    | 2 seconds, 64 queued per connection                                                                      | 2 seconds, 64 queued per connection                                                                            | —                 |
-| Connect/acquisition timeout   | 10 seconds                                                                                               | 10 seconds                                                                                                     | 10 seconds        |
+| Connect/acquisition timeout   | 10 seconds, or `pool.connectTimeoutMs` (1000 to 120000)                                                   | 10 seconds, or `pool.connectTimeoutMs`                                                                         | 10 seconds, or `pool.connectTimeoutMs` |
+| Silent server                 | 60 seconds with a statement waiting, or `pool.queryTimeoutMs` (1000 to 3600000)                            | 60 seconds, or `pool.queryTimeoutMs`                                                                           | 60 seconds, or `pool.queryTimeoutMs` |
 | Idle expiry                   | 5 minutes, or `pool.idleSeconds` (1 to 86400) or `MISTRI_POOL_IDLE`; two connections stay open through idle, or `pool.minIdle` | 5 minutes, or `pool.idleSeconds` or `MISTRI_POOL_IDLE`; one connection stays open through idle, or `pool.minIdle` | 5 minutes, or `pool.idleSeconds` or `MISTRI_POOL_IDLE` |
 | Statement timeout             | 30 seconds                                                                                               | 30 seconds                                                                                                     | 30 seconds        |
 | Lock timeout                  | —                                                                                                        | 5 seconds; `--lock-timeout`                                                                                    | 5 seconds         |
@@ -17,6 +18,19 @@ Each configured PostgreSQL database opens up to three pools lazily, on first use
 
 The last three rows are set once per physical connection, or per transaction
 behind a [transaction-mode pooler](../site/src/content/docs/docs/performance.md#behind-a-transaction-mode-pooler).
+
+A connection the network drops without a reset is noticed by this process, not left to the operating system (about
+16 minutes on Linux while a statement is being retransmitted, two hours on a quiet socket). Every PostgreSQL socket
+asks for TCP keepalive ten seconds into a quiet spell, which finds a dead peer under a statement that is waiting for
+its answer. And each pooled connection is watched for silence (`packages/engine/src/adapters/postgresSilence.ts`):
+with a statement waiting, nothing read from the server and nothing new written to it for `pool.queryTimeoutMs`
+closes the connection with `ETIMEDOUT`, the statement fails as on any lost connection (a write's outcome is
+unknown), and the pool dials another. The default is the statement timeout and half a minute, 60 seconds: the
+server stops a statement at 30 seconds and says so, so the default never cuts one the server would have let finish,
+and a pipelined batch is answered statement by statement, so it is never silent that long either. A value under the
+statement timeout also cuts a statement that runs that long without answering. `mistri migrate` runs
+on a connection of its own, which takes the keepalive and no silence watch, so a long migration
+statement is not cut.
 Initialization is awaited for every new physical connection. Every structured
 read leases a client for exactly its statement, as `pool.query` would, so its
 wait for a connection is measured ([the pool meters](../site/src/content/docs/docs/performance.md#reading-the-pool-meters));

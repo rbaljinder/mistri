@@ -126,7 +126,12 @@ MCP, a fixed verb and a command. A verb is a fixed move (`to`, with `label`, `se
 `reason`, `when`, `confirm`, `bulk`) or a command by name, which takes `to`,
 `label`, `when`, `bulk` and `confirm`: a command that asks nothing runs on one
 click, or asks first with `confirm: true`
-(`readyForPickup: { on: { handOver: { to: 'collected', confirm: true } } }`). `since` names a
+(`readyForPickup: { on: { handOver: { to: 'collected', confirm: true } } }`). A verb's
+destination binds the command's own record: its handler may move any other row
+of the table along any edge of the graph in the same transaction, so accepting
+one proposal declines the rest with
+`db.plan.update(other, { status: 'declined' })` where `proposed` lists a verb
+to `declined`, and a write that is no edge is refused whole. `since` names a
 timestamp the server stamps on every move, and a state's
 `after: { '3 days': 'expireApplication' }` runs that command through the
 [jobs](/docs/events-and-jobs/) once a record has stayed that long.

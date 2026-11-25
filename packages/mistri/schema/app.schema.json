@@ -163,7 +163,7 @@
         "themes": {
           "type": "array",
           "minItems": 1,
-          "maxItems": 12,
+          "maxItems": 20,
           "items": { "anyOf": [{ "type": "string", "minLength": 1 }, { "$ref": "theme.schema.json" }] },
           "description": "The themes a tenant starts from (defineTheme results or built-in names); the first is the default. Absent: the App's own look."
         }
@@ -350,16 +350,17 @@
         "instructions": { "type": "string", "minLength": 1, "description": "What it is for and how it answers, appended to the platform's own rules." },
         "starters": {
           "type": "array", "minItems": 1, "uniqueItems": true,
-          "description": "Questions an empty conversation offers, each sent as the person's own when pressed: a line alone everywhere, { text, views, records } only in those views' rooms or on a record of those tables. At most six in one place.",
+          "description": "Questions an empty conversation offers, each sent as the person's own when pressed: a line alone everywhere, { text, views, records } only in those views' rooms or on a record of those tables, roles only to people holding one of them. At most six in one place for one person.",
           "items": {
             "oneOf": [
               { "type": "string", "minLength": 1, "maxLength": 120 },
               {
-                "type": "object", "additionalProperties": false, "required": ["text"], "anyOf": [{ "required": ["views"] }, { "required": ["records"] }],
+                "type": "object", "additionalProperties": false, "required": ["text"], "anyOf": [{ "required": ["views"] }, { "required": ["records"] }, { "required": ["roles"] }],
                 "properties": {
                   "text": { "type": "string", "minLength": 1, "maxLength": 120, "description": "The line the person sends." },
                   "views": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 }, "description": "View keys: offered while one of these views is the room." },
-                  "records": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 }, "description": "Table names: offered while a record of one of these tables is open. Needs the record placement." }
+                  "records": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 }, "description": "Table names: offered while a record of one of these tables is open. Needs the record placement." },
+                  "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1 }, "description": "Roles of the App's auth: offered only to a person holding one of them." }
                 }
               }
             ]
@@ -377,7 +378,8 @@
           "properties": {
             "tokensPerTurn": { "type": "integer", "minimum": 1000 },
             "tokensPerPersonPerDay": { "type": "integer", "minimum": 1000 },
-            "tokensPerDay": { "type": "integer", "minimum": 1000 }
+            "tokensPerDay": { "type": "integer", "minimum": 1000 },
+            "steps": { "type": "integer", "minimum": 1, "maximum": 32, "description": "Rounds of tool calls one answer may take before it is written; 8 when absent. A round whose every call was refused is not counted." }
           }
         }
       }

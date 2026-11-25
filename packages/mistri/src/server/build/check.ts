@@ -1684,6 +1684,28 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       }
     }
 
+    /* A failed validation while migrations wait: the App may be written for the schema they make (a grant or a view
+       naming a column a pending migration adds), and --pending judges it against that, on a scratch copy. Said
+       only then: a field report built that copy by hand, not knowing the flag was there. */
+    if (!pending && schemaFile === undefined) {
+      const judged = steps.findLast((step) => step.name === 'validation');
+      if (judged?.status === 'failed') {
+        const { pendingScripts } = await import('./pending.js');
+        const waiting = await pendingScripts(
+          appDir,
+          rest,
+          { ...(migrations !== undefined ? { migrations } : {}), ...(historyTable !== undefined ? { table: historyTable } : {}) },
+          CONFIG_SECTIONS,
+        );
+        if (waiting.length)
+          judged.lines = [
+            ...judged.lines,
+            `note: ${waiting.length} migration${waiting.length === 1 ? ' is' : 's are'} pending (${waiting.slice(0, 3).join(', ')}${waiting.length > 3 ? ', …' : ''}). ` +
+              'mistri check --pending judges the App against the schema as it will be once applied, on a scratch copy of the database.',
+          ];
+      }
+    }
+
     /* A role granted a command whose `read` names a table that role cannot read is refused on every run, as "not
        available to this account" (businessCommandAuthorization.ts), while everything above passed: said here, naming
        each role, command and table. Judged against the App's own catalog, so a database that cannot be read leaves it

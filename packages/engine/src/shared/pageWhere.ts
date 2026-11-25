@@ -12,8 +12,10 @@
  * Values are written so the parser reads them as what they are: a string is quoted (a quoted value is always
  * text, so `'me'` or `'today'` in a text column is those letters), except digits on a number column, which stay
  * bare so they compare as numbers, ids past 2^53 included, and an ISO day on a date column, bare so it reads as
- * that day (on a timestamp, all of it). A list is a chain of `=` joined by `or`, never `in (…)`: the language
- * splits an `in` list at every comma, quoted or not.
+ * that day (on a timestamp, all of it). A list is `in (…)`, one membership test whatever its length, where every
+ * value is quoted text or a bare number: those the language reads in a list exactly as it reads them after `=`. Any
+ * other list (an ISO day, a yes or no, a text with a comma, since the language splits an `in` list at every comma,
+ * quoted or not, or the empty text, which it drops from one) stays a chain of `=` joined by `or`.
  */
 import { columnKind, isFlagColumn, type ColumnMeta, type TableMeta } from './schema.js';
 
@@ -25,6 +27,9 @@ const WHERE_OPERATORS: readonly string[] = ['not', ...Object.keys(RANGE), ...Obj
 type Kind = 'number' | 'boolean' | 'date' | 'text' | 'other';
 const NUMERAL = /^-?\d+(?:\.\d+)?$/;
 const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/* A written value an `in (…)` list reads as `=` reads it: a bare number, or quoted text that is not empty and holds no
+   comma. */
+const LISTABLE = /^(?:-?\d+(?:\.\d+)?|"[^,]+")$/;
 /* The language's column token: a name outside it could not be read back as a column. */
 const COLUMN_NAME = /^[\w$]+$/;
 
@@ -73,13 +78,19 @@ function written(name: string, kind: Kind, value: unknown): { text: string } | {
 function oneOf(name: string, kind: Kind, values: readonly unknown[], op: '=' | '!='): { text: string } | { error: string } {
   if (!values.length) return { error: `${name} is asked for one of no values: leave it out, or name at least one.` };
   const parts: string[] = [];
+  const listed: string[] = [];
   for (const value of values) {
     const got = written(name, kind, value);
     if ('error' in got) return got;
     parts.push(`${name} ${op} ${got.text}`);
+    listed.push(got.text);
   }
   if (op === '!=') return { text: parts.join(' and ') };
-  return { text: parts.length === 1 ? parts[0] : `(${parts.join(' or ')})` };
+  if (parts.length === 1) return { text: parts[0] };
+  /* One test, not a branch per value: the language caps a condition's OR branches (query.ts MAX_GROUPS), and a list
+     of ids a first read found is often longer than the cap, or meets another list and multiplies past it. */
+  if (listed.every((text) => LISTABLE.test(text))) return { text: `${name} in (${listed.join(', ')})` };
+  return { text: `(${parts.join(' or ')})` };
 }
 
 function condition(name: string, kind: Kind, value: unknown): { text: string } | { error: string } {

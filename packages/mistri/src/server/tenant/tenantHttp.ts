@@ -123,7 +123,7 @@ import { flowRunsOf } from '../workflows/flowRuns.js';
 import { readRecordActivityFor } from '../recordActivity.js';
 import { appSurfaceForRealm } from '../../shared/appTenancy.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
-import { PAGE_HEADER, pageLoad, pageManifestRefusal } from '../http/pageLoad.js';
+import { PAGE_HEADER, pageLoad, pageManifestRefusal, tellLoaderReads } from '../http/pageLoad.js';
 import { currentReadRoute, readRouteOf, withReadKind, withReadRoute } from '../readAudit.js';
 import { readRefusalHeaders, tenantReadRefusal } from './tenantReadRefusal.js';
 import { attributeAction, attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
@@ -137,6 +137,7 @@ import { leaseInbox } from './tenantInbox.js';
 import { answerLiveOff, LIVE_PATH } from '../live/liveRoute.js';
 import { liveOffResources, liveSyncOn } from '../live/liveBinding.js';
 import { trackingReads } from '../live/liveReads.js';
+import { hearingWrites, WRITES_HEADER, writesHeader } from '../commands/commandWrites.js';
 import type { RoomInput } from '../http/firstPaintRooms.js';
 import { bootRoom } from './tenantBootRoom.js';
 import { itemKey, readKey, type FirstPaintData } from '@mistriwork/engine/shared/firstPaint.js';
@@ -925,8 +926,10 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   ...(context.zone === undefined ? {} : { zone: context.zone }),
                   chosenHeader: req.headers[CHOICE_HEADER],
                   chosenStored,
+                  toldFrom: servedBaseOf(schema),
                 }),
               );
+              tellLoaderReads(asked.told ?? res, loaded);
               return { status: loaded.status, body: loaded.body };
             }
             // These replies consume the fresh lease context and its projected
@@ -1804,10 +1807,16 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           ...(named ? { name: named } : {}),
           ...(typeof chosenHeader === 'string' ? { chosenHeader } : {}),
         };
-        const result = await attributed(
-          () => tenantCommandRoute(contexts, { path, platform, req, selectors, expected, input, execution }),
-          commandActionLabel(app, input),
-        );
+        /* What an executed command wrote, for the page that ran it (commands/commandWrites.ts). */
+        const result = await hearingWrites(async (heard) => {
+          const answered = await attributed(
+            () => tenantCommandRoute(contexts, { path, platform, req, selectors, expected, input, execution }),
+            commandActionLabel(app, input),
+          );
+          const wrote = path.endsWith('/execute') ? writesHeader(app, heard, answered.value) : undefined;
+          if (wrote !== undefined && !res.headersSent) res.setHeader(WRITES_HEADER, wrote);
+          return answered;
+        });
         // A proposal decided or a mark confirmed wrote too; a list of proposals wrote nothing a retry could repeat.
         completedWrite =
           path.endsWith('/execute') ||

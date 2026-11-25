@@ -695,6 +695,11 @@
   .kit-item-clickable {
     cursor: pointer;
   }
+  /* The chosen row (`selected`): the accent's tint, as the primitives' sheet dresses it, so a page that brings only
+     this sheet shows which row is picked. */
+  .kit-item[data-selected] {
+    background: var(--accent-soft);
+  }
   .kit-item-lead {
     position: relative;
     z-index: 1;

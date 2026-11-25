@@ -33,6 +33,11 @@ export function publicPlacement(): string | null {
   return null;
 }
 
+/** `shown`'s inverse, by the mount of the request being rendered. */
+export function inside(external: string): string | undefined {
+  return inward(currentMount(), external);
+}
+
 export function shownUnplaced(internal: string): string {
   return shown(internal);
 }

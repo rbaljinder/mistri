@@ -325,6 +325,10 @@ export interface PageCommand<Input extends string = string, Output = unknown> {
     input?: Readonly<Partial<Record<Input, unknown>>>,
     options?: CommandRunOptions,
   ): Promise<CommandOutcome<Output>>;
+  /** Open its form, filled with `input`. `run`, `open` and `prepare` all take `input` as a person would type it, which
+      is what the form sends: a `field.money({ minor: true })` input is its major amount (`255` or `'255.00'` for
+      $255.00), never the cents its handler receives, and the field's `min` and `max` are in that unit too. A field
+      left out takes its `default`. */
   open(
     record: Readonly<Record<string, unknown>>,
     input?: Readonly<Partial<Record<Input, unknown>>>,
@@ -411,8 +415,10 @@ export interface PageDefinition<
     readonly loaders?: readonly LS[];
   };
   /** One of the page's loaders by its name, `loader` or one of `loaders`: `page.useLoader('dueFigure')`, its `data` typed by what
-      the loader returns. Each has its own query, loading state and refetch, and is read again after a command the page runs commits. */
-  useLoader<const N extends L | LS>(name: N): UiQuery<LoaderData<N>>;
+      the loader returns. Each has its own query, loading state and refetch, and is read again after a command the page runs commits.
+      `{ enabled: false }` asks nothing yet: a page that settles a parameter after its first reads holds the loader until it has,
+      so it runs once with the place the page settled on (`page.useLoader('asap', { enabled: office !== undefined })`). */
+  useLoader<const N extends L | LS>(name: N, options?: { enabled?: boolean }): UiQuery<LoaderData<N>>;
   /** Rows of one of the page's reads, each typed by what `show` names:
       `page.useRows('pick_list', { show: ['id', 'reference'], where: { status: 'to_pick' }, sort: 'reference' })`. */
   useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly []>(
@@ -770,11 +776,17 @@ export declare function Steps<const N extends CommandName>(props: StepsProps<N>)
  * label and the row's title ("Check in Morgan Lee"), so a list of them reads apart. Its outcome is said in the
  * platform's live region — `done` says it in the page's words — and a refusal is said there too. The row needs its
  * key (a `RecordList`'s and a `useRows` read's rows both carry it); a command that names no row (`targets: 'none'`) takes
- * none: `<CommandButton command="postRent" />`. `page.useCommand` stays for what a button cannot say.
+ * none: `<CommandButton command="postRent" />`. `values` are the command's input, as `run(row, values)` takes them:
+ * complete, the press sends the command; short of what it asks, its form opens filled with them
+ * (`<CommandButton command="recordPayment" row={invoice} values={{ amount: owed }} />`). `page.useCommand` stays for
+ * what a button cannot say.
  */
-export declare function CommandButton(props: {
-  command: CommandName;
+export declare function CommandButton<const N extends CommandName>(props: {
+  command: N;
   row?: UiRow;
+  /** The command's input, by name, in the units a person types: a `minor` money input is its major amount (`12.5`
+      or `'12.50'` for $12.50), never cents. */
+  values?: Readonly<Partial<Record<import('./app.js').CommandInputName<N>, unknown>>>;
   label?: string;
   variant?: 'primary' | 'secondary' | 'soft' | 'outline' | 'ghost' | 'danger' | 'danger-soft';
   size?: 'xs' | 'sm' | 'md' | 'lg';

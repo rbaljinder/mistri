@@ -58,7 +58,7 @@ export async function sendCommand(
   action: AppCommandAction,
   owner: CommandOwner,
   input: Record<string, unknown>,
-  options: { headless: boolean; current?: () => boolean; refresh: () => void; pinned?: number },
+  options: { headless: boolean; current?: () => boolean; refresh: (wrote?: readonly string[]) => void; pinned?: number },
 ): Promise<CommandSent> {
   /* A revision a person reviewed is sent as it is, once: a record that moved since is refused `stale_record`, and
      preparing again here would run the command over a revision nobody saw. */
@@ -93,7 +93,7 @@ async function execute(
   owner: CommandOwner,
   input: Record<string, unknown>,
   expectedVersion: number,
-  { headless, current = () => true, refresh }: { headless: boolean; current?: () => boolean; refresh: () => void },
+  { headless, current = () => true, refresh }: { headless: boolean; current?: () => boolean; refresh: (wrote?: readonly string[]) => void },
 ): Promise<CommandSent> {
   let operation: CommandOperation;
   try {
@@ -118,7 +118,11 @@ async function execute(
  * A sent command whose answer did not arrive, asked again by its receipt: the same frozen envelope, so the same
  * idempotency key, which the server answers from its journal and never runs a second time (businessCommandExecution.ts).
  */
-export async function checkCommand(operation: CommandOperation, owner: CommandOwner, refresh: () => void): Promise<void> {
+export async function checkCommand(
+  operation: CommandOperation,
+  owner: CommandOwner,
+  refresh: (wrote?: readonly string[]) => void,
+): Promise<void> {
   await commandOperations.send(
     operation,
     'status',

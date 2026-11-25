@@ -377,9 +377,17 @@ export type CommandTables<Scope, R extends string, W extends string> = {
 };
 /** One table's row on a source: `RowOf<typeof lending, 'lead'>`. */
 export type RowOf<Src, Table extends string> = RowIn<SourceTables<Src, Table>, LocalName<Table>>;
-/** Some of a source's tables, read-only — for a helper a handler passes its `db` to. */
-export type CommandDb<Src, Tables extends string> = {
-  readonly [T in Tables]: ReadTable<RowOf<Src, T>, { readonly [To in Tables]: RowOf<Src, To> }>;
+/**
+ * Some of a source's tables, for a helper a handler passes its `db` to: `Tables` read-only, and `Writes`, where the
+ * helper writes, as the handler's own handles are (`insert`, `update`, `remove`, …). A handler whose command reads
+ * and writes at least these hands its `db` over as it is:
+ * `function post(db: CommandDb<typeof ledger, 'account', 'entry'>, …)` reads `account` and writes `entry`.
+ * Read-only, it also takes a loader's and an `initial`'s `db`.
+ */
+export type CommandDb<Src, Tables extends string, Writes extends string = never> = {
+  readonly [T in Tables | Writes]: T extends Writes
+    ? WriteTable<RowOf<Src, T>, { readonly [To in Writes]: RowOf<Src, To> }, { readonly [To in Tables | Writes]: RowOf<Src, To> }>
+    : ReadTable<RowOf<Src, T>, { readonly [To in Tables | Writes]: RowOf<Src, To> }>;
 };
 
 /* ---------- the catalog ---------- */
@@ -390,6 +398,8 @@ interface CommandTable {
   readonly key: readonly string[];
   readonly kinds: Readonly<Record<string, ColumnKind>>;
   readonly meta: TableMeta;
+  /** The table's id in the schema it was cataloged from, which `meta` renames: what a run says it wrote (commandWrites.ts). */
+  readonly schemaId?: string;
   /** The tables its handle may ask about with `any`/`no`, and the references between them: exactly the tables the
       catalog declares (commandCatalog), so a child outside the declared reads is not a table there. */
   readonly declared?: { readonly tables: TableMeta[]; readonly foreignKeys: ForeignKey[] };
@@ -438,6 +448,7 @@ export function commandCatalog(
       key: Object.freeze(meta.columns.filter((column) => column.primaryKey).map((column) => column.name)),
       kinds: Object.freeze(Object.fromEntries(meta.columns.map((column) => [column.name, columnKind(column.type)]))),
       meta: renamed,
+      schemaId: meta.id,
       dialect: schema.dialect,
     });
   }

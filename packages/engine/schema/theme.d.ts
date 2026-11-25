@@ -328,7 +328,7 @@ export interface ThemeRecipes {
   /** A record's avatar. */
   avatar?: 'plain' | 'large' | 'round';
   /** A workflow's steps. */
-  workflow?: 'markers' | 'pills' | 'segments';
+  workflow?: 'markers' | 'pills' | 'segments' | 'none';
   /** A dashboard's banner note: a tint of the accent, a soft gradient across it, or plain on the ground. */
   banner?: 'tint' | 'gradient' | 'plain';
   /** A breakdown drawn as steps: cards on the surface with a hairline, each on a pale tint of its tone, or one strip of figures parted by hairlines, with no cards or marks. */

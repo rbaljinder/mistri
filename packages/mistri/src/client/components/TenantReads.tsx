@@ -9,8 +9,7 @@ import { useCallback, useEffect, useState, type FormEvent, type MouseEvent } fro
 import { api } from '@mistriwork/kit/client/core.js';
 import { formatDateTime } from '@mistriwork/kit/client/locale.js';
 import { navFollow } from '@mistriwork/kit/client/shellHost.js';
-import { shell } from '@mistriwork/kit/client/shellMode.js';
-import { sessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
+import { tenantQualified } from '../tenantAddress.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Field } from '@mistriwork/ui/Field.js';
 import { Select } from '@mistriwork/ui/Select.js';
@@ -87,18 +86,6 @@ function body(filters: Filters, before?: number): Record<string, unknown> {
     ...(until ? { until } : {}),
     ...(before !== undefined ? { before } : {}),
   };
-}
-
-/** An in-App address as the shell writes it for this session: a tenant's carries its selector (sdk/host.tsx). */
-function tenantQualified(href: string): string {
-  const { tenant } = sessionIdentity();
-  const qualify = shell().tenantLinks?.qualify;
-  if (!tenant || !qualify) return href;
-  try {
-    return qualify(href, tenant.appId, tenant.tenantId);
-  } catch {
-    return href;
-  }
 }
 
 function RecordLink({ resource, record }: { resource: string; record: string }) {

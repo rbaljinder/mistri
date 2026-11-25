@@ -359,12 +359,18 @@ export async function startTenantServing(
       await owner.retire();
       throw new Error(`Tenant deployment files changed during authentication startup${which(changedFiles)}; restart.`);
     }
+    /* MISTRI_JOBS=off: shot and grade look at an App and must not change its database, which a scheduled job does
+       (cli/serve.ts says the same of a single App). The endpoints still answer; nothing is scheduled or sent. */
+    const startJobs = (): void => {
+      if (!owner.jobs) return;
+      const jobsOff = process.env.MISTRI_JOBS === 'off';
+      if (jobsOff) console.log('mistri: jobs and effects are off (MISTRI_JOBS=off): nothing is scheduled.');
+      else for (const line of jobLines) console.log(`mistri: ${line}`);
+      owner.jobs.start({ scheduled: !jobsOff });
+    };
     if (opts.embedded) {
       for (const line of unsweptBuckets([loaded.app], owner.filesSwept)) console.log(`mistri: ${line}`);
-      if (owner.jobs) {
-        for (const line of jobLines) console.log(`mistri: ${line}`);
-        owner.jobs.start();
-      }
+      startJobs();
       console.log(`  ${loaded.app.name}: mounted at ${appHome(mount, loaded.app.id)} (tenant membership isolation enabled)`);
       return { server: owner.server, mount, close: () => stop(0) };
     }
@@ -388,10 +394,7 @@ export async function startTenantServing(
       if (api) console.log(apiServingLine(loaded.app, api, true));
       for (const line of unsweptBuckets([loaded.app], owner.filesSwept)) console.log(`mistri: ${line}`);
       // One job host, after enrollment: it starts once the listener is up.
-      if (owner.jobs) {
-        for (const line of jobLines) console.log(`mistri: ${line}`);
-        owner.jobs.start();
-      }
+      startJobs();
       const open = process.env.MISTRI_OPEN;
       if (open === undefined ? opts.open : !['', '0', 'false'].includes(open.toLowerCase())) {
         void openBrowser(`http://${shown}:${opts.port}${appHome(mount, loaded.app.id)}`);

@@ -28,7 +28,7 @@ import { parseCommandInput } from '../../shared/commandInputParse.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
 import { AUDIT_TARGET_ENTRIES_MOST } from '../../adapters/commands/commandJournalSchema.js';
 import { COMMAND_FIELD_PATH } from '@mistriwork/engine/shared/commandFieldPath.js';
-import { CommandInputRefusal, readCommandInput } from '../../shared/commandInput.js';
+import { CommandInputRefusal, literalDefault, readCommandInput } from '../../shared/commandInput.js';
 import {
   captureCommandEvents,
   type BusinessEventPick,
@@ -1524,6 +1524,16 @@ export function parseRegisteredInput(
     richText: (value, most) => readRichTextInput(value, {}, most),
     ...(options.cell ? { cell: options.cell } : {}),
   });
+  /* A field asked only where its `when` holds, left out where it does hold, takes its literal default as any other
+     field does: judged here, where the condition can be. One that reads the record waits for its binding. */
+  for (const field of command.fields) {
+    if (field.type === 'group' || field.type === 'lines' || field.when === undefined || Object.hasOwn(read, field.name)) continue;
+    if (literalDefault(field) === undefined) continue;
+    const condition = options.bound?.[field.name] ?? (readsRecord(field.when) ? undefined : field.when);
+    if (condition === undefined || !draftHolds(condition, read, command.fields, options.now ?? appTime())) continue;
+    const { when: _when, ...alone } = field;
+    Object.assign(read, readCommandInput([alone as AppCommandField], {}, options.currency ? { currency: options.currency } : {}));
+  }
   judgeDraft(command, read, options.bound, options.now);
   // A sensitive input is what it keeps from here on: validate, the handler, the fingerprint and the audit never hold the value.
   const parsed = cutSensitive(command.fields, read, context.actor.appId, options.reveal);

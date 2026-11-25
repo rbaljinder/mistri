@@ -27,6 +27,7 @@ import { appZone } from '../../shared/appUi.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { PageLoader } from '../commands/pageLoaders.js';
 import { strayRead } from './tablesReached.js';
+import { READS_HEADER, readTables } from '../live/liveReads.js';
 import { PageLoaderRefused, runPageLoader } from '../commands/pageLoaderRun.js';
 import { readChosen, type StoredPicks } from '../app/appChoices.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
@@ -36,6 +37,38 @@ export { PAGE_HEADER, PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoute
 const PARAM_MOST = 1024;
 
 type Reply = { status: number; body: Record<string, unknown> };
+/** A loader's answer, and the tables it answers from where they can be told: its route says them as `mistri-reads`. */
+type LoadReply = Reply & { reads?: readonly string[] };
+
+/**
+ * The tables a loader answers from: every table it declares, and what a read of each can reach without naming it
+ * (live/liveReads.ts: its references, its rollups' children, its computed columns' paths), so the page that ran a
+ * command asks the loader again only when the command wrote one of them. Undefined, and so asked again after every
+ * command, for a loader that declares none (it hands the page what the server knows) or one that cannot be told.
+ */
+function loaderReads(schema: DatabaseSchema, loader: PageLoader, logical: (local: string) => string): readonly string[] | undefined {
+  if (!loader.reads.length) return undefined;
+  const reads = new Set<string>();
+  for (const name of loader.reads) {
+    const id = tableNamed(schema, logical(name))?.id;
+    const found = id === undefined ? undefined : readTables(schema, id, null);
+    if (!found) return undefined;
+    for (const table of found) reads.add(table);
+  }
+  return [...reads].sort();
+}
+
+/** A load's reply said on `reply`: its tables as the header a read's own would be, or none where they are not told. */
+export function tellLoaderReads(
+  reply: { readonly headersSent: boolean; setHeader(name: string, value: string): unknown; removeHeader(name: string): unknown },
+  loaded: { reads?: readonly string[] },
+): void {
+  if (reply.headersSent) return;
+  /* Set or taken off, never left: the reader a loader reads through tells the tables of the reads it happened to make
+     (liveReads.ts trackingReads), which are not all of them. */
+  if (loaded.reads) reply.setHeader(READS_HEADER, loaded.reads.map(encodeURIComponent).join(','));
+  else reply.removeHeader(READS_HEADER);
+}
 const notFound: Reply = { status: 404, body: { error: 'No such page.', code: 'not_found' } };
 
 /** The free-form page a reader holding `roles` may open under `key`, or undefined. */
@@ -60,6 +93,9 @@ export async function pageLoad(options: {
   body: Record<string, unknown>;
   reader: Pick<Adapter, 'query' | 'count' | 'aggregate'>;
   schema: DatabaseSchema;
+  /** The catalog the loader's tables are told from, where `schema` is a copy made for this request: the kept one,
+      whose answers are kept with it (a tenant's, tenantHttp.ts). */
+  toldFrom?: DatabaseSchema;
   /** The reader's zone, where `ui.timezone` reads one (readerZone.ts). */
   zone?: string;
   /* The surface a headless request names (surfaceGate.ts): its loader is run in place of a page's, and it keeps no
@@ -69,7 +105,7 @@ export async function pageLoad(options: {
   chosenHeader?: string | string[];
   /** What the person has stored for a name the header leaves out (app/appPreferences.ts). */
   chosenStored?: StoredPicks;
-}): Promise<Reply> {
+}): Promise<LoadReply> {
   const { app, body, schema, surface } = options;
   if (!surface && (typeof body.page !== 'string' || body.page.length > 64))
     return { status: 400, body: { error: 'Name the page: { page }.' } };
@@ -101,6 +137,9 @@ export async function pageLoad(options: {
       return { status: 400, body: { error: `"${param}" is not a parameter's text.` } };
     params[param] = value;
   }
+  /* A loader that says the parameters it reads is handed those alone: the page keys it by them (client hooks.ts
+     pageLoadPlace), so one it read without saying would be a value the page never asked it again for. */
+  if (loader.params) for (const param of Object.keys(params)) if (!loader.params.includes(param)) delete params[param];
   try {
     const data = await runPageLoader({
       name,
@@ -114,7 +153,14 @@ export async function pageLoad(options: {
       timezone: appZone(app.ui, options.zone),
       chosen: await readChosen(app, schema, options.reader, options.chosenHeader, options.chosenStored),
     });
-    return { status: 200, body: { data } };
+    const logical = loader.source ? (local: string) => logicalResource(app, loader.source!, local) : (local: string) => local;
+    let reads: readonly string[] | undefined;
+    try {
+      reads = loaderReads(options.toldFrom ?? schema, loader, logical);
+    } catch {
+      reads = undefined;
+    }
+    return { status: 200, body: { data }, ...(reads ? { reads } : {}) };
   } catch (error) {
     if (error instanceof PageLoaderRefused) return { status: error.status, body: { error: error.message, code: error.code } };
     throw error;

@@ -96,6 +96,21 @@ describe('a command on one row', () => {
     await vi.waitFor(() => expect(button).not.toBeDisabled());
   });
 
+  test('`values` are its input, handed to the run as `run(row, values)` takes them', async () => {
+    const drawn = renderPage(
+      definePage({
+        label: 'Desk',
+        reads: ['booking'],
+        commands: ['checkIn'],
+        component: () => <CommandButton command="checkIn" row={{ id: 1, guest_name: 'Morgan Lee' }} values={{ party_size: 2 }} />,
+      }),
+      { data: BOOKINGS, viewer: SIGNED_IN, commands: { checkIn: { label: 'Check in' } } },
+    );
+    (await screen.findByRole('button', { name: /^Check in/ })).click();
+    await vi.waitFor(() => expect(drawn.commands).toHaveLength(1));
+    expect(drawn.commands[0]).toMatchObject({ command: 'checkIn', mode: 'run', input: { party_size: 2 } });
+  });
+
   test("is held where the row's state does not allow it", async () => {
     const available = (key: Readonly<Record<string, unknown>>) => key.id !== 4;
     renderPage(desk, { data: BOOKINGS, viewer: SIGNED_IN, commands: { checkIn: { label: 'Check in', available } } });

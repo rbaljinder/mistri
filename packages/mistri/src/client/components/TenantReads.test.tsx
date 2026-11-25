@@ -14,7 +14,7 @@ vi.mock('../../../../kit/src/client/core.js', () => ({
   viewportSize: () => ({ width: 1024, height: 768 }),
   viewportBox: (element: Element) => element.getBoundingClientRect(),
 }));
-vi.mock('../../../../kit/src/client/shellHost.js', () => ({ navFollow }));
+vi.mock('../../../../kit/src/client/shellHost.js', async (original) => ({ ...(await original<object>()), navFollow }));
 vi.mock('../publicAddress.js', () => ({
   recordHref: (table: string, key: string) => (table === 'patients' ? `/clinic/patients/${key}` : undefined),
 }));

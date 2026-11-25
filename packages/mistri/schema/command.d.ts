@@ -28,7 +28,10 @@ interface FieldBase {
   help?: string | AppMessageRef;
   /** A field is required unless it says `optional: true`; an optional field left empty is absent. */
   optional?: boolean;
-  /** What the field starts as; see CommandFieldDefault. An `initial()` value for the field stands over it. */
+  /** What the field starts as; see CommandFieldDefault. An `initial()` value for the field stands over it.
+      A literal default also answers for a caller that leaves the field out: an input sent without it (a row's button,
+      a page's `run`, a test, a job, the App API) takes the default instead of being refused as required. A box a
+      person emptied on the form is still asked for, unless the field is `optional`. */
   default?: CommandFieldDefault;
   /**
    * Asked only while this condition holds, judged over the draft as it is typed: a bare name is another field of this
@@ -105,15 +108,23 @@ export interface CommandNumberField extends FieldBase {
     With `minor: true` the reader still types the major amount, at the currency's own precision (two places in USD, none in
     JPY, three in KWD; a finer fraction is refused, never rounded), but the handler receives the exact whole number of minor
     units - 19.99 is 1999 - as a number, or as a string past 2^53, as an id is. `min` and `max` stay in the typed (major)
-    unit, and `step` is not taken: the currency sets the precision. */
+    unit, and `step` is not taken: the currency sets the precision.
+    Only the handler holds minor units. Every caller gives the major amount, as the form does: a page's
+    `run(record, { amount: 19.99 })` and `open`, a `CommandButton`'s `values`, a test's `client.command`, the App API
+    and the field's own `default`. A caller that sends 1999 has said $1,999.00. */
 export interface CommandMoneyField extends FieldBase {
   type: 'money';
   /** Example text inside the empty box: `placeholder: 'e.g. 2018 Honda Civic'`. At most 256 characters. */
   placeholder?: string | AppMessageRef;
+  /** The least amount, in the currency's major unit whether or not the field is `minor`: `min: 0.5` is fifty cents,
+      and with `minor: true` the handler's least is 50. Zero where unsaid. */
   min?: number;
+  /** The most, in the currency's major unit whether or not the field is `minor`: `max: 50_000` is $50,000.00 (the
+      handler's 5000000 with `minor: true`), never 50,000 cents. */
   max?: number;
   step?: number;
-  /** Received as the exact whole number of minor units (cents, paise, yen) the typed amount is. */
+  /** Received as the exact whole number of minor units (cents, paise, yen) the typed amount is. `min`, `max` and
+      `default` stay in the major unit. */
   minor?: boolean;
   /** ISO 4217 code this amount is in, where the App's `ui.currency` is not (`'EUR'`). */
   currency?: string;

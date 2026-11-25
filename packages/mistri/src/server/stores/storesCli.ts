@@ -505,6 +505,16 @@ async function appStoreSteps(
         const stores = Object.entries(made.stores).map(([id, store]) => said(id, store));
         return [...stores, `${made.destinations.length} delivery destination(s)`].join(', ');
       });
+    /* Given a jobs module, the step above makes the jobs' destinations and not the effects': those are their own
+       step, as a single App's are below. Without it a tenant App with both was refused at start, its effects'
+       deliveries unprovisioned, until `up` was run once more without --jobs. */
+    if (registryOf && jobs && commands.some((command) => getCommandEffects(command)))
+      add(home, ['event-delivery'], async (where) => {
+        kept(where, "effects' deliveries");
+        const effects = await provision(where, { app: { id: app.id, tenant: binding, commands: registryOf } });
+        const added = effects.destinations.filter((each) => each.added).length;
+        return `effects: ${effects.destinations.length} destination(s), ${added} added`;
+      });
     return { steps };
   }
   const notifying = Object.entries(app.resources ?? {}).filter(([, resource]) => resource.notify?.length);

@@ -21,6 +21,7 @@ import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from '
 import { dirname, join, relative, resolve } from 'node:path';
 import { dependencyDeclarations } from './upgradeDependencies.js';
 import {
+  EVERYDAY_WORDS,
   EXPORTS,
   GENERIC_TOKENS,
   KEYS,
@@ -29,6 +30,7 @@ import {
   REFUSED,
   THIRD_PARTY_SELECTOR,
   TOKENS,
+  TYPE_MEMBERS,
   VALUES,
   renamedModule,
   type Guards,
@@ -338,6 +340,8 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
   const is = (index: number, text: string) => tokens[index]?.text === text && tokens[index]!.kind !== 'string';
   const imports = importedNames(tokens);
   const componentRows = KEYS.filter((each) => each.component);
+  /* The tags whose renamed-word prop is given an expression, for the words the file holds to be named once the pass is done. */
+  const held: Array<{ rename: (typeof componentRows)[number]; shown: string; line: number; open: number }> = [];
   /** The name mistri exports the word at `j` under, when it is one of mistri's: imported from it, or a member of a namespace that is. */
   const mistriAt = (j: number, types = false): string | undefined => {
     const token = tokens[j];
@@ -726,9 +730,19 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
         const value = is(j + 1, '=') ? tokens[j + 2] : undefined;
         const word =
           value?.kind === 'string' && rename.values && Object.hasOwn(rename.values, value.text) ? rename.values[value.text] : undefined;
+        const flag =
+          value?.kind === 'string' && rename.flags && Object.hasOwn(rename.flags, value.text) ? rename.flags[value.text] : undefined;
         if (value && word !== undefined) {
           edits.push({ start: value.start, end: value.end, text: word });
           changes.push({ line: token.line, said: `<${shown} ${rename.to}="${value.text}"> -> "${word}"` });
+        } else if (value && flag !== undefined) {
+          /* The whole attribute, through its closing quote, is the bare prop (or nothing, and the space before it goes too). */
+          const from = flag ? tokens[first]!.start : (tokens[first - 1]?.end ?? tokens[first]!.start);
+          edits.push({ start: from, end: value.end + 1, text: flag });
+          changes.push({ line: token.line, said: `<${shown} ${rename.from}="${value.text}"> -> ${flag || 'left out'}` });
+        } else if (is(j + 1, '=') && is(j + 2, '{') && (rename.values || rename.flags)) {
+          /* Its words come from an expression: the old ones the file holds are named below, each by its line. */
+          held.push({ rename, shown, line: token.line, open: j + 2 });
         }
       } else if (rename && own) {
         refusals.push({
@@ -740,6 +754,76 @@ export function upgradeSource(source: string, context: UpgradeContext = {}): Upg
         j += 2;
         if (is(j, '{')) j = closeOf(j);
         else if (tokens[j]?.kind !== 'string') return;
+      }
+    }
+  }
+
+  /* A prop whose words changed, given an expression (`tone={tones[row.status]}`): nothing on the tag says which word
+     reaches it, so each old word the file still holds as a string is named by its line, for a person to change where
+     it is that prop's (a map, a ternary, a variable). A word the file no longer holds is not named, so a run after
+     the change finds nothing. */
+  if (held.length) {
+    const rewritten = new Set(edits.map((edit) => edit.start));
+    const named = new Set<string>();
+    for (const token of tokens) {
+      if (token.kind !== 'string' || rewritten.has(token.start) || EVERYDAY_WORDS.has(token.text)) continue;
+      for (const { rename, shown, line } of held) {
+        const now = rename.values && Object.hasOwn(rename.values, token.text) ? `'${rename.values[token.text]}'` : undefined;
+        const flagged = rename.flags && Object.hasOwn(rename.flags, token.text) ? rename.flags[token.text] : undefined;
+        if (now === undefined && flagged === undefined) continue;
+        const key = `${token.start}:${rename.from}`;
+        if (named.has(key)) continue;
+        named.add(key);
+        refusals.push({
+          line: token.line,
+          said:
+            `'${token.text}' is held here, and <${shown} ${rename.to}={…}> (line ${line}) takes its ${rename.to} from an expression: ` +
+            `as a ${rename.to} it is now ${now ?? (flagged ? `the \`${flagged}\` prop` : 'what the component does unsaid, so leave it out')}. ` +
+            `Change it by hand where it is the word that reaches the prop; a CSS class built from it changes with it`,
+        });
+      }
+    }
+  }
+  /* A component written against a type whose member was renamed (`InputProps`' `onChange`). */
+  for (let t = 0; t < tokens.length; t++) {
+    const token = tokens[t]!;
+    if (token.kind !== 'id' || !is(t - 1, ':')) continue;
+    const imported = imports.get(token.text);
+    if (!imported || !isKitModule(imported.module)) continue;
+    for (const member of TYPE_MEMBERS) {
+      if (member.type !== imported.name) continue;
+      if (is(t - 2, '}')) {
+        /* `({ value, onChange }: InputProps)`: the member at the pattern's own level, keeping the name the body uses. */
+        let open = t - 2;
+        for (let depth = 0; open >= 0; open--) {
+          if (is(open, '}')) depth++;
+          else if (is(open, '{') && --depth === 0) break;
+        }
+        for (let j = open + 1, depth = 0; j < t - 2; j++) {
+          if (is(j, '{') || is(j, '[') || is(j, '(')) depth++;
+          else if (is(j, '}') || is(j, ']') || is(j, ')')) depth--;
+          else if (depth === 0 && tokens[j]!.kind === 'id' && tokens[j]!.text === member.from && (is(j - 1, '{') || is(j - 1, ','))) {
+            const aliased = is(j + 1, ':');
+            edits.push({ start: tokens[j]!.start, end: tokens[j]!.end, text: aliased ? member.to : `${member.to}: ${member.from}` });
+            changes.push({ line: tokens[j]!.line, said: `${member.type}: ${member.from} -> ${member.to}` });
+          }
+        }
+      } else if (tokens[t - 2]?.kind === 'id') {
+        /* `(props: InputProps)`: read off the whole object, under a name another function may also use. */
+        const props = tokens[t - 2]!.text;
+        for (let j = 0; j + 2 < tokens.length; j++)
+          if (
+            tokens[j]!.kind === 'id' &&
+            tokens[j]!.text === props &&
+            !is(j - 1, '.') &&
+            is(j + 1, '.') &&
+            tokens[j + 2]!.text === member.from &&
+            tokens[j + 2]!.kind === 'id'
+          )
+            refusals.push({
+              line: tokens[j]!.line,
+              said: `${props}.${member.from} reads \`${member.from}\` off a \`${props}\` typed ${member.type} (line ${token.line}), where it is now \`${member.to}\`; rename it by hand if this is that \`${props}\``,
+            });
       }
     }
   }

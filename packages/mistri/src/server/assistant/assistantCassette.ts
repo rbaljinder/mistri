@@ -14,6 +14,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import type { AssistantModel, ModelBlock, ModelMessage, ModelRequest } from './assistantModel.js';
+import { NOW_LINE } from './assistantCatalog.js';
 
 type ModelReply = Awaited<ReturnType<AssistantModel['stream']>>;
 
@@ -76,8 +77,18 @@ const canonical = (value: unknown): unknown =>
 /** A request's key: what the model is asked, not how much it may answer or how hard it thinks. Redacted first, so a recorded key and a replayed one agree whichever keys the environment holds. */
 export function requestKey(request: ModelRequest, keys: readonly string[] = providerKeys()): string {
   const asked = redact({ model: request.model, system: request.system, tools: request.tools, messages: request.messages }, keys);
+  /* The moment a person asked (assistantCatalog.ts nowLine) is not part of what was asked: a cassette recorded on
+     Tuesday answers on Wednesday. */
+  const timeless = (value: unknown): unknown =>
+    typeof value === 'string'
+      ? value.replace(NOW_LINE, 'Now.')
+      : Array.isArray(value)
+        ? value.map(timeless)
+        : value && typeof value === 'object'
+          ? Object.fromEntries(Object.entries(value).map(([name, each]) => [name, timeless(each)]))
+          : value;
   return createHash('sha256')
-    .update(JSON.stringify(canonical(asked)))
+    .update(JSON.stringify(canonical(timeless(asked))))
     .digest('hex')
     .slice(0, 24);
 }

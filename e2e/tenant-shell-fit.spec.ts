@@ -137,3 +137,64 @@ test.describe('a long tenant name beside the top bar tabs', () => {
     });
   }
 });
+
+// The same long name beside a side shell's workspace tabs, which stand in the bar where the top shell's tabs do: the
+// rule that made the name give way was written for the top shell alone, so here the chooser kept its 24rem and the
+// workspaces went under More at a desk. The tabs win; the name is cut, whole in its title.
+test.describe('a long tenant name beside the workspace tabs', () => {
+  test.setTimeout(SLOW_MS);
+  const name = 'North Motors and Commercial Fleet Leasing of the Greater Lakes Region';
+  const spaces = ['Desk', 'Pipeline', 'Follow-ups', 'Appraisals', 'Financing'];
+  let app: TenantAppFixture;
+  test.beforeEach(async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('mistri.tour', 'done'));
+    process.env.MISTRI_E2E_SHELL = 'side';
+    process.env.MISTRI_E2E_WORKSPACES = '1';
+    process.env.MISTRI_E2E_DEALER_NAME = name;
+    app = await startTenantApp({ support: true });
+  });
+  test.afterEach(async () => {
+    delete process.env.MISTRI_E2E_SHELL;
+    delete process.env.MISTRI_E2E_WORKSPACES;
+    delete process.env.MISTRI_E2E_DEALER_NAME;
+    await app?.stop();
+  });
+
+  for (const width of [1280, 1440]) {
+    test(`at ${width}px every workspace keeps its tab and the name is cut`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 800 });
+      const alice = app.accounts.alice;
+      expect(
+        (
+          await page.request.post(app.origin + '/api/auth/sign-in/email', {
+            headers: { origin: app.origin },
+            data: { email: alice.email, password: alice.password },
+          })
+        ).status(),
+      ).toBe(200);
+      await page.goto(`${app.origin}/${app.appId}`);
+      const bar = page.getByRole('navigation', { name: 'Workspaces' });
+      const trigger = page.locator('.tenant-control-trigger');
+      await expect(trigger).toHaveAttribute('title', name);
+      for (const space of spaces) await expect(bar.getByRole('link', { name: space, exact: true })).toBeVisible();
+      await expect(bar.getByRole('button', { name: 'More' })).toBeHidden();
+      const found = await page.evaluate(`(() => {
+        const rect = (e) => e.getBoundingClientRect();
+        const problems = [];
+        const label = document.querySelector('.tenant-control-trigger > :first-child');
+        if (label.scrollWidth <= label.clientWidth) problems.push('the name is not cut: ' + label.scrollWidth + ' <= ' + label.clientWidth);
+        const host = document.querySelector('.workspace-host');
+        if (!host.parentElement.contains(document.querySelector('.tenant-control'))) problems.push('the chooser is not in the bar the tabs are in');
+        const pieces = [...document.querySelectorAll('.workspace-tab, .tenant-control-host button, .account-host')].filter((e) => rect(e).width > 0 && getComputedStyle(e).visibility !== 'hidden');
+        for (let i = 0; i < pieces.length; i++) for (let j = i + 1; j < pieces.length; j++) {
+          const a = rect(pieces[i]), b = rect(pieces[j]);
+          if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) problems.push(pieces[i].textContent + ' overlaps ' + pieces[j].textContent);
+        }
+        const de = document.documentElement;
+        if (de.scrollWidth > de.clientWidth) problems.push('the page scrolls sideways: ' + de.scrollWidth + ' > ' + de.clientWidth);
+        return problems;
+      })()`);
+      expect(found).toEqual([]);
+    });
+  }
+});

@@ -107,4 +107,110 @@ describe('page.useLoader', () => {
     expect(await screen.findByText('slow: {"n":11}; fast: {"n":2}')).toBeInTheDocument();
     expect(asked.sort()).toEqual(['fast', 'fast', 'slow', 'slow']);
   });
+
+  /* A field report: a page that settles its office after its first reads ran its loader before and again after. */
+  test('a loader held with `enabled: false` asks nothing, and runs once with the place the page settles on', async () => {
+    const host = fixtureHost(NONE, {}, []);
+    const asked: Array<Record<string, string>> = [];
+    host.load = (_page, params) => {
+      asked.push({ ...params });
+      return Promise.resolve({ office: params.office });
+    };
+    let office: string | undefined;
+    const frame = (): UiPageFrame => ({
+      view: 'today',
+      label: 'Today',
+      reads: [],
+      commands: [],
+      params: ['office'],
+      loaders: ['asap'],
+      get: () => office,
+      set: () => {},
+    });
+    function Today() {
+      const asap = useLoader('asap', { enabled: office !== undefined });
+      return <p>{asap.data === undefined ? 'waiting' : JSON.stringify(asap.data)}</p>;
+    }
+    const client: QueryClient = fixtureClient();
+    const drawn = (
+      <SectionFrame host={host} id="today" width={960} client={client}>
+        <UiPageContext.Provider value={frame()}>
+          <Today />
+        </UiPageContext.Provider>
+      </SectionFrame>
+    );
+    const view = render(drawn);
+    expect(await screen.findByText('waiting')).toBeInTheDocument();
+    await act(async () => {});
+    expect(asked).toEqual([]);
+    office = 'north';
+    view.rerender(
+      <SectionFrame host={host} id="today" width={960} client={client}>
+        <UiPageContext.Provider value={frame()}>
+          <Today />
+        </UiPageContext.Provider>
+      </SectionFrame>,
+    );
+    expect(await screen.findByText('{"office":"north"}')).toBeInTheDocument();
+    expect(asked).toEqual([{ office: 'north' }]);
+  });
+
+  /* Every address parameter ran every loader of the page again, whether it read the parameter or not: picking a row
+     kept in the address read the whole page's data again (a field report). A loader says the ones it reads. */
+  test('a loader that says the params it reads is asked again only when one of those moves, and is sent only those', async () => {
+    const host = fixtureHost(NONE, {}, []);
+    const asked: Array<[string, Readonly<Record<string, string>>]> = [];
+    host.load = (_page, params, loader) => {
+      asked.push([String(loader), { ...params }]);
+      return Promise.resolve({ at: params });
+    };
+    const place: Record<string, string | undefined> = { office: 'north', picked: '7' };
+    const frame = (): UiPageFrame => ({
+      view: 'board',
+      label: 'Board',
+      reads: [],
+      commands: [],
+      params: ['office', 'picked', 'day'],
+      loaders: ['schedule', 'everything', 'settings'],
+      // The server says them with the page (pageLoaderCheck.ts): `everything` declares none, and reads the whole place.
+      loaderParams: { schedule: ['office', 'day'], settings: [] },
+      get: (name) => place[name],
+      set: () => {},
+    });
+    function Three() {
+      const schedule = useLoader('schedule');
+      const everything = useLoader('everything');
+      const settings = useLoader('settings');
+      return <p>{[schedule, everything, settings].map((each) => (each.data ? 'ok' : 'reading')).join(' ')}</p>;
+    }
+    const client: QueryClient = fixtureClient();
+    const drawn = (value: UiPageFrame) => (
+      <SectionFrame host={host} id="board" width={960} client={client}>
+        <UiPageContext.Provider value={value}>
+          <Three />
+        </UiPageContext.Provider>
+      </SectionFrame>
+    );
+    const view = render(drawn(frame()));
+    expect(await screen.findByText('ok ok ok')).toBeInTheDocument();
+    expect(asked.sort(([a], [b]) => a.localeCompare(b))).toEqual([
+      ['everything', { office: 'north', picked: '7' }],
+      ['schedule', { office: 'north' }],
+      ['settings', {}],
+    ]);
+    // A parameter only the undeclared loader reads: one loader runs, not three.
+    asked.length = 0;
+    place.picked = '8';
+    view.rerender(drawn(frame()));
+    await vi.waitFor(() => expect(asked).toEqual([['everything', { office: 'north', picked: '8' }]]));
+    // One the schedule reads: it and the undeclared one, never the loader that reads none.
+    asked.length = 0;
+    place.day = '2026-11-25';
+    view.rerender(drawn(frame()));
+    await vi.waitFor(() => expect(asked).toHaveLength(2));
+    expect(asked.sort(([a], [b]) => a.localeCompare(b))).toEqual([
+      ['everything', { office: 'north', picked: '8', day: '2026-11-25' }],
+      ['schedule', { office: 'north', day: '2026-11-25' }],
+    ]);
+  });
 });

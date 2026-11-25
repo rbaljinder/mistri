@@ -46,7 +46,9 @@ export const RECIPE_MENU = {
   links: { plain: null, underline: null, name: null },
   rules: { ink: null, hairline: null, double: 'ledger' },
   avatar: { plain: null, large: 'sage', round: 'lumen' },
-  workflow: { markers: null, pills: 'lumen', segments: 'tiles' },
+  /* `none` draws no strip: a record whose head already says its state on a chip need not say it twice, however many
+     states its workflow has. It is the component's to leave out (WorkflowStatus.tsx), so it needs no sheet. */
+  workflow: { markers: null, pills: 'lumen', segments: 'tiles', none: null },
   banner: { tint: null, gradient: 'lumen', plain: 'lumen' },
   steps: { flat: null, tinted: 'lumen', strip: 'lumen' },
   lanes: { tint: null, tag: 'brand', plain: 'brand' },

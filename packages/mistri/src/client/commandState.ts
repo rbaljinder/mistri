@@ -4,6 +4,7 @@ import {
   subscribeSessionIdentity,
   type SessionIdentitySnapshot,
 } from '@mistriwork/kit/client/sessionIdentity.js';
+import { writesOf } from '@mistriwork/kit/client/liveReads.js';
 import type { AppCommandAction } from '../shared/app.js';
 import { BULK_LIMIT, commandKeyText } from '../shared/command.js';
 import { tenantMutationState, type TenantMutationAttempt } from './tenantMutationState.js';
@@ -57,6 +58,9 @@ export interface CommandOperation {
   /** Sent by a component's `run`, or from the form its `open` holds: its caller resolves it, so a record's action bar
       must not draw its form while it is in flight (a composer's reply would show twice). */
   headless?: boolean;
+  /** The tables the run wrote, where its answer said them (kit liveReads.ts `writesOf`); undefined where it did not,
+      and every read is then asked again (commandRefresh.ts). */
+  wrote?: readonly string[];
   /** Pending on a read of the receipt of a lost answer (`send(…, 'status')`), not on a send: the outcome says "checking". */
   checking?: boolean;
 }
@@ -196,7 +200,7 @@ export const commandOperations = {
     operation: CommandOperation,
     endpoint: 'execute' | 'status',
     request: (path: string, envelope: CommandEnvelope) => Promise<unknown>,
-    onApplied: () => void,
+    onApplied: (wrote?: readonly string[]) => void,
   ): Promise<void> {
     const current = () => sessionIdentity() === operation.identity && operations.get(ownerKey(operation.owner)) === operation;
     if (!current() || operation.phase === 'success' || operation.phase === 'error') return;
@@ -242,9 +246,10 @@ export const commandOperations = {
         applied++;
         for (const key of envelope.keys ?? [envelope.key!])
           appliedTo.set(recordKey(operation.owner.connection, operation.owner.target, key), applied);
+        operation.wrote = writesOf(value);
         changed();
         try {
-          onApplied();
+          onApplied(operation.wrote);
         } catch {
           operation.message = say('completedCloseAndRefresh');
           changed();

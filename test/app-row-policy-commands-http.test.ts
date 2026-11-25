@@ -329,10 +329,13 @@ test('public row-policy commands prepare, execute, replay and status use scoped 
   assert.equal(first.body.commandVersion, 1);
   assert.deepEqual(first.body.result, { reviewerId: 1, version: 1, reviewerName: 'Ada' });
   assert.equal(first.headers.get('cache-control'), 'no-store');
+  // Under a row policy too, the run says which tables it wrote (commands/commandWrites.ts); a replay says nothing.
+  assert.match(first.headers.get('mistri-writes') ?? '', /^tables=[^,]/);
   const saved = f.receipts();
   for (const path of ['execute', 'status']) {
     const replay = await f.command(path);
     assert.equal(replay.status, 200);
+    assert.equal(replay.headers.get('mistri-writes'), null);
     assert.deepEqual(replay.body, { ...first.body, replayed: true });
   }
   assert.deepEqual(f.receipts(), saved);

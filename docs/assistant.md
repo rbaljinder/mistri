@@ -140,8 +140,23 @@ commands availability allows (`/api/commands/availability`) — so "log a call"
 on a lead starts from that lead's verbs.
 
 The stable prefix (tools, then system) carries `cache_control`; what changes —
-today's date, the record in view — rides in the person's message, never the
-prefix.
+the moment, the record in view — rides in the person's message, never the
+prefix. The moment is one line (`Now: Saturday 2026-02-28, 20:30
+(America/Chicago).`) on the wall clock the person's days are counted in: the
+App's `ui.timezone`, or the zone their tenant's row names, which is the clock a
+condition's `today` is read on.
+
+A record is named everywhere by the resource's `recordLabel` (a column, a path
+or a template, read as a list reads it): a proposal's card, a record block,
+`find`, the evidence a review shows, and each row `query` returns, which
+carries a `label` where its columns do not include the name. Only a resource
+with no `recordLabel` falls to the engine's guess at a name column.
+
+A turn takes at most `limits.steps` rounds of tool calls (8 unless the App
+names a figure, 32 at most). A round whose every call was refused is not
+counted (within twice the allowance of calls), and the call after the last
+round is sent with tool use turned off, so the turn ends in words rather than
+a note that it stopped.
 
 ## Blocks
 
@@ -153,8 +168,11 @@ existing components in the App's look:
   `sort`, `limit`, `by`, `measure`, `shape`), checked against the person's
   readable resources and then asked once through the read the section will
   draw (a table's is the dashboard's own, `dashboardListQuery`), so a block
-  that would fail never reaches the panel, and a table that matched nothing is
-  not drawn: the model is told so and says it in a sentence. Rows open their
+  that would fail never reaches the panel, and a table that matched nothing,
+  or a figure, chart or breakdown with nothing to measure, is
+  not drawn: the model is told so and says it in a sentence. A table the model
+  names no columns for is the record's name and the columns of the App's list
+  view of that table; a column empty in every row drawn is left out. Rows open their
   records; charts and figures are the dashboard's. A chart keeps the shape the
   model asks for; unasked, groups of a kind are bars and a calendar bucket a
   line.
@@ -280,7 +298,9 @@ back to the side panel first, keeping the focus where it was, then closes. A
 phone has no full screen to go to and shows no button.
 
 **Starters.** `starters` (up to six one-line questions) are offered as a grid
-of buttons on an empty conversation; one sends as the person's words.
+of buttons on an empty conversation; one sends as the person's words. A
+starter with `roles` is served only to a person holding one of them, and the
+payload carries no role list.
 
 **The conversation list.** One component (`ConversationList.tsx`) is the
 panel's Conversations view and the page's rail. It is a flat inbox, not a stack

@@ -307,8 +307,17 @@ function servedStarters(
     if (typeof starter === 'string') return [starter];
     const inViews = starter.views?.filter((key) => Object.hasOwn(views, key)) ?? [];
     const onRecords = starter.records?.map((name) => tableNamed(schema, name)?.id ?? name) ?? [];
-    if (!inViews.length && !onRecords.length) return [];
-    return [{ text: starter.text, ...(inViews.length ? { views: inViews } : {}), ...(onRecords.length ? { records: onRecords } : {}) }];
+    // One that named places and is left with none is dropped; one for some roles only names no place and is kept.
+    if ((starter.views || starter.records) && !inViews.length && !onRecords.length) return [];
+    return [
+      {
+        text: starter.text,
+        ...(inViews.length ? { views: inViews } : {}),
+        ...(onRecords.length ? { records: onRecords } : {}),
+        // Until the reader's roles are known (http/appProjection.ts), where the starters of other roles are left out.
+        ...(starter.roles ? { roles: starter.roles } : {}),
+      },
+    ];
   });
   return served.length ? { starters: served } : {};
 }

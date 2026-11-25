@@ -42,6 +42,12 @@ export interface TestAppOptions extends HostOptions {
   /** Production CLI options, e.g. --policy, --commands or --jobs. A relative path given to --policy, --commands or
       --jobs is the App directory's, as `--jobs jobs.ts` beside app.ts reads. */
   args?: readonly string[];
+  /** Apply the App's pending migrations (`mistri migrate`) to the database the test serves before the App starts,
+      as `mistri check --pending` judges it against them: the tests run on the schema the migrations will make,
+      before the database you develop on is migrated. Only the test's own copy is changed, a SQLite file in the
+      workspace (`workspace.copyConfig`, or `database` without a `config`); any other database is refused. The
+      migrations are the App's `migrations/` directory, or the one named here, relative to the App directory. */
+  pending?: boolean | { migrations: string };
   /** The in-App assistant's model, scripted: each turn answers the person's words a pattern matches with text and
       tool calls, offline and the same every run. Or a cassette, `replay(file)`: requests recorded with their replies.
       Without it the assistant has no model in a test. */
@@ -323,6 +329,28 @@ export async function startTestApp(options: TestAppOptions) {
       MISTRI_TEST_CONTROL: control,
     },
   };
+  if (options.pending) {
+    const migrations = typeof options.pending === 'object' ? resolve(directory, options.pending.migrations) : undefined;
+    try {
+      await runTestMaintenance<string[]>(
+        {
+          kind: 'pending',
+          directory,
+          args: [
+            // As the host reads it, from the workspace it runs in: the worker runs elsewhere.
+            ...(options.config ? ['--config', resolve(options.workspace.directory, options.config)] : ['--no-config']),
+            ...(options.database ? ['--db', options.database] : []),
+          ],
+          ...(migrations === undefined ? {} : { migrations }),
+          within: options.workspace.directory,
+        },
+        options.environment,
+        options.allowedHosts,
+      );
+    } catch (error) {
+      throw new Error(`startTestApp({ pending }) could not apply the pending migrations: ${(error as Error).message}`, { cause: error });
+    }
+  }
   const host = startHost(options, async (port) => [
     '--app',
     directory,

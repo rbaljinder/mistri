@@ -45,6 +45,7 @@ import { withDraftsHidden } from '../forms/savedFormLists.js';
 import { send, sendRevalidated } from '@mistriwork/engine/server/http/reply.js';
 import { catalogLocales, localeRow } from '../app/readerLocale.js';
 import { componentMessages, frameworkWords } from '../app/appMessages.js';
+import { startersFor } from '../../shared/appAssistant.js';
 import { principalOf, type RequestContext, type ResolvedSource } from '@mistriwork/engine/server/http/context.js';
 import { requestRecordBranding, withRecordBranding } from './recordBranding.js';
 import { pageReadRoutes, type PageReadHooks } from '@mistriwork/engine/server/http/pageReads.js';
@@ -149,6 +150,12 @@ export function browserApp(ctx: RequestContext, source: ResolvedSource) {
   if (app && host?.app.app.auth && !identity.id) app = withoutSignedInParts(app, schema);
   /* The roles the reader holds, for a component that offers by role (`useViewer().roles`); the server still decides every request. */
   if (app && host?.app.app.auth && identity.id) app = { ...app, viewerRoles: [...roles] };
+  /* The assistant's starters for this reader's roles, and no role list with them (appAssistant.ts startersFor). */
+  if (app?.assistant?.starters) {
+    const { starters: all, ...rest } = app.assistant;
+    const theirs = startersFor(all, roles);
+    app = { ...app, assistant: { ...rest, ...(theirs.length ? { starters: theirs } : {}) } };
+  }
   /* And who the shell is drawn for: the App's own public is offered none of the office's tools (appAudience.ts). */
   if (app && host && viewerAudience(host.app.app.auth, { signedIn: Boolean(identity.id), roles }))
     app = { ...app, viewerAudience: 'person' };

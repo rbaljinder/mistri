@@ -67,7 +67,11 @@ test('a pool outside the range, of the wrong shape or on another engine is refus
     [[4], {}, /must be an object/],
     [{ read: 4, write: 0 }, {}, /"write": 0 \}\. It must be a whole number from 1 to 64, without quotes/],
     [{ write: '8' }, {}, /"write": "8" \}.*without quotes/],
-    [{ read: 4, max: 9 }, {}, /"pool\.max"\. A pool takes "read", "write", "idleSeconds" and "minIdle"/],
+    [
+      { read: 4, max: 9 },
+      {},
+      /"pool\.max"\. A pool takes "read", "write", "idleSeconds", "minIdle", "connectTimeoutMs" and "queryTimeoutMs"/,
+    ],
     [{ read: 4 }, { url: './app.sqlite' }, /is not a PostgreSQL connection/],
     [{ read: 4 }, { kind: 'http', url: 'https://api.example/v1/', description: 'desk.http.json' }, /HTTP connection; "pool" sizes/],
   ];
@@ -261,6 +265,27 @@ test('a pool names how long an idle connection stays open and how many stay warm
     [{ minIdle: -1 }, /"minIdle": -1 \}\. It must be a whole number from 0 to 64, without quotes/],
     [{ minIdle: 65 }, /from 0 to 64/],
     [{ minIdle: '2' }, /"minIdle": "2" \}.*without quotes/],
+  ];
+  for (const [pool, message] of refused)
+    await withConfig(entry(pool), (path) => assert.rejects(loadConfig(path, CONFIG_SECTIONS), message));
+});
+
+test('a pool names how long a connection may take to open and how long a silent server is waited on, in whole milliseconds', async () => {
+  for (const pool of [
+    { connectTimeoutMs: 1_000 },
+    { queryTimeoutMs: 3_600_000 },
+    { read: 8, connectTimeoutMs: 5_000, queryTimeoutMs: 45_000 },
+  ]) {
+    const loaded = await withConfig(entry(pool), (path) => loadConfig(path, CONFIG_SECTIONS));
+    assert.deepEqual(loaded?.connections[0].pool, pool);
+  }
+  const refused: Array<[unknown, RegExp]> = [
+    [{ connectTimeoutMs: 999 }, /"connectTimeoutMs": 999 \}\. It must be whole milliseconds from 1000 to 120000, without quotes/],
+    [{ connectTimeoutMs: 120_001 }, /from 1000 to 120000/],
+    [{ connectTimeoutMs: '5000' }, /"connectTimeoutMs": "5000" \}.*without quotes/],
+    [{ queryTimeoutMs: 0 }, /"queryTimeoutMs": 0 \}\. It must be whole milliseconds from 1000 to 3600000, without quotes/],
+    [{ queryTimeoutMs: 3_600_001 }, /from 1000 to 3600000/],
+    [{ queryTimeoutMs: 1500.5 }, /from 1000 to 3600000/],
   ];
   for (const [pool, message] of refused)
     await withConfig(entry(pool), (path) => assert.rejects(loadConfig(path, CONFIG_SECTIONS), message));

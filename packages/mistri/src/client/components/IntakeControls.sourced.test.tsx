@@ -65,6 +65,17 @@ test('a choice from a table that says radios is radios, however many rows it has
   expect(screen.queryByRole('combobox')).toBeNull();
 });
 
+/* The rule that cuts a long chosen value short lives beside these controls, not in the first-paint sheet, and finds
+   the drop-down by this class (IntakeControls.css): a real browser showed the value wrapping past its box without it. */
+test('a table choice drawn as a drop-down wears the class its chosen value is cut short by', async () => {
+  const rows = ['Kia', 'Ford', 'Fiat', 'Audi', 'Saab', 'Seat', 'Opel', 'Mini'].map((label) => ({ value: `n-${label}`, label }));
+  const { container } = draw(make(true, rows));
+  await waitFor(() => expect(container.querySelector('.intake-select[data-slot="dropdown"] [data-slot="select-value"]')).not.toBeNull());
+  const { readFileSync } = await import('node:fs');
+  const sheet = readFileSync('packages/mistri/src/client/components/IntakeControls.css', 'utf8');
+  expect(sheet).toMatch(/\.intake-select \[data-slot='select-value'\] \{[^}]*text-overflow: ellipsis/);
+});
+
 test("a list the page reads is said by the reader's language's column, else by labelColumn", async () => {
   reader.locale = 'es-MX';
   run.mockResolvedValueOnce({

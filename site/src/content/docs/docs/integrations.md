@@ -141,6 +141,9 @@ export default defineJobs({}, {
 effects: { text: send('sms', (order) => ({ to: order.phone, text: 'Thanks for your order.', consent: order.sms_consent })) },
 ```
 
+The projection returns one message, or `null` for none: `(order) => (order.phone ? { … } : null)`
+sends nothing for an order without a number, and nothing is queued or logged for it.
+
 A `notify` rule tells on a channel too with `send`: the title is the message,
 queued in the write's own transaction and sent after it commits, under the
 same consent, opt-out and quiet hours as `send(...)`. `to` may be left out.

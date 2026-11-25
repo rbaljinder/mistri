@@ -45,5 +45,7 @@ export default defineApp({
     customThemes: [grounded, groundedEdge],
     /* Asked with `in` first: an App's definition reads only the environment its entry passes, or asks whether it is set. */
     ...('PAGE_KIT_HEADER' in process.env && process.env.PAGE_KIT_HEADER === 'bar' ? { shell: { header: 'bar' as const } } : {}),
+    /* The look the App starts in, read from the environment (the spec serves a second look by it and reads the root). */
+    ...('PAGE_KIT_PRESET' in process.env && process.env.PAGE_KIT_PRESET ? { theme: { preset: process.env.PAGE_KIT_PRESET } } : {}),
   },
 });

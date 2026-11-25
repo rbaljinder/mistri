@@ -16,6 +16,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { scriptedModel, type AssistantScript } from './assistantScripted.js';
+import { ModelUnavailable, modelRefused } from './assistantModelRefusal.js';
 import { openaiModel } from './assistantOpenAI.js';
 import { recordingKeyMissing, recordingModel, replayModel } from './assistantCassette.js';
 
@@ -43,6 +44,8 @@ export interface ModelRequest {
   messages: readonly ModelMessage[];
   maxTokens: number;
   effort?: 'low' | 'medium' | 'high';
+  /** The turn's last call: the model may only write, whatever tools the conversation has used (assistantTurn.ts). */
+  answerOnly?: true;
 }
 interface ModelReply {
   content: ModelBlock[];
@@ -52,14 +55,6 @@ interface ModelReply {
 }
 export interface AssistantModel {
   stream(request: ModelRequest, onText: (delta: string) => void, signal: AbortSignal): Promise<ModelReply>;
-}
-
-/** A provider's refusal of the call itself (a bad key, an overloaded service), said without its internals. */
-class ModelUnavailable extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ModelUnavailable';
-  }
 }
 
 const API = 'https://api.anthropic.com/v1/messages';
@@ -80,6 +75,7 @@ export function anthropicBody(request: ModelRequest): Record<string, unknown> {
     stream: true,
     system: [{ type: 'text', text: request.system, cache_control: ephemeral }],
     tools,
+    ...(request.answerOnly ? { tool_choice: { type: 'none' } } : {}),
     messages,
     ...(request.effort ? { output_config: { effort: request.effort } } : {}),
   };
@@ -209,16 +205,7 @@ export function anthropicModel(key: string, fetchImpl: typeof fetch = fetch, dea
       body: JSON.stringify(anthropicBody(request)),
       signal,
     });
-    if (!response.ok || !response.body) {
-      const status = response.status;
-      throw new ModelUnavailable(
-        status === 401 || status === 403
-          ? "The assistant's model key was refused. The operator sets ANTHROPIC_API_KEY."
-          : status === 429 || status === 529
-            ? 'The model is busy. Try again in a moment.'
-            : `The model could not be reached (${status}).`,
-      );
-    }
+    if (!response.ok || !response.body) throw await modelRefused(response, 'ANTHROPIC_API_KEY');
     return readAnthropicStream(response.body, onText);
   }
 }

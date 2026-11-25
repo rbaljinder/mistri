@@ -21,6 +21,7 @@
  * a loopback browser) is untouched.
  */
 import { Socket } from 'node:net';
+import { KEEPALIVE_IDLE_MS } from '../postgresValues.js';
 import { checkedLookup, refusedLiteral, type NetworkPolicy } from './networkPolicy.js';
 
 /** Where an untrusted address may go: the public network only. */
@@ -120,6 +121,7 @@ export function sealedPgOptions(target: string, policy: NetworkPolicy): Record<s
     database: decoded(url.pathname.slice(1)) || user,
     password: () => password,
     keepAlive: true,
+    keepAliveInitialDelayMillis: KEEPALIVE_IDLE_MS,
     ssl,
     ...(url.searchParams.get('application_name') ? { application_name: url.searchParams.get('application_name') } : {}),
     stream: () => guardedSocket(policy),

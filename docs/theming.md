@@ -234,7 +234,7 @@ CSS.
 | `links`    | `plain` (Workshop, Lumen, Sage, Ledger, Graphite, Bloom), `underline` (Mono), `name` (Atelier) |
 | `rules`    | `ink` (Mono, Atelier), `hairline` (Workshop, Lumen, Sage, Graphite, Bloom), `double` (Ledger) |
 | `avatar`   | `plain` (Workshop, Mono, Ledger, Atelier, Graphite), `large` (Sage), `round` (Lumen, Bloom) |
-| `workflow` | `markers` (Workshop, Lumen, Mono, Sage, Ledger, Atelier), `pills` (Graphite), `segments` (Bloom) |
+| `workflow` | `markers` (Workshop, Lumen, Mono, Sage, Ledger, Atelier), `pills` (Graphite), `segments` (Bloom), `none` (no strip: the head's chip says the state alone) |
 | `banner`   | `tint` (Mono, Sage), `gradient` (Bloom), `plain` (Workshop, Lumen, Ledger, Atelier, Graphite) |
 | `steps`    | `flat` (Mono, Sage), `tinted` (Bloom), `strip` (Workshop, Lumen, Ledger, Atelier, Graphite) |
 | `lanes`    | `tint` (Lumen, Mono, Sage, Bloom), `tag` (Workshop, Graphite), `plain` (Ledger, Atelier) |

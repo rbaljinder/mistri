@@ -45,7 +45,9 @@ secret is random per host. Real provider keys never belong in a test; a call to
 any host but loopback fails it unless `allowedHosts` names that host.
 To test against seed data dated for one day, pass `asOf: '2026-01-05'`: App
 logic's today and now start there (midnight in the App's zone) while sign-in
-and sessions keep the real clock.
+and sessions keep the real clock. A command an inbound event runs reads that
+clock too, and a channel judges its quiet hours by it; a delivery's signature
+is still judged fresh by the real time, and a held message waits in real time.
 
 ## Choosing what to run
 

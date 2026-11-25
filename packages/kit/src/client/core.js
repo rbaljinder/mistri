@@ -41,7 +41,7 @@ import { hopName, hopsFrom as sharedHopsFrom, tableAtPrefix as sharedTableAtPref
 import { say } from './copy/shell/core.js';
 import { shellById, shellQuery, shellQueryAll, shellRoot } from './shellHost.js';
 import { fetchServer } from './transport.js';
-import { fileReads } from './liveReads.js';
+import { fileReads, fileWrites } from './liveReads.js';
 import { sayDayLabel } from './dayLabel.js';
 export { andQuery, splitClauseTail } from '@mistriwork/engine/shared/query.js';
 export { humanName } from '@mistriwork/engine/shared/model.js';
@@ -402,6 +402,7 @@ async function request(path, body, headers) {
     throw failure;
   }
   fileReads(data, res.headers?.get('mistri-reads'));
+  fileWrites(data, res.headers?.get('mistri-writes'));
   return data;
 }
 

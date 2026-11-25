@@ -2176,10 +2176,14 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
       ...(jobs || mailHost || outbound || notices || contacts
         ? {
             jobs: Object.freeze({
-              start: () => {
-                jobs?.start();
-                mailHost?.start();
-                outbound?.start();
+              /* `scheduled: false` (MISTRI_JOBS=off, cli/tenant.ts): what the jobs module schedules and sends stays
+                 unstarted, as a single App's does (cli/serve.ts); a test's run-now still runs a job. */
+              start: ({ scheduled = true }: { scheduled?: boolean } = {}) => {
+                if (scheduled) {
+                  jobs?.start();
+                  mailHost?.start();
+                  outbound?.start();
+                }
                 notices?.start();
                 contacts?.start();
               },

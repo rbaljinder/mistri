@@ -121,6 +121,7 @@ export const RECIPE_WORDS = {
     pills: 'A workflow is a row of pills with a dot each: a step walked in the good tint, the current one in the accent’s.',
     segments:
       'A workflow is one bar cut into segments, a word in each: the steps walked on a tint in the ink, the current one on the accent’s tint, those ahead muted.',
+    none: 'No workflow strip is drawn: a record says its state on the chip in its head alone.',
   },
   banner: {
     tint: 'A dashboard’s banner note is a box tinted with the accent.',

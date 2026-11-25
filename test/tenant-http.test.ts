@@ -2331,6 +2331,19 @@ test('same account in two tenant contexts gets separate rows and command receipt
   const first = await f.data('/api/commands/execute', a, f.command());
   owned(first, a);
   assert.equal(first.body.status, 'applied');
+  /* What the page that ran it reads again (client commandRefresh.ts): the tables the run wrote, in the ids this
+     tenant's own catalog serves, so a read filed under one of them is matched and no other is. */
+  const wrote = (first.headers.get('mistri-writes') ?? '')
+    .replace(/^tables=/, '')
+    .split(',')
+    .map(decodeURIComponent);
+  const served = ((await f.data('/api/schema', a)).body.tables as Array<{ id: string }>).map((table) => table.id);
+  assert.match(first.headers.get('mistri-writes') ?? '', /^tables=./);
+  assert.deepEqual(
+    wrote.filter((id) => !served.includes(id)),
+    [],
+    `wrote ${wrote.join(', ')}; served ${served.join(', ')}`,
+  );
   const second = await f.data('/api/commands/execute', b, f.command('south'));
   owned(second, b);
   assert.equal(second.body.status, 'applied');
@@ -2341,6 +2354,8 @@ test('same account in two tenant contexts gets separate rows and command receipt
   const status = await f.data('/api/commands/status', a, f.command());
   owned(status, a);
   assert.equal(status.body.replayed, true);
+  // A replay is not this request's run: it says nothing, and the page reads everything again.
+  assert.equal(status.headers.get('mistri-writes'), null);
   assert.equal(f.control.commands, 2);
   const bRows = await f.data('/api/query', b, { table: 'item' });
   owned(bRows, b);

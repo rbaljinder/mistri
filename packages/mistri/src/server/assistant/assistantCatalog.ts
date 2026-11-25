@@ -16,6 +16,8 @@ import { ASSISTANT_BLOCKS, type AppAssistant } from '../../shared/appAssistant.j
 import type { AppDef } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import type { ModelTool } from './assistantModel.js';
+import { zonedNow } from '../../shared/appZone.js';
+import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 
 export interface CatalogVerb {
   resource: string;
@@ -233,6 +235,22 @@ export function toolSpecs(assistant: AppAssistant | undefined): ModelTool[] {
     },
   ];
   return tools.filter((tool) => allowed.has(tool.name as never));
+}
+
+const NOW_MARK = 'Now: ';
+/** That line in a message, wherever it stands: a replayed conversation is the same request at any hour (assistantCassette.ts). */
+export const NOW_LINE = /^Now: [^\n]*$/gm;
+const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+/**
+ * The moment a person asks, on the wall clock their days are counted in (the served payload's `timezone`: the App's
+ * zone, or the one their tenant's row names), which is the clock the query language reads "today" on, so the model's
+ * day and a condition's agree.
+ */
+export function nowLine(zone: string | undefined, at: Date = clockNow()): string {
+  const wall = zonedNow(zone, at);
+  const two = (n: number) => String(n).padStart(2, '0');
+  const day = `${wall.getFullYear()}-${two(wall.getMonth() + 1)}-${two(wall.getDate())}`;
+  return `${NOW_MARK}${WEEKDAYS[wall.getDay()]} ${day}, ${two(wall.getHours())}:${two(wall.getMinutes())}${zone ? ` (${zone})` : ''}.`;
 }
 
 /** A conservative count of a text's tokens: English and JSON run near four characters a token, and this says 3.5. */

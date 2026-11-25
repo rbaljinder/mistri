@@ -21,11 +21,22 @@ const TENANT_REQUEST_POOL = Object.freeze({ pipelineReads: true });
 
 /* The `"pool"` of each tenant database's connection, by URL (declareTenantPool): what `tenantAdapter` sizes the shared
    manager with, ahead of `--read-pool` and `--write-pool`, as an ordinary App's connection does (Registry.dial). */
-const declared = new Map<string, { readonly read?: number; readonly write?: number }>();
+type DeclaredPool = { read?: number; write?: number; connectTimeoutMs?: number; queryTimeoutMs?: number };
+const declared = new Map<string, Readonly<DeclaredPool>>();
 
-/** Say what `pool` the tenant App's connection on `url` has (none, the process's settings size it). */
-export function declareTenantPool(url: string, pool: { read?: number; write?: number } | undefined): void {
+/** Say what `pool` the tenant App's connection on `url` has (none, the process's settings size it). Its timeouts
+ * (`connectTimeoutMs`, `queryTimeoutMs`) are the request pool's too, as an ordinary App's connection's are. */
+export function declareTenantPool(url: string, pool: DeclaredPool | undefined): void {
   declared.set(url, Object.freeze({ ...pool }));
+}
+
+/** How long the request pool on `url` waits to connect and on a silent server, where its connection says. */
+function tenantPoolTimeouts(url: string): Pick<DeclaredPool, 'connectTimeoutMs' | 'queryTimeoutMs'> {
+  const pool = declared.get(url);
+  return {
+    ...(pool?.connectTimeoutMs !== undefined ? { connectTimeoutMs: pool.connectTimeoutMs } : {}),
+    ...(pool?.queryTimeoutMs !== undefined ? { queryTimeoutMs: pool.queryTimeoutMs } : {}),
+  };
 }
 
 /** Forget every declared pool and backstop: a test's, between hosts. */
@@ -94,7 +105,7 @@ export function tenantAdapter(url: string, label: string, replica = false, role:
     return sharedPostgresAdapter(
       backstop.owner,
       label,
-      { ...TENANT_REQUEST_POOL, ...owner },
+      { ...TENANT_REQUEST_POOL, ...owner, ...tenantPoolTimeouts(url) },
       { rowSecurity: { role: backstop.role, bypass: true } },
     );
   }
@@ -102,7 +113,7 @@ export function tenantAdapter(url: string, label: string, replica = false, role:
   return sharedPostgresAdapter(
     url,
     label,
-    { ...TENANT_REQUEST_POOL, readers, writers, ...(replica ? { readersOnly: true } : {}) },
+    { ...TENANT_REQUEST_POOL, readers, writers, ...tenantPoolTimeouts(url), ...(replica ? { readersOnly: true } : {}) },
     backstop ? { rowSecurity: { role: backstop.role } } : {},
   );
 }

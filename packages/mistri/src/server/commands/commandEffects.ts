@@ -153,6 +153,8 @@ function projected<Payload>(
   wrap: (body: EffectPayload) => Payload,
 ): Payload | Promise<Payload> {
   const finish = (body: unknown): Payload => {
+    // A send that returned nothing: no event is recorded for it (businessEvents.ts skips a null payload).
+    if (captured.skips && (body === null || body === undefined)) return null as Payload;
     boundBody(captured.destination, body);
     return wrap(body as EffectPayload);
   };
@@ -168,6 +170,8 @@ interface DeclaredEffect {
   project: (output: unknown, context: EffectProjectionContext) => unknown;
   /** `envelope: false`: the body is the projection itself, and `headers` ride with each call. */
   bare?: { headers?: (output: unknown) => unknown };
+  /** A projection that returns null or undefined sends nothing: a send's, never a post's. */
+  skips?: true;
 }
 const declared = new WeakMap<object, DeclaredEffect>();
 
@@ -224,7 +228,7 @@ export function post<Output, Db = unknown>(
   return effect as CommandEffect<Output, Db>;
 }
 
-/** What a channel message's projection returns: who it goes to, what it says, and whether they agreed to hear it. */
+/** What a channel message's projection returns for a message to send: who it goes to, what it says, and whether they agreed to hear it. */
 export interface ChannelMessageProjection {
   /** The recipient's address on the channel: a phone number in E.164 for SMS. */
   readonly to: string;
@@ -241,23 +245,32 @@ const CHANNEL_NAME = /^[a-z][a-z0-9-]{0,31}$/;
 
 /**
  * One message on an integration's channel (`sms`), after the command
- * commits. Core checks the recipient's opt-out and the message's consent and
+ * commits, or none: a projection that returns null or undefined sends
+ * nothing (the recipient has no number, the tenant has not connected a
+ * provider). Core checks the recipient's opt-out and the message's consent and
  * holds it through quiet hours before the integration ever sees it; every
  * outcome is recorded in the integrations store's message log.
  */
 export function send<Output>(
   channel: string,
-  project: (output: BusinessEventOutput<Output>) => ChannelMessageProjection,
+  project: (output: BusinessEventOutput<Output>) => ChannelMessageProjection | null | undefined,
 ): CommandEffect<Output> {
   if (typeof channel !== 'string' || !CHANNEL_NAME.test(channel) || channel === 'email')
     throw new TypeError(
       "send() names an integration's channel in lowercase letters, digits and hyphens: send('sms', …). Email is notify's.",
     );
   if (typeof project !== 'function' || isProxy(project))
-    throw new TypeError('send() takes a function from the output to { to, text, consent }.');
+    throw new TypeError('send() takes a function from the output to { to, text, consent }, or to null for no message.');
   const destination = `${CHANNEL_DESTINATION_PREFIX}${channel}`;
   const effect = Object.freeze({ destination });
-  declared.set(effect, { destination, project: (output) => channelBody(Reflect.apply(project, undefined, [output])) });
+  declared.set(effect, {
+    destination,
+    project: (output) => {
+      const message: unknown = Reflect.apply(project, undefined, [output]);
+      return message === null || message === undefined ? null : channelBody(message);
+    },
+    skips: true,
+  });
   return effect as CommandEffect<Output>;
 }
 

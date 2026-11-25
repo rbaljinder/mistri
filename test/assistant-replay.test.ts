@@ -64,6 +64,10 @@ test('a hit is answered as recorded, its text streamed; the key is what the mode
   // Object key order is not part of a request's key.
   const reordered = { messages: asked.messages, tools: asked.tools, system: asked.system, model: asked.model, maxTokens: 1 };
   assert.equal(requestKey(reordered), requestKey(asked));
+  // Nor is the moment the person asked, which the turn says with their words: a cassette answers on another day.
+  const at = (now: string) => request(`which leads are new?\n\nNow: ${now}`);
+  assert.equal(requestKey(at('Tuesday 2026-03-03, 09:15 (America/Chicago).')), requestKey(at('Friday 2026-03-06, 17:40 (UTC).')));
+  assert.notEqual(requestKey(at('Tuesday 2026-03-03, 09:15.')), requestKey(asked));
 });
 
 test('a miss fails the turn clearly: the cassette, the request key and the words, and how to record it', async () => {

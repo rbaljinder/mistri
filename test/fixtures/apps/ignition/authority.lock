@@ -215,4 +215,3 @@ api resource vehicle field price — the App
 api resource vehicle field status — the App
 api resource vehicle field stock_reference — the App
 api command convertLead target {"target":"lead","targets":"one","realm":"tenant"} — the App
-api command qualifyLead target {"target":"lead","targets":"many","realm":"tenant"} — the App

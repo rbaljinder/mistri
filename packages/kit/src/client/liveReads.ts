@@ -40,12 +40,50 @@ export function sameReads<T>(made: T, answer: unknown): T {
   return made;
 }
 
+/** A read kept a page at a time (an infinite query's `pages`) answered from its pages' tables: all of them, or none
+    where a page does not say. */
+function pagedReads(data: unknown): readonly string[] | undefined {
+  const pages = data && typeof data === 'object' ? (data as { pages?: unknown }).pages : undefined;
+  if (!Array.isArray(pages) || !pages.length) return undefined;
+  const reads = new Set<string>();
+  for (const page of pages) {
+    const said = readsOf(page);
+    if (!said) return undefined;
+    for (const id of said) reads.add(id);
+  }
+  return [...reads];
+}
+
 /** The query cache's hook: file the tables of what a query just got, or forget what an answer without them replaced. */
 export function fileQueryReads(data: unknown, query: Pick<Query, 'queryHash'>): void {
-  const reads = readsOf(data);
+  const reads = readsOf(data) ?? pagedReads(data);
   if (reads) queries.set(query.queryHash, reads);
   else queries.delete(query.queryHash);
 }
 
 export const forgetQueryReads = (hash: string): void => void queries.delete(hash);
 export const queryReads = (hash: string): readonly string[] | undefined => queries.get(hash);
+
+/* ---------- what a command wrote (`mistri-writes`, server commands/commandWrites.ts) ---------- */
+
+const written = new WeakMap<object, readonly string[]>();
+
+/** The tables a command's answer says it wrote: none for `tables=`, undefined where the header is absent or unread. */
+export function parseWrites(header: string | null | undefined): readonly string[] | undefined {
+  if (typeof header !== 'string' || !header.startsWith('tables=')) return undefined;
+  const list = header.slice('tables='.length);
+  try {
+    return list ? list.split(',').map(decodeURIComponent) : [];
+  } catch {
+    return undefined;
+  }
+}
+
+/** Keep a command's written tables against the parsed answer they came with. */
+export function fileWrites(answer: unknown, header: string | null | undefined): void {
+  const writes = parseWrites(header);
+  if (writes && answer && typeof answer === 'object') written.set(answer, writes);
+}
+
+export const writesOf = (answer: unknown): readonly string[] | undefined =>
+  answer && typeof answer === 'object' ? written.get(answer) : undefined;

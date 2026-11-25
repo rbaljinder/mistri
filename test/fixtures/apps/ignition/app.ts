@@ -237,8 +237,8 @@ export default defineApp({
      What it exposes, and what it never does. A dealership's own four tables,
      read only, with the fields named one by one — the contract takes read fields
      alone, generic writes are not part of it, and a filter or a sort has to be a
-     field that is listed. Two of the dealership's own commands, so a dealer's
-     system can qualify and convert without anyone in a browser. And nothing of
+     field that is listed. One of the dealership's own commands, so a dealer's
+     system can convert a qualified lead without anyone in a browser. And nothing of
      the lender's: no `applicants.*` resource, because that source is the
      platform realm's alone; no platform-realm view; no platform command. Each of
      those three is refused by name when the App is read, so this block is held
@@ -249,10 +249,12 @@ export default defineApp({
      token is already scoped to one dealership, so the column would say only what
      the token already said.
 
-     The two commands are the lead's own: qualify and convert, so a dealer's
-     system can work its leads without a person in a browser. `disqualifyLead`
-     is not among them deliberately — it takes a reason a person writes, and a
-     lead closed by an integration with no reason is worse than one left open.
+     The command is the lead's own: convert. `qualifyLead` is not exposed: it
+     answers one of two shapes (one lead, or several), and the API's document
+     carries one object per command, so `--export openapi` and `mistri check`
+     both refuse it by name. `disqualifyLead` is left out deliberately: it
+     takes a reason a person writes, and a lead closed by an integration with
+     no reason is worse than one left open.
      Nor is `withdrawApplication`: withdrawal is the dealership's last word on an
      application under the lender's review, and this sample keeps it to someone
      who can see what they are withdrawing. */
@@ -289,7 +291,7 @@ export default defineApp({
       application_document: expose(['id', 'application_id', 'category', 'status', 'received_on']),
       vehicle: expose(['id', 'stock_reference', 'condition', 'mileage', 'price', 'status']),
     },
-    commands: ['qualifyLead', 'convertLead'],
+    commands: ['convertLead'],
   },
   ui: {
     logo: 'lightning',

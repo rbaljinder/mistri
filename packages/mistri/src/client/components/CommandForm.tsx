@@ -38,6 +38,7 @@ import { CommandOutcome } from './CommandOutcome.js';
 import { fieldWord, outcomeOfOperation } from './outcomeModel.js';
 import { dismissLabel, recordNounOf, repeatsTitle, theRecord } from './verbDialog.js';
 import { armUnloadGuard } from './formLeaveGuard.js';
+import { refreshAfterWrites } from '../commandRefresh.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 
 const LiveEditNotice = onDemand(() => import('@mistriwork/kit/client/components/LiveNotices.js'), 'LiveEditNotice', { quiet: true });
@@ -142,8 +143,9 @@ export function CommandForm({
   onClose: (settled?: CommandOperation) => void;
   onDone: () => void;
   /** The command landed: what to ask again. A record's bar asks its record (recordWriteRefresh.ts refreshAfterCommand);
-      without it, every read is asked again, as a group's or an assistant's form does. */
-  onApplied?: () => void;
+      without it, every read the run's tables could show is asked again (commandRefresh.ts), as a group's or an
+      assistant's form does. */
+  onApplied?: (wrote?: readonly string[]) => void;
   /** Supplemental host lifetime; retirement never forgets an operation. */
   isCurrent?: () => boolean;
   /** A group owner's records, aligned with `owner.keys`. */
@@ -379,8 +381,8 @@ export function CommandForm({
         }
         return api(path, { ...envelope, ...ownedBy(owner.connection) });
       },
-      () => {
-        if (current()) (onApplied ?? (() => void client.invalidateQueries()))();
+      (wrote) => {
+        if (current()) (onApplied ?? ((tables) => void refreshAfterWrites(client, tables)))(wrote);
       },
     );
   };

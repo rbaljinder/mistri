@@ -83,6 +83,11 @@ interface KeyRename extends Guards {
   kitOnly?: boolean;
   /** A component's prop whose words changed with it, or instead of it: `intent="quiet"` is `variant="ghost"`. Only a value written as a string is rewritten. */
   values?: Readonly<Record<string, string>>;
+  /**
+   * A word of the prop that became a prop of its own, said bare: `tone="muted"` is `muted`. An empty one is what the
+   * component does unsaid, so the prop is dropped (`tone="default"`). Only a value written as a string is rewritten.
+   */
+  flags?: Readonly<Record<string, string>>;
   /** Where the CHANGELOG says so. */
   note: string;
 }
@@ -260,8 +265,22 @@ export const KEYS: readonly KeyRename[] = [
         "A tone is one of `Tone`'s words: 'warn' is 'warning' and 'bad' is 'critical'",
         { warn: 'warning', bad: 'critical' },
       ],
-    ] as ReadonlyArray<readonly [string, string, readonly string[], string, Readonly<Record<string, string>>?]>
-  ).map(([from, to, components, note, values]) => ({
+      /* `Text` had three words of its own before it took a `Tone`: its secondary ink is the `muted` prop, its danger
+         is `critical`, and `default` is what it draws unsaid. */
+      [
+        'tone',
+        'tone',
+        ['Text'],
+        "A line of text's `tone=\"muted\"` is the `muted` prop, and `'danger'` is `'critical'`",
+        { danger: 'critical', warn: 'warning', bad: 'critical' },
+        { muted: 'muted', default: '' },
+      ],
+      ['label', 'ariaLabel', ['Tabs', 'ScrollArea'], "A tab list's and a scroll area's accessible name is `ariaLabel`, not `label`"],
+      ['inputRef', 'ref', ['TextField', 'TextArea', 'FileField'], "A field's `inputRef` is `ref`"],
+    ] as ReadonlyArray<
+      readonly [string, string, readonly string[], string, Readonly<Record<string, string>>?, Readonly<Record<string, string>>?]
+    >
+  ).map(([from, to, components, note, values, flags]) => ({
     from,
     to,
     component: true,
@@ -269,8 +288,26 @@ export const KEYS: readonly KeyRename[] = [
     components,
     note,
     ...(values ? { values } : {}),
+    ...(flags ? { flags } : {}),
   })),
 ];
+
+/**
+ * A type whose member was renamed, where a component is written against it: an App's input component takes
+ * `InputProps`, whose `onChange` is `onValueChange`. Rewritten where the parameter typed by it is destructured (the
+ * local name is kept: `{ onValueChange: onChange }`), and named by line where it is read off a whole `props`.
+ */
+export const TYPE_MEMBERS: ReadonlyArray<{ type: string; from: string; to: string; note: string }> = [
+  {
+    type: 'InputProps',
+    from: 'onChange',
+    to: 'onValueChange',
+    note: "An input component's `onChange` (from `InputProps`) is `onValueChange`",
+  },
+];
+
+/** An old word of a prop that is also what a size or a switch says unsaid: never named where it is only held. */
+export const EVERYDAY_WORDS: ReadonlySet<string> = new Set(['default']);
 
 /**
  * Where a kit component comes from: the entry points an App imports the kit's parts and the page's blocks from (a page
