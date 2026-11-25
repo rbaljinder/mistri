@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, it, expect } from 'vitest';
 import { WorkflowStatus } from './WorkflowStatus.js';
 
@@ -19,6 +19,18 @@ describe('workflow status', () => {
     expect(container.querySelectorAll('[aria-current="step"]')).toHaveLength(1);
     expect(container.querySelector('[aria-current="step"]')?.textContent).toBe('Active');
     expect(screen.queryByRole('button')).toBeNull();
+  });
+  it("draws no strip under a look whose workflow recipe is 'none', and draws it again when the look changes", () => {
+    document.documentElement.dataset.lookWorkflow = 'none';
+    try {
+      const { container } = render(<WorkflowStatus definition={definition} value="active" />);
+      expect(container.querySelector('.workflow-status')).toBeNull();
+      document.documentElement.dataset.lookWorkflow = 'markers';
+      act(() => void window.dispatchEvent(new Event('mistri:visual-theme-change')));
+      expect(container.querySelector('.workflow-status')).not.toBeNull();
+    } finally {
+      delete document.documentElement.dataset.lookWorkflow;
+    }
   });
   it('passes nothing unless the author says the steps are an order', () => {
     const { container, rerender } = render(<WorkflowStatus definition={definition} value="closed" />);

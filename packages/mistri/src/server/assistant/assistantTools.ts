@@ -20,7 +20,7 @@ import type { AppAssistant } from '../../shared/appAssistant.js';
 import { appAddressBook, recordSegments, type AddressBook } from '../../shared/appAddress.js';
 import { viewOrder } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
-import { labelColumn, primaryKey, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
+import { primaryKey, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { dashboardListQuery } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { formShownFields } from '@mistriwork/engine/shared/form.js';
 import type { Loop } from '@mistriwork/engine/server/http/firstPaint.js';
@@ -252,6 +252,12 @@ function makeContext(session: ToolSession) {
     if (problems.length) throw new ToolRefusal(problems.join(' '));
     return { rows: body.rows ?? [], columns: body.columns ?? [], total: body.total };
   };
+  /* Where a table's records are named, as the App's lists and breadcrumbs read it: the resource's `recordLabel` (a
+     column, a path, or a template the catalog computes as `$label`), and only without one the engine's guess at a
+     name column. A card that said "visit 12" beside a page titled "Ada Park · Annual physical" named another thing. */
+  const naming = async (table: TableMeta): Promise<string | undefined> =>
+    lookupsOf({ schema: await catalogSchema(), resources: session.payload.resources }).naming(table);
+  const said = (value: unknown) => (value === null || value === undefined || value === '' ? undefined : value);
   /** One record by key, if this person can see it. */
   const record = async (table: TableMeta, id: unknown, condition?: string) => {
     const [pk, ...more] = primaryKey(table);
@@ -259,15 +265,18 @@ function makeContext(session: ToolSession) {
     if (id === undefined || id === null || id === '') throw new ToolRefusal('Name the record by its id.');
     const { rows } = await run(`${table.id} ${pk} = ${quoted(id)}${condition ? ` and (${condition})` : ''} limit 1`, 1);
     if (!rows.length) return undefined;
-    const label = labelColumn(table);
+    const label = await naming(table);
+    let name = label ? said(rows[0][label]) : undefined;
+    /* A name that is a path or a template is not one of the row's own columns: it is read as a list reads it. A
+       name that cannot be read (a path this person may not follow) leaves the record named by its key. */
+    if (label && name === undefined && !(label in rows[0])) {
+      const named = await run(`${table.id} ${pk} = ${quoted(id)} show ${pk}, ${label} limit 1`, 1).catch(() => undefined);
+      name = said(named?.rows[0]?.[label]);
+    }
     const key = { [pk]: rows[0][pk] ?? id };
-    read(table.id, key, label && rows[0][label] != null ? rows[0][label] : `${table.id} ${String(id)}`);
-    return {
-      row: rows[0],
-      key,
-      title: String(label && rows[0][label] != null ? rows[0][label] : `${table.id} ${String(id)}`),
-      address: await addressOf(table.id, key),
-    };
+    const title = String(name ?? `${table.id} ${String(id)}`);
+    read(table.id, key, title);
+    return { row: rows[0], key, title, address: await addressOf(table.id, key) };
   };
   const verbOf = (name: string): CatalogVerb => {
     const [resource, action, rest] = String(name ?? '').split('.');
@@ -288,7 +297,7 @@ function makeContext(session: ToolSession) {
     (session.payload.resources[resource] as { actions?: Array<Record<string, unknown>> } | undefined)?.actions?.find(
       (each) => each.id === id,
     );
-  return { ask, run, measure, record, tableOf, addressOf, verbOf, servedAction, catalogSchema, read, evidenceRead };
+  return { ask, run, measure, record, naming, tableOf, addressOf, verbOf, servedAction, catalogSchema, read, evidenceRead };
 }
 type Context = ReturnType<typeof toolContext>;
 
@@ -314,7 +323,7 @@ async function find(context: Context, session: ToolSession, input: Record<string
   const schema = await context.catalogSchema();
   for (const resource of session.catalog.resources.map((each) => each.name).slice(0, 12)) {
     const table = schema.tables.find((each) => each.id === resource);
-    const label = table && labelColumn(table);
+    const label = table && (await context.naming(table));
     const [pk, ...more] = table ? primaryKey(table) : [];
     if (!table || !label || !pk || more.length) continue;
     try {
@@ -409,7 +418,7 @@ async function describe(context: Context, session: ToolSession, input: Record<st
     ...(column.references ? { references: column.references.table } : {}),
   }));
   const changes = session.catalog.resources.find((each) => each.name === resource)?.verbs.map((verb) => `${resource}.${verb.id}`) ?? [];
-  return { result: { resource, label: labelColumn(table), fields, changes }, label: `Looked at ${resource}` };
+  return { result: { resource, label: await context.naming(table), fields, changes }, label: `Looked at ${resource}` };
 }
 
 async function query(context: Context, input: Record<string, unknown>) {
@@ -429,14 +438,30 @@ async function query(context: Context, input: Record<string, unknown>) {
   const schema = await context.catalogSchema();
   const meta = table ? schema.tables.find((each) => each.id === table) : undefined;
   const [pk] = meta ? primaryKey(meta) : [];
-  const label = meta && labelColumn(meta);
+  const label = meta && (await context.naming(meta));
   const cited: AskEvidence[] = [];
+  /* The rows' names, where the read did not carry them (a `show` without it, a name that is a path or a template):
+     one more read, by key, so the model has a name to say and the evidence a name to show, not "visit 12". */
+  const names = new Map<string, unknown>();
+  const head = rows.slice(0, SHOWN_TO_MODEL);
+  if (meta && pk && label && head.length && head.every((row) => row[pk] !== undefined && !(label in row))) {
+    try {
+      const named = await context.run(
+        `${meta.id} ${pk} in (${head.map((row) => quoted(row[pk])).join(', ')}) show ${pk}, ${label} limit ${head.length}`,
+        head.length,
+      );
+      for (const row of named.rows) if (row[label] != null && row[label] !== '') names.set(String(row[pk]), row[label]);
+    } catch {
+      /* A name that cannot be read leaves the rows named by their keys. */
+    }
+  }
   const shown = await Promise.all(
-    rows.slice(0, SHOWN_TO_MODEL).map(async (row) => {
-      const said =
-        meta && pk && row[pk] !== undefined ? (label && row[label] != null ? row[label] : `${meta.id} ${String(row[pk])}`) : undefined;
+    head.map(async (row) => {
+      const name = meta && pk && label ? (row[label] != null && row[label] !== '' ? row[label] : names.get(String(row[pk]))) : undefined;
+      const said = meta && pk && row[pk] !== undefined ? (name ?? `${meta.id} ${String(row[pk])}`) : undefined;
       if (meta && pk && row[pk] !== undefined) context.read(meta.id, { [pk]: row[pk] }, said);
       const out = Object.fromEntries(Object.entries(row).map(([key, value]) => [key, clipped(value)]));
+      if (label && name !== undefined && !(label in row)) out.label = clipped(name);
       if (meta && pk && row[pk] !== undefined) {
         const address = await context.addressOf(meta.id, { [pk]: row[pk] });
         if (address) out.address = address;
@@ -495,33 +520,46 @@ async function show(context: Context, session: ToolSession, input: Record<string
   if (condition && /^\s*(show|sort|limit)\b/i.test(condition))
     throw new ToolRefusal('query holds conditions only; show, sort and limit are their own keys.');
   if (kind === 'table') {
-    const label = labelColumn(table);
-    const show =
-      Array.isArray(input.show) && input.show.length
-        ? (input.show as unknown[]).map(String)
-        : [
-            ...new Set(
-              [label, ...table.columns.filter((column) => !column.primaryKey).map((column) => column.name)].filter(Boolean) as string[],
-            ),
-          ].slice(0, 5);
+    /* Unasked, a table is the App's own list of these records: what names the row first, then the list view's
+       columns, and only for a table no list shows its first columns. The model's own `show` is drawn as asked. */
+    const [pk] = primaryKey(table);
+    const label = await context.naming(table);
+    const listed = Object.values(session.payload.views as Record<string, { kind?: string; table?: string; show?: string[] }>).find(
+      (view) => (view.kind ?? 'list') === 'list' && view.table === table.id && view.show?.length,
+    )?.show;
+    const asked = Array.isArray(input.show) && input.show.length ? (input.show as unknown[]).map(String) : undefined;
+    let show =
+      asked ??
+      [
+        ...new Set(
+          [label, ...(listed ?? table.columns.filter((column) => !column.primaryKey).map((column) => column.name))].filter(
+            (name) => name && name !== pk,
+          ) as string[],
+        ),
+      ].slice(0, 5);
     const sort = typeof input.sort === 'string' && input.sort.trim() ? input.sort.trim() : undefined;
     if (sort && !SORT.test(sort)) throw new ToolRefusal('sort is one column, then asc or desc: "created_on desc".');
     const limit = Math.max(1, Math.min(MAX_ROWS, Number.isInteger(input.limit) ? (input.limit as number) : 10));
-    const section = {
+    const sectionOf = (columns: string[]) => ({
       kind: 'rows',
       title: title ?? '',
       table: table.id,
       ...(condition ? { query: condition } : {}),
-      show,
+      show: columns,
       ...(sort ? { sort } : {}),
       limit,
-    };
+    });
     /* Read as the panel will read it: the dashboard's own question for this section (shared/dashboardAsks.ts), the
        names of its references and its keys with it. A block is drawn only over a read that answered, so a question
        the panel's table could not ask is the model's to correct, never a table that says "No rows match." */
     const rules = { schema: await context.catalogSchema(), resources: session.payload.resources };
-    const { rows, total } = await context.run(dashboardListQuery(lookupsOf(rules), section).query, limit, 'exact');
-    const [pk] = primaryKey(table);
+    const { rows, total } = await context.run(dashboardListQuery(lookupsOf(rules), sectionOf(show)).query, limit, 'exact');
+    /* A column with nothing in any row drawn says nothing and takes a fifth of the table: it is left out, unless
+       that would leave no column at all. The panel reads these same rows, so what is empty here is empty there. */
+    const filled = show.filter((name) => rows.some((row) => row[name] !== null && row[name] !== undefined && row[name] !== ''));
+    const dropped = rows.length && filled.length ? show.filter((name) => !filled.includes(name)) : [];
+    if (dropped.length) show = filled;
+    const section = sectionOf(show);
     const told = await Promise.all(
       rows.slice(0, TABLE_ROWS_TO_MODEL).map(async (row) => {
         const out: Record<string, unknown> = Object.fromEntries(
@@ -545,7 +583,14 @@ async function show(context: Context, session: ToolSession, input: Record<string
         label: `Found no ${table.id} for ${title ?? 'that'}`,
       };
     return {
-      result: { shown: 'table', total: matched, drawn: rows.length, first: told },
+      result: {
+        shown: 'table',
+        total: matched,
+        drawn: rows.length,
+        columns: show,
+        ...(dropped.length ? { empty: `${dropped.join(', ')}: empty in every row, so not drawn` } : {}),
+        first: told,
+      },
       label: `Showed ${title ?? table.id}: ${matched} ${matched === 1 ? 'row' : 'rows'}`,
       block: { kind: 'section', section } as AssistantBlock,
     };
@@ -559,6 +604,16 @@ async function show(context: Context, session: ToolSession, input: Record<string
     `${table.id}${condition ? ` where ${condition}` : ''} ${measure ?? 'count'}${by ? ` by ${by}` : ''}`,
     50,
   );
+  /* A figure, a chart or a breakdown over no rows is "Nothing to count yet" above the answer, as an empty table was
+     "No rows match.": nothing is drawn, and the model says so. A count of none still answers with its one row, 0. */
+  if (!rows.length || (!by && rows.every((row) => Object.values(row).every((value) => value === null || value === undefined))))
+    return {
+      result: {
+        shown: 'nothing',
+        note: `Nothing to measure, so no ${kind} was drawn. Say so in a sentence; if that is unexpected, check the condition with describe.`,
+      },
+      label: `Found nothing to measure for ${title ?? table.id}`,
+    };
   const section = {
     kind,
     title: title ?? '',

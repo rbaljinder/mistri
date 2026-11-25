@@ -7,6 +7,7 @@
  * is branding-store.test.ts's.
  */
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { MemoryCacheStore } from '../packages/engine/src/adapters/cache/cacheStore.js';
 import type { BrandingWrite, StoredBranding, StoredBrandingLogo } from '../packages/mistri/src/adapters/branding/branding.js';
@@ -41,6 +42,9 @@ test('branding.themes lists one to twenty looks', () => {
   assert.equal(declare(raw(20)).themes.length, 20);
   assert.throws(() => declare(raw(21)), /one to twenty themes/);
   assert.throws(() => declare({ ...raw(1), themes: [] }), /one to twenty themes/);
+  // The published schema says the parser's bound: it held twelve after the parser took twenty, so an editor refused a thirteenth look.
+  const published = JSON.parse(readFileSync(new URL('../packages/mistri/schema/app.schema.json', import.meta.url), 'utf8'));
+  assert.equal(published.properties.branding.properties.themes.maxItems, 20);
 });
 
 test('an App lets its tenants change only what branding.allow names, and only its tenant roles save it', () => {

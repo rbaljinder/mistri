@@ -3347,9 +3347,12 @@ tr.expanded > td { border-bottom-color: transparent; background: var(--accent-so
 .tenant-control-trigger { display: inline-flex; align-items: center; gap: var(--space-2h); max-width: min(24rem, 100%); min-width: 0; }
 .tenant-control-trigger > :first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tenant-control-trigger > :last-child { flex: none; }
-/* Beside a top bar's tabs the name gives way before they fold into the menu: at 1280 a long name's 24rem folded a
-   dealer's five tabs. It still grows with the window, and an ordinary name is whole at a desk. */
-body.app-topnav .topbar .tenant-control { max-width: clamp(12rem, 18vw, 24rem); }
+/* Beside the bar's tabs the name gives way before they fold into the menu: at 1280 a long name's 24rem folded a
+   dealer's five tabs. It still grows with the window, and an ordinary name is whole at a desk. The tabs are the top
+   placement's or a side shell's workspaces, which stand in the same bar: the shell says when the bar holds tabs
+   (`app-tabs`, appChrome.js), where this once asked for the top placement and missed the workspaces. Either way the
+   chooser is in that bar, so the rule names no bar (and the first stylesheet is no larger for it). */
+.app-tabs .tenant-control { max-width: clamp(12rem, 18vw, 24rem); }
 /* The names scroll and the foot stays: a list of many tenants carried the
    foot off the bottom of the dialog. */
 .tenant-chooser-dialog {

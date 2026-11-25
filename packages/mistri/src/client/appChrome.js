@@ -423,6 +423,9 @@ export function appMenuShell() {
      placement a workspace is a group like any. */
   const workspaces = Boolean(appMode && rooms && !noMenu && !topMode && !mobileDrawer && workspaceSwitcher(app));
   renderWorkspaces(workspaces, app);
+  /* The bar holds tabs, the top placement's or the workspaces': what stands beside them gives way to them (style.css,
+     the tenant chooser's long name). */
+  shellBody().classList.toggle('app-tabs', topMode || workspaces);
   const topnav = $('topnav');
   topnav.hidden = !(topMode || mobileDrawer);
   if (topMode || mobileDrawer) renderTopNav(topnav, app, mobileDrawer);

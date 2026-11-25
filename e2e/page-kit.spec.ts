@@ -345,6 +345,51 @@ test.describe('The page kit vocabulary', () => {
     }
   });
 
+  // A long title wraps to as many lines as it needs, as the page kit's row always did, whether or not the page also
+  // brings the primitives' sheet (whose own row cuts a title to one line); and a chosen row is dressed on both.
+  for (const path of ['rows', 'rows-primitives']) {
+    test(`on /${path} a row's long title wraps and a chosen row is dressed`, async ({ page }) => {
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.goto(`${app.origin}/${path}`);
+      await settled(page);
+      const seen = await page.evaluate(() => {
+        const rows = [...document.querySelectorAll<HTMLElement>('.kit-item')];
+        const title = rows[0]!.querySelector<HTMLElement>('.kit-item-title')!;
+        const style = getComputedStyle(title);
+        return {
+          lines: Math.round(title.getBoundingClientRect().height / parseFloat(style.lineHeight)),
+          cut: title.scrollWidth > title.clientWidth + 1,
+          chosen: getComputedStyle(rows[1]!).backgroundColor,
+          plain: getComputedStyle(rows[2]!).backgroundColor,
+          sideways: document.documentElement.scrollWidth > window.innerWidth,
+        };
+      });
+      expect(seen.lines).toBeGreaterThan(1);
+      expect(seen.cut).toBe(false);
+      expect(seen.chosen).not.toBe(seen.plain);
+      expect(seen.sideways).toBe(false);
+    });
+  }
+
+  // An App may read the look it starts in from the environment its entry passes (`ui.theme.preset`): the server's
+  // reading is the one the browser draws, with nothing stored to say otherwise.
+  test('a preset read from the environment is the look the browser wears', async ({ page }) => {
+    test.setTimeout(LONG_MS);
+    const mono = await startLayersApp('page-kit', { env: { PAGE_KIT_PRESET: 'mono' } });
+    try {
+      await page.goto(`${mono.origin}/vocabulary`);
+      await settled(page);
+      await expect(page.locator('html')).toHaveAttribute('data-visual-theme', 'mono');
+      // And the look is drawn, not only named: Mono's rules are ink, where the fixture's own look draws hairlines.
+      await expect(page.locator('html')).toHaveAttribute('data-look-rules', 'ink');
+      await page.goto(`${app.origin}/vocabulary`);
+      await settled(page);
+      await expect(page.locator('html')).not.toHaveAttribute('data-visual-theme', 'mono');
+    } finally {
+      await mono.stop();
+    }
+  });
+
   // A field report: a theme that declared the page's ground as a part (`parts: { ground: { ground } }`) was drawn as
   // the plain surface, because the shell's pane said its own background after the theme's layer. The pane reads the
   // part's token now; here the computed ground, in the sidebar's header and the bar's, the inset pane and the edge,

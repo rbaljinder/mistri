@@ -794,7 +794,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // 1.0.0-rc.79: a resource's `frozen` condition (one entry, one new name): 1795/531.
     // 1.0.0-rc.79: root `choose`, with a choice's `from`, `label` and `required` (four entries; only `choose` is a new
     // name): 1799/532.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1799, names: 532 });
+    // 1.0.0-rc.86: an assistant starter's `roles` and the assistant's `limits.steps` (two entries; both names were
+    // keys already): 1801/532.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1801, names: 532 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

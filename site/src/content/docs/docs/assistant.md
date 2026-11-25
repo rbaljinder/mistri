@@ -63,8 +63,8 @@ made, and the person asks the assistant for it instead, where it becomes a propo
 | `exclude` | Verbs it never proposes: `'resource.action'`, `'resource.new'` | none | Stable |
 | `tools`, `blocks` | Narrow its tools (`find`, `describe`, `query`, `show`, `run`) and what it may draw | all | Stable |
 | `placement` | `'panel'`; `'record'` to read the open record as context; `'page'` for a page of its own | `'panel'`, `'record'` | Stable |
-| `starters` | One-line questions offered on an empty conversation; `{ text, views, records }` offers one only in those views or on a record of those tables, at most six in one place | none | Stable |
-| `limits` | Tokens per answer, per person per day, per App per day | 200,000 per person per day | Stable |
+| `starters` | One-line questions offered on an empty conversation; `{ text, views, records, roles }` offers one only in those views, on a record of those tables, or to people holding one of those roles; at most six in one place for one person | none | Stable |
+| `limits` | Tokens per answer (`tokensPerTurn`), per person per day, per App per day; `steps`, the rounds of tool calls one answer may take before it is written (1 to 32; a refused call's round is not counted) | 200,000 per person per day; 8 steps | Stable |
 | `model`, `effort` | The Claude model and its effort | `claude-sonnet-5-5` | Stable |
 
 A starter about the open record belongs on that record only:
@@ -72,6 +72,11 @@ A starter about the open record belongs on that record only:
 ```ts
 starters: ['Which tickets are mine?', { text: 'Summarize this ticket', records: ['incident'] }, { text: 'Find stale deals', views: ['pipeline'] }],
 ```
+
+And one for a manager is offered to managers only, wherever it is placed: `{ text: 'Who is behind this week?', roles: ['manager'] }`. `mistri check` refuses a role the App does not declare.
+
+The assistant is told the day, the time and the zone with each question (the App's `ui.timezone`, or the zone the person's tenant names), names records by the resource's `recordLabel`, and draws no block for a read that came back empty.
+When the model provider refuses a call, the person reads a plain sentence and the server's log names the status and the provider's error type; a spent credit balance is said there as such.
 
 It reads and proposes only what the signed-in person may: their roles, fields and verbs. A proposed new record fills only the fields its New form shows. The server needs
 `ANTHROPIC_API_KEY` in its environment, never in the App, and the database needs its store

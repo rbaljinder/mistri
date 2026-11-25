@@ -11,14 +11,12 @@
  * is kept exactly as it came, thinking and its signatures too, so every call
  * after the first is the previous one's prefix.
  */
-import type { AppAssistant } from '../../shared/appAssistant.js';
+import { DEFAULT_ASSISTANT_STEPS, type AppAssistant } from '../../shared/appAssistant.js';
 import type { AssistantOwner, AssistantStore, ConversationState, StoredEvent } from '../../adapters/assistant/assistantStore.js';
-import type { AssistantModel, ModelBlock, ModelMessage, ModelTool, ModelUsage } from './assistantModel.js';
+import type { AssistantModel, ModelBlock, ModelMessage, ModelRefusal, ModelTool, ModelUsage } from './assistantModel.js';
 import { answerTool, runningLabel, type DisplayItem, type Proposal, type ToolSession } from './assistantTools.js';
 import { estimateTokens } from './assistantCatalog.js';
 
-/** Steps (model calls) one turn may take before it stops and says so. */
-const MAX_STEPS = 8;
 const MAX_OUTPUT = 4096;
 /** Past this many tokens of history, the earlier part is summarised before the next call. */
 const COMPACT_AT = 100_000;
@@ -306,7 +304,14 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
     return state;
   };
   try {
-    for (let step = 0; step < MAX_STEPS; step++) {
+    /* A turn takes the rounds of tool calls the App allows (`limits.steps`), and then one more call that may only
+       write: the person is owed an answer from what was read, not "Stopped after 8 steps" over a page of folded
+       reads. A round whose every call was refused taught the model the language and read nothing, so it is not
+       counted; twice the allowance of calls is the bound on that, whatever was refused. */
+    const most = context.assistant.limits.steps ?? DEFAULT_ASSISTANT_STEPS;
+    let counted = 0;
+    for (let step = 0; ; step++) {
+      const last = counted >= most || step >= most * 2;
       const refused = await capReached(context, spent);
       if (refused) return await finish('idle', refused);
       let events = await context.store.events(context.owner, context.conversation);
@@ -321,6 +326,7 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
           messages: messagesOf(events, context.assistant.model),
           maxTokens: MAX_OUTPUT,
           ...(context.assistant.effort ? { effort: context.assistant.effort } : {}),
+          ...(last ? { answerOnly: true as const } : {}),
         },
         (delta) => {
           streamed += delta;
@@ -336,15 +342,21 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
         name: string;
         input: unknown;
       }>;
-      pendingTools = reply.stopReason === 'tool_use' ? uses.map(({ id, name, input }) => ({ id, name, input })) : [];
+      // The last call was asked for words only; a tool it named all the same is not run.
+      const calling = reply.stopReason === 'tool_use' && !last;
+      pendingTools = calling ? uses.map(({ id, name, input }) => ({ id, name, input })) : [];
       /* A reply that stopped anywhere but at its tool calls keeps none of
          them: a tool_use with no result would make every later call invalid. */
-      const kept = reply.stopReason === 'tool_use' ? reply.content : reply.content.filter((block) => block.type !== 'tool_use');
+      const kept = calling ? reply.content : reply.content.filter((block) => block.type !== 'tool_use');
       // The model that made it is kept with it: its thinking goes back to that model only.
       await append(context, 'assistant', { content: kept, usage: reply.usage, model: context.assistant.model });
       streamed = '';
       if (reply.stopReason === 'refusal') return await finish('idle', 'The model declined to answer that.');
       if (reply.stopReason === 'max_tokens') return await finish('idle', 'The answer was cut short. Ask again to continue.');
+      if (last) {
+        const wrote = kept.some((block) => block.type === 'text' && String(block.text ?? '').trim());
+        return await finish('idle', wrote ? undefined : `Stopped after ${most} steps. Ask again to continue.`);
+      }
       if (!pendingTools.length) return await finish('idle');
       const results: ToolResultRecord[] = [];
       const display: DisplayItem[] = [];
@@ -372,8 +384,8 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
       await append(context, 'tool', { results, display }, proposed ? 'awaiting' : 'idle');
       pendingTools = [];
       if (proposed) return await finish('awaiting');
+      if (results.some((result) => !result.isError)) counted++;
     }
-    return await finish('idle', `Stopped after ${MAX_STEPS} steps. Ask again to continue.`);
   } catch (error) {
     /* What was said stays said: a stopped stream keeps its text, and a stopped
        step answers its calls, so the conversation can always be continued. */
@@ -402,16 +414,13 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
         display: ((error as { display?: DisplayItem[] }).display ?? []).filter((item) => item.type !== 'proposal'),
       });
     }
-    const note = stopped
-      ? 'Stopped.'
-      : error instanceof Error && error.name === 'ModelUnavailable'
-        ? error.message
-        : 'The assistant could not answer just now.';
-    /* The operator's account of it: the error's name, or a provider's refusal in our own words — never its message,
-       which may quote a row or a tool's answer. Unlogged, a refused key or a bug left the server's log empty. */
+    const unavailable = !stopped && error instanceof Error && error.name === 'ModelUnavailable' ? (error as ModelRefusal) : undefined;
+    const note = stopped ? 'Stopped.' : unavailable ? unavailable.message : 'The assistant could not answer just now.';
+    /* The operator's account of it: the error's name, or a provider's refusal in our own words with the kind of error
+       the provider named (its type, never its message) — never a message that may quote a row or a tool's answer. Unlogged, a refused key or a bug left the server's log empty. */
     if (!stopped)
       console.error(
-        `mistri: an assistant answer failed (${error instanceof Error ? (error.name === 'ModelUnavailable' ? error.message : error.name) : 'error'})`,
+        `mistri: an assistant answer failed (${unavailable ? (unavailable.operator ?? unavailable.message) : error instanceof Error ? error.name : 'error'})`,
       );
     await append(context, 'note', { text: note });
     if (!stopped) emit('error', { message: note });

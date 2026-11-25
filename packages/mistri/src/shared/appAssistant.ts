@@ -14,7 +14,12 @@ export const ASSISTANT_PLACEMENTS = ['panel', 'record', 'page'] as const;
 export const ASSISTANT_EFFORTS = ['low', 'medium', 'high'] as const;
 /** The model an App gets unless it names one; the operator's key decides whether any is reachable. */
 const DEFAULT_ASSISTANT_MODEL = 'claude-sonnet-5-5';
-const LIMIT_KEYS = ['tokensPerTurn', 'tokensPerPersonPerDay', 'tokensPerDay'] as const;
+const TOKEN_LIMIT_KEYS = ['tokensPerTurn', 'tokensPerPersonPerDay', 'tokensPerDay'] as const;
+const LIMIT_KEYS = [...TOKEN_LIMIT_KEYS, 'steps'] as const;
+/** The rounds of tool calls one answer takes before it must be written, when the App names no figure. */
+export const DEFAULT_ASSISTANT_STEPS = 8;
+/** The most an App may ask for: every round resends the turn so far, so a long one is paid for many times over. */
+const MAX_ASSISTANT_STEPS = 32;
 /** What one person may spend in a UTC day when the App names no figure: an assistant is a bill the operator pays,
  * so an open sign-up is not an open tab. A modest day's use fits; an App that expects more names its own
  * `limits.tokensPerPersonPerDay`. */
@@ -27,13 +32,14 @@ const KEYS = ['instructions', 'starters', 'model', 'effort', 'roles', 'tools', '
     most six in any one place, however many the App declares for its different places. */
 const MAX_STARTERS = 6;
 const MAX_STARTER = 120;
-const STARTER_KEYS = ['text', 'views', 'records'] as const;
+const STARTER_KEYS = ['text', 'views', 'records', 'roles'] as const;
 
 /**
  * A starter offered in some places only: in the named views (their own rooms, a list or a dashboard), on a record of
- * the named tables, or both. A starter that is a bare line is offered everywhere.
+ * the named tables, or both; and to some people only, by `roles`. A starter that is a bare line is offered everywhere,
+ * to everyone.
  *
- *   starters: ['Find stale deals', { text: 'Summarize this ticket', records: ['incident'] }]
+ *   starters: ['Find stale deals', { text: 'Summarize this ticket', records: ['incident'] }, { text: 'Who is behind?', roles: ['manager'] }]
  */
 export interface AssistantStarter {
   text: string;
@@ -41,6 +47,8 @@ export interface AssistantStarter {
   views?: string[];
   /** Table names: offered while a record of one of these tables is open. */
   records?: string[];
+  /** Role names: offered to a person who holds one of them. The server leaves the rest out; a served starter carries none. */
+  roles?: string[];
 }
 
 interface AssistantLimits {
@@ -51,6 +59,9 @@ interface AssistantLimits {
   tokensPerPersonPerDay?: number;
   /** Every person's tokens in the App in a UTC day. */
   tokensPerDay?: number;
+  /** The rounds of tool calls one answer may take before it is written, 1 to `MAX_ASSISTANT_STEPS`; a round whose
+   * every call was refused is not counted, and the answer after the last round is always words. */
+  steps?: number;
 }
 
 export interface AppAssistant {
@@ -148,7 +159,10 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     for (const [key, value] of Object.entries(a.limits)) {
       if (!(LIMIT_KEYS as readonly string[]).includes(key))
         throw new Error(`${where}.limits has an unknown key "${key}"; it takes ${LIMIT_KEYS.join(', ')}.`);
-      if (!Number.isSafeInteger(value) || (value as number) < 1000)
+      if (key === 'steps') {
+        if (!Number.isSafeInteger(value) || (value as number) < 1 || (value as number) > MAX_ASSISTANT_STEPS)
+          throw new Error(`${where}.limits.steps is a whole number of tool rounds, 1 to ${MAX_ASSISTANT_STEPS}.`);
+      } else if (!Number.isSafeInteger(value) || (value as number) < 1000)
         throw new Error(`${where}.limits.${key} is a whole number of tokens, at least 1000.`);
       limits[key as keyof AssistantLimits] = value as number;
     }
@@ -181,7 +195,7 @@ function parseStarters(
   where: string,
 ): AppAssistant['starters'] {
   if (!Array.isArray(raw) || !raw.length)
-    throw new Error(`${where} is a list of questions an empty conversation offers: a line, or { text, views, records }.`);
+    throw new Error(`${where} is a list of questions an empty conversation offers: a line, or { text, views, records, roles }.`);
   const views = context.views ?? {};
   const tables = new Set(context.recordTables ?? Object.values(views).filter((table) => table !== undefined));
   const seen = new Set<string>();
@@ -199,9 +213,19 @@ function parseStarters(
     for (const key of Object.keys(starter))
       if (!(STARTER_KEYS as readonly string[]).includes(key))
         throw new Error(`${at} has an unknown key "${key}"; a starter takes ${STARTER_KEYS.join(', ')}.`);
-    if (starter.views === undefined && starter.records === undefined)
-      throw new Error(`${at} names no place: give it views, records or both, or write the line alone to offer it everywhere.`);
+    if (starter.views === undefined && starter.records === undefined && starter.roles === undefined)
+      throw new Error(`${at} names no place and no role: give it views, records or roles, or write the line alone to offer it everywhere.`);
     const out: AssistantStarter = { text: line };
+    if (starter.roles !== undefined) {
+      if (!context.roles) throw new Error(`${at}.roles names roles, and the App declares no "auth" with roles.`);
+      out.roles = nameList(
+        starter.roles,
+        (role) => (context.roles as readonly string[]).includes(role),
+        `${at}.roles`,
+        'role names',
+        `is not one of the App's roles (${(context.roles as readonly string[]).join(', ')})`,
+      );
+    }
     if (starter.views !== undefined)
       out.views = nameList(starter.views, (key) => Object.hasOwn(views, key), `${at}.views`, 'view keys', "is not one of this App's views");
     if (starter.records !== undefined) {
@@ -220,21 +244,46 @@ function parseStarters(
     }
     return out;
   });
-  /* At most six in any one place: everywhere's, with a view's own or a record's own. */
-  const everywhere = starters.filter((s) => typeof s === 'string').length;
-  const places = [
-    ['everywhere', everywhere] as const,
-    ...Object.keys(views).map(
-      (key) => [`in view "${key}"`, everywhere + starters.filter((s) => typeof s !== 'string' && s.views?.includes(key)).length] as const,
-    ),
-    ...[...tables].map(
-      (table) =>
-        [`on a ${table} record`, everywhere + starters.filter((s) => typeof s !== 'string' && s.records?.includes(table)).length] as const,
-    ),
-  ];
-  const crowded = places.find(([, count]) => count > MAX_STARTERS);
-  if (crowded) throw new Error(`${where} offers ${crowded[1]} starters ${crowded[0]}; at most ${MAX_STARTERS} are offered in one place.`);
+  /* At most six in any one place: everywhere's, with a view's own or a record's own, as one person is offered them
+     (a starter for one role is not counted against another's). */
+  const scoped = starters.some((s) => typeof s !== 'string' && s.roles);
+  for (const role of scoped ? (context.roles as readonly string[]) : [undefined]) {
+    const theirs = starters.filter((s) => typeof s === 'string' || !s.roles || (role !== undefined && s.roles.includes(role)));
+    const placed = (s: string | AssistantStarter): s is AssistantStarter => typeof s !== 'string' && Boolean(s.views || s.records);
+    const everywhere = theirs.filter((s) => !placed(s)).length;
+    const places = [
+      ['everywhere', everywhere] as const,
+      ...Object.keys(views).map(
+        (key) => [`in view "${key}"`, everywhere + theirs.filter((s) => placed(s) && s.views?.includes(key)).length] as const,
+      ),
+      ...[...tables].map(
+        (table) => [`on a ${table} record`, everywhere + theirs.filter((s) => placed(s) && s.records?.includes(table)).length] as const,
+      ),
+    ];
+    const crowded = places.find(([, count]) => count > MAX_STARTERS);
+    if (crowded)
+      throw new Error(
+        `${where} offers ${crowded[1]} starters ${crowded[0]}${role === undefined ? '' : ` to role "${role}"`}; at most ${MAX_STARTERS} are offered in one place.`,
+      );
+  }
   return starters;
+}
+
+/**
+ * The starters a person holding `roles` is offered, as they are served: one for other roles is left out, and the
+ * rest carry no role list (which roles an App has is not the browser's to know). One that named only roles is a bare
+ * line again, offered everywhere.
+ */
+export function startersFor(
+  starters: readonly (string | AssistantStarter)[] | undefined,
+  roles: readonly string[],
+): Array<string | AssistantStarter> {
+  return (starters ?? []).flatMap((starter): Array<string | AssistantStarter> => {
+    if (typeof starter === 'string' || !starter.roles) return [starter];
+    if (!starter.roles.some((role) => roles.includes(role))) return [];
+    const { roles: _roles, ...rest } = starter;
+    return [rest.views || rest.records ? rest : rest.text];
+  });
 }
 
 /** Where the person is, as the starters read it: the view that is the room, the table of the record that is open. */

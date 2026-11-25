@@ -955,9 +955,10 @@
           "enum": [
             "markers",
             "pills",
-            "segments"
+            "segments",
+            "none"
           ],
-          "description": "`markers`: A workflow whose steps are an order is numbered marks joined by a rule, the label under each; a set of states with no order is a track of thin segments. `pills`: A workflow is a row of pills with a dot each: a step walked in the good tint, the current one in the accent’s. `segments`: A workflow is one bar cut into segments, a word in each: the steps walked on a tint in the ink, the current one on the accent’s tint, those ahead muted."
+          "description": "`markers`: A workflow whose steps are an order is numbered marks joined by a rule, the label under each; a set of states with no order is a track of thin segments. `pills`: A workflow is a row of pills with a dot each: a step walked in the good tint, the current one in the accent’s. `segments`: A workflow is one bar cut into segments, a word in each: the steps walked on a tint in the ink, the current one on the accent’s tint, those ahead muted. `none`: No workflow strip is drawn: a record says its state on the chip in its head alone."
         },
         "banner": {
           "enum": [

@@ -2153,7 +2153,7 @@ export interface AppBranding {
   allow: readonly BrandingKey[];
   /** The tenant roles (auth.roles with `realm: 'tenant'`) whose members may save it: a tenant's admins. */
   editors: readonly string[];
-  /** The themes a tenant starts from, `defineTheme(...)` results or built-in names; the first is the default.
+  /** The themes a tenant starts from, `defineTheme(...)` results or built-in names, one to twenty; the first is the default.
       Absent: the App's own look. */
   themes?: readonly (import('@mistriwork/engine/schema/theme.js').Theme | import('@mistriwork/engine/schema/theme.js').ThemeBase)[];
 }
@@ -3728,7 +3728,8 @@ export interface AssistantDeclaration {
   /** What it is for and how it answers, appended to the platform's own rules. */
   readonly instructions?: string;
   /** Questions an empty conversation offers, each one line the person sends with a press: a bare line everywhere,
-   * `{ text, views, records }` only in those views' rooms or on a record of those tables. At most six in one place. */
+   * `{ text, views, records }` only in those views' rooms or on a record of those tables, `roles` only to people
+   * holding one of them. At most six in one place for any one person. */
   readonly starters?: readonly (string | AssistantStarter)[];
   /** The model id; `'claude-sonnet-5-5'` when absent. */
   readonly model?: string;
@@ -3745,17 +3746,21 @@ export interface AssistantDeclaration {
    * of its own at `/{app}/assistant`, which nav places by the word `'assistant'` (at the menu's end where it does not).
    * Absent, the panel and the record. */
   readonly placement?: readonly ('panel' | 'record' | 'page')[];
-  /** Token caps, counted per model call: a turn past one is refused before the model is asked. A person's day is 200,000 tokens unless `tokensPerPersonPerDay` names another figure. */
-  readonly limits?: { readonly tokensPerTurn?: number; readonly tokensPerPersonPerDay?: number; readonly tokensPerDay?: number };
+  /** Token caps, counted per model call: a turn past one is refused before the model is asked. A person's day is 200,000 tokens unless `tokensPerPersonPerDay` names another figure.
+   * `steps` is the rounds of tool calls one answer may take before it is written, 8 unless named and 32 at most: a round whose every call was refused is not counted, and the call after the last round only writes. */
+  readonly limits?: { readonly tokensPerTurn?: number; readonly tokensPerPersonPerDay?: number; readonly tokensPerDay?: number; readonly steps?: number };
 }
-/** A starter offered in some places only: `{ text: 'Summarize this ticket', records: ['incident'] }`. Give it
- * `views`, `records` or both; a starter for everywhere is the line alone. */
+/** A starter offered in some places only, or to some roles only: `{ text: 'Summarize this ticket', records: ['incident'] }`,
+ * `{ text: 'Who is behind?', roles: ['manager'] }`. Give it `views`, `records`, `roles` or any of them together; a
+ * starter for everywhere and everyone is the line alone. */
 export interface AssistantStarter {
   readonly text: string | AppMessageRef;
   /** View keys: offered while one of these views is the room (its list, dashboard or form). */
   readonly views?: readonly string[];
   /** Table names: offered while a record of one of these tables is open. Needs the `'record'` placement. */
   readonly records?: readonly string[];
+  /** Roles of the App's `auth`: offered only to a person holding one of them, wherever its `views` and `records` place it. */
+  readonly roles?: readonly string[];
 }
 /** Declare an App's assistant; identity at runtime, checked at load. */
 export declare function assistant<const A extends AssistantDeclaration>(declaration: A & { [K in Exclude<keyof A, keyof AssistantDeclaration>]: never }): A;

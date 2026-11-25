@@ -781,21 +781,19 @@
     gap: var(--space-1);
   }
 
+  /* The words wrap, as the page kit's row always let them (kit.css): the row is one element with both sheets' names,
+     and cut to one line here a long title lost its end on any page that brought this sheet too. */
   .nx-item-row-title {
     font-size: var(--text-base);
     font-weight: 520;
     color: var(--ink);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
 
   .nx-item-row-description {
     font-size: var(--text-sm);
     color: var(--ink-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    overflow-wrap: anywhere;
   }
 
   .nx-item-row-meta {

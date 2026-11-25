@@ -119,7 +119,9 @@ test('no selector reads a theme by its family name: data-theme-style has no valu
 });
 
 /** Values the menu offers that no rule answers, and why. */
-const RULE_LESS: Record<string, string> = {};
+const RULE_LESS: Record<string, string> = {
+  'workflow=none': 'no strip is drawn at all: WorkflowStatus.tsx leaves it out of the page, so there is nothing for a sheet to dress',
+};
 
 test("every value that is not its part's default is answered by a rule", () => {
   const answered = new Set(rules.map((rule) => `${rule.part}=${rule.value}`));

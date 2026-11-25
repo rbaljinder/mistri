@@ -57,6 +57,8 @@ export async function serveSupportFixture({ directory, appId, port }: { director
     provisionSqliteTenantStore(database, binding);
     provisionSqliteTenantAdministrationJournal(database, binding);
     provisionSqliteSupportAudit(database, binding, supportAuditKey());
+    // Each top-level group a product of its own, so a side shell draws them as tabs in the bar (the shell-fit spec).
+    const workspace = process.env.MISTRI_E2E_WORKSPACES ? { workspace: true as const } : {};
     const loaded = {
       path: join(directory, 'app.ts'),
       pages: [],
@@ -88,11 +90,17 @@ export async function serveSupportFixture({ directory, appId, port }: { director
           },
           home: 'leads',
           nav: [
-            { id: 'desk', label: 'Desk', realm: 'tenant', children: ['leads'] },
-            { id: 'underwriting', label: 'Underwriting', realm: 'platform', children: ['dealers'] },
+            { id: 'desk', label: 'Desk', realm: 'tenant', children: ['leads'], ...workspace },
+            { id: 'underwriting', label: 'Underwriting', realm: 'platform', children: ['dealers'], ...workspace },
             // A dealer's bar with a workspace's worth of tabs, for the shell-fit spec's long tenant name.
             ...(process.env.MISTRI_E2E_DEALER_NAME
-              ? WORKSPACE_TABS.map((label) => ({ id: tabId(label), label, realm: 'tenant' as const, children: [`${tabId(label)}-leads`] }))
+              ? WORKSPACE_TABS.map((label) => ({
+                  id: tabId(label),
+                  label,
+                  realm: 'tenant' as const,
+                  children: [`${tabId(label)}-leads`],
+                  ...workspace,
+                }))
               : []),
           ],
           // A side menu is the other shell whose foot holds the tenant control (the shell-fit spec reads it).

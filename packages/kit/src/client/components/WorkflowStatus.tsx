@@ -11,11 +11,19 @@
  * hairline joins each step to the next — in the ink where it has been walked.
  *
  * With one or two states there is no way to show: the head's chip already says where the record is, so the strip is
- * drawn from three states up and a shorter one is left out.
+ * drawn from three states up and a shorter one is left out. A look may leave every strip out (`recipes.workflow: 'none'`).
  */
-import { useLayoutEffect, useRef } from 'react';
+import { useLayoutEffect, useRef, useSyncExternalStore } from 'react';
 import { workflowLabel, type ResolvedWorkflowStatus as WorkflowDefinition } from '@mistriwork/engine/shared/pageModel.js';
 import { say } from '../copy/record/components/WorkflowStatus.js';
+import { addHostListener, shellRoot } from '../shellHost.js';
+import { VISUAL_THEME_EVENT } from '../visualTheme.js';
+
+/* A look may draw no strip at all (`recipes.workflow: 'none'`, themeRecipes.ts): the head's chip says the state, and
+   a long workflow's strip under it said it twice. Left out here rather than hidden by a rule, so nothing of it is in
+   the tree to be read aloud; a look put on while the record is open is heard through the theme's own event. */
+const whenLookChanges = (notify: () => void) => addHostListener(window, VISUAL_THEME_EVENT, notify);
+const stripLeftOut = () => shellRoot().dataset.lookWorkflow === 'none';
 
 export function WorkflowStatus({
   definition,
@@ -45,7 +53,8 @@ export function WorkflowStatus({
     ol.scrollLeft = Math.max(0, from.offsetLeft - ol.offsetLeft);
     edges(ol);
   }, [current]);
-  if (road.length < 3) return null;
+  const leftOut = useSyncExternalStore(whenLookChanges, stripLeftOut, () => false);
+  if (road.length < 3 || leftOut) return null;
   return (
     <div className="workflow-status">
       <ol
