@@ -51,7 +51,7 @@ export function registerSuiteFlagAccess(
     const platform = { ...base, realm: 'platform' as const };
     const syncRead = () => {
       active();
-      db ??= new DatabaseSync(path!, { readOnly: true });
+      db ??= new DatabaseSync(path!, { readOnly: true, timeout: 5000 });
       return tenant ? readSqliteTenantMembership(db, binding, tenant) : readSqlitePlatformMembership(db, binding, platform);
     };
     const started = now();

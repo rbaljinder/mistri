@@ -435,14 +435,39 @@ export async function runTenantCommand(
             problems.push(`${address} has no account yet: set MISTRI_ACCOUNT_PASSWORD to the password it is made with.`);
         }
         if (problems.length) return refuse(problems);
-        for (const [address, id] of found) {
-          if (id === null) {
-            const [made] = await maintenance.createAppAccounts(app, [
-              { email: address, name: flags['--name'] ?? address.split('@')[0], password: process.env.MISTRI_ACCOUNT_PASSWORD! },
-            ]);
-            found.set(address, made);
-            write(`${address}: an account was made in ${kept}.`);
-          } else write(`${address}: the account in ${kept}.`);
+        const madeNow = new Set<string>();
+        let pending = [...found.entries()].filter(([, id]) => id === null).map(([address]) => address);
+        for (let attempt = 0; pending.length && attempt < 4; attempt++) {
+          const batch = pending.slice(0, 256);
+          try {
+            const ids = await maintenance.createAppAccounts(
+              app,
+              batch.map((address) => ({
+                email: address,
+                name: flags['--name'] ?? address.split('@')[0],
+                password: process.env.MISTRI_ACCOUNT_PASSWORD!,
+              })),
+            );
+            batch.forEach((address, index) => {
+              found.set(address, ids[index]);
+              madeNow.add(address);
+            });
+            pending = pending.slice(batch.length);
+            attempt = -1;
+          } catch (error) {
+            // Another `tenant grant` running beside this one may have just made one of these accounts: adopt what is there now.
+            const still: string[] = [];
+            for (const address of batch) {
+              const existing = await maintenance.findAppAccount(app, address).catch(() => null);
+              if (existing !== null) found.set(address, existing);
+              else still.push(address);
+            }
+            if (still.length === batch.length || attempt === 3) throw error;
+            pending = [...still, ...pending.slice(batch.length)];
+          }
+        }
+        for (const [address] of found) {
+          write(madeNow.has(address) ? `${address}: an account was made in ${kept}.` : `${address}: the account in ${kept}.`);
         }
         const validUntil = Date.now() + days * 86_400_000;
         const until = new Date(validUntil).toISOString().slice(0, 10);

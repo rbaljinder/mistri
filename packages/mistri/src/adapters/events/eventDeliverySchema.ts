@@ -268,7 +268,7 @@ export interface EventDeliveryProvisionOptions {
 /** The destinations among `policies` that the store holds under a different policy, read and changed by nothing:
  * what `migrate status` and `check` say before a start finds them. A store with no such table holds none. */
 export function changedSqliteDestinations(path: string, policies: readonly EventDeliveryPolicy[]): EventDeliveryDestinationChanged[] {
-  const db = new DatabaseSync(path, { readOnly: true });
+  const db = new DatabaseSync(path, { readOnly: true, timeout: 5000 });
   try {
     if (!db.prepare(`SELECT 1 FROM main.sqlite_schema WHERE type='table' AND name=?`).get(t.destination)) return [];
     const changed: EventDeliveryDestinationChanged[] = [];

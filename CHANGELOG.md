@@ -26,6 +26,7 @@ The rest of the decisions from the field report's open gaps: `field.member()`, a
 - The docs say three things are by design, where they read as gaps: an App lists its feature modules one line a module, since there is no `import.meta.glob` (the guided tour); an effect's answer is its status alone and never reaches a transaction (Commands); and an administration rule with `tenants: 'all'` acts on any tenant named to it but lists none in Manage tenants (Tenant Apps).
 - `mistri check` and `--export openapi` say every refused API exposure in one run, a line each, where they stopped at the first and an author met them one fix at a time: each exposed resource, view and command is judged on its own, and the reads, generic writes and commands are judged together in an ordinary App and a tenant App alike. Within one exposure its first refusal stands for it.
 - A test host's `asOf` (`MISTRI_AS_OF`, `mistri dev --as-of`) reaches a workflow's `w.now()`, `w.until()` and the commands and proposals its steps run, and a job's or decision's command counts the offset once (the runner and the handler both shifted it before), while the job store's leases, retries and sleep waits keep the real clock.
+- Concurrent `mistri tenant grant` runs over SQLite wait their turn instead of colliding on the sign-in store (`SQLITE_BUSY` while hashing passwords, or a race creating the store's tables) or failing host validation on a read-only handle without a busy timeout, and `grant --from` makes new accounts in batches rather than reopening the store per row.
 
 ## 1.0.0-rc.87
 

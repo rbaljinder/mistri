@@ -54,15 +54,16 @@ export const accountAuditPlugin = () => ({ id: 'mistri-account-audit', schema: A
 
 /** After Better Auth's migration of the file: the triggers, once. */
 export function provisionSqliteAccountAudit(db: DatabaseSync): void {
-  db.exec('BEGIN IMMEDIATE');
+  const own = !db.isTransaction;
+  if (own) db.exec('BEGIN IMMEDIATE');
   try {
     for (const [name, ddl] of SQLITE_ACCOUNT_AUDIT_TRIGGERS) {
       const found = db.prepare("SELECT sql FROM main.sqlite_schema WHERE type = 'trigger' AND name = ? COLLATE BINARY").get(name);
       if (!found) db.exec(ddl);
     }
-    db.exec('COMMIT');
+    if (own) db.exec('COMMIT');
   } catch (error) {
-    if (db.isTransaction) db.exec('ROLLBACK');
+    if (own && db.isTransaction) db.exec('ROLLBACK');
     throw error;
   }
 }

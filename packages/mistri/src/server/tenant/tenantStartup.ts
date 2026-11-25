@@ -269,7 +269,7 @@ export async function prepareTenantStartup(
       if (!isPostgresAuthStore(appAuthStore(loaded, capturedEnvironment)))
         assertAuthStoreSeparation(appAuthStore(loaded, capturedEnvironment), exclusion);
       describe = async () => {
-        const db = new DatabaseSync(file, { readOnly: true, enableForeignKeyConstraints: true });
+        const db = new DatabaseSync(file, { readOnly: true, enableForeignKeyConstraints: true, timeout: 5000 });
         try {
           db.exec('BEGIN');
           const physical = readSqliteReadCatalog(db).schema;
