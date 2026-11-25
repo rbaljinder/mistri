@@ -433,7 +433,11 @@ export const UiHostContext = createContext<UiHost | null>(null);
 
 /** The host where there is one: a kit block drawn outside a section (a story, a test) keeps the browser's own behaviour. */
 export function useHostIfAny(): UiHost | null {
-  return useContext(UiHostContext) ?? pageHost;
+  try {
+    return useContext(UiHostContext) ?? pageHost;
+  } catch {
+    return pageHost;
+  }
 }
 
 export function useUiHost(): UiHost {

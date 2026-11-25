@@ -1377,6 +1377,52 @@
         { "file": "e2e/decide.spec.ts" }
       ],
       "browser": true
+    },
+    {
+      "id": "resource-photos",
+      "surface": [
+        "dsl: app: resources.*.photos",
+        "dsl: app: resources.*.photos.aspect",
+        "dsl: app: resources.*.photos.from",
+        "dsl: app: resources.*.photos.sort",
+        "dsl: app: resources.*.photos.whose"
+      ],
+      "tests": [
+        { "file": "test/custom-site-capabilities.test.ts" },
+        { "file": "packages/mistri/src/client/components/sdk/customSite.test.tsx" }
+      ]
+    },
+    {
+      "id": "ui-site",
+      "surface": [
+        "dsl: app: ui.site",
+        "dsl: app: ui.site.cta",
+        "dsl: app: ui.site.cta.href",
+        "dsl: app: ui.site.cta.label",
+        "dsl: app: ui.site.cta.view",
+        "dsl: app: ui.site.footer",
+        "dsl: app: ui.site.footer.links",
+        "dsl: app: ui.site.footer.links[].href",
+        "dsl: app: ui.site.footer.links[].label",
+        "dsl: app: ui.site.footer.links[].view",
+        "dsl: app: ui.site.footer.text",
+        "dsl: app: ui.site.links",
+        "dsl: app: ui.site.links[].href",
+        "dsl: app: ui.site.links[].label",
+        "dsl: app: ui.site.links[].view",
+        "dsl: app: ui.site.search",
+        "dsl: app: ui.site.search.param",
+        "dsl: app: ui.site.search.placeholder",
+        "dsl: app: ui.site.search.view",
+        "dsl: app: ui.site.signIn",
+        "dsl: app: ui.site.signIn = \"footer\"",
+        "dsl: app: ui.site.signIn = \"header\"",
+        "dsl: app: ui.site.signIn = false"
+      ],
+      "tests": [
+        { "file": "test/custom-site-capabilities.test.ts" },
+        { "file": "packages/mistri/src/client/components/sdk/customSite.test.tsx" }
+      ]
     }
   ],
   "unmapped": ["cli: flag --ahead", "cli: flag --operator", "cli: flag --rate", "cli: flag --samples"]

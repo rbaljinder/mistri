@@ -920,7 +920,9 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
                           ? (row) => {
                               const record = recordForRow(row, data.columns ?? []);
                               if (record.key)
-                                void openRecord(table.id, record.key, record.label, 'push', section.open ? { open: section.open } : {});
+                                void (section.open
+                                  ? openRecord(table.id, record.key, record.label, 'push', { open: section.open })
+                                  : openRecord(table.id, record.key, record.label));
                             }
                           : undefined
                       }
@@ -1066,7 +1068,9 @@ function RelatedList({ section, plan, base, recordKey, onEdit, collapsed, counte
                             ? (row) => {
                                 const record = recordForRow(row);
                                 if (record.key)
-                                  void openRecord(table.id, record.key, record.label, 'push', section.open ? { open: section.open } : {});
+                                  void (section.open
+                                    ? openRecord(table.id, record.key, record.label, 'push', { open: section.open })
+                                    : openRecord(table.id, record.key, record.label));
                               }
                             : undefined
                         }

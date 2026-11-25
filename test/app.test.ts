@@ -357,7 +357,7 @@ describe('nav modules', () => {
     const entry = resolvedViews(app, SCHEMA)[0] as ResolvedListView;
     assert.equal(entry.open, 'drawer');
     assert.equal((resolvedViews(listApp({ from: 'work_order', open: 'modal' }), SCHEMA)[0] as ResolvedListView).open, 'modal');
-    assert.throws(() => listApp({ from: 't', open: 'sheet' }), /"open" of "sheet"\. Use "page", "drawer" or "modal"/);
+    assert.throws(() => listApp({ from: 't', open: 'sheet' }), /"open" of "sheet"\. Use "page", "drawer", "modal", or \{ page, param\? \}/);
     // The New form's word is the list's: the one it replaced is refused by name.
     assert.throws(() => listApp({ from: 't', open: 'peek' }), /"open" of "peek", which is now "drawer"/);
   });
@@ -1871,7 +1871,7 @@ test('display rules take a meter, an avatar and a second line, and refuse their 
   refused({ bar: 5, max: 5 }, /has no "max"/);
   refused({ avatar: 'yes' }, /"avatar" that is not true, false or \{ from, whose \}/);
   refused({ subtitle: 'account.name' }, /"subtitle" that is not one of the resource's own columns/);
-  refused({ sparkline: true }, /It takes: format, currency, minor, whole, unit, tone, bar, avatar, icons, values, subtitle/);
+  refused({ sparkline: true }, /It takes: format, currency, minor, whole, round, unit, tone, bar, avatar, icons, values, subtitle/);
 });
 
 test('a list view takes totals over its own numeric columns and a density, and refuses their wrong shapes', () => {

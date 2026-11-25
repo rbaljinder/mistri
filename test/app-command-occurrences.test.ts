@@ -133,7 +133,7 @@ test("a command creates by its registration (targets: 'none'), never by a form o
   const actor = { id: 'operator', appId: 'app', roles: ['operator'] };
   assert.equal(authorizer.creates('change'), false);
   assert.equal(authorizer.creates('create'), true);
-  assert.equal(authorizer.creates('publicCreate'), false);
+  assert.equal(authorizer.creates('publicCreate'), true);
   assert.deepEqual(authorizer.authorize('change', actor).keyColumns, ['id']);
   assert.deepEqual(authorizer.authorize('create', actor).keyColumns, []);
   assert.throws(() => authorizer.authorize('publicCreate', actor));

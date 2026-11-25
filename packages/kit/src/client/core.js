@@ -1055,7 +1055,11 @@ export async function openRecord(tableId, key, label, how = 'push', opts = {}) {
      fencing. The latter is used by app-owned split workspaces: their detail
      pane is a row surface, but automatic page affinity must not replace it
      with a configured page. */
-  const answer = !opts.direct ? shell().openRecord(tableId, key, label, opts.records, opts.list, opts.open) : false;
+  const answer = !opts.direct
+    ? opts.open
+      ? shell().openRecord(tableId, key, label, opts.records, opts.list, opts.open)
+      : shell().openRecord(tableId, key, label, opts.records, opts.list)
+    : false;
   /* `{ under }` is a row route that first stands a list beneath it: a split
      picked at the App's root, where the walk is empty (appnav.js). */
   const under = answer && typeof answer === 'object' ? answer.under : undefined;
