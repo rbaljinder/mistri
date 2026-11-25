@@ -204,10 +204,15 @@ export async function prepareTenantStartup(
         replicas.push(found);
       }
       /* The connection's "pool" sizes the App's request pool as it sizes an ordinary App's (tenantConnections.ts); a
-         replica's readers are as wide as the primary's. */
+         replica's readers are as wide as the primary's, and wait as long as its connections do. */
       declareTenantPool(url, connection.pool);
-      for (const replica of replicas)
-        declareTenantPool(replica, connection.pool?.read === undefined ? undefined : { read: connection.pool.read });
+      const { read, connectTimeoutMs, queryTimeoutMs } = connection.pool ?? {};
+      const replicaPool = {
+        ...(read === undefined ? {} : { read }),
+        ...(connectTimeoutMs === undefined ? {} : { connectTimeoutMs }),
+        ...(queryTimeoutMs === undefined ? {} : { queryTimeoutMs }),
+      };
+      for (const replica of replicas) declareTenantPool(replica, Object.keys(replicaPool).length ? replicaPool : undefined);
       /* The connection's "listen": where the jobs host holds its LISTEN when `url` is a transaction-mode pooler's. */
       const listen = connection.listen
         ? (await resolveConnection(connection.name, connection.listen, { environment: capturedEnvironment })).url

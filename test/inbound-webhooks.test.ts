@@ -10,6 +10,7 @@
  * hand-written one is.
  */
 import assert from 'node:assert/strict';
+import { setAppClockOffset } from '../packages/engine/src/shared/appClock.js';
 import { createHmac, randomUUID } from 'node:crypto';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import type { AddressInfo } from 'node:net';
@@ -243,12 +244,15 @@ after(async () => {
   if (process.env.TABLEWALK_TEST_PG) await dropDedicatedPostgresDatabase(DATABASE);
 });
 
+/* What `now()` read in each run of `settle`: the command's clock, which an as-of moment moves. */
+const settledAt: number[] = [];
 const settle = defineCommand({
   source: 'shop',
   target: 'vehicle',
   input: { status: field.choice(['reserved', 'sold']) },
   output: shape({ id: id() }),
-  async handle({ db, record }, input) {
+  async handle({ db, record, now }, input) {
+    settledAt.push(now().getTime());
     const updated = await db.vehicle.update(record!, { status: input.status });
     return { id: updated.id as number };
   },
@@ -445,6 +449,28 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         assert.equal(await reply.text(), '');
         assert.deepEqual(await f.item(1), { status: 'reserved', version: 1 });
         assert.deepEqual(await f.item(2), { status: 'available', version: 0 });
+      });
+    });
+
+    /* A test host started as of another moment (`asOf`, MISTRI_AS_OF) moves App logic's clock: the delivered
+       command reads that day, as a person's command and a job's do, while the signature is still judged fresh by
+       the real time it was signed at. A field report: an event taken "now" by a test was in the future to a
+       handler whose clock stayed on the real day. */
+    test("an as-of moment moves the delivered command's clock, not the signature's", async (t) => {
+      const month = 30 * 86_400_000;
+      setAppClockOffset(-month);
+      t.after(() => setAppClockOffset(0));
+      await fixture(dialect, async (f) => {
+        settledAt.length = 0;
+        const { body, headers } = f.delivery({ id: 'chk-as-of', item: 2, status: 'reserved' });
+        assert.equal((await f.send(body, headers)).status, 204);
+        assert.deepEqual(settledAt, [f.clock.now - month]);
+        // Signed a month back, where the command's clock now stands, is still a stale delivery.
+        f.clock.now -= month;
+        const stale = f.delivery({ id: 'chk-as-of-stale', item: 3, status: 'reserved' });
+        f.clock.now += month;
+        assert.equal((await f.send(stale.body, stale.headers)).status, 401);
+        assert.deepEqual(await f.item(3), { status: 'available', version: 0 });
       });
     });
 

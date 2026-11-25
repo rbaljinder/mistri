@@ -52,6 +52,7 @@
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { inSpan } from '@mistriwork/engine/adapters/telemetry/trace.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { readBounded } from '@mistriwork/engine/server/http/reply.js';
 import { asBackgroundWork } from '@mistriwork/engine/adapters/writeLanes.js';
 import { AppAccessDenied } from '../app/appAccess.js';
@@ -512,7 +513,9 @@ export function createInboundHost(
             door: 'api',
             flags,
             requestId: `inbound:${endpoint.name}`,
-            now: () => new Date(now()),
+            /* The command's clock is App logic's, moved by an as-of moment as a person's command and a job's are
+               (http/clock.ts); the signature's freshness and the receipt above keep the real one. */
+            now: () => appTime(now()),
             ...(run.files ? { files: run.files } : {}),
             ...(brought ? { delivered: brought.files } : {}),
           },

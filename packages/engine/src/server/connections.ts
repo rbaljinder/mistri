@@ -645,6 +645,8 @@ export class Registry {
                   ...(entry.config.pool.write !== undefined ? { writers: entry.config.pool.write } : {}),
                   ...(entry.config.pool.idleSeconds !== undefined ? { idleSeconds: entry.config.pool.idleSeconds } : {}),
                   ...(entry.config.pool.minIdle !== undefined ? { minIdle: entry.config.pool.minIdle } : {}),
+                  ...(entry.config.pool.connectTimeoutMs !== undefined ? { connectTimeoutMs: entry.config.pool.connectTimeoutMs } : {}),
+                  ...(entry.config.pool.queryTimeoutMs !== undefined ? { queryTimeoutMs: entry.config.pool.queryTimeoutMs } : {}),
                 },
               }
             : {}),
@@ -903,7 +905,7 @@ interface ConfigFile {
     rows?: boolean;
     /** Table → columns never served over the connection (hiddenColumns.ts). */
     hidden?: HiddenColumnRules;
-    /** `{ "read": n, "write": m, "idleSeconds": s, "minIdle": k }`: a PostgreSQL connection's pool sizes and idle window, checked by poolOf. */
+    /** `{ "read": n, "write": m, "idleSeconds": s, "minIdle": k, "connectTimeoutMs": c, "queryTimeoutMs": q }`: a PostgreSQL connection's pool sizes, idle window and timeouts, checked by poolOf. */
     pool?: unknown;
     /** Read replicas' URLs, checked by replicasOf. */
     replicas?: unknown;

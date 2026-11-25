@@ -7,6 +7,7 @@
  * webhooks to effects, is test/tenant-integrations.test.ts.
  */
 import assert from 'node:assert/strict';
+import { setAppClockOffset } from '../packages/engine/src/shared/appClock.js';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { once } from 'node:events';
@@ -338,6 +339,45 @@ test('a channel message waits out quiet hours, in the recipient zone when it nam
   assert.equal(response.status, 204, 'taken: the opt-in is recorded, though no command is mapped to it');
   await publish({ to: '+15550003', text: 'Hello again.', consent: false });
   assert.deepEqual(provider.texts.at(-1)?.to, '+15550003');
+});
+
+/* Quiet hours are asked of App logic's clock, which a test host's `asOf` (MISTRI_AS_OF) moves: started at 21:30 in
+   New York, a text is held whatever the real hour, for as long as the quiet hours have left; what is stored stays
+   on the runtime's own clock, as a receipt does. A field report: an App's tests set their quiet hours from the real
+   clock and waited them out. */
+test('an as-of moment moves the hour quiet hours are judged at, and the wait is kept in real time', async (t) => {
+  resetProvider();
+  const declared = capture({ use: [fakepay()], quietHours: { from: '21:00', to: '08:00', timezone: 'America/New_York' } });
+  // Really 12:30 in New York (17:30 UTC); as of 21:30 there the night before (02:30 UTC), 10.5 hours of quiet left.
+  const clock = { now: Date.UTC(2026, 0, 15, 17, 30) };
+  setAppClockOffset(Date.UTC(2026, 0, 15, 2, 30) - clock.now);
+  t.after(() => setAppClockOffset(0));
+  const runtime = await openRuntime(t, declared, clock);
+  await saveIntegrationSettings(runtime, 't1', 'owner', {
+    integration: 'fakepay',
+    secrets: { apiKey: 'sk_t1', webhookSecret: 'whsec_t1_0123456789abcdef' },
+  });
+  const sender = channelSender(runtime, 'sms');
+  const transport = sender.transport(new Set(['notify\neffect.text']));
+  const publish = (receiptId: string, message: Record<string, unknown>) =>
+    transport({
+      envelope: { name: 'effect.text', commandId: 'notify', receiptId, tenantId: 't1', payloadJson: JSON.stringify({ body: message }) },
+      signal: AbortSignal.timeout(5_000),
+    } as unknown as EventPublication);
+  assert.equal(await publish('as-of-1', { to: '+15550001', text: 'Shipped.', consent: true }), 'accepted');
+  assert.deepEqual(provider.texts, [], 'held: it is night as the App reads the clock');
+  const held = await runtime.store.message('shop', effectIdempotencyKey('as-of-1', 'text'));
+  assert.equal(held?.reason, 'quiet_hours');
+  assert.equal(held?.at, clock.now, 'stamped on the real clock');
+  assert.equal(held?.dueAt, clock.now + 10.5 * 3_600_000, 'due when 08:00 comes round on the moved clock');
+  // And the other way: really night, as of midday, it goes at once.
+  clock.now = Date.UTC(2026, 0, 16, 2, 30);
+  setAppClockOffset(Date.UTC(2026, 0, 15, 17, 30) - clock.now);
+  assert.equal(await publish('as-of-2', { to: '+15550002', text: 'Shipped.', consent: true }), 'accepted');
+  assert.deepEqual(
+    provider.texts.map(({ to }) => to),
+    ['+15550002'],
+  );
 });
 
 test('a held message the provider never takes is tried eight times, a minute apart, then recorded failed', async (t) => {

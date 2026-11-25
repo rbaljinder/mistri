@@ -75,7 +75,7 @@ import {
   intakePlace,
   intakeTenantOf,
   tenantOwnAddress,
-  tenantOwnAddressQuery,
+  tenantOwnAddressesStatement,
   ownAddressResolution,
   type TenantAddresses,
   type TenantAddressesLookup,
@@ -1550,16 +1550,17 @@ export async function openPostgresTenantReadSource(
           false,
           () => OWNER,
         ),
+      /* Every address and its resolution in the message that begins the snapshot (`lead`), which on an attestation
+         that stands ends it too: one round trip, where the read in its turn and the COMMIT after it were two. */
       readTenantAddresses: (lookup: TenantAddressesLookup) =>
         invoke(
           lookup,
-          async (query, lease) => {
+          (query, lease) => {
             const { tenantId, columns } = captureAddressesLookup(owned, query);
             const found: Record<string, string> = {};
-            for (const [kind, column] of Object.entries(columns)) {
-              if (column === undefined) continue;
-              // The address and its resolution in one round trip (`tenantOwnAddressQuery`): an entry waits on it.
-              const { rows } = await lease.client.query(tenantOwnAddressQuery(owned, column), [tenantId]);
+            for (const kind of Object.keys(columns)) {
+              if (columns[kind as keyof typeof columns] === undefined) continue;
+              const rows = (lease.lead ?? denyTenant()).filter((row) => row.kind === kind);
               const address = heldAddress(rows);
               const own = address && tenantOwnAddress(tenantId, address, ownAddressResolution(rows));
               if (own) found[kind] = own;
@@ -1567,7 +1568,7 @@ export async function openPostgresTenantReadSource(
             return Object.freeze(found) as TenantAddresses;
           },
           undefined,
-          undefined,
+          (query) => tenantOwnAddressesStatement(owned, captureAddressesLookup(owned, query)) ?? denyTenant(),
           false,
           () => OWNER,
         ),

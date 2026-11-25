@@ -46,6 +46,7 @@ import {
 } from './poolMetrics.js';
 import { PoolAdmission } from './poolAdmission.js';
 import { holdConnections, managerConnections } from './connectionBudget.js';
+import { watchSilence } from './postgresSilence.js';
 import { pgConnectionOptions } from './postgresValues.js';
 import { sealedPgOptions } from './net/untrustedDatabase.js';
 import type { NetworkPolicy } from './net/networkPolicy.js';
@@ -87,8 +88,9 @@ export interface PgPool extends PgQuery {
 export interface PgPoolOptions {
   connectionString?: string;
   ssl?: { rejectUnauthorized: true };
-  /** TCP keepalive on the socket (pgConnectionOptions). */
+  /** TCP keepalive on the socket, and how long it is quiet before the first probe (pgConnectionOptions). */
   keepAlive?: boolean;
+  keepAliveInitialDelayMillis?: number;
   max: number;
   connectionTimeoutMillis: number;
   idleTimeoutMillis: number;
@@ -152,6 +154,26 @@ const IDLE_TIMEOUT_MS = 300_000;
  * and a hosted database or pooler has closed the socket long before. */
 export const MAX_IDLE_SECONDS = 86_400;
 
+/** How long a new connection may take to open before the checkout that asked for it fails: ten seconds. */
+const CONNECT_TIMEOUT_MS = 10_000;
+export const MIN_CONNECT_TIMEOUT_MS = 1_000;
+export const MAX_CONNECT_TIMEOUT_MS = 120_000;
+/** Whether `value` is a connect timeout a connection accepts: whole milliseconds from a second to two minutes. */
+export function isConnectTimeoutMs(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= MIN_CONNECT_TIMEOUT_MS && value <= MAX_CONNECT_TIMEOUT_MS;
+}
+/** How much longer than the statement cap a server may be silent, a statement waiting on it, before the connection
+ * is closed as dead (postgresSilence.ts): half a minute past a cap the server itself enforces, so the default never
+ * cuts a statement the server would have let finish, and a connection the network dropped fails in about a minute
+ * rather than the kernel's sixteen. */
+const QUERY_TIMEOUT_GRACE_MS = 30_000;
+export const MIN_QUERY_TIMEOUT_MS = 1_000;
+export const MAX_QUERY_TIMEOUT_MS = 3_600_000;
+/** Whether `value` is a silence a connection accepts: whole milliseconds from a second to an hour. */
+export function isQueryTimeoutMs(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= MIN_QUERY_TIMEOUT_MS && value <= MAX_QUERY_TIMEOUT_MS;
+}
+
 /** Whether `value` is an idle window a connection accepts: whole seconds from 1 to a day. */
 export function isIdleSeconds(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= MAX_IDLE_SECONDS;
@@ -206,6 +228,11 @@ export interface PgConnectionOptions {
   readonly idleSeconds?: number;
   /** Connections each pool keeps open through an idle spell, 0 to 64 (never more than the pool's size). Two readers and one writer when absent. */
   readonly minIdle?: number;
+  /** Milliseconds a new connection may take to open, 1000 to 120000. Ten seconds when absent. */
+  readonly connectTimeoutMs?: number;
+  /** Milliseconds a server may say nothing while a statement waits on it before the connection is closed as dead
+   * (postgresSilence.ts), 1000 to 3600000. The statement cap and half a minute (60 seconds) when absent. */
+  readonly queryTimeoutMs?: number;
   /** How long a writer waits for a lock. The process's (`--lock-timeout`) when absent. */
   readonly lockTimeoutMs?: number;
   /** What sits between this process and the server. The process default when absent. */
@@ -312,6 +339,8 @@ export class PgConnectionManager {
   readonly pooler: PoolerMode;
   private readonly capMs: number;
   private readonly lockMs: number;
+  private readonly connectMs: number;
+  private readonly silenceMs: number;
   private readonly queueWaitMs: number;
   private readonly queuePerConnection: number;
   private readonly meters: Readonly<Record<OwnRole, PoolMeter>>;
@@ -358,10 +387,20 @@ export class PgConnectionManager {
     if (options.minIdle !== undefined && !isMinIdle(options.minIdle))
       throw new RangeError(`A PostgreSQL pool keeps 0 to ${MAX_READERS} idle connections; ${String(options.minIdle)} is not one of them.`);
     this.idle = { idleSeconds: options.idleSeconds, minIdle: options.minIdle };
+    if (options.connectTimeoutMs !== undefined && !isConnectTimeoutMs(options.connectTimeoutMs))
+      throw new RangeError(
+        `A PostgreSQL connection opens within ${MIN_CONNECT_TIMEOUT_MS} to ${MAX_CONNECT_TIMEOUT_MS} ms; ${String(options.connectTimeoutMs)} is not one of them.`,
+      );
+    if (options.queryTimeoutMs !== undefined && !isQueryTimeoutMs(options.queryTimeoutMs))
+      throw new RangeError(
+        `A PostgreSQL connection waits ${MIN_QUERY_TIMEOUT_MS} to ${MAX_QUERY_TIMEOUT_MS} ms on a silent server; ${String(options.queryTimeoutMs)} is not one of them.`,
+      );
+    this.connectMs = options.connectTimeoutMs ?? CONNECT_TIMEOUT_MS;
     this.network = options.network;
     this.pipelineReads = options.pipelineReads === true;
     this.timingLabel = options.timingLabel ?? 'app';
     this.capMs = options.capMs ?? STATEMENT_TIMEOUT_MS;
+    this.silenceMs = options.queryTimeoutMs ?? this.capMs + QUERY_TIMEOUT_GRACE_MS;
     this.queueWaitMs = options.queueWaitMs ?? POOL_QUEUE_WAIT_MS;
     this.queuePerConnection = options.queuePerConnection ?? POOL_QUEUE_PER_CONNECTION;
     this.lockMs = Math.min(options.lockTimeoutMs ?? lockTimeoutMs(), this.capMs);
@@ -562,7 +601,7 @@ export class PgConnectionManager {
     const pool = new Pool({
       ...this.dialOptions(),
       max: this.meters[role].size,
-      connectionTimeoutMillis: 10_000,
+      connectionTimeoutMillis: this.connectMs,
       idleTimeoutMillis: idle.idleTimeoutMillis,
       /* Readers and the foreground writers keep a few connections warm
          (the background writer, which runs jobs that are not waited on, keeps none). The
@@ -589,6 +628,9 @@ export class PgConnectionManager {
            was running rejects with the same failure, which is where it is
            answered. */
         (client as PgClient).on?.('error', () => {});
+        /* A server gone silent under a statement is closed here, not waited out (postgresSilence.ts): before the
+           session's own settings, which are statements too. */
+        watchSilence(client, this.silenceMs);
         if (!session) return;
         if (!write) await client.query('SET default_transaction_read_only = on');
         /* A writer also stops waiting for a lock after lockMs: a row held by
@@ -1011,8 +1053,11 @@ export class PgConnectionManager {
   }
 }
 
-/** The pool shape a holder of a shared manager names: the sizes, and whether its readers pipeline. */
-export type SharedPoolShape = Pick<PgConnectionOptions, 'readers' | 'writers' | 'pipelineReads' | 'readersOnly'>;
+/** The pool shape a holder of a shared manager names: the sizes, whether its readers pipeline, and its timeouts. */
+export type SharedPoolShape = Pick<
+  PgConnectionOptions,
+  'readers' | 'writers' | 'pipelineReads' | 'readersOnly' | 'connectTimeoutMs' | 'queryTimeoutMs'
+>;
 
 /** The reader and writer counts a manager takes for `shape`: its own, else the process's (`--read-pool`, `--write-pool`) or the defaults. */
 export function poolSizes(shape: Pick<SharedPoolShape, 'readers' | 'writers'> = {}): { readers: number; writers: number } {
@@ -1066,10 +1111,19 @@ export function sharedPgConnections(url: string, shape: SharedPoolShape = {}, on
     serverSettings().pooler,
     lockTimeoutMs(),
     onLoad ? hookId(onLoad) : 0,
+    shape.connectTimeoutMs ?? 0,
+    shape.queryTimeoutMs ?? 0,
   ]);
   let entry = sharedManagers.get(key);
   if (!entry) {
-    const manager = new PgConnectionManager(url, onLoad, undefined, { readers, writers, pipelineReads, readersOnly });
+    const manager = new PgConnectionManager(url, onLoad, undefined, {
+      readers,
+      writers,
+      pipelineReads,
+      readersOnly,
+      ...(shape.connectTimeoutMs !== undefined ? { connectTimeoutMs: shape.connectTimeoutMs } : {}),
+      ...(shape.queryTimeoutMs !== undefined ? { queryTimeoutMs: shape.queryTimeoutMs } : {}),
+    });
     entry = { manager, holders: 0 };
     sharedManagers.set(key, entry);
   }

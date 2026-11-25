@@ -14,6 +14,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { WriteLanes } from '@mistriwork/engine/adapters/writeLanes.js';
+import { renamedAnyRows, type Filter } from '@mistriwork/engine/shared/filter.js';
 import { isPoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
 import { renamedWriteAhead, withWriteAhead, writeAhead } from '@mistriwork/engine/adapters/writeAhead.js';
 import { commandsOf } from '../stores/commandStores.js';
@@ -409,6 +410,13 @@ export async function openSqliteTenantWriteSource(
     const physical = new Map(Object.entries(owned.resources));
     const ids = new Set(physical.values());
     const toPhysical = (logical: string) => physical.get(logical) ?? denyTenant();
+    /* A read in the database's names: its table, and the table of a test against another's rows (Condition.within),
+       which is a table of this source too. Left logical, the scope beneath knew no such table wherever the names
+       differ, as every PostgreSQL table's do by its schema. */
+    const physicalRead = <R extends { table: string; filter?: Filter }>(request: R): R => {
+      const filter = renamedAnyRows(request.filter, toPhysical);
+      return { ...request, table: toPhysical(request.table), ...(filter ? { filter } : {}) };
+    };
     const said = logicalReferences(physical);
     // A snapshot, so every write's composition with it is kept (tenantReadScope.ts).
     const allTrue: RowScope = snapshotRowScope(owned.schema, Object.fromEntries([...physical.keys()].map((id) => [id, true])));
@@ -597,11 +605,9 @@ export async function openSqliteTenantWriteSource(
           const work = async (records: WriteTransaction, journal?: CommandJournal) => {
             started = true;
             const logical = Object.freeze<WriteTransaction>({
-              query: (request) => records.query({ ...request, table: toPhysical(request.table) }),
-              count: (table, filter) => records.count(toPhysical(table), filter),
-              ...(records.aggregate
-                ? { aggregate: (request: AggregateRequest) => records.aggregate!({ ...request, table: toPhysical(request.table) }) }
-                : {}),
+              query: (request) => records.query(physicalRead(request)),
+              count: (table, filter) => records.count(toPhysical(table), renamedAnyRows(filter, toPhysical)),
+              ...(records.aggregate ? { aggregate: (request: AggregateRequest) => records.aggregate!(physicalRead(request)) } : {}),
               insert: (request) => records.insert({ ...request, table: toPhysical(request.table) }),
               update: (request) => records.update({ ...request, table: toPhysical(request.table) }),
               ...(records.insertMany && records.updateMany
@@ -790,6 +796,13 @@ export async function openPostgresTenantWriteSource(
     const physical = new Map(Object.entries(owned.resources));
     const ids = new Set(physical.values());
     const toPhysical = (logical: string) => physical.get(logical) ?? denyTenant();
+    /* A read in the database's names: its table, and the table of a test against another's rows (Condition.within),
+       which is a table of this source too. Left logical, the scope beneath knew no such table wherever the names
+       differ, as every PostgreSQL table's do by its schema. */
+    const physicalRead = <R extends { table: string; filter?: Filter }>(request: R): R => {
+      const filter = renamedAnyRows(request.filter, toPhysical);
+      return { ...request, table: toPhysical(request.table), ...(filter ? { filter } : {}) };
+    };
     const said = logicalReferences(physical);
     // A snapshot, so every write's composition with it is kept (tenantReadScope.ts).
     const allTrue: RowScope = snapshotRowScope(owned.schema, Object.fromEntries([...physical.keys()].map((id) => [id, true])));
@@ -1032,17 +1045,17 @@ export async function openPostgresTenantWriteSource(
             const logical = Object.freeze<WriteTransaction>({
               query: (request) => {
                 live();
-                return records.query({ ...request, table: toPhysical(request.table) });
+                return records.query(physicalRead(request));
               },
               count: (table, filter) => {
                 live();
-                return records.count(toPhysical(table), filter);
+                return records.count(toPhysical(table), renamedAnyRows(filter, toPhysical));
               },
               ...(records.aggregate
                 ? {
                     aggregate: (request: AggregateRequest) => {
                       live();
-                      return records.aggregate!({ ...request, table: toPhysical(request.table) });
+                      return records.aggregate!(physicalRead(request));
                     },
                   }
                 : {}),

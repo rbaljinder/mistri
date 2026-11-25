@@ -49,8 +49,14 @@ test('a value is quoted as text, except digits on a number column and an ISO day
 });
 
 test('lists, not, empty, ranges and matches', () => {
-  assert.equal(text({ status: ['booked', 'waiting'] }), '(status = "booked" or status = "waiting")');
+  assert.equal(text({ status: ['booked', 'waiting'] }), 'status in ("booked", "waiting")');
+  assert.equal(text({ id: [3, '4', '9007199254740993'] }), 'id in (3, 4, 9007199254740993)');
   assert.equal(text({ status: ['booked'] }), 'status = "booked"');
+  // What a list would read otherwise stays a chain: a comma splits a list, an empty text is dropped from one, a day is a range.
+  assert.equal(text({ guest_name: ['Ng, Ana', 'Bo'] }), '(guest_name = "Ng, Ana" or guest_name = "Bo")');
+  assert.equal(text({ status: ['', 'booked'] }), '(status = "" or status = "booked")');
+  assert.equal(text({ booked_on: ['2026-11-08', '2026-11-09'] }), '(booked_on = 2026-11-08 or booked_on = 2026-11-09)');
+  assert.equal(text({ paid: [true, false] }), '(paid = true or paid = false)');
   assert.equal(text({ status: { not: ['cancelled', 'no_show'] } }), 'status != "cancelled" and status != "no_show"');
   assert.equal(text({ status: { not: 'cancelled' } }), 'status != "cancelled"');
   assert.equal(text({ guest_name: null, status: { not: null } }), 'guest_name is empty and status is not empty');
@@ -95,7 +101,26 @@ test('the text it writes parses as the condition typed by hand would', () => {
   const schema: DatabaseSchema = { label: 'page-where', dialect: 'sqlite', foreignKeys: [], readAt: '', tables: [booking] };
   const filter = (query: string) => parseQuery(`booking ${query}`, { schema }).query!.filter;
   assert.deepEqual(filter(text({ status: 'booked', party_size: { gt: 1 } })), filter('status = booked and party_size > 1'));
-  assert.deepEqual(filter(text({ status: ['booked', 'waiting'] })), filter('(status = booked or status = waiting)'));
+  assert.deepEqual(filter(text({ status: ['booked', 'waiting'] })), filter('status in (booked, waiting)'));
+  // Text the language would read as something else is those letters in a list too, as it is after `=`.
+  assert.deepEqual(filter(text({ guest_name: ['me', 'today', 'a) or (b', ' x '] })).groups, [
+    [{ column: 'guest_name', op: 'in', value: ['me', 'today', 'a) or (b', ' x '] }],
+  ]);
+});
+
+test('a list is one test however long, so two long lists do not multiply into OR branches', () => {
+  const schema: DatabaseSchema = { label: 'page-where', dialect: 'sqlite', foreignKeys: [], readAt: '', tables: [booking] };
+  const ids = Array.from({ length: 500 }, (_, index) => index + 1);
+  const names = ids.map((id) => `guest ${id}`);
+  const parsed = parseQuery(`booking ${text({ id: ids, guest_name: names, party_size: { gt: 1 } })}`, { schema });
+  assert.deepEqual(parsed.errors, []);
+  assert.deepEqual(parsed.query!.filter.groups, [
+    [
+      { column: 'id', op: 'in', value: ids },
+      { column: 'guest_name', op: 'in', value: names },
+      { column: 'party_size', op: '>', value: 1 },
+    ],
+  ]);
 });
 
 test('a plain object is read by shape: another realm, no prototype', async () => {

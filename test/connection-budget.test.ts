@@ -300,6 +300,26 @@ describe("a tenant App's request pool", () => {
     await adapter.close();
   });
 
+  test("the request pool takes its connection's timeouts, and the defaults where it names none", async (t) => {
+    configureServerSettings({ writeOrder: 'keyed' });
+    t.after(() => {
+      configureServerSettings({ ...settings, writeOrder: keyed });
+      forgetTenantPools();
+    });
+    const timeouts = (adapter: ReturnType<typeof tenantAdapter>) => {
+      const manager = (adapter as unknown as { connections: { connectMs: number; silenceMs: number } }).connections;
+      return { connect: manager.connectMs, silence: manager.silenceMs };
+    };
+    declareTenantPool(url, { read: 2 });
+    const plain = tenantAdapter(url, 'reader');
+    assert.deepEqual(timeouts(plain), { connect: 10_000, silence: 60_000 });
+    await plain.close();
+    declareTenantPool(url, { read: 2, connectTimeoutMs: 4_000, queryTimeoutMs: 45_000 });
+    const said = tenantAdapter(url, 'reader');
+    assert.deepEqual(timeouts(said), { connect: 4_000, silence: 45_000 });
+    await said.close();
+  });
+
   test('a replica holds its readers and no writer, which is what check --deploy counts', async (t) => {
     configureServerSettings({ writeOrder: 'keyed' });
     t.after(() => {

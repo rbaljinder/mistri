@@ -331,8 +331,12 @@ const BUDGETS: Record<string, number> = {
      visibility, and its COMMIT with the release fence riding it): 13, a flight more as the parallel snapshots
      interleave on the wire. */
   enter: 14,
-  /* The page's first reads, asked past the sign-in: one snapshot of the context's reads, its COMMIT carrying the
-     release fence (TenantReadRuntime `fencedTogether`) rather than a snapshot of the fence's own after it. */
+  /* The page's first reads, asked past the sign-in: the tenant's addresses, a whole snapshot in one message; one
+     snapshot of the context's reads; the inbox's visibility read, which waits on its page; and the COMMIT carrying
+     the release fence (TenantReadRuntime `fencedTogether`) rather than a snapshot of the fence's own after it. Three
+     where the visibility read is asked while the reads before it are still being answered, and so counts in their
+     flight: which it is turns on how the answers arrive, so the budget is the four. (The addresses were a read and a
+     COMMIT of their own, five whenever the visibility read did not overlap.) */
   boot: 4,
   /* A record page's compose: its plan and every read its sections ask, on one snapshot ending with the fence, then
      the verbs' availability where the page carries checks, which keeps its own fence (availability, above). */

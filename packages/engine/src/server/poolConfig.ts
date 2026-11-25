@@ -1,16 +1,29 @@
 /**
  * A connection's `"pool"` and `"replicas"` in tablewalk.json, checked where the file is read:
- * `{ "read": n, "write": m, "idleSeconds": s, "minIdle": k }`: the sizes each a
+ * `{ "read": n, "write": m, "idleSeconds": s, "minIdle": k, "connectTimeoutMs": c, "queryTimeoutMs": q }`: the sizes each a
  * whole number from 1 to 64, the idle window whole seconds from 1 to a day, the
- * warm count 0 to 64, every one optional, on a PostgreSQL connection. Apart from the loader because
+ * warm count 0 to 64, the two timeouts whole milliseconds (a second to two minutes to open a connection, a
+ * second to an hour of a silent server under a statement), every one optional, on a PostgreSQL connection. Apart from the loader because
  * the rule is the pool's (postgresPool.ts holds the bounds); the loader only
  * asks it, as it asks httpConnection.ts about an API's fields.
  */
-import { isIdleSeconds, isMinIdle, isReaderCount, MAX_IDLE_SECONDS, MAX_READERS } from '../adapters/postgresPool.js';
+import {
+  isConnectTimeoutMs,
+  isIdleSeconds,
+  isMinIdle,
+  isQueryTimeoutMs,
+  isReaderCount,
+  MAX_CONNECT_TIMEOUT_MS,
+  MAX_IDLE_SECONDS,
+  MAX_QUERY_TIMEOUT_MS,
+  MAX_READERS,
+  MIN_CONNECT_TIMEOUT_MS,
+  MIN_QUERY_TIMEOUT_MS,
+} from '../adapters/postgresPool.js';
 import { isWriterCount, MAX_WRITERS } from '../adapters/writeLanes.js';
 import { MAX_REPLICAS } from '../adapters/replicas.js';
 
-const POOL_KEYS = ['read', 'write', 'idleSeconds', 'minIdle'];
+const POOL_KEYS = ['read', 'write', 'idleSeconds', 'minIdle', 'connectTimeoutMs', 'queryTimeoutMs'];
 
 /** A connection's pool as its entry sizes it; what it leaves out is the process default. */
 export interface PoolSize {
@@ -20,6 +33,11 @@ export interface PoolSize {
   idleSeconds?: number;
   /** Connections each pool keeps open through an idle spell; two readers and one writer when absent. */
   minIdle?: number;
+  /** Milliseconds a new connection may take to open; ten seconds when absent. */
+  connectTimeoutMs?: number;
+  /** Milliseconds the server may say nothing while a statement waits on it before the connection is closed as dead;
+   * the statement cap and half a minute (60 seconds) when absent. */
+  queryTimeoutMs?: number;
 }
 
 /**
@@ -41,7 +59,10 @@ export function poolOf(entry: Record<string, unknown>, http: boolean, path: stri
   }
   const pool = written as Record<string, unknown>;
   const stray = Object.keys(pool).find((key) => !POOL_KEYS.includes(key));
-  if (stray !== undefined) throw new Error(`${where} has "pool.${stray}". A pool takes "read", "write", "idleSeconds" and "minIdle".`);
+  if (stray !== undefined)
+    throw new Error(
+      `${where} has "pool.${stray}". A pool takes "read", "write", "idleSeconds", "minIdle", "connectTimeoutMs" and "queryTimeoutMs".`,
+    );
   if (!POOL_KEYS.some((key) => pool[key] !== undefined)) {
     throw new Error(
       `${where} has an empty "pool". Say how many connections may read or write at once, such as { "read": 16, "write": 8 }.`,
@@ -55,6 +76,16 @@ export function poolOf(entry: Record<string, unknown>, http: boolean, path: stri
   if (pool.minIdle !== undefined && !isMinIdle(pool.minIdle)) {
     throw new Error(
       `${where} has "pool": { "minIdle": ${JSON.stringify(pool.minIdle)} }. It must be a whole number from 0 to ${MAX_READERS}, without quotes.`,
+    );
+  }
+  if (pool.connectTimeoutMs !== undefined && !isConnectTimeoutMs(pool.connectTimeoutMs)) {
+    throw new Error(
+      `${where} has "pool": { "connectTimeoutMs": ${JSON.stringify(pool.connectTimeoutMs)} }. It must be whole milliseconds from ${MIN_CONNECT_TIMEOUT_MS} to ${MAX_CONNECT_TIMEOUT_MS}, without quotes.`,
+    );
+  }
+  if (pool.queryTimeoutMs !== undefined && !isQueryTimeoutMs(pool.queryTimeoutMs)) {
+    throw new Error(
+      `${where} has "pool": { "queryTimeoutMs": ${JSON.stringify(pool.queryTimeoutMs)} }. It must be whole milliseconds from ${MIN_QUERY_TIMEOUT_MS} to ${MAX_QUERY_TIMEOUT_MS}, without quotes.`,
     );
   }
   if (pool.read !== undefined && !isReaderCount(pool.read)) {
@@ -76,6 +107,8 @@ export function poolOf(entry: Record<string, unknown>, http: boolean, path: stri
     ...(pool.write !== undefined ? { write: pool.write as number } : {}),
     ...(pool.idleSeconds !== undefined ? { idleSeconds: pool.idleSeconds } : {}),
     ...(pool.minIdle !== undefined ? { minIdle: pool.minIdle as number } : {}),
+    ...(pool.connectTimeoutMs !== undefined ? { connectTimeoutMs: pool.connectTimeoutMs } : {}),
+    ...(pool.queryTimeoutMs !== undefined ? { queryTimeoutMs: pool.queryTimeoutMs } : {}),
   };
 }
 

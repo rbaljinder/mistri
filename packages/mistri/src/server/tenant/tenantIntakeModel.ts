@@ -300,7 +300,7 @@ export function tenantAddressQuery(owned: TenantOwnershipSnapshot, column: strin
  * waited on it, in front of every entry that shows one; the two are one snapshot either way, so asking them together
  * changes nothing they say. `heldAddress` still reads the rows and `tenantOwnAddress` the resolution, which names one
  * tenant only where it found exactly one row. One parameter, the tenant id. */
-export function tenantOwnAddressQuery(owned: TenantOwnershipSnapshot, column: string): string {
+function tenantOwnAddressQuery(owned: TenantOwnershipSnapshot, column: string): string {
   assertIntakeColumn(owned, column);
   if (owned.schema.dialect !== 'postgres') return denyTenant();
   const key = intakeProfileKey(owned),
@@ -315,6 +315,28 @@ export function tenantOwnAddressQuery(owned: TenantOwnershipSnapshot, column: st
         SELECT ${quoted(key)}::text AS tenant FROM ${table} WHERE ${quoted(column)} COLLATE "C" = held.address LIMIT 2
       ) hit
     ) resolved ON true`;
+}
+/* A string as a PostgreSQL literal, as tenantStorePostgres.ts writes one: quotes doubled, and backslashes doubled
+   under E'' so the value reads the same whatever standard_conforming_strings says; a NUL is refused. */
+function literal(value: string): string {
+  if (typeof value !== 'string' || value.includes('\0')) return denyTenant();
+  const text = `'${value.replace(/'/g, "''").replace(/\\/g, '\\\\')}'`;
+  return value.includes('\\') ? ` E${text}` : text;
+}
+/** `tenantOwnAddressQuery` for every column asked, as one statement without parameters: each column's rows under
+ * its `kind`. Parameter-free so it can ride in the message that begins its snapshot and ends it (tenantReadSource.ts
+ * `readTenantAddresses`): asked in its turn, the read was a flight and its COMMIT another, and a boot's count then
+ * turned on how two connections' answers happened to interleave. Undefined where no column is asked. */
+export function tenantOwnAddressesStatement(owned: TenantOwnershipSnapshot, lookup: TenantAddressesLookup): string | undefined {
+  const tenant = literal(lookup.tenantId);
+  const asked = Object.entries(lookup.columns).filter((entry): entry is [string, string] => entry[1] !== undefined);
+  if (!asked.length) return undefined;
+  return asked
+    .map(
+      ([kind, column]) =>
+        `SELECT ${literal(kind)}::text AS kind, own.address, own.tenant, own.found FROM (${tenantOwnAddressQuery(owned, column).replaceAll('$1', tenant)}) own`,
+    )
+    .join(' UNION ALL ');
 }
 /** The resolution `tenantOwnAddressQuery` carried on the held row, in `intakeAddressQuery`'s rows: one where it
  * found exactly one, none otherwise — `intakeTenantOf` names a tenant only for one row. */

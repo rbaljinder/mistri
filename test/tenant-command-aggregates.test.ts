@@ -159,6 +159,31 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       );
     });
 
+    /* What a handler's path through a reference compiles to (commandDb.ts `'tenant_id.name': …`): the other table is
+       named as the command names its tables, on both engines. PostgreSQL refused it as an unknown table, since the
+       table read was renamed to the database's and the test's table was not. */
+    test("a test against another table's rows names that table as the command does, and reads it under the same scope", async (t) => {
+      const f = await fixture(t, dialect);
+      const named = (name: string) => ({
+        groups: [
+          [
+            {
+              column: 'tenant_id',
+              op: 'in' as const,
+              within: { table: 'dealer', filter: { groups: [[{ column: 'name', op: '=' as const, value: name }]] } },
+            },
+          ],
+        ],
+      });
+      const read = await f.command(async (tx) => ({
+        north: (await tx.query({ table: 'deal', filter: named('North Motors'), limit: 100, offset: 0 })).rows.length,
+        counted: await tx.count('deal', named('North Motors')),
+        // Another dealer's name finds none of this member's rows: the deals are still the tenant's and the policy's.
+        south: await tx.count('deal', named('South Auto')),
+      }));
+      assert.deepEqual(plain(read), { north: 4, counted: 4, south: 0 });
+    });
+
     test("a table off the write footprint is read as count and query read it, and a hidden table's rows never", async (t) => {
       const f = await fixture(t, dialect);
       const tags = { table: 'tag', measures: [{ name: 'n', fn: 'count' as const }], limit: 1 };

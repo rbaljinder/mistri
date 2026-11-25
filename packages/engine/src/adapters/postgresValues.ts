@@ -36,15 +36,21 @@ export function redact(connectionString: string): string {
  * its values weakens this, because `disable` is the operator's word.
  *
  * Every socket asks for TCP keepalive: a hosted database or its pooler drops a silent connection without a word,
- * and a warm pooled one found dead costs an error and the reconnect it was kept to avoid.
+ * and a warm pooled one found dead costs an error and the reconnect it was kept to avoid. The first probe leaves
+ * after KEEPALIVE_IDLE_MS of quiet: asked for with no delay of its own, a socket waits the operating system's
+ * (two hours on Linux), which no request outlives. A probe is answered by the peer's kernel, so a statement that
+ * runs for minutes on a live server is never cut by it.
  */
+export const KEEPALIVE_IDLE_MS = 10_000;
 export function pgConnectionOptions(connectionString: string): {
   connectionString: string;
   keepAlive: true;
+  keepAliveInitialDelayMillis: number;
   ssl?: { rejectUnauthorized: true };
 } {
+  const keepAlive = { keepAlive: true as const, keepAliveInitialDelayMillis: KEEPALIVE_IDLE_MS };
   const at = connectionString.indexOf('?');
-  if (at < 0 || !/(^|[?&])sslrootcert=system(&|$)/i.test(connectionString.slice(at))) return { connectionString, keepAlive: true };
+  if (at < 0 || !/(^|[?&])sslrootcert=system(&|$)/i.test(connectionString.slice(at))) return { connectionString, ...keepAlive };
   const query = connectionString
     .slice(at + 1)
     .split('&')
@@ -52,8 +58,8 @@ export function pgConnectionOptions(connectionString: string): {
     .join('&');
   const stripped = connectionString.slice(0, at) + (query ? `?${query}` : '');
   // `disable` is the operator's word: the root is dropped but no TLS is asked for.
-  if (/(^|&)sslmode=disable(&|$)/i.test(query)) return { connectionString: stripped, keepAlive: true };
-  return { connectionString: stripped, keepAlive: true, ssl: { rejectUnauthorized: true } };
+  if (/(^|&)sslmode=disable(&|$)/i.test(query)) return { connectionString: stripped, ...keepAlive };
+  return { connectionString: stripped, ...keepAlive, ssl: { rejectUnauthorized: true } };
 }
 
 /** One value, made safe to send as JSON. See `toJsonSafe` for the row form. */

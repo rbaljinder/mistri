@@ -36,6 +36,7 @@
  *     in an inbox.
  */
 import { createHash } from 'node:crypto';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { channelBody, effectIdempotencyKey, EFFECT_EVENT_PREFIX } from '../commands/commandEffects.js';
 import { isBusinessCommandExecutionError } from '../commands/commandErrors.js';
 import type { EventPublicationTransport } from '../events/eventPublisher.js';
@@ -258,7 +259,11 @@ export function channelSender(runtime: IntegrationRuntime, channel: string) {
       });
       return 'accepted';
     }
-    const due = quietUntil(runtime.declared.quietHours, zone, now);
+    /* Quiet hours are App logic's question, asked of its clock, which an as-of moment moves (http/clock.ts): a test
+       host started at 22:00 holds a message whatever the real hour. What is stored stays on the runtime's clock, as
+       every receipt does, so the wait is carried over to it: held now, due once that much time has passed. */
+    const asOf = appTime(now).getTime();
+    const due = now + (quietUntil(runtime.declared.quietHours, zone, asOf) - asOf);
     if (due > now) {
       await put({
         ...row,

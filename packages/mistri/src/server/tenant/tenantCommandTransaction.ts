@@ -4,6 +4,7 @@ import {
   TransactionOutcomeUnknown,
   type AggregateRequest,
   type InsertRequest,
+  type QueryRequest,
   type TellRequest,
   type UpdateRequest,
   type WriteTransaction,
@@ -257,6 +258,23 @@ export async function runTenantCommandTransaction<T>(
   };
   const project = <V>(table: string, row: Record<string, V>): Record<string, V> =>
     Object.fromEntries(Object.entries(row).filter(([column]) => fields.get(table)?.read.has(column)));
+  /* A test against another table's rows (`customer_id.region` in a handler's where, Condition.within) names a table of
+     the command's too: authorized and named as the table read is. Left under the handler's name, the read beneath
+     knew no such table wherever the database ids it otherwise (every PostgreSQL table, by its schema), and a path
+     that ran on SQLite was refused there. `any`/`no` stay as they are asked, refused beneath. */
+  const named = <F extends QueryRequest['filter']>(filter: F): F =>
+    filter?.groups.some((group) => group.some((condition) => condition.within !== undefined))
+      ? ({
+          ...filter,
+          groups: filter.groups.map((group) =>
+            group.map((condition) =>
+              condition.within === undefined
+                ? condition
+                : { ...condition, within: { ...condition.within, table: authorization.table(condition.within.table) } },
+            ),
+          ),
+        } as F)
+      : filter;
   const records = Object.freeze<WriteTransaction>({
     query: (input) =>
       invoke(
@@ -264,7 +282,7 @@ export async function runTenantCommandTransaction<T>(
         async (value) => {
           assertStructuredReadFilter(value.filter, 'column');
           const table = authorization.table(value.table);
-          const result = await tx.query({ ...value, table });
+          const result = await tx.query({ ...value, table, filter: named(value.filter) });
           noteFound(table, result.rows);
           return { ...result, sql: { text: '', params: [] } };
         },
@@ -275,7 +293,7 @@ export async function runTenantCommandTransaction<T>(
         { table, filter },
         (value) => {
           assertStructuredReadFilter(value.filter, 'column');
-          return tx.count(authorization.table(value.table), value.filter);
+          return tx.count(authorization.table(value.table), named(value.filter));
         },
         true,
       ),
@@ -287,7 +305,7 @@ export async function runTenantCommandTransaction<T>(
               input,
               (value) => {
                 assertStructuredReadFilter(value.filter, 'column');
-                return tx.aggregate!({ ...value, table: authorization.table(value.table) });
+                return tx.aggregate!({ ...value, table: authorization.table(value.table), filter: named(value.filter) });
               },
               true,
             ),

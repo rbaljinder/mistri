@@ -21,7 +21,7 @@ test('sslrootcert=system alone leaves no empty query', () => {
 
 test('every other string passes through untouched, a real path included', () => {
   for (const url of ['postgres://h/db', 'postgres://h/db?sslmode=require', 'postgres://h/db?sslrootcert=/etc/ssl/ca.pem']) {
-    assert.deepEqual(pgConnectionOptions(url), { connectionString: url, keepAlive: true });
+    assert.deepEqual(pgConnectionOptions(url), { connectionString: url, keepAlive: true, keepAliveInitialDelayMillis: 10_000 });
   }
 });
 
@@ -39,5 +39,6 @@ test('sslmode=disable forces no ssl, with or without the system root', () => {
   assert.deepEqual(pgConnectionOptions('postgres://h/db?sslmode=disable'), {
     connectionString: 'postgres://h/db?sslmode=disable',
     keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
   });
 });
