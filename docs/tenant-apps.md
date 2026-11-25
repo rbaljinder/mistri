@@ -150,10 +150,14 @@ A first page is one request past the lease (`/api/boot`,
 `packages/mistri/src/shared/tenantBoot.ts`). An ordinary App's page arrives
 with its first answers in it; a tenant App's cannot, because its reads need the
 lease the page opens. So once the lease is open the shell asks for the page in
-one read on it: the host answers the runtime, the App, its pages, its schema
-and the bell's count, plans the room the address opens as an ordinary App's
+one read on it: the host answers the runtime, the App, its pages and its
+schema, plans the room the address opens as an ordinary App's
 first page plans it (a natural key's record found by its key first), and asks
-each of the room's reads through its own route on the one context. Each answer
+each of the room's reads through its own route on the one context. The bell's
+count is not among them: reading it takes a second round trip behind the first
+(the notices, then whether their records are still the reader's to see), which
+the whole page would wait on, so the bell asks for itself once the bar has
+drawn, and its count is laid over its corner without moving anything. Each answer
 is keyed by the request it answers, and the shell's requests take them once;
 anything the boot did not carry, or a refusal in a read's own words, the page
 asks itself. A boot that fails fences nothing, and a support lease is answered

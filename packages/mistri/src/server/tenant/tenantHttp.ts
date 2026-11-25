@@ -78,6 +78,7 @@ import { RECORD_LINKS_PATH, RECORD_LINKS_REVOKE_PATH } from '../http/recordLinkR
 import type { RecordLinksRequest } from './tenantLinkRevoke.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { tenantSessionDiscovery } from './tenantDiscovery.js';
+import type { TenantAddresses } from './tenantIntakeModel.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
 import { tenantElevatedReaderOf, withBoundedReads, type TenantReadContext } from './tenantReadRuntime.js';
 import type { PlatformReadContext } from './tenantPlatformReadRuntime.js';
@@ -153,7 +154,6 @@ import {
 } from '../../shared/tenantBoot.js';
 import { PLATFORM_TENANT_ID } from '../../shared/tenantContext.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
-import { appKeepsInbox } from '../../shared/appNotify.js';
 import { endLiveStreams } from '../live/liveStream.js';
 import { tenantLiveHub } from './tenantLive.js';
 import { tenantWriterPaused } from './tenantWriterHealth.js';
@@ -380,7 +380,15 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       /* `let`, these four: an enter request, once its lease is open, is answered as the boot on that lease (below). */
       let control = controls.has(path);
       /* An enter request past its lease: discovery's answer and the lease, which its boot's answer carries. */
-      let entering: { found: TenantDiscovery; lease: TenantContextReply; whoami?: Record<string, unknown> } | undefined;
+      let entering:
+        | {
+            found: TenantDiscovery;
+            lease: TenantContextReply;
+            whoami?: Record<string, unknown>;
+            /* The entered tenant's own addresses, read in discovery's names message (tenantDiscovery.ts `TenantEntering`). */
+            addresses?: { tenantId: string; read: Promise<TenantAddresses | undefined> };
+          }
+        | undefined;
       const selected =
         !control || path.endsWith('/open') || path.endsWith('/switch') || path.endsWith('/renew') || path.endsWith('/resume');
       const supportLog = path === SUPPORT_LOG_PATH,
@@ -550,6 +558,11 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
            request is answered as who-am-I answers it, and the page draws the sign-in it always drew. */
         let who: Record<string, unknown> | undefined;
         let proof: VerifiedSessionInstance | null | undefined;
+        /* The addresses of the tenant being entered, asked in the message that names the person's tenants rather than
+           by the App payload on a snapshot of its own. Which tenant is the rule `ahead` follows: the one the page
+           expects, else the only one found; and only ever one of the person's own, which discovery's first snapshot
+           just read. Nothing of them is said until the boot below is admitted to that tenant on its lease. */
+        let addressesAhead: { tenantId: string; read: Promise<TenantAddresses | undefined> } | undefined;
         try {
           /* Named nowhere, the tenant is the one discovery's first snapshot finds, where it finds one. */
           found = await discoverFor(
@@ -559,6 +572,12 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             },
             (proved) => {
               proof = proved;
+            },
+            {
+              tenant: (ids) => hint ?? (ids.length === 1 ? ids[0] : undefined),
+              addresses: (tenantId, read) => {
+                addressesAhead = { tenantId, read };
+              },
             },
           );
           /* The session discovery proved is the one who-am-I says, not another look at the store. */
@@ -588,7 +607,12 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
            the address as the boot's — so each of its reads is admitted on the lease and gated as its own request. */
         parseTenantSelector([sole!]);
         exposed(headers.tenant, sole!);
-        entering = { found, lease, ...(who ? { whoami: who } : {}) };
+        entering = {
+          found,
+          lease,
+          ...(who ? { whoami: who } : {}),
+          ...(addressesAhead?.tenantId === sole ? { addresses: addressesAhead } : {}),
+        };
         control = false;
         selectors = [sole!];
         assertion = { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision };
@@ -1014,8 +1038,15 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               /* The tenant's own addresses, for a link it hands out: every member of its own lease,
                  by the lease's tenant and never one the request names, read fresh so a rotation shows on the
                  next load. Never on the platform realm or a support session, which are not the tenant. */
+              /* Entering, they were read as the person's tenants were named (`entering.addresses`), for this very
+                 tenant: the same read a moment earlier in the same request, said here, under the lease, as it always
+                 was. Read for another tenant, or not read, they are asked now. */
+              const heldAhead = entering?.addresses;
+              const readAhead = heldAhead !== undefined && heldAhead.tenantId === tenantId ? heldAhead.read : undefined;
               const addressesAsked =
-                forApp && !platform && !onSupport && typeof tenantId === 'string' ? asked(() => enrollment.addresses(tenantId)) : undefined;
+                forApp && !platform && !onSupport && typeof tenantId === 'string'
+                  ? asked(async () => (await readAhead) ?? enrollment.addresses(tenantId))
+                  : undefined;
               const tenantDefault = await tenantDefaultAsked;
               const locale = resolveLocale({ person: context.locale ?? pickedLocale(app, req), tenant: tenantDefault, app: app.ui.locale });
               const tenantWords = await tenantWordsAsked;
@@ -1676,9 +1707,13 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 ask('GET', '/api/app'),
                 ask('GET', '/api/pages'),
                 ask('GET', '/api/schema'),
-                /* The bell's count (InboxBell.tsx), where the App keeps an inbox: drawn with the bar, it would
-               otherwise be one more round after the page's. */
-                appKeepsInbox(app) && enrollment.deployment.inbox !== undefined ? ask('POST', '/api/inbox', { limit: 1 }) : undefined,
+                /* Not the bell's count (InboxBell.tsx), which the boot carried once so that it drew with the bar:
+               its notices are read, and then the records they name are read for whether the reader may still see
+               them, a round trip that waits on the first and that the whole page waited on in turn (a field
+               report: the entry was the slowest step of every page load). The bar draws its bell without a count
+               and the bell asks for itself once it has: the count is a badge laid over the bell's corner
+               (InboxBell.css), so nothing moves when it arrives. A tenant App's bell is always drawn — its payload
+               never says `viewerAudience` — so there is no bell that waits on its count to appear. */
               ]);
               const appPayload = (payload as { app?: AppPayloadApp } | undefined)?.app;
               await Promise.all([appPayload && pageList ? askRoom(appPayload, pageList as RoomInput['pages']) : undefined, early]);

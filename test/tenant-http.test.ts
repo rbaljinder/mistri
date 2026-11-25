@@ -4954,6 +4954,10 @@ test("every method of the tenant read and write sources is answered by a cross-t
       ],
       lastWave: ['postgres-bounded-reads.test.ts', 'a bounded read asked after the last wave is refused, and the request with it'],
       readPlatformMembership: platformRead,
+      readMembershipsWithPlatform: [
+        'tenant-marks.test.ts',
+        "the memberships with the platform's are what each read answers alone, each for the account asked",
+      ],
       assertPlatformCurrent: platformFence,
       scopePlatformReads: platformRead,
       bindPlatformReads: dialects(
@@ -4978,6 +4982,10 @@ test("every method of the tenant read and write sources is answered by a cross-t
         'names are read for the asked tenants only, said as the template says them, and a blank one is none',
       ],
       readTenantAddresses: ['tenant-boot.test.ts', "one role's answers are never another's, nor one clinic's another's"],
+      readTenantMarks: [
+        'tenant-marks.test.ts',
+        'the marks are what the names, the sandboxes and the addresses each answer alone, and name nothing that was not asked',
+      ],
       readTenantProfile: [
         'tenant-profile-zone.test.ts',
         "tenant.<column> in a query and resolveRows read the asking tenant's own profile, and an unshared column is refused",

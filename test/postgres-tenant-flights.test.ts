@@ -35,6 +35,7 @@ import { IGNITION_DIR, openIgnitionLending } from './support/ignitionLendingFixt
 import { uuidPostgresDatabase } from './support/tenantDialects.js';
 import { provisionPostgresInbox } from '../packages/mistri/src/adapters/inbox/postgresInbox.js';
 import { tenantInbox } from '../packages/mistri/src/adapters/inbox/inbox.js';
+import { provisionPostgresTenantSandboxes } from '../packages/mistri/src/server/tenant/tenantSandboxStore.js';
 import { startLatencyProxy, type LatencyProxy, type Statement } from '../e2e/support/latencyProxy.js';
 import { holdPort } from './support/heldPort.js';
 
@@ -42,6 +43,9 @@ const LIVE = process.env.TABLEWALK_TEST_PG;
 /** How many vehicles the bulk command writes on its next run (the test sets it before each measurement). */
 const bulk = globalThis as { __mistriFlightsBulkRows?: number };
 const PRINT = process.env.TABLEWALK_FLIGHTS_PRINT === '1';
+/* TABLEWALK_FLIGHTS_CLONING=0 serves Ignition as it is, with no resource marked for cloning: an arrival's budget holds
+   either way, and this is the way to see it does. */
+const CLONING = process.env.TABLEWALK_FLIGHTS_CLONING !== '0';
 const password = 'Ignition-flights-password-123!';
 
 interface Answer {
@@ -130,12 +134,19 @@ async function deploy(t: TestContext, relay: LatencyProxy) {
         ...lead,
         notify: [{ on: { changes: ['status'] }, when: 'status = qualified', to: ['qualified_by'], title: 'Lead {reference} moved' }],
       },
-      // The bulk command's vehicles (bulkCommandsModule): a command writes only what the App lets be written.
-      vehicle: { ...loaded.app.resources!.vehicle!, access: 'write' },
+      /* The bulk command's vehicles (bulkCommandsModule): a command writes only what the App lets be written. Marked
+         for cloning, as an App with sandboxes marks a resource: an arrival then asks which of the person's tenants
+         are sandboxes (tenantEnrollment.ts `sandboxes`), which nothing else of Ignition would. */
+      vehicle: { ...loaded.app.resources!.vehicle!, access: 'write', ...(CLONING ? { clone: 'config' as const } : {}) },
     },
   };
   const served = { ...loaded, app } as typeof loaded;
   await provisionPostgresInbox((lending.target as { postgres: string }).postgres);
+  if (CLONING) {
+    /* A clone's new tenant is born without a code, which Ignition's dealers must have (tenantFeatureClone.ts). */
+    await lending.exec('ALTER TABLE dealer ALTER COLUMN code DROP NOT NULL');
+    await provisionPostgresTenantSandboxes((lending.target as { postgres: string }).postgres);
+  }
   const held = await holdPort(),
     port = held.port,
     origin = `http://127.0.0.1:${port}`;
@@ -326,18 +337,26 @@ const BUDGETS: Record<string, number> = {
   'executeMany (50 rows)': 10,
   // admission, the second admission around the session check, its release fence: one whole snapshot each
   renew: 3,
-  /* Discovery's memberships, the platform's and the tenant's names, beside the open's two admissions and its
-     fence, the tenant's addresses, then the boot it carries (one snapshot: BEGIN with every read, the inbox's
-     visibility, and its COMMIT with the release fence riding it): 13, a flight more as the parallel snapshots
-     interleave on the wire. */
-  enter: 14,
-  /* The page's first reads, asked past the sign-in: the tenant's addresses, a whole snapshot in one message; one
-     snapshot of the context's reads; the inbox's visibility read, which waits on its page; and the COMMIT carrying
-     the release fence (TenantReadRuntime `fencedTogether`) rather than a snapshot of the fence's own after it. Three
-     where the visibility read is asked while the reads before it are still being answered, and so counts in their
-     flight: which it is turns on how the answers arrive, so the budget is the four. (The addresses were a read and a
-     COMMIT of their own, five whenever the visibility read did not overlap.) */
-  boot: 4,
+  /* Discovery's three looks at the person's memberships, the platform's riding the second; the marks, one message
+     for the tenants' names, which of them are sandboxes and the entered tenant's addresses (tenantReadSource.ts
+     `readTenantMarks`); the open's two admissions and its fence; then the boot it carries, BEGIN with every read and
+     its COMMIT with the release fence riding it. Nine, each a whole snapshot in one message or awaited, so none is
+     left to land on either side of the answer: the count no longer turns on how parallel snapshots interleave on the
+     wire, and there is no flight's allowance for it. (It was 12 to 14: the platform's membership on a snapshot beside
+     the second look; the names behind a BEGIN with a COMMIT nobody waited on, counted when it happened to leave
+     before the answer; the addresses on a snapshot of their own; and the bell's count carried in the boot, whose
+     visibility read waited on its notices. Marked for cloning, the sandboxes were four more: the store's layout, its
+     version, its rows and a COMMIT.) */
+  enter: 9,
+  /* The same for a page reloaded in its tab, which resumes the context that tab kept where the first opens one: a
+     resume is admitted as an open is. */
+  'enter (kept)': 9,
+  /* The page's first reads, asked past the sign-in: the tenant's addresses, a whole snapshot in one message; BEGIN
+     with the context's reads; and the COMMIT carrying the release fence (TenantReadRuntime `fencedTogether`) rather
+     than a snapshot of the fence's own after it. Three, always: the bell's count is not among the reads (the bell asks
+     for itself once the bar has drawn, `inbox` above), and it was its visibility read, waiting on its notices and
+     counted in their flight or not as the answers happened to arrive, that made this three or four. */
+  boot: 3,
   /* A record page's compose: its plan and every read its sections ask, on one snapshot ending with the fence, then
      the verbs' availability where the page carries checks, which keeps its own fence (availability, above). */
   'pages/compose': 7,
@@ -523,6 +542,16 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
       },
       enter: async () => {
         const entered = await enter();
+        if (entered.status === 200) lease = entered.body.entered.context;
+        return entered;
+      },
+      /* A reload: the page says which context its tab kept (client tenantBrowser.ts `keep`), and the host resumes it. */
+      'enter (kept)': async () => {
+        const entered = await f.call(
+          '/api/tenant/enter?app=ignition',
+          { path: '/ignition/leads', search: '', kept: { tenantId: f.tenant, tabId: String(lease.tabId) } },
+          identity,
+        );
         if (entered.status === 200) lease = entered.body.entered.context;
         return entered;
       },

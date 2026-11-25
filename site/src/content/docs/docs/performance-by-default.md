@@ -10,7 +10,7 @@ mistri keeps an App fast by counting round trips to the database, because the di
 ## What mistri does
 
 - Reads that belong together share one round trip: a record's snapshot is pipelined, so a read costs two round trips whatever it fetches.
-- The first page of an App is about fourteen round trips in all: the person, the App's payload and the page's own reads, in two waves.
+- The first page of a tenant App on PostgreSQL is nine round trips in one request: the person and their tenants, the lease, and the App's payload with the page's own reads. The bell's unread count is asked after the page has drawn.
 - Connections come from one shared pool per database, and people arriving at once are let in a few at a time, in order, instead of all at once.
 - Platform tests hold budgets: a read at most three round trips, a command at most six, a first page at most sixteen.
 

@@ -7,8 +7,8 @@ import { startTenantApp, type TenantAppFixture } from './support/tenantServer.js
  * room's own reads, each round after the last had answered: on a remote database every round is a network's latency
  * and a context's admission. The page is now asked for in one read on the lease, and someone in one tenant is
  * entered with it in the same request as discovery (`/api/tenant/enter`), which says who-am-I as well, so a list or a
- * record settles in one round — the entry — whatever the room asks. A change that brings a round back fails here, by
- * name.
+ * record settles in one round — the entry — whatever the room asks; only the bell's count comes after it. A change
+ * that brings a round back fails here, by name.
  */
 test.describe("a tenant App's first page", () => {
   test.setTimeout(60000);
@@ -82,10 +82,12 @@ test.describe("a tenant App's first page", () => {
       ])
         expect(paths, said).not.toContain(carried);
       /* Who-am-I, the member's tenants, the lease and the boot in one, asked before the page knows who is signed in
-         (tenantTransport.ts `enterFirst`); never asked again apart. The bell's count the boot carries too, so it is
-         not asked at all. */
-      expect(paths, said).toEqual(['/api/tenant/enter']);
-      expect(Math.max(...asked.map((request) => request.wave)), said).toBe(1);
+         (tenantTransport.ts `enterFirst`); never asked again apart. The bell's count is the one thing asked past it:
+         the boot no longer carries it (its notices' visibility read was a round trip every page waited on,
+         tenantHttp.ts), so the bell asks once the bar has drawn, and nothing of the room waits on it. */
+      expect(paths, said).toEqual(['/api/tenant/enter', '/api/inbox']);
+      const room = asked.filter((request) => request.path !== '/api/inbox');
+      expect(Math.max(...room.map((request) => request.wave)), said).toBe(1);
       /* The tenant's flows are asked beside the page, not once who-am-I has said the session is a tenant's
          (clientSurface.ts tenantPreloads): the entry waits on them, being made from them. Built pages only — the
          source client under Vite names no chunks. */
