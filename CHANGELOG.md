@@ -5,7 +5,9 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
-## Unreleased
+## 1.0.0-rc.86
+
+Field-report fixes after a re-check of every open gap against rc.85: hosted PostgreSQL and the as-of clock, fewer client round trips, command inputs, the tooling's tenant paths, and the page kit and assistant. Two things an App may notice: after a command a page reads again only what the command could have changed, and a PostgreSQL connection silent for 60 seconds while a statement waits is closed (`pool.queryTimeoutMs`).
 
 - A `field.money({ minor: true })` input says its unit where it is declared and where it is given. Every door reads the major amount, as the form sends it, and only the handler holds minor units: a page's `run(record, { amount: 255 })` and `open`, a `CommandButton`'s `values`, a test's `client.command`, a job and the App API all mean $255.00, and `min`, `max` and `default` are in the major unit too (`max: 50_000` is $50,000.00). Nothing changed in what any door reads; the field's types, `useCommand`'s and the commands guide now say it, and `test/command-input-doors.test.ts` holds each door to it. An App that passes cents to `run` or wrote its bounds in cents is recording, or allowing, a hundred times the amount.
 - A command input with a literal `default` is no longer required of a caller: an input that leaves the field out takes the default, at every door (a row's button, `run`, a test, a job, the App API, a public form), in a tenant App as in any other. `field.bool({ default: false })` sent `{}` was refused as "The command input is invalid", so giving a command its first field broke every caller that sent nothing. A box a person emptied on the form is still asked for, `optional: true` beside a default still means "left empty is absent", and a default only the form can work out (`today`, `{ record }`, `{ tenant }`, `{ answer }`) still has to be sent by a caller without the form. The App API's input schema no longer lists such a field as required.
