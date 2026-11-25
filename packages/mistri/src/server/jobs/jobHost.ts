@@ -446,6 +446,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
       appId: deployment.appId,
       bind: options.bind,
       store: jobs,
+      now,
       ...(workflows || builtIn.length || options.decide
         ? {
             extra: {
@@ -457,6 +458,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
                     app: options.app,
                     bind: options.bind,
                     jobs,
+                    now,
                     runtime: options.decide,
                   })
                 : {}),

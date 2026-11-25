@@ -6,10 +6,17 @@
  * — today, a window, a stamp — while sign-in keeps the real clock.
  */
 import assert from 'node:assert/strict';
+import { writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, describe, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
+import { pathToFileURL } from 'node:url';
 import { appClockOffset, appTime, clockNow, configureAsOf, parseAsOf } from '../packages/engine/src/server/http/clock.js';
 import { appClockNow, setAppClockOffset } from '../packages/engine/src/shared/appClock.js';
 import { createTestWorkspace, startTestApp } from '../packages/mistri/src/server/testing.js';
+import { ROOT, childEnv, runCli } from './appApiCli.js';
+
+const src = (path: string) => JSON.stringify(pathToFileURL(join(ROOT, path)).href);
 
 afterEach(() => setAppClockOffset(0));
 
@@ -169,5 +176,163 @@ test(
     const read = await desk.rows('task', { where: 'id = 2' });
     assert.ok(read.ok, JSON.stringify(read));
     assert.match(String(read.value[0].done_at), /^2026-01-05/, 'the stamp an action writes is the as-of day');
+  },
+);
+
+test(
+  'a job and a workflow read the as-of day in w.now(), w.until() and the commands they run, without shifting real timers twice',
+  { timeout: 120_000 },
+  async (t) => {
+    const workspace = await createTestWorkspace();
+    t.after(() => workspace.close());
+    const database = await workspace.database('desk.db', (db) =>
+      db.exec(`
+      CREATE TABLE task (id INTEGER PRIMARY KEY, due_on DATE NOT NULL);
+      CREATE TABLE stamp (id INTEGER PRIMARY KEY, source TEXT NOT NULL, due_ids TEXT NOT NULL, clock TEXT NOT NULL);
+      INSERT INTO task (id, due_on) VALUES (1, '2026-01-05'), (2, '2026-01-06'), (3, '2026-01-04');
+    `),
+    );
+    await workspace.write('app/app.json', {
+      id: 'desk',
+      name: 'Desk',
+      ui: { timezone: 'UTC' },
+      sources: { desk: { connection: 'desk' } },
+      resources: { task: { access: 'write' }, stamp: { access: 'write' } },
+      auth: {
+        providers: ['email'],
+        store: workspace.path('auth.db'),
+        roles: {
+          desk: { read: true, commands: ['kickoff'] },
+          automation: { read: true, service: true, commands: ['jobStamp', 'workflowStamp'] },
+        },
+      },
+      views: { stamps: { kind: 'list', from: 'stamp' } },
+      home: 'stamps',
+    });
+    const events = workspace.path('app/events.mjs');
+    writeFileSync(
+      events,
+      `import { defineEvent, shape, text } from ${src('packages/mistri/src/server/commands.ts')};
+export const Started = defineEvent('desk.started', shape({ key: text() }));
+`,
+    );
+    const commands = workspace.path('app/commands.mjs');
+    writeFileSync(
+      commands,
+      `import { defineCommand, defineCommands, defineEventProjection, field, shape, text } from ${src('packages/mistri/src/server/commands.ts')};
+import { Started } from './events.mjs';
+export default defineCommands({
+  kickoff: defineCommand({
+    source: 'desk',
+    target: 'stamp',
+    targets: 'none',
+    input: { key: field.text() },
+    output: shape({ key: text() }),
+    events: { started: defineEventProjection(Started, (out) => ({ key: out.key })) },
+    async handle(_ctx, input) { return { key: input.key }; },
+  }),
+  jobStamp: defineCommand({
+    source: 'desk',
+    target: 'stamp',
+    targets: 'none',
+    read: ['task'],
+    write: ['stamp'],
+    input: {},
+    async handle({ db }) {
+      const due = await db.task.where('due_on = today');
+      await db.stamp.insert({
+        source: 'job',
+        due_ids: due.map((row) => row.id).sort().join(','),
+        clock: due.map((row) => row.due_on).join(','),
+      });
+    },
+  }),
+  workflowStamp: defineCommand({
+    source: 'desk',
+    target: 'stamp',
+    targets: 'none',
+    read: ['task'],
+    write: ['stamp'],
+    input: { clock: field.text() },
+    async handle({ db }, input) {
+      const due = await db.task.where('due_on = today');
+      await db.stamp.insert({
+        source: 'workflow',
+        due_ids: due.map((row) => row.id).sort().join(','),
+        clock: input.clock,
+      });
+    },
+  }),
+});
+`,
+    );
+    const jobs = workspace.path('app/jobs.mjs');
+    writeFileSync(
+      jobs,
+      `import { defineJob, defineJobs } from ${src('packages/mistri/src/server/jobs.ts')};
+import { defineWorkflow, defineWorkflows } from ${src('packages/mistri/src/server/workflows.ts')};
+import { Started } from './events.mjs';
+export default defineJobs(
+  { daily: defineJob({ every: '* * * * *', runAs: 'clock', command: 'jobStamp' }) },
+  {
+    principals: { clock: { roles: ['automation'] } },
+    workflows: defineWorkflows({
+      follow: defineWorkflow({
+        runAs: 'clock',
+        start: { event: Started, key: (event) => event.key },
+        async run(w) {
+          const at = await w.now('startedAt');
+          await w.until('brief', new Date(at.getTime() + 40));
+          await w.run('stamp', 'workflowStamp', { input: { clock: at.toISOString() } });
+          return { clock: at.toISOString() };
+        },
+      }),
+    }),
+  },
+);
+`,
+    );
+    const config = workspace.path('mistri.json');
+    writeFileSync(config, JSON.stringify({ connections: [{ name: 'desk', url: database, writable: true }] }));
+    const env = childEnv({ XDG_CONFIG_HOME: workspace.path('config') });
+    const up = await runCli(
+      ['migrate', 'stores', 'up', '--app', workspace.path('app'), '--commands', commands, '--jobs', jobs, '--config', config],
+      env,
+    );
+    assert.equal(up.code, 0, up.out + up.err);
+
+    const host = await startTestApp({
+      workspace,
+      directory: workspace.path('app'),
+      config,
+      args: ['--commands', commands, '--jobs', jobs],
+      environment: { XDG_CONFIG_HOME: workspace.path('config') },
+      asOf: '2026-01-05T09:30:00Z',
+      jobs: 'manual',
+    });
+    t.after(() => host.close());
+
+    const ran = await host.runJob('daily');
+    assert.equal(ran.state, 'succeeded', `${JSON.stringify(ran)}\n${host.logs()}`);
+    const desk = await host.as('desk');
+    const kicked = await desk.command('kickoff', {}, { key: 'run-1' });
+    assert.ok(kicked.ok, JSON.stringify(kicked));
+
+    const deadline = Date.now() + 15_000;
+    let stamps: ReadonlyArray<Record<string, unknown>> = [];
+    while (Date.now() < deadline) {
+      const read = await desk.rows('stamp', {});
+      assert.ok(read.ok, JSON.stringify(read));
+      stamps = read.value;
+      if (stamps.length >= 2) break;
+      await delay(50);
+    }
+    assert.equal(stamps.length, 2, `${JSON.stringify(stamps)}\n${host.logs()}`);
+    const byJob = stamps.find((row) => row.source === 'job')!;
+    const byWorkflow = stamps.find((row) => row.source === 'workflow')!;
+    assert.equal(byJob.due_ids, '1', 'a job command counts today once on the as-of day, not twice');
+    assert.equal(byJob.clock, '2026-01-05');
+    assert.equal(byWorkflow.due_ids, '1', 'a workflow step command counts today on the as-of day');
+    assert.match(String(byWorkflow.clock), /^2026-01-05T09:30:/, 'w.now() and w.until() run on the as-of clock');
   },
 );

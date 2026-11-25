@@ -24,6 +24,7 @@
  *   in-flight instances.
  */
 import { createHash } from 'node:crypto';
+import { appClockOffset, appTime } from '@mistriwork/engine/server/http/clock.js';
 import { performance } from 'node:perf_hooks';
 import type { WorkflowStore } from '../../adapters/workflows/workflowStoreContract.js';
 import {
@@ -463,13 +464,13 @@ export async function advance(env: EngineEnvironment, id: string): Promise<Advan
     async until(raw: unknown, when: Date | string | number): Promise<void> {
       const at = new Date(when).getTime();
       if (!Number.isFinite(at)) throw new WorkflowDeclarationError('w.until needs a time: a Date, an ISO string or epoch milliseconds.');
-      await timer(raw, hashOf('until', at), () => at);
+      await timer(raw, hashOf('until', at), () => Math.max(0, at - appClockOffset()));
     },
 
     async now(raw?: unknown): Promise<Date> {
       const { name, recorded } = await enter(raw ?? `now#${++unnamedNow}`, 'now', hashOf('now'));
       if (recorded?.status === 'completed') return new Date(Number(stored(recorded)));
-      const at = env.now();
+      const at = appTime(env.now()).getTime();
       await persist(name, {
         kind: 'now',
         hash: hashOf('now'),
