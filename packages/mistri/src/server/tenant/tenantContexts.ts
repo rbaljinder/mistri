@@ -1179,8 +1179,48 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       tab.expiresAt = retainUntil(tab, lease.window);
       return reply(tab, lease);
     });
+  /**
+   * A reload taking back its tab's released context with no admission of its own (`/api/tenant/enter` with
+   * `reenter`, tenantEnter.ts): the session proven and the tab its own, released, unexpired and in the tenant asked,
+   * as `resume` holds it, but the membership not read here. That is the next request's to read, and the caller makes
+   * one at once — the page's boot on this lease, whose snapshot fences the lease's evidence against the membership
+   * as it stands, as every read on a lease does — and lets the context go again, unanswered, where it is refused.
+   * Admission's own read repeats that fence (tenantAdmissionCache.ts); the window it would bound is the lease's
+   * already, which this never lengthens. Only a released context, and only once.
+   */
+  const reclaim = (request: Request, inputSelectors: readonly string[], input: { tabId: string }): Promise<TenantContextReply> =>
+    control(async () => {
+      const value = body(input);
+      tenantRecord(value, ['tabId']);
+      token(value.tabId);
+      const chosen = captureTarget({ realm: 'tenant', selectors: inputSelectors });
+      const tab = tabs.get(value.tabId),
+        lease = tab?.lease;
+      if (
+        !tab ||
+        !tab.released ||
+        !lease ||
+        tab.switching ||
+        !lease.active ||
+        lease.realm !== 'tenant' ||
+        chosen.realm !== 'tenant' ||
+        parseTenantSelector(chosen.selectors) !== tenantOf(lease)
+      )
+        return denyTenant();
+      /* A tenant's own host takes back its tenant's context alone, as it admits that tenant alone (`admittedCandidate`). */
+      const onHost = tenantHostIntentOf(request);
+      if (onHost && onHost.tenant !== tenantOf(lease)) return denyTenant();
+      belongs(tab, await session(request));
+      if (!tab.released || tab.lease !== lease || tab.switching) return denyTenant();
+      live(tab, lease);
+      if (clock() >= Math.min(lease.window.expiresAt, tab.expiresAt)) return denyTenant();
+      tab.released = false;
+      tab.expiresAt = retainUntil(tab, lease.window);
+      return reply(tab, lease);
+    });
   return Object.freeze({
     release,
+    reclaim,
     resume: (request: Request, inputSelectors: readonly string[], input: { tabId: string }): Promise<TenantContextReply> =>
       resume(request, { realm: 'tenant', selectors: inputSelectors }, input),
     resumePlatform: (request: Request, input: { tabId: string }): Promise<TenantContextReply> =>

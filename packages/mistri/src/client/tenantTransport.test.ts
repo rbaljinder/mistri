@@ -111,6 +111,63 @@ test('entering takes a lease only where discovery has the one tenant it would en
   await expect(transport.enterTenant(page, '@platform')).rejects.toThrow();
 });
 
+test("a reload in a tab that holds the person's tenants re-enters its kept context: one request, no discovery, and a refusal enters afresh", async () => {
+  sessionStorage.clear();
+  const discovery = {
+    status: 'ready',
+    appId: 'desk',
+    accountId: 'alice',
+    memberships: [{ tenantId: 'north', name: 'North Motors' }, { tenantId: 'south' }],
+  };
+  const me = { signedIn: true, accountId: 'alice', appId: 'desk', who: 'alice', header: null, tenant: true };
+  const boot = { reads: {}, items: {} };
+  const page = { path: '/desk/leads', search: '' };
+  const kept = { tenantId: 'north', tabId: 'tab-one' };
+  const lease = proof();
+  const fetcher = vi.fn();
+  vi.stubGlobal('fetch', fetcher);
+  /* With no tenants held, a kept context is entered through discovery, as ever: the request does not say `reenter`. */
+  fetcher.mockResolvedValueOnce(reply({ ...discovery, whoami: me, entered: { context: lease, boot } }, lease));
+  expect(await transport.enterFirst('desk', page, undefined, kept)).toEqual(me);
+  expect(JSON.parse(fetcher.mock.calls[0][1].body).reenter).toBeUndefined();
+  /* That answer's tenants are held for the tab's next page: it asks to re-enter, and its answer names no tenants. */
+  await transport.enterTenant(page, undefined, kept);
+  const back = { status: 'ready', appId: 'desk', accountId: 'alice', reentered: true, whoami: me, entered: { context: lease, boot } };
+  fetcher.mockResolvedValueOnce(reply(back, lease));
+  expect(await transport.enterFirst('desk', page, undefined, kept)).toEqual(me);
+  expect(JSON.parse(fetcher.mock.calls[1][1].body)).toEqual({ path: '/desk/leads', search: '', kept, reenter: true });
+  expect(await transport.enterTenant(page, undefined, kept)).toEqual({ reentered: true, tenants: ['north', 'south'], lease, boot });
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  /* Its boot refused (a member removed, roles changed, a tenant suspended): the page enters afresh, through discovery. */
+  fetcher.mockResolvedValueOnce(reply({ error: 'refused' }, lease, 403));
+  fetcher.mockResolvedValueOnce(reply({ ...discovery, whoami: me }, lease));
+  expect(await transport.enterFirst('desk', page, undefined, kept)).toEqual(me);
+  expect(fetcher).toHaveBeenCalledTimes(4);
+  expect(JSON.parse(fetcher.mock.calls[3][1].body).reenter).toBeUndefined();
+  expect(await transport.enterTenant(page, undefined, kept)).toEqual({ tenants: ['north', 'south'] });
+  /* A context the host no longer holds is entered in the same request, as any: one request, its answer taken. */
+  const other = { ...lease, tabId: 'tab-two' };
+  fetcher.mockResolvedValueOnce(reply({ ...discovery, whoami: me, entered: { context: other, boot } }, other));
+  expect(await transport.enterFirst('desk', page, undefined, kept)).toEqual(me);
+  expect(fetcher).toHaveBeenCalledTimes(5);
+  /* A re-entry is taken only as that very context: another tab's, another tenant's, or one naming tenants is not. */
+  for (const body of [
+    { ...back, entered: { context: other, boot } },
+    { ...back, entered: { context: proof('south'), boot } },
+    { ...back, memberships: [] },
+    { ...back, entered: { context: lease } },
+  ]) {
+    fetcher.mockResolvedValueOnce(reply(body, body.entered.context as TenantContextReply));
+    await transport.enterFirst('desk', page, undefined, kept);
+    await expect(transport.enterTenant(page, undefined, kept)).rejects.toThrow();
+  }
+  /* A link naming another tenant is a choice: discovery's. */
+  fetcher.mockResolvedValueOnce(reply({ ...discovery, whoami: me }, lease));
+  await transport.enterFirst('desk', page, 'south', kept);
+  expect(JSON.parse(fetcher.mock.calls.at(-1)![1].body).reenter).toBeUndefined();
+  sessionStorage.clear();
+});
+
 test("the page's first request is entering, which says who-am-I: no who-am-I is asked, and the look takes that answer", async () => {
   const discovery = { status: 'ready', appId: 'desk', accountId: 'alice', memberships: [{ tenantId: 'north' }] };
   const me = { signedIn: true, accountId: 'alice', appId: 'desk', who: 'alice', header: null, tenant: true };

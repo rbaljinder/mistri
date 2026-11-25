@@ -157,7 +157,7 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/import': ['table', 'view', 'name', 'csv', 'mapping', 'mode', 'skipRefused'],
   '/api/revert': ['confirm', 'expectedId', 'limit'],
   '/api/tenant/context/open': [],
-  [TENANT_ENTER_PATH]: ['path', 'search', 'loaders', 'tenant', 'kept'],
+  [TENANT_ENTER_PATH]: ['path', 'search', 'loaders', 'tenant', 'kept', 'reenter'],
   '/api/tenant/context/switch': ['tabId', 'expectedContext', 'expectedRevision'],
   '/api/tenant/context/renew': ['tabId', 'expectedContext', 'expectedRevision'],
   '/api/tenant/context/recover': ['tabId'],

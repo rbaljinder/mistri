@@ -142,6 +142,8 @@ unintended statement fails a test.
   and the named loaders its browser saw it ask as it last opened), where the
   page asked each once the entry had answered: a second wait, and two round
   trips a load.
+  A reload takes its tab's released context back with no discovery and
+  no admission but the boot's own snapshot (`reenter`): three round trips.
   Where the entry
   is not answered so, the page asks who-am-I as before. A record's references
   are read on one snapshot, its row and then every count at once.

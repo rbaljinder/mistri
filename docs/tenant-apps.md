@@ -139,6 +139,22 @@ proof and membership admission, and only a released context resumes, once, so a
 context another page holds is never shared. A reader who reloads all morning
 holds one context, not one per load.
 
+A reload in a tab that holds the person's tenants from its last entry asks
+`/api/tenant/enter` with `reenter`: the host takes the tab's released context
+back with no discovery and no admission of its own (`tenantContexts.ts`
+`reclaim`: the session proven, the tab its own, released, unexpired and in the
+tenant kept) and answers the page's boot on it, three round trips where an
+entry is nine. The lease is trusted as every request on it is, and no more: the
+boot's snapshot fences the lease's evidence (the membership's and tenant's
+versions, the roles) against the store before any read, so a member removed,
+whose roles changed or whose tenant was suspended is refused there, as their
+next request on the lease would have been, the answer carries nothing and the
+context is let go; signed out or signed in as another session, the session
+check refuses first. A context the host no longer holds (a restart, a deploy),
+one another page took back, or one past its grace is entered as any request is,
+in the same request. The chooser and the bar offer the tab's last discovery's
+tenants, and ask discovery again once the bar has drawn.
+
 A record page is one request (`/api/pages/compose`): the host plans the page and
 asks each of its reads through its own read route on the one context the
 request holds — one admission, each read in its own operation's snapshot under

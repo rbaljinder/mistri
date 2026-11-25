@@ -129,3 +129,66 @@ export async function enterTenant(given: {
     ...(lease && held?.tenantId === sole ? { addresses: held } : {}),
   };
 }
+
+/**
+ * A reload's entry (`reenter`): the tab's kept context taken back (tenantContexts.ts `reclaim`), with no discovery
+ * and no admission of its own, for the page's boot on it to be read at once. Undefined where it cannot be — signed
+ * out, another account or session, a tab this host no longer holds (a restart, a deploy), one another page took
+ * back, one past its grace — and the request is then entered as any other.
+ *
+ * What it trusts is the lease, as every request on a lease does, and no more: the boot that follows is admitted on
+ * it as `/api/boot` is, its snapshot fencing the lease's evidence (membership and tenant versions, roles) against
+ * the store before any read, and the caller sends nothing of it, and lets the context go, where that refuses. A
+ * member removed, whose roles changed or whose tenant was suspended is refused there, as their next request on the
+ * lease would be; signed out, the session check here refuses first.
+ */
+export async function reenterTenant(given: {
+  readonly req: IncomingMessage;
+  readonly asked: NonNullable<ReturnType<typeof tenantEnterRequest>>;
+  readonly contexts: {
+    reclaim(req: IncomingMessage, selectors: readonly string[], input: { tabId: string }): Promise<TenantContextReply>;
+    release(req: IncomingMessage, input: TenantContextAssertion): Promise<unknown>;
+  };
+  /** The session check every tenant route makes (tenantDiscovery.ts `verified`). */
+  readonly verified: (req: IncomingMessage) => Promise<VerifiedSessionInstance | null>;
+  readonly whoami: (proof: VerifiedSessionInstance | null) => Promise<Record<string, unknown> | undefined>;
+  readonly assertActive: () => void;
+}): Promise<{ readonly accountId: string; readonly lease: TenantContextReply; readonly whoami?: Record<string, unknown> } | undefined> {
+  const { req, asked, contexts } = given;
+  const kept = asked.kept;
+  if (!asked.reenter || !kept) return undefined;
+  const onHost = getTenantHostIntent(req);
+  if (onHost && onHost.tenant !== kept.tenantId) return undefined;
+  const proof = await given.verified(req);
+  if (!proof) return undefined;
+  let lease: TenantContextReply;
+  try {
+    lease = await contexts.reclaim(req, [kept.tenantId], { tabId: kept.tabId });
+  } catch {
+    return undefined;
+  }
+  try {
+    given.assertActive();
+    if (
+      lease.tenantId !== kept.tenantId ||
+      lease.tabId !== kept.tabId ||
+      lease.realm !== undefined ||
+      lease.accountId !== proof.identity.id
+    )
+      return denyTenant();
+    const who = await given.whoami(proof);
+    return { accountId: proof.identity.id, lease, ...(who ? { whoami: who } : {}) };
+  } catch (error) {
+    await letGoOf(req, contexts, lease);
+    throw error;
+  }
+}
+
+/** A context taken back that the answer will not carry, let go again, as its page let it go. */
+export async function letGoOf(
+  req: IncomingMessage,
+  contexts: { release(req: IncomingMessage, input: TenantContextAssertion): Promise<unknown> },
+  lease: TenantContextReply,
+): Promise<void> {
+  await contexts.release(req, { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision }).catch(() => {});
+}

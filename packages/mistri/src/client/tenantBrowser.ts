@@ -147,6 +147,8 @@ export async function enterFirstAt(appId: string, location: string): Promise<Rec
 const bootedLeases = new WeakSet<TenantContextReply>();
 /** Whether the page's boot came with `reply`, entered in the same request as discovery. */
 export const enteredWithBoot = (reply: TenantContextReply): boolean => bootedLeases.has(reply);
+/* Whether the choices are this tab's last discovery's, held by a reload that re-entered without one (`tenantControl`). */
+let choicesHeld = false;
 let departing = false;
 /* A page that is going (not into the back-forward cache, from which it
    would return holding its lease) lets its context go. */
@@ -302,8 +304,10 @@ export async function initialTenantSelection(
         busy = false;
         const only = answered ? undefined : sole();
         if (error === undefined) answered = true;
-        if (only !== undefined && entry?.lease?.tenantId === only) enter(entry.lease, entry.boot);
-        else {
+        if (only !== undefined && entry?.lease?.tenantId === only) {
+          if (entry.reentered) choicesHeld = true;
+          enter(entry.lease, entry.boot);
+        } else {
           /* A lease this page will not take is let go, as a page leaving lets its own go. */
           if (entry?.lease) releaseTenant(entry.lease);
           if (only === undefined) draw();
@@ -479,6 +483,21 @@ export function tenantControl(
     }
   };
   ownDiscoveryRefresh(owner, refresh);
+  /* A reload re-entered with no discovery offers this tab's last choices: asked again once the bar has drawn, and
+     drawn quietly, as nothing the page waits on. */
+  if (choicesHeld) {
+    choicesHeld = false;
+    void discoverTenants().then(
+      (found) => {
+        if (sessionIdentity() !== owner || refreshing) return;
+        tenantIds = found;
+        drawControl();
+      },
+      () => {
+        /* The choices held stand; the bar's retry asks again. */
+      },
+    );
+  }
   const switchTo = async (tenantId: string) => {
     if (busy || refreshing || sessionIdentity().tenant !== selected || tenantId === selected.tenantId || !tenantIds.includes(tenantId))
       return;

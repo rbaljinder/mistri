@@ -385,6 +385,10 @@ const BUDGETS: Record<string, number> = {
   /* The same for a page reloaded in its tab, which resumes the context that tab kept where the first opens one: a
      resume is admitted as an open is. */
   'enter (kept)': 9,
+  /* A reload that takes its tab's let-go context back (`reenter`, tenantEnter.ts): no discovery and no admission of
+     its own, so only the boot's three, its snapshot fencing the lease's evidence against the membership as every
+     request on a lease does. */
+  reenter: 3,
   /* The page's first reads, asked past the sign-in: the tenant's addresses, a whole snapshot in one message; BEGIN
      with the context's reads; and the COMMIT carrying the release fence (TenantReadRuntime `fencedTogether`) rather
      than a snapshot of the fence's own after it. Three, always: the bell's count is not among the reads (the bell asks
@@ -596,6 +600,24 @@ describe('tenant request flights on Ignition (PostgreSQL)', { skip: liveSkip('po
           { path: '/ignition/leads', search: '', kept: { tenantId: f.tenant, tabId: String(lease.tabId) } },
           identity,
         );
+        if (entered.status === 200) lease = entered.body.entered.context;
+        return entered;
+      },
+      /* A reload in a tab that holds the person's tenants: its page let the context go (pagehide), and the next takes
+         it back with no discovery (`reenter`). The release is the leaving page's, and not counted here. */
+      reenter: async () => {
+        const released = await f.call(
+          '/api/tenant/context/release?app=ignition',
+          { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision },
+          identity,
+        );
+        assert.equal(released.status, 200, released.text);
+        const entered = await f.call(
+          '/api/tenant/enter?app=ignition',
+          { path: '/ignition/leads', search: '', kept: { tenantId: f.tenant, tabId: String(lease.tabId) }, reenter: true },
+          identity,
+        );
+        assert.equal(entered.body.reentered, true, entered.text);
         if (entered.status === 200) lease = entered.body.entered.context;
         return entered;
       },

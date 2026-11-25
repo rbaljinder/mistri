@@ -79,7 +79,7 @@ import type { RecordLinksRequest } from './tenantLinkRevoke.js';
 import { captureTenantEnrollment, type TenantEnrollment } from './tenantEnrollment.js';
 import { tenantSessionDiscovery } from './tenantDiscovery.js';
 import { pageLoads } from '../http/firstPaintRooms.js';
-import { enterTenant, type AddressesAhead } from './tenantEnter.js';
+import { enterTenant, letGoOf, reenterTenant, type AddressesAhead } from './tenantEnter.js';
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
 import { tenantElevatedReaderOf, withBoundedReads, type TenantReadContext } from './tenantReadRuntime.js';
 import type { PlatformReadContext } from './tenantPlatformReadRuntime.js';
@@ -382,7 +382,8 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       /* An enter request past its lease: discovery's answer and the lease, which its boot's answer carries. */
       let entering:
         | {
-            found: TenantDiscovery;
+            /* Discovery's answer; a reload's re-entry has none, and says whose session it is (tenantEnter.ts). */
+            found: TenantDiscovery | { status: 'ready'; appId: string; accountId: string; reentered: true };
             lease: TenantContextReply;
             whoami?: Record<string, unknown>;
             addresses?: AddressesAhead;
@@ -518,6 +519,34 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       }
       if (path === TENANT_ENTER_PATH) {
         /* The person's tenants, and where they are entered without being asked, the lease (tenantEnter.ts). */
+        const asked = tenantEnterRequest(input, app.id) ?? invalid();
+        /* A reload: its tab's kept context taken back, and its boot read on it below, with no discovery and no
+           admission but the boot's own (tenantEnter.ts `reenterTenant`). Where it cannot be taken back, entered as
+           any other request is. */
+        const back = await reenterTenant({
+          req,
+          asked,
+          contexts,
+          verified,
+          whoami: async (proof) => whoami?.(req, expectedAccounts.get(req), proof),
+          assertActive,
+        });
+        if (back) {
+          parseTenantSelector([back.lease.tenantId]);
+          exposed(headers.tenant, back.lease.tenantId);
+          entering = {
+            found: { status: 'ready', appId: app.id, accountId: back.accountId, reentered: true },
+            lease: back.lease,
+            ...(back.whoami ? { whoami: back.whoami } : {}),
+          };
+          control = false;
+          selectors = [back.lease.tenantId];
+          assertion = { tabId: back.lease.tabId, expectedContext: back.lease.context, expectedRevision: back.lease.revision };
+          input = { path: asked.page.path, search: asked.page.search, ...(asked.page.loaders ? { loaders: asked.page.loaders } : {}) };
+          path = TENANT_BOOT_PATH;
+        }
+      }
+      if (path === TENANT_ENTER_PATH) {
         const asked = tenantEnterRequest(input, app.id) ?? invalid();
         const entered = await enterTenant({
           req,
@@ -1673,6 +1702,12 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
           if (!booted) {
             /* Nothing is left running behind a request: the verbs started ahead, whose answer is not carried. */
             await Promise.allSettled(verbsAhead.values());
+            /* A re-entry whose boot is refused is refused whole, and its context let go again: its lease was taken
+               back on the boot's say-so alone, and the page enters afresh, through discovery, and hears why there. */
+            if ('reentered' in entering!.found) {
+              await letGoOf(req, contexts, entering!.lease);
+              return denyTenant();
+            }
             assertActive();
             if (req.aborted || res.destroyed) return denyTenant();
             return send(

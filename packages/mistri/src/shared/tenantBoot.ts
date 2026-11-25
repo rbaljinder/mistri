@@ -92,6 +92,10 @@ interface TenantEnterRequest {
   readonly tenant?: string;
   /** The context this browser tab's last page let go (client tenantBrowser.ts `keep`), to resume where it is that tenant's. */
   readonly kept?: { readonly tenantId: string; readonly tabId: string };
+  /** A reload's: take the kept context back and read its page's boot on it, with no discovery (tenantEnter.ts
+   * `reenterTenant`). Said only beside `kept`, and only by a page that holds the person's tenants from its tab's last
+   * entry (client tenantTransport.ts): the answer names no tenants. */
+  readonly reenter?: true;
 }
 
 const enterId = (value: unknown): value is string =>
@@ -99,8 +103,9 @@ const enterId = (value: unknown): value is string =>
 
 /** Whether an enter request says what it may: a plannable address, and at most a named tenant and a kept context. */
 export function tenantEnterRequest(input: Readonly<Record<string, unknown>>, appId: string): TenantEnterRequest | undefined {
-  const { path, search, loaders, tenant, kept, ...rest } = input;
+  const { path, search, loaders, tenant, kept, reenter, ...rest } = input;
   if (Object.keys(rest).length) return undefined;
+  if (reenter !== undefined && (reenter !== true || kept === undefined)) return undefined;
   const page = tenantBootRequest({ path, search, ...(loaders === undefined ? {} : { loaders }) }, appId);
   if (!page || (tenant !== undefined && (!enterId(tenant) || tenant === PLATFORM_TENANT_ID))) return undefined;
   const named = tenant === undefined ? {} : { tenant: tenant as string };
@@ -108,7 +113,9 @@ export function tenantEnterRequest(input: Readonly<Record<string, unknown>>, app
     if (!kept || typeof kept !== 'object' || Array.isArray(kept)) return undefined;
     const { tenantId, tabId, ...other } = kept as Record<string, unknown>;
     if (Object.keys(other).length || !enterId(tenantId) || tenantId === PLATFORM_TENANT_ID || !enterId(tabId)) return undefined;
-    return { page, ...named, kept: { tenantId, tabId } };
+    /* A reload re-enters the tenant its tab kept: a link naming another is a choice, answered by discovery. */
+    if (reenter && tenant !== undefined && tenant !== tenantId) return undefined;
+    return { page, ...named, kept: { tenantId, tabId }, ...(reenter ? { reenter: true as const } : {}) };
   }
   return { page, ...named };
 }

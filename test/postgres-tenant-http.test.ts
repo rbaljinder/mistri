@@ -1414,6 +1414,58 @@ describe('a tenant App on PostgreSQL over HTTP, against a real server', { skip: 
     assert.equal(await taskVersion('north-task'), 2);
   });
 
+  test("a reload's re-entry takes its context back with its boot, and is refused whole once the roles change or the membership is revoked", async (t) => {
+    const f = await fixture(t),
+      ada = await f.signup('Ada');
+    await f.grant(ada, 'north');
+    const membership = (change: Record<string, unknown>) =>
+      administer((admin) =>
+        admin.putMembership({
+          tenantId: 'north',
+          accountId: ada.accountId,
+          membershipId: `north-${ada.accountId}`,
+          status: 'active',
+          roles: ['member'],
+          validUntil: Date.now() + 120_000,
+          ...change,
+        } as unknown as Parameters<typeof admin.putMembership>[0]),
+      );
+    /* The page lets its context go (pagehide); the change, if any, lands; the next page asks to take it back. */
+    const reload = async (change?: Record<string, unknown>) => {
+      const north = await f.open(ada, 'north');
+      const assertion = {
+        tabId: north['x-mistri-tab'],
+        expectedContext: north['x-mistri-context'],
+        expectedRevision: Number(north['x-mistri-lease-revision']),
+      };
+      assert.equal((await f.call(`/api/tenant/context/release?app=${appId}`, assertion, f.signedIn(ada))).status, 200);
+      if (change) await membership(change);
+      const reply = await f.call(
+        `/api/tenant/enter?app=${appId}`,
+        { path: `/${appId}`, search: '', kept: { tenantId: 'north', tabId: assertion.tabId }, reenter: true },
+        f.signedIn(ada),
+      );
+      return { reply, north };
+    };
+    const kept = await reload();
+    assert.equal(kept.reply.status, 200, kept.reply.text);
+    assert.equal(kept.reply.body.reentered, true);
+    assert.equal((kept.reply.body.entered as { context: { tabId: string } }).context.tabId, kept.north['x-mistri-tab']);
+    assert.match(kept.reply.text, /North item/);
+    /* Roles changed; then, its roles put back, revoked, so the revocation alone is what refuses it. */
+    for (const [change, before] of [
+      [{ roles: ['member', 'viewer'], expectedVersion: '1' }, undefined],
+      [{ status: 'revoked', expectedVersion: '3' }, { expectedVersion: '2' }],
+    ] as const) {
+      if (before) await membership(before);
+      const { reply, north } = await reload(change);
+      refused(reply);
+      assert.equal('entered' in reply.body, false, reply.text);
+      assert.doesNotMatch(reply.text, /North item/);
+      refused(await f.data('/api/query', north, { table: 'item' }));
+    }
+  });
+
   test('revocation mid-session refuses the next write and read, and changes nothing', async (t) => {
     const f = await fixture(t),
       ada = await f.signup('Ada');
