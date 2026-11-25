@@ -191,3 +191,38 @@ test("a free-form page's component is handed refresh() beside data, and calling 
   expect(await screen.findByRole('button', { name: 'n 2' })).toBeInTheDocument();
   expect(load).toHaveBeenCalledTimes(2);
 });
+
+/* A field report: a read bounded by the window on a second column ("visits starting after the window opened, booked
+   before it closed") could not say the window's edges, so rows came back incomplete. */
+test("a declared read's query names the window's edges, bound to the reader's window, and to all time with none", async () => {
+  const realNow = Date.now.bind(Date);
+  const shift = new Date(2026, 10, 20, 12).getTime() - realNow();
+  vi.spyOn(Date, 'now').mockImplementation(() => realNow() + shift);
+  onTestFinished(() => {
+    vi.restoreAllMocks();
+  });
+  const section = {
+    kind: 'custom',
+    title: 'Summary',
+    component: { id: 'summary' },
+    aggregates: {
+      rebooked: { table: 'visit', measure: 'count', query: 'booked_at < window.end and note != "window.start"', over: 'starts_at' },
+    },
+  };
+  const drawWith = (windowNow: string | null) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CustomDashSection section={section as never} windowNow={windowNow} picks={{}} />
+      </QueryClientProvider>,
+    );
+  drawWith('last 7 days');
+  await screen.findByText(/rows reads/);
+  expect(asked.map((ask) => ask.text)).toContain(
+    'visit booked_at < 2026-11-21 and note != "window.start" and starts_at = last 7 days count',
+  );
+  cleanup();
+  asked.length = 0;
+  drawWith(null);
+  await screen.findByText(/rows reads/);
+  expect(asked.map((ask) => ask.text)).toContain('visit booked_at < 9999-12-31 and note != "window.start" count');
+});

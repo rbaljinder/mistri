@@ -2114,6 +2114,8 @@ export interface FirstRunDashSection<View extends string = string> {
 /** One read of rows a dashboard's custom section declares: a rows section's words, the window's `over` included. */
 export interface CustomDashRead {
   from: string;
+  /** Conditions on its rows. `window.start` and `window.end` name the dashboard window's edges, as the component is
+      handed them (`booked_at < window.end`): all time's earliest and latest day while no window is picked. */
   query?: string;
   /** The columns the component reads, label paths welcome; each row carries exactly these. */
   show: readonly string[];
@@ -2135,6 +2137,8 @@ export interface CustomDashFigure {
   measure: CustomMeasure;
   /** Group the figure: a column, a path or a period and a date column ("status", "month opened_on"). */
   by?: string;
+  /** Conditions on its rows. `window.start` and `window.end` name the dashboard window's edges, as the component is
+      handed them (`booked_at < window.end`): all time's earliest and latest day while no window is picked. */
   query?: string;
   /** The date column the dashboard's time window narrows this figure by. */
   over?: string;

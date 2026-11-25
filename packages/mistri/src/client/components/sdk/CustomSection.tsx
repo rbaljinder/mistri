@@ -31,7 +31,7 @@ import { pageLoadKey, pageLoadPlace } from './hooks.js';
 import { rowsByPath } from './rows.js';
 import { mistriSurfaceSeam } from './seam.js';
 import { batchedBreakdown } from '@mistriwork/kit/client/breakdownBatch.js';
-import { breakdownText, measureText } from '@mistriwork/engine/shared/dashboardAsks.js';
+import { boundWindowEdges, breakdownText, measureText } from '@mistriwork/engine/shared/dashboardAsks.js';
 import { windowBounds } from '@mistriwork/engine/shared/queryDates.js';
 import { groupsAsked } from '@mistriwork/engine/shared/appComponents.js';
 import { totalFigure, totalGroups, type TotalGroup, type TotalValue } from '../../../shared/customTotals.js';
@@ -287,11 +287,18 @@ function DashReads({
   refresh?: number;
   aside: boolean;
 }) {
+  /* A read's query may name the window's edges (`starts_at >= window.start`): bound to the reader's window as the
+     component is handed it, or all time's (dashboardAsks.ts). */
+  const edges = useMemo(() => (windowNow ? windowBounds(windowNow, appNow()) : undefined), [windowNow]);
+  const edged = (query: string | undefined) => boundWindowEdges(query, edges);
   const asked = useMemo(
     () =>
       Object.entries(section.reads ?? {}).map(([name, read]) => {
         const narrowed = picked(
-          windowed({ kind: 'rows', table: read.table, query: read.query, over: read.over, windowBase: read.windowBase }, windowNow),
+          windowed(
+            { kind: 'rows', table: read.table, query: edged(read.query), over: read.over, windowBase: edged(read.windowBase) },
+            windowNow,
+          ),
           picks,
         );
         return {
@@ -302,7 +309,7 @@ function DashReads({
           limit: read.limit ?? 20,
         };
       }),
-    [section.reads, windowNow, picks],
+    [section.reads, windowNow, picks, edges],
   );
   /* Each total is a metric or a breakdown in all but drawing: the window and the picks narrow it as they narrow one,
      and it is asked with the dashboard's other figures in one request (breakdownBatch.ts). */
@@ -310,7 +317,10 @@ function DashReads({
     () =>
       Object.entries(section.aggregates ?? {}).map(([name, total]) => {
         const narrowed = picked(
-          windowed({ kind: 'metric', table: total.table, query: total.query, over: total.over, windowBase: total.windowBase }, windowNow),
+          windowed(
+            { kind: 'metric', table: total.table, query: edged(total.query), over: total.over, windowBase: edged(total.windowBase) },
+            windowNow,
+          ),
           picks,
         );
         const grouped = total.by !== undefined;
@@ -319,7 +329,7 @@ function DashReads({
           : measureText({ table: total.table, measure: total.measure }, narrowed.query);
         return { name, text, grouped };
       }),
-    [section.aggregates, windowNow, picks],
+    [section.aggregates, windowNow, picks, edges],
   );
   const totals = useQuery({
     queryKey: ['dash-custom', 'totals', section.component?.id, askedTotals],

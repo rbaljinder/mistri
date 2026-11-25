@@ -7,7 +7,8 @@
  * builds a first page's from them too (server/http/firstPaintRooms.ts), so
  * the answers it carries are for the requests the sections then make.
  */
-import { andQuery } from './query.js';
+import { andQuery, quoteValue } from './query.js';
+import { maskQuoted } from './maskQuoted.js';
 import { labelColumn, primaryKey, type ForeignKey, type TableMeta } from './schema.js';
 import { listPresentationColumns } from './appListColumns.js';
 import type { AppListPresentation } from './listPresentations.js';
@@ -101,6 +102,34 @@ export function windowed<S extends AskedSection>(section: S, windowNow: string |
       section.comparePeriod && m ? andQuery(base, `${section.over} = previous ${m[1]} ${m[2]}${m[1] === '1' ? '' : 's'}`) : undefined;
   }
   return out;
+}
+
+/** Where a declared read's query names the dashboard window's edges (`starts_at >= window.start`): never in a quote. */
+const WINDOW_EDGE = /(?<![\w.])window\.(start|end)(?![\w.])/g;
+/** The edges a read is bound to while the dashboard reads all time: the earliest day and the latest, so a condition on
+    them holds of every dated row and narrows nothing the window does not. */
+const ALL_TIME_EDGES = { start: '0001-01-01', end: '9999-12-31' } as const;
+
+/** Whether a query names the window's edges (`window.start`, `window.end`). */
+const namesWindowEdges = (query: string | undefined): boolean =>
+  query !== undefined && new RegExp(WINDOW_EDGE.source).test(maskQuoted(query));
+
+/**
+ * A custom section's declared read with the reader's window's edges where its query names them: `window.start` the
+ * first moment in it, `window.end` the first after it, as the section's component is handed them (`window`), in the
+ * query grammar's quoting. With no window picked, all time's (ALL_TIME_EDGES). A query that names neither is as it was.
+ */
+export function boundWindowEdges(query: string | undefined, edges: { start: string; end: string } | undefined): string | undefined {
+  if (!namesWindowEdges(query)) return query;
+  const bounds = edges ?? ALL_TIME_EDGES;
+  const masked = maskQuoted(query!);
+  let out = '',
+    at = 0;
+  for (const found of masked.matchAll(WINDOW_EDGE)) {
+    out += query!.slice(at, found.index) + quoteValue(found[1] === 'start' ? bounds.start : bounds.end);
+    at = found.index! + found[0].length;
+  }
+  return out + query!.slice(at);
 }
 
 /** The period a section with windows of its own is over: the reader's pick, else its first. */
