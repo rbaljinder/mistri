@@ -61,8 +61,9 @@ const IMMUTABLE = 'public, max-age=31536000, immutable';
    Measured cold: 288.1 KB the staff sign-in, 509 KB Forecourt's list (504.6 KB its landing), 621.2 KB Tick's list;
    the targets sit about 3% above. rc.84's one-call tenant entry (enter carries the boot and who-am-I, one rule for
    which tenant is entered) lives in the guest chunk a sign-in fetches, and took the staff sign-in to 297.1 KB; it
-   moved about 0.5% above. */
-const FIRST_PAINT_WIRE_KB = { public: 299, app: 525, workshop: 640 };
+   moved about 0.5% above. rc.89's built-in Gallery look and public-site primitives (Eyebrow, Figure, MediaCard) took
+   Forecourt's public landing to 525.2 KB; app moved about 0.5% above. */
+const FIRST_PAINT_WIRE_KB = { public: 299, app: 528, workshop: 640 };
 const NEVER = {
   public: ['/assets/shell', '/assets/chrome', '/assets/tenant'],
   app: ['/assets/tenant', '/assets/public'],

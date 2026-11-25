@@ -292,7 +292,7 @@ drawn by, and `check --design --fix` deletes a rule that restates one.
 ## Custom pages: compose primitives, write little or no CSS
 
 A free-form page (`pages/<path>.page.tsx`) should look native to the App's active look — light, dark, and phone —
-without hand-rolling CSS cards, forms, or grids. Start from [foundry](../../../examples/apps/foundry/) (`preset: 'gallery'`,
+without hand-rolling CSS cards, forms, or grids. Start from [foundry/app.ts](../../../examples/apps/foundry/app.ts) (`preset: 'gallery'`,
 0 lines of custom CSS) and compose from `@mistriwork/mistri/page`:
 
 | Need | Primitive from `@mistriwork/mistri/page` |
@@ -307,7 +307,8 @@ without hand-rolling CSS cards, forms, or grids. Start from [foundry](../../../e
 | Form controls (never raw `<input>`/`<select>`) | `TextField`, `TextArea`, `Select`, `Dropdown`, `Checkbox`, `Switch`, `ChoiceCards` |
 
 When a tiny layout tweak truly needs CSS, use only look tokens — never hex colors, pixel font scales, or custom box shadows:
-`--ground`, `--surface`, `--raised`, `--ink`, `--ink-muted`, `--accent`, `--accent-ink`, `--on-accent`, `--line`,
-`--line-strong`, `--radius`, `--radius-lg`, `--pill-radius`, `--shadow-card`, `--heading-font`, `--space-1`..`--space-8`.
+`var(--ground)`, `var(--surface)`, `var(--raised)`, `var(--ink)`, `var(--ink-muted)`, `var(--accent)`, `var(--accent-ink)`,
+`var(--on-accent)`, `var(--line)`, `var(--line-strong)`, `var(--radius)`, `var(--radius-lg)`, `var(--pill-radius)`,
+`var(--shadow-card)`, `var(--heading-font)`, and `var(--space-1)`..`var(--space-8)`.
 Verify with `npx @mistriwork/mistri check --app . --warnings` until there are 0 warnings.
 

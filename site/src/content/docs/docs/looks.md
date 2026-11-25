@@ -83,51 +83,51 @@ Lintel's leases in each look. Every component in every look is in the [component
 
 Each part's treatment in each look, as `mistri theme show <look>` prints it. A theme that `extends` a look starts from its column; `mistri theme show . --diff lumen` says what yours changes.
 
-| Part | Workshop | Lumen | Mono | Sage | Ledger | Atelier | Graphite | Bloom |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `nav` | `slot` | `pill` | `inverted` | `quiet` | `wash` | `quiet` | `slot` | `float` |
-| `bar` | `ruled` | `airy` | `ruled` | `soft` | `dark` | `plain` | `dark` | `soft` |
-| `tabs` | `rule` | `underline` | `inverted` | `tint` | `rule` | `rule` | `lifted` | `pill` |
-| `windows` | `segmented` | `lifted` | `segmented` | `tint` | `segmented` | `tint` | `segmented` | `lifted` |
-| `stat` | `divided` | `icon` | `framed` | `panel` | `divided` | `plain` | `panel` | `bento` |
-| `section` | `open` | `card` | `open` | `panel` | `panel` | `open` | `card` | `panel` |
-| `fields` | `open` | `card` | `open` | `panel` | `panel` | `rail` | `card` | `panel` |
-| `table` | `open` | `card` | `open` | `hairline` | `banded` | `open` | `card` | `rows` |
-| `status` | `dot` | `pill-dot` | `dot` | `pill` | `quiet` | `quiet` | `pill-dot` | `pill` |
-| `board` | `ruled` | `strip` | `ruled` | `soft` | `ruled` | `ruled` | `strip` | `soft` |
-| `chart` | `plain` | `gradient` | `plain` | `wash` | `plain` | `line` | `gradient` | `wash` |
-| `buttons` | `keyed` | `raised` | `accent` | `accent` | `accent` | `accent` | `accent` | `accent` |
-| `links` | `plain` | `plain` | `underline` | `plain` | `plain` | `name` | `plain` | `plain` |
-| `rules` | `hairline` | `hairline` | `ink` | `hairline` | `double` | `ink` | `hairline` | `hairline` |
-| `avatar` | `plain` | `round` | `plain` | `large` | `plain` | `plain` | `plain` | `round` |
-| `workflow` | `markers` | `markers` | `markers` | `markers` | `markers` | `markers` | `pills` | `segments` |
-| `banner` | `plain` | `plain` | `tint` | `tint` | `plain` | `plain` | `plain` | `gradient` |
-| `steps` | `strip` | `strip` | `flat` | `flat` | `strip` | `strip` | `strip` | `tinted` |
-| `lanes` | `tag` | `tint` | `tint` | `tint` | `plain` | `plain` | `tag` | `tint` |
-| `header` | `band` | `plain` | `plain` | `band` | `plain` | `plain` | `plain` | `plain` |
-| `pane` | `inset` | `inset` | `inset` | `inset` | `inset` | `inset` | `inset` | `inset` |
-| `filters` | `solid` | `solid` | `solid` | `solid` | `solid` | `quiet` | `solid` | `solid` |
-| `required` | `star` | `star` | `star` | `star` | `star` | `optional-word` | `star` | `star` |
-| `formStep` | `plain` | `plain` | `plain` | `plain` | `plain` | `ruled` | `ruled` | `plain` |
-| `actionBar` | `plain` | `plain` | `plain` | `plain` | `plain` | `plain` | `plain` | `raised` |
-| `choice` | `tint` | `tint` | `tint` | `tint` | `tint` | `tint` | `tint` | `tint` |
+| Part | Workshop | Lumen | Mono | Sage | Ledger | Atelier | Graphite | Bloom | Gallery |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `nav` | `slot` | `pill` | `inverted` | `quiet` | `wash` | `quiet` | `slot` | `float` | `quiet` |
+| `bar` | `ruled` | `airy` | `ruled` | `soft` | `dark` | `plain` | `dark` | `soft` | `plain` |
+| `tabs` | `rule` | `underline` | `inverted` | `tint` | `rule` | `rule` | `lifted` | `pill` | `rule` |
+| `windows` | `segmented` | `lifted` | `segmented` | `tint` | `segmented` | `tint` | `segmented` | `lifted` | `lifted` |
+| `stat` | `divided` | `icon` | `framed` | `panel` | `divided` | `plain` | `panel` | `bento` | `plain` |
+| `section` | `open` | `card` | `open` | `panel` | `panel` | `open` | `card` | `panel` | `panel` |
+| `fields` | `open` | `card` | `open` | `panel` | `panel` | `rail` | `card` | `panel` | `panel` |
+| `table` | `open` | `card` | `open` | `hairline` | `banded` | `open` | `card` | `rows` | `open` |
+| `status` | `dot` | `pill-dot` | `dot` | `pill` | `quiet` | `quiet` | `pill-dot` | `pill` | `pill` |
+| `board` | `ruled` | `strip` | `ruled` | `soft` | `ruled` | `ruled` | `strip` | `soft` | `ruled` |
+| `chart` | `plain` | `gradient` | `plain` | `wash` | `plain` | `line` | `gradient` | `wash` | `line` |
+| `buttons` | `keyed` | `raised` | `accent` | `accent` | `accent` | `accent` | `accent` | `accent` | `accent` |
+| `links` | `plain` | `plain` | `underline` | `plain` | `plain` | `name` | `plain` | `plain` | `name` |
+| `rules` | `hairline` | `hairline` | `ink` | `hairline` | `double` | `ink` | `hairline` | `hairline` | `hairline` |
+| `avatar` | `plain` | `round` | `plain` | `large` | `plain` | `plain` | `plain` | `round` | `plain` |
+| `workflow` | `markers` | `markers` | `markers` | `markers` | `markers` | `markers` | `pills` | `segments` | `markers` |
+| `banner` | `plain` | `plain` | `tint` | `tint` | `plain` | `plain` | `plain` | `gradient` | `plain` |
+| `steps` | `strip` | `strip` | `flat` | `flat` | `strip` | `strip` | `strip` | `tinted` | `tinted` |
+| `lanes` | `tag` | `tint` | `tint` | `tint` | `plain` | `plain` | `tag` | `tint` | `plain` |
+| `header` | `band` | `plain` | `plain` | `band` | `plain` | `plain` | `plain` | `plain` | `plain` |
+| `pane` | `inset` | `inset` | `inset` | `inset` | `inset` | `inset` | `inset` | `inset` | `inset` |
+| `filters` | `solid` | `solid` | `solid` | `solid` | `solid` | `quiet` | `solid` | `solid` | `quiet` |
+| `required` | `star` | `star` | `star` | `star` | `star` | `optional-word` | `star` | `star` | `optional-word` |
+| `formStep` | `plain` | `plain` | `plain` | `plain` | `plain` | `ruled` | `ruled` | `plain` | `ruled` |
+| `actionBar` | `plain` | `plain` | `plain` | `plain` | `plain` | `plain` | `plain` | `raised` | `plain` |
+| `choice` | `tint` | `tint` | `tint` | `tint` | `tint` | `tint` | `tint` | `tint` | `tint` |
 
 ## Type, look by look
 
 The type roles each look says (`type.roles`, [Theme recipes](/docs/theme-recipes/#type)); a role it leaves out is drawn as the platform draws it.
 
-| Role | Workshop | Lumen | Mono | Sage | Ledger | Atelier | Graphite | Bloom |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `title` | condensed, 28px, 700 | 22px, 600, -0.022em | 30px, 700 | 600 | 26px, 600, -0.01em | serif, 30px, 400, -0.01em | 600, -0.015em | 30px, 700, -0.02em |
-| `heading` | condensed, 23px, 700 | 19px, 600, -0.018em | | | 20px, 600, -0.018em | serif, 26px, 400, -0.01em | | |
-| `section` | 15px, 600 | 14px, 600, -0.01em | | | `data`, 12px, 500, `upper` | 12px, 600, `upper`, 0.09em | `mono`, 12px, 600, `upper` | 16px, 600, -0.01em |
-| `label` | 12px, 600 | | `mono`, `upper` | | `data`, 500, `upper` | `small-caps`, 0.05em | `mono`, 11px, 500, `upper` | |
-| `figure` | condensed, 38px, 700, `tnum` | 24px, 600, -0.025em, `tnum` | `mono`, 700 | | `data`, 30px, 500, `tnum` | serif, 34px, 400, -0.01em, `lnum` | `mono`, 500, `tnum` | 32px, 700, -0.03em |
-| `nav` | 500 | | `mono`, `upper` | | 400 | | | |
+| Role | Workshop | Lumen | Mono | Sage | Ledger | Atelier | Graphite | Bloom | Gallery |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `title` | condensed, 28px, 700 | 22px, 600, -0.022em | 30px, 700 | 600 | 26px, 600, -0.01em | serif, 30px, 400, -0.01em | 600, -0.015em | 30px, 700, -0.02em | serif, 34px, 500, -0.02em |
+| `heading` | condensed, 23px, 700 | 19px, 600, -0.018em | | | 20px, 600, -0.018em | serif, 26px, 400, -0.01em | | | serif, 26px, 500, -0.015em |
+| `section` | 15px, 600 | 14px, 600, -0.01em | | | `data`, 12px, 500, `upper` | 12px, 600, `upper`, 0.09em | `mono`, 12px, 600, `upper` | 16px, 600, -0.01em | 12px, 600, `upper`, 0.08em |
+| `label` | 12px, 600 | | `mono`, `upper` | | `data`, 500, `upper` | `small-caps`, 0.05em | `mono`, 11px, 500, `upper` | | |
+| `figure` | condensed, 38px, 700, `tnum` | 24px, 600, -0.025em, `tnum` | `mono`, 700 | | `data`, 30px, 500, `tnum` | serif, 34px, 400, -0.01em, `lnum` | `mono`, 500, `tnum` | 32px, 700, -0.03em | serif, 34px, 500, -0.015em, `lnum` |
+| `nav` | 500 | | `mono`, `upper` | | 400 | | | | |
 
 ## When to use it, and when not
 
-- Use a built-in look (`preset`) for almost every App: Workshop for operations and field work, Lumen for a polished workspace product, Mono for dense daily operations, Sage for a soft workspace, Ledger for books, figures and records kept in ruled columns, Atelier for what is read more than it is worked (a client's portal, a report), Graphite for a dense console people are in all day, Bloom for a friendly product people meet now and then.
+- Use a built-in look (`preset`) for almost every App: Workshop for operations and field work, Lumen for a polished workspace product, Mono for dense daily operations, Sage for a soft workspace, Ledger for books, figures and records kept in ruled columns, Atelier for what is read more than it is worked (a client's portal, a report), Graphite for a dense console people are in all day, Bloom for a friendly product people meet now and then, Gallery for editorial public sites, curated catalogs and storefronts.
 - Use `accent`, `radius` and `font` to carry a brand's color into a built-in look without leaving it.
 - Use [`defineTheme`](/docs/themes/) when a brand needs its own grounds and inks or another look's treatments; [Themes and branding](/docs/themes/#three-themes-to-start-from) has three to copy.
 

@@ -363,6 +363,13 @@ for (const id of [...THEME_PRESETS.map((theme) => theme.id), 'meridian'])
         expect(shape.rule).toBeLessThan(1.5);
         expect(shape.boxedNeutral).toEqual([]);
         expect(shape.boxedTones.length).toBe(shape.meaningfulTones);
+      } else if (id === 'gallery') {
+        /* Gallery's: open table on warm linen paper with a hairline head rule and meaningful tinted status pills. */
+        expect(shape.box).toEqual({ border: '0px', shadow: 'none', fill: 'rgba(0, 0, 0, 0)' });
+        expect(shape.rule).toBeGreaterThan(0.5);
+        expect(shape.rule).toBeLessThan(1.5);
+        expect(shape.boxedNeutral).toEqual([]);
+        expect(shape.boxedTones.length).toBe(shape.meaningfulTones);
       } else {
         expect(shape.box).toEqual({ border: '0px', shadow: 'none', fill: 'rgba(0, 0, 0, 0)' });
         // 2px, snapped to whole device pixels under the density zoom.
