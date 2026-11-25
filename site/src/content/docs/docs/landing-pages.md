@@ -66,6 +66,16 @@ With `auth.public`, public pages are served ready to read; there is nothing to c
 - **Who may keep a picture.** A picture read by nobody in particular (an App with no sign-in, or a signed-out visitor to a resource under `auth.public`, without a row policy) is sent `public, max-age=86400, stale-while-revalidate=604800`, and `public, max-age=31536000, immutable` when its address names its bytes (`&h=`, which a public page writes where the file resource keeps a `thumbnail` and a `hash`). A picture read by a person, or under a row policy, is always `private, no-cache`.
 - **No shift when it arrives.** A public picture is made at upload in AVIF and WebP at 320, 480, 640, 960 and 1280 pixels, with its average color and proportions kept; the server's drawing of a public page sets `width`, `height` and a background color from them, and `…&meta=1` returns them as JSON.
 
+## Custom public sites (`ui.site`, `gallery`, and `open: { page }`)
+
+When an editorial site, curated catalog, booking portal, or storefront needs custom public pages (`pages/*.page.tsx` with `public: true` and `head: false`) alongside a staff desk in one App, wire four pieces in `app.ts` and compose pages from Mistri primitives without writing custom CSS (see [Foundry Market](/docs/examples/#foundry)):
+
+- **Separate site shell (`ui.site`)**: declare `links`, `search` (`{ view, param?, placeholder? }`), `cta`, `signIn: 'header' | 'footer' | false`, and optional `footer` (`{ text?, links? }`). Signed-out visitors wear the site header and a centered `1220px` editorial page container, while signed-in staff keep the desk `nav`.
+- **Editorial base look (`preset: 'gallery'`)**: warm linen ground, crisp lifted white tiles, book-serif display titles and figures, rounded controls, and accent-filled primary calls to action — light and dark.
+- **Cover photos & custom detail routing**: declare `photos: { from, whose, sort?, aspect? }` on a resource so `useRows`, `useRecord`, cards, and embeds hydrate `row.cover` automatically; set `open: { page: 'item', param: 'id' }` on cards, landing embeds, and `related` lists so clicks, canonical URLs, Open Graph tags, and `/sitemap.xml` all open your custom detail page while staff keep the built-in record page.
+- **First-paint SSR for public custom pages**: signed-out `definePage({ public: true })` routes plan first-paint reads (`useLoader`, `useRows` with hydrated `row.cover`, `useRecord`, `useBreakdown`), preload the page module and styles, and stream pre-rendered HTML with `<SiteHeader>` and `<AppFooter>` visible immediately on frame 0.
+- **Zero-CSS primitive composition**: build front doors, faceted browse pages, and detail screens from `MediaCard`, `Eyebrow`, `Figure`, `Heading` (`level={1}` / `size="display"`), `ButtonLink`, `Beside`, `Cluster`, `Stack`, `Row`, `Card`, `DescriptionList`, `Photos` (`aspect`), `ListFilters`, `Value` (`row`), and `CommandButton` from `@mistriwork/mistri/page`.
+
 ## Common mistakes
 
 - "A landing view requires `auth`" → add `auth` with a provider; an App without sign-in has no signed-out visitor to greet.

@@ -1,9 +1,9 @@
 ---
 title: Sample Apps
-description: Three runnable sample Apps — Tick in one file, Lintel's property operations, Ladle's general path — what each shows, how to start it, where to look.
+description: Four runnable sample Apps — Tick in one file, Lintel's property operations, Ladle's general path, and Foundry Market's zero-CSS public site — what each shows, how to start it, where to look.
 ---
 
-Three runnable sample Apps — Tick in one file, Lintel's property operations, Ladle's general path — what each shows, how to start it, where to look.
+Four runnable sample Apps — Tick in one file, Lintel's property operations, Ladle's general path, and Foundry Market's zero-CSS public site — what each shows, how to start it, where to look.
 
 ```sh
 mkdir try && cd try && npm init -y && npm pkg set type=module
@@ -17,7 +17,9 @@ The samples ship in the npm package, seeds included; copy one out of
 `node_modules` first, because Node does not run TypeScript from there. Tick is
 a whole App in a single file. Lintel is the flagship, an App in modules with
 its own test suite. Ladle is the general path: a host's own React site and
-server with the App inside. All run on SQLite with synthetic data, Lintel on
+server with the App inside. Foundry Market is an editorial public storefront
+and staff curator desk in one App using `preset: 'gallery'` and Mistri
+primitives with zero custom CSS. All run on SQLite with synthetic data, Lintel on
 PostgreSQL too, and each README holds the full recipe.
 
 ## Find a capability
@@ -38,6 +40,7 @@ PostgreSQL too, and each README holds the full recipe.
 | An App's own tests in layers, with a clock and a browser | [Lintel](#lintel): `tests/` |
 | PostgreSQL seeds | [Lintel](#lintel) |
 | A free-form page beside declared lists, the handler in a server of your own, the App in a React app of your own | [Ladle](#ladle): `pages/`, `host/` |
+| Dedicated public site shell (`ui.site`), `preset: 'gallery'`, zero-CSS custom pages (`MediaCard`, `Photos`, `ListFilters`), `resources.*.photos` (`row.cover`), `open: { page }`, and atomic `db.<table>.claim()` | [Foundry](#foundry): `app.ts`, `commands.ts`, `pages/` |
 
 The repository catalog (`examples/apps/README.md`)
 names the file that shows each capability. What none of them shows (a CRM
@@ -159,6 +162,30 @@ host's dependencies (`npm install vite @vitejs/plugin-react react react-dom tsx`
 and run `npx tsx ladle/host/server.ts ./ladle.db.json 4620`: `/` is the public
 schedule, `/staff` the App. The README (`examples/apps/ladle/README.md`) has the
 source-checkout recipe.
+
+## Foundry
+
+A curated vintage marketplace (cameras, mid-century furniture, analog hi-fi, and
+lighting) with a public editorial storefront and a signed-in curator desk in one
+App. It wears `preset: 'gallery'` and composes all three public custom pages
+(`pages/door.page.tsx`, `pages/browse.page.tsx`, `pages/item.page.tsx`) from
+Mistri primitives (`MediaCard`, `ButtonLink`, `Eyebrow`, `Figure`, `Heading`,
+`Beside`, `Cluster`, `Card`, `DescriptionList`, `TextField`, `Photos`,
+`ListFilters`, `Value`, `CommandButton`) with zero lines of custom CSS and zero
+`mistri check --warnings` findings.
+
+```sh
+export MISTRI_FORM_KEY="foundry-local-form-key"
+cp -r node_modules/@mistriwork/mistri/examples/apps/foundry ./foundry
+node node_modules/@mistriwork/mistri/examples/databases/foundry/seed.mjs ./foundry.db
+npx @mistriwork/mistri --config ./foundry.db.json --app foundry --port 4791
+```
+
+Open `/` for the server-rendered editorial door, `/browse` for faceted filtering
+with live counts, `/item?id=1` for the 3:2 photo gallery and atomic 48-hour hold
+(`db.listing.claim()`), `/catalog` for built-in cards routing into `/item` via
+`open: { page: 'item', param: 'id' }`, and `/sign-in` for the curator desk. The
+README (`examples/apps/foundry/README.md`) has the source-checkout recipe.
 
 ## Related
 

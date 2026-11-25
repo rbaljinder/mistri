@@ -27,6 +27,8 @@
     "examples/apps/ladle/host/*.{html,css}",
     "examples/apps/*/fonts/*.{woff2,txt}",
     "examples/databases/ladle/seed.mjs",
+    "examples/databases/foundry/seed.mjs",
+    "examples/databases/foundry/photos/*.jpg",
     "README.md",
     "CHANGELOG.md",
     "mark.svg",
