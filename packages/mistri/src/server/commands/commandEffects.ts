@@ -314,6 +314,52 @@ export function channelBody(value: unknown): EffectPayload {
   };
 }
 
+/**
+ * Withdraw any held message on `channel` carrying `reference`, after the
+ * command commits (a cancelled booking, an order paid before morning); `null`
+ * or `undefined` withdraws nothing. Already-sent messages and another tenant's
+ * messages are untouched, and each withdrawn message settles as `suppressed`
+ * with reason `'withdrawn'`.
+ */
+export function withdraw<Output>(
+  channel: string,
+  project: (output: BusinessEventOutput<Output>) => string | { readonly reference: string } | null | undefined,
+): CommandEffect<Output> {
+  if (typeof channel !== 'string' || !CHANNEL_NAME.test(channel) || channel === 'email')
+    throw new TypeError("withdraw() names an integration's channel in lowercase letters, digits and hyphens: withdraw('sms', …).");
+  if (typeof project !== 'function' || isProxy(project))
+    throw new TypeError('withdraw() takes a function from the output to a reference, or to null to withdraw nothing.');
+  const destination = `${CHANNEL_DESTINATION_PREFIX}${channel}`;
+  const effect = Object.freeze({ destination });
+  declared.set(effect, {
+    destination,
+    project: (output) => {
+      const target: unknown = Reflect.apply(project, undefined, [output]);
+      if (target === null || target === undefined) return null;
+      return channelWithdrawBody(target);
+    },
+    skips: true,
+  });
+  return effect as CommandEffect<Output>;
+}
+
+/** A channel withdrawal as the event records it: checked when the command projects it, again when it is delivered. */
+export function channelWithdrawBody(value: unknown): EffectPayload {
+  const raw =
+    typeof value === 'string'
+      ? value
+      : value && typeof value === 'object' && !Array.isArray(value) && !isProxy(value)
+        ? Object.keys(value).length === 1 && Object.hasOwn(value, 'withdraw')
+          ? (value as { withdraw: unknown }).withdraw
+          : Object.keys(value).length === 1 && Object.hasOwn(value, 'reference')
+            ? (value as { reference: unknown }).reference
+            : undefined
+        : undefined;
+  if (typeof raw !== 'string' || !raw.trim() || raw.length > 200)
+    throw new TypeError("A channel withdrawal's reference is the App's own name for the message, from 1 to 200 characters.");
+  return { withdraw: raw.trim() };
+}
+
 /* A header a call may add: RFC 9110's token and a visible value, as the webhook's
    own are. The request owns the rest (webhooks.ts); the Idempotency-Key is the one a call may replace. */
 const HEADER_NAME = /^[A-Za-z0-9!#$%&'*+.^_`|~-]{1,64}$/;

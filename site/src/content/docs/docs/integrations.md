@@ -159,7 +159,7 @@ integrations: { use: [fakepay()], settled: { runAs: 'payments', command: 'record
 It runs as that service principal, in the message's tenant, with
 `{ reference, channel, state, message }` and, where there is one, `reason` and
 `providerId`: `state` is `held` (quiet hours), `sent` (with the provider's id),
-`suppressed` (`opted_out`, `no_consent`) or `failed` (the provider's reason).
+`suppressed` (`opted_out`, `no_consent`, `withdrawn`) or `failed` (the provider's reason).
 `message` is the key the provider deduped the send by. The command takes those
 of the fields it declares and no others, names no record (`targets: 'none'`)
 and finds the App's row itself by the reference
@@ -169,6 +169,14 @@ and then sent before the loop comes round is told once, as sent. A message
 without a reference is never told. A refusal the command makes is said to the
 operator and not offered again; one that may pass is asked again on the next
 loop.
+
+A later command cancels a held message by its `reference` with `withdraw`:
+`effects: { cancelText: withdraw('sms', (visit) => visit.id) }` (returning
+`null` withdraws nothing). It rides the same channel delivery as `send`, so it
+commits with the command and runs after any `send` committed before it; a
+message still held for quiet hours in that tenant becomes `suppressed`
+(`withdrawn`) and never goes out, while one already sent or belonging to
+another tenant is untouched.
 
 A `notify` rule tells on a channel too with `send`: the title is the message,
 queued in the write's own transaction and sent after it commits, under the

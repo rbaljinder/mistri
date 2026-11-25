@@ -71,7 +71,7 @@ export type { BusinessEvent, BusinessEventProjection } from './commands/business
 export { post } from './commands/commandEffects.js';
 export type { CommandEffect, EffectPayload, PostOptions } from './commands/commandEffects.js';
 /* A message on an integration's channel, after commit: consent, opt-out and quiet hours are core's. */
-export { send } from './commands/commandEffects.js';
+export { send, withdraw } from './commands/commandEffects.js';
 export type { ChannelMessageProjection } from './commands/commandEffects.js';
 export type { LookupSources, LookupTable } from './commands/commandLookup.js';
 /* The one-time steps a deployment runs on its stopped database — migrating the command journal, the

@@ -12,7 +12,11 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { migrateSqliteCommandJournal } from '../packages/mistri/src/adapters/commands/commandJournal.js';
-import { openIntegrationStore, provisionSqliteIntegrations } from '../packages/mistri/src/adapters/integrations/integrationStore.js';
+import {
+  openIntegrationStore,
+  provisionPostgresIntegrations,
+  provisionSqliteIntegrations,
+} from '../packages/mistri/src/adapters/integrations/integrationStore.js';
 import { loadAppRuntimeResources } from '../packages/mistri/src/server/app/appRuntimeResources.js';
 import { bindBusinessCommands } from '../packages/mistri/src/server/commands/businessCommandAccess.js';
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
@@ -229,3 +233,182 @@ test('check holds the settled command to what a settle sends, and the declaratio
   assert.throws(() => capture({ use: [fakepay()], settled: { runAs: 'nobody', command: 'recordText' } }), /principals do not declare/);
   assert.throws(() => capture({ use: [fakepay()], settled: { runAs: 'texts', command: 'recordText', extra: 1 } }), /has no "extra"/);
 });
+
+test('withdraw cancels a held message by reference in its own tenant, settles it as withdrawn, and leaves sent or other-tenant messages alone', async (t) => {
+  const { withdraw, getCommandEffects } = await import('../packages/mistri/src/server/commands/businessCommands.js').then(async (mod) => ({
+    getCommandEffects: mod.getCommandEffects,
+    withdraw: (await import('../packages/mistri/src/server/commands/commandEffects.js')).withdraw,
+  }));
+  resetProvider();
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-channel-withdraw-'));
+  const path = join(directory, 'shop.db');
+  const db = new DatabaseSync(path);
+  const registry = new Registry();
+  t.after(async () => {
+    await registry.closeAll();
+    db.close();
+    rmSync(directory, { recursive: true, force: true });
+  });
+  db.exec(`CREATE TABLE text_log (id INTEGER PRIMARY KEY, reference TEXT NOT NULL, state TEXT NOT NULL, reason TEXT, provider_id TEXT);`);
+  migrateSqliteCommandJournal(path);
+  provisionSqliteIntegrations(path);
+  registry.add({ id: 'shop-db', name: 'Shop', url: path, writable: true, source: 'config' });
+  const app = parseAppConfig(
+    {
+      id: 'shop',
+      name: 'Shop',
+      home: 'texts',
+      sources: { shop: { connection: 'shop-db', default: true } },
+      resources: { text_log: { access: 'write' } },
+      auth: { roles: { texts: { service: true, read: ['text_log'], commands: ['recordText'] } } },
+      views: { texts: { kind: 'list', from: 'text_log' } },
+    },
+    'withdraw fixture',
+  );
+  const cancelVisit = defineCommand({
+    source: 'shop',
+    target: 'text_log',
+    targets: 'none',
+    input: { id: { type: 'text', optional: true } },
+    output: { parse: (value: unknown) => value as { id?: string } },
+    effects: { cancelText: withdraw('sms', (out: { id?: string }) => out.id ?? null) },
+    handle: (_ctx, input) => ({ ...(input.id ? { id: input.id } : {}) }),
+  });
+  const captured = getCommandEffects(cancelVisit)!;
+  assert.equal(captured[0].destination, 'channel:sms');
+  assert.throws(() => withdraw('email', () => 'x'), /withdraw\(\) names an integration's channel/);
+
+  const commands = defineCommands({ recordText });
+  const resources = await loadAppRuntimeResources(registry, app, 'shop-db');
+  const binding = bindBusinessCommands({ app, registry: commands, resources, writableConnection: (id) => id === 'shop-db' });
+
+  const declared = capture({
+    use: [fakepay()],
+    settled: { runAs: 'texts', command: 'recordText' },
+    quietHours: { from: '21:00', to: '08:00', timezone: 'America/New_York' },
+  });
+  assert.deepEqual(integrationCommandProblems(declared, defineCommands({ recordText, cancelVisit })), []);
+  const clock = { now: Date.UTC(2026, 0, 15, 2, 30) }; // 21:30 in New York: quiet.
+  const store = await openIntegrationStore({ sqlite: path });
+  t.after(() => store.close());
+  const runtime = createIntegrationRuntime({ appId: 'shop', declared, store, now: () => clock.now });
+  for (const tenant of ['clinic-a', 'clinic-b']) {
+    await saveIntegrationSettings(runtime, tenant, 'owner', {
+      integration: 'fakepay',
+      secrets: { apiKey: `sk_${tenant}`, webhookSecret: 'whsec_shop_0123456789abcdef' },
+    });
+  }
+  const sender = channelSender(runtime, 'sms');
+  const transport = sender.transport(new Set(['notify\neffect.text', 'cancelVisit\neffect.cancelText']));
+  let receipt = 0;
+  const publish = (tenantId: string, commandId: string, effectName: string, body: Record<string, unknown>) =>
+    transport({
+      envelope: {
+        name: `effect.${effectName}`,
+        commandId,
+        tenantId,
+        receiptId: `receipt-${++receipt}`,
+        payloadJson: JSON.stringify({ body }),
+      },
+      signal: AbortSignal.timeout(5_000),
+    } as unknown as EventPublication);
+  const reporter = settledReporter({
+    runtime,
+    version: 1,
+    principals,
+    bind: async () => ({ binding, release: () => {} }),
+    warn: (message) => assert.fail(message),
+  })!;
+  const log = () =>
+    (db.prepare('SELECT reference, state, reason, provider_id FROM text_log ORDER BY id').all() as Array<Record<string, unknown>>).map(
+      (row) => ({ ...row }),
+    );
+
+  // Two clinics each hold a reminder with the same reference, and a third message is sent at once (Tokyo daytime).
+  await publish('clinic-a', 'notify', 'text', { to: '+15550101', text: 'Visit tomorrow.', consent: true, reference: 'visit-9' });
+  await publish('clinic-b', 'notify', 'text', { to: '+15550102', text: 'Visit tomorrow.', consent: true, reference: 'visit-9' });
+  await publish('clinic-a', 'notify', 'text', {
+    to: '+15550103',
+    text: 'Already sent.',
+    consent: true,
+    timezone: 'Asia/Tokyo',
+    reference: 'visit-sent',
+  });
+  assert.equal(await reporter.report(), true);
+  assert.equal(provider.texts.length, 1);
+
+  // Clinic A cancels `visit-9` and also tries to withdraw `visit-sent` (already sent): only Clinic A's held `visit-9` is withdrawn.
+  clock.now += 1_000;
+  assert.equal(await publish('clinic-a', 'cancelVisit', 'cancelText', { withdraw: 'visit-9' }), 'accepted');
+  assert.equal(await publish('clinic-a', 'cancelVisit', 'cancelText', { withdraw: 'visit-sent' }), 'accepted');
+  assert.equal(await reporter.report(), true);
+  assert.deepEqual(log().at(-1), { reference: 'visit-9', state: 'suppressed', reason: 'withdrawn', provider_id: null });
+
+  // Morning in New York: Clinic A's withdrawn message never goes out; Clinic B's held `visit-9` still sends!
+  clock.now = Date.UTC(2026, 0, 15, 13, 0);
+  assert.equal(await sender.sendDue(), true);
+  assert.equal(await reporter.report(), true);
+  assert.deepEqual(
+    provider.texts.map((text) => text.to),
+    ['+15550103', '+15550102'],
+  );
+  assert.deepEqual(log().at(-1), {
+    reference: 'visit-9',
+    state: 'sent',
+    reason: null,
+    provider_id: provider.texts.find((text) => text.to === '+15550102')!.id,
+  });
+});
+
+test(
+  'withdrawHeld on PostgreSQL marks only the matching tenant’s held rows as withdrawn and unsettled',
+  { skip: !process.env.TABLEWALK_TEST_PG },
+  async (t) => {
+    const pgUrl = process.env.TABLEWALK_TEST_PG!;
+    await provisionPostgresIntegrations(pgUrl);
+    const appId = `withdraw-pg-${Date.now()}`;
+    const store = await openIntegrationStore({ postgres: pgUrl });
+    t.after(() => store.close());
+    await store.putMessage({
+      app: appId,
+      key: 'msg-a',
+      tenant: 't-a',
+      channel: 'sms',
+      recipient: '+15550201',
+      text: 'Held A',
+      state: 'held',
+      reason: 'quiet_hours',
+      providerId: null,
+      dueAt: 50_000,
+      attempts: 0,
+      at: 1000,
+      reference: 'ref-1',
+    });
+    await store.settled(appId, 'msg-a', 'held');
+    await store.putMessage({
+      app: appId,
+      key: 'msg-b',
+      tenant: 't-b',
+      channel: 'sms',
+      recipient: '+15550202',
+      text: 'Held B',
+      state: 'held',
+      reason: 'quiet_hours',
+      providerId: null,
+      dueAt: 50_000,
+      attempts: 0,
+      at: 1001,
+      reference: 'ref-1',
+    });
+    await store.settled(appId, 'msg-b', 'held');
+
+    assert.equal(await store.withdrawHeld(appId, 't-a', 'sms', 'ref-1', 2000), 1);
+    assert.equal(await store.withdrawHeld(appId, 't-a', 'sms', 'ref-1', 2001), 0);
+    const unsettled = await store.unsettled(appId, 10);
+    assert.equal(unsettled.length, 1);
+    assert.equal(unsettled[0].key, 'msg-a');
+    assert.equal(unsettled[0].state, 'suppressed');
+    assert.equal(unsettled[0].reason, 'withdrawn');
+    assert.equal((await store.message(appId, 'msg-b'))?.state, 'held');
+  },
+);

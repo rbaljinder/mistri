@@ -340,6 +340,8 @@ export interface IntegrationStore {
   settled(app: string, key: string, state: MessageRow['state']): Promise<void>;
   /** A settle report could not run yet: move it behind every unsettled row so others do not wait behind it. */
   deferSettled(app: string, key: string, state: MessageRow['state'], now: number): Promise<void>;
+  /** Withdraw held messages carrying `reference` on `channel` for `tenant`: marked `suppressed` (`withdrawn`) and `settle = 1`. */
+  withdrawHeld(app: string, tenant: string, channel: string, reference: string, at: number): Promise<number>;
   /** Held messages whose quiet hours are over, oldest first: one channel's, or every channel's. */
   due(app: string, now: number, limit: number, channel?: string): Promise<readonly MessageRow[]>;
   /** How many messages one tenant's writes sent on a channel since a moment, to one recipient or to anyone: what the email
@@ -657,6 +659,18 @@ function openSqliteIntegrationStore(existingPath: string): IntegrationStore {
         );
       });
     },
+    async withdrawHeld(app, tenant, channel, reference, at) {
+      return write(() =>
+        Number(
+          db
+            .prepare(
+              `UPDATE "${t.message}" SET state = 'suppressed', reason = 'withdrawn', due_at = NULL, words = NULL, at = ?, settle = 1
+                WHERE app = ? AND tenant = ? AND channel = ? AND reference = ? AND state = 'held'`,
+            )
+            .run(at, app, tenant, channel, reference).changes,
+        ),
+      );
+    },
     async due(app, now, limit, channel) {
       return read(() =>
         (channel === undefined
@@ -918,6 +932,15 @@ async function openPostgresIntegrationStore(url: string): Promise<IntegrationSto
           WHERE app = $1 AND key = $2 AND state = $3 AND settle = 1`,
         [app, key, state, now],
       );
+    },
+    async withdrawHeld(app, tenant, channel, reference, at) {
+      return (
+        await query(
+          `UPDATE ${table(t.message)} SET state = 'suppressed', reason = 'withdrawn', due_at = NULL, words = NULL, at = $5, settle = 1
+            WHERE app = $1 AND tenant = $2 AND channel = $3 AND reference = $4 AND state = 'held' RETURNING key`,
+          [app, tenant, channel, reference, at],
+        )
+      ).length;
     },
     /* Every process of a deployment (replicas, --workers) runs the held-message loop, so a page is leased as it is
        read: the rows taken move their due moment past the time a page of sends can take, and another process's look
