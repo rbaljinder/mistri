@@ -104,6 +104,7 @@ export const UI_EXPORTS = [
   'useNotice',
   'useHref',
   'useComposer',
+  'useAssistant',
   'useFormat',
   'useLook',
   'useToken',

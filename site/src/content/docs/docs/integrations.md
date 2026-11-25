@@ -144,6 +144,40 @@ effects: { text: send('sms', (order) => ({ to: order.phone, text: 'Thanks for yo
 The projection returns one message, or `null` for none: `(order) => (order.phone ? { … } : null)`
 sends nothing for an order without a number, and nothing is queued or logged for it.
 
+### What became of a message
+
+A message may carry the App's own `reference` (at most 200 characters), such as
+the order it is about: `send('sms', (order) => ({ to: order.phone, text: '…',
+consent: order.sms_consent, reference: order.id }))`. The channel's package
+receives it beside the idempotency key, to hand the provider as metadata.
+The jobs module names a command that is told each time such a message settles:
+
+```ts
+integrations: { use: [fakepay()], settled: { runAs: 'payments', command: 'recordText' } }
+```
+
+It runs as that service principal, in the message's tenant, with
+`{ reference, channel, state, message }` and, where there is one, `reason` and
+`providerId`: `state` is `held` (quiet hours), `sent` (with the provider's id),
+`suppressed` (`opted_out`, `no_consent`, `withdrawn`) or `failed` (the provider's reason).
+`message` is the key the provider deduped the send by. The command takes those
+of the fields it declares and no others, names no record (`targets: 'none'`)
+and finds the App's row itself by the reference
+([`integration-settled-input`](/docs/check-codes/#integration-settled-input)).
+Each state is told once, after the channel's loop decides it; a message held
+and then sent before the loop comes round is told once, as sent. A message
+without a reference is never told. A refusal the command makes is said to the
+operator and not offered again; one that may pass is asked again on the next
+loop.
+
+A later command cancels a held message by its `reference` with `withdraw`:
+`effects: { cancelText: withdraw('sms', (visit) => visit.id) }` (returning
+`null` withdraws nothing). It rides the same channel delivery as `send`, so it
+commits with the command and runs after any `send` committed before it; a
+message still held for quiet hours in that tenant becomes `suppressed`
+(`withdrawn`) and never goes out, while one already sent or belonging to
+another tenant is untouched.
+
 A `notify` rule tells on a channel too with `send`: the title is the message,
 queued in the write's own transaction and sent after it commits, under the
 same consent, opt-out and quiet hours as `send(...)`. `to` may be left out.
@@ -182,7 +216,7 @@ a `message` is taken out.
 - **Webhooks**: an inbound endpoint, the same one a [`defineInbound`](/docs/events-and-jobs/#a-signed-callback-inbound) is: `POST /api/inbound/<name>` (on a tenant App, `/api/inbound/<name>/<tenant>`; see [what a tenant keeps](/docs/tenant-apps/#what-a-tenant-keeps)). The package's `verify` reads the signature; everything else is the inbound endpoint's: past 256 KB is 413, a bad signature or a time more than five minutes off is 401, the same delivery again answers the first one's receipt, an event the App does not map is 202.
 - **Files**: a provider that sends a file beside its event may send `multipart/form-data`. The signature is still over the whole body, and `verify` is given the non-file parts as `form` (a record of strings) beside the raw `body`, to build the event from. Each file part is put in the mapped command's `field.files` (or `field.signature`) of the part's name, as a person's upload is, and the command stores it with `db.<file resource>.insertFile(file, values)`. The field's own declaration bounds them: its `accept` (a type it does not take is 415), its `min` and `max` (400), and the file resource's `maxBytes` (413). A part for a field the command does not have is 404. Nothing is declared for it; only a multipart callback may weigh more than 256 KB, up to the largest file resource's `maxBytes` plus 256 KB. Only a command's top-level file fields are named by a part.
 - **Events**: a mapped event runs its command as the service principal, with that principal's grants, in the tenant whose secret verified it.
-- **Channels**: a message is suppressed when the recipient opted out or the App holds no consent, held through quiet hours, and logged either way. A held message the provider will not take is tried again a minute on, eight times in all, then recorded failed. `channel: 'email'` is built in and mails an address the record holds ([email](/docs/email/#mail-to-an-address-a-record-holds)).
+- **Channels**: a message is suppressed when the recipient opted out or the App holds no consent, held through quiet hours, and logged either way; one with a `reference` is told to the App's `settled` command as it settles. A held message the provider will not take is tried again a minute on, eight times in all, then recorded failed. `channel: 'email'` is built in and mails an address the record holds ([email](/docs/email/#mail-to-an-address-a-record-holds)).
 - **Check**: `mistri check` refuses an unknown integration, action, event or channel by [its code](/docs/check-codes/#integration-unknown).
 
 Provision from `@mistriwork/mistri/maintenance`: `provisionStores` with the App and its

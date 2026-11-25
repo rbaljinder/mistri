@@ -367,10 +367,14 @@ export function useBulkSelection({
 
   /* A bulk command prepares, asks and sends inside the command form. Its
      records are the selection at the press, in list order; the form may
-     only narrow them (Deselect ineligible), never widen them. */
+     only narrow them (Deselect ineligible), never widen them. A one-record
+     command with `bulk: 'each'` opens the form once when it draws inputs,
+     and runs straight away when it asks nothing. */
+  const asksInputs = (action: AppCommandAction) =>
+    action.command.input.some((field) => !action.given?.includes(field.name) && (!action.asks || action.asks.includes(field.name)));
   const openCommand = (action: AppCommandAction) => {
     if (running || commandForm || !availableCommands.includes(action)) return;
-    if (action.bulk === 'each') return void runEach(action);
+    if (action.bulk === 'each' && !asksInputs(action)) return void runEach(action);
     const targets = keyed.filter((record) => selection.includes(record.id)).map(({ key, label }) => ({ key, label }));
     if (!targets.length) return;
     setReported(null);
@@ -378,15 +382,15 @@ export function useBulkSelection({
   };
   /* `bulk: 'each'`: the command runs once per selected record, in list order, each in its own transaction and each
      answered on its own, so a refusal on one neither undoes nor stops the others (as a fixed action's bulk does). */
-  const runEach = async (action: AppCommandAction) => {
+  const runEach = async (action: AppCommandAction, input?: Readonly<Record<string, unknown>>, chosen?: BulkTarget[]) => {
     const runOne = commanding?.runEach;
     if (!runOne) return;
-    const targets = keyed.filter((record) => selection.includes(record.id));
+    const targets = chosen ?? keyed.filter((record) => selection.includes(record.id));
     if (!targets.length) return;
     const epoch = sessionIdentity().epoch;
     const current = () => alive.current && sessionIdentity().epoch === epoch && (state.activeConnection ?? null) === connection;
     setReported(null);
-    if (action.confirm) {
+    if (action.confirm && input === undefined) {
       const yes = await new Promise<boolean>((answer) => setAsking({ action, count: targets.length, skipped: 0, answer }));
       if (alive.current) setAsking(null);
       if (!yes || !current()) return;
@@ -402,7 +406,7 @@ export function useBulkSelection({
         );
         break;
       }
-      const answer = await runOne(action, record.key);
+      const answer = await runOne(action, record.key, input);
       outcomes.push({ key: record.key, label: record.label, kind: answer.kind, message: answer.message });
       if (alive.current) setRunning({ label: action.label, done: at + 1, total: targets.length });
     }
@@ -581,6 +585,16 @@ export function useBulkSelection({
           owner={groupOwner(commandForm)}
           targets={commandForm.targets}
           onDeselect={deselect}
+          {...(commandForm.action.bulk === 'each'
+            ? {
+                onSubmitEach: (input) => {
+                  const chosen = commandForm;
+                  setCommandRun(null);
+                  returnFocus.current = null;
+                  void runEach(chosen.action, input, chosen.targets);
+                },
+              }
+            : {})}
           noun={nounOf(table)}
           label={say('countSelectedRecords', { count: commandForm.targets.length })}
           onClose={closeCommand}

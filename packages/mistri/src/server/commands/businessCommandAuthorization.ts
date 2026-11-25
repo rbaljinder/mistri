@@ -718,6 +718,19 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
   const bindings = new Map(
     Object.entries(registry).map(([id, command]) => {
       if (!Object.hasOwn(app.sources!, command.source)) invalid(`Command "${id}" has an unknown source.`);
+      /* A member of the team is a tenant's: a membership the server can read, and a team its members may list. */
+      const memberInput = command.fields.find((field) => field.type === 'text' && field.format === 'member');
+      if (memberInput && !isTenantApp(app))
+        invalid(
+          `Command "${id}" input "${memberInput.name}" [command-member] names a member of the team, and App "${app.id}" has no team: ` +
+            "field.member() is a tenant App's (auth.rows: 'tenant'), whose members it names. Ask a field.reference() to the App's people table instead.",
+        );
+      if (memberInput && app.auth?.tenancy?.team === false)
+        invalid(
+          `Command "${id}" input "${memberInput.name}" [command-member] names a member of the team, and auth.tenancy.team is false: ` +
+            'its members may not list who else is a member, so the form could offer no one, and an id typed in would tell whether it is one. ' +
+            "Leave team on, or ask a field.reference() to the App's people table.",
+        );
       const logical = (local: string) => logicalResource(app, command.source, local);
       const read = Object.freeze(command.read.map(logical)),
         write = Object.freeze(command.write.map(logical));

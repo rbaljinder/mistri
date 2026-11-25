@@ -246,10 +246,13 @@ const require = createRequire(join(ROOT, 'package.json'));
    Compass measures 106,209 symbols (9 past); its symbols rise to about 1.5% above that, the rest hold.
    A resource takes `noOverlap` and `constraints` (`AppNoOverlap`, `AppConstraintRefusal`: two interfaces and their
    nine members, each generic over the table's columns as the resource's other blocks are), read once in the
-   declarations, nothing per table: about 70 symbols on Compass, inside the ceiling above. Every ceiling holds. */
+   declarations, nothing per table: about 70 symbols on Compass, inside the ceiling above. Every ceiling holds.
+   A dashboard's `commandButton` (`CommandDashSection`, one more member of the section union and its helper, generic
+   over the registered command names), and an action's and a form view's `asks`: read once in the declarations,
+   nothing per table. Compass measures 32,525 types (25 past); its types rise to about 1.5% above, the rest hold. */
 export const BUDGET = {
   synthetic: { types: 184_400, instantiations: 991_600, symbols: 488_400 },
-  compass: { types: 32_500, instantiations: 149_000, symbols: 107_800 },
+  compass: { types: 33_000, instantiations: 149_000, symbols: 107_800 },
   ignition: { types: 69_700, instantiations: 254_100, symbols: 205_900 },
 };
 

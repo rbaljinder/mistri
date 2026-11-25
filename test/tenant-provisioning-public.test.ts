@@ -25,7 +25,7 @@ import { publishedDeclarations } from './support/installedMistri.js';
 import * as commands from '../packages/mistri/src/server/commands.js';
 import * as maintenance from '../packages/mistri/src/server/maintenance.js';
 import { provisionStores, type MaintenanceTarget } from '../packages/mistri/src/server/maintenance.js';
-import { send } from '../packages/mistri/src/server/commands/commandEffects.js';
+import { send, withdraw } from '../packages/mistri/src/server/commands/commandEffects.js';
 import type { LoadedApp } from '../packages/mistri/src/server/app/apps.js';
 import type { ConnectionConfig } from '../packages/engine/src/server/connections.js';
 import { ADMINISTRATION_JOURNAL_TABLES } from '../packages/mistri/src/server/tenant/tenantAdministrationJournal.js';
@@ -119,6 +119,7 @@ test('the public commands entry exports no maintenance step, and the maintenance
     'avg',
     'bool',
     'count',
+    'currentZone',
     'date',
     'defineChallenges',
     'defineCommand',
@@ -149,9 +150,11 @@ test('the public commands entry exports no maintenance step, and the maintenance
     'shape',
     'sum',
     'text',
+    'withdraw',
   ]);
-  // The integrations' channel effect (commandEffects.ts), beside `post`: the same function, not a wrapper.
+  // The integrations' channel effects (commandEffects.ts), beside `post`: the same functions, not wrappers.
   assert.equal(commands.send, send);
+  assert.equal(commands.withdraw, withdraw);
   assert.equal(maintenance.migratePostgresTenantInvitations, migratePostgresTenantInvitations);
   assert.equal((commands as Record<string, unknown>).migratePostgresTenantInvitations, undefined);
   assert.equal(maintenance.migratePostgresTenantStore, migratePostgresTenantStore);
@@ -390,6 +393,7 @@ test('published declarations type the provisioning steps without exposing privat
       'send',
       'shape',
       'text',
+      'withdraw',
       'publicReference',
       'publicReferencePattern',
       'Aggregated',
@@ -406,6 +410,7 @@ test('published declarations type the provisioning steps without exposing privat
       'RowQuery',
       'avg',
       'count',
+      'currentZone',
       'max',
       'min',
       'period',

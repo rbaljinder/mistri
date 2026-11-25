@@ -357,7 +357,7 @@ export function verifySqliteSupportAudit(
   try {
     const owner = binding(input);
     if (typeof existingPath !== 'string' || !statSync(existingPath).isFile()) return denyTenant();
-    db = new DatabaseSync(existingPath, { readOnly: true });
+    db = new DatabaseSync(existingPath, { readOnly: true, timeout: 5000 });
     db.exec('BEGIN');
     attest(db, owner, key);
     const failed = new Set(broken(db));

@@ -134,7 +134,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "filters": "solid",
       "required": "star",
       "formStep": "plain",
-      "actionBar": "plain"
+      "actionBar": "plain",
+      "choice": "tint"
     },
     "elevation": "flat",
     "type": {
@@ -313,7 +314,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "filters": "solid",
       "required": "star",
       "formStep": "plain",
-      "actionBar": "plain"
+      "actionBar": "plain",
+      "choice": "tint"
     },
     "elevation": "raised",
     "type": {
@@ -467,7 +469,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "filters": "solid",
       "required": "star",
       "formStep": "plain",
-      "actionBar": "plain"
+      "actionBar": "plain",
+      "choice": "tint"
     },
     "elevation": "flat",
     "type": {
@@ -609,7 +612,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "filters": "solid",
       "required": "star",
       "formStep": "plain",
-      "actionBar": "plain"
+      "actionBar": "plain",
+      "choice": "tint"
     },
     "elevation": "soft",
     "type": {
@@ -743,7 +747,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "filters": "solid",
       "required": "star",
       "formStep": "plain",
-      "actionBar": "plain"
+      "actionBar": "plain",
+      "choice": "tint"
     },
     "elevation": "flat",
     "type": {
@@ -920,7 +925,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "filters": "quiet",
       "required": "optional-word",
       "formStep": "ruled",
-      "actionBar": "plain"
+      "actionBar": "plain",
+      "choice": "tint"
     },
     "elevation": "flat",
     "type": {
@@ -1077,7 +1083,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "filters": "solid",
       "required": "star",
       "formStep": "ruled",
-      "actionBar": "plain"
+      "actionBar": "plain",
+      "choice": "tint"
     },
     "elevation": "hairline",
     "type": {
@@ -1237,7 +1244,8 @@ export const THEME_PRESETS: readonly ThemeDefinition[] = [
       "filters": "solid",
       "required": "star",
       "formStep": "plain",
-      "actionBar": "raised"
+      "actionBar": "raised",
+      "choice": "tint"
     },
     "elevation": "soft",
     "type": {

@@ -11,10 +11,12 @@ import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { checkApiCommandCatalog } from './apiCommandCatalog.js';
 import type { checkApiReadCatalog } from './apiReadCatalog.js';
+import { renderApiCommandOpenApi } from './apiCommandOpenApi.js';
 import { renderApiReadOpenApi } from './apiReadOpenApi.js';
 import { renderApiOpenApi } from './apiOpenApiDocument.js';
 import { apiExposesCommands, withApiWrites } from './apiGenericWrites.js';
-import { readApiApp } from './appApiValidation.js';
+import { apiJudgment } from './apiRefusals.js';
+import { assertAppApiContext, readApiApp } from './appApiValidation.js';
 
 type Json = Record<string, unknown>;
 /** Per operation: who may call it and the views' authored questions. */
@@ -36,8 +38,11 @@ export function renderAppApiOpenApi(
   }>,
 ): Json {
   if (!app.api) throw new Error('The App API document requires an explicit api declaration.');
-  if (!apiExposesCommands(app.api))
-    return renderApiReadOpenApi(readApiApp(app), schema, { integers: options.integers }, options.tenant?.reads).document as Json;
+  if (!apiExposesCommands(app.api)) {
+    const read = readApiApp(app);
+    if (!options.tenant) assertAppApiContext(read);
+    return renderApiReadOpenApi(read, schema, { integers: options.integers }, options.tenant?.reads).document as Json;
+  }
   if (!options.evidence) throw new Error('The App API document needs its command evidence.');
   if (options.tenant) {
     if (!options.commands || !options.tenant.commands) throw new Error('The App API document needs its commands module.');
@@ -53,10 +58,26 @@ export function renderAppApiOpenApi(
       },
     ).document as Json;
   }
-  // Generic writes are the platform's commands, described as the owner serves them.
-  const served = withApiWrites(app, schema, options.commands);
-  if (!served.registry) throw new Error('The App API document needs its commands module.');
-  return renderApiOpenApi(served.app, schema, served.registry, options.evidence, { integers: options.integers }).document as Json;
+  // Generic writes are the platform's commands, described as the owner serves them; reads and commands are judged with them.
+  const judged = apiJudgment();
+  const served = judged.run(() => withApiWrites(app, schema, options.commands));
+  if (!served) {
+    judged.run(() => {
+      const read = readApiApp(app);
+      assertAppApiContext(read);
+      return renderApiReadOpenApi(read, schema, { integers: options.integers });
+    });
+    if (options.commands && app.api.commands.length)
+      judged.run(() => renderApiCommandOpenApi(app, schema, options.commands!, options.evidence!, { integers: options.integers }));
+    judged.done();
+  }
+  if (!served!.registry) throw new Error('The App API document needs its commands module.');
+  judged.run(() => assertAppApiContext(readApiApp(served!.app)));
+  const rendered = judged.run(() =>
+    renderApiOpenApi(served!.app, schema, served!.registry!, options.evidence!, { integers: options.integers }),
+  );
+  judged.done();
+  return rendered!.document as Json;
 }
 
 /** The document as anyone may read it: every operation, without its roles or standing questions. */

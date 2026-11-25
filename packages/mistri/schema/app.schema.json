@@ -1357,8 +1357,15 @@
             "description": "A column this action asks a reason for and writes with its set. Required when the action runs; not with bulk or a command."
           },
           "bulk": {
-            "type": "boolean",
-            "description": "May run on a selection, App-wide: a queue offers it for its selection. A fixed update is one ordinary write per selected record, with results per record; a command must declare targets: many and runs the whole selection as one atomic request."
+            "oneOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "const": "each"
+              }
+            ],
+            "description": "May run on a selection, App-wide: a list offers it for its selection. A fixed update is one ordinary write per selected record, with results per record; a command with `targets: 'many'` takes `true` and runs the whole selection as one atomic request; a one-record command takes `'each'` and runs once per selected record, opening its form once when it draws inputs."
           },
           "header": {
             "type": "boolean",
@@ -1393,6 +1400,16 @@
           "given": {
             "type": "array",
             "description": "A command action's inputs its page supplies (useCommand(name).open(record, { step })): its form does not draw them. A required one with no default needs header: false and no bulk.",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+            }
+          },
+          "asks": {
+            "type": "array",
+            "description": "The command's inputs this action's form asks, when not every one: only these are drawn; the rest a page sends, or take their default, or wait on their when. One required with no default and no when is refused (command-asks).",
             "minItems": 1,
             "uniqueItems": true,
             "items": {
@@ -3156,6 +3173,17 @@
           "type": "boolean",
           "default": true,
           "description": "false keeps a tenant's members from reading who else is a member. Left out, any member reads the members' names and ids (never an address, a role or an invitation), which is what useTeam() lists for a reader who does not manage the team."
+        },
+        "readAudit": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Tenant roles whose signed-in members read this tenant's read audit (Settings \u2192 Reads and useReadAudit()), where a resource has audit: { reads: true }. Left out, the roles that edit the tenant's domains, else its branding."
         },
         "platform": {
           "type": "object",
@@ -5437,6 +5465,22 @@
             "area": { "$ref": "#/$defs/dashArea" },
             "width": { "enum": ["full", "two-thirds", "half", "third"] }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "command"],
+          "description": "A button that runs one of the App's commands: one that names no record and needs no input (check refuses one with a required input, dashboard-command). Drawn only for a reader granted the command.",
+          "properties": {
+            "kind": { "const": "command" },
+            "command": { "$ref": "#/$defs/commandName" },
+            "title": { "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+            "description": { "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "The sentence under the title: what the button does." },
+            "label": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 60 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "The button's words; the command's own name where not said." },
+            "icon": { "$ref": "#/$defs/appIcon", "description": "A curated mark in the section’s heading row." },
+            "area": { "$ref": "#/$defs/dashArea" },
+            "width": { "enum": ["full", "two-thirds", "half", "third"] }
+          }
         }
       ]
     },
@@ -6273,6 +6317,16 @@
             "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
           },
           "description": "The command's inputs the link supplies (?unit=12): filled from the address, never drawn, on a step, on the review or on the done screen, and judged by the command like anything typed. Text, number, date or choice inputs, never also prefillable, never on a form saved each step."
+        },
+        "asks": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_]*$"
+          },
+          "description": "The command's inputs this form asks, when not every one: only these are drawn; the rest a page sends, or take their default, or wait on their when. One required with no default and no when is refused (command-asks). Never also given, never on a form saved each step."
         },
         "resume": {
           "type": "object",

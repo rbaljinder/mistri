@@ -1320,7 +1320,7 @@ export type AppRoleClaims = {
 };
 
 /** Tenancy vocabulary under `auth.rows: 'tenant'`: what one tenant is called, the platform-owned profile resource with one row per tenant (whose record name the chooser and the bar call each tenant by), and the platform realm with its label. */
-export interface AppTenancy<Resource extends string = string> {
+export interface AppTenancy<Resource extends string = string, Role extends string = string> {
   label?: string | AppMessageRef;
   profile?: Resource;
   /** Columns of the tenant's profile row its members read, at most 16 scalar ones: `tenant.country` in a query, a row
@@ -1330,6 +1330,9 @@ export interface AppTenancy<Resource extends string = string> {
       names and ids, never an address, a role or an invitation: what `useTeam()` lists for a reader who does not manage
       the team, where the App administers its tenants' members. */
   team?: boolean;
+  /** Tenant roles whose signed-in members read this tenant's read audit (`Settings → Reads` and `useReadAudit()`),
+      where a resource has `audit: { reads: true }`. Left out, the roles that edit the tenant's domains, else its branding. */
+  readAudit?: readonly Role[];
   platform?: {
     label: string | AppMessageRef;
     /** Who `me` is in the platform realm, as `auth.me` says it in a tenant's: the platform-owned resource its staff
@@ -1376,7 +1379,7 @@ export interface AppAuth<Resource extends string = string, Role extends string =
       command: the name of a verifier the commands module exports in `challenges` (`defineChallenges` from
       @mistriwork/mistri/commands; a provider such as Turnstile comes from its pack). A missing or refused token is a 403. */
   challenge?: string;
-  tenancy?: AppTenancy<Resource>;
+  tenancy?: AppTenancy<Resource, Role>;
   /** Who `me` is as a row: the table people are rows of and its column holding their sign-in email, so a condition
       like `owner_id = me` compares a reference to that table with the signed-in person's row. Without it, `me` is the
       signed-in account's email and compares with text columns only. In a tenant App `column` holds the account's id,
@@ -2114,6 +2117,8 @@ export interface FirstRunDashSection<View extends string = string> {
 /** One read of rows a dashboard's custom section declares: a rows section's words, the window's `over` included. */
 export interface CustomDashRead {
   from: string;
+  /** Conditions on its rows. `window.start` and `window.end` name the dashboard window's edges, as the component is
+      handed them (`booked_at < window.end`): all time's earliest and latest day while no window is picked. */
   query?: string;
   /** The columns the component reads, label paths welcome; each row carries exactly these. */
   show: readonly string[];
@@ -2135,6 +2140,8 @@ export interface CustomDashFigure {
   measure: CustomMeasure;
   /** Group the figure: a column, a path or a period and a date column ("status", "month opened_on"). */
   by?: string;
+  /** Conditions on its rows. `window.start` and `window.end` name the dashboard window's edges, as the component is
+      handed them (`booked_at < window.end`): all time's earliest and latest day while no window is picked. */
   query?: string;
   /** The date column the dashboard's time window narrows this figure by. */
   over?: string;
@@ -2230,11 +2237,28 @@ export interface IntegrationsDashSection extends DashSectionCommon {
   integrations?: readonly string[];
 }
 
+/** A button that runs one of the App's commands, under a title and a sentence: a switch an owner throws once (turn
+    texting on), which no record carries and no form asks anything for. The command names no record (`targets:
+    'none'`) and needs no input: `check` refuses one with a required input (`dashboard-command`), since the button sends
+    none. Drawn only for a reader granted the command, whose grant the server judges again where it runs; its outcome is
+    said as a page's `CommandButton` says it. */
+export interface CommandDashSection extends DashSectionCommon {
+  kind: 'command';
+  readonly [madeBy]: 'commandButton';
+  command: FormCommandName<false>;
+  /** The sentence under the title: what the button does, said before it is pressed. */
+  description?: string | AppMessageRef;
+  /** The button's words, at most 60 characters; the command's own name where not said. */
+  label?: string | AppMessageRef;
+  /** A curated mark in the section's heading row. */
+  icon?: AppIcon;
+}
+
 /** One section of a dashboard, by kind. */
 export type AppDashSection =
   | MetricDashSection | BreakdownDashSection | RowsDashSection | ChartDashSection
   | NoteDashSection | BannerDashSection | MatrixDashSection | FunnelDashSection | BoardDashSection | FirstRunDashSection | CustomDashSection | ActivityDashSection
-  | FindDashSection | BrandingDashSection | IntegrationsDashSection;
+  | FindDashSection | BrandingDashSection | IntegrationsDashSection | CommandDashSection;
 
 /** A list view drawn read-only inside a dashboard: the rows its room opens on, drawn as it draws them.
     Its "open →" opens that view's room, which it has even when nav does not list it. */
@@ -2466,6 +2490,11 @@ export interface AppFormView<Field extends string = string> {
       that leaves a required one out gets its refusal on the form's line. Text, number, date or choice inputs, never
       also `prefillable`, never on a form saved each step. */
   given?: readonly Field[];
+  /** The inputs this form asks, when it does not ask every one (`asks: ['transcript']`): only these are drawn, on its
+      page and its steps. The rest are a page's to send through the command (`useCommand(name).run`), or take their
+      default, or wait on their `when`; one the command requires with no default and no `when` is refused by `check`
+      (`command-asks`). Never also `given`, never on a form saved each step. */
+  asks?: readonly Field[];
   /** A form's input drawn by the App's own input component, in place of the platform's control; a public form's page loads
       it too, and the value is still the field's kind's to judge on the server. An input in a group is named by its path (`trade.vin`), and in a repeating group stands in every row; `check` refuses a
       path the command does not take. */
@@ -4334,8 +4363,8 @@ export type ActionSet<Set> = { -readonly [K in keyof Set]: Set[K] } & { readonly
 export declare function action<const L extends string | AppMessageRef, const Name extends CommandOn>(
   label: L, options: Omit<CommandAction<Name>, 'label' | 'command' | 'bulk'> & { command: Name;
     /** `true`: offered for a queue selection when the command declares `targets: 'many'` (one request, all or none).
-        `'each'`: a command that names one record and asks nothing runs once per selected record, each in its own
-        transaction and each answered on its own. */
+        `'each'`: a command that names one record runs once per selected record, opening its form once when it draws
+        inputs, each record in its own transaction and answered on its own. */
     bulk?: TakesMany<Name> extends true ? boolean : false | 'each' },
 ): CommandAction<Name, L> & MadeBy<'action'>;
 export declare function action<const L extends string | AppMessageRef, const O extends Omit<AppUpdateAction<string | AppMessageRef>, 'id' | 'label' | 'set'> & { set: Readonly<Record<string, ActionSetValue>> }>(
@@ -4535,6 +4564,11 @@ export declare function brandingForm(
 export declare function integrationsForm(
   title?: string | AppMessageRef, opts?: Omit<IntegrationsDashSection, Made | 'kind' | 'title'>,
 ): { kind: 'integrations'; readonly [madeBy]: 'integrationsForm'; title?: string | AppMessageRef } & Omit<IntegrationsDashSection, Made | 'kind' | 'title'>;
+/** dashboard section: a button that runs a command that names no record and asks nothing —
+    `commandButton('enableTexting', { title: 'Texting', description: 'Send reminders by text.', label: 'Turn on texting' })`. */
+export declare function commandButton<const Name extends FormCommandName<false>>(
+  command: Name, opts?: Omit<CommandDashSection, Made | 'kind' | 'command'>,
+): { kind: 'command'; readonly [madeBy]: 'commandButton'; command: Name } & Omit<CommandDashSection, Made | 'kind' | 'command'>;
 /** A dashboard's one box over several resources' records: `find('Find anything', ['article', 'catalog_item'], { placeholder: 'Search help and the catalog' })`. */
 export declare function find<const R extends readonly string[]>(
   title: string | AppMessageRef, resources: R, opts?: Omit<FindDashSection, Made | 'kind' | 'title' | 'resources'>,

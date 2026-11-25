@@ -9,6 +9,7 @@ type CommandModule = typeof import("./commands.ts").default;
 /** Each command by its name: the table it acts on, how many existing records a request names
     (none: a form's command), its input names, whether a public form runs it, and what it returns. */
 export type Commands = {
+  assignClinician: { target: "appointment"; targets: "one"; input: "clinician"; output: CommandOutput<CommandModule["assignClinician"]> };
   bookRoom: { target: "room_booking"; targets: "none"; input: "room" | "starts_at" | "ends_at"; output: CommandOutput<CommandModule["bookRoom"]> };
   postNotice: { target: "notice"; targets: "none"; input: "clinic_id" | "body"; output: CommandOutput<CommandModule["postNotice"]> };
   recordPayment: { target: "appointment"; targets: "one"; input: "amount_cents" | "method"; output: CommandOutput<CommandModule["recordPayment"]> };

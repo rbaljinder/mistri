@@ -370,7 +370,7 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     ]);
     /* tenancy says what a tenant is called, its profile table, the profile's columns its members read (`shared`) and
        the platform realm. */
-    assert.deepEqual(props(a.tenancy), ['label', 'platform', 'profile', 'shared', 'team']);
+    assert.deepEqual(props(a.tenancy), ['label', 'platform', 'profile', 'readAudit', 'shared', 'team']);
     assert.equal(a.tenancy.additionalProperties, false);
     assert.deepEqual(props(a.tenancy.properties.platform), ['label', 'me']);
     assert.deepEqual(a.auth.properties.tenancy, { $ref: '#/$defs/tenancy' });
@@ -464,9 +464,11 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     );
     assert.deepEqual(a.landingAction.properties.intent.enum, [...LANDING_ACTION_INTENTS]);
     /* Commands are names; their inputs and targets come from the server registry. `given` (rc.39): the inputs the
-       action's page gives, hidden from its form. */
+       action's page gives, hidden from its form. `asks` (1.0): the inputs its form asks, the rest left to a page or
+       a default. */
     assert.equal(a.actions.additionalProperties.properties.command.$ref, '#/$defs/commandName');
     assert.deepEqual(props(a.actions.additionalProperties), [
+      'asks',
       'bulk',
       'command',
       'confirm',
@@ -802,7 +804,12 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // Unreleased: a resource's `noOverlap` (`by`, `from`, `to`, `when`, `field`, `message`, `constraint`) and
     // `constraints` (each `field`, `message`): eleven entries; `noOverlap`, `constraint` and `constraints` are new
     // names: 1814/537.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1814, names: 537 });
+    // Unreleased: an action's and a form view's `asks`, the inputs its form asks (two entries, one new name): 1816/538.
+    // Unreleased: a dashboard's `commandButton` section (`kind`, `command`, `title`, `description`, `label`, `icon`,
+    // `area`, `width`: eight entries; every name was a key already): 1824/538.
+    // Unreleased: a theme's `recipes.choice`, how a picked choice is drawn (one entry, one new name): 1825/539.
+    // Unreleased: `auth.tenancy.readAudit`, the tenant roles that open Settings -> Reads (one entry, one new name): 1826/540.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1826, names: 540 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

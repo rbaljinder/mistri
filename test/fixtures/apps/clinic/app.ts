@@ -28,10 +28,16 @@ export default defineApp({
         fields: {
           room_booking: { read: ['id', 'room', 'starts_at', 'ends_at', 'status'], write: ['room', 'starts_at', 'ends_at', 'status'] },
         },
-        commands: ['recordPayment', 'bookRoom'],
+        commands: ['recordPayment', 'assignClinician', 'bookRoom'],
         operations: ['support'],
       },
-      reception: { label: 'Reception', realm: 'tenant', read: clinicReads, write: ['patient'], commands: ['recordPayment', 'bookRoom'] },
+      reception: {
+        label: 'Reception',
+        realm: 'tenant',
+        read: clinicReads,
+        write: ['patient'],
+        commands: ['recordPayment', 'assignClinician', 'bookRoom'],
+      },
       operator: {
         label: 'Operator',
         realm: 'platform',

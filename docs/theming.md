@@ -241,6 +241,7 @@ CSS.
 | `header`   | `plain` (Lumen, Mono, Ledger, Atelier, Graphite, Bloom), `band` (Workshop, Sage), `hero` (own) |
 | `pane`     | `inset`, `edge` (own: the room runs to the window's right and bottom edges beside a side menu)                          |
 | `filters`  | `solid` (Workshop, Lumen, Mono, Sage, Ledger, Graphite, Bloom), `dashed`, `quiet` (Atelier) |
+| `choice`   | `tint` (every look), `filled` (own: a picked choice in the accent fill, its words in the accent's own ink) |
 
 Each value is pictured on the CRM (the former Compass sample) in the site's recipe gallery
 (`site/src/content/docs/docs/theme-recipes.md`, its pictures under

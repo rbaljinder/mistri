@@ -623,6 +623,8 @@ export async function lintComponents(
   schema?: DatabaseSchema,
   messages?: ComponentMessages,
   unprepared: ReadonlySet<string> = new Set(),
+  /** The App's assistant as declared, its placements (null: it declares none), for `useAssistant`; left out, unjudged. */
+  assistant?: { placement: readonly string[] } | null,
 ): Promise<ComponentLint> {
   const problems: ComponentFinding[] = [];
   const warnings: ComponentFinding[] = [];
@@ -727,6 +729,22 @@ export async function lintComponents(
                 `api.commands entry offers, so the browser is refused it (403, "not available to this account") whatever a role ` +
                 `is granted. Offer it on its target: actions: [action('…', { command: '${name}', header: false })] keeps it off the record's bar`,
             });
+      /* A page's door to the assistant does nothing in an App that has none, and a record handed to one that reads no
+         record is refused at every press: a button that never works is the author's to hear of here. */
+      if (assistant !== undefined)
+        for (const match of text.matchAll(/\buseAssistant\s*\(/g)) {
+          const line = text.slice(0, match.index).split('\n').length;
+          if (assistant === null)
+            warn(
+              line,
+              "[component-assistant] useAssistant() opens the App's assistant, and the App declares none (assistant() in app.ts): offered is false and open() does nothing",
+            );
+          else if (!assistant.placement.includes('record') && /\.open\(\s*\{[^}]*\babout\s*:/.test(text))
+            warn(
+              line,
+              `[component-assistant] useAssistant().open({ about }) hands the assistant a record, and its placement leaves out "record", so the server refuses every one: add 'record' to assistant({ placement })`,
+            );
+        }
       for (const line of styleColors(text))
         warn(
           line,

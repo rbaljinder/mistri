@@ -167,6 +167,11 @@ export const RECIPE_WORDS = {
     plain: 'A form’s sticky action bar stands on a hairline over the page.',
     raised: 'A form’s sticky action bar is raised on the surface with a soft lift, in place of the hairline.',
   },
+  choice: {
+    tint: 'A picked choice — one of a yes-or-no pair, a row of words or a card — stands on a tint of the accent with an accent edge; in a pair or a row, its words in bold.',
+    filled:
+      'A picked choice is filled in the accent with its words in the accent’s own ink: a picked answer that reads at a glance on a phone, where a tint can sit close to the field’s own fill.',
+  },
 } as const satisfies Words;
 
 /** One part's values said, in the menu's order: "`tint`: …. `inverted`: …." — the schema's description of the part. */

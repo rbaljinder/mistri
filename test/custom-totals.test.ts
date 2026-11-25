@@ -37,7 +37,7 @@ async function database(t: { after(run: () => void): void }, rows: number) {
   const db = new DatabaseSync(file);
   db.exec(`CREATE TABLE account (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
     CREATE TABLE sale (id INTEGER PRIMARY KEY, account_id INTEGER NOT NULL REFERENCES account(id), status TEXT NOT NULL,
-      amount INTEGER NOT NULL);
+      amount INTEGER NOT NULL, created_on DATE);
     INSERT INTO account VALUES (1, 'Ada'), (2, 'Grace');`);
   const insert = db.prepare('INSERT INTO sale (account_id, status, amount) VALUES (?, ?, ?)');
   for (let i = 0; i < rows; i++) insert.run(i % 5 === 0 ? 2 : 1, i % 3 === 0 ? 'won' : 'open', 10);
@@ -301,4 +301,31 @@ test('a custom section\'s old "totals" is refused with "figures", on a page and 
       ),
     /has "totals", which is now "figures"/,
   );
+});
+
+/* A field report: a read bounded by the window on another column than its `over` could not say the window's edges. */
+test("a declared read's query names the window's edges, judged at load and served as written", async (t) => {
+  const { schema } = await database(t, 1);
+  const { boundWindowEdges } = await import('../packages/engine/src/shared/dashboardAsks.js');
+  const query = 'created_on >= window.start and created_on < window.end';
+  const app = dashboard({ n: { from: 'sale', measure: 'count', query } });
+  const resolved = resolveViews(app, schema).board as AppDashboardView;
+  assert.equal(resolved.error, undefined);
+  const served = (resolved as unknown as { sections: Array<{ aggregates: Record<string, { query: string }> }> }).sections[0];
+  assert.equal(served.aggregates.n.query, query);
+  // A misspelled column beside the edges is still said before a reader sees the section.
+  const broken = resolveViews(dashboard({ n: { from: 'sale', measure: 'count', query: 'acount >= window.start' } }), schema)
+    .board as AppDashboardView;
+  assert.match(broken.error ?? '', /acount/);
+  // Bound as the client binds them: the reader's window, else all time's; never inside a quoted value.
+  assert.equal(
+    boundWindowEdges('starts_at >= window.start and booked_at < window.end and note = "window.end"', {
+      start: '2026-10-21',
+      end: '2026-11-21',
+    }),
+    'starts_at >= 2026-10-21 and booked_at < 2026-11-21 and note = "window.end"',
+  );
+  assert.equal(boundWindowEdges('booked_at < window.end', undefined), 'booked_at < 9999-12-31');
+  assert.equal(boundWindowEdges('my_window.start = 1', undefined), 'my_window.start = 1');
+  assert.equal(boundWindowEdges(undefined, undefined), undefined);
 });

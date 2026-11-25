@@ -37,6 +37,7 @@ export default defineAppTenantPolicy({
   // What each command's result names: a payment it made, and nothing for the two that answer only a message.
   resultReferences: {
     recordPayment: (result) => [{ table: 'payment', key: { id: (result as { payment: string }).payment } }],
+    assignClinician: () => [],
     postNotice: () => [],
     bookRoom: (result) => [{ table: 'room_booking', key: { id: (result as { booking: string }).booking } }],
     requestVisit: () => [],

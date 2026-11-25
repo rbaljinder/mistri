@@ -68,7 +68,15 @@ function textSchema(field: Extract<Field, { type: 'text' | 'textarea' }>, requir
   if (field.maxLength !== undefined) bounds.maxLength = field.maxLength;
   if (field.minLength !== undefined || field.maxLength !== undefined) notes.push('Its length is counted after trimming.');
   if (field.format !== undefined)
-    notes.push(field.format === 'email' ? 'An email address.' : field.format === 'url' ? 'A web address (URL).' : 'A phone number.');
+    notes.push(
+      field.format === 'email'
+        ? 'An email address.'
+        : field.format === 'url'
+          ? 'A web address (URL).'
+          : field.format === 'member'
+            ? 'The account id of an active member of the tenant the command runs in; any other id is refused at this field.'
+            : 'A phone number.',
+    );
   if (field.as === 'color') {
     const schema = Object.freeze({ type: 'string', pattern: '^#[0-9A-Fa-f]{6}$' });
     return described(required ? schema : optionalScalar(schema), ['A color, # and six hex digits (#1d6a5a); kept in lower case.']);

@@ -9,7 +9,7 @@ role in; on the signed-in client, `.update(table, key, values)`,
 throw: `{ ok: true, value }` or `{ ok: false, status, code, message }`, and
 `assertPermissions` checks a role × resource and command table. `host.seed(table, rows)`
 arranges rows as setup (past grants, ids returned), `host.runJob(name)` runs a job at
-times now, `startTestApp({ assistant })` scripts the in-App assistant, and `startTestApp({ decisions })` the model a decision asks. `startTestApp({ pending: true })` applies the App's pending migrations to the test's SQLite copy first, as `mistri check --pending` judges against them. Then add what the
+times now (`startTestApp({ jobs: 'manual' })` holds them otherwise, so none fires mid-test), `startTestApp({ assistant })` scripts the in-App assistant, and `startTestApp({ decisions })` the model a decision asks. `startTestApp({ pending: true })` applies the App's pending migrations to the test's SQLite copy first, as `mistri check --pending` judges against them. Then add what the
 App's own journeys need; Lintel's `tests/` (`../../../examples/apps/lintel/tests/`, shipped beside it) is
 the worked example, with a file for each layer below; `mistri docs test-workflow` has the commands, CI
 recipes and the optional security scan, `mistri docs testing-apps` the helpers.

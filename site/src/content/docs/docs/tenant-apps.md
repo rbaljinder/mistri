@@ -174,6 +174,10 @@ names exactly one of `accountId` or `platformRole`: a `platformRole` rule admits
 every account whose active platform membership holds that platform-realm role, so
 a new operator is a platform membership, not a policy edit. Role rules may overlap;
 the rules matching one account, tenant and operation give their roles together.
+A rule with `tenants: 'all'` acts on any tenant named to it, and by design never
+lists the tenant table: Manage tenants offers only the tenants a rule names, so an
+operator who holds `'all'` alone sees none there and acts on a tenant by its id
+through the administration door, or is given a rule that names the ones to list.
 
 A role's `write` on a tenant table gives it Save and New there; Delete needs
 `authorizeDeletedRecord` as well; `mistri check` warns
@@ -571,8 +575,9 @@ ordinary not-found.
 
 ### Who read a tenant's records
 
-When a resource has `audit: { reads: true }`, a tenant's admins (the roles that
-edit its domains, else its branding) see Settings → Reads: who opened or listed
+When a resource has `audit: { reads: true }`, a tenant's admins (`auth.tenancy.readAudit`
+when named, else the roles that edit its domains, else its branding) see
+Settings → Reads and `useReadAudit()`: who opened or listed
 the organization's audited records, newest first, 50 at a time with Show older.
 Filter by person (click a name), resource, record and a day range; a record's
 id matches where it was opened and every list that returned it. The rows are the

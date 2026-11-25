@@ -59,7 +59,8 @@ import {
   type AppNoun,
 } from '@mistriwork/engine/shared/model.js';
 import { parseIcon, type AppIconName } from '@mistriwork/engine/shared/appIcons.js';
-import { isRegisteredCommand, parseCommandReference, registeredCommand } from './command.js';
+import { maskQuoted } from '@mistriwork/engine/shared/maskQuoted.js';
+import { commandFieldsDeep, isRegisteredCommand, parseAsks, parseCommandReference, recordColumnsIn, registeredCommand } from './command.js';
 import { machineActions, parseMachine } from './appMachine.js';
 import { parseResourceAt } from './appAt.js';
 import { ROLLUP_FNS, type RollupFn } from '@mistriwork/engine/shared/rollups.js';
@@ -1770,6 +1771,7 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
         'reason',
         'inputs',
         'given',
+        'asks',
         ...(derived ? ['labels', 'move'] : []),
       ],
       here,
@@ -1802,14 +1804,44 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
           `${here} can offer "${command.id}" in bulk only when the command declares targets: 'many'; say bulk: 'each' to run it once per selected record.`,
         );
       }
-      /* 'each' runs the one-record command once per record, with no form: it has nothing to ask, and no one to ask it of. */
+      /* 'each' runs a one-record command once per selected record, opening its form once when it asks inputs;
+         inputs that read a single target record, prepare from the tenant or reader, or spend held files cannot be shared. */
       if (a.bulk === 'each') {
         if (command.targets === 'many')
           throw new Error(`${here} says bulk: 'each', but "${command.id}" already names many records; say bulk: true.`);
-        if (command.input.length)
+        if (registeredCommand(command.id)?.hasInitial)
           throw new Error(
-            `${here} says bulk: 'each', but "${command.id}" asks for input (${command.input.map((field) => field.name).join(', ')}); a command run once per record asks nothing.`,
+            `${here} says bulk: 'each', but "${command.id}" prepares initial values from its record; only inputs asked once for the whole selection may use bulk: 'each'.`,
           );
+        for (const { field, path } of commandFieldsDeep(command.input)) {
+          if (field.type === 'files' || field.type === 'signature')
+            throw new Error(
+              `${here} says bulk: 'each', but "${command.id}" takes ${field.type === 'files' ? 'files' : 'a signature'} ("${path}"), which a single submission commits once; declare targets: 'many' and bulk: true instead.`,
+            );
+          if (field.type === 'defined')
+            throw new Error(`${here} says bulk: 'each', but "${command.id}" asks row-defined questions ("${path}"), which prepare reads.`);
+          if (
+            field.type !== 'group' &&
+            field.type !== 'lines' &&
+            field.when !== undefined &&
+            /(?<![\w$.])(?:record|tenant)\./.test(maskQuoted(field.when))
+          )
+            throw new Error(
+              `${here} says bulk: 'each', but "${command.id}" asks "${path}" when "${field.when}", which prepare reads per record or tenant.`,
+            );
+          if ((field.type === 'choice' || field.type === 'choices') && field.options.some((option) => option.when !== undefined))
+            throw new Error(`${here} says bulk: 'each', but "${command.id}" narrows "${path}" by tenant profile at prepare time.`);
+          if (field.type === 'reference' && field.query !== undefined && recordColumnsIn(field.query).length > 0)
+            throw new Error(
+              `${here} says bulk: 'each', but "${command.id}" narrows "${path}" by record.${recordColumnsIn(field.query)[0]}.`,
+            );
+          if (
+            field.type !== 'group' &&
+            typeof field.default === 'object' &&
+            ('record' in field.default || 'tenant' in field.default || ('auto' in field.default && field.default.auto === 'me'))
+          )
+            throw new Error(`${here} says bulk: 'each', but "${command.id}" starts "${path}" from prepare (record, tenant or me).`);
+        }
       }
       /* A component standing in one of the command's own inputs, in its form. */
       const inputs = parseInputs(a.inputs, here, { paths: true });
@@ -1820,6 +1852,7 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
         );
       }
       const given = parseGiven(a, command, here);
+      const asks = parseAsks(a.asks, command.input, given, here);
       /* A machine's verb is offered from the states that leave (the machine wrote that condition). Any other button is
          offered where the command is, narrowed by the action's own `when` where it has one: the command's says where it
          may run, the action's where this button is worth drawing (a tenant's verbs that do not apply to it). */
@@ -1845,11 +1878,13 @@ function parseActions(raw: unknown, at: string, derived = false): AppAction[] {
         ...header,
         ...(inputs ? { inputs } : {}),
         ...(given ? { given } : {}),
+        ...(asks ? { asks } : {}),
       };
     }
     if (a.inputs !== undefined) throw new Error(`${here} names "inputs", which only a command's form draws; a fixed update asks nothing.`);
     if (a.given !== undefined)
       throw new Error(`${here} names "given", which only a command's form leaves undrawn; a fixed update asks nothing.`);
+    if (a.asks !== undefined) throw new Error(`${here} names "asks", which only a command's form reads; a fixed update asks nothing.`);
     if (!a.set || typeof a.set !== 'object' || Array.isArray(a.set) || !Object.keys(a.set).length) {
       throw new Error(
         `${here} has no "set" — the column → value it writes, like { "status": "working" } — and no "command": write it with action(label, { set }) or action(label, { command }).`,

@@ -54,6 +54,7 @@ A command a person runs from a record opens its form over the record: a short on
 | `public`                             | Serve it signed out at `/form/<key>`, running a `public: true` command; a signed-out visitor who opens `/<key>` is sent there              | `false`       | Stable |
 | `prefillable`                        | Inputs a page's link may fill in                                                                                                           | none          | Stable |
 | `given`                              | Inputs the link supplies, never drawn: `given: ['unit']` with `?unit=12`. The command still judges them; a link without one is refused     | none          | Stable |
+| `asks`                               | The inputs the form asks, when it does not ask every one: `asks: ['transcript']`. The rest are not drawn and take their default (or wait on their `when`), so a page can send them through the command while this form leaves them out; one required with no default and no `when` is refused (`[command-asks]`). Not on a form saved each step | every input | Stable |
 | `resume`, `draft`                    | Save every step into your tables as the visitor goes                                                                                       | none          | Stable |
 
 All keys: [the generated reference](/docs/dsl-views/).
@@ -255,7 +256,9 @@ The handler loops over `records`. Any refusal refuses the whole request and
 names the record it is about. Before submitting, the form lists the records
 that no longer match `when`, with **Deselect ineligible**. Public and
 event-recording commands cannot target many. For a result per record, use a
-fixed [action](/docs/actions/) with `bulk: true`, which writes each on its own.
+fixed [action](/docs/actions/) with `bulk: true`, or a one-record command with
+`bulk: 'each'` (which opens its form once when it asks inputs and runs each
+record in its own transaction).
 
 ## Common mistakes
 

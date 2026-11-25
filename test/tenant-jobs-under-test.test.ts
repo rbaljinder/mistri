@@ -42,7 +42,7 @@ async function textingClinic() {
   edit(join(dir, 'commands.ts'), '  refuse,\n', '  refuse,\n  send,\n');
   edit(
     join(dir, 'commands.ts'),
-    'export default defineCommands({ recordPayment, bookRoom, postNotice, requestVisit });',
+    'export default defineCommands({ recordPayment, assignClinician, bookRoom, postNotice, requestVisit });',
     `export const remindPatient = defineCommand({
   source,
   target: 'appointment',
@@ -65,13 +65,15 @@ export const sweep = defineCommand({
     return { message: 'Swept.' as const };
   },
 });
-export default defineCommands({ recordPayment, bookRoom, postNotice, requestVisit, remindPatient, sweep });`,
+export default defineCommands({ recordPayment, assignClinician, bookRoom, postNotice, requestVisit, remindPatient, sweep });`,
   );
   edit(
     join(dir, 'app.ts'),
-    "reception: { label: 'Reception', realm: 'tenant', read: clinicReads, write: ['patient'], commands: ['recordPayment', 'bookRoom'] },",
-    `reception: { label: 'Reception', realm: 'tenant', read: clinicReads, write: ['patient'], commands: ['recordPayment', 'bookRoom', 'remindPatient'] },
-      sweeper: { label: 'Sweeper', realm: 'tenant', service: true, read: clinicReads, commands: ['sweep'] },`,
+    "        commands: ['recordPayment', 'assignClinician', 'bookRoom'],\n      },\n      operator: {",
+    `        commands: ['recordPayment', 'assignClinician', 'bookRoom', 'remindPatient'],
+      },
+      sweeper: { label: 'Sweeper', realm: 'tenant', service: true, read: clinicReads, commands: ['sweep'] },
+      operator: {`,
   );
   edit(
     join(dir, 'server', 'tenant-policy.ts'),
@@ -151,17 +153,18 @@ test('MISTRI_JOBS=off: a tenant host schedules nothing, so a look leaves the dat
       db.close();
     }
   };
-  const serve = (environment: Record<string, string> = {}) =>
+  const serve = (environment: Record<string, string> = {}, jobs?: 'manual') =>
     startTestApp({
       workspace,
       directory: dir,
       config,
       args: ['--policy', 'server/tenant-policy.ts', '--commands', 'commands.ts', '--jobs', 'jobs.ts'],
       environment: { ...KEYS, ...environment },
+      ...(jobs ? { jobs } : {}),
     });
   /* A run in the store: a host that finds one catches up the slot it missed at its next start, so the two starts
      below differ at once rather than at the next minute. */
-  const first = await serve();
+  const first = await serve({}, 'manual');
   await first.tenant('north', { roles: ['reception'] });
   // A tenant's job is admitted while its tenant and the platform are both active.
   await first.platform({ roles: ['operator'] });
@@ -183,4 +186,48 @@ test('MISTRI_JOBS=off: a tenant host schedules nothing, so a look leaves the dat
   for (let waited = 0; swept() === before && waited < 15_000; waited += 250) await delay(250);
   await serving.close();
   assert.ok(swept() > before, 'a serving host runs its job at times');
+});
+
+test("jobs: 'manual': a tenant host holds its jobs at times until runJob runs one", async (t) => {
+  const { dir } = await textingClinic();
+  const workspace = await createTestWorkspace();
+  t.after(() => workspace.close());
+  const config = await workspace.copyConfig(join(dir, 'mistri.json'));
+  const database = (JSON.parse(readFileSync(config, 'utf8')) as { connections: { url: string }[] }).connections[0].url;
+  const swept = () => {
+    const db = new DatabaseSync(resolve(workspace.directory, database), { readOnly: true });
+    try {
+      return (db.prepare("SELECT count(*) AS n FROM notice WHERE body = 'swept'").get() as { n: number }).n;
+    } finally {
+      db.close();
+    }
+  };
+  const serve = (manual: boolean) =>
+    startTestApp({
+      workspace,
+      directory: dir,
+      config,
+      args: ['--policy', 'server/tenant-policy.ts', '--commands', 'commands.ts', '--jobs', 'jobs.ts'],
+      environment: KEYS,
+      ...(manual ? { jobs: 'manual' as const } : {}),
+    });
+  // A run in the store first, so an unheld host would catch up the slot it missed at once.
+  const held = await serve(true);
+  await held.tenant('north', { roles: ['reception'] });
+  await held.platform({ roles: ['operator'] });
+  const ran = await held.runJob('everyMinute', { tenant: 'north' });
+  assert.equal(ran.state, 'succeeded', `${ran.code}\n${held.logs()}`);
+  await held.close();
+  const before = swept();
+  assert.ok(before >= 1, 'the job run now swept');
+
+  const again = await serve(true);
+  await delay(2500);
+  await again.close();
+  assert.equal(swept(), before, 'nothing ran on its own while held');
+
+  const serving = await serve(false);
+  for (let waited = 0; swept() === before && waited < 15_000; waited += 250) await delay(250);
+  await serving.close();
+  assert.ok(swept() > before, 'an unheld host runs its job at times');
 });

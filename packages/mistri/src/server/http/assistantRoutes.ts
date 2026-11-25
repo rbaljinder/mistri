@@ -7,6 +7,7 @@
  *   POST /api/assistant/turn               say something (or edit, or retry): a stream
  *   POST /api/assistant/resolve            a proposal's outcome, and the turn continues: a stream
  *   POST /api/assistant/acted              a verb the person ran from a card or a row the conversation drew
+ *   POST /api/assistant/about              the record a page hands the panel: its key and label, if the person may open it
  *   GET  /api/assistant/search?app=&q=     their conversations whose words hold q, each with a line of them
  *   POST /api/assistant/rename             name one again
  *   POST /api/assistant/delete             forget one
@@ -27,7 +28,7 @@ import type { AppHost } from '../app/apps.js';
 import { catalogFromPayload, mayRunAction, nowLine, systemPrompt, toolSpecs } from '../assistant/assistantCatalog.js';
 import { assistantModel } from '../assistant/assistantModel.js';
 import { assistantStoreFor, storeUnavailableReply } from '../assistant/assistantStores.js';
-import { recordContext, type ToolSession } from '../assistant/assistantTools.js';
+import { aboutRecord, recordContext, type ToolSession } from '../assistant/assistantTools.js';
 import type { CommandProposalRow } from '../../adapters/commands/commandJournalTypes.js';
 import type { ProposalDraft } from '../commands/proposals.js';
 import { createAssistantProposal } from './assistantProposal.js';
@@ -56,6 +57,7 @@ export const ASSISTANT_PATHS: ReadonlySet<string> = new Set([
   '/api/assistant/delete',
   '/api/assistant/rename',
   '/api/assistant/search',
+  '/api/assistant/about',
 ]);
 const SAID: Record<string, readonly string[]> = {
   '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode'],
@@ -63,7 +65,12 @@ const SAID: Record<string, readonly string[]> = {
   '/api/assistant/delete': ['app', 'conversation'],
   '/api/assistant/rename': ['app', 'conversation', 'title'],
   '/api/assistant/acted': ['app', 'conversation', 'resource', 'action', 'key', 'record', 'outcome', 'detail'],
+  '/api/assistant/about': ['app', 'resource', 'id'],
 };
+/* Refused alike whether the table is not theirs, the row is outside their rows or it is not there: which of the three
+   is not the page's to learn, as a record's own address answers. */
+const NOT_OPEN = 'That record is not one you can open, so the assistant cannot be told about it.';
+const NO_RECORD = 'The assistant here takes no record as its context: its placement leaves out "record".';
 const MAX_TEXT = 4000;
 
 /** A line of the words a search found, around where it found them. */
@@ -242,6 +249,29 @@ export async function answerAssistant(
       send(res, 200, { deleted: true });
       return;
     }
+    if (path === '/api/assistant/about') {
+      /* A page hands the panel what the person is on (useAssistant().open({ about })): the record is read here as them,
+         through the App's own routes, and named as the panel will say it. Nothing is kept: the turn reads it again. */
+      if (!assistant.placement.includes('record')) throw new HttpError(400, NO_RECORD);
+      const resource = typeof body.resource === 'string' ? body.resource : '';
+      const key = body.id;
+      if (!resource || !((typeof key === 'string' && key && key.length <= 200) || (typeof key === 'number' && Number.isFinite(key))))
+        throw new HttpError(400, 'Name the record by its table and id.');
+      const signal = new AbortController().signal;
+      const payload = await servedTo(loop(), app.id, signal);
+      const session: ToolSession = {
+        loop: loop(),
+        app: app.id,
+        payload,
+        assistant,
+        catalog: catalogFromPayload(payload, assistant, await tablesOf(loop(), app.id, signal)),
+        signal,
+      };
+      const found = await aboutRecord(session, resource, key);
+      if (!found) throw new HttpError(404, NOT_OPEN);
+      send(res, 200, found);
+      return;
+    }
     if (path === '/api/assistant/acted') {
       /* Not a write: the person already ran the verb, through the App's own path and under its own checks
          (/api/update, the command's form). This tells the conversation what they did, so the model reads it
@@ -298,6 +328,19 @@ export async function answerAssistant(
     let text: string | undefined;
     let cutFrom: number | undefined;
     let context = body.context as { resource?: unknown; key?: unknown } | undefined;
+    if (
+      context !== undefined &&
+      (!context ||
+        typeof context !== 'object' ||
+        typeof context.resource !== 'string' ||
+        !context.key ||
+        typeof context.key !== 'object' ||
+        Array.isArray(context.key) ||
+        JSON.stringify(context.key).length > 500)
+    )
+      throw new HttpError(400, 'A context names a record: { resource, key }.');
+    if (context !== undefined && !assistant.placement.includes('record')) throw new HttpError(400, NO_RECORD);
+    let started: string | undefined;
     if (path === '/api/assistant/turn') {
       if (body.mode !== undefined && body.mode !== 'ask') throw new HttpError(400, 'A turn is asked with mode "ask", or none.');
       if (waiting) throw new HttpError(409, 'Confirm or decline the proposed change first.');
@@ -319,6 +362,7 @@ export async function answerAssistant(
       cutFrom = from?.seq;
       if (!conversation) {
         conversation = await store.create(owner, text, at);
+        started = conversation.id;
         hold(conversation.id);
       }
     } else {
@@ -352,9 +396,15 @@ export async function answerAssistant(
       ...(body.mode === 'ask' ? { ask: true as const } : {}),
     };
     const line =
-      text !== undefined && context && assistant.placement.includes('record')
-        ? await recordContext(session, context.resource, context.key)
+      text !== undefined && context
+        ? await recordContext(session, context.resource as string, context.key as Record<string, unknown>)
         : undefined;
+    if (text !== undefined && context && line === undefined) {
+      /* A record this person cannot open is refused, not answered as if the turn were about nothing: a page that
+         handed the panel another reader's record learns no more than that. The conversation this turn began goes too. */
+      if (started) await store.remove(owner, started);
+      throw new HttpError(404, NOT_OPEN);
+    }
     if (cutFrom !== undefined) await store.truncate(owner, conversation!.id, cutFrom, at);
     if (text !== undefined) {
       /* When it is, for this person: said with their words, not in the system prompt, which is the same for every

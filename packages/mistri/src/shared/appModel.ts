@@ -305,6 +305,9 @@ export interface AppTenancy {
   /** `false`: a tenant's members are not told who else is a member. Absent, any member reads the members' names and
       ids (never an address or a role), which is what `useTeam()` lists for a reader who does not manage the team. */
   team?: false;
+  /** Tenant roles whose signed-in members read this tenant's read audit (`Settings -> Reads` and `useReadAudit()`),
+      where a resource has `audit: { reads: true }`. Absent, the roles that edit its domains, else its branding. */
+  readAudit?: string[];
   /** Declares the platform realm; its label names the platform context ("Lender"). `me` is who the word is there,
       as `auth.me` says it in a tenant's: a row of the platform's table of its staff, by the column holding their
       account id. Absent, `me` in the platform realm is nobody's row. */
@@ -490,6 +493,8 @@ export interface AppFormView<Field extends string = string> extends ServedFormVi
   prefillable?: string[];
   /** The inputs the link supplies (`?unit=12`): filled from the address, never drawn, judged by the command like the rest. */
   given?: string[];
+  /** The inputs it asks, when it names them: the rest are not drawn and take their default (`command-asks`). */
+  asks?: string[];
   /** Command input → the App's own input component, drawn in place of the platform's control. Never on a public form. */
   inputs?: Record<string, import('@mistriwork/engine/shared/appComponents.js').ComponentDecl>;
   /** Saved on every step into the App's real tables (appSavedForms.ts): a public form only. */
@@ -617,7 +622,12 @@ export interface AppDashSection {
     | 'activity'
     | 'find'
     | 'branding'
-    | 'integrations';
+    | 'integrations'
+    | 'command';
+  /** command: the command its button runs, one that names no record and needs no input (appDashSections.ts). */
+  command?: string;
+  /** command: the button's words; the command's own name where not said. */
+  label?: string;
   /** find: the resources one box searches by their records' names (config `resources`), served as table ids. */
   searched?: string[];
   /** integrations: the ones the settings form shows, by name, in this order (config `integrations`); every one without it. */
@@ -1441,6 +1451,7 @@ export const DASH_KINDS = [
   'find',
   'branding',
   'integrations',
+  'command',
 ] as const;
 /** How many changes an activity section draws before "Show more", at most, and how many one read answers. */
 export const ACTIVITY_MAX = 50;
@@ -1778,6 +1789,7 @@ export const SECTION_KEYS: Record<AppDashSection['kind'] | 'banner', readonly st
   find: ['kind', 'area', 'title', 'icon', 'resources', 'placeholder', 'width'],
   branding: ['kind', 'area', 'title', 'icon', 'width'],
   integrations: ['kind', 'area', 'title', 'icon', 'width', 'integrations'],
+  command: ['kind', 'area', 'title', 'description', 'icon', 'command', 'label', 'width'],
 };
 
 /** The keys a dashboard's embed of a list view takes (`{ kind: 'view', view }`). */

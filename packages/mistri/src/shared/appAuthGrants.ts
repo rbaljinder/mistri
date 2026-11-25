@@ -106,14 +106,15 @@ export function parseAuthGrants(
         profile?: string;
         shared?: string[];
         team?: false;
+        readAudit?: string[];
         platform?: { label: string; me?: { from: string; column: string } };
       }
     | undefined;
   if (raw.tenancy !== undefined) {
     const here = `${at}, "tenancy"`;
     if (rows !== 'tenant') throw new Error(`${here} describes a tenant App's tenants; it needs "rows": "tenant".`);
-    if (!isRecord(raw.tenancy)) throw new Error(`${here} is not an object { label?, profile?, shared?, team?, platform? }.`);
-    allowKeys(raw.tenancy, ['label', 'profile', 'shared', 'team', 'platform'], here);
+    if (!isRecord(raw.tenancy)) throw new Error(`${here} is not an object { label?, profile?, shared?, team?, readAudit?, platform? }.`);
+    allowKeys(raw.tenancy, ['label', 'profile', 'shared', 'team', 'readAudit', 'platform'], here);
     const name = (value: unknown, key: string): string => {
       if (typeof value !== 'string' || !value.trim() || value.trim().length > 60)
         throw new Error(`${here} has a "${key}" that is not a name of 1 to 60 characters.`);
@@ -152,6 +153,23 @@ export function parseAuthGrants(
           `${here} has a "team" that is not true or false: false keeps a tenant's members from reading who else is a member (useTeam() then lists the team only for a reader who manages it).`,
         );
       if (given.team === false) tenancy.team = false;
+    }
+    /* Who in a tenant reads its read audit (tenantReadsRoute.ts), when the App has no domains or branding editors or
+       names a separate compliance role. Checked against auth.roles once the roles are read below. */
+    if (given.readAudit !== undefined) {
+      const readAudit = given.readAudit;
+      if (
+        !Array.isArray(readAudit) ||
+        !readAudit.length ||
+        readAudit.length > 16 ||
+        readAudit.some((r) => typeof r !== 'string' || !r.trim())
+      )
+        throw new Error(
+          `${here} has a "readAudit" that is not a list of 1 to 16 tenant role names of "auth.roles", like ['compliance', 'admin'].`,
+        );
+      const rolesNamed = (readAudit as string[]).map((r) => r.trim());
+      if (new Set(rolesNamed).size !== rolesNamed.length) throw new Error(`${here} names a role twice in "readAudit".`);
+      tenancy.readAudit = rolesNamed;
     }
     if (given.platform !== undefined) {
       if (!isRecord(given.platform)) throw new Error(`${here} has a "platform" that is not an object { label, me? }.`);
@@ -407,6 +425,16 @@ export function parseAuthGrants(
       };
     });
   if (roleProblems.length) throw new AppProblems(roleProblems);
+  for (const role of tenancy?.readAudit ?? []) {
+    const grant = roles[role];
+    if (!grant) throw new Error(`${at}, "tenancy", "readAudit" names "${role}", which "auth.roles" does not declare.`);
+    if (grant.service)
+      throw new Error(`${at}, "tenancy", "readAudit" names "${role}", a service role: Settings → Reads is for signed-in members.`);
+    if (grant.realm !== undefined && grant.realm !== 'tenant')
+      throw new Error(
+        `${at}, "tenancy", "readAudit" names "${role}", which has realm "${grant.realm}": only a tenant role reads a tenant's read audit.`,
+      );
+  }
   claimMappingProblems(roles, providers as AppProvider[], rows, at);
   if (rows === 'policy' && !namedSources) {
     throw new Error(`${at} has "rows": "policy", which requires named "sources" (one of them the default).`);

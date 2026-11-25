@@ -305,4 +305,6 @@ a.dash-step-card { text-decoration: none; }
   .dash-mini-line { color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.35; overflow-wrap: anywhere; }
   .dash-mini-value { flex: none; color: var(--ink-muted); font-size: var(--text-sm); line-height: 1.35; font-variant-numeric: tabular-nums; white-space: nowrap; }
   @media (prefers-reduced-motion: reduce) { .dash-mini-name { transition: none; } }
+  /* A command's button under its title and sentence (DashboardCommand.tsx): the sentence reads as a note's does. */
+  .dash-command > [data-slot='button'] { margin-top: var(--space-4); }
 }

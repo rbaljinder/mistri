@@ -24,7 +24,6 @@
  * does (writeLanes.ts).
  */
 import { createHash } from 'node:crypto';
-import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { asBackgroundWork } from '@mistriwork/engine/adapters/writeLanes.js';
 import { attributeAction, attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
@@ -146,6 +145,7 @@ export function decisionHandlers(
     app: () => AppDef;
     bind: JobAttemptBinding;
     jobs: JobStore;
+    now?: () => number;
     runtime: DecisionRuntime;
   }>,
 ): Record<string, AnyJobDefinition> {
@@ -186,7 +186,8 @@ async function sweep(
   const decision = options.module.decisions!.get(job.decide![0])!;
   const slotKey = context.provenance.causationId;
   if (!slotKey) throw new JobRejected('The sweep names no slot.');
-  const keys = await readDue(authorized, decision.where, decision.limit, appTime(context.now()));
+  const keys = await readDue(authorized, decision.where, decision.limit, new Date(context.now()));
+  const realNow = options.now ?? Date.now;
   for (const key of keys)
     await options.jobs.enqueue(
       {
@@ -196,7 +197,7 @@ async function sweep(
         input: { key, input: { records: [{ decision: decision.name, key }] } },
         provenance: { ...context.provenance, causationId: slotKey },
       },
-      context.now(),
+      realNow(),
     );
   return { enqueued: keys.length };
 }
@@ -508,7 +509,7 @@ async function act(
           {
             signal: context.signal,
             requestId: `decide:${context.jobId}:${context.attempt}`,
-            now: () => appTime(context.now()),
+            now: () => new Date(context.now()),
             flags,
             door: 'job',
             // The receipt says a decision made it, and the field it wrote is marked as the decision's until a person confirms it.
@@ -574,7 +575,7 @@ async function propose(
         evidence: decisionEvidence(read, decision.name),
         reason: `${humanName(decision.name)}: ${CONFIDENCE_WORDS[confidenceOf(answer.probability)]}.`,
       },
-      () => appTime(context.now()),
+      () => new Date(context.now()),
     );
   } catch {
     /* The suggestion stands without its proposal. */

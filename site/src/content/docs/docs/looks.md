@@ -110,6 +110,7 @@ Each part's treatment in each look, as `mistri theme show <look>` prints it. A t
 | `required` | `star` | `star` | `star` | `star` | `star` | `optional-word` | `star` | `star` |
 | `formStep` | `plain` | `plain` | `plain` | `plain` | `plain` | `ruled` | `ruled` | `plain` |
 | `actionBar` | `plain` | `plain` | `plain` | `plain` | `plain` | `plain` | `plain` | `raised` |
+| `choice` | `tint` | `tint` | `tint` | `tint` | `tint` | `tint` | `tint` | `tint` |
 
 ## Type, look by look
 

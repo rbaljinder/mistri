@@ -277,6 +277,19 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | `views.*[kind=dashboard].sections[][kind=chart].unit` | string | Stable | A word said after each figure ("days", "/mo"). Used in `examples/apps/lintel/app.ts`. |
 | `views.*[kind=dashboard].sections[][kind=chart].x` | string | Stable | A scatter's across measure ("sum amount"); measure is its up one. Only on a scatter, which needs it. |
 
+## `views.*[kind=dashboard].sections[][kind=command]`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=dashboard].sections[][kind=command].command` | string | Stable | A command, by its name in the App's commands module (defineCommands). The server fills in its input, target and version from the registration; mistri-commands.d.ts types the names. Used in `examples/apps/lintel/app.ts`. |
+| `views.*[kind=dashboard].sections[][kind=command].description` | string \| object | Stable | The sentence under the title: what the button does. Used in `examples/apps/lintel/app.ts`. |
+| `views.*[kind=dashboard].sections[][kind=command].description.args` | object | Stable | Each ICU argument's column path: { "title": "thread_id.title" }. |
+| `views.*[kind=dashboard].sections[][kind=command].description.message` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
+| `views.*[kind=dashboard].sections[][kind=command].kind` |  | Stable |  One of `command`. Used in `examples/apps/lintel/pages/maintenance_request.ts`. |
+| `views.*[kind=dashboard].sections[][kind=command].label` | string \| object | Stable | The button's words; the command's own name where not said. |
+| `views.*[kind=dashboard].sections[][kind=command].label.args` | object | Stable | Each ICU argument's column path: { "title": "thread_id.title" }. |
+| `views.*[kind=dashboard].sections[][kind=command].label.message` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
+
 ## `views.*[kind=dashboard].sections[][kind=custom]`
 
 | Key | Type | Status | What it does |
@@ -440,6 +453,12 @@ narrows), `windows`, `icon`, `title` and `width` (`full`, `two-thirds`,
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `views.*[kind=form].abandoned` | `"purge"` · `"keep"` | Stable | An expired draft: 'purge' (the default) removes the root and the rows that point at it; 'keep' leaves them for follow-up. One of `keep`, `purge`. |
+
+## `views.*[kind=form].asks`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `views.*[kind=form].asks` | array | Stable | The command's inputs this form asks, when not every one: only these are drawn; the rest a page sends, or take their default, or wait on their when. One required with no default and no when is refused (command-asks). Never also given, never on a form saved each step. |
 
 ## `views.*[kind=form].command`
 

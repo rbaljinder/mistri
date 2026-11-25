@@ -19,6 +19,7 @@
 import { createHash } from 'node:crypto';
 import { asBackgroundWork } from '@mistriwork/engine/adapters/writeLanes.js';
 import { attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
+import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { JobStore } from '../../adapters/jobs/jobStoreContract.js';
 import type { WorkflowStore } from '../../adapters/workflows/workflowStoreContract.js';
 import { WorkflowRefusal } from '../../adapters/workflows/workflowStoreTypes.js';
@@ -359,7 +360,7 @@ async function stepCommand(
     const attempt = {
       signal: request.signal,
       requestId: stepRequestId(context.jobId, request.step),
-      now: () => new Date(now()),
+      now: () => appTime(now()),
       flags,
     };
     if (authorized.command.approval === 'ai')
@@ -400,6 +401,7 @@ export async function proposed(
   now: number,
   pending?: (proposalId: string) => void,
 ): Promise<unknown> {
+  const asOf = appTime(now).getTime();
   const proposal = await createProposal(
     binding,
     actor,
@@ -413,13 +415,14 @@ export async function proposed(
       evidence: [],
       reason: `The workflow "${workflow}" proposed this at its step "${request.step}".`,
     },
-    () => new Date(now),
+    () => new Date(asOf),
   );
   if (proposal.state === 'approved') return { proposal: proposal.id, state: 'approved', receipt: proposal.receiptId };
-  if (proposal.state === 'proposed' && now < proposal.expiresAt) {
-    // Woken at once when a person approves it in this process; the poll is for every other case.
+  if (proposal.state === 'proposed' && asOf < proposal.expiresAt) {
+    // Woken at once when a person approves it in this process; the poll is for every other case, on the job store's real clock.
     pending?.(proposal.id);
-    throw new StepPending(Math.min(proposal.expiresAt, now + proposalPollMs(now - proposal.createdAt)));
+    const wait = Math.min(proposal.expiresAt - asOf, proposalPollMs(asOf - proposal.createdAt));
+    throw new StepPending(now + Math.max(0, wait));
   }
   throw new StepRefused(request.step, `proposal_${proposal.state === 'proposed' ? 'expired' : proposal.state}`);
 }

@@ -133,6 +133,7 @@ const FULL = {
     required: 'optional-word',
     formStep: 'ruled',
     actionBar: 'raised',
+    choice: 'filled',
   },
   shell: { placement: 'top' },
   surface: { ground: { kind: 'grid', strength: 2 }, nav: { kind: 'dots', strength: 3 } },

@@ -12,6 +12,7 @@ import { describeShape } from '../commands/commandShapes.js';
 import { renderApiOutputSchema } from './apiOutputSchema.js';
 import { genericWriteOf } from '../commands/genericWriteBrand.js';
 import { publicActorId } from '../../shared/publicActor.js';
+import { apiJudgment } from './apiRefusals.js';
 
 type Evidence = Pick<BusinessCommandAuthorizationOptions, 'connectionFor' | 'writableConnection' | 'transactionalConnection'>;
 type Authority = Evidence & Pick<BusinessCommandAuthorizationOptions, 'managedOwnership'>;
@@ -73,7 +74,9 @@ export function scopedCommandCatalog(
     transactionalConnection: authority.transactionalConnection,
     ...(authority.managedOwnership === undefined ? {} : { managedOwnership: authority.managedOwnership }),
   });
-  const operations = api.commands.map(({ command: ref }) => {
+  // Each exposed command judged on its own, so one run says every refused one (apiRefusals.ts).
+  const judged = apiJudgment();
+  const operation = ({ command: ref }: AppApiDef['commands'][number]) => {
     const id = ref.id,
       command = registry[id];
     if (!command) return fail(id, 'unregistered command');
@@ -168,7 +171,12 @@ export function scopedCommandCatalog(
       output,
       outputSchema,
     });
+  };
+  const operations = api.commands.flatMap((exposure) => {
+    const made = judged.run(() => operation(exposure));
+    return made === undefined ? [] : [made];
   });
+  judged.done();
   return Object.freeze({
     stage: 'command-validation-foundation' as const,
     wireValidation: 'pending' as const,

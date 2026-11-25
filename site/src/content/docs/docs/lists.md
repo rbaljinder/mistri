@@ -36,7 +36,7 @@ See it in the sample (`examples/apps/lintel/views.ts:150`) (some tabs left out);
 
 - Use a list when people find, compare and work many records of one table; pick its `presentation` from [Choose a building block](/docs/choose/#show-rows): a grid to compare, `cards` to look at, `board` for stages, `queue` for an inbox, `split` to read one after another, `calendar` for dates.
 - Use a [record page](/docs/pages/) instead for one record and everything around it, and a [dashboard](/docs/dashboards/) for figures across tables.
-- Use a [command](/docs/commands/) with `targets: 'many'` instead of a bulk action when many records must change in one transaction; a one-record command with `bulk: 'each'` (no inputs) runs once per picked record, each in its own transaction, and reports how each went.
+- Use a [command](/docs/commands/) with `targets: 'many'` instead of a bulk action when many records must change in one transaction; a one-record command with `bulk: 'each'` opens its form once when it asks inputs (none that read a single record, prepare from the tenant or reader, or spend held files) and runs once per picked record, each in its own transaction, reporting how each went.
 
 ## Options
 

@@ -26,7 +26,10 @@
  *   `words`: where the notice's title says a write's words (`{words.code}`),
  *   `text` keeps them masked and `words` the said text, sealed
  *   (noticeWordsSeal.ts), only while the message is held: a row that is sent,
- *   suppressed or fails keeps none.
+ *   suppressed or fails keeps none. Version 3 adds `reference`, the App's own
+ *   name for a command's message (`send(…, { reference })`), and `settle`, set
+ *   while the App's `integrations.settled` command has not yet been told the
+ *   state the row is in (integrationSettled.ts), with the index it is found by.
  *
  * Under the reserved runtime prefix, so no App lists, reads or writes it.
  * Provisioned explicitly (provisionStores in @mistriwork/mistri/maintenance, `only:
@@ -44,7 +47,7 @@ import { beforeCommit } from '@mistriwork/engine/adapters/postgresTransactionHan
 import { runtimeName, runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 
 const INTEGRATION_PREFIX = '__mistri_integration_';
-const INTEGRATION_VERSION = 2;
+const INTEGRATION_VERSION = 3;
 const t = Object.freeze({
   meta: `${INTEGRATION_PREFIX}meta`,
   secret: `${INTEGRATION_PREFIX}secret`,
@@ -72,10 +75,15 @@ const ACTOR_KIND_SQLITE = `actor_kind TEXT CHECK (actor_kind IN (${list(ACTOR_KI
 const ACTOR_KIND_POSTGRES = `actor_kind text CHECK (actor_kind IN (${list(ACTOR_KINDS)}))`;
 const SQLITE_RECIPIENT_INDEX = `CREATE INDEX "${t.message}_recipient" ON "${t.message}" (app, channel, recipient, at)`;
 const POSTGRES_RECIPIENT_INDEX = `CREATE INDEX "${t.message}_recipient" ON ${runtimeTable('postgres', t.message)} (app, channel, recipient, at)`;
-const SQLITE_META = `CREATE TABLE "${t.meta}" (
+/* The messages whose settle the App has not been told yet, found without reading the rest. */
+const SQLITE_SETTLE_INDEX = `CREATE INDEX "${t.message}_settle" ON "${t.message}" (app, settle, at)`;
+const POSTGRES_SETTLE_INDEX = `CREATE INDEX "${t.message}_settle" ON ${runtimeTable('postgres', t.message)} (app, settle, at)`;
+/* The version row's table as a version lays it out: an upgrade step writes its own, so steps run one after another. */
+const sqliteMeta = (version: number) => `CREATE TABLE "${t.meta}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-  version INTEGER NOT NULL CHECK (version = ${INTEGRATION_VERSION})
+  version INTEGER NOT NULL CHECK (version = ${version})
 )`;
+const SQLITE_META = sqliteMeta(INTEGRATION_VERSION);
 const POSTGRES_META = `CREATE TABLE ${runtimeTable('postgres', t.meta)} (
   singleton integer PRIMARY KEY CHECK (singleton = 1),
   version integer NOT NULL CHECK (version = ${INTEGRATION_VERSION})
@@ -139,12 +147,13 @@ const SQLITE = [
   consent INTEGER CHECK (consent IN (0, 1)),
   timezone TEXT,
   attempts INTEGER NOT NULL,
-  at INTEGER NOT NULL, ${ACTOR_KIND_SQLITE}, words TEXT,
+  at INTEGER NOT NULL, ${ACTOR_KIND_SQLITE}, words TEXT, reference TEXT, settle INTEGER,
   PRIMARY KEY (app, key)
 )`,
   `CREATE INDEX "${t.message}_due" ON "${t.message}" (app, state, due_at)`,
   `CREATE INDEX "${t.message}_at" ON "${t.message}" (at)`,
   SQLITE_RECIPIENT_INDEX,
+  SQLITE_SETTLE_INDEX,
 ];
 const POSTGRES = [
   POSTGRES_META,
@@ -207,11 +216,14 @@ const POSTGRES = [
   at bigint NOT NULL,
   ${ACTOR_KIND_POSTGRES},
   words text,
+  reference text,
+  settle integer,
   PRIMARY KEY (app, key)
 )`,
   `CREATE INDEX "${t.message}_due" ON ${runtimeTable('postgres', t.message)} (app, state, due_at)`,
   `CREATE INDEX "${t.message}_at" ON ${runtimeTable('postgres', t.message)} (at)`,
   POSTGRES_RECIPIENT_INDEX,
+  POSTGRES_SETTLE_INDEX,
 ];
 
 class IntegrationStoreUnavailable extends Error {
@@ -272,6 +284,8 @@ export interface MessageRow {
   /** A held notice's said text, sealed, where its title says a write's words (`text` has them masked). The store keeps
       it only while the row is held. */
   readonly words?: string | null;
+  /** A command's message's own name, the App's (`send(…, { reference })`): kept from its first write, never changed. */
+  readonly reference?: string | null;
   readonly attempts: number;
   readonly at: number;
 }
@@ -320,6 +334,14 @@ export interface IntegrationStore {
   setConsent(row: ConsentRow): Promise<void>;
   message(app: string, key: string): Promise<MessageRow | undefined>;
   putMessage(row: MessageRow): Promise<void>;
+  /** Messages with a reference whose state the App's `integrations.settled` command has not been told yet, oldest first. */
+  unsettled(app: string, limit: number, skipTenants?: readonly string[]): Promise<readonly MessageRow[]>;
+  /** The App was told the message is in `state`: it is not told again unless the message moves on. */
+  settled(app: string, key: string, state: MessageRow['state']): Promise<void>;
+  /** A settle report could not run yet: move it behind every unsettled row so others do not wait behind it. */
+  deferSettled(app: string, key: string, state: MessageRow['state'], now: number): Promise<void>;
+  /** Withdraw held messages carrying `reference` on `channel` for `tenant`: marked `suppressed` (`withdrawn`) and `settle = 1`. */
+  withdrawHeld(app: string, tenant: string, channel: string, reference: string, at: number): Promise<number>;
   /** Held messages whose quiet hours are over, oldest first: one channel's, or every channel's. */
   due(app: string, now: number, limit: number, channel?: string): Promise<readonly MessageRow[]>;
   /** How many messages one tenant's writes sent on a channel since a moment, to one recipient or to anyone: what the email
@@ -376,6 +398,7 @@ const messageOf = (row: Record<string, unknown>): MessageRow => ({
   timezone: nullable(row.timezone),
   ...(row.actor_kind === null || row.actor_kind === undefined ? {} : { actorKind: String(row.actor_kind) as ActorKind }),
   ...(row.words === null || row.words === undefined ? {} : { words: String(row.words) }),
+  ...(row.reference === null || row.reference === undefined ? {} : { reference: String(row.reference) }),
   attempts: num(row.attempts),
   at: num(row.at),
 });
@@ -578,10 +601,11 @@ function openSqliteIntegrationStore(existingPath: string): IntegrationStore {
     async putMessage(row) {
       write(() => {
         db.prepare(
-          `INSERT INTO "${t.message}" (app, key, tenant, channel, recipient, text, state, reason, provider_id, due_at, attempts, at, consent, timezone, words)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `INSERT INTO "${t.message}" (app, key, tenant, channel, recipient, text, state, reason, provider_id, due_at, attempts, at, consent, timezone, words, reference, settle)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT (app, key) DO UPDATE SET state = excluded.state, reason = excluded.reason, provider_id = excluded.provider_id,
-             due_at = excluded.due_at, attempts = excluded.attempts, at = excluded.at, words = excluded.words`,
+             due_at = excluded.due_at, attempts = excluded.attempts, at = excluded.at, words = excluded.words,
+             settle = CASE WHEN reference IS NOT NULL AND state <> excluded.state THEN 1 ELSE settle END`,
         ).run(
           row.app,
           row.key,
@@ -598,11 +622,54 @@ function openSqliteIntegrationStore(existingPath: string): IntegrationStore {
           row.consent === undefined || row.consent === null ? null : Number(row.consent),
           row.timezone ?? null,
           heldWords(row),
+          clip(row.reference ?? null, 200),
+          row.reference ? 1 : null,
         );
         db.prepare(
           `DELETE FROM "${t.message}" WHERE rowid IN (SELECT rowid FROM "${t.message}" WHERE at < ? AND state <> 'held' LIMIT 100)`,
         ).run(row.at - KEEP_MS);
       });
+    },
+    async unsettled(app, limit, skipTenants) {
+      return read(() => {
+        const skipped = skipTenants?.length ? skipTenants : undefined;
+        const filter = skipped ? ` AND tenant NOT IN (${skipped.map(() => '?').join(', ')})` : '';
+        return db
+          .prepare(`SELECT * FROM "${t.message}" WHERE app = ? AND settle = 1${filter} ORDER BY at LIMIT ?`)
+          .all(app, ...(skipped ?? []), limit)
+          .map((row) => messageOf(row as Record<string, unknown>));
+      });
+    },
+    async settled(app, key, state) {
+      write(() => {
+        db.prepare(`UPDATE "${t.message}" SET settle = NULL WHERE app = ? AND key = ? AND state = ?`).run(app, key, state);
+      });
+    },
+    async deferSettled(app, key, state, now) {
+      write(() => {
+        const latest = Number(
+          (db.prepare(`SELECT COALESCE(MAX(at), 0) AS m FROM "${t.message}" WHERE app = ? AND settle = 1`).get(app) as { m?: unknown })
+            ?.m ?? 0,
+        );
+        db.prepare(`UPDATE "${t.message}" SET at = ? WHERE app = ? AND key = ? AND state = ? AND settle = 1`).run(
+          Math.max(now, latest) + 1,
+          app,
+          key,
+          state,
+        );
+      });
+    },
+    async withdrawHeld(app, tenant, channel, reference, at) {
+      return write(() =>
+        Number(
+          db
+            .prepare(
+              `UPDATE "${t.message}" SET state = 'suppressed', reason = 'withdrawn', due_at = NULL, words = NULL, at = ?, settle = 1
+                WHERE app = ? AND tenant = ? AND channel = ? AND reference = ? AND state = 'held'`,
+            )
+            .run(at, app, tenant, channel, reference).changes,
+        ),
+      );
     },
     async due(app, now, limit, channel) {
       return read(() =>
@@ -662,6 +729,7 @@ const POSTGRES_RELATIONS = [
   `${t.message}_at`,
   `${t.message}_due`,
   `${t.message}_recipient`,
+  `${t.message}_settle`,
   runtimeName('postgres', t.meta),
   runtimeName('postgres', t.secret),
   runtimeName('postgres', t.seen),
@@ -816,10 +884,11 @@ async function openPostgresIntegrationStore(url: string): Promise<IntegrationSto
     async putMessage(row) {
       await query(
         `WITH old AS (DELETE FROM ${table(t.message)} WHERE ctid IN (SELECT ctid FROM ${table(t.message)} WHERE at < $13 AND state <> 'held' LIMIT 100))
-         INSERT INTO ${table(t.message)} (app, key, tenant, channel, recipient, text, state, reason, provider_id, due_at, attempts, at, consent, timezone, words)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $15, $16)
+         INSERT INTO ${table(t.message)} AS m (app, key, tenant, channel, recipient, text, state, reason, provider_id, due_at, attempts, at, consent, timezone, words, reference, settle)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $14, $15, $16, $17, $18)
          ON CONFLICT (app, key) DO UPDATE SET state = excluded.state, reason = excluded.reason, provider_id = excluded.provider_id,
-           due_at = excluded.due_at, attempts = excluded.attempts, at = excluded.at, words = excluded.words`,
+           due_at = excluded.due_at, attempts = excluded.attempts, at = excluded.at, words = excluded.words,
+           settle = CASE WHEN m.reference IS NOT NULL AND m.state <> excluded.state THEN 1 ELSE m.settle END`,
         [
           row.app,
           row.key,
@@ -837,8 +906,41 @@ async function openPostgresIntegrationStore(url: string): Promise<IntegrationSto
           row.consent === undefined || row.consent === null ? null : Number(row.consent),
           row.timezone ?? null,
           heldWords(row),
+          clip(row.reference ?? null, 200),
+          row.reference ? 1 : null,
         ],
       );
+    },
+    async unsettled(app, limit, skipTenants) {
+      const skipped = skipTenants?.length ? skipTenants : undefined;
+      return (
+        await query(
+          skipped
+            ? `SELECT * FROM ${table(t.message)} WHERE app = $1 AND settle = 1 AND NOT (tenant = ANY($3::text[])) ORDER BY at LIMIT $2`
+            : `SELECT * FROM ${table(t.message)} WHERE app = $1 AND settle = 1 ORDER BY at LIMIT $2`,
+          skipped ? [app, limit, [...skipped]] : [app, limit],
+        )
+      ).map(messageOf);
+    },
+    async settled(app, key, state) {
+      await query(`UPDATE ${table(t.message)} SET settle = NULL WHERE app = $1 AND key = $2 AND state = $3`, [app, key, state]);
+    },
+    async deferSettled(app, key, state, now) {
+      await query(
+        `UPDATE ${table(t.message)}
+            SET at = GREATEST($4::bigint, COALESCE((SELECT MAX(at) FROM ${table(t.message)} WHERE app = $1 AND settle = 1), 0)) + 1
+          WHERE app = $1 AND key = $2 AND state = $3 AND settle = 1`,
+        [app, key, state, now],
+      );
+    },
+    async withdrawHeld(app, tenant, channel, reference, at) {
+      return (
+        await query(
+          `UPDATE ${table(t.message)} SET state = 'suppressed', reason = 'withdrawn', due_at = NULL, words = NULL, at = $5, settle = 1
+            WHERE app = $1 AND tenant = $2 AND channel = $3 AND reference = $4 AND state = 'held' RETURNING key`,
+          [app, tenant, channel, reference, at],
+        )
+      ).length;
     },
     /* Every process of a deployment (replicas, --workers) runs the held-message loop, so a page is leased as it is
        read: the rows taken move their due moment past the time a page of sends can take, and another process's look
@@ -889,7 +991,7 @@ export function sqliteIntegrationsUpgradeFrom1(): readonly string[] {
   return [
     `ALTER TABLE "${t.message}" ADD COLUMN words TEXT`,
     `DROP TABLE "${t.meta}"`,
-    SQLITE_META,
+    sqliteMeta(2),
     `INSERT INTO "${t.meta}" (singleton, version) VALUES (1, 2)`,
   ];
 }
@@ -902,6 +1004,32 @@ export function postgresIntegrationsUpgradeFrom1(): readonly string[] {
     `ALTER TABLE ${meta} DROP CONSTRAINT ${runtimeName('postgres', t.meta)}_version_check`,
     `UPDATE ${meta} SET version = 2`,
     `ALTER TABLE ${meta} ADD CONSTRAINT ${runtimeName('postgres', t.meta)}_version_check CHECK (version = 2)`,
+  ];
+}
+
+/** Version 2 to 3: a message gains the App's `reference` and its `settle` mark, every row kept with neither, and the
+    index the unsettled are found by. ADD COLUMN writes SQLite's CREATE text as version 3 lays it out. */
+export function sqliteIntegrationsUpgradeFrom2(): readonly string[] {
+  return [
+    `ALTER TABLE "${t.message}" ADD COLUMN reference TEXT`,
+    `ALTER TABLE "${t.message}" ADD COLUMN settle INTEGER`,
+    SQLITE_SETTLE_INDEX,
+    `DROP TABLE "${t.meta}"`,
+    sqliteMeta(3),
+    `INSERT INTO "${t.meta}" (singleton, version) VALUES (1, 3)`,
+  ];
+}
+
+/** The same on PostgreSQL. */
+export function postgresIntegrationsUpgradeFrom2(): readonly string[] {
+  const meta = runtimeTable('postgres', t.meta);
+  return [
+    `ALTER TABLE ${runtimeTable('postgres', t.message)} ADD COLUMN reference text`,
+    `ALTER TABLE ${runtimeTable('postgres', t.message)} ADD COLUMN settle integer`,
+    POSTGRES_SETTLE_INDEX,
+    `ALTER TABLE ${meta} DROP CONSTRAINT ${runtimeName('postgres', t.meta)}_version_check`,
+    `UPDATE ${meta} SET version = 3`,
+    `ALTER TABLE ${meta} ADD CONSTRAINT ${runtimeName('postgres', t.meta)}_version_check CHECK (version = 3)`,
   ];
 }
 

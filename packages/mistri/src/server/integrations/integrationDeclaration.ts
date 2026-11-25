@@ -7,6 +7,7 @@
  *     integrations: {
  *       use: [fakepay()],
  *       webhooks: { fakepay: { runAs: 'payments', events: { paid: 'markOrderPaid' } } },
+ *       settled: { runAs: 'payments', command: 'recordText' },
  *       quietHours: { from: '21:00', to: '08:00', timezone: 'America/New_York' },
  *       editors: ['owner'],
  *     },
@@ -14,7 +15,9 @@
  *
  * `use` lists the packages' integrations. `webhooks` maps an integration's
  * events to the App's commands, each run as the named principal, whose
- * roles are service roles (`service: true`). `quietHours` holds a channel
+ * roles are service roles (`service: true`). `settled` runs a command, as
+ * a principal, each time a channel message that carries the App's `reference`
+ * settles (sent, held, suppressed, failed): what the App records of it. `quietHours` holds a channel
  * message that would arrive at night until the morning, in the recipient's
  * zone when the message names one. `editors` are the roles that may enter
  * the integrations' secrets on the settings screen. What a command calls (`integrations:
@@ -29,6 +32,9 @@ export interface IntegrationsDeclaration {
   readonly use: readonly Integration[];
   /** Per integration: the principal its events run as, and the command each event runs. */
   readonly webhooks?: Readonly<Record<string, Readonly<{ runAs: string; events: Readonly<Record<string, string>> }>>>;
+  /** The command a channel message that carries a `reference` runs, as this principal, each time it settles: sent, held,
+      suppressed or failed. Its input is `{ reference, channel, state, reason?, providerId?, message }`. */
+  readonly settled?: Readonly<{ runAs: string; command: string }>;
   /** No channel message is sent between `from` and `to` (24-hour `HH:MM`) in `timezone`, or in the recipient's own when the message names one. */
   readonly quietHours?: Readonly<{ from: string; to: string; timezone: string }>;
   /** The App roles that may enter secrets on the settings screen (in their own tenant, on a tenant App). None: nobody may. */
@@ -39,6 +45,7 @@ export interface IntegrationsDeclaration {
 export interface CapturedIntegrations {
   readonly use: ReadonlyMap<string, CapturedIntegration>;
   readonly webhooks: ReadonlyMap<string, Readonly<{ runAs: string; events: ReadonlyMap<string, string> }>>;
+  readonly settled?: Readonly<{ runAs: string; command: string }>;
   readonly quietHours?: Readonly<{ from: number; to: number; timezone: string }>;
   readonly editors: readonly string[];
 }
@@ -75,8 +82,8 @@ export function captureIntegrations(
 ): CapturedIntegrations {
   const declared = plain(value, 'Jobs integrations', fail);
   for (const key of Object.keys(declared))
-    if (!['use', 'webhooks', 'quietHours', 'editors'].includes(key))
-      fail(`Jobs integrations has no "${key}". It takes: use, webhooks, quietHours, editors.`);
+    if (!['use', 'webhooks', 'settled', 'quietHours', 'editors'].includes(key))
+      fail(`Jobs integrations has no "${key}". It takes: use, webhooks, settled, quietHours, editors.`);
   if (!Array.isArray(declared.use) || !declared.use.length)
     fail('Jobs integrations.use lists the integrations the App uses: use: [fakepay()].');
   const use = new Map<string, CapturedIntegration>();
@@ -141,6 +148,23 @@ export function captureIntegrations(
       webhooks.set(name, Object.freeze({ runAs: mapping.runAs as string, events }));
     }
   }
+  let settled: CapturedIntegrations['settled'];
+  if (declared.settled !== undefined) {
+    const at = 'Jobs integrations.settled';
+    const mapping = plain(declared.settled, at, fail);
+    for (const key of Object.keys(mapping))
+      if (key !== 'runAs' && key !== 'command') fail(`${at} has no "${key}". It takes: runAs, command.`);
+    if (typeof mapping.runAs !== 'string' || !PRINCIPAL.test(mapping.runAs)) fail(`${at} runAs names a principal of the module.`);
+    if (!principals.has(mapping.runAs as string))
+      fail(`${at} runs as "${mapping.runAs as string}", which the module's principals do not declare.`);
+    if (typeof mapping.command !== 'string' || !COMMAND_ID.test(mapping.command))
+      fail(`${at} names the command it runs, as defineCommands registers it: command: 'recordText'.`);
+    if (!channels.size)
+      fail(
+        `[integration-channel-unknown] ${at} runs a command when a channel message settles, and no integration the App uses has a channel.`,
+      );
+    settled = Object.freeze({ runAs: mapping.runAs as string, command: mapping.command as string });
+  }
   let quietHours: CapturedIntegrations['quietHours'];
   if (declared.quietHours !== undefined) {
     const quiet = plain(declared.quietHours, 'Jobs integrations.quietHours', fail);
@@ -160,7 +184,31 @@ export function captureIntegrations(
   const editors = declared.editors ?? [];
   if (!Array.isArray(editors) || editors.some((role) => typeof role !== 'string' || !role) || new Set(editors).size !== editors.length)
     fail("Jobs integrations.editors lists the App roles that may enter secrets: editors: ['owner'].");
-  return Object.freeze({ use, webhooks, ...(quietHours ? { quietHours } : {}), editors: Object.freeze([...(editors as string[])]) });
+  return Object.freeze({
+    use,
+    webhooks,
+    ...(settled ? { settled } : {}),
+    ...(quietHours ? { quietHours } : {}),
+    editors: Object.freeze([...(editors as string[])]),
+  });
+}
+
+/** The command a settled channel message runs, as the part a tenant's delivery binding names it by: never an integration's name. */
+export const SETTLED_PART = 'integration:@settled';
+
+/** Each command a service runs for the integrations, by what runs it: every webhook event's, and a settled message's. */
+export function integrationServiceCommands(
+  captured: CapturedIntegrations | undefined,
+): Array<{ what: string; command: string; runAs: string }> {
+  if (!captured) return [];
+  return [
+    ...integrationEventCommands(captured).map(({ integration, event, command, runAs }) => ({
+      what: `integrations.webhooks "${integration}" event "${event}"`,
+      command,
+      runAs,
+    })),
+    ...(captured.settled ? [{ what: 'integrations.settled', ...captured.settled }] : []),
+  ];
 }
 
 /** Each command a webhook event runs: the integration, the event and who runs it. */

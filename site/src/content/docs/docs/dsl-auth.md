@@ -146,5 +146,6 @@ tenant App refuses one at startup ([Tenant Apps](/docs/tenant-apps/)).
 | `auth.tenancy.platform.me.column` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `auth.tenancy.platform.me.from` | string | Stable |  Used in `examples/apps/lintel/app.ts`. |
 | `auth.tenancy.profile` | string | Stable | The platform-owned resource with one row per tenant. A tenant's row may reference it, only through its ownership column. |
+| `auth.tenancy.readAudit` | array | Stable | Tenant roles whose signed-in members read this tenant's read audit (Settings → Reads and useReadAudit()), where a resource has audit: { reads: true }. Left out, the roles that edit the tenant's domains, else its branding. |
 | `auth.tenancy.shared` | array | Stable | Columns of the tenant's profile row its members read, scalar ones only: tenant.country in a query, a row scope, a when or a handler's tenant. Read once per request; a tenant with no row reads nulls. Needs profile. |
 | `auth.tenancy.team` | boolean | Stable | false keeps a tenant's members from reading who else is a member. Left out, any member reads the members' names and ids (never an address, a role or an invitation), which is what useTeam() lists for a reader who does not manage the team. Default `true`. |

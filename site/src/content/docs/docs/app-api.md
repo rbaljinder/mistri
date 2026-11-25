@@ -260,7 +260,17 @@ mistri compare-openapi previous-api.json current-api.json
 a sort by a timestamp column (`api-sort-type`), a view that names totals
 (`api-view-totals`), a command that names no record (`api-command-no-record`)
 or one no role holds (`api-command-unheld`), is a check problem with its
-[code](/docs/check-codes/) and not a surprise at the first export.
+[code](/docs/check-codes/) and not a surprise at the first export. Each
+exposed resource, view and command is judged on its own, and the reads and
+commands are judged together, so one run says every refused exposure in an
+ordinary App and a tenant App alike, a line each; an exposure's first refusal
+stands for it.
+
+The document is held to 16 levels of nesting, the bound a command request is
+read under. Past it the refusal names the path that went deeper
+(`api-document-depth`); today a `targets: 'many'` command's body is the one
+that does, so expose that command without `targets: 'many'` in `api.commands`
+(its one-record route stays) until the bound is lifted.
 
 `compare-openapi` reports changes between two exported files: exit `0` when
 the version requirement is met, `1` when a needed version increase is missing,

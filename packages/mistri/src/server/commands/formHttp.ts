@@ -82,6 +82,7 @@ export function presentForm(key: string, form: AppFormView) {
     ...(form.submitLabel === undefined ? {} : { submitLabel: form.submitLabel }),
     ...(form.prefillable?.length ? { prefillable: form.prefillable } : {}),
     ...(form.given?.length ? { given: form.given } : {}),
+    ...(form.asks?.length ? { asks: form.asks } : {}),
     // The App's own input components standing in its inputs, by id alone: where each is served is the route's to add.
     ...(form.inputs ? { inputs: Object.fromEntries(Object.entries(form.inputs).map(([name, decl]) => [name, { id: decl.id }])) } : {}),
     ...(form.done === undefined ? {} : { done: form.done }),

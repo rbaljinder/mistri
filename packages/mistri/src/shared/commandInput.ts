@@ -114,7 +114,9 @@ const CONTROL_MULTILINE = /[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/;
    nothing here sends mail, opens the address or dials the number. */
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE = /^\+?[0-9 ().-]{7,32}$/;
-const FORMATS: Record<'email' | 'url' | 'phone', (value: string) => boolean> = {
+/* An account id as the sign-in store writes one (native or SSO subject): whose it is, and whether they are a member, is the server's to say. */
+const ACCOUNT_ID = /^[A-Za-z0-9][A-Za-z0-9._:@|/+=-]{0,255}$/;
+const FORMATS: Record<'email' | 'url' | 'phone' | 'member', (value: string) => boolean> = {
   email: (value) => EMAIL.test(value),
   url: (value) => {
     try {
@@ -125,6 +127,7 @@ const FORMATS: Record<'email' | 'url' | 'phone', (value: string) => boolean> = {
     }
   },
   phone: (value) => PHONE.test(value) && value.replace(/\D/g, '').length >= 7,
+  member: (value) => ACCOUNT_ID.test(value),
 };
 
 /** A number on its step: `0.01` keeps cents, and the rounding leaves no binary tail behind. */

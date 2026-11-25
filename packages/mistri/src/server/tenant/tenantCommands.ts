@@ -467,8 +467,8 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
                   const contexts = new WeakMap<WriteTransaction, TenantCommandRecords>();
                   return Object.freeze<AuthorizedBusinessCommand>({
                     ...authorization,
-                    ...(zone === undefined ? {} : { timezone: zone }),
-                    ...(scope.principal.tenantId === PLATFORM_TENANT_ID ? {} : { tenant: scope.tenant }),
+                    ...(zone === undefined ? {} : { timezone: zone, ownZone: zone }),
+                    ...(scope.principal.tenantId === PLATFORM_TENANT_ID ? {} : { tenant: scope.tenant, members: scope.members }),
                     transaction: deny,
                     /* No plain transaction here either: what a signed-in draft finds (the person's open draft, its
                        version) and a decision's inputs are read in this command's own fenced transaction, scoped to

@@ -52,6 +52,9 @@ export interface Section {
   windowNote?: string;
   sizing?: import('@mistriwork/engine/shared/tableSizing.js').TableSizing;
   kind: string;
+  /** command: the command its button runs, and the button's words where they are not the command's own. */
+  command?: string;
+  label?: string;
   /** custom: the author's component, its named reads (each a rows section's words) and its props. */
   component?: import('@mistriwork/engine/shared/appComponents.js').ComponentDecl;
   reads?: Record<string, import('@mistriwork/engine/shared/appComponents.js').DashCustomRead>;

@@ -83,7 +83,9 @@ export async function tenantsModule(loaded: LoadedApp, grants: Map<string | null
     const action = (app.resources?.[table]?.actions ?? []).find(
       (each) => typeof each.command === 'object' && each.command?.id === command,
     ) as { command?: { input?: AppCommandField[] } } | undefined;
-    const sampled = await sampleInput(action?.command?.input ?? [], async () => undefined);
+    /* A member of the team is answered with an id of the right shape: the execute aims at another tenant's record, which
+       is refused before any member is judged. */
+    const sampled = await sampleInput(action?.command?.input ?? [], async () => undefined, 'someone-on-the-team');
     return sampled.unanswered ? undefined : sampled.input;
   };
   const commands: Array<readonly [string, number, string, string, string, string]> = [];

@@ -97,8 +97,9 @@ export interface AppCommandChoice {
   row?: Readonly<Record<string, string | number | boolean | null>>;
 }
 
-/** A shape a text value must have; each refuses anything else. */
-export type CommandTextFormat = 'email' | 'url' | 'phone';
+/** A shape a text value must have; each refuses anything else. `member` is an account id of an active member of the
+    command's tenant (`field.member()`): its shape is judged here, its membership by the server where the command runs. */
+export type CommandTextFormat = 'email' | 'url' | 'phone' | 'member';
 
 /** Where an editor's @-mentions come from: a resource of people, its handle column, and the column a person is shown by
     or a template of their columns (`'{first_name} {last_name}'`);
@@ -341,6 +342,10 @@ export interface CommandActionBase<Label extends string | AppMessageRef> {
       draw them, and sends what the page gave. A required one with no default is typed by no one, so the action says
       `header: false` and is not `bulk`: only a page opens it. The server judges the value as any other. */
   given?: readonly string[];
+  /** The command's own inputs this action's form asks (`asks: ['transcript']`): only these are drawn. The rest are a
+      page's to send (`useCommand(name).run`), or take their default, or wait on their `when`; one the command requires
+      with no default and no `when` is refused by `check` (`command-asks`). Never also `given`. */
+  asks?: readonly string[];
 }
 
 /** A command action as the App serves it. */

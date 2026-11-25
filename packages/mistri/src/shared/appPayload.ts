@@ -429,6 +429,23 @@ export function withAvailableEmptyActions<A extends Pick<AppPayloadApp, 'views'>
   return { ...app, views };
 }
 
+/** A dashboard's command button (`commandButton`) stands only for a reader granted its command: anyone else is served
+ * the dashboard without it, rather than a button whose every press is refused. Presentation only: the run is judged
+ * where it runs, whatever was drawn. */
+export function withGrantedCommandSections<A extends Pick<AppPayloadApp, 'views'>>(app: A, granted: readonly string[] | undefined): A {
+  const held = new Set(granted ?? []);
+  const kept = <S extends { kind: string; command?: string }>(sections: readonly S[]): S[] =>
+    sections.filter((section) => section.kind !== 'command' || held.has(section.command ?? ''));
+  const views = Object.fromEntries(
+    Object.entries(app.views).map(([key, view]) =>
+      'sections' in view
+        ? [key, { ...view, sections: kept(view.sections), ...(view.aside === undefined ? {} : { aside: kept(view.aside) }) }]
+        : [key, view],
+    ),
+  ) as A['views'];
+  return { ...app, views };
+}
+
 export { withAvailablePageEmptyActions } from '@mistriwork/engine/shared/pageEmptyActions.js';
 
 /**

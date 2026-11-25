@@ -8,6 +8,7 @@ import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { assertAppApiContext, readApiApp } from '../api/appApiValidation.js';
 import { checkApiReadCatalog } from '../api/apiReadCatalog.js';
 import { apiWriteProblems } from '../api/apiGenericWrites.js';
+import { ApiRefusals } from '../api/apiRefusals.js';
 
 export interface RuntimeResources extends AppResources {
   /** Physical registry owners. Never derived from a request's table spelling. */
@@ -76,31 +77,33 @@ export async function loadAppRuntimeResources(
   app: AppDef,
   connection: string,
   onOpen: (connection: string) => void = () => {},
+  options?: Readonly<{ deferApiCheck?: boolean }>,
 ): Promise<RuntimeResources> {
   /* Loading checks the read half of the API. A command exposure needs its
      registry, which only a command host has; that host checks it
-     (checkApiCommandCatalog), and loading never widens what it may run. */
+     (checkApiCommandCatalog), and loading never widens what it may run.
+     `mistri check` and `--export openapi` defer this step so reads and
+     commands are judged together in one pass. */
   const readApp = readApiApp(app);
-  assertAppApiContext(readApp);
+  if (!options?.deferApiCheck) assertAppApiContext(readApp);
   /* Only an ordinary App's exposure is checked here. A tenant App's is served
      by its tenant host alone, which checks it against the tenant-visible
      catalog (apiTenantReadCatalog) with that membership's own grants; this
      foundation knows only `auth.rows: 'all'`, so applying it to a tenant App
      refused a correct two-realm App at load — the Ignition sample could not
      start once it declared `api`. */
-  const checksApi = readApp.api !== undefined && app.auth?.rows === 'all';
+  const checksApi = readApp.api !== undefined && app.auth?.rows === 'all' && !options?.deferApiCheck;
   if (!app.sources) {
     const opened = await registry.open(connection);
     onOpen(connection);
-    const resources = keptResources(app, connection, [...declared(app), opened.adapter, opened.schema], () => {
-      const resources = mapOpenedAppRuntimeResources(app, connection, new Map([['', opened]]), new Map([['', connection]]));
-      if (checksApi) {
-        checkApiReadCatalog(readApp.api!, readApp, resources.schema);
-        assertApiWrites(app, resources.schema);
-      }
-      return resources;
-    });
+    const resources = keptResources(app, connection, [...declared(app), opened.adapter, opened.schema], () =>
+      mapOpenedAppRuntimeResources(app, connection, new Map([['', opened]]), new Map([['', connection]])),
+    );
     openedDatabases.set(resources, new Map([[connection, opened.adapter]]));
+    if (checksApi) {
+      checkApiReadCatalog(readApp.api!, readApp, resources.schema);
+      assertApiWrites(app, resources.schema);
+    }
     return resources;
   }
   const bindings = appSourceConnections(registry, app);
@@ -134,10 +137,12 @@ export async function loadAppRuntimeResources(
       registry.configOf(owner)?.writable === true,
     ]),
   ];
-  const resources = keptResources(app, connection, inputs, () =>
-    mapSources(app, connection, bindings, databases, registry, readApp, checksApi),
-  );
+  const resources = keptResources(app, connection, inputs, () => mapSources(app, connection, bindings, databases, registry));
   openedDatabases.set(resources, new Map([...databases].map(([owner, database]) => [owner, database.adapter])));
+  if (checksApi) {
+    checkApiReadCatalog(readApp.api!, readApp, resources.schema);
+    assertApiWrites(app, resources.schema);
+  }
   return resources;
 }
 
@@ -167,7 +172,7 @@ function keptResources(app: AppDef, connection: string, inputs: readonly unknown
 /** An API's generic writes are judged with its reads, against the same catalog (apiGenericWrites.ts). */
 function assertApiWrites(app: AppDef, schema: DatabaseSchema): void {
   const problems = apiWriteProblems(app, schema);
-  if (problems.length) throw new Error(problems.join(' '));
+  if (problems.length) throw new ApiRefusals(problems);
 }
 
 function mapSources(
@@ -176,8 +181,6 @@ function mapSources(
   bindings: ReturnType<typeof appSourceConnections>,
   databases: Map<string, Awaited<ReturnType<Registry['open']>>>,
   registry: Registry,
-  readApp: AppDef,
-  checksApi: boolean,
 ): RuntimeResources {
   const sources = new Map<string, AppAdapterSource>();
   for (const [source, owner] of bindings) {
@@ -194,10 +197,5 @@ function mapSources(
       ...(scope === undefined ? {} : { scope }),
     });
   }
-  const runtime = mapOpenedAppRuntimeResources(app, connection, sources, bindings);
-  if (checksApi) {
-    checkApiReadCatalog(readApp.api!, readApp, runtime.schema);
-    assertApiWrites(app, runtime.schema);
-  }
-  return runtime;
+  return mapOpenedAppRuntimeResources(app, connection, sources, bindings);
 }

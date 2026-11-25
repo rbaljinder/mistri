@@ -171,6 +171,8 @@ export function commandPath(route: keyof typeof COMMAND_ROUTES, app: string): st
 export async function sampleInput(
   fields: readonly AppCommandField[],
   first: (table: string) => Promise<TestRow | undefined>,
+  /** The account id a member of the team is answered with (`field.member()`); absent, a required one is unanswered. */
+  member?: string,
 ): Promise<{ input: Record<string, unknown>; unanswered?: string }> {
   const input: Record<string, unknown> = {};
   const today = new Date().toISOString().slice(0, 10);
@@ -184,7 +186,7 @@ export async function sampleInput(
         if ((field.repeat.min ?? 0) > 0) return { input, unanswered: field.name };
         continue;
       }
-      const inner = await sampleInput(field.fields, first);
+      const inner = await sampleInput(field.fields, first, member);
       if (inner.unanswered) return { input, unanswered: `${field.name}.${inner.unanswered}` };
       input[field.name] = inner.input;
       continue;
@@ -227,6 +229,12 @@ export async function sampleInput(
           break;
         }
         const format = 'format' in field ? field.format : undefined;
+        // A member of the team is a person this sample knows only where its caller says one (`field.member()`).
+        if (format === 'member') {
+          if (member !== undefined) input[field.name] = member;
+          else if (must) return { input, unanswered: field.name };
+          break;
+        }
         const text =
           format === 'email'
             ? 'checked@example.test'

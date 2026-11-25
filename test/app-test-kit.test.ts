@@ -506,7 +506,9 @@ test('test init writes a tenant App an isolation suite that passes: each resourc
   });
   assert.equal(tests.status, 0, `${tests.stdout}\n${tests.stderr}`);
   assert.match(tests.stdout, /^ℹ fail 0/m);
-  // The membership check, seven resources, one command and the operator, and the test around them: none skipped.
-  assert.match(tests.stdout, /^ℹ pass 11/m);
+  // The membership check, seven resources, two commands and the operator, and the test around them: none skipped. A
+  // command that names a member of the team (assignClinician) is answered with an id of the right shape.
+  assert.match(suite, /\['assignClinician', 1, 'appointment', '\w+', '\w+', '\{"clinician":"someone-on-the-team"\}'\]/);
+  assert.match(tests.stdout, /^ℹ pass 12/m);
   assert.match(tests.stdout, /^ℹ skipped 0/m);
 });

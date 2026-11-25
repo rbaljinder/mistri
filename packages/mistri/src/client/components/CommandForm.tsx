@@ -121,6 +121,7 @@ export function CommandForm({
   isCurrent,
   targets,
   onDeselect,
+  onSubmitEach,
   finalFocus,
   noun,
   initial,
@@ -152,6 +153,8 @@ export function CommandForm({
   targets?: CommandTarget[];
   /** Drop these records from the group. The host owns the selection, and the form follows it. */
   onDeselect?: (keys: Array<Record<string, unknown>>) => void;
+  /** `bulk: 'each'` over a selection: the form asks once, then hands the validated input to run per record. */
+  onSubmitEach?: (input: Record<string, unknown>) => void;
   /** Evidence beside the form: a second column from 900px up, folded under the form below that, and not drawn at all
       when absent. The form's own pipeline is untouched; whoever fills this slot only reads. */
   aside?: ReactNode;
@@ -161,8 +164,10 @@ export function CommandForm({
       the person corrected, when they did — and Dismiss stands where Cancel does. Always the drawer. */
   proposal?: { id: string; input: Readonly<Record<string, unknown>>; onDismiss: () => Promise<unknown> };
 }) {
+  const each = onSubmitEach !== undefined;
+  const many = owner.keys !== undefined;
   // A group is one request for several records: every one commits or none does.
-  const group = owner.keys !== undefined;
+  const group = many && !each;
   const [identity] = useState(sessionIdentity);
   const currentIdentity = useSyncExternalStore(subscribeSessionIdentity, sessionIdentity, sessionIdentity);
   useSyncExternalStore(commandOperations.subscribe, commandOperations.version, commandOperations.version);
@@ -251,7 +256,7 @@ export function CommandForm({
     }
   };
   const prepared = useQuery({
-    queryKey: ['command-prepare', identity.epoch, group ? { ...owner, keys: preparedKeys, labels: undefined } : owner],
+    queryKey: ['command-prepare', identity.epoch, many ? { ...owner, keys: preparedKeys, labels: undefined } : owner],
     retry: false,
     staleTime: 0,
     gcTime: 0,
@@ -262,7 +267,12 @@ export function CommandForm({
       if (!current() || signal.aborted) throw new Error(say('common.thisCommandFormIsNoLonger'));
       const seen = commandOperations.appliedOn(owner.connection, owner.target, preparedKeys ?? [owner.key]);
       // The draft's logic travels beside prepare, so the form is drawn whole once prepare answers (CommandFields.tsx).
-      const logic = asksDraftLogic(action.command.input) ? draftLogic.ready() : undefined;
+      const logic = asksDraftLogic(action.command.input, action.command.rules) ? draftLogic.ready() : undefined;
+      if (each) {
+        await logic;
+        if (!current()) throw new Error(say('theSessionChanged'));
+        return { expectedVersion: 0, seen };
+      }
       if (group) {
         const keys = (preparedKeys ?? []).map((key) =>
           Object.fromEntries(
@@ -317,9 +327,11 @@ export function CommandForm({
   const fields = useMemo(() => askedFields(action.command.input, record), [action.command.input, record]);
   /* An action's `given` inputs are its page's to fill (useCommand(…).open(record, { step })): not drawn, still sent,
      since `fields` is what the submit reads. */
+  /* An action that names what it `asks` draws those alone: the rest take their default or wait on their `when`, still
+     in the draft and so still sent. */
   const drawn = useMemo(
-    () => (action.given?.length ? fields.filter((field) => !action.given!.includes(field.name)) : fields),
-    [fields, action.given],
+    () => fields.filter((field) => !action.given?.includes(field.name) && (!action.asks || action.asks.includes(field.name))),
+    [fields, action.given, action.asks],
   );
   /* Another command applied to this record after this form prepared it: the
      revision it holds is one it knows is old, and submitting it could only
@@ -328,7 +340,10 @@ export function CommandForm({
      the page's queries (which a busy server answers late, if at all). */
   const seen = prepared.data instanceof Map ? groupSeen.get(prepared.data) : record?.seen;
   const outdated =
-    !operation && seen !== undefined && commandOperations.appliedOn(owner.connection, owner.target, preparedKeys ?? [owner.key]) > seen;
+    !each &&
+    !operation &&
+    seen !== undefined &&
+    commandOperations.appliedOn(owner.connection, owner.target, preparedKeys ?? [owner.key]) > seen;
   const refetchPrepared = prepared.refetch;
   useEffect(() => {
     if (outdated && !prepared.isFetching && !prepared.isError) void refetchPrepared();
@@ -410,12 +425,12 @@ export function CommandForm({
   const count = say('common.records2', { count: listed.length });
   /* The verb follows the selection as it narrows: a group of two says so. A label the App's messages count
      (useBulkSelection.tsx ActionLabel) is not counted as English counts; the form's count line says how many. */
-  const verb = group && noun && !(action as { counted?: unknown }).counted ? countedLabel(action.label, listed.length, noun) : action.label;
+  const verb = many && noun && !(action as { counted?: unknown }).counted ? countedLabel(action.label, listed.length, noun) : action.label;
   const noticed = Boolean(changedElsewhere && !operation && !problem);
   /* The one record it changed, linked when the person is not already on it: a row's action from a list, say. On the
      record itself the page is what changed, and a link to it would lead nowhere. */
   const here = state.stack?.at(-1) as { table?: string; key?: Record<string, unknown> } | undefined;
-  const single = !group && Object.keys(owner.key).length > 0;
+  const single = !many && Object.keys(owner.key).length > 0;
   const elsewhere = single && !(here?.table === owner.target && here.key && commandKeyText(here.key) === commandKeyText(owner.key));
   /* A component's `open` hands the verb's own label as the record's: no subtitle repeats the title, and a link
      leads to the record by its noun ("Open the booking"), not to "Open Cancel". */
@@ -438,19 +453,20 @@ export function CommandForm({
     (unknown && untracked ? say('checkTheRecord') : '') ||
     (operation?.message && `${operation.message}${refused ? ` (${refused.label})` : ''}`) ||
     (prepared.isError
-      ? say(group ? 'recordsCouldNotBePrepared' : 'recordCouldNotBePrepared')
+      ? say(many ? 'recordsCouldNotBePrepared' : 'recordCouldNotBePrepared')
       : prepared.isPending || outdated
-        ? say(group ? 'readingTheCurrentVersions' : 'readingTheCurrentVersion')
+        ? say(many ? 'readingTheCurrentVersions' : 'readingTheCurrentVersion')
         : group && ineligible.length
           ? say('deselectTheIneligibleRecords')
-          : group
+          : many
             ? say('readyToSubmit', { count })
             : say('readyToSubmitOne'));
   /* The frame follows New's rule (formFrame): a short form is the centered dialog, a long one a side drawer over the page.
      Counted from the command's whole input, not what prepare leaves asked, so the box does not change frame (and
      remount, losing what was typed) when a `when` answer arrives. A page's `given` inputs are not drawn, so not counted. */
   const asked = [...commandFieldsDeep(action.command.input)].filter(
-    ({ field, path }) => field.type !== 'group' && !action.given?.includes(path),
+    ({ field, path }) =>
+      field.type !== 'group' && !action.given?.includes(path) && (!action.asks || action.asks.includes(path.split(/[.[]/)[0])),
   ).length;
   const drawer = proposal !== undefined || formFrame(undefined, asked) === 'page';
   const dismiss = async () => {
@@ -491,13 +507,14 @@ export function CommandForm({
       )}
     </>
   );
+  const judging = action.command.rules ? { rules: action.command.rules } : {};
   const form = (
     <form
       noValidate
       onSubmit={(event) => {
         event.preventDefault();
         if (!current() || operation || !ready || prepared.isFetching) return;
-        const found = commandProblems(fields, values, record?.questions);
+        const found = commandProblems(fields, values, record?.questions, judging);
         if (Object.keys(found).length > 0) {
           setBeside(found);
           setProblem(Object.values(found)[0] ?? '');
@@ -506,9 +523,15 @@ export function CommandForm({
           return;
         }
         try {
-          const input = commandInput(fields, values, record?.questions);
+          const input = commandInput(fields, values, record?.questions, judging);
           setProblem('');
           setBeside(undefined);
+          if (onSubmitEach) {
+            closed.current = true;
+            setDirty(false);
+            onSubmitEach(input);
+            return;
+          }
           send(
             commandOperations.start(owner, group ? (versions as number[]) : record!.expectedVersion, input, action, headless),
             'execute',

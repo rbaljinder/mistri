@@ -268,6 +268,7 @@ const readPosts = new Set([
   '/api/assistant/turn',
   '/api/assistant/resolve',
   '/api/assistant/acted',
+  '/api/assistant/about',
   '/api/assistant/rename',
   '/api/assistant/delete',
 ]);

@@ -693,7 +693,7 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     id: 'integrations',
     title: "integrations' secrets, calls, webhook deliveries and channel messages",
     tables: { prefix: '__mistri_integration_' },
-    current: both(2),
+    current: both(3),
     read: marked({ sqlite: { table: '__mistri_integration_meta' }, postgres: { table: '__mistri_integration_meta' } }),
     upgrades: {
       sqlite: {
@@ -704,12 +704,26 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
               await db.run(sql);
           },
         },
+        2: {
+          says: "adds a channel message's reference and whether the App has been told how it settled (integrations.settled)",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/integrations/integrationStore.js')).sqliteIntegrationsUpgradeFrom2())
+              await db.run(sql);
+          },
+        },
       },
       postgres: {
         1: {
           says: "adds a channel message's sealed words: a notice whose text says a write's words keeps them sealed until it is sent",
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/integrations/integrationStore.js')).postgresIntegrationsUpgradeFrom1())
+              await db.run(sql);
+          },
+        },
+        2: {
+          says: "adds a channel message's reference and whether the App has been told how it settled (integrations.settled)",
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/integrations/integrationStore.js')).postgresIntegrationsUpgradeFrom2())
               await db.run(sql);
           },
         },

@@ -244,7 +244,7 @@ describe('every form', () => {
     const { label, ...rest } = finance();
     assert.throws(
       () => withViews({ finance: { ...rest, title: label } }),
-      /views "finance" has no "title"\. It takes: kind, label, path, icon, description, command, steps, style, note, review, submitLabel, done, public, prefillable, given, resume, draft, abandoned, owner, statusCheck, link, inputs\./,
+      /views "finance" has no "title"\. It takes: kind, label, path, icon, description, command, steps, style, note, review, submitLabel, done, public, prefillable, given, asks, resume, draft, abandoned, owner, statusCheck, link, inputs\./,
     );
     assert.throws(() => parseTestApp({ ...base, intake: [] }, 'f'), /has no "intake"\. It takes:/);
     assert.throws(() => withViews({ finance: { ...finance(), sidebar: true } }), /has no "sidebar"/);
@@ -372,5 +372,50 @@ describe('a form given inputs by its link', () => {
     const view = form(withViews({ apply: given({ done: { title: 'Thanks', reference: false, home: false } }) }), 'apply');
     assert.deepEqual(view.done, { title: 'Thanks', reference: false, home: false });
     assert.throws(() => withViews({ apply: given({ done: { reference: true } }) }), /"done" has a "reference" that is not false/);
+  });
+});
+
+/* A field report: an input only a page fills (a note template the page found) had to be asked on every form of the
+   command, or hidden by a `when` that hid it from the page's run too. A form names what it asks. */
+describe('a form that names the inputs it asks', () => {
+  const asking = (asks: unknown, opts: Record<string, unknown> = {}) => commandForm('Log a call', logCall, { asks, ...opts } as never);
+
+  test('carries them, and leaves an optional input to the page', () => {
+    const view = form(withViews({ log: asking(['account']) }, inNav), 'log');
+    assert.deepEqual(view.asks, ['account']);
+    assert.deepEqual(
+      view.command.input.map((field) => field.name),
+      ['account', 'notes'],
+    );
+  });
+
+  test('refuses one the command requires with no default, a name it does not take, a name twice, and one also given', () => {
+    assert.throws(
+      () => withViews({ log: asking(['notes']) }, inNav),
+      /asks "notes" and leaves out "account", which the command requires with no default and no "when".*\[command-asks\]/,
+    );
+    assert.throws(
+      () => withViews({ log: asking(['nope']) }, inNav),
+      /asks "nope", which is not one of the command's inputs \(account, notes\) \[command-asks\]/,
+    );
+    assert.throws(() => withViews({ log: asking(['account', 'account']) }, inNav), /asks "account" twice \[command-asks\]/);
+    assert.throws(() => withViews({ log: asking([]) }, inNav), /"asks" that is not a list/);
+    assert.throws(() => withViews({ log: asking(['account'], { given: ['account'] }) }, inNav), /both asks and is given "account"/);
+  });
+
+  test('a step names only what the form asks, and the inputs it leaves out belong to no step', () => {
+    const view = form(
+      withViews({ log: commandForm('Log a call', logCall, [step('Who', ['account'])], { asks: ['account'] } as never) }, inNav),
+      'log',
+    );
+    assert.deepEqual(
+      view.steps?.map((each) => each.fields),
+      [['account']],
+    );
+    assert.throws(
+      () =>
+        withViews({ log: commandForm('Log a call', logCall, [step('All', ['account', 'notes'])], { asks: ['account'] } as never) }, inNav),
+      /step "All" names "notes", which the form's "asks" leaves out/,
+    );
   });
 });

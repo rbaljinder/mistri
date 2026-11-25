@@ -4,6 +4,7 @@
  * checked with their registry by whatever hosts them, never here. */
 import type { AppDef } from '../../shared/appModel.js';
 import { apiCrossConnectionProblems } from '../../shared/appApi.js';
+import { ApiRefusals } from './apiRefusals.js';
 
 /** The read half of an App that also exposes commands: the same App with its
  * command exposures projected out, for read catalogs, token scope, rendering
@@ -37,5 +38,5 @@ export function assertAppApiContext(app: AppDef): void {
   // without a catalog is refused before any database opens; the checked
   // catalog judges every path again (apiReadCatalog.ts).
   const crossing = apiCrossConnectionProblems(app);
-  if (crossing.length) throw new Error(crossing[0]);
+  if (crossing.length) throw new ApiRefusals(crossing);
 }

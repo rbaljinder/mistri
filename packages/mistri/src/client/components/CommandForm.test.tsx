@@ -938,3 +938,64 @@ test("an action's given input is not drawn, and is sent as the page filled it", 
     expect(api.mock.calls.find((call) => call[0].endsWith('/execute'))?.[1].input).toEqual({ reason: 'North desk', step: 'intake' }),
   );
 });
+
+test('an action that names what it asks draws those alone, and sends the rest with their default', async () => {
+  const input: AppCommandField[] = [
+    { name: 'reason', label: 'Reason', type: 'textarea', required: true, maxLength: 500 },
+    { name: 'template', label: 'Template', type: 'text', required: true, default: 'soap' },
+    { name: 'note', label: 'Note', type: 'text' },
+  ];
+  draw({ actions: [{ ...action, command: { ...action.command, input }, asks: ['reason'] }] });
+  const { user, dialog } = await open();
+  expect(within(dialog).queryByLabelText(/Template/)).toBeNull();
+  expect(within(dialog).queryByLabelText(/Note/)).toBeNull();
+  await user.type(within(dialog).getByLabelText('Reason (required)'), 'North desk');
+  await user.click(within(dialog).getByRole('button', { name: 'Assign reviewer' }));
+  await vi.waitFor(() =>
+    expect(api.mock.calls.find((call) => call[0].endsWith('/execute'))?.[1].input).toMatchObject({
+      reason: 'North desk',
+      template: 'soap',
+    }),
+  );
+});
+
+test('onSubmitEach prepares no record on the wire, counts the selection, validates fields and hands the parsed input over', async () => {
+  const { CommandForm } = await import('./CommandForm.js');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  clients.push(client);
+  const onSubmitEach = vi.fn();
+  const groupOwner: CommandOwner = {
+    ...owner,
+    key: {},
+    keys: [{ id: 1 }, { id: 2 }],
+    labels: ['Loan #1', 'Loan #2'],
+  };
+  render(
+    <QueryClientProvider client={client}>
+      <CommandForm
+        action={{ ...action, label: 'Approve application' }}
+        owner={groupOwner}
+        targets={[
+          { key: { id: 1 }, label: 'Loan #1' },
+          { key: { id: 2 }, label: 'Loan #2' },
+        ]}
+        noun={{ one: 'application', many: 'applications' }}
+        label="2 selected records"
+        onSubmitEach={onSubmitEach}
+        onClose={vi.fn()}
+        onDone={vi.fn()}
+      />
+    </QueryClientProvider>,
+  );
+  const user = userEvent.setup();
+  const dialog = await screen.findByRole('dialog', { name: 'Approve 2 applications' });
+  const submit = within(dialog).getByRole('button', { name: 'Approve 2 applications' });
+  await vi.waitFor(() => expect(submit).toBeEnabled());
+  expect(api.mock.calls.some(([path]) => String(path).includes('/prepare'))).toBe(false);
+  await user.click(submit);
+  expect(onSubmitEach).not.toHaveBeenCalled();
+  await user.type(within(dialog).getByLabelText('Reason (required)'), '  North desk  ');
+  await user.click(submit);
+  expect(onSubmitEach).toHaveBeenCalledWith({ reason: 'North desk' });
+  expect(api.mock.calls.some(([path]) => String(path).includes('/execute'))).toBe(false);
+});

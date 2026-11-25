@@ -61,15 +61,32 @@ const record = (value: unknown): value is Record<string, unknown> => Boolean(val
 
 /** A run of the model's words: plain, bold, code, or a link to an address inside the App. */
 export type Run = { text: string; mark?: 'strong' | 'code' } | { text: string; link: string };
-export type Paragraph = { list: false; lines: Run[][] } | { list: true; lines: Run[][] };
+export type Paragraph =
+  | { list: false; lines: Run[][] }
+  | { list: true; lines: Run[][] }
+  /** A Markdown table, as the model writes one: its header's cells and each row's, each cell its runs. */
+  | { list: false; lines: []; table: { head: Run[][]; rows: Run[][][] } };
 
 /* An inside address only: a path, never a scheme or another host. */
 export const inside = (href: string): boolean => /^\/(?!\/)[^\s\\]*$/.test(href);
 
+/* A table's rows (`| a | b |`) and the line under its header (`| --- | :-: |`), as Markdown writes them. */
+const TABLE_ROW = /^\s*\|.*\|\s*$/;
+const TABLE_RULE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+const cellsOf = (line: string): string[] =>
+  line
+    .trim()
+    .replace(/^\|/, '')
+    .replace(/(?<!\\)\|$/, '')
+    .split(/(?<!\\)\|/)
+    .map((cell) => cell.trim().replace(/\\\|/g, '|'));
+
 /**
- * The model's words as paragraphs and lists of runs, read with three marks
- * and nothing else. Text, never markup: a link to anywhere but a path in the
- * App is said as its words alone.
+ * The model's words as paragraphs, lists and tables of runs, read with three
+ * marks and nothing else. Text, never markup: a link to anywhere but a path in
+ * the App is said as its words alone. A table the model writes in words (it is
+ * told not to repeat a block, and sometimes does) is drawn as a table, not as
+ * lines of pipes.
  */
 export function wordsOf(text: string): Paragraph[] {
   const runs = (line: string): Run[] => {
@@ -86,14 +103,37 @@ export function wordsOf(text: string): Paragraph[] {
     if (from < line.length) found.push({ text: line.slice(from) });
     return found;
   };
+  const prose = (lines: string[]): Paragraph => {
+    return lines.every((line) => /^\s*[-*] /.test(line))
+      ? { list: true, lines: lines.map((line) => runs(line.replace(/^\s*[-*] /, ''))) }
+      : { list: false, lines: lines.map((line) => runs(line)) };
+  };
   return text
     .trim()
     .split(/\n{2,}/)
     .filter(Boolean)
-    .map((paragraph) => {
+    .flatMap((paragraph) => {
       const lines = paragraph.split('\n');
-      const list = lines.every((line) => /^\s*[-*] /.test(line));
-      return { list, lines: lines.map((line) => runs(list ? line.replace(/^\s*[-*] /, '') : line)) };
+      /* A table may follow a line of words with no blank line between, and words may follow it. */
+      const at = lines.findIndex((line, index) => index > 0 && TABLE_RULE.test(line) && TABLE_ROW.test(lines[index - 1]));
+      if (at < 0) return [prose(lines)];
+      let end = at + 1;
+      while (end < lines.length && TABLE_ROW.test(lines[end])) end++;
+      const head = cellsOf(lines[at - 1]);
+      const table: Paragraph = {
+        list: false,
+        lines: [],
+        table: {
+          head: head.map((cell) => runs(cell)),
+          rows: lines.slice(at + 1, end).map((line) => {
+            const cells = cellsOf(line);
+            return head.map((_, index) => runs(cells[index] ?? ''));
+          }),
+        },
+      };
+      const before = lines.slice(0, at - 1);
+      const after = lines.slice(end);
+      return [...(before.length ? [prose(before)] : []), table, ...(after.length ? wordsOf(after.join('\n')) : [])];
     });
 }
 

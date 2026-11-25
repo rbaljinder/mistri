@@ -7,8 +7,9 @@
  * its command line.
  */
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test, type TestContext } from 'node:test';
 import * as maintenance from '@mistriwork/mistri/maintenance';
@@ -385,3 +386,57 @@ test('grant takes several accounts and tenants, or a CSV: every row is checked f
   assert.match((await f.run('grant', '--from', header)).err, /has no tenant, role column|has no account, tenant, role column/);
   assert.match((await f.run('grant', '--from', csv, '--roles', 'staff')).err, /--from carries the accounts/);
 });
+
+test(
+  'five concurrent mistri tenant grant processes over SQLite create the sign-in store, accounts and memberships without colliding',
+  { timeout: 60_000 },
+  async (t) => {
+    const f = await fixture(t);
+    assert.equal((await f.run('init', 'north', 'south', 'east', 'west')).code, 0);
+    const entry = resolve('packages/mistri/src/server/index.ts');
+    const env = {
+      ...Object.fromEntries(Object.entries(process.env).filter(([name]) => name !== 'NODE_TEST_CONTEXT')),
+      MISTRI_ACCOUNT_PASSWORD: PASSWORD,
+      XDG_CONFIG_HOME: join(f.directory, 'xdg'),
+    };
+    const spawnGrant = (email: string, tenant: string, index: number) =>
+      new Promise<{ code: number; out: string; err: string }>((done) =>
+        execFile(
+          process.execPath,
+          [
+            '--import',
+            'tsx',
+            entry,
+            'tenant',
+            'grant',
+            email,
+            '--tenant',
+            tenant,
+            '--roles',
+            'staff',
+            '--app',
+            f.appDir,
+            '--policy',
+            join(f.directory, 'policy.mjs'),
+            '--config',
+            join(f.directory, 'config.json'),
+            '--operator',
+            `ops-${index}`,
+          ],
+          { timeout: 45_000, env },
+          (error, out, err) => done({ code: Number(error?.code ?? 0), out, err }),
+        ),
+      );
+    const runs = await Promise.all([
+      spawnGrant('one@dealer.example', 'north', 1),
+      spawnGrant('two@dealer.example', 'south', 2),
+      spawnGrant('three@dealer.example', 'east', 3),
+      spawnGrant('shared@dealer.example', 'north', 4),
+      spawnGrant('shared@dealer.example', 'west', 5),
+    ]);
+    for (const [index, result] of runs.entries()) {
+      assert.equal(result.code, 0, `run ${index + 1}: ${result.out}\n${result.err}`);
+    }
+    assert.equal(f.memberships().length, 5);
+  },
+);

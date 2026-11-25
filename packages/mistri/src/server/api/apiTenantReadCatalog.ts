@@ -8,6 +8,7 @@ import { isTenantApp, resolveAppAccess, tenantAppShape, tenantBusinessApp, type 
 import type { TenantOwnershipSnapshot } from '../tenant/tenantOwnership.js';
 import { tenantAuthoringSchema, tenantVisibleFields } from '../tenant/tenantVisibleFields.js';
 import { scopedReadCatalog, type ReadCatalog } from './apiReadCatalog.js';
+import { apiJudgment } from './apiRefusals.js';
 
 const fail = (at: string, message: string): never => {
   throw new Error(`${at}: ${message}.`);
@@ -37,37 +38,47 @@ export function checkApiTenantReadCatalog(app: AppDef, owned: TenantOwnershipSna
       return view && 'table' in view ? [view.table] : [];
     }),
   ];
+  // Each exposure judged on its own, and beside the shared catalog's, so one run says every refused one (apiRefusals.ts).
+  const judged = apiJudgment();
   for (const base of bases) {
-    const source = platformOnlySourceOf(app, base);
-    if (source)
-      fail(
-        `api.resources.${base}`,
-        `"${base}" belongs to the platform-only source "${source}", which only the platform realm's own reads see`,
-      );
-    if (owned.ownership[base]?.kind === 'platform')
-      fail(`api.resources.${base}`, 'a platform-owned resource is not readable in a tenant context');
+    judged.run(() => {
+      const source = platformOnlySourceOf(app, base);
+      if (source)
+        fail(
+          `api.resources.${base}`,
+          `"${base}" belongs to the platform-only source "${source}", which only the platform realm's own reads see`,
+        );
+      if (owned.ownership[base]?.kind === 'platform')
+        fail(`api.resources.${base}`, 'a platform-owned resource is not readable in a tenant context');
+    });
   }
   // Grants resolve as every business owner's do, on the App without its
   // platform-only sources: their tables are not in this schema, so resolving
   // the whole App's ceiling against it would refuse a legitimate exposure.
   const business = tenantBusinessApp(app);
-  const catalog = scopedReadCatalog(api, app, tenantAuthoringSchema(owned), (role) =>
-    tenantVisibleFields(owned, resolveAppAccess(business, owned.schema, [role])),
+  const catalog = judged.run(() =>
+    scopedReadCatalog(api, app, tenantAuthoringSchema(owned), (role) =>
+      tenantVisibleFields(owned, resolveAppAccess(business, owned.schema, [role])),
+    ),
   );
+  judged.done();
   // The walk's own result, not the top level: a field, filter, sort, standing
   // question or reference hop that resolved into a platform-only source would
   // name it among these dependencies. The tenant schema holds none of its
   // tables, so this is the second layer, not the first.
-  for (const operation of catalog.operations) {
-    for (const resource of [operation.resource, ...operation.dependencies.map((dependency) => dependency.resource)]) {
-      const source = platformOnlySourceOf(app, resource);
-      if (source) {
-        fail(
-          `api.${operation.kind === 'view' ? 'views' : 'resources'}.${operation.id}`,
-          `it reaches "${resource}", which belongs to the platform-only source "${source}"`,
-        );
+  for (const operation of catalog!.operations) {
+    judged.run(() => {
+      for (const resource of [operation.resource, ...operation.dependencies.map((dependency) => dependency.resource)]) {
+        const source = platformOnlySourceOf(app, resource);
+        if (source) {
+          fail(
+            `api.${operation.kind === 'view' ? 'views' : 'resources'}.${operation.id}`,
+            `it reaches "${resource}", which belongs to the platform-only source "${source}"`,
+          );
+        }
       }
-    }
+    });
   }
-  return catalog;
+  judged.done();
+  return catalog!;
 }

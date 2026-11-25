@@ -109,24 +109,22 @@ function checkSqliteAuthStore(db: DatabaseSync): boolean {
   return true;
 }
 
-/** After Better Auth has made the tables of a new store (see checkSqliteAuthStore). */
-function markSqliteAuthStore(db: DatabaseSync): void {
-  db.exec('BEGIN IMMEDIATE');
-  try {
-    db.exec(SQLITE_AUTH_META_DDL);
-    db.prepare(`INSERT INTO "${SQLITE_AUTH_META_TABLE}" (singleton, version) VALUES (1, ?)`).run(SQLITE_AUTH_STORE_VERSION);
-    db.exec('COMMIT');
-  } catch (error) {
-    if (db.isTransaction) db.exec('ROLLBACK');
-    throw error;
-  }
-}
-
 export function openSqliteAuthStore(path: string, fence: () => void): AuthStoreHandle {
   fence();
   mkdirSync(dirname(path), { recursive: true });
   fence();
-  const database = new DatabaseSync(path, { timeout: 5000 });
+  const database = new DatabaseSync(path, { timeout: 15_000 });
+  /* Better Auth's Kysely dialect opens deferred `BEGIN` transactions, reads `"user"` under a shared lock, hashes the
+     password asynchronously, and then inserts — a shared-to-reserved upgrade SQLite refuses at once (`SQLITE_BUSY`,
+     ignoring `busy_timeout`) whenever two processes make accounts together. Taking the write lock up front lets every
+     other writer wait out `timeout` cleanly while keeping `database instanceof DatabaseSync`. */
+  Object.defineProperty(database, 'prepare', {
+    value(this: DatabaseSync, sql: string) {
+      return DatabaseSync.prototype.prepare.call(this, !this.isTransaction && /^\s*begin\s*;?\s*$/i.test(sql) ? 'BEGIN IMMEDIATE' : sql);
+    },
+    configurable: true,
+    writable: true,
+  });
   let closed = false;
   return {
     kind: 'sqlite',
@@ -135,9 +133,19 @@ export function openSqliteAuthStore(path: string, fence: () => void): AuthStoreH
     file: database,
     prepare: async (migrate) => {
       fence();
-      const created = checkSqliteAuthStore(database);
-      await migrate();
-      if (created) markSqliteAuthStore(database);
+      database.exec('BEGIN IMMEDIATE');
+      try {
+        const created = checkSqliteAuthStore(database);
+        await migrate();
+        if (created) {
+          database.exec(SQLITE_AUTH_META_DDL);
+          database.prepare(`INSERT INTO "${SQLITE_AUTH_META_TABLE}" (singleton, version) VALUES (1, ?)`).run(SQLITE_AUTH_STORE_VERSION);
+        }
+        database.exec('COMMIT');
+      } catch (error) {
+        if (database.isTransaction) database.exec('ROLLBACK');
+        throw error;
+      }
       fence();
     },
     close: () => {

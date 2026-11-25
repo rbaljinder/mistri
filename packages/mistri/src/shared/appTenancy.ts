@@ -421,6 +421,11 @@ export function checkTenancy(app: AppDef, pages: readonly PageDef[]): void {
         `${at}: "auth", "me" names "${auth.me.from}", a platform-owned resource, and "auth", "tenancy", "platform", "me" names the platform's staff. With both, "auth", "me" is a tenant's people: a resource with "owner": "tenant".`,
       );
     }
+    for (const role of tenancy.readAudit ?? []) {
+      const grant = auth?.roles?.[role];
+      if (!grant || grant.service || (grant.realm !== undefined && grant.realm !== 'tenant'))
+        throw new Error(`${at}: "auth", "tenancy", "readAudit" has "${role}", which is not a signed-in tenant role of "auth.roles".`);
+    }
   }
 
   /* A signed-out visitor to a tenant App reads one tenant's public rows, by

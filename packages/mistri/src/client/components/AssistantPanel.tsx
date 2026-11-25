@@ -55,6 +55,7 @@ import {
   labelPath,
   state,
   viewportBox,
+  viewportScale,
   viewportSize,
   writeAllowed,
 } from '@mistriwork/kit/client/core.js';
@@ -94,6 +95,7 @@ import {
 import { Button } from '@mistriwork/ui/Button.js';
 import { EvidenceItem } from './EvidenceList.js';
 import { assistantApi, assistantOwner } from './assistantRequest.js';
+import type { AssistantHandoff } from './assistantDoor.js';
 import { ConversationList, DeleteConversation, RenameField, type ConversationSummary } from './ConversationList.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { CommandForm } from './CommandForm.js';
@@ -160,7 +162,30 @@ function Words({ text, onFollow }: { text: string; onFollow: (address: string) =
   return (
     <>
       {wordsOf(text).map((paragraph, p) =>
-        paragraph.list ? (
+        'table' in paragraph ? (
+          <div key={p} className="assistant-words-table">
+            <table>
+              <thead>
+                <tr>
+                  {paragraph.table.head.map((cell, c) => (
+                    <th key={c} scope="col">
+                      {draw(cell)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {paragraph.table.rows.map((row, r) => (
+                  <tr key={r}>
+                    {row.map((cell, c) => (
+                      <td key={c}>{draw(cell)}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : paragraph.list ? (
           <ul key={p}>
             {paragraph.lines.map((line, l) => (
               <li key={l}>{draw(line)}</li>
@@ -235,7 +260,11 @@ function CardValue({
 }) {
   if (column?.references && table && value !== null && value !== undefined && String(value) !== '')
     return <RefJump references={column.references} value={value} label={label} table={table} column={name} row={row} />;
-  return <Value col={column} value={value} tableId={tableId} compact links={false} />;
+  /* A rollup or computed column is no column of the table's, and is dressed by its own rule all the same: a balance kept
+     in cents is said as money, not as 12500. */
+  return (
+    <Value col={column ?? ({ name, type: '' } as TableMeta['columns'][number])} value={value} tableId={tableId} compact links={false} />
+  );
 }
 
 function RecordCard({ block, onFollow }: { block: Extract<AssistantBlock, { kind: 'record' }>; onFollow: (address: string) => void }) {
@@ -583,8 +612,19 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
   );
 }
 
-/* Full screen is a per-person preference, kept on this device: the panel opens the way it was last left. */
+/* Full screen and side-panel width are per-person preferences, kept on this device: the panel opens the way it was last left. */
 const expandedKey = (app: string) => `mistri.assistant.expanded.${app}.${sessionIdentity().accountId ?? 'local'}`;
+const widthKey = (app: string) => `mistri.assistant.width.${app}.${sessionIdentity().accountId ?? 'local'}`;
+const PANEL_WIDTH_DEFAULT = 512;
+const PANEL_WIDTH_MIN = 384;
+const PANEL_WIDTH_MAX = 832;
+function panelCeiling(): number {
+  const vw = viewportSize().width;
+  return vw > 0 ? Math.max(PANEL_WIDTH_MIN, Math.min(PANEL_WIDTH_MAX, Math.floor(vw * 0.75))) : PANEL_WIDTH_MAX;
+}
+function clampPanelWidth(px: number): number {
+  return Math.round(Math.min(panelCeiling(), Math.max(PANEL_WIDTH_MIN, px)));
+}
 function readExpanded(app: string): boolean {
   try {
     return window.localStorage.getItem(expandedKey(app)) === '1';
@@ -596,6 +636,22 @@ function writeExpanded(app: string, on: boolean): void {
   try {
     if (on) window.localStorage.setItem(expandedKey(app), '1');
     else window.localStorage.removeItem(expandedKey(app));
+  } catch {
+    /* Remembered where the browser lets it be; the panel works either way. */
+  }
+}
+function readPanelWidth(app: string): number | null {
+  try {
+    const raw = Number(window.localStorage.getItem(widthKey(app)));
+    return Number.isFinite(raw) && raw > 0 ? clampPanelWidth(raw) : null;
+  } catch {
+    return null;
+  }
+}
+function writePanelWidth(app: string, width: number | null): void {
+  try {
+    if (width === null) window.localStorage.removeItem(widthKey(app));
+    else window.localStorage.setItem(widthKey(app), String(Math.round(width)));
   } catch {
     /* Remembered where the browser lets it be; the panel works either way. */
   }
@@ -650,6 +706,8 @@ interface AssistantProps {
   conversation?: string;
   /** Opened to Ask (the palette's, a list's): a fresh conversation whose turns read and show what they read. */
   ask?: boolean;
+  /** What a page handed it (`useAssistant().open`): the record the person is on, words for the box. `at` counts them. */
+  handoff?: AssistantHandoff & { at: number };
 }
 
 /** What an Ask read: the line it ran, in the App's query language, and the rows it read there, each opening as its
@@ -673,7 +731,19 @@ function AskRead({ read }: { read: Extract<PanelItem, { type: 'query' }> }) {
 }
 
 /** The trigger's panel, beside the page or full screen over its content. */
-export function AssistantPanel({ app, record, onClose, ask }: { app: string; record: boolean; onClose: () => void; ask?: number }) {
+export function AssistantPanel({
+  app,
+  record,
+  onClose,
+  ask,
+  handoff,
+}: {
+  app: string;
+  record: boolean;
+  onClose: () => void;
+  ask?: number;
+  handoff?: AssistantHandoff & { at: number };
+}) {
   /* Another customer, or another person, is another history: the panel starts again in it. Each Ask (`ask` counts
      them) starts again too, on a fresh conversation. */
   return (
@@ -684,6 +754,7 @@ export function AssistantPanel({ app, record, onClose, ask }: { app: string; rec
       mode="panel"
       onClose={onClose}
       ask={Boolean(ask)}
+      {...(handoff ? { handoff } : {})}
     />
   );
 }
@@ -697,7 +768,11 @@ export function AssistantRoom({ conversation }: { conversation?: string }) {
   );
 }
 
-function Assistant({ app, record, mode, onClose, conversation: addressed, ask }: AssistantProps) {
+/* Where the person is, as a string: a record a page handed the panel is its context while they stay there. */
+const spotOf = (entry: ReturnType<typeof useWalk>[number] | undefined): string =>
+  JSON.stringify(entry ? [entry.kind, entry.table, entry.key, entry.view, entry.pageId] : null);
+
+function Assistant({ app, record, mode, onClose, conversation: addressed, ask, handoff }: AssistantProps) {
   const room = mode === 'page';
   const owner = assistantOwner();
   const [conversation, setConversation] = useState<string | null>(
@@ -725,6 +800,8 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [deletingOpen, setDeletingOpen] = useState(false);
   const [expanded, setExpanded] = useState(() => !room && readExpanded(app));
+  const [panelWidth, setPanelWidth] = useState<number | null>(() => (room ? null : readPanelWidth(app)));
+  const resizeDrag = useRef<{ startX: number; startWidth: number; prevWidth: number | null } | null>(null);
   const onPhone = usePhone();
   const wide = room || (expanded && !onPhone);
   const stop = useRef<AbortController | null>(null);
@@ -734,16 +811,23 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
   const queryClient = useQueryClient();
   const walk = useWalk();
   const top = walk[walk.length - 1];
+  /* The record a page handed the panel (useAssistant().open({ about })), read and named by the server as this
+     person; it is the context while they stay where they handed it, and the open record's place is its own again
+     once they move. */
+  const [handed, setHanded] = useState<{ resource: string; key: Record<string, unknown>; label: string; spot: string } | null>(null);
+  const spot = spotOf(top);
   const context =
-    record && (top?.kind === 'row' || top?.kind === 'page') && top.table && top.key
-      ? { resource: top.table, key: top.key, label: top.label ?? top.table }
-      : undefined;
+    handed && handed.spot === spot
+      ? { resource: handed.resource, key: handed.key, label: handed.label }
+      : record && (top?.kind === 'row' || top?.kind === 'page') && top.table && top.key
+        ? { resource: top.table, key: top.key, label: top.label ?? top.table }
+        : undefined;
   /* The App's starters for where the person is: its bare lines everywhere, a scoped one in its view's room or on a
      record of its table (appAssistant.ts). The room is the walk's top: a list's view, a dashboard's or a form's page. */
   const starters = startersHere((activeApp() as AppPayloadApp | null)?.assistant?.starters, {
     ...(top?.kind === 'table' && top.view ? { view: top.view } : {}),
     ...(top?.kind === 'page' && !top.key ? { view: dashViewKey(top.pageId) ?? formViewKey(top.pageId) } : {}),
-    ...((top?.kind === 'row' || top?.kind === 'page') && top.table && top.key ? { record: top.table } : {}),
+    ...(context ? { record: context.resource } : {}),
   });
 
   const conversations = useQuery({
@@ -782,6 +866,41 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened.isError, room]);
   useEffect(() => () => stop.current?.abort(), []);
+  /* A page's hand-off: words in the box, never sent, and the record asked of the server as this person. One they may
+     not open is refused there and said here; the panel is not quietly about nothing. */
+  useEffect(() => {
+    if (!handoff) return;
+    setListing(false);
+    setProblem(null);
+    if (typeof handoff.text === 'string') {
+      setEditing(null);
+      setText(handoff.text);
+      box.current?.focus();
+    }
+    const about = handoff.about;
+    if (!about) return;
+    setHanded(null);
+    let current = true;
+    void (async () => {
+      try {
+        const found = (await assistantApi('/api/assistant/about', { app, resource: about.table, id: about.id })) as {
+          resource: string;
+          key: Record<string, unknown>;
+          label: string;
+        };
+        if (!current) return;
+        setHanded({ resource: found.resource, key: found.key, label: found.label, spot });
+        setWithRecord(true);
+      } catch (error) {
+        if (current) setProblem({ text: say('couldNotTell', { message: error instanceof Error ? error.message : String(error) }) });
+      }
+    })();
+    return () => {
+      current = false;
+    };
+    // Each hand-off once, where the person was when it was made.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handoff]);
   useEffect(() => {
     if (!listing) box.current?.focus();
   }, [conversation, listing]);
@@ -832,6 +951,21 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
     addHostListener(window, 'resize', place);
     return () => removeHostListener(window, 'resize', place);
   }, [room, wide]);
+  /* The side panel's chosen width, clamped to the window as it narrows; absent, the stylesheet's 32rem stands. */
+  useLayoutEffect(() => {
+    const panel = frame.current;
+    if (room || !panel) return;
+    if (wide || panelWidth === null) {
+      panel.style.removeProperty('--assistant-width');
+      return;
+    }
+    const fit = () => {
+      panel.style.setProperty('--assistant-width', `${clampPanelWidth(panelWidth)}px`);
+    };
+    fit();
+    addHostListener(window, 'resize', fit);
+    return () => removeHostListener(window, 'resize', fit);
+  }, [room, wide, panelWidth]);
   /* The room stands from where it begins to the foot of the window, so the composer sits at the bottom. */
   useLayoutEffect(() => {
     const panel = frame.current;
@@ -1116,6 +1250,73 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask }:
       aria-label={say('assistant')}
       onKeyDown={onPanelKey}
     >
+      {!room && !wide && !onPhone && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={say('resize')}
+          title={say('resize')}
+          tabIndex={0}
+          aria-valuenow={panelWidth ?? PANEL_WIDTH_DEFAULT}
+          aria-valuemin={PANEL_WIDTH_MIN}
+          aria-valuemax={panelCeiling()}
+          className="assistant-resize"
+          onPointerDown={(event) => {
+            if (event.pointerType === 'mouse' && event.button !== 0) return;
+            const panel = frame.current;
+            const current = panel
+              ? Math.round(viewportBox(panel).width) || panelWidth || PANEL_WIDTH_DEFAULT
+              : (panelWidth ?? PANEL_WIDTH_DEFAULT);
+            resizeDrag.current = { startX: event.clientX, startWidth: current, prevWidth: panelWidth };
+            try {
+              event.currentTarget.setPointerCapture(event.pointerId);
+            } catch {
+              /* A renderer without capture still delivers the moves to the handle. */
+            }
+          }}
+          onPointerMove={(event) => {
+            const drag = resizeDrag.current;
+            if (!drag) return;
+            const next = clampPanelWidth(drag.startWidth + (drag.startX - event.clientX) / viewportScale());
+            setPanelWidth(next);
+            writePanelWidth(app, next);
+          }}
+          onPointerUp={() => {
+            resizeDrag.current = null;
+          }}
+          onPointerCancel={() => {
+            const drag = resizeDrag.current;
+            if (!drag) return;
+            resizeDrag.current = null;
+            setPanelWidth(drag.prevWidth);
+            writePanelWidth(app, drag.prevWidth);
+          }}
+          onDoubleClick={() => {
+            setPanelWidth(null);
+            writePanelWidth(app, null);
+          }}
+          onKeyDown={(event) => {
+            if (event.altKey && event.key === 'Backspace') {
+              event.preventDefault();
+              setPanelWidth(null);
+              writePanelWidth(app, null);
+              return;
+            }
+            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
+            event.preventDefault();
+            const step = event.shiftKey ? 64 : 24;
+            const base = panelWidth ?? PANEL_WIDTH_DEFAULT;
+            const next =
+              event.key === 'Home'
+                ? PANEL_WIDTH_MIN
+                : event.key === 'End'
+                  ? panelCeiling()
+                  : clampPanelWidth(base + (event.key === 'ArrowLeft' ? step : -step));
+            setPanelWidth(next);
+            writePanelWidth(app, next);
+          }}
+        />
+      )}
       {room && (
         <nav className="assistant-rail" aria-label={say('conversations')}>
           {list}

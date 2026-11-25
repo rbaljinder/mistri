@@ -75,6 +75,9 @@ export interface ChannelMessage {
   readonly text: string;
   /** The same for every attempt at this message: the provider's dedupe key. */
   readonly idempotencyKey: string;
+  /** The App's own name for the message, where its `send(…)` gave one: a package may hand it to the provider as the
+      message's metadata, so a delivery callback names it back. */
+  readonly reference?: string;
 }
 
 /** A way to reach a person that is not email: `send` delivers one message and answers the provider's id for it. */

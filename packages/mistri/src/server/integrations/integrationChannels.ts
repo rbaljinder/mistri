@@ -37,7 +37,7 @@
  */
 import { createHash } from 'node:crypto';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
-import { channelBody, effectIdempotencyKey, EFFECT_EVENT_PREFIX } from '../commands/commandEffects.js';
+import { channelBody, channelWithdrawBody, effectIdempotencyKey, EFFECT_EVENT_PREFIX } from '../commands/commandEffects.js';
 import { isBusinessCommandExecutionError } from '../commands/commandErrors.js';
 import type { EventPublicationTransport } from '../events/eventPublisher.js';
 import { QUEUED, type IntegrationStore, type MessageRow } from '../../adapters/integrations/integrationStore.js';
@@ -113,6 +113,7 @@ interface Message {
   readonly text: string;
   readonly consent: boolean;
   readonly timezone?: string;
+  readonly reference?: string;
 }
 
 /** The channel's sender over a runtime: the delivery transport for its effects, and the loop that sends what quiet hours held. */
@@ -167,6 +168,7 @@ export function channelSender(runtime: IntegrationRuntime, channel: string) {
           to: row.recipient,
           text,
           idempotencyKey: row.key,
+          ...(row.reference ? { reference: row.reference } : {}),
         }),
         Object.freeze({ signal }),
       )) as { id?: unknown } | null;
@@ -202,9 +204,25 @@ export function channelSender(runtime: IntegrationRuntime, channel: string) {
     async (publication) => {
       const envelope = publication.envelope;
       if (!envelope.name.startsWith(EFFECT_EVENT_PREFIX) || !routed.has(`${envelope.commandId}\n${envelope.name}`)) return 'accepted';
+      let rawBody: unknown;
+      try {
+        rawBody = (JSON.parse(envelope.payloadJson) as { body?: unknown }).body;
+      } catch {
+        return 'rejected';
+      }
+      if (rawBody && typeof rawBody === 'object' && !Array.isArray(rawBody) && Object.hasOwn(rawBody, 'withdraw')) {
+        let withdrawal: { readonly withdraw: string };
+        try {
+          withdrawal = channelWithdrawBody(rawBody) as { readonly withdraw: string };
+        } catch {
+          return 'rejected';
+        }
+        await runtime.store.withdrawHeld(runtime.appId, envelope.tenantId ?? '', channel, withdrawal.withdraw, runtime.now());
+        return 'accepted';
+      }
       let message: Message;
       try {
-        message = channelBody((JSON.parse(envelope.payloadJson) as { body?: unknown }).body) as unknown as Message;
+        message = channelBody(rawBody) as unknown as Message;
       } catch {
         return 'rejected';
       }
@@ -226,6 +244,7 @@ export function channelSender(runtime: IntegrationRuntime, channel: string) {
         dueAt: null,
         attempts: 0,
         at: now,
+        ...(message.reference === undefined ? {} : { reference: message.reference }),
       };
       return decide(row, message.consent, message.timezone, publication.signal);
     };

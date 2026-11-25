@@ -105,4 +105,15 @@ test.describe('0.8.13 preview blocks', () => {
     await section.getByRole('button', { name: 'VPN drops every hour' }).click();
     await expect(page).toHaveURL(/\/1$/);
   });
+
+  test("a dashboard's command button runs a command that names no record and asks nothing", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page, app);
+    await page.goto(`${app.origin}/desk`);
+    const section = page.locator('.page-section').filter({ has: page.getByRole('heading', { name: 'Opening' }) });
+    await expect(section.getByText('Start taking calls for the day.')).toBeVisible();
+    await section.getByRole('button', { name: 'Open the desk' }).click();
+    // Said as a page's CommandButton says an applied run.
+    await expect(page.getByRole('status').getByText('Open the desk done.')).toBeVisible();
+  });
 });

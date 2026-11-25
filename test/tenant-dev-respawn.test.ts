@@ -142,10 +142,7 @@ test(
 
     // A grant saved: the member's reads follow the new App, not what the first host knew (field reports #30, #68).
     save('app.ts', (text) =>
-      text.replace(
-        "reception: { label: 'Reception', realm: 'tenant', read: clinicReads,",
-        "reception: { label: 'Reception', realm: 'tenant', read: clinicReads.filter((name) => name !== 'notice'),",
-      ),
+      text.replace(/(reception:\s*\{[\s\S]*?)read: clinicReads,/, "$1read: clinicReads.filter((name) => name !== 'notice'),"),
     );
     await until('the host to start again with the new grant', () => listening() === 3);
     // A client holds the lease its host granted; a restarted host's member comes in as a new one.

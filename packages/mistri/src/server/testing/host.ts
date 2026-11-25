@@ -55,6 +55,10 @@ export interface TestAppOptions extends HostOptions {
   /** The decision providers, scripted (decide/providers/scriptedDecisions.ts): each decision's answers by name, a
       `when` matching the inputs sent, offline and the same every run. Without it a test App's decisions have no provider. */
   decisions?: TestDecisionScript;
+  /** `'manual'`: the App's jobs at times (`every`) and its timers never run on their own in this test, so none fires
+      in the middle of one; `host.runJob(name)` runs one now. Event jobs, workflows and effects run as they would. Unsaid,
+      the schedule runs as a deployment's does. */
+  jobs?: 'manual';
 }
 /** The turns a scripted assistant model replays (`startTestApp({ assistant })`). `$record` in a tool's input is the
     open record's key. */
@@ -327,6 +331,7 @@ export async function startTestApp(options: TestAppOptions) {
       ...(script ? { MISTRI_ASSISTANT_SCRIPT: script } : {}),
       ...replayed?.environment,
       ...(decide ? { MISTRI_DECIDE_SCRIPT: decide } : {}),
+      ...(options.jobs === 'manual' ? { MISTRI_JOBS: 'manual' } : {}),
       ...options.environment,
       MISTRI_TEST_CONTROL: control,
     },

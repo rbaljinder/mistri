@@ -411,6 +411,17 @@ A form's sticky action bar: a hairline over the page, or raised on the surface w
 
 <!-- /recipe words -->
 
+## `choice`
+
+A picked choice: one of a yes-or-no pair (`field.bool({ as: 'buttons' })`), a row of words or a card. On a tint of the accent with an accent edge, or filled in the accent with its words in the accent's own ink, for a look whose tint sits close to the field's fill.
+
+<!-- recipe words: choice -->
+
+- `tint`: A picked choice — one of a yes-or-no pair, a row of words or a card — stands on a tint of the accent with an accent edge; in a pair or a row, its words in bold.
+- `filled`: A picked choice is filled in the accent with its words in the accent’s own ink: a picked answer that reads at a glance on a phone, where a tint can sit close to the field’s own fill.
+
+<!-- /recipe words -->
+
 ## `shape.radius.pill`
 
 Not a recipe but a length beside them: a status pill's, a tag's and a chip's corner. Omitted, round. Shown in Sage, whose statuses are pills.

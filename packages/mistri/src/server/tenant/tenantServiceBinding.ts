@@ -220,7 +220,7 @@ export function bindTenantServices(options: TenantServicesOptions) {
         const contexts = new WeakMap<WriteTransaction, TenantCommandRecords>();
         return Object.freeze<AuthorizedBusinessCommand>({
           ...authorization,
-          ...(options.zone === undefined ? {} : { timezone: options.zone }),
+          ...(options.zone === undefined ? {} : { timezone: options.zone, ownZone: options.zone }),
           transaction: deny,
           /* No plain transaction: a decision's reads (its record, its choices) run in this command's own fenced
              transaction, scoped to the tenant's rows, and write nothing (decideReads.ts). Without it every tenant

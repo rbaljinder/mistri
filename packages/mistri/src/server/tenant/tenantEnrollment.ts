@@ -384,7 +384,7 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
       const existingPath = source.existingPath ?? denyTenant();
       if (!statSync(existingPath).isFile()) return denyTenant();
       path = realpathSync(existingPath);
-      const db = new DatabaseSync(path, { readOnly: true, enableForeignKeyConstraints: true });
+      const db = new DatabaseSync(path, { readOnly: true, enableForeignKeyConstraints: true, timeout: 5000 });
       let ownership: TenantOwnershipSnapshot;
       try {
         db.exec('BEGIN');
