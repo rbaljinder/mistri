@@ -146,3 +146,31 @@ test('an App whose API the export renders passes the check', async (t) => {
   const checked = await run(f.directory, f.check);
   assert.equal(checked.code, 0, checked.out + checked.err);
 });
+
+/* A field report: four refusals of one App's API surfaced one at a time, each from its own run. Every exposure is
+   judged on its own now, and one run says each refused one: here a resource and the view over it. */
+test('one check says every refused exposure, and the export the same', async (t) => {
+  const app = ledger(['change']);
+  const many = {
+    ...app,
+    api: {
+      ...app.api,
+      resources: { item: { fields: ['id', 'revision', 'created_at'], sorts: ['created_at'] } },
+      views: [{ view: 'items' }],
+    },
+  };
+  const f = fixture(
+    many,
+    "CREATE TABLE item(id INTEGER PRIMARY KEY, revision INTEGER NOT NULL, created_at TIMESTAMP NOT NULL); INSERT INTO item VALUES(1,0,datetime(0, 'unixepoch'));",
+    '',
+  );
+  t.after(() => rmSync(f.directory, { recursive: true, force: true }));
+  const checked = await run(f.directory, f.check);
+  assert.equal(checked.code, 4, checked.out + checked.err);
+  for (const at of ['api.resources.item', 'api.views.items'])
+    assert.match(checked.out + checked.err, new RegExp(`${at.replace(/\./g, '\\.')}: sort "created_at" .*\\[api-sort-type\\]`));
+  const exported = await run(f.directory, f.exported);
+  assert.notEqual(exported.code, 0);
+  for (const at of ['api.resources.item', 'api.views.items'])
+    assert.match(exported.err, new RegExp(`${at.replace(/\./g, '\\.')}: sort "created_at" .*\\[api-sort-type\\]`));
+});

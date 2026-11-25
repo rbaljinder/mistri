@@ -19,6 +19,7 @@ import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
 import { captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { tenantAuthoringSchema } from './tenantVisibleFields.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
+import { refusalsOf } from '../api/apiRefusals.js';
 
 export async function tenantAppOpenApi(
   registry: Registry,
@@ -73,8 +74,8 @@ function tenantApiDocument(
 
 /**
  * What the export would refuse, for `mistri check` (tenantFeatureApi.ts): the same catalogs and the same render, so a
- * refusal is found while the App is written. The reads and the commands are judged apart, so one run says a refusal
- * of each; within a catalog the first refusal is the one said. An App that exposes commands and was given no
+ * refusal is found while the App is written. The reads and the commands are judged apart, and within each catalog
+ * every exposure on its own, so one run says every refused exposure (api/apiRefusals.ts). An App that exposes commands and was given no
  * registry is judged on its reads alone, as an ordinary App's check is.
  */
 export function tenantApiProblems(app: AppDef, owned: TenantOwnershipSnapshot, commands: BusinessCommandRegistry | undefined): string[] {
@@ -84,7 +85,7 @@ export function tenantApiProblems(app: AppDef, owned: TenantOwnershipSnapshot, c
     try {
       run();
     } catch (error) {
-      problems.push((error as Error).message);
+      problems.push(...(refusalsOf(error) ?? [(error as Error).message]));
     }
   };
   const exposed = app.api.commands.length > 0 && commands ? commands : undefined;

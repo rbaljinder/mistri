@@ -17,6 +17,7 @@ import { tabKey } from '@mistriwork/engine/shared/addressParams.js';
 import { reservedKeys } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { opensTo } from '../../shared/appViewRoles.js';
 import { checkApiScopes } from './apiRowScope.js';
+import { apiJudgment } from './apiRefusals.js';
 
 type Exposure = NonNullable<ReturnType<typeof parseAppApi>>;
 interface Dependency {
@@ -316,14 +317,19 @@ export function scopedReadCatalog(
       }),
     );
   };
+  // Each exposure judged on its own, so one run says every refused one (apiRefusals.ts).
+  const judged = apiJudgment();
   for (const resource of Object.keys(api.resources).sort()) {
-    construct('list', resource, resource);
-    construct('item', resource, resource);
+    judged.run(() => construct('list', resource, resource));
+    judged.run(() => construct('item', resource, resource));
   }
   for (const entry of [...api.views].sort((a, b) => a.view.localeCompare(b.view))) {
-    const view = app.views[entry.view];
-    if (!view || !('table' in view)) fail(`api.views.${entry.view}`, 'only declared list views are supported');
-    construct('view', entry.view, view.table, view);
+    judged.run(() => {
+      const view = app.views[entry.view];
+      if (!view || !('table' in view)) fail(`api.views.${entry.view}`, 'only declared list views are supported');
+      construct('view', entry.view, (view as AppListView).table, view as AppListView);
+    });
   }
+  judged.done();
   return Object.freeze({ stage: 'read-validation-foundation', operations: Object.freeze(operations) });
 }

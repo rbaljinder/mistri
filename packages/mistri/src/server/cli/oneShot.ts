@@ -664,7 +664,9 @@ async function apiExportProblems(
     await renderApiExport(registry, app.app, resources, 'decimal-string', exposed ? commands : undefined);
     return [];
   } catch (error) {
-    return [`${app.path}: ${(error as Error).message}`];
+    // Every exposure's refusal of the run, each its own problem (api/apiRefusals.ts).
+    const { refusalsOf } = await import('../api/apiRefusals.js');
+    return (refusalsOf(error) ?? [(error as Error).message]).map((refusal) => `${app.path}: ${refusal}`);
   }
 }
 

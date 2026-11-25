@@ -14,6 +14,7 @@ import { renderApiCommandOpenApi } from './apiCommandOpenApi.js';
 import { renderApiReadOpenApi } from './apiReadOpenApi.js';
 import { narrowApiReadOpenApi } from './apiNarrowedReadOpenApi.js';
 import { compareApiReadSpecs } from './apiReadSpecCompare.js';
+import { apiJudgment } from './apiRefusals.js';
 
 type Json = Record<string, any>;
 /** Which mistri document this is: the composed one, or reads alone (apiReadOpenApi.ts). */
@@ -72,8 +73,13 @@ export function renderApiOpenApi(
   // The read catalog refuses command exposures so a read-only surface cannot
   // silently ignore them. Here the command half renders them explicitly, so
   // the read half is rendered from the same App with its commands projected out.
-  const read = renderApiReadOpenApi({ ...app, api: { ...app.api, commands: [] } }, schema, options, tenant?.reads).document as Json;
-  const commands = renderApiCommandOpenApi(app, schema, registry, evidence, options, tenant?.commands);
+  // The reads and the commands judged apart, so one run says the refusals of both (apiRefusals.ts).
+  const judged = apiJudgment();
+  const read = judged.run(
+    () => renderApiReadOpenApi({ ...app, api: { ...app.api!, commands: [] } }, schema, options, tenant?.reads).document as Json,
+  )!;
+  const commands = judged.run(() => renderApiCommandOpenApi(app, schema, registry, evidence, options, tenant?.commands))!;
+  judged.done();
   for (const path of Object.keys(commands.paths)) if (Object.hasOwn(read.paths, path) || !isCommandPath(path)) refuse();
   for (const name of Object.keys(commands.schemas))
     if (Object.hasOwn(read.components.schemas, name) || !COMMAND_SCHEMA.test(name)) refuse();

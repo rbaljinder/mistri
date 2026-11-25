@@ -260,7 +260,11 @@ mistri compare-openapi previous-api.json current-api.json
 a sort by a timestamp column (`api-sort-type`), a view that names totals
 (`api-view-totals`), a command that names no record (`api-command-no-record`)
 or one no role holds (`api-command-unheld`), is a check problem with its
-[code](/docs/check-codes/) and not a surprise at the first export.
+[code](/docs/check-codes/) and not a surprise at the first export. Each
+exposed resource, view and command is judged on its own, so one run says
+every one refused, a line each; an exposure's first refusal stands for it.
+The commands are judged once the reads stand, since a command host loads
+the reads first (a tenant App's check judges the two together).
 
 The document is held to 16 levels of nesting, the bound a command request is
 read under. Past it the refusal names the path that went deeper
