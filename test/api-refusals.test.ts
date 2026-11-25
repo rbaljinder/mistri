@@ -94,3 +94,59 @@ test("a judgment keeps each exposure's refusal once, throws them together, and l
   );
   apiJudgment().done();
 });
+
+test('renderAppApiOpenApi says a refused read, a refused generic write and a refused command together', async () => {
+  const { renderAppApiOpenApi } = await import('../packages/mistri/src/server/api/apiPublicSpec.js');
+  const app = parseTestApp(
+    {
+      id: 'app',
+      name: 'App',
+      sources: { business: { connection: 'private' } },
+      resources: { item: { access: 'write' } },
+      auth: { roles: { editor: { read: true, commands: [] } } },
+      views: { items: { kind: 'list', from: 'item' } },
+      home: 'items',
+    },
+    'fixture',
+  );
+  app.api = parseTestApi(
+    {
+      version: 1,
+      roles: ['editor'],
+      resources: { item: { fields: ['id', 'revision', 'created_at'], sorts: ['created_at'], delete: true } },
+      commands: [{ id: 'archive', version: 1, target: 'item', input: {} }],
+    },
+    ['editor'],
+  )!;
+  const catalog: DatabaseSchema = {
+    ...schema,
+    tables: [
+      {
+        ...schema.tables[0],
+        columns: [...schema.tables[0].columns, { name: 'created_at', type: 'TIMESTAMP', primaryKey: false, nullable: false }],
+      },
+    ],
+  };
+  const registry = defineCommands({
+    archive: defineCommand({ source: 'business', target: 'item', input: {}, output: shape({ ok: bool() }), handle: () => ({ ok: true }) }),
+  });
+  assert.throws(
+    () => renderAppApiOpenApi(app, catalog, { integers: 'decimal-string', commands: registry, evidence }),
+    (error: unknown) => {
+      const said = refusalsOf(error) ?? [];
+      assert.ok(
+        said.some((line) => line.includes('[api-write-unsupported]')),
+        JSON.stringify(said),
+      );
+      assert.ok(
+        said.some((line) => line.includes('[api-sort-type]')),
+        JSON.stringify(said),
+      );
+      assert.ok(
+        said.some((line) => line.includes('[api-command-unheld]')),
+        JSON.stringify(said),
+      );
+      return true;
+    },
+  );
+});

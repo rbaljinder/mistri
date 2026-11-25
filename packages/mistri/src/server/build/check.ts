@@ -471,7 +471,7 @@ export async function schemaTypes(registry: Registry, loaded: LoadedApp | undefi
         Object.keys(app.sources ?? {}).length > 1
         ? typesForSchema(schema)
         : typesForSchema({
-            ...withRollups(app, (await loadAppRuntimeResources(registry, app, connection.id)).schema),
+            ...withRollups(app, (await loadAppRuntimeResources(registry, app, connection.id, undefined, { deferApiCheck: true })).schema),
             label: schema.label,
           });
   } catch (error) {
@@ -1229,7 +1229,10 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
           ? registry.list().find((c) => c.id === bound || c.name === bound)
           : registry.list().find((c) => c.id === registry.active);
         if (!connection) throw new Error(`the App names connection "${bound}", which is not configured`);
-        return { schema: (await loadAppRuntimeResources(registry, app.app, connection.id)).schema, why: '' };
+        return {
+          schema: (await loadAppRuntimeResources(registry, app.app, connection.id, undefined, { deferApiCheck: true })).schema,
+          why: '',
+        };
       } catch (error) {
         return { why: `could not read the App's catalog: ${(error as Error).message}` };
       }

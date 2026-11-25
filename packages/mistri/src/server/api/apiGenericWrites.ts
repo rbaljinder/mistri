@@ -27,6 +27,7 @@ import { field } from '../commands/commandFields.js';
 import { int, oneOf, shape, text } from '../commands/commandShapes.js';
 import { BusinessCommandExecutionError, refuse } from '../commands/commandErrors.js';
 import { apiDialectOf } from './apiValueCodec.js';
+import { ApiRefusals } from './apiRefusals.js';
 import { genericWriteEntitled, genericWriteOf, markGenericWrite } from '../commands/genericWriteBrand.js';
 import { AppAccessDenied, authorizeTransaction, type ResourceAccess } from '../app/appAccess.js';
 import { AppValidationDenied, ConsumesRefused } from '../app/appValidationDenied.js';
@@ -279,7 +280,7 @@ export function withApiWrites(
   const writes = apiWrites(app.api);
   if (!writes.length) return { app, registry };
   const problems = apiWriteProblems(app, schema, registry);
-  if (problems.length) throw new Error(problems.join(' '));
+  if (problems.length) throw new ApiRefusals(problems);
   // No commands module is an empty registry: the receipts' journal is the platform's, not the module's.
   registry ??= defineCommands({});
   // One command per write per schema, so every owner of this App runs the same instances.
