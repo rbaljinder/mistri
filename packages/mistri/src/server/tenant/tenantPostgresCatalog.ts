@@ -36,7 +36,7 @@
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { postgresCatalogDigestOf } from '@mistriwork/engine/adapters/postgresCatalogDigest.js';
 import { denyTenant } from '@mistriwork/engine/server/evidence.js';
-import { tenantKeyRefusal, tenantUniqueRefusal, type TenantOwnershipSnapshot } from './tenantOwnership.js';
+import { tenantExclusionRefusal, tenantKeyRefusal, tenantUniqueRefusal, type TenantOwnershipSnapshot } from './tenantOwnership.js';
 import { EPOCHLESS_TTL_MS } from '@mistriwork/engine/adapters/postgresSchemaEpoch.js';
 import { TENANT_POLICY, TENANT_POLICY_TAIL } from '@mistriwork/engine/adapters/scoped/postgresScopeCatalog.js';
 
@@ -313,7 +313,13 @@ interface IndexRow {
   unique: boolean;
   primary: boolean;
   exclusion: boolean;
-  columns: Array<{ attnum: number; name: string | null; deterministic: boolean | null }> | null;
+  deferrable: boolean | null;
+  columns: Array<{
+    attnum: number;
+    name: string | null;
+    deterministic: boolean | null;
+    operator: string | null;
+  }> | null;
 }
 
 /** Attest tenant-local business uniqueness; a single opaque primary ID is the
@@ -327,15 +333,19 @@ export async function assertPostgresTenantUniqueKeys(client: PgQuery, ownership:
   const rows = (
     await client.query(
       `SELECT w.id, i.indexrelid::regclass::text AS name, i.indisunique AS "unique", i.indisprimary AS "primary", i.indisexclusion AS exclusion,
-            (SELECT json_agg(json_build_object('attnum', k.attnum, 'name', a.attname, 'deterministic', l.collisdeterministic) ORDER BY k.ord)
+            x.condeferrable AS deferrable,
+            (SELECT json_agg(json_build_object('attnum', k.attnum, 'name', a.attname, 'deterministic', l.collisdeterministic,
+                                               'operator', o.oprname) ORDER BY k.ord)
                FROM unnest(i.indkey::int2[], i.indcollation::oid[]) WITH ORDINALITY AS k(attnum, coll, ord)
                LEFT JOIN pg_catalog.pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
                LEFT JOIN pg_catalog.pg_collation l ON l.oid = k.coll
+               LEFT JOIN pg_catalog.pg_operator o ON o.oid = x.conexclop[k.ord::int]
               WHERE k.ord <= i.indnkeyatts) AS columns
        FROM unnest($1::text[], $2::text[], $3::text[]) AS w(id, schema, name)
        JOIN pg_catalog.pg_namespace n ON n.nspname = w.schema
        JOIN pg_catalog.pg_class c ON c.relnamespace = n.oid AND c.relname = w.name
        JOIN pg_catalog.pg_index i ON i.indrelid = c.oid
+       LEFT JOIN pg_catalog.pg_constraint x ON x.conindid = i.indexrelid AND x.contype = 'x'
       WHERE i.indisunique OR i.indisprimary OR i.indisexclusion`,
       targets(physical),
     )
@@ -354,7 +364,20 @@ export async function assertPostgresTenantUniqueKeys(client: PgQuery, ownership:
       return denyTenant(tenantKeyRefusal(logical, rule.column, primary));
     let primarySeen = false;
     for (const index of rows.filter((row) => row.id === ownership.resources[logical])) {
-      if (index.exclusion || !index.unique) return denyTenant();
+      /* An exclusion constraint holds within one tenant when the ownership column is one of its keys, compared with
+         `=` under a deterministic collation, and it is checked as each statement runs: two rows it finds in conflict
+         are then one tenant's, so its refusal says nothing of another's rows. Its other keys may be expressions (a
+         range of two columns): they only narrow which of the tenant's own rows conflict. This is what holds an App's
+         `noOverlap` under several writers. */
+      if (index.exclusion) {
+        const owned = (index.columns ?? []).some(
+          (key) => key.name === rule.column && key.attnum !== 0 && key.operator === '=' && key.deterministic !== false,
+        );
+        if (!owned || index.deferrable !== false)
+          return denyTenant(tenantExclusionRefusal(logical, typeof index.name === 'string' ? index.name : undefined, rule.column));
+        continue;
+      }
+      if (!index.unique) return denyTenant();
       const keys = index.columns ?? [];
       if (!keys.length || keys.some((key) => key.attnum === 0 || typeof key.name !== 'string')) return denyTenant();
       const local = keys.some((key) => key.name === rule.column && key.deterministic !== false);

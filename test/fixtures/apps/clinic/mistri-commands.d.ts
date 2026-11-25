@@ -9,6 +9,7 @@ type CommandModule = typeof import("./commands.ts").default;
 /** Each command by its name: the table it acts on, how many existing records a request names
     (none: a form's command), its input names, whether a public form runs it, and what it returns. */
 export type Commands = {
+  bookRoom: { target: "room_booking"; targets: "none"; input: "room" | "starts_at" | "ends_at"; output: CommandOutput<CommandModule["bookRoom"]> };
   postNotice: { target: "notice"; targets: "none"; input: "clinic_id" | "body"; output: CommandOutput<CommandModule["postNotice"]> };
   recordPayment: { target: "appointment"; targets: "one"; input: "amount_cents" | "method"; output: CommandOutput<CommandModule["recordPayment"]> };
   requestVisit: { target: "visit_request"; targets: "none"; input: "name" | "phone" | "note"; public: true; output: CommandOutput<CommandModule["requestVisit"]> };
@@ -16,12 +17,13 @@ export type Commands = {
 
 /** Each form view by its key, with the command it runs: what `page.useForm(view).open(input)` is typed by. */
 export type FormCommands = {
+  "book-room": "bookRoom";
   "post-notice": "postNotice";
   "request-visit": "requestVisit";
 };
 
 /** Each view of the App by its key (a list, a dashboard, a form): what `useHref().view` and `.record` take. */
-export type ViewKeys = "appointments" | "clinics" | "notices" | "patients" | "payments" | "post-notice" | "request-visit" | "requests" | "services" | "triage";
+export type ViewKeys = "appointments" | "book-room" | "clinics" | "notices" | "patients" | "payments" | "post-notice" | "request-visit" | "requests" | "rooms" | "services" | "triage";
 
 declare module '@mistriwork/mistri/app' {
   interface Register { commands: Commands; forms: FormCommands; views: ViewKeys }

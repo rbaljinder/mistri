@@ -150,6 +150,26 @@ export const CONNECTION_HIDDEN: unique symbol = Symbol('mistri.connectionHidden'
  */
 export const GRANTED_DERIVED: unique symbol = Symbol('mistri.grantedDerived');
 
+/** One constraint of a table, by the name a refused write carries (Adapter.constraints). */
+export interface TableConstraint {
+  name: string;
+  /**
+   * `exclusion`, `unique` (a constraint or a unique index), `check` and `reference` are the database's own rules;
+   * `trigger` is a name a SQLite trigger raises (`RAISE(ABORT, '<name>')`), which is all a refusal of its says.
+   */
+  kind: 'exclusion' | 'unique' | 'check' | 'reference' | 'trigger';
+  /** Whether a refused write says this name on this engine: SQLite reports a unique rule by its columns alone. */
+  named: boolean;
+  /** An exclusion constraint's index method, keys (each its expression and operator, as the catalog writes them),
+      predicate, and whether it waits for COMMIT. */
+  exclusion?: {
+    method: string;
+    keys: ReadonlyArray<{ expression: string; operator: string }>;
+    predicate?: string;
+    deferrable: boolean;
+  };
+}
+
 export interface TableMeta {
   /** What the connection hides of this table (CONNECTION_HIDDEN); never serialized. */
   readonly [CONNECTION_HIDDEN]?: readonly string[];

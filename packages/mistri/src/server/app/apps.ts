@@ -108,6 +108,7 @@ import { appComponents } from '../../shared/appComponentPlaces.js';
 import { machineChecks } from './appMachineChecks.js';
 import { segmentProblems, servedSegments } from '../../shared/appSegments.js';
 import { appConsumesRules } from '../../shared/appConsumes.js';
+import { appDataRules } from '../../shared/appDataRules.js';
 import { withMachineSteppers } from '../../shared/appMachine.js';
 import { tabSlug } from '@mistriwork/engine/shared/addressParams.js';
 import { isMessageRef } from '@mistriwork/engine/shared/appMessages.js';
@@ -1186,6 +1187,8 @@ export function appProblems(loaded: LoadedApp, schema: DatabaseSchema): string[]
   const whole = appCatalog(loaded.app, schema);
   problems.push(...segmentProblems(loaded.app, whole).map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
   problems.push(...appConsumesRules(loaded.app, schema).problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
+  /* Rows that may not overlap, and the PostgreSQL constraint that holds them (appDataRules.ts): without it the App does not load. */
+  problems.push(...appDataRules(loaded.app, schema).problems.map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));
   schema = servedSegments(whole);
   /* A list's filters across its related tables, judged whole: a reader's catalog leaves one it cannot read off. */
   problems.push(...listFilterProblems(loaded.app, schema).map((p) => `${manifest}: ${locateProblem(loaded.origins, p)}`));

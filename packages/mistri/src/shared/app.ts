@@ -61,6 +61,7 @@ export { zonedNow } from './appZone.js';
 export { segmentProblems, servedSegments } from './appSegments.js';
 import { tabNameProblem } from './appSegments.js';
 export { appConsumesRules } from './appConsumes.js';
+export { appDataRules } from './appDataRules.js';
 import { ANYONE, andQuery, expandSegments, parseQuery, saidAt, topLevelConditions } from '@mistriwork/engine/shared/query.js';
 import { funnelChains, funnelText } from '@mistriwork/engine/shared/funnel.js';
 import { parseViewQuery, resolvePath, tryResolvePath } from '@mistriwork/engine/shared/view.js';

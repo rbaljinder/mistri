@@ -8,6 +8,8 @@ export const views = {
   services: listView('Services', 'service', { show: ['name', 'price_cents', 'published'] }),
   requests: listView('Visit requests', 'visit_request', { show: ['name', 'phone', 'note'] }),
   notices: listView('Notices', 'notice', { show: ['body'] }),
+  rooms: listView('Room bookings', 'room_booking', { show: ['room', 'starts_at', 'ends_at', 'status'] }),
+  'book-room': commandForm('Book a room', 'bookRoom'),
   // The platform's.
   clinics: listView('Clinics', 'clinic', { show: ['name'], realm: 'platform' }),
   triage: listView('Triage', 'triage', { show: ['name', 'phone', 'note'], realm: 'platform' }),
@@ -17,6 +19,8 @@ export const views = {
 };
 
 export const nav = [
-  navGroup('clinic', 'Clinic', ['appointments', 'patients', 'payments', 'services', 'requests', 'notices'], { realm: 'tenant' }),
+  navGroup('clinic', 'Clinic', ['appointments', 'patients', 'payments', 'services', 'requests', 'notices', 'rooms', 'book-room'], {
+    realm: 'tenant',
+  }),
   navGroup('platform', 'Platform', ['clinics', 'triage', 'post-notice'], { realm: 'platform' }),
 ];

@@ -98,6 +98,26 @@ that must refuse an oversell is `consumes`; a figure that is only read is a
 rollup. `check` warns when a command also writes the balance
 (`consumes-written`).
 
+## Rows that may not overlap
+
+```ts
+booking: {
+  noOverlap: { by: ['chair_id'], from: 'starts_at', to: 'ends_at', when: 'status != cancelled', message: 'That chair is taken then.' },
+  constraints: { booking_fee_positive: { field: 'fee', message: 'A fee is more than zero.' } },
+},
+```
+
+Among rows equal on every `by` column, no two may hold ranges `[from, to)` that
+meet; a row `when` does not match, or with an empty end, is outside the rule. A
+write that would break it is refused beside `from` in `message`, on every door.
+PostgreSQL holds it with an exclusion constraint the App's migration adds:
+`check` prints the statement, and the App does not start without it
+(`no-overlap-constraint`). On SQLite the App's write reads for a row that meets
+it. `constraints` says any database constraint's refusal, by the constraint's
+name, beside a field in fixed words where the write answered
+`constraint_failed`. The words never carry a value. See
+[Rows that may not overlap](/docs/no-overlap/).
+
 ## Row-defined fields
 
 ```ts
@@ -416,6 +436,16 @@ command's id; never a support visit's id or a row's key.
 | `resources.*.computed.*.type` | `"boolean"` · `"number"` · `"date"` · `"text"` | Stable |  One of `boolean`, `date`, `number`, `text`. Used in `examples/apps/lintel/resources.ts`. |
 | `resources.*.computed.*.value` | string | Stable | The expression: columns and paths through references, a JSON column's member as text (filters_json.make, Preview: computed.text('filters_json.make')), numbers, quoted text, true, false, today, now, me, comparisons, and, or, not, in (…), is empty, + - * /, date spans (+ 3 months), and coalesce(a, b, …), round(x) or round(x, places), abs(x), min(a, b, …) and max(a, b, …), and concat(a, b, …) of text (a part with no value reads as empty). Used in `examples/apps/lintel/views.ts`. |
 
+## `resources.*.constraints`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `resources.*.constraints` | object | Stable | Database constraints said as a field's refusal, each by the name the database gives it: a write the constraint refuses is refused beside field in message, where it would have been constraint_failed. The words are said as written and never carry a value. |
+| `resources.*.constraints.*.field` | string | Stable | The resource's own column the refusal is put beside. |
+| `resources.*.constraints.*.message` | string \| object | Stable | What a refused write says: fixed words, never a value. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.constraints.*.message.args` | object | Stable | Each ICU argument's column path: { "title": "thread_id.title" }. |
+| `resources.*.constraints.*.message.message` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
+
 ## `resources.*.consumes`
 
 | Key | Type | Status | What it does |
@@ -681,6 +711,35 @@ command's id; never a support visit's id or a row's key.
 | `resources.*.machine.states.*.on.*.set` | object | Stable |  Used in `examples/apps/tick/app.ts`. |
 | `resources.*.machine.states.*.on.*.to` | string \| array | Stable |  Used in `examples/apps/lintel/dashboards.ts`. |
 | `resources.*.machine.states.*.on.*.when` | string | Stable |  Used in `examples/apps/tick/app.ts`. |
+
+## `resources.*.noOverlap`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `resources.*.noOverlap` | object \| array | Stable | Rows of this resource that may not overlap: among rows equal on every by column, no two may hold ranges [from, to) that meet. Held on every write and refused beside from in the rule's message. PostgreSQL holds it with an exclusion constraint the App's migration adds, which mistri check prints and holds the App to; on SQLite the App's write reads for a row that meets it. One, or a list. |
+| `resources.*.noOverlap.by` | array | Stable | The columns that scope the rule, each compared for equality: the chair, the provider. In a tenant App the tenant is always part of it. Used in `examples/apps/lintel/pages/resident.ts`. |
+| `resources.*.noOverlap.constraint` | string | Stable | The name of the PostgreSQL exclusion constraint that holds the rule; &lt;table>_no_overlap when absent. |
+| `resources.*.noOverlap.field` | string | Stable | The column the refusal is put beside; from when absent. |
+| `resources.*.noOverlap.from` | string | Stable | Where a row's range starts. Used in `examples/apps/lintel/app.ts`. |
+| `resources.*.noOverlap.message` | string \| object | Stable | What a refused write says, as written; it is never filled from a row. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.noOverlap.message.args` | object | Stable | Each ICU argument's column path: { "title": "thread_id.title" }. |
+| `resources.*.noOverlap.message.message` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.noOverlap.to` | string | Stable | Where a row's range stops: the range is half-open and ends just before it. Used in `examples/apps/lintel/dashboards.ts`. |
+| `resources.*.noOverlap.when` | string | Stable | Rows the rule holds for, as conditions comparing the row's own columns with fixed values: "status != cancelled". Used in `examples/apps/tick/app.ts`. |
+
+## `resources.*.noOverlap[]`
+
+| Key | Type | Status | What it does |
+| --- | --- | --- | --- |
+| `resources.*.noOverlap[].by` | array | Stable | The columns that scope the rule, each compared for equality: the chair, the provider. In a tenant App the tenant is always part of it. Used in `examples/apps/lintel/pages/resident.ts`. |
+| `resources.*.noOverlap[].constraint` | string | Stable | The name of the PostgreSQL exclusion constraint that holds the rule; &lt;table>_no_overlap when absent. |
+| `resources.*.noOverlap[].field` | string | Stable | The column the refusal is put beside; from when absent. |
+| `resources.*.noOverlap[].from` | string | Stable | Where a row's range starts. Used in `examples/apps/lintel/app.ts`. |
+| `resources.*.noOverlap[].message` | string \| object | Stable | What a refused write says, as written; it is never filled from a row. Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.noOverlap[].message.args` | object | Stable | Each ICU argument's column path: { "title": "thread_id.title" }. |
+| `resources.*.noOverlap[].message.message` | string | Stable |  Used in `examples/apps/lintel/resources.ts`. |
+| `resources.*.noOverlap[].to` | string | Stable | Where a row's range stops: the range is half-open and ends just before it. Used in `examples/apps/lintel/dashboards.ts`. |
+| `resources.*.noOverlap[].when` | string | Stable | Rows the rule holds for, as conditions comparing the row's own columns with fixed values: "status != cancelled". Used in `examples/apps/tick/app.ts`. |
 
 ## `resources.*.notify`
 

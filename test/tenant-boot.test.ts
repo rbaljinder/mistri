@@ -60,7 +60,7 @@ async function evidence(t: TestContext) {
         return (value.reads[key(client, 'GET', '/api/app')].body as { app: Record<string, unknown> }).app;
       }),
     );
-    assert.deepEqual([...(owner.writableTables as string[])].sort(), ['patient', 'service']);
+    assert.deepEqual([...(owner.writableTables as string[])].sort(), ['patient', 'room_booking', 'service']);
     assert.deepEqual(reception.writableTables, ['patient']);
     /* The same role in another clinic: that clinic's own addresses, never the first's. */
     assert.deepEqual(owner.addresses, { ...ADDRESSES.north });

@@ -99,6 +99,17 @@ refuses the whole write. A balance that is only read stays a rollup.
 `restocks` is the same rule the other way round, on a line that brings stock
 in, so receiving stock is a New form on the receipt rather than a command.
 
+**Rows that may not overlap.** `noOverlap` on a resource (`by` a chair, from
+`starts_at` to `ends_at`, `when` not cancelled) refuses a row that meets
+another, beside a field in the App's words, on every door. A range is
+half-open. PostgreSQL holds it with an exclusion constraint the App's
+migration adds, which is what holds under several writers; `mistri check`
+prints the statement and an App on PostgreSQL does not start without it. On
+SQLite the write layer reads for a meeting row in the write's transaction.
+`constraints` says any named database constraint's refusal the same way:
+a field and fixed words, never a value. See
+[Rows that may not overlap](../site/src/content/docs/docs/no-overlap.md).
+
 **A rule about a parent.** A `validation` may read through one reference
 (`order_id.status = bench`), so a line keeps the rule its parent sets. The
 server reads the parent in the write's own transaction, so an order moved

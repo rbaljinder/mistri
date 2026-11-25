@@ -57,6 +57,7 @@ import {
   type AggregateRequest,
   type AggregateResult,
   refuseUpdateMatches,
+  type TableConstraint,
 } from './adapter.js';
 import { compileAggregate } from '../shared/aggregate.js';
 import { coerceForColumn } from '../shared/schema.js';
@@ -433,6 +434,76 @@ export class PostgresAdapter implements Adapter {
     for (const table of tables) {
       const triggers = byTable(`${table.schema}.${table.name}`);
       if (triggers.length) found.set(table.id, triggers);
+    }
+    return found;
+  }
+
+  /**
+   * Each table's constraints and unique indexes by name, with what an exclusion constraint excludes: its index
+   * method, each key's expression and operator as the catalog writes them, and its predicate. On the reader.
+   */
+  async constraints(): Promise<ReadonlyMap<string, readonly TableConstraint[]>> {
+    const schema = await this.introspect();
+    const tables = new Map(schema.tables.filter((table) => !table.isView).map((table) => [`${table.schema}.${table.name}`, table.id]));
+    const rows = await primaryReads(async () =>
+      (await this.conn()).query(
+        `SELECT n.nspname AS schema, c.relname AS "table", con.conname AS name, con.contype::text AS kind, con.condeferrable AS deferrable,
+                am.amname AS method, pg_catalog.pg_get_expr(i.indpred, i.indrelid) AS predicate,
+                (SELECT pg_catalog.json_agg(pg_catalog.json_build_object(
+                          'expression', pg_catalog.pg_get_indexdef(con.conindid, k.ord::int, false), 'operator', o.oprname) ORDER BY k.ord)
+                   FROM unnest(con.conexclop) WITH ORDINALITY AS k(op, ord)
+                   JOIN pg_catalog.pg_operator o ON o.oid = k.op) AS keys
+           FROM pg_catalog.pg_constraint con
+           JOIN pg_catalog.pg_class c ON c.oid = con.conrelid
+           JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+           LEFT JOIN pg_catalog.pg_index i ON i.indexrelid = con.conindid AND con.contype = 'x'
+           LEFT JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+           LEFT JOIN pg_catalog.pg_am am ON am.oid = ic.relam
+          WHERE con.contype IN ('x', 'u', 'p', 'c', 'f')
+         UNION ALL
+         SELECT n.nspname, c.relname, ic.relname, 'u', false, NULL, NULL, NULL
+           FROM pg_catalog.pg_index i
+           JOIN pg_catalog.pg_class c ON c.oid = i.indrelid
+           JOIN pg_catalog.pg_class ic ON ic.oid = i.indexrelid
+           JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+          WHERE i.indisunique AND NOT EXISTS (SELECT 1 FROM pg_catalog.pg_constraint con WHERE con.conindid = i.indexrelid)
+          ORDER BY 1, 2, 3`,
+      ),
+    );
+    const kinds: Record<string, TableConstraint['kind']> = {
+      x: 'exclusion',
+      u: 'unique',
+      p: 'unique',
+      c: 'check',
+      f: 'reference',
+    };
+    const found = new Map<string, TableConstraint[]>();
+    for (const row of rows.rows as Array<Record<string, unknown>>) {
+      const id = tables.get(`${String(row.schema)}.${String(row.table)}`);
+      const kind = kinds[String(row.kind)];
+      if (!id || !kind) continue;
+      const keys = Array.isArray(row.keys) ? (row.keys as Array<{ expression: unknown; operator: unknown }>) : [];
+      found.set(id, [
+        ...(found.get(id) ?? []),
+        {
+          name: String(row.name),
+          kind,
+          named: true,
+          ...(kind === 'exclusion'
+            ? {
+                exclusion: {
+                  method: String(row.method ?? ''),
+                  keys: keys.map((key) => ({
+                    expression: String(key.expression),
+                    operator: String(key.operator),
+                  })),
+                  ...(typeof row.predicate === 'string' ? { predicate: row.predicate } : {}),
+                  deferrable: row.deferrable === true,
+                },
+              }
+            : {}),
+        },
+      ]);
     }
     return found;
   }

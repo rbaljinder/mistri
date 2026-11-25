@@ -31,6 +31,8 @@ import {
   type AppAuditDef,
   type AppComputed,
   type AppConsumes,
+  type AppConstraintRefusal,
+  type AppNoOverlap,
   type AppRollup,
   type AppSegment,
   type AppDisplayRule,
@@ -120,6 +122,8 @@ export const RESOURCE_BLOCK_KEYS = [
   'segments',
   'consumes',
   'restocks',
+  'noOverlap',
+  'constraints',
   'links',
 ] as const;
 
@@ -261,7 +265,7 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
       const raw = plainRecord(
         value,
         at,
-        'an object. A resource block is { physical?, query?, frozen?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, triggers?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, audit?, settings?, import?, notify?, links? }',
+        'an object. A resource block is { physical?, query?, frozen?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, triggers?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, noOverlap?, constraints?, audit?, settings?, import?, notify?, links? }',
       );
       allowKeys(raw, [...RESOURCE_BLOCK_KEYS, 'owner', 'clone', 'live'], at);
       if (dot < 0 && data.sources && !data.defaultSource) {
@@ -673,6 +677,13 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
       /* The balances a row uses up (appConsumes.ts): shape here, the columns against the catalog. */
       if (raw.consumes !== undefined) resource.consumes = parseConsumes(raw.consumes, `${at}, "consumes"`);
       if (raw.restocks !== undefined) resource.restocks = parseConsumes(raw.restocks, `${at}, "restocks"`);
+      /* Rows that may not overlap, and database constraints said as a field's refusal (appDataRules.ts): shape
+         here, the columns and the constraint against the catalog. */
+      if (raw.noOverlap !== undefined) resource.noOverlap = parseNoOverlap(raw.noOverlap, `${at}, "noOverlap"`);
+      if (raw.constraints !== undefined) {
+        const constraints = parseConstraints(raw.constraints, `${at}, "constraints"`);
+        if (Object.keys(constraints).length) resource.constraints = constraints;
+      }
       /* Who a write tells: judged against the catalog once the App is whole (appNotifyRules). */
       if (raw.notify !== undefined) {
         const notify = parseNotify(raw.notify, `${at}, "notify"`);
@@ -840,6 +851,80 @@ function parseConsumes(raw: unknown, here: string): AppConsumes[] {
       ...(rule.floor === false ? { floor: false as const } : {}),
     };
   });
+}
+
+/* A constraint as a database names one: what an engine's refusal carries, compared exactly. */
+const CONSTRAINT_NAME = /^[A-Za-z_][A-Za-z0-9_$]{0,62}$/;
+const sentence = (value: unknown): value is string => typeof value === 'string' && value.trim().length > 0 && value.trim().length <= 300;
+
+/**
+ * A resource's `noOverlap`: one rule or a list of them, shape only. Whether `by`, `from` and `to` are its columns,
+ * whether the two ends are one kind of value and whether `when` reads is the catalog's to judge (appDataRules.ts).
+ */
+function parseNoOverlap(raw: unknown, here: string): AppNoOverlap[] {
+  const list = Array.isArray(raw) ? raw : [raw];
+  if (!list.length)
+    throw new Error(`${here} is an empty list: name one rule, { by: ['chair_id'], from: 'starts_at', to: 'ends_at' }, or leave it out.`);
+  return list.map((entry, i) => {
+    const at = Array.isArray(raw) ? `${here}, rule ${i + 1}` : here;
+    const rule = plainRecord(
+      entry,
+      at,
+      "a rule: { by: ['chair_id'], from: 'starts_at', to: 'ends_at', when?: 'status != cancelled', field?, message?, constraint? }",
+    );
+    allowKeys(rule, ['by', 'from', 'to', 'when', 'field', 'message', 'constraint'], at);
+    const by = rule.by === undefined ? [] : rule.by;
+    if (!Array.isArray(by) || by.some((column) => typeof column !== 'string' || !IDENTIFIER.test(column)) || new Set(by).size !== by.length)
+      throw new Error(`${at} has a "by" that is not a list of this resource's own columns, each once, like ['chair_id'].`);
+    for (const end of ['from', 'to'] as const)
+      if (typeof rule[end] !== 'string' || !IDENTIFIER.test(rule[end]))
+        throw new Error(
+          `${at} needs a "${end}": the column where a row's range ${end === 'from' ? 'starts' : 'ends (the range stops just before it)'}.`,
+        );
+    if (rule.from === rule.to) throw new Error(`${at} has the same column as "from" and "to": a range runs from one column to another.`);
+    if ((by as string[]).includes(rule.from as string) || (by as string[]).includes(rule.to as string))
+      throw new Error(
+        `${at} names a column in "by" and as an end of the range: "by" holds what must be equal, "from" and "to" what must not meet.`,
+      );
+    if (rule.when !== undefined && (typeof rule.when !== 'string' || !rule.when.trim()))
+      throw new Error(`${at} has a "when" that is not conditions over the row's own columns, like 'status != cancelled'.`);
+    if (rule.field !== undefined && (typeof rule.field !== 'string' || !IDENTIFIER.test(rule.field)))
+      throw new Error(`${at} has a "field" that is not one of this resource's own columns: the one the refusal is put beside.`);
+    if (rule.message !== undefined && !sentence(rule.message))
+      throw new Error(`${at} has a "message" that is not a sentence of at most 300 characters: what a refused write says.`);
+    if (rule.constraint !== undefined && (typeof rule.constraint !== 'string' || !CONSTRAINT_NAME.test(rule.constraint)))
+      throw new Error(`${at} has a "constraint" that is not a constraint's name: letters, digits and underscores, at most 63.`);
+    return {
+      by: [...(by as string[])],
+      from: rule.from as string,
+      to: rule.to as string,
+      ...(typeof rule.when === 'string' ? { when: rule.when.trim() } : {}),
+      ...(typeof rule.field === 'string' ? { field: rule.field } : {}),
+      ...(typeof rule.message === 'string' ? { message: rule.message.trim() } : {}),
+      ...(typeof rule.constraint === 'string' ? { constraint: rule.constraint } : {}),
+    };
+  });
+}
+
+/** A resource's `constraints`: a database constraint's name → `{ field, message }`, shape only. */
+function parseConstraints(raw: unknown, here: string): Record<string, AppConstraintRefusal> {
+  const declared = plainRecord(raw, here, "an object: { booking_room_free: { field: 'starts_at', message: 'That room is taken then.' } }");
+  const out: Record<string, AppConstraintRefusal> = {};
+  for (const [name, entry] of Object.entries(declared)) {
+    const at = `${here}, "${name}"`;
+    if (!CONSTRAINT_NAME.test(name))
+      throw new Error(`${at} is not a constraint's name as the database says it: letters, digits and underscores, at most 63.`);
+    const said = plainRecord(entry, at, "{ field: 'starts_at', message: 'That room is taken then.' }");
+    allowKeys(said, ['field', 'message'], at);
+    if (typeof said.field !== 'string' || !IDENTIFIER.test(said.field))
+      throw new Error(`${at} needs a "field": the resource's own column the refusal is put beside.`);
+    if (!sentence(said.message))
+      throw new Error(
+        `${at} needs a "message": the sentence a write this constraint refuses says, at most 300 characters. It is said as written; it never carries a value.`,
+      );
+    out[name] = { field: said.field, message: said.message.trim() };
+  }
+  return out;
 }
 
 /**

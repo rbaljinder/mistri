@@ -155,6 +155,7 @@ export default defineConfig({
             { label: 'Segments', slug: 'docs/segments' },
             { label: 'Tags', slug: 'docs/tags' },
             { label: "Stock that can't be oversold", slug: 'docs/stock' },
+            { label: 'Rows that may not overlap', slug: 'docs/no-overlap' },
             { label: 'File storage', slug: 'docs/file-storage' },
             { label: 'Change your schema', slug: 'docs/change-your-schema' },
             { label: 'Change it from schema.sql', slug: 'docs/schema-sql' },

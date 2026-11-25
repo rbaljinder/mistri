@@ -2,7 +2,15 @@ import { defineAppTenantPolicy } from '@mistriwork/mistri/policy';
 
 const HOUR = 60 * 60 * 1000,
   DAY = 24 * HOUR;
-const everyClinicTable = { patient: true, appointment: true, payment: true, service: true, visit_request: true, notice: true };
+const everyClinicTable = {
+  patient: true,
+  appointment: true,
+  payment: true,
+  service: true,
+  visit_request: true,
+  notice: true,
+  room_booking: true,
+};
 
 /* The operator who creates and suspends clinics in Manage tenants is a native account, named by id: a deployment
    writes its own. The fixture reads it from the environment, so a test can make the account first. */
@@ -21,6 +29,7 @@ export default defineAppTenantPolicy({
     service: { kind: 'tenant', column: 'clinic_id' },
     visit_request: { kind: 'tenant', column: 'clinic_id' },
     notice: { kind: 'tenant', column: 'clinic_id' },
+    room_booking: { kind: 'tenant', column: 'clinic_id' },
   },
   resolveMembershipRows: () => everyClinicTable,
   resolveRows: () => everyClinicTable,
@@ -29,6 +38,7 @@ export default defineAppTenantPolicy({
   resultReferences: {
     recordPayment: (result) => [{ table: 'payment', key: { id: (result as { payment: string }).payment } }],
     postNotice: () => [],
+    bookRoom: (result) => [{ table: 'room_booking', key: { id: (result as { booking: string }).booking } }],
     requestVisit: () => [],
   },
   administration: {

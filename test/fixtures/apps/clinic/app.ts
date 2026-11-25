@@ -2,7 +2,7 @@ import { defineApp } from '@mistriwork/mistri/app';
 import { resources } from './resources.ts';
 import { nav, views } from './views.ts';
 
-const clinicReads = ['patient', 'appointment', 'payment', 'service', 'visit_request', 'notice'];
+const clinicReads = ['patient', 'appointment', 'payment', 'service', 'visit_request', 'notice', 'room_booking'];
 
 /* A clinic is a tenant; the business that runs every clinic is the platform. A sign-in grants nothing until a
    membership does: a clinic's owner invites its people, the platform's operators are granted by the operator. */
@@ -23,11 +23,15 @@ export default defineApp({
         label: 'Owner',
         realm: 'tenant',
         read: clinicReads,
-        write: ['patient', 'service'],
-        commands: ['recordPayment'],
+        write: ['patient', 'service', 'room_booking'],
+        // A booking is made by the command; the owner moves or cancels one in place.
+        fields: {
+          room_booking: { read: ['id', 'room', 'starts_at', 'ends_at', 'status'], write: ['room', 'starts_at', 'ends_at', 'status'] },
+        },
+        commands: ['recordPayment', 'bookRoom'],
         operations: ['support'],
       },
-      reception: { label: 'Reception', realm: 'tenant', read: clinicReads, write: ['patient'], commands: ['recordPayment'] },
+      reception: { label: 'Reception', realm: 'tenant', read: clinicReads, write: ['patient'], commands: ['recordPayment', 'bookRoom'] },
       operator: {
         label: 'Operator',
         realm: 'platform',

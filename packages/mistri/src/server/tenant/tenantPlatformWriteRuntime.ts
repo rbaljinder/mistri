@@ -22,6 +22,7 @@
  * no owner and the account that saved it. A tenant's rows still change only
  * through commands, which say what they do and are journaled.
  */
+import { restatesConstraint } from '../app/appDataRules.js';
 import { isPromise } from 'node:util/types';
 import {
   TransactionOperations,
@@ -214,7 +215,11 @@ export function bindPlatformWriteRuntime<Request>(runtime: PlatformRequestRuntim
           if (callbackFailure?.error instanceof TenantWriteFailure && callbackFailure.error.outcome === 'unknown')
             throw new TransactionOutcomeUnknown(callbackFailure.error);
           /* A refusal the callback restated — a record's line named by its place — is the same refusal. */
-          if (failed && !(failed.error instanceof AppValidationDenied && callbackFailure?.error instanceof AppValidationDenied))
+          if (
+            failed &&
+            !(failed.error instanceof AppValidationDenied && callbackFailure?.error instanceof AppValidationDenied) &&
+            !restatesConstraint(failed.error, callbackFailure?.error)
+          )
             throw failed.error;
           if (callbackFailure) throw callbackFailure.error;
           return result;

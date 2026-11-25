@@ -249,6 +249,12 @@ export const tenantKeyRefusal = (
           : ` Its key "${only.name}" is ${only.type || 'untyped'}, not text.`;
   return `Table "${table}" is owned by tenant column "${column}", and its primary key keeps neither form.${rule}${why}`;
 };
+/** Why an exclusion constraint on a tenant-owned table refuses the source, and what makes it one tenant's. */
+export const tenantExclusionRefusal = (table: string, index: string | undefined, column: string): string =>
+  `${index ? `Exclusion constraint "${index}"` : 'An exclusion constraint'} on "${table}" does not hold within one tenant: ` +
+  `it has to compare tenant column "${column}" with = and be checked as each statement runs (not DEFERRABLE), ` +
+  `as EXCLUDE USING gist ("${column}" WITH =, …).`;
+
 export const tenantUniqueRefusal = (table: string, index: string | undefined, column: string): string =>
   `${index ? `Unique index "${index}"` : 'A unique index'} on "${table}" does not include tenant column "${column}": ` +
   `uniqueness has to hold within one tenant, so add "${column}" to it, as UNIQUE ("${column}", …). ` +

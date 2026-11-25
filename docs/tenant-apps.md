@@ -1089,8 +1089,15 @@ What differs from SQLite:
 - **Tenant-local uniqueness** is attested from `pg_index` by the SQLite rule:
   every unique index on a tenant-owned table includes the ownership column
   under a deterministic collation, except the primary key of a single opaque
-  `text`, `varchar` or `uuid` identifier. Expression keys and exclusion
-  constraints refuse.
+  `text`, `varchar` or `uuid` identifier. Expression keys refuse. An
+  exclusion constraint is admitted where it holds within one tenant: the
+  ownership column is one of its keys, compared with `=` under a deterministic
+  collation, and it is not `DEFERRABLE`; its other keys may be expressions,
+  such as the range of two columns. That is what holds a resource's
+  `noOverlap` under several writers
+  ([Rows that may not overlap](../site/src/content/docs/docs/no-overlap.md)),
+  and `mistri check` prints the statement. Any other exclusion constraint
+  refuses.
 - **The fence** is row locks held to COMMIT rather than a file-wide writer
   lock: a revocation waits for an in-flight business commit, and a business
   write waits for an in-flight revocation and then refuses. It is the write's

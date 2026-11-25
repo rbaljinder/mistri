@@ -7,6 +7,7 @@ export type Rows = {
   service: { id: string; clinic_id: string; name: string; price_cents: number; published: number };
   visit_request: { id: string; clinic_id: string; name: string; phone: string; note: string | null };
   notice: { id: string; clinic_id: string; body: string };
+  room_booking: { id: string; clinic_id: string; room: string; starts_at: string; ends_at: string; status: string };
   triage: { id: string; name: string; phone: string; note: string | null };
 };
 

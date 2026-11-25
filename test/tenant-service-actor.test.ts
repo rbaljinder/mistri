@@ -36,7 +36,7 @@ function serviceClinicApp(t: TestContext): string {
   );
   edit(
     'commands.ts',
-    'export default defineCommands({ recordPayment, postNotice, requestVisit });',
+    'export default defineCommands({ recordPayment, bookRoom, postNotice, requestVisit });',
     `/** A clinic's reminder, posted by its billing service. */
 export const postReminder = defineCommand({
   source,
@@ -51,7 +51,7 @@ export const postReminder = defineCommand({
   },
 });
 
-export default defineCommands({ recordPayment, postNotice, requestVisit, postReminder });`,
+export default defineCommands({ recordPayment, bookRoom, postNotice, requestVisit, postReminder });`,
   );
   edit(
     'server/tenant-policy.ts',

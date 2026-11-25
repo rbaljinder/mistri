@@ -243,7 +243,10 @@ const require = createRequire(join(ROOT, 'package.json'));
    Who may read what. `definePage` takes `optionalReads` (one more type parameter on the page and its
    definition, read by the three optional overloads), `auth.tenancy` takes `team`, `useTeam()` says `read` and each
    member's `account` and `initials`, and `defineLoader` takes `elevate`: members read once each, nothing per table.
-   Compass measures 106,209 symbols (9 past); its symbols rise to about 1.5% above that, the rest hold. */
+   Compass measures 106,209 symbols (9 past); its symbols rise to about 1.5% above that, the rest hold.
+   A resource takes `noOverlap` and `constraints` (`AppNoOverlap`, `AppConstraintRefusal`: two interfaces and their
+   nine members, each generic over the table's columns as the resource's other blocks are), read once in the
+   declarations, nothing per table: about 70 symbols on Compass, inside the ceiling above. Every ceiling holds. */
 export const BUDGET = {
   synthetic: { types: 184_400, instantiations: 991_600, symbols: 488_400 },
   compass: { types: 32_500, instantiations: 149_000, symbols: 107_800 },

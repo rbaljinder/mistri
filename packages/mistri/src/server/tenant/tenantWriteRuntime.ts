@@ -1,3 +1,4 @@
+import { restatesConstraint } from '../app/appDataRules.js';
 import { isPromise } from 'node:util/types';
 import { TransactionOperations, TransactionOutcomeUnknown, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
@@ -291,7 +292,11 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
             }
             /* A refusal the callback restated — a record's line named by its place (recordWriteOperations.ts
                writeLines) — is the same refusal, said where the person can find it. */
-            if (failed && !(failed.error instanceof AppValidationDenied && callbackFailure?.error instanceof AppValidationDenied))
+            if (
+              failed &&
+              !(failed.error instanceof AppValidationDenied && callbackFailure?.error instanceof AppValidationDenied) &&
+              !restatesConstraint(failed.error, callbackFailure?.error)
+            )
               throw failed.error;
             if (callbackFailure) throw callbackFailure.error;
             return result;

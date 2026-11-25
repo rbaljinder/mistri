@@ -799,7 +799,10 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // A timer's `failed`, the command that keeps its refusal on the record (one entry, one new name): 1802/533.
     // Unreleased: `auth.tenancy.team`, whether a tenant's members read who else is a member (one entry, one new
     // name): 1803/534.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1803, names: 534 });
+    // Unreleased: a resource's `noOverlap` (`by`, `from`, `to`, `when`, `field`, `message`, `constraint`) and
+    // `constraints` (each `field`, `message`): eleven entries; `noOverlap`, `constraint` and `constraints` are new
+    // names: 1814/537.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1814, names: 537 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

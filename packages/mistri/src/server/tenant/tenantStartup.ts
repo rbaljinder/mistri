@@ -54,6 +54,8 @@ import { appIndexWarnings } from '../../shared/appIndexWarnings.js';
 import { tenantDeleteWarnings } from './tenantAdvice.js';
 import { intakeColumnProblem } from './tenantIntakeModel.js';
 import { unofferedCommandWarnings } from '../app/appCommandOfferChecks.js';
+import { noOverlapUnheld } from '../../shared/appDataRules.js';
+import type { TableConstraint } from '@mistriwork/engine/adapters/adapter.js';
 import { sayTenantAuthoringProblems, tenantAuthoringProblems, type TenantAuthoringProblem } from './tenantAuthoring.js';
 import {
   planValidation,
@@ -187,6 +189,8 @@ export async function prepareTenantStartup(
     const resolved = await resolveConnection(connection.name, connection.url, { environment: capturedEnvironment });
     const postgres = /^postgres(ql)?:\/\//i.test(resolved.url);
     let describe: () => Promise<DatabaseSchema>, enrollmentSource: Enrollment['source'];
+    /* Each table's constraints by its physical id, where the engine has exclusion constraints to hold a `noOverlap`. */
+    let constraints: (() => Promise<ReadonlyMap<string, readonly TableConstraint[]>>) | undefined;
     let authStoreExclusion: AuthStoreExclusion | undefined;
     if (postgres) {
       stage = 'the PostgreSQL source and separate authentication store';
@@ -233,6 +237,14 @@ export async function prepareTenantStartup(
         const adapter = new PostgresAdapter(owner ?? url, 'Tenant startup');
         try {
           return await adapter.readSnapshot((snapshot) => snapshot.describe());
+        } finally {
+          await adapter.close();
+        }
+      };
+      constraints = async () => {
+        const adapter = new PostgresAdapter(owner ?? url, 'Tenant startup');
+        try {
+          return await adapter.constraints();
         } finally {
           await adapter.close();
         }
@@ -416,6 +428,24 @@ export async function prepareTenantStartup(
               .map((line) => `  ${line}`)
               .join('\n'),
         );
+      }
+      /* A `noOverlap` is the database's to hold on PostgreSQL (appDataRules.ts): the exclusion constraint, with the
+         policy's own ownership column in it. Read off the database itself: the realms' catalogs above are captured
+         copies, and carry no constraint. */
+      if (constraints && Object.values(business.resources ?? {}).some((resource) => resource.noOverlap?.length)) {
+        const found = await constraints();
+        const unheld = await noOverlapUnheld(
+          business,
+          catalog.schema,
+          async (table) => found.get(catalog.toPhysical(table)) ?? [],
+          Object.fromEntries(
+            Object.entries(policy.ownership).map(([id, owner]) => [id, owner.kind === 'tenant' ? owner.column : undefined]),
+          ),
+        );
+        if (unheld.length)
+          throw new TenantAuthoringStartupError(
+            `Tenant startup could not validate ${AUTHORING_STAGE}:\n${unheld.map((line) => `  ${line}`).join('\n')}`,
+          );
       }
       validated = { catalog, owned, outsideSchemas, indexLines };
     }

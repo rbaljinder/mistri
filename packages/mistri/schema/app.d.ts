@@ -229,6 +229,35 @@ export type AppTab =
     name another segment; it only ever narrows, under the reader's grants and row scope. */
 export type AppSegment = string | { query: string; label?: string | AppMessageRef };
 
+/** Rows that may not overlap: among rows equal on every `by` column, no two may hold ranges that meet. A range is
+    half-open, `[from, to)`: one that ends at ten and one that starts at ten do not meet. A row with an empty `by`,
+    `from` or `to`, or whose range is empty, is outside the rule. */
+export interface AppNoOverlap<Column extends string = string> {
+  /** The columns that scope the rule, each compared for equality: the chair, the provider. In a tenant App the
+      tenant is always part of it. Absent or empty, no two rows of the resource may meet. */
+  by?: readonly Column[];
+  /** Where a row's range starts, and where it stops (the range ends just before `to`): two date columns, two
+      timestamps or two numbers, of one type. */
+  from: Column;
+  to: Column;
+  /** Rows the rule holds for, as query-language conditions comparing the row's own columns with fixed values:
+      `'status != cancelled'`. A row it does not match blocks nothing and is blocked by nothing. */
+  when?: string;
+  /** The column the refusal is put beside; `from` when absent. */
+  field?: Column;
+  /** What a refused write says, as written (it is never filled from a row). "This overlaps another record." when absent. */
+  message?: string | AppMessageRef;
+  /** The name of the PostgreSQL exclusion constraint that holds the rule; `<table>_no_overlap` when absent. */
+  constraint?: string;
+}
+
+/** What a write a named database constraint refuses says, and beside which column. */
+export interface AppConstraintRefusal<Column extends string = string> {
+  field: Column;
+  /** Said as written: fixed words, never a value of the row written or of the row it met. */
+  message: string | AppMessageRef;
+}
+
 /** A child row that uses up a number on the record it points at: `{ column: 'part_id.on_hand', by: 'quantity' }`. An
     insert takes `by` (1 if absent) from the balance in the same transaction, refused with `message` below zero; a
     delete gives it back; an edit moves the difference, or between records when the reference changes. */
@@ -1042,6 +1071,17 @@ export interface AppResource<Column extends string = string, Page extends string
       what it brought in has been used since. So Receive stock is a New form on the receipt line, not a command:
       `stock_receipt: { restocks: { column: 'part_id.on_hand', by: 'quantity' } }`. One, or a list. */
   restocks?: AppConsumes | readonly AppConsumes[];
+  /** Rows of this resource that may not overlap, one chair or one person at one time:
+      `noOverlap: { by: ['chair_id'], from: 'starts_at', to: 'ends_at', when: 'status != cancelled' }`. Held on every
+      write, whichever door it came through, and refused beside `from` in the rule's `message`. PostgreSQL holds it
+      with an exclusion constraint the App's migration adds (`mistri check` prints the statement and refuses the App
+      without it); on SQLite the App's write reads for a row that meets it. One, or a list. */
+  noOverlap?: AppNoOverlap<Column> | readonly AppNoOverlap<Column>[];
+  /** Database constraints said as a field's refusal, each by the name the database gives it:
+      `constraints: { booking_runs_forward: { field: 'ends_at', message: 'A booking ends after it starts.' } }`. A write
+      the constraint refuses, through a form or a command's handler, is refused beside `field` in those words where it
+      would have been `constraint_failed`. The words are said as written, in a tenant App too: they never carry a value. */
+  constraints?: Readonly<Record<string, AppConstraintRefusal<Column>>>;
   /** Row-defined fields: a JSON column whose keys are defined by another resource's rows, which people edit at runtime
       — `{ specs: { from: 'attribute', per: 'category_id' } }`. Each definition row has `key`, `label` and `type` (text,
       textarea, number, money, date, datetime, bool, choice or choices), and may have `options` (one per line),

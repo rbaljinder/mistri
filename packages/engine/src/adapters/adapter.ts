@@ -9,7 +9,7 @@
  * a browsing tool that interpolates a filter into SQL is a SQL injection
  * vulnerability with a nice front end.
  */
-import { declaredOrder, type DatabaseSchema, type Order, type TableMeta } from '../shared/schema.js';
+import { declaredOrder, type DatabaseSchema, type Order, type TableConstraint, type TableMeta } from '../shared/schema.js';
 /* Type-only, and deliberately so: shared/ never imports the adapters, and a
    value import from here would put them in its graph. Types are erased, so
    these edges do not exist once compiled. */
@@ -666,6 +666,9 @@ export class Serial {
   }
 }
 
+/** One constraint of a table, by the name a refused write carries (Adapter.constraints): shared/schema.ts. */
+export type { TableConstraint } from '../shared/schema.js';
+
 /**
  * Structured reads and writes on the same transaction connection.
  * This is not the whole adapter: no raw SQL, DDL, or cross-source access.
@@ -1087,6 +1090,13 @@ export interface Adapter {
    * writer, under its own lock.
    */
   triggers?(): Promise<ReadonlyMap<string, readonly ScopeTrigger[]>>;
+
+  /**
+   * Each table's constraints as a refused write names them, keyed by table id: the name an engine's error carries
+   * (PostgreSQL's `constraint`, SQLite's `CHECK constraint failed: <name>`), and for a PostgreSQL exclusion
+   * constraint what it excludes. For `mistri check`, which holds an App's declared data rules to the database.
+   */
+  constraints?(): Promise<ReadonlyMap<string, readonly TableConstraint[]>>;
 
   /**
    * The keys of `tables` a trigger's effect may name, and how each column compares, read by the rules a scoped

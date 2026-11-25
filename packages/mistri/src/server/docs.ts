@@ -31,6 +31,7 @@ export const DOC_TOPICS: ReadonlyArray<{ topic: string; page: string }> = [
   { topic: 'segments', page: 'segments' },
   { topic: 'icons', page: 'icons' },
   { topic: 'stock', page: 'stock' },
+  { topic: 'no-overlap', page: 'no-overlap' },
   { topic: 'dashboards', page: 'dashboards' },
   { topic: 'pages', page: 'pages' },
   { topic: 'forms', page: 'forms' },

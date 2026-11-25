@@ -1131,8 +1131,36 @@ export interface ResourceDef {
   consumes?: AppConsumes[];
   /** The parent balances a row of this resource adds to (a receipt's line, a return): `consumes` the other way round. */
   restocks?: AppConsumes[];
+  /** Rows of this resource that may not overlap (appDataRules.ts): within the same `by`, no two rows' `[from, to)`
+      meet. Held by an exclusion constraint on PostgreSQL and by the App's write layer on SQLite. */
+  noOverlap?: AppNoOverlap[];
+  /** Named database constraints said as a field's refusal (appDataRules.ts): the constraint's name → the column the
+      message is put beside and its fixed words. */
+  constraints?: Record<string, AppConstraintRefusal>;
   /** Capability links by name (appLinks.ts): one record, its declared columns and commands, to whoever holds the link. */
   links?: Record<string, import('./appLinks.js').AppLinkDef>;
+}
+
+/**
+ * One `noOverlap` rule: among rows equal on every `by` column, no two may hold ranges `[from, to)` that meet. `when`
+ * (query-language conditions over the row's own stored columns) leaves a row out of the rule altogether.
+ */
+export interface AppNoOverlap {
+  by: string[];
+  from: string;
+  to: string;
+  when?: string;
+  /** The column the refusal is put beside; `from` when absent. */
+  field?: string;
+  message?: string;
+  /** The PostgreSQL exclusion constraint's name; `<table>_no_overlap` when absent. */
+  constraint?: string;
+}
+
+/** What a named database constraint's refusal says, and beside which column: fixed words, never a value. */
+export interface AppConstraintRefusal {
+  field: string;
+  message: string;
 }
 
 /** A segment as authored: its conditions in the query language, and what a tab over it is called. */

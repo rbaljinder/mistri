@@ -1,3 +1,4 @@
+import { restatesConstraint } from '../app/appDataRules.js';
 import { isPromise, isProxy, isUint8Array } from 'node:util/types';
 import {
   TransactionOperations,
@@ -498,7 +499,9 @@ async function runManaged<T>(
   // Never replace uncertainty with a callback, capture, permission or drain
   // refusal. The outer owner alone can classify actual transaction completion.
   if (callbackFailure?.error instanceof TransactionOutcomeUnknown) throw callbackFailure.error;
-  if (drainFailure) throw drainFailure.error;
+  /* A named constraint's refusal the callback said in the App's declared words (appDataRules.ts) stands over the
+     engine's own, which the drain kept. */
+  if (drainFailure && !restatesConstraint(drainFailure.error, callbackFailure?.error)) throw drainFailure.error;
   if (callbackFailure) throw callbackFailure.error;
   return result;
 }

@@ -1,4 +1,5 @@
 import { AppValidationDenied } from '../app/appValidationDenied.js';
+import { restatesConstraint } from '../app/appDataRules.js';
 import {
   Refusal,
   TransactionOperations,
@@ -45,7 +46,10 @@ export async function runScopedTransactionFacade<T>(records: WriteTransaction, r
     try {
       await operations.finish();
     } catch (error) {
-      if (!(error instanceof AppValidationDenied && thrown instanceof AppValidationDenied)) throw error;
+      /* So is a database constraint's refusal the App said in its own declared words (appDataRules.ts): the
+         operations kept the engine's, or the scope's over it, and the callback threw what the App calls it. */
+      if (!(error instanceof AppValidationDenied && thrown instanceof AppValidationDenied) && !restatesConstraint(error, thrown))
+        throw error;
     }
   };
   let result: T;

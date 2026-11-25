@@ -493,7 +493,7 @@ test('test init writes a tenant App an isolation suite that passes: each resourc
   const suite = readFileSync(join(dir, 'tests', 'tenants.test.ts'), 'utf8');
   // Two clinics of the database, each clinic-owned table, the command a clinic runs and the operator's reads.
   assert.match(suite, /\?\? 'east,north'/);
-  for (const table of ['appointment', 'patient', 'payment', 'service', 'visit_request', 'notice'])
+  for (const table of ['appointment', 'patient', 'payment', 'service', 'visit_request', 'notice', 'room_booking'])
     assert.match(suite, new RegExp(`\\['${table}', '`));
   assert.match(suite, /\['recordPayment', 1, 'appointment', '\w+', '\w+', '\{"amount_cents":1,"method":"card"\}'\]/);
   assert.match(suite, /\['operator', \['appointment', 'clinic'/);
@@ -506,7 +506,7 @@ test('test init writes a tenant App an isolation suite that passes: each resourc
   });
   assert.equal(tests.status, 0, `${tests.stdout}\n${tests.stderr}`);
   assert.match(tests.stdout, /^ℹ fail 0/m);
-  // The membership check, six resources, one command and the operator, and the test around them: none skipped.
-  assert.match(tests.stdout, /^ℹ pass 10/m);
+  // The membership check, seven resources, one command and the operator, and the test around them: none skipped.
+  assert.match(tests.stdout, /^ℹ pass 11/m);
   assert.match(tests.stdout, /^ℹ skipped 0/m);
 });
