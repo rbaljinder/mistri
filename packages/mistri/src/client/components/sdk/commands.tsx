@@ -34,6 +34,7 @@ import { confirmFor } from '@mistriwork/kit/client/prompt.js';
 import { expectedValues, type TableMeta } from '@mistriwork/engine/shared/schema.js';
 import { commandOperations, type CommandOperation, type CommandOwner } from '../../commandState.js';
 import { checkCommand, prepareCommand, sendCommand } from '../../commandSend.js';
+import { refreshAfterWrites } from '../../commandRefresh.js';
 import { heldReview, holdReview, reviewFresh, reviewOwner, staleReview } from '../../commandReviews.js';
 import { checkCommandStep } from '../commandStepCheck.js';
 import { commandAvailable, useCommandAvailability } from '../../commandAvailability.js';
@@ -101,9 +102,49 @@ async function offeredOn(id: UiCommandRef, action: AppCommandAction, record: Rea
   if (!table) return false;
   const key = keyFor(action, record);
   for (const each of offering) {
-    if ((await matchingKeys(table, [key], each.when, state.activeConnection)).has(bulkKey(table, key))) return true;
+    if (await conditionHolds(table, key, each.when!)) return true;
   }
   return false;
+}
+
+/*
+ * One draw's questions of one condition are one read. Twenty rows each draw the command's button, each button its own
+ * handle, and each asked the `when` of its own row in a request of its own; the availability asks then started after
+ * twenty different replies and missed their shared batch too (commandAvailability.ts), so a list of twenty sent forty
+ * requests. Asks made in the same moment of the same table, condition and connection share `matchingKeys`' one read,
+ * and their replies land together, so what follows them is one batch as well. Nothing is kept: the next moment asks again.
+ */
+interface ConditionAsk {
+  keys: Record<string, unknown>[];
+  waiting: Map<string, Array<(holds: boolean) => void>>;
+}
+const conditionAsks = new Map<string, ConditionAsk>();
+function conditionHolds(table: TableMeta, key: Record<string, unknown>, when: string): Promise<boolean> {
+  const connection = state.activeConnection;
+  const id = JSON.stringify([connection ?? null, table.id, when]);
+  let ask = conditionAsks.get(id);
+  if (!ask) {
+    const mine: ConditionAsk = { keys: [], waiting: new Map() };
+    ask = mine;
+    conditionAsks.set(id, mine);
+    queueMicrotask(() => {
+      conditionAsks.delete(id);
+      const settle = (matched: Set<string>) =>
+        mine.waiting.forEach((resolves, text) => resolves.forEach((resolve) => resolve(matched.has(text))));
+      // A read that fails vouches for no record, as `matchingKeys` itself answers.
+      matchingKeys(table, mine.keys, when, connection).then(settle, () => settle(new Set()));
+    });
+  }
+  const text = bulkKey(table, key);
+  const asked = ask;
+  return new Promise((resolve) => {
+    const waiting = asked.waiting.get(text);
+    if (waiting) waiting.push(resolve);
+    else {
+      asked.keys.push(key);
+      asked.waiting.set(text, [resolve]);
+    }
+  });
 }
 
 /** The resource whose actions hold this one: the table its records are rows of. */
@@ -240,7 +281,10 @@ export function openForm(
     portalRoot().append(host);
     let take = () => {};
     let leave = () => {};
+    /* The run the form closed on: what it wrote is what closing reads again. */
+    let ended: CommandOperation | undefined;
     const close = (settled?: CommandOperation) => {
+      ended = settled;
       leave();
       take();
       host.remove();
@@ -271,7 +315,7 @@ export function openForm(
         ...restExtra,
         onClose: close,
         onDone: () => {
-          void queryClient.invalidateQueries();
+          void refreshAfterWrites(queryClient, ended?.wrote);
         },
       }),
     );
@@ -389,8 +433,8 @@ async function runCommand(
   for (let tries = 1; ; tries++) {
     sent = await sendCommand(action, owner, values, {
       headless: true,
-      refresh: () => {
-        void queryClient.invalidateQueries();
+      refresh: (wrote) => {
+        void refreshAfterWrites(queryClient, wrote);
       },
       ...(review ? { pinned: review.expectedVersion } : {}),
     });

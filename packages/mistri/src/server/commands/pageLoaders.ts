@@ -61,11 +61,12 @@ export interface PageLoaderViewer {
 type ReadTableOf<Name extends string> = Name extends `${infer T}.${string}` ? T : Name;
 
 /** What a loader's `load` is handed. */
-export interface PageLoaderContext<Src = string, R extends string = string> {
+export interface PageLoaderContext<Src = string, R extends string = string, P extends string = string> {
   /** The tables it declared, read-only, as this reader may read them. */
   readonly db: CommandTables<SourceTables<Src, string>, R, never>;
-  /** The page's address parameters it keeps, as the address says them now. */
-  readonly params: Readonly<Record<string, string | undefined>>;
+  /** The page's address parameters, as the address says them now: the ones the loader says it reads (`params`),
+      and no others; every one the page keeps, for a loader that says none. */
+  readonly params: Readonly<Record<P, string | undefined>>;
   readonly viewer: PageLoaderViewer;
   /** The instant the page is loaded at, as a command's `now()` is, so a line moves between them unchanged. */
   readonly now: () => Date;
@@ -89,13 +90,16 @@ export interface PageLoader<Result = unknown, Src = string, R extends string = s
   /** The computed columns and rollups it may ask for with `.with`, by table. */
   readonly derived: Readonly<Record<string, readonly string[]>>;
   readonly source?: string;
+  /** The address parameters it reads, where it says them: it is handed these alone, and the page runs it again only
+      when one of them moves. Undefined for a loader that says none: it is handed every one, and runs on any. */
+  readonly params?: readonly string[];
   /** Milliseconds. */
   readonly timeout: number;
   readonly load: (context: PageLoaderContext<Src, R>) => Result | Promise<Result>;
 }
 
 const made = new WeakSet<object>();
-const LOADER_KEYS = new Set(['reads', 'source', 'timeout', 'load']);
+const LOADER_KEYS = new Set(['reads', 'source', 'params', 'timeout', 'load']);
 const NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
 
 /**
@@ -103,17 +107,26 @@ const NAME = /^[A-Za-z][A-Za-z0-9_]{0,63}$/;
  * `reads: []`, for a loader that hands the page only what the server knows), an
  * optional timeout (`'2 seconds'`, at most ten), and `load`, which reads
  * through `db` and returns what the page's component is handed as `data`.
+ *
+ * `params: ['office', 'day']` says which of the page's address parameters it
+ * reads. The page then runs it again only when one of those moves, and not
+ * when another does (a picked row, a view toggle kept in the address), and
+ * `params` in its context holds those alone, so one it did not say is not
+ * there to read. Left out, it reads any of them and runs when any moves;
+ * `params: []` is a loader no parameter runs again.
  */
 export function defineLoader<
   Result,
   Src = string,
   const R extends readonly ((keyof SourceTables<Src, string> & string) | `${keyof SourceTables<Src, string> & string}.${string}`)[] =
     readonly (keyof SourceTables<Src, string> & string)[],
+  const P extends readonly string[] = readonly string[],
 >(definition: {
   readonly reads: R;
   readonly source?: Src;
+  readonly params?: P;
   readonly timeout?: `${number} second` | `${number} seconds`;
-  readonly load: (context: PageLoaderContext<Src, ReadTableOf<R[number]>>) => Result | Promise<Result>;
+  readonly load: (context: PageLoaderContext<Src, ReadTableOf<R[number]>, P[number]>) => Result | Promise<Result>;
 }): PageLoader<Awaited<Result>, Src, ReadTableOf<R[number]>> {
   if (!definition || typeof definition !== 'object') throw new TypeError('defineLoader takes { reads, load }.');
   for (const key of Object.keys(definition)) if (!LOADER_KEYS.has(key)) throw new TypeError(`defineLoader has no "${key}".`);
@@ -126,6 +139,14 @@ export function defineLoader<
   const timeout = definition.timeout === undefined ? LOADER_TIMEOUT_DEFAULT : parseDuration(definition.timeout);
   if (timeout === undefined || timeout < 1000 || timeout > LOADER_TIMEOUT_MOST)
     throw new TypeError("A loader's timeout is between '1 second' and '10 seconds'.");
+  const params = definition.params as unknown;
+  if (
+    params !== undefined &&
+    (!Array.isArray(params) || params.some((name) => typeof name !== 'string' || !name) || new Set(params).size !== params.length)
+  )
+    throw new TypeError(
+      "A loader's params are the address parameters it reads, each once: params: ['office', 'day'], or params: [] for none.",
+    );
   const source = definition.source === undefined ? undefined : sourceName(definition.source);
   if (definition.source !== undefined && !source) throw new TypeError("A loader's source is a defineSource() handle or its name.");
   /* `'invoice.balance'` asks for the computed column or rollup `balance` of `invoice` through `.with`: the table is
@@ -148,6 +169,7 @@ export function defineLoader<
       Object.fromEntries(Object.entries(derived).map(([table, names]) => [table, Object.freeze([...new Set(names)])])),
     ),
     ...(source ? { source } : {}),
+    ...(params === undefined ? {} : { params: Object.freeze([...(params as string[])]) }),
     timeout,
     load: definition.load,
   });

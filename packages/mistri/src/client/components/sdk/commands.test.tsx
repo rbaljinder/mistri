@@ -486,6 +486,81 @@ test("a record's command is granted by role and command, and available only wher
   expect(calls.some((call) => call.path === '/api/run' && String(call.body.q).includes("stage = 'open'"))).toBe(true);
 });
 
+/* Twenty rows each draw the command's button, and each button is its own `useCommand`: every one asked the action's
+   `when` of its own row in a request of its own, and then its availability after its own reply, twenty and twenty
+   (a field report's count). One draw's asks are one question of the condition and one of the command. */
+test("twenty buttons over an action with a `when` ask its condition once and the command's availability once", async () => {
+  await onDesk();
+  const { state } = await import('../../../../../kit/src/client/core.js');
+  const { render, screen } = await import('@testing-library/react');
+  const { CommandButton } = await import('./page.js');
+  await import('./host.js');
+  const before = state.schema;
+  const col = (name: string, primaryKey = false) => ({
+    name,
+    type: primaryKey ? 'INTEGER' : 'TEXT',
+    nullable: !primaryKey,
+    primaryKey,
+  });
+  state.schema = {
+    tables: [
+      {
+        id: 'deal',
+        name: 'deal',
+        schema: '',
+        isView: false,
+        columns: [col('id', true), col('stage')],
+      },
+    ],
+  } as never;
+  onTestFinished(() => {
+    state.schema = before;
+  });
+  granted = [...granted, 'escalate'];
+  // Deals 1 to 10 are open; the command is available on every one but deal 3.
+  answer = async () => {
+    const last = calls.at(-1)!;
+    if (last.path === '/api/run') {
+      const asked = [...String(last.body.q).matchAll(/id = '?(\d+)'?/g)].map((match) => Number(match[1]));
+      return { rows: asked.filter((id) => id <= 10).map((id) => ({ id })) };
+    }
+    const checks = last.body.checks as Array<{
+      command: string;
+      commandVersion: number;
+      keys: Array<{ id: number }>;
+    }>;
+    return {
+      checks: checks.map(({ command, commandVersion, keys }) => ({
+        available: keys.map((key) => key.id !== 3),
+        command,
+        commandVersion,
+      })),
+    };
+  };
+  const rows = Array.from({ length: 20 }, (_, i) => ({
+    id: i + 1,
+    stage: i < 10 ? 'open' : 'won',
+  }));
+  render(
+    <>
+      {rows.map((row) => (
+        <CommandButton key={row.id} command="escalate" row={row} label={`Escalate ${row.id}`} />
+      ))}
+    </>,
+  );
+  await vi.waitFor(() => expect(screen.getByRole('button', { name: /^Escalate 1\b/ })).not.toBeDisabled());
+  await vi.waitFor(() => expect(screen.getByRole('button', { name: /^Escalate 20\b/ })).toBeDisabled());
+  expect(screen.getByRole('button', { name: /^Escalate 3\b/ })).toBeDisabled();
+  expect(screen.getByRole('button', { name: /^Escalate 10\b/ })).not.toBeDisabled();
+  expect(screen.getByRole('button', { name: /^Escalate 11\b/ })).toBeDisabled();
+  const paths = calls.map((call) => call.path);
+  expect(paths.filter((path) => path === '/api/run')).toHaveLength(1);
+  expect(paths.filter((path) => path === '/api/commands/availability')).toHaveLength(1);
+  // The command is asked only of the rows its condition holds of.
+  const asked = calls.find((call) => call.path === '/api/commands/availability')!.body.checks as Array<{ keys: unknown[] }>;
+  expect(asked[0].keys).toHaveLength(10);
+});
+
 test('a granted command no form runs is reached by name, and sent with no record under the word the component gives it', async () => {
   const command = handle('markAllRead');
   expect(command.label).toBe('Mark all read');
@@ -544,6 +619,58 @@ test('a run resolves with what the command returned, so a component acts on what
 
 /* A composer's reply prepares the record and sends at once; another person's change landing between the two is no
    reason to refuse it, since the person saw neither revision (live sync's churn). */
+/* Every applied command read every query on the page again, a board's seventeen lists and its loader on each click
+   (a field report). The answer says which tables the run wrote (`mistri-writes`), and only the reads over one are asked. */
+test('a run reads again what could show what it wrote, and everything where its answer does not say', async () => {
+  await onDesk();
+  const { state } = await import('../../../../../kit/src/client/core.js');
+  const { queryClient } = await import('../../../../../kit/src/client/components/mount.js');
+  const { fileReads, fileWrites } = await import('../../../../../kit/src/client/liveReads.js');
+  const before = state.schema;
+  const table = (id: string) => ({ id, name: id, schema: '', isView: false, columns: [{ name: 'id', type: 'INTEGER', primaryKey: true }] });
+  state.schema = { tables: [table('deal'), table('note')] } as never;
+  onTestFinished(() => {
+    state.schema = before;
+    queryClient.clear();
+  });
+  const keys = { deals: ['mistri-ui', 'rows', 'desk', 1, 'deal', {}], notes: ['mistri-ui', 'rows', 'desk', 1, 'note', {}] };
+  const read = (reads: string) => () => {
+    const got = { rows: [] };
+    fileReads(got, reads);
+    return got;
+  };
+  const seed = async () => {
+    queryClient.clear();
+    await queryClient.fetchQuery({ queryKey: keys.deals, queryFn: read('deal') });
+    await queryClient.fetchQuery({ queryKey: keys.notes, queryFn: read('note') });
+  };
+  const stale = () => ({
+    deals: queryClient.getQueryState(keys.deals)?.isInvalidated,
+    notes: queryClient.getQueryState(keys.notes)?.isInvalidated,
+  });
+  let version = 4;
+  let wrote: string | null = 'tables=deal';
+  answer = async () => {
+    if (calls.at(-1)!.path === '/api/commands/prepare') return { expectedVersion: version };
+    const landed = applied(++version);
+    fileWrites(landed, wrote);
+    return landed;
+  };
+  await seed();
+  expect((await handle('checkStep').run({ id: 7 }, { step: 'Call' })).status).toBe('applied');
+  expect(stale()).toEqual({ deals: true, notes: false });
+  // A run that wrote nothing leaves both.
+  wrote = 'tables=';
+  await seed();
+  expect((await handle('checkStep').run({ id: 7 }, { step: 'Look' })).status).toBe('applied');
+  expect(stale()).toEqual({ deals: false, notes: false });
+  // An answer that does not say (a replay, an older server) reads everything, as before.
+  wrote = null;
+  await seed();
+  expect((await handle('checkStep').run({ id: 7 }, { step: 'Send' })).status).toBe('applied');
+  expect(stale()).toEqual({ deals: true, notes: true });
+});
+
 test('a run whose record changed between its own prepare and its send is prepared again and sent', async () => {
   await onDesk();
   let version = 4;

@@ -32,6 +32,10 @@ function checkDerivedReads(app: AppDef, loader: PageLoader, name: string, at: st
  * the surface's reads the same way: the runtime limits the loader's db to its own
  * `reads`, so a subset of the surface's is what keeps a surface from loading a
  * table it may not read.
+ *
+ * A loader that says the address parameters it reads (`params`) is held to the
+ * ones the page keeps, and they are put on the page as it is served
+ * (`loaderParams`): the one thing this check adds to the App it reads.
  */
 export function checkPageLoaders(app: AppDef, loaders: Readonly<Record<string, PageLoader>> | undefined, where: string): void {
   for (const [key, view] of Object.entries(app.views)) {
@@ -53,6 +57,15 @@ export function checkPageLoaders(app: AppDef, loaders: Readonly<Record<string, P
         );
       }
       checkDerivedReads(app, loader, name, at);
+      const unkept = loader.params?.find((param) => !view.page!.params.includes(param));
+      if (unkept !== undefined) {
+        throw new Error(
+          `[page-loader] ${at}: its loader "${name}" reads the parameter "${unkept}", which the page does not keep in its address` +
+            `${view.page.params.length ? ` (it keeps ${view.page.params.join(', ')})` : ''}. Add it to the page's params, or take it out of the loader's.`,
+        );
+      }
+      /* Served with the page, so it asks each loader the parameters it reads and no others (client hooks.ts pageLoadPlace). */
+      if (loader.params) (view.page.loaderParams ??= {})[name] = [...loader.params];
     }
   }
   for (const [key, surface] of Object.entries(app.surfaces ?? {})) {
@@ -72,5 +85,10 @@ export function checkPageLoaders(app: AppDef, loaders: Readonly<Record<string, P
       );
     }
     checkDerivedReads(app, loader, name, at);
+    if (loader.params?.length) {
+      throw new Error(
+        `[page-loader] ${at}: its loader "${name}" reads the parameter "${loader.params[0]}", and a surface keeps none: a front end passes no params.`,
+      );
+    }
   }
 }

@@ -228,7 +228,7 @@ export function CustomPageSection({ page, section, index, plan, base, recordKey,
  */
 export function CustomPageBody({ frame, section }: { frame: UiPageFrame; section: Section }) {
   const host = useUiHost();
-  const place = pageLoadPlace(frame);
+  const place = pageLoadPlace(frame, frame.loader);
   const loaded = useQuery({
     queryKey: pageLoadKey(host.scope, frame.view, frame.loader ?? '', place),
     queryFn: async () => (await host.load(frame.view, place, frame.loader)) ?? null,

@@ -109,6 +109,7 @@ export { BusinessCommandExecutionError, isBusinessCommandExecutionError, refuse 
 export { effectiveTrack, type CommandDoor, type CommandHandlerDoor } from './commandTrack.js';
 import { effectiveTrack, handlerDoorOf, type CommandDoor, type CommandHandlerDoor, type CommandTrack } from './commandTrack.js';
 import { integrationCalls } from '../integrations/integrationRuntime.js';
+import { tellWrites } from './commandWrites.js';
 
 export type { RefusalCode } from './commandErrors.js';
 
@@ -1087,7 +1088,10 @@ async function executeUntraced(
             const madeOnTarget: string[] = [];
             /* The rows a trial would write, by table: what an import's check says each run would do. */
             const trialWrites: Record<string, number> = {};
+            /* The tables this run changed a row of, told to the route with its answer (commandWrites.ts). */
+            const wroteTables = new Set<string>();
             const tally = (table: string, rows: number) => {
+              if (rows > 0) wroteTables.add(table);
               if (trial && rows > 0) trialWrites[table] = (trialWrites[table] ?? 0) + rows;
             };
             const { written: wroteOnTarget, wrote } = targetWrites(authorized, command.target);
@@ -2023,6 +2027,11 @@ async function executeUntraced(
               else if (track !== 'none' && !(await journal.insert!(receipt, audits.length === 1 ? audits[0] : audits)))
                 throw new ReceiptTaken();
               checkCancelled();
+              /* Said only whole: a table with no id in the catalog, or one this person cannot read, leaves it unsaid. */
+              const wroteIds = [...wroteTables].map((table) =>
+                authorized.insertOnly?.has(table) ? undefined : authorized.catalog?.[table]?.schemaId,
+              );
+              if (wroteIds.every((table) => table !== undefined)) tellWrites(id, wroteIds as string[]);
               return answer(id, scoped ? result : JSON.parse(resultJson), false);
             } catch (error) {
               await operations.finish().catch(() => {});

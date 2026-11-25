@@ -398,6 +398,8 @@ interface CommandTable {
   readonly key: readonly string[];
   readonly kinds: Readonly<Record<string, ColumnKind>>;
   readonly meta: TableMeta;
+  /** The table's id in the schema it was cataloged from, which `meta` renames: what a run says it wrote (commandWrites.ts). */
+  readonly schemaId?: string;
   /** The tables its handle may ask about with `any`/`no`, and the references between them: exactly the tables the
       catalog declares (commandCatalog), so a child outside the declared reads is not a table there. */
   readonly declared?: { readonly tables: TableMeta[]; readonly foreignKeys: ForeignKey[] };
@@ -446,6 +448,7 @@ export function commandCatalog(
       key: Object.freeze(meta.columns.filter((column) => column.primaryKey).map((column) => column.name)),
       kinds: Object.freeze(Object.fromEntries(meta.columns.map((column) => [column.name, columnKind(column.type)]))),
       meta: renamed,
+      schemaId: meta.id,
       dialect: schema.dialect,
     });
   }

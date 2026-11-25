@@ -369,6 +369,9 @@ export interface UiPageFrame {
   loader?: string;
   /** Every loader the page names, `loader` first: what `useLoader` is held to. */
   loaders?: readonly string[];
+  /** The address parameters each loader says it reads (`defineLoader({ params })`), by loader: it is asked them alone,
+      and again only when one moves. A loader not named here says none, and is asked the page's whole place. */
+  loaderParams?: Readonly<Record<string, readonly string[]>>;
   /**
    * The record a page is a tab of (`pages/accounts/[id]/map.page.tsx`): its resource and key, what `useRecordKey` gives.
    * A test's frame (`renderPage(page, { record })`) knows no file and so no resource: any the page reads is answered.

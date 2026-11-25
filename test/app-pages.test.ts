@@ -24,7 +24,7 @@ import { count, max } from '../packages/mistri/src/server/commands/commandDb.js'
 import { runPageLoader } from '../packages/mistri/src/server/commands/pageLoaderRun.js';
 import type { Identity } from '../packages/mistri/src/server/auth/auth.js';
 import { Registry } from '../packages/engine/src/server/connections.js';
-import { pageLoad, pageManifestRefusal } from '../packages/mistri/src/server/http/pageLoad.js';
+import { pageLoad, pageManifestRefusal, tellLoaderReads } from '../packages/mistri/src/server/http/pageLoad.js';
 import { createApp } from './support/createApp.js';
 import { loadHttpAppPolicy, type HttpAppPolicy } from '../packages/mistri/src/server/policy/appPolicyHttp.js';
 import { commandTypes } from '../packages/mistri/src/server/typegen.js';
@@ -1113,21 +1113,72 @@ describe('a loader reads as the reader, never writes, and ends', () => {
     );
   });
 
+  /* Every address parameter ran every loader of the page again (a field report). A loader says the ones it reads:
+     held to the page's own, served with the page so it keys the loader by them, and the only ones the loader is handed. */
+  test('page-loader: a loader says the params it reads, each one the page keeps; the page is served them, and the loader handed them alone', async (t) => {
+    const at = await reader(t);
+    const page = { ...APP.views.board, params: ['desk', 'picked'], loaders: ['tally', 'still'] };
+    const seen: unknown[] = [];
+    const loaders = defineLoaders({
+      ...(LOADERS as object),
+      // Reads `desk`, never `picked`.
+      board: defineLoader({
+        reads: ['ticket'],
+        params: ['desk'],
+        load: ({ params }) => (seen.push({ ...params }), { desk: params.desk ?? null }),
+      }),
+      // Reads none: no parameter runs it again.
+      still: defineLoader({ reads: [], params: [], load: ({ params }) => (seen.push({ ...params }), 'still') }),
+    }) as never;
+    const app = parse(views({ board: page }));
+    assert.doesNotThrow(() => checkPageLoaders(app, loaders, 'desk'));
+    // `tally` says none, so it is not named: it reads the whole place, as every loader did.
+    const served = appForRoles(app, ['clerk']).views.board as { page?: { loaderParams?: unknown } };
+    assert.deepEqual(served.page?.loaderParams, { board: ['desk'], still: [] });
+    const ask = (body: Record<string, unknown>) =>
+      pageLoad({ app, roles: ['clerk'], signedIn: true, loaders, body, reader: at.adapter, schema: at.schema });
+    // An older page still sends its whole place: the loader is handed what it said, and no more.
+    assert.deepEqual((await ask({ page: 'board', params: { desk: '2', picked: '7' } })).body, { data: { desk: '2' } });
+    assert.deepEqual((await ask({ page: 'board', loader: 'still', params: { desk: '2', picked: '7' } })).body, { data: 'still' });
+    assert.deepEqual(seen, [{ desk: '2' }, {}]);
+    // A parameter the page does not keep is refused where the author can fix it; so is one on a surface, which keeps none.
+    const stray = defineLoaders({ ...(LOADERS as object), board: defineLoader({ reads: ['ticket'], params: ['day'], load: () => null }) });
+    assert.throws(
+      () => checkPageLoaders(parse(views({ board: page })), stray as never, 'desk'),
+      /\[page-loader\].*its loader "board" reads the parameter "day", which the page does not keep in its address \(it keeps desk, picked\)/,
+    );
+    assert.throws(
+      () => defineLoader({ reads: [], params: 'desk' as never, load: () => null }),
+      /params are the address parameters it reads/,
+    );
+    assert.throws(() => defineLoader({ reads: [], params: ['desk', 'desk'], load: () => null }), /each once/);
+    // In its types too: a parameter it did not say is not there to read.
+    defineLoader({
+      reads: [],
+      params: ['desk'],
+      // @ts-expect-error `picked` is not one of the params this loader says it reads
+      load: ({ params }) => params.picked,
+    });
+  });
+
   test('the route runs only the loader the page names, for a reader the page is served to, with the parameters it keeps', async (t) => {
     const at = await reader(t);
     const app = parse();
     const ask = (body: Record<string, unknown>, roles: string[] = ['clerk'], signedIn = true) =>
       pageLoad({ app, roles, signedIn, loaders: LOADERS, body, reader: at.adapter, schema: at.schema });
+    /* With the tables it answers from: `ticket`, which it declares, and `desk`, which a ticket's reference reaches. */
     assert.deepEqual(await ask({ page: 'board', params: { desk: '2' } }), {
       status: 200,
       body: { data: { tickets: ['South one'], counted: 1 } },
+      reads: ['desk', 'ticket'],
     });
     assert.equal((await ask({ page: 'settle' })).body.code, 'page_undeclared', 'a page that names no loader has none to run');
     assert.equal((await ask({ page: 'board', params: { tab: 'x' } })).body.code, 'page_undeclared', 'only the parameters it keeps');
     assert.equal((await ask({ page: 'notes' }, ['reader'])).status, 404, "a page the reader's roles are not offered is not found");
     assert.equal((await ask({ page: 'board' }, [], false)).status, 404, 'a signed-out visitor is served no page but a public one');
     const lobby = await ask({ page: 'lobby' }, [], false);
-    assert.deepEqual(lobby, { status: 200, body: { data: { desks: 2, viewer: { roles: [] } } } });
+    // `ticket` points at a desk, so a read of desks may count them: it is among what the loader answers from.
+    assert.deepEqual(lobby, { status: 200, body: { data: { desks: 2, viewer: { roles: [] } } }, reads: ['desk', 'ticket'] });
     // Several loaders: the page's `data` is its `loader`; the others are asked for by name, from its own list only.
     const two = parse(views({ board: { ...APP.views.board, loaders: ['tally'] } }));
     const askTwo = (body: Record<string, unknown>, roles: string[] = ['clerk']) =>
@@ -1164,6 +1215,47 @@ describe('a loader reads as the reader, never writes, and ends', () => {
       schema: at.schema,
     });
     assert.equal(unexported.status, 404);
+  });
+
+  /* What the page that ran a command asks again (client commandRefresh.ts): a loader is filed with the tables it
+     declares and what a read of each reaches, so a command that wrote none of them leaves it; one that declares none
+     hands the page what the server knows, cannot be told, and is asked again after every command. */
+  test("the route's reply says the tables a loader answers from, and nothing for a loader that declares none", async (t) => {
+    const at = await reader(t);
+    const settings = defineLoader({ reads: [], load: () => ({ program: 'North' }) });
+    const loaders = defineLoaders({ ...(LOADERS as object), board: settings }) as never;
+    const none = await pageLoad({
+      app: parse(),
+      roles: ['clerk'],
+      signedIn: true,
+      loaders,
+      body: { page: 'board' },
+      reader: at.adapter,
+      schema: at.schema,
+    });
+    assert.deepEqual(none, { status: 200, body: { data: { program: 'North' } } });
+    const notes = await pageLoad({
+      app: parse(),
+      roles: ['clerk'],
+      signedIn: true,
+      loaders: LOADERS,
+      body: { page: 'notes' },
+      reader: at.adapter,
+      schema: at.schema,
+    });
+    assert.deepEqual(notes.reads, ['note']);
+    /* Said as a read's own `mistri-reads`, and taken off where it cannot be said: the reader the loader read through
+       named the tables of the reads it happened to make, which are not all of them. */
+    const headers = new Map<string, string>([['mistri-reads', 'ticket']]);
+    const reply = {
+      headersSent: false,
+      setHeader: (name: string, value: string) => headers.set(name, value),
+      removeHeader: (name: string) => headers.delete(name),
+    };
+    tellLoaderReads(reply, { reads: ['desk', 'a,b'] });
+    assert.equal(headers.get('mistri-reads'), 'desk,a%2Cb');
+    tellLoaderReads(reply, {});
+    assert.equal(headers.has('mistri-reads'), false);
   });
 
   test('a request that says it is a page’s is refused outside what the page declares', () => {

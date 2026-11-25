@@ -61,6 +61,7 @@ export function FreePage({
     params: page.params,
     ...(page.loader ? { loader: page.loader } : {}),
     ...(page.loader || page.loaders?.length ? { loaders: [...(page.loader ? [page.loader] : []), ...(page.loaders ?? [])] } : {}),
+    ...(page.loaderParams ? { loaderParams: page.loaderParams } : {}),
     get: (name) => place[name],
     set: (name, value, options = {}) => {
       const owned = entry ?? initial.current;

@@ -841,6 +841,9 @@ interface AppPageManifest {
   loader?: string;
   /** More loaders the page runs by name, beside `loader` (`useLoader`): the page's allowlist is both. */
   loaders?: string[];
+  /** Served, never authored: the address parameters each of its loaders says it reads (`defineLoader({ params })`),
+      by loader, so the page asks one again only when a parameter it reads moves (pageLoaderCheck.ts). */
+  loaderParams?: Record<string, string[]>;
   /** The App's form views it opens (`page.useForm`); left out when it opens none. */
   forms?: string[];
   public?: true;

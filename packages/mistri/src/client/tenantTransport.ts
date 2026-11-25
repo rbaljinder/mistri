@@ -22,7 +22,7 @@ import { say } from './copy/tenancy/tenantTransport.js';
 import { MUTATION_PATHS } from '@mistriwork/kit/client/writePaths.js';
 import { isTenantName, replaceTenantNames } from './tenantNames.js';
 import { fetchServer } from '@mistriwork/kit/client/transport.js';
-import { fileReads } from '@mistriwork/kit/client/liveReads.js';
+import { fileReads, fileWrites } from '@mistriwork/kit/client/liveReads.js';
 import { firstPaintRead } from '@mistriwork/kit/client/firstPaint.js';
 import {
   TENANT_BATCH_MOST,
@@ -1250,5 +1250,7 @@ export async function tenantMutationApi(
   } catch (error) {
     throw mutationError(error instanceof Error ? error.message : say('theChangeCouldNotBeConfirmed'), 'unknown');
   }
+  /* The tables a command wrote, as an App's own answer says them: the page asks again only the reads over one. */
+  fileWrites(value, response.headers.get('mistri-writes'));
   return value;
 }

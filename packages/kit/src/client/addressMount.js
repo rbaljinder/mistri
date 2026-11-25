@@ -101,6 +101,17 @@ export function shownUnplaced(internal) {
 }
 
 /**
+ * An address as the browser shows it, read back to its inside form (`shown`'s
+ * inverse, for an address a page was handed rather than the address bar's);
+ * undefined for one this page's mount does not place.
+ * @param {string} external
+ * @returns {string | undefined}
+ */
+export function inside(external) {
+  return inward(mount, external);
+}
+
+/**
  * One of an App's own files by its inside address — a compiled component,
  * `/{app}/_components/<file>` — where the browser fetches it. On a served
  * page that is the address bar's form: the page and the server share one

@@ -6,10 +6,12 @@
 import { appEntrypoint } from '../app/appEntrypoint.js';
 import { dispatchBusinessCommandHttp, dispatchScopedBusinessCommandHttp } from '../commands/businessCommandHttp.js';
 import { send } from '@mistriwork/engine/server/http/reply.js';
+import { hearingWrites, WRITES_HEADER, writesHeader } from '../commands/commandWrites.js';
 import { clientAddress, publicFormLimiter } from '@mistriwork/engine/server/http/rateLimit.js';
 import { COMMAND_ROUTES } from '../../shared/commandRoutes.js';
 import { commandActionLabel } from '../recordHistory.js';
 import { sessionActorWords } from '../app/appStamps.js';
+import type { ServerResponse } from 'node:http';
 import type { Identity, RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { captureHttpCommandFlags } from '../flags/httpRuntime.js';
 import { stageFileHttp } from '../commands/stagedFileHttp.js';
@@ -96,15 +98,20 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
             await storedForPerson(ctx.registry, signedIn, identity.id),
           )
         : undefined;
-      const result = await dispatchScopedBusinessCommandHttp({
-        req,
-        res,
-        path,
-        commands: policyContext.commands,
-        label: (body) => commandActionLabel(signedIn.app.app, body),
-        ...given,
-        ...(locale ? { locale } : {}),
-        ...(chosen ? { chosen } : {}),
+      const scoped = policyContext.commands;
+      const result = await hearingWrites(async (heard) => {
+        const answer = await dispatchScopedBusinessCommandHttp({
+          req,
+          res,
+          path,
+          commands: scoped,
+          label: (body) => commandActionLabel(signedIn.app.app, body),
+          ...given,
+          ...(locale ? { locale } : {}),
+          ...(chosen ? { chosen } : {}),
+        });
+        sayWrites(res, signedIn.app.app, path, heard, answer);
+        return answer;
       });
       send(res, 200, path === COMMAND_ROUTES.execute ? await policyLinkUrls(ctx, result) : result);
       return true;
@@ -122,26 +129,36 @@ export async function commandRoutes(ctx: RequestContext, body?: unknown): Promis
       await stageFileHttp(ctx, connection, actor);
       return true;
     }
-    const result = await dispatchBusinessCommandHttp({
-      req,
-      res,
-      path,
-      registry,
-      connection,
-      captureFlags: captureHttpCommandFlags,
-      app: signedIn.app.app,
-      commands: commands.registry,
-      ...(commands.events ? { events: commands.events } : {}),
-      label: (body) => commandActionLabel(signedIn.app.app, body),
-      ...given,
-      actor,
-      ...(await browserChosen(ctx, signedIn.app.app, path)),
+    const result = await hearingWrites(async (heard) => {
+      const answer = await dispatchBusinessCommandHttp({
+        req,
+        res,
+        path,
+        registry,
+        connection,
+        captureFlags: captureHttpCommandFlags,
+        app: signedIn.app.app,
+        commands: commands.registry,
+        ...(commands.events ? { events: commands.events } : {}),
+        label: (body) => commandActionLabel(signedIn.app.app, body),
+        ...given,
+        actor,
+        ...(await browserChosen(ctx, signedIn.app.app, path)),
+      });
+      sayWrites(res, signedIn.app.app, path, heard, answer);
+      return answer;
     });
     send(res, 200, result);
     return true;
   }
 
   return false;
+}
+
+/* What an executed command wrote, for the page that ran it (commands/commandWrites.ts): said with its own answer only. */
+function sayWrites(res: ServerResponse, app: AppDef, path: string, heard: ReadonlyMap<string, readonly string[]>, answer: unknown): void {
+  const wrote = path === COMMAND_ROUTES.execute ? writesHeader(app, heard, answer) : undefined;
+  if (wrote !== undefined && !res.headersSent) res.setHeader(WRITES_HEADER, wrote);
 }
 
 /* A link a row-policy command minted is said as its URL to whoever ran it, as on the unscoped path

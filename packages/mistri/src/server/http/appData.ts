@@ -40,7 +40,7 @@ import { httpOperationRoutes } from '@mistriwork/engine/server/http/httpOperatio
 import { inboxRoutes } from './inboxRoutes.js';
 import { chooseRoutes } from './chooseRoutes.js';
 import { integrationRoutes } from './integrationRoutes.js';
-import { PAGE_HEADER, PAGE_LOAD_PATH, pageLoad, pageManifestRefusal } from './pageLoad.js';
+import { PAGE_HEADER, PAGE_LOAD_PATH, pageLoad, pageManifestRefusal, tellLoaderReads } from './pageLoad.js';
 import { headlessHeld, isSurfaceRefusal, namedSurface, surfaceRefusal } from './surfaceGate.js';
 import { SURFACE_HEADER } from '../../shared/appSurfaces.js';
 import type { ComposeResources } from '@mistriwork/engine/server/http/recordCompose.js';
@@ -186,6 +186,7 @@ export const APP_DATA: DataHooks = {
         chosenHeader: req.headers[CHOICE_HEADER],
         chosenStored: await storedForPerson(ctx.registry, source.selectedHost, identity.id),
       });
+      tellLoaderReads(res, reply);
       send(res, reply.status, reply.body);
       return true;
     }

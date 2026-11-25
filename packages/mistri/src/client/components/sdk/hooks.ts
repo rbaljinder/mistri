@@ -341,19 +341,29 @@ export function useBreakdown(
   );
 }
 
-/** The address parameters a page holds, as its loaders are asked them: only the ones it has a value for. */
-export const pageLoadPlace = (frame: UiPageFrame): Record<string, string> =>
-  Object.fromEntries(frame.params.flatMap((name) => (frame.get(name) === undefined ? [] : [[name, frame.get(name)!]])));
+/**
+ * The address parameters a page holds, as one of its loaders is asked them: only the ones it has a value for, and of
+ * those only the ones the loader says it reads (`defineLoader({ params })`), so a parameter it does not read — a
+ * picked row, a view toggle — is no part of its cache entry and does not run it again. A loader that says none of
+ * its own is asked the page's whole place, as every loader was.
+ */
+export const pageLoadPlace = (frame: UiPageFrame, loader?: string): Record<string, string> => {
+  const read =
+    loader !== undefined && frame.loaderParams && Object.hasOwn(frame.loaderParams, loader) ? frame.loaderParams[loader] : undefined;
+  const names = read ? frame.params.filter((name) => read.includes(name)) : frame.params;
+  return Object.fromEntries(names.flatMap((name) => (frame.get(name) === undefined ? [] : [[name, frame.get(name)!]])));
+};
 
 /* One entry per reader, page, loader and place: the page's `data` and `useLoader` of the same loader share it, and a
-   command that commits reads all of them again with `['mistri-page', 'load']` (commands.tsx). */
+   command that commits reads again each one over a table it wrote (commandRefresh.ts). */
 export const pageLoadKey = (scope: readonly unknown[], view: string, loader: string, place: Readonly<Record<string, string>>) =>
   ['mistri-page', 'load', ...scope, view, loader, place] as const;
 
 /**
  * One of a page's loaders, by its name: `page.useLoader('dueFigure')`. Each loader has its own cache entry and its own
- * state, so a slow one does not hold another back, and it is asked again as the page's place in the address changes
- * and after a command the page runs commits, as the page's `data` and its rows are. `data` is undefined while it loads.
+ * state, so a slow one does not hold another back, and it is asked again as the parameters it reads change in the
+ * address and after a command the page runs writes a table it answers from, as the page's `data` and its rows are.
+ * `data` is undefined while it loads.
  * `{ enabled: false }` asks nothing yet, for a page that settles a parameter after its first reads (which office, from
  * the list of them): the loader runs once, with the place the page settled on, not once before it and again after.
  */
@@ -371,7 +381,7 @@ export function useLoader(name: string, options: { enabled?: boolean } = {}): Us
       }),
     );
   }
-  const place = pageLoadPlace(frame);
+  const place = pageLoadPlace(frame, name);
   return withReadState(
     useQuery({
       queryKey: pageLoadKey(host.scope, frame.view, name, place),
