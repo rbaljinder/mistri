@@ -133,7 +133,15 @@ interface JobHostOptions {
   readonly builtIn?: readonly BuiltInJob[];
   /** What the module's decisions decide with (decide/decideHost.ts): their `decide-` jobs run through it. */
   readonly decide?: import('../decide/decideHost.js').DecisionRuntime;
+  /** The App's jobs at times and its timers are never enqueued on their own: only `runNow` runs one. The test host's
+   * `startTestApp({ jobs: 'manual' })`, so a job at ten past cannot fire in the middle of a test. Event jobs, workflows
+   * and the server's own work still run. Unsaid, MISTRI_JOBS=manual under NODE_ENV=test says it (`heldByTest`). */
+  readonly manual?: boolean;
 }
+
+/** MISTRI_JOBS=manual, which only a test's server reads (NODE_ENV=test, as http/testControl.ts): a deployment that set
+    it by mistake still runs its schedule rather than silently none. */
+const heldByTest = (env: NodeJS.ProcessEnv): boolean => env.NODE_ENV === 'test' && env.MISTRI_JOBS === 'manual';
 
 /**
  * Work the server schedules for itself, beside an App's jobs: enqueued slot
@@ -324,6 +332,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     maxIdleMs = options.maxIdleMs ?? MAX_IDLE_MS,
     quietMs = options.maxIdleMs ?? QUIET_MS;
   const clock = options.now ? ('caller' as const) : ('database' as const);
+  const manual = options.manual ?? heldByTest(process.env);
   // A tenant App's host is the one that knows its tenants: its workflows keep each tenant's instances apart.
   const tenancy = options.tenants !== undefined;
   const pg = 'postgres' in target ? sharedPgConnections(target.postgres, RUNTIME_STORE_POOL) : undefined;
@@ -584,7 +593,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
      the one enqueued; the ones before it are skipped. A store with no run of
      the job yet starts at the next slot instead. */
   const timed: readonly Pick<CapturedJob, 'id' | 'version' | 'every' | 'input' | 'realm' | 'runAs'>[] = [
-    ...[...module.jobs.values()].filter((job) => job.every),
+    ...(manual ? [] : [...module.jobs.values()].filter((job) => job.every)),
     ...builtIn.map((job) => ({
       id: job.id,
       version: BUILT_IN_VERSION,
@@ -615,7 +624,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     const at = now();
     const fresh: string[] = [];
     if (only === undefined) {
-      if (!timers.length || (at - swept < SWEEP_MS && more <= 0)) return fresh;
+      if (manual || !timers.length || (at - swept < SWEEP_MS && more <= 0)) return fresh;
       swept = at;
       more = Math.max(0, more - 1);
     }
@@ -813,7 +822,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
   let waited: number | undefined;
   let due = 0;
   /** How long until a machine timer's next sweep, so a quiet wait never sleeps past it. */
-  const untilSweep = (): number => (timers.length ? Math.max(0, swept + SWEEP_MS - now()) : Number.POSITIVE_INFINITY);
+  const untilSweep = (): number => (timers.length && !manual ? Math.max(0, swept + SWEEP_MS - now()) : Number.POSITIVE_INFINITY);
   /** The wait after a cycle: none after work; for the next thing due while every write is heard; else a poll. */
   const idleWait = (worked: boolean): number => {
     if (worked) {
