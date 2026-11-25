@@ -9,6 +9,7 @@ here.
 | App | Database setup | Start with |
 | --- | --- | --- |
 | Tick | [tick/seed.mjs](tick/seed.mjs) | [Tick README](../apps/tick/README.md) |
+| Foundry | [foundry/seed.mjs](foundry/seed.mjs) (SQLite: sellers, listings, bundled 3:2 studio photos, and stores) | [Foundry README](../apps/foundry/README.md) |
 | Lintel | [lintel/seed.mjs](lintel/seed.mjs) (SQLite, with every store the App and its jobs use), [seed-postgres.mjs](lintel/seed-postgres.mjs) (the same buildings in PostgreSQL), the schema in [schema.mjs](lintel/schema.mjs), the buildings, leases, ledger and repairs from [data.mjs](lintel/data.mjs) and the street views [images.mjs](lintel/images.mjs) draws | [Lintel README](../apps/lintel/README.md) |
 | Ladle | [ladle/seed.mjs](ladle/seed.mjs) (SQLite: the classes, the bookings and the App's stores) | [Ladle README](../apps/ladle/README.md) |
 | Ignition (a test fixture) | [ignition/seed-postgres.mjs](ignition/seed-postgres.mjs), the schema in [schema.mjs](ignition/schema.mjs) and [server.example.json](ignition/server.example.json) | [Ignition README](../../test/fixtures/apps/ignition/README.md) |

@@ -1,0 +1,42 @@
+.c-page-item-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-8);
+}
+
+.c-page-item-crumb {
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  text-decoration: none;
+}
+
+.c-page-item-price {
+  font-size: var(--text-xl, 1.75rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-page-item-was {
+  color: var(--ink-muted);
+  text-decoration: line-through;
+  font-variant-numeric: tabular-nums;
+}
+
+.c-page-item-link {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+
+.c-page-item-media {
+  aspect-ratio: 3 / 2;
+  background: var(--raised);
+  overflow: hidden;
+}
+
+.c-page-item-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}

@@ -274,9 +274,9 @@ describe('the home and the quickstarts', () => {
   test('the home counts the sample Apps the Sample Apps page and the catalog ship', () => {
     const catalog = readFileSync(join(ROOT, 'examples/apps/README.md'), 'utf8');
     const shipped = readdirSync(join(ROOT, 'examples/apps'), { withFileTypes: true }).filter((entry) => entry.isDirectory());
-    assert.equal(shipped.length, 3, 'the home says three sample Apps');
+    assert.equal(shipped.length, 4, 'the home says four sample Apps');
     for (const entry of shipped) assert.match(catalog, new RegExp(`\\| ${entry.name}`, 'i'));
-    assert.match(home, /<strong>Three sample Apps<\/strong>/);
+    assert.match(home, /<strong>Four sample Apps<\/strong>/);
     assert.doesNotMatch(home, /Nine sample Apps/);
   });
 

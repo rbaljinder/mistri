@@ -6,6 +6,7 @@ business data. Start with the smallest one that fits your task.
 | Sample | What to learn | Entry point |
 | --- | --- | --- |
 | Tick | A checklist, quick add, a New form and inline schema types in one file. | [README](tick/README.md), [app.ts](tick/app.ts) |
+| Foundry | A curated vintage marketplace and staff curator desk in one App: public site shell (`ui.site`), SSR custom public pages (`head: false`), hydrated cover photos (`resources.*.photos`), `<Photos>` gallery, `<ListFilters>` rail, cards opening a custom page (`open: { page }`), and atomic `claim()` holds. SQLite. | [README](foundry/README.md), [app.ts](foundry/app.ts), [pages](foundry/pages/) |
 | Ladle | The general path: a cooking school's own React site and Node server with the staff App embedded under its header, the school's own JSON route beside the handler, and a check-in page drawn whole by the App's own code. SQLite. | [README](ladle/README.md), [check-in page](ladle/pages/check-in.page.tsx), [host](ladle/host/) |
 | Lintel | Property operations in Lumen, the flagship: a staff desk and a resident portal in one App under a row policy, roles that extend roles, leases, a rent ledger posted by a job, a late-fee workflow, repairs whose parts come off a storeroom shelf, email to a resident without an account, a signed payment callback, and its own test suite. PostgreSQL or SQLite. | [README](lintel/README.md), [app.ts](lintel/app.ts), [tests](lintel/tests/) |
 
@@ -19,6 +20,7 @@ Seeds refuse existing databases. Never reseed a running preview.
 | Capability | Source |
 | --- | --- |
 | One-file authoring, quick add and blur autosave | [Tick](tick/app.ts) |
+| Public custom site shell (`ui.site`), SSR custom pages, cover photos, `<Photos>`, `<ListFilters>`, `open: { page }`, and atomic `claim()` holds | [Foundry app](foundry/app.ts), [commands](foundry/commands.ts), [pages](foundry/pages/) |
 | One App for staff and residents under a row policy, roles that extend roles | [Lintel app](lintel/app.ts), [policy](lintel/policy.ts) |
 | State machines with groups, and fixed moves | [Lintel resources](lintel/resources.ts) |
 | Boards, queues, a gantt, a calendar and cards refined from a rail | [Lintel views](lintel/views.ts) |

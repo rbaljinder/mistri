@@ -879,7 +879,7 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
   });
 
   test('the public examples use the TypeScript DSL', async () => {
-    assert.deepEqual(publicExamples(), ['ladle', 'lintel', 'tick']);
+    assert.deepEqual(publicExamples(), ['foundry', 'ladle', 'lintel', 'tick']);
     assert.deepEqual(readdirSync(join(EXAMPLES, 'tick')).sort(), ['README.md', 'app.ts'], 'Tick keeps one DSL file and a README');
     for (const app of walkedApps()) {
       const loaded = await loadApp(appDirectory(app));

@@ -118,7 +118,7 @@ describe('the coverage map', () => {
   test('no row leans on an example that does not ship', () => {
     const leaning = map.rows.flatMap((row) =>
       row.tests
-        .filter(({ file }) => file.startsWith('examples/apps/') && !/^examples\/apps\/(tick|lintel|ladle)\//.test(file))
+        .filter(({ file }) => file.startsWith('examples/apps/') && !/^examples\/apps\/(foundry|tick|lintel|ladle)\//.test(file))
         .map(({ file }) => `${row.id}: ${file}`),
     );
     assert.deepEqual(leaning, [], 'Only Tick, Lintel and Ladle ship; cite their tests or a fixture test.');

@@ -1,0 +1,74 @@
+.c-page-door-wrap {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: var(--space-5) var(--space-4) var(--space-8);
+}
+
+.c-page-door-hero {
+  align-self: center;
+}
+
+.c-page-door-title {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: clamp(2rem, 3.6vw, 3rem);
+  line-height: 1.08;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.c-page-door-link {
+  color: inherit;
+  text-decoration: none;
+  display: block;
+}
+
+.c-page-door-media {
+  aspect-ratio: 3 / 2;
+  background: var(--raised);
+  overflow: hidden;
+}
+
+.c-page-door-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.c-page-door-cta,
+.c-page-door-ghost {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.c-page-door-cta {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.c-page-door-ghost {
+  border: 1px solid var(--line);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+.c-page-door-more {
+  color: var(--accent-ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.c-page-door-price {
+  font-variant-numeric: tabular-nums;
+}
+
+.c-page-door-was {
+  color: var(--ink-muted);
+  text-decoration: line-through;
+  font-variant-numeric: tabular-nums;
+}

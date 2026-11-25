@@ -25,6 +25,7 @@ import { capturedJobModule } from '../packages/mistri/src/server/jobs/jobModule.
 
 const SAMPLES: Record<string, { commands?: string; jobs?: string; dir?: string }> = {
   tick: {},
+  foundry: { commands: 'commands.ts' },
   lintel: { commands: 'commands.ts', jobs: 'jobs.ts' },
   ladle: { commands: 'commands.ts' },
   /* Public examples until 0.9.2, kept as fixtures. */
