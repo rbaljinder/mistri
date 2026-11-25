@@ -5,7 +5,9 @@ Releases are tagged `v<version>`. The App framework is published to npm as
 beneath them as `@mistriwork/engine`, `@mistriwork/kit` and `@mistriwork/ui`. The
 desktop app has its own version in `desktop/package.json`.
 
-## Unreleased
+## 1.0.0-rc.87
+
+Tenant entry in fewer round trips, and the first of the decisions from the field report's open gaps: rows that may not overlap, a database constraint said as a field refusal, work larger than one command as a row per item, the team's names for every member, a loader's `elevate` and a page's optional reads. Entering a tenant on PostgreSQL takes nine round trips where it took 12 to 17, a reload three, and a free-form page draws from one wait instead of two. A tenant-owned PostgreSQL table may now carry an exclusion constraint on its ownership column.
 
 - Work larger than one command is a row per item and a timer that runs a command on each. A resource's timer at an instant takes `failed`, the command run on the record when the timer's command is refused for good or its attempts are spent: `at: { queued_at: { command: 'postLine', when: "state = 'waiting'", failed: 'failLine' } }`. It is given the refusal as its text inputs `code` and `message`, so each row keeps its own failure where a person reads it and arms it again with a new instant; the job is then done, and nothing is left failed for an operator. Startup and `mistri check` refuse a `failed` command that does not take both (`at-failed`). Ordinary and tenant Apps alike, each run in its row's tenant.
 - Rows due on a timer are worked through without waiting for the minute. Once a sweep's page of new runs is done the host reads the next at once, so a few thousand queued rows take as long as their commands, not a page a minute. A sweep that finds only what it found before still waits the minute.
