@@ -249,11 +249,18 @@ const require = createRequire(join(ROOT, 'package.json'));
    declarations, nothing per table: about 70 symbols on Compass, inside the ceiling above. Every ceiling holds.
    A dashboard's `commandButton` (`CommandDashSection`, one more member of the section union and its helper, generic
    over the registered command names), and an action's and a form view's `asks`: read once in the declarations,
-   nothing per table. Compass measures 32,525 types (25 past); its types rise to about 1.5% above, the rest hold. */
+   nothing per table. Compass measures 32,525 types (25 past); its types rise to about 1.5% above, the rest hold.
+   Joined data, SQL CTEs, and nested message catalogs: `defineQuery` (`AppDerived`, `AppDerivedStep`), nested
+   `defineMessages`, page `include` (`PageIncludeSpec`, `RowWithInclude`), `ctx.db` projection/batching/include
+   (`select`, `include`, `getMany`, `by`, `join`, 1-hop FK `orderBy`/`groupBy`), and `ctx.cte` (`CteRunner`,
+   `CteRequest`, `CteResult`). All types are fixed declarations read once; nothing grows with the schema
+   (synthetic types 172,414/184,400, instantiations 904,905/991,600; Compass holds on all three). Synthetic
+   measures 488,577 symbols (+0.04% past 488,400) and Ignition 255,240 instantiations (+0.45% past 254,100);
+   those two rise to about 1.5% above, and every other ceiling holds. */
 export const BUDGET = {
-  synthetic: { types: 184_400, instantiations: 991_600, symbols: 488_400 },
+  synthetic: { types: 184_400, instantiations: 991_600, symbols: 495_900 },
   compass: { types: 33_000, instantiations: 149_000, symbols: 107_800 },
-  ignition: { types: 69_700, instantiations: 254_100, symbols: 205_900 },
+  ignition: { types: 69_700, instantiations: 258_800, symbols: 205_900 },
 };
 
 /* Seconds of an unloaded core, scaled from the process's wall time (`calibrate`): a

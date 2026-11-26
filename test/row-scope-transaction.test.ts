@@ -76,7 +76,7 @@ test('SQLite scoped transactions expose only transaction methods and return the 
   const capability: Adapter = adapter;
   assert.equal(typeof capability.scopeTransaction, 'function');
   const result = await adapter.scopeTransaction(rowsA(), async (tx) => {
-    assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
+    assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'cte', 'insert', 'query', 'remove', 'update']);
     assert.equal(await tx.count('item'), 2);
     assert.deepEqual((await tx.query(page('item', { columns: ['id'], filter: eq('id', 2) }))).rows, []);
     assert.equal(await tx.count('item', eq('id', 2)), 0);

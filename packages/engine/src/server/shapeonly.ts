@@ -102,6 +102,10 @@ export function shapeOnly(adapter: Adapter, name: string): Adapter {
     wrapped.aggregate = () => {
       throw why(name, 'summing rows');
     };
+  if (adapter.cte)
+    wrapped.cte = () => {
+      throw why(name, 'reading rows');
+    };
   if (adapter.countBreakdown) wrapped.countBreakdown = from('countBreakdown') as Adapter['countBreakdown'];
 
   /* Profile keeps the numbers and loses the values. "52% null, 4,100

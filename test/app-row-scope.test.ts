@@ -14,7 +14,7 @@ import type { ViewDef } from '../packages/engine/src/shared/view.js';
 const query = (table: string) => ({ table, limit: 20, offset: 0 });
 const rule = (value: number): Filter => ({ groups: [[{ column: 'tenant_id', op: '=', value }]] });
 const view = (base: string): ViewDef => ({ id: 'scoped', name: 'Scoped', base, columns: [{ path: 'id' }, { path: 'owner_id.name' }] });
-const readKeys = ['aggregate', 'query', 'count', 'countEach', 'runView', 'countView', 'runBreakdown', 'countBreakdown'].sort();
+const readKeys = ['aggregate', 'cte', 'query', 'count', 'countEach', 'runView', 'countView', 'runBreakdown', 'countBreakdown'].sort();
 const surface = (reads: ScopedReads) => {
   assert.deepEqual(Reflect.ownKeys(reads).sort(), readKeys);
   assert.equal(Object.isFrozen(reads), true);

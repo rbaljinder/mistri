@@ -279,27 +279,58 @@ function optionally<T>(
 export function useRecord(
   resource: string,
   key: Readonly<Record<string, unknown>> | undefined,
-  show: readonly string[] | undefined,
-  options: { optional: true },
+  showOrOptions:
+    | readonly string[]
+    | {
+        readonly show?: readonly string[];
+        readonly include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec;
+        readonly optional: true;
+      }
+    | undefined,
+  options?: { optional?: boolean; include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec },
 ): UseQueryResult<UiRow | null> & UiReadState & UiRefusable;
 export function useRecord(
   resource: string,
   key: Readonly<Record<string, unknown>> | undefined,
-  show?: readonly string[],
-  options?: { optional?: false },
+  showOrOptions?:
+    | readonly string[]
+    | {
+        readonly show?: readonly string[];
+        readonly include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec;
+        readonly optional?: false;
+      },
+  options?: { optional?: false; include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec },
 ): UseQueryResult<UiRow | null> & UiReadState;
 export function useRecord(
   resource: string,
   key: Readonly<Record<string, unknown>> | undefined,
-  show?: readonly string[],
-  options: { optional?: boolean } = {},
+  showOrOptions?:
+    | readonly string[]
+    | {
+        readonly show?: readonly string[];
+        readonly include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec;
+        readonly optional?: boolean;
+      },
+  options: { optional?: boolean; include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec } = {},
 ): UseQueryResult<UiRow | null> & UiReadState & UiRefusable {
+  const isOpts = Boolean(showOrOptions && !Array.isArray(showOrOptions));
+  const recordOpts = isOpts
+    ? (showOrOptions as {
+        readonly show?: readonly string[];
+        readonly include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec;
+        readonly optional?: boolean;
+      })
+    : undefined;
+  const show = isOpts ? recordOpts?.show : (showOrOptions as readonly string[] | undefined);
+  const include = recordOpts?.include ?? options.include;
+  const optional = recordOpts?.optional === true || options.optional === true;
   const host = useUiHost();
-  const page = useDeclared(resource, options.optional === true);
-  const closed = useClosed(resource, options.optional === true);
-  const queryKey = ['mistri-ui', 'record', ...host.scope, resource, key, show, page] as const;
+  const page = useDeclared(resource, optional);
+  const closed = useClosed(resource, optional);
+  const queryKey = ['mistri-ui', 'record', ...host.scope, resource, key, show, include, page] as const;
   const enabled = key !== undefined && !closed;
-  const queryFn = async () => (await host.record(resource, key!, show, page ? { page } : {})) ?? null;
+  const queryFn = async () =>
+    (await host.record(resource, key!, show, { ...(page ? { page } : {}), ...(include ? { include } : {}) })) ?? null;
   host.ssrPrefetch?.(queryKey, queryFn, enabled);
   return optionally(
     withReadState(
@@ -309,7 +340,7 @@ export function useRecord(
         enabled,
       }),
     ),
-    options.optional === true,
+    optional,
     closed,
   );
 }

@@ -78,6 +78,8 @@ import {
   type CountItem,
   type AggregateRequest,
   type AggregateResult,
+  type CteRequest,
+  type CteResult,
   batchedRows,
   chunked,
   gathered,
@@ -87,6 +89,7 @@ import {
   type TableConstraint,
 } from './adapter.js';
 import { compileAggregate } from '../shared/aggregate.js';
+import { compileCte, cteTables } from '../shared/cte.js';
 import { readExactly, summed } from '../shared/decimals.js';
 import { buildUpdateGuard } from './scoped/updateGuard.js';
 import { createScopedReads } from './scoped/scopedReads.js';
@@ -987,6 +990,12 @@ export class SqliteAdapter implements Adapter {
     return answered;
   }
 
+  async cte(request: CteRequest): Promise<CteResult> {
+    const answered = await this.cteOn(request, this.db);
+    await this.turn();
+    return answered;
+  }
+
   async countEach(items: readonly CountItem[], limit?: number): Promise<number[]> {
     const relations = items.map((item) => ({ relation: ANSI_STYLE.quote(this.readTable(item.table)), filter: item.filter }));
     const statement = countEachStatement(relations, ANSI_STYLE, { limit, together: countsTogether(this.cachedSchema, items, limit) });
@@ -1014,6 +1023,14 @@ export class SqliteAdapter implements Adapter {
       summed(request.measures),
     );
     return { rows: rows.map(toJsonSafe) };
+  }
+
+  private async cteOn(request: CteRequest, db: DatabaseSync): Promise<CteResult> {
+    for (const table of cteTables(request)) this.assertTable(table, db);
+    const schema = await this.schema();
+    const compiled = compileCte(schema, request, ANSI_STYLE);
+    const rows = await this.readRows(compiled.text, compiled.params, true, db);
+    return { columns: compiled.columns, rows: rows.map(toJsonSafe) };
   }
 
   /**
@@ -1816,6 +1833,7 @@ export class SqliteAdapter implements Adapter {
           query: (r) => this.queryOn(r, handle),
           count: (table, filter) => this.countOn(table, filter, handle),
           aggregate: (r) => this.aggregateOn(r, handle),
+          cte: (r) => this.cteOn(r, handle),
           insert: history ? (r) => history.insert(r, insert) : insert,
           remove: history ? (r) => history.remove(r, remove) : remove,
           update: history ? (r) => history.update(r, update) : update,
@@ -2000,6 +2018,7 @@ export class SqliteAdapter implements Adapter {
                 query: (r: QueryRequest) => invoke(r, (r) => records.query(r)),
                 count: (table: string, filter?: Filter) => invoke({ table, filter }, (r) => records.count(r.table, r.filter)),
                 ...(records.aggregate ? { aggregate: (r: AggregateRequest) => invoke(r, (r) => records.aggregate!(r)) } : {}),
+                ...(records.cte ? { cte: (r: CteRequest) => invoke(r, (r) => records.cte!(r)) } : {}),
                 insert: (r: InsertRequest) => invoke(r, (r) => records.insert(r)),
                 remove: (r: DeleteRequest) => invoke(r, (r) => records.remove(r)),
                 update: (r: UpdateRequest) => invoke(r, (r) => records.update(r)),

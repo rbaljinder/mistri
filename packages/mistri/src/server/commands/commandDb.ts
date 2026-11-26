@@ -63,7 +63,84 @@ import type { CommandFile } from '../../../schema/command.js';
 import { zonedNow } from '../../shared/appZone.js';
 import type { CommandDerived } from './commandWhen.js';
 import type { ColumnSaying } from './commandSaying.js';
+import {
+  hydrateDbIncludes,
+  neededColumnsForInclude,
+  projectRow,
+  runBy,
+  runGetMany,
+  validateSelect,
+  type PeerReadHandle,
+} from './commandInclude.js';
+import { buildGroupedCteSpec, createCteRunner, createJoinedQuery, CTE_SPEC } from './commandCte.js';
 import { PublicLinkRef } from '../links/publicLink.js';
+
+export type DbIncludeSpec = Readonly<
+  Record<
+    string,
+    | true
+    | readonly string[]
+    | { readonly via: string; readonly from?: string; readonly select?: readonly string[] }
+    | {
+        readonly from?: string;
+        readonly by: string;
+        readonly select?: readonly string[];
+        readonly orderBy?: readonly [string, 'asc' | 'desc'];
+        readonly limit?: number;
+      }
+  >
+>;
+export type DbReadOptions<S = never, Inc = never> = { readonly select?: S; readonly include?: Inc };
+export type DbByOptions<S = never> = { readonly select?: S; readonly orderBy?: readonly [string, 'asc' | 'desc']; readonly limit?: number };
+type DbPick<Row, Cols> = Cols extends readonly (infer C extends string)[] ? { readonly [K in C]: Row[K & keyof Row] } : Readonly<Row>;
+type DbIncVal<R, K extends string, Spec> = Spec extends true
+  ? (K extends `${infer B}_id` ? B : K) extends infer T extends keyof R
+    ? Readonly<R[T]> | null
+    : Readonly<Record<string, unknown>> | null
+  : Spec extends readonly string[]
+    ? DbPick<(K extends `${infer B}_id` ? B : K) extends infer T extends keyof R ? R[T] : Record<string, unknown>, Spec> | null
+    : Spec extends { readonly via: infer FK extends string; readonly from?: infer F; readonly select?: infer Sel }
+      ? DbPick<
+          (F extends string ? F : FK extends `${infer B}_id` ? B : FK) extends infer T extends keyof R ? R[T] : Record<string, unknown>,
+          Sel
+        > | null
+      : Spec extends { readonly by: string; readonly from?: infer F; readonly select?: infer Sel }
+        ? readonly DbPick<(F extends string ? F : K) extends infer T extends keyof R ? R[T] : Record<string, unknown>, Sel>[]
+        : unknown;
+type DbSel<Row, S extends readonly string[]> = [S] extends [never]
+  ? Row
+  : string extends S[number]
+    ? Row
+    : Pick<Row, S[number] & keyof Row>;
+type DbInc<Row, R, Inc> = [Inc] extends [never]
+  ? Row
+  : string extends keyof Inc
+    ? Row
+    : Omit<Row, keyof Inc & string> & { readonly [K in keyof Inc & string]: DbIncVal<R, K, Inc[K]> };
+export interface CteRef<Name extends string = string, Row = Readonly<Record<string, unknown>>> {
+  readonly __cteName: Name;
+  readonly __rowType?: Row;
+}
+export type CteRefs<Steps extends Readonly<Record<string, unknown>>> = {
+  readonly [K in keyof Steps & string]: CteRef<
+    K,
+    Steps[K] extends PromiseLike<readonly (infer Row)[]> ? Row : Readonly<Record<string, unknown>>
+  >;
+};
+type CteJoinOption = { readonly on: readonly [string, string]; readonly kind?: 'inner' | 'left'; readonly alias?: string };
+type CteLeaf<S extends string> = S extends `${string}.${infer Leaf}` ? Leaf : S;
+export interface JoinedQuery<Out = Readonly<Record<string, unknown>>> extends PromiseLike<Out[]> {
+  join(target: CteRef, options: CteJoinOption): JoinedQuery<Out>;
+  where(conditions: Readonly<Record<string, unknown>>): JoinedQuery<Out>;
+  select<const Cols extends readonly string[]>(...columns: Cols): JoinedQuery<Readonly<Record<CteLeaf<Cols[number]>, unknown>>>;
+  orderBy(column: string, direction?: 'asc' | 'desc'): JoinedQuery<Out>;
+  limit(count: number): JoinedQuery<Out>;
+  first(): Promise<Out | undefined>;
+}
+export type CteRunner = <Steps extends Readonly<Record<string, PromiseLike<readonly unknown[]>>>, Result>(
+  steps: Steps,
+  run: (q: CteRefs<Steps>) => PromiseLike<Result>,
+) => Promise<Result>;
 
 /** A value a column holds, as the handle writes it. */
 export type Value = string | number | boolean | null;
@@ -160,7 +237,11 @@ type AnyMeasures = Readonly<Record<string, Measure>>;
 export interface Query<Row, R extends Reads = Reads> extends RowQuery<Row> {
   /** Narrows the rows further: every where this query has been given must hold (`db.lead.segment('open').where({ owner: 7 })`). */
   where(where: WhereInput<Row, R>): Query<Row, R>;
-  orderBy(column: keyof Row & string, direction?: 'asc' | 'desc'): Query<Row, R>;
+  /** Projects only the named columns (`SELECT col1, col2`) from this table. */
+  select<const Cols extends readonly string[]>(...columns: Cols & readonly (keyof Row & string)[]): Query<DbSel<Row, Cols>, R>;
+  /** Hydrates parent FK rows (`seller_id: true | ['name', 'city']`) and bounded reverse-FK child arrays in batched queries. */
+  include<const Inc extends DbIncludeSpec>(spec: Inc): Query<DbInc<Row, R, Inc>, R>;
+  orderBy(column: ColumnOf<Row> | PathKey, direction?: 'asc' | 'desc'): Query<Row, R>;
   /** At most this many rows. Without it, more than 1,000 is refused rather than cut. */
   limit(count: number): Query<Row, R>;
   /**
@@ -176,7 +257,7 @@ export interface Query<Row, R extends Reads = Reads> extends RowQuery<Row> {
   sum(column: keyof Row & string): Promise<string | number>;
   /** Measures over every matching row, as one object: `aggregate({ entries: count(), posted: sum('amount') })`. */
   aggregate<M extends AnyMeasures>(measures: M & Measures<Row>): Promise<Aggregated<Row, M>>;
-  /** One group per value of up to three columns (or a date's period, `period.month('posted_on')`), measured by `aggregate`. */
+  /** One group per value of up to three columns (or 1-hop reference paths / date periods), measured by `aggregate`. */
   groupBy<const Keys extends readonly GroupKey<Row>[]>(...keys: Keys): GroupBy<Row, Keys[number]>;
   /** One page in key order (or this query's order, the key appended), resumable from `next`, which is plain data. */
   page(options: { readonly after?: Boundary | undefined; readonly size: number }): Promise<Page<Row>>;
@@ -203,13 +284,13 @@ export interface Period<Column extends string = string> {
 export type Measures<Row> = Readonly<
   Record<string, Measure<'count', ColumnOf<Row> | undefined> | Measure<'sum' | 'avg' | 'min' | 'max', ColumnOf<Row>>>
 >;
-/** A group's key: one of the table's own columns, or a date column's period. */
-export type GroupKey<Row> = ColumnOf<Row> | Period<ColumnOf<Row>>;
+/** A group's key: one of the table's own columns, a 1-hop FK path (`'seller_id.city'`), or a date column's period. */
+export type GroupKey<Row> = ColumnOf<Row> | PathKey | Period<ColumnOf<Row>>;
 type KeyName<K> = K extends Period<infer C> ? C : K;
 /* `Row` is looked up, never tested: TypeScript relates two deferred conditionals only when what they test is identical,
    and measures `Row` invariant where it meets `keyof Row` there, either of which would make a typed table's answers
    unassignable to an untyped one's (a handler's `db` as BusinessCommandContext says it). */
-type KeyValue<Row, K> = K extends Period ? string | number | null : Row[K & keyof Row];
+type KeyValue<Row, K> = K extends Period ? string | number | null : K extends PathKey ? Value : Row[K & keyof Row];
 /** What each measure answers, by its word: a least or greatest value keeps its column's type. */
 type MeasureValues<Row, Column> = {
   count: number;
@@ -249,8 +330,31 @@ export interface Page<Row> {
 export interface ReadTable<Row, R extends Reads = Reads> {
   /** The row with this key — a one-column key's value, or `{ column: value }` — or `not_found`. */
   get(key: string | number | Partial<Row>): Promise<Row>;
+  get<const S extends readonly string[] = never, const Inc extends DbIncludeSpec = never>(
+    key: string | number | Partial<Row>,
+    options: DbReadOptions<S, Inc>,
+  ): Promise<DbInc<DbSel<Row, S>, R, Inc>>;
   /** The one row that matches, or undefined; several is the handler's mistake, not a refusal. */
   find(where: WhereInput<Row, R>): Promise<Row | undefined>;
+  find<const S extends readonly string[] = never, const Inc extends DbIncludeSpec = never>(
+    where: WhereInput<Row, R>,
+    options: DbReadOptions<S, Inc>,
+  ): Promise<DbInc<DbSel<Row, S>, R, Inc> | undefined>;
+  /** Batch primary-key lookup returning a `Map` of matched rows (single query, zero queries on empty input). */
+  getMany(keys: Iterable<string | number | Partial<Row>>): Promise<Map<string | number, Row>>;
+  getMany<const S extends readonly string[]>(
+    keys: Iterable<string | number | Partial<Row>>,
+    options: DbReadOptions<S, never>,
+  ): Promise<Map<string | number, DbSel<Row, S>>>;
+  /** Batch foreign-key lookup grouping child rows by `column` into `Map<Key, Row[]>`. */
+  by(column: keyof Row & string, keys: Iterable<string | number>): Promise<Map<string | number, Row[]>>;
+  by<const S extends readonly string[] = never>(
+    column: keyof Row & string,
+    keys: Iterable<string | number>,
+    options: DbByOptions<S>,
+  ): Promise<Map<string | number, DbSel<Row, S>[]>>;
+  /** Join this table to a named CTE inside `cte(steps, (q) => ...)`. */
+  join(target: CteRef, options: CteJoinOption): JoinedQuery;
   where(where?: WhereInput<Row, R>): Query<Row, R>;
   /** The query language with values, each quoted: ``where`make = ${make}` ``. */
   where(template: TemplateStringsArray, ...values: readonly (string | number | boolean)[]): Query<Row, R>;
@@ -1079,9 +1183,27 @@ function planAggregate(table: CommandTable, keys: readonly unknown[], given: unk
   };
   const by = keys.map((key, at) => {
     if (typeof key === 'string') {
+      if (key.includes('.')) {
+        const parts = key.split('.');
+        if (parts.length !== 2 || !Object.hasOwn(table.kinds, parts[0]!)) {
+          return authorMistake(`${name}: groupBy "${key}" must be a column or a 1-hop reference path (fk.column).`);
+        }
+        const fk = table.declared?.foreignKeys.find(
+          (edge) => edge.from.table === table.name && edge.from.columns.length === 1 && edge.from.columns[0] === parts[0],
+        );
+        const target = fk ? table.declared?.tables.find((each) => each.name === fk.to.table) : undefined;
+        const targetMeta = target?.columns.find((c) => c.name === parts[1]);
+        if (!fk || !target || !targetMeta) {
+          return authorMistake(
+            `${name}: groupBy "${key}" follows "${parts[0]}", which does not point to a declared read table with column "${parts[1]}".`,
+          );
+        }
+        answer(key, 'the key', true);
+        return { name: `k${at}`, answer: key, column: key, meta: targetMeta, kind: columnKind(targetMeta.type), bucket: undefined };
+      }
       const meta = column(key, 'groupBy');
       answer(meta.name, 'the key', true);
-      return { name: `k${at}`, answer: meta.name, meta, bucket: undefined };
+      return { name: `k${at}`, answer: meta.name, column: meta.name, meta, kind: table.kinds[meta.name], bucket: undefined };
     }
     const cut = key as Partial<Period> | null;
     if (!cut || typeof cut !== 'object' || !PERIODS.includes(cut.period as DateUnit))
@@ -1090,7 +1212,7 @@ function planAggregate(table: CommandTable, keys: readonly unknown[], given: unk
     if (table.kinds[meta.name] !== 'date')
       authorMistake(`${name}: period.${cut.period} cuts a date or time column; "${meta.name}" is not one.`);
     answer(meta.name, 'the key', true);
-    return { name: `k${at}`, answer: meta.name, meta, bucket: cut.period as DateUnit };
+    return { name: `k${at}`, answer: meta.name, column: meta.name, meta, kind: table.kinds[meta.name], bucket: cut.period as DateUnit };
   });
   if (!given || typeof given !== 'object' || Array.isArray(given))
     authorMistake(`${name}: aggregate takes its measures by name, { entries: count(), posted: sum('amount') }.`);
@@ -1116,7 +1238,7 @@ function planAggregate(table: CommandTable, keys: readonly unknown[], given: unk
     ...measures.map((measure) => [measure.said, measure.word === 'avg' ? `m${measure.at}a` : `m${measure.at}`] as const),
   ]);
   return {
-    by: by.map((key) => ({ name: key.name, column: key.meta.name, ...(key.bucket ? { bucket: key.bucket } : {}) })),
+    by: by.map((key) => ({ name: key.name, column: key.column, ...(key.bucket ? { bucket: key.bucket } : {}) })),
     measures: (ordered) =>
       measures.flatMap((measure): AggregateMeasure[] => {
         const id = `m${measure.at}`;
@@ -1136,8 +1258,7 @@ function planAggregate(table: CommandTable, keys: readonly unknown[], given: unk
       orderNames.get(said) ?? authorMistake(`${name}: groups order by one of their keys or measures, not "${said.slice(0, 80)}".`),
     decode: (row) => {
       const out: Record<string, unknown> = {};
-      for (const key of by)
-        out[key.answer] = key.bucket ? (row[key.name] ?? null) : columnValue(key.meta, table.kinds[key.meta.name], row[key.name]);
+      for (const key of by) out[key.answer] = key.bucket ? (row[key.name] ?? null) : columnValue(key.meta, key.kind, row[key.name]);
       for (const measure of measures) {
         const id = `m${measure.at}`;
         const scale = measure.meta ? placesOf(measure.meta) : 0;
@@ -1169,7 +1290,7 @@ function planAggregate(table: CommandTable, keys: readonly unknown[], given: unk
 
 /* ---------- the handle ---------- */
 
-type Reader = Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>;
+type Reader = Pick<WriteTransaction, 'query' | 'count' | 'aggregate' | 'cte'>;
 interface CommandDbOptions {
   readonly tx: Reader | WriteTransaction;
   readonly catalog: CommandCatalog;
@@ -1328,6 +1449,16 @@ export async function readKeptFile(
   return { file, key, stored: 'object' in found ? { bucket: found.bucket, object: found.object } : undefined };
 }
 
+/** Internal symbol storing the transaction's scoped `CteRunner` on a `createCommandDb` object. */
+export const CTE_RUNNER = Symbol('mistri.cte.runner');
+
+/** Returns the scoped `CteRunner` bound to a `createCommandDb` handle object. */
+export function cteOf(db: object): CteRunner {
+  const runner = (db as Record<symbol, unknown>)[CTE_RUNNER];
+  if (typeof runner !== 'function') throw new Error('This command/loader context does not have a CTE runner.');
+  return runner as CteRunner;
+}
+
 /** The `db` of one command run: a frozen object of table handles, exactly the footprint's. */
 export function createCommandDb(options: CommandDbOptions): Readonly<Record<string, ReadTable<UntypedRow> | WriteTable<UntypedRow>>> {
   const handles: Record<string, ReadTable<UntypedRow> | WriteTable<UntypedRow>> = {};
@@ -1343,7 +1474,49 @@ export function createCommandDb(options: CommandDbOptions): Readonly<Record<stri
     };
     handles[name] = tableHandle(declared ? { ...table, declared } : table, options.write.includes(name), options, budget, handles);
   }
+  const cteRunner = createCteRunner(options.tx, DEFAULT_CAP, (tableName, where) => {
+    const tbl = options.catalog[tableName];
+    return tbl ? compileWhere(tbl, where, options.now(), [], undefined, HANDLE).filter : { groups: [] };
+  });
+  Object.defineProperty(handles, CTE_RUNNER, { value: cteRunner, enumerable: false, configurable: false });
   return Object.freeze(handles);
+}
+
+function compileJoinedWhere(where: Record<string, unknown>, knownAliases: ReadonlySet<string>, baseTable: CommandTable, now: Date): Filter {
+  const conditions: Condition[] = [];
+  for (const [key, value] of Object.entries(where)) {
+    if (value === undefined) continue;
+    const dot = key.indexOf('.');
+    const isAlias = dot > 0 && knownAliases.has(key.slice(0, dot));
+    if (!isAlias && Object.hasOwn(baseTable.kinds, key)) {
+      const compiled = compileWhere(baseTable, { [key]: value }, now, [], undefined, HANDLE);
+      if (compiled.filter.groups[0]?.length) conditions.push(...compiled.filter.groups[0]);
+      continue;
+    }
+    if (!isAlias) authorMistake(`${baseTable.name}: unknown column or CTE alias "${key}" in joined where.`);
+    if (value === null) {
+      conditions.push({ column: key, op: 'isNull' });
+    } else if (Array.isArray(value)) {
+      conditions.push({ column: key, op: 'in', value: value as Array<string | number> });
+    } else if (typeof value === 'object') {
+      for (const [op, rhs] of Object.entries(value as Record<string, unknown>)) {
+        if (rhs === undefined) continue;
+        if (op === 'not') {
+          conditions.push(rhs === null ? { column: key, op: 'isNotNull' } : { column: key, op: '!=', value: rhs as string | number });
+        } else if (op === 'gt' || op === 'gte' || op === 'lt' || op === 'lte') {
+          const map = { gt: '>', gte: '>=', lt: '<', lte: '<=' } as const;
+          conditions.push({ column: key, op: map[op], value: rhs as string | number });
+        } else if (op === 'contains' || op === 'startsWith' || op === 'endsWith') {
+          conditions.push({ column: key, op, value: String(rhs) });
+        } else {
+          authorMistake(`${baseTable.name}: unsupported operator "${op}" on "${key}".`);
+        }
+      }
+    } else {
+      conditions.push({ column: key, op: '=', value: value as string | number | boolean });
+    }
+  }
+  return { groups: conditions.length ? [conditions] : [] };
 }
 
 function tableHandle(
@@ -1360,11 +1533,22 @@ function tableHandle(
   const who: QueryPerson | undefined = options.chosen ? { email: null, chosen: options.chosen } : undefined;
   const canView = Boolean(options.readDerived) && !options.elevated?.has(name);
   const handleOptions = canView ? Object.freeze({ anyRows: true, rollups: true }) : HANDLE;
+  const resolveOneHopFk = (path: string) => {
+    const parts = path.split('.');
+    if (parts.length !== 2 || !Object.hasOwn(table.kinds, parts[0]!)) return undefined;
+    const fk = table.declared?.foreignKeys.find(
+      (edge) => edge.from.table === table.name && edge.from.columns.length === 1 && edge.from.columns[0] === parts[0],
+    );
+    const target = fk ? table.declared?.tables.find((each) => each.name === fk.to.table) : undefined;
+    if (!fk || !target || !target.columns.some((c) => c.name === parts[1])) return undefined;
+    return { fkCol: parts[0]!, target: target.name, targetPk: fk.to.columns[0]!, targetCol: parts[1]! };
+  };
   const rows = async (
     compiled: Compiled,
     limit: number,
     orderBy = compiled.orderBy,
     withNames: readonly string[] = [],
+    columns?: readonly string[],
   ): Promise<UntypedRow[]> => {
     if (compiled.none) return [];
     if (withNames.length || compiled.view) {
@@ -1373,9 +1557,43 @@ function tableHandle(
           `${name}: a read ${withNames.length ? 'with .with' : 'naming a rollup'} takes a where over the row's own columns, computed columns and rollups, not "any" or "in".`,
         );
       const found = await options.readDerived!({ table: name, names: withNames, filter: compiled.filter, orderBy, limit });
-      return found.rows.map((row) => normalizeRow(table, row) as UntypedRow);
+      const normalized = found.rows.map((row) => normalizeRow(table, row) as UntypedRow);
+      return columns ? normalized.map((r) => projectRow(r, [...columns, ...withNames]) as UntypedRow) : normalized;
     }
-    const result = await tx.query({ table: name, filter: compiled.filter, limit, offset: 0, ...(orderBy.length ? { orderBy } : {}) });
+    const dottedOrders = orderBy.filter((o) => o.column.includes('.'));
+    if (dottedOrders.length) {
+      if (typeof tx.cte !== 'function') authorMistake(`${name}: ordering by a joined path requires a SQL source.`);
+      const joinMap = new Map<string, { target: string; alias: string; on: readonly [string, string] }>();
+      const mappedOrder = orderBy.map((o) => {
+        if (!o.column.includes('.')) return o;
+        const hop = resolveOneHopFk(o.column);
+        if (!hop) authorMistake(`${name}: orderBy "${o.column}" does not follow a declared 1-hop reference.`);
+        const alias = `__ord_${hop.fkCol}`;
+        if (!joinMap.has(alias)) joinMap.set(alias, { target: hop.target, alias, on: [hop.fkCol, hop.targetPk] });
+        return { column: `${alias}.${hop.targetCol}`, direction: o.direction };
+      });
+      const selectCols = (columns?.length ? columns : Object.keys(table.kinds)).map((col) => ({ column: col, alias: col }));
+      const cteResult = await tx.cte({
+        with: [],
+        query: {
+          from: name,
+          joins: [...joinMap.values()].map((j) => ({ target: j.target, alias: j.alias, kind: 'left' as const, on: j.on })),
+          ...(compiled.filter.groups.length ? { filter: compiled.filter } : {}),
+          select: selectCols,
+          orderBy: mappedOrder,
+          limit,
+        },
+      });
+      return cteResult.rows.map((row) => normalizeRow(table, row) as UntypedRow);
+    }
+    const result = await tx.query({
+      table: name,
+      filter: compiled.filter,
+      ...(columns?.length ? { columns: [...columns] } : {}),
+      limit,
+      offset: 0,
+      ...(orderBy.length ? { orderBy } : {}),
+    });
     return result.rows.map((row) => normalizeRow(table, row) as UntypedRow);
   };
   const keyOf = (row: unknown): Record<string, string | number> => {
@@ -1406,15 +1624,25 @@ function tableHandle(
   const queryOver = (parts: Part[]): Query<UntypedRow> => {
     const order: { column: string; direction: 'asc' | 'desc' }[] = [];
     const withNames: string[] = [];
+    let selectedCols: string[] | undefined;
+    let includeSpec: DbIncludeSpec | undefined;
     let cap: number | undefined;
     const run = async (limit?: number): Promise<UntypedRow[]> => {
       const compiled = compileParts(parts);
       const bound = limit ?? cap ?? compiled.limit;
-      const found = await rows(compiled, bound ?? DEFAULT_CAP + 1, [...compiled.orderBy, ...order], withNames);
+      const extraCols = neededColumnsForInclude(table, includeSpec);
+      const fetchCols = selectedCols ? [...new Set([...selectedCols, ...extraCols])] : undefined;
+      const found = await rows(compiled, bound ?? DEFAULT_CAP + 1, [...compiled.orderBy, ...order], withNames, fetchCols);
       if (bound === undefined && found.length > DEFAULT_CAP) {
         throw new Error(`${name}: more than ${DEFAULT_CAP} rows match; say how many with .limit(n).`);
       }
-      return found;
+      return (await hydrateDbIncludes(
+        table,
+        found,
+        includeSpec,
+        peers as Readonly<Record<string, PeerReadHandle>>,
+        selectedCols,
+      )) as UntypedRow[];
     };
     /* Sums and groups: every row the where matches, so the rows' own order and limit mean nothing here; the
          groups have their own, after aggregate(). */
@@ -1519,13 +1747,34 @@ function tableHandle(
           }
         : { rows: shown };
     };
-    const query: Query<UntypedRow> = {
+    const query: Query<UntypedRow> & { [CTE_SPEC]?: () => import('@mistriwork/engine/adapters/adapter.js').CteQuerySpec } = {
+      [CTE_SPEC]() {
+        const compiled = compileParts(parts);
+        const allOrder = [...compiled.orderBy, ...order];
+        return {
+          from: name,
+          ...(compiled.filter.groups.length ? { filter: compiled.filter } : {}),
+          ...(selectedCols?.length ? { select: selectedCols.map((col) => ({ column: col, alias: col })) } : {}),
+          ...(allOrder.length ? { orderBy: allOrder } : {}),
+          ...(cap !== undefined ? { limit: cap } : compiled.limit !== undefined ? { limit: compiled.limit } : {}),
+        };
+      },
       where(more) {
         parts.push({ where: more, values: [] });
         return query;
       },
+      select(...columns) {
+        selectedCols = validateSelect(table, columns as readonly string[]);
+        return query as never;
+      },
+      include(spec) {
+        includeSpec = includeSpec ? { ...includeSpec, ...spec } : { ...spec };
+        return query as never;
+      },
       orderBy(column, direction = 'asc') {
-        if (!Object.hasOwn(table.kinds, column)) throw new Error(`${name}: "${column}" is not one of its columns.`);
+        if (!Object.hasOwn(table.kinds, column) && !resolveOneHopFk(column)) {
+          throw new Error(`${name}: "${column}" is not one of its columns or a declared 1-hop reference path.`);
+        }
         order.push({ column, direction: direction === 'desc' ? 'desc' : 'asc' });
         return query;
       },
@@ -1558,7 +1807,31 @@ function tableHandle(
           aggregate(measures) {
             const groupOrder: { name: string; direction: 'asc' | 'desc' }[] = [];
             let groupCap: number | undefined;
-            const grouped: Grouped<never> = {
+            const grouped: Grouped<never> & { [CTE_SPEC]?: () => import('@mistriwork/engine/adapters/adapter.js').CteQuerySpec } = {
+              [CTE_SPEC]() {
+                const compiled = compileParts(parts);
+                const plan = planAggregate(table, keys, measures);
+                const cteBy = keys.map((k) => {
+                  if (typeof k === 'string') return { name: k, column: k };
+                  const p = k as Period;
+                  return { name: p.column, column: p.column, bucket: p.period };
+                });
+                const cteMeasures: AggregateMeasure[] = Object.entries(measures as Record<string, Measure>).map(([alias, m]) => ({
+                  name: alias,
+                  fn: m.measure,
+                  ...(m.column !== undefined ? { column: m.column } : {}),
+                }));
+                /* Ensure plan validation ran for every measure/key. */
+                void plan;
+                return buildGroupedCteSpec(
+                  name,
+                  compiled.filter,
+                  cteBy,
+                  cteMeasures,
+                  groupOrder.map((o) => ({ column: o.name, direction: o.direction })),
+                  groupCap,
+                );
+              },
               orderBy(answer, direction = 'asc') {
                 groupOrder.push({ name: answer, direction: direction === 'desc' ? 'desc' : 'asc' });
                 return grouped;
@@ -1607,7 +1880,7 @@ function tableHandle(
     return readKeptFile(tx, { name, verb, via: `db.${name}`, table, rule, scope: options.fileScope, budget }, given);
   };
   const read: ReadTable<UntypedRow> = {
-    async get(key) {
+    async get(key: unknown, readOpts?: DbReadOptions<readonly string[], DbIncludeSpec>): Promise<never> {
       const given =
         key !== null && typeof key === 'object'
           ? (key as Record<string, unknown>)
@@ -1619,14 +1892,67 @@ function tableHandle(
       }
       const exact = canonicalKey(table, given);
       if (!exact) return refuse('not_found');
-      const found = await rows({ filter: keyFilter(exact), none: false, orderBy: [] }, 2);
+      const selected = validateSelect(table, readOpts?.select);
+      const extraCols = neededColumnsForInclude(table, readOpts?.include);
+      const fetchCols = selected ? [...new Set([...selected, ...extraCols])] : undefined;
+      const found = await rows({ filter: keyFilter(exact), none: false, orderBy: [] }, 2, [], [], fetchCols);
       if (found.length > 1) throw new Error(`${name}: its key names ${found.length} rows.`);
-      return found[0] ?? refuse('not_found');
+      if (!found[0]) return refuse('not_found');
+      const hydrated = await hydrateDbIncludes(
+        table,
+        [found[0]],
+        readOpts?.include,
+        peers as Readonly<Record<string, PeerReadHandle>>,
+        selected,
+      );
+      return hydrated[0] as never;
     },
-    async find(where) {
-      const found = await rows(compileWhere(table, where, now(), [], who, handleOptions), 2);
+    async find(where: unknown, readOpts?: DbReadOptions<readonly string[], DbIncludeSpec>): Promise<never> {
+      const selected = validateSelect(table, readOpts?.select);
+      const extraCols = neededColumnsForInclude(table, readOpts?.include);
+      const fetchCols = selected ? [...new Set([...selected, ...extraCols])] : undefined;
+      const found = await rows(compileWhere(table, where, now(), [], who, handleOptions), 2, [], [], fetchCols);
       if (found.length > 1) throw new Error(`${name}: find matched several rows; narrow the where, or use where().`);
-      return found[0];
+      if (!found[0]) return undefined as never;
+      const hydrated = await hydrateDbIncludes(
+        table,
+        [found[0]],
+        readOpts?.include,
+        peers as Readonly<Record<string, PeerReadHandle>>,
+        selected,
+      );
+      return hydrated[0] as never;
+    },
+    getMany(keys: Iterable<string | number | Partial<UntypedRow>>, getManyOpts?: DbReadOptions<readonly string[], never>): Promise<never> {
+      return runGetMany(
+        table,
+        keys,
+        (given) => canonicalKey(table, given),
+        (filter, limit, cols) => rows({ filter, none: false, orderBy: [] }, limit, [], [], cols),
+        getManyOpts?.select,
+        DEFAULT_CAP,
+      ) as never;
+    },
+    by(column: string, keys: Iterable<string | number>, byOpts?: DbByOptions<readonly string[]>): Promise<never> {
+      return runBy(
+        table,
+        column,
+        keys,
+        (col, val) => scalar(table, col, val),
+        (filter, limit, orderBy, cols) => rows({ filter, none: false, orderBy: [...orderBy] }, limit, [...orderBy], [], cols),
+        byOpts,
+        DEFAULT_CAP,
+      ) as never;
+    },
+    join(target, joinOpts) {
+      return createJoinedQuery(
+        name,
+        target as unknown as CteRef,
+        joinOpts as { readonly on: readonly [string, string]; readonly kind?: 'inner' | 'left'; readonly alias?: string },
+        (where, knownAliases) => compileJoinedWhere(where, knownAliases, table, now()),
+        DEFAULT_CAP,
+        tx,
+      ) as never;
     },
     where(where?: unknown, ...values: readonly unknown[]): Query<UntypedRow> {
       /* Only the template binds values. A string with a second argument would drop it and match the wrong rows

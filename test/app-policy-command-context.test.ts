@@ -144,7 +144,7 @@ async function fixture(t: TestContext) {
     control.actors.push(context.actor);
     assert.ok(Object.isFrozen(context.actor));
     assert.ok(Object.isFrozen(context.actor.roles));
-    assert.deepEqual(Reflect.ownKeys(context.tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
+    assert.deepEqual(Reflect.ownKeys(context.tx).sort(), ['aggregate', 'count', 'cte', 'insert', 'query', 'remove', 'update']);
     assert.ok(!Reflect.ownKeys(context).some((key) => ['journal', 'authorize', 'binding'].includes(String(key))));
     if (control.handle) await control.handle(context);
     // The assignee is read again after the hook; the revision is the one the platform checked.

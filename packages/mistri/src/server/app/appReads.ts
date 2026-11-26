@@ -10,9 +10,10 @@ import { appError } from './appErrors.js';
 import { readMeSets, textsMentionMe } from './appMe.js';
 import { appDataResponse } from './appResponses.js';
 import { unionReads } from './unionReads.js';
+import { derivedReads } from './derivedReads.js';
 
 export const APP_READS: AppReads = Object.freeze<AppReads>({
-  reader: unionReads,
+  reader: (adapter, schema) => derivedReads(unionReads(adapter, schema), schema),
   reply: (body: Record<string, unknown>) => appDataResponse(body, true),
   error: (err: unknown) => appError(err),
   /* The person is looked up once, and only for text that compares with them. */

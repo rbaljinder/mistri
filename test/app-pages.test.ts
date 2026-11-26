@@ -1040,7 +1040,7 @@ describe('a loader reads as the reader, never writes, and ends', () => {
     );
     /* `chosen` (rc.80): the App's picks, read again under the reader, by name. A value, not a handle: nothing to write through. */
     assert.deepEqual(reached, {
-      keys: ['chosen', 'db', 'now', 'params', 'signal', 'timezone', 'today', 'viewer'],
+      keys: ['chosen', 'cte', 'db', 'now', 'params', 'signal', 'timezone', 'today', 'viewer'],
       tables: ['ticket'],
       sql: false,
     });

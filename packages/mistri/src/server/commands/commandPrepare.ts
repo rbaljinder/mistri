@@ -225,10 +225,11 @@ export async function readPreparedRecord(
   )
     return { expectedVersion };
   // Reads only: the handler's writes are not the prefill's to make.
-  const tx = Object.freeze<Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>>({
+  const tx = Object.freeze<Pick<WriteTransaction, 'query' | 'count' | 'aggregate' | 'cte'>>({
     query: (request) => records.query(request),
     count: (table, filter) => records.count(table, filter),
     ...(records.aggregate ? { aggregate: (request) => records.aggregate!(request) } : {}),
+    ...(records.cte ? { cte: (request) => records.cte!(request) } : {}),
   });
   const table = catalog[command.target];
   const exact = table && canonicalKey(table, key);
@@ -422,10 +423,11 @@ async function readPreparedStart(
   if (!commandFlagEnabled(command, flags)) throw new BusinessCommandExecutionError('forbidden');
   const started = await startingValues(preparedStarts(command), options.actor, undefined, options.tenant);
   const initial = registeredInitial(command);
-  const tx = Object.freeze<Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>>({
+  const tx = Object.freeze<Pick<WriteTransaction, 'query' | 'count' | 'aggregate' | 'cte'>>({
     query: (request) => records.query(request),
     count: (table, filter) => records.count(table, filter),
     ...(records.aggregate ? { aggregate: (request) => records.aggregate!(request) } : {}),
+    ...(records.cte ? { cte: (request) => records.cte!(request) } : {}),
   });
   /* An input asked by the tenant's profile alone (`when: 'tenant.country = "US"'`): judged here, as no record is,
      so the form is told which it is not asked and what is left of the rest over the draft. */

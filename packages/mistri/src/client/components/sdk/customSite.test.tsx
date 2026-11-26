@@ -526,4 +526,92 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
     expect(form.classList.contains('is-open')).toBe(true);
   });
+
+  test('SSR useRecord and useRows reshape parent FK and bounded child includes in one pass', async () => {
+    const { renderPublic } = await import('../../ssr/render.js');
+    const { mountJson } = await import('@mistriwork/engine/shared/mount.js');
+
+    const code = `import{jsx}from"/_mistri/sdk/v1/react-jsx-runtime.js";import{useRecord}from"/_mistri/sdk/v1/page.js";export default function Item(){const {data:record}=useRecord("listing",{id:10},{show:["id","title"],include:{seller_id:["name","city"],listing_photo:{by:"listing_id",show:["url"],limit:2}}});if(!record)return jsx("div",{children:"loading"});return jsx("div",{children:[record.title,record.seller_id?.name,record.seller_id?.city,(record.listing_photo??[]).map(p=>p.url).join(",")].join("|")});}`;
+    let calls = 0;
+    const html = await renderPublic({
+      kind: 'page',
+      mount: mountJson({ base: '', apps: { foundry: '' } }),
+      app: {
+        id: 'foundry',
+        name: 'Foundry',
+        home: 'item',
+        nav: [],
+        resources: { seller: {}, listing: {}, listing_photo: {} },
+        views: {
+          item: {
+            label: 'Item',
+            sections: [{ kind: 'custom', component: { id: 'page-item', kind: 'page' } }],
+            page: { public: true, reads: ['listing', 'seller', 'listing_photo'], commands: [], params: [] },
+          },
+        },
+        ui: {},
+      } as never,
+      schema: {
+        tables: [
+          {
+            id: 'seller',
+            name: 'seller',
+            columns: [
+              { name: 'id', type: 'integer', primaryKey: true, nullable: false },
+              { name: 'name', type: 'text', primaryKey: false, nullable: false },
+              { name: 'city', type: 'text', primaryKey: false, nullable: false },
+            ],
+          },
+          {
+            id: 'listing',
+            name: 'listing',
+            columns: [
+              { name: 'id', type: 'integer', primaryKey: true, nullable: false },
+              { name: 'title', type: 'text', primaryKey: false, nullable: false },
+              { name: 'seller_id', type: 'integer', primaryKey: false, nullable: true, references: { table: 'seller', column: 'id' } },
+            ],
+          },
+          {
+            id: 'listing_photo',
+            name: 'listing_photo',
+            columns: [
+              { name: 'id', type: 'integer', primaryKey: true, nullable: false },
+              { name: 'listing_id', type: 'integer', primaryKey: false, nullable: false, references: { table: 'listing', column: 'id' } },
+              { name: 'url', type: 'text', primaryKey: false, nullable: false },
+            ],
+          },
+        ],
+        foreignKeys: [],
+      } as never,
+      viewKey: 'item',
+      dashboard: { id: 'item', label: 'Item', sections: [] } as never,
+      page: { public: true, reads: ['listing', 'seller', 'listing_photo'], commands: [], params: [] } as never,
+      place: {},
+      code,
+      read: async (_method, path, body) => {
+        calls++;
+        expect(path).toBe('/api/view/run');
+        expect((body as { include?: Record<string, unknown> }).include?.listing_photo).toBeTruthy();
+        return {
+          status: 200,
+          body: {
+            view: {
+              columns: [{ path: 'id' }, { path: 'title' }, { path: 'seller_id' }, { path: 'seller_id.name' }, { path: 'seller_id.city' }],
+            },
+            columns: ['id', 'title', 'seller_id', 'seller_id.name', 'seller_id.city'],
+            rows: [{ id: 10, title: 'Brass Lamp', seller_id: 1, 'seller_id.name': 'Zelda', 'seller_id.city': 'Portland' }],
+            included: {
+              listing_photo: {
+                rowsByParent: {
+                  '10': [{ id: 101, listing_id: 10, url: '/lamp-1.jpg' }],
+                },
+              },
+            },
+          },
+        };
+      },
+    });
+    expect(calls).toBe(1);
+    expect(html).toContain('Brass Lamp|Zelda|Portland|/lamp-1.jpg');
+  });
 });

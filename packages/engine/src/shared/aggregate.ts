@@ -61,6 +61,45 @@ export interface AggregateResult {
   readonly rows: Record<string, unknown>[];
 }
 
+export interface CteJoin {
+  readonly target: string;
+  readonly alias?: string;
+  readonly kind?: 'inner' | 'left';
+  readonly on: readonly [string, string];
+}
+export interface CteSelect {
+  readonly column: string;
+  readonly alias?: string;
+}
+export interface CteGroupKey {
+  readonly name: string;
+  readonly column: string;
+  readonly bucket?: DateUnit;
+}
+export interface CteQuerySpec {
+  readonly from: string;
+  readonly alias?: string;
+  readonly joins?: readonly CteJoin[];
+  readonly filter?: Filter;
+  readonly select?: readonly CteSelect[];
+  readonly by?: readonly CteGroupKey[];
+  readonly measures?: readonly AggregateMeasure[];
+  readonly orderBy?: readonly { readonly column: string; readonly direction: 'asc' | 'desc' }[];
+  readonly limit?: number;
+  readonly offset?: number;
+}
+export interface CteStep extends CteQuerySpec {
+  readonly name: string;
+}
+export interface CteRequest {
+  readonly with: readonly CteStep[];
+  readonly query: CteQuerySpec;
+}
+export interface CteResult {
+  readonly columns: readonly string[];
+  readonly rows: Record<string, unknown>[];
+}
+
 /** Every column an aggregate's keys and measures read (its where's are a filter's, checked as one). */
 export const aggregateColumns = (request: AggregateRequest): string[] => [
   ...(request.by ?? []).map((key) => key.column),
@@ -81,14 +120,21 @@ function aggregateBreakdown(schema: DatabaseSchema, request: AggregateRequest): 
   const table = typeof request.table === 'string' ? findTable(schema, request.table) : undefined;
   if (!table) throw new RequestFault('Unknown resource in aggregate.');
   const own = new Set(table.columns.map((column) => column.name));
-  /* A column, never a path: a dot is a reference walked, and a walk under a command's scope can read a table its
-     footprint holds as empty (above). */
-  const column = (name: unknown, what: string): string => {
-    if (typeof name !== 'string' || !own.has(name) || name.includes('.'))
-      throw new RequestFault(
-        `An aggregate's ${what} names one of "${table.name}"'s own columns; "${String(name).slice(0, 80)}" is not one.`,
-      );
-    return name;
+  const column = (name: unknown, what: string, allowOneHop = false): string => {
+    if (typeof name === 'string' && own.has(name) && !name.includes('.')) return name;
+    if (allowOneHop && typeof name === 'string' && name.includes('.')) {
+      const parts = name.split('.');
+      if (parts.length === 2 && own.has(parts[0]!)) {
+        const fk = schema.foreignKeys.find(
+          (edge) => edge.from.table === table.id && edge.from.columns.length === 1 && edge.from.columns[0] === parts[0],
+        );
+        const target = fk ? findTable(schema, fk.to.table) : undefined;
+        if (target && target.columns.some((c) => c.name === parts[1])) return name;
+      }
+    }
+    throw new RequestFault(
+      `An aggregate's ${what} names one of "${table.name}"'s own columns${allowOneHop ? ' (or a 1-hop reference path)' : ''}; "${String(name).slice(0, 80)}" is not one.`,
+    );
   };
   const names = new Set<string>();
   const output = (name: unknown): string => {
@@ -102,7 +148,7 @@ function aggregateBreakdown(schema: DatabaseSchema, request: AggregateRequest): 
   const keys: BreakdownKey[] = by.map((key) => {
     if (key.bucket !== undefined && !DATE_UNITS.includes(key.bucket))
       throw new RequestFault(`"${String(key.bucket).slice(0, 40)}" is not a period. Use one of: ${DATE_UNITS.join(', ')}.`);
-    return { path: column(key.column, 'key'), alias: output(key.name), ...(key.bucket ? { bucket: key.bucket } : {}) };
+    return { path: column(key.column, 'key', true), alias: output(key.name), ...(key.bucket ? { bucket: key.bucket } : {}) };
   });
   if (!Array.isArray(request.measures) || !request.measures.length) throw new RequestFault('An aggregate measures something.');
   const measures: Measure[] = request.measures.map((measure) => {

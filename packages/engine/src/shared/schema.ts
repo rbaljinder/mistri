@@ -252,6 +252,8 @@ export interface TableMeta {
   isView: boolean;
   /** An App's union (appUnions.ts): read by asking each branch it holds, never as a table. */
   union?: import('./servedApp.js').UnionTable;
+  /** An App's declarative CTE-backed derived resource (appDerived.ts): read via `adapter.cte`, never as a table. */
+  derived?: import('./servedApp.js').DerivedTable;
   /**
    * Columns that lead an index, primary key included.
    *

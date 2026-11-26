@@ -4,6 +4,7 @@ import {
   TransactionOperations,
   TransactionOutcomeUnknown,
   type AggregateRequest,
+  type CteRequest,
   type DeleteRequest,
   type NoteRequest,
   type TellRequest,
@@ -13,6 +14,7 @@ import {
   type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { cteTables } from '@mistriwork/engine/shared/cte.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import type { CommandJournal, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
 import { captureTenantData, denyTenant, TenantContextError, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
@@ -157,6 +159,11 @@ async function runManaged<T>(
   const aggregate =
     summed && 'value' in summed && typeof summed.value === 'function'
       ? (((...args: unknown[]) => Reflect.apply(summed.value, records, args)) as NonNullable<WriteTransaction['aggregate']>)
+      : undefined;
+  const cted = Object.getOwnPropertyDescriptor(records, 'cte');
+  const cte =
+    cted && 'value' in cted && typeof cted.value === 'function'
+      ? (((...args: unknown[]) => Reflect.apply(cted.value, records, args)) as NonNullable<WriteTransaction['cte']>)
       : undefined;
   const journalMethod = <K extends keyof CommandJournal>(name: K): CommandJournal[K] => {
     if (!journal || typeof journal !== 'object' || isProxy(journal)) return denyTenant();
@@ -358,6 +365,19 @@ async function runManaged<T>(
               )
                 return denyTenant();
               return aggregate(value);
+            }),
+        }
+      : {}),
+    ...(cte
+      ? {
+          cte: (request: CteRequest) =>
+            invoke(request, (value) => {
+              tenantRecord(value, ['with', 'query']);
+              if (!Array.isArray(value.with) || !value.query || typeof value.query !== 'object') return denyTenant();
+              const tables = cteTables(value);
+              if (!tables.length) return denyTenant();
+              for (const tbl of tables) target(tbl);
+              return cte(value);
             }),
         }
       : {}),

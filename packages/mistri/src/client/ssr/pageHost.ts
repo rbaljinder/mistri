@@ -19,6 +19,13 @@ import { readKey } from '@mistriwork/engine/shared/firstPaint.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
 import { humanName } from '@mistriwork/engine/shared/model.js';
 import { outward, readMountJson, serverPath } from '@mistriwork/engine/shared/mount.js';
+import {
+  parentIncludePaths,
+  shapeIncludedRows,
+  splitInclude,
+  type IncludedChildPayload,
+  type ViewIncludeSpec,
+} from '@mistriwork/engine/shared/viewInclude.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import type { DashboardDef } from '@mistriwork/kit/client/components/dashboardModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
@@ -246,27 +253,31 @@ export function createSsrPageHost(input: SsrPageInput, queryClient: QueryClient,
     askingPage?: string,
     where?: unknown,
     offset?: number,
+    include?: ViewIncludeSpec,
   ): Promise<UiRow[]> => {
     if (activeSignal?.aborted) return [];
+    const { parents, children, hasChildren } = splitInclude(include);
     const basePaths = show?.length ? [...show] : table.columns.map((c) => c.name);
+    const parentPaths = parentIncludePaths(parents);
     const declared = [...(page.reads ?? []), ...(page.optionalReads ?? [])];
     const coverDeclared = !askingPage || (table.cover !== undefined && declared.includes(table.cover.from));
     const attachCover =
       Boolean(table.cover) && coverDeclared && !table.columns.some((c) => c.name === COVER_COLUMN) && !basePaths.includes(COVER_COLUMN);
-    const paths = attachCover ? [...basePaths, COVER_COLUMN] : basePaths;
+    const paths = [...new Set([...basePaths, ...parentPaths, ...(attachCover ? [COVER_COLUMN] : [])])];
     const body = {
       ...uiViewRunBody(table.id, table.name, paths, query, limit),
       app: app.id,
       ...(where === undefined ? {} : { where }),
       ...(offset ? { offset } : {}),
+      ...(hasChildren ? { include: children } : {}),
     };
     const reply = await read('POST', '/api/view/run', body, askingPage ? { 'x-mistri-page': askingPage } : undefined, activeSignal);
     if (reply.status >= 400) return [];
-    const got = reply.body as Parameters<typeof rowsByPath>[1];
-    const rows = rowsByPath(paths, got, `Could not read ${table.name}`, { schema, base: table.id });
+    const got = reply.body as Parameters<typeof rowsByPath>[1] & { included?: Readonly<Record<string, IncludedChildPayload>> };
+    const rawRows = rowsByPath(paths, got, `Could not read ${table.name}`, { schema, base: table.id });
     const cover = table.cover;
     if (cover && (attachCover || basePaths.includes(COVER_COLUMN))) {
-      for (const row of rows) {
+      for (const row of rawRows) {
         const raw = row[COVER_COLUMN];
         row[COVER_COLUMN] =
           raw === null || raw === undefined
@@ -274,7 +285,8 @@ export function createSsrPageHost(input: SsrPageInput, queryClient: QueryClient,
             : (fileAddress(cover.from, { [cover.photoKey]: raw }, cover.thumbnail ? { thumbnail: true } : undefined) ?? null);
       }
     }
-    return rows;
+    const pkCol = primaryKey(table)[0];
+    return shapeIncludedRows(rawRows, parents, got.included, pkCol, show?.length ? basePaths : undefined);
   };
 
   const href = (to: UiAddress): string | undefined => {
@@ -331,7 +343,7 @@ export function createSsrPageHost(input: SsrPageInput, queryClient: QueryClient,
       const limit = options.limit ?? 20;
       const show = options.show?.length ? (options.keys ? [...new Set([...primaryKey(table), ...options.show])] : options.show) : undefined;
       const query = uiRowsQuery(options.query, options.sort);
-      const rows = await viewRows(table, show, query, limit + 1, options.page, options.where, options.offset);
+      const rows = await viewRows(table, show, query, limit + 1, options.page, options.where, options.offset, options.include);
       const more = rows.length > limit;
       return { rows: more ? rows.slice(0, limit) : rows, more };
     },
@@ -339,7 +351,7 @@ export function createSsrPageHost(input: SsrPageInput, queryClient: QueryClient,
       const table = tableOf(resource);
       const pk = primaryKey(table);
       const paths = show?.length ? [...new Set([...pk, ...show])] : undefined;
-      const rows = await viewRows(table, paths, '', 1, asking.page, key);
+      const rows = await viewRows(table, paths, '', 1, asking.page, key, undefined, asking.include);
       return rows[0];
     },
     async breakdown(resource, { by, measure, query, limit, page: askingPage, where }) {

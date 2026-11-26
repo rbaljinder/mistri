@@ -54,7 +54,7 @@
  * server's adapter types.
  */
 import { parseDuration } from '@mistriwork/engine/shared/duration.js';
-import { sourceName, type CommandTables, type SourceTables } from './commandDb.js';
+import { sourceName, type CommandTables, type CteRunner, type SourceTables } from './commandDb.js';
 
 /** The longest a loader may run, and how long one that says nothing does. */
 const LOADER_TIMEOUT_MOST = 10_000;
@@ -76,6 +76,8 @@ type ReadTableOf<Name extends string> = Name extends `${infer T}.${string}` ? T 
 export interface PageLoaderContext<Src = string, R extends string = string, P extends string = string> {
   /** The tables it declared, read-only, as this reader may read them. */
   readonly db: CommandTables<SourceTables<Src, string>, R, never>;
+  /** Execute a scoped multi-stage SQL CTE (`WITH ... AS (...) SELECT ...`) over declared tables. */
+  readonly cte: CteRunner;
   /** The page's address parameters, as the address says them now: the ones the loader says it reads (`params`),
       and no others; every one the page keeps, for a loader that says none. */
   readonly params: Readonly<Record<P, string | undefined>>;

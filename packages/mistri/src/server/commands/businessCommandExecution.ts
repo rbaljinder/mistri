@@ -11,6 +11,7 @@ import {
   isWriteConflict,
   TransactionOperations,
   type AggregateRequest,
+  type CteRequest,
   type InsertRequest,
   type InsertResult,
   type QueryResult,
@@ -18,6 +19,7 @@ import {
   type UpdateResult,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { cteTables } from '@mistriwork/engine/shared/cte.js';
 import { CommandTransactionFailure, TrialRolledBack } from '../../adapters/commands/commandJournal.js';
 import {
   AUDIT_PART_ENTRIES,
@@ -42,7 +44,7 @@ import {
   registeredAvailability,
   type BusinessCommandActor,
 } from './businessCommands.js';
-import { canonicalKey, createCommandDb, keyFilter, normalizeRow, type UntypedRow, type WriteTable } from './commandDb.js';
+import { canonicalKey, createCommandDb, cteOf, keyFilter, normalizeRow, type UntypedRow, type WriteTable } from './commandDb.js';
 import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
 import { auditCommandRead, type CommandReadAudit, type ReadAuditSink } from '../readAudit.js';
 import { FLOW_TELL, flowCommandOf } from './flowCommandBrand.js';
@@ -1298,6 +1300,20 @@ async function executeUntraced(
                       ),
                   }
                 : {}),
+              ...(store.cte
+                ? {
+                    cte: (request: CteRequest) =>
+                      accept(
+                        request,
+                        async (request) => {
+                          checkCancelled();
+                          for (const tbl of cteTables(request)) addingOnly(tbl, true);
+                          return store.cte!(request);
+                        },
+                        true,
+                      ),
+                  }
+                : {}),
               insert: (request) => accept(request, (request) => insertVia(request, (request) => store.insert(request))),
               update: (request) =>
                 accept(request, async (request) => {
@@ -1822,6 +1838,7 @@ async function executeUntraced(
                       chosen: chosenContext(options.chosen),
                       flags: executionFlags,
                       db,
+                      cte: cteOf(db),
                       tx: audit(tx),
                       nextNumber: handlerNextNumber(journal, authorized.actor.appId),
                       link: links.link,

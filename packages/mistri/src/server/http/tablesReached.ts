@@ -9,6 +9,7 @@ import { textToBreakdown } from '@mistriwork/engine/shared/breakdowntext.js';
 import { rollupReads } from '@mistriwork/engine/shared/rollups.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
+import { childIncludeTables } from '@mistriwork/engine/shared/viewInclude.js';
 import { textToView } from '@mistriwork/engine/shared/viewtext.js';
 import { PathError, resolveAggregate, tableAtPrefix, tryResolvePath, type ViewDef } from '@mistriwork/engine/shared/viewPaths.js';
 
@@ -143,7 +144,9 @@ function reachedBy(schema: DatabaseSchema | undefined, asked: Asked): string[] {
  * route. Without the reader's catalog only each read's base can be told; the routes that judge a read always have it.
  */
 export function tablesReached(schema: DatabaseSchema | undefined, path: string, body: Record<string, unknown>): string[] | undefined {
-  if (path === '/api/view/run') return reachedBy(schema, { view: body.view, text: body.text, query: body.query });
+  if (path === '/api/view/run') {
+    return [...reachedBy(schema, { view: body.view, text: body.text, query: body.query }), ...childIncludeTables(body.include)];
+  }
   if (path === '/api/breakdown') return reachedBy(schema, { def: body.def, text: body.text });
   if (path === '/api/breakdowns' && Array.isArray(body.items)) {
     return body.items.flatMap((item) => {
@@ -152,7 +155,7 @@ export function tablesReached(schema: DatabaseSchema | undefined, path: string, 
       const run = isRecord(given.run) ? given.run : undefined;
       /* A batched view (a free-form page's rows) reaches what `/api/view/run` would. */
       const view = isRecord(given.view) ? given.view : undefined;
-      if (view) return reachedBy(schema, { view: view.view, text: view.text, query: view.query });
+      if (view) return [...reachedBy(schema, { view: view.view, text: view.text, query: view.query }), ...childIncludeTables(view.include)];
       return reachedBy(schema, run ? { text: run.q } : { def: given.def, text: given.text });
     });
   }

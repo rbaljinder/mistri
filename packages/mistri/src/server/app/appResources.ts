@@ -3,12 +3,14 @@ import {
   Refusal,
   type Adapter,
   type AggregateRequest,
+  type CteRequest,
   type DeleteRequest,
   type NoteRequest,
   type ScopedReads,
   type TellRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { remapCteTables } from '@mistriwork/engine/shared/cte.js';
 import type { TriggerAcceptance, TriggerChange } from '@mistriwork/engine/adapters/storeHost.js';
 import { nativeVerifiedCommandRunner, type VerifiedCommandRunner } from '../commands/verifiedCommandRunner.js';
 import { isRuntimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
@@ -401,6 +403,7 @@ export function mapAppScopedReads(reads: ScopedReads, catalog: AppResourceCatalo
     runBreakdown: (breakdown, offset) => reads.runBreakdown(resourceBreakdown(breakdown, catalog), offset),
     countBreakdown: (breakdown) => reads.countBreakdown(resourceBreakdown(breakdown, catalog)),
     ...(reads.aggregate ? { aggregate: (request) => reads.aggregate!(physicalRead(request, catalog)) } : {}),
+    ...(reads.cte ? { cte: (request) => reads.cte!(physicalCte(request, catalog)) } : {}),
     ...(reads.countEach
       ? {
           countEach: (items, limit) =>
@@ -412,6 +415,23 @@ export function mapAppScopedReads(reads: ScopedReads, catalog: AppResourceCatalo
       : {}),
   };
   return Object.freeze(scoped);
+}
+
+/** Rewrites base table references inside a CTE request to physical names and folds narrowed resource filters. */
+function physicalCte(request: CteRequest, catalog: AppResourceCatalog): CteRequest {
+  const mapped = remapCteTables(request, (name) => catalog.toPhysical(name));
+  const foldSpec = <S extends CteRequest['query']>(spec: S, origFrom: string, defined: ReadonlySet<string>): S => {
+    if (defined.has(origFrom)) return spec;
+    const filter = physicalFilter(spec.filter, origFrom, catalog);
+    return filter ? { ...spec, filter } : spec;
+  };
+  const defined = new Set<string>();
+  const steps = mapped.with.map((step, i) => {
+    const out = foldSpec(step, request.with[i]!.from, defined);
+    defined.add(step.name);
+    return out;
+  });
+  return { with: steps, query: foldSpec(mapped.query, request.query.from, defined) };
 }
 
 /** A single-table read in the database's names, a narrowed resource's conditions ANDed into its filter. */
@@ -654,6 +674,7 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
       query: (request) => tx.query(mapRead(request)),
       count: (table, filter) => tx.count(toPhysical(table), physicalFilter(filter, table, catalog)),
       ...(tx.aggregate ? { aggregate: (request: AggregateRequest) => tx.aggregate!(mapRead(request)) } : {}),
+      ...(tx.cte ? { cte: (request: CteRequest) => tx.cte!(physicalCte(request, catalog)) } : {}),
       insert: (request) => through(request.table)?.insert(request) ?? tx.insert(mapWrite(request)),
       update: (request) => through(request.table)?.update(request) ?? tx.update(mapWrite(request)),
       remove: (request) => through(request.table)?.remove(request) ?? tx.remove(mapWrite(request)),
@@ -845,6 +866,7 @@ export function createAppResourcesOver(physicalAdapter: Adapter, catalog: AppRes
   if (physicalAdapter.countBreakdown)
     adapter.countBreakdown = (breakdown, limit) => physicalAdapter.countBreakdown!(resourceBreakdown(breakdown, catalog), limit);
   if (physicalAdapter.aggregate) adapter.aggregate = (request) => physicalAdapter.aggregate!(mapRead(request));
+  if (physicalAdapter.cte) adapter.cte = (request) => physicalAdapter.cte!(physicalCte(request, catalog));
   if (physicalAdapter.countEach)
     adapter.countEach = (items, limit) =>
       physicalAdapter.countEach!(

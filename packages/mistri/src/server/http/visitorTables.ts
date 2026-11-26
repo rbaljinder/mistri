@@ -8,6 +8,7 @@
  * so nothing says which exist.
  */
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
+import { childIncludeTables } from '@mistriwork/engine/shared/viewInclude.js';
 
 /* The first word of a query, a breakdown or a view's text: the table it starts from. */
 const leading = (text: unknown): string | undefined => {
@@ -26,7 +27,9 @@ function named(body: Record<string, unknown>, questions: boolean): (string | und
   const view = body.view && typeof body.view === 'object' ? (body.view as Record<string, unknown>) : undefined;
   return [
     typeof body.table === 'string' ? body.table : undefined,
-    ...(questions ? [leading(body.q), leading(body.text), typeof view?.base === 'string' ? view.base : undefined] : []),
+    ...(questions
+      ? [leading(body.q), leading(body.text), typeof view?.base === 'string' ? view.base : undefined, ...childIncludeTables(body.include)]
+      : []),
   ];
 }
 

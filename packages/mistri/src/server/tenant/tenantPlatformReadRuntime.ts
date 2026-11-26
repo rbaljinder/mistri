@@ -15,7 +15,8 @@
  * sources, so no path, join or reference does.
  */
 import { isPromise } from 'node:util/types';
-import type { Adapter, AggregateRequest, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
+import type { Adapter, AggregateRequest, CteRequest, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
+import { cteTables } from '@mistriwork/engine/shared/cte.js';
 import { declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape, type AppDef } from '../../shared/app.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { assertScopeCatalog, captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
@@ -372,6 +373,19 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
                             ),
                         }
                       : {}),
+                    ...(reads.cte
+                      ? {
+                          cte: (request: CteRequest) => {
+                            const tables = cteTables(request);
+                            if (!tables.length) return Promise.reject(new TenantContextError());
+                            const firstOwner = holder.get(tables[0]!);
+                            if (tables.some((tbl) => holder.get(tbl) !== firstOwner)) return Promise.reject(new TenantContextError());
+                            return on(tables[0]!).then((reader) =>
+                              reader.cte ? reader.cte(request) : Promise.reject(new TenantContextError()),
+                            );
+                          },
+                        }
+                      : {}),
                   });
                 },
               });
@@ -470,6 +484,19 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
                           request,
                           (value) => reader.aggregate!(value),
                           (value) => assertStructuredReadFilter(value.filter, 'column'),
+                        ),
+                    }
+                  : {}),
+                ...(reader.cte
+                  ? {
+                      cte: (request: CteRequest) =>
+                        track(
+                          request,
+                          (value) => reader.cte!(value),
+                          (value) => {
+                            for (const step of value.with) assertStructuredReadFilter(step.filter, 'column');
+                            assertStructuredReadFilter(value.query.filter, 'column');
+                          },
                         ),
                     }
                   : {}),

@@ -152,6 +152,7 @@ import { autoKeyOf, withUnit } from '@mistriwork/engine/shared/autoBucket.js';
 import { PREVIOUS_PERIOD, hasWindowPhrase, previousPeriodQuery, withoutWindowPhrase } from './dashWindow.js';
 import { noteDeprecated } from './deprecations.js';
 import { parseUnions } from './appUnions.js';
+import { parseDerived } from './appDerived.js';
 export { previousPeriodQuery, withoutWindowPhrase } from './dashWindow.js';
 export { AppProblems, problemsOf } from './appProblems.js';
 export { appStampRules, type AppStampRules } from './appStamps.js';
@@ -196,6 +197,7 @@ export const ROOT_KEYS = [
   'sources',
   'resources',
   'unions',
+  'derived',
   'auth',
   'views',
   'pages',
@@ -375,7 +377,8 @@ function parseRoot(raw: unknown, where: string, problems: string[], composed?: A
   /* A union is read like a resource (appUnions.ts): a view names it as it names a table. */
   const parsedData = attempt(problems, () => {
     const data = parseDataBlocks(a, where);
-    return a.unions === undefined ? data : { ...data, unions: parseUnions(a.unions, where) };
+    const withU = a.unions === undefined ? data : { ...data, unions: parseUnions(a.unions, where) };
+    return a.derived === undefined ? withU : { ...withU, derived: parseDerived(a.derived, where) };
   });
   const parsedUi = attempt(problems, () => parseUi(a.ui, where));
   // A platform-only source is not one of the App's own: grants and tenancy count those only.
@@ -551,6 +554,7 @@ function parseRoot(raw: unknown, where: string, problems: string[], composed?: A
     ...(data.sources ? { sources: data.sources } : {}),
     ...(data.resources ? { resources: data.resources } : {}),
     ...(data.unions ? { unions: data.unions } : {}),
+    ...(data.derived ? { derived: data.derived } : {}),
     views: withMachineLanes(content.views, data.resources),
     nav: content.nav,
     home: content.home,

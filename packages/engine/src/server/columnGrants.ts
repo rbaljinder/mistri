@@ -27,6 +27,7 @@ import { compileView, resolveAggregate, tryResolvePath, type ViewDef } from '../
 import { rollupReads, type Rollup } from '../shared/rollups.js';
 import { compileBreakdown, measureConditions, type BreakdownDef } from '../shared/breakdown.js';
 import { aggregateColumns, type AggregateRequest } from '../shared/aggregate.js';
+import { cteReadReferences, type CteRequest } from '../shared/cte.js';
 import { checkedComputed } from '../shared/computedWhere.js';
 import { textToView } from '../shared/viewtext.js';
 import { textToBreakdown } from '../shared/breakdowntext.js';
@@ -541,6 +542,16 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
     assertFields(request.table, aggregateColumns(request), 'read', server);
     return { ...request, filter: filterFor(request.table, request.filter, server) };
   };
+  const cteFor = (input: CteRequest): CteRequest => {
+    const server = isServerRequest(input);
+    const request = requestData(input);
+    for (const ref of cteReadReferences(request)) {
+      assertRead(ref.table);
+      if (ref.allColumns) assertAllFields(ref.table, 'read', server);
+      if (ref.columns.length) assertFields(ref.table, [...ref.columns], 'read', server);
+    }
+    return request;
+  };
   /* A rollup reads its child rows: the child, the reference, the column it
      sums and the columns its filter narrows by must all be readable here —
      an inner rollup's too — or the number would be built from values this
@@ -719,6 +730,7 @@ export function resourceChecks(full: DatabaseSchema, access: ColumnGrant) {
     queryFor,
     filterFor,
     aggregateFor,
+    cteFor,
     viewFor,
     breakdownFor,
     assertRelatedWrites,
@@ -809,8 +821,18 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
   // authorizeResources may bind the explicit capability before composing this.
   if (grant.rows !== undefined) throw new AppAccessDenied();
   const checks = resourceChecks(full, grant);
-  const { assertRead, assertWrite, assertAllFields, recordFields, keyFields, queryFor, filterFor, aggregateFor, assertRelatedWrites } =
-    checks;
+  const {
+    assertRead,
+    assertWrite,
+    assertAllFields,
+    recordFields,
+    keyFields,
+    queryFor,
+    filterFor,
+    aggregateFor,
+    cteFor,
+    assertRelatedWrites,
+  } = checks;
   const product = rules?.(checks);
   // Keep each call's rules stable across its awaits; the next call reads current grants.
   const capture = (current: G): G => (product ? product.capture(current) : captureGrant(current));
@@ -882,6 +904,7 @@ export function authorizeColumnWrites<G extends ColumnGrant>(
     query: (request) => writer.query(queryFor(request)),
     count: (table, filter) => writer.count(table, filterFor(table, filter)),
     ...(writer.aggregate ? { aggregate: (request: AggregateRequest) => writer.aggregate!(aggregateFor(request)) } : {}),
+    ...(writer.cte ? { cte: (request: CteRequest) => writer.cte!(cteFor(request)) } : {}),
     insert: (input) => insertVia(input, (request) => writer.insert(request)),
     update: (input) => updateVia(input, (request) => writer.update(request)),
     // A batch: each row through the same checks, its write one row of one statement.

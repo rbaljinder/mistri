@@ -7,12 +7,14 @@ import {
   TransactionOperations,
   TransactionOutcomeUnknown,
   type AggregateRequest,
+  type CteRequest,
   type InsertRequest,
   type NoteRequest,
   type TellRequest,
   type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { remapCteTables } from '@mistriwork/engine/shared/cte.js';
 import { WriteLanes } from '@mistriwork/engine/adapters/writeLanes.js';
 import { renamedAnyRows, type Filter } from '@mistriwork/engine/shared/filter.js';
 import { isPoolBusy } from '@mistriwork/engine/adapters/poolMetrics.js';
@@ -231,6 +233,7 @@ function recording(records: WriteTransaction, wrote: TenantCommittedWrite[], own
     query: (request) => records.query(request),
     count: (table, filter) => records.count(table, filter),
     ...(records.aggregate ? { aggregate: (request: AggregateRequest) => records.aggregate!(request) } : {}),
+    ...(records.cte ? { cte: (request: CteRequest) => records.cte!(request) } : {}),
     insert: async (request) => {
       const result = await records.insert(request);
       wrote.push({ table: request.table, key: result.key });
@@ -608,6 +611,7 @@ export async function openSqliteTenantWriteSource(
               query: (request) => records.query(physicalRead(request)),
               count: (table, filter) => records.count(toPhysical(table), renamedAnyRows(filter, toPhysical)),
               ...(records.aggregate ? { aggregate: (request: AggregateRequest) => records.aggregate!(physicalRead(request)) } : {}),
+              ...(records.cte ? { cte: (request: CteRequest) => records.cte!(remapCteTables(request, toPhysical)) } : {}),
               insert: (request) => records.insert({ ...request, table: toPhysical(request.table) }),
               update: (request) => records.update({ ...request, table: toPhysical(request.table) }),
               ...(records.insertMany && records.updateMany
@@ -1056,6 +1060,14 @@ export async function openPostgresTenantWriteSource(
                     aggregate: (request: AggregateRequest) => {
                       live();
                       return records.aggregate!(physicalRead(request));
+                    },
+                  }
+                : {}),
+              ...(records.cte
+                ? {
+                    cte: (request: CteRequest) => {
+                      live();
+                      return records.cte!(remapCteTables(request, toPhysical));
                     },
                   }
                 : {}),

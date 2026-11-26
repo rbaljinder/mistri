@@ -14,6 +14,7 @@
 import { createContext, useContext, type MouseEvent } from 'react';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import type { ColumnMeta } from '@mistriwork/engine/shared/schema.js';
+import type { ViewIncludeSpec } from '@mistriwork/engine/shared/viewInclude.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import { resolveInAppSpaHref } from '@mistriwork/kit/client/inAppLink.js';
 import { shell } from '@mistriwork/kit/client/shellMode.js';
@@ -25,6 +26,8 @@ export type UiRow = Record<string, unknown>;
 /** The page a read is made for (`x-mistri-page`), where it is a free-form page's. */
 interface UiAsking {
   page?: string;
+  /** Structured parent FK joins and bounded 1-to-many child includes returned on each row. */
+  include?: ViewIncludeSpec;
 }
 export interface UiRowsOptions extends UiAsking {
   /** A condition written as an object (`{ status: 'booked' }`), or a list of them joined by `and` (a `<Scope>`'s and

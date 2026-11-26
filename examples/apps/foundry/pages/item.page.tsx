@@ -47,31 +47,27 @@ function ItemPage(): ReactNode {
   const fmt = useFormat();
   const href = useHref();
 
-  const itemQuery = page.useRecord('listing', numericId ? { id: numericId } : undefined, [
-    'id',
-    'title',
-    'maker',
-    'category',
-    'year_made',
-    'condition',
-    'city',
-    'price_cents',
-    'was_price_cents',
-    'status',
-    'seller_id',
-    'description',
-    'provenance',
-  ]);
+  const itemQuery = page.useRecord('listing', numericId ? { id: numericId } : undefined, {
+    show: [
+      'id',
+      'title',
+      'maker',
+      'category',
+      'year_made',
+      'condition',
+      'city',
+      'price_cents',
+      'was_price_cents',
+      'status',
+      'description',
+      'provenance',
+    ],
+    include: {
+      seller_id: ['id', 'name', 'city', 'specialty', 'bio'],
+    },
+  });
   const item = itemQuery.data;
-
-  const sellerQuery = page.useRecord('seller', item?.seller_id ? { id: item.seller_id } : undefined, [
-    'id',
-    'name',
-    'city',
-    'specialty',
-    'bio',
-  ]);
-  const seller = sellerQuery.data;
+  const seller = item?.seller_id;
 
   const moreQuery = page.useRows('listing', {
     query: 'status = live',

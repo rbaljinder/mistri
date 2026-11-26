@@ -16,6 +16,7 @@ import { ComponentStyleScope, UiSurfaceSeamContext } from '@mistriwork/ui';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createElement, useMemo, useState, type ComponentType, type ReactNode } from 'react';
 import { authoredDisplay, type DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
+import { splitInclude, type ViewIncludeSpec } from '@mistriwork/engine/shared/viewInclude.js';
 
 /** A display rule as the DSL writes it: `bar: 5` fills against 5. */
 type AuthoredDisplay = Omit<DisplayRule, 'bar' | 'max'> & { bar?: boolean | number };
@@ -564,6 +565,48 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
           label: (row: UiRow, key: string | number): string => String(row[field.labelColumn] ?? key),
         };
   const title = (resource: string, row: UiRow) => (catalogTitle(options.catalog, resource) ?? guessedTitle)(row);
+  const applyFixtureInclude = (
+    fixturesData: Fixtures,
+    resource: string,
+    rows: UiRow[],
+    include: ViewIncludeSpec,
+    catalog: FixtureCatalog | undefined,
+    sourceRows?: readonly UiRow[],
+  ): UiRow[] => {
+    const { parents, children } = splitInclude(include);
+    const baseTable = catalog?.tables.find((t) => t.name === resource);
+    const pkCol = catalogKey(catalog, resource);
+    return rows.map((row, index) => {
+      const full = sourceRows?.[index] ?? row;
+      const next: UiRow = { ...row };
+      for (const parent of parents) {
+        const fkVal = full[parent.via];
+        if (fkVal === null || fkVal === undefined) {
+          next[parent.alias] = null;
+          continue;
+        }
+        const refMeta = baseTable?.columns.find((c) => c.name === parent.via)?.references as
+          | { table?: string; column?: string }
+          | undefined;
+        const targetTable = refMeta?.table ?? parent.via.replace(/_id$/, '');
+        const targetCol = refMeta?.column ?? catalogKey(catalog, targetTable);
+        const targetRow = (fixturesData.tables[targetTable] ?? []).find((candidate) => candidate[targetCol] === fkVal);
+        next[parent.alias] = targetRow ? pick(targetRow, parent.show) : null;
+      }
+      for (const [alias, child] of Object.entries(children)) {
+        const pkVal = full[pkCol];
+        const matched =
+          pkVal === null || pkVal === undefined
+            ? []
+            : read(fixturesData, child.from, child.show, child.sort, child.limit, {
+                ...(child.where && typeof child.where === 'object' ? (child.where as Record<string, unknown>) : {}),
+                [child.by]: pkVal,
+              });
+        next[alias] = matched;
+      }
+      return next;
+    });
+  };
   const host: UiHost = {
     flags: { ...flags, snapshot: () => flags, subscribe: () => () => {}, load: async () => {} },
     analytics: {
@@ -574,18 +617,21 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
     scope: ['test'],
     /* A fixture's key is `id`, as its custom list's is (ListBody). */
     /* Asked one past the page, as the page host asks the server, so `more` is the same answer in a test. */
-    rows: async (resource, { show, sort, limit, where, keys, offset }) => {
+    rows: async (resource, { show, sort, limit, where, keys, offset, include }) => {
       refuse(resource);
       const size = limit ?? 20;
       const got = read(data, resource, keys && show?.length ? [...new Set([...show, 'id'])] : show, sort, size + 1, where, offset);
-      return { rows: got.slice(0, size), more: got.length > size };
+      const sliced = got.slice(0, size);
+      return { rows: include ? applyFixtureInclude(data, resource, sliced, include, options.catalog) : sliced, more: got.length > size };
     },
-    record: async (resource, key, show) => {
+    record: async (resource, key, show, asking) => {
       refuse(resource);
       const row = (data.tables[resource] ?? []).find((candidate) =>
         Object.entries(key).every(([column, value]) => candidate[column] === value),
       );
-      return row && pick(row, show?.length ? [...new Set([...show, ...Object.keys(key)])] : show);
+      if (!row) return undefined;
+      const picked = pick(row, show?.length ? [...new Set([...show, ...Object.keys(key)])] : show);
+      return asking?.include ? applyFixtureInclude(data, resource, [picked], asking.include, options.catalog, [row])[0] : picked;
     },
     breakdown: async (resource, { by, measure, limit, where }) => {
       refuse(resource);

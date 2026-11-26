@@ -3,12 +3,14 @@ import {
   TransactionOperations,
   TransactionOutcomeUnknown,
   type AggregateRequest,
+  type CteRequest,
   type InsertRequest,
   type QueryRequest,
   type TellRequest,
   type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { remapCteTables } from '@mistriwork/engine/shared/cte.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import type { CommandAudit, CommandJournal, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
 import { AppAccessDenied, authorizeTransaction, type ResourceAccess } from '../app/appAccess.js';
@@ -306,6 +308,20 @@ export async function runTenantCommandTransaction<T>(
               (value) => {
                 assertStructuredReadFilter(value.filter, 'column');
                 return tx.aggregate!({ ...value, table: authorization.table(value.table), filter: named(value.filter) });
+              },
+              true,
+            ),
+        }
+      : {}),
+    ...(tx.cte
+      ? {
+          cte: (input: CteRequest) =>
+            invoke(
+              input,
+              (value) => {
+                for (const step of value.with) assertStructuredReadFilter(step.filter, 'column');
+                assertStructuredReadFilter(value.query.filter, 'column');
+                return tx.cte!(remapCteTables(value, (table) => authorization.table(table)));
               },
               true,
             ),

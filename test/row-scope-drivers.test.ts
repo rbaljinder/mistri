@@ -148,7 +148,7 @@ for (const dialect of ['postgres'] as const) {
       assert.deepEqual(
         Object.keys(reads).sort(),
         // `aggregate` is a command's sum or group under the same scope (shared/aggregate.ts), proved in command-aggregates.
-        ['query', 'count', 'aggregate', 'countEach', 'runView', 'countView', 'runBreakdown', 'countBreakdown'].sort(),
+        ['query', 'count', 'aggregate', 'cte', 'countEach', 'runView', 'countView', 'runBreakdown', 'countBreakdown'].sort(),
       );
       for (const forbidden of [
         'runSql',

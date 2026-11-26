@@ -1,11 +1,13 @@
 import {
   TransactionOperations,
   type AggregateRequest,
+  type CteRequest,
   type InsertRequest,
   type TellRequest,
   type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { remapCteTables } from '@mistriwork/engine/shared/cte.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournal.js';
 import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
@@ -255,6 +257,11 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
               ? {
                   aggregate: (request: AggregateRequest) =>
                     operations.read(async () => tx.aggregate!({ ...request, table: table(request.table) })),
+                }
+              : {}),
+            ...(tx.cte
+              ? {
+                  cte: (request: CteRequest) => operations.read(async () => tx.cte!(remapCteTables(request, (name) => table(name)))),
                 }
               : {}),
             insert: (request) => operations.run(async () => tx.insert({ ...request, table: table(request.table, true) })),

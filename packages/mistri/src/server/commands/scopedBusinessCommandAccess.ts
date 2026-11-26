@@ -3,9 +3,11 @@ import {
   TransactionOperations,
   type Adapter,
   type AggregateRequest,
+  type CteRequest,
   type TellRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { remapCteTables } from '@mistriwork/engine/shared/cte.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournal.js';
 type J = CommandJournal;
 import type { CommandJournalAppScope, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
@@ -293,6 +295,12 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                       ? {
                           aggregate: (request: AggregateRequest) =>
                             accept(request, (request) => readResult(tx.aggregate!({ ...request, table: localTable(request.table) })), true),
+                        }
+                      : {}),
+                    ...(tx.cte
+                      ? {
+                          cte: (request: CteRequest) =>
+                            accept(request, (request) => readResult(tx.cte!(remapCteTables(request, (name) => localTable(name)))), true),
                         }
                       : {}),
                     insert: (request) => accept(request, (request) => tx.insert({ ...request, table: localTable(request.table, true) })),

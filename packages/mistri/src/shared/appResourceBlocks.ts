@@ -166,6 +166,7 @@ export interface ParsedData extends SourceScope {
   sources?: Record<string, AppSourceBinding>;
   resources?: Record<string, ResourceDef>;
   unions?: import('./appUnions.js').AppUnion[];
+  derived?: import('./appModel.js').AppDerived[];
 }
 
 /**
@@ -175,6 +176,7 @@ export interface ParsedData extends SourceScope {
 export function checkDeclaredResource(name: string, at: string, data: ParsedData): void {
   if (data.resources && Object.hasOwn(data.resources, name)) return;
   if (data.unions?.some((union) => union.name === name)) return;
+  if (data.derived?.some((query) => query.name === name)) return;
   /* A source that says `resources: 'all'` declares every table it has: which
      ones exist is the catalog's to say, so a view naming one it lacks is
      reported where views resolve, not here. */

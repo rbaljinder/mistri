@@ -472,7 +472,7 @@ export async function seedDatabase(adapter: Adapter, schema: DatabaseSchema, opt
 
   /* The App's tables, and the parents a required reference of theirs needs; without an App, every table. */
   const candidates = schema.tables.filter(
-    (table) => !table.isView && !table.union && table.insertable !== false && !OWN.test(local(table.name)),
+    (table) => !table.isView && !table.union && !table.derived && table.insertable !== false && !OWN.test(local(table.name)),
   );
   let chosen = opts.resources ? candidates.filter((table) => resourceOf(table)) : candidates;
   for (let grew = true; grew;) {

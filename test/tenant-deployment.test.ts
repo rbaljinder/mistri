@@ -380,6 +380,7 @@ test('flat frozen deployment exposes only existing operations and a seven-method
     'count',
     'countBreakdown',
     'countView',
+    'cte',
     'query',
     'runBreakdown',
     'runView',
@@ -392,7 +393,7 @@ test('flat frozen deployment exposes only existing operations and a seven-method
   await assert.rejects(retained!.data.count('item'), readFailure);
   assert.equal((await deployment.execute(request, north, f.body())).status, 'applied');
   assert.deepEqual([...f.control.seen!.actor.roles], ['operator']);
-  assert.deepEqual(Object.keys(f.control.seen!.tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
+  assert.deepEqual(Object.keys(f.control.seen!.tx).sort(), ['aggregate', 'count', 'cte', 'insert', 'query', 'remove', 'update']);
   assert.equal('journal' in f.control.seen!, false);
 });
 

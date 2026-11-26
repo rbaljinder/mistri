@@ -1394,6 +1394,8 @@ export interface AppDef {
   resources?: Record<string, ResourceDef>;
   /** Read-only resources over tables that share a shape, each read in one order and one page (appUnions.ts). */
   unions?: readonly import('./appUnions.js').AppUnion[];
+  /** Declarative CTE-backed read-only resources (appDerived.ts). */
+  derived?: readonly AppDerived[];
   /** Named server-side bindings; connection is normalized to the default binding. */
   sources?: Record<string, AppSourceBinding>;
   /**
@@ -1811,3 +1813,28 @@ export const VIEW_SECTION_KEYS = [
   'interactive',
   'empty',
 ] as const;
+
+export interface AppDerivedStep {
+  readonly from: string;
+  readonly alias?: string;
+  readonly where?: string;
+  readonly join?: readonly {
+    readonly target: string;
+    readonly alias?: string;
+    readonly kind?: 'inner' | 'left';
+    readonly on: readonly [string, string];
+  }[];
+  readonly groupBy?: readonly (
+    | string
+    | { readonly column: string; readonly bucket?: import('@mistriwork/engine/shared/filter.js').DateUnit; readonly as?: string }
+  )[];
+  readonly measures?: Readonly<Record<string, { readonly fn: 'count' | 'sum' | 'avg' | 'min' | 'max'; readonly column?: string }>>;
+  readonly select?: Readonly<Record<string, string>>;
+  readonly orderBy?: readonly { readonly column: string; readonly direction?: 'asc' | 'desc' }[];
+  readonly limit?: number;
+}
+
+export interface AppDerived extends AppDerivedStep {
+  readonly name: string;
+  readonly with?: Readonly<Record<string, AppDerivedStep>>;
+}

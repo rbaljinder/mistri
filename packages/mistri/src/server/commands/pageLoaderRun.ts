@@ -4,19 +4,20 @@
  * its result held to a size (pageLoaders.ts says what a loader is).
  */
 import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
+import { cteTables, remapCteTables } from '@mistriwork/engine/shared/cte.js';
 import { renamedAnyRows } from '@mistriwork/engine/shared/filter.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { ResourceReadError, readView, readViewCount, type ResourceReader } from '@mistriwork/engine/server/resourceReadOperations.js';
 import type { ViewDef } from '@mistriwork/engine/shared/view.js';
 import { chosenContext, type Chosen } from '../app/appChoices.js';
 import { zoneDay, zoned } from './currentZone.js';
-import { commandCatalog, createCommandDb, zonedCatalog, type ReadTable, type UntypedRow } from './commandDb.js';
+import { commandCatalog, createCommandDb, cteOf, zonedCatalog, type ReadTable, type UntypedRow } from './commandDb.js';
 import { isBusinessCommandExecutionError } from './commandErrors.js';
 import { LOADER_RESULT_MOST, type PageLoader, type PageLoaderViewer } from './pageLoaders.js';
 
 /** The App's own reader and catalog, for a loader's elevated tables alone. */
 export interface ElevatedReads {
-  readonly reader: Pick<Adapter, 'query'> & Partial<Pick<Adapter, 'count' | 'aggregate'>>;
+  readonly reader: Pick<Adapter, 'query'> & Partial<Pick<Adapter, 'count' | 'aggregate' | 'cte'>>;
   readonly schema: DatabaseSchema;
 }
 
@@ -50,7 +51,7 @@ function readOnly(handle: ReadTable<UntypedRow>): ReadTable<UntypedRow> {
 export async function runPageLoader(options: {
   name: string;
   loader: PageLoader;
-  reader: Pick<Adapter, 'query' | 'count' | 'aggregate'> & Partial<Pick<Adapter, 'runView' | 'countView'>>;
+  reader: Pick<Adapter, 'query' | 'count' | 'aggregate'> & Partial<Pick<Adapter, 'runView' | 'countView' | 'cte'>>;
   schema: DatabaseSchema;
   /** A declared resource's table in `schema` (logicalResource for a qualified source). */
   logical?: (local: string) => string;
@@ -177,6 +178,31 @@ export async function runPageLoader(options: {
           },
         }
       : {}),
+    ...(reader.cte
+      ? {
+          cte: async (request: Parameters<NonNullable<Adapter['cte']>>[0]) => {
+            if (!open) throw revoked();
+            const tables = cteTables(request);
+            if (!tables.length) throw new PageLoaderRefused(403, 'loader_refused', `The loader "${options.name}" ran an empty CTE.`);
+            const firstLifted = lifted.has(tables[0]!);
+            for (const tbl of tables) {
+              if (idOf(tbl) === undefined)
+                throw new PageLoaderRefused(403, 'page_undeclared', `The loader "${options.name}" reads what this reader cannot.`);
+              if (lifted.has(tbl) !== firstLifted)
+                throw new PageLoaderRefused(
+                  403,
+                  'loader_refused',
+                  `The loader "${options.name}" joins "${tables[0]}" with "${tbl}" across elevated and non-elevated authority; read each on its own.`,
+                );
+            }
+            const source = firstLifted ? above!.reader : reader;
+            if (!source.cte) throw new PageLoaderRefused(403, 'loader_refused', `The loader "${options.name}" cannot run SQL CTEs here.`);
+            const result = await source.cte(remapCteTables(request, (name) => idOf(name)!));
+            if (!open) throw revoked();
+            return result;
+          },
+        }
+      : {}),
   });
   /* `.with(…)` and rollup wheres: the rows (or count) of one non-elevated table with the computed columns and rollups
      the reader is served, as a list of that table reads them — one view through the reader the list reads through
@@ -281,6 +307,7 @@ export async function runPageLoader(options: {
           loader.load(
             Object.freeze({
               db: db as never,
+              cte: cteOf(handles),
               params: Object.freeze({ ...options.params }),
               viewer: options.viewer,
               now: () => options.now,

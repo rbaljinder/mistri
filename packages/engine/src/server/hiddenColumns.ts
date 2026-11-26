@@ -176,6 +176,7 @@ export function hideColumns(adapter: Adapter, name: string, rules: HiddenColumnR
       query: guard(inner.query),
       count: guard(inner.count),
       ...(inner.aggregate ? { aggregate: guard(inner.aggregate) } : {}),
+      ...(inner.cte ? { cte: guard(inner.cte) } : {}),
       insert: guard(inner.insert),
       update: guard(inner.update),
       remove: guard(inner.remove),
@@ -211,6 +212,7 @@ export function hideColumns(adapter: Adapter, name: string, rules: HiddenColumnR
         limit,
       ),
     ...(bound.aggregate ? { aggregate: (request) => bound.aggregate!(checked(() => checks.aggregateFor(request))) } : {}),
+    ...(bound.cte ? { cte: (request) => bound.cte!(checked(() => checks.cteFor(request))) } : {}),
   });
 
   const wrapped: Adapter = Object.create(Object.getPrototypeOf(adapter) as object) as Adapter;
@@ -262,6 +264,7 @@ export function hideColumns(adapter: Adapter, name: string, rules: HiddenColumnR
         limit,
       );
   if (adapter.aggregate) wrapped.aggregate = async (request) => adapter.aggregate!(checked(() => checks.aggregateFor(request)));
+  if (adapter.cte) wrapped.cte = async (request) => adapter.cte!(checked(() => checks.cteFor(request)));
   if (adapter.scopeReads) wrapped.scopeReads = async (scope) => reads(await adapter.scopeReads!(scope));
   /* Raw SQL can name any column, in any spelling, through any function: no
      honest redaction exists for it. EXPLAIN is refused with it, since a plan

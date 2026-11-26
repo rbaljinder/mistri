@@ -1257,4 +1257,40 @@ describe('i18n wave 2', () => {
     );
     await assert.rejects(runMessagesCommand(['extract', '--app', dir, '--locale', 'en']), /source catalog/);
   });
+
+  test('defineMessages flattens nested groups and mixed keys, rejecting empty groups and key collisions', () => {
+    const nested = defineMessages('en', {
+      door: {
+        headline: 'Welcome',
+        actions: {
+          explore: 'Explore',
+        },
+      },
+      'role.curator': 'Curator',
+    });
+    assert.deepEqual(
+      { ...nested.entries },
+      {
+        'door.headline': 'Welcome',
+        'door.actions.explore': 'Explore',
+        'role.curator': 'Curator',
+      },
+    );
+    const translated = defineMessages('es', {
+      door: {
+        headline: 'Bienvenido',
+      },
+      'role.curator': 'Curador',
+    });
+    assert.deepEqual(
+      { ...translated.entries },
+      {
+        'door.headline': 'Bienvenido',
+        'role.curator': 'Curador',
+      },
+    );
+    assert.throws(() => defineMessages('en', { door: {} } as never), /empty group/);
+    assert.throws(() => defineMessages('en', { 'door.title': 'A', door: { title: 'B' } } as never), /defined more than once/);
+    assert.throws(() => defineMessages('en', { solo: 'Not dotted' } as never), /not a message key/);
+  });
 });

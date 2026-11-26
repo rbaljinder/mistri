@@ -103,6 +103,7 @@ test('unmigrated command store refuses before callback while ordinary transactio
       assert.deepEqual(Object.keys(tx).sort(), [
         'aggregate',
         'count',
+        'cte',
         'insert',
         'insertMany',
         'lockRecord',
@@ -130,6 +131,7 @@ test('records, receipt and paired audit commit together and receipt survives reo
       assert.deepEqual(Object.keys(tx).sort(), [
         'aggregate',
         'count',
+        'cte',
         'insert',
         'insertMany',
         'lockRecord',

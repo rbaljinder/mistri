@@ -130,6 +130,30 @@ export declare function union<const Name extends string, const Columns extends s
   name: Name, branches: readonly [AppUnionBranch<Columns>, AppUnionBranch<Columns>, ...AppUnionBranch<Columns>[]],
 ): AppUnion<Name, Columns>;
 
+/** One CTE step or outer query of a declarative `defineQuery(...)` resource. */
+export interface AppDerivedStep {
+  from: string;
+  alias?: string;
+  where?: string;
+  join?: readonly { target: string; alias?: string; kind?: 'inner' | 'left'; on: readonly [string, string] }[];
+  groupBy?: readonly (string | { column: string; bucket?: 'hour' | 'day' | 'week' | 'month' | 'quarter' | 'year' | 'weekday'; as?: string })[];
+  measures?: Readonly<Record<string, { fn: 'count' | 'sum' | 'avg' | 'min' | 'max'; column?: string }>>;
+  select?: Readonly<Record<string, string>>;
+  orderBy?: readonly { column: string; direction?: 'asc' | 'desc' }[];
+  limit?: number;
+}
+/** A declarative CTE-backed read-only resource made by `defineQuery(name, spec)`. */
+export interface AppDerived<Name extends string = string> extends AppDerivedStep {
+  name: Name;
+  with?: Readonly<Record<string, AppDerivedStep>>;
+}
+/** A declarative CTE-backed read-only resource: `defineQuery('seller_scorecard', { with: { ... }, from: 'seller', join: [...], select: { ... } })`.
+    Compiled into one parameterized SQL `WITH ... AS (...) SELECT ...` query under the reader's grants and row policy. */
+export declare function defineQuery<const Name extends string>(
+  name: Name,
+  query: AppDerivedStep & { with?: Readonly<Record<string, AppDerivedStep>> },
+): AppDerived<Name>;
+
 /** A resource's state machine: `machine: machine('status', { draft: { on: { submit: 'submitted' } }, submitted: { final: true } })`.
     Each verb's next state must be one of the states. */
 export declare function machine<const Column extends string, const States extends { readonly [S in keyof States]: MachineState<Extract<keyof States, string>> }>(
@@ -3926,6 +3950,8 @@ export interface AppConfig {
   resources?: Record<string, AppResource>;
   /** Read-only resources over tables that share a shape, each listed in one order and one page: `union(...)`. */
   unions?: readonly AppUnion[];
+  /** Read-only declarative CTE-backed resources: `defineQuery(name, { with, from, join, select })`. */
+  derived?: readonly AppDerived[];
   /* auth */
   auth?: AppAuth;
   /** What the App API and App MCP expose: resources, views, commands and events, to roles' scoped tokens. */
@@ -4040,15 +4066,33 @@ export interface AppMessageCatalog<Locale extends string = string, Entries exten
     source catalog's: `declare module '@mistriwork/mistri/app' { interface AppMessages extends Record<keyof typeof en.entries, string> {} }`. */
 export interface AppMessages {}
 export type AppMessageKey = [keyof AppMessages] extends [never] ? string : Extract<keyof AppMessages, string>;
-/** The source catalog, in the App's own language: `export default defineMessages('en', { 'lead.title': 'Lead' })`.
-    Text is ICU MessageFormat: `{name}`, `{n, plural, one {# lead} other {# leads}}`, `{v, select, …}`. */
-export declare function defineMessages<const Locale extends string, const Entries extends Readonly<Record<string, string>>>(
+type MessageEntries = { readonly [key: string]: string | MessageEntries };
+type FlatMessageKeys<T, Prefix extends string = ''> = {
+  [K in Extract<keyof T, string>]: T[K] extends string
+    ? Prefix extends ''
+      ? K
+      : `${Prefix}.${K}`
+    : T[K] extends MessageEntries
+      ? FlatMessageKeys<T[K], Prefix extends '' ? K : `${Prefix}.${K}`>
+      : never;
+}[Extract<keyof T, string>];
+type FlatMessages<T> = { readonly [K in FlatMessageKeys<T>]: string };
+type NestedTranslation<Keys extends string> = {
+  readonly [K in Keys]?: string;
+} & {
+  readonly [Head in Keys extends `${infer H}.${string}` ? H : never]?: NestedTranslation<
+    Extract<Keys, `${Head}.${string}`> extends `${Head}.${infer Rest}` ? Rest : never
+  >;
+};
+/** The source catalog, in the App's own language: flat dotted keys (`{ 'lead.title': 'Lead' }`), nested groups
+    (`{ lead: { title: 'Lead' } }`), or both. Text is ICU MessageFormat: `{name}`, `{n, plural, one {# lead} other {# leads}}`, `{v, select, …}`. */
+export declare function defineMessages<const Locale extends string, const Entries extends MessageEntries>(
   locale: Locale, entries: Entries,
-): AppMessageCatalog<Locale, Entries>;
-/** A translation, typed against the source: `defineMessages<typeof en>('es', { 'lead.title': 'Prospecto' })` — every key
-    optional (a missing one says the source text), none new. */
+): AppMessageCatalog<Locale, FlatMessages<Entries>>;
+/** A translation, typed against the source: `defineMessages<typeof en>('es', { lead: { title: 'Prospecto' } })` or flat
+    `'lead.title': 'Prospecto'` — every key optional (a missing one says the source text), none new. */
 export declare function defineMessages<Source extends AppMessageCatalog>(
-  locale: string, entries: { readonly [K in keyof Source['entries']]?: string },
+  locale: string, entries: NestedTranslation<Extract<keyof Source['entries'], string>>,
 ): AppMessageCatalog<string, { readonly [K in keyof Source['entries']]?: string }>;
 /** Name a message where a caption goes. `args` binds an ICU argument to a column path (`{ title: 'thread_id.title' }`);
     a bare `{status}` reads the record's own column, and `{count}`, `{message}` and `{to}` are the framework's. */

@@ -21,6 +21,7 @@ import {
 import { clampLimit, clampOffset, COUNT_EACH_MAX } from '../shared/reads.js';
 import { readPageStep } from '../shared/keysetPage.js';
 import { recordsPaging, settlePage, viewPaging, type ViewPaging } from './keysetReadHttp.js';
+import { parseChildIncludes, runChildIncludes } from './viewIncludeExec.js';
 
 /**
  * A view's count as a plain count, when it is one: every condition names a
@@ -57,7 +58,7 @@ function plainCount(schema: DatabaseSchema, view: ViewDef): { filter?: Filter } 
 /* What a batched list's page may say: what `/api/run` reads of a first page. */
 const RUN_FIELDS = ['q', 'limit', 'offset', 'count', 'exactCount', 'countLimit', 'lanes'] as const;
 /* What a batched view may say: what `/api/view/run` reads. */
-const VIEW_FIELDS = ['view', 'text', 'query', 'where', 'count', 'limit', 'offset'] as const;
+const VIEW_FIELDS = ['view', 'text', 'query', 'where', 'count', 'limit', 'offset', 'include'] as const;
 
 /** The most rows a lanes read keeps per lane: a board's page, a few times over. */
 const LANE_MOST = 100;
@@ -255,14 +256,14 @@ export async function dispatchResourceReadHttp(
         const base = findTable(schema, asView.view.base);
         /* A list that names a path (`customer_id.name`) is a view, and its lanes are read the same one way. */
         if (lanes) {
-          if (!base || base.union || step || !base.columns.some((column) => column.name === lanes.by))
+          if (!base || base.union || base.derived || step || !base.columns.some((column) => column.name === lanes.by))
             return refusal(400, [`A board reads its lanes in one read only by a column of ${asView.view.base}'s own rows.`]);
           const most = options.rowsMost?.(asView.view.base);
           const bounded = most === undefined ? body : { ...body, limit: Math.min(clampLimit(body.limit ?? asView.view.limit), most) };
           return runViewForBar(adapter, schema, { ...asView.view, lanes }, bounded, app, 'none');
         }
-        /* A union pages by offset: its rows have no one key order across branches (unionReads.ts). */
-        const paging = base && !base.union ? viewPaging(schema, base, asView.view, step) : undefined;
+        /* A union or derived CTE pages by offset: its rows have no single physical key order. */
+        const paging = base && !base.union && !base.derived ? viewPaging(schema, base, asView.view, step) : undefined;
         if (step && !paging?.continuation) {
           const refused = tooDeep();
           if (refused) return refused;
@@ -311,12 +312,16 @@ export async function dispatchResourceReadHttp(
        estimate or a plain count answers as before. */
     const countLimit = body.countLimit ?? (!exact && q.filter?.groups?.length ? DEFAULT_COUNT_LIMIT : undefined);
     /* Lanes are a column of one stored table's rows: a union pages its branches apart, an API answers in its own order. */
-    if (lanes && (!own || own.union || dialect === 'http' || step || !own.columns.some((column) => column.name === lanes.by))) {
+    if (
+      lanes &&
+      (!own || own.union || own.derived || dialect === 'http' || step || !own.columns.some((column) => column.name === lanes.by))
+    ) {
       return refusal(400, [`A board reads its lanes in one read only by a column of ${q.table}'s own rows.`]);
     }
     const most = options.rowsMost?.(own?.id ?? q.table);
     const bounded = (limit: unknown) => (most === undefined ? limit : Math.min(clampLimit(limit), most));
-    const paging = own && !own.union && !lanes ? recordsPaging(own, dialect, q.orderBy, q.columns, q.filter, step) : undefined;
+    const paging =
+      own && !own.union && !own.derived && !lanes ? recordsPaging(own, dialect, q.orderBy, q.columns, q.filter, step) : undefined;
     if (step && !paging?.continuation) {
       const refused = tooDeep();
       if (refused) return refused;
@@ -658,6 +663,8 @@ export async function dispatchResourceReadHttp(
         limit: parsed.limit ?? view.limit,
       };
     }
+    const parsedIncludes = parseChildIncludes(body.include);
+    if (!parsedIncludes.ok) return refusal(400, [parsedIncludes.error]);
     if (errors.length) return reply(200, { errors });
 
     try {
@@ -669,6 +676,22 @@ export async function dispatchResourceReadHttp(
         limit,
         offset,
       } = await readView(adapter, schema, merged, { limit: body.limit, offset: body.offset }, countMode);
+      let included: Record<string, unknown> | undefined;
+      if (parsedIncludes.specs.length) {
+        const inc = await runChildIncludes(
+          adapter,
+          schema,
+          merged.base,
+          validated,
+          result.columns,
+          result.rows,
+          parsedIncludes.specs,
+          options.now(),
+          person,
+        );
+        if (!inc.ok) return refusal(400, [inc.error]);
+        included = inc.included;
+      }
       return sendData(path, {
         view: validated,
         text: viewToTextWithSchema(schema, merged),
@@ -677,6 +700,7 @@ export async function dispatchResourceReadHttp(
         resolved: result.resolved,
         joins: result.joins,
         rows: result.rows,
+        ...(included ? { included } : {}),
         ...(result.partial ? { partial: result.partial } : {}),
         ms: result.ms,
         sql: result.sql,

@@ -3,7 +3,13 @@
 // captures a source for the admission checks. The PostgreSQL source (tenantReadSource.ts) and the SQLite one
 // (tenantReadSourceSqlite.ts) are built on it.
 import { type SandboxRecord } from './tenantSandboxStore.js';
-import { Refusal, type AggregateRequest, type ScopedReads, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import {
+  Refusal,
+  type AggregateRequest,
+  type CteRequest,
+  type ScopedReads,
+  type WriteTransaction,
+} from '@mistriwork/engine/adapters/adapter.js';
 import { type RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import {
   captureTenantData,
@@ -321,6 +327,7 @@ export function advisoryRecords(reads: ScopedReads): WriteTransaction {
     query: (request) => reads.query(request),
     count: (table, filter) => reads.count(table, filter),
     ...(reads.aggregate ? { aggregate: (request: AggregateRequest) => reads.aggregate!(request) } : {}),
+    ...(reads.cte ? { cte: (request: CteRequest) => reads.cte!(request) } : {}),
     insert: refuse,
     update: refuse,
     remove: refuse,
@@ -406,6 +413,7 @@ export async function readBatch<T>(
     ...(bound.aggregate
       ? { aggregate: (request: AggregateRequest) => run([request] as [typeof request], (value) => bound.aggregate!(value)) }
       : {}),
+    ...(bound.cte ? { cte: (request: CteRequest) => run([request] as [typeof request], (value) => bound.cte!(value)) } : {}),
   });
   let result: T;
   try {

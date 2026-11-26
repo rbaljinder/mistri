@@ -277,6 +277,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         assert.deepEqual(Reflect.ownKeys(tx).sort(), [
           'aggregate',
           'count',
+          'cte',
           'insert',
           ...(batch ? ['insertMany'] : []),
           'query',
