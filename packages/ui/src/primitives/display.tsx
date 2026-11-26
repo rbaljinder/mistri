@@ -1002,8 +1002,13 @@ export function MediaCard({
   priority = false,
   ariaLabel,
   className,
+  onClick,
   ...props
 }: MediaCardProps) {
+  const seam = useSurfaceSeam();
+  const linkProps = seam?.useLinkProps
+    ? seam.useLinkProps(href, onClick as ((event: MouseEvent<HTMLElement>) => void) | undefined)
+    : { href, onClick };
   const hasFoot = given(value) || given(was) || given(note) || given(meta);
   const altText = alt ?? (typeof title === 'string' ? title : '');
   const inner = (
@@ -1036,13 +1041,20 @@ export function MediaCard({
 
   if (href) {
     return (
-      <a href={href} data-slot="media-card" aria-label={ariaLabel} className={cx('nx-media-card', 'is-link', className)}>
+      <a
+        {...(props as unknown as ComponentProps<'a'>)}
+        href={linkProps.href ?? href}
+        onClick={linkProps.onClick as ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined}
+        data-slot="media-card"
+        aria-label={ariaLabel}
+        className={cx('nx-media-card', 'is-link', className)}
+      >
         {inner}
       </a>
     );
   }
   return (
-    <div data-slot="media-card" aria-label={ariaLabel} className={cx('nx-media-card', className)} {...props}>
+    <div data-slot="media-card" aria-label={ariaLabel} className={cx('nx-media-card', className)} onClick={onClick} {...props}>
       {inner}
     </div>
   );

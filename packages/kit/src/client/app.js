@@ -59,7 +59,7 @@ import { forgetPages, pagesFor, prefetchPages, recordPageId, whenPagesChange } f
 import { listenForRecordPresses, prefetchRecordPage } from './recordPress.js';
 import { installShell, shell } from './shellMode.js';
 import { message, onLanguagePicked, subscribeMessages } from './messages.js';
-import { SETTINGS_PAGE } from './components/appRooms.js';
+import { homeRoom, SETTINGS_PAGE } from './components/appRooms.js';
 import { applyDensity } from './density.js';
 import { applyTypography } from './typography.js';
 import { openPrefs } from './prefs.js';
@@ -76,8 +76,10 @@ import { OverflowMenu } from './components/OverflowMenu.js';
 import './composerEntry.js';
 import { say } from './copy/shell/app.js';
 import { arrivedPlacement, herePath, hereSearch, shown, shownUnplaced } from './addressMount.js';
+import { resolveInAppSpaHref } from './inAppLink.js';
 import {
   addHostListener,
+  navFollow,
   navReplace,
   navState,
   onNavigate,
@@ -382,10 +384,13 @@ async function registerPages() {
     if (!isCurrent()) return;
     setKnownPages(pages.filter((p) => !p.error));
     /* The home screen is drawn before this arrives — it is the first paint —
-       so it is drawn again once the pages are known. Only there: anywhere
-       else the reader is looking at something, and redrawing it under them
-       to add a list they cannot see is worse than the wait. */
-    if (!currentEntry()) render();
+       so it is drawn again once the pages are known, when the home room shows
+       saved pages (workbench, home card, or standard dashboard). Anywhere else
+       — including free-form `definePage` and list/form homes — redrawing under
+       the reader adds nothing they can see. */
+    const home = shell().inApp() ? homeRoom(shell().app()) : undefined;
+    const showsPages = !shell().inApp() || !home || ('sections' in home && !home.page);
+    if (!currentEntry() && showsPages) render();
     setMenuGroup(
       say('pages'),
       pages.map((page) => ({
@@ -731,8 +736,13 @@ export async function boot(me, landingAt, installed) {
      once the schema is known, because the landing reads it — and once the App
      is, as rebuildTenantSurface mounts it. A first paint that had not yet heard
      of the App drew the Workbench's landing behind the startup veil, and so
-     fetched the schema diagram's chunk for a reader who would never see it. */
-  content.replaceChildren();
+     fetched the schema diagram's chunk for a reader who would never see it.
+     When the server rendered a public custom page (`data-ssr="page"`), keep
+     its visible DOM intact while boot connections/templates/chunks settle so
+     the reader never sees a blank white flash before client handoff. */
+  const ssrPage = content.dataset.ssr === 'page';
+  const ssrPageReady = ssrPage ? /** @type {{ ready?: () => Promise<void> } | undefined} */ (shell().rooms.Page)?.ready?.() : undefined;
+  if (!ssrPage) content.replaceChildren();
   /* Held before the tree mounts: from here to applying the address, every
      await is a chance for React to commit an empty walk as home (Content.tsx
      holdHome). A bare `/{app}` is held too, and drawn by the same paint. */
@@ -754,9 +764,26 @@ export async function boot(me, landingAt, installed) {
     after: () => afterPaint(currentEntry(), state.stack.length),
     yields: () => yieldsFirst(currentEntry()),
   });
+  /* Catch unmodified left-clicks on plain in-App `<a href>` elements inside
+     custom pages or built-in rooms so they navigate inside the SPA instead of
+     unloading the document and flashing the startup splash. */
+  if (!content.dataset.spaLinks) {
+    content.dataset.spaLinks = '1';
+    content.addEventListener('click', (event) => {
+      if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (!anchor || anchor.hasAttribute('download')) return;
+      const targetAttr = anchor.getAttribute('target');
+      if (targetAttr && targetAttr !== '_self') return;
+      const target = resolveInAppSpaHref(anchor.getAttribute('href'));
+      if (!target) return;
+      event.preventDefault();
+      navFollow(target);
+    });
+  }
   /* A press on a record begins reading its page, so the hold is short (recordCompose.ts). */
   listenForRecordPresses();
-  mount(content, createElement(Content, { onHome: goHome }));
+  if (!ssrPage) mount(content, createElement(Content, { onHome: goHome }));
   shellBody().classList.remove('tenant-pending');
   applyBrand();
   void chrome.showAccount?.(me, kit);
@@ -802,8 +829,13 @@ export async function boot(me, landingAt, installed) {
     followSaves();
   });
   if (businessRetired) return;
-  await Promise.all([loadTemplates(), tools?.loadStores()]);
+  await Promise.all([loadTemplates(), tools?.loadStores(), ssrPageReady]);
   if (businessRetired || sessionIdentity().mode === 'locked') return;
+  if (ssrPage) {
+    content.replaceChildren();
+    delete content.dataset.ssr;
+    mount(content, createElement(Content, { onHome: goHome }));
+  }
   // Un-awaited on purpose: a warm cache, not a gate on first paint.
   void chrome.loadFilters?.();
   /* After the saved-pages mirror is filled, or the menu and ⌘K are built

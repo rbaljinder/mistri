@@ -136,8 +136,18 @@ export const navReplace = (href: string, walk: unknown = null): void => window.h
 /** Back, Forward, or an address followed by `navFollow`: the shell reads the address again. */
 export const onNavigate = (fn: () => void, options?: Options): (() => void) => addHostListener(window, 'popstate', fn, options);
 
+let following = false;
+
+/** Whether the current `popstate` dispatch was triggered programmatically by `navFollow`. */
+export const isFollowing = (): boolean => following;
+
 /** Follow an address inside the shell without a reload: a new entry, painted by the `onNavigate` listener. */
 export function navFollow(href: string): void {
   navPush(href);
-  window.dispatchEvent(new window.PopStateEvent('popstate'));
+  following = true;
+  try {
+    window.dispatchEvent(new window.PopStateEvent('popstate'));
+  } finally {
+    following = false;
+  }
 }

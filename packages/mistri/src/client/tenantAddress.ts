@@ -14,11 +14,24 @@ import { shell } from '@mistriwork/kit/client/shellMode.js';
  */
 export function tenantQualified(href: string): string {
   const { tenant } = sessionIdentity();
-  const qualify = shell().tenantLinks?.qualify;
-  if (!tenant || !qualify) return href;
+  const tenantLinks = shell().tenantLinks;
+  if (!tenant || !tenantLinks) return href;
+  const hashAt = href.indexOf('#');
+  const beforeHash = hashAt < 0 ? href : href.slice(0, hashAt);
+  const hash = hashAt < 0 ? '' : href.slice(hashAt);
   try {
-    const within = inside(href);
-    return within === undefined ? href : shownUnplaced(qualify(within, tenant.appId, tenant.tenantId));
+    const within = inside(beforeHash);
+    if (within === undefined) return href;
+    const queryAt = within.indexOf('?');
+    const rawPath = queryAt < 0 ? within : within.slice(0, queryAt);
+    const rawQuery = queryAt < 0 ? '' : within.slice(queryAt);
+    const segments = rawPath.split('/').filter(Boolean);
+    const cleanPath = segments.length > 0 ? `/${segments.join('/')}` : rawPath;
+    const cleanQuery = rawQuery === '?' ? '' : rawQuery;
+    const candidate = `${cleanPath}${cleanQuery}`;
+    const parsed = tenantLinks.parse(candidate, tenant.appId);
+    if (parsed.tenantId !== null) return href;
+    return `${shownUnplaced(tenantLinks.qualify(candidate, tenant.appId, tenant.tenantId))}${hash}`;
   } catch {
     return href;
   }

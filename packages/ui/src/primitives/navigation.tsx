@@ -74,6 +74,21 @@ export interface NavigationMenuComponentProps<T extends string = string> {
 /** Alias for `NavigationMenuComponentProps`. */
 export type NavigationMenuProps<T extends string = string> = NavigationMenuComponentProps<T>;
 
+function NavMenuLink({ href, current, className, children }: { href: string; current?: boolean; className: string; children: ReactNode }) {
+  const seam = useSurfaceSeam();
+  const linkProps = seam?.useLinkProps ? seam.useLinkProps(href) : { href };
+  return (
+    <SdkNavigationMenuLink
+      href={linkProps.href ?? href}
+      onClick={linkProps.onClick as ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined}
+      current={current}
+      className={className}
+    >
+      {children}
+    </SdkNavigationMenuLink>
+  );
+}
+
 /** Accessible top-level navigation menu bar with hover/keyboard flyout link panels. */
 export function NavigationMenu<T extends string = string>({
   items,
@@ -129,7 +144,7 @@ export function NavigationMenu<T extends string = string>({
                         {item.content ?? (
                           <div className="nx-nav-menu-grid">
                             {item.links?.map((sub, subIdx) => (
-                              <SdkNavigationMenuLink key={subIdx} href={sub.href} current={sub.current} className="nx-nav-menu-card">
+                              <NavMenuLink key={subIdx} href={sub.href} current={sub.current} className="nx-nav-menu-card">
                                 {sub.icon !== undefined && (
                                   <SdkNavigationMenuLinkIcon className="nx-nav-menu-card-icon">{sub.icon}</SdkNavigationMenuLinkIcon>
                                 )}
@@ -137,19 +152,19 @@ export function NavigationMenu<T extends string = string>({
                                   <span className="nx-nav-menu-card-title">{sub.label}</span>
                                   {sub.description !== undefined && <span className="nx-nav-menu-card-desc">{sub.description}</span>}
                                 </div>
-                              </SdkNavigationMenuLink>
+                              </NavMenuLink>
                             ))}
                           </div>
                         )}
                       </SdkNavigationMenuContent>
                     </>
                   ) : (
-                    <SdkNavigationMenuLink href={item.href ?? '#'} current={item.current} className="nx-nav-menu-link">
+                    <NavMenuLink href={item.href ?? '#'} current={item.current} className="nx-nav-menu-link">
                       {item.icon !== undefined && (
                         <SdkNavigationMenuLinkIcon className="nx-nav-menu-icon">{item.icon}</SdkNavigationMenuLinkIcon>
                       )}
                       <span>{item.label}</span>
-                    </SdkNavigationMenuLink>
+                    </NavMenuLink>
                   )}
                 </SdkNavigationMenuItem>
               );

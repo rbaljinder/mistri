@@ -13,9 +13,20 @@
  * shown and never run, and a link's href was held to https:, mailto: and tel:
  * when the App loaded.
  */
+import type { MouseEvent } from 'react';
 import type { LandingLink } from '@mistriwork/engine/shared/servedApp.js';
+import { resolveInAppSpaHref } from '../inAppLink.js';
+import { navFollow } from '../shellHost.js';
 import { safeHref } from './LandingSurface.js';
 import './AppFooter.css';
+
+function followFooterLink(event: MouseEvent<HTMLAnchorElement>, href: string) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const target = resolveInAppSpaHref(href);
+  if (!target) return;
+  event.preventDefault();
+  navFollow(target);
+}
 
 export function AppFooter({
   footer,
@@ -34,11 +45,17 @@ export function AppFooter({
       {links.length || signInHref ? (
         <ul className="app-footer-links">
           {links.map((link, index) => {
-            const href = link.href.startsWith('/') && !link.href.startsWith('//') ? link.href : safeHref(link.href);
+            const href =
+              link.href.startsWith('/') && !link.href.startsWith('//') && !link.href.startsWith('/\\') ? link.href : safeHref(link.href);
             return (
               <li key={index}>
                 {href ? (
-                  <a href={href} {...(href.startsWith('/') ? {} : { rel: 'noreferrer noopener' })}>
+                  <a
+                    href={href}
+                    {...(href.startsWith('/')
+                      ? { onClick: (event: MouseEvent<HTMLAnchorElement>) => followFooterLink(event, href) }
+                      : { rel: 'noreferrer noopener' })}
+                  >
                     {link.label}
                   </a>
                 ) : (

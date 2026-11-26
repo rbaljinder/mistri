@@ -21,6 +21,7 @@ import { bulkCommands, recordCommand } from './components/sdk/commands.js';
 import { useAppTargetLinks } from './appTargetLinks.js';
 import { navTargets } from './appNavTargets.js';
 import { SplitRecordRoom } from './components/SplitRecordRoom.js';
+import { SharedDashboard, SharedFreePage } from './components/sharedRooms.js';
 
 /* A view that says `open: "modal"` opens its record in the App's own dialog (peekpanel.js), fetched the first time one does. */
 setRecordDialog(onDemand(() => import('./components/RecordModal.js'), 'RecordModal', { quiet: true }));
@@ -74,7 +75,7 @@ export const appChrome = {
     /* The App's own rooms, which the content pane reaches by the walk (Content.tsx). */
     rooms: {
       /* A dashboard and its charts are a chunk of their own, loaded when one is first shown. */
-      Dashboard: onDemand(() => import('./components/Dashboard.js'), 'Dashboard'),
+      Dashboard: SharedDashboard,
       Home: AppHome,
       /* The form surface is a part of its own: a first page that is not a form never fetches it. */
       Form: onDemand(() => import('./components/FormRoom.js'), 'FormRoom'),
@@ -88,8 +89,8 @@ export const appChrome = {
       Settings: onDemand(() => import('./components/SettingsRoom.js'), 'SettingsRoom'),
       /* What waits for review: its own part, fetched when first opened, so no first page carries the queue. */
       Review: onDemand(() => import('./components/ReviewRoom.js'), 'ReviewRoom'),
-      /* A free-form page: its own chunk, loaded on demand (AppLanding.tsx loads it the same way). */
-      Page: onDemand(() => import('./components/FreePage.js'), 'FreePage'),
+      /* A free-form page: its own chunk, loaded on demand (shared with AppLanding.tsx). */
+      Page: SharedFreePage,
       /* A free-form page that is a record's tab: drawn by the record page's tab strip (PageSections.tsx). */
       RecordTab: onDemand(() => import('./components/RecordTabPage.js'), 'RecordTabPage'),
       SplitRecord: SplitRecordRoom,

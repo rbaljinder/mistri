@@ -249,3 +249,57 @@ test('a stylesheet a part links as it loads is read then, so the next navigation
     [settings.disableCSSFileLoading, settings.handleDisabledFileLoadingAsSuccess] = loading;
   }
 });
+
+test('programmatic navFollow is treated as a forward click, not Back/Forward traversal', async () => {
+  const { navFollow } = await import('./shellHost.js');
+  pane.scrollTop = 320;
+  window.dispatchEvent(new Event('pointerdown'));
+  navFollow('/compass/accounts/52');
+  paint(record, '<div class="panel-pad"><h1>Clearwater</h1></div>', 2);
+  frames(5);
+  expect(pane.scrollTop).toBe(0);
+  expect(pane.classList.contains('nav-enter')).toBe(true);
+});
+
+test('afterHold runs immediately when idle and defers until release while holding', () => {
+  const events: string[] = [];
+  hold.afterHold(() => events.push('idle'));
+  expect(events).toEqual(['idle']);
+
+  window.history.pushState(null, '', '/compass/accounts/52');
+  paint(record, '<div class="panel-pad"><h1>Clearwater</h1></div>', 2);
+  const req = work.beginWork();
+  expect(hold.holding()).toBe(true);
+  hold.afterHold(() => events.push('on-release'));
+  expect(events).toEqual(['idle']);
+
+  req();
+  frames(5);
+  expect(hold.holding()).toBe(false);
+  expect(events).toEqual(['idle', 'on-release']);
+});
+
+test('a linked stylesheet whose async fetch is still in flight still holds via cssRules fallback', async () => {
+  const settings = (
+    window as unknown as { happyDOM: { settings: { disableCSSFileLoading: boolean; handleDisabledFileLoadingAsSuccess: boolean } } }
+  ).happyDOM.settings;
+  const loading = [settings.disableCSSFileLoading, settings.handleDisabledFileLoadingAsSuccess] as const;
+  settings.disableCSSFileLoading = true;
+  settings.handleDisabledFileLoadingAsSuccess = true;
+  // Never-resolving fetch simulates a slow network re-fetch of an already-loaded stylesheet.
+  vi.stubGlobal('fetch', () => new Promise<Response>(() => {}));
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = '/assets/inflight.css';
+  document.head.append(link);
+  try {
+    await Promise.resolve();
+    window.history.pushState(null, '', '/compass/accounts/52');
+    paint(record, '<div class="panel-pad"><h1>Clearwater</h1></div>', 2);
+    expect(hold.holding()).toBe(true);
+  } finally {
+    link.remove();
+    vi.unstubAllGlobals();
+    [settings.disableCSSFileLoading, settings.handleDisabledFileLoadingAsSuccess] = loading;
+  }
+});

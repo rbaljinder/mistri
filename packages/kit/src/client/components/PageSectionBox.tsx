@@ -150,7 +150,11 @@ export function Loading({ section }: { section: PageSection }) {
           {titled(section.title)}
         </h2>
       )}
-      {section.kind === 'list' ? <GridSkeleton columns={4} rows={3} /> : <div className="sk-bar" />}
+      {section.kind === 'list' ? (
+        <GridSkeleton columns={4} rows={3} />
+      ) : (
+        <div className="sk-bar" style={{ minBlockSize: 'var(--space-8)' }} />
+      )}
     </section>
   );
 }

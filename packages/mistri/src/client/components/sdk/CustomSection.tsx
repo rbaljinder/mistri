@@ -95,7 +95,7 @@ export function CustomBody({
     return () => observer.disconnect();
   }, [onBlank]);
   const [size, setSize] = useState<UiSize>({ width: 1024, compact: false });
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = box.current;
     if (!node || typeof ResizeObserver === 'undefined') return;
     const measure = () => {
@@ -229,6 +229,12 @@ export function CustomPageSection({ page, section, index, plan, base, recordKey,
 export function CustomPageBody({ frame, section }: { frame: UiPageFrame; section: Section }) {
   const host = useUiHost();
   const place = pageLoadPlace(frame, frame.loader);
+  const componentId = section.component?.id;
+  // Prefetch the custom component module + CSS in parallel with the server loader instead of waiting for `loaded.data`.
+  useEffect(() => {
+    if (!componentId) return;
+    void loadComponent(componentId).catch(() => {});
+  }, [componentId]);
   const loaded = useQuery({
     queryKey: pageLoadKey(host.scope, frame.view, frame.loader ?? '', place),
     queryFn: async () => (await host.load(frame.view, place, frame.loader)) ?? null,
@@ -238,7 +244,8 @@ export function CustomPageBody({ frame, section }: { frame: UiPageFrame; section
   if (!section.component) return null;
   if (frame.loader !== undefined) {
     if (loaded.isError) return <Problem text={loaded.error.message} retry={() => void loaded.refetch()} />;
-    if (loaded.data === undefined) return <div className="sk-bar" role="status" aria-label={say('common.loading')} />;
+    if (loaded.data === undefined)
+      return <div className="sk-bar" style={{ minBlockSize: 'var(--space-8)' }} role="status" aria-label={say('common.loading')} />;
   }
   return (
     <CustomBody
@@ -369,7 +376,7 @@ function DashReads({
      the title, then the problem in place of the drawing, with a retry. */
   let body: ReactNode;
   if (reads.isPending || (askedTotals.length > 0 && totals.isPending))
-    body = <div className="sk-bar" role="status" aria-label={say('common.loading')} />;
+    body = <div className="sk-bar" style={{ minBlockSize: 'var(--space-8)' }} role="status" aria-label={say('common.loading')} />;
   else if (reads.isError || totals.isError) {
     const failed = (reads.isError ? reads : totals) as typeof reads;
     body = <Problem text={(failed.error as Error).message} retry={() => void failed.refetch()} />;
