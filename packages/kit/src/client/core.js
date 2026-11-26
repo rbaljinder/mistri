@@ -592,11 +592,14 @@ let refining = false;
 let refiningYields = false;
 export const roomVersion = () => roomTick;
 
-/** A table view's identity as a room, or null for anything else. */
-function tableRoomShape() {
+/** A table or free-form page view's identity as a room, or null for anything else. */
+function roomShape() {
   const top = currentEntry();
-  if (!top || top.kind !== 'table') return null;
-  return JSON.stringify([state.activeConnection ?? '', state.stack.length, top.table, top.tab ?? 'rows']);
+  if (!top) return null;
+  if (top.kind === 'table') return JSON.stringify([state.activeConnection ?? '', state.stack.length, top.table, top.tab ?? 'rows']);
+  if (top.kind === 'page' && !top.table && top.pageId)
+    return JSON.stringify([state.activeConnection ?? '', 'page', state.stack.length, top.pageId]);
+  return null;
 }
 
 /**
@@ -648,7 +651,7 @@ let waitingRoom = false;
 export function render() {
   if (sessionIdentity().mode === 'locked') return;
   paintTick += 1;
-  const shape = tableRoomShape();
+  const shape = roomShape();
   let roomChanged = !refining || shape === null || shape !== roomOnScreen;
   if (roomChanged) roomTick += 1;
   roomOnScreen = shape;

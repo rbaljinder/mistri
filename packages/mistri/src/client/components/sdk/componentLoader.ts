@@ -11,6 +11,7 @@
  */
 import type { ComponentType } from 'react';
 import { pageBridge } from '@mistriwork/kit/client/uiBridge.js';
+import { beginWork } from '@mistriwork/kit/client/pendingWork.js';
 import './host.js';
 import { say } from '../../copy/components/components/sdk/componentLoader.js';
 import { appFile } from '@mistriwork/kit/client/addressMount.js';
@@ -23,6 +24,7 @@ interface Served {
 }
 
 const modules = new Map<string, Promise<ComponentType<never>>>();
+const stylesheets = new Map<string, Promise<void>>();
 
 /* The payload says each file's inside address (`/{app}/_components/…`);
    it is fetched where the browser reaches it (addressMount.js `appFile`): an
@@ -38,13 +40,48 @@ const reached = (entry: { href: string; css?: string }) => ({
   ...(entry.css ? { css: appFile(entry.css) } : {}),
 });
 
-function linkStylesheet(href: string, id: string): void {
-  if (document.head.querySelector(`link[data-component-css="${CSS.escape(id)}"][href="${CSS.escape(href)}"]`)) return;
+/** Link a component stylesheet once and resolve when it loads (or fails / times out) so holds wait for CSS too. */
+function linkStylesheet(href: string, id: string): Promise<void> {
+  if (typeof document === 'undefined' || !document.head) return Promise.resolve();
+  const key = `${id}\0${href}`;
+  const pending = stylesheets.get(key);
+  if (pending) return pending;
+  const existing = document.head.querySelector<HTMLLinkElement>(`link[data-component-css="${CSS.escape(id)}"][href="${CSS.escape(href)}"]`);
+  if (existing) {
+    if (existing.sheet) return Promise.resolve();
+    const waitExisting = new Promise<void>((resolve) => {
+      const done = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+      const timer = setTimeout(done, 1200);
+      existing.addEventListener('load', done, { once: true });
+      existing.addEventListener('error', done, { once: true });
+    });
+    stylesheets.set(key, waitExisting);
+    return waitExisting;
+  }
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = href;
   link.dataset.componentCss = id;
+  const wait = new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(done, 1200);
+    link.addEventListener('load', done, { once: true });
+    link.addEventListener('error', done, { once: true });
+  });
+  stylesheets.set(key, wait);
   document.head.append(link);
+  // In happy-dom/jsdom where `<link rel="stylesheet">` never fires `load`, resolve synchronously if already attached with no real network.
+  if (link.sheet) {
+    stylesheets.set(key, Promise.resolve());
+    return Promise.resolve();
+  }
+  return wait;
 }
 
 /** The component the App declares under `id`, its default export; rejects when it is not served or will not load. */
@@ -83,13 +120,17 @@ function loadEntry(id: string, entry: { href: string; css?: string } | undefined
   if (!entry) return Promise.reject(new Error(say('theAppServesNoComponent', { id })));
   let loading = modules.get(entry.href);
   if (!loading) {
-    if (entry.css) linkStylesheet(entry.css, id);
-    loading = (import(/* @vite-ignore */ entry.href) as Promise<{ default?: unknown }>).then((module) => {
+    const settled = beginWork();
+    const cssReady = entry.css ? linkStylesheet(entry.css, id) : Promise.resolve();
+    const jsReady = (import(/* @vite-ignore */ entry.href) as Promise<{ default?: unknown }>).then((module) => {
       const part = module.default;
       if (typeof part !== 'function' && (typeof part !== 'object' || part === null))
         throw new Error(say('theComponentHasNoDefault', { id }));
       return part as ComponentType<never>;
     });
+    loading = Promise.all([jsReady, cssReady])
+      .then(([part]) => part)
+      .finally(settled);
     // A failed fetch is not kept: the next draw asks again (a Reload is offered meanwhile).
     loading.catch(() => {
       if (modules.get(entry.href) === loading) modules.delete(entry.href);

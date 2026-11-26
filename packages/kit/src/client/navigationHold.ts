@@ -38,7 +38,7 @@
  */
 import { motionStill } from './motionStill.js';
 import { workMark, workSince } from './pendingWork.js';
-import { addHostListener, onNavigate, shellRoot } from './shellHost.js';
+import { addHostListener, isFollowing, onNavigate, shellRoot } from './shellHost.js';
 import { herePath, hereSearch } from './addressMount.js';
 
 /** How long a navigation holds the screen it left without saying so, in ms. */
@@ -94,6 +94,13 @@ const TRAVERSAL_WINDOW = 1000;
 let lastInput: { pointer: boolean; at: number; target?: EventTarget | null } = { pointer: false, at: 0 };
 const scrollAt = new Map<string, number>();
 let restoring: { top: number; until: number } | null = null;
+const onRelease: Array<() => void> = [];
+
+/** Run `fn` once the current navigation hold releases (or immediately if no hold is active). */
+export function afterHold(fn: () => void): void {
+  if (hold) onRelease.push(fn);
+  else fn();
+}
 
 const address = () => herePath() + hereSearch();
 const placeOf = (entry: Place | undefined): string =>
@@ -125,17 +132,17 @@ export function installNavigationHold(host: HTMLElement, reads?: HoldProbe): voi
       if (hold && records.some((record) => record.target !== hold!.copy)) stirred = true;
     }).observe(host, { childList: true, subtree: true, characterData: true, attributes: true });
   }
-  /* Registered before the shell's own listener, which paints: the mark is set when the paint comes. */
+  /* Registered before the shell's own listener, which paints: the mark is set when the paint comes,
+     excluding programmatic `navFollow` calls which are forward link navigations. */
   onNavigate(() => {
-    traversedAt = performance.now();
+    if (!isFollowing()) traversedAt = performance.now();
   }, true);
-  /* The page's stylesheets, read for the picture before the first navigation
-     needs them — when the page is idle, so starting up never waits on it. */
+  /* The page's stylesheets, read for the picture as soon as the shell installs
+     so early navigations have full source twins ready without waiting up to 3s. */
   const warm = () => {
     mirrorSheets();
   };
-  if (typeof requestIdleCallback === 'function') requestIdleCallback(warm, { timeout: 3000 });
-  else setTimeout(warm, 1000);
+  void Promise.resolve().then(warm);
   /* And each one a part brings when it loads, as it arrives. The published
      client links a part's stylesheet when the part is first drawn (a record's
      sections, the related lists); read only at the next navigation, it was
@@ -304,6 +311,8 @@ function release(): void {
   if (ending.frame) cancelAnimationFrame(ending.frame);
   const pane = content;
   ending.copy.remove();
+  const callbacks = onRelease.splice(0, onRelease.length);
+  for (const fn of callbacks) fn();
   if (!pane) return;
   pane.classList.remove('nav-holding', 'nav-holding-focusable');
   pane.removeAttribute('aria-busy');
@@ -396,13 +405,28 @@ function readLinked(href: string): void {
     });
 }
 
+/** Synchronous CSSOM fallback while `readLinked`'s fetch is in flight so early clicks never drop the hold. */
+function cssRulesText(sheet: CSSStyleSheet): string | undefined {
+  try {
+    const rules = sheet.cssRules;
+    if (!rules) return undefined;
+    let text = '';
+    for (let i = 0; i < rules.length; i++) text += `${rules[i].cssText}\n`;
+    return text;
+  } catch {
+    return undefined;
+  }
+}
+
 /** A sheet's own text, null to leave it out, or undefined while it is still being read. */
 function sourceOf(sheet: CSSStyleSheet): string | null | undefined {
   const owner = sheet.ownerNode;
   if (owner instanceof HTMLStyleElement) return owner.textContent ?? '';
   if (!sheet.href) return null;
   if (!linked.has(sheet.href)) readLinked(sheet.href);
-  return linked.get(sheet.href);
+  const fetched = linked.get(sheet.href);
+  if (fetched !== undefined) return fetched;
+  return cssRulesText(sheet);
 }
 
 function mirrorSheets(): CSSStyleSheet[] | null {

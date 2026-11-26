@@ -5,7 +5,8 @@
  * @mistriwork/mistri/ui, so the kit's rooms name none of it.
  */
 import { useLayoutEffect, useRef, useState } from 'react';
-import { currentEntry, go, state } from '@mistriwork/kit/client/core.js';
+import { currentEntry, go, refine, state } from '@mistriwork/kit/client/core.js';
+import { shellBody } from '@mistriwork/kit/client/shellHost.js';
 import { syncHash } from '@mistriwork/kit/client/url.js';
 import { DashHead } from '@mistriwork/kit/client/components/DashHead.js';
 import { ErrorBoundary } from '@mistriwork/kit/client/components/ErrorBoundary.js';
@@ -40,14 +41,14 @@ export function FreePage({
   page: NonNullable<DashboardDef['page']>;
   initialEntry?: () => PageEntry;
 }) {
-  const [tick, setTick] = useState(0);
+  const [, setTick] = useState(0);
   const bare = dashboard.layout === 'bare';
-  // Before paint, so the bars never flash in front of a page that has none.
+  // Standalone fallback (tests / outside Content): when Content owns the shell, ContentBody toggles `page-bare` declaratively.
   useLayoutEffect(() => {
-    if (!bare) return;
-    // host-global: the body class is the shell's own frame, which this room owns while it is the page.
-    document.body.classList.add('page-bare');
-    return () => document.body.classList.remove('page-bare');
+    const body = shellBody();
+    if (!bare || body.dataset.bareOwner === 'shell') return;
+    body.classList.add('page-bare');
+    return () => body.classList.remove('page-bare');
   }, [bare]);
   const initial = useRef<PageEntry | undefined>(undefined);
   const section = dashboard.sections[0];
@@ -85,8 +86,8 @@ export function FreePage({
         /* A refinement of the place the reader is on, not a step: replace. */
         (state as unknown as { navMode: string }).navMode = 'replace';
         syncHash();
-        setTick(tick + 1);
-      } else go({ ...owned, rootBody: body }, 'push');
+        setTick((n) => n + 1);
+      } else refine(() => go({ ...owned, rootBody: body }, 'push'));
     },
   };
   return (

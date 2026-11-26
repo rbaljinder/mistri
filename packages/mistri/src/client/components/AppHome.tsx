@@ -22,6 +22,7 @@ import { preloadDashboardParts } from '@mistriwork/kit/client/components/dashboa
 import { LoadErrorNote } from '@mistriwork/kit/client/components/Landing.js';
 import { AppListRoom } from '@mistriwork/kit/client/components/Rooms.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+export { SharedDashboard, SharedFreePage } from './sharedRooms.js';
 
 /* Its rules stay in the first stylesheet (and so in one compression with it): they are shared with the public page,
    and a second file for them would cost more in brotli than the rules weigh. */
@@ -33,7 +34,7 @@ import './CommandOutcome.css';
 const FormBody = onDemand(() => import('./FormRoom.js'), 'FormBody');
 const PublicHome = onDemand(() => import('./PublicHome.js'), 'PublicHome');
 
-export function AppHome({ paint, said, entry, pages }: AppHomeProps) {
+export function AppHome({ said, entry, pages }: AppHomeProps) {
   const app = activeApp();
   const home = app ? homeRoom(app) : undefined;
   const homeDash = home && 'sections' in home ? (home as DashboardDef) : undefined;
@@ -45,7 +46,7 @@ export function AppHome({ paint, said, entry, pages }: AppHomeProps) {
       <>
         <LoadErrorNote error={shell().loadError()} />
         {said}
-        <AppListRoom key={paint} entry={{ table: homeList.table, query: appListQuery(homeList) }} spec={homeList} />
+        <AppListRoom key={`list:${homeList.table}`} entry={{ table: homeList.table, query: appListQuery(homeList) }} spec={homeList} />
       </>
     );
   /* A signed-in form home is the form, as its room draws it. */
@@ -54,7 +55,7 @@ export function AppHome({ paint, said, entry, pages }: AppHomeProps) {
       <>
         <LoadErrorNote error={shell().loadError()} />
         {said}
-        <FormBody key={paint} form={home} appName={app.name} />
+        <FormBody key={`form:${home.id}`} form={home} appName={app.name} />
       </>
     );
   /* A dashboard home is drawn exactly the way the dashboard route draws —
@@ -66,7 +67,7 @@ export function AppHome({ paint, said, entry, pages }: AppHomeProps) {
       {app && homeDash ? (
         <div className="landing-host">
           <AppLanding
-            key={paint}
+            key={`dash:${homeDash.id}`}
             app={app}
             firstDash={homeDash}
             loadError={shell().loadError()}
@@ -78,7 +79,7 @@ export function AppHome({ paint, said, entry, pages }: AppHomeProps) {
       ) : app?.home !== undefined && !home ? (
         /* The payload is this server's own, so an absent landingView says the App declares no landing: null marks
            that, against an omitted prop, which keeps PublicHome's legacy landing probe. */
-        <PublicHome key={paint} view={app.home} landingView={app.landingView ?? null} loadError={shell().loadError()} />
+        <PublicHome key={`home-public-${app.home}`} view={app.home} landingView={app.landingView ?? null} loadError={shell().loadError()} />
       ) : app ? (
         <AppHomeLanding app={app} loadError={shell().loadError()} pages={pages} />
       ) : null}

@@ -14,7 +14,7 @@ import { useDecisionMarks } from './components/decisionMarks.js';
 import { useRecordDecisions } from './components/decisionAdornment.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { setRecordDialog } from '@mistriwork/kit/client/peekpanel.js';
-import { AppHome } from './components/AppHome.js';
+import { AppHome, SharedDashboard, SharedFreePage } from './components/AppHome.js';
 import { ImportButton } from './components/ImportButton.js';
 import { AppTargetAction } from './components/AppTargetAction.js';
 import { bulkCommands, recordCommand } from './components/sdk/commands.js';
@@ -74,7 +74,7 @@ export const appChrome = {
     /* The App's own rooms, which the content pane reaches by the walk (Content.tsx). */
     rooms: {
       /* A dashboard and its charts are a chunk of their own, loaded when one is first shown. */
-      Dashboard: onDemand(() => import('./components/Dashboard.js'), 'Dashboard'),
+      Dashboard: SharedDashboard,
       Home: AppHome,
       /* The form surface is a part of its own: a first page that is not a form never fetches it. */
       Form: onDemand(() => import('./components/FormRoom.js'), 'FormRoom'),
@@ -88,8 +88,8 @@ export const appChrome = {
       Settings: onDemand(() => import('./components/SettingsRoom.js'), 'SettingsRoom'),
       /* What waits for review: its own part, fetched when first opened, so no first page carries the queue. */
       Review: onDemand(() => import('./components/ReviewRoom.js'), 'ReviewRoom'),
-      /* A free-form page: its own chunk, loaded on demand (AppLanding.tsx loads it the same way). */
-      Page: onDemand(() => import('./components/FreePage.js'), 'FreePage'),
+      /* A free-form page: its own chunk, loaded on demand (shared with AppLanding.tsx). */
+      Page: SharedFreePage,
       /* A free-form page that is a record's tab: drawn by the record page's tab strip (PageSections.tsx). */
       RecordTab: onDemand(() => import('./components/RecordTabPage.js'), 'RecordTabPage'),
       SplitRecord: SplitRecordRoom,

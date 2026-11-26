@@ -15,6 +15,8 @@ import { createContext, useContext, type MouseEvent } from 'react';
 import { andQuery } from '@mistriwork/engine/shared/query.js';
 import type { ColumnMeta } from '@mistriwork/engine/shared/schema.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
+import { resolveInAppSpaHref } from '@mistriwork/kit/client/inAppLink.js';
+import { shell } from '@mistriwork/kit/client/shellMode.js';
 import { say } from '../../copy/components/components/sdk/context.js';
 import type { AppFlagsSource } from '../../appFlags.js';
 import type { AppCommandField } from '../../../shared/command.js';
@@ -446,7 +448,7 @@ export function useUiHost(): UiHost {
   return host;
 }
 
-/** Follow an in-App `/` address in place through the `UiHost`, preserving modified/middle clicks and external URLs. */
+/** Follow an in-App `/` address in place through the `UiHost`, preserving modified/middle clicks, downloads, targets, and non-SPA/external URLs. */
 export function useFollow(
   href: string | undefined,
   onClick?: (event: MouseEvent<HTMLElement>) => void,
@@ -455,7 +457,12 @@ export function useFollow(
   return (event: MouseEvent<HTMLElement>) => {
     onClick?.(event);
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-    if (!host || href === undefined || !href.startsWith('/') || href.startsWith('//')) return;
+    const anchor = event.currentTarget instanceof HTMLAnchorElement ? event.currentTarget : null;
+    if (anchor?.hasAttribute('download') || anchor?.getAttribute('aria-disabled') === 'true') return;
+    const targetAttr = anchor?.getAttribute('target');
+    if (targetAttr && targetAttr !== '_self') return;
+    if (!host || href === undefined || !href.startsWith('/') || href.startsWith('//') || href.startsWith('/\\')) return;
+    if (shell().inApp() && resolveInAppSpaHref(href) === null) return;
     event.preventDefault();
     host.follow(href);
   };

@@ -4,11 +4,24 @@ import { Icon } from '../Icon.js';
 import { Avatar, AvatarFallback, AvatarImage } from '@ui-sdk/react/avatar';
 import { Drawer, DrawerBackdrop, DrawerClose, DrawerContent, DrawerTitle } from '@ui-sdk/react/drawer';
 import { Menu, MenuContent, MenuGroupLabel, MenuItem, MenuSeparator, MenuTrigger } from '@ui-sdk/react/menu';
-import { Fragment, type MouseEvent, type ReactNode, type Ref, useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  Fragment,
+  type MouseEvent,
+  type ReactNode,
+  type Ref,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { cx, toDataTone, type Tone } from '../internal/cx.js';
 import { viewportBox, viewportSize } from '../internal/ruler.js';
 import { type UiSurfaceSeam, useSurfaceSeam } from '../internal/surfaceSeam.js';
 import type { BreadcrumbItem } from '../primitives/navigation.js';
+
+const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect;
 
 export type { BreadcrumbItem };
 
@@ -428,6 +441,21 @@ export function Sidebar({
 /* TopBar                                                                     */
 /* -------------------------------------------------------------------------- */
 
+function TopBarCrumbLink({ crumb }: { crumb: BreadcrumbItem }) {
+  const seam = useSurfaceSeam();
+  const linkProps = seam?.useLinkProps ? seam.useLinkProps(crumb.href, crumb.onClick) : { href: crumb.href, onClick: crumb.onClick };
+  return (
+    <a
+      href={linkProps.href ?? crumb.href}
+      className="nx-breadcrumb-link"
+      onClick={linkProps.onClick as ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined}
+    >
+      {crumb.icon && <span className="nx-breadcrumb-icon">{crumb.icon}</span>}
+      <span>{crumb.label}</span>
+    </a>
+  );
+}
+
 /** Top workspace header bar with sidebar toggle, breadcrumbs, and trailing actions. */
 export function TopBar({ breadcrumbs = [], onToggleSidebar, sidebarCollapsed, isMobile = false, actions, className, ref }: TopBarProps) {
   return (
@@ -457,10 +485,7 @@ export function TopBar({ breadcrumbs = [], onToggleSidebar, sidebarCollapsed, is
                       <span>{crumb.label}</span>
                     </span>
                   ) : crumb.href ? (
-                    <a href={crumb.href} className="nx-breadcrumb-link" onClick={crumb.onClick}>
-                      {crumb.icon && <span className="nx-breadcrumb-icon">{crumb.icon}</span>}
-                      <span>{crumb.label}</span>
-                    </a>
+                    <TopBarCrumbLink crumb={crumb} />
                   ) : crumb.onClick ? (
                     <button type="button" className="nx-breadcrumb-link" onClick={crumb.onClick}>
                       {crumb.icon && <span className="nx-breadcrumb-icon">{crumb.icon}</span>}
@@ -649,7 +674,7 @@ export function AppShell({
   const collapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
   const mainId = useId();
 
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     const el = shellRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
     const update = () => {

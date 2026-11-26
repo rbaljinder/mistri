@@ -14,7 +14,6 @@ import { useRef, type ReactNode } from 'react';
 import { currentEntry, findTable, go, pageView, state, tableView, toast } from '@mistriwork/kit/client/core.js';
 import { syncHash } from '@mistriwork/kit/client/url.js';
 import { recentVisits } from '@mistriwork/kit/client/pagemarks.js';
-import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { DashHead } from '@mistriwork/kit/client/components/DashHead.js';
 import { dashboardSelection, rootSlot, type DashboardDef } from '@mistriwork/kit/client/components/dashboardModel.js';
 import type { PageEntry } from '@mistriwork/kit/client/components/pageModel.js';
@@ -35,10 +34,7 @@ import { say } from '../copy/shell/components/AppLanding.js';
 import { LoadErrorNote } from '@mistriwork/kit/client/components/Landing.js';
 import { WorkPanel, type KnownPage as WorkPage } from '@mistriwork/kit/client/components/WorkPanel.js';
 
-/* A dashboard and its charts are a chunk of their own: an App whose home is a
-   list never loads them. */
-const Dashboard = onDemand(() => import('./Dashboard.js'), 'Dashboard');
-const FreePage = onDemand(() => import('./FreePage.js'), 'FreePage');
+import { SharedDashboard as Dashboard, SharedFreePage as FreePage } from './sharedRooms.js';
 
 /** What the landing reads of the served App: its name, its menu, and where the menu sits. */
 type AppInfo = Pick<AppPayloadApp, 'name' | 'ui' | 'views' | 'nav' | 'resources' | 'home'>;

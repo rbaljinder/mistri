@@ -685,6 +685,14 @@
       "mistri-built": "./dist/client/peekpanel.js",
       "default": "./src/client/peekpanel.js"
     },
+    "./client/pendingWork.js": {
+      "mistri-built": "./dist/client/pendingWork.js",
+      "default": "./src/client/pendingWork.ts"
+    },
+    "./client/inAppLink.js": {
+      "mistri-built": "./dist/client/inAppLink.js",
+      "default": "./src/client/inAppLink.ts"
+    },
     "./client/prompt.js": {
       "mistri-built": "./dist/client/prompt.js",
       "default": "./src/client/prompt.js"

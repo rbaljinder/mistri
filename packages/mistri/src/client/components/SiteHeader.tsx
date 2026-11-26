@@ -11,6 +11,8 @@
 import { useState, useSyncExternalStore, type FormEvent, type MouseEvent } from 'react';
 import type { AppSite, AppSiteLink } from '@mistriwork/engine/shared/servedApp.js';
 import { go, state, subscribeWalk, tableView } from '@mistriwork/kit/client/core.js';
+import { resolveInAppSpaHref } from '@mistriwork/kit/client/inAppLink.js';
+import { navFollow } from '@mistriwork/kit/client/shellHost.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { dashPageId, dashViewKey, formPageId, formViewKey, isListRoom } from '@mistriwork/kit/client/components/appRooms.js';
 import { rootSlot } from '@mistriwork/kit/client/components/dashboardModel.js';
@@ -43,6 +45,10 @@ function linkHref(app: SiteHeaderApp, link: AppSiteLink, resolveHref?: (link: Ap
     if (href) return href;
   }
   return shownUnplaced(`/${encodeURIComponent(app.id)}/${encodeURIComponent(link.view ?? '')}`);
+}
+
+function isExternalHref(href: string): boolean {
+  return !href.startsWith('/') && !href.startsWith('#');
 }
 
 function openSiteView(app: SiteHeaderApp, viewKey: string, params?: Record<string, string>) {
@@ -100,10 +106,17 @@ export function SiteHeader({ app, site, resolveHref, activeView }: SiteHeaderPro
   const cta = site.cta && (!site.cta.view || Object.hasOwn(app.views, site.cta.view)) ? site.cta : undefined;
   const showHeaderSignIn = site.signIn === 'header';
 
-  const onLinkClick = (event: MouseEvent<HTMLAnchorElement>, link: AppSiteLink) => {
-    if (!link.view || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+  const onLinkClick = (event: MouseEvent<HTMLAnchorElement>, link: AppSiteLink, href: string) => {
+    if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    if (link.view) {
+      event.preventDefault();
+      openSiteView(app, link.view);
+      return;
+    }
+    const target = resolveInAppSpaHref(href);
+    if (!target) return;
     event.preventDefault();
-    openSiteView(app, link.view);
+    navFollow(target);
   };
 
   const onSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -116,19 +129,23 @@ export function SiteHeader({ app, site, resolveHref, activeView }: SiteHeaderPro
     openSiteView(app, search.view, trimmed ? { [param]: trimmed } : undefined);
   };
 
+  const ctaHref = cta ? linkHref(app, cta, resolveHref) : undefined;
+
   return (
     <div className="site-header">
       {links.length > 0 && (
         <nav className="site-nav" aria-label={say('siteNavigation')}>
           {links.map((link, index) => {
             const active = isViewActive(link.view, activeView);
+            const href = linkHref(app, link, resolveHref);
             return (
               <a
                 key={`${link.view ?? link.href ?? index}`}
                 className="site-link"
-                href={linkHref(app, link, resolveHref)}
+                href={href}
+                rel={isExternalHref(href) ? 'noopener noreferrer' : undefined}
                 aria-current={active ? 'page' : undefined}
-                onClick={(event) => onLinkClick(event, link)}
+                onClick={(event) => onLinkClick(event, link, href)}
               >
                 {link.label}
               </a>
@@ -152,8 +169,13 @@ export function SiteHeader({ app, site, resolveHref, activeView }: SiteHeaderPro
         </form>
       )}
       <div className="site-actions">
-        {cta && (
-          <a className="site-cta" href={linkHref(app, cta, resolveHref)} onClick={(event) => onLinkClick(event, cta)}>
+        {cta && ctaHref && (
+          <a
+            className="site-cta"
+            href={ctaHref}
+            rel={isExternalHref(ctaHref) ? 'noopener noreferrer' : undefined}
+            onClick={(event) => onLinkClick(event, cta, ctaHref)}
+          >
             {cta.label}
           </a>
         )}

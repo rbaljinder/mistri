@@ -1671,7 +1671,7 @@ export interface MediaCardProps extends CleanElementProps<'div', 'title'> {
  * General-purpose visual card dressed by the active Mistri look: aspect-locked photograph with optional
  * floating badge, serif/look heading title, and tabular footer figures — zero custom CSS required.
  */
-export declare function MediaCard({ href, media, alt, aspect, badge, eyebrow, title, subtitle, value, was, note, meta, priority, ariaLabel, className, ...props }: MediaCardProps): import("react").JSX.Element;
+export declare function MediaCard({ href, media, alt, aspect, badge, eyebrow, title, subtitle, value, was, note, meta, priority, ariaLabel, className, onClick, ...props }: MediaCardProps): import("react").JSX.Element;
 /** Display preset for `FormattedValue`. */
 export type ValueFormat = 'text' | 'number' | 'currency' | 'percent' | 'date' | 'datetime' | 'bytes' | 'id';
 /** Props for the `FormattedValue` inline scalar display. */

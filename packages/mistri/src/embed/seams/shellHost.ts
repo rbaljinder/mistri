@@ -134,9 +134,18 @@ export const navReplace = (href: string, walk: unknown = null): void => binding(
 
 export const onNavigate = (fn: () => void, _options?: Options): (() => void) => onEmbedNavigation(fn);
 
+let following = false;
+
+export const isFollowing = (): boolean => following;
+
 export function navFollow(href: string): void {
   navPush(href);
-  announceNavigation();
+  following = true;
+  try {
+    announceNavigation();
+  } finally {
+    following = false;
+  }
 }
 
 /* The ui primitives (packages/ui) measure against the page's root and draw their popups where UI SDK chooses, which

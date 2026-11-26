@@ -33,12 +33,14 @@ import {
   INBOX_PAGE,
   REVIEW_PAGE,
   SETTINGS_PAGE,
+  dashboardAt,
   dashPageId,
   dashViewKey,
   formViewKey,
   homeRoom,
 } from './appRooms.js';
 import { onDemand } from './onDemand.js';
+import { afterHold } from '../navigationHold.js';
 import type { BreakdownEntry } from './Breakdown.js';
 import { crumbBarShown, Crumbs } from './Crumbs.js';
 import type { DashboardDef } from './dashboardModel.js';
@@ -166,6 +168,30 @@ function ContentBody({ onHome }: { onHome: () => void }) {
     entry?.kind === 'page' && (entry as PageEntry).tab === 'home' && homeDash && (entry as PageEntry).pageId === dashPageId(homeDash.id)
       ? (entry as PageEntry)
       : undefined;
+  const isBare =
+    !entry || homeEntry
+      ? Boolean(homeDash?.layout === 'bare')
+      : entry.kind === 'page' &&
+        !('table' in entry && entry.table) &&
+        Boolean((entry as PageEntry).pageId) &&
+        Boolean(app && (dashboardAt(app, (entry as PageEntry).pageId!) as { layout?: string } | undefined)?.layout === 'bare');
+  useLayoutEffect(() => {
+    const body = shellBody();
+    body.dataset.bareOwner = 'shell';
+    return () => {
+      delete body.dataset.bareOwner;
+      body.classList.remove('page-bare');
+    };
+  }, []);
+  useLayoutEffect(() => {
+    let cancelled = false;
+    afterHold(() => {
+      if (!cancelled) shellBody().classList.toggle('page-bare', isBare);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [isBare]);
   if (!entry && homeHeld) return null;
   if (!entry || homeEntry) {
     /* In an app, home is the app: where its work starts and what is waiting,
