@@ -1450,7 +1450,7 @@ export async function readKeptFile(
 }
 
 /** Internal symbol storing the transaction's scoped `CteRunner` on a `createCommandDb` object. */
-export const CTE_RUNNER = Symbol('mistri.cte.runner');
+const CTE_RUNNER = Symbol('mistri.cte.runner');
 
 /** Returns the scoped `CteRunner` bound to a `createCommandDb` handle object. */
 export function cteOf(db: object): CteRunner {

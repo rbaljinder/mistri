@@ -12,7 +12,8 @@
  * and across every principal, because deciding who sees what is the policy's
  * job; what it returns is a row scope, which is judged like any other.
  */
-import type { AggregateRequest, Filter, QueryRequest } from '@mistriwork/engine/adapters/adapter.js';
+import type { AggregateRequest, CteRequest, Filter, QueryRequest } from '@mistriwork/engine/adapters/adapter.js';
+import { cteTables } from '@mistriwork/engine/shared/cte.js';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import { commandCatalog, zonedCatalog, createCommandDb, type ReadTable, type UntypedRow } from '../commands/commandDb.js';
@@ -42,6 +43,20 @@ export function createPolicyDb(resources: RuntimeResources, zone?: string): Poli
        cannot say one has none, and the handle refuses. */
     ...(names.every((table) => typeof adapter(table).aggregate === 'function')
       ? { aggregate: (request: AggregateRequest) => adapter(request.table).aggregate!(request) }
+      : {}),
+    ...(names.every((table) => typeof adapter(table).cte === 'function')
+      ? {
+          cte: (request: CteRequest) => {
+            const tables = cteTables(request);
+            const target = tables[0];
+            if (!target) throw new Error('CTE query references no table.');
+            const conn = resources.connectionFor(target);
+            if (tables.some((t) => resources.connectionFor(t) !== conn)) {
+              throw new Error('CTE queries cannot span multiple connections.');
+            }
+            return adapter(target).cte!(request);
+          },
+        }
       : {}),
   });
   return createCommandDb({ tx: reader, catalog, read: names, write: [], now: () => appTime() }) as PolicyDb;

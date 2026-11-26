@@ -32,9 +32,9 @@ const IDENT = /^[a-z_][a-z0-9_]{0,62}$/i;
 const DATE_UNITS: readonly DateUnit[] = ['year', 'quarter', 'month', 'week', 'day'];
 const AGG_FNS = new Set(['count', 'sum', 'avg', 'min', 'max']);
 export const CTE_MAX_STEPS = 8;
-export const CTE_MAX_JOINS = 8;
+const CTE_MAX_JOINS = 8;
 
-export interface CompiledCte {
+interface CompiledCte {
   readonly text: string;
   readonly params: unknown[];
   readonly columns: readonly string[];

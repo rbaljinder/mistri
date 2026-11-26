@@ -4,6 +4,7 @@ import {
   TransactionOutcomeUnknown,
   type Adapter,
   type AggregateRequest,
+  type CteRequest,
   type ScopedReads,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
@@ -601,6 +602,7 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
       runBreakdown: (definition, offset) => track(() => adapter.runBreakdown!(definition, offset)),
       countBreakdown: (definition) => track(() => adapter.countBreakdown!(definition)),
       ...(adapter.aggregate ? { aggregate: (request: AggregateRequest) => track(() => adapter.aggregate!(request)) } : {}),
+      ...(adapter.cte ? { cte: (request: CteRequest) => track(() => adapter.cte!(request)) } : {}),
       ...(adapter.insert && !server ? { insert: ((request) => track(() => adapter.insert!(request))) as WriteTransaction['insert'] } : {}),
       ...(adapter.update && !server ? { update: ((request) => track(() => adapter.update!(request))) as WriteTransaction['update'] } : {}),
       ...(adapter.remove && !server ? { remove: ((request) => track(() => adapter.remove!(request))) as WriteTransaction['remove'] } : {}),

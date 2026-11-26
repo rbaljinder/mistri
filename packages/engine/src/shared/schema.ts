@@ -18,6 +18,7 @@ import { isLabelTemplate, LABEL_SEGMENT, parseLabelTemplate } from './recordLabe
 import type { Rollup } from './rollups.js';
 import type { TagSet } from './tagLists.js';
 import type { ComputedColumn } from './computed.js';
+import type { DerivedTable } from './servedApp.js';
 
 export interface ColumnMeta {
   name: string;
@@ -253,7 +254,7 @@ export interface TableMeta {
   /** An App's union (appUnions.ts): read by asking each branch it holds, never as a table. */
   union?: import('./servedApp.js').UnionTable;
   /** An App's declarative CTE-backed derived resource (appDerived.ts): read via `adapter.cte`, never as a table. */
-  derived?: import('./servedApp.js').DerivedTable;
+  derived?: DerivedTable;
   /**
    * Columns that lead an index, primary key included.
    *

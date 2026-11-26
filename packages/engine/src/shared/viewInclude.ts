@@ -9,12 +9,12 @@
  * travel on `/api/view/run` and execute as bounded, grant-checked batched reads in the same HTTP round trip.
  */
 
-export interface ParentIncludeObject {
+interface ParentIncludeObject {
   readonly via: string;
   readonly show: readonly string[];
 }
 
-export interface ChildIncludeSpec {
+interface ChildIncludeSpec {
   readonly from?: string;
   readonly by: string;
   readonly show?: readonly string[];
@@ -24,16 +24,16 @@ export interface ChildIncludeSpec {
   readonly query?: string;
 }
 
-export type IncludeEntry = readonly string[] | ParentIncludeObject | ChildIncludeSpec;
+type IncludeEntry = readonly string[] | ParentIncludeObject | ChildIncludeSpec;
 export type ViewIncludeSpec = Readonly<Record<string, IncludeEntry>>;
 
-export interface NormalizedParentInclude {
+interface NormalizedParentInclude {
   readonly alias: string;
   readonly via: string;
   readonly show: readonly string[];
 }
 
-export interface NormalizedChildInclude {
+interface NormalizedChildInclude {
   readonly alias: string;
   readonly from: string;
   readonly by: string;
@@ -56,7 +56,7 @@ export function isChildIncludeEntry(value: unknown): value is ChildIncludeSpec {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && typeof (value as { by?: unknown }).by === 'string';
 }
 
-export function isParentIncludeObject(value: unknown): value is ParentIncludeObject {
+function isParentIncludeObject(value: unknown): value is ParentIncludeObject {
   return (
     Boolean(value) &&
     typeof value === 'object' &&

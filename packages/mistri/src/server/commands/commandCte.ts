@@ -37,7 +37,7 @@ interface InternalCteRef<Name extends string = string, Row = Readonly<Record<str
   readonly __steps?: readonly CteStep[];
 }
 
-export interface CteSourceSpec {
+interface CteSourceSpec {
   readonly buildSpec: () => CteQuerySpec;
 }
 
@@ -49,7 +49,7 @@ interface PendingJoin {
   readonly steps?: readonly CteStep[];
 }
 
-export interface CteContext {
+interface CteContext {
   readonly steps: readonly CteStep[];
   readonly tx: Pick<WriteTransaction, 'query' | 'count' | 'aggregate' | 'cte'>;
   readonly defaultCap: number;
@@ -58,12 +58,12 @@ export interface CteContext {
 
 const cteStorage = new AsyncLocalStorage<CteContext>();
 
-export function currentCteContext(): CteContext | undefined {
+function currentCteContext(): CteContext | undefined {
   return cteStorage.getStore();
 }
 
 /** Extracts a `CteQuerySpec` from a Mistri `Query` or `Grouped` handle. */
-export function extractCteSpec(name: string, step: unknown): CteStep {
+function extractCteSpec(name: string, step: unknown): CteStep {
   if (!step || (typeof step !== 'object' && typeof step !== 'function') || !(CTE_SPEC in step)) {
     authorMistake(`cte("${name}") expects a db.<table>.where(...) or .groupBy(...).aggregate(...) query.`);
   }

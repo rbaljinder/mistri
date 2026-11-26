@@ -29,7 +29,7 @@ interface DbIncludeChildSpec {
   readonly limit?: number;
 }
 
-export interface IncludeTableMeta {
+interface IncludeTableMeta {
   readonly name: string;
   readonly key: readonly string[];
   readonly kinds: Readonly<Record<string, ColumnKind>>;

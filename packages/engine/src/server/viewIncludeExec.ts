@@ -21,7 +21,7 @@ import { readView } from './resourceReadOperations.js';
 
 const CHILD_TOTAL_CAP = 1_000;
 
-export interface ValidatedChildInclude {
+interface ValidatedChildInclude {
   readonly alias: string;
   readonly from: string;
   readonly by: string;

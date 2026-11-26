@@ -7,11 +7,11 @@ import { compileAggregate, type AggregateRequest, type AggregateResult } from '.
 import { compileCte, cteTables, type CteRequest, type CteResult } from '../shared/cte.js';
 import { POSTGRES_STYLE } from './adapter.js';
 
-export interface PgQueryLike {
+interface PgQueryLike {
   query(text: string, params?: unknown[]): Promise<{ rows: Record<string, unknown>[] }>;
 }
 
-export interface PgCteHost {
+interface PgCteHost {
   assertTable(table: string, db: PgQueryLike): Promise<{ schema: string; name: string }>;
   getSchema(): Promise<DatabaseSchema>;
   toJsonSafe(row: Record<string, unknown>): Record<string, unknown>;

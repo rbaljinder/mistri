@@ -13,7 +13,6 @@
  * `compileCte`'s `ScopedRelations`.
  */
 import type { AppDef, AppDerived, AppDerivedStep } from './appModel.js';
-export type { AppDerived, AppDerivedStep } from './appModel.js';
 import { allowKeys, isRecord } from '@mistriwork/engine/shared/model.js';
 import {
   compileCte,
@@ -32,11 +31,10 @@ import { DATE_UNITS } from '@mistriwork/engine/shared/breakdown.js';
 import { ANSI_STYLE, type DateUnit, type Filter } from '@mistriwork/engine/shared/filter.js';
 import { parseQuery } from '@mistriwork/engine/shared/query.js';
 import { columnKind, tableNamed, type ColumnMeta, type DatabaseSchema, type TableMeta } from '@mistriwork/engine/shared/schema.js';
-export type { DerivedTable } from '@mistriwork/engine/shared/servedApp.js';
 
-export type AppDerivedJoin = NonNullable<AppDerivedStep['join']>[number];
-export type AppDerivedMeasure = NonNullable<AppDerivedStep['measures']>[string];
-export type AppDerivedGroupKey = NonNullable<AppDerivedStep['groupBy']>[number];
+type AppDerivedJoin = NonNullable<AppDerivedStep['join']>[number];
+type AppDerivedMeasure = NonNullable<AppDerivedStep['measures']>[string];
+type AppDerivedGroupKey = NonNullable<AppDerivedStep['groupBy']>[number];
 
 const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const AGG_FNS = new Set(['count', 'sum', 'avg', 'min', 'max']);
@@ -78,7 +76,7 @@ function parseStep(raw: unknown, at: string, allowedKeys: readonly string[]): Ap
       }
       return {
         target: entry.target.trim(),
-        ...(entry.alias ? { alias: entry.alias } : {}),
+        ...(typeof entry.alias === 'string' ? { alias: entry.alias } : {}),
         kind,
         on: [entry.on[0].trim(), entry.on[1].trim()] as const,
       };
@@ -101,8 +99,8 @@ function parseStep(raw: unknown, at: string, allowedKeys: readonly string[]): Ap
         }
         return {
           column: g.column.trim(),
-          ...(g.bucket ? { bucket: g.bucket as DateUnit } : {}),
-          ...(g.as ? { as: g.as } : {}),
+          ...(typeof g.bucket === 'string' ? { bucket: g.bucket as DateUnit } : {}),
+          ...(typeof g.as === 'string' ? { as: g.as } : {}),
         };
       }
       throw new Error(`${at}.groupBy[${idx}] must be a column name or { column, bucket?, as? }.`);
@@ -168,8 +166,8 @@ function parseStep(raw: unknown, at: string, allowedKeys: readonly string[]): Ap
   }
   return {
     from: raw.from.trim(),
-    ...(raw.alias ? { alias: raw.alias } : {}),
-    ...(raw.where ? { where: raw.where } : {}),
+    ...(typeof raw.alias === 'string' ? { alias: raw.alias } : {}),
+    ...(typeof raw.where === 'string' ? { where: raw.where } : {}),
     ...(join ? { join } : {}),
     ...(groupBy ? { groupBy } : {}),
     ...(measures ? { measures } : {}),
@@ -267,7 +265,7 @@ function toCteSpec(step: AppDerivedStep, at: string): CteQuerySpec {
 }
 
 /** Converts a parsed `AppDerived` declaration into a `CteRequest`. */
-export function derivedToCteRequest(derived: AppDerived): CteRequest {
+function derivedToCteRequest(derived: AppDerived): CteRequest {
   const withSteps: CteStep[] = Object.entries(derived.with ?? {}).map(([name, step]) => ({
     name,
     ...toCteSpec(step, `derived "${derived.name}".with.${name}`),

@@ -1,7 +1,7 @@
 /** Shared eligibility evaluation. The host must supply already-authorized
  * target rows and a read transaction under the command's footprint/row scope.
  * This helper neither authorizes a principal nor executes a handler. */
-import type { AggregateRequest, WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import type { AggregateRequest, CteRequest, WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
 import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import { snapshotScopedData } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
@@ -168,7 +168,7 @@ export async function evaluateCommandAvailability(options: {
   actor: BusinessCommandActor;
   records: readonly Readonly<Record<string, unknown>>[];
   catalog: CommandCatalog;
-  reader: Pick<WriteTransaction, 'query' | 'count' | 'aggregate'>;
+  reader: Pick<WriteTransaction, 'query' | 'count' | 'aggregate' | 'cte'>;
   signal: AbortSignal;
   requestId: string;
   now: () => Date;
@@ -226,6 +226,16 @@ export async function evaluateCommandAvailability(options: {
           aggregate: async (request: AggregateRequest) => {
             checkCancelled();
             const result = await options.reader.aggregate!(request);
+            checkCancelled();
+            return result;
+          },
+        }
+      : {}),
+    ...(options.reader.cte
+      ? {
+          cte: async (request: CteRequest) => {
+            checkCancelled();
+            const result = await options.reader.cte!(request);
             checkCancelled();
             return result;
           },
