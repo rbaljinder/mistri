@@ -156,3 +156,17 @@ view is bent into a page it is not. Ladle shows all three:
 [ladle/host/main.tsx](../../../examples/apps/ladle/host/main.tsx),
 [ladle/pages/check-in.page.tsx](../../../examples/apps/ladle/pages/check-in.page.tsx);
 `mistri docs general-path`.
+
+## Joining data across tables
+
+Never issue sequential `useRecord`/`useRows` waterfalls on a page or N+1 `db.*.get`/`where` loops inside a command or loader. Pick the narrowest server-side join that fits:
+
+| Need | Use | Where & docs |
+| --- | --- | --- |
+| Page showing rows + parent FK fields or bounded child rows | `include` on `useRows` / `useRecord` (`seller_id: ['name']`, `{ via, show }`, `{ by, show, sort, limit }`) — one round trip and SSR pass | [foundry/pages/item.page.tsx:65](../../../examples/apps/foundry/pages/item.page.tsx#L65), `mistri docs custom-components` |
+| Command or loader reading a few columns or hydrating relations | `ctx.db` `.select(...)`, `getMany(keys, { select })`, `by(fk, keys, { select, orderBy, limit })`, `.include(...)`, and 1-hop FK `orderBy`/`groupBy` | `mistri docs commands` |
+| Ad-hoc multi-step SQL aggregation or join in a command/loader | `ctx.cte({ step: db.t... }, (q) => db.other.join(q.step, { on, kind }))` — one parameterized `WITH ... AS (...) SELECT ...` under grants, row policy and tenancy | `mistri docs commands` |
+| Reusable joined/aggregated read-only resource for views, charts, metrics, or `useRows` | `defineQuery(name, { with, from, join, groupBy, measures, select })` under `derived` in `app.ts` — typed in `mistri-schema.d.ts`, grant-pruned per reader | `mistri docs dsl-resources`, `mistri docs relationships` |
+
+- **Organize copy with nested catalogs**: group `messages/<locale>.ts` by area inside `defineMessages` (nested keys flatten to dot paths checked by `mistri check` and accepted in `msg()` / `useMessage()`) — [foundry/messages/en.ts:9](../../../examples/apps/foundry/messages/en.ts#L9), `mistri docs languages`.
+

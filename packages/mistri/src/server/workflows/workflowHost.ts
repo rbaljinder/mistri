@@ -224,6 +224,8 @@ export interface WorkflowHandlerOptions {
   readonly attemptTimeoutMs: number;
   /** A tenant App's: each wake-up carries its instance's tenant, and the advance reads only that tenant's partition. */
   readonly tenancy?: boolean;
+  /** Registers a cleanup callback invoked when the owning JobHost stops. */
+  readonly onStop?: (teardown: () => void) => void;
 }
 
 /* The steps waiting in this process on a proposal, by its id: what an approval wakes (onProposalApproved). Listening
@@ -241,6 +243,7 @@ interface ProposalWait {
 function proposalWaits(options: WorkflowHandlerOptions) {
   const waits = new Map<string, ProposalWait & { readonly addedAt: number }>();
   let stop: (() => void) | undefined;
+  let closed = false;
   const trim = (now: number) => {
     const cutoff = now - PROPOSAL_WAIT_TTL_MS;
     for (const [id, entry] of waits) {
@@ -249,12 +252,20 @@ function proposalWaits(options: WorkflowHandlerOptions) {
     }
     while (waits.size > PROPOSAL_WAITS_MAX) waits.delete(waits.keys().next().value!);
   };
+  options.onStop?.(() => {
+    closed = true;
+    waits.clear();
+    stop?.();
+    stop = undefined;
+  });
   return (id: string, wait: ProposalWait) => {
+    if (closed) return;
     const now = options.now();
     waits.delete(id);
     waits.set(id, { ...wait, addedAt: now });
     trim(now);
     stop ??= onProposalApproved(options.appId, ({ id: approved }) => {
+      if (closed) return;
       const woken = waits.get(approved);
       if (!woken) return;
       waits.delete(approved);
@@ -276,6 +287,89 @@ function proposalWaits(options: WorkflowHandlerOptions) {
       });
     });
   };
+}
+
+/**
+ * Recovery sweep for workflow instances stranded in `waiting` past their `wakeAt` or stuck in
+ * `running` after a crash or failed wake enqueue. Uses the same idempotency keys as normal wakes
+ * so instances that already have a pending wake-up job are harmlessly deduplicated.
+ */
+export async function sweepOverdueWorkflows(
+  options: Pick<WorkflowHandlerOptions, 'module' | 'appId' | 'workflows' | 'jobs' | 'now' | 'attemptTimeoutMs' | 'tenancy'>,
+  at = options.now(),
+): Promise<number> {
+  const WAITING_GRACE_MS = 10_000;
+  const RUNNING_GRACE_MS = Math.max(options.attemptTimeoutMs * 2, 60_000);
+  const LIMIT = 64;
+  let woken = 0;
+
+  const resolveWorkflow = (partition: string): { workflow: CapturedWorkflow; tenantId: string | undefined } | undefined => {
+    const atTilde = partition.indexOf('~');
+    const name = atTilde < 0 ? partition : partition.slice(0, atTilde);
+    const workflow = options.module.workflows.get(name);
+    if (!workflow) return undefined;
+    if (options.tenancy) {
+      if (atTilde < 0) return undefined;
+      const tail = partition.slice(atTilde + 1);
+      // Hashed >128-byte tenant partitions cannot be reversed to a raw tenantId here.
+      if (!tail || tail.startsWith('#')) return undefined;
+      return { workflow, tenantId: tail };
+    }
+    return atTilde < 0 ? { workflow, tenantId: undefined } : undefined;
+  };
+
+  try {
+    const waiting = await options.workflows.inspect({ state: 'waiting' }, LIMIT);
+    for (const instance of waiting) {
+      if (instance.wakeAt === null || instance.wakeAt > at - WAITING_GRACE_MS) continue;
+      const target = resolveWorkflow(instance.workflow);
+      if (!target) continue;
+      try {
+        await wake(
+          options.jobs,
+          target.workflow,
+          options.appId,
+          target.tenantId,
+          instance.id,
+          wakeKey('timer', instance.id, instance.currentStep ?? '', instance.wakeAt),
+          at,
+          instance.wakeAt,
+        );
+        woken++;
+      } catch {
+        /* Store transiently unavailable: next sweep tries again. */
+      }
+    }
+  } catch {
+    /* Store transiently unavailable: next sweep tries again. */
+  }
+
+  try {
+    const running = await options.workflows.inspect({ state: 'running' }, LIMIT);
+    for (const instance of running) {
+      if (instance.updatedAt > at - RUNNING_GRACE_MS) continue;
+      const target = resolveWorkflow(instance.workflow);
+      if (!target) continue;
+      try {
+        await wake(
+          options.jobs,
+          target.workflow,
+          options.appId,
+          target.tenantId,
+          instance.id,
+          wakeKey('resume', instance.id, 'overdue', instance.updatedAt),
+          at,
+        );
+        woken++;
+      } catch {
+        /* Store transiently unavailable: next sweep tries again. */
+      }
+    }
+  } catch {
+    /* Store transiently unavailable: next sweep tries again. */
+  }
+
+  return woken;
 }
 
 /** The runner's handlers for the module's workflows: `wf-<name>`, each advancing one instance. */

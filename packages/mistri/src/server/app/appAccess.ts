@@ -459,10 +459,8 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
       if (typeof resources.forConnection(owner).scopeTransaction !== 'function') throw new AppAccessDenied();
     }
   }
-  const { schema, assertRead, assertWrite, assertAllFields, queryFor, filterFor, viewFor, breakdownFor, aggregateFor } = resourceChecks(
-    full,
-    access,
-  );
+  const { schema, assertRead, assertWrite, assertAllFields, queryFor, filterFor, viewFor, breakdownFor, aggregateFor, cteFor } =
+    resourceChecks(full, access);
   /* The read audit (../readAudit.ts): a row per read of an audited table, written before its rows are handed on.
      Only `query` and `runView` hand rows out; a count, a breakdown and a sum say how many, never which. A grant
      that audits nothing takes the plain path, with nothing to look up. */
@@ -567,6 +565,11 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
           read(
             () => aggregateFor(request),
             (bound, checked) => (bound.aggregate ? bound.aggregate(checked) : Promise.reject(new AppAccessDenied())),
+          ),
+        cte: (request) =>
+          read(
+            () => cteFor(request),
+            (bound, checked) => (bound.cte ? bound.cte(checked) : Promise.reject(new AppAccessDenied())),
           ),
       };
       const writable = [...access.writable, ...(access.actions?.keys() ?? [])].some(
@@ -688,6 +691,7 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
     if (underlying.runBreakdown) guarded.runBreakdown = (def, offset) => underlying.runBreakdown!(breakdownFor(def), offset);
     if (underlying.countBreakdown) guarded.countBreakdown = (def, limit) => underlying.countBreakdown!(breakdownFor(def), limit);
     if (underlying.aggregate) guarded.aggregate = (request) => underlying.aggregate!(aggregateFor(request));
+    if (underlying.cte) guarded.cte = (request) => underlying.cte!(cteFor(request));
     /* Each item checked as `count` checks one — the table readable, every
        filtered field granted — before any of them reaches the statement. */
     if (underlying.countEach)

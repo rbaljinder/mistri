@@ -279,27 +279,58 @@ function optionally<T>(
 export function useRecord(
   resource: string,
   key: Readonly<Record<string, unknown>> | undefined,
-  show: readonly string[] | undefined,
-  options: { optional: true },
+  showOrOptions:
+    | readonly string[]
+    | {
+        readonly show?: readonly string[];
+        readonly include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec;
+        readonly optional: true;
+      }
+    | undefined,
+  options?: { optional?: boolean; include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec },
 ): UseQueryResult<UiRow | null> & UiReadState & UiRefusable;
 export function useRecord(
   resource: string,
   key: Readonly<Record<string, unknown>> | undefined,
-  show?: readonly string[],
-  options?: { optional?: false },
+  showOrOptions?:
+    | readonly string[]
+    | {
+        readonly show?: readonly string[];
+        readonly include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec;
+        readonly optional?: false;
+      },
+  options?: { optional?: false; include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec },
 ): UseQueryResult<UiRow | null> & UiReadState;
 export function useRecord(
   resource: string,
   key: Readonly<Record<string, unknown>> | undefined,
-  show?: readonly string[],
-  options: { optional?: boolean } = {},
+  showOrOptions?:
+    | readonly string[]
+    | {
+        readonly show?: readonly string[];
+        readonly include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec;
+        readonly optional?: boolean;
+      },
+  options: { optional?: boolean; include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec } = {},
 ): UseQueryResult<UiRow | null> & UiReadState & UiRefusable {
+  const isOpts = Boolean(showOrOptions && !Array.isArray(showOrOptions));
+  const recordOpts = isOpts
+    ? (showOrOptions as {
+        readonly show?: readonly string[];
+        readonly include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec;
+        readonly optional?: boolean;
+      })
+    : undefined;
+  const show = isOpts ? recordOpts?.show : (showOrOptions as readonly string[] | undefined);
+  const include = recordOpts?.include ?? options.include;
+  const optional = recordOpts?.optional === true || options.optional === true;
   const host = useUiHost();
-  const page = useDeclared(resource, options.optional === true);
-  const closed = useClosed(resource, options.optional === true);
-  const queryKey = ['mistri-ui', 'record', ...host.scope, resource, key, show, page] as const;
+  const page = useDeclared(resource, optional);
+  const closed = useClosed(resource, optional);
+  const queryKey = ['mistri-ui', 'record', ...host.scope, resource, key, show, include, page] as const;
   const enabled = key !== undefined && !closed;
-  const queryFn = async () => (await host.record(resource, key!, show, page ? { page } : {})) ?? null;
+  const queryFn = async () =>
+    (await host.record(resource, key!, show, { ...(page ? { page } : {}), ...(include ? { include } : {}) })) ?? null;
   host.ssrPrefetch?.(queryKey, queryFn, enabled);
   return optionally(
     withReadState(
@@ -309,7 +340,7 @@ export function useRecord(
         enabled,
       }),
     ),
-    options.optional === true,
+    optional,
     closed,
   );
 }
@@ -749,7 +780,8 @@ export function useCommandHandle(ref: UiCommandRef, viewer: UiViewer): UiCommand
       }),
     );
   }
-  return useMemo(() => host.command(ref, page?.view), [host, ref, page?.view, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rolesKey = viewer.roles.join(',');
+  return useMemo(() => host.command(ref, page?.view), [host, ref, page?.view, viewer.signedIn, viewer.account, rolesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
@@ -762,7 +794,8 @@ export function useGranted(ref: UiCommandRef): boolean {
   const host = useUiHost();
   const viewer = useViewer();
   const page = useContext(UiPageContext);
-  return useMemo(() => host.command(ref, page?.view).granted, [host, ref, page?.view, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rolesKey = viewer.roles.join(',');
+  return useMemo(() => host.command(ref, page?.view).granted, [host, ref, page?.view, viewer.signedIn, viewer.account, rolesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
@@ -787,7 +820,8 @@ export function useAction(ref: UiCommandRef): UiCommand {
     );
   }
   const viewer = useViewer();
-  const handle = useMemo(() => host.action(ref, page?.reads), [host, ref, page?.reads, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rolesKey = viewer.roles.join(',');
+  const handle = useMemo(() => host.action(ref, page?.reads), [host, ref, page?.reads, viewer.signedIn, viewer.account, rolesKey]); // eslint-disable-line react-hooks/exhaustive-deps
   return useHandle(handle, viewer);
 }
 
@@ -800,15 +834,18 @@ function useHandle(handle: UiCommandHandle, viewer: UiViewer): UiCommand {
   const [round, setRound] = useState(0);
   /* The handle whose answers are wanted: one for another reader or command asks everything again. */
   const current = useRef(handle);
+  const generation = useRef(0);
   useEffect(() => {
     if (current.current === handle) return;
     current.current = handle;
+    generation.current += 1;
     asked.current.clear();
     setAnswers(new Map());
   }, [handle]);
   useEffect(
     () => () => {
       current.current = undefined as unknown as typeof handle;
+      generation.current += 1;
     },
     [],
   );
@@ -819,14 +856,16 @@ function useHandle(handle: UiCommandHandle, viewer: UiViewer): UiCommand {
     if (!ask.length) return;
     for (const [text, key] of ask) asked.current.set(text, key);
     const by = handle;
+    const gen = generation.current;
     void Promise.all(ask.map(async ([text, key]) => [text, by.granted ? await by.available(key).catch(() => false) : false] as const)).then(
       (results) => {
-        if (current.current === by) setAnswers((before) => new Map([...before, ...results]));
+        if (current.current === by && generation.current === gen) setAnswers((before) => new Map([...before, ...results]));
       },
     );
   });
   /* Asked again after a run, keeping the last answers until the new ones arrive: a chip does not blink. */
   const again = () => {
+    generation.current += 1;
     asked.current.clear();
     setRound((n) => n + 1);
   };

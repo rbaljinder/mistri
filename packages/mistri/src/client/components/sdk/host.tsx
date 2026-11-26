@@ -32,6 +32,7 @@ import {
   toast,
 } from '@mistriwork/kit/client/core.js';
 import { PAGE_LOAD_PATH } from '@mistriwork/engine/shared/pageRoutes.js';
+import { parentIncludePaths, shapeIncludedRows, splitInclude, type IncludedChildPayload } from '@mistriwork/engine/shared/viewInclude.js';
 import { ownedBy } from '@mistriwork/kit/client/requestIdentity.js';
 import { sessionIdentity, subscribeSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { batchedBreakdown, batchedView } from '@mistriwork/kit/client/breakdownBatch.js';
@@ -76,7 +77,7 @@ import { tenantQualified } from '../../tenantAddress.js';
 function tableOf(resource: string): TableMeta {
   const table = state.schema ? (tableNamed(state.schema, resource) as TableMeta | undefined) : undefined;
   const declared = (pageBridge.activeApp() as { resources?: Record<string, unknown> } | null)?.resources ?? {};
-  if (!table || (Object.keys(declared).length && !Object.hasOwn(declared, table.id) && !table.union)) {
+  if (!table || (Object.keys(declared).length && !Object.hasOwn(declared, table.id) && !table.union && !table.derived)) {
     throw new Error(say('isNotOneOfThisApps', { resource }));
   }
   return table;
@@ -91,8 +92,11 @@ async function viewRows(
   page?: string,
   where?: unknown,
   offset?: number,
+  include?: import('@mistriwork/engine/shared/viewInclude.js').ViewIncludeSpec,
 ): Promise<UiRow[]> {
+  const { parents, children, hasChildren } = splitInclude(include);
   const basePaths = show?.length ? [...show] : table.columns.map((column) => column.name);
+  const parentPaths = parentIncludePaths(parents);
   const pageReads = (() => {
     if (!page) return undefined;
     const app = pageBridge.activeApp() as {
@@ -108,26 +112,30 @@ async function viewRows(
     coverDeclared &&
     !table.columns.some((column) => column.name === COVER_COLUMN) &&
     !basePaths.includes(COVER_COLUMN);
-  const paths = attachCover ? [...basePaths, COVER_COLUMN] : basePaths;
+  const paths = [...new Set([...basePaths, ...parentPaths, ...(attachCover ? [COVER_COLUMN] : [])])];
   const body = {
     ...uiViewRunBody(table.id, table.name, paths, query, limit),
     /* Sent as written, not compiled here: the server judges it against the columns this reader is served. */
     ...(where === undefined ? {} : { where }),
     ...(offset ? { offset } : {}),
+    ...(hasChildren ? { include: children } : {}),
   };
   /* Asked with the page's other reads of the same moment: nineteen lists on one page are one request, each still its
      own query with its own rows or its own error (kit breakdownBatch.ts). */
-  const got = await batchedView<Parameters<typeof rowsByPath>[1]>(body, page);
+  const got = await batchedView<Parameters<typeof rowsByPath>[1] & { included?: Readonly<Record<string, IncludedChildPayload>> }>(
+    body,
+    page,
+  );
   /* A refused read (a query the language cannot parse, say) fails this read alone, and says which read it was: a
      page with several reads otherwise shows a parser's words with nothing to tell which of them they belong to. */
   const refusal = (got as { errors?: Array<{ message?: string }> } | null)?.errors?.[0]?.message;
   if (refusal) throw new Error(say('theRowsOfRefused', { name: table.name, reason: refusal }));
   /* Said of the same tables as the answer they were read out of (liveReads.ts): what is made of them below says so
      too, so the read is filed by them and asked again only when one changes (liveInvalidate.ts, commandRefresh.ts). */
-  const rows = rowsByPath(paths, got, say('theRowsOfCould', { name: table.name }), { schema: state.schema, base: table.id });
+  const rawRows = rowsByPath(paths, got, say('theRowsOfCould', { name: table.name }), { schema: state.schema, base: table.id });
   const cover = table.cover;
   if (cover && (attachCover || basePaths.includes(COVER_COLUMN))) {
-    for (const row of rows) {
+    for (const row of rawRows) {
       const raw = row[COVER_COLUMN];
       row[COVER_COLUMN] =
         raw === null || raw === undefined
@@ -135,6 +143,8 @@ async function viewRows(
           : (pageHost.fileAddress(cover.from, { [cover.photoKey]: raw }, cover.thumbnail ? { thumbnail: true } : undefined) ?? null);
     }
   }
+  const pkCol = (primaryKey(table) as string[])[0];
+  const rows = shapeIncludedRows(rawRows, parents, got.included, pkCol, show?.length ? basePaths : undefined);
   return sameReads(rows, got);
 }
 
@@ -243,11 +253,11 @@ const pageHost: UiHost = {
       return false;
     }
   },
-  async rows(resource, { where, query, show, sort, limit, page, keys, offset }) {
+  async rows(resource, { where, query, show, sort, limit, page, keys, offset, include }) {
     const table = tableOf(resource);
     const paths = keys && show?.length ? [...new Set([...show, ...(primaryKey(table) as string[])])] : show;
     const size = limit ?? 20;
-    const got = await viewRows(table, paths, uiRowsQuery(query, sort), size + 1, page, where, offset);
+    const got = await viewRows(table, paths, uiRowsQuery(query, sort), size + 1, page, where, offset, include);
     return sameReads({ rows: got.slice(0, size), more: got.length > size }, got);
   },
   async record(resource, key, show, asking = {}) {
@@ -256,7 +266,7 @@ const pageHost: UiHost = {
     const where = keyed.map((column) => `${column} = ${quote(String(key[column]))}`).join(' and ');
     /* The key rides beside `show`, as a read's rows carry it: the record's type says it is there. */
     const paths = show?.length ? [...new Set([...show, ...keyed])] : show;
-    const rows = await viewRows(table, paths, where, 1, asking.page);
+    const rows = await viewRows(table, paths, where, 1, asking.page, undefined, undefined, asking.include);
     return sameReads(rows[0], rows);
   },
   async breakdown(resource, { by, measure, query, limit, page, where }) {

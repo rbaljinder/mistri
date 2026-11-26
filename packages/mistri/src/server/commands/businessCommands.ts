@@ -39,6 +39,7 @@ import { captureCommandEffects, EFFECT_EVENT_PREFIX, type CapturedEffects, type 
 import {
   sourceName,
   type CommandTables,
+  type CteRunner,
   type LocalName,
   type ReadTable,
   type RowOf,
@@ -195,6 +196,8 @@ export interface BusinessCommandContext extends CommandContextBase {
    */
   readonly chosen: Readonly<Record<string, string | number | undefined>>;
   readonly db: Readonly<Record<string, ReadTable<UntypedRow>>>;
+  /** Execute a scoped multi-stage SQL CTE (`WITH ... AS (...) SELECT ...`) over declared tables. */
+  readonly cte: CteRunner;
   /** The target, read and checked in this transaction: a one-target command that names a record. */
   readonly record?: UntypedRow;
   /** Every target, in request order: a `targets: 'many'` command. */
@@ -372,6 +375,8 @@ type CommandHandlerContext<
   readonly locale: BusinessCommandContext['locale'];
   readonly chosen: BusinessCommandContext['chosen'];
   readonly db: CommandTables<Tables<Src, Target>, Reads<Target, Read, Write>, Writes<Target, Write>>;
+  /** Execute a scoped multi-stage SQL CTE (`WITH ... AS (...) SELECT ...`) over declared tables. */
+  readonly cte: CteRunner;
   readonly tx: WriteTransaction;
   readonly nextNumber: CommandNextNumber;
   readonly link: CommandLinkMint;

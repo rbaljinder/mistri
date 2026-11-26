@@ -15,7 +15,7 @@ import { declaredOrder, type DatabaseSchema, type Order, type TableConstraint, t
    these edges do not exist once compiled. */
 import type { CompiledColumn, CompiledJoin, ViewDef } from '../shared/view.js';
 import type { BreakdownDef, CompiledMeasure } from '../shared/breakdown.js';
-import type { AggregateRequest, AggregateResult } from '../shared/aggregate.js';
+import type { AggregateRequest, AggregateResult, CteRequest, CteResult } from '../shared/aggregate.js';
 import type { RowScope } from '../shared/rowScope.js';
 import { Refusal } from '../shared/refusal.js';
 import { LANE_ROW, type QueryResult } from '../shared/reads.js';
@@ -38,7 +38,17 @@ export {
   type SqlFragment,
   type SqlStyle,
 } from '../shared/filter.js';
-export type { AggregateMeasure, AggregateRequest, AggregateResult } from '../shared/aggregate.js';
+export type {
+  AggregateMeasure,
+  AggregateRequest,
+  AggregateResult,
+  CteJoin,
+  CteQuerySpec,
+  CteRequest,
+  CteResult,
+  CteSelect,
+  CteStep,
+} from '../shared/aggregate.js';
 export {
   DEFAULT_LIMIT,
   ESTIMATE_ABOVE,
@@ -704,6 +714,8 @@ export interface WriteTransaction {
    * through the same scope, footprint and table names. Optional, and never approximated where absent: a facade that
    * cannot bound it as it bounds `count` leaves it out, and the command's `db` refuses the call. */
   aggregate?(request: AggregateRequest): Promise<AggregateResult>;
+  /** A scoped multi-stage SQL CTE query (`WITH ... AS (...) SELECT ...`, shared/cte.ts) run inside this transaction. */
+  cte?(request: CteRequest): Promise<CteResult>;
   /** Non-replacing creation, including restoration: enforce InsertRequest's
    * conflict contract in this transaction. A prior absent-key lock/read is not
    * an absence reservation; uniqueness conflicts must still reject the insert. */
@@ -1060,6 +1072,8 @@ export interface ScopedReads {
   countBreakdown(breakdown: BreakdownDef, limit?: number): Promise<number>;
   /** An aggregate over one table, under the scope (WriteTransaction.aggregate). */
   aggregate?(request: AggregateRequest): Promise<AggregateResult>;
+  /** A scoped multi-stage SQL CTE query (`WITH ... AS (...) SELECT ...`, shared/cte.ts). */
+  cte?(request: CteRequest): Promise<CteResult>;
   /** Several `count`s in one statement, each under the scope and its own filter
    * (a menu's badges); absent on a reader that counts one at a time. */
   countEach?(items: readonly CountItem[], limit?: number): Promise<number[]>;
@@ -1223,6 +1237,9 @@ export interface Adapter {
       what a row policy's `db`, a page loader and a command's availability read through. Optional, and never
       approximated where absent: a reader that cannot bound it as it bounds `count` leaves it out, and the `db` refuses. */
   aggregate?(request: AggregateRequest): Promise<AggregateResult>;
+
+  /** A scoped multi-stage SQL CTE query (`WITH ... AS (...) SELECT ...`, shared/cte.ts). */
+  cte?(request: CteRequest): Promise<CteResult>;
 
   /**
    * Count matching rows, for pagination and the "how many point here" badge.

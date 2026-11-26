@@ -198,7 +198,7 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
         if (!may(reached)) return refuseTable(answer, reached === UNKNOWN_TABLE ? view.base : reached);
       const base = findTable(schema, view.base);
       /* A union pages by offset: its rows have no one key order across branches (unionReads.ts), as the list's. */
-      const keyed = base && !base.union ? base : undefined;
+      const keyed = base && !base.union && !base.derived ? base : undefined;
       const byOffset = !keyed || !viewPaging(schema, keyed, view, undefined);
       let step: PageStep | undefined;
       const read = async (offset: number, size: number) => {
@@ -260,11 +260,15 @@ export async function exportFile(asked: ExportAsked): Promise<(() => void) | und
     if (!may(reached)) return refuseTable(answer, reached === UNKNOWN_TABLE ? table.id : reached);
   /* The order the list reads in, made total with the key; an offset batch reads in it too. */
   const order = tableDialect(schema, table) === 'http' && !query.orderBy?.length ? undefined : resolveOrder(table, query.orderBy).order;
-  const byOffset = table.union || !recordsPaging(table, tableDialect(schema, table), query.orderBy, wanted, query.filter, undefined);
+  const byOffset =
+    table.union || table.derived || !recordsPaging(table, tableDialect(schema, table), query.orderBy, wanted, query.filter, undefined);
   let step: PageStep | undefined;
   const read = async (offset: number, size: number) => {
-    /* A union pages by offset: its rows have no one key order across branches (unionReads.ts), as the list's. */
-    const paging = table.union ? undefined : recordsPaging(table, tableDialect(schema, table), query.orderBy, wanted, query.filter, step);
+    /* A union or derived CTE pages by offset: its rows have no single physical key order. */
+    const paging =
+      table.union || table.derived
+        ? undefined
+        : recordsPaging(table, tableDialect(schema, table), query.orderBy, wanted, query.filter, step);
     /* Past the first batch with no boundary to resume from, the file goes on by offset in the same total order. */
     const continued = paging && (!step || paging.continuation) ? paging : undefined;
     /* An order column the file does not show is read for the boundary and taken out again (settlePage): it never

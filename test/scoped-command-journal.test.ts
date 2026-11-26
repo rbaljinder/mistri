@@ -166,7 +166,7 @@ test('scoped reads and CRUD share one atomic commit with the receipt and paired 
   const { adapter, db, path } = fixture(t);
   const result = await commandsOf(adapter).scopeCommandTransaction(scopeA(), async function (tx, journal, catalog) {
     assert.equal(arguments.length, 3);
-    assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'insert', 'query', 'remove', 'update']);
+    assert.deepEqual(Object.keys(tx).sort(), ['aggregate', 'count', 'cte', 'insert', 'query', 'remove', 'update']);
     assert.deepEqual(Object.keys(journal).sort(), [
       'appendReadAudit',
       'commit',

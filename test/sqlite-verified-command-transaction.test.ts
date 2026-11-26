@@ -77,6 +77,7 @@ test('private ordinary verifier surrounds handler and drained journal operations
         assert.deepEqual(Object.keys(tx).sort(), [
           'aggregate',
           'count',
+          'cte',
           'insert',
           'insertMany',
           'lockRecord',

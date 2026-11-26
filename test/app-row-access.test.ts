@@ -241,6 +241,7 @@ test('scoped facade exposes no writer, transaction, statistics, raw SQL, lifecyc
         'count',
         'runView',
         'countView',
+        'cte',
         'runBreakdown',
         'countBreakdown',
         'countEach',

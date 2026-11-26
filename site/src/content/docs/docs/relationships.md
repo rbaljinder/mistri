@@ -47,6 +47,16 @@ A composite key is `a+b`, and the constraint's name where two keys share columns
 
 **Across [sources](/docs/sources/):** two sources on one connection are one database, so a key between them joins. A reference into a source on another connection is read in two steps (the rows, then one read of the targets through that source's grants): it labels, links and gives the target a related list, while a filter, sort, grouping, rollup, `tags` or `notify` path through it is refused. A target in an API source is read by its key: one request for the page where the API documents `in` on the key, otherwise one request per distinct key (at most 50 a page; `mistri check` says `stitched-fanout`). A target that is down does not fail the list: the rows stay, its labels show the stored keys, the read says `partial`, and the list says so in one line. A tenant App's references stay within its one source.
 
+## Choosing a multi-table read
+
+| Where | What you need | Preferred pattern |
+| --- | --- | --- |
+| Declarative views & record pages | Parent labels, related lists, rollups | Label paths (`owner_id.name`), `related(...)`, `rollup.*` |
+| Free-form `definePage` (`useRows` / `useRecord`) | Rows plus nested parent objects or bounded child arrays | `include` option — one SQL `LEFT JOIN` + server-side child batch in one round trip and SSR pass ([custom pages](/docs/custom-components/)) |
+| Command or page loader (`ctx.db`) | Slim columns, batched key/FK maps, or hydrated relations | `.select(...)`, `getMany`, `by`, `.include(...)`, and 1-hop FK `orderBy`/`groupBy` ([commands](/docs/commands/#projection-batching-includes-and-ctes)) |
+| Command or page loader (`ctx.cte`) | Multi-step SQL aggregation joined back to a table | `ctx.cte({ step: ... }, (q) => db.t.join(q.step, { on, kind }))` in one `WITH ... AS (...)` statement ([commands](/docs/commands/#projection-batching-includes-and-ctes)) |
+| Reusable read-only resource across views, charts & pages | Named CTE-backed scorecard or report | `defineQuery(name, { with, from, join, select })` under `derived` in `app.ts` ([derived queries](/docs/dsl-resources/#derived-queries)) |
+
 ## Common mistakes
 
 - `has no reference called "site_code"` or `[not-a-reference]` → the column is not a foreign key; add one (`ALTER TABLE work_order ADD FOREIGN KEY (site_code) REFERENCES site (code)`) or a `references` entry, then run `mistri check`.

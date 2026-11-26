@@ -298,8 +298,9 @@ export async function appProjectionRoutes(ctx: RequestContext, source: ResolvedS
       const writableTables = schema!.tables
         .filter(
           (table) =>
-            /* A union is read-only, and has no connection of its own (appUnions.ts). */
+            /* A union or derived query is read-only, and has no connection of its own. */
             !table.union &&
+            !table.derived &&
             registry.configOf(resources!.connectionFor(table.id))?.writable === true &&
             (access
               ? access.writable.has(table.id) && (!access.fields || Boolean(access.fields.get(table.id)?.write.size))

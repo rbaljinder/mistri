@@ -60,6 +60,8 @@ export const expose = (fields, options = {}) => {
 export const machine = (column, states, opts = {}) => ({ column, states, ...opts });
 /** One list over several tables, in one order and one page: `union('my_requests', [{ from: 'incident', as: { title: 'short_description' } }, …])`. */
 export const union = (name, branches) => ({ name, branches });
+/** A declarative CTE-backed read-only resource: `defineQuery('seller_scorecard', { with: { ... }, from: 'seller', join: [...], select: { ... } })`. */
+export const defineQuery = (name, query) => ({ ...query, name });
 /** A fixed update, or a command by its name (`command: 'assignReviewer'`); the label stays a literal, so a view's `actions` selector is checked. */
 export const action = (label, options) => ({ ...options, label });
 /** An OpenID Connect provider for `auth.providers`, by its config entry's name; `oidc.tenants()` is each tenant's own. */
@@ -333,14 +335,30 @@ const messagePlain = (value, what) => {
     throw new TypeError(`${what} must be a plain object.`);
   return value;
 };
+const MESSAGE_SEGMENT = /^[A-Za-z][A-Za-z0-9_-]*(?:\.[A-Za-z][A-Za-z0-9_-]*)*$/;
+const isMessageObject = (value) =>
+  Boolean(value) && typeof value === 'object' && !Array.isArray(value) && [Object.prototype, null].includes(Object.getPrototypeOf(value));
 export const defineMessages = (locale, entries) => {
-  if (typeof locale !== 'string' || !messageLocale.test(locale)) throw new TypeError(`defineMessages: "${String(locale)}" is not a language tag like "es" or "pt-BR".`);
+  if (typeof locale !== 'string' || !messageLocale.test(locale))
+    throw new TypeError(`defineMessages: "${String(locale)}" is not a language tag like "es" or "pt-BR".`);
   const copied = Object.create(null);
-  for (const [key, text] of Object.entries(messagePlain(entries, 'defineMessages entries'))) {
-    if (!MESSAGE_KEY.test(key)) throw new TypeError(`defineMessages: "${key}" is not a message key like "lead.title".`);
-    if (typeof text !== 'string' || !text.trim()) throw new TypeError(`defineMessages: "${key}" has no text.`);
-    copied[key] = text;
-  }
+  const walk = (node, prefix) => {
+    const pairs = Object.entries(node);
+    if (prefix && !pairs.length) throw new TypeError(`defineMessages: "${prefix}" is an empty group; add messages or remove it.`);
+    for (const [part, value] of pairs) {
+      const full = prefix ? `${prefix}.${part}` : part;
+      if (!MESSAGE_SEGMENT.test(part)) throw new TypeError(`defineMessages: "${full}" is not a message key like "lead.title".`);
+      if (isMessageObject(value)) {
+        walk(value, full);
+        continue;
+      }
+      if (!MESSAGE_KEY.test(full)) throw new TypeError(`defineMessages: "${full}" is not a message key like "lead.title".`);
+      if (typeof value !== 'string' || !value.trim()) throw new TypeError(`defineMessages: "${full}" has no text.`);
+      if (Object.hasOwn(copied, full)) throw new TypeError(`defineMessages: "${full}" is defined more than once.`);
+      copied[full] = value;
+    }
+  };
+  walk(messagePlain(entries, 'defineMessages entries'), '');
   return Object.freeze({ kind: 'messages', locale, entries: Object.freeze(copied) });
 };
 export const msg = (key, args) => {

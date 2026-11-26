@@ -164,7 +164,7 @@ describe('what the App cannot express yet is refused as not supported yet, with 
 
 describe('any other unknown key gets the ordinary refusal: the place, the key, what the place takes', () => {
   const ROOT =
-    'It takes: id, name, shortName, connection, sources, resources, unions, auth, views, pages, features, home, nav, ui, uiKit, branding, api, track, live, flags, audiences, experiments, analytics, assistant, ai, choose, retention\\.';
+    'It takes: id, name, shortName, connection, sources, resources, unions, derived, auth, views, pages, features, home, nav, ui, uiKit, branding, api, track, live, flags, audiences, experiments, analytics, assistant, ai, choose, retention\\.';
   const UNKNOWN: Array<[string, Fragment, RegExp]> = [
     ['a root key', { writable: true }, new RegExp(`^test/app\\.json has no "writable"\\. ${ROOT}$`)],
     [

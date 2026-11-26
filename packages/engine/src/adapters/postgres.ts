@@ -57,10 +57,12 @@ import {
   type SqlStyle,
   type AggregateRequest,
   type AggregateResult,
+  type CteRequest,
+  type CteResult,
   refuseUpdateMatches,
   type TableConstraint,
 } from './adapter.js';
-import { compileAggregate } from '../shared/aggregate.js';
+import { runPostgresAggregate, runPostgresCte } from './postgresCte.js';
 import { coerceForColumn } from '../shared/schema.js';
 import { buildUpdateGuard } from './scoped/updateGuard.js';
 import {
@@ -936,13 +938,10 @@ export class PostgresAdapter implements Adapter {
     return postgresRowEstimate((result.rows[0] as { n?: unknown } | undefined)?.n);
   }
 
-  async count(table: string, filter?: Filter, limit?: number): Promise<number> {
-    return this.countOn(table, filter, await this.conn(), limit, true);
-  }
-
-  async aggregate(request: AggregateRequest): Promise<AggregateResult> {
-    return this.aggregateOn(request, await this.conn());
-  }
+  count = async (table: string, filter?: Filter, limit?: number): Promise<number> =>
+    this.countOn(table, filter, await this.conn(), limit, true);
+  aggregate = async (request: AggregateRequest): Promise<AggregateResult> => this.aggregateOn(request, await this.conn());
+  cte = async (request: CteRequest): Promise<CteResult> => this.cteOn(request, await this.conn());
 
   async countEach(items: readonly CountItem[], limit?: number): Promise<number[]> {
     const relations = await Promise.all(
@@ -965,15 +964,14 @@ export class PostgresAdapter implements Adapter {
     return Number((result.rows[0] as { n?: string })?.n ?? 0);
   }
 
-  /* A command's aggregate on its own transaction's client (shared/aggregate.ts): one statement over the table as
-     `countOn` names it, its numeric and bigint answers the exact text the driver reads them as. */
-  private async aggregateOn(request: AggregateRequest, db: PgQuery): Promise<AggregateResult> {
-    const { schema: namespace, name } = await this.assertTable(request.table, db);
-    const catalog = await this.schema();
-    const compiled = compileAggregate(catalog, { ...request, table: `${namespace}.${name}` }, POSTGRES_STYLE);
-    const result = await db.query(compiled.text, compiled.params);
-    return { rows: result.rows.map(toJsonSafe) };
-  }
+  private readonly cteHost = {
+    assertTable: (t: string, d: unknown) => this.assertTable(t, d as PgQuery),
+    getSchema: () => this.schema(),
+    toJsonSafe,
+  };
+  private aggregateOn = (request: AggregateRequest, db: PgQuery): Promise<AggregateResult> =>
+    runPostgresAggregate(request, db, this.cteHost);
+  private cteOn = (request: CteRequest, db: PgQuery): Promise<CteResult> => runPostgresCte(request, db, this.cteHost);
 
   private async columnsOf(schema: string, name: string, db?: PgQuery): Promise<PgColumnRow[]> {
     return postgresColumnsOf(schema, name, db, this.epochOf(db), this.catalogCache, () => this.conn());
@@ -1352,6 +1350,7 @@ export class PostgresAdapter implements Adapter {
                   query: (r) => operations.read(() => reads(r)),
                   count: (table, filter) => operations.read(() => this.countOn(table, filter, write)),
                   aggregate: (r) => operations.read(() => this.aggregateOn(r, write)),
+                  cte: (r) => operations.read(() => this.cteOn(r, write)),
                   insert: (r) => operations.run(() => writes.insert(r)),
                   remove: (r) => operations.run(() => writes.remove(r)),
                   update: (r) => operations.run(() => writes.update(r)),
@@ -1554,6 +1553,7 @@ export class PostgresAdapter implements Adapter {
               query: (r) => operations.read(() => reads(r)),
               count: (table, filter) => operations.read(() => this.countOn(table, filter, write)),
               aggregate: (r) => operations.read(() => this.aggregateOn(r, write)),
+              cte: (r) => operations.read(() => this.cteOn(r, write)),
               insert: (r) => operations.run(() => writes.insert(r)),
               remove: (r) => operations.run(() => writes.remove(r)),
               update: (r) => operations.run(() => writes.update(r)),
@@ -2036,6 +2036,7 @@ export class PostgresAdapter implements Adapter {
                   query: (r: QueryRequest) => invoke(r, (r) => records.query(r), true),
                   count: (table: string, filter?: Filter) => invoke({ table, filter }, (r) => records.count(r.table, r.filter), true),
                   ...(records.aggregate ? { aggregate: (r: AggregateRequest) => invoke(r, (r) => records.aggregate!(r), true) } : {}),
+                  ...(records.cte ? { cte: (r: CteRequest) => invoke(r, (r) => records.cte!(r), true) } : {}),
                   insert: (r: InsertRequest) => invoke(r, (r) => records.insert(r)),
                   remove: (r: DeleteRequest) => invoke(r, (r) => records.remove(r)),
                   update: (r: UpdateRequest) => invoke(r, (r) => records.update(r)),

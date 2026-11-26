@@ -262,6 +262,41 @@ name it as they name a table, in one order and one page; each row also says
 reader's own grants and row policy, so a branch they cannot read is none of
 their rows. A union lists; it has no record page, breakdown or summary.
 
+## Derived queries
+
+```ts
+import { defineQuery } from '@mistriwork/mistri/app';
+
+derived: [
+  defineQuery('seller_scorecard', {
+    with: {
+      live_stats: {
+        from: 'listing',
+        where: 'status = live',
+        groupBy: ['seller_id'],
+        measures: {
+          live_count: { fn: 'count' },
+          total_value: { fn: 'sum', column: 'price_cents' },
+        },
+      },
+    },
+    from: 'seller',
+    join: [{ target: 'live_stats', kind: 'left', on: ['id', 'seller_id'] }],
+    select: {
+      seller_id: 'seller.id',
+      seller_name: 'seller.name',
+      live_count: 'live_stats.live_count',
+      total_value: 'live_stats.total_value',
+    },
+    orderBy: [{ column: 'total_value', direction: 'desc' }],
+  }),
+],
+```
+
+One read-only CTE-backed resource compiled into a single parameterized SQL `WITH ... AS (...) SELECT ...` query on both SQLite and PostgreSQL. A derived resource appears as a typed virtual table in `mistri-schema.d.ts` and can be read by `listView`, `chart`, `metric`, `breakdown`, `page.useRows`, and `/api/view/run` — with filtering, sorting, pagination, and breakdowns applied over the derived result.
+
+Every base table and column referenced by any CTE step or the outer query is validated by `mistri check` and pruned per reader: if a role lacks grants to any source table or column, the derived resource is omitted from that reader's catalog. Row policies and tenant isolation wrap every underlying base table automatically. Derived resources are read-only and cannot be written to or seeded.
+
 ## Record names and conditions
 
 ```ts

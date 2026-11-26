@@ -11,7 +11,7 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
-import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
@@ -761,7 +761,7 @@ test("a tenant App is swept tenant by tenant, and one tenant's sweep cannot dele
   }
 });
 
-test('a server whose App keeps files in a bucket does not start without the credentials, and says which to set', () => {
+test('a server whose App keeps files in a bucket does not start without the credentials, and says which to set', async () => {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-s3-start-'));
   try {
     const appDir = join(directory, 'app');
@@ -774,14 +774,21 @@ test('a server whose App keeps files in a bucket does not start without the cred
     const env: NodeJS.ProcessEnv = { ...process.env, MISTRI_OPEN: '0' };
     for (const name of Object.values(S3_CREDENTIAL_VARIABLES)) delete env[name];
     const root = fileURLToPath(new URL('..', import.meta.url));
-    const started = spawnSync(
+    const child = spawn(
       process.execPath,
       ['--import', import.meta.resolve('tsx'), join(root, 'packages/mistri/src/server/index.ts'), '--app', appDir, file, '--port', '0'],
-      { cwd: directory, encoding: 'utf8', timeout: 30_000, env },
+      { cwd: directory, env, stdio: ['ignore', 'pipe', 'pipe'] },
     );
-    assert.equal(started.status, 1, started.stderr);
+    let stderr = '';
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', (chunk: string) => {
+      stderr += chunk;
+    });
+    const timer = setTimeout(() => child.kill('SIGKILL'), 30_000);
+    const [status] = await once(child, 'exit').finally(() => clearTimeout(timer));
+    assert.equal(status, 1, stderr);
     assert.match(
-      started.stderr,
+      stderr,
       /bucket "tw-files", and this server has no credentials for it: set MISTRI_S3_ACCESS_KEY_ID and MISTRI_S3_SECRET_ACCESS_KEY/,
     );
   } finally {

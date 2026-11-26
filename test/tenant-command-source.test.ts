@@ -246,8 +246,8 @@ for (const { dialect, skip } of TENANT_DIALECTS)
       assert.deepEqual(observed, {
         // PostgreSQL's scope writes a batch in one statement; SQLite's writes it a row at a time beneath the command db.
         records: postgres
-          ? ['aggregate', 'count', 'insert', 'insertMany', 'query', 'remove', 'update', 'updateMany']
-          : ['aggregate', 'count', 'insert', 'query', 'remove', 'update'],
+          ? ['aggregate', 'count', 'cte', 'insert', 'insertMany', 'query', 'remove', 'update', 'updateMany']
+          : ['aggregate', 'count', 'cte', 'insert', 'query', 'remove', 'update'],
         journal: [
           'appendReadAudit',
           'commit',

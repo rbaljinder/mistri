@@ -1,4 +1,5 @@
 // Foundry Market's business writes, beside its manifest. Server-only.
+import { msg } from '@mistriwork/mistri/app';
 import {
   defineCommand,
   defineCommands,
@@ -11,39 +12,9 @@ import {
   shape,
   text,
 } from '@mistriwork/mistri/commands';
+import type { Rows } from './mistri-schema.d.ts';
 
-interface FoundryRows {
-  seller: { id: number; name: string; city: string; specialty: string; verified: number; bio: string };
-  listing: {
-    id: number;
-    title: string;
-    maker: string;
-    category: string;
-    year_made: number;
-    condition: string;
-    city: string;
-    price_cents: number;
-    was_price_cents: number | null;
-    status: string;
-    seller_id: number;
-    description: string;
-    provenance: string;
-    buyer_name: string | null;
-    buyer_email: string | null;
-  };
-  consignment: {
-    id: number;
-    seller_name: string;
-    seller_email: string;
-    item_title: string;
-    category: string;
-    asking_cents: number;
-    notes: string | null;
-    status: string;
-  };
-}
-
-const foundry = defineSource<FoundryRows>('foundry');
+const foundry = defineSource<Rows>('foundry');
 
 /**
  * Unified public + staff machine verb (`live -> reserved`).
@@ -55,8 +26,8 @@ export const reserveListing = defineCommand({
   target: 'listing',
   targets: 'one',
   input: {
-    buyer_name: field.text({ label: 'Your full name', max: 120 }),
-    buyer_email: field.email({ label: 'Email address' }),
+    buyer_name: field.text({ label: msg('command.buyerName'), max: 120 }),
+    buyer_email: field.email({ label: msg('command.buyerEmail') }),
   },
   output: shape({
     reference: text({ pattern: publicReferencePattern('HD') }),
@@ -110,25 +81,24 @@ export const submitConsignment = defineCommand({
   public: true,
   target: 'consignment',
   input: {
-    seller_name: field.text({ label: 'Your name or workshop', max: 120 }),
-    seller_email: field.email({ label: 'Email address' }),
-    item_title: field.text({ label: 'Piece title & year', max: 160 }),
+    seller_name: field.text({ label: msg('command.sellerName'), max: 120 }),
+    seller_email: field.email({ label: msg('command.buyerEmail') }),
+    item_title: field.text({ label: msg('command.itemTitle'), max: 160 }),
     category: field.choice(['Cameras', 'Furniture', 'Audio', 'Lighting']),
-    asking_price: field.text({ label: 'Target asking price (USD)', max: 32 }),
-    notes: field.textarea({ label: 'Condition & provenance', max: 1000, optional: true }),
+    asking_price: field.money({ label: msg('command.askingPrice'), minor: true, min: 1 }),
+    notes: field.textarea({ label: msg('command.notes'), max: 1000, optional: true }),
   },
   output: shape({
     reference: text({ pattern: publicReferencePattern('FM') }),
     message: literal('Consignment received. Our curation team will review your piece within 24 hours.'),
   }),
   async handle({ db }, input) {
-    const askingDollars = Number(input.asking_price.replace(/[^0-9.]/g, '')) || 0;
     await db.consignment.insert({
       seller_name: input.seller_name,
       seller_email: input.seller_email,
       item_title: input.item_title,
       category: input.category,
-      asking_cents: Math.round(askingDollars * 100),
+      asking_cents: input.asking_price,
       notes: input.notes ?? null,
       status: 'new',
     });

@@ -21,6 +21,7 @@ import { activeApp, appLoadError, appSaveMode, inAppMode, setAppCache } from './
 import { openPeek } from '@mistriwork/kit/client/peekpanel.js';
 import { appListFor } from './applist.js';
 import { dashPageId, homeRoom, isListRoom, resourceOf } from '@mistriwork/kit/client/components/appRooms.js';
+import { rootSlot } from '@mistriwork/kit/client/components/dashboardModel.js';
 import { appAddress, appStackFrom, listParams, needsNaturalKey, viewEntryFromAddress } from './publicAddress.js';
 import { registerIcons } from '@mistriwork/kit/client/components/Icon.js';
 import { yesNoRule } from '@mistriwork/kit/client/yesNoRule.js';
@@ -245,11 +246,11 @@ function openRecord(tableId, key, label, records, list, explicitOpen) {
     if (app && Object.hasOwn(app.views, pageTarget.page)) {
       const param = pageTarget.param || Object.keys(key ?? {})[0] || 'id';
       const val = key && Object.hasOwn(key, param) ? key[param] : Object.values(key ?? {})[0];
-      const body = val !== undefined && val !== null ? `${encodeURIComponent(param)}=${encodeURIComponent(String(val))}` : '';
+      const body = val !== undefined && val !== null ? rootSlot(null, { [param]: String(val) }) : '';
       go(
         {
           ...pageView(dashPageId(pageTarget.page), label),
-          rootBody: body,
+          ...(body ? { rootBody: body } : {}),
           table: tableId,
           key,
         },

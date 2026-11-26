@@ -29,6 +29,7 @@ import {
   Serial,
   TransactionOutcomeUnknown,
   type AggregateRequest,
+  type CteRequest,
   type ScopedReads,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { PostgresAdapter, type PostgresReadSnapshot } from '@mistriwork/engine/adapters/postgres.js';
@@ -488,6 +489,7 @@ export function openSqlitePlatformReadSource(existingPath: string, input: Tenant
             countBreakdown: (breakdown, limit) => run([breakdown, limit], reads.countBreakdown),
             // Revalidated first and bounded by the realm's rows, as `count` is.
             ...(reads.aggregate ? { aggregate: (request: AggregateRequest) => run([request], reads.aggregate!) } : {}),
+            ...(reads.cte ? { cte: (request: CteRequest) => run([request], reads.cte!) } : {}),
           } satisfies ScopedReads);
         } catch {
           return denyTenant();
@@ -690,6 +692,7 @@ export async function openPostgresPlatformReadSource(
             countBreakdown: (breakdown, limit) => run([breakdown, limit], reads.countBreakdown),
             // Revalidated first and bounded by the realm's rows, as `count` is.
             ...(reads.aggregate ? { aggregate: (request: AggregateRequest) => run([request], reads.aggregate!) } : {}),
+            ...(reads.cte ? { cte: (request: CteRequest) => run([request], reads.cte!) } : {}),
           } satisfies ScopedReads);
         } catch {
           return denyTenant();

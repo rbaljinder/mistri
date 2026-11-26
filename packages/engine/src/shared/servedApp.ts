@@ -451,6 +451,11 @@ export interface UnionTable {
   branches: ReadonlyArray<{ from: string; key: string; as: Readonly<Record<string, string>> }>;
 }
 
+/** What a served CTE-backed derived resource carries: its compiled CteRequest executed on every read. */
+export interface DerivedTable {
+  request: import('./aggregate.js').CteRequest;
+}
+
 /** A nav node as served: a reference carries the menu's word, its view's label when nav gave none. */
 export type AppPayloadNavNode =
   | { view: string; label: string; color?: SeriesColor }

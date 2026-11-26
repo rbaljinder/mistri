@@ -3,6 +3,7 @@ import {
   type Adapter,
   type CountItem,
   type AggregateRequest,
+  type CteRequest,
   type DeleteRequest,
   type InsertRequest,
   type NoteRequest,
@@ -11,6 +12,7 @@ import {
   type UpdateRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { cteTables } from '@mistriwork/engine/shared/cte.js';
 import type { ViewDef } from '@mistriwork/engine/shared/view.js';
 import { renameViaTargets, snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { createAppResourcesOver, mapAppScopedReads, appResourceVerifiedCommandRunner, type AppResourceCatalog } from './appResources.js';
@@ -201,6 +203,19 @@ export function createAppSourceAdapter(
           ...([...bound.values()].every((each) => typeof each.aggregate === 'function')
             ? { aggregate: async (request: AggregateRequest) => reads(request.table).aggregate!(request) }
             : {}),
+          ...([...bound.values()].every((each) => typeof each.cte === 'function')
+            ? {
+                cte: async (request: CteRequest) => {
+                  const tables = cteTables(request);
+                  const first = targetFor(tables[0] ?? request.query.from, anchor);
+                  for (const tbl of tables.slice(1)) {
+                    if (targetFor(tbl, anchor).source !== first.source)
+                      throw new Refusal('A SQL CTE query must stay within one database source.');
+                  }
+                  return reads(tables[0] ?? request.query.from).cte!(request);
+                },
+              }
+            : {}),
           countEach: (items, limit) =>
             countedBySource(items, anchor, (resource) => {
               const source = reads(resource);
@@ -262,6 +277,16 @@ export function createAppSourceAdapter(
         if (!target.adapter.aggregate) return unsupported(target.source, 'sums and groups');
         return target.adapter.aggregate(request);
       };
+    if (supports('cte'))
+      adapter.cte = async (request) => {
+        const tables = cteTables(request);
+        const target = targetFor(tables[0] ?? request.query.from, anchor);
+        for (const tbl of tables.slice(1)) {
+          if (targetFor(tbl, anchor).source !== target.source) throw new Refusal('A SQL CTE query must stay within one database source.');
+        }
+        if (!target.adapter.cte) return unsupported(target.source, 'SQL CTE queries');
+        return target.adapter.cte(request);
+      };
     if (supports('insert'))
       adapter.insert = async (request) => {
         const target = targetFor(request.table, anchor, true);
@@ -303,6 +328,14 @@ export function createAppSourceAdapter(
           return transaction.count(table, filter);
         },
         ...(transaction.aggregate ? { aggregate: (request: AggregateRequest) => transaction.aggregate!(check(request, false)) } : {}),
+        ...(transaction.cte
+          ? {
+              cte: (request: CteRequest) => {
+                for (const tbl of cteTables(request)) targetFor(tbl, anchor, false);
+                return transaction.cte!(request);
+              },
+            }
+          : {}),
         insert: (request) => transaction.insert(check(request)),
         update: (request) => transaction.update(check(request)),
         ...(transaction.insertMany

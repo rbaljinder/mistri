@@ -255,10 +255,19 @@ async function visibleKeys(
       const id = `${grant.fingerprint}\u0000${entry.table}\u0000${asked.map(keyText).sort().join('\u0000')}`;
       let found = memo.get(id);
       if (!found) {
-        found = authority.probe(entry.table, asked).catch((): ReadonlySet<string> => new Set());
+        const pending = authority.probe(entry.table, asked);
+        found = pending;
         memo.set(id, found);
+        pending.catch(() => {
+          if (memo.get(id) === found) memo.delete(id);
+        });
       }
-      const admitted = await found;
+      let admitted: ReadonlySet<string>;
+      try {
+        admitted = await found;
+      } catch {
+        admitted = new Set();
+      }
       for (const key of asked) if (admitted.has(keyText(key))) visible.set(keyText(key), key);
     }
   }

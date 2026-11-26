@@ -4,7 +4,7 @@ import { sandboxRows, sandboxStorePresent, sqliteSandboxSession } from './tenant
 import { realpathSync, statSync } from 'node:fs';
 import { isPromise } from 'node:util/types';
 import { DatabaseSync, type SQLInputValue } from 'node:sqlite';
-import { ANSI_STYLE, Serial, type AggregateRequest, type ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
+import { ANSI_STYLE, Serial, type AggregateRequest, type CteRequest, type ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { createScopedReads } from '@mistriwork/engine/adapters/scoped/scopedReads.js';
 import { schemaFingerprint, sqliteParams, toJsonSafe, withBytes } from '@mistriwork/engine/adapters/sqlite.js';
 import { readSqliteReadCatalog } from '@mistriwork/engine/adapters/scoped/sqliteScopeCatalog.js';
@@ -381,6 +381,7 @@ export function openSqliteTenantReadSource(
         countBreakdown: (breakdown, limit) => run([breakdown, limit], reads.countBreakdown),
         // Revalidated and bounded by the tenant's rows as `count` is.
         ...(reads.aggregate ? { aggregate: (request: AggregateRequest) => run([request], reads.aggregate!) } : {}),
+        ...(reads.cte ? { cte: (request: CteRequest) => run([request], reads.cte!) } : {}),
       } satisfies ScopedReads);
     };
     /* A batch is one queued snapshot: its reads run inside it, on the handle

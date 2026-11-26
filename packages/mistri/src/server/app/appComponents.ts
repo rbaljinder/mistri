@@ -469,7 +469,7 @@ async function compileOne(
       SURFACE_ENTRIES.indexOf(entry as SurfaceEntry),
     ),
   );
-  const code = cssNeedsEntry > imported ? `import "${surfaceEntryId(SURFACE_ENTRIES[cssNeedsEntry]!)}";${chunk.code}` : chunk.code;
+  const code = cssNeedsEntry > imported ? `import "${surfaceEntryId(SURFACE_ENTRIES[cssNeedsEntry]!)}";\n${chunk.code}` : chunk.code;
   const own = (id: string) => isAbsolute(id) && inside(real(id), root) && !installed(id);
   const sources = [...new Set([...modules.filter(own), ...cssFiles.filter(own), ...[...extraCss].filter(own)])]
     .map((id) => relative(root, real(id)).split(sep).join('/'))

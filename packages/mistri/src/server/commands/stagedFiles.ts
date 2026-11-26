@@ -158,8 +158,9 @@ export async function stageCommandFile(
     throw error;
   }
   const publicActor = actor.kind === 'public';
-  // A public form holds files for its own public command, and a signed-in person for a command that is not one.
-  if (publicActor !== (authorized.command.public === true) || (publicActor && authorized.actor.kind !== 'public'))
+  const publicOnly = authorized.command.public === true && authorized.command.targets === 'none';
+  // A public visitor stages files only for a public command; a signed-in person stages for any command they hold except public-only forms.
+  if (publicActor ? authorized.command.public !== true || authorized.actor.kind !== 'public' : publicOnly)
     throw new StageRefusal(403, 'forbidden', 'This command is not available to this account.');
   /* A field inside a group is named by its path, a repeating group's rows by `[]` (`attachments[].file`; a row's own
      `attachments[2].file` is read as that): the hold is the field's, whichever row it ends up in. */

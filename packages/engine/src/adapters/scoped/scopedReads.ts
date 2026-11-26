@@ -23,6 +23,7 @@ import { ScopedRelations, snapshotRowScope, type RowScope } from '../../shared/r
 import { compileView, compileViewCount } from '../../shared/view.js';
 import { compileBreakdown, compileBreakdownCount } from '../../shared/breakdown.js';
 import { compileAggregate } from '../../shared/aggregate.js';
+import { compileCte } from '../../shared/cte.js';
 import { childRows, plannedWithin, withinRows } from '../../shared/anyRows.js';
 import type { AnyRows, WithinPlan, WithinRows } from '../../shared/filter.js';
 import { readExactly, summed } from '../../shared/decimals.js';
@@ -286,6 +287,11 @@ export function createScopedReads(
     async aggregate(request) {
       const compiled = compileAggregate(schema, snapshotScopedData(request), style, 0, scope, schema);
       return { rows: (await exact(() => execute(compiled), request.measures)).rows };
+    },
+    async cte(request) {
+      const compiled = compileCte(schema, snapshotScopedData(request), style, scope, schema);
+      const result = await execute(compiled);
+      return { columns: compiled.columns, rows: result.rows };
     },
   } satisfies ScopedReads);
 }

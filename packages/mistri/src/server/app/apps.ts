@@ -12,6 +12,7 @@ import { zoneColumnProblem } from './readerZone.js';
 import { catalogColumnProblems, menuWhenProblems, sharedProfileProblems } from './appTenantProfile.js';
 import { localeColumnProblem } from './readerLocale.js';
 import { unionProblems } from '../../shared/appUnions.js';
+import { derivedProblems } from '../../shared/appDerived.js';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { statSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -1176,6 +1177,7 @@ export function appProblems(loaded: LoadedApp, schema: DatabaseSchema): string[]
   if (locale) problems.push(`${manifest}: ${locale}`);
   problems.push(...messageProblems(loaded, schema).map((p) => `${manifest}: ${p}`));
   problems.push(...unionProblems(loaded.app, schema).map((p) => `${manifest}: ${p}`));
+  problems.push(...derivedProblems(loaded.app, schema).map((p) => `${manifest}: ${p}`));
   problems.push(...chooseProblems(loaded.app, schema).map((p) => `${manifest}: ${p}`));
   /* Rollups read like columns wherever a view, a page or a sort names one,
      so everything below is judged against the catalog that serves them. */
@@ -1487,7 +1489,9 @@ export function appAdvisories(loaded: LoadedApp, schema: DatabaseSchema): string
 /** The definition a load was parsed from, its catalogs beside it, where it has any. */
 const wordsOf = (loaded: LoadedApp) => {
   const localizer = localizerOf(loaded.app);
-  return localizer ? { raw: (localizer.definition as DefinitionInput).raw, catalogs: localizer.catalogs } : undefined;
+  if (!localizer) return undefined;
+  const definition = localizer.definition as DefinitionInput;
+  return { raw: definition.raw, definition, catalogs: localizer.catalogs };
 };
 
 /**
@@ -1537,7 +1541,13 @@ function messageAdvice(loaded: LoadedApp): string[] {
   const words = wordsOf(loaded);
   if (!words) return [];
   const componentKeys = loaded.components ? loaded.dir && componentMessageKeys(loaded.dir, loaded.components) : new Set<string>();
-  return messageAdvisories(words.raw, words.catalogs, componentKeys || undefined);
+  const sources = [
+    words.raw,
+    ...(words.definition.catalog ? [...words.definition.catalog.values()] : []),
+    ...words.definition.filePages.map((page) => page.raw),
+    ...(words.definition.surfaces?.map((surface) => surface.fields) ?? []),
+  ];
+  return messageAdvisories(sources, words.catalogs, componentKeys || undefined);
 }
 
 /* A label said from the App's messages restates nothing: its words differ in every other language. */

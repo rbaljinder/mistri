@@ -11,10 +11,11 @@ import { humanName } from '@mistriwork/engine/shared/model.js';
 import { splitQuery } from '@mistriwork/kit/client/clauses.js';
 import { withCondition } from '@mistriwork/kit/client/filterbar.js';
 import { boxesFor, boxTail } from '@mistriwork/kit/client/components/FilterBoxes.js';
-import { FilterRail, type FacetUnit } from '@mistriwork/kit/client/components/FilterRail.js';
+import { FilterRail, FilterSheet, type FacetUnit } from '@mistriwork/kit/client/components/FilterRail.js';
 import { ListFilterBar } from '@mistriwork/kit/client/components/ListFilterBar.js';
 import { SortMenu } from '@mistriwork/kit/client/components/SortMenu.js';
 import { FilterPageContext } from '@mistriwork/kit/client/components/filterPageContext.js';
+import { PHONE_QUERY, useMediaQuery } from '@mistriwork/kit/client/components/useMediaQuery.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import { UiPageContext } from './context.js';
 import './filters.css';
@@ -86,6 +87,8 @@ export function ListFilters({
   const paramValue = canBindParam ? (frame!.get(param) ?? '') : '';
   const [localValue, setLocalValue] = useState('');
   const [typed, setTyped] = useState<string | undefined>(undefined);
+  const [sheet, setSheet] = useState(false);
+  const phone = useMediaQuery(PHONE_QUERY);
 
   const rawRefinement = canBindParam ? paramValue : localValue;
   const setRawRefinement = useCallback(
@@ -135,11 +138,14 @@ export function ListFilters({
 
   const updateSortFromQuery = useCallback(
     (full: string) => {
-      const { filter, sort } = splitRefinement(tableId, full.replace(new RegExp(`^${tableId}\\s*`), ''));
+      const parts = splitQuery(full) as { filter?: string; sort?: string };
+      const filter = (parts.filter ?? '').trim();
+      const sortClause = (parts.sort ?? '').trim();
+      const sort = sortClause ? sortClause.replace(/^sort\s+/i, '').trim() : undefined;
       const next = sort ? (filter ? `${filter} sort ${sort}` : `sort ${sort}`) : filter;
       setRawRefinement(next);
     },
-    [tableId, setRawRefinement],
+    [setRawRefinement],
   );
 
   const clear = useCallback(() => {
@@ -186,11 +192,25 @@ export function ListFilters({
               apply={(next) => updateFilter(next)}
               current={() => activeFilter}
               listLabel={label ?? table.name}
-              phone={false}
-              onSheet={() => {}}
+              phone={phone}
+              onSheet={() => setSheet(true)}
             />
             {sorts && sorts.length > 0 && <SortMenu sorts={sorts} query={sortQuery} sort={defaultSort} onPick={updateSortFromQuery} />}
           </div>
+        )}
+        {layout === 'bar' && sheet && (
+          <FilterSheet
+            table={table}
+            boxes={boxes.filter((box) => box !== searchBox)}
+            refinement={activeFilter}
+            standing={standing}
+            unitOf={unitOf}
+            onClose={() => setSheet(false)}
+            onApply={(next) => {
+              setSheet(false);
+              updateFilter(next);
+            }}
+          />
         )}
         {layout === 'rail' && (
           <aside className="kit-list-filters-rail">

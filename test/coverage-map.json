@@ -1423,6 +1423,27 @@
         { "file": "test/custom-site-capabilities.test.ts" },
         { "file": "packages/mistri/src/client/components/sdk/customSite.test.tsx" }
       ]
+    },
+    {
+      "id": "derived-cte-queries",
+      "surface": [
+        "dsl: app: derived",
+        "dsl: app: derived[].alias",
+        "dsl: app: derived[].from",
+        "dsl: app: derived[].groupBy",
+        "dsl: app: derived[].join",
+        "dsl: app: derived[].limit",
+        "dsl: app: derived[].measures",
+        "dsl: app: derived[].name",
+        "dsl: app: derived[].orderBy",
+        "dsl: app: derived[].select",
+        "dsl: app: derived[].where",
+        "dsl: app: derived[].with"
+      ],
+      "tests": [
+        { "file": "test/joined-data-and-cte.test.ts" },
+        { "file": "packages/mistri/src/client/components/sdk/customSite.test.tsx" }
+      ]
     }
   ],
   "unmapped": ["cli: flag --ahead", "cli: flag --operator", "cli: flag --rate", "cli: flag --samples"]

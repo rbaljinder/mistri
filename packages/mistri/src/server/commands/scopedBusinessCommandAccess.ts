@@ -3,9 +3,11 @@ import {
   TransactionOperations,
   type Adapter,
   type AggregateRequest,
+  type CteRequest,
   type TellRequest,
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { remapCteTables } from '@mistriwork/engine/shared/cte.js';
 import type { CommandJournal } from '../../adapters/commands/commandJournal.js';
 type J = CommandJournal;
 import type { CommandJournalAppScope, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
@@ -73,11 +75,12 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
     ![null, Object.prototype].includes(Object.getPrototypeOf(rawExtractors))
   )
     invalid();
-  /* A `public: true` command never runs on a row-policy App: its public
-     form answers 503 there and no role may hold it. It needs no result
-     authorization and no scoped journal, so it is left out of both checks
-     below, and naming it in resultReferences is an extra entry. */
-  const scopedIds = Object.keys(registry).filter((id) => registry[id].public !== true);
+  /* A public-only command (`public: true, targets: 'none'`) never runs in a
+     scoped member context: no role may hold it, so it needs no result
+     authorization or scoped journal. A unified `public: true, targets: 'one'`
+     command may be granted to roles and participates in scoped checks. */
+  const isPublicOnly = (cmd: { public?: true; targets?: string }) => cmd.public === true && cmd.targets === 'none';
+  const scopedIds = Object.keys(registry).filter((id) => !isPublicOnly(registry[id]));
   const extractorKeys = Reflect.ownKeys(rawExtractors);
   if (extractorKeys.length !== scopedIds.length) invalid();
   const extractors = new Map<string, (result: unknown) => readonly CommandResultReference[]>();
@@ -149,7 +152,7 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
   const events = options.events;
   const base = bindBusinessCommands({ app, resources, registry, writableConnection: writable, validation, ...(events ? { events } : {}) });
   for (const command of Object.values(registry)) {
-    if (command.public === true) continue;
+    if (isPublicOnly(command)) continue;
     const target = logicalResource(app, command.source, command.target);
     if (!commandsOf(resources.forConnection(resources.connectionFor(target))).scopeCommandTransaction) invalid();
   }
@@ -173,7 +176,7 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
           assertActive();
           const authorized = base.authorize(id, actor);
           const command = authorized.command;
-          if (command.public === true) throw new AppAccessDenied();
+          if (isPublicOnly(command)) throw new AppAccessDenied();
           // The actor says the scope its rows were narrowed to (`actor.scope`), and only that one.
           const said = authorized.actor.scope;
           if (apiScope ? said?.name !== apiScope.name || said.key !== apiScope.key : said !== undefined) throw new AppAccessDenied();
@@ -292,6 +295,12 @@ export function bindScopedBusinessCommands(options: ScopedCommandOptions & { app
                       ? {
                           aggregate: (request: AggregateRequest) =>
                             accept(request, (request) => readResult(tx.aggregate!({ ...request, table: localTable(request.table) })), true),
+                        }
+                      : {}),
+                    ...(tx.cte
+                      ? {
+                          cte: (request: CteRequest) =>
+                            accept(request, (request) => readResult(tx.cte!(remapCteTables(request, (name) => localTable(name)))), true),
                         }
                       : {}),
                     insert: (request) => accept(request, (request) => tx.insert({ ...request, table: localTable(request.table, true) })),

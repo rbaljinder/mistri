@@ -333,6 +333,7 @@ export function httpPolicyReads(context: AppPolicyContext): { adapter: Adapter; 
       runBreakdown: data.runBreakdown,
       countBreakdown: data.countBreakdown,
       ...(data.aggregate ? { aggregate: data.aggregate } : {}),
+      ...(data.cte ? { cte: data.cte } : {}),
     }),
     access: {
       readable: new Set(context.schema.tables.map((table) => table.id)),

@@ -29,7 +29,24 @@ export type { RefusalCode, RefusalKeepDb, RefusalKeepTable } from './commands/co
    writes through: a row type, a read-only view of some tables for a helper,
    and the table and query shapes. */
 export { defineSource } from './commands/commandDb.js';
-export type { CommandDb, CommandSource, Query, ReadTable, RowOf, RowQuery, Where, WriteOptions, WriteTable } from './commands/commandDb.js';
+export type {
+  CommandDb,
+  CommandSource,
+  CteRef,
+  CteRefs,
+  CteRunner,
+  DbByOptions,
+  DbIncludeSpec,
+  DbReadOptions,
+  JoinedQuery,
+  Query,
+  ReadTable,
+  RowOf,
+  RowQuery,
+  Where,
+  WriteOptions,
+  WriteTable,
+} from './commands/commandDb.js';
 /* Sums and groups on a query (`where(…).groupBy(…).aggregate({ posted: sum('amount') })`), a date's period as a
    group's key, and a page's boundary, which is plain data a caller keeps. */
 export { avg, count, max, min, period, sum } from './commands/commandDb.js';

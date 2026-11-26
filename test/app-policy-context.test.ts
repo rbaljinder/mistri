@@ -216,6 +216,7 @@ test('verified context exposes only frozen logical metadata and scoped capabilit
       'count',
       'countBreakdown',
       'countView',
+      'cte',
       'insert',
       'query',
       'remove',

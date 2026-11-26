@@ -52,6 +52,7 @@ import {
   roomPageId,
   viewRoom,
 } from '@mistriwork/kit/client/components/appRooms.js';
+import { rootSlot } from '@mistriwork/kit/client/components/dashboardModel.js';
 import {
   litTabFor,
   searchColumn,
@@ -797,7 +798,7 @@ export function appStackFrom(hash: string): { connection: string; stack: Entry[]
     const val = Object.hasOwn(parsed.key, param) ? parsed.key[param] : Object.values(parsed.key)[0];
     const params = new URLSearchParams(search);
     if (val !== undefined && val !== null) params.set(param, String(val));
-    const body = [...params.entries()].map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`).join(';');
+    const body = rootSlot(null, Object.fromEntries(params.entries()));
     return {
       connection,
       stack: [
@@ -807,7 +808,7 @@ export function appStackFrom(hash: string): { connection: string; stack: Entry[]
           table: parsed.table,
           key: parsed.key,
           label: row.label,
-          rootBody: body,
+          ...(body ? { rootBody: body } : {}),
         },
       ],
       slugged: parsed.slugged,

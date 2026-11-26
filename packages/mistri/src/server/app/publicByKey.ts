@@ -165,6 +165,12 @@ export function byKeyAdapter(underlying: Adapter, full: DatabaseSchema, access: 
       listing.aggregateFor(request);
       return underlying.aggregate!(request);
     };
+  if (underlying.cte)
+    guarded.cte = (input) => {
+      const request = carryServerRequest(input, requestData(input));
+      listing.cteFor(request);
+      return underlying.cte!(request);
+    };
   /* No write and no transaction. The public grant is read-only, and a transaction's `query` and `count` are only
      grant-checked (appAccess.ts), so passing it through would read a byKey table past every refusal above. Left
      off, fail closed: a method a caller needs here is judged and fenced like the others, not inherited. */

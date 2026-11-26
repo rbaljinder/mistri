@@ -275,7 +275,9 @@ function DefaultButtonLink({
   return (
     <a
       {...rest}
-      href={safeHref(routed.href) ?? cleanHref}
+      href={held ? undefined : (safeHref(routed.href) ?? cleanHref)}
+      role={held ? (rest.role ?? 'link') : rest.role}
+      tabIndex={held ? (rest.tabIndex ?? 0) : rest.tabIndex}
       aria-label={resolvedAriaLabel}
       onClick={(event) => {
         if (held) {

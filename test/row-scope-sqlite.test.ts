@@ -58,6 +58,7 @@ test('SQLite private scope binds all seven reads and preserves bigint values and
     'countBreakdown',
     'countEach',
     'countView',
+    'cte',
     'query',
     'runBreakdown',
     'runView',

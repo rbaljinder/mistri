@@ -26,7 +26,7 @@
  * support evidence.
  */
 import { isPromise } from 'node:util/types';
-import type { Adapter, AggregateRequest, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
+import type { Adapter, AggregateRequest, CteRequest, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape, type AppDef } from '../../shared/app.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import type { TenantRowsContext } from '../policy/appTenantPolicy.js';
@@ -377,6 +377,19 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
                       request,
                       (value) => reader.aggregate!(value),
                       (value) => assertStructuredReadFilter(value.filter, 'column'),
+                    ),
+                }
+              : {}),
+            ...(reader.cte
+              ? {
+                  cte: (request: CteRequest) =>
+                    track(
+                      request,
+                      (value) => reader.cte!(value),
+                      (value) => {
+                        for (const step of value.with) assertStructuredReadFilter(step.filter, 'column');
+                        assertStructuredReadFilter(value.query.filter, 'column');
+                      },
                     ),
                 }
               : {}),

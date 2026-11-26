@@ -274,6 +274,8 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
       /* `choose` (1.0.0-rc.79): an App-wide picked row (the current site) the shell shows and pages read as `chosen.<name>`. */
       'choose',
       'connection',
+      /* `derived` (1.0): declarative CTE-backed read-only resources (`defineQuery(...)`). */
+      'derived',
       'experiments',
       'features',
       'flags',
@@ -813,7 +815,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // `resources.*.photos` (`from`, `whose`, `sort`, `aspect`), `display.*.round`, and `open: { page, param? }` on
     // list views, landing embeds, and related sections: twenty-four entries; `site`, `cta`, `signIn`, `photos`,
     // `aspect`, `round` are new names: 1850/546.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1850, names: 546 });
+    // 1.0.0-rc.91: declarative CTE-backed `derived` resources (`derived`, `with`, `alias`, `where`, `join`, `groupBy`,
+    // `measures`, `select`, `orderBy`, `limit`, plus `name`, `from` already present: twelve entries; eight new names): 1862/554.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1862, names: 554 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

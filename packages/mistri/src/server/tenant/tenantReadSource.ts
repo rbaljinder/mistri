@@ -1172,6 +1172,8 @@ export async function openPostgresTenantReadSource(
           run([request] as [typeof request], (bound, value) =>
             bound.aggregate ? bound.aggregate(value) : Promise.reject(new TenantContextError()),
           ),
+        cte: (request) =>
+          run([request] as [typeof request], (bound, value) => (bound.cte ? bound.cte(value) : Promise.reject(new TenantContextError()))),
       } satisfies ScopedReads);
     };
     /* A batch is one leased snapshot, revalidated once, its reads on that lease. */

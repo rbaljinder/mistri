@@ -35,7 +35,7 @@ import { renderToPipeableStream, renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { installSurfaceSeam } from '@mistriwork/ui';
 import type { AppLanding } from '../../shared/app.js';
-import { readMountJson } from '@mistriwork/engine/shared/mount.js';
+import { outward, readMountJson } from '@mistriwork/engine/shared/mount.js';
 import type { PublicRoom as Room } from '../../shared/publicDocument.js';
 import { LandingSurface } from '@mistriwork/kit/client/components/LandingSurface.js';
 import { AppFooter } from '@mistriwork/kit/client/components/AppFooter.js';
@@ -43,7 +43,6 @@ import { FormSurface, type FormPresentation } from '../components/FormSurface.js
 import { SiteHeader } from '../components/SiteHeader.js';
 import { say as saySiteHeader } from '../copy/components/components/SiteHeader.js';
 import { rooted } from '@mistriwork/kit/client/components/mount.js';
-import { shownUnplaced } from '@mistriwork/kit/client/addressMount.js';
 import { UiHostContext, UiPageContext, UiParamKindsContext } from '../components/sdk/context.js';
 import * as sdkUi from '../components/sdk/index.js';
 import * as sdkPage from '../components/sdk/page.js';
@@ -110,16 +109,22 @@ function getSsrHostModules(): Promise<Readonly<Record<string, unknown>>> {
   return ssrHostModulesReady;
 }
 
-function renderStream(mountJsonText: string, element: ReactNode): Promise<string> {
+function renderStream(mountJsonText: string, element: ReactNode, signal?: AbortSignal): Promise<string> {
   if (!stream) return Promise.reject(new Error('The server renderer runs only on Node.'));
+  if (signal?.aborted) return Promise.reject(new Error('The public render was cancelled.'));
   return new Promise<string>((done, fail) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const resolve = (html: string) => {
+    let onAbort: (() => void) | undefined;
+    const cleanup = () => {
       clearTimeout(timer);
+      if (onAbort && signal) signal.removeEventListener('abort', onAbort);
+    };
+    const resolve = (html: string) => {
+      cleanup();
       done(html);
     };
     const reject = (error: unknown) => {
-      clearTimeout(timer);
+      cleanup();
       fail(error);
     };
     const sink = new stream.PassThrough();
@@ -138,6 +143,13 @@ function renderStream(mountJsonText: string, element: ReactNode): Promise<string
         },
       }),
     );
+    if (signal) {
+      onAbort = () => {
+        rendering.abort();
+        reject(new Error('The public render was cancelled.'));
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+    }
     timer = setTimeout(() => {
       rendering.abort();
       reject(new Error('The public render took too long.'));
@@ -162,88 +174,112 @@ function syncTree(input: Exclude<PublicRenderInput, SsrPageInput>): ReactNode {
 }
 
 async function renderPublicPage(input: SsrPageInput): Promise<string> {
-  const hostModules = await getSsrHostModules();
-  const PageComponent = await loadSsrPageComponent(input.code, hostModules);
-  const queryClient = new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
-  });
-  const { host, frame, drain, resolveSiteLinkHref } = createSsrPageHost(input, queryClient);
+  const controller = new AbortController();
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  const onParentAbort = () => controller.abort();
+  if (input.signal) {
+    if (input.signal.aborted) controller.abort();
+    else input.signal.addEventListener('abort', onParentAbort, { once: true });
+  }
+  const mount = readMountJson(input.mount);
+  try {
+    return await withMount(mount, async () => {
+      if (controller.signal.aborted) throw new Error('The public render was cancelled.');
+      const hostModules = await getSsrHostModules();
+      if (controller.signal.aborted) throw new Error('The public render was cancelled.');
+      timeout = setTimeout(() => controller.abort(), MOST_MS);
+      const PageComponent = await loadSsrPageComponent(input.code, hostModules);
+      if (controller.signal.aborted) throw new Error('The public render was cancelled.');
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+      });
+      const { host, frame, drain, resolveSiteLinkHref } = createSsrPageHost(input, queryClient, controller.signal);
 
-  /* Preload the page's primary loader result (`data` prop) if declared. */
-  const initialData = input.page.loader ? await host.load(input.viewKey, input.place, input.page.loader).catch(() => undefined) : undefined;
+      /* Preload the page's primary loader result (`data` prop) if declared. */
+      const initialData = input.page.loader
+        ? await host.load(input.viewKey, input.place, input.page.loader).catch(() => undefined)
+        : undefined;
+      if (controller.signal.aborted) throw new Error('The public render was cancelled.');
 
-  const bare = input.dashboard.layout === 'bare';
-  const site = !bare ? input.app.ui.site : undefined;
-  const siteFooter = site?.footer;
-  const footer = siteFooter
-    ? {
-        ...(siteFooter.text ? { text: siteFooter.text } : {}),
-        ...(siteFooter.links?.length
-          ? { links: siteFooter.links.map((link) => ({ label: link.label, href: resolveSiteLinkHref(link) })) }
-          : {}),
-      }
-    : input.app.ui.footer;
-  const signInHref =
-    site && (site.signIn ?? 'footer') === 'footer' ? shownUnplaced(`/${encodeURIComponent(input.app.id)}/sign-in`) : undefined;
+      const bare = input.dashboard.layout === 'bare';
+      const site = !bare ? input.app.ui.site : undefined;
+      const siteFooter = site?.footer;
+      const footer = siteFooter
+        ? {
+            ...(siteFooter.text ? { text: siteFooter.text } : {}),
+            ...(siteFooter.links?.length
+              ? { links: siteFooter.links.map((link) => ({ label: link.label, href: resolveSiteLinkHref(link) })) }
+              : {}),
+          }
+        : input.app.ui.footer;
+      const signInHref =
+        site && (site.signIn ?? 'footer') === 'footer' ? outward(mount, `/${encodeURIComponent(input.app.id)}/sign-in`) : undefined;
 
-  const buildElement = (): ReactNode =>
-    createElement(
-      QueryClientProvider,
-      { client: queryClient },
-      createElement(
-        UiHostContext.Provider,
-        { value: host },
+      const noopRefresh = () => {};
+      const pageProps = { data: initialData ?? null, props: {}, refresh: noopRefresh };
+
+      const buildElement = (): ReactNode =>
         createElement(
-          UiPageContext.Provider,
-          { value: frame },
+          QueryClientProvider,
+          { client: queryClient },
           createElement(
-            UiParamKindsContext.Provider,
-            { value: {} },
+            UiHostContext.Provider,
+            { value: host },
             createElement(
-              'div',
-              { className: `page-body free-page-body${bare ? ' is-bare' : ''}` },
-              site
-                ? createElement(
-                    'header',
-                    { className: 'ssr-site-header' },
-                    createElement(SiteHeader, {
-                      app: { id: input.app.id, name: input.app.name, views: input.app.views },
-                      site,
-                      resolveHref: resolveSiteLinkHref,
-                      activeView: input.viewKey,
-                    }),
-                  )
-                : null,
-              createElement('section', { className: 'page-section width-full' }, createElement(PageComponent, { data: initialData })),
-              !bare && (footer || signInHref)
-                ? createElement(AppFooter, {
-                    footer,
-                    signInHref,
-                    signInLabel: signInHref ? saySiteHeader('signIn') : undefined,
-                  })
-                : null,
+              UiPageContext.Provider,
+              { value: frame },
+              createElement(
+                UiParamKindsContext.Provider,
+                { value: {} },
+                createElement(
+                  'div',
+                  { className: `page-body free-page-body${bare ? ' is-bare' : ''}` },
+                  site
+                    ? createElement(
+                        'header',
+                        { className: 'ssr-site-header' },
+                        createElement(SiteHeader, {
+                          app: { id: input.app.id, name: input.app.name, views: input.app.views },
+                          site,
+                          resolveHref: resolveSiteLinkHref,
+                          activeView: input.viewKey,
+                        }),
+                      )
+                    : null,
+                  createElement('section', { className: 'page-section width-full' }, createElement(PageComponent, pageProps)),
+                  !bare && (footer || signInHref)
+                    ? createElement(AppFooter, {
+                        footer,
+                        signInHref,
+                        signInLabel: signInHref ? saySiteHeader('signIn') : undefined,
+                      })
+                    : null,
+                ),
+              ),
             ),
           ),
-        ),
-      ),
-    );
+        );
 
-  const mount = readMountJson(input.mount);
-  /* Two-pass prefetch: pass 1 discovers top-level useRows/useRecord/useLoader queries; pass 2 discovers
-     dependent queries (e.g., <Photos> after useRecord resolves). */
-  for (let pass = 0; pass < PREFETCH_PASSES; pass++) {
-    withMount(mount, () => {
-      try {
-        renderToStaticMarkup(buildElement());
-      } catch {
-        /* Any throw during prefetch is caught; final pass determines whether SSR succeeds or falls back. */
+      /* Two-pass prefetch: pass 1 discovers top-level useRows/useRecord/useLoader queries; pass 2 discovers
+         dependent queries (e.g., <Photos> after useRecord resolves). */
+      for (let pass = 0; pass < PREFETCH_PASSES; pass++) {
+        if (controller.signal.aborted) throw new Error('The public render was cancelled.');
+        try {
+          renderToStaticMarkup(buildElement());
+        } catch {
+          /* Any throw during prefetch is caught; final pass determines whether SSR succeeds or falls back. */
+        }
+        const ran = await drain();
+        if (!ran) break;
       }
-    });
-    const ran = await drain();
-    if (!ran) break;
-  }
 
-  return renderStream(input.mount, buildElement());
+      if (controller.signal.aborted) throw new Error('The public render was cancelled.');
+      return await renderStream(input.mount, buildElement(), controller.signal);
+    });
+  } finally {
+    clearTimeout(timeout);
+    if (input.signal) input.signal.removeEventListener('abort', onParentAbort);
+  }
 }
 
 /** The HTML of one public page's content pane, or a refusal the server answers by sending the page without it. */

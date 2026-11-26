@@ -4,6 +4,7 @@ import {
   Refusal,
   TransactionOperations,
   type AggregateRequest,
+  type CteRequest,
   type DeleteRequest,
   type TellRequest,
   type Filter,
@@ -60,6 +61,7 @@ export async function runScopedTransactionFacade<T>(records: WriteTransaction, r
         query: (r: QueryRequest) => invoke(r, (request) => records.query(request)),
         count: (table: string, filter?: Filter) => invoke({ table, filter }, (request) => records.count(request.table, request.filter)),
         ...(records.aggregate ? { aggregate: (r: AggregateRequest) => invoke(r, (request) => records.aggregate!(request)) } : {}),
+        ...(records.cte ? { cte: (r: CteRequest) => invoke(r, (request) => records.cte!(request)) } : {}),
         insert: (r: InsertRequest) => invoke(r, (request) => records.insert(request)),
         update: (r: UpdateRequest) => invoke(r, (request) => records.update(request)),
         ...(records.insertMany

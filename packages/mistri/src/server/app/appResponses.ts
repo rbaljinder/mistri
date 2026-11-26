@@ -22,6 +22,8 @@ const readFields = [
   'partial',
   // A breakdown's groups by the name of the record each is (breakdown.ts, withGroupNames).
   'names',
+  // Bounded child relation rows attached by `/api/view/run` (`include`).
+  'included',
 ] as const;
 
 const writeFields = ['affected', 'applied', 'key', 'row', 'undoId', 'impact', 'deleted', 'errors', 'outcome'] as const;

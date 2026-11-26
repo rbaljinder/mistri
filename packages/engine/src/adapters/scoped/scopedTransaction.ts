@@ -445,7 +445,7 @@ const sameBound = (a: unknown, b: unknown, equality: boolean): boolean =>
  */
 export interface ScopeOwnRows {
   readonly scope: RowScope;
-  readonly reads: (scope: RowScope, guard: boolean) => Pick<ScopedReads, 'query' | 'count' | 'aggregate'>;
+  readonly reads: (scope: RowScope, guard: boolean) => Pick<ScopedReads, 'query' | 'count' | 'aggregate' | 'cte'>;
 }
 
 /** `scope` with each child rule's key conditions on a reference to a table in `made` extended by those rows' keys. */
@@ -517,7 +517,7 @@ type Asked =
 export function createScopedTransaction(
   catalog: ScopeCatalog,
   records: WriteTransaction,
-  reads: Pick<ScopedReads, 'query' | 'count' | 'aggregate'>,
+  reads: Pick<ScopedReads, 'query' | 'count' | 'aggregate' | 'cte'>,
   guards: Pick<ScopedReads, 'query' | 'count'>,
   locks?: ScopeRowLocks,
   bound?: ScopeBound,
@@ -1251,6 +1251,12 @@ export function createScopedTransaction(
       ? {
           aggregate: (request: Parameters<NonNullable<ScopedReads['aggregate']>>[0]) =>
             reads.aggregate ? reads.aggregate(request) : refuse('This scope cannot aggregate.'),
+        }
+      : {}),
+    ...(reads.cte
+      ? {
+          cte: (request: Parameters<NonNullable<ScopedReads['cte']>>[0]) =>
+            reads.cte ? reads.cte(request) : refuse('This scope cannot run CTE queries.'),
         }
       : {}),
     insert,

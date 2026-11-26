@@ -564,6 +564,10 @@
       "mistri-built": "./dist/shared/aggregate.js",
       "default": "./src/shared/aggregate.ts"
     },
+    "./shared/cte.js": {
+      "mistri-built": "./dist/shared/cte.js",
+      "default": "./src/shared/cte.ts"
+    },
     "./shared/appNoun.js": {
       "mistri-built": "./dist/shared/appNoun.js",
       "default": "./src/shared/appNoun.ts"
@@ -1003,6 +1007,10 @@
     "./shared/view.js": {
       "mistri-built": "./dist/shared/view.js",
       "default": "./src/shared/view.ts"
+    },
+    "./shared/viewInclude.js": {
+      "mistri-built": "./dist/shared/viewInclude.js",
+      "default": "./src/shared/viewInclude.ts"
     },
     "./shared/viewPaths.js": {
       "mistri-built": "./dist/shared/viewPaths.js",

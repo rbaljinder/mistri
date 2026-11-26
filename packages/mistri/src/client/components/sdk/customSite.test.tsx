@@ -203,7 +203,11 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
           page: { public: true, reads: ['listing', 'listing_photo'], commands: [], params: [], loader: 'featured' },
         },
       },
+      messages: {
+        'door.count': '{count, plural, one {# listing available} other {# listings available}}',
+      },
       ui: {
+        locale: 'en-US',
         site: {
           links: [{ label: 'Catalog', view: 'catalog' }],
           cta: { label: 'Contact', href: 'https://example.com/contact' },
@@ -214,14 +218,16 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
     };
     const compiledDoorJs = `
       import { jsxs, jsx } from "/_mistri/sdk/cb6940da33/react-jsx-runtime.js";
-      import { useRows, useFormat } from "/_mistri/sdk/cb6940da33/page.js";
+      import { useRows, useFormat, useMessage } from "/_mistri/sdk/cb6940da33/page.js";
       export default function Door({ data }) {
         const { data: rows } = useRows("listing", { show: ["id", "title", "price"], limit: 6 });
         const fmt = useFormat();
+        const countLabel = useMessage("door.count", { count: (rows ?? []).length });
         return jsxs("div", {
           className: "door-page",
           children: [
             jsx("h1", { children: data?.headline ?? "Welcome" }),
+            jsx("p", { children: countLabel }),
             jsx("ul", {
               children: (rows ?? []).map((row) =>
                 jsxs("li", {
@@ -265,6 +271,8 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
       },
     });
     expect(html).toContain('Find Your Next Place');
+    expect(html).toContain('1 listing available');
+    expect(html).not.toContain('door.count');
     expect(html).toContain('Cedar House');
     expect(html).toContain('$48,900');
     expect(html).toContain('/api/file?');
@@ -390,5 +398,220 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
       read: async () => ({ status: 404, body: {} }),
     });
     expect(html).toContain('promo-off');
+  });
+
+  test('SSR rewriteHostImports handles minified consecutive imports and renderPublic honors basePath, real theme, dotted FK rules, and abort', async () => {
+    const { rewriteHostImports } = await import('../../ssr/pageHost.js');
+    const { renderPublic } = await import('../../ssr/render.js');
+    const { mountJson } = await import('@mistriwork/engine/shared/mount.js');
+
+    const minified = `import"/_mistri/sdk/v1/views.js";import{jsx}from"/_mistri/sdk/v1/react-jsx-runtime.js";import{useLook,useFormat}from"/_mistri/sdk/v1/page.js";export default function Mini(p){const l=useLook();const f=useFormat();return jsx("div",{children:[l.preset,":",l.mode,":",typeof p.refresh,":",f.column("listing","seller_id.rate",5000)].join("")});}`;
+    const rewritten = rewriteHostImports(minified);
+    expect(rewritten).not.toMatch(/\bimport\s*[{'"]/);
+    expect(rewritten).toContain('ssr-host:@mistriwork/mistri/views');
+    expect(rewritten).toContain('const {jsx} =');
+    expect(rewritten).toContain('const {useLook,useFormat} =');
+
+    const html = await renderPublic({
+      kind: 'page',
+      mount: mountJson({ base: '/shop', apps: { foundry: '' } }),
+      app: {
+        id: 'foundry',
+        name: 'Foundry',
+        home: 'door',
+        nav: [],
+        resources: {
+          seller: {
+            display: { rate: { format: 'money', currency: 'USD', minor: true, whole: true } },
+          },
+          listing: {},
+        },
+        views: {
+          door: {
+            label: 'Home',
+            sections: [{ kind: 'custom', component: { id: 'page-mini', kind: 'page' } }],
+            page: { public: true, reads: ['listing', 'seller'], commands: [], params: [] },
+          },
+        },
+        ui: {
+          theme: { preset: 'gallery', scheme: 'dark', density: 'compact' },
+          site: {
+            links: [{ label: 'Sell', href: '/form/consign' }],
+            signIn: 'footer',
+          },
+        },
+      } as never,
+      schema: {
+        tables: [
+          {
+            id: 'seller',
+            name: 'seller',
+            columns: [
+              { name: 'id', type: 'integer', primaryKey: true, nullable: false },
+              { name: 'rate', type: 'integer', primaryKey: false, nullable: false },
+            ],
+          },
+          {
+            id: 'listing',
+            name: 'listing',
+            columns: [
+              { name: 'id', type: 'integer', primaryKey: true, nullable: false },
+              { name: 'seller_id', type: 'integer', primaryKey: false, nullable: false, references: { table: 'seller', column: 'id' } },
+            ],
+          },
+        ],
+        foreignKeys: [],
+      } as never,
+      viewKey: 'door',
+      dashboard: { id: 'door', label: 'Home', sections: [] } as never,
+      page: { public: true, reads: ['listing', 'seller'], commands: [], params: [] } as never,
+      place: {},
+      code: minified,
+      read: async () => ({ status: 404, body: {} }),
+    });
+    expect(html).toContain('gallery:dark:function:$50');
+    expect(html).toContain('href="/shop/form/consign"');
+    expect(html).toContain('href="/shop/sign-in"');
+
+    const ac = new AbortController();
+    ac.abort();
+    await expect(
+      renderPublic({
+        kind: 'page',
+        mount: mountJson({ base: '', apps: {} }),
+        app: { id: 'foundry', name: 'Foundry', views: {}, resources: {}, nav: [], ui: {} } as never,
+        schema: { tables: [], foreignKeys: [] } as never,
+        viewKey: 'door',
+        dashboard: { id: 'door', label: 'Home', sections: [] } as never,
+        page: { public: true, reads: [], commands: [], params: [] } as never,
+        place: {},
+        code: minified,
+        read: async () => ({ status: 200, body: {} }),
+        signal: ac.signal,
+      }),
+    ).rejects.toThrow(/cancelled/i);
+  });
+
+  test('Photos renders empty state for null record and ButtonLink omits href when disabled', async () => {
+    const { ButtonLink } = await import('@mistriwork/ui');
+    const host = fixtureHost(fixtures({ listing_photo: [] }), {}, []);
+    const { container } = render(
+      <SectionFrame host={host} id="photos-null" width={960}>
+        <Photos from="listing_photo" whose="listing_id" record={null} empty="Nothing here" />
+        <ButtonLink href="/catalog" disabled>
+          Unavailable
+        </ButtonLink>
+      </SectionFrame>,
+    );
+    expect(screen.getByText('Nothing here')).toBeTruthy();
+    const disabledAnchor = container.querySelector('a[data-disabled]');
+    expect(disabledAnchor).toBeTruthy();
+    expect(disabledAnchor?.getAttribute('href')).toBeNull();
+  });
+
+  test('SiteHeader provides a mobile search toggle button with aria-expanded', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const { container } = render(
+      <SiteHeader
+        app={{ id: 'foundry', name: 'Foundry', views: { browse: { sections: [], label: 'Browse' } } }}
+        site={{ search: { view: 'browse', placeholder: 'Find a piece…' } }}
+      />,
+    );
+    const toggle = container.querySelector('.site-search-toggle') as HTMLButtonElement;
+    const form = container.querySelector('.site-search') as HTMLFormElement;
+    expect(toggle).toBeTruthy();
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(form.classList.contains('is-open')).toBe(false);
+    fireEvent.click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(form.classList.contains('is-open')).toBe(true);
+  });
+
+  test('SSR useRecord and useRows reshape parent FK and bounded child includes in one pass', async () => {
+    const { renderPublic } = await import('../../ssr/render.js');
+    const { mountJson } = await import('@mistriwork/engine/shared/mount.js');
+
+    const code = `import{jsx}from"/_mistri/sdk/v1/react-jsx-runtime.js";import{useRecord}from"/_mistri/sdk/v1/page.js";export default function Item(){const {data:record}=useRecord("listing",{id:10},{show:["id","title"],include:{seller_id:["name","city"],listing_photo:{by:"listing_id",show:["url"],limit:2}}});if(!record)return jsx("div",{children:"loading"});return jsx("div",{children:[record.title,record.seller_id?.name,record.seller_id?.city,(record.listing_photo??[]).map(p=>p.url).join(",")].join("|")});}`;
+    let calls = 0;
+    const html = await renderPublic({
+      kind: 'page',
+      mount: mountJson({ base: '', apps: { foundry: '' } }),
+      app: {
+        id: 'foundry',
+        name: 'Foundry',
+        home: 'item',
+        nav: [],
+        resources: { seller: {}, listing: {}, listing_photo: {} },
+        views: {
+          item: {
+            label: 'Item',
+            sections: [{ kind: 'custom', component: { id: 'page-item', kind: 'page' } }],
+            page: { public: true, reads: ['listing', 'seller', 'listing_photo'], commands: [], params: [] },
+          },
+        },
+        ui: {},
+      } as never,
+      schema: {
+        tables: [
+          {
+            id: 'seller',
+            name: 'seller',
+            columns: [
+              { name: 'id', type: 'integer', primaryKey: true, nullable: false },
+              { name: 'name', type: 'text', primaryKey: false, nullable: false },
+              { name: 'city', type: 'text', primaryKey: false, nullable: false },
+            ],
+          },
+          {
+            id: 'listing',
+            name: 'listing',
+            columns: [
+              { name: 'id', type: 'integer', primaryKey: true, nullable: false },
+              { name: 'title', type: 'text', primaryKey: false, nullable: false },
+              { name: 'seller_id', type: 'integer', primaryKey: false, nullable: true, references: { table: 'seller', column: 'id' } },
+            ],
+          },
+          {
+            id: 'listing_photo',
+            name: 'listing_photo',
+            columns: [
+              { name: 'id', type: 'integer', primaryKey: true, nullable: false },
+              { name: 'listing_id', type: 'integer', primaryKey: false, nullable: false, references: { table: 'listing', column: 'id' } },
+              { name: 'url', type: 'text', primaryKey: false, nullable: false },
+            ],
+          },
+        ],
+        foreignKeys: [],
+      } as never,
+      viewKey: 'item',
+      dashboard: { id: 'item', label: 'Item', sections: [] } as never,
+      page: { public: true, reads: ['listing', 'seller', 'listing_photo'], commands: [], params: [] } as never,
+      place: {},
+      code,
+      read: async (_method, path, body) => {
+        calls++;
+        expect(path).toBe('/api/view/run');
+        expect((body as { include?: Record<string, unknown> }).include?.listing_photo).toBeTruthy();
+        return {
+          status: 200,
+          body: {
+            view: {
+              columns: [{ path: 'id' }, { path: 'title' }, { path: 'seller_id' }, { path: 'seller_id.name' }, { path: 'seller_id.city' }],
+            },
+            columns: ['id', 'title', 'seller_id', 'seller_id.name', 'seller_id.city'],
+            rows: [{ id: 10, title: 'Brass Lamp', seller_id: 1, 'seller_id.name': 'Zelda', 'seller_id.city': 'Portland' }],
+            included: {
+              listing_photo: {
+                rowsByParent: {
+                  '10': [{ id: 101, listing_id: 10, url: '/lamp-1.jpg' }],
+                },
+              },
+            },
+          },
+        };
+      },
+    });
+    expect(calls).toBe(1);
+    expect(html).toContain('Brass Lamp|Zelda|Portland|/lamp-1.jpg');
   });
 });

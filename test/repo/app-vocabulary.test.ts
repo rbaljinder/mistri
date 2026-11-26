@@ -35,6 +35,8 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       // rc.80: App-wide picked rows (the current site), read as `chosen.<name>` (server/app/appChoices.ts).
       'choose',
       'connection',
+      // Declarative CTE-backed read-only resources (`defineQuery(...)`, shared/appDerived.ts).
+      'derived',
       'experiments',
       'flags',
       'home',

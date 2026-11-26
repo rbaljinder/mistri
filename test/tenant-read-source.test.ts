@@ -355,6 +355,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         'count',
         'countBreakdown',
         'countView',
+        'cte',
         'query',
         'runBreakdown',
         'runView',

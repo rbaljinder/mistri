@@ -230,6 +230,7 @@ test('sidecar exposes only logical data and preserves physical source flags and 
       'count',
       'countBreakdown',
       'countView',
+      'cte',
       'insert',
       'query',
       'remove',

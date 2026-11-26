@@ -114,6 +114,32 @@
         }
       }
     },
+    "derived": {
+      "type": "array",
+      "description": "Declarative CTE-backed read-only resources: defineQuery('seller_scorecard', { with: { ... }, from: 'seller', join: [...], select: { ... } }). Compiled into one SQL WITH query under the reader's grants and row policy.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "from"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "with": {
+            "type": "object",
+            "description": "Named CTE steps compiled in declaration order.",
+            "additionalProperties": { "type": "object" }
+          },
+          "from": { "type": "string" },
+          "alias": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "where": { "type": "string" },
+          "join": { "type": "array", "items": { "type": "object" } },
+          "groupBy": { "type": "array" },
+          "measures": { "type": "object" },
+          "select": { "type": "object", "additionalProperties": { "type": "string" } },
+          "orderBy": { "type": "array", "items": { "type": "object" } },
+          "limit": { "type": "integer", "minimum": 1 }
+        }
+      }
+    },
     "auth": {
       "$ref": "#/$defs/auth"
     },

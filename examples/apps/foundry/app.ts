@@ -1,11 +1,12 @@
-import { cards, commandForm, defineApp, listView, machine } from '@mistriwork/mistri/app';
+import { cards, commandForm, defineApp, listView, machine, msg } from '@mistriwork/mistri/app';
+import type { App } from './mistri-schema.d.ts';
 
 /* Foundry Market: a curated vintage marketplace and its curator desk in one App.
    Signed-out visitors wear `ui.site` (public header, search, CTA, footer sign-in) over three custom
    public pages (`pages/door.page.tsx`, `pages/browse.page.tsx`, `pages/item.page.tsx`) plus the
    built-in `catalog` cards view whose cards open `item` via `open: { page: 'item', param: 'id' }`. */
 
-export default defineApp({
+export default defineApp<App>({
   id: 'foundry',
   name: 'Foundry Market',
   connection: 'foundry',
@@ -16,13 +17,13 @@ export default defineApp({
     },
     roles: {
       curator: {
-        label: 'Curator',
+        label: msg('role.curator'),
         read: true,
         write: ['seller', 'listing_photo'],
         commands: ['reserveListing', 'releaseHold', 'markSold'],
       },
       admin: {
-        label: 'Admin',
+        label: msg('role.admin'),
         extends: 'curator',
       },
     },
@@ -37,10 +38,10 @@ export default defineApp({
       slug: true,
       recordLabel: '{title}',
       labels: {
-        price_cents: 'Price',
-        was_price_cents: 'Original price',
-        year_made: 'Year',
-        seller_id: 'Workshop',
+        price_cents: msg('listing.price'),
+        was_price_cents: msg('listing.originalPrice'),
+        year_made: msg('listing.year'),
+        seller_id: msg('listing.workshop'),
       },
       photos: {
         from: 'listing_photo',
@@ -76,7 +77,7 @@ export default defineApp({
     },
   },
   views: {
-    catalog: listView('Catalog', 'listing', {
+    catalog: listView(msg('view.catalog'), 'listing', {
       query: 'status = live',
       filters: ['category', 'condition', 'city', 'price_cents'],
       presentation: cards({
@@ -87,50 +88,51 @@ export default defineApp({
       }),
       open: { page: 'item', param: 'id' },
     }),
-    consign: commandForm('Sell on Foundry', 'submitConsignment', {
-      description: 'Submit vintage optics, analog hi-fi, or mid-century furniture for curated listing.',
+    consign: commandForm(msg('view.consign'), 'submitConsignment', {
+      description: msg('view.consignDescription'),
       public: true,
     }),
-    inventory: listView('Inventory', 'listing', {
+    inventory: listView(msg('view.inventory'), 'listing', {
       show: ['title', 'category', 'price_cents', 'status', 'seller_id.name', 'city'],
       filters: ['status', 'category', 'city'],
     }),
-    sellers: listView('Sellers', 'seller', {
+    sellers: listView(msg('view.sellers'), 'seller', {
       show: ['name', 'city', 'specialty', 'verified'],
     }),
-    consignments: listView('Submissions', 'consignment', {
+    consignments: listView(msg('view.consignments'), 'consignment', {
       show: ['item_title', 'seller_name', 'category', 'asking_cents', 'status'],
     }),
   },
   home: [{ view: 'door', signedOut: true }, { view: 'inventory' }],
   nav: ['inventory', 'sellers', 'consignments'],
   ui: {
+    locale: 'en-US',
     theme: {
       preset: 'gallery',
       accent: '#A84423',
     },
     site: {
       links: [
-        { label: 'Collection', view: 'browse' },
-        { label: 'Catalog', view: 'catalog' },
-        { label: 'Sell on Foundry', href: '/form/consign' },
+        { label: msg('site.linkCollection'), view: 'browse' },
+        { label: msg('site.linkCatalog'), view: 'catalog' },
+        { label: msg('site.linkSell'), href: '/form/consign' },
       ],
       search: {
         view: 'browse',
         param: 'q',
-        placeholder: 'Search Leica, Braun, walnut…',
+        placeholder: msg('site.searchPlaceholder'),
       },
       cta: {
-        label: 'List a piece',
+        label: msg('site.cta'),
         href: '/form/consign',
       },
       signIn: 'footer',
       footer: {
-        text: '© 2026 Foundry Market — Curated vintage optics, analog audio & mid-century design',
+        text: msg('site.footerText'),
         links: [
-          { label: 'Browse collection', view: 'browse' },
-          { label: 'Catalog view', view: 'catalog' },
-          { label: 'Consign a piece', href: '/form/consign' },
+          { label: msg('site.footerBrowse'), view: 'browse' },
+          { label: msg('site.footerCatalog'), view: 'catalog' },
+          { label: msg('site.footerConsign'), href: '/form/consign' },
         ],
       },
     },

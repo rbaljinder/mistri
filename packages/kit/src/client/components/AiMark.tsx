@@ -19,4 +19,4 @@ export function aiWord(): string {
 
 registerAiLabel(aiWord);
 
-export { AiBadge } from '@mistriwork/ui/primitives.js';
+export { AiBadge } from '@mistriwork/ui/AiBadge.js';

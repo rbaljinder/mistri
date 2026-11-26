@@ -97,27 +97,49 @@ export class Bucket {
 
   private async send(method: string, url: URL, headers: Record<string, string>, body?: Uint8Array): Promise<Response> {
     const payloadHash = body ? sha256Hex(body) : sha256Hex('');
-    let signed: Record<string, string>;
-    try {
-      signed = signRequest({ method, url, headers: { ...headers, 'x-amz-content-sha256': payloadHash }, payloadHash }, await this.place());
-    } catch (error) {
-      throw new BucketError(`The bucket "${this.location.name}" has no credentials to sign with: ${(error as Error).message}`, 503);
+    const maxAttempts = 3;
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let signed: Record<string, string>;
+      try {
+        signed = signRequest(
+          { method, url, headers: { ...headers, 'x-amz-content-sha256': payloadHash }, payloadHash },
+          await this.place(),
+        );
+      } catch (error) {
+        throw new BucketError(`The bucket "${this.location.name}" has no credentials to sign with: ${(error as Error).message}`, 503);
+      }
+      /* fetch sets host itself; a second one is refused. */
+      delete signed.host;
+      let response: Response;
+      try {
+        response = await this.fetcher(url, {
+          method,
+          headers: signed,
+          // A Buffer over a shared ArrayBuffer is still bytes to fetch; only the DOM's types say otherwise.
+          ...(body ? { body: body as Uint8Array<ArrayBuffer> } : {}),
+          signal: AbortSignal.timeout(TIMEOUT_MS),
+        });
+      } catch (error) {
+        const name = (error as { name?: string })?.name;
+        const retryable = attempt < maxAttempts && name !== 'TimeoutError' && name !== 'AbortError';
+        if (retryable) {
+          await new Promise((done) => setTimeout(done, attempt * 25 + Math.floor(Math.random() * 25)));
+          continue;
+        }
+        throw new BucketError(`The bucket "${this.location.name}" could not be reached: ${(error as Error).message}`, 503);
+      }
+      if (
+        attempt < maxAttempts &&
+        (response.status === 500 || response.status === 502 || response.status === 503 || response.status === 504)
+      ) {
+        await response.body?.cancel().catch(() => {});
+        await new Promise((done) => setTimeout(done, attempt * 25 + Math.floor(Math.random() * 25)));
+        continue;
+      }
+      return response;
     }
-    /* fetch sets host itself; a second one is refused. */
-    delete signed.host;
-    let response: Response;
-    try {
-      response = await this.fetcher(url, {
-        method,
-        headers: signed,
-        // A Buffer over a shared ArrayBuffer is still bytes to fetch; only the DOM's types say otherwise.
-        ...(body ? { body: body as Uint8Array<ArrayBuffer> } : {}),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-      });
-    } catch (error) {
-      throw new BucketError(`The bucket "${this.location.name}" could not be reached: ${(error as Error).message}`, 503);
-    }
-    return response;
+    /* Unreachable: loop always returns or throws. */
+    throw new BucketError(`The bucket "${this.location.name}" could not be reached.`, 503);
   }
 
   private async refused(response: Response, doing: string): Promise<never> {

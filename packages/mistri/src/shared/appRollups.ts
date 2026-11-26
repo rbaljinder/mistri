@@ -31,6 +31,7 @@ import type { Rollup } from '@mistriwork/engine/shared/rollups.js';
 import { shortList } from '@mistriwork/engine/shared/suggest.js';
 import { appComputedRules, computedConstants, withComputed } from './appComputed.js';
 import { withUnions } from './appUnions.js';
+import { withDerived } from './appDerived.js';
 import { appZone, zonedNow } from './appZone.js';
 import { servedSegments } from './appSegments.js';
 import { computedColumnMeta, computedReads, foldConstants, readsMe, type ComputedNode } from '@mistriwork/engine/shared/computed.js';
@@ -581,7 +582,7 @@ export function appCatalog(
         }),
       }
     : withTags;
-  return withUnions(app, grantedComputed(withComputed(app, withCovers, now, me, zone, symbolic)));
+  return withDerived(app, withUnions(app, grantedComputed(withComputed(app, withCovers, now, me, zone, symbolic))));
 }
 
 /* A reader's field grant may name a table's rollups and computed columns (appAccess.ts); pruning marks the ones it

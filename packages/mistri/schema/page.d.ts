@@ -161,7 +161,7 @@ export type ColumnPath<T extends string> = [SchemaColumns] extends [never]
   : [T] extends [never]
     ? string
     : T extends keyof SchemaColumns
-      ? (keyof SchemaColumns[T] & string) | `${keyof SchemaColumns[T] & string}.${string}`
+      ? (keyof SchemaColumns[T] & string) | `${keyof RefsOf<T> & string}.${string}`
       : string;
 
 /* ---------- rows, conditions and params, typed from the schema ---------- */
@@ -179,9 +179,13 @@ type KindValue<K> = K extends 'number'
         : unknown;
 type ColumnValue<T, C extends string> = C extends keyof RowsOf<T>
   ? RowsOf<T>[C]
-  : C extends keyof KindsOf<T>
-    ? KindValue<KindsOf<T>[C]> | null
-    : unknown;
+  : C extends 'cover'
+    ? C extends keyof KindsOf<T>
+      ? string | null
+      : unknown
+    : C extends keyof KindsOf<T>
+      ? KindValue<KindsOf<T>[C]> | null
+      : unknown;
 /* A label path follows each reference to the table it lands on; the record may point at nothing, so a hop may be null. */
 type PathValue<T, P extends string> = P extends `${infer Head}.${infer Rest}`
   ? Head extends keyof RefsOf<T>
@@ -206,9 +210,57 @@ export type PageRow<T extends string, S extends readonly string[] = readonly []>
     ? [T] extends [never]
       ? UiRow
       : { readonly [C in Extract<keyof KindsOf<T> | keyof RowsOf<T>, string>]: ValueIn<T, C> }
-    : { readonly [P in S[number]]: ValueIn<Reading<T>, P> } & KeyOf<T>;
+    : { readonly [P in S[number]]: ValueIn<Reading<T>, P> } & KeyOf<T> & CoverOf<T>;
+/** A structured parent FK join or bounded 1-to-many child include on `useRows` / `useRecord`. */
+export type PageIncludeSpec = Readonly<
+  Record<
+    string,
+    | readonly string[]
+    | { readonly via: string; readonly show: readonly string[] }
+    | {
+        readonly from?: string;
+        readonly by: string;
+        readonly show?: readonly string[];
+        readonly sort?: string;
+        readonly limit?: number;
+        readonly where?: unknown;
+        readonly query?: string;
+      }
+  >
+>;
+type ParentProjection<Target extends string, Cols extends readonly string[]> = {
+  readonly [C in Cols[number]]: ValueIn<Target, C>;
+};
+type IncludedEntryValue<T extends string, Alias extends string, Spec> = Spec extends readonly (infer Col extends string)[]
+  ? Alias extends keyof RefsOf<T>
+    ? ParentProjection<Extract<RefsOf<T>[Alias], string>, readonly Col[]> | null
+    : Readonly<Record<Col, unknown>> | null
+  : Spec extends { readonly via: infer FK extends string; readonly show: readonly (infer Col extends string)[] }
+    ? FK extends keyof RefsOf<T>
+      ? ParentProjection<Extract<RefsOf<T>[FK], string>, readonly Col[]> | null
+      : Readonly<Record<Col, unknown>> | null
+    : Spec extends { readonly by: string; readonly from?: infer From; readonly show?: infer ChildShow }
+      ? readonly PageRow<
+          From extends string ? From : Alias,
+          ChildShow extends readonly string[] ? ChildShow : readonly []
+        >[]
+      : unknown;
+type IncludedFields<T extends string, Inc> = {
+  readonly [Alias in Extract<keyof Inc, string>]: IncludedEntryValue<T, Alias, Inc[Alias]>;
+};
+type RowWithInclude<T extends string, S extends readonly string[], Inc> = [Inc] extends [undefined]
+  ? PageRow<T, S>
+  : Omit<PageRow<T, S>, Extract<keyof Inc, string>> & IncludedFields<T, Inc>;
 /* The key column(s) a read adds beside `show`. Untyped where the resource is not one name (a RecordList inside a Scope, without its own `from`: the runtime still sends the key) or the types are not generated. */
 type KeyOf<T extends string> = [SchemaKeys] extends [never] ? {} : [T] extends [never] ? {} : RecordKey<T>;
+/* The auto-hydrated cover photo URL on resources declaring `photos`: present whenever the page also reads the photo child resource. */
+type CoverOf<T extends string> = [SchemaColumns] extends [never]
+  ? {}
+  : [T] extends [never]
+    ? {}
+    : 'cover' extends keyof KindsOf<T>
+      ? { readonly cover?: string | null }
+      : {};
 
 /* The value a condition compares a column with, by the column's kind: a number column takes a number or its digits
    (an id past 2^53 is digits), a vocabulary one of its words. */
@@ -421,9 +473,17 @@ export interface PageDefinition<
       `{ enabled: false }` asks nothing yet: a page that settles a parameter after its first reads holds the loader until it has,
       so it runs once with the place the page settled on (`page.useLoader('asap', { enabled: office !== undefined })`). */
   useLoader<const N extends L | LS>(name: N, options?: { enabled?: boolean }): UiQuery<LoaderData<N>>;
-  /** Rows of one of the page's reads, each typed by what `show` names:
-      `page.useRows('pick_list', { show: ['id', 'reference'], where: { status: 'to_pick' }, sort: 'reference' })`.
+  /** Rows of one of the page's reads, each typed by what `show` names (and any `include` parent/child joins):
+      `page.useRows('pick_list', { show: ['id', 'reference'], include: { owner_id: ['name'] }, where: { status: 'to_pick' }, sort: 'reference' })`.
       One of its `optionalReads` is read with `optional: true` alone, and says `refused` for a reader not granted it. */
+  useRows<T extends R | O, const S extends readonly ColumnPath<T>[] = readonly [], const Inc extends PageIncludeSpec = never>(
+    resource: T,
+    options: RowsOptions<T, S> & { include: Inc; optional: true },
+  ): UiRowsQuery<RowWithInclude<T, S, Inc>> & UiRefusable;
+  useRows<T extends R, const S extends readonly ColumnPath<T>[] = readonly [], const Inc extends PageIncludeSpec = never>(
+    resource: T,
+    options: RowsOptions<T, S> & { include: Inc; optional?: false },
+  ): UiRowsQuery<RowWithInclude<T, S, Inc>>;
   useRows<T extends R | O, const S extends readonly ColumnPath<T>[] = readonly []>(
     resource: T,
     options: RowsOptions<T, S> & { optional: true },
@@ -433,6 +493,16 @@ export interface PageDefinition<
     options?: RowsOptions<T, S> & { optional?: false },
   ): UiRowsQuery<PageRow<T, S>>;
   /** One record of one of the page's reads, by its key; null when there is none, not asked while the key is undefined. */
+  useRecord<T extends R | O, const S extends readonly ColumnPath<T>[] = readonly [], const Inc extends PageIncludeSpec | undefined = undefined>(
+    resource: T,
+    key: RecordKey<T> | undefined,
+    options: { readonly show?: S; readonly include?: Inc; readonly optional: true },
+  ): UiQuery<RowWithInclude<T, S, Inc> | null> & UiRefusable;
+  useRecord<T extends R, const S extends readonly ColumnPath<T>[] = readonly [], const Inc extends PageIncludeSpec | undefined = undefined>(
+    resource: T,
+    key: RecordKey<T> | undefined,
+    options: { readonly show?: S; readonly include?: Inc; readonly optional?: false },
+  ): UiQuery<RowWithInclude<T, S, Inc> | null>;
   useRecord<T extends R | O, const S extends readonly ColumnPath<T>[] = readonly []>(
     resource: T,
     key: RecordKey<T> | undefined,
@@ -683,6 +753,14 @@ export declare function useHref(): {
 };
 
 /** Rows of one of the page's reads, typed by what `show` names; `page.useRows` is this hook held to the page's `reads`. */
+export declare function useRows<T extends ResourceName, const S extends readonly ColumnPath<T>[] = readonly [], const Inc extends PageIncludeSpec = never>(
+  resource: T,
+  options: RowsOptions<T, S> & { include: Inc; optional: true },
+): UiRowsQuery<RowWithInclude<T, S, Inc>> & UiRefusable;
+export declare function useRows<T extends ResourceName, const S extends readonly ColumnPath<T>[] = readonly [], const Inc extends PageIncludeSpec = never>(
+  resource: T,
+  options: RowsOptions<T, S> & { include: Inc; optional?: false },
+): UiRowsQuery<RowWithInclude<T, S, Inc>>;
 export declare function useRows<T extends ResourceName, const S extends readonly ColumnPath<T>[] = readonly []>(
   resource: T,
   options: RowsOptions<T, S> & { optional: true },
@@ -692,6 +770,24 @@ export declare function useRows<T extends ResourceName, const S extends readonly
   options?: RowsOptions<T, S> & { optional?: false },
 ): UiRowsQuery<PageRow<T, S>>;
 /** One record by its key, typed by what `show` names; null when there is none, not asked while the key is undefined. */
+export declare function useRecord<
+  T extends ResourceName,
+  const S extends readonly ColumnPath<T>[] = readonly [],
+  const Inc extends PageIncludeSpec | undefined = undefined,
+>(
+  resource: T,
+  key: RecordKey<T> | undefined,
+  options: { readonly show?: S; readonly include?: Inc; readonly optional: true },
+): UiQuery<RowWithInclude<T, S, Inc> | null> & UiRefusable;
+export declare function useRecord<
+  T extends ResourceName,
+  const S extends readonly ColumnPath<T>[] = readonly [],
+  const Inc extends PageIncludeSpec | undefined = undefined,
+>(
+  resource: T,
+  key: RecordKey<T> | undefined,
+  options: { readonly show?: S; readonly include?: Inc; readonly optional?: false },
+): UiQuery<RowWithInclude<T, S, Inc> | null>;
 export declare function useRecord<T extends ResourceName, const S extends readonly ColumnPath<T>[] = readonly []>(
   resource: T,
   key: RecordKey<T> | undefined,

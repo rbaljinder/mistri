@@ -6,29 +6,34 @@ keywords: [language, languages, locale, translation, i18n, messages, msg, define
 
 Say an App's captions in each reader's language from one catalog per language, with plurals, numbers and dates in ICU MessageFormat.
 
-```ts
+```ts title="examples/apps/foundry/messages/en.ts"
 const en = defineMessages('en', {
-  'people.people': 'People',
-  'people.name': 'Name',
-  // …
+  role: {
+    curator: 'Curator',
+    admin: 'Admin',
+  },
+  listing: {
+    price: 'Price',
+    originalPrice: 'Original price',
+  },
 });
 export default en;
 ```
-<!-- no sample: no shipped App ships a catalog -->
 
 ```ts
 export default defineMessages<typeof en>('es', {
-  'people.people': 'Personas',
-  'people.name': 'Nombre',
-  // …
+  role: { curator: 'Curador' },
+  'listing.price': 'Precio', // nested groups and flat dotted keys can be mixed
 });
 ```
 
-A caption names a message where its text would go: `labels: { name: msg('people.name') }`, `related(msg('people.directReports'), …)`, `tab: msg('people.overview')`, a list's `tabs: [{ label: msg('people.toDo'), … }]`, a free-form page's `definePage({ label: msg('page.help.label'), description: msg('page.help.description'), … })`. Every caption a reader sees takes one: a view's or a dashboard's label and description, a section's title, a note's words, a headline's small print, a unit, a donut's total, a banner's eyebrow, an image's `alt`, a validation `message`, an action's label, an empty state, a form's labels and steps, a document's name, a nav group, the landing's words. A command's inputs take one too: `field.text({ label: msg('ticket.reason'), help: msg('ticket.reasonHelp') })`, an option's `label`, `help` and `icon`; the App API and MCP read them in the App's own words. The catalog in the App's own language (`ui.locale`) is the source: every key is in it, and another catalog translates some or all of its keys. A key a translation leaves out is said in the source's words.
+`defineMessages` accepts flat dotted keys (`'people.name'`), nested groups (`{ people: { name: 'Name' } }`), or both; nested groups flatten to canonical dot keys at load time and refuse empty groups or colliding keys. Translations typed with `defineMessages<typeof en>('es', …)` accept either nested or flat keys against the source catalog (`examples/apps/foundry/messages/en.ts:9`).
+
+A caption names a message where its text would go: `labels: { name: msg('people.name') }`, `related(msg('people.directReports'), …)`, `tab: msg('people.overview')`, a list's `tabs: [{ label: msg('people.toDo'), … }]`, `ui.site` (`brand`, `tagline`, `search`, `links`, `footer`), and a free-form page's `definePage({ label: msg('page.help.label'), description: msg('page.help.description'), … })`. Every caption a reader sees takes one: a view's or a dashboard's label and description, a section's title, a note's words, a headline's small print, a unit, a donut's total, a banner's eyebrow, an image's `alt`, a validation `message`, an action's label, an empty state, a form's labels and steps, a document's name, a nav group, the landing's words. A command's inputs take one too: `field.text({ label: msg('ticket.reason'), help: msg('ticket.reasonHelp') })`, an option's `label`, `help` and `icon`; the App API and MCP read them in the App's own words. The catalog in the App's own language (`ui.locale`) is the source: every key is in it, and another catalog translates some or all of its keys. A key a translation leaves out is said in the source's words.
 
 A resource's `noun` takes a message with a plural, so a translation says it its own way: `noun: msg('people.person')` with `'{count, plural, one {person} other {people}}'`; the same for a fact's word, `{ column: 'reviews', after: msg('car.review') }`. An untitled `history()` says "History" in the reader's language without one.
 
-A custom component or a `definePage` page says a message itself, in the reader's language: `useMessage('help.title')`, `useMessage('help.results', { count })` from `@mistriwork/mistri/ui`. A key the catalog lacks is shown as the key itself rather than failing the page, so `mistri check` refuses a quoted key the source catalog does not have, or any quoted key in an App with no catalog (`component-message`); a key built from an expression is not followed.
+A custom component or a `definePage` page says a message itself, in the reader's language (in both browser hydration and public SSR): `useMessage('help.title')`, `useMessage('help.results', { count })` from `@mistriwork/mistri/ui`. A key the catalog lacks is shown as the key itself rather than failing the page, so `mistri check` refuses a quoted key the source catalog does not have, or any quoted key in an App with no catalog (`component-message`); a key built from an expression is not followed.
 
 ## Whose language
 
