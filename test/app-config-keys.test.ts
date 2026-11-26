@@ -27,6 +27,7 @@ const KEYS: Record<string, string> = {
   sources: 'Named bindings when the App reads more than one database or an HTTP source',
   resources: 'The logical tables every view, page and command refers to',
   unions: 'Read-only resources over tables that share a shape; not a table of their own',
+  derived: 'Read-only CTE-backed resources joining or aggregating multiple tables; not a single table of their own',
   auth: 'Roles and sign-in decide what every other key may show',
   api: 'What the App API and MCP expose to scoped tokens',
   track: 'What every command keeps unless one says otherwise',
