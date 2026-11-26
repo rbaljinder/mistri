@@ -221,6 +221,14 @@ const LOCALE_GROUP: CodeSplittingGroup = {
   priority: 10,
   test: LOCALE_WORDS,
 };
+/* Pure-JS chart math shared by the kit's Chart.tsx (which imports Chart.css) and @mistriwork/mistri/charts:
+   keeping it in its own chunk prevents Rolldown from merging it into Chart.tsx and pulling Chart.css ahead of
+   the on-demand surface stylesheet cascade (sheetCharts.ts). */
+const CHART_CORE_GROUP: CodeSplittingGroup = {
+  name: 'chart-core',
+  priority: 0,
+  test: /(?:\/packages\/ui\/src|\/@mistriwork\/ui\/dist)\/charts\/(?:core|chartFormat|chartPath|chartScale)\.(?:ts|js)$/,
+};
 
 /**
  * One page per first-page surface, each naming its chunks for the browser to fetch beside the entry (the engine's
@@ -658,7 +666,7 @@ export function kitClientConfig({ workspace, main, clients = [], build, plugins 
           /* One chunk for each surface's first page (`surfaces`, above). Left alone, the bundler cuts the graph into
              some thirty pieces along the seams it shares with the parts loaded on demand (components/onDemand.tsx),
              and a first visit fetches every piece. Those parts stay chunks of their own. */
-          codeSplitting: { groups: [LOCALE_GROUP, ...(split?.groups ?? [])] },
+          codeSplitting: { groups: [LOCALE_GROUP, CHART_CORE_GROUP, ...(split?.groups ?? [])] },
         },
       },
     },

@@ -214,6 +214,7 @@ export async function typesOfApp(
         ...(made?.rollups ? { rollups: made.rollups } : {}),
         ...(Object.keys(computed).length ? { computed } : {}),
         ...(tags ? { tags } : {}),
+        ...(made?.cover ? { cover: made.cover } : {}),
         ...(Object.keys(segments).length ? { segments } : {}),
       };
     }),

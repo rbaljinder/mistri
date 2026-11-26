@@ -21,8 +21,6 @@ import {
   TextField,
   useFormat,
   useHref,
-  useRecord,
-  useRows,
   Value,
 } from '@mistriwork/mistri/page';
 
@@ -38,31 +36,6 @@ const page = definePage({
 });
 export default page;
 
-interface ListingDetail extends Record<string, unknown> {
-  id: number;
-  title: string;
-  maker: string;
-  category: string;
-  year_made: number;
-  condition: string;
-  city: string;
-  price_cents: number;
-  was_price_cents: number | null;
-  status: string;
-  seller_id: number;
-  description: string;
-  provenance: string;
-  cover?: string | null;
-}
-
-interface SellerRow extends Record<string, unknown> {
-  id: number;
-  name: string;
-  city: string;
-  specialty: string;
-  bio: string;
-}
-
 function ItemPage(): ReactNode {
   const [rawId] = page.useParam('id');
   const numericId = rawId !== undefined ? Number(String(rawId).split('-')[0]) : undefined;
@@ -72,7 +45,7 @@ function ItemPage(): ReactNode {
   const fmt = useFormat();
   const href = useHref();
 
-  const itemQuery = useRecord('listing', numericId ? { id: numericId } : undefined, [
+  const itemQuery = page.useRecord('listing', numericId ? { id: numericId } : undefined, [
     'id',
     'title',
     'maker',
@@ -87,19 +60,25 @@ function ItemPage(): ReactNode {
     'description',
     'provenance',
   ]);
-  const item = itemQuery.data as unknown as ListingDetail | undefined;
+  const item = itemQuery.data;
 
-  const sellerQuery = useRecord('seller', item?.seller_id ? { id: item.seller_id } : undefined, ['id', 'name', 'city', 'specialty', 'bio']);
-  const seller = sellerQuery.data as unknown as SellerRow | undefined;
+  const sellerQuery = page.useRecord('seller', item?.seller_id ? { id: item.seller_id } : undefined, [
+    'id',
+    'name',
+    'city',
+    'specialty',
+    'bio',
+  ]);
+  const seller = sellerQuery.data;
 
-  const moreQuery = useRows('listing', {
+  const moreQuery = page.useRows('listing', {
     query: 'status = live',
     show: ['id', 'title', 'maker', 'price_cents', 'city'],
     sort: 'id asc',
     limit: 4,
     enabled: Boolean(item),
   });
-  const more = ((moreQuery.data ?? []) as unknown as ListingDetail[]).filter((row) => row.id !== item?.id).slice(0, 3);
+  const more = (moreQuery.data ?? []).filter((row) => row.id !== item?.id).slice(0, 3);
 
   return (
     <Stack gap="section">

@@ -12,7 +12,6 @@ import {
   Text,
   useFormat,
   useHref,
-  useRows,
   Value,
 } from '@mistriwork/mistri/page';
 
@@ -26,19 +25,6 @@ const page = definePage({
   component: BrowsePage,
 });
 export default page;
-
-interface ListingRow extends Record<string, unknown> {
-  id: number;
-  title: string;
-  maker: string;
-  category: string;
-  year_made: number;
-  condition: string;
-  city: string;
-  price_cents: number;
-  was_price_cents: number | null;
-  cover?: string | null;
-}
 
 function BrowsePage(): ReactNode {
   const fmt = useFormat();
@@ -82,13 +68,13 @@ function CollectionGrid({
   fmt: ReturnType<typeof useFormat>;
   href: ReturnType<typeof useHref>;
 }): ReactNode {
-  const result = useRows('listing', {
+  const result = page.useRows('listing', {
     query,
     show: ['id', 'title', 'maker', 'category', 'year_made', 'condition', 'city', 'price_cents', 'was_price_cents'],
     sort: sort ?? 'price_cents asc',
     limit: 24,
   });
-  const rows = (result.data ?? []) as unknown as ListingRow[];
+  const rows = result.data ?? [];
 
   return (
     <Stack gap="field">

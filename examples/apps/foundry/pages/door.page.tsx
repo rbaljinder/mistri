@@ -12,7 +12,6 @@ import {
   Text,
   useFormat,
   useHref,
-  useRows,
   Value,
 } from '@mistriwork/mistri/page';
 
@@ -26,31 +25,18 @@ const page = definePage({
 });
 export default page;
 
-interface ListingRow extends Record<string, unknown> {
-  id: number;
-  title: string;
-  maker: string;
-  category: string;
-  year_made: number;
-  condition: string;
-  city: string;
-  price_cents: number;
-  was_price_cents: number | null;
-  cover?: string | null;
-}
-
 const CATEGORIES = ['Cameras', 'Furniture', 'Audio', 'Lighting'] as const;
 
 function DoorPage(): ReactNode {
   const fmt = useFormat();
   const href = useHref();
-  const { data } = useRows('listing', {
+  const { data } = page.useRows('listing', {
     query: 'status = live',
     show: ['id', 'title', 'maker', 'category', 'year_made', 'condition', 'city', 'price_cents', 'was_price_cents'],
     sort: 'id asc',
     limit: 6,
   });
-  const rows = (data ?? []) as unknown as ListingRow[];
+  const rows = data ?? [];
   const lead = rows[0];
 
   return (

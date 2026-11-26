@@ -28,8 +28,8 @@
     min-width: 0;
     overflow-x: auto;
     scrollbar-width: none;
-    padding-block: 3px;
-    margin-block: -3px;
+    padding-block: var(--space-1h);
+    margin-block: calc(var(--space-1h) * -1);
   }
   .site-link {
     display: inline-flex;

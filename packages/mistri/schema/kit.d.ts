@@ -1376,6 +1376,15 @@ export interface TabsProps<T extends string = string> {
 declare function DefaultTabs<T extends string = string>({ tabs, items, value, defaultValue, param, width, onValueChange, variant, orientation, activationMode, fitted, className, ariaLabel, children, ref, }: TabsProps<T>): import("react").JSX.Element;
 /** Accessible tabbed panel switcher with arrow-key roving focus, indicator bar, and optional URL query param sync. */
 export declare const Tabs: typeof DefaultTabs;
+/** Props for the `AiBadge` provenance indicator. */
+export interface AiBadgeProps extends Omit<ComponentProps<'span'>, 'onChange' | 'aria-label' | 'inlist'> {
+    ariaLabel?: string;
+    quiet?: boolean;
+    pill?: boolean;
+    label?: ReactNode;
+}
+/** Sparkle badge marking AI-generated or AI-assisted content. */
+export declare function AiBadge({ quiet, label, pill, ariaLabel, className, children, ref, ...props }: AiBadgeProps): import("react").JSX.Element;
 /** Visual size scale for `Avatar`. */
 export type AvatarSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 /** Presence indicator status for `Avatar`. */
@@ -1495,14 +1504,6 @@ export interface StatusDotProps extends CleanElementProps<'span'> {
 }
 /** Semantic status dot and optional text label dressed in the active theme's status ink. */
 export declare function StatusDot({ tone, pulse, ariaLabel, className, children, ref, ...props }: StatusDotProps): import("react").JSX.Element;
-/** Props for the `AiBadge` provenance indicator. */
-export interface AiBadgeProps extends CleanElementProps<'span'> {
-    quiet?: boolean;
-    pill?: boolean;
-    label?: ReactNode;
-}
-/** Sparkle badge marking AI-generated or AI-assisted content. */
-export declare function AiBadge({ quiet, label, pill, ariaLabel, className, children, ref, ...props }: AiBadgeProps): import("react").JSX.Element;
 /** Props for the `Person` identity lockup. */
 export interface PersonProps extends CleanElementProps<'div', 'role' | 'ref'> {
     name: string;

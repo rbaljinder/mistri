@@ -3,6 +3,7 @@
 
 import { formatShortcut } from '@ui-sdk/react/shortcuts';
 import { Children, useId, useRef, type CSSProperties, type ComponentProps, type MouseEvent, type ReactNode, type Ref } from 'react';
+import { AiBadge, type AiBadgeProps } from '../AiBadge.js';
 import { Avatar, type AvatarProps, type AvatarSize, type AvatarStatus } from '../Avatar.js';
 import { Badge, IconRows, PhotoTiles, type BadgeProps, type IconRowsProps, type PhotoTile, type PhotoTilesProps } from '../HeroBlocks.js';
 import { Icon } from '../Icon.js';
@@ -208,31 +209,7 @@ export function StatusDot({ tone = 'neutral', pulse = false, ariaLabel, classNam
   );
 }
 
-/** Props for the `AiBadge` provenance indicator. */
-export interface AiBadgeProps extends CleanElementProps<'span'> {
-  quiet?: boolean;
-  pill?: boolean;
-  label?: ReactNode;
-}
-
-/** Sparkle badge marking AI-generated or AI-assisted content. */
-export function AiBadge({ quiet = false, label, pill = true, ariaLabel, className, children, ref, ...props }: AiBadgeProps) {
-  const seam = useSurfaceSeam();
-  const content = children ?? label ?? seam?.aiLabel?.() ?? 'AI';
-  return (
-    <span
-      ref={ref}
-      aria-label={ariaLabel}
-      data-quiet={quiet ? '' : undefined}
-      data-pill={pill ? '' : undefined}
-      className={cx('ai-mark nx-badge nx-ai-badge', className)}
-      {...props}
-    >
-      <Icon name="sparkle" size={11.5} weight="bold" />
-      <span className={quiet ? 'kit-visually-hidden nx-sr-only visually-hidden' : undefined}>{content}</span>
-    </span>
-  );
-}
+export { AiBadge, type AiBadgeProps };
 
 /* ============================================================================
  * 3. Avatar, AvatarGroup & Person

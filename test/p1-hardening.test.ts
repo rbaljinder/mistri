@@ -280,3 +280,31 @@ test('Foundry sample smoke test: seeds database and passes mistri check --warnin
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('Packaging guard: every @mistriwork/ui/* import in @mistriwork/kit is present in published @mistriwork/ui exports', async () => {
+  const { readdirSync } = await import('node:fs');
+  const { published } = await import('../scripts/pack-manifest.mjs');
+  const uiPkg = JSON.parse(readFileSync(join(ROOT, 'packages/ui/package.json'), 'utf8')) as Record<string, unknown>;
+  const pub = published(uiPkg) as { exports: Record<string, unknown> };
+  const exported = new Set(Object.keys(pub.exports));
+
+  const walk = (dir: string): string[] => {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) out.push(...walk(full));
+      else if (/\.(ts|tsx|js|jsx)$/.test(entry.name) && !/\.test\./.test(entry.name)) out.push(full);
+    }
+    return out;
+  };
+
+  const missing: string[] = [];
+  for (const file of walk(join(ROOT, 'packages/kit/src'))) {
+    const text = readFileSync(file, 'utf8');
+    for (const match of text.matchAll(/from\s+['"]@mistriwork\/ui(\/[^'"]+)['"]/g)) {
+      const subpath = `.${match[1]}`;
+      if (!exported.has(subpath)) missing.push(`${file.slice(ROOT.length)} -> @mistriwork/ui${match[1]}`);
+    }
+  }
+  assert.deepEqual(missing, [], `Published @mistriwork/ui is missing exports imported by @mistriwork/kit:\n${missing.join('\n')}`);
+});

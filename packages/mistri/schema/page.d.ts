@@ -179,9 +179,13 @@ type KindValue<K> = K extends 'number'
         : unknown;
 type ColumnValue<T, C extends string> = C extends keyof RowsOf<T>
   ? RowsOf<T>[C]
-  : C extends keyof KindsOf<T>
-    ? KindValue<KindsOf<T>[C]> | null
-    : unknown;
+  : C extends 'cover'
+    ? C extends keyof KindsOf<T>
+      ? string | null
+      : unknown
+    : C extends keyof KindsOf<T>
+      ? KindValue<KindsOf<T>[C]> | null
+      : unknown;
 /* A label path follows each reference to the table it lands on; the record may point at nothing, so a hop may be null. */
 type PathValue<T, P extends string> = P extends `${infer Head}.${infer Rest}`
   ? Head extends keyof RefsOf<T>
@@ -206,9 +210,17 @@ export type PageRow<T extends string, S extends readonly string[] = readonly []>
     ? [T] extends [never]
       ? UiRow
       : { readonly [C in Extract<keyof KindsOf<T> | keyof RowsOf<T>, string>]: ValueIn<T, C> }
-    : { readonly [P in S[number]]: ValueIn<Reading<T>, P> } & KeyOf<T>;
+    : { readonly [P in S[number]]: ValueIn<Reading<T>, P> } & KeyOf<T> & CoverOf<T>;
 /* The key column(s) a read adds beside `show`. Untyped where the resource is not one name (a RecordList inside a Scope, without its own `from`: the runtime still sends the key) or the types are not generated. */
 type KeyOf<T extends string> = [SchemaKeys] extends [never] ? {} : [T] extends [never] ? {} : RecordKey<T>;
+/* The auto-hydrated cover photo URL on resources declaring `photos`: present whenever the page also reads the photo child resource. */
+type CoverOf<T extends string> = [SchemaColumns] extends [never]
+  ? {}
+  : [T] extends [never]
+    ? {}
+    : 'cover' extends keyof KindsOf<T>
+      ? { readonly cover?: string | null }
+      : {};
 
 /* The value a condition compares a column with, by the column's kind: a number column takes a number or its digits
    (an id past 2^53 is digits), a vocabulary one of its words. */

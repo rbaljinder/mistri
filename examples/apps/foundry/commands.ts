@@ -11,39 +11,9 @@ import {
   shape,
   text,
 } from '@mistriwork/mistri/commands';
+import type { Rows } from './mistri-schema.d.ts';
 
-interface FoundryRows {
-  seller: { id: number; name: string; city: string; specialty: string; verified: number; bio: string };
-  listing: {
-    id: number;
-    title: string;
-    maker: string;
-    category: string;
-    year_made: number;
-    condition: string;
-    city: string;
-    price_cents: number;
-    was_price_cents: number | null;
-    status: string;
-    seller_id: number;
-    description: string;
-    provenance: string;
-    buyer_name: string | null;
-    buyer_email: string | null;
-  };
-  consignment: {
-    id: number;
-    seller_name: string;
-    seller_email: string;
-    item_title: string;
-    category: string;
-    asking_cents: number;
-    notes: string | null;
-    status: string;
-  };
-}
-
-const foundry = defineSource<FoundryRows>('foundry');
+const foundry = defineSource<Rows>('foundry');
 
 /**
  * Unified public + staff machine verb (`live -> reserved`).

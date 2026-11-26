@@ -1,11 +1,12 @@
 import { cards, commandForm, defineApp, listView, machine } from '@mistriwork/mistri/app';
+import type { App } from './mistri-schema.d.ts';
 
 /* Foundry Market: a curated vintage marketplace and its curator desk in one App.
    Signed-out visitors wear `ui.site` (public header, search, CTA, footer sign-in) over three custom
    public pages (`pages/door.page.tsx`, `pages/browse.page.tsx`, `pages/item.page.tsx`) plus the
    built-in `catalog` cards view whose cards open `item` via `open: { page: 'item', param: 'id' }`. */
 
-export default defineApp({
+export default defineApp<App>({
   id: 'foundry',
   name: 'Foundry Market',
   connection: 'foundry',

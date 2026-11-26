@@ -32,6 +32,10 @@
       },
       "default": "./src/index.ts"
     },
+    "./AiBadge.js": {
+      "mistri-built": "./dist/AiBadge.js",
+      "default": "./src/AiBadge.tsx"
+    },
     "./Avatar.js": {
       "mistri-built": "./dist/Avatar.js",
       "default": "./src/Avatar.tsx"

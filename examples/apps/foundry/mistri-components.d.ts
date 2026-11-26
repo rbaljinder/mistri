@@ -2,6 +2,7 @@
 // mistri check regenerates it when a declaration changes; do not edit by hand.
 
 import type { PageProps } from '@mistriwork/mistri/ui';
+import type { Rows } from './mistri-schema.d.ts';
 
 /** The props of the page "page-browse". */
 export type PageBrowseProps = PageProps;
