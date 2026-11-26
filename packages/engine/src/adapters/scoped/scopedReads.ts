@@ -7,6 +7,8 @@ import {
   lanesStatement,
   withoutLaneRow,
   Refusal,
+  conditionalExpected,
+  isConditionalExpected,
   type Filter,
   type QueryRequest,
   type QueryResult,
@@ -84,6 +86,7 @@ export function snapshotScopedData<T>(input: T, limits?: { readonly characters: 
       if (characters > most) return tooLong();
       result[key] = copy(descriptor.value, depth + 1);
     }
+    if (isConditionalExpected(value)) conditionalExpected(result);
     return result;
   };
   return copy(input) as T;

@@ -31,6 +31,7 @@ import {
   type ProfileResult,
   Refusal,
   WriteConflict,
+  isConditionalExpected,
   TransactionOperations,
   queueRecordLock,
   recordLockFilter,
@@ -1076,13 +1077,15 @@ export class PostgresAdapter implements Adapter {
     const params = [...Object.values(applied), ...where.params, ...guard.params];
 
     const result = await write.query(text, params);
-    if (request.expected !== undefined && Number(result.rowCount ?? 0) === 0) throw new WriteConflict();
-    if (transactional && Number(result.rowCount ?? 0) !== 1) refuseMatches(Number(result.rowCount ?? 0));
+    const count = Number(result.rowCount ?? 0);
+    if (count === 0 && isConditionalExpected(request.expected)) return { affected: 0, applied, sql: { text, params } };
+    if (request.expected !== undefined && count === 0) throw new WriteConflict();
+    if (transactional && count !== 1) refuseMatches(count);
     /* Postgres counts rows matched, not rows whose bytes changed, so saving a
        cell without changing its value still reports 1 — the editor would
        otherwise tell the user a successful write failed. */
     const row = transactional && result.rows?.length === 1 ? (toJsonSafe(result.rows[0]) as Record<string, unknown>) : undefined;
-    return { affected: Number(result.rowCount ?? 0), applied, ...(row ? { row } : {}), sql: { text, params } };
+    return { affected: count, applied, ...(row ? { row } : {}), sql: { text, params } };
   }
 
   /**

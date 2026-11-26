@@ -16,6 +16,7 @@
 import {
   Refusal,
   WriteConflict,
+  isConditionalExpected,
   type DeleteRequest,
   type InsertRequest,
   type TellRequest,
@@ -124,14 +125,17 @@ export function narrowedWrites(tx: WriteTransaction, table: NarrowedTable) {
       return result;
     },
     async update(request: UpdateRequest) {
-      if (!(await found(request.key))) return missing('update', request.expected);
+      if (!(await found(request.key))) {
+        if (isConditionalExpected(request.expected)) return { affected: 0, applied: {}, sql: { text: '', params: [] } };
+        return missing('update', request.expected);
+      }
       const contradiction = contradicted(request.values ?? {});
       if (contradiction)
         throw new NarrowedRefusal(
           `${contradiction.said}; this change gives ${JSON.stringify(contradiction.given)}, which would move the row out of it.`,
         );
       const result = await tx.update({ ...request, table: physical });
-      if (!(await inside(request.key)))
+      if (result.affected === 1 && !(await inside(request.key)))
         throw new NarrowedRefusal(
           `This change would move the "${resource}" row (${keyText(request.key)}) out of the rows its query reads, so it was not made. ` +
             "Change it through its table's own resource.",

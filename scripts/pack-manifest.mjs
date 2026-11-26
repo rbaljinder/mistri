@@ -50,14 +50,15 @@ export const CARRIED = {
   cloudflare: EVERY,
 };
 
-/** What the repository's changelog becomes in a tarball: the 1.0 release candidates, then a link to all of it. */
+/** What the repository's changelog becomes in a tarball: the 1.0 release line (including release candidates), then a link to all of it. */
 export const CHANGELOG_URL = 'https://github.com/rbaljinder/mistri/blob/main/CHANGELOG.md';
+const RELEASE_SECTION = /^## (?:1\.0\.0-rc\.|[1-9]\d*\.\d+\.\d+)/;
 export function rcChangelog(changelog) {
-  const sections = changelog.split(/^(?=## )/m).filter((section) => section.startsWith('## 1.0.0-rc.'));
+  const sections = changelog.split(/^(?=## )/m).filter((section) => RELEASE_SECTION.test(section));
   return [
     '# Changelog',
     '',
-    'The 1.0 release candidates of `@mistriwork/mistri`. Every earlier release is in the full changelog.',
+    'The 1.0 release line of `@mistriwork/mistri`. Every earlier release is in the full changelog.',
     '',
     ...sections.map((section) => section.trimEnd() + '\n'),
     `The full changelog: ${CHANGELOG_URL}`,

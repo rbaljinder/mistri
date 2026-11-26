@@ -1788,7 +1788,8 @@ function tableHandle(
         if (!Object.hasOwn(table.kinds, column)) throw new Error(`${name}: "${column}" is not one of its columns.`);
         if (table.meta.columns.some((meta) => meta.name === column && isJsonType(meta.type)))
           throw new Error(`${name}: claim cannot guard JSON column "${column}".`);
-        expected[column] = (val ?? null) as Value;
+        if (val === undefined) throw new Error(`${name}: claim "where.${column}" cannot be undefined; pass null to match NULL.`);
+        expected[column] = val as Value;
       }
       const revision = options.versionField;
       const isRowObj = Boolean(row && typeof row === 'object' && !Array.isArray(row));

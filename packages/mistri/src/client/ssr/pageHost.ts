@@ -167,7 +167,7 @@ function resolveSsrColumnMeta(schema: DatabaseSchema, table: TableMeta, path: st
 
 const NOOP_FLAGS = {
   ready: () => true,
-  snapshot: () => ({}),
+  snapshot: () => ({ get: () => undefined }),
   load: async () => {},
   get: () => undefined,
   subscribe: () => () => {},
@@ -224,7 +224,10 @@ export function createSsrPageHost(input: SsrPageInput, queryClient: QueryClient)
     offset?: number,
   ): Promise<UiRow[]> => {
     const basePaths = show?.length ? [...show] : table.columns.map((c) => c.name);
-    const attachCover = Boolean(table.cover) && !table.columns.some((c) => c.name === COVER_COLUMN) && !basePaths.includes(COVER_COLUMN);
+    const declared = [...(page.reads ?? []), ...(page.optionalReads ?? [])];
+    const coverDeclared = !askingPage || (table.cover !== undefined && declared.includes(table.cover.from));
+    const attachCover =
+      Boolean(table.cover) && coverDeclared && !table.columns.some((c) => c.name === COVER_COLUMN) && !basePaths.includes(COVER_COLUMN);
     const paths = attachCover ? [...basePaths, COVER_COLUMN] : basePaths;
     const body = {
       ...uiViewRunBody(table.id, table.name, paths, query, limit),

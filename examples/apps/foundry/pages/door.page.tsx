@@ -21,7 +21,7 @@ const page = definePage({
   description: 'Curated vintage optics, analog audio, and mid-century design from independent workshops.',
   public: true,
   head: false,
-  reads: ['listing'],
+  reads: ['listing', 'listing_photo'],
   component: DoorPage,
 });
 export default page;

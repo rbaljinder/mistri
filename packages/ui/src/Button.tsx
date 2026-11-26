@@ -12,6 +12,7 @@
 import { Button as Behavior } from '@ui-sdk/react/button';
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, MouseEvent, ReactNode, Ref } from 'react';
 import type { ControlSize } from './internal/cx.js';
+import { safeHref } from './internal/safeHref.js';
 import { useSurfaceSeam } from './internal/surfaceSeam.js';
 import { slotted } from './internal/uiKitContext.js';
 
@@ -269,11 +270,12 @@ function DefaultButtonLink({
     }
     onClick?.(event as MouseEvent<HTMLAnchorElement>);
   };
-  const routed = seam?.useLinkProps ? seam.useLinkProps(held ? undefined : href, rawFollow) : { href, onClick: rawFollow };
+  const cleanHref = safeHref(href);
+  const routed = seam?.useLinkProps ? seam.useLinkProps(held ? undefined : cleanHref, rawFollow) : { href: cleanHref, onClick: rawFollow };
   return (
     <a
       {...rest}
-      href={routed.href ?? href}
+      href={safeHref(routed.href) ?? cleanHref}
       aria-label={resolvedAriaLabel}
       onClick={(event) => {
         if (held) {

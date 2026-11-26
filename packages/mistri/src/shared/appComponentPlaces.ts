@@ -180,6 +180,14 @@ export function publicComponentIds(app: AppDef, pages: readonly PageDef[]): Set<
   const ids = new Set<string>();
   for (const view of Object.values(app.views)) if (isPublicForm(view)) for (const id of publicFormInputIds(view)) ids.add(id);
   const reach = publicReach(app);
+  for (const view of Object.values(app.views)) {
+    if ('sections' in view && view.page) {
+      if (!view.page.public || !view.page.reads.every((resource) => Boolean(reach?.reads(resource)))) continue;
+      for (const section of [...view.sections, ...(view.aside ?? [])]) {
+        if (section.kind === 'custom' && section.component) ids.add(section.component.id);
+      }
+    }
+  }
   if (!reach) return ids;
   for (const page of pages) {
     if (!reach.reads(page.base)) continue;
@@ -187,7 +195,7 @@ export function publicComponentIds(app: AppDef, pages: readonly PageDef[]): Set<
   }
   for (const view of Object.values(app.views)) {
     if ('sections' in view) {
-      if (view.page && !view.page.reads.every((resource) => reach.reads(resource))) continue;
+      if (view.page) continue;
       for (const section of [...view.sections, ...(view.aside ?? [])]) {
         if (section.kind !== 'custom' || !section.component) continue;
         if (

@@ -9,6 +9,7 @@ import { stampColumn } from '../../shared/appStamps.js';
 import { stateStampColumn } from '@mistriwork/engine/shared/schema.js';
 import { wallClockText, withWallClock } from '../app/wallClock.js';
 import { Refusal, type QueryResult, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
 import { recordRefusalCause } from '@mistriwork/engine/server/evidence.js';
 import { personMatch, type CommandPeople } from './commandWhen.js';
 import { BusinessCommandExecutionError } from './commandErrors.js';
@@ -195,7 +196,7 @@ export async function machineUpdate<
   const added = { ...(since ? { [since]: sinceValue(catalog, request.table, since, now, timezone) } : {}), ...entered };
   if (!Object.keys(added).length) return request;
   /* A write guarded at the values it read (commandDb.ts) is guarded at what the machine adds too: it was read with the state. */
-  return {
+  return carryServerRequest(request, {
     ...request,
     values: { ...request.values, ...added },
     ...(request.expected
@@ -206,5 +207,5 @@ export async function machineUpdate<
           },
         }
       : {}),
-  };
+  });
 }

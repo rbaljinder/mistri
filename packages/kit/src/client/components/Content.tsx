@@ -119,7 +119,10 @@ export function Content({ onHome }: { onHome: () => void }) {
           : {}),
       }
     : app?.ui.footer;
-  const footerSignIn = app?.ui.site?.signIn === 'footer' && isVisitor ? shownUnplaced(`/${encodeURIComponent(app.id)}/sign-in`) : undefined;
+  const footerSignIn =
+    app?.ui.site && (app.ui.site.signIn ?? 'footer') === 'footer' && isVisitor
+      ? shownUnplaced(`/${encodeURIComponent(app.id)}/sign-in`)
+      : undefined;
   const withFooter =
     footer || footerSignIn ? (
       <>

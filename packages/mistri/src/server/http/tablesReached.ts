@@ -6,6 +6,7 @@
  */
 import { measurePaths, type BreakdownDef, type Measure } from '@mistriwork/engine/shared/breakdown.js';
 import { textToBreakdown } from '@mistriwork/engine/shared/breakdowntext.js';
+import { rollupReads } from '@mistriwork/engine/shared/rollups.js';
 import { tableNamed, type DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { parseViewQuery } from '@mistriwork/engine/shared/view.js';
 import { textToView } from '@mistriwork/engine/shared/viewtext.js';
@@ -26,10 +27,21 @@ interface Asked {
 /** The paths a read walks from one base, collected into the tables they land on. */
 function walker(schema: DatabaseSchema, baseId: string, into: Set<string>) {
   /* A path that does not resolve reaches nothing: the run refuses it. One that ends on the base's own column, a
-     reference included, has no hops and so reaches nothing either. */
+     reference included, has no hops and so reaches nothing either. Virtual paths (`cover`, `tags`, rollups) read
+     subquery tables, so those underlying tables are reached too. */
   const path = (value: unknown) => {
     if (typeof value !== 'string') return;
-    for (const fk of tryResolvePath(schema, baseId, value).resolved?.hops ?? []) into.add(fk.to.table);
+    const resolved = tryResolvePath(schema, baseId, value).resolved;
+    if (!resolved) return;
+    for (const fk of resolved.hops) into.add(fk.to.table);
+    if (resolved.cover) into.add(resolved.cover.from);
+    if (resolved.tags) {
+      into.add(resolved.tags.through);
+      into.add(resolved.tags.to);
+    }
+    if (resolved.rollup) {
+      for (const read of rollupReads(resolved.rollup)) into.add(read.table);
+    }
   };
   const filter = (value: unknown): void => {
     const groups = isRecord(value) && Array.isArray(value.groups) ? value.groups : [];

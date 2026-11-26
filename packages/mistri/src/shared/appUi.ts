@@ -748,7 +748,7 @@ function parseSiteLink(raw: unknown, where: string): AppSiteLink {
   if (hasHref) {
     if (typeof raw.href !== 'string' || !raw.href.trim()) throw new Error(`${where}.href must be a URL or path.`);
     const href = raw.href.trim();
-    if (!/^(https:\/\/|mailto:|tel:|\/(?!\/))/i.test(href))
+    if (!/^(https:\/\/|mailto:|tel:|\/(?![/\\]))/i.test(href))
       throw new Error(`${where}.href "${href}" must start with https://, mailto:, tel:, or /.`);
   }
   return {

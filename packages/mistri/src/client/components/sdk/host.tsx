@@ -93,8 +93,21 @@ async function viewRows(
   offset?: number,
 ): Promise<UiRow[]> {
   const basePaths = show?.length ? [...show] : table.columns.map((column) => column.name);
+  const pageReads = (() => {
+    if (!page) return undefined;
+    const app = pageBridge.activeApp() as {
+      views?: Readonly<Record<string, { page?: { reads?: readonly string[]; optionalReads?: readonly string[] } }>>;
+    } | null;
+    const view = app?.views?.[page];
+    if (!view?.page) return undefined;
+    return [...(view.page.reads ?? []), ...(view.page.optionalReads ?? [])];
+  })();
+  const coverDeclared = !pageReads || (table.cover !== undefined && pageReads.includes(table.cover.from));
   const attachCover =
-    Boolean(table.cover) && !table.columns.some((column) => column.name === COVER_COLUMN) && !basePaths.includes(COVER_COLUMN);
+    Boolean(table.cover) &&
+    coverDeclared &&
+    !table.columns.some((column) => column.name === COVER_COLUMN) &&
+    !basePaths.includes(COVER_COLUMN);
   const paths = attachCover ? [...basePaths, COVER_COLUMN] : basePaths;
   const body = {
     ...uiViewRunBody(table.id, table.name, paths, query, limit),
