@@ -34,6 +34,7 @@ export function tenantTeamService(
   app: AppDef,
   administration: Pick<TenantAdministration, 'team'> | undefined,
   profileOf: (accountId: string) => Promise<{ readonly name?: string } | null>,
+  profilesOf?: (accountIds: readonly string[]) => Promise<ReadonlyMap<string, { readonly name?: string }>>,
 ): TenantTeamService | undefined {
   if (!administration || app.auth?.tenancy?.team === false) return undefined;
   const roles = Object.entries(app.auth?.roles ?? {})
@@ -43,6 +44,15 @@ export function tenantTeamService(
     members: (tenantId: string, limit: number) => administration.team(tenantId, roles, limit),
     names: async (accountIds: readonly string[]) => {
       const named = new Map<string, string>();
+      if (profilesOf && accountIds.length > 0) {
+        try {
+          const profiles = await profilesOf(accountIds);
+          for (const [id, who] of profiles) if (who.name) named.set(id, who.name);
+          return named;
+        } catch {
+          /* Fall back to per-account lookup so one unavailable record never refuses the list. */
+        }
+      }
       for (const id of accountIds) {
         try {
           /* The name alone: the address the same row holds is the administration's to say, never this read's. */

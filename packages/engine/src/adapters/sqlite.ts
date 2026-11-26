@@ -53,6 +53,7 @@ import {
   type BreakdownResult,
   Refusal,
   WriteConflict,
+  isConditionalExpected,
   TransactionOutcomeUnknown,
   Serial,
   TransactionOperations,
@@ -1105,9 +1106,11 @@ export class SqliteAdapter implements Adapter {
 
     const write = read === this.db ? this.writeHandle() : read;
     const result = write.prepare(text).run(...sqliteParams(params));
-    if (request.expected !== undefined && Number(result.changes) === 0) throw new WriteConflict();
-    if (transactional && Number(result.changes) !== 1) refuseUpdateMatches(request, Number(result.changes));
-    return { affected: Number(result.changes), applied, sql: { text, params } };
+    const changes = Number(result.changes);
+    if (changes === 0 && isConditionalExpected(request.expected)) return { affected: 0, applied, sql: { text, params } };
+    if (request.expected !== undefined && changes === 0) throw new WriteConflict();
+    if (transactional && changes !== 1) refuseUpdateMatches(request, changes);
+    return { affected: changes, applied, sql: { text, params } };
   }
 
   /**

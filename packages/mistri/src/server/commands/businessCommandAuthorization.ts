@@ -697,6 +697,23 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         }
       }
     }
+    if (command.public && app.auth?.public) {
+      const publicFields = resolveAppAccess(app, schema, [], 'public').fields;
+      if (publicFields) {
+        for (const { text, said } of judgedOf()) {
+          for (const { local, reads } of readsBy(text) ?? []) {
+            const named = logicalOf(local);
+            const seen = publicFields.get(named)?.read;
+            if (seen && reads.some((column) => !seen.has(column))) {
+              invalid(
+                `Public command "${id}" judges a column of "${named}" in its ${said} that "auth.public" does not read ` +
+                  '(a "fields" rule or "hidden" leaves it out). Let "auth.public" read it, or judge the state in the handler.',
+              );
+            }
+          }
+        }
+      }
+    }
   };
   /* The command-and-edit conflicts are said together, across every command and role: each is a separate edit to
      the roles, and meeting them one a run (a table, then its revision column, then the next command's) was the

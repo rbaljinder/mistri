@@ -36,6 +36,8 @@ import { livePast, liveStoreOf, type LivePosition, type LiveStore } from './live
 
 /** One subscriber's attachment to one database. */
 export interface LiveTap {
+  /** Immutable tenant scope for tenant-bound streams; omitted for single-tenant or unscoped streams. */
+  readonly tenant?: string;
   /** The cursor it asked to resume from on this database; undefined to start at the head. */
   readonly cursor?: string;
   /** Its authority, re-resolved when stale; a throw ends the subscriber. */
@@ -103,6 +105,8 @@ export function guard(where: string, run: () => unknown): void {
 
 export class LiveHub {
   private readonly attached = new Set<Attached>();
+  private readonly byTenant = new Map<string, Set<Attached>>();
+  private readonly unscoped = new Set<Attached>();
   private readonly joining: Attached[] = [];
   private position?: LivePosition;
   /** Moves at each stop: a pass begun before it reads nothing after it (`pass`). */
@@ -130,6 +134,31 @@ export class LiveHub {
     this.pruner.unref?.();
   }
 
+  private indexEntry(entry: Attached): void {
+    const tenant = entry.tap.tenant;
+    if (tenant === undefined) {
+      this.unscoped.add(entry);
+      return;
+    }
+    let bucket = this.byTenant.get(tenant);
+    if (!bucket) this.byTenant.set(tenant, (bucket = new Set()));
+    bucket.add(entry);
+  }
+
+  private unindexEntry(entry: Attached): void {
+    this.attached.delete(entry);
+    const tenant = entry.tap.tenant;
+    if (tenant === undefined) {
+      this.unscoped.delete(entry);
+      return;
+    }
+    const bucket = this.byTenant.get(tenant);
+    if (bucket) {
+      bucket.delete(entry);
+      if (bucket.size === 0) this.byTenant.delete(tenant);
+    }
+  }
+
   get subscribers(): number {
     return this.attached.size;
   }
@@ -145,6 +174,7 @@ export class LiveHub {
     const entry: Attached = { tap };
     const joined = new Promise<void>((resolve) => (entry.joined = resolve));
     this.attached.add(entry);
+    this.indexEntry(entry);
     this.joining.push(entry);
     this.start();
     this.wake(0);
@@ -154,7 +184,7 @@ export class LiveHub {
   detach(tap: LiveTap): void {
     for (const entry of this.attached)
       if (entry.tap === tap) {
-        this.attached.delete(entry);
+        this.unindexEntry(entry);
         /* A subscriber that leaves before its pass is not joined, but its attach settles: whoever awaits it (a
            choice cache's listening promise) must not wait for a pass that will skip it. */
         entry.joined?.();
@@ -194,6 +224,8 @@ export class LiveHub {
     this.closed = true;
     const attached = [...this.attached];
     this.attached.clear();
+    this.byTenant.clear();
+    this.unscoped.clear();
     this.joining.length = 0;
     for (const entry of attached) {
       entry.joined?.();
@@ -285,7 +317,7 @@ export class LiveHub {
 
   private failAll(): void {
     for (const entry of [...this.attached]) {
-      this.attached.delete(entry);
+      this.unindexEntry(entry);
       entry.joined?.();
       guard('subscriber', () => entry.tap.fail());
     }
@@ -319,7 +351,7 @@ export class LiveHub {
         if (entry.at) entry.tap.placed(entry.at);
       } catch (error) {
         liveFault('join', error);
-        this.attached.delete(entry);
+        this.unindexEntry(entry);
         guard('subscriber', () => entry.tap.fail());
       }
       entry.joined?.();
@@ -335,21 +367,40 @@ export class LiveHub {
       const primary = await this.replicasBehind();
       if (stopped()) return;
       const memo = this.countedMemo();
-      const live = [...this.attached].filter((entry) => entry.at);
-      const authorities = new Map<Attached, LiveAuthority>();
-      await Promise.all(
-        live.map(async (entry) => {
-          try {
-            authorities.set(entry, await entry.tap.authority());
-          } catch {
-            /* Its stream has ended itself; it detaches. */
-          }
-        }),
-      );
-      /* Index which tables and tenants appear in this batch so subscribers that
-         cannot read any changed table skip inner filtering altogether. */
+      /* Index which tables and tenants appear in this batch FIRST so subscribers
+         bound to unaffected tenants skip authority() resolution and inner filtering. */
       const changedTables = new Set<string>();
-      for (const { change } of rows) for (const item of change.entries) changedTables.add(item.table);
+      const changedTenants = new Set<string>();
+      let hasUnscopedChange = false;
+      for (const { change } of rows) {
+        for (const item of change.entries) {
+          changedTables.add(item.table);
+          if (item.tenant === undefined) hasUnscopedChange = true;
+          else changedTenants.add(item.tenant);
+        }
+      }
+      const live: Attached[] = [];
+      if (hasUnscopedChange) {
+        for (const entry of this.attached) if (entry.at) live.push(entry);
+      } else {
+        for (const entry of this.unscoped) if (entry.at) live.push(entry);
+        for (const tenant of changedTenants) {
+          const bucket = this.byTenant.get(tenant);
+          if (bucket) for (const entry of bucket) if (entry.at) live.push(entry);
+        }
+      }
+      const authorities = new Map<Attached, LiveAuthority>();
+      if (live.length) {
+        await Promise.all(
+          live.map(async (entry) => {
+            try {
+              authorities.set(entry, await entry.tap.authority());
+            } catch {
+              /* Its stream has ended itself; it detaches. */
+            }
+          }),
+        );
+      }
       const deliveries = new Map<Attached, LiveDelivery>();
       const tasks: Array<Promise<void>> = [];
       for (const entry of live) {
@@ -405,7 +456,7 @@ export class LiveHub {
             entry.tap.receive(delivery, entry.at!, false, primary);
           } catch (error) {
             liveFault('subscriber', error);
-            this.attached.delete(entry);
+            this.unindexEntry(entry);
             guard('subscriber', () => entry.tap.fail());
           }
       if (rows.length < LIVE_CHANGE_PAGE) break;

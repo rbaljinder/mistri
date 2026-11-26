@@ -39,7 +39,7 @@ import type { TenantSourceIdentity } from './tenantSourceIdentity.js';
 type Evidence = TenantMembershipEvidence | PlatformMembershipEvidence;
 /* Far above one host's open contexts (tenantContexts.ts allows 1,024 tabs),
    so eviction only bounds memory. */
-const MAXIMUM = 4096;
+const MAXIMUM = 16_384;
 
 /* The native session instance a request's login was verified as, noted by
    the host verifier that resolved it (tenantAuthenticatedHttp.ts). */

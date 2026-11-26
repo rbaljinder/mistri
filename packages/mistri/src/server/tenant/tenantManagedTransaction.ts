@@ -16,6 +16,7 @@ import {
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
 import type { CommandJournal, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
 import { captureTenantData, denyTenant, TenantContextError, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
+import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js';
 import type { TenantManagedEvidence, TenantManagedKind } from './tenantManagedKindContract.js';
 import { intakeManagedKind } from './tenantManagedKindIntake.js';
 import { memberManagedKind } from './tenantManagedKindMember.js';
@@ -305,7 +306,10 @@ async function runManaged<T>(
       // engine's exactly-touched-fields rule can still reject extra fields.
       expected = original;
     }
-    return captureTenantData({ table: table.id, key: completeKey, values: supplied, ...(expected !== undefined ? { expected } : {}) });
+    return carryServerRequest(
+      value,
+      captureTenantData({ table: table.id, key: completeKey, values: supplied, ...(expected !== undefined ? { expected } : {}) }),
+    );
   };
   const tx: WriteTransaction = Object.freeze({
     query: (request: QueryRequest) =>

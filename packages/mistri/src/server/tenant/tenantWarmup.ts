@@ -34,7 +34,7 @@ interface TenantWarmup {
 
 export function startTenantWarmup(
   reader: WarmupReader,
-  options: { readonly concurrency?: number; readonly log?: (line: string) => void } = {},
+  options: { readonly concurrency?: number; readonly maxTenants?: number; readonly log?: (line: string) => void } = {},
 ): TenantWarmup {
   const log = options.log ?? ((line: string) => console.error(line));
   const failed: string[] = [];
@@ -49,6 +49,18 @@ export function startTenantWarmup(
     } catch {
       // Not knowing the tenants is not a reason to refuse traffic for ever: each opens on its first request, as before.
       log('mistri: the tenants could not be listed to open at start; each opens on its first request.');
+      return;
+    }
+    if (options.maxTenants !== undefined && ids.length > options.maxTenants) {
+      ids = ids.slice(0, options.maxTenants);
+    }
+    if (ids.length === 0) {
+      // Still warm the shared connection pool and catalog attestation once when no tenants exist yet.
+      try {
+        await reader.readServiceAnchors(null);
+      } catch {
+        /* Readiness still proceeds; first request will retry. */
+      }
       return;
     }
     total = ids.length;

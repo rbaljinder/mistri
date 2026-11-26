@@ -86,7 +86,7 @@ interface Constants {
 const constantsOf = new WeakMap<DatabaseSchema, Constants>();
 const boundHeld = new WeakMap<DatabaseSchema, Map<string, DatabaseSchema>>();
 const basesOf = new WeakMap<DatabaseSchema, DatabaseSchema>();
-const BOUND_HELD = 16;
+const BOUND_HELD = 1024;
 function constantsIn(base: DatabaseSchema): Constants {
   let found = constantsOf.get(base);
   if (found) return found;

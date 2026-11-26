@@ -49,7 +49,7 @@ export function forgetTenantPools(): void {
 /* The owner's pool under the row-security backstop: what crosses tenants by design (a public address resolved, the
    jobs' sweep of every tenant, administration, enrollment's catalog) is a small share of the traffic, and it must
    not take a connection the role's request pool is counting on. */
-const OWNER_POOL = Object.freeze({ read: 2, write: 2 });
+const OWNER_POOL = Object.freeze({ read: 8, write: 4 });
 
 /* Each tenant database's backstop, by its runtime URL and each replica's (declareTenantBackstop). */
 const backstops = new Map<string, Readonly<{ owner: string; role: string }>>();

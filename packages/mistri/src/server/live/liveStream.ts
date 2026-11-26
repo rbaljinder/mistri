@@ -129,7 +129,9 @@ class LiveStream {
     res.on('drain', () => guard('stream', () => this.flush()));
     const cursors = this.cursorParts();
     hubs.forEach((_hub, index) => {
+      const tenant = this.authority[index]?.tenant;
       const tap: LiveTap = {
+        ...(tenant === undefined ? {} : { tenant }),
         ...(cursors ? { cursor: cursors[index] } : {}),
         authority: async () => (await this.current())[index],
         receive: (delivery, position, replay, primary) => {

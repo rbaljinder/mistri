@@ -117,7 +117,14 @@ before(async () => {
   registry = new Registry();
   registry.add({ id: owner, name: 'Sec', url: file, source: 'config', writable: true });
   const definition = parseAppConfig(APP, 'security fixture');
-  const pages: PageDef[] = [{ id: 'task', name: 'Task', base: 'task', sections: [{ kind: 'history' }] }];
+  const pages: PageDef[] = [
+    {
+      id: 'task',
+      name: 'Task',
+      base: 'task',
+      sections: [{ kind: 'history' }, { kind: 'custom', component: { id: 'hello', module: './Hello.jsx', kind: 'section' } }],
+    },
+  ];
   const host: AppHost = {
     app: {
       path: 'sec-fixture.ts',

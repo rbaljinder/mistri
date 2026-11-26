@@ -63,7 +63,7 @@ import {
   safeReturnPath,
   verifierHashOf,
 } from '../auth/hostHandoff.js';
-import { nativeAccountEmailOf, nativeAccountProfileOf, nativeMailAccount } from '../auth/authAccounts.js';
+import { nativeAccountEmailOf, nativeAccountProfileOf, nativeAccountProfilesOf, nativeMailAccount } from '../auth/authAccounts.js';
 import { auditsReads } from './tenantReadAudit.js';
 import type { TenantReadsService } from './tenantReadsRoute.js';
 import { tenantTeamService } from './tenantTeamRoute.js';
@@ -621,6 +621,14 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
             read: (tenantId: string, query: Parameters<TenantReadsService['read']>[1]) => auditReader.read(tenantId, query),
             people: async (accountIds: readonly string[]) => {
               const named = new Map<string, { name?: string; email: string | null }>();
+              if (!accountIds.length) return named;
+              try {
+                const profiles = await nativeAccountProfilesOf(raw.auth as AppAuthRuntime, accountIds);
+                for (const [id, who] of profiles) named.set(id, who);
+                return named;
+              } catch {
+                /* Fall back to per-account lookup so one unreadable account never refuses the audit page. */
+              }
               for (const id of accountIds) {
                 try {
                   const who = await nativeAccountProfileOf(raw.auth as AppAuthRuntime, id);
@@ -634,7 +642,12 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
           })
         : undefined;
     /* The tenant's members by name, for any of its members: `useTeam()` for a reader who does not manage the team. */
-    const team = tenantTeamService(loaded.app, administration, (id) => nativeAccountProfileOf(raw.auth as AppAuthRuntime, id));
+    const team = tenantTeamService(
+      loaded.app,
+      administration,
+      (id) => nativeAccountProfileOf(raw.auth as AppAuthRuntime, id),
+      (ids) => nativeAccountProfilesOf(raw.auth as AppAuthRuntime, ids),
+    );
     if (
       raw.suiteBase !== undefined &&
       (typeof raw.suiteBase !== 'string' || (raw.suiteBase !== '' && !/^\/[^?#]*[^/?#]$/.test(raw.suiteBase)))
@@ -1900,8 +1913,8 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
     /* Every address read through the mount first, as createApp reads it
        (http/server.ts): the base path off `req.url`, which every route below
        reads, and the page's inside address kept for the shell. */
-    /* Each tenant opened once now, a few at a time, and `/readyz` waits for them (tenantWarmup.ts). */
-    const warmup = startTenantWarmup(captureTenantEnrollment(enrollment).services.reader);
+    /* Warm the shared connection pool and catalog attestation on boot (bounded so /readyz stays O(1) at 1,000+ tenants). */
+    const warmup = startTenantWarmup(captureTenantEnrollment(enrollment).services.reader, { maxTenants: 8 });
     platformRequests(server, (req, res) => {
       let url: URL;
       try {

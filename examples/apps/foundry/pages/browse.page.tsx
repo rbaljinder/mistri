@@ -21,7 +21,7 @@ const page = definePage({
   description: 'Filter curated vintage optics, mid-century furniture, audio, and lighting.',
   public: true,
   head: false,
-  reads: ['listing'],
+  reads: ['listing', 'listing_photo'],
   params: { q: 'text' },
   component: BrowsePage,
 });

@@ -5,16 +5,17 @@
  * Works for any custom public site — marketing, editorial, directory, docs, portfolio, booking site,
  * or storefront. Renders semantic `<a href>` navigation links, an optional site search form that
  * routes straight into a public search page or list view without a full reload, an optional primary
- * CTA, and an optional Sign in link (only when `signIn` is `'header'` or omitted; `'footer'` and
+ * CTA, and an optional Sign in link (only when `signIn` is `'header'`; omitted, `'footer'`, and
  * `false` keep Sign in off the site header).
  */
 import { useState, useSyncExternalStore, type FormEvent, type MouseEvent } from 'react';
 import type { AppSite, AppSiteLink } from '@mistriwork/engine/shared/servedApp.js';
-import { go, pageView, state, subscribeWalk, tableView } from '@mistriwork/kit/client/core.js';
+import { go, state, subscribeWalk, tableView } from '@mistriwork/kit/client/core.js';
 import { resolveInAppSpaHref } from '@mistriwork/kit/client/inAppLink.js';
 import { navFollow } from '@mistriwork/kit/client/shellHost.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { dashPageId, dashViewKey, formPageId, formViewKey, isListRoom } from '@mistriwork/kit/client/components/appRooms.js';
+import { rootSlot } from '@mistriwork/kit/client/components/dashboardModel.js';
 import { shownUnplaced } from '@mistriwork/kit/client/addressMount.js';
 import { isFormView } from '../../shared/appModel.js';
 import { hrefFor } from '../publicAddress.js';
@@ -55,22 +56,27 @@ function openSiteView(app: SiteHeaderApp, viewKey: string, params?: Record<strin
   if (!view) return;
   if ('table' in view && typeof view.table === 'string') {
     const base = view.query ?? view.tabs?.[0]?.query ?? '';
-    const typed = params?.search?.trim();
+    const typed = (params?.search ?? (params ? Object.values(params).find((value) => value.trim()) : undefined))?.trim();
     const query = typed ? [base, `"${typed.replace(/"/g, '')}"`].filter(Boolean).join(' ') : base;
     go({ ...tableView(view.table, query), view: viewKey, title: view.label ?? viewKey }, 'push');
     return;
   }
   if (isFormView(view as never)) {
-    go(pageView(formPageId(viewKey), view.label ?? viewKey), 'push');
+    go({ kind: 'page', pageId: formPageId(viewKey), table: undefined, label: view.label ?? viewKey }, 'push');
     return;
   }
-  const body = params
-    ? Object.entries(params)
-        .filter(([, value]) => value !== '')
-        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-        .join(';')
-    : '';
-  go(pageView(dashPageId(viewKey), view.label ?? viewKey, body), 'push');
+  const cleanParams = params ? Object.fromEntries(Object.entries(params).filter(([, value]) => value !== '')) : {};
+  const body = Object.keys(cleanParams).length ? rootSlot(null, cleanParams) : '';
+  go(
+    {
+      kind: 'page',
+      pageId: dashPageId(viewKey),
+      table: undefined,
+      label: view.label ?? viewKey,
+      ...(body ? { rootBody: body } : {}),
+    },
+    'push',
+  );
 }
 
 function isViewActive(viewKey: string | undefined, activeView?: string): boolean {
@@ -98,7 +104,7 @@ export function SiteHeader({ app, site, resolveHref, activeView }: SiteHeaderPro
   const links = (site.links ?? []).filter((item) => !item.view || Object.hasOwn(app.views, item.view));
   const search = site.search && Object.hasOwn(app.views, site.search.view) ? site.search : undefined;
   const cta = site.cta && (!site.cta.view || Object.hasOwn(app.views, site.cta.view)) ? site.cta : undefined;
-  const showHeaderSignIn = site.signIn === 'header' || site.signIn === undefined;
+  const showHeaderSignIn = site.signIn === 'header';
 
   const onLinkClick = (event: MouseEvent<HTMLAnchorElement>, link: AppSiteLink, href: string) => {
     if (event.defaultPrevented || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || event.button !== 0) return;

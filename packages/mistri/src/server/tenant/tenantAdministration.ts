@@ -51,6 +51,7 @@ import {
   findNativeAccountByEmail,
   nativeAccountEmailOf,
   nativeAccountProfileOf,
+  nativeAccountProfilesOf,
   type NativeAccountInput,
 } from '../auth/authAccounts.js';
 import {
@@ -1367,16 +1368,31 @@ async function openAdministration(
             return member;
           });
           const paged = pageItems(candidates, limit, (item) => item.membershipId);
-          /* Who each member is, in words (the account's address and name): read from the sign-in store once for the
-             page; an account it cannot say is listed by its id alone, and the page is never refused for it. */
+          /* Who each member is, in words (the account's address and name): read from the sign-in store in one batched
+             query for the page; an account it cannot say is listed by its id alone, and the page is never refused for it. */
+          let batched: ReadonlyMap<string, { readonly email: string | null; readonly name?: string }> | undefined;
+          if (paged.items.length) {
+            try {
+              batched = await nativeAccountProfilesOf(
+                raw.auth as AppAuthRuntime,
+                paged.items.map((member) => member.accountId),
+              );
+            } catch {
+              batched = undefined;
+            }
+          }
           const items = [];
           for (const member of paged.items) {
             active();
             let who: Awaited<ReturnType<typeof nativeAccountProfileOf>> = null;
-            try {
-              who = await nativeAccountProfileOf(raw.auth as AppAuthRuntime, member.accountId);
-            } catch {
-              who = null;
+            if (batched) {
+              who = batched.get(member.accountId) ?? null;
+            } else {
+              try {
+                who = await nativeAccountProfileOf(raw.auth as AppAuthRuntime, member.accountId);
+              } catch {
+                who = null;
+              }
             }
             items.push({ ...member, ...(who?.email ? { email: who.email } : {}), ...(who?.name ? { name: who.name } : {}) });
           }

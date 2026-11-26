@@ -29,8 +29,7 @@ import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { createHash } from 'node:crypto';
 import { hostModuleSource, hostVersion } from '../app/componentSdk.js';
 import { COMPONENTS_SEGMENT, HOST_MODULES, SDK_PATH } from '../../shared/uiSdk.js';
-import { publicFormInputIds } from '../../shared/appComponentPlaces.js';
-import { isPublicForm } from '../../shared/app.js';
+import { publicComponentIds } from '../../shared/appComponentPlaces.js';
 import type { AppHost } from '../app/apps.js';
 
 const TYPES: Record<string, string> = {
@@ -170,25 +169,24 @@ export async function tenantComponentRoute(
   return reply(ctx, body, TYPES[extension], extension === 'map' ? 'private, no-cache' : 'private, max-age=31536000, immutable');
 }
 
-const formFiles = new WeakMap<object, ReadonlySet<string>>();
+const visitorFilesCache = new WeakMap<object, ReadonlySet<string>>();
 
-/* The files of the input components an App's public forms draw (appComponentPlaces.ts publicFormInputIds), and its
-   control kit's, per compile. */
-function publicFormFiles(host: AppHost): ReadonlySet<string> {
+/* The compiled JS/CSS files a signed-out visitor may load (appComponentPlaces.ts publicComponentIds), plus the control
+   kit, per compile. Never private components, never source maps. */
+function publicVisitorFiles(host: AppHost): ReadonlySet<string> {
   const compiled = host.app.components;
   if (!compiled) return new Set();
-  let files = formFiles.get(compiled);
+  let files = visitorFilesCache.get(host.app);
   if (!files) {
-    const ids = new Set<string>();
-    for (const view of Object.values(host.app.app.views)) if (isPublicForm(view)) for (const id of publicFormInputIds(view)) ids.add(id);
+    const ids = publicComponentIds(host.app.app, host.app.pages);
     files = new Set([
       ...Object.entries(compiled.entries)
-        .filter(([id, entry]) => ids.has(id) && entry.kind === 'input')
+        .filter(([id]) => ids.has(id))
         .flatMap(([, entry]) => [entry.js, ...(entry.css ? [entry.css] : [])]),
       /* The control kit draws the sign-in screen and a public form as it draws every other page, before anyone signs in. */
       ...(compiled.kit ? [compiled.kit.js, ...(compiled.kit.css ? [compiled.kit.css] : [])] : []),
     ]);
-    formFiles.set(compiled, files);
+    visitorFilesCache.set(host.app, files);
   }
   return files;
 }
@@ -206,17 +204,15 @@ export async function componentRoutes(ctx: RequestContext): Promise<boolean> {
     return false;
   }
   const host = appHosts?.find((candidate) => candidate.app.app.id === appId);
-  /* In an App that signs people in, a component is drawn for a signed-out
-     visitor only over what `auth.public` opens (appComponents.ts), or as one of
-     a public form's inputs, so only such an App serves a visitor its compiled
-     code — every file where it opens public reads, else the public forms'
-     inputs' alone — and never its source map, which carries the App's own
-     source. Elsewhere a signed-out visitor is told there is no such file, and a
-     shared cache never keeps one. */
+  /* In an App that signs people in, a signed-out visitor is served only the
+     compiled files of components their public pages, public forms, or public
+     surfaces draw (publicComponentIds) plus the control kit — never private
+     component bundles and never source maps, which carry the App's own source.
+     Elsewhere a signed-out visitor is told there is no such file, and a shared
+     cache never keeps one. */
   const signsIn = Boolean(host?.auth);
   const signedIn = typeof ctx.identity.id === 'string' && Boolean(ctx.identity.id.trim());
-  const opensPublic = Boolean(host?.app.app.auth?.public);
-  const visitorMay = match[3] !== 'js.map' && (opensPublic || (host !== undefined && publicFormFiles(host).has(match[2])));
+  const visitorMay = match[3] !== 'js.map' && host !== undefined && publicVisitorFiles(host).has(match[2]);
   const files = signsIn && !signedIn && !visitorMay ? undefined : host?.app.components?.files;
   if (!files || !Object.hasOwn(files, match[2])) {
     return missing(ctx);
