@@ -22,6 +22,7 @@ import { preloadDashboardParts } from '@mistriwork/kit/client/components/dashboa
 import { LoadErrorNote } from '@mistriwork/kit/client/components/Landing.js';
 import { AppListRoom } from '@mistriwork/kit/client/components/Rooms.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
+export { SharedDashboard, SharedFreePage } from './sharedRooms.js';
 
 /* Its rules stay in the first stylesheet (and so in one compression with it): they are shared with the public page,
    and a second file for them would cost more in brotli than the rules weigh. */
@@ -78,7 +79,7 @@ export function AppHome({ said, entry, pages }: AppHomeProps) {
       ) : app?.home !== undefined && !home ? (
         /* The payload is this server's own, so an absent landingView says the App declares no landing: null marks
            that, against an omitted prop, which keeps PublicHome's legacy landing probe. */
-        <PublicHome key={`public:${app.home}`} view={app.home} landingView={app.landingView ?? null} loadError={shell().loadError()} />
+        <PublicHome key={`home-public-${app.home}`} view={app.home} landingView={app.landingView ?? null} loadError={shell().loadError()} />
       ) : app ? (
         <AppHomeLanding app={app} loadError={shell().loadError()} pages={pages} />
       ) : null}

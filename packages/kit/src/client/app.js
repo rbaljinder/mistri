@@ -766,13 +766,17 @@ export async function boot(me, landingAt, installed) {
   });
   /* Catch unmodified left-clicks on plain in-App `<a href>` elements inside
      custom pages or built-in rooms so they navigate inside the SPA instead of
-     unloading the document and flashing the startup splash. */
+     unloading the document and flashing the startup splash. Attached on
+     `document` in the bubble phase so React's own synthetic `onClick` handlers
+     on `#content` (dialogs, disabled link guards, custom handlers) always run
+     first and can call `preventDefault()`. */
   if (!content.dataset.spaLinks) {
     content.dataset.spaLinks = '1';
-    content.addEventListener('click', (event) => {
+    addHostListener(document, 'click', (event) => {
       if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
       const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
-      if (!anchor || anchor.hasAttribute('download')) return;
+      if (!anchor || !content.contains(anchor) || anchor.hasAttribute('download') || anchor.getAttribute('aria-disabled') === 'true')
+        return;
       const targetAttr = anchor.getAttribute('target');
       if (targetAttr && targetAttr !== '_self') return;
       const target = resolveInAppSpaHref(anchor.getAttribute('href'));

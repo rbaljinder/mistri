@@ -458,7 +458,7 @@ export function useFollow(
     onClick?.(event);
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     const anchor = event.currentTarget instanceof HTMLAnchorElement ? event.currentTarget : null;
-    if (anchor?.hasAttribute('download')) return;
+    if (anchor?.hasAttribute('download') || anchor?.getAttribute('aria-disabled') === 'true') return;
     const targetAttr = anchor?.getAttribute('target');
     if (targetAttr && targetAttr !== '_self') return;
     if (!host || href === undefined || !href.startsWith('/') || href.startsWith('//') || href.startsWith('/\\')) return;

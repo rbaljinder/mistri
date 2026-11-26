@@ -14,14 +14,13 @@ import { useDecisionMarks } from './components/decisionMarks.js';
 import { useRecordDecisions } from './components/decisionAdornment.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
 import { setRecordDialog } from '@mistriwork/kit/client/peekpanel.js';
-import { AppHome } from './components/AppHome.js';
+import { AppHome, SharedDashboard, SharedFreePage } from './components/AppHome.js';
 import { ImportButton } from './components/ImportButton.js';
 import { AppTargetAction } from './components/AppTargetAction.js';
 import { bulkCommands, recordCommand } from './components/sdk/commands.js';
 import { useAppTargetLinks } from './appTargetLinks.js';
 import { navTargets } from './appNavTargets.js';
 import { SplitRecordRoom } from './components/SplitRecordRoom.js';
-import { SharedDashboard, SharedFreePage } from './components/sharedRooms.js';
 
 /* A view that says `open: "modal"` opens its record in the App's own dialog (peekpanel.js), fetched the first time one does. */
 setRecordDialog(onDemand(() => import('./components/RecordModal.js'), 'RecordModal', { quiet: true }));

@@ -431,8 +431,6 @@ const CLIENT_CROSSINGS = [
   'CustomList',
   // An author's page section (sdk/), installed as the shell's slots by appnav.js and fetched on demand.
   'CustomSection',
-  // The App's dashboard room, named as the shell's `rooms` (shellMode.ts) by appnav.js and fetched on demand.
-  'Dashboard',
   // A long menu's Directory (All pages), named as the shell's `rooms` by appnav.js and fetched on demand.
   'Directory',
   // A record's document, named as the shell's `rooms` by appnav.js and fetched on demand.
@@ -448,8 +446,6 @@ const CLIENT_CROSSINGS = [
   'FormRoom',
   'FormStatusSurface',
   'FormSurface',
-  // A free-form page's room, named as the shell's `rooms` by appnav.js.
-  'FreePage',
   'HelpPanel',
   'History',
   // The inbox's page, named as the shell's `rooms` by appnav.js and fetched on demand.
