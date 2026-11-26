@@ -449,12 +449,12 @@ const months = await db.invoice.where`status = ${'open'}`
   decimal exactly while each value times 10^places stays below 2^53; past that
   the command is refused with `invalid_result`, never answered wrong.
 - Keys and measures name the table's own columns, any one the command may
-  read (`_tag` and `región` too), up to three keys; none may be named
-  `__proto__`, `constructor` or `prototype`. A period is `hour`, `day`,
-  `week`, `month`, `quarter`, `year` or `weekday`, over a date column, or on
-  SQLite a `TEXT` column the resource declares a date
-  ([types](/docs/dates-and-types/)). A reference path (`customer_id.region`)
-  is refused: group by the id and read the few rows it names.
+  read (`_tag` and `región` too), or a 1-hop foreign-key path
+  (`'customer_id.region'`), up to three keys; none may be named `__proto__`,
+  `constructor` or `prototype`. A period is `hour`, `day`, `week`, `month`,
+  `quarter`, `year` or `weekday`, over a date column, or on SQLite a `TEXT`
+  column the resource declares a date ([types](/docs/dates-and-types/)).
+  `orderBy` accepts the same 1-hop foreign-key paths (`'customer_id.name'`).
 - `page({ after, size })` reads up to 1,000 rows in key order (or the query's
   order, the key appended) and answers `{ rows, next }`. `next` is plain data:
   keep it in a job, a workflow step or a URL and pass it back as `after`. The
@@ -468,7 +468,7 @@ const months = await db.invoice.where`status = ${'open'}`
   stopped after a restart, and a mark taken first (`max('id')`) keeps rows
   added meanwhile out of the run.
 
-A request that cannot succeed as written (a reference path, a text column
+A request that cannot succeed as written (an unknown path, a text column
 summed, a bound passed) is `invalid_result`, marked as the author's mistake,
 and jobs do not retry it.
 
@@ -486,6 +486,50 @@ and `mistri check` says so. Every statement on PostgreSQL stops at 30 seconds
 (the session's `statement_timeout`); SQLite runs a statement to its end, so a
 sum over a very large SQLite table holds the server as a dashboard over it
 does.
+
+### Projection, batching, includes and CTEs
+
+Use column projection, batch lookups, declarative includes, and scoped SQL CTEs on `ctx.db` and `ctx.cte` instead of N+1 loops inside handlers or page loaders:
+
+```ts
+// Project only needed columns
+const titles = await db.listing.where({ status: 'live' }).select('id', 'title', 'price_cents').orderBy('seller_id.name');
+const seller = await db.seller.get(sellerId, { select: ['id', 'name', 'city'] });
+
+// Batch lookups (single query; zero queries on empty input)
+const sellersById = await db.seller.getMany(sellerIds, { select: ['id', 'name'] });
+const bidsByListing = await db.bid.by('listing_id', listingIds, { select: ['id', 'amount_cents'], orderBy: ['amount_cents', 'desc'], limit: 5 });
+
+// Declarative parent + bounded child hydration (zero N+1, same transaction)
+const items = await db.listing
+  .where({ status: 'live' })
+  .select('id', 'title', 'seller_id')
+  .include({
+    seller_id: ['id', 'name', 'city'],
+    bids: { by: 'listing_id', select: ['id', 'amount_cents'], orderBy: ['amount_cents', 'desc'], limit: 3 },
+  });
+
+// Scoped SQL CTE (WITH ... AS (...) SELECT ...) in one parameterized statement
+const scorecard = await ctx.cte(
+  {
+    live_stats: db.listing
+      .where({ status: 'live' })
+      .groupBy('seller_id')
+      .aggregate({ live_count: count(), total_value: sum('price_cents') }),
+  },
+  (q) =>
+    db.seller
+      .join(q.live_stats, { on: ['id', 'seller_id'], kind: 'left' })
+      .select('seller.id', 'seller.name', 'live_stats.live_count', 'live_stats.total_value')
+      .orderBy('live_stats.total_value', 'desc')
+      .limit(20),
+);
+```
+
+- `.select(...)` and `{ select }` push column projection down to SQL so wide columns are never fetched.
+- `getMany(keys, { select })` returns a `Map<Key, Row>` and `by(fkColumn, keys, { select, orderBy, limit })` returns a `Map<Key, Row[]>`; both skip the database entirely when `keys` is empty.
+- `.include(...)` (and `{ include }` on `get`/`find`) hydrates parent FK objects (or `null`) and bounded reverse-FK child arrays in batched queries inside the same transaction, under the command's footprint, field grants, row policy, and tenant scope.
+- `ctx.cte(steps, (q) => ...)` compiles chained CTE steps and the outer join into a single parameterized SQL `WITH ... AS (...) SELECT ...` statement on both SQLite and PostgreSQL. Every base table and column is checked against the command or loader's footprint, column grants, row policy, and tenant isolation.
 
 ### Output shapes
 
