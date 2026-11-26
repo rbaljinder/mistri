@@ -40,6 +40,8 @@ export type FlowChangeReader = (query: Readonly<{ after?: number; from?: string 
 
 const SETTLE_MS = 60_000;
 const LOOK_BACK_MS = 24 * 60 * 60_000;
+const PAGE_CONTINUE_SIZE = 200;
+const MAX_PAGES_PER_TICK = 25;
 
 export function createFlowTail(options: Readonly<{ read: FlowChangeReader; jobs: JobStore; appId: string; now: () => number }>): {
   tick(): Promise<boolean>;
@@ -49,45 +51,53 @@ export function createFlowTail(options: Readonly<{ read: FlowChangeReader; jobs:
   return {
     async tick() {
       const at = options.now();
-      let rows: readonly FlowChange[];
-      try {
-        rows = await options.read(cursor === undefined ? { from: new Date(at - LOOK_BACK_MS).toISOString() } : { after: cursor });
-      } catch {
-        // History unavailable now: the next cycle reads from the same cursor.
-        return false;
-      }
       let enqueued = false,
         settled = true;
-      for (const row of rows) {
-        if (!seen.has(row.id) && !row.byFlow) {
-          const key = `flow-change-${String(row.id).padStart(12, '0')}`;
-          try {
-            await options.jobs.enqueue(
-              {
-                job: workflowJobId(row.workflow),
-                version: WORKFLOW_JOB_VERSION,
-                idempotencyKey: key,
-                input: { dispatch: { ...row.dispatch, change: `h${row.id}` } },
-                provenance: {
-                  appId: options.appId,
-                  actorId: `service:${row.runAs}`,
-                  ...(row.tenantId === undefined ? {} : { tenantId: row.tenantId }),
-                  correlationId: key,
-                  causationId: key,
-                },
-              },
-              at,
-            );
-            enqueued = true;
-          } catch {
-            // Not enqueued: the cursor stops here, and the next cycle tries this row again under the same key.
-            return enqueued;
-          }
+      let scanAfter: number | undefined = cursor;
+      for (let page = 0; page < MAX_PAGES_PER_TICK; page++) {
+        let rows: readonly FlowChange[];
+        try {
+          rows = await options.read(scanAfter === undefined ? { from: new Date(at - LOOK_BACK_MS).toISOString() } : { after: scanAfter });
+        } catch {
+          // History unavailable now: the next cycle reads from the same cursor.
+          break;
         }
-        seen.add(row.id);
-        // The cursor passes the rows that cannot have an earlier row still committing behind them.
-        settled &&= row.at <= at - SETTLE_MS;
-        if (settled) cursor = row.id;
+        if (rows.length === 0) break;
+        for (const row of rows) {
+          if (!seen.has(row.id) && !row.byFlow) {
+            const key = `flow-change-${String(row.id).padStart(12, '0')}`;
+            try {
+              await options.jobs.enqueue(
+                {
+                  job: workflowJobId(row.workflow),
+                  version: WORKFLOW_JOB_VERSION,
+                  idempotencyKey: key,
+                  input: { dispatch: { ...row.dispatch, change: `h${row.id}` } },
+                  provenance: {
+                    appId: options.appId,
+                    actorId: `service:${row.runAs}`,
+                    ...(row.tenantId === undefined ? {} : { tenantId: row.tenantId }),
+                    correlationId: key,
+                    causationId: key,
+                  },
+                },
+                at,
+              );
+              enqueued = true;
+            } catch {
+              // Not enqueued: the cursor stops here, and the next cycle tries this row again under the same key.
+              for (const id of seen) if (cursor !== undefined && id <= cursor) seen.delete(id);
+              return enqueued;
+            }
+          }
+          seen.add(row.id);
+          // The cursor passes the rows that cannot have an earlier row still committing behind them.
+          settled &&= row.at <= at - SETTLE_MS;
+          if (settled) cursor = row.id;
+        }
+        const lastId = rows[rows.length - 1]!.id;
+        if (rows.length < PAGE_CONTINUE_SIZE || (scanAfter !== undefined && lastId <= scanAfter)) break;
+        scanAfter = lastId;
       }
       // Until a row settles the reads stay a window on the last day, so a quiet store never reads from its beginning.
       for (const id of seen) if (cursor !== undefined && id <= cursor) seen.delete(id);

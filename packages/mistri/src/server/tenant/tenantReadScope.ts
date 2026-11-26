@@ -101,7 +101,8 @@ const layerSnapshots = new WeakMap<object, RowScope>();
    the one handed on, and the compositions keyed by it are found. Per catalog, bounded: one entry per distinct
    reader's scope. */
 const layersByText = new WeakMap<object, Map<string, RowScope>>();
-const LAYERS_BY_TEXT = 256;
+const LAYERS_BY_TEXT = 4096;
+const MAX_TENANTS_COMPOSED = 4096;
 function snapshotLayer(schema: TenantOwnershipSnapshot['schema'], layer: RowScope): RowScope {
   const kept = layerSnapshots.get(layer);
   if (kept) return snapshotRowScope(schema, kept);
@@ -266,7 +267,10 @@ export function composeTenantReadScope(
       result[id] = { groups, ...(binary.length ? { binary } : {}) };
     }
     const composed = snapshotRowScope(owned.schema, result);
-    byTenant?.set(tenantId, composed);
+    if (byTenant) {
+      if (byTenant.size >= MAX_TENANTS_COMPOSED) byTenant.delete(byTenant.keys().next().value!);
+      byTenant.set(tenantId, composed);
+    }
     return composed;
   } catch (error) {
     return denyTenant(error);

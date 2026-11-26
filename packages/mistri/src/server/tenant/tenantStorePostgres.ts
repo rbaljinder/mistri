@@ -1059,8 +1059,9 @@ export function createPostgresTenantAdministration(
     if (!['active', 'revoked', 'invited'].includes(value.status)) return denyTenant();
     if (value.expectedVersion !== null) revision(value.expectedVersion);
     await attest(client, owner);
-    // The anchor row first, FOR UPDATE: the lock order the fence shares.
-    const anchor = (await client.query(`SELECT status FROM ${q(tables.tenant)} WHERE id = $1 AND kind = $2 FOR UPDATE`, [anchorId, kind]))
+    // The anchor row first, FOR SHARE: serializes against tenant suspend/close (FOR UPDATE) without blocking
+    // concurrent business writes of other members (which also hold FOR SHARE on the tenant row).
+    const anchor = (await client.query(`SELECT status FROM ${q(tables.tenant)} WHERE id = $1 AND kind = $2 FOR SHARE`, [anchorId, kind]))
       .rows[0];
     if (!anchor || (anchor.status !== 'active' && value.status !== 'revoked')) return denyTenant();
     const previous = (

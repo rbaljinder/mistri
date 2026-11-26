@@ -242,10 +242,16 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
       });
       return { status: loaded.status, body: loaded.body };
     }
-    const said = localizedApp({ app, pages: [...pages] }, locale);
-    /* A visitor reads no tenant's profile, so the menu's `when`s offer it nothing (appTenantProfile.ts). */
-    const metadata = projectTenantMetadata(visitorApp(said.app), said.pages, schema, undefined, [], 'tenant', undefined, locale, true);
+    let cachedMetadata: ReturnType<typeof projectTenantMetadata> | undefined;
+    const getMetadata = () => {
+      if (cachedMetadata) return cachedMetadata;
+      const said = localizedApp({ app, pages: [...pages] }, locale);
+      /* A visitor reads no tenant's profile, so the menu's `when`s offer it nothing (appTenantProfile.ts). */
+      cachedMetadata = projectTenantMetadata(visitorApp(said.app), said.pages, schema, undefined, [], 'tenant', undefined, locale, true);
+      return cachedMetadata;
+    };
     if (path === '/api/app') {
+      const metadata = getMetadata();
       const branding = options.branding ? await options.branding(tenantId).catch(() => undefined) : undefined;
       // The placed tenant's published look, and only one that says it is that tenant's.
       const published =
@@ -267,13 +273,14 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
         app: served && commands && Object.keys(commands).length ? { ...served, publicCommands: commands } : served,
       });
     }
-    if (path === '/api/pages') return reply({ appId: app.id, pages: metadata.pages });
+    if (path === '/api/pages') return reply({ appId: app.id, pages: getMetadata().pages });
     if (path === '/api/references') {
       tenantIdentifier(input.table);
       tenantRecord(input.key);
       return reply(await tenantReferences(readAdapter(context), schema, input.table, input.key as Record<string, string | number>));
     }
     if (path === '/api/pages/plan' || path === '/api/pages/compose') {
+      const metadata = getMetadata();
       tenantIdentifier(input.page, 1024);
       tenantRecord(input.key);
       // Only a page the App declares: a suggested page is a member's.

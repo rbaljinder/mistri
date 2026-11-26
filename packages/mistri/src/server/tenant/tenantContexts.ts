@@ -275,7 +275,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
     supportHolds = holds as SupportAdmission<Request>['holds'];
   }
   const now = tenantRuntimeClock((raw.now ?? Date.now) as () => number);
-  const maximum = raw.maxContexts ?? 1024,
+  const maximum = raw.maxContexts ?? 4096,
     lifetime = raw.maxLifetimeMs ?? 300_000,
     dormant = raw.maxDormantMs ?? 1_800_000;
   const grace = raw.releaseGraceMs ?? RELEASE_GRACE;
@@ -284,7 +284,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
     typeof maximum !== 'number' ||
     !Number.isSafeInteger(maximum) ||
     maximum < 1 ||
-    maximum > 1024 ||
+    maximum > 16_384 ||
     typeof lifetime !== 'number' ||
     !Number.isSafeInteger(lifetime) ||
     lifetime < 1 ||
@@ -974,14 +974,17 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       // cover are reserved here; the eviction itself waits for admission
       // below, so a caller the membership refuses lets nothing go.
       let occupied = accountOpenings.get(accountId) ?? 0,
-        idle = 0;
-      for (const tab of tabs.values())
+        idle = 0,
+        globalReclaimable = 0;
+      for (const tab of tabs.values()) {
         if (tab.accountId === accountId) {
           occupied++;
           if (evictable(tab)) idle++;
         }
+        if (tab.released && evictable(tab)) globalReclaimable++;
+      }
       // No provider, clock callback or await between the checks and reservation.
-      if (tabs.size + opening >= maximum) return denyTenant();
+      if (tabs.size + opening - globalReclaimable >= maximum) return denyTenant();
       if (occupied - idle >= accountMaximum) throw new TenantContextsBusy();
       opening++;
       accountOpenings.set(accountId, (accountOpenings.get(accountId) ?? 0) + 1);
@@ -1010,6 +1013,19 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
           if (victim.lease) victim.lease.active = false;
           tabs.delete(victim.id);
           held--;
+        }
+        // If global capacity is full, reclaim the oldest already-released tab (never a live or dormant tab).
+        while (tabs.size >= maximum) {
+          let victim: Tab | undefined;
+          for (const candidateTab of tabs.values()) {
+            if (candidateTab.released && evictable(candidateTab)) {
+              victim = candidateTab;
+              break;
+            }
+          }
+          if (!victim) return denyTenant();
+          if (victim.lease) victim.lease.active = false;
+          tabs.delete(victim.id);
         }
         tabs.set(id, tab);
         return reply(tab, lease);

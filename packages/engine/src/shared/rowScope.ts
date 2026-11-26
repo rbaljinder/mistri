@@ -269,7 +269,7 @@ const checkedAgainst = (scope: object, schema: DatabaseSchema) => snapshots.get(
    booleans, finite numbers, arrays and records, nothing else survives captureRowScope — so equal text is an equal
    scope. Bounded per catalog; a reader past the bound is checked as before. */
 const byText = new WeakMap<DatabaseSchema, Map<string, RowScope>>();
-const BY_TEXT_HELD = 256;
+const BY_TEXT_HELD = 4096;
 
 /** A scope's text, where the text says all of it: undefined for anything JSON would say the same as something else
  * (an undefined value, which it drops; a non-finite number; an object that is not a plain record). Only for data

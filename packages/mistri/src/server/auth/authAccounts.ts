@@ -236,6 +236,39 @@ export async function nativeAccountProfileOf(
   return { email: typeof row.email === 'string' ? row.email.toLowerCase() : null, ...(name ? { name } : {}) };
 }
 
+/** Batched equivalent of `nativeAccountProfileOf` (one SQL query for up to 500 account ids). */
+export async function nativeAccountProfilesOf(
+  runtime: AppAuthRuntime,
+  accountIds: readonly string[],
+): Promise<ReadonlyMap<string, { readonly email: string | null; readonly name?: string }>> {
+  const unique = [...new Set(accountIds)];
+  const out = new Map<string, { readonly email: string | null; readonly name?: string }>();
+  if (!unique.length) return out;
+  const projection = suiteObservations.get(runtime);
+  if (projection) {
+    for (const id of unique) {
+      const found = await nativeAccountProfileOf(runtime, id);
+      if (found) out.set(id, found);
+    }
+    return out;
+  }
+  const store = registered(runtime);
+  for (const id of unique) exact(id);
+  const rows = store.file
+    ? store.file
+        .prepare(`SELECT id, email, name FROM "user" WHERE id IN (${unique.map(() => '?').join(', ')}) COLLATE BINARY`)
+        .all(...unique)
+    : (await store.pool!.query(`SELECT id, email, name FROM ${ACCOUNTS} WHERE id = ANY($1::text[])`, [unique])).rows;
+  if (store.closed()) throw new NativeAccountRefusal('unavailable');
+  for (const raw of rows) {
+    const row = raw as Record<string, unknown>;
+    if (typeof row.id !== 'string' || !unique.includes(row.id)) continue;
+    const name = profileName(row.name);
+    out.set(row.id, { email: typeof row.email === 'string' ? row.email.toLowerCase() : null, ...(name ? { name } : {}) });
+  }
+  return out;
+}
+
 /**
  * One account, through Better Auth, with the deployment's default native role
  * (a native role grants no tenant or platform authority). An address that
