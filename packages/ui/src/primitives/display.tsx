@@ -10,6 +10,7 @@ import { Popover } from '../Popover.js';
 import { Sparkline } from '../charts/charts.js';
 import { CopyIconButton } from '../internal/CopyIconButton.js';
 import { cx, isEmptyStateSpec, toDataTone, toKitTone, type ControlSize, type EmptyStateSpec, type Tone } from '../internal/cx.js';
+import { safeHref } from '../internal/safeHref.js';
 import { useInCard, useSurfaceSeam } from '../internal/surfaceSeam.js';
 
 type CleanElementProps<T extends keyof React.JSX.IntrinsicElements> = Omit<ComponentProps<T>, 'onChange' | 'aria-label' | 'inlist'> & {
@@ -345,8 +346,8 @@ export function Person({
         <Avatar name={name} src={src} status={status} size={size} />
       </span>
       <div className="kit-person-text nx-person-copy">
-        {href !== undefined && !hoverDetails ? (
-          <a className="kit-person-name nx-person-name" href={linkProps.href ?? href} onClick={linkProps.onClick}>
+        {safeHref(href) !== undefined && !hoverDetails ? (
+          <a className="kit-person-name nx-person-name" href={safeHref(linkProps.href) ?? safeHref(href)} onClick={linkProps.onClick}>
             {name}
           </a>
         ) : (
@@ -529,19 +530,20 @@ export function StatCard({
     </>
   );
 
+  const cleanHref = safeHref(href);
   const rootClass = cx(
     'kit-stat nx-stat-card',
     nested ? 'kit-stat-plain' : 'kit-card nx-card',
-    href !== undefined && 'kit-stat-link nx-focusable',
+    cleanHref !== undefined && 'kit-stat-link nx-focusable',
     className,
   );
 
-  if (href !== undefined) {
+  if (cleanHref !== undefined) {
     return (
       <a
         ref={ref as Ref<HTMLAnchorElement>}
         aria-label={ariaLabel}
-        href={linkProps.href ?? href}
+        href={safeHref(linkProps.href) ?? cleanHref}
         onClick={linkProps.onClick}
         className={rootClass}
       >
@@ -842,12 +844,13 @@ export function ItemRow({
   const hasEndSlot = given(meta) || given(resolvedActions);
   const marked = given(resolvedLead) || resolvedTone !== undefined;
 
+  const cleanHref = safeHref(href);
   const titleNode =
-    !disabled && href !== undefined ? (
+    !disabled && cleanHref !== undefined ? (
       <a
         ref={targetRef}
         className="kit-item-target nx-focusable"
-        href={linkProps.href ?? href}
+        href={safeHref(linkProps.href) ?? cleanHref}
         onClick={linkProps.onClick as ((event: MouseEvent<HTMLAnchorElement>) => void) | undefined}
       >
         {title}
@@ -1034,9 +1037,10 @@ export function MediaCard({
     </>
   );
 
-  if (href) {
+  const cleanHref = safeHref(href);
+  if (cleanHref) {
     return (
-      <a href={href} data-slot="media-card" aria-label={ariaLabel} className={cx('nx-media-card', 'is-link', className)}>
+      <a href={cleanHref} data-slot="media-card" aria-label={ariaLabel} className={cx('nx-media-card', 'is-link', className)}>
         {inner}
       </a>
     );

@@ -36,7 +36,7 @@ const page = definePage({
   nav: { position: 4 },
   public: true,
   layout: 'bare',
-  reads: ['board', 'thread', 'member', 'site_image'],
+  reads: ['board', 'thread', 'post', 'member', 'site_image'],
   forms: ['start-thread'],
   component: StartHere,
 });

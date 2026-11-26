@@ -31,6 +31,7 @@ import { brandRoute } from './brandRoutes.js';
 import { pwaRoute } from './pwaRoutes.js';
 import { pwaUrls } from '../app/appPwa.js';
 import { pageAssetHref, uiKitHref } from '../app/appComponents.js';
+import { publicComponentIds } from '../../shared/appComponentPlaces.js';
 import { publicHead, type ShellHead } from './publicHead.js';
 import { personAddress } from './personAddress.js';
 import { redirectedTo } from '../../shared/appRedirects.js';
@@ -654,12 +655,15 @@ async function serveShell(ctx: RequestContext): Promise<void> {
   const segment = ctx.path.split('/')[1] ?? '';
   const servedHost = (ctx.appHosts ?? []).find((host) => host.app.app.id === decodeSegment(segment));
   const served = servedHost?.app.app;
-  /* Its control kit (Preview), preloaded and installed before the first render; an App without one says nothing. */
-  const uiKit = served ? uiKitHref(served.id, servedHost.app.components, (href) => outward(ctx.mount, href)) : undefined;
-  const pageAsset = served ? pageAssetFor(served, servedHost.app.components, ctx.path, (href) => outward(ctx.mount, href)) : undefined;
-  const named = served?.name;
   /* Who the page is drawn for, so its first paint is guessed in their theme (ui.theme.for, themeResolve.ts). */
   const audience = { public: ctx.identity.id === undefined, roles: sessionRoles(ctx.identity.role) };
+  /* Its control kit (Preview), preloaded and installed before the first render; an App without one says nothing. */
+  const uiKit = served ? uiKitHref(served.id, servedHost.app.components, (href) => outward(ctx.mount, href)) : undefined;
+  const visitorComponentIds = served && servedHost.auth && audience.public ? publicComponentIds(served, servedHost.app.pages) : undefined;
+  const pageAsset = served
+    ? pageAssetFor(served, servedHost.app.components, ctx.path, (href) => outward(ctx.mount, href), visitorComponentIds)
+    : undefined;
+  const named = served?.name;
   const placedFormPage = placedPublicFormPage(ctx.path, ctx.policy?.publicPlacement?.isPlacedForm);
   const mount = { base: ctx.mount.base, json: mountJson(ctx.mount) };
   /* A public page's content pane drawn on the server (publicRender.ts); a placed form owns a fresh token and never is. */
@@ -902,6 +906,7 @@ function pageAssetFor(
   components: Parameters<typeof pageAssetHref>[1],
   path: string,
   outwardFn: (inside: string) => string,
+  allowedIds?: ReadonlySet<string>,
 ): { id: string; js: string; css?: string } | undefined {
   if (!components) return undefined;
   const segments = path.split('/').filter(Boolean).slice(1);
@@ -920,9 +925,14 @@ function pageAssetFor(
       }
     }
   }
+  if (allowedIds) {
+    const page = (matched as { page?: { public?: true } } | undefined)?.page;
+    if (page && page.public !== true) return undefined;
+  }
   const sections = (matched as { sections?: Array<{ component?: { id?: string } }> } | undefined)?.sections;
   const componentId = sections?.[0]?.component?.id;
-  return componentId ? pageAssetHref(served.id, components, componentId, outwardFn) : undefined;
+  if (!componentId || (allowedIds && !allowedIds.has(componentId))) return undefined;
+  return pageAssetHref(served.id, components, componentId, outwardFn);
 }
 
 /** In-process loopback reader for SSR of public custom pages, forwarding per-page headers like `x-mistri-page`. */

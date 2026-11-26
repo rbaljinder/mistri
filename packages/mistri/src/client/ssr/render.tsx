@@ -183,7 +183,8 @@ async function renderPublicPage(input: SsrPageInput): Promise<string> {
           : {}),
       }
     : input.app.ui.footer;
-  const signInHref = site?.signIn === 'footer' ? shownUnplaced(`/${encodeURIComponent(input.app.id)}/sign-in`) : undefined;
+  const signInHref =
+    site && (site.signIn ?? 'footer') === 'footer' ? shownUnplaced(`/${encodeURIComponent(input.app.id)}/sign-in`) : undefined;
 
   const buildElement = (): ReactNode =>
     createElement(

@@ -17,7 +17,6 @@ import { SortMenu } from '@mistriwork/kit/client/components/SortMenu.js';
 import { FilterPageContext } from '@mistriwork/kit/client/components/filterPageContext.js';
 import type { DisplayRule } from '@mistriwork/kit/client/components/valueModel.js';
 import { UiPageContext } from './context.js';
-import { useAddressState } from './hooks.js';
 import './filters.css';
 
 interface ListFilterSort {
@@ -83,18 +82,18 @@ export function ListFilters({
   children,
 }: ListFiltersProps) {
   const frame = useContext(UiPageContext);
-  const canBindParam = Boolean(frame && frame.params.includes(param));
-  const [paramValue, setParamValue] = useAddressState(canBindParam ? param : '');
+  const canBindParam = Boolean(frame && param && frame.params.includes(param));
+  const paramValue = canBindParam ? (frame!.get(param) ?? '') : '';
   const [localValue, setLocalValue] = useState('');
   const [typed, setTyped] = useState<string | undefined>(undefined);
 
   const rawRefinement = canBindParam ? paramValue : localValue;
   const setRawRefinement = useCallback(
     (next: string) => {
-      if (canBindParam) setParamValue(next);
+      if (canBindParam) frame!.set(param, next === '' ? undefined : next);
       else setLocalValue(next);
     },
-    [canBindParam, setParamValue],
+    [canBindParam, frame, param],
   );
 
   const table = state.schema ? (tableNamed(state.schema, from) as TableMeta | undefined) : undefined;

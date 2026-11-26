@@ -200,7 +200,7 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
         door: {
           label: 'Welcome',
           sections: [{ kind: 'custom', component: { id: 'page-door', kind: 'page' } }],
-          page: { public: true, reads: ['listing'], commands: [], params: [], loader: 'featured' },
+          page: { public: true, reads: ['listing', 'listing_photo'], commands: [], params: [], loader: 'featured' },
         },
       },
       ui: {
@@ -272,5 +272,123 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
     expect(html).toContain('class="site-header"');
     expect(html).toContain('© 2026 North Site');
     expect(html).toContain('/northsite/sign-in');
+  });
+
+  test('SiteHeader defaults signIn to footer when omitted, passes rootBody for custom page search, and honors custom search.param on list views', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    const { state } = await import('@mistriwork/kit/client/core.js');
+    const searchApp = {
+      id: 'journal',
+      name: 'Field Journal',
+      views: {
+        articles: { table: 'article', label: 'Articles', query: 'published = true' },
+        browse: {
+          label: 'Browse',
+          sections: [{ kind: 'custom', component: { id: 'page-browse', kind: 'page' } }],
+          page: { public: true, reads: ['article'], commands: [], params: ['q'] },
+        },
+      },
+    };
+    const { rerender } = render(
+      <SiteHeader
+        app={searchApp}
+        site={{
+          links: [{ label: 'Articles', view: 'articles' }],
+          search: { view: 'browse', param: 'q', placeholder: 'Search browse…' },
+        }}
+      />,
+    );
+    // Omitted signIn defaults to footer, never header.
+    expect(screen.queryByRole('link', { name: 'Sign in' })).toBeNull();
+
+    // Searching into a free-form page pushes rootBody encoded via rootSlot (not as key).
+    const input = screen.getByRole('searchbox', { name: 'Search browse…' });
+    fireEvent.change(input, { target: { value: 'leica' } });
+    fireEvent.submit(input.closest('form')!);
+    const top = state.stack.at(-1) as { kind?: string; pageId?: string; rootBody?: string; key?: unknown };
+    expect(top.kind).toBe('page');
+    expect(top.pageId).toBe('dash-browse');
+    expect(top.rootBody).toBe(';q=leica');
+    expect(top.key).toBeUndefined();
+
+    // Searching into a list view with a custom search.param applies the typed query.
+    rerender(
+      <SiteHeader
+        app={searchApp}
+        site={{
+          links: [{ label: 'Articles', view: 'articles' }],
+          search: { view: 'articles', param: 'q', placeholder: 'Search list…' },
+        }}
+      />,
+    );
+    const listInput = screen.getByRole('searchbox', { name: 'Search list…' });
+    fireEvent.change(listInput, { target: { value: 'optics' } });
+    fireEvent.submit(listInput.closest('form')!);
+    const listTop = state.stack.at(-1) as { kind?: string; view?: string; query?: string };
+    expect(listTop.kind).toBe('table');
+    expect(listTop.view).toBe('articles');
+    expect(listTop.query).toContain('"optics"');
+  });
+
+  test('ListFilters falls back cleanly to local state when param is not declared in page params', async () => {
+    const { ListFilters } = await import('./filters.js');
+    const { UiPageContext } = await import('./context.js');
+    const frame = {
+      view: 'browse',
+      label: 'Browse',
+      reads: ['listing'],
+      commands: [],
+      params: [],
+      get: () => undefined,
+      set: () => {},
+    };
+    render(
+      <UiPageContext.Provider value={frame}>
+        <ListFilters from="listing" filters={['category']} param="q">
+          {({ query }) => <div data-testid="filter-query">{query || 'empty'}</div>}
+        </ListFilters>
+      </UiPageContext.Provider>,
+    );
+    expect(screen.getByTestId('filter-query').textContent).toBe('empty');
+  });
+
+  test('SSR renderPublic supports useFlags() via NOOP_FLAGS.snapshot().get()', async () => {
+    const { renderPublic } = await import('../../ssr/render.js');
+    const { mountJson } = await import('@mistriwork/engine/shared/mount.js');
+    const compiledFlagsJs = `
+      import { jsx } from "/_mistri/sdk/cb6940da33/react-jsx-runtime.js";
+      import { useFlags } from "/_mistri/sdk/cb6940da33/page.js";
+      export default function FlagsPage() {
+        const flags = useFlags();
+        return jsx("p", { children: flags.get("promo_banner") ? "promo-on" : "promo-off" });
+      }
+    `;
+    const html = await renderPublic({
+      kind: 'page',
+      mount: mountJson({ base: '', apps: {} }),
+      app: {
+        id: 'flagapp',
+        name: 'Flag App',
+        home: 'door',
+        nav: [],
+        resources: {},
+        views: {
+          door: {
+            label: 'Welcome',
+            sections: [{ kind: 'custom', component: { id: 'page-flags', kind: 'page' } }],
+            page: { public: true, reads: [], commands: [], params: [] },
+          },
+        },
+        ui: {},
+      } as never,
+      schema: { tables: [], foreignKeys: [] } as never,
+      viewKey: 'door',
+      dashboard: { id: 'door', label: 'Welcome', sections: [] } as never,
+      page: { public: true, reads: [], commands: [], params: [] } as never,
+      place: {},
+      code: compiledFlagsJs,
+      read: async () => ({ status: 404, body: {} }),
+    });
+    expect(html).toContain('promo-off');
   });
 });

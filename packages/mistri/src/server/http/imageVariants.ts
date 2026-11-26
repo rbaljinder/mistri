@@ -148,16 +148,29 @@ const waitingBackground: Array<() => void> = [];
 /* A visitor's picture goes before an upload's pre-made ones, and the pre-made ones may hold only one of the two
    places, so a visitor never waits behind them for more than the work already begun. */
 function pump(): void {
-  while (running < AT_ONCE && waiting.length) waiting.shift()!();
-  while (running < AT_ONCE - 1 && backgroundRunning < 1 && !waiting.length && waitingBackground.length) waitingBackground.shift()!();
+  while (running < AT_ONCE && waiting.length) {
+    running++;
+    waiting.shift()!();
+  }
+  while (running < AT_ONCE - 1 && backgroundRunning < 1 && !waiting.length && waitingBackground.length) {
+    running++;
+    backgroundRunning++;
+    waitingBackground.shift()!();
+  }
 }
 async function turn<T>(work: () => Promise<T>, background = false): Promise<T> {
   if (background) {
-    if (running >= AT_ONCE - 1 || backgroundRunning >= 1 || waiting.length)
+    if (running >= AT_ONCE - 1 || backgroundRunning >= 1 || waiting.length) {
       await new Promise<void>((resolve) => waitingBackground.push(resolve));
-    backgroundRunning++;
-  } else if (running >= AT_ONCE) await new Promise<void>((resolve) => waiting.push(resolve));
-  running++;
+    } else {
+      running++;
+      backgroundRunning++;
+    }
+  } else if (running >= AT_ONCE) {
+    await new Promise<void>((resolve) => waiting.push(resolve));
+  } else {
+    running++;
+  }
   try {
     return await work();
   } finally {

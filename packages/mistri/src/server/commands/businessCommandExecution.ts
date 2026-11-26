@@ -1205,6 +1205,7 @@ async function executeUntraced(
                 throw error;
               }
               tally(request.table, result.affected);
+              if (result.affected === 0) return result;
               if (before && before.rows.length !== 1) {
                 throw recordRefusalCause(
                   new BusinessCommandExecutionError('invalid_result'),

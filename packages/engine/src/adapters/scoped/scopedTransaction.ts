@@ -1,5 +1,6 @@
 import {
   Refusal,
+  isConditionalExpected,
   oneAtATime,
   sameTable,
   type Filter,
@@ -1087,6 +1088,10 @@ export function createScopedTransaction(
         : await updateRow(table, request, written);
     } finally {
       withdraw?.();
+    }
+    if (result.affected === 0 && isConditionalExpected(request.expected)) {
+      await after.row?.catch(() => undefined);
+      return { affected: 0, applied: result.applied, sql: result.sql };
     }
     if (result.affected !== 1) return refuse(`The update of "${table.id}" changed ${result.affected} rows, not one.`);
     const now = await (after.row ?? stored(table, request.key));
