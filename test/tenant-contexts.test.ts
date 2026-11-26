@@ -1806,7 +1806,7 @@ for (const malformed of [
     if (malformed === 'provider proxy') options = { ...options, verifySessionInstance: proxy(options.verifySessionInstance) };
     if (malformed === 'fake deployment') options = { ...options, deployment: { ...f.deployment } };
     if (malformed === 'zero capacity') options = { ...options, maxContexts: 0 };
-    if (malformed === 'excess capacity') options = { ...options, maxContexts: 1025 };
+    if (malformed === 'excess capacity') options = { ...options, maxContexts: 16385 };
     if (malformed === 'zero lifetime') options = { ...options, maxLifetimeMs: 0 };
     if (malformed === 'excess lifetime') options = { ...options, maxLifetimeMs: 300001 };
     assert.throws(() => createTenantContexts(options), controlFailure);

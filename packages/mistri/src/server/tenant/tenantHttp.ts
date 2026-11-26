@@ -303,6 +303,9 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
       : {}),
   });
   const tenantImport = tenantImporter({ app, contexts, appNow });
+  /* Hoisted once per realm so each projection keeps its WeakMap cache across requests instead of rebuilding per request. */
+  const tenantRealmProjection = tenantProjection({ app, pages, schema: ownership.schema, platform: false, look });
+  const platformRealmProjection = tenantProjection({ app, pages, schema: ownership.schema, platform: true, look });
   /* Live streams this server holds open: ended when it retires, so its close does not wait ten minutes for them. */
   const liveStreams = new Set<ServerResponse>();
   /* People arriving, a few at a time (tenantArrivals.ts): a burst of them queued here, cheaply, instead of for the
@@ -860,7 +863,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         }
         /* The App and its pages as this context is offered them (tenantProjection.ts): what `/api/app` and `/api/pages`
            answer from, and what the page's boot plans its room from. */
-        const { projected, variantOf } = tenantProjection({ app, pages, schema: ownership.schema, platform, look });
+        const { projected, variantOf } = platform ? platformRealmProjection : tenantRealmProjection;
         /* A batch of the page's own reads (`POST /api/boot` with `reads`) every one of which is a bounded read
            (BOUNDED_READS) is answered as each would be alone, bounded: the one snapshot of the batch and its release
            fence in the message that ends it, where it took the unbounded path — a fence snapshot of its own — after

@@ -405,6 +405,11 @@ export function tenantProfileQuery(owned: TenantOwnershipSnapshot, columns: read
   if (dot < 1) return denyTenant();
   return `SELECT ${list} FROM ${quoted(physical.slice(0, dot))}.${quoted(physical.slice(dot + 1))} WHERE ${quoted(key)} = $1 LIMIT 2`;
 }
+/** Parameter-free `tenantProfileQuery` for PostgreSQL `lead` pipelining (1 round trip instead of 3). */
+export function tenantProfileStatement(owned: TenantOwnershipSnapshot, lookup: TenantProfileLookup): string {
+  const { tenantId, columns } = captureProfileLookup(owned, lookup);
+  return tenantProfileQuery(owned, columns).replace('$1', literal(tenantId));
+}
 /** Whom a job at times runs for (readActiveTenants): `zone`, a shared profile column, asks each tenant's value of it;
  * `schedule`, a job's `every.column` (`tenant.<column>` or `<resource>.<column>`), each tenant's cron text. */
 export interface ActiveTenantsQuery {

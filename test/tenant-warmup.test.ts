@@ -91,3 +91,32 @@ test('no failures: 200 without a failed list; an unlistable tenant set does not 
   assert.equal(ask(blind.answer).status, 200);
   assert.equal(lines.length, 1);
 });
+
+test('maxTenants bounds warmup work in O(1) and empty tenant lists still warm the shared pool once', async () => {
+  const opened: Array<string | null> = [];
+  const capped = startTenantWarmup(
+    {
+      readActiveTenants: async () => Array.from({ length: 50 }, (_, i) => ({ id: `t-${i}` })),
+      async readServiceAnchors(id) {
+        opened.push(id);
+        return {};
+      },
+    },
+    { maxTenants: 4 },
+  );
+  await capped.settled;
+  assert.equal(opened.length, 4);
+  assert.equal(ask(capped.answer).status, 200);
+
+  const emptyOpened: Array<string | null> = [];
+  const empty = startTenantWarmup({
+    readActiveTenants: async () => [],
+    async readServiceAnchors(id) {
+      emptyOpened.push(id);
+      return {};
+    },
+  });
+  await empty.settled;
+  assert.deepEqual(emptyOpened, [null]);
+  assert.equal(ask(empty.answer).status, 200);
+});

@@ -87,6 +87,7 @@ import {
   type ActiveTenantsQuery,
   readActiveWith,
   tenantProfileQuery,
+  tenantProfileStatement,
   type TenantIntakeEvidence,
   type TenantIntakeLookup,
   type TenantIntakeTenantLookup,
@@ -1712,10 +1713,11 @@ export async function openPostgresTenantReadSource(
           lookup,
           async (query, lease) => {
             const { tenantId, columns } = captureProfileLookup(owned, query);
-            return heldProfile(owned, columns, (await lease.client.query(tenantProfileQuery(owned, columns), [tenantId])).rows);
+            const rows = lease.lead ?? (await lease.client.query(tenantProfileQuery(owned, columns), [tenantId])).rows;
+            return heldProfile(owned, columns, rows);
           },
           undefined,
-          undefined,
+          (query) => tenantProfileStatement(owned, query),
           false,
           () => OWNER,
         ),

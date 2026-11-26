@@ -21,7 +21,7 @@ import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { assertScopeCatalog, captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { PathError } from '@mistriwork/engine/shared/viewPaths.js';
-import { authorizeResources } from '../app/appAccess.js';
+import { authorizeResources, markStableGrant } from '../app/appAccess.js';
 import { appResourceCatalog } from '../app/appResources.js';
 import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import {
@@ -142,8 +142,11 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
   const readAudit = raw.readAudit as PublicReadRuntimeOptions['readAudit'];
   const now = tenantRuntimeClock((raw.now ?? Date.now) as () => number);
   const lifetime = raw.maxLifetimeMs as number;
-  // A visitor's grant, as the App resolves one: the same for every visitor.
-  const access = resolveAppAccess(app, ownership.schema, [], 'public');
+  // A visitor's grant, as the App resolves one: the same for every visitor, marked stable so schema caches hit.
+  const access = markStableGrant(
+    tenantVisibleFields(ownership, { ...resolveAppAccess(app, ownership.schema, [], 'public'), writable: new Set(), creatable: new Set() }),
+  );
+  let cachedSchema: { from: DatabaseSchema; value: DatabaseSchema } | undefined;
   let retired = false;
   let retirement: Promise<void> | undefined;
   const pendingRequests = new Set<Promise<void>>();
@@ -289,11 +292,7 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
           };
           const guarded = authorizeResources(
             resources,
-            withTenantReadAudit(
-              tenantVisibleFields(ownership, { ...access, rows, writable: new Set(), creatable: new Set() }),
-              { app: app.id, tenant: principal.tenantId, actor: 'public' },
-              readAudit,
-            ),
+            withTenantReadAudit({ ...access, rows }, { app: app.id, tenant: principal.tenantId, actor: 'public' }, readAudit),
             assertActive,
           );
           const reader = guarded.adapter;
@@ -346,7 +345,10 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
                 }
               : {}),
           });
-          const schema = captureScopeCatalog(guarded.schema);
+          if (!cachedSchema || cachedSchema.from !== guarded.schema) {
+            cachedSchema = { from: guarded.schema, value: captureScopeCatalog(guarded.schema) };
+          }
+          const schema = cachedSchema.value;
           assertActive();
           const context: PublicReadContext = Object.freeze({ principal: Object.freeze({ ...principal, roles: [] }), schema, data });
           /* Whether a file sits beneath someone's open draft (tenantReadRuntime.ts tenantDraftReaderOf), asked under
