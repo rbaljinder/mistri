@@ -101,7 +101,6 @@ export {
   type StepHeaderProps,
 } from './FormParts.js';
 /* The landing hero's blocks and semantic badges. */
-export { AiBadge, type AiBadgeProps } from './AiBadge.js';
 export {
   Badge,
   IconRows,

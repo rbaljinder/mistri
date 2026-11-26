@@ -14,7 +14,11 @@ vi.mock('./tenantTransport.js', () => ({
   tenantReadApi() {},
   tenantExport() {},
 }));
-vi.mock('../../../kit/src/client/messages.js', () => ({ messageLanguage: () => 'en', setMessageScope() {} }));
+vi.mock('../../../kit/src/client/messages.js', () => ({
+  defineMessages: () => (key: string) => key,
+  messageLanguage: () => 'en',
+  setMessageScope() {},
+}));
 vi.mock('../../../kit/src/client/peekpanel.js', () => ({ openPeek() {} }));
 /* The App shell's parts that draw (appnav.js appShell): this file reads none of them. */
 vi.mock('./components/presentedList.js', () => ({ presentList() {} }));
@@ -29,6 +33,7 @@ vi.mock('./publicAddress.js', () => ({
   appStackFrom: () => null,
   listParams() {},
   needsNaturalKey() {},
+  rootSlot() {},
   viewEntryFromAddress() {},
 }));
 vi.mock('../../../kit/src/client/components/Icon.js', () => ({ registerIcons() {} }));
