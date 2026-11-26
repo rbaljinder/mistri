@@ -41,11 +41,12 @@ export function sayAppMessage(
   catalog: Readonly<Record<string, string | readonly unknown[]>> | undefined,
   key: string,
   args?: MessageArgs,
+  locale?: string,
 ): string {
   const message = catalog && Object.hasOwn(catalog, key) ? catalog[key] : undefined;
   if (message === undefined) return key;
   try {
-    return String(formatter(message, formatLocale() ?? 'en-US').format(args as Record<string, string | number | boolean | Date>));
+    return String(formatter(message, locale ?? formatLocale() ?? 'en-US').format(args as Record<string, string | number | boolean | Date>));
   } catch {
     return key;
   }

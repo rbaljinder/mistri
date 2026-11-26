@@ -26,6 +26,7 @@ import { viewOrder } from '../../shared/appModel.js';
 import { appAddressBook, recordSegments, viewAddress } from '../../shared/appAddress.js';
 import { HOST_MODULES, SDK_PATH, uiBreakdownText, uiRowsQuery, uiViewRunBody } from '../../shared/uiSdk.js';
 import type { UiAddress, UiHost, UiPageFrame, UiRow } from '../components/sdk/context.js';
+import { sayAppMessage } from '../components/sdk/appMessage.js';
 import { rowsByPath } from '../components/sdk/rows.js';
 
 type SsrLoopReader = (
@@ -429,7 +430,8 @@ export function createSsrPageHost(input: SsrPageInput, queryClient: QueryClient,
       const first = Object.values(row).find((v) => typeof v === 'string' && v.trim());
       return typeof first === 'string' ? first : undefined;
     },
-    message: (key) => key,
+    message: (key, args) =>
+      sayAppMessage(app.messages as Readonly<Record<string, string | readonly unknown[]>> | undefined, key, args, app.ui?.locale),
     look: () => ({ look: lookPreset, preset: lookPreset, mode: lookMode, density: lookDensity }),
     subscribeLook: () => () => {},
     token: () => '',

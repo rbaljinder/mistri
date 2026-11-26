@@ -469,10 +469,6 @@ export default definePage({ label: { message: 'ticket.plural' }, description: { 
       'model.d.ts CommandFieldDefault.answer',
       /* The App's name for its AI, a mark's word like `shortName` is the App's: one name, not a sentence to translate. */
       'app.d.ts AppConfig.label',
-      /* Public site chrome (`ui.site`) link labels, search placeholder, and footer text are plain strings. */
-      'app.d.ts AppUi.label',
-      'app.d.ts AppUi.placeholder',
-      'app.d.ts AppUi.text',
     ]);
     const found = new Set<string>();
     const property = new RegExp(`\\b(${[...CAPTION_KEYS].join('|')})\\??: ([^;,)=]*)`, 'g');

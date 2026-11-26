@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { msg } from '@mistriwork/mistri/app';
 import {
   Cluster,
   definePage,
@@ -12,12 +13,13 @@ import {
   Text,
   useFormat,
   useHref,
+  useMessage,
   Value,
 } from '@mistriwork/mistri/page';
 
 const page = definePage({
-  label: 'Collection',
-  description: 'Filter curated vintage optics, mid-century furniture, audio, and lighting.',
+  label: msg('browse.label'),
+  description: msg('browse.description'),
   public: true,
   head: false,
   reads: ['listing', 'listing_photo'],
@@ -29,13 +31,18 @@ export default page;
 function BrowsePage(): ReactNode {
   const fmt = useFormat();
   const href = useHref();
+  const eyebrow = useMessage('browse.eyebrow');
+  const heading = useMessage('browse.heading');
+  const sortPriceAsc = useMessage('browse.sortPriceAsc');
+  const sortPriceDesc = useMessage('browse.sortPriceDesc');
+  const sortYearAsc = useMessage('browse.sortYearAsc');
 
   return (
     <Stack gap="section">
       <Stack gap="tight">
-        <Eyebrow>Foundry collection</Eyebrow>
+        <Eyebrow>{eyebrow}</Eyebrow>
         <Heading level={1} size="2xl">
-          Browse curated pieces
+          {heading}
         </Heading>
       </Stack>
 
@@ -45,15 +52,53 @@ function BrowsePage(): ReactNode {
         param="q"
         filters={['category', 'condition', 'city', 'price_cents']}
         sorts={[
-          { label: 'Price: Low to High', sort: 'price_cents asc' },
-          { label: 'Price: High to Low', sort: 'price_cents desc' },
-          { label: 'Year: Oldest First', sort: 'year_made asc' },
+          { label: sortPriceAsc, sort: 'price_cents asc' },
+          { label: sortPriceDesc, sort: 'price_cents desc' },
+          { label: sortYearAsc, sort: 'year_made asc' },
         ]}
         sort="price_cents asc"
       >
         {({ query, sort }) => <CollectionGrid query={query} sort={sort} fmt={fmt} href={href} />}
       </ListFilters>
     </Stack>
+  );
+}
+
+function CollectionCard({
+  row,
+  fmt,
+  href,
+}: {
+  row: {
+    readonly id: number;
+    readonly title: string;
+    readonly maker: string;
+    readonly category: string;
+    readonly year_made: number;
+    readonly condition: string;
+    readonly city: string;
+    readonly price_cents: number;
+    readonly cover?: string | null;
+  };
+  fmt: ReturnType<typeof useFormat>;
+  href: ReturnType<typeof useHref>;
+}): ReactNode {
+  const monthlyNote = useMessage('browse.monthly', {
+    amount: fmt.money(Math.round(row.price_cents / 12), { minor: true, round: true }),
+  });
+  return (
+    <MediaCard
+      href={href.page('item', { id: String(row.id) })}
+      media={row.cover}
+      alt={row.title}
+      aspect="3/2"
+      badge={row.condition}
+      eyebrow={`${row.maker} · ${row.year_made} · ${row.category}`}
+      title={row.title}
+      value={<Value resource="listing" column="price_cents" value={row.price_cents} row={row} />}
+      note={monthlyNote}
+      meta={row.city}
+    />
   );
 }
 
@@ -75,29 +120,20 @@ function CollectionGrid({
     limit: 24,
   });
   const rows = result.data ?? [];
+  const showingCount = useMessage('browse.showingCount', { count: rows.length });
+  const emptyTitle = useMessage('browse.emptyTitle');
+  const emptyDescription = useMessage('browse.emptyDescription');
 
   return (
     <Stack gap="field">
       <Text size="sm" muted>
-        Showing <strong>{rows.length}</strong> available {rows.length === 1 ? 'piece' : 'pieces'}
+        {showingCount}
       </Text>
-      <Loaded query={result} empty={<EmptyState title="No pieces match" description="Try clearing a filter or broadening your search." />}>
+      <Loaded query={result} empty={<EmptyState title={emptyTitle} description={emptyDescription} />}>
         {() => (
           <Cluster min="18rem" gap="field">
             {rows.map((row) => (
-              <MediaCard
-                key={row.id}
-                href={href.page('item', { id: String(row.id) })}
-                media={row.cover}
-                alt={row.title}
-                aspect="3/2"
-                badge={row.condition}
-                eyebrow={`${row.maker} · ${row.year_made} · ${row.category}`}
-                title={row.title}
-                value={<Value resource="listing" column="price_cents" value={row.price_cents} row={row} />}
-                note={`${fmt.money(Math.round(row.price_cents / 12), { minor: true, round: true })}/mo`}
-                meta={row.city}
-              />
+              <CollectionCard key={row.id} row={row} fmt={fmt} href={href} />
             ))}
           </Cluster>
         )}

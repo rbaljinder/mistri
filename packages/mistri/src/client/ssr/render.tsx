@@ -175,7 +175,7 @@ function syncTree(input: Exclude<PublicRenderInput, SsrPageInput>): ReactNode {
 
 async function renderPublicPage(input: SsrPageInput): Promise<string> {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), MOST_MS);
+  let timeout: ReturnType<typeof setTimeout> | undefined;
   const onParentAbort = () => controller.abort();
   if (input.signal) {
     if (input.signal.aborted) controller.abort();
@@ -186,6 +186,8 @@ async function renderPublicPage(input: SsrPageInput): Promise<string> {
     return await withMount(mount, async () => {
       if (controller.signal.aborted) throw new Error('The public render was cancelled.');
       const hostModules = await getSsrHostModules();
+      if (controller.signal.aborted) throw new Error('The public render was cancelled.');
+      timeout = setTimeout(() => controller.abort(), MOST_MS);
       const PageComponent = await loadSsrPageComponent(input.code, hostModules);
       if (controller.signal.aborted) throw new Error('The public render was cancelled.');
       const queryClient = new QueryClient({

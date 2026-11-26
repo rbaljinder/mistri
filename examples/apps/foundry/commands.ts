@@ -1,4 +1,5 @@
 // Foundry Market's business writes, beside its manifest. Server-only.
+import { msg } from '@mistriwork/mistri/app';
 import {
   defineCommand,
   defineCommands,
@@ -25,8 +26,8 @@ export const reserveListing = defineCommand({
   target: 'listing',
   targets: 'one',
   input: {
-    buyer_name: field.text({ label: 'Your full name', max: 120 }),
-    buyer_email: field.email({ label: 'Email address' }),
+    buyer_name: field.text({ label: msg('command.buyerName'), max: 120 }),
+    buyer_email: field.email({ label: msg('command.buyerEmail') }),
   },
   output: shape({
     reference: text({ pattern: publicReferencePattern('HD') }),
@@ -80,12 +81,12 @@ export const submitConsignment = defineCommand({
   public: true,
   target: 'consignment',
   input: {
-    seller_name: field.text({ label: 'Your name or workshop', max: 120 }),
-    seller_email: field.email({ label: 'Email address' }),
-    item_title: field.text({ label: 'Piece title & year', max: 160 }),
+    seller_name: field.text({ label: msg('command.sellerName'), max: 120 }),
+    seller_email: field.email({ label: msg('command.buyerEmail') }),
+    item_title: field.text({ label: msg('command.itemTitle'), max: 160 }),
     category: field.choice(['Cameras', 'Furniture', 'Audio', 'Lighting']),
-    asking_price: field.money({ label: 'Target asking price (USD)', minor: true, min: 1 }),
-    notes: field.textarea({ label: 'Condition & provenance', max: 1000, optional: true }),
+    asking_price: field.money({ label: msg('command.askingPrice'), minor: true, min: 1 }),
+    notes: field.textarea({ label: msg('command.notes'), max: 1000, optional: true }),
   },
   output: shape({
     reference: text({ pattern: publicReferencePattern('FM') }),

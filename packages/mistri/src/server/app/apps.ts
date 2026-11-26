@@ -1487,7 +1487,9 @@ export function appAdvisories(loaded: LoadedApp, schema: DatabaseSchema): string
 /** The definition a load was parsed from, its catalogs beside it, where it has any. */
 const wordsOf = (loaded: LoadedApp) => {
   const localizer = localizerOf(loaded.app);
-  return localizer ? { raw: (localizer.definition as DefinitionInput).raw, catalogs: localizer.catalogs } : undefined;
+  if (!localizer) return undefined;
+  const definition = localizer.definition as DefinitionInput;
+  return { raw: definition.raw, definition, catalogs: localizer.catalogs };
 };
 
 /**
@@ -1537,7 +1539,13 @@ function messageAdvice(loaded: LoadedApp): string[] {
   const words = wordsOf(loaded);
   if (!words) return [];
   const componentKeys = loaded.components ? loaded.dir && componentMessageKeys(loaded.dir, loaded.components) : new Set<string>();
-  return messageAdvisories(words.raw, words.catalogs, componentKeys || undefined);
+  const sources = [
+    words.raw,
+    ...(words.definition.catalog ? [...words.definition.catalog.values()] : []),
+    ...words.definition.filePages.map((page) => page.raw),
+    ...(words.definition.surfaces?.map((surface) => surface.fields) ?? []),
+  ];
+  return messageAdvisories(sources, words.catalogs, componentKeys || undefined);
 }
 
 /* A label said from the App's messages restates nothing: its words differ in every other language. */

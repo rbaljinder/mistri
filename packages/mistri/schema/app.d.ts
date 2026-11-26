@@ -3635,13 +3635,13 @@ export interface AppUi {
       primary CTA, an optional site footer, and where (or whether) the Sign in link appears
       (`'header' | 'footer' | false`). */
   site?: {
-    links?: readonly ({ view: string; label: string } | { href: string; label: string })[];
-    search?: { view: string; param?: string; placeholder?: string };
-    cta?: { view: string; label: string } | { href: string; label: string };
+    links?: readonly ({ view: string; label: string | AppMessageRef } | { href: string; label: string | AppMessageRef })[];
+    search?: { view: string; param?: string; placeholder?: string | AppMessageRef };
+    cta?: { view: string; label: string | AppMessageRef } | { href: string; label: string | AppMessageRef };
     signIn?: 'header' | 'footer' | false;
     footer?: {
-      text?: string;
-      links?: readonly ({ view: string; label: string } | { href: string; label: string })[];
+      text?: string | AppMessageRef;
+      links?: readonly ({ view: string; label: string | AppMessageRef } | { href: string; label: string | AppMessageRef })[];
     };
   };
   /** Decorative brand mark drawn beside the App name: an App icon, or the App's own picture (`{ src, dark, mark }`).

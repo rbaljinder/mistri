@@ -203,7 +203,11 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
           page: { public: true, reads: ['listing', 'listing_photo'], commands: [], params: [], loader: 'featured' },
         },
       },
+      messages: {
+        'door.count': '{count, plural, one {# listing available} other {# listings available}}',
+      },
       ui: {
+        locale: 'en-US',
         site: {
           links: [{ label: 'Catalog', view: 'catalog' }],
           cta: { label: 'Contact', href: 'https://example.com/contact' },
@@ -214,14 +218,16 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
     };
     const compiledDoorJs = `
       import { jsxs, jsx } from "/_mistri/sdk/cb6940da33/react-jsx-runtime.js";
-      import { useRows, useFormat } from "/_mistri/sdk/cb6940da33/page.js";
+      import { useRows, useFormat, useMessage } from "/_mistri/sdk/cb6940da33/page.js";
       export default function Door({ data }) {
         const { data: rows } = useRows("listing", { show: ["id", "title", "price"], limit: 6 });
         const fmt = useFormat();
+        const countLabel = useMessage("door.count", { count: (rows ?? []).length });
         return jsxs("div", {
           className: "door-page",
           children: [
             jsx("h1", { children: data?.headline ?? "Welcome" }),
+            jsx("p", { children: countLabel }),
             jsx("ul", {
               children: (rows ?? []).map((row) =>
                 jsxs("li", {
@@ -265,6 +271,8 @@ describe('public custom page SSR (renderPublic kind: "page")', () => {
       },
     });
     expect(html).toContain('Find Your Next Place');
+    expect(html).toContain('1 listing available');
+    expect(html).not.toContain('door.count');
     expect(html).toContain('Cedar House');
     expect(html).toContain('$48,900');
     expect(html).toContain('/api/file?');

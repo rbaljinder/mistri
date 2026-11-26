@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react';
+import { msg } from '@mistriwork/mistri/app';
 import {
   Badge,
   Beside,
@@ -21,12 +22,13 @@ import {
   TextField,
   useFormat,
   useHref,
+  useMessage,
   Value,
 } from '@mistriwork/mistri/page';
 
 const page = definePage({
-  label: 'Listing',
-  description: 'Studio photography, provenance, and instant atomic hold for a single piece.',
+  label: msg('item.label'),
+  description: msg('item.description'),
   public: true,
   head: false,
   reads: ['listing', 'listing_photo', 'seller'],
@@ -80,14 +82,38 @@ function ItemPage(): ReactNode {
   });
   const more = (moreQuery.data ?? []).filter((row) => row.id !== item?.id).slice(0, 3);
 
+  const breadcrumbAria = useMessage('item.breadcrumbAria');
+  const breadcrumbHome = useMessage('item.breadcrumbHome');
+  const breadcrumbCollection = useMessage('item.breadcrumbCollection');
+  const notFoundTitle = useMessage('item.notFoundTitle');
+  const notFoundDescription = useMessage('item.notFoundDescription');
+  const monthlyNote = useMessage('item.monthlyNote', {
+    amount: item ? fmt.money(Math.round(item.price_cents / 12), { minor: true, round: true }) : '',
+  });
+  const holdTitle = useMessage('item.holdTitle');
+  const cancelLabel = useMessage('item.cancel');
+  const buyerNameLabel = useMessage('command.buyerName');
+  const buyerNamePlaceholder = useMessage('item.buyerNamePlaceholder');
+  const buyerEmailLabel = useMessage('command.buyerEmail');
+  const buyerEmailPlaceholder = useMessage('item.buyerEmailPlaceholder');
+  const confirmHoldLabel = useMessage('item.confirmHold');
+  const holdDone = useMessage('item.holdDone');
+  const holdGuarantee = useMessage('item.holdGuarantee');
+  const reserveCta = useMessage('item.reserveCta');
+  const unavailableStatus = useMessage('item.unavailableStatus', { status: item?.status ?? '' });
+  const workshopEyebrow = useMessage('item.workshopEyebrow');
+  const curatorNotesTitle = useMessage('item.curatorNotes');
+  const provenanceTitle = useMessage('item.provenance');
+  const alsoOnFoundry = useMessage('item.alsoOnFoundry');
+
   return (
     <Stack gap="section">
-      <Row gap="tight" ariaLabel="Breadcrumb">
-        <a href={href.page('door')}>Home</a>
+      <Row gap="tight" ariaLabel={breadcrumbAria}>
+        <a href={href.page('door')}>{breadcrumbHome}</a>
         <Text as="span" size="sm" muted>
           /
         </Text>
-        <a href={href.page('browse')}>Collection</a>
+        <a href={href.page('browse')}>{breadcrumbCollection}</a>
         {item ? (
           <>
             <Text as="span" size="sm" muted>
@@ -98,7 +124,7 @@ function ItemPage(): ReactNode {
         ) : null}
       </Row>
 
-      <Loaded query={itemQuery} empty={<EmptyState title="Piece not found" description="This listing may have been removed or moved." />}>
+      <Loaded query={itemQuery} empty={<EmptyState title={notFoundTitle} description={notFoundDescription} />}>
         {() =>
           item ? (
             <Stack gap="section">
@@ -127,7 +153,7 @@ function ItemPage(): ReactNode {
                               <Value resource="listing" column="was_price_cents" value={item.was_price_cents} row={item} />
                             ) : undefined
                           }
-                          note={`Estimated ${fmt.money(Math.round(item.price_cents / 12), { minor: true, round: true })}/mo over 12 months · Insured courier included`}
+                          note={monthlyNote}
                         />
 
                         {item.status === 'live' ? (
@@ -136,21 +162,21 @@ function ItemPage(): ReactNode {
                               <Card.Body>
                                 <Stack gap="field">
                                   <Row justify="between" align="center">
-                                    <Heading level={4}>48-hour atomic hold</Heading>
+                                    <Heading level={4}>{holdTitle}</Heading>
                                     <Button variant="ghost" size="sm" onClick={() => setShowHold(false)}>
-                                      Cancel
+                                      {cancelLabel}
                                     </Button>
                                   </Row>
                                   <TextField
-                                    label="Your full name"
-                                    placeholder="Elena Vance"
+                                    label={buyerNameLabel}
+                                    placeholder={buyerNamePlaceholder}
                                     value={buyerName}
                                     onValueChange={setBuyerName}
                                   />
                                   <TextField
-                                    label="Email address"
+                                    label={buyerEmailLabel}
                                     type="email"
-                                    placeholder="elena@studio.org"
+                                    placeholder={buyerEmailPlaceholder}
                                     value={buyerEmail}
                                     onValueChange={setBuyerEmail}
                                   />
@@ -158,23 +184,23 @@ function ItemPage(): ReactNode {
                                     command="reserveListing"
                                     row={item}
                                     values={{ buyer_name: buyerName, buyer_email: buyerEmail }}
-                                    label="Confirm 48h hold"
+                                    label={confirmHoldLabel}
                                     variant="primary"
-                                    done="Piece reserved. Check your confirmation reference."
+                                    done={holdDone}
                                   />
                                   <Text size="sm" muted>
-                                    Backed by atomic db.listing.claim() — commits only while this piece is still live.
+                                    {holdGuarantee}
                                   </Text>
                                 </Stack>
                               </Card.Body>
                             </Card>
                           ) : (
                             <Button variant="primary" block onClick={() => setShowHold(true)}>
-                              Reserve this piece (48h hold)
+                              {reserveCta}
                             </Button>
                           )
                         ) : (
-                          <Badge tone="warning">Currently {item.status} — no longer available for hold</Badge>
+                          <Badge tone="warning">{unavailableStatus}</Badge>
                         )}
 
                         <DescriptionList
@@ -188,7 +214,7 @@ function ItemPage(): ReactNode {
                           <Card variant="subtle">
                             <Card.Body>
                               <Stack gap="tight">
-                                <Eyebrow>Authenticated workshop</Eyebrow>
+                                <Eyebrow>{workshopEyebrow}</Eyebrow>
                                 <Heading level={4}>{seller.name}</Heading>
                                 <Text size="sm" muted>
                                   {seller.specialty} · {seller.city}
@@ -207,12 +233,12 @@ function ItemPage(): ReactNode {
               </Beside>
 
               <Cluster min="20rem" gap="section">
-                <Card title="Curator notes">
+                <Card title={curatorNotesTitle}>
                   <Card.Body>
                     <Text>{item.description}</Text>
                   </Card.Body>
                 </Card>
-                <Card title="Provenance & service">
+                <Card title={provenanceTitle}>
                   <Card.Body>
                     <Text>{item.provenance}</Text>
                   </Card.Body>
@@ -222,7 +248,7 @@ function ItemPage(): ReactNode {
               {more.length > 0 ? (
                 <Stack gap="field">
                   <Heading level={2} size="xl">
-                    Also on Foundry
+                    {alsoOnFoundry}
                   </Heading>
                   <Cluster min="16rem" gap="field">
                     {more.map((other) => (

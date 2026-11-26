@@ -116,17 +116,21 @@ const ALLOWED = [
     reason: 'a developer error thrown at a surface the shell never registered, never drawn on a page',
   },
   { file: 'components/TopNav.tsx', text: '⌘K', reason: 'a keyboard shortcut, drawn as its keys' },
-  ...['Not in the page yet.', 'The server renderer runs only on Node.', 'The public render took too long.'].map((text) => ({
+  ...[
+    'Not in the page yet.',
+    'The server renderer runs only on Node.',
+    'The public render took too long.',
+    'The public render was cancelled.',
+  ].map((text) => ({
     file: 'ssr/render.tsx',
     text,
     reason: 'a refusal the server reads and answers by sending the page without its drawing; no person sees it',
   })),
   ...[
     "globalThis[Symbol.for('mistri.ssr.host')][{}]",
-    '{}/* ssr-host:{} */',
-    '{}const {} = {};',
-    '{}const {} = {}; const {} = {}.default ?? {}; const {} = {};',
-    '{}const {} = {}; const {} = {}.default ?? {};',
+    'const {} = {};',
+    'const {} = {}; const {} = {}.default ?? {}; const {} = {};',
+    'const {} = {}; const {} = {}.default ?? {};',
     'Compiled page module has no default component export.',
     'Unknown resource "{}" during SSR.',
     'Could not read {}',
