@@ -36,6 +36,7 @@ type PublicPageReader = (
   target: string,
   body?: unknown,
   headers?: Record<string, string>,
+  signal?: AbortSignal,
 ) => Promise<{ status: number; body: unknown }>;
 
 /** What the renderer is asked to draw (client ssr/render.tsx, PublicRenderInput). */
@@ -55,6 +56,7 @@ type RenderInput =
       code: string;
       answers?: Readonly<Record<string, { body: unknown }>>;
       read: PublicPageReader;
+      signal?: AbortSignal;
     };
 
 /** A content pane the server drew, and which kind it is (`data-ssr` on the pane). */
@@ -116,6 +118,8 @@ interface PublicPageContext {
   read: PublicPageReader;
   /** True only when the current request is a signed-out visitor (never SSR a signed-in user's view). */
   visitor: boolean;
+  /** Aborted when the client disconnects before the HTML response finishes. */
+  signal?: AbortSignal;
 }
 
 /** Resolve which public custom `definePage` (if any) a path opens, along with its initial address params. */
@@ -248,6 +252,7 @@ export function publicPane(
                 code,
                 answers,
                 read: customPage.read,
+                ...(customPage.signal ? { signal: customPage.signal } : {}),
               },
               mount.base,
             );

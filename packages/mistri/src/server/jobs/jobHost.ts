@@ -44,7 +44,7 @@ import { openPostgresJobStore } from '../../adapters/jobs/postgresJobStore.js';
 import { openSqliteWorkflowStore } from '../../adapters/workflows/workflowStore.js';
 import type { WorkflowStore } from '../../adapters/workflows/workflowStoreContract.js';
 import { openPostgresWorkflowStore } from '../../adapters/workflows/postgresWorkflowStore.js';
-import { workflowHandlers, workflowTransport, type WebhookSource } from '../workflows/workflowHost.js';
+import { sweepOverdueWorkflows, workflowHandlers, workflowTransport, type WebhookSource } from '../workflows/workflowHost.js';
 import { decisionHandlers } from '../decide/decideHost.js';
 import { connectionFailure } from '../storeConnection.js';
 import { workflowJobId } from '../workflows/workflowKeys.js';
@@ -437,6 +437,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     now,
   });
   const admit = options.admit;
+  const workflowTeardowns: Array<() => void> = [];
   const runner = createJobRunner({
     store: jobs,
     now,
@@ -474,6 +475,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
                     now,
                     attemptTimeoutMs: deployment.attemptTimeoutMs,
                     tenancy,
+                    onStop: (teardown) => workflowTeardowns.push(teardown),
                   })
                 : {}),
             },
@@ -761,11 +763,31 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
     else slotDue.set(job.id, soonest);
     return enqueued;
   }
+  let workflowsSwept = Number.NEGATIVE_INFINITY;
   async function enqueueSlots(): Promise<boolean> {
     let enqueued = (await sweepTimers()).length > 0;
     if (enqueued) pending = true;
     // A sweep at once that found nothing new still has its second to come: the next cycle follows without a wait.
     else if (more > 0) enqueued = true;
+    if (workflows && module.workflows.size && !stopping) {
+      const at = now();
+      if (at - workflowsSwept >= SWEEP_MS) {
+        workflowsSwept = at;
+        const recovered = await sweepOverdueWorkflows(
+          {
+            module,
+            appId: deployment.appId,
+            workflows,
+            jobs,
+            now,
+            attemptTimeoutMs: deployment.attemptTimeoutMs,
+            tenancy,
+          },
+          at,
+        );
+        if (recovered > 0) enqueued = true;
+      }
+    }
     for (const job of timed) {
       const at = now();
       if (job.every!.tenantZone || job.every!.column !== undefined) {
@@ -983,6 +1005,7 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
         stopping = true;
         unlisten?.();
         withdrawFlowRuns?.();
+        for (const teardown of workflowTeardowns.splice(0)) teardown();
         await (await listening)?.close();
         if (timer) clearTimeout(timer);
         await runner.halt();

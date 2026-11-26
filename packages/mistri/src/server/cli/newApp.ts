@@ -305,6 +305,12 @@ export async function runNewApp(args: readonly string[]): Promise<number> {
     }
     return runNewFromBrief(args[1], args.slice(2));
   }
+  if (args.length === 1 && (args[0] === '--help' || args[0] === '-h')) {
+    console.log(
+      `${usage}. An App that is only an API is mistri new --api <name>; a public multi-step intake, mistri new --template intake; one from a database you have, mistri --scaffold-app; one from an approved brief, mistri new --brief <BRIEF.md>.`,
+    );
+    return 0;
+  }
   if (args.length > 2 || args.some((arg) => arg.startsWith('-'))) {
     console.error(
       `mistri: ${usage}. An App that is only an API is mistri new --api <name>; a public multi-step intake, mistri new --template intake; one from a database you have, mistri --scaffold-app; one from an approved brief, mistri new --brief <BRIEF.md>.`,

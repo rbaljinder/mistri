@@ -176,7 +176,7 @@ export default defineCommands({ complete });
     2,
   )}\n`;
   files['mistri.json'] = `${JSON.stringify(
-    { app: { dir: '.' }, connections: [{ name: id, url: database, writable: true, migrations: { dir: 'db/migrations' } }] },
+    { app: { dir: '.' }, connections: [{ name: id, url: basename(database), writable: true, migrations: { dir: 'db/migrations' } }] },
     null,
     2,
   )}\n`;
@@ -204,7 +204,7 @@ export default defineCommands({ complete });
     2,
   )}\n`;
   // .mistri/ holds the pinned Atlas that schema:diff fetches, and nothing worth committing.
-  files['.gitignore'] = '*.db\n*.db-*\n.mistri/\n';
+  files['.gitignore'] = 'node_modules/\n*.db\n*.db-*\n.mistri/\n';
   const base = `http://127.0.0.1:4111/api/apps/${id}/v1`;
   files['README.md'] = [
     `# ${name}`,

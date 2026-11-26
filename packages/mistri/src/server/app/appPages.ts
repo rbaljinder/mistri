@@ -513,7 +513,7 @@ const BLOCK_NAMES: Readonly<
   Record<string, { what: 'reads' | 'commands' | 'actions'; on?: ReadonlySet<string>; off?: ReadonlySet<string> }>
 > = {
   from: { what: 'reads' },
-  resource: { what: 'reads', off: new Set(['Value']) },
+  resource: { what: 'reads', off: new Set(['Value', 'DescriptionList']) },
   command: { what: 'commands', on: new Set(['CommandForm', 'CommandButton', 'Steps']) },
   action: { what: 'actions', on: new Set(['ActionButton']) },
 };

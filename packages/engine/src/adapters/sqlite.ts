@@ -2068,7 +2068,9 @@ export class SqliteAdapter implements Adapter {
   }
 
   async close(): Promise<void> {
+    if (this.closed) return;
     this.closed = true;
+    await this.writes.run(async () => {}).catch(() => {});
     this.db.close();
     this.writeDb?.close();
     this.writeDb = null;

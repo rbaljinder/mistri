@@ -668,7 +668,14 @@ async function serveShell(ctx: RequestContext): Promise<void> {
   const mount = { base: ctx.mount.base, json: mountJson(ctx.mount) };
   /* A public page's content pane drawn on the server (publicRender.ts); a placed form owns a fresh token and never is. */
   const worn = branding && !branding.private ? branding.value.content.name : undefined;
-  const pane = placedFormPage
+  const ssrAbort = served && servedHost.app.components && audience.public && !placedFormPage ? new AbortController() : undefined;
+  const onSsrClose = ssrAbort
+    ? () => {
+        if (!res.writableEnded) ssrAbort.abort();
+      }
+    : undefined;
+  if (onSsrClose) res.once('close', onSsrClose);
+  const rawPane = placedFormPage
     ? undefined
     : publicPane(
         ctx.path,
@@ -682,9 +689,20 @@ async function serveShell(ctx: RequestContext): Promise<void> {
               components: servedHost.app.components,
               read: ssrLoopback(ctx, pages),
               visitor: audience.public,
+              ...(ssrAbort ? { signal: ssrAbort.signal } : {}),
             }
           : undefined,
       );
+  const pane =
+    rawPane && onSsrClose
+      ? async (answers: Readonly<Record<string, { body: unknown }>> | undefined) => {
+          try {
+            return await rawPane(answers);
+          } finally {
+            res.off('close', onSsrClose);
+          }
+        }
+      : rawPane;
   const { page: _page, site: _site, headline: _headline, ...shellHead } = head ?? {};
   /* `?embed=frame`: an App's page in a host's iframe (clientHttp.ts withFrameAncestors), framed only by the origins listed for it. */
   const framed =
@@ -942,16 +960,18 @@ function ssrLoopback(ctx: GatedContext, pages: PageDef[]) {
     target: string,
     body?: unknown,
     headers?: Record<string, string>,
+    signal?: AbortSignal,
   ): Promise<{ status: number; body: unknown }> => {
-    if (ctx.res.destroyed) return { status: 503, body: {} };
+    if (ctx.res.destroyed || signal?.aborted) return { status: 503, body: {} };
     const request = loopbackRequest(ctx.req, method, target, body as Record<string, unknown> | undefined);
     if (headers) {
       for (const [name, value] of Object.entries(headers)) request.headers[name.toLowerCase()] = value;
     }
     inheritTenantHostIntent(ctx.req, request);
     const reply = new CapturedReply();
+    let onAbort: (() => void) | undefined;
     try {
-      await handle(request, reply.asResponse(), new URL(target, 'http://localhost'), {
+      const work = handle(request, reply.asResponse(), new URL(target, 'http://localhost'), {
         registry: ctx.registry,
         views: ctx.configViews,
         configPath: ctx.configPath,
@@ -967,8 +987,27 @@ function ssrLoopback(ctx: GatedContext, pages: PageDef[]) {
         jobs: ctx.jobs,
         mount: ctx.mount,
       });
+      if (signal) {
+        const aborted = new Promise<'aborted'>((resolve) => {
+          if (signal.aborted) {
+            resolve('aborted');
+            return;
+          }
+          onAbort = () => resolve('aborted');
+          signal.addEventListener('abort', onAbort, { once: true });
+        });
+        const winner = await Promise.race([work.then(() => 'done' as const), aborted]);
+        if (winner === 'aborted') {
+          void work.catch(() => {});
+          return { status: 503, body: {} };
+        }
+      } else {
+        await work;
+      }
     } catch {
       return { status: 500, body: {} };
+    } finally {
+      if (onAbort && signal) signal.removeEventListener('abort', onAbort);
     }
     const answer = reply.answer();
     return answer ? { status: answer.status, body: answer.body } : { status: 500, body: {} };

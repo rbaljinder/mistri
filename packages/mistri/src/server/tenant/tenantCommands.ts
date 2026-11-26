@@ -274,16 +274,18 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
     peopleByAccount: !!app.auth?.me && ownership.ownership[app.auth.me.from]?.kind === 'tenant',
   });
   // The App's whole registry pins its references; only a tenant's commands run
-  // here. A public command runs only through public intake (tenantIntake.ts),
-  // which places it per submission, never in a member's context.
+  // here. A public-only command (`targets: 'none'`) runs only through public intake
+  // (tenantIntake.ts), never in a member's context; a unified `public: true, targets: 'one'`
+  // command may also be granted to roles and invoked by authenticated members.
+  const isPublicOnly = (command: { public?: true; targets?: string }) => command.public === true && command.targets === 'none';
   for (const command of Object.values(registry)) {
-    if (command.realm === 'platform' || command.public === true) continue;
+    if (command.realm === 'platform' || isPublicOnly(command)) continue;
     if (command.source !== identity.source.id || command.write.some((table) => ownership.ownership[table]?.kind !== 'tenant')) deny();
   }
   // Decided, may be revisited: a tenant's command looks up global rows and its own tenant's, whatever the App declares.
   assertLookupOwners(app, registry, ownership.ownership);
   const own = (id: string) => {
-    if (Object.hasOwn(registry, id) && (registry[id].realm === 'platform' || registry[id].public === true)) deny();
+    if (Object.hasOwn(registry, id) && (registry[id].realm === 'platform' || isPublicOnly(registry[id]))) deny();
   };
   const declarations = tenantOptions(configured.resultReferences, Object.keys(registry));
   if (Object.keys(declarations).length !== Object.keys(registry).length) deny();

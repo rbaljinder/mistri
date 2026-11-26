@@ -276,7 +276,12 @@ export function CommandForm({
       className={className}
       loading={loading}
       disabled={loading || handle.available(key) === false}
-      onClick={() => void handle.open(key).then((outcome) => onDone?.(outcome))}
+      onClick={() =>
+        void handle
+          .open(key)
+          .then((outcome) => onDone?.(outcome))
+          .catch(() => undefined)
+      }
     >
       {label ?? handle.label}
     </Button>
@@ -360,10 +365,13 @@ export function CommandButton({
   /* `values` are the run's input, as `run(row, values)` takes them: complete, the command is sent; short of what it
      asks, its form opens filled with them (a Take a payment button beside the amount owed). */
   const run = () =>
-    void handle.run(row, values, { label }).then((outcome) => {
-      if (outcome.status === 'applied') host.announce(done ?? outcome.message ?? say('commandDone', { label }), 'ok');
-      onDone?.(outcome);
-    });
+    void handle
+      .run(row, values, { label })
+      .then((outcome) => {
+        if (outcome.status === 'applied') host.announce(done ?? outcome.message ?? say('commandDone', { label }), 'ok');
+        onDone?.(outcome);
+      })
+      .catch(() => undefined);
   return <RowButton handle={handle} run={run} row={row} {...props} />;
 }
 
@@ -373,7 +381,10 @@ export function ActionButton({ action, done, onDone, ...props }: RowButtonProps 
   const label = props.label ?? handle.label;
   // An action says its own outcome (sdk/commands.tsx), in `done`'s words where given.
   const run = () =>
-    void handle.run(props.row, undefined, { label, ...(done === undefined ? {} : { done }) }).then((outcome) => onDone?.(outcome));
+    void handle
+      .run(props.row, undefined, { label, ...(done === undefined ? {} : { done }) })
+      .then((outcome) => onDone?.(outcome))
+      .catch(() => undefined);
   return <RowButton handle={handle} run={run} {...props} />;
 }
 

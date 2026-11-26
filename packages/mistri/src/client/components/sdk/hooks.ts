@@ -749,7 +749,8 @@ export function useCommandHandle(ref: UiCommandRef, viewer: UiViewer): UiCommand
       }),
     );
   }
-  return useMemo(() => host.command(ref, page?.view), [host, ref, page?.view, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rolesKey = viewer.roles.join(',');
+  return useMemo(() => host.command(ref, page?.view), [host, ref, page?.view, viewer.signedIn, viewer.account, rolesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
@@ -762,7 +763,8 @@ export function useGranted(ref: UiCommandRef): boolean {
   const host = useUiHost();
   const viewer = useViewer();
   const page = useContext(UiPageContext);
-  return useMemo(() => host.command(ref, page?.view).granted, [host, ref, page?.view, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rolesKey = viewer.roles.join(',');
+  return useMemo(() => host.command(ref, page?.view).granted, [host, ref, page?.view, viewer.signedIn, viewer.account, rolesKey]); // eslint-disable-line react-hooks/exhaustive-deps
 }
 
 /**
@@ -787,7 +789,8 @@ export function useAction(ref: UiCommandRef): UiCommand {
     );
   }
   const viewer = useViewer();
-  const handle = useMemo(() => host.action(ref, page?.reads), [host, ref, page?.reads, viewer.signedIn, viewer.account]); // eslint-disable-line react-hooks/exhaustive-deps
+  const rolesKey = viewer.roles.join(',');
+  const handle = useMemo(() => host.action(ref, page?.reads), [host, ref, page?.reads, viewer.signedIn, viewer.account, rolesKey]); // eslint-disable-line react-hooks/exhaustive-deps
   return useHandle(handle, viewer);
 }
 
@@ -800,15 +803,18 @@ function useHandle(handle: UiCommandHandle, viewer: UiViewer): UiCommand {
   const [round, setRound] = useState(0);
   /* The handle whose answers are wanted: one for another reader or command asks everything again. */
   const current = useRef(handle);
+  const generation = useRef(0);
   useEffect(() => {
     if (current.current === handle) return;
     current.current = handle;
+    generation.current += 1;
     asked.current.clear();
     setAnswers(new Map());
   }, [handle]);
   useEffect(
     () => () => {
       current.current = undefined as unknown as typeof handle;
+      generation.current += 1;
     },
     [],
   );
@@ -819,14 +825,16 @@ function useHandle(handle: UiCommandHandle, viewer: UiViewer): UiCommand {
     if (!ask.length) return;
     for (const [text, key] of ask) asked.current.set(text, key);
     const by = handle;
+    const gen = generation.current;
     void Promise.all(ask.map(async ([text, key]) => [text, by.granted ? await by.available(key).catch(() => false) : false] as const)).then(
       (results) => {
-        if (current.current === by) setAnswers((before) => new Map([...before, ...results]));
+        if (current.current === by && generation.current === gen) setAnswers((before) => new Map([...before, ...results]));
       },
     );
   });
   /* Asked again after a run, keeping the last answers until the new ones arrive: a chip does not blink. */
   const again = () => {
+    generation.current += 1;
     asked.current.clear();
     setRound((n) => n + 1);
   };

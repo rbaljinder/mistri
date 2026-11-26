@@ -31,7 +31,7 @@
  * width, as before. The kept copies are bounded (`IMAGE_CACHE_BYTES`) and
  * the least recently sent is let go first.
  */
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile, rename } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -319,17 +319,20 @@ async function kept(current: Store, name: string, shared: SharedVariants | undef
 }
 
 async function keep(current: Store, name: string, made: Uint8Array): Promise<void> {
+  let temporary: string | undefined;
   try {
     await opened();
     if (store === current && !current.files.has(name)) {
-      const temporary = join(current.dir!, `.${name}.${process.pid}.tmp`);
+      temporary = join(current.dir!, `.${name}.${process.pid}.${randomUUID()}.tmp`);
       await writeFile(temporary, made);
       await rename(temporary, join(current.dir!, name));
+      temporary = undefined;
       current.files.set(name, made.length);
       current.total += made.length;
       await evict(current);
     }
   } catch {
+    if (temporary) await rm(temporary, { force: true }).catch(() => {});
     /* Not kept: sent all the same. */
   }
 }
@@ -475,6 +478,7 @@ async function keptPlaceholder(hash: string, shared?: SharedVariants): Promise<I
     const meta = JSON.parse(Buffer.from(far).toString()) as ImagePlaceholder;
     if (typeof meta.width === 'number' && typeof meta.height === 'number' && /^#[0-9a-f]{6}$/.test(meta.color)) {
       placeholders.set(hash, meta);
+      if (placeholders.size > 5000) placeholders.delete(placeholders.keys().next().value!);
       return meta;
     }
   } catch {

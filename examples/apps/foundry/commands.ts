@@ -114,7 +114,7 @@ export const submitConsignment = defineCommand({
     seller_email: field.email({ label: 'Email address' }),
     item_title: field.text({ label: 'Piece title & year', max: 160 }),
     category: field.choice(['Cameras', 'Furniture', 'Audio', 'Lighting']),
-    asking_price: field.text({ label: 'Target asking price (USD)', max: 32 }),
+    asking_price: field.money({ label: 'Target asking price (USD)', minor: true, min: 1 }),
     notes: field.textarea({ label: 'Condition & provenance', max: 1000, optional: true }),
   },
   output: shape({
@@ -122,13 +122,12 @@ export const submitConsignment = defineCommand({
     message: literal('Consignment received. Our curation team will review your piece within 24 hours.'),
   }),
   async handle({ db }, input) {
-    const askingDollars = Number(input.asking_price.replace(/[^0-9.]/g, '')) || 0;
     await db.consignment.insert({
       seller_name: input.seller_name,
       seller_email: input.seller_email,
       item_title: input.item_title,
       category: input.category,
-      asking_cents: Math.round(askingDollars * 100),
+      asking_cents: input.asking_price,
       notes: input.notes ?? null,
       status: 'new',
     });

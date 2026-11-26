@@ -101,6 +101,7 @@ export function SiteHeader({ app, site, resolveHref, activeView }: SiteHeaderPro
     () => '',
   );
   const [queryText, setQueryText] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const links = (site.links ?? []).filter((item) => !item.view || Object.hasOwn(app.views, item.view));
   const search = site.search && Object.hasOwn(app.views, site.search.view) ? site.search : undefined;
   const cta = site.cta && (!site.cta.view || Object.hasOwn(app.views, site.cta.view)) ? site.cta : undefined;
@@ -127,9 +128,11 @@ export function SiteHeader({ app, site, resolveHref, activeView }: SiteHeaderPro
     const isList = Boolean(target && typeof target === 'object' && 'table' in target);
     const param = search.param ?? (isList ? 'search' : 'q');
     openSiteView(app, search.view, trimmed ? { [param]: trimmed } : undefined);
+    setSearchOpen(false);
   };
 
   const ctaHref = cta ? linkHref(app, cta, resolveHref) : undefined;
+  const searchLabel = search?.placeholder ?? say('searchSite');
 
   return (
     <div className="site-header">
@@ -154,7 +157,7 @@ export function SiteHeader({ app, site, resolveHref, activeView }: SiteHeaderPro
         </nav>
       )}
       {search && (
-        <form className="site-search" role="search" onSubmit={onSearchSubmit}>
+        <form className={`site-search${searchOpen ? ' is-open' : ''}`} role="search" onSubmit={onSearchSubmit}>
           <span className="site-search-icon" aria-hidden="true">
             <Icon name="magnifying-glass" size={14} />
           </span>
@@ -163,12 +166,23 @@ export function SiteHeader({ app, site, resolveHref, activeView }: SiteHeaderPro
             className="site-search-input"
             value={queryText}
             onChange={(event) => setQueryText(event.target.value)}
-            placeholder={search.placeholder ?? say('searchSite')}
-            aria-label={search.placeholder ?? say('searchSite')}
+            placeholder={searchLabel}
+            aria-label={searchLabel}
           />
         </form>
       )}
       <div className="site-actions">
+        {search && (
+          <button
+            type="button"
+            className="site-search-toggle"
+            aria-label={searchLabel}
+            aria-expanded={searchOpen}
+            onClick={() => setSearchOpen((open) => !open)}
+          >
+            <Icon name="magnifying-glass" size={15} />
+          </button>
+        )}
         {cta && ctaHref && (
           <a
             className="site-cta"

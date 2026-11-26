@@ -87,10 +87,24 @@ export function Photos({ from, whose, record, sort, aspect, alt, caption, label,
     return out;
   }, [query.data, pk, fileUrl, alt, caption, table]);
 
+  if (ownerId === undefined && record !== undefined) {
+    return (
+      <Gallery
+        key="empty"
+        items={[]}
+        label={label ?? say('photos')}
+        emptyText={empty ?? say('noPhotosYet')}
+        aspect={aspect}
+        className={className}
+      />
+    );
+  }
+
   return (
     <Loaded query={query} empty={empty ?? say('noPhotosYet')}>
       {() => (
         <Gallery
+          key={ownerId !== undefined ? String(ownerId) : 'pending'}
           items={items}
           label={label ?? say('photos')}
           emptyText={empty ?? say('noPhotosYet')}

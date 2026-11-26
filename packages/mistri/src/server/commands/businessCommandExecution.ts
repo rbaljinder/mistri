@@ -1797,10 +1797,10 @@ async function executeUntraced(
                 links: authorized.links,
                 tenantApp: receiptOwner !== undefined,
                 rowKey:
-                  authorized.actor.kind === 'public'
-                    ? () => (madeOnTarget.length === 1 ? madeOnTarget[0] : undefined)
-                    : (command.targets ?? 'one') === 'one' && !creating && !many && list.keys.length === 1
-                      ? commandKeyText(list.keys[0])
+                  (command.targets ?? 'one') === 'one' && !creating && !many && list.keys.length === 1
+                    ? commandKeyText(list.keys[0])
+                    : authorized.actor.kind === 'public'
+                      ? () => (madeOnTarget.length === 1 ? madeOnTarget[0] : undefined)
                       : undefined,
                 now,
               });
