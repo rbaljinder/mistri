@@ -117,6 +117,11 @@ export function appComponents(app: AppDef, pages: readonly PageDef[], where: str
       }
     });
   }
+  for (const [name, customBlock] of Object.entries(app.assistant?.customBlocks ?? {})) {
+    if (customBlock.component) {
+      places.push({ decl: customBlock.component, at: `${where}: assistant.customBlocks "${name}"` });
+    }
+  }
   if (!places.length) return new Map();
   const reach = publicReach(app);
   if (reach) {

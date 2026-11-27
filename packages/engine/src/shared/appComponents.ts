@@ -147,7 +147,7 @@ const PLACED: Record<ComponentKind, string> = {
   page: 'A free-form page (pages/*.page.tsx)',
 };
 
-function parsePropDecls(raw: unknown, at: string): Record<string, ComponentPropDecl> {
+export function parsePropDecls(raw: unknown, at: string): Record<string, ComponentPropDecl> {
   if (!isRecord(raw))
     throw new Error(`${at} has "props" that are not an object of prop.number(), prop.text(), prop.bool() or prop.choice().`);
   const out: Record<string, ComponentPropDecl> = {};
@@ -189,7 +189,7 @@ function parsePropDecls(raw: unknown, at: string): Record<string, ComponentPropD
   return out;
 }
 
-function propValue(decl: ComponentPropDecl, value: unknown, at: string): unknown {
+export function propValue(decl: ComponentPropDecl, value: unknown, at: string): unknown {
   switch (decl.type) {
     case 'number':
       if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${at} is ${JSON.stringify(value)}, not a number.`);

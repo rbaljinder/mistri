@@ -20,7 +20,7 @@
  * tenant App's host answers the same routes through `answerAssistant`, on the
  * tab's context lease (tenant/tenantAssistant.ts).
  */
-import { ASSISTANT_EFFORTS, type AppAssistant } from '../../shared/appAssistant.js';
+import { ASSISTANT_EFFORTS, resolveAgentAssistant, type AppAssistant } from '../../shared/appAssistant.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AssistantOwner, AssistantStore } from '../../adapters/assistant/assistantStore.js';
 import type { AppDef } from '../../shared/appModel.js';
@@ -61,7 +61,7 @@ export const ASSISTANT_PATHS: ReadonlySet<string> = new Set([
   '/api/assistant/about',
 ]);
 const SAID: Record<string, readonly string[]> = {
-  '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode', 'effort'],
+  '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode', 'effort', 'agent'],
   '/api/assistant/resolve': ['app', 'conversation', 'proposal', 'outcome', 'detail'],
   '/api/assistant/delete': ['app', 'conversation'],
   '/api/assistant/rename': ['app', 'conversation', 'title'],
@@ -157,6 +157,8 @@ interface AssistantScope {
   readonly app: AppDef;
   readonly owner: AssistantOwner;
   readonly store: AssistantStore;
+  /** Verified viewer roles, used to enforce role-scoped named agents and subagents. */
+  readonly roles?: readonly string[];
   /** A request back through the App's own routes, as this person: each read is gated and row-scoped there. */
   readonly loop: () => Loop;
   /** A tenant App's: the platform owner's daily cap for one tenant. */
@@ -175,13 +177,24 @@ export async function assistantRoutes(ctx: Base, loop: () => Loop): Promise<bool
     const host = (appHosts ?? []).find((each) => each.app.app.id === appId);
     if (!host?.app.app.assistant) throw new HttpError(404, 'This App has no assistant.');
     const owner = personOf(ctx, host);
+    const roles = (ctx.identity.role ?? '')
+      .split(',')
+      .map((role) => role.trim())
+      .filter(Boolean);
     let store: AssistantStore;
     try {
       store = await assistantStoreFor(registry, host);
     } catch (error) {
       throw storeUnavailableReply(error);
     }
-    return { app: host.app.app, owner, store, loop, propose: (draft) => createAssistantProposal(ctx, draft) };
+    return {
+      app: host.app.app,
+      owner,
+      store,
+      roles: host.app.app.auth ? roles : undefined,
+      loop,
+      propose: (draft) => createAssistantProposal(ctx, draft),
+    };
   });
   return true;
 }
@@ -192,6 +205,16 @@ export async function assistantRoutes(ctx: Base, loop: () => Loop): Promise<bool
 const TURNS_PER_PERSON = 2;
 const answering = new Set<string>();
 const turnsOf = new Map<string, number>();
+
+/** The last named agent chosen in a conversation's events, if any. */
+function lastAgentOf(events: ReadonlyArray<{ kind: string; body: unknown }>): string | undefined {
+  for (let i = events.length - 1; i >= 0; i--) {
+    if (events[i]?.kind !== 'person') continue;
+    const agent = (events[i]?.body as { agent?: unknown } | undefined)?.agent;
+    if (typeof agent === 'string' && agent) return agent;
+  }
+  return undefined;
+}
 
 /** One assistant request, answered whole: `scopeOf` says whose it is, from the App the request names. */
 export async function answerAssistant(
@@ -221,10 +244,12 @@ export async function answerAssistant(
       const conversation = typeof id === 'string' ? await store.get(owner, id) : null;
       if (!conversation) throw new HttpError(404, 'No such conversation.');
       const events = await store.events(owner, conversation.id);
+      const activeAgentId = lastAgentOf(events);
       send(res, 200, {
         conversation,
         items: itemsOf(events, await reviewsOf(loop(), undecidedReviews(events)), { showReasoning: assistant.reasoning !== 'hidden' }),
         ...(pendingProposal(events) ? { awaiting: true } : {}),
+        ...(activeAgentId ? { agent: activeAgentId } : {}),
       });
       return;
     }
@@ -342,6 +367,7 @@ export async function answerAssistant(
       throw new HttpError(400, 'A context names a record: { resource, key }.');
     if (context !== undefined && !assistant.placement.includes('record')) throw new HttpError(400, NO_RECORD);
     let turnEffort: AppAssistant['effort'] | undefined;
+    let requestedAgent: string | undefined;
     let started: string | undefined;
     if (path === '/api/assistant/turn') {
       if (body.mode !== undefined && body.mode !== 'ask') throw new HttpError(400, 'A turn is asked with mode "ask", or none.');
@@ -350,6 +376,19 @@ export async function answerAssistant(
         if (!(ASSISTANT_EFFORTS as readonly unknown[]).includes(body.effort))
           throw new HttpError(400, 'Effort is "low", "medium" or "high".');
         turnEffort = body.effort as AppAssistant['effort'];
+      }
+      if (body.agent !== undefined) {
+        if (typeof body.agent !== 'string' || !body.agent.trim()) throw new HttpError(400, 'Agent must be a named agent id.');
+        requestedAgent = body.agent.trim();
+        if (!assistant.agents || !Object.hasOwn(assistant.agents, requestedAgent))
+          throw new HttpError(400, `Unknown agent "${requestedAgent}".`);
+        if (scope.roles) {
+          try {
+            resolveAgentAssistant(assistant, requestedAgent, scope.roles);
+          } catch (error) {
+            throw new HttpError(403, error instanceof Error ? error.message : 'That agent is not offered to your role.');
+          }
+        }
       }
       if (waiting) throw new HttpError(409, 'Confirm or decline the proposed change first.');
       const people = events.filter((event) => event.kind === 'person');
@@ -392,12 +431,23 @@ export async function answerAssistant(
       if (!res.writableEnded) controller.abort();
     });
     const payload = await servedTo(loop(), app.id, controller.signal);
-    const catalog = catalogFromPayload(payload, assistant, await tablesOf(loop(), app.id, controller.signal));
+    const viewerRoles = scope.roles ?? payload.viewerRoles;
+    const chosenAgentId = requestedAgent ?? lastAgentOf(events);
+    let resolvedAgent: ReturnType<typeof resolveAgentAssistant>;
+    try {
+      resolvedAgent = resolveAgentAssistant(assistant, chosenAgentId, viewerRoles);
+    } catch (error) {
+      if (started) await store.remove(owner, started);
+      throw new HttpError(403, error instanceof Error ? error.message : 'That agent is not offered to your role.');
+    }
+    const effectiveAssistant = resolvedAgent.assistant;
+    const activeAgent = resolvedAgent.agent;
+    const catalog = catalogFromPayload(payload, effectiveAssistant, await tablesOf(loop(), app.id, controller.signal), activeAgent);
     const session: ToolSession = {
       loop: loop(),
       app: app.id,
       payload,
-      assistant,
+      assistant: effectiveAssistant,
       catalog,
       signal: controller.signal,
       ...(scope.propose ? { propose: scope.propose } : {}),
@@ -419,13 +469,20 @@ export async function answerAssistant(
          call of a conversation so its cached prefix holds. Without it "tomorrow" and "this month" were the model's guess. */
       const said = [nowLine(payload.ui?.timezone), line].filter(Boolean).join('\n');
       // A fresh conversation's first words, or an edited or retried turn's again (the cut above removed them).
-      await store.append(owner, conversation!.id, [{ kind: 'person', body: { text, context: said } }], 'idle', at);
+      await store.append(
+        owner,
+        conversation!.id,
+        [{ kind: 'person', body: { text, context: said, ...(activeAgent ? { agent: activeAgent.id } : {}) } }],
+        'idle',
+        at,
+      );
     }
     const emit = stream(res);
     const after = await store.events(owner, conversation!.id);
     emit('conversation', {
       id: conversation!.id,
       title: conversation!.title,
+      ...(activeAgent ? { agent: activeAgent.id } : {}),
       ...(text !== undefined ? { person: after[after.length - 1].seq } : {}),
     });
     await continueTurn({
@@ -433,9 +490,12 @@ export async function answerAssistant(
       owner,
       conversation: conversation!.id,
       model,
-      assistant,
+      assistant: effectiveAssistant,
+      baseAssistant: assistant,
+      ...(activeAgent ? { activeAgent } : {}),
+      ...(viewerRoles ? { viewerRoles } : {}),
       system: systemPrompt(catalog, session.ask ? 'ask' : undefined),
-      tools: toolSpecs(assistant),
+      tools: toolSpecs(effectiveAssistant, activeAgent),
       session,
       emit,
       ...(turnEffort ? { effort: turnEffort } : {}),

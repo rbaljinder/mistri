@@ -96,7 +96,7 @@ interface Building {
 
 /** Read one Messages API event stream into the reply, handing text and reasoning deltas on as they arrive. */
 export async function readAnthropicStream(body: ReadableStream<Uint8Array>, sink: ModelStreamSink): Promise<ModelReply> {
-  const { onText, onReasoning } = streamCallbacks(sink);
+  const { onText, onReasoning, onToolDelta } = streamCallbacks(sink);
   const blocks = new Map<number, Building>();
   const usage: ModelUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   let stopReason = 'end_turn';
@@ -136,8 +136,12 @@ export async function readAnthropicStream(body: ReadableStream<Uint8Array>, sink
         if (delta.type === 'text_delta') {
           at.block.text = String(at.block.text ?? '') + delta.text;
           onText(delta.text);
-        } else if (delta.type === 'input_json_delta') at.json = (at.json ?? '') + delta.partial_json;
-        else if (delta.type === 'thinking_delta') {
+        } else if (delta.type === 'input_json_delta') {
+          at.json = (at.json ?? '') + delta.partial_json;
+          if (typeof at.block.name === 'string' && at.block.name) {
+            onToolDelta({ id: String(at.block.id ?? `tool_${event.index}`), name: at.block.name, inputJson: at.json });
+          }
+        } else if (delta.type === 'thinking_delta') {
           at.block.thinking = String(at.block.thinking ?? '') + delta.thinking;
           if (at.reasoningId && delta.thinking) onReasoning({ id: at.reasoningId, delta: delta.thinking });
         } else if (delta.type === 'signature_delta') at.block.signature = delta.signature;

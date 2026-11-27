@@ -12,7 +12,7 @@
  * over the App's definition, every role at once, is the upper bound the
  * budget test measures.
  */
-import { ASSISTANT_BLOCKS, type AppAssistant } from '../../shared/appAssistant.js';
+import { ASSISTANT_BLOCKS, type AppAssistant, type AppAssistantAgent } from '../../shared/appAssistant.js';
 import type { AppDef } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import type { ModelTool } from './assistantModel.js';
@@ -31,11 +31,25 @@ interface CatalogResource {
   label: string;
   verbs: CatalogVerb[];
 }
+interface CatalogCustomBlock {
+  name: string;
+  description: string;
+  title?: string;
+  props?: Record<string, { type: string; options?: string[]; min?: number; max?: number; default?: unknown }>;
+}
+interface CatalogSubagent {
+  id: string;
+  name: string;
+  description?: string;
+}
 export interface AssistantCatalog {
   app: string;
   instructions?: string;
+  agent?: { id: string; name: string; description?: string };
   resources: CatalogResource[];
   views: Array<{ id: string; label: string; table?: string }>;
+  customBlocks?: CatalogCustomBlock[];
+  subagents?: CatalogSubagent[];
 }
 
 const humane = (name: string) => name.replace(/[_-]+/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
@@ -54,7 +68,7 @@ interface CatalogSource {
   mayAction(table: string, action: ActionLike): boolean;
 }
 
-function catalogOf(source: CatalogSource, assistant: AppAssistant | undefined): AssistantCatalog {
+function catalogOf(source: CatalogSource, assistant: AppAssistant | undefined, activeAgent?: AppAssistantAgent): AssistantCatalog {
   const excluded = new Set(assistant?.exclude ?? []);
   const views = Object.entries(source.views)
     .filter(([, view]) => typeof view.table === 'string' || Array.isArray(view.sections))
@@ -69,7 +83,39 @@ function catalogOf(source: CatalogSource, assistant: AppAssistant | undefined): 
     }
     return { name, label: views.find((view) => view.table === name)?.label ?? humane(name), verbs };
   });
-  return { app: source.name, ...(assistant?.instructions ? { instructions: assistant.instructions } : {}), resources, views };
+  const customBlocks =
+    assistant?.customBlocks && Object.keys(assistant.customBlocks).length
+      ? Object.entries(assistant.customBlocks).map(([name, decl]) => ({
+          name,
+          description: decl.description,
+          ...(decl.title ? { title: decl.title } : {}),
+          ...(decl.props ? { props: decl.props } : {}),
+        }))
+      : undefined;
+  const subagents =
+    activeAgent?.subagents?.length && assistant?.agents
+      ? activeAgent.subagents
+          .map((id) => assistant.agents![id])
+          .filter((each): each is AppAssistantAgent => Boolean(each))
+          .map((each) => ({ id: each.id, name: each.name, ...(each.description ? { description: each.description } : {}) }))
+      : undefined;
+  return {
+    app: source.name,
+    ...(assistant?.instructions ? { instructions: assistant.instructions } : {}),
+    ...(activeAgent
+      ? {
+          agent: {
+            id: activeAgent.id,
+            name: activeAgent.name,
+            ...(activeAgent.description ? { description: activeAgent.description } : {}),
+          },
+        }
+      : {}),
+    resources,
+    views,
+    ...(customBlocks ? { customBlocks } : {}),
+    ...(subagents?.length ? { subagents } : {}),
+  };
 }
 
 const commandId = (command: unknown): string | undefined =>
@@ -95,6 +141,7 @@ export function catalogFromPayload(
   payload: AppPayloadApp,
   assistant: AppAssistant | undefined,
   tables: readonly string[],
+  activeAgent?: AppAssistantAgent,
 ): AssistantCatalog {
   const writable = new Set(Array.isArray(payload.writableTables) ? payload.writableTables : []);
   return catalogOf(
@@ -106,6 +153,7 @@ export function catalogFromPayload(
       mayAction: (table, action) => mayRunAction(payload, table, action),
     },
     assistant,
+    activeAgent,
   );
 }
 
@@ -139,9 +187,24 @@ const ASK = `This is Ask: the person asked a question about the application's da
 - Answer it from what query returns, and query before you answer. Every row you read is shown to them as evidence, so cite the records you rely on.
 - Change nothing. If the question needs a change, say so; only an action kept for review may be proposed with run.`;
 
+function propSignature(props: CatalogCustomBlock['props']): string {
+  if (!props || !Object.keys(props).length) return '';
+  const parts = Object.entries(props).map(([name, decl]) => {
+    if (decl.type === 'choice' && decl.options?.length) return `${name}: ${decl.options.join('|')}`;
+    if (decl.type === 'number' && (decl.min !== undefined || decl.max !== undefined))
+      return `${name}: number(${decl.min ?? ''}..${decl.max ?? ''})`;
+    return `${name}: ${decl.type}`;
+  });
+  return ` [props: ${parts.join(', ')}]`;
+}
+
 /** The system prompt: fixed preamble, the App, its instructions, its catalog. Nothing that changes within a conversation. */
 export function systemPrompt(catalog: AssistantCatalog, mode?: 'ask'): string {
   const lines = [PREAMBLE, '', `The application is "${catalog.app}".`];
+  if (catalog.agent)
+    lines.push(
+      `Active agent: ${catalog.agent.name} (${catalog.agent.id})${catalog.agent.description ? ` — ${catalog.agent.description}` : ''}.`,
+    );
   if (mode === 'ask') lines.push('', ASK);
   if (catalog.instructions) lines.push('', `The application's own instructions:\n${catalog.instructions}`);
   lines.push('', 'Resources (name: label; the changes this person may propose):');
@@ -150,6 +213,18 @@ export function systemPrompt(catalog: AssistantCatalog, mode?: 'ask'): string {
     lines.push(`- ${resource.name}: ${resource.label}${verbs.length ? `; ${verbs.join(', ')}` : ''}`);
   }
   lines.push('', `Views: ${catalog.views.map((view) => `${view.id} (${view.label}${view.table ? `, ${view.table}` : ''})`).join('; ')}`);
+  if (catalog.customBlocks?.length) {
+    lines.push('', 'Custom blocks (draw with show { kind: "custom", name, title?, props }):');
+    for (const block of catalog.customBlocks) {
+      lines.push(`- ${block.name}: ${block.description}${propSignature(block.props)}`);
+    }
+  }
+  if (catalog.subagents?.length) {
+    lines.push('', 'Specialist subagents (delegate focused analysis with delegate { agent, task }):');
+    for (const sub of catalog.subagents) {
+      lines.push(`- ${sub.id}: ${sub.name}${sub.description ? ` — ${sub.description}` : ''}`);
+    }
+  }
   return lines.join('\n');
 }
 
@@ -161,9 +236,35 @@ const QUERY_SYNTAX =
   'measures before by: `opportunity where stage != closed_lost count, sum amount as total by stage`.';
 
 /** The tool core, narrowed to what the App allows. Compact: choices and fields come from describe, not from here. */
-export function toolSpecs(assistant: AppAssistant | undefined): ModelTool[] {
+export function toolSpecs(assistant: AppAssistant | undefined, activeAgent?: AppAssistantAgent): ModelTool[] {
   const allowed = new Set(assistant?.tools ?? ['find', 'describe', 'query', 'show', 'run']);
-  const blocks = assistant?.blocks ?? [...ASSISTANT_BLOCKS];
+  const customNames = Object.keys(assistant?.customBlocks ?? {});
+  const hasCustom = customNames.length > 0;
+  const blocks: string[] = [...(assistant?.blocks ?? ASSISTANT_BLOCKS), ...(hasCustom ? ['custom'] : [])];
+  const showProperties: Record<string, unknown> = {
+    kind: { enum: blocks },
+    title: { type: 'string' },
+    resource: { type: 'string' },
+    query: { type: 'string', description: 'Conditions only: "status = new".' },
+    show: { type: 'array', items: { type: 'string' } },
+    sort: { type: 'string' },
+    limit: { type: 'integer', minimum: 1, maximum: 50 },
+    measure: { type: 'string' },
+    by: { type: 'string' },
+    date: { type: 'string' },
+    lanes: { type: 'array', items: { type: 'string' } },
+    shape: { enum: ['bar', 'line', 'donut', 'waterfall', 'treemap', 'heatmap', 'scatter'] },
+    tone: { enum: ['info', 'good', 'warning', 'critical'] },
+    body: { type: 'string' },
+    items: { type: 'array', items: { type: 'object' } },
+    id: { description: 'Record key for kind=record.' },
+    ...(hasCustom
+      ? {
+          name: { type: 'string', enum: customNames, description: 'Custom block name for kind=custom.' },
+          props: { type: 'object', description: 'Declared props for kind=custom.' },
+        }
+      : {}),
+  };
   const tools: ModelTool[] = [
     {
       name: 'find',
@@ -196,27 +297,10 @@ export function toolSpecs(assistant: AppAssistant | undefined): ModelTool[] {
       description:
         'Draw a validated UI block: table (query, show, sort, limit), metric (measure), metrics (items of {title, resource, measure, query}), ' +
         'chart/breakdown (measure, by, shape), funnel (items of {label, query}), board (by, show, lanes), timeline (date, show, limit), ' +
-        'record (id), callout (tone, body), or tabs (items of {label, block}).',
+        `record (id), callout (tone, body), or tabs (items of {label, block})${hasCustom ? ', or custom (name, props)' : ''}.`,
       input_schema: {
         type: 'object',
-        properties: {
-          kind: { enum: blocks },
-          title: { type: 'string' },
-          resource: { type: 'string' },
-          query: { type: 'string', description: 'Conditions only: "status = new".' },
-          show: { type: 'array', items: { type: 'string' } },
-          sort: { type: 'string' },
-          limit: { type: 'integer', minimum: 1, maximum: 50 },
-          measure: { type: 'string' },
-          by: { type: 'string' },
-          date: { type: 'string' },
-          lanes: { type: 'array', items: { type: 'string' } },
-          shape: { enum: ['bar', 'line', 'donut', 'waterfall', 'treemap', 'heatmap', 'scatter'] },
-          tone: { enum: ['info', 'good', 'warning', 'critical'] },
-          body: { type: 'string' },
-          items: { type: 'array', items: { type: 'object' } },
-          id: { description: 'Record key for kind=record.' },
-        },
+        properties: showProperties,
         required: ['kind'],
         additionalProperties: false,
       },
@@ -239,7 +323,24 @@ export function toolSpecs(assistant: AppAssistant | undefined): ModelTool[] {
       },
     },
   ];
-  return tools.filter((tool) => allowed.has(tool.name as never));
+  const filtered = tools.filter((tool) => allowed.has(tool.name as never));
+  if (activeAgent?.subagents?.length) {
+    filtered.push({
+      name: 'delegate',
+      description:
+        'Delegate a focused read or analysis sub-task to a specialist subagent. Returns the subagent summary and any blocks it drew.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          agent: { enum: activeAgent.subagents, description: 'Target subagent id.' },
+          task: { type: 'string', description: 'Self-contained analysis task or question for the subagent.' },
+        },
+        required: ['agent', 'task'],
+        additionalProperties: false,
+      },
+    });
+  }
+  return filtered;
 }
 
 const NOW_MARK = 'Now: ';

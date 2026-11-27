@@ -40,7 +40,22 @@ export type AssistantBlock =
   | { kind: 'callout'; tone: 'info' | 'good' | 'warning' | 'critical'; title?: string; body: string }
   | { kind: 'tabs'; title?: string; tabs: Array<{ id: string; label: string; block: AssistantBlock }> }
   | { kind: 'record'; table: string; key: Record<string, unknown>; title: string; values: Record<string, unknown>; address?: string }
-  | { kind: 'custom'; name: string; title?: string; props: Record<string, unknown> };
+  | { kind: 'custom'; name: string; title?: string; props: Record<string, unknown>; componentId?: string };
+
+export interface DelegationItem {
+  type: 'delegation';
+  id: string;
+  fromAgent?: string;
+  fromAgentName?: string;
+  agent: string;
+  agentName: string;
+  task: string;
+  status: 'running' | 'done' | 'error';
+  reasoning?: string;
+  summary?: string;
+  blocks?: AssistantBlock[];
+  durationMs?: number;
+}
 
 export type PanelItem =
   /** `seq` is the stored event's, once the server has said it; edit names it. */
@@ -51,7 +66,8 @@ export type PanelItem =
   | { type: 'text'; text: string; open?: true }
   | { type: 'note'; text: string }
   | { type: 'step'; id: string; tool: string; label: string; failed?: true }
-  | { type: 'block'; id: string; block: AssistantBlock }
+  | { type: 'block'; id: string; block: AssistantBlock; streaming?: true }
+  | DelegationItem
   | { type: 'proposal'; id: string; proposal: Proposal; outcome?: ProposalOutcome }
   /** An Ask's read: the line it ran and the rows it read there. */
   | { type: 'query'; id: string; q: string; resource?: string; total: number; evidence: AskEvidence[] };
@@ -246,9 +262,59 @@ export function applyEvent(items: readonly PanelItem[], { event, data }: StreamE
           ...(data.failed === true ? { failed: true as const } : {}),
         });
       return next;
-    case 'block':
-      if (typeof data.id === 'string' && record(data.block)) next.push({ type: 'block', id: data.id, block: data.block as AssistantBlock });
+    case 'block_delta':
+      if (typeof data.id === 'string' && record(data.block)) {
+        const at = next.findIndex((item) => item.type === 'block' && item.id === data.id);
+        const updated: Extract<PanelItem, { type: 'block' }> = {
+          type: 'block',
+          id: data.id,
+          block: data.block as AssistantBlock,
+          streaming: true,
+        };
+        if (at >= 0) next[at] = updated;
+        else next.push(updated);
+      }
       return next;
+    case 'block':
+      if (typeof data.id === 'string' && record(data.block)) {
+        const at = next.findIndex((item) => item.type === 'block' && item.id === data.id);
+        const finalBlock: Extract<PanelItem, { type: 'block' }> = {
+          type: 'block',
+          id: data.id,
+          block: data.block as AssistantBlock,
+        };
+        if (at >= 0) next[at] = finalBlock;
+        else next.push(finalBlock);
+      }
+      return next;
+    case 'delegation': {
+      if (
+        typeof data.id === 'string' &&
+        typeof data.agent === 'string' &&
+        typeof data.agentName === 'string' &&
+        typeof data.task === 'string' &&
+        (data.status === 'running' || data.status === 'done' || data.status === 'error')
+      ) {
+        const delegation: DelegationItem = {
+          type: 'delegation',
+          id: data.id,
+          ...(typeof data.fromAgent === 'string' ? { fromAgent: data.fromAgent } : {}),
+          ...(typeof data.fromAgentName === 'string' ? { fromAgentName: data.fromAgentName } : {}),
+          agent: data.agent,
+          agentName: data.agentName,
+          task: data.task,
+          status: data.status,
+          ...(typeof data.reasoning === 'string' && data.reasoning ? { reasoning: data.reasoning } : {}),
+          ...(typeof data.summary === 'string' && data.summary ? { summary: data.summary } : {}),
+          ...(Array.isArray(data.blocks) ? { blocks: data.blocks.filter(record) as AssistantBlock[] } : {}),
+          ...(typeof data.durationMs === 'number' && Number.isFinite(data.durationMs) ? { durationMs: data.durationMs } : {}),
+        };
+        const at = next.findIndex((item) => item.type === 'delegation' && item.id === data.id);
+        if (at >= 0) next[at] = delegation;
+        else next.push(delegation);
+      }
+      return next;
+    }
     case 'proposal':
       if (typeof data.id === 'string' && record(data.proposal))
         next.push({ type: 'proposal', id: data.id, proposal: data.proposal as unknown as Proposal });
@@ -269,6 +335,14 @@ export function applyEvent(items: readonly PanelItem[], { event, data }: StreamE
     case 'note':
       if (typeof data.text === 'string') next.push({ type: 'note', text: data.text });
       return next;
+    case 'done':
+      return next.map((item) => {
+        if (item.type === 'block' && item.streaming) {
+          const { streaming: _streaming, ...settled } = item;
+          return settled;
+        }
+        return item;
+      });
     default:
       return next;
   }

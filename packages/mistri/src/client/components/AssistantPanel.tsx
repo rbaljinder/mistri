@@ -86,6 +86,7 @@ import {
   waitingProposal,
   wordsOf,
   type AssistantBlock,
+  type DelegationItem,
   type Run,
   type PanelItem,
   type Proposal,
@@ -93,6 +94,7 @@ import {
   type StreamEvent,
 } from './assistantStream.js';
 import { Button } from '@mistriwork/ui/Button.js';
+import { Resizable } from '@mistriwork/ui/Resizable.js';
 import { Tabs } from '@mistriwork/ui/Tabs.js';
 import { Callout } from '@mistriwork/ui/primitives/feedback.js';
 import { AiAssistantSurface, AiModeSwitcher } from '@mistriwork/ui/views/AiAssistantSurface.js';
@@ -118,6 +120,7 @@ import './AssistantPanel.css';
 import { addHostListener, navFollow, portalRoot, removeHostListener, shellById } from '@mistriwork/kit/client/shellHost.js';
 
 const Dashboard = onDemand(() => import('./Dashboard.js'), 'Dashboard');
+const AssistantCustomBlock = onDemand(() => import('./sdk/AssistantCustomBlock.js'), 'AssistantCustomBlock');
 
 type Summary = ConversationSummary;
 
@@ -218,9 +221,46 @@ function rowActionsOn(tableId: unknown): boolean {
 }
 
 const WIDE_SECTION_KINDS = new Set(['rows', 'board', 'funnel']);
+const CANVAS_CAPABLE_KINDS = new Set<AssistantBlock['kind']>(['section', 'metrics', 'timeline', 'tabs', 'custom', 'record']);
 
-/** A block the server validated, drawn by the App's own components. */
-function Block({ block, onFollow }: { block: AssistantBlock; onFollow: (address: string) => void }) {
+function blockTitle(block: AssistantBlock): string {
+  if (block.kind === 'section') {
+    const t = block.section.title;
+    return typeof t === 'string' && t.trim()
+      ? t.trim()
+      : block.section.table || block.section.kind
+        ? humanName(String(block.section.table ?? block.section.kind))
+        : say('canvasTitle');
+  }
+  if (block.kind === 'custom') return block.title || humanName(block.name);
+  if (block.kind === 'record') return block.title;
+  if (block.kind === 'timeline') return block.title || humanName(block.table);
+  if (block.kind === 'metrics' || block.kind === 'tabs' || block.kind === 'callout') return block.title || say('canvasTitle');
+  return say('canvasTitle');
+}
+
+function formatDuration(ms: number | undefined): string | undefined {
+  if (ms === undefined || !Number.isFinite(ms)) return undefined;
+  return ms < 1000 ? `${Math.max(1, Math.round(ms))}ms` : `${(ms / 1000).toFixed(1)}s`;
+}
+
+/** A block the server validated, drawn by the App's own components or an author's interactive custom block. */
+function Block({
+  block,
+  onFollow,
+  onSendMessage,
+  onOpenCanvas,
+  streaming = false,
+  presentation = 'inline',
+}: {
+  block: AssistantBlock;
+  onFollow: (address: string) => void;
+  onSendMessage?: (text: string) => void;
+  onOpenCanvas?: (block: AssistantBlock) => void;
+  streaming?: boolean;
+  presentation?: 'inline' | 'canvas';
+}) {
+  const app = activeApp() as AppPayloadApp | null;
   const dashboard = useMemo(() => {
     if (block.kind !== 'section') return null;
     /* A table's rows open their records, and — where the App's list over the table offers it — carry the list's own row menu. */
@@ -233,10 +273,28 @@ function Block({ block, onFollow }: { block: AssistantBlock; onFollow: (address:
     return { id: 'assistant-metrics', label: block.title ?? '', sections: block.sections } as unknown as DashboardDef;
   }, [block]);
 
+  const canCanvas = presentation === 'inline' && Boolean(onOpenCanvas) && CANVAS_CAPABLE_KINDS.has(block.kind);
+  const canvasAction = canCanvas ? (
+    <Button size="xs" variant="ghost" onClick={() => onOpenCanvas!(block)}>
+      {say('openInCanvas')}
+    </Button>
+  ) : null;
+  const streamingBadge = streaming ? (
+    <span className="assistant-streaming-pill" aria-live="polite">
+      <span className="assistant-streaming-dot" aria-hidden="true" />
+      {say('streamingBlock')}
+    </span>
+  ) : null;
+
   if (dashboard && block.kind === 'section') {
     const isWide = WIDE_SECTION_KINDS.has(String(block.section.kind ?? ''));
     return (
       <div className={`assistant-block assistant-section${isWide ? ' assistant-block-wide' : ''}`}>
+        {canCanvas && (
+          <div className="assistant-block-bar">
+            <div className="assistant-block-bar-actions">{canvasAction}</div>
+          </div>
+        )}
         <Dashboard dashboard={dashboard} />
       </div>
     );
@@ -244,7 +302,12 @@ function Block({ block, onFollow }: { block: AssistantBlock; onFollow: (address:
   if (metricsDash && block.kind === 'metrics') {
     return (
       <section className="assistant-block assistant-metrics assistant-block-wide" aria-label={block.title || undefined}>
-        {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+        {(block.title || canCanvas) && (
+          <div className="assistant-block-bar">
+            {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+            <div className="assistant-block-bar-actions">{canvasAction}</div>
+          </div>
+        )}
         <div className="assistant-metrics-grid">
           <Dashboard dashboard={metricsDash} />
         </div>
@@ -253,7 +316,7 @@ function Block({ block, onFollow }: { block: AssistantBlock; onFollow: (address:
   }
   if (block.kind === 'callout') {
     return (
-      <Callout tone={block.tone} title={block.title} className="assistant-callout">
+      <Callout tone={block.tone} title={block.title} className={`assistant-callout${streaming ? ' assistant-block-streaming' : ''}`}>
         <div className="assistant-text">
           <Words text={block.body} onFollow={onFollow} />
         </div>
@@ -263,7 +326,12 @@ function Block({ block, onFollow }: { block: AssistantBlock; onFollow: (address:
   if (block.kind === 'timeline') {
     return (
       <section className="assistant-block assistant-timeline" aria-label={block.title || block.table}>
-        {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+        {(block.title || canCanvas) && (
+          <div className="assistant-block-bar">
+            {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+            <div className="assistant-block-bar-actions">{canvasAction}</div>
+          </div>
+        )}
         <ol className="assistant-timeline-list">
           {block.items.map((item, i) => (
             <li key={`${item.label}:${item.when}:${i}`} className="assistant-timeline-item">
@@ -294,41 +362,187 @@ function Block({ block, onFollow }: { block: AssistantBlock; onFollow: (address:
     if (!block.tabs.length) return null;
     return (
       <section className="assistant-block assistant-tabs assistant-block-wide" aria-label={block.title || undefined}>
-        {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+        {(block.title || canCanvas) && (
+          <div className="assistant-block-bar">
+            {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+            <div className="assistant-block-bar-actions">{canvasAction}</div>
+          </div>
+        )}
         <Tabs
           defaultValue={block.tabs[0].id}
           variant="underline"
           items={block.tabs.map((tab) => ({
             value: tab.id,
             label: tab.label,
-            content: <Block block={tab.block} onFollow={onFollow} />,
+            content: (
+              <Block
+                block={tab.block}
+                onFollow={onFollow}
+                onSendMessage={onSendMessage}
+                onOpenCanvas={onOpenCanvas}
+                presentation={presentation}
+              />
+            ),
           }))}
         />
       </section>
     );
   }
   if (block.kind === 'custom') {
+    const componentId = block.componentId ?? app?.assistant?.customBlocks?.[block.name]?.componentId;
+    const hasCompiledComponent = Boolean(componentId && app?.components && Object.hasOwn(app.components, componentId));
     const entries = Object.entries(block.props).slice(0, 12);
+    const showBar = (presentation === 'inline' && Boolean(block.title)) || streaming || canCanvas;
     return (
-      <section className="assistant-block assistant-custom" data-custom-block={block.name} aria-label={block.title || block.name}>
-        {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
-        <dl className="peekpanel-fields">
-          {entries.map(([key, value]) => (
-            <div className="field" key={key}>
-              <dt>{humanName(key)}</dt>
-              <dd>
-                {typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
-                  ? String(value)
-                  : JSON.stringify(value)}
-              </dd>
+      <section
+        className={`assistant-block assistant-custom${streaming ? ' assistant-block-streaming' : ''}`}
+        data-custom-block={block.name}
+        data-streaming={streaming ? '' : undefined}
+        aria-label={block.title || block.name}
+      >
+        {showBar && (
+          <div className="assistant-block-bar">
+            {presentation === 'inline' && block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+            <div className="assistant-block-bar-actions">
+              {streamingBadge}
+              {canvasAction}
             </div>
-          ))}
-        </dl>
+          </div>
+        )}
+        {hasCompiledComponent && componentId ? (
+          <AssistantCustomBlock
+            componentId={componentId}
+            given={{
+              name: block.name,
+              ...(block.title ? { title: block.title } : {}),
+              props: block.props,
+              streaming,
+              presentation,
+              sendMessage: (prompt: string) => {
+                if (typeof prompt === 'string' && prompt.trim()) onSendMessage?.(prompt.trim());
+              },
+              navigate: (address: string) => {
+                if (typeof address === 'string' && inside(address)) onFollow(address);
+              },
+              openCanvas: () => onOpenCanvas?.(block),
+            }}
+          />
+        ) : (
+          <dl className="peekpanel-fields">
+            {entries.map(([key, value]) => (
+              <div className="field" key={key}>
+                <dt>{humanName(key)}</dt>
+                <dd>
+                  {typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+                    ? String(value)
+                    : JSON.stringify(value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
       </section>
     );
   }
   if (block.kind !== 'record') return null;
-  return <RecordCard block={block} onFollow={onFollow} />;
+  return (
+    <div className="assistant-record-wrap">
+      {canCanvas && (
+        <div className="assistant-block-bar">
+          <div className="assistant-block-bar-actions">{canvasAction}</div>
+        </div>
+      )}
+      <RecordCard block={block} onFollow={onFollow} />
+    </div>
+  );
+}
+
+/** A bounded subagent delegation card (`parent → child`) with live status, child reasoning, summary, and nested blocks. */
+function DelegationCard({
+  item,
+  showReasoning,
+  onFollow,
+  onSendMessage,
+  onOpenCanvas,
+}: {
+  item: DelegationItem;
+  showReasoning: boolean;
+  onFollow: (address: string) => void;
+  onSendMessage: (text: string) => void;
+  onOpenCanvas: (id: string, block: AssistantBlock) => void;
+}) {
+  const duration = formatDuration(item.durationMs);
+  return (
+    <details
+      className="assistant-delegation"
+      data-status={item.status}
+      open={item.status === 'running' || Boolean(item.blocks?.length)}
+      aria-label={say('delegationRegion')}
+    >
+      <summary className="assistant-delegation-summary">
+        <span className="assistant-delegation-route">
+          {item.fromAgentName ? (
+            <>
+              <span>{item.fromAgentName}</span>
+              <span className="assistant-delegation-arrow" aria-hidden="true">
+                →
+              </span>
+            </>
+          ) : null}
+          <span>{item.agentName}</span>
+        </span>
+        <span className="assistant-delegation-task" title={item.task}>
+          {item.task}
+        </span>
+        <span className="assistant-delegation-meta">
+          {item.status === 'running' ? (
+            <>
+              <span className="assistant-streaming-dot" aria-hidden="true" />
+              {say('delegationRunning')}
+            </>
+          ) : item.status === 'error' ? (
+            say('delegationFailed')
+          ) : (
+            (duration ?? say('delegatedTo', { agent: item.agentName }))
+          )}
+        </span>
+      </summary>
+      {(item.reasoning || item.summary || (item.blocks && item.blocks.length > 0)) && (
+        <div className="assistant-delegation-body">
+          {showReasoning && item.reasoning ? (
+            <AiReasoning
+              text={item.reasoning}
+              words={{
+                thinking: say('thinking'),
+                thought: say('reasoning'),
+                thoughtFor: (d) => say('thoughtFor', { duration: d }),
+                redacted: say('reasoningRedacted'),
+                regionLabel: say('reasoningRegion'),
+              }}
+            />
+          ) : null}
+          {item.summary ? (
+            <div className="assistant-text">
+              <Words text={item.summary} onFollow={onFollow} />
+            </div>
+          ) : null}
+          {item.blocks && item.blocks.length > 0 ? (
+            <div className="assistant-delegation-blocks">
+              {item.blocks.map((childBlock, i) => (
+                <Block
+                  key={`${item.id}_b${i}`}
+                  block={childBlock}
+                  onFollow={onFollow}
+                  onSendMessage={onSendMessage}
+                  onOpenCanvas={(blk) => onOpenCanvas(`${item.id}_b${i}`, blk)}
+                />
+              ))}
+            </div>
+          ) : null}
+        </div>
+      )}
+    </details>
+  );
 }
 
 /**
@@ -912,6 +1126,14 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
   const [restoreMode, setRestoreMode] = useState<'sidebar' | 'floating'>(() => (presentation === 'floating' ? 'floating' : 'sidebar'));
   const [fullscreenLeft, setFullscreenLeft] = useState<number>(0);
   const [effort, setEffort] = useState<'low' | 'medium' | 'high'>(() => assistantConfig?.effort ?? 'medium');
+  const agents = assistantConfig?.agents ?? [];
+  const defaultAgentId = assistantConfig?.defaultAgent ?? agents[0]?.id;
+  const [selectedAgentId, setSelectedAgentId] = useState<string | undefined>(() => defaultAgentId);
+  const activeAgent = useMemo(
+    () => (selectedAgentId ? agents.find((each) => each.id === selectedAgentId) : undefined) ?? agents[0],
+    [agents, selectedAgentId],
+  );
+  const [canvasEntry, setCanvasEntry] = useState<{ id: string; block: AssistantBlock } | null>(null);
   const [panelWidth, setPanelWidth] = useState<number | null>(() => (room ? null : readPanelWidth(app)));
   const onPhone = usePhone();
   const wide = room || (presentation === 'fullscreen' && !onPhone);
@@ -935,8 +1157,8 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
         ? { resource: top.table, key: top.key, label: top.label ?? top.table }
         : undefined;
   /* The App's starters for where the person is: its bare lines everywhere, a scoped one in its view's room or on a
-     record of its table (appAssistant.ts). The room is the walk's top: a list's view, a dashboard's or a form's page. */
-  const starters = startersHere(assistantConfig?.starters, {
+     record of its table (appAssistant.ts). Active agent starters take precedence when declared. */
+  const starters = startersHere(activeAgent?.starters ?? assistantConfig?.starters, {
     ...(top?.kind === 'table' && top.view ? { view: top.view } : {}),
     ...(top?.kind === 'page' && !top.key ? { view: dashViewKey(top.pageId) ?? formViewKey(top.pageId) } : {}),
     ...(context ? { record: context.resource } : {}),
@@ -955,10 +1177,16 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     queryFn: async () =>
       (await assistantApi(`/api/assistant/conversation?app=${encodeURIComponent(app)}&id=${encodeURIComponent(conversation!)}`)) as {
         items: PanelItem[];
+        agent?: string;
       },
   });
   useEffect(() => {
-    if (opened.data && Array.isArray(opened.data.items) && !busy) setItems(opened.data.items);
+    if (opened.data && Array.isArray(opened.data.items) && !busy) {
+      setItems(opened.data.items);
+      if (opened.data.agent && agents.some((each) => each.id === opened.data!.agent)) {
+        setSelectedAgentId(opened.data.agent);
+      }
+    }
     // Only when a conversation is (re)opened: a live turn's items are the panel's own.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [opened.data]);
@@ -1158,6 +1386,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     }
     if (context && withRecord) request.context = { resource: context.resource, key: context.key };
     if (assistantConfig?.effortPicker) request.effort = effort;
+    if (activeAgent) request.agent = activeAgent.id;
     setItems([...next, { type: 'person', text: said }]);
     setText('');
     setEditing(null);
@@ -1174,6 +1403,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       retry: true,
       ...askMode,
       ...(assistantConfig?.effortPicker ? { effort } : {}),
+      ...(activeAgent ? { agent: activeAgent.id } : {}),
     });
   };
   /* A turn cut off on the way, tried again: from the person's words if the server kept them, else sent as it was. */
@@ -1243,6 +1473,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     stop.current?.abort();
     setListing(false);
     setAsking(false);
+    setCanvasEntry(null);
     if (room) {
       go(assistantEntry(id), 'push');
       return;
@@ -1255,6 +1486,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     stop.current?.abort();
     setListing(false);
     setAsking(false);
+    setCanvasEntry(null);
     if (room) {
       if (conversation) go(assistantEntry(), 'push');
       return;
@@ -1289,6 +1521,9 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     follow(address);
     if (!room && (onPhone || wide)) onClose?.();
   };
+  const openInCanvas = (id: string, block: AssistantBlock) => {
+    setCanvasEntry({ id, block });
+  };
   const onKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault();
@@ -1312,6 +1547,9 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       event.preventDefault();
       setEditing(null);
       setText('');
+    } else if (canvasEntry) {
+      event.preventDefault();
+      setCanvasEntry(null);
     } else if (listing) {
       event.preventDefault();
       setListing(false);
@@ -1330,6 +1568,16 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
   const lastPerson = items.map((item) => item.type).lastIndexOf('person');
   const ready = conversations.data?.ready !== false;
   const drawn = grouped(items);
+  const liveCanvasItem = canvasEntry
+    ? (() => {
+        const matched = items.find(
+          (item): item is Extract<PanelItem, { type: 'block' }> => item.type === 'block' && item.id === canvasEntry.id,
+        );
+        return matched
+          ? { id: matched.id, block: matched.block, streaming: Boolean(matched.streaming) }
+          : { ...canvasEntry, streaming: false };
+      })()
+    : null;
   const list = (
     <ConversationList
       app={app}
@@ -1371,6 +1619,309 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       ? ({ '--assistant-width': `${clampPanelWidth(panelWidth)}px` } as CSSProperties)
       : undefined;
 
+  const threadContent = (
+    <div className="assistant-thread-column">
+      {listing && !room ? (
+        <div className="assistant-body">{list}</div>
+      ) : (
+        <ActionOutcomes.Provider value={acted}>
+          <div
+            className="assistant-body"
+            ref={body}
+            aria-busy={busy}
+            onScroll={(event) => {
+              const view = event.currentTarget;
+              pinned.current = view.scrollHeight - view.scrollTop - view.clientHeight < 24;
+            }}
+          >
+            {!ready && <p className="assistant-empty">{say('noModel')}</p>}
+            {starting && (
+              <div className="assistant-start">
+                <p className="assistant-empty">{say(asking ? 'askHint' : 'emptyHint')}</p>
+                {activeAgent?.description && <p className="assistant-agent-intro">{activeAgent.description}</p>}
+                {starters.length > 0 && (
+                  <div className="assistant-starters" role="group" aria-label={say('starters')}>
+                    {starters.map((starter) => (
+                      <button key={starter} type="button" className="assistant-starter" disabled={busy} onClick={() => say_(starter)}>
+                        {starter}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            {drawn.map((entry, index) => {
+              if (entry.type === 'steps')
+                return (
+                  <Steps key={`s${entry.at}`} steps={entry.steps} running={busy && index === drawn.length - 1 ? running : undefined} />
+                );
+              const { item, at } = entry;
+              if (item.type === 'reasoning') {
+                if (assistantConfig?.reasoning === 'hidden') return null;
+                const isLast = index === drawn.length - 1;
+                return (
+                  <AiReasoning
+                    key={`r${item.id}`}
+                    text={item.text}
+                    redacted={item.redacted}
+                    durationMs={item.durationMs}
+                    streaming={Boolean(busy && isLast && item.open)}
+                    defaultOpen={assistantConfig?.reasoning === 'expanded'}
+                    words={{
+                      thinking: say('thinking'),
+                      thought: say('reasoning'),
+                      thoughtFor: (duration) => say('thoughtFor', { duration }),
+                      redacted: say('reasoningRedacted'),
+                      regionLabel: say('reasoningRegion'),
+                    }}
+                  />
+                );
+              }
+              if (item.type === 'delegation')
+                return (
+                  <DelegationCard
+                    key={`d${item.id}`}
+                    item={item}
+                    showReasoning={assistantConfig?.reasoning !== 'hidden'}
+                    onFollow={onFollow}
+                    onSendMessage={say_}
+                    onOpenCanvas={openInCanvas}
+                  />
+                );
+              if (item.type === 'person')
+                return (
+                  <div
+                    key={`p${at}`}
+                    className={`assistant-person${editing !== null && item.seq === editing ? ' assistant-person-editing' : ''}`}
+                  >
+                    <p>{item.text}</p>
+                    {!busy && !waiting && (
+                      <div className="assistant-person-tools">
+                        {item.seq !== undefined && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditing(item.seq!);
+                              setText(item.text);
+                              box.current?.focus();
+                            }}
+                          >
+                            {say('edit')}
+                          </button>
+                        )}
+                        {at === lastPerson && conversation && (
+                          <button type="button" onClick={retry}>
+                            {say('retry')}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              if (item.type === 'text')
+                return (
+                  <div key={`t${at}`} className="assistant-text">
+                    <Words text={item.text} onFollow={onFollow} />
+                  </div>
+                );
+              if (item.type === 'note')
+                return (
+                  <p key={`n${at}`} className="assistant-note">
+                    {item.text}
+                  </p>
+                );
+              if (item.type === 'block')
+                return (
+                  <Block
+                    key={`b${item.id}`}
+                    block={item.block}
+                    streaming={Boolean(item.streaming)}
+                    onFollow={onFollow}
+                    onSendMessage={say_}
+                    onOpenCanvas={(blk) => openInCanvas(item.id, blk)}
+                  />
+                );
+              if (item.type === 'query') return <AskRead key={`q${at}`} read={item} />;
+              if (item.type === 'proposal')
+                return (
+                  <ProposalCard
+                    key={`c${item.id}`}
+                    proposal={item.proposal}
+                    outcome={item.outcome}
+                    live={!busy && (item.proposal.review ? !item.outcome : waiting?.id === item.id)}
+                    onResolve={(outcome) => resolve(item.proposal, outcome)}
+                    onFollow={onFollow}
+                  />
+                );
+              return null;
+            })}
+            {busy && (drawn.length === 0 || drawn[drawn.length - 1].type !== 'steps') && running && (
+              <p className="assistant-working" role="status" aria-live="polite" aria-atomic="true">
+                {running}
+              </p>
+            )}
+            {problem && (
+              <div className="assistant-problem" role="alert">
+                <p>{problem.text}</p>
+                {problem.again && !busy && (
+                  <button type="button" onClick={again}>
+                    {say('tryAgain')}
+                  </button>
+                )}
+                {problem.fresh && (
+                  <button type="button" onClick={startNew}>
+                    {say('newConversation')}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </ActionOutcomes.Provider>
+      )}
+      <div className="assistant-foot">
+        {context && withRecord && !listing && (
+          <div className="assistant-context">
+            <span>{say('about', { label: context.label })}</span>
+            <button
+              type="button"
+              className="ghost"
+              aria-label={say('leaveOutRecord', { label: context.label })}
+              title={say('leaveOutRecord', { label: context.label })}
+              onClick={() => setWithRecord(false)}
+            >
+              ×
+            </button>
+          </div>
+        )}
+        {editing !== null && (
+          <div className="assistant-context">
+            <span>{say('editing')}</span>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => {
+                setEditing(null);
+                setText('');
+              }}
+            >
+              {say('cancelEdit')}
+            </button>
+          </div>
+        )}
+        {/* A change waiting for the person is said in the field itself, and the field says it is why it is shut. */}
+        <div className="assistant-compose">
+          {waiting && !busy && (
+            <p className="assistant-waiting" id={waitingNote}>
+              <span className="assistant-waiting-dot" aria-hidden="true" />
+              {say('waitingForYou')}
+            </p>
+          )}
+          <div
+            className={`assistant-compose-box${(assistantConfig?.effortPicker || agents.length > 1) && !listing ? ' assistant-compose-rich' : ''}`}
+          >
+            <textarea
+              ref={box}
+              rows={1}
+              value={text}
+              aria-label={say(asking ? 'askMessage' : 'message')}
+              aria-describedby={waiting && !busy ? waitingNote : undefined}
+              placeholder={say(asking ? 'askMessage' : 'message')}
+              disabled={!ready || Boolean(waiting && !busy)}
+              onChange={(event) => setText(event.target.value)}
+              onKeyDown={onKey}
+            />
+            <div className="assistant-compose-bar">
+              {(agents.length > 1 || assistantConfig?.effortPicker) && !listing ? (
+                <div className="assistant-compose-meta">
+                  {agents.length > 1 && activeAgent ? (
+                    <div className="assistant-agent-picker">
+                      <Select<string>
+                        size="xs"
+                        value={activeAgent.id}
+                        onValueChange={(next) => {
+                          if (!next) return;
+                          setSelectedAgentId(next);
+                          const picked = agents.find((each) => each.id === next);
+                          if (picked?.effort) setEffort(picked.effort);
+                        }}
+                        options={agents.map((each) => ({ value: each.id, label: each.name }))}
+                        ariaLabel={say('agentLabel')}
+                        triggerClassName="assistant-agent-trigger"
+                      />
+                    </div>
+                  ) : null}
+                  {assistantConfig?.effortPicker ? (
+                    <div className="assistant-effort">
+                      <Select<'low' | 'medium' | 'high'>
+                        size="xs"
+                        value={effort}
+                        onValueChange={(next) => {
+                          if (next) setEffort(next);
+                        }}
+                        options={[
+                          { value: 'low', label: say('effort_low') },
+                          { value: 'medium', label: say('effort_medium') },
+                          { value: 'high', label: say('effort_high') },
+                        ]}
+                        ariaLabel={say('effortLabel')}
+                        triggerClassName="nx-ai-effort-trigger"
+                      />
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <div className="assistant-compose-actions">
+                {busy ? (
+                  <Button size="sm" onClick={() => stop.current?.abort()}>
+                    {say('stop')}
+                  </Button>
+                ) : (
+                  <Button size="sm" variant={canSend ? 'primary' : 'secondary'} onClick={send} disabled={!canSend}>
+                    {say('send')}
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const canvasPane = liveCanvasItem ? (
+    <section className={`assistant-canvas${!wide ? ' assistant-canvas-sheet' : ''}`} aria-label={say('canvasPane')}>
+      <div className="assistant-canvas-head">
+        {!wide && (
+          <Button size="xs" variant="ghost" onClick={() => setCanvasEntry(null)}>
+            {say('backToChat')}
+          </Button>
+        )}
+        <h3 className="assistant-canvas-title" title={blockTitle(liveCanvasItem.block)}>
+          {blockTitle(liveCanvasItem.block)}
+        </h3>
+        {!room && !wide && allowedPresentations.includes('fullscreen') && (
+          <Button size="xs" variant="ghost" onClick={() => changePresentation('fullscreen')}>
+            {say('expand')}
+          </Button>
+        )}
+        <Button size="xs" variant="ghost" ariaLabel={say('closeCanvas')} onClick={() => setCanvasEntry(null)}>
+          ×
+        </Button>
+      </div>
+      <div className="assistant-canvas-body">
+        <ActionOutcomes.Provider value={acted}>
+          <Block
+            block={liveCanvasItem.block}
+            streaming={liveCanvasItem.streaming}
+            presentation="canvas"
+            onFollow={onFollow}
+            onSendMessage={say_}
+          />
+        </ActionOutcomes.Provider>
+      </div>
+    </section>
+  ) : null;
+
   return (
     <AiAssistantSurface
       ref={frame}
@@ -1397,7 +1948,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       words={surfaceWords}
       style={surfaceStyle}
       onKeyDown={onPanelKey}
-      className={`${room ? 'assistant-room' : 'assistant-panel'}${wide ? ' assistant-wide' : ''}${!room && wide ? ' assistant-panel-expanded' : ''}${floating ? ' assistant-panel-floating' : ''}${room && listing ? ' assistant-room-listing' : ''}${(starting || !ready) && !(listing && !room) ? ' assistant-starting' : ''}`}
+      className={`${room ? 'assistant-room' : 'assistant-panel'}${wide ? ' assistant-wide' : ''}${!room && wide ? ' assistant-panel-expanded' : ''}${floating ? ' assistant-panel-floating' : ''}${room && listing ? ' assistant-room-listing' : ''}${(starting || !ready) && !(listing && !room) && !liveCanvasItem ? ' assistant-starting' : ''}`}
     >
       <div className="assistant-main">
         <div className="assistant-head">
@@ -1474,224 +2025,23 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
             </button>
           )}
         </div>
-        {listing && !room ? (
-          <div className="assistant-body">{list}</div>
-        ) : (
-          <ActionOutcomes.Provider value={acted}>
-            <div
-              className="assistant-body"
-              ref={body}
-              aria-busy={busy}
-              onScroll={(event) => {
-                const view = event.currentTarget;
-                pinned.current = view.scrollHeight - view.scrollTop - view.clientHeight < 24;
-              }}
-            >
-              {!ready && <p className="assistant-empty">{say('noModel')}</p>}
-              {starting && (
-                <div className="assistant-start">
-                  <p className="assistant-empty">{say(asking ? 'askHint' : 'emptyHint')}</p>
-                  {starters.length > 0 && (
-                    <div className="assistant-starters" role="group" aria-label={say('starters')}>
-                      {starters.map((starter) => (
-                        <button key={starter} type="button" className="assistant-starter" disabled={busy} onClick={() => say_(starter)}>
-                          {starter}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-              {drawn.map((entry, index) => {
-                if (entry.type === 'steps')
-                  return (
-                    <Steps key={`s${entry.at}`} steps={entry.steps} running={busy && index === drawn.length - 1 ? running : undefined} />
-                  );
-                const { item, at } = entry;
-                if (item.type === 'reasoning') {
-                  if (assistantConfig?.reasoning === 'hidden') return null;
-                  const isLast = index === drawn.length - 1;
-                  return (
-                    <AiReasoning
-                      key={`r${item.id}`}
-                      text={item.text}
-                      redacted={item.redacted}
-                      durationMs={item.durationMs}
-                      streaming={Boolean(busy && isLast && item.open)}
-                      defaultOpen={assistantConfig?.reasoning === 'expanded'}
-                      words={{
-                        thinking: say('thinking'),
-                        thought: say('reasoning'),
-                        thoughtFor: (duration) => say('thoughtFor', { duration }),
-                        redacted: say('reasoningRedacted'),
-                        regionLabel: say('reasoningRegion'),
-                      }}
-                    />
-                  );
-                }
-                if (item.type === 'person')
-                  return (
-                    <div
-                      key={`p${at}`}
-                      className={`assistant-person${editing !== null && item.seq === editing ? ' assistant-person-editing' : ''}`}
-                    >
-                      <p>{item.text}</p>
-                      {!busy && !waiting && (
-                        <div className="assistant-person-tools">
-                          {item.seq !== undefined && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEditing(item.seq!);
-                                setText(item.text);
-                                box.current?.focus();
-                              }}
-                            >
-                              {say('edit')}
-                            </button>
-                          )}
-                          {at === lastPerson && conversation && (
-                            <button type="button" onClick={retry}>
-                              {say('retry')}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  );
-                if (item.type === 'text')
-                  return (
-                    <div key={`t${at}`} className="assistant-text">
-                      <Words text={item.text} onFollow={onFollow} />
-                    </div>
-                  );
-                if (item.type === 'note')
-                  return (
-                    <p key={`n${at}`} className="assistant-note">
-                      {item.text}
-                    </p>
-                  );
-                if (item.type === 'block') return <Block key={`b${at}`} block={item.block} onFollow={onFollow} />;
-                if (item.type === 'query') return <AskRead key={`q${at}`} read={item} />;
-                if (item.type === 'proposal')
-                  return (
-                    <ProposalCard
-                      key={`c${item.id}`}
-                      proposal={item.proposal}
-                      outcome={item.outcome}
-                      live={!busy && (item.proposal.review ? !item.outcome : waiting?.id === item.id)}
-                      onResolve={(outcome) => resolve(item.proposal, outcome)}
-                      onFollow={onFollow}
-                    />
-                  );
-                return null;
-              })}
-              {busy && (drawn.length === 0 || drawn[drawn.length - 1].type !== 'steps') && running && (
-                <p className="assistant-working" role="status" aria-live="polite" aria-atomic="true">
-                  {running}
-                </p>
-              )}
-              {problem && (
-                <div className="assistant-problem" role="alert">
-                  <p>{problem.text}</p>
-                  {problem.again && !busy && (
-                    <button type="button" onClick={again}>
-                      {say('tryAgain')}
-                    </button>
-                  )}
-                  {problem.fresh && (
-                    <button type="button" onClick={startNew}>
-                      {say('newConversation')}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
-          </ActionOutcomes.Provider>
-        )}
-        <div className="assistant-foot">
-          {context && withRecord && !listing && (
-            <div className="assistant-context">
-              <span>{say('about', { label: context.label })}</span>
-              <button
-                type="button"
-                className="ghost"
-                aria-label={say('leaveOutRecord', { label: context.label })}
-                title={say('leaveOutRecord', { label: context.label })}
-                onClick={() => setWithRecord(false)}
-              >
-                ×
-              </button>
-            </div>
+        <div className="assistant-workspace">
+          {wide && canvasPane ? (
+            <Resizable
+              direction="horizontal"
+              className="assistant-split"
+              ariaLabel={say('canvasPane')}
+              panels={[
+                { label: say('conversation'), defaultSize: 54, minSize: 32, children: threadContent },
+                { label: say('canvasPane'), defaultSize: 46, minSize: 28, children: canvasPane },
+              ]}
+            />
+          ) : (
+            <>
+              {threadContent}
+              {canvasPane}
+            </>
           )}
-          {editing !== null && (
-            <div className="assistant-context">
-              <span>{say('editing')}</span>
-              <button
-                type="button"
-                className="ghost"
-                onClick={() => {
-                  setEditing(null);
-                  setText('');
-                }}
-              >
-                {say('cancelEdit')}
-              </button>
-            </div>
-          )}
-          {/* A change waiting for the person is said in the field itself, and the field says it is why it is shut. */}
-          <div className="assistant-compose">
-            {waiting && !busy && (
-              <p className="assistant-waiting" id={waitingNote}>
-                <span className="assistant-waiting-dot" aria-hidden="true" />
-                {say('waitingForYou')}
-              </p>
-            )}
-            <div className={`assistant-compose-box${assistantConfig?.effortPicker && !listing ? ' assistant-compose-rich' : ''}`}>
-              <textarea
-                ref={box}
-                rows={1}
-                value={text}
-                aria-label={say(asking ? 'askMessage' : 'message')}
-                aria-describedby={waiting && !busy ? waitingNote : undefined}
-                placeholder={say(asking ? 'askMessage' : 'message')}
-                disabled={!ready || Boolean(waiting && !busy)}
-                onChange={(event) => setText(event.target.value)}
-                onKeyDown={onKey}
-              />
-              <div className="assistant-compose-bar">
-                {assistantConfig?.effortPicker && !listing ? (
-                  <div className="assistant-effort">
-                    <Select<'low' | 'medium' | 'high'>
-                      size="xs"
-                      value={effort}
-                      onValueChange={(next) => {
-                        if (next) setEffort(next);
-                      }}
-                      options={[
-                        { value: 'low', label: say('effort_low') },
-                        { value: 'medium', label: say('effort_medium') },
-                        { value: 'high', label: say('effort_high') },
-                      ]}
-                      ariaLabel={say('effortLabel')}
-                      triggerClassName="nx-ai-effort-trigger"
-                    />
-                  </div>
-                ) : null}
-                <div className="assistant-compose-actions">
-                  {busy ? (
-                    <Button size="sm" onClick={() => stop.current?.abort()}>
-                      {say('stop')}
-                    </Button>
-                  ) : (
-                    <Button size="sm" variant={canSend ? 'primary' : 'secondary'} onClick={send} disabled={!canSend}>
-                      {say('send')}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </div>
       {deletingOpen && titled && (

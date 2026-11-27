@@ -17,6 +17,7 @@
  * step line, a block, a card).
  */
 import type { AppAssistant } from '../../shared/appAssistant.js';
+import { propValue } from '@mistriwork/engine/shared/appComponents.js';
 import { appAddressBook, recordSegments, type AddressBook } from '../../shared/appAddress.js';
 import { viewOrder } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
@@ -43,7 +44,7 @@ export type AssistantBlock =
   | { kind: 'callout'; tone: 'info' | 'good' | 'warning' | 'critical'; title?: string; body: string }
   | { kind: 'tabs'; title?: string; tabs: Array<{ id: string; label: string; block: AssistantBlock }> }
   | { kind: 'record'; table: string; key: Record<string, unknown>; title: string; values: Record<string, unknown>; address?: string }
-  | { kind: 'custom'; name: string; title?: string; props: Record<string, unknown> };
+  | { kind: 'custom'; name: string; title?: string; props: Record<string, unknown>; componentId?: string };
 
 export interface Proposal {
   /** The tool call it answers; its outcome is reported under this id. */
@@ -69,7 +70,22 @@ export type DisplayItem =
   | { type: 'proposal'; id: string; proposal: Proposal }
   /* Ask shows what it read: the line it ran, as the query bar would take it, and the rows it read there, each a record
      the person may open. Only what this person's own read returned, so it says nothing they could not see. */
-  | { type: 'query'; id: string; q: string; resource?: string; total: number; evidence: AskEvidence[] };
+  | { type: 'query'; id: string; q: string; resource?: string; total: number; evidence: AskEvidence[] }
+  /** A bounded subagent delegation trace (`parent → child`) streamed live and persisted for replay. */
+  | {
+      type: 'delegation';
+      id: string;
+      fromAgent?: string;
+      fromAgentName?: string;
+      agent: string;
+      agentName: string;
+      task: string;
+      status: 'running' | 'done' | 'error';
+      reasoning?: string;
+      summary?: string;
+      blocks?: AssistantBlock[];
+      durationMs?: number;
+    };
 
 /** One row an Ask read: the evidence shape a proposal keeps, with the address the reader opens it at. */
 interface AskEvidence extends ProposalEvidence {
@@ -624,8 +640,68 @@ async function show(
   depth = 0,
 ): Promise<{ result: Record<string, unknown>; label: string; block?: AssistantBlock }> {
   const kind = String(input.kind ?? '');
-  if (!(session.assistant.blocks as string[]).includes(kind)) throw new ToolRefusal(`show draws ${session.assistant.blocks.join(', ')}.`);
+  const customDecls = session.assistant.customBlocks;
+  const hasCustom = Boolean(customDecls && Object.keys(customDecls).length);
+  const allowedKinds = [...(session.assistant.blocks as string[]), ...(hasCustom ? ['custom'] : [])];
+  if (!allowedKinds.includes(kind)) throw new ToolRefusal(`show draws ${allowedKinds.join(', ')}.`);
   const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 120) : undefined;
+
+  if (kind === 'custom') {
+    const name = typeof input.name === 'string' ? input.name.trim() : '';
+    const decl = name && customDecls ? customDecls[name] : undefined;
+    if (!decl) {
+      throw new ToolRefusal(
+        `show(custom) names "${name}", which is not a declared custom block. Available: ${Object.keys(customDecls ?? {}).join(', ') || 'none'}.`,
+      );
+    }
+    const rawProps = input.props;
+    if (rawProps !== undefined && (!rawProps || typeof rawProps !== 'object' || Array.isArray(rawProps))) {
+      throw new ToolRefusal(`custom block "${name}" expects props to be an object.`);
+    }
+    const given = (rawProps ?? {}) as Record<string, unknown>;
+    const validated: Record<string, unknown> = {};
+    if (decl.props) {
+      for (const propName of Object.keys(given)) {
+        if (!Object.hasOwn(decl.props, propName)) {
+          throw new ToolRefusal(
+            `custom block "${name}" does not declare prop "${propName}". Declared props: ${Object.keys(decl.props).join(', ') || 'none'}.`,
+          );
+        }
+      }
+      for (const [propName, propDecl] of Object.entries(decl.props)) {
+        const value = Object.hasOwn(given, propName) ? given[propName] : propDecl.default;
+        if (value !== undefined) {
+          try {
+            validated[propName] = propValue(propDecl, value, `custom block "${name}", prop "${propName}"`);
+          } catch (error) {
+            throw new ToolRefusal(error instanceof Error ? error.message : `Invalid value for prop "${propName}".`);
+          }
+        }
+      }
+    } else {
+      for (const [propName, value] of Object.entries(given).slice(0, 16)) {
+        if (value === null || typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+          validated[propName] = typeof value === 'string' ? value.slice(0, 500) : value;
+        } else if (Array.isArray(value)) {
+          validated[propName] = value.slice(0, 24);
+        } else if (value && typeof value === 'object') {
+          validated[propName] = value;
+        }
+      }
+    }
+    const resolvedTitle = title ?? decl.title;
+    return {
+      result: { shown: 'custom', name, ...(resolvedTitle ? { title: resolvedTitle } : {}), props: validated },
+      label: `Showed ${resolvedTitle ?? name}`,
+      block: {
+        kind: 'custom',
+        name,
+        ...(resolvedTitle ? { title: resolvedTitle } : {}),
+        props: validated,
+        ...(decl.component ? { componentId: decl.component.id } : {}),
+      },
+    };
+  }
 
   if (kind === 'callout') {
     const body = typeof input.body === 'string' && input.body.trim() ? input.body.trim().slice(0, 1000) : '';
@@ -1092,12 +1168,136 @@ export function runningLabel(name: string, input: unknown): string {
         ? `Looking at ${said(args.action) || said(args.resource)}`
         : name === 'query' && said(args.q)
           ? `Reading ${said(args.q).split(' ')[0]}`
-          : name === 'show' && (said(args.title) || said(args.resource))
-            ? `Drawing ${said(args.title) || said(args.resource)}`
+          : name === 'show' && (said(args.title) || said(args.name) || said(args.resource))
+            ? `Drawing ${said(args.title) || said(args.name) || said(args.resource)}`
             : name === 'run' && said(args.action)
               ? `Preparing ${said(args.action)}`
-              : 'Working';
+              : name === 'delegate' && said(args.agent)
+                ? `Delegating to ${said(args.agent)}`
+                : 'Working';
   return `${label}…`;
+}
+
+/**
+ * Best-effort parser for an in-flight JSON object string streamed from a model's tool input deltas.
+ * Closes unclosed strings/brackets/braces and strips trailing dangling keys/commas/colons so progressive
+ * custom blocks and callouts can hydrate smoothly before the final tool_use payload lands.
+ */
+function parsePartialJsonObject(raw: string): Record<string, unknown> | undefined {
+  const trimmed = raw.trim();
+  if (!trimmed.startsWith('{')) return undefined;
+  try {
+    const whole = JSON.parse(trimmed) as unknown;
+    return whole && typeof whole === 'object' && !Array.isArray(whole) ? (whole as Record<string, unknown>) : undefined;
+  } catch {
+    /* Fall through to incremental repair. */
+  }
+  let inString = false;
+  let escape = false;
+  const stack: string[] = [];
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i]!;
+    if (inString) {
+      if (escape) escape = false;
+      else if (ch === '\\') escape = true;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') {
+      inString = true;
+    } else if (ch === '{') {
+      stack.push('}');
+    } else if (ch === '[') {
+      stack.push(']');
+    } else if (ch === '}' || ch === ']') {
+      stack.pop();
+    }
+  }
+  let candidate = trimmed;
+  if (inString) {
+    if (escape) candidate = candidate.slice(0, -1);
+    candidate += '"';
+  }
+  // Strip trailing incomplete separator or key-without-value.
+  candidate = candidate.replace(/,\s*$/, '');
+  candidate = candidate.replace(/,\s*"[^"]*"\s*:\s*$/, '');
+  candidate = candidate.replace(/\{\s*"[^"]*"\s*:\s*$/, '{');
+  candidate = candidate.replace(/,\s*"[^"]*"\s*$/, '');
+  candidate = candidate.replace(/\{\s*"[^"]*"\s*$/, '{');
+  // Recalculate open containers after cleanup.
+  const closers: string[] = [];
+  inString = false;
+  escape = false;
+  for (let i = 0; i < candidate.length; i++) {
+    const ch = candidate[i]!;
+    if (inString) {
+      if (escape) escape = false;
+      else if (ch === '\\') escape = true;
+      else if (ch === '"') inString = false;
+    } else if (ch === '"') inString = true;
+    else if (ch === '{') closers.push('}');
+    else if (ch === '[') closers.push(']');
+    else if (ch === '}' || ch === ']') closers.pop();
+  }
+  try {
+    const parsed = JSON.parse(candidate + closers.reverse().join('')) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Extract a previewable progressive `AssistantBlock` from a partially streamed `show` tool input JSON string.
+ * Only surfaces declared `custom` blocks (filtered to known props) and `callout` blocks; returns undefined
+ * until enough structure has arrived to draw meaningfully.
+ */
+export function partialBlockFromJson(assistant: AppAssistant, inputJson: string): AssistantBlock | undefined {
+  const parsed = parsePartialJsonObject(inputJson);
+  if (!parsed) return undefined;
+  const kind = parsed.kind;
+  const title = typeof parsed.title === 'string' && parsed.title.trim() ? parsed.title.trim().slice(0, 120) : undefined;
+  if (kind === 'custom') {
+    const name = typeof parsed.name === 'string' ? parsed.name.trim() : '';
+    const decl = name ? assistant.customBlocks?.[name] : undefined;
+    if (!decl) return undefined;
+    const rawProps =
+      parsed.props && typeof parsed.props === 'object' && !Array.isArray(parsed.props) ? (parsed.props as Record<string, unknown>) : {};
+    const props: Record<string, unknown> = {};
+    if (decl.props) {
+      for (const [propName, propDecl] of Object.entries(decl.props)) {
+        if (Object.hasOwn(rawProps, propName)) {
+          const val = rawProps[propName];
+          if (
+            (propDecl.type === 'text' && typeof val === 'string') ||
+            (propDecl.type === 'number' && typeof val === 'number' && Number.isFinite(val)) ||
+            (propDecl.type === 'boolean' && typeof val === 'boolean') ||
+            (propDecl.type === 'choice' && typeof val === 'string')
+          ) {
+            props[propName] = val;
+          }
+        } else if (propDecl.default !== undefined) {
+          props[propName] = propDecl.default;
+        }
+      }
+    } else {
+      for (const [k, v] of Object.entries(rawProps).slice(0, 16)) props[k] = v;
+    }
+    const resolvedTitle = title ?? decl.title;
+    return {
+      kind: 'custom',
+      name,
+      ...(resolvedTitle ? { title: resolvedTitle } : {}),
+      props,
+      ...(decl.component ? { componentId: decl.component.id } : {}),
+    };
+  }
+  if (kind === 'callout' && (assistant.blocks as string[]).includes('callout')) {
+    const body = typeof parsed.body === 'string' && parsed.body.trim() ? parsed.body.trim().slice(0, 1000) : '';
+    if (!body) return undefined;
+    const rawTone = typeof parsed.tone === 'string' ? parsed.tone : 'info';
+    const tone: CalloutTone = CALLOUT_TONES.has(rawTone as CalloutTone) ? (rawTone as CalloutTone) : 'info';
+    return { kind: 'callout', tone, ...(title ? { title } : {}), body };
+  }
+  return undefined;
 }
 
 /** Answer one tool call. A refusal is told to the model as an error it can correct; anything else is a failed step. */
