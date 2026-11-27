@@ -6,6 +6,7 @@ import { userEvent } from '@testing-library/user-event';
 const toast = vi.fn();
 const run = vi.fn(async () => ({ status: 'applied' as const, message: undefined }));
 vi.mock('@mistriwork/kit/client/core.js', () => ({ toast: (...args: unknown[]) => toast(...args) }));
+vi.mock('./sdk/host.js', () => ({}));
 vi.mock('./sdk/hooks.js', () => ({ useCommand: () => ({ label: 'Enable texting', granted: true, run }) }));
 
 const { DashboardCommand } = await import('./DashboardCommand.js');
