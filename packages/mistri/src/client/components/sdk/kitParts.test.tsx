@@ -227,7 +227,7 @@ describe('Person', () => {
     expect(kit).toMatch(/\.kit-person-name\s*\{[^}]*font-weight:\s*500;/);
     const queue = readFileSync('packages/kit/src/client/components/QueueList.css', 'utf8');
     expect(queue).toMatch(/\.queue-title\s*\{[^}]*font-weight:\s*500;/);
-    expect(queue).toMatch(/\.queue-list \.queue-title\s*\{[^}]*font-weight:\s*500;/);
+    expect(queue).not.toMatch(/\.queue-list \.queue-title\s*\{[^}]*font-weight:\s*600/);
     expect(queue).toMatch(/\.queue-pick-list \.queue-pick > strong\s*\{[^}]*font-weight:\s*500;/);
     const families = readFileSync('packages/kit/src/client/themeFamilies.css', 'utf8');
     expect(families).toMatch(/:is\(\.board-card-title, \.triage-card-title\)\s*\{\s*font:\s*500\b/);

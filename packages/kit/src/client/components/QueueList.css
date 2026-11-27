@@ -51,7 +51,6 @@
 .queue-list > .queue-row:last-child { border-bottom: 0; }
 /* Dashboard sections already provide a content gutter. */
 .dash-section .queue-list > .queue-row { padding-inline: 0; }
-.queue-list .queue-title { font-weight: 500; }
 .queue-list .queue-detail, .queue-list .queue-meta { margin-top: var(--space-3); line-height: 1.5; }
 .queue-list .queue-open { opacity: 1; align-self: center; white-space: normal; }
 @media (max-width: 540px) {
