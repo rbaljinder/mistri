@@ -3905,6 +3905,10 @@ export interface AssistantBackgroundRunsDeclaration {
   readonly maxSteps?: number;
   /** Optional one-click background run playbooks/presets shown in the Run Monitor. */
   readonly presets?: readonly AssistantRunPresetDeclaration[];
+  /** Optional cron-scheduled background runs shown in the Run Monitor's Automations view. */
+  readonly schedules?: readonly AssistantRunScheduleDeclaration[];
+  /** Optional record-change event-triggered background runs shown in the Run Monitor's Automations view. */
+  readonly triggers?: readonly AssistantRunTriggerDeclaration[];
 }
 /** A one-click background agent run preset shown in the Run Monitor. */
 export interface AssistantRunPresetDeclaration {
@@ -3920,6 +3924,52 @@ export interface AssistantRunPresetDeclaration {
   readonly agent?: string;
   /** Roles permitted to launch this preset; absent, everyone who may open the assistant. */
   readonly roles?: readonly string[];
+}
+/** A declarative cron-scheduled background agent run. */
+export interface AssistantRunScheduleDeclaration {
+  /** Stable identifier for this schedule (lowercase letters, digits, hyphens, underscores). */
+  readonly id: string;
+  /** Short label shown in the Run Monitor Automations view. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description explaining what this scheduled run inspects or prepares. */
+  readonly description?: string | AppMessageRef;
+  /** Five cron fields (`minute hour dom month dow`) or `@hourly`, `@daily`, `@weekly`, `@monthly`. */
+  readonly every: string;
+  /** Optional IANA time zone name (defaults to `ui.timezone` or `UTC`). */
+  readonly timezone?: string;
+  /** Prompt/task executed each time this schedule runs. */
+  readonly prompt: string;
+  /** Optional named agent key from `assistant.agents`. */
+  readonly agent?: string;
+  /** Roles offered this schedule; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Whether enabled by default before a person pauses it (default `true`). */
+  readonly enabled?: boolean;
+}
+/** A declarative record-change triggered background agent run. */
+export interface AssistantRunTriggerDeclaration {
+  /** Stable identifier for this trigger (lowercase letters, digits, hyphens, underscores). */
+  readonly id: string;
+  /** Short label shown in the Run Monitor Automations view. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description explaining what this triggered run inspects or prepares. */
+  readonly description?: string | AppMessageRef;
+  /** Resource/table name in the App whose committed writes fire this trigger. */
+  readonly resource: string;
+  /** Committed write events that fire this trigger (`'create'` and/or `'update'`, default `['create']`). */
+  readonly on?: readonly ('create' | 'update')[];
+  /** Optional column names: on `'update'`, fire only when at least one listed field changed. */
+  readonly fields?: readonly string[];
+  /** Prompt/task executed with the triggering record context. */
+  readonly prompt: string;
+  /** Optional named agent key from `assistant.agents`. */
+  readonly agent?: string;
+  /** Roles for whom this trigger fires; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Whether enabled by default before a person pauses it (default `true`). */
+  readonly enabled?: boolean;
+  /** Minimum seconds between automatic fires for the same record (0–86400, default `60`). */
+  readonly cooldownSeconds?: number;
 }
 /** Scoped durable memory configuration for an App's assistant. */
 export interface AssistantMemoryDeclaration {

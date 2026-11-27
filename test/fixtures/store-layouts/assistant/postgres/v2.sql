@@ -12,6 +12,24 @@ SET row_security = off;
 CREATE SCHEMA mistri;
 SET default_tablespace = '';
 SET default_table_access_method = heap;
+CREATE TABLE mistri.assistant_automation (
+    app text NOT NULL COLLATE pg_catalog."C",
+    tenant text NOT NULL COLLATE pg_catalog."C",
+    account text NOT NULL COLLATE pg_catalog."C",
+    kind text NOT NULL,
+    automation_id text NOT NULL COLLATE pg_catalog."C",
+    enabled integer NOT NULL,
+    last_slot text NOT NULL,
+    last_run_id text NOT NULL COLLATE pg_catalog."C",
+    last_run_at text NOT NULL,
+    updated_at text NOT NULL,
+    CONSTRAINT assistant_automation_account_check CHECK ((octet_length(account) <= 1024)),
+    CONSTRAINT assistant_automation_app_check CHECK ((octet_length(app) <= 128)),
+    CONSTRAINT assistant_automation_automation_id_check CHECK ((octet_length(automation_id) <= 64)),
+    CONSTRAINT assistant_automation_enabled_check CHECK ((enabled = ANY (ARRAY[0, 1]))),
+    CONSTRAINT assistant_automation_kind_check CHECK ((kind = ANY (ARRAY['schedule'::text, 'trigger'::text]))),
+    CONSTRAINT assistant_automation_tenant_check CHECK ((octet_length(tenant) <= 128))
+);
 CREATE TABLE mistri.assistant_conversation (
     id text NOT NULL COLLATE pg_catalog."C",
     app text NOT NULL COLLATE pg_catalog."C",
@@ -67,6 +85,7 @@ CREATE TABLE mistri.assistant_run (
     account text NOT NULL COLLATE pg_catalog."C",
     conversation text NOT NULL COLLATE pg_catalog."C",
     agent text NOT NULL COLLATE pg_catalog."C",
+    source text NOT NULL COLLATE pg_catalog."C",
     title text NOT NULL,
     prompt text NOT NULL,
     status text NOT NULL,
@@ -80,6 +99,7 @@ CREATE TABLE mistri.assistant_run (
     CONSTRAINT assistant_run_agent_check CHECK ((octet_length(agent) <= 64)),
     CONSTRAINT assistant_run_app_check CHECK ((octet_length(app) <= 128)),
     CONSTRAINT assistant_run_prompt_check CHECK ((octet_length(prompt) <= 4000)),
+    CONSTRAINT assistant_run_source_check CHECK ((octet_length(source) <= 128)),
     CONSTRAINT assistant_run_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'awaiting'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]))),
     CONSTRAINT assistant_run_summary_check CHECK ((octet_length(summary) <= 2000)),
     CONSTRAINT assistant_run_tenant_check CHECK ((octet_length(tenant) <= 128)),
@@ -113,6 +133,8 @@ CREATE TABLE mistri.switch_tenant (
 );
 INSERT INTO mistri.assistant_meta (singleton, version) VALUES (1, 2);
 INSERT INTO mistri.switch_meta (singleton, version) VALUES (1, 1);
+ALTER TABLE ONLY mistri.assistant_automation
+    ADD CONSTRAINT assistant_automation_pkey PRIMARY KEY (app, tenant, account, kind, automation_id);
 ALTER TABLE ONLY mistri.assistant_conversation
     ADD CONSTRAINT assistant_conversation_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY mistri.assistant_event

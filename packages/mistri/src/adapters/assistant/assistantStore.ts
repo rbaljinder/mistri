@@ -24,6 +24,7 @@ export const ASSISTANT_TABLES = Object.freeze({
   usage: `${ASSISTANT_PREFIX}usage`,
   memory: `${ASSISTANT_PREFIX}memory`,
   run: `${ASSISTANT_PREFIX}run`,
+  automation: `${ASSISTANT_PREFIX}automation`,
 });
 export const ASSISTANT_INDEX = `${ASSISTANT_PREFIX}conversation_owner`;
 export const ASSISTANT_MEMORY_INDEX = `${ASSISTANT_PREFIX}memory_owner`;
@@ -46,6 +47,10 @@ export const ASSISTANT_LIMITS = Object.freeze({
   runPrompt: 4000,
   /** Final summary or failure detail of a durable background run, in bytes. */
   runSummary: 2000,
+  /** Origin tag of a durable background run (`manual`, `preset:<id>`, `schedule:<id>`, `trigger:<id>`). */
+  runSource: 128,
+  /** Schedule or trigger id, in bytes. */
+  automationId: 64,
 });
 
 export class AssistantStoreUnavailable extends Refusal {
@@ -105,6 +110,7 @@ export interface StoredRun {
   readonly id: string;
   readonly conversation: string;
   readonly agent: string;
+  readonly source: string;
   readonly title: string;
   readonly prompt: string;
   readonly status: RunStatus;
@@ -118,6 +124,7 @@ export interface StoredRun {
 interface CreateRunInput {
   readonly conversation: string;
   readonly agent?: string;
+  readonly source?: string;
   readonly title: string;
   readonly prompt: string;
 }
@@ -127,6 +134,24 @@ interface UpdateRunInput {
   readonly tokens?: number;
   readonly summary?: string;
   readonly finishedAt?: string;
+}
+type AutomationKind = 'schedule' | 'trigger';
+interface StoredAutomationState {
+  readonly kind: AutomationKind;
+  readonly automationId: string;
+  readonly enabled: boolean;
+  readonly lastSlot: string;
+  readonly lastRunId: string;
+  readonly lastRunAt: string;
+  readonly updatedAt: string;
+}
+interface UpsertAutomationInput {
+  readonly kind: AutomationKind;
+  readonly automationId: string;
+  readonly enabled?: boolean;
+  readonly lastSlot?: string;
+  readonly lastRunId?: string;
+  readonly lastRunAt?: string;
 }
 
 export type Row = Record<string, unknown>;
@@ -176,6 +201,12 @@ export interface AssistantStore {
   deleteRun(owner: AssistantOwner, id: string): Promise<boolean>;
   /** Count currently active (`queued` or `running`) runs for this owner. */
   countActiveRuns(owner: AssistantOwner): Promise<number>;
+  /** Durable schedule & trigger state rows owned by this person. */
+  listAutomations(owner: AssistantOwner): Promise<StoredAutomationState[]>;
+  /** One durable schedule or trigger state row owned by this person, or null. */
+  getAutomation(owner: AssistantOwner, kind: AutomationKind, automationId: string): Promise<StoredAutomationState | null>;
+  /** Upsert enablement, last fired slot, and last run link for an owned schedule or trigger. */
+  upsertAutomation(owner: AssistantOwner, input: UpsertAutomationInput, at: string): Promise<StoredAutomationState>;
   /** Whether the platform has turned the assistant on for this tenant: off until it says so. */
   tenantEnabled(app: string, tenant: string): Promise<boolean>;
   /** Every conversation of the App untouched since `before` (an ISO instant), with its events; how many went. */
@@ -571,7 +602,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
       const runs = t(ASSISTANT_TABLES.run);
       const rows = await transaction((db) =>
         db.all(
-          `SELECT id, conversation, agent, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at
+          `SELECT id, conversation, agent, source, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at
           FROM ${runs} WHERE app = ? AND tenant = ? AND account = ? ORDER BY updated_at DESC, id DESC LIMIT ?`,
           owner.app,
           owner.tenant,
@@ -583,6 +614,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
         id: String(row.id),
         conversation: String(row.conversation),
         agent: String(row.agent),
+        source: String(row.source),
         title: String(row.title),
         prompt: String(row.prompt),
         status: String(row.status) as RunStatus,
@@ -600,7 +632,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
       const runs = t(ASSISTANT_TABLES.run);
       const rows = await transaction((db) =>
         db.all(
-          `SELECT id, conversation, agent, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at
+          `SELECT id, conversation, agent, source, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at
           FROM ${runs} WHERE id = ? AND app = ? AND tenant = ? AND account = ?`,
           id,
           owner.app,
@@ -614,6 +646,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
         id: String(row.id),
         conversation: String(row.conversation),
         agent: String(row.agent),
+        source: String(row.source),
         title: String(row.title),
         prompt: String(row.prompt),
         status: String(row.status) as RunStatus,
@@ -630,6 +663,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
       const runs = t(ASSISTANT_TABLES.run);
       const id = randomUUID();
       const agent = (input.agent ?? '').trim().slice(0, ASSISTANT_LIMITS.memoryAgent);
+      const source = (input.source ?? 'manual').trim().slice(0, ASSISTANT_LIMITS.runSource) || 'manual';
       const cleanTitle = title(input.title);
       let prompt = input.prompt.trim();
       while (bytes(prompt) > ASSISTANT_LIMITS.runPrompt) prompt = prompt.slice(0, -1);
@@ -637,6 +671,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
         id,
         conversation: input.conversation,
         agent,
+        source,
         title: cleanTitle,
         prompt,
         status: 'queued',
@@ -649,14 +684,15 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
       };
       await transaction((db) =>
         db.run(
-          `INSERT INTO ${runs} (id, app, tenant, account, conversation, agent, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '', ?, ?, '')`,
+          `INSERT INTO ${runs} (id, app, tenant, account, conversation, agent, source, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '', ?, ?, '')`,
           row.id,
           owner.app,
           owner.tenant,
           owner.account,
           row.conversation,
           row.agent,
+          row.source,
           row.title,
           row.prompt,
           row.status,
@@ -672,7 +708,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
       const runs = t(ASSISTANT_TABLES.run);
       return transaction(async (db) => {
         const rows = await db.all(
-          `SELECT id, conversation, agent, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at
+          `SELECT id, conversation, agent, source, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at
           FROM ${runs} WHERE id = ? AND app = ? AND tenant = ? AND account = ?`,
           id,
           owner.app,
@@ -705,6 +741,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
           id,
           conversation: String(cur.conversation),
           agent: String(cur.agent),
+          source: String(cur.source),
           title: String(cur.title),
           prompt: String(cur.prompt),
           status,
@@ -744,6 +781,108 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
         ),
       );
       return rows.length ? num(rows[0]!.n) : 0;
+    },
+    async listAutomations(owner) {
+      assertOwner(owner);
+      const automations = t(ASSISTANT_TABLES.automation);
+      const rows = await transaction((db) =>
+        db.all(
+          `SELECT kind, automation_id, enabled, last_slot, last_run_id, last_run_at, updated_at
+          FROM ${automations} WHERE app = ? AND tenant = ? AND account = ? ORDER BY kind ASC, automation_id ASC`,
+          owner.app,
+          owner.tenant,
+          owner.account,
+        ),
+      );
+      return rows.map((row): StoredAutomationState => ({
+        kind: row.kind === 'trigger' ? 'trigger' : 'schedule',
+        automationId: String(row.automation_id),
+        enabled: num(row.enabled) === 1,
+        lastSlot: String(row.last_slot),
+        lastRunId: String(row.last_run_id),
+        lastRunAt: String(row.last_run_at),
+        updatedAt: String(row.updated_at),
+      }));
+    },
+    async getAutomation(owner, kind, automationId) {
+      assertOwner(owner);
+      if (typeof automationId !== 'string' || !automationId || bytes(automationId) > ASSISTANT_LIMITS.automationId) return null;
+      const automations = t(ASSISTANT_TABLES.automation);
+      const rows = await transaction((db) =>
+        db.all(
+          `SELECT kind, automation_id, enabled, last_slot, last_run_id, last_run_at, updated_at
+          FROM ${automations} WHERE app = ? AND tenant = ? AND account = ? AND kind = ? AND automation_id = ?`,
+          owner.app,
+          owner.tenant,
+          owner.account,
+          kind,
+          automationId,
+        ),
+      );
+      if (rows.length !== 1) return null;
+      const row = rows[0]!;
+      return {
+        kind: row.kind === 'trigger' ? 'trigger' : 'schedule',
+        automationId: String(row.automation_id),
+        enabled: num(row.enabled) === 1,
+        lastSlot: String(row.last_slot),
+        lastRunId: String(row.last_run_id),
+        lastRunAt: String(row.last_run_at),
+        updatedAt: String(row.updated_at),
+      };
+    },
+    async upsertAutomation(owner, input, at) {
+      assertOwner(owner);
+      const automationId = input.automationId.trim().slice(0, ASSISTANT_LIMITS.automationId);
+      const automations = t(ASSISTANT_TABLES.automation);
+      return transaction(async (db) => {
+        const existingRows = await db.all(
+          `SELECT enabled, last_slot, last_run_id, last_run_at
+          FROM ${automations} WHERE app = ? AND tenant = ? AND account = ? AND kind = ? AND automation_id = ?`,
+          owner.app,
+          owner.tenant,
+          owner.account,
+          input.kind,
+          automationId,
+        );
+        const existing = existingRows[0];
+        const enabled = input.enabled !== undefined ? input.enabled : existing ? num(existing.enabled) === 1 : true;
+        const lastSlot = input.lastSlot !== undefined ? input.lastSlot : existing ? String(existing.last_slot) : '';
+        const lastRunId = input.lastRunId !== undefined ? input.lastRunId : existing ? String(existing.last_run_id) : '';
+        const lastRunAt = input.lastRunAt !== undefined ? input.lastRunAt : existing ? String(existing.last_run_at) : '';
+        if (existing) {
+          await db.run(
+            `UPDATE ${automations} SET enabled = ?, last_slot = ?, last_run_id = ?, last_run_at = ?, updated_at = ?
+            WHERE app = ? AND tenant = ? AND account = ? AND kind = ? AND automation_id = ?`,
+            enabled ? 1 : 0,
+            lastSlot,
+            lastRunId,
+            lastRunAt,
+            at,
+            owner.app,
+            owner.tenant,
+            owner.account,
+            input.kind,
+            automationId,
+          );
+        } else {
+          await db.run(
+            `INSERT INTO ${automations} (app, tenant, account, kind, automation_id, enabled, last_slot, last_run_id, last_run_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            owner.app,
+            owner.tenant,
+            owner.account,
+            input.kind,
+            automationId,
+            enabled ? 1 : 0,
+            lastSlot,
+            lastRunId,
+            lastRunAt,
+            at,
+          );
+        }
+        return { kind: input.kind, automationId, enabled, lastSlot, lastRunId, lastRunAt, updatedAt: at };
+      });
     },
     async tenantEnabled(app, tenant) {
       if (typeof app !== 'string' || typeof tenant !== 'string' || !app || !tenant) return false;

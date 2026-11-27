@@ -21,6 +21,7 @@ import { appFileRules } from '../../shared/appResourceRules.js';
 import type { RequestContext } from '@mistriwork/engine/server/http/context.js';
 import { judgeLines } from './formLinesWrite.js';
 import type { LineCollection } from '@mistriwork/engine/server/recordWriteOperations.js';
+import { onScopedRecordWritten } from '../assistant/assistantAutomations.js';
 
 /**
  * What the App calls a column of the table a Save or New is writing, by request: the handler's refusal says a
@@ -93,12 +94,15 @@ export async function scopedWriteRoutes(ctx: RequestContext): Promise<boolean> {
           policy!.updates.update(policyContext, body, controller.signal, moment),
         );
         indexed(body.table as string, body.key as Record<string, unknown>);
+        onScopedRecordWritten(ctx, host, 'update', body.table as string, body.key as Record<string, unknown>, body.values);
         sendResource(res, path, 200, updated);
         return true;
       }
       if (path === '/api/insert') {
+        const host = ctx.appHosts?.find((candidate) => candidate.app.app.id === policy!.appId);
         const inserted = await policy!.updates.insert(policyContext, body, controller.signal, lines, moment);
         indexed(body.table as string, inserted.key, lines);
+        onScopedRecordWritten(ctx, host, 'create', body.table as string, inserted.key, body.values);
         sendResource(res, path, 200, inserted);
         return true;
       }

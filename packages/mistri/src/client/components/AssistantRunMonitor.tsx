@@ -8,6 +8,7 @@ import type { AppPayloadApp } from '../../shared/appPayload.js';
 import { api } from '@mistriwork/kit/client/core.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Select } from '@mistriwork/ui/Select.js';
+import { Switch } from '@mistriwork/ui/Switch.js';
 import { AiReasoning } from '@mistriwork/ui/views/AiReasoning.js';
 import { CitationPill, CitationsCard, MemoryEventChip } from './AssistantCitations.js';
 import { assistantApi, assistantOwner } from './assistantRequest.js';
@@ -34,7 +35,8 @@ interface BackgroundRunRecord {
   title: string;
   prompt: string;
   agent: string;
-  preset: string;
+  source?: string;
+  preset?: string;
   status: RunStatus;
   steps: number;
   tokens: number;
@@ -47,6 +49,39 @@ interface BackgroundRunRecord {
 
 interface RunsListPayload {
   runs: BackgroundRunRecord[];
+  ready: boolean;
+}
+
+interface AutomationScheduleRecord {
+  id: string;
+  label: string;
+  description?: string;
+  every: string;
+  timezone: string;
+  agent?: string;
+  enabled: boolean;
+  nextRunAt: string | null;
+  lastRunId: string | null;
+  lastRunAt: string | null;
+}
+
+interface AutomationTriggerRecord {
+  id: string;
+  label: string;
+  description?: string;
+  resource: string;
+  on: Array<'create' | 'update'>;
+  fields?: string[];
+  agent?: string;
+  cooldownSeconds: number;
+  enabled: boolean;
+  lastRunId: string | null;
+  lastRunAt: string | null;
+}
+
+interface AutomationsPayload {
+  schedules: AutomationScheduleRecord[];
+  triggers: AutomationTriggerRecord[];
   ready: boolean;
 }
 
@@ -239,11 +274,15 @@ export function AssistantRunMonitor({
   const queryClient = useQueryClient();
   const owner = assistantOwner();
   const listKey = useMemo(() => ['assistant-runs', app, owner] as const, [app, owner]);
+  const automationsKey = useMemo(() => ['assistant-automations', app, owner] as const, [app, owner]);
+  const automationCount = (config.schedules?.length ?? 0) + (config.triggers?.length ?? 0);
 
+  const [activeTab, setActiveTab] = useState<'runs' | 'automations'>('runs');
   const [selectedId, setSelectedId] = useState<string | null>(initialRunId ?? null);
   const [prompt, setPrompt] = useState('');
   const [agentId, setAgentId] = useState<string>(agents[0]?.id ?? '');
   const [submitting, setSubmitting] = useState(false);
+  const [togglingKey, setTogglingKey] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [liveRun, setLiveRun] = useState<BackgroundRunRecord | null>(null);
   const [traceItems, setTraceItems] = useState<PanelItem[]>([]);
@@ -269,6 +308,12 @@ export function AssistantRunMonitor({
     },
   });
 
+  const { data: automationsData } = useQuery({
+    queryKey: automationsKey,
+    enabled: automationCount > 0,
+    queryFn: () => assistantApi(`/api/assistant/automations?app=${encodeURIComponent(app)}`) as Promise<AutomationsPayload>,
+  });
+
   const runs = listData?.runs ?? [];
   const ready = listData?.ready ?? true;
   const activeCount = runs.filter((r) => r.status === 'running' || r.status === 'queued').length;
@@ -283,8 +328,9 @@ export function AssistantRunMonitor({
 
   const refreshRuns = useCallback(async () => {
     await queryClient.invalidateQueries({ queryKey: listKey });
+    if (automationCount > 0) await queryClient.invalidateQueries({ queryKey: automationsKey });
     onRunsChanged?.();
-  }, [queryClient, listKey, onRunsChanged]);
+  }, [queryClient, listKey, automationsKey, automationCount, onRunsChanged]);
 
   const loadDetail = useCallback(
     async (runId: string) => {
@@ -451,6 +497,54 @@ export function AssistantRunMonitor({
     }
   };
 
+  const toggleAutomation = async (kind: 'schedule' | 'trigger', id: string, enabled: boolean) => {
+    const key = `${kind}:${id}`;
+    setTogglingKey(key);
+    setActionError(null);
+    try {
+      await assistantApi('/api/assistant/automations/toggle', { app, kind, id, enabled });
+      await queryClient.invalidateQueries({ queryKey: automationsKey });
+    } catch (err) {
+      setActionError(say('runsActionError', { message: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setTogglingKey(null);
+    }
+  };
+
+  const runScheduleNow = async (scheduleId: string) => {
+    setSubmitting(true);
+    setActionError(null);
+    try {
+      const result = (await assistantApi('/api/assistant/automations/run', { app, id: scheduleId })) as {
+        run: BackgroundRunRecord;
+      };
+      await refreshRuns();
+      setActiveTab('runs');
+      setSelectedId(result.run.id);
+    } catch (err) {
+      setActionError(say('runsActionError', { message: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const formatScheduleTime = (iso: string, timeZone?: string): string => {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return '';
+    try {
+      return date.toLocaleString(undefined, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        ...(timeZone ? { timeZone } : {}),
+      });
+    } catch {
+      return date.toLocaleString();
+    }
+  };
+
   const onPromptKey = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && prompt.trim() && !submitting && ready) {
       event.preventDefault();
@@ -460,6 +554,8 @@ export function AssistantRunMonitor({
 
   const metadataLine = (run: BackgroundRunRecord) => {
     const parts: string[] = [];
+    if (run.source?.startsWith('schedule:')) parts.push(say('sourceScheduled'));
+    else if (run.source?.startsWith('trigger:')) parts.push(say('sourceTriggered'));
     const agentLabel = agentNameOf(run.agent);
     if (agentLabel) parts.push(agentLabel);
     if (run.steps > 0) parts.push(run.steps === 1 ? say('stepOne') : say('stepsCount', { count: run.steps }));
@@ -666,6 +762,23 @@ export function AssistantRunMonitor({
   }
 
   const presets = config.presets ?? [];
+  const schedules =
+    automationsData?.schedules ??
+    (config.schedules ?? []).map((s) => ({
+      ...s,
+      timezone: s.timezone ?? 'UTC',
+      nextRunAt: null,
+      lastRunId: null,
+      lastRunAt: null,
+    }));
+  const triggers =
+    automationsData?.triggers ??
+    (config.triggers ?? []).map((t) => ({
+      ...t,
+      lastRunId: null,
+      lastRunAt: null,
+    }));
+  const liveAutomationCount = schedules.length + triggers.length;
 
   return (
     <section className="assistant-runs" aria-label={say('runsTitle')}>
@@ -682,6 +795,28 @@ export function AssistantRunMonitor({
             ×
           </Button>
         </div>
+        {liveAutomationCount > 0 && (
+          <div className="assistant-runs-tabs" role="tablist" aria-label={say('runsTitle')}>
+            <button
+              type="button"
+              role="tab"
+              className="assistant-runs-tab"
+              aria-selected={activeTab === 'runs'}
+              onClick={() => setActiveTab('runs')}
+            >
+              {say('tabRuns')}
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className="assistant-runs-tab"
+              aria-selected={activeTab === 'automations'}
+              onClick={() => setActiveTab('automations')}
+            >
+              {say('tabAutomations', { count: liveAutomationCount })}
+            </button>
+          </div>
+        )}
       </header>
 
       <div className="assistant-runs-body">
@@ -696,107 +831,221 @@ export function AssistantRunMonitor({
             </p>
           )}
 
-          {presets.length > 0 && (
-            <div className="assistant-runs-section">
-              <h4 className="assistant-runs-section-label">{say('presetsHeading')}</h4>
-              <div className="assistant-runs-presets">
-                {presets.map((preset) => (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    className="assistant-runs-preset"
-                    disabled={submitting || !ready}
-                    onClick={() => void startRun({ preset: preset.id })}
-                  >
-                    <span className="assistant-runs-preset-title">{preset.label}</span>
-                    {preset.description && <span className="assistant-runs-preset-desc">{preset.description}</span>}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {activeTab === 'automations' && liveAutomationCount > 0 ? (
+            <>
+              {schedules.length > 0 && (
+                <div className="assistant-runs-section">
+                  <h4 className="assistant-runs-section-label">{say('schedulesHeading')}</h4>
+                  <ul className="assistant-runs-list">
+                    {schedules.map((schedule) => {
+                      const meta: string[] = [];
+                      const agentName = schedule.agent ? agentNameOf(schedule.agent) : '';
+                      if (agentName) meta.push(agentName);
+                      if (schedule.enabled && schedule.nextRunAt) {
+                        meta.push(say('nextRun', { when: formatScheduleTime(schedule.nextRunAt, schedule.timezone) }));
+                      } else if (!schedule.enabled) {
+                        meta.push(say('paused'));
+                      }
+                      if (schedule.lastRunAt) meta.push(say('lastRun', { when: formatDay(schedule.lastRunAt) }));
+                      return (
+                        <li key={schedule.id} className="assistant-auto-row">
+                          <div className="assistant-auto-top">
+                            <div className="assistant-auto-heading">
+                              <span className="assistant-auto-title">{schedule.label}</span>
+                              <span className="assistant-auto-pill">
+                                {schedule.every} · {schedule.timezone}
+                              </span>
+                            </div>
+                            <div className="assistant-auto-controls">
+                              <Switch
+                                size="xs"
+                                checked={schedule.enabled}
+                                loading={togglingKey === `schedule:${schedule.id}`}
+                                ariaLabel={say('toggleAutomation', { label: schedule.label })}
+                                onCheckedChange={(next) => void toggleAutomation('schedule', schedule.id, next)}
+                              />
+                            </div>
+                          </div>
+                          {schedule.description && <p className="assistant-auto-desc">{schedule.description}</p>}
+                          <div className="assistant-auto-meta">
+                            <span className="assistant-runs-whisper">{meta.join(' · ')}</span>
+                            <div className="assistant-runs-actions">
+                              {schedule.lastRunId && (
+                                <Button size="xs" variant="ghost" onClick={() => setSelectedId(schedule.lastRunId)}>
+                                  {say('lastTrace')}
+                                </Button>
+                              )}
+                              <Button
+                                size="xs"
+                                variant="ghost"
+                                disabled={submitting || !ready}
+                                onClick={() => void runScheduleNow(schedule.id)}
+                              >
+                                {say('runNow')}
+                              </Button>
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
 
-          <form
-            className="assistant-runs-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (!prompt.trim() || submitting || !ready) return;
-              void startRun({ prompt: prompt.trim() });
-            }}
-          >
-            <textarea
-              className="assistant-runs-input"
-              rows={2}
-              value={prompt}
-              disabled={!ready || submitting}
-              placeholder={say('launchPlaceholder')}
-              aria-label={say('launchPlaceholder')}
-              onChange={(event) => setPrompt(event.target.value)}
-              onKeyDown={onPromptKey}
-            />
-            <div className="assistant-runs-form-bar">
-              <div className="assistant-runs-form-left">
-                {agents.length > 1 && (
-                  <Select<string>
-                    size="xs"
-                    value={agentId}
-                    onValueChange={(next) => {
-                      if (next) setAgentId(next);
-                    }}
-                    options={agents.map((a) => ({ value: a.id, label: a.name }))}
-                    ariaLabel={say('agentLabel')}
-                  />
-                )}
-              </div>
-              <Button size="xs" variant="primary" type="submit" disabled={!ready || submitting || !prompt.trim()}>
-                {submitting ? say('launching') : say('launchAction')}
-              </Button>
-            </div>
-          </form>
-
-          {listLoading ? (
-            <p className="assistant-runs-empty">{say('runsLoading')}</p>
-          ) : runs.length === 0 ? (
-            <p className="assistant-runs-empty">{say('runsEmpty')}</p>
+              {triggers.length > 0 && (
+                <div className="assistant-runs-section">
+                  <h4 className="assistant-runs-section-label">{say('triggersHeading')}</h4>
+                  <ul className="assistant-runs-list">
+                    {triggers.map((trigger) => {
+                      const meta: string[] = [];
+                      const agentName = trigger.agent ? agentNameOf(trigger.agent) : '';
+                      if (agentName) meta.push(agentName);
+                      if (trigger.fields?.length) meta.push(say('fieldsFilter', { fields: trigger.fields.join(', ') }));
+                      if (trigger.cooldownSeconds > 0) meta.push(say('cooldown', { seconds: trigger.cooldownSeconds }));
+                      if (!trigger.enabled) meta.push(say('paused'));
+                      if (trigger.lastRunAt) meta.push(say('lastRun', { when: formatDay(trigger.lastRunAt) }));
+                      return (
+                        <li key={trigger.id} className="assistant-auto-row">
+                          <div className="assistant-auto-top">
+                            <div className="assistant-auto-heading">
+                              <span className="assistant-auto-title">{trigger.label}</span>
+                              <span className="assistant-auto-pill">
+                                {trigger.resource} · {trigger.on.join(' / ')}
+                              </span>
+                            </div>
+                            <div className="assistant-auto-controls">
+                              <Switch
+                                size="xs"
+                                checked={trigger.enabled}
+                                loading={togglingKey === `trigger:${trigger.id}`}
+                                ariaLabel={say('toggleAutomation', { label: trigger.label })}
+                                onCheckedChange={(next) => void toggleAutomation('trigger', trigger.id, next)}
+                              />
+                            </div>
+                          </div>
+                          {trigger.description && <p className="assistant-auto-desc">{trigger.description}</p>}
+                          <div className="assistant-auto-meta">
+                            <span className="assistant-runs-whisper">{meta.join(' · ')}</span>
+                            <div className="assistant-runs-actions">
+                              {trigger.lastRunId && (
+                                <Button size="xs" variant="ghost" onClick={() => setSelectedId(trigger.lastRunId)}>
+                                  {say('lastTrace')}
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+            </>
           ) : (
-            <ul className="assistant-runs-list">
-              {runs.map((run) => {
-                const isActive = run.status === 'running' || run.status === 'queued';
-                return (
-                  <li key={run.id} className="assistant-runs-row">
-                    <div className="assistant-runs-row-top">
-                      <button type="button" className="assistant-runs-open" onClick={() => setSelectedId(run.id)}>
-                        <span className="assistant-runs-dot" data-status={run.status} aria-hidden="true" />
-                        <span className="assistant-runs-open-title">{run.title}</span>
+            <>
+              {presets.length > 0 && (
+                <div className="assistant-runs-section">
+                  <h4 className="assistant-runs-section-label">{say('presetsHeading')}</h4>
+                  <div className="assistant-runs-presets">
+                    {presets.map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        className="assistant-runs-preset"
+                        disabled={submitting || !ready}
+                        onClick={() => void startRun({ preset: preset.id })}
+                      >
+                        <span className="assistant-runs-preset-title">{preset.label}</span>
+                        {preset.description && <span className="assistant-runs-preset-desc">{preset.description}</span>}
                       </button>
-                      <span className="assistant-runs-status-label" data-status={run.status}>
-                        {statusWord(run.status)}
-                      </span>
-                    </div>
-                    <p className="assistant-runs-summary">{run.summary || run.prompt}</p>
-                    <div className="assistant-runs-meta">
-                      <span className="assistant-runs-whisper">{metadataLine(run)}</span>
-                      <div className="assistant-runs-actions">
-                        {(isActive || run.status === 'awaiting') && (
-                          <Button size="xs" variant="ghost" onClick={() => void cancelRun(run.id)}>
-                            {say('cancel')}
-                          </Button>
-                        )}
-                        <Button size="xs" variant="ghost" onClick={() => setSelectedId(run.id)}>
-                          {say('inspect')}
-                        </Button>
-                        <Button size="xs" variant="ghost" onClick={() => onOpenConversation(run.conversation)}>
-                          {say('openInChat')}
-                        </Button>
-                        <Button size="xs" variant="ghost" onClick={() => void deleteRun(run.id)}>
-                          {say('delete')}
-                        </Button>
-                      </div>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <form
+                className="assistant-runs-form"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (!prompt.trim() || submitting || !ready) return;
+                  void startRun({ prompt: prompt.trim() });
+                }}
+              >
+                <textarea
+                  className="assistant-runs-input"
+                  rows={2}
+                  value={prompt}
+                  disabled={!ready || submitting}
+                  placeholder={say('launchPlaceholder')}
+                  aria-label={say('launchPlaceholder')}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  onKeyDown={onPromptKey}
+                />
+                <div className="assistant-runs-form-bar">
+                  <div className="assistant-runs-form-left">
+                    {agents.length > 1 && (
+                      <Select<string>
+                        size="xs"
+                        value={agentId}
+                        onValueChange={(next) => {
+                          if (next) setAgentId(next);
+                        }}
+                        options={agents.map((a) => ({ value: a.id, label: a.name }))}
+                        ariaLabel={say('agentLabel')}
+                      />
+                    )}
+                  </div>
+                  <Button size="xs" variant="primary" type="submit" disabled={!ready || submitting || !prompt.trim()}>
+                    {submitting ? say('launching') : say('launchAction')}
+                  </Button>
+                </div>
+              </form>
+
+              {listLoading ? (
+                <p className="assistant-runs-empty">{say('runsLoading')}</p>
+              ) : runs.length === 0 ? (
+                <p className="assistant-runs-empty">{say('runsEmpty')}</p>
+              ) : (
+                <ul className="assistant-runs-list">
+                  {runs.map((run) => {
+                    const isActive = run.status === 'running' || run.status === 'queued';
+                    return (
+                      <li key={run.id} className="assistant-runs-row">
+                        <div className="assistant-runs-row-top">
+                          <button type="button" className="assistant-runs-open" onClick={() => setSelectedId(run.id)}>
+                            <span className="assistant-runs-dot" data-status={run.status} aria-hidden="true" />
+                            <span className="assistant-runs-open-title">{run.title}</span>
+                          </button>
+                          <span className="assistant-runs-status-label" data-status={run.status}>
+                            {statusWord(run.status)}
+                          </span>
+                        </div>
+                        <p className="assistant-runs-summary">{run.summary || run.prompt}</p>
+                        <div className="assistant-runs-meta">
+                          <span className="assistant-runs-whisper">{metadataLine(run)}</span>
+                          <div className="assistant-runs-actions">
+                            {(isActive || run.status === 'awaiting') && (
+                              <Button size="xs" variant="ghost" onClick={() => void cancelRun(run.id)}>
+                                {say('cancel')}
+                              </Button>
+                            )}
+                            <Button size="xs" variant="ghost" onClick={() => setSelectedId(run.id)}>
+                              {say('inspect')}
+                            </Button>
+                            <Button size="xs" variant="ghost" onClick={() => onOpenConversation(run.conversation)}>
+                              {say('openInChat')}
+                            </Button>
+                            <Button size="xs" variant="ghost" onClick={() => void deleteRun(run.id)}>
+                              {say('delete')}
+                            </Button>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </>
           )}
         </div>
       </div>

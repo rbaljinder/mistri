@@ -20,6 +20,10 @@
  *   POST /api/assistant/runs/resolve       record a proposal outcome and resume a paused background run
  *   POST /api/assistant/runs/resume        retry a failed, cancelled, or interrupted background run
  *   POST /api/assistant/runs/delete        cancel (if active) and delete a background run record
+ *   GET  /api/assistant/automations?app=   viewer-scoped schedules & event triggers with live enablement and next/last run metadata
+ *   POST /api/assistant/automations/toggle enable or pause a schedule or trigger for this person
+ *   POST /api/assistant/automations/run    immediately dispatch a schedule under this person's authority
+ *   POST /api/assistant/automations/tick   evaluate due schedules for this person at the current clock
  *   POST /api/assistant/rename             name one again
  *   POST /api/assistant/delete             forget one
  *
@@ -37,6 +41,13 @@ import type { AssistantOwner, AssistantStore } from '../../adapters/assistant/as
 import type { AppDef } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import type { AppHost } from '../app/apps.js';
+import {
+  automationNowMs,
+  dispatchAutomatedRun,
+  nextScheduleRunIso,
+  registerScheduleOwner,
+  tickSchedulesForOwner,
+} from '../assistant/assistantAutomations.js';
 import { catalogFromPayload, mayRunAction, nowLine, systemPrompt, toolSpecs } from '../assistant/assistantCatalog.js';
 import { assistantModel } from '../assistant/assistantModel.js';
 import { cancelBackgroundRun, isBackgroundRunLive, launchBackgroundRun, subscribeBackgroundRun } from '../assistant/assistantRuns.js';
@@ -80,6 +91,10 @@ export const ASSISTANT_PATHS: ReadonlySet<string> = new Set([
   '/api/assistant/runs/resolve',
   '/api/assistant/runs/resume',
   '/api/assistant/runs/delete',
+  '/api/assistant/automations',
+  '/api/assistant/automations/toggle',
+  '/api/assistant/automations/run',
+  '/api/assistant/automations/tick',
 ]);
 const SAID: Record<string, readonly string[]> = {
   '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode', 'effort', 'agent'],
@@ -95,6 +110,9 @@ const SAID: Record<string, readonly string[]> = {
   '/api/assistant/runs/resolve': ['app', 'id', 'proposal', 'outcome', 'detail'],
   '/api/assistant/runs/resume': ['app', 'id'],
   '/api/assistant/runs/delete': ['app', 'id'],
+  '/api/assistant/automations/toggle': ['app', 'kind', 'id', 'enabled'],
+  '/api/assistant/automations/run': ['app', 'id'],
+  '/api/assistant/automations/tick': ['app'],
 };
 /* Refused alike whether the table is not theirs, the row is outside their rows or it is not there: which of the three
    is not the page's to learn, as a record's own address answers. */
@@ -542,6 +560,7 @@ export async function answerAssistant(
             title,
             prompt,
             agent: prepared.activeAgent?.id ?? '',
+            source: typeof body.preset === 'string' && body.preset.trim() ? `preset:${body.preset.trim()}` : 'manual',
           },
           at,
         );
@@ -648,6 +667,141 @@ export async function answerAssistant(
         return;
       }
       throw new HttpError(404, 'No such run route.');
+    }
+    if (path === '/api/assistant/automations' || path.startsWith('/api/assistant/automations/')) {
+      const bgCfg = assistant.backgroundRuns;
+      if (!bgCfg) throw new HttpError(404, 'Background runs are not enabled for this assistant.');
+      const runLoopFactory = scope.backgroundLoop ?? loop;
+      const roles = scope.roles ?? (await servedTo(loop(), app.id, new AbortController().signal)).viewerRoles ?? [];
+      const permitted = (itemRoles: readonly string[] | undefined) => !itemRoles || roles.some((role) => itemRoles.includes(role));
+      if (bgCfg.schedules.length) {
+        // Snapshot detached loopback on the live request so background cron ticks stay valid after this response closes.
+        const detached = runLoopFactory();
+        registerScheduleOwner({
+          store,
+          owner,
+          app,
+          bgLoop: () => detached,
+          ...(scope.roles ? { viewerRoles: scope.roles } : {}),
+          ...(scope.propose ? { propose: scope.propose } : {}),
+          ...(scope.tokensPerTenantPerDay === undefined ? {} : { tokensPerTenantPerDay: scope.tokensPerTenantPerDay }),
+          ...(scope.withdrawn ? { withdrawn: scope.withdrawn } : {}),
+        });
+      }
+
+      if (path === '/api/assistant/automations') {
+        if (!get) throw new HttpError(405, 'Method not allowed.');
+        const nowMs = automationNowMs();
+        const saved = await store.listAutomations(owner);
+        const byKey = new Map(saved.map((row) => [`${row.kind}:${row.automationId}`, row]));
+        const schedules = bgCfg.schedules
+          .filter((s) => permitted(s.roles))
+          .map((s) => {
+            const state = byKey.get(`schedule:${s.id}`);
+            const enabled = state ? state.enabled : s.enabled;
+            const appTz = typeof app.ui?.timezone === 'string' ? app.ui.timezone : 'UTC';
+            const tz = s.timezone ?? appTz;
+            return {
+              id: s.id,
+              label: s.label,
+              ...(s.description ? { description: s.description } : {}),
+              every: s.every,
+              timezone: tz,
+              ...(s.agent ? { agent: s.agent } : {}),
+              enabled,
+              nextRunAt: enabled ? nextScheduleRunIso(s.every, tz, nowMs) : null,
+              lastRunId: state?.lastRunId || null,
+              lastRunAt: state?.lastRunAt || null,
+              lastSlot: state?.lastSlot || null,
+            };
+          });
+        const triggers = bgCfg.triggers
+          .filter((t) => permitted(t.roles))
+          .map((t) => {
+            const state = byKey.get(`trigger:${t.id}`);
+            return {
+              id: t.id,
+              label: t.label,
+              ...(t.description ? { description: t.description } : {}),
+              resource: t.resource,
+              on: t.on,
+              ...(t.fields ? { fields: t.fields } : {}),
+              ...(t.agent ? { agent: t.agent } : {}),
+              cooldownSeconds: t.cooldownSeconds,
+              enabled: state ? state.enabled : t.enabled,
+              lastRunId: state?.lastRunId || null,
+              lastRunAt: state?.lastRunAt || null,
+            };
+          });
+        send(res, 200, { schedules, triggers, ready: Boolean(assistantModel()) });
+        return;
+      }
+
+      if (path === '/api/assistant/automations/toggle') {
+        const kind = body.kind;
+        if (kind !== 'schedule' && kind !== 'trigger') throw new HttpError(400, 'Kind must be "schedule" or "trigger".');
+        const autoId = typeof body.id === 'string' ? body.id.trim() : '';
+        if (!autoId) throw new HttpError(400, 'Name the automation id.');
+        if (typeof body.enabled !== 'boolean') throw new HttpError(400, 'Enabled must be true or false.');
+        const target = kind === 'schedule' ? bgCfg.schedules.find((s) => s.id === autoId) : bgCfg.triggers.find((t) => t.id === autoId);
+        if (!target) throw new HttpError(404, `Unknown ${kind} "${autoId}".`);
+        if (!permitted(target.roles)) throw new HttpError(403, `That ${kind} is not offered to your role.`);
+        const at = new Date(automationNowMs()).toISOString();
+        const updated = await store.upsertAutomation(owner, { kind, automationId: autoId, enabled: body.enabled }, at);
+        send(res, 200, { automation: updated });
+        return;
+      }
+
+      if (path === '/api/assistant/automations/run') {
+        if (!assistantModel()) throw new HttpError(503, 'The assistant has no model set up. The operator sets ANTHROPIC_API_KEY.');
+        const autoId = typeof body.id === 'string' ? body.id.trim() : '';
+        const schedule = bgCfg.schedules.find((s) => s.id === autoId);
+        if (!schedule) throw new HttpError(404, `Unknown schedule "${autoId}".`);
+        if (!permitted(schedule.roles)) throw new HttpError(403, 'That schedule is not offered to your role.');
+        const active = await store.countActiveRuns(owner);
+        if (active >= bgCfg.maxConcurrent) {
+          throw new HttpError(
+            429,
+            `At most ${bgCfg.maxConcurrent} background ${bgCfg.maxConcurrent === 1 ? 'run' : 'runs'} may run at once: wait for one to finish or cancel it.`,
+          );
+        }
+        const run = await dispatchAutomatedRun({
+          store,
+          owner,
+          app,
+          bgLoop: runLoopFactory(),
+          ...(scope.roles ? { viewerRoles: scope.roles } : {}),
+          title: schedule.label,
+          prompt: schedule.prompt,
+          source: `schedule:${schedule.id}`,
+          ...(schedule.agent ? { agentId: schedule.agent } : {}),
+          ...(scope.propose ? { propose: scope.propose } : {}),
+          ...(scope.tokensPerTenantPerDay === undefined ? {} : { tokensPerTenantPerDay: scope.tokensPerTenantPerDay }),
+          ...(scope.withdrawn ? { withdrawn: scope.withdrawn } : {}),
+          automation: { kind: 'schedule', id: schedule.id },
+        });
+        if (!run) throw new HttpError(403, 'That schedule could not start under your permissions.');
+        send(res, 202, { run: { ...run, live: true } });
+        return;
+      }
+
+      if (path === '/api/assistant/automations/tick') {
+        if (!assistantModel()) throw new HttpError(503, 'The assistant has no model set up. The operator sets ANTHROPIC_API_KEY.');
+        const detached = runLoopFactory();
+        const fired = await tickSchedulesForOwner({
+          store,
+          owner,
+          app,
+          bgLoop: () => detached,
+          ...(scope.roles ? { viewerRoles: scope.roles } : {}),
+          ...(scope.propose ? { propose: scope.propose } : {}),
+          ...(scope.tokensPerTenantPerDay === undefined ? {} : { tokensPerTenantPerDay: scope.tokensPerTenantPerDay }),
+          ...(scope.withdrawn ? { withdrawn: scope.withdrawn } : {}),
+        });
+        send(res, 200, { runs: fired.map((run) => ({ ...run, live: true })) });
+        return;
+      }
+      throw new HttpError(404, 'No such automation route.');
     }
     if (path === '/api/assistant/about') {
       /* A page hands the panel what the person is on (useAssistant().open({ about })): the record is read here as them,

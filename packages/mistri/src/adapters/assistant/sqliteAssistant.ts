@@ -28,7 +28,7 @@ import {
 } from './assistantStore.js';
 import { provisionSqliteTenantSwitch, sqliteTenantSwitchReady } from '../switch/sqliteTenantSwitch.js';
 
-const { meta, conversation, event, usage, memory, run } = ASSISTANT_TABLES;
+const { meta, conversation, event, usage, memory, run, automation } = ASSISTANT_TABLES;
 const bytes = (column: string, limit: number) => `length(CAST(${column} AS BLOB)) <= ${limit}`;
 /** The version row's table, which pins this version: the upgrade (storeLayouts.ts) rebuilds it to pin the next. */
 const ASSISTANT_META_SQLITE = `CREATE TABLE "${meta}" (
@@ -96,6 +96,7 @@ const definitions = new Map<string, string>([
   account TEXT COLLATE BINARY NOT NULL CHECK (${bytes('account', ASSISTANT_LIMITS.account)}),
   conversation TEXT COLLATE BINARY NOT NULL,
   agent TEXT COLLATE BINARY NOT NULL CHECK (${bytes('agent', ASSISTANT_LIMITS.memoryAgent)}),
+  source TEXT COLLATE BINARY NOT NULL CHECK (${bytes('source', ASSISTANT_LIMITS.runSource)}),
   title TEXT NOT NULL CHECK (${bytes('title', ASSISTANT_LIMITS.title)}),
   prompt TEXT NOT NULL CHECK (${bytes('prompt', ASSISTANT_LIMITS.runPrompt)}),
   status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'awaiting', 'completed', 'failed', 'cancelled')),
@@ -105,6 +106,22 @@ const definitions = new Map<string, string>([
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   finished_at TEXT NOT NULL
+)`,
+  ],
+  [
+    automation,
+    `CREATE TABLE "${automation}" (
+  app TEXT COLLATE BINARY NOT NULL CHECK (${bytes('app', ASSISTANT_LIMITS.app)}),
+  tenant TEXT COLLATE BINARY NOT NULL CHECK (${bytes('tenant', ASSISTANT_LIMITS.tenant)}),
+  account TEXT COLLATE BINARY NOT NULL CHECK (${bytes('account', ASSISTANT_LIMITS.account)}),
+  kind TEXT NOT NULL CHECK (kind IN ('schedule', 'trigger')),
+  automation_id TEXT COLLATE BINARY NOT NULL CHECK (${bytes('automation_id', ASSISTANT_LIMITS.automationId)}),
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  last_slot TEXT NOT NULL,
+  last_run_id TEXT COLLATE BINARY NOT NULL,
+  last_run_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (app, tenant, account, kind, automation_id)
 )`,
   ],
 ]);
@@ -153,13 +170,14 @@ export function sqliteAssistantReady(db: DatabaseSync): boolean {
 
 const inMain = (ddl: string) => ddl.replace('CREATE TABLE ', 'CREATE TABLE main.').replace('CREATE INDEX ', 'CREATE INDEX main.');
 
-/** Version 1 to 2: adds the scoped durable memory table, durable background runs table, and their owner indexes. */
+/** Version 1 to 2: adds the scoped durable memory table, durable background runs table, automation state table, and their owner indexes. */
 export function sqliteAssistantUpgradeFrom1(): readonly string[] {
   return Object.freeze([
     inMain(definitions.get(memory)!),
     inMain(INDEXES.get(ASSISTANT_MEMORY_INDEX)!),
     inMain(definitions.get(run)!),
     inMain(INDEXES.get(ASSISTANT_RUN_INDEX)!),
+    inMain(definitions.get(automation)!),
     `DROP TABLE main."${meta}"`,
     inMain(ASSISTANT_META_SQLITE),
     `INSERT INTO main."${meta}" (singleton, version) VALUES (1, ${ASSISTANT_STORE_VERSION})`,

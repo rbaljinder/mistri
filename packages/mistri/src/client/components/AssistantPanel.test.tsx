@@ -1260,3 +1260,155 @@ test('Wave 2B: Runs header badge, Run Monitor presets, live trace, approval chec
   expect(screen.queryByRole('region', { name: 'Pipeline Risk Audit' })).not.toBeInTheDocument();
   expect(await screen.findByText('Escalated Acme renewal and logged audit summary.')).toBeInTheDocument();
 });
+
+test('Wave 2C: Run Monitor Automations tab lists schedules & triggers, toggles enablement, and dispatches Run now', async () => {
+  const user = userEvent.setup();
+  let scheduleEnabled = true;
+  let runs: Array<Record<string, unknown>> = [
+    {
+      id: 'run_trig_1',
+      conversation: 'conv_trig_1',
+      title: 'Inbound Lead Triage',
+      prompt: 'Investigate new lead',
+      agent: 'deal_desk',
+      source: 'trigger:new_lead',
+      status: 'completed',
+      steps: 2,
+      tokens: 310,
+      summary: 'Triaged Stark Industries inbound lead.',
+      createdAt: '2026-11-27T10:00:00Z',
+      updatedAt: '2026-11-27T10:02:00Z',
+      finishedAt: '2026-11-27T10:02:00Z',
+      live: false,
+    },
+  ];
+
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      agents: [{ id: 'deal_desk', name: 'Deal Desk' }],
+      defaultAgent: 'deal_desk',
+      backgroundRuns: {
+        maxConcurrent: 3,
+        maxSteps: 16,
+        presets: [],
+        schedules: [
+          {
+            id: 'morning_brief',
+            label: 'Morning Pipeline Brief',
+            description: 'Weekday 8:30 AM slippage summary.',
+            every: '30 8 * * 1-5',
+            timezone: 'America/New_York',
+            agent: 'deal_desk',
+            enabled: true,
+          },
+        ],
+        triggers: [
+          {
+            id: 'new_lead',
+            label: 'Inbound Lead Triage',
+            description: 'Auto-triage newly created leads.',
+            resource: 'lead',
+            on: ['create'],
+            agent: 'deal_desk',
+            enabled: true,
+            cooldownSeconds: 60,
+          },
+        ],
+      },
+    },
+  };
+
+  fetcher.mockImplementation(async (url, init) => {
+    const path = String(url);
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path.startsWith('/api/assistant/runs?')) return json({ runs, ready: true });
+    if (path.startsWith('/api/assistant/automations?')) {
+      return json({
+        schedules: [
+          {
+            id: 'morning_brief',
+            label: 'Morning Pipeline Brief',
+            description: 'Weekday 8:30 AM slippage summary.',
+            every: '30 8 * * 1-5',
+            timezone: 'America/New_York',
+            agent: 'deal_desk',
+            enabled: scheduleEnabled,
+            nextRunAt: scheduleEnabled ? '2026-11-30T13:30:00.000Z' : null,
+            lastRunId: null,
+            lastRunAt: null,
+          },
+        ],
+        triggers: [
+          {
+            id: 'new_lead',
+            label: 'Inbound Lead Triage',
+            description: 'Auto-triage newly created leads.',
+            resource: 'lead',
+            on: ['create'],
+            agent: 'deal_desk',
+            cooldownSeconds: 60,
+            enabled: true,
+            lastRunId: 'run_trig_1',
+            lastRunAt: '2026-11-27T10:02:00Z',
+          },
+        ],
+        ready: true,
+      });
+    }
+    if (path === '/api/assistant/automations/toggle' && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body)) as { enabled: boolean };
+      scheduleEnabled = payload.enabled;
+      return json({ automation: { kind: 'schedule', automationId: 'morning_brief', enabled: scheduleEnabled } });
+    }
+    if (path === '/api/assistant/automations/run' && init?.method === 'POST') {
+      const added = {
+        id: 'run_sched_1',
+        conversation: 'conv_sched_1',
+        title: 'Morning Pipeline Brief',
+        prompt: 'Morning pipeline brief',
+        agent: 'deal_desk',
+        source: 'schedule:morning_brief',
+        status: 'completed',
+        steps: 1,
+        tokens: 180,
+        summary: 'Morning pipeline summary ready.',
+        createdAt: '2026-11-27T11:00:00Z',
+        updatedAt: '2026-11-27T11:00:05Z',
+        finishedAt: '2026-11-27T11:00:05Z',
+        live: false,
+      };
+      runs = [added, ...runs];
+      return json({ run: added }, 202);
+    }
+    if (path.startsWith('/api/assistant/runs/detail?')) {
+      return json({
+        run: runs[0],
+        items: [{ type: 'text', text: 'Morning pipeline summary ready.' }],
+      });
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+
+  await user.click(await screen.findByRole('button', { name: 'Runs' }));
+  expect(await screen.findByText(/Triggered · Deal Desk/)).toBeInTheDocument();
+
+  // Switch to Automations tab.
+  await user.click(screen.getByRole('tab', { name: 'Automations · 2' }));
+  expect(await screen.findByText('Morning Pipeline Brief')).toBeInTheDocument();
+  expect(screen.getByText('30 8 * * 1-5 · America/New_York')).toBeInTheDocument();
+  expect(screen.getByText('lead · create')).toBeInTheDocument();
+
+  // Toggle schedule off -> switches to Paused.
+  await user.click(screen.getByRole('switch', { name: 'Toggle Morning Pipeline Brief' }));
+  expect(await screen.findByText(/Paused/)).toBeInTheDocument();
+
+  // Click Run now -> dispatches run and opens its trace detail.
+  await user.click(screen.getByRole('button', { name: 'Run now' }));
+  expect(await screen.findByText('Morning pipeline summary ready.')).toBeInTheDocument();
+});

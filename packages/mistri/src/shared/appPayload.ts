@@ -193,9 +193,11 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
     memory?: ServedAssistantMemory & { sharedRoles?: string[] };
     /** Authority-scoped knowledge sources available to this viewer (`roles` stripped in appProjection.ts). */
     knowledge?: Array<ServedAssistantKnowledge & { roles?: string[] }>;
-    /** Durable background agent runs capability and presets (`roles` stripped in appProjection.ts). */
-    backgroundRuns?: Omit<ServedAssistantBackgroundRuns, 'presets'> & {
+    /** Durable background agent runs capability, presets, schedules, and triggers (`roles` stripped in appProjection.ts). */
+    backgroundRuns?: Omit<ServedAssistantBackgroundRuns, 'presets' | 'schedules' | 'triggers'> & {
       presets: Array<ServedAssistantBackgroundRuns['presets'][number] & { roles?: string[] }>;
+      schedules?: Array<NonNullable<ServedAssistantBackgroundRuns['schedules']>[number] & { roles?: string[] }>;
+      triggers?: Array<NonNullable<ServedAssistantBackgroundRuns['triggers']>[number] & { roles?: string[] }>;
     };
   };
   /** The fields a decision answers, by table id then column (decide/decisionServing.ts): where a record reserves a
@@ -453,6 +455,36 @@ function servedBackgroundRuns(runs: NonNullable<AppDef['assistant']>['background
         ...(preset.agent ? { agent: preset.agent } : {}),
         ...(preset.roles ? { roles: [...preset.roles] } : {}),
       })),
+      ...(runs.schedules.length
+        ? {
+            schedules: runs.schedules.map((s) => ({
+              id: s.id,
+              label: s.label,
+              ...(s.description ? { description: s.description } : {}),
+              every: s.every,
+              ...(s.timezone ? { timezone: s.timezone } : {}),
+              ...(s.agent ? { agent: s.agent } : {}),
+              enabled: s.enabled,
+              ...(s.roles ? { roles: [...s.roles] } : {}),
+            })),
+          }
+        : {}),
+      ...(runs.triggers.length
+        ? {
+            triggers: runs.triggers.map((t) => ({
+              id: t.id,
+              label: t.label,
+              ...(t.description ? { description: t.description } : {}),
+              resource: t.resource,
+              on: [...t.on],
+              ...(t.fields ? { fields: [...t.fields] } : {}),
+              ...(t.agent ? { agent: t.agent } : {}),
+              enabled: t.enabled,
+              cooldownSeconds: t.cooldownSeconds,
+              ...(t.roles ? { roles: [...t.roles] } : {}),
+            })),
+          }
+        : {}),
     },
   };
 }

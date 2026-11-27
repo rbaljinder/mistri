@@ -27,6 +27,7 @@ import { readLines } from './formLinesWrite.js';
 import type { RecordHooks, RecordRules } from '@mistriwork/engine/server/http/recordWrites.js';
 import { send, sendResource } from '@mistriwork/engine/server/http/reply.js';
 import { writeRefusal } from '@mistriwork/engine/server/http/writeRefusal.js';
+import { onAppRecordWritten } from '../assistant/assistantAutomations.js';
 
 /** The most tags a New form sends with its record. */
 const TAGS_MOST = 50;
@@ -162,7 +163,12 @@ export const APP_WRITES: RecordHooks = {
     write: (post, tableId, update) =>
       writeRefusal(post.registry, appWriteWording(post.appHosts), post.connection, tableId, post.resources, post.access, update),
   },
-  after: { write: (post, table, key) => appIndexed(post)(table, key) },
+  after: {
+    write: (post, table, key) => {
+      appIndexed(post)(table, key);
+      onAppRecordWritten(post, table, key);
+    },
+  },
   rules: RULES,
 };
 

@@ -103,6 +103,7 @@ import { APP_DATA } from './appData.js';
 import { getData, postData } from '@mistriwork/engine/server/http/dataRoutes.js';
 import { sessionRoles } from '../../shared/appViewRoles.js';
 import { assistantRoutes } from './assistantRoutes.js';
+import { bindAssistantWriteContext, registerAssistantRecordLoopFactory } from '../assistant/assistantAutomations.js';
 import { ensureAppRecordHistory } from '../recordHistory.js';
 import { currentReadRoute, readRouteOf, withReadRoute } from '../readAudit.js';
 import { ensureAppReadAudit } from '../readAuditStore.js';
@@ -411,6 +412,7 @@ const ROUTES: readonly Route<RequestContext>[] = [
   /* Everything else that takes a body, on the source the body names (dataRoutes.ts), with the App's hooks. */
   async (ctx) => {
     if (ctx.req.method !== 'POST' || !ctx.path.startsWith('/api/')) return false;
+    bindAssistantWriteContext(ctx);
     await postData(ctx, APP_DATA);
     return true;
   },
@@ -948,6 +950,8 @@ function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMe
     };
   };
 }
+
+registerAssistantRecordLoopFactory((ctx) => loopback(ctx, ctx.configPages, undefined, true));
 
 /** Resolve the compiled JS/CSS asset for a free-form page matching this path, for `<head>` preloading. */
 function pageAssetFor(

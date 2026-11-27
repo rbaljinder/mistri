@@ -825,7 +825,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // `maxItems`, `sharedRoles`, `assistantKnowledge` properties, per-agent `memory`/`knowledge`: 14 entries; 5 new names): 1901/567.
     // Unreleased (Wave 2B): durable background runs (`backgroundRuns`, `maxConcurrent`, `maxSteps`, `presets`,
     // `assistantRunPreset` properties: 10 entries; 6 new names): 1911/573.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1911, names: 573 });
+    // Unreleased (Wave 2C): scheduled & event-triggered background runs (`schedules`, `triggers`,
+    // `assistantRunSchedule` & `assistantRunTrigger` properties: 22 entries; 4 new names): 1933/577.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1933, names: 577 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

@@ -48,6 +48,7 @@ CREATE TABLE "__mistri_assistant_run" (
   account TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(account AS BLOB)) <= 1024),
   conversation TEXT COLLATE BINARY NOT NULL,
   agent TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(agent AS BLOB)) <= 64),
+  source TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(source AS BLOB)) <= 128),
   title TEXT NOT NULL CHECK (length(CAST(title AS BLOB)) <= 200),
   prompt TEXT NOT NULL CHECK (length(CAST(prompt AS BLOB)) <= 4000),
   status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'awaiting', 'completed', 'failed', 'cancelled')),
@@ -57,6 +58,19 @@ CREATE TABLE "__mistri_assistant_run" (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   finished_at TEXT NOT NULL
+);
+CREATE TABLE "__mistri_assistant_automation" (
+  app TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(app AS BLOB)) <= 128),
+  tenant TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(tenant AS BLOB)) <= 128),
+  account TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(account AS BLOB)) <= 1024),
+  kind TEXT NOT NULL CHECK (kind IN ('schedule', 'trigger')),
+  automation_id TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(automation_id AS BLOB)) <= 64),
+  enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+  last_slot TEXT NOT NULL,
+  last_run_id TEXT COLLATE BINARY NOT NULL,
+  last_run_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (app, tenant, account, kind, automation_id)
 );
 CREATE INDEX "__mistri_assistant_conversation_owner" ON "__mistri_assistant_conversation" (app, tenant, account, updated_at);
 CREATE INDEX "__mistri_assistant_memory_owner" ON "__mistri_assistant_memory" (app, tenant, scope, account, updated_at);

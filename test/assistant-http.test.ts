@@ -1885,3 +1885,189 @@ test('durable background runs stream live SSE, pause at approval checkpoints, re
     },
   );
 });
+
+test('scheduled and record-change triggered background runs fire idempotently, respect toggles/fields/roles, and link lastRunId', async () => {
+  const prevClock = process.env.MISTRI_CLOCK;
+  process.env.MISTRI_CLOCK = '2026-09-07T12:30:00.000Z'; // Monday 08:30 America/New_York
+  try {
+    await fixture(
+      async ({ as, get, streamGet, post }) => {
+        setAssistantModel(() =>
+          scriptedModel({
+            turns: [
+              {
+                when: 'Morning pipeline brief',
+                steps: [{ tools: [{ name: 'query', input: { q: 'lead' } }] }, { text: 'Morning brief complete: 2 active leads reviewed.' }],
+              },
+              {
+                when: 'Investigate new lead',
+                steps: [{ tools: [{ name: 'query', input: { q: 'lead' } }] }, { text: 'Investigated newly created lead automatically.' }],
+              },
+              {
+                when: 'Review lead status change',
+                steps: [{ text: 'Reviewed status change on lead.' }],
+              },
+            ],
+          }),
+        );
+
+        // 1. Listing automations returns schedules (with nextRunAt) and triggers for rep.
+        const listed = await get(`/api/assistant/automations?app=${appId}`);
+        assert.equal(listed.status, 200);
+        const schedules = listed.body.schedules as Array<{ id: string; enabled: boolean; nextRunAt: string | null }>;
+        const triggers = listed.body.triggers as Array<{ id: string; enabled: boolean; resource: string }>;
+        assert.equal(schedules.length, 1);
+        assert.equal(schedules[0].id, 'morning_brief');
+        assert.equal(schedules[0].enabled, true);
+        assert.ok(schedules[0].nextRunAt, 'nextRunAt computed from cron');
+        assert.equal(triggers.length, 2);
+
+        // 2. Tick at 08:30 America/New_York fires `morning_brief` once; second tick in same slot is idempotent (0 runs).
+        const tick1 = await post('/api/assistant/automations/tick', { app: appId });
+        assert.equal(tick1.status, 200);
+        const fired1 = tick1.body.runs as Array<{ id: string; source: string }>;
+        assert.equal(fired1.length, 1);
+        assert.equal(fired1[0].source, 'schedule:morning_brief');
+        await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(fired1[0].id)}`);
+
+        const tick2 = await post('/api/assistant/automations/tick', { app: appId });
+        assert.equal(tick2.status, 200);
+        assert.equal((tick2.body.runs as unknown[]).length, 0, 'cron slot never double-fires');
+
+        // Automations list now links lastRunId + lastRunAt.
+        const afterTick = await get(`/api/assistant/automations?app=${appId}`);
+        assert.equal((afterTick.body.schedules as Array<{ lastRunId: string }>)[0].lastRunId, fired1[0].id);
+
+        // 3. Manual "Run now" on schedule dispatches immediately and links the new run.
+        const runNow = await post('/api/assistant/automations/run', { app: appId, id: 'morning_brief' });
+        assert.equal(runNow.status, 202);
+        const manualRun = runNow.body.run as { id: string; source: string };
+        assert.equal(manualRun.source, 'schedule:morning_brief');
+        await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(manualRun.id)}`);
+
+        // 4. Pausing a schedule via toggle persists `enabled: false` and clears `nextRunAt`.
+        const paused = await post('/api/assistant/automations/toggle', {
+          app: appId,
+          kind: 'schedule',
+          id: 'morning_brief',
+          enabled: false,
+        });
+        assert.equal(paused.status, 200);
+        assert.equal((paused.body.automation as { enabled: boolean }).enabled, false);
+        const afterPause = await get(`/api/assistant/automations?app=${appId}`);
+        assert.equal((afterPause.body.schedules as Array<{ enabled: boolean; nextRunAt: string | null }>)[0].enabled, false);
+        assert.equal((afterPause.body.schedules as Array<{ nextRunAt: string | null }>)[0].nextRunAt, null);
+
+        // 5. Record-change trigger on `lead` create fires automatically after `/api/insert` commits!
+        const inserted = await post('/api/insert', {
+          table: 'lead',
+          values: { name: 'Stark Industries', status: 'new', notes: 'Inbound enterprise request' },
+        });
+        assert.equal(inserted.status, 200, JSON.stringify(inserted.body));
+        assert.ok(inserted.body.key, JSON.stringify(inserted.body));
+
+        // Wait briefly for the fire-and-forget trigger run to be created & finish.
+        let triggerRun: { id: string; source: string; status: string } | undefined;
+        for (let attempt = 0; attempt < 40; attempt++) {
+          const runsRes = await get(`/api/assistant/runs?app=${appId}`);
+          triggerRun = (runsRes.body.runs as Array<{ id: string; source: string; status: string }>).find(
+            (r) => r.source === 'trigger:new_lead',
+          );
+          if (triggerRun && triggerRun.status === 'completed') break;
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        assert.ok(triggerRun, 'create trigger launched a durable background run');
+        assert.equal(triggerRun!.status, 'completed');
+
+        // 6. Update trigger with `fields: ['status']` ignores a `notes`-only update, then fires when `status` updates.
+        const notesEdit = await post('/api/update', {
+          table: 'lead',
+          key: { id: 1 },
+          values: { notes: 'Updated notes only' },
+        });
+        assert.equal(notesEdit.status, 200, JSON.stringify(notesEdit.body));
+        await new Promise((r) => setTimeout(r, 120));
+        const runsAfterNotes = (await get(`/api/assistant/runs?app=${appId}`)).body.runs as Array<{ source: string }>;
+        assert.ok(!runsAfterNotes.some((r) => r.source === 'trigger:status_watch'), 'non-matching field edit did not fire trigger');
+
+        const statusEdit = await post('/api/update', {
+          table: 'lead',
+          key: { id: 1 },
+          values: { status: 'working' },
+        });
+        assert.equal(statusEdit.status, 200, JSON.stringify(statusEdit.body));
+        let statusRun: { id: string; source: string; status: string } | undefined;
+        for (let attempt = 0; attempt < 40; attempt++) {
+          const runsRes = await get(`/api/assistant/runs?app=${appId}`);
+          statusRun = (runsRes.body.runs as Array<{ id: string; source: string; status: string }>).find(
+            (r) => r.source === 'trigger:status_watch',
+          );
+          if (statusRun && statusRun.status === 'completed') break;
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        assert.ok(statusRun, 'matching field update fired trigger');
+        assert.equal(statusRun!.status, 'completed');
+
+        // 7. Role enforcement: `viewer` does not see rep-only schedule or triggers and gets 403 on toggle/run.
+        as('viewer');
+        const viewerAutos = await get(`/api/assistant/automations?app=${appId}`);
+        assert.equal(viewerAutos.status, 200);
+        assert.deepEqual(viewerAutos.body.schedules, []);
+        assert.deepEqual(viewerAutos.body.triggers, []);
+        assert.equal((await post('/api/assistant/automations/run', { app: appId, id: 'morning_brief' })).status, 403);
+        assert.equal(
+          (await post('/api/assistant/automations/toggle', { app: appId, kind: 'trigger', id: 'new_lead', enabled: false })).status,
+          403,
+        );
+      },
+      {
+        assistant: {
+          defaultAgent: 'analyst',
+          agents: { analyst: { name: 'Analyst' } },
+          backgroundRuns: {
+            maxConcurrent: 3,
+            maxSteps: 8,
+            schedules: [
+              {
+                id: 'morning_brief',
+                label: 'Morning Pipeline Brief',
+                description: 'Weekday 8:30 AM executive review.',
+                every: '30 8 * * 1-5',
+                timezone: 'America/New_York',
+                prompt: 'Morning pipeline brief',
+                agent: 'analyst',
+                roles: ['rep'],
+              },
+            ],
+            triggers: [
+              {
+                id: 'new_lead',
+                label: 'New Lead Triage',
+                resource: 'lead',
+                on: ['create'],
+                prompt: 'Investigate new lead',
+                agent: 'analyst',
+                roles: ['rep'],
+                cooldownSeconds: 60,
+              },
+              {
+                id: 'status_watch',
+                label: 'Lead Status Watch',
+                resource: 'lead',
+                on: ['update'],
+                fields: ['status'],
+                prompt: 'Review lead status change',
+                agent: 'analyst',
+                roles: ['rep'],
+                cooldownSeconds: 60,
+              },
+            ],
+          },
+        },
+      },
+    );
+  } finally {
+    if (prevClock === undefined) delete process.env.MISTRI_CLOCK;
+    else process.env.MISTRI_CLOCK = prevClock;
+  }
+});

@@ -473,6 +473,18 @@
           "maxItems": 12,
           "items": { "$ref": "#/$defs/assistantRunPreset" },
           "description": "One-click background run presets shown in the Run Monitor."
+        },
+        "schedules": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "$ref": "#/$defs/assistantRunSchedule" },
+          "description": "Cron-scheduled background runs."
+        },
+        "triggers": {
+          "type": "array",
+          "maxItems": 16,
+          "items": { "$ref": "#/$defs/assistantRunTrigger" },
+          "description": "Record-change event-triggered background runs."
         }
       }
     },
@@ -488,6 +500,42 @@
         "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
         "agent": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,39}$" },
         "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } }
+      }
+    },
+    "assistantRunSchedule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "every", "prompt"],
+      "description": "A cron-scheduled background agent run.",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
+        "label": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 80 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "every": { "type": "string", "minLength": 1 },
+        "timezone": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "agent": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,39}$" },
+        "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "enabled": { "type": "boolean" }
+      }
+    },
+    "assistantRunTrigger": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "resource", "prompt"],
+      "description": "A record-change event-triggered background agent run.",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
+        "label": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 80 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "resource": { "type": "string", "minLength": 1 },
+        "on": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["create", "update"] } },
+        "fields": { "type": "array", "minItems": 1, "maxItems": 20, "uniqueItems": true, "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" } },
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "agent": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,39}$" },
+        "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "enabled": { "type": "boolean" },
+        "cooldownSeconds": { "type": "integer", "minimum": 0, "maximum": 86400 }
       }
     },
     "assistantMemory": {

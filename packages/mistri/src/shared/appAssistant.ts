@@ -105,13 +105,45 @@ const KNOWLEDGE_KEYS = ['resource', 'fields', 'title', 'description', 'where', '
 const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEFAULT_KNOWLEDGE_LIMIT = 6;
 const MAX_KNOWLEDGE_LIMIT = 12;
-const BACKGROUND_RUNS_KEYS = ['maxConcurrent', 'maxSteps', 'presets'] as const;
+const BACKGROUND_RUNS_KEYS = ['maxConcurrent', 'maxSteps', 'presets', 'schedules', 'triggers'] as const;
 const DEFAULT_RUN_CONCURRENT = 2;
 const MAX_RUN_CONCURRENT = 5;
 const DEFAULT_RUN_STEPS = 16;
 const RUN_PRESET_ID = /^[a-z][a-z0-9_-]{0,47}$/;
 const MAX_RUN_PRESETS = 12;
 const RUN_PRESET_KEYS = ['id', 'label', 'description', 'prompt', 'agent', 'roles'] as const;
+const MAX_RUN_SCHEDULES = 12;
+const RUN_SCHEDULE_KEYS = ['id', 'label', 'description', 'every', 'timezone', 'prompt', 'agent', 'roles', 'enabled'] as const;
+const MAX_RUN_TRIGGERS = 16;
+const RUN_TRIGGER_KEYS = [
+  'id',
+  'label',
+  'description',
+  'resource',
+  'on',
+  'fields',
+  'prompt',
+  'agent',
+  'roles',
+  'enabled',
+  'cooldownSeconds',
+] as const;
+const RUN_TRIGGER_EVENTS = ['create', 'update'] as const;
+const DEFAULT_TRIGGER_COOLDOWN = 60;
+const MAX_TRIGGER_COOLDOWN = 86_400;
+const CRON_WORDS: Readonly<Record<string, string>> = {
+  '@hourly': '0 * * * *',
+  '@daily': '0 0 * * *',
+  '@weekly': '0 0 * * 0',
+  '@monthly': '0 0 1 * *',
+};
+const CRON_BOUNDS: readonly [number, number][] = [
+  [0, 59],
+  [0, 23],
+  [1, 31],
+  [1, 12],
+  [0, 7],
+];
 /** An empty conversation offers a few of the App's own questions, each a line the person sends with one press: at
     most six in any one place, however many the App declares for its different places. */
 const MAX_STARTERS = 6;
@@ -286,6 +318,39 @@ interface AppAssistantRunPreset {
   roles?: string[];
 }
 
+/** A declarative cron-scheduled background run. */
+interface AppAssistantRunSchedule {
+  id: string;
+  label: string;
+  description?: string;
+  /** Five cron fields or @hourly, @daily, @weekly, @monthly. */
+  every: string;
+  /** Optional IANA timezone (defaults to App ui.timezone or UTC). */
+  timezone?: string;
+  prompt: string;
+  agent?: string;
+  roles?: string[];
+  /** Whether enabled by default before a person toggles it (default true). */
+  enabled: boolean;
+}
+
+/** A declarative record-change triggered background run. */
+interface AppAssistantRunTrigger {
+  id: string;
+  label: string;
+  description?: string;
+  resource: string;
+  on: Array<'create' | 'update'>;
+  fields?: string[];
+  prompt: string;
+  agent?: string;
+  roles?: string[];
+  /** Whether enabled by default before a person toggles it (default true). */
+  enabled: boolean;
+  /** Minimum seconds between automatic fires for the same record (default 60). */
+  cooldownSeconds: number;
+}
+
 /** Durable background agent run settings for an App's assistant. */
 interface AppAssistantBackgroundRuns {
   /** Maximum active concurrent background runs per person (1–5, default 2). */
@@ -294,13 +359,37 @@ interface AppAssistantBackgroundRuns {
   maxSteps: number;
   /** Optional one-click background run playbooks/presets. */
   presets: AppAssistantRunPreset[];
+  /** Optional cron-scheduled background runs. */
+  schedules: AppAssistantRunSchedule[];
+  /** Optional record-change event-triggered background runs. */
+  triggers: AppAssistantRunTrigger[];
 }
 
-/** Viewer-safe background runs capability served in `/api/app` (never leaks preset `roles`). */
+/** Viewer-safe background runs capability served in `/api/app` (never leaks `roles`). */
 export interface ServedAssistantBackgroundRuns {
   maxConcurrent: number;
   maxSteps: number;
   presets: Array<{ id: string; label: string; description?: string; prompt: string; agent?: string }>;
+  schedules?: Array<{
+    id: string;
+    label: string;
+    description?: string;
+    every: string;
+    timezone?: string;
+    agent?: string;
+    enabled: boolean;
+  }>;
+  triggers?: Array<{
+    id: string;
+    label: string;
+    description?: string;
+    resource: string;
+    on: Array<'create' | 'update'>;
+    fields?: string[];
+    agent?: string;
+    enabled: boolean;
+    cooldownSeconds: number;
+  }>;
 }
 
 interface AssistantContext {
@@ -475,6 +564,27 @@ function parseKnowledge(raw: unknown, context: AssistantContext, where: string):
   return out;
 }
 
+function validateCronEvery(raw: unknown, where: string): string {
+  if (typeof raw !== 'string' || !raw.trim()) throw new Error(`${where} is five cron fields, or @hourly, @daily, @weekly or @monthly.`);
+  const trimmed = raw.trim();
+  const expr = CRON_WORDS[trimmed] ?? trimmed;
+  const parts = expr.split(/\s+/);
+  if (parts.length !== 5) throw new Error(`${where} "${trimmed}" is not five cron fields: minute, hour, day of month, month, day of week.`);
+  for (let idx = 0; idx < 5; idx++) {
+    const [low, high] = CRON_BOUNDS[idx]!;
+    for (const part of parts[idx]!.split(',')) {
+      const match = /^(\*|(\d{1,2})(?:-(\d{1,2}))?)(?:\/(\d{1,2}))?$/.exec(part);
+      if (!match) throw new Error(`${where} "${trimmed}", field ${idx + 1} "${part}" is invalid.`);
+      const from = match[1] === '*' ? low : Number(match[2]);
+      const to = match[1] === '*' ? high : match[3] !== undefined ? Number(match[3]) : match[4] !== undefined ? high : from;
+      const step = match[4] === undefined ? 1 : Number(match[4]);
+      if (from < low || to > high || from > to || step < 1)
+        throw new Error(`${where} "${trimmed}", field ${idx + 1} "${part}" is outside ${low}-${high}.`);
+    }
+  }
+  return trimmed;
+}
+
 function parseBackgroundRuns(
   raw: unknown,
   agents: Record<string, AppAssistantAgent> | undefined,
@@ -482,9 +592,9 @@ function parseBackgroundRuns(
   where: string,
 ): AppAssistantBackgroundRuns | undefined {
   if (raw === undefined || raw === false) return undefined;
-  if (raw === true) return { maxConcurrent: DEFAULT_RUN_CONCURRENT, maxSteps: DEFAULT_RUN_STEPS, presets: [] };
+  if (raw === true) return { maxConcurrent: DEFAULT_RUN_CONCURRENT, maxSteps: DEFAULT_RUN_STEPS, presets: [], schedules: [], triggers: [] };
   if (!raw || typeof raw !== 'object' || Array.isArray(raw))
-    throw new Error(`${where} is true, false, or an object: { maxConcurrent, maxSteps, presets }.`);
+    throw new Error(`${where} is true, false, or an object: { maxConcurrent, maxSteps, presets, schedules, triggers }.`);
   const cfg = raw as Record<string, unknown>;
   for (const key of Object.keys(cfg)) {
     if (!(BACKGROUND_RUNS_KEYS as readonly string[]).includes(key))
@@ -548,7 +658,143 @@ function parseBackgroundRuns(
       });
     }
   }
-  return { maxConcurrent, maxSteps, presets };
+  const schedules: AppAssistantRunSchedule[] = [];
+  if (cfg.schedules !== undefined) {
+    if (!Array.isArray(cfg.schedules) || cfg.schedules.length > MAX_RUN_SCHEDULES)
+      throw new Error(`${where}.schedules is a list of at most ${MAX_RUN_SCHEDULES} schedules.`);
+    const seen = new Set<string>();
+    for (let i = 0; i < cfg.schedules.length; i++) {
+      const entry = cfg.schedules[i];
+      const at = `${where}.schedules[${i}]`;
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+        throw new Error(`${at} is an object: { id, label, every, prompt, ... }.`);
+      const s = entry as Record<string, unknown>;
+      for (const key of Object.keys(s)) {
+        if (!(RUN_SCHEDULE_KEYS as readonly string[]).includes(key))
+          throw new Error(`${at} has an unknown key "${key}"; it takes ${RUN_SCHEDULE_KEYS.join(', ')}.`);
+      }
+      if (typeof s.id !== 'string' || !RUN_PRESET_ID.test(s.id))
+        throw new Error(`${at}.id is lowercase letters, digits, hyphens or underscores, starting with a letter.`);
+      if (seen.has(s.id)) throw new Error(`${at}.id duplicates "${s.id}".`);
+      seen.add(s.id);
+      if (typeof s.label !== 'string' || !s.label.trim() || s.label.trim().length > 80)
+        throw new Error(`${at}.label is a non-empty string of at most 80 characters.`);
+      if (s.description !== undefined && (typeof s.description !== 'string' || !s.description.trim() || s.description.trim().length > 240))
+        throw new Error(`${at}.description is a non-empty string of at most 240 characters.`);
+      const every = validateCronEvery(s.every, `${at}.every`);
+      let timezone: string | undefined;
+      if (s.timezone !== undefined) {
+        if (typeof s.timezone !== 'string' || !s.timezone.trim()) throw new Error(`${at}.timezone is an IANA time zone name.`);
+        try {
+          new Intl.DateTimeFormat('en-US', { timeZone: s.timezone.trim() });
+        } catch {
+          throw new Error(`${at}.timezone "${s.timezone}" is not an IANA time zone name.`);
+        }
+        timezone = s.timezone.trim();
+      }
+      if (typeof s.prompt !== 'string' || !s.prompt.trim() || s.prompt.trim().length > 2000)
+        throw new Error(`${at}.prompt is a non-empty string of at most 2000 characters.`);
+      let agent: string | undefined;
+      if (s.agent !== undefined) {
+        if (!agents || typeof s.agent !== 'string' || !Object.hasOwn(agents, s.agent))
+          throw new Error(`${at}.agent names "${String(s.agent)}", which is not one of assistant.agents.`);
+        agent = s.agent;
+      }
+      let roles: string[] | undefined;
+      if (s.roles !== undefined) {
+        if (!context.roles) throw new Error(`${at}.roles names roles, and the App declares no "auth" with roles.`);
+        roles = subset(s.roles, context.roles as string[], `${at}.roles`);
+      }
+      if (s.enabled !== undefined && typeof s.enabled !== 'boolean') throw new Error(`${at}.enabled is true or false.`);
+      schedules.push({
+        id: s.id,
+        label: s.label.trim(),
+        ...(s.description !== undefined ? { description: (s.description as string).trim() } : {}),
+        every,
+        ...(timezone ? { timezone } : {}),
+        prompt: s.prompt.trim(),
+        ...(agent ? { agent } : {}),
+        ...(roles ? { roles } : {}),
+        enabled: s.enabled !== false,
+      });
+    }
+  }
+  const triggers: AppAssistantRunTrigger[] = [];
+  if (cfg.triggers !== undefined) {
+    if (!Array.isArray(cfg.triggers) || cfg.triggers.length > MAX_RUN_TRIGGERS)
+      throw new Error(`${where}.triggers is a list of at most ${MAX_RUN_TRIGGERS} triggers.`);
+    const seen = new Set<string>();
+    for (let i = 0; i < cfg.triggers.length; i++) {
+      const entry = cfg.triggers[i];
+      const at = `${where}.triggers[${i}]`;
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+        throw new Error(`${at} is an object: { id, label, resource, prompt, ... }.`);
+      const t = entry as Record<string, unknown>;
+      for (const key of Object.keys(t)) {
+        if (!(RUN_TRIGGER_KEYS as readonly string[]).includes(key))
+          throw new Error(`${at} has an unknown key "${key}"; it takes ${RUN_TRIGGER_KEYS.join(', ')}.`);
+      }
+      if (typeof t.id !== 'string' || !RUN_PRESET_ID.test(t.id))
+        throw new Error(`${at}.id is lowercase letters, digits, hyphens or underscores, starting with a letter.`);
+      if (seen.has(t.id)) throw new Error(`${at}.id duplicates "${t.id}".`);
+      seen.add(t.id);
+      if (typeof t.label !== 'string' || !t.label.trim() || t.label.trim().length > 80)
+        throw new Error(`${at}.label is a non-empty string of at most 80 characters.`);
+      if (t.description !== undefined && (typeof t.description !== 'string' || !t.description.trim() || t.description.trim().length > 240))
+        throw new Error(`${at}.description is a non-empty string of at most 240 characters.`);
+      if (typeof t.resource !== 'string' || !Object.hasOwn(context.actions, t.resource))
+        throw new Error(`${at}.resource names "${String(t.resource)}", which is not a declared resource.`);
+      const on: Array<'create' | 'update'> = t.on === undefined ? ['create'] : subset(t.on, RUN_TRIGGER_EVENTS, `${at}.on`);
+      let fields: string[] | undefined;
+      if (t.fields !== undefined) {
+        if (!Array.isArray(t.fields) || !t.fields.length || t.fields.length > 20)
+          throw new Error(`${at}.fields is a non-empty list of at most 20 field names.`);
+        fields = [];
+        for (const f of t.fields) {
+          if (typeof f !== 'string' || !FIELD_NAME.test(f)) throw new Error(`${at}.fields names invalid column "${String(f)}".`);
+          if (!fields.includes(f)) fields.push(f);
+        }
+      }
+      if (typeof t.prompt !== 'string' || !t.prompt.trim() || t.prompt.trim().length > 2000)
+        throw new Error(`${at}.prompt is a non-empty string of at most 2000 characters.`);
+      let agent: string | undefined;
+      if (t.agent !== undefined) {
+        if (!agents || typeof t.agent !== 'string' || !Object.hasOwn(agents, t.agent))
+          throw new Error(`${at}.agent names "${String(t.agent)}", which is not one of assistant.agents.`);
+        agent = t.agent;
+      }
+      let roles: string[] | undefined;
+      if (t.roles !== undefined) {
+        if (!context.roles) throw new Error(`${at}.roles names roles, and the App declares no "auth" with roles.`);
+        roles = subset(t.roles, context.roles as string[], `${at}.roles`);
+      }
+      if (t.enabled !== undefined && typeof t.enabled !== 'boolean') throw new Error(`${at}.enabled is true or false.`);
+      let cooldownSeconds = DEFAULT_TRIGGER_COOLDOWN;
+      if (t.cooldownSeconds !== undefined) {
+        if (
+          !Number.isSafeInteger(t.cooldownSeconds) ||
+          (t.cooldownSeconds as number) < 0 ||
+          (t.cooldownSeconds as number) > MAX_TRIGGER_COOLDOWN
+        )
+          throw new Error(`${at}.cooldownSeconds is a whole number, 0 to ${MAX_TRIGGER_COOLDOWN}.`);
+        cooldownSeconds = t.cooldownSeconds as number;
+      }
+      triggers.push({
+        id: t.id,
+        label: t.label.trim(),
+        ...(t.description !== undefined ? { description: (t.description as string).trim() } : {}),
+        resource: t.resource,
+        on,
+        ...(fields ? { fields } : {}),
+        prompt: t.prompt.trim(),
+        ...(agent ? { agent } : {}),
+        ...(roles ? { roles } : {}),
+        enabled: t.enabled !== false,
+        cooldownSeconds,
+      });
+    }
+  }
+  return { maxConcurrent, maxSteps, presets, schedules, triggers };
 }
 
 function parseAgents(
@@ -909,22 +1155,32 @@ export function knowledgeFor(
     .map(({ roles: _roles, ...rest }) => rest);
 }
 
-/** Viewer-safe background runs capability for `/api/app` (filters presets by `roles` and strips `roles`). */
+/** Viewer-safe background runs capability for `/api/app` (filters presets/schedules/triggers by `roles` and strips `roles`). */
 export function backgroundRunsFor(
   runs:
-    | (Omit<ServedAssistantBackgroundRuns, 'presets'> & {
+    | (Omit<ServedAssistantBackgroundRuns, 'presets' | 'schedules' | 'triggers'> & {
         presets: ReadonlyArray<ServedAssistantBackgroundRuns['presets'][number] & { roles?: readonly string[] }>;
+        schedules?: ReadonlyArray<NonNullable<ServedAssistantBackgroundRuns['schedules']>[number] & { roles?: readonly string[] }>;
+        triggers?: ReadonlyArray<NonNullable<ServedAssistantBackgroundRuns['triggers']>[number] & { roles?: readonly string[] }>;
       })
     | undefined,
   roles: readonly string[],
 ): ServedAssistantBackgroundRuns | undefined {
   if (!runs) return undefined;
+  const schedules = (runs.schedules ?? [])
+    .filter((each) => !each.roles || each.roles.some((role) => roles.includes(role)))
+    .map(({ roles: _roles, ...rest }) => rest);
+  const triggers = (runs.triggers ?? [])
+    .filter((each) => !each.roles || each.roles.some((role) => roles.includes(role)))
+    .map(({ roles: _roles, ...rest }) => rest);
   return {
     maxConcurrent: runs.maxConcurrent,
     maxSteps: runs.maxSteps,
     presets: runs.presets
       .filter((preset) => !preset.roles || preset.roles.some((role) => roles.includes(role)))
       .map(({ roles: _roles, ...rest }) => rest),
+    ...(schedules.length ? { schedules } : {}),
+    ...(triggers.length ? { triggers } : {}),
   };
 }
 
