@@ -304,3 +304,18 @@ test('resolveTenantParentAuditTargets + /api/reads resolves 1-hop audited childr
     assert.equal((refused.body as { code: string }).code, 'reads_refused');
   }
 });
+
+test('isSingleWaveBootRead treats /api/view/run with include as multi-wave (#585)', async () => {
+  const { isSingleWaveBootRead } = await import('../packages/mistri/src/server/tenant/tenantCompose.js');
+  assert.equal(isSingleWaveBootRead('/api/view/run', { view: { base: 'item' } }), true);
+  assert.equal(
+    isSingleWaveBootRead('/api/view/run', {
+      view: { base: 'item' },
+      include: { notes: { from: 'note', by: 'item_id', show: ['name'] } },
+    }),
+    false,
+  );
+  assert.equal(isSingleWaveBootRead('/api/run', {}), true);
+  assert.equal(isSingleWaveBootRead('/api/counts', { items: [] }), true);
+  assert.equal(isSingleWaveBootRead('/api/counts', { views: [] }), false);
+});
