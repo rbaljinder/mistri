@@ -213,7 +213,7 @@ const SCOPED_CATALOG_DIGEST = postgresCatalogDigestStatement(SYSTEM_SCHEMAS);
    resourceReadOperations.ts). A kept description is therefore served for a few minutes only, after which the next
    reader describes again: a table that grew is counted as large a few minutes later rather than never, and a start,
    whose readers come within seconds, still describes each catalog once. */
-const sharedDescriptions = new EpochCache<Readonly<{ schema: DatabaseSchema; at: number }>>(32);
+const sharedDescriptions = new EpochCache<Readonly<{ schema: DatabaseSchema; at: number }>>(256);
 const SHARED_DESCRIPTION_MS = 5 * 60_000;
 let descriptionsRead = 0,
   descriptionsKept = 0;

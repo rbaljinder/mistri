@@ -918,6 +918,17 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
     upgrades: {},
   },
   {
+    id: 'shard-directory',
+    title: 'sharded cluster routing directory',
+    tables: { prefix: '__mistri_shard_', own: true },
+    current: { postgres: 1 },
+    read: marked({ postgres: { table: '__mistri_shard_meta' } }),
+    upgrades: {},
+    attest: {
+      postgres: async (client) => (await import('../adapters/sharding/postgresShardDirectory.js')).postgresShardDirectoryReady(client),
+    },
+  },
+  {
     /* One row that moves with every DDL (adapters/postgresSchemaEpoch.ts). It keeps no version: a start that finds
        it reads the epoch, and one that does not reads the catalog, only slower. */
     id: 'schema-epoch',

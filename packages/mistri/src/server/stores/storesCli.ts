@@ -63,16 +63,46 @@ async function storeLocations(input: {
   const add = (label: string, url: string) => {
     if (!locations.some((each) => each.url === url)) locations.push({ label, url });
   };
+  const addSharded = async (
+    label: string,
+    connection: {
+      readonly name: string;
+      readonly url: string;
+      readonly shards?: { readonly directory?: string; readonly nodes: readonly { readonly id: string; readonly url: string }[] };
+    },
+    environment?: NodeJS.ProcessEnv,
+  ) => {
+    if (!connection.shards) {
+      add(label, (await resolveConnection(connection.name, connection.url, { secrets: true, environment })).url);
+      return;
+    }
+    if (connection.shards.directory) {
+      add(
+        `${label} [directory]`,
+        (await resolveConnection(`${connection.name}[directory]`, connection.shards.directory, { secrets: true, environment })).url,
+      );
+    }
+    for (const node of connection.shards.nodes) {
+      add(
+        `${label} [shard:${node.id}]`,
+        (await resolveConnection(`${connection.name}[shard:${node.id}]`, node.url, { secrets: true, environment })).url,
+      );
+    }
+  };
   const flags = { connection: input.connection, argument: input.argument, schemas: input.schemas };
   if (input.suite === undefined || input.connection !== undefined || input.argument !== undefined || input.appDir !== undefined) {
     if (input.connection !== undefined || input.argument !== undefined || input.appDir !== undefined) {
       const target = await resolveTarget(input.registry, input.config, flags, input.appDir, input.loaded && appBinding(input.loaded.app));
-      add(target.connection.name, target.url);
+      if (target.connection.shards) {
+        await addSharded(target.connection.name, target.connection, input.registry.environment);
+      } else {
+        add(target.connection.name, target.url);
+      }
     } else {
       for (const connection of input.registry.configs()) {
         if (connection.http) continue;
         try {
-          add(connection.name, (await resolveConnection(connection.name, connection.url, { secrets: true })).url);
+          await addSharded(connection.name, connection, input.registry.environment);
         } catch (error) {
           problems.push(`${connection.name}: ${(error as Error).message}`);
         }
@@ -111,10 +141,7 @@ async function storeLocations(input: {
         if (loaded?.analytics && suite.analytics === undefined) add(`${app.id}: analytics`, loaded.analytics.store);
         for (const connection of loaded?.connections ?? []) {
           if (connection.http) continue;
-          add(
-            `${app.id}: ${connection.name}`,
-            (await resolveConnection(connection.name, connection.url, { secrets: true, environment: app.environment })).url,
-          );
+          await addSharded(`${app.id}: ${connection.name}`, connection, app.environment);
         }
       } catch (error) {
         problems.push(`${app.id}: ${(error as Error).message}`);

@@ -946,6 +946,8 @@ export interface AppSourceBinding {
       `'all'`, or their local names. Each is an implicit `{}` block, which
       grants nothing a block would not. */
   resources?: 'all' | readonly string[];
+  /** Horizontal sharding co-location groups and virtual bucket count for a sharded PostgreSQL source (appSharding.ts). */
+  sharding?: import('./appSharding.js').AppSourceShardingDef;
 }
 
 /**
@@ -1018,6 +1020,8 @@ export interface ResourceDef {
       tenant's, every tenant's read-only, or the platform realm's. Required on
       every resource there; refused anywhere else. */
   owner?: ResourceOwner;
+  /** Horizontal sharding placement for non-tenant sharded databases (`sharded`, `reference`, or `unsharded`). */
+  placement?: import('@mistriwork/engine/shared/shardPlan.js').TableShardPlacement;
   /** In a tenant App, what a clone of a tenant into a sandbox copies of this
       tenant-owned resource: `config` rows always, `sample` rows only when the
       clone asks for samples. Unmarked, nothing (tenantClone.ts). */

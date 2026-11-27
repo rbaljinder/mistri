@@ -62,6 +62,43 @@ export const freshCookie = (): string => `${product()}_fresh`;
  * ten seconds. A caller sending a bearer token has no cookie jar, so its
  * writes are remembered in this process under a digest of the token.
  */
+const MAX_FRESH_SCOPES = 8;
+const SAFE_SCOPE_RE = /^[A-Za-z0-9._-]{1,64}$/;
+
+function parseFreshMarkers(values: readonly string[], at: number): { fresh: boolean; freshScopes: Map<string, number> } {
+  let fresh = false;
+  const freshScopes = new Map<string, number>();
+  for (const raw of values) {
+    if (/^\d{1,16}$/.test(raw)) {
+      const wrote = Number(raw);
+      // A time ahead of this clock by more than a little is not one this server wrote.
+      if (wrote <= at + 1_000 && at - wrote < FRESH_READ_MS) fresh = true;
+      continue;
+    }
+    for (const part of raw.split(',')) {
+      const sep = part.lastIndexOf(':');
+      if (sep <= 0) continue;
+      const scope = part.slice(0, sep);
+      const stamp = part.slice(sep + 1);
+      if (!SAFE_SCOPE_RE.test(scope) || !/^\d{1,16}$/.test(stamp)) continue;
+      const wrote = Number(stamp);
+      if (wrote <= at + 1_000 && at - wrote < FRESH_READ_MS) {
+        const prior = freshScopes.get(scope);
+        if (prior === undefined || wrote > prior) freshScopes.set(scope, wrote);
+      }
+    }
+  }
+  return { fresh, freshScopes };
+}
+
+function serializeFreshScopes(scopes: ReadonlyMap<string, number>, at: number): string {
+  const active = [...scopes.entries()]
+    .filter(([, wrote]) => at - wrote < FRESH_READ_MS)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_FRESH_SCOPES);
+  return active.map(([scope, wrote]) => `${scope}:${wrote}`).join(',');
+}
+
 export function readFreshness(
   request: Pick<IncomingMessage, 'headers'>,
   response: Pick<ServerResponse, 'headersSent' | 'getHeader' | 'setHeader'>,
@@ -71,18 +108,25 @@ export function readFreshness(
   const bearer = /^Bearer\s+(\S+)/i.exec(request.headers.authorization ?? '')?.[1];
   if (bearer) return { fresh: false, key: `bearer:${createHash('sha256').update(bearer).digest('base64url').slice(0, 22)}` };
   const at = now();
-  const fresh = cookieValues(request.headers.cookie, freshCookie()).some((value) => {
-    const wrote = /^\d{1,16}$/.test(value) ? Number(value) : NaN;
-    // A time ahead of this clock by more than a little is not one this server wrote.
-    return wrote <= at + 1_000 && at - wrote < FRESH_READ_MS;
-  });
+  const { fresh, freshScopes } = parseFreshMarkers(cookieValues(request.headers.cookie, freshCookie()), at);
   return {
     fresh,
-    onWrite: () => {
+    freshScopes,
+    onWrite: (scope?: string) => {
       if (response.headersSent) return;
-      const cookie = `${freshCookie()}=${now()}; Path=${base || '/'}; Max-Age=${FRESH_READ_MS / 1000}; HttpOnly; SameSite=Lax`;
+      const writtenAt = now();
+      let value: string;
+      if (scope !== undefined && SAFE_SCOPE_RE.test(scope) && !fresh) {
+        freshScopes.set(scope, writtenAt);
+        value = serializeFreshScopes(freshScopes, writtenAt) || String(writtenAt);
+      } else {
+        value = String(writtenAt);
+      }
+      const cookie = `${freshCookie()}=${value}; Path=${base || '/'}; Max-Age=${FRESH_READ_MS / 1000}; HttpOnly; SameSite=Lax`;
       const prior = response.getHeader('set-cookie');
-      response.setHeader('set-cookie', prior === undefined ? cookie : [...(Array.isArray(prior) ? prior : [String(prior)]), cookie]);
+      const namePrefix = `${freshCookie()}=`;
+      const existing = prior === undefined ? [] : (Array.isArray(prior) ? prior : [String(prior)]).filter((c) => !c.startsWith(namePrefix));
+      response.setHeader('set-cookie', existing.length ? [...existing, cookie] : cookie);
     },
   };
 }

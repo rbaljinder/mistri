@@ -477,7 +477,8 @@ export const forgetAttestations = (origin: object, client?: PgQuery, error?: unk
    its first one did. A write's (READ COMMITTED) each sees what had committed when it ran, so DDL committing between
    its version read and its attestation would be filed under a version it never saw, for a snapshot begun before the
    DDL to find; it reads the version again after attesting (`reread`) and files only if it has not moved. */
-const sharedAttestations = new EpochCache<Set<string>>(32);
+/* Sized for sharded PostgreSQL clusters (up to 256 shard store attestations kept warm in one process). */
+const sharedAttestations = new EpochCache<Set<string>>(256);
 /* DDL, or code that may run it, where a statement may begin: the start of the message, after a `;`, or after a
    comment, block (nested or not) or line, so a comment before it hides nothing. A word that only looks like one
    there (a column at the start of a line) costs a transaction its sharing, never its correctness. */

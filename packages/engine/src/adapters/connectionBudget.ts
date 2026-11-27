@@ -96,6 +96,20 @@ interface ProcessShape {
 export const primaryConnections = (shape: ProcessShape): number =>
   managerConnections(shape.readers, shape.writers) + (shape.listen === false ? 0 : 1);
 
+/**
+ * Total connections one process may hold across a sharded cluster's primaries:
+ * each shard holds its own manager (+ optional LISTEN), plus the optional
+ * control-plane routing directory pool (`SMALL_STORE_POOL` + 1 LISTEN).
+ */
+export function shardedProcessConnections(
+  shards: readonly ProcessShape[],
+  options: { readonly directory?: boolean; readonly directoryListen?: boolean } = {},
+): number {
+  const shardTotal = shards.reduce((sum, shape) => sum + primaryConnections(shape), 0);
+  if (!options.directory) return shardTotal;
+  return shardTotal + managerConnections(SMALL_STORE_POOL.readers, SMALL_STORE_POOL.writers) + (options.directoryListen === false ? 0 : 1);
+}
+
 export interface DatabaseBudget {
   database: string;
   /** What one process may hold against it. */

@@ -63,6 +63,7 @@ import { maskQuoted } from '@mistriwork/engine/shared/maskQuoted.js';
 import { commandFieldsDeep, isRegisteredCommand, parseAsks, parseCommandReference, recordColumnsIn, registeredCommand } from './command.js';
 import { machineActions, parseMachine } from './appMachine.js';
 import { parseResourceAt } from './appAt.js';
+import { parseResourcePlacement, parseSourceSharding } from './appSharding.js';
 import { ROLLUP_FNS, type RollupFn } from '@mistriwork/engine/shared/rollups.js';
 import { COMPUTED_TYPES } from '@mistriwork/engine/shared/computed.js';
 import { pluralOf } from '@mistriwork/engine/shared/appNoun.js';
@@ -271,7 +272,7 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
         at,
         'an object. A resource block is { physical?, query?, frozen?, access?, delete?, favorite?, fields?, hidden?, references?, display?, types?, validation?, triggers?, text?, defined?, labels?, recordLabel?, form?, actions?, machine?, file?, tags?, search?, page?, view?, address?, slug?, noun?, rollups?, computed?, segments?, consumes?, restocks?, noOverlap?, constraints?, audit?, settings?, import?, notify?, links? }',
       );
-      allowKeys(raw, [...RESOURCE_BLOCK_KEYS, 'owner', 'clone', 'live'], at);
+      allowKeys(raw, [...RESOURCE_BLOCK_KEYS, 'owner', 'clone', 'live', 'placement'], at);
       if (dot < 0 && data.sources && !data.defaultSource) {
         throw new Error(
           `${at} is a bare name, and no source says "default: true", so every resource is named "source.${key}". ` +
@@ -288,6 +289,9 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
           throw new Error(`${at} has an "owner" of "${String(raw.owner)}". Use "tenant", "global" or "platform".`);
         }
         resource.owner = raw.owner;
+      }
+      if (raw.placement !== undefined) {
+        resource.placement = parseResourcePlacement(raw.placement, at);
       }
       // Checked against the owner once the App is whole (appTenancy.ts); the catalog at startup (tenantClone.ts).
       if (raw.clone !== undefined) {
@@ -1070,7 +1074,7 @@ function parseSources(a: Record<string, unknown>, where: string): { scope: Sourc
       throw new Error(`${at} needs a non-reserved identifier containing only letters, digits and underscores.`);
     }
     if (!isRecord(raw)) throw new Error(`${at} must be a connection binding object.`);
-    allowKeys(raw, ['connection', 'default', 'realm', 'schema', 'resources'], at);
+    allowKeys(raw, ['connection', 'default', 'realm', 'schema', 'resources', 'sharding'], at);
     if (typeof raw.connection !== 'string' || !raw.connection.trim()) throw new Error(`${at} needs a non-empty "connection" reference.`);
     const connection = raw.connection.trim();
     if (/^[A-Za-z][A-Za-z0-9+.-]*:\/\//.test(connection)) {
@@ -1116,6 +1120,7 @@ function parseSources(a: Record<string, unknown>, where: string): { scope: Sourc
       ...(raw.realm === 'platform' ? { realm: 'platform' as const } : {}),
       ...(schema ? { schema } : {}),
       ...(raw.resources !== undefined ? { resources: parseSourceResources(raw.resources, at) } : {}),
+      ...(raw.sharding !== undefined ? { sharding: parseSourceSharding(raw.sharding, at) } : {}),
     };
   }
   if (defaults.length > 1) {

@@ -50,12 +50,14 @@ const preference = new AsyncLocalStorage<Preference>();
  * anywhere after it agree.
  */
 export interface ReadContext {
-  /** The request arrived with a fresh write marker, or wrote since: its reads stay on the primary. */
+  /** The request arrived with a global fresh write marker, or wrote without a shard scope: all reads stay on the primary. */
   fresh: boolean;
+  /** Per-shard/database fresh write markers (scope -> write timestamp ms), keeping RYW stickiness isolated to the shard written. */
+  freshScopes?: Map<string, number>;
   /** A caller with no cookie jar (a bearer token): its writes are remembered here, in this process, under this key. */
   readonly key?: string;
-  /** Called on the request's first write: the HTTP layer sets the marker the browser carries back. */
-  readonly onWrite?: () => void;
+  /** Called on the request's first write (or first write to a new shard scope): the HTTP layer sets the marker the browser carries back. */
+  readonly onWrite?: (scope?: string) => void;
 }
 const reader = new AsyncLocalStorage<ReadContext>();
 
@@ -80,23 +82,32 @@ let replicasConfigured = false;
 /** Whether any database in this process has configured read replicas. */
 export const hasReplicas = (): boolean => replicasConfigured;
 
-/* Last write per keyed caller, in this process. Pruned as it grows, so many
+/* Last write per keyed caller (optionally scoped by shard), in this process. Pruned as it grows, so many
    tokens cannot grow it without bound. */
 const wrote = new Map<string, number>();
 const PRUNE_AT = 4_096;
 
-/** A write began for the current caller: its reads go to the primary for FRESH_READ_MS. Background work is nobody's. */
-export function noteWrite(now = Date.now()): void {
+const callerKey = (key: string, scope?: string): string => (scope === undefined ? key : `${key}\0${scope}`);
+
+/** A write began for the current caller: its reads (to `scope`, or globally when omitted) go to the primary for FRESH_READ_MS. Background work is nobody's. */
+export function noteWrite(now = Date.now(), scope?: string): void {
   if (!replicasConfigured || inBackgroundWork()) return;
   const context = reader.getStore();
   if (!context) return;
-  if (!context.fresh) {
-    context.fresh = true;
-    context.onWrite?.();
+  if (scope !== undefined && context.freshScopes) {
+    const prior = context.freshScopes.get(scope);
+    context.freshScopes.set(scope, now);
+    if (prior === undefined || now - prior >= FRESH_READ_MS) context.onWrite?.(scope);
+  } else if (scope === undefined || context.key === undefined) {
+    if (!context.fresh) {
+      context.fresh = true;
+      context.onWrite?.(scope);
+    }
   }
   if (context.key === undefined) return;
-  wrote.delete(context.key);
-  wrote.set(context.key, now);
+  const k = callerKey(context.key, scope);
+  wrote.delete(k);
+  wrote.set(k, now);
   if (wrote.size > PRUNE_AT) {
     for (const [key, at] of wrote) {
       if (now - at < FRESH_READ_MS) break;
@@ -105,13 +116,24 @@ export function noteWrite(now = Date.now()): void {
   }
 }
 
-/** Whether a read starting now may go to a replica. */
-export function replicaReadWanted(now = Date.now()): boolean {
+/** Whether a read starting now (optionally on `scope`) may go to a replica. */
+export function replicaReadWanted(now = Date.now(), scope?: string): boolean {
   if (preference.getStore() !== 'replica') return false;
   const context = reader.getStore();
   if (context?.fresh) return false;
-  const at = context?.key === undefined ? undefined : wrote.get(context.key);
-  return at === undefined || now - at >= FRESH_READ_MS;
+  if (scope !== undefined && context?.freshScopes) {
+    const scopeAt = context.freshScopes.get(scope);
+    if (scopeAt !== undefined && now - scopeAt < FRESH_READ_MS) return false;
+  }
+  if (context?.key !== undefined) {
+    const globalAt = wrote.get(context.key);
+    if (globalAt !== undefined && now - globalAt < FRESH_READ_MS) return false;
+    if (scope !== undefined) {
+      const scopedAt = wrote.get(callerKey(context.key, scope));
+      if (scopedAt !== undefined && now - scopedAt < FRESH_READ_MS) return false;
+    }
+  }
+  return true;
 }
 
 /** A replica read that must go to the primary instead, for a reason the replica's own error does not say. */
@@ -217,8 +239,8 @@ export class ReplicaSet<Pool> {
    * replica failed due to overload (`PoolBusy`) and the primary is already
    * saturated, refuse rather than tipping the primary into metastable collapse.
    */
-  async read<T>(onReplica: (pool: Pool) => Promise<T>, onPrimary: () => Promise<T>): Promise<T> {
-    const chosen = replicaReadWanted() ? this.pick() : undefined;
+  async read<T>(onReplica: (pool: Pool) => Promise<T>, onPrimary: () => Promise<T>, scope?: string): Promise<T> {
+    const chosen = replicaReadWanted(Date.now(), scope) ? this.pick() : undefined;
     const span = currentSpan();
     if (!chosen) {
       span?.setAttribute('mistri.read.pool', 'primary');

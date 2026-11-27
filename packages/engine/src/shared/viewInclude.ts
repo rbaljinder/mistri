@@ -16,7 +16,7 @@ interface ParentIncludeObject {
 
 interface ChildIncludeSpec {
   readonly from?: string;
-  readonly by: string;
+  readonly by: string | readonly string[];
   readonly show?: readonly string[];
   readonly sort?: string;
   readonly limit?: number;
@@ -36,7 +36,7 @@ interface NormalizedParentInclude {
 interface NormalizedChildInclude {
   readonly alias: string;
   readonly from: string;
-  readonly by: string;
+  readonly by: string | readonly string[];
   readonly show?: readonly string[];
   readonly sort?: string;
   readonly limit: number;
@@ -53,7 +53,9 @@ export const CHILD_INCLUDE_DEFAULT_LIMIT = 20;
 export const CHILD_INCLUDE_MAX_LIMIT = 100;
 
 export function isChildIncludeEntry(value: unknown): value is ChildIncludeSpec {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value) && typeof (value as { by?: unknown }).by === 'string';
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const by = (value as { by?: unknown }).by;
+  return typeof by === 'string' || (Array.isArray(by) && by.length > 0 && by.every((col) => typeof col === 'string' && col.length > 0));
 }
 
 function isParentIncludeObject(value: unknown): value is ParentIncludeObject {
@@ -142,7 +144,7 @@ export function shapeIncludedRows<Row extends Record<string, unknown>>(
   rows: readonly Row[],
   parents: readonly NormalizedParentInclude[],
   included: Readonly<Record<string, IncludedChildPayload>> | undefined,
-  pkColumn: string | undefined,
+  pkColumn: string | readonly string[] | undefined,
   explicitShow: readonly string[] | undefined,
 ): Row[] {
   const hasIncluded = Boolean(included && Object.keys(included).length > 0);
@@ -158,6 +160,7 @@ export function shapeIncludedRows<Row extends Record<string, unknown>>(
       }
     }
   }
+  const pkCols = typeof pkColumn === 'string' ? [pkColumn] : pkColumn;
   return rows.map((row) => {
     const next: Record<string, unknown> = { ...row };
     for (const parent of parents) {
@@ -182,9 +185,24 @@ export function shapeIncludedRows<Row extends Record<string, unknown>>(
       }
     }
     for (const key of internalKeys) delete next[key];
-    if (hasIncluded && pkColumn) {
-      const pkVal = row[pkColumn];
-      const keyStr = pkVal === null || pkVal === undefined ? undefined : String(pkVal);
+    if (hasIncluded && pkCols?.length) {
+      let keyStr: string | undefined;
+      if (pkCols.length === 1) {
+        const pkVal = row[pkCols[0]!];
+        keyStr = pkVal === null || pkVal === undefined ? undefined : String(pkVal);
+      } else {
+        const parts: string[] = [];
+        let ok = true;
+        for (const col of pkCols) {
+          const val = row[col];
+          if (val === null || val === undefined) {
+            ok = false;
+            break;
+          }
+          parts.push(`${col}=${String(val)}`);
+        }
+        if (ok) keyStr = parts.join(',');
+      }
       for (const [alias, payload] of Object.entries(included!)) {
         next[alias] = keyStr !== undefined && Object.hasOwn(payload.rowsByParent, keyStr) ? payload.rowsByParent[keyStr] : [];
       }
