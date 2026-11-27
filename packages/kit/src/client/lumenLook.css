@@ -1244,7 +1244,7 @@
     right: 6px;
   }
   :root[data-look-board='strip'] :is(.board-card-title, .triage-card-title) {
-    font: 600 var(--text-base)/1.35 var(--sans);
+    font: 500 var(--text-base)/1.35 var(--sans);
     color: var(--ink);
   }
   :root[data-look-board='strip'] :is(.board-card-line, .triage-card-subtitle) {

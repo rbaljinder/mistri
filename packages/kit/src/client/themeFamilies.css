@@ -167,7 +167,7 @@
 :root[data-theme-style] .triage-card.has-menu { padding-right: var(--space-7); }
 :root[data-theme-style] :is(.board-card, .triage-card):hover { border-color: var(--line-strong); }
 :root[data-theme-style] .triage-card.is-selected { border-color: var(--accent); }
-:root[data-theme-style] :is(.board-card-title, .triage-card-title) { font: 600 var(--text-md) var(--sans); }
+:root[data-theme-style] :is(.board-card-title, .triage-card-title) { font: 500 var(--text-md) var(--sans); }
 :root[data-theme-style] :is(.board-card-line, .triage-card-subtitle) { font-size: var(--text-sm); color: var(--ink-muted); }
 
 /* One radius (docs/design.md, Shape): the look's --radius on what a hand

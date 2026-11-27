@@ -221,6 +221,23 @@ describe('Person', () => {
     withLeads(<Person name="Ada Stone" />);
     expect(document.querySelector('.kit-person')).toHaveAttribute('data-size', 'sm');
   });
+
+  test('list and card item titles use the calm 500 weight across Person, queues, boards, worklists, and split lists', () => {
+    const kit = readFileSync('packages/mistri/src/client/components/sdk/kit.css', 'utf8');
+    expect(kit).toMatch(/\.kit-person-name\s*\{[^}]*font-weight:\s*500;/);
+    const queue = readFileSync('packages/kit/src/client/components/QueueList.css', 'utf8');
+    expect(queue).toMatch(/\.queue-title\s*\{[^}]*font-weight:\s*500;/);
+    expect(queue).toMatch(/\.queue-list \.queue-title\s*\{[^}]*font-weight:\s*500;/);
+    expect(queue).toMatch(/\.queue-pick-list \.queue-pick > strong\s*\{[^}]*font-weight:\s*500;/);
+    const families = readFileSync('packages/kit/src/client/themeFamilies.css', 'utf8');
+    expect(families).toMatch(/:is\(\.board-card-title, \.triage-card-title\)\s*\{\s*font:\s*500\b/);
+    const lumen = readFileSync('packages/kit/src/client/lumenLook.css', 'utf8');
+    expect(lumen).toMatch(/:is\(\.board-card-title, \.triage-card-title\)\s*\{\s*font:\s*500\b/);
+    const dash = readFileSync('packages/mistri/src/client/components/DashboardBlocks.css', 'utf8');
+    expect(dash).not.toMatch(/\.dash-worklist \.dash-mini-name\s*\{[^}]*font-weight:\s*600/);
+    const split = readFileSync('packages/ui/src/styles/surfaces/views-tree-timeline.css', 'utf8');
+    expect(split).toMatch(/\.nx-split-item-title\s*\{[^}]*font-weight:\s*500;/);
+  });
 });
 
 describe('Details', () => {

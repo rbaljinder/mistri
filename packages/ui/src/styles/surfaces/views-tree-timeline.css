@@ -822,7 +822,7 @@
 
   .nx-split-item-title {
     font-size: var(--text-base);
-    font-weight: 550;
+    font-weight: 500;
     color: var(--ink);
     overflow: hidden;
     text-overflow: ellipsis;

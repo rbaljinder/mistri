@@ -7,7 +7,7 @@
 .queue .collection-selection-empty { padding: 28px 0; color: var(--ink-muted); }
 .queue-row { display: flex; align-items: flex-start; gap: var(--space-4); }
 .queue-content { min-width: 0; flex: 1; }
-.queue-title { color: var(--ink); font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.queue-title { color: var(--ink); font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; }
 .queue-content > .queue-badge { display: inline-block; margin-bottom: var(--space-2h); padding: var(--space-1h) var(--space-3h); border-radius: 999px; background: var(--raised); color: var(--ink); font: 600 var(--text-sm)/1.4 var(--sans); }
 .queue-content > .queue-badge:has(> .tone) { padding: 0; background: none; }
 .queue-detail, .queue-meta, .queue-status { color: var(--ink-muted); font-size: var(--text-base); margin: var(--space-2) 0 0; }
@@ -51,7 +51,7 @@
 .queue-list > .queue-row:last-child { border-bottom: 0; }
 /* Dashboard sections already provide a content gutter. */
 .dash-section .queue-list > .queue-row { padding-inline: 0; }
-.queue-list .queue-title { font-weight: 600; }
+.queue-list .queue-title { font-weight: 500; }
 .queue-list .queue-detail, .queue-list .queue-meta { margin-top: var(--space-3); line-height: 1.5; }
 .queue-list .queue-open { opacity: 1; align-self: center; white-space: normal; }
 @media (max-width: 540px) {
@@ -113,5 +113,5 @@
    date was squeezed beside the title until it broke word by word. A long line is cut at the edge; the record beside the
    list holds all of it. */
 .queue-pick-list .queue-pick { flex-wrap: wrap; row-gap: var(--space-1); }
-.queue-pick-list .queue-pick > strong { flex: 1 1 100%; min-width: 0; }
+.queue-pick-list .queue-pick > strong { flex: 1 1 100%; min-width: 0; font-weight: 500; }
 .queue-pick-list .queue-pick > span { flex: 1 1 100%; max-width: 100%; overflow: hidden; color: var(--ink-muted); font-size: var(--text-sm); white-space: nowrap; text-overflow: ellipsis; }
