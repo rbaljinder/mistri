@@ -462,7 +462,7 @@ export async function createPolicyApiOwner(input: {
                 outcome = {
                   status: REFUSAL_STATUS[code]!,
                   value: commandProblem(code, refusal.outcome, refusal.field, key),
-                  headers: refusalHeaders(code),
+                  headers: refusalHeaders(code, refusal),
                 };
               } else {
                 // The token is checked first: a token gone says nothing about the policy.

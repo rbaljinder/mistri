@@ -85,6 +85,8 @@
     color: var(--m-critical);
   }
 
+  [data-slot='sheet-head-actions'] { display: flex; align-items: center; gap: var(--m-space-2); flex: none; }
+
   /* A panel beside the page it describes: it dims nothing, so its own edge and shadow are what set it off. */
   [data-slot='drawer-content'][data-kind='sheet'][data-beside] {
     border: 1px solid var(--m-line);

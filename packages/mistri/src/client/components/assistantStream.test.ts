@@ -110,3 +110,22 @@ test('a Markdown table in the words is a table of runs, with the words around it
   // Pipes that are not a table stay words.
   expect(wordsOf('a | b')).toEqual([{ list: false, lines: [[{ text: 'a | b' }]] }]);
 });
+
+test('reasoning events join deltas, record duration, mark redaction, and close when text or done arrives', () => {
+  let items: PanelItem[] = [{ type: 'person', text: 'Analyze pipeline' }];
+  const events: StreamEvent[] = [
+    { event: 'reasoning', data: { id: 'r0', delta: 'Checking ' } },
+    { event: 'reasoning', data: { id: 'r0', delta: 'deals.' } },
+    { event: 'reasoning', data: { id: 'r0', done: true, durationMs: 1450 } },
+    { event: 'reasoning', data: { id: 'r1', redacted: true, done: true } },
+    { event: 'text', data: { delta: 'Done.' } },
+    { event: 'done', data: { state: 'idle' } },
+  ];
+  for (const event of events) items = applyEvent(items, event);
+  expect(items).toEqual([
+    { type: 'person', text: 'Analyze pipeline' },
+    { type: 'reasoning', id: 'r0', text: 'Checking deals.', durationMs: 1450 },
+    { type: 'reasoning', id: 'r1', text: '', redacted: true },
+    { type: 'text', text: 'Done.' },
+  ]);
+});

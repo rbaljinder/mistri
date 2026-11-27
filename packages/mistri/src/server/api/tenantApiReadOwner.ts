@@ -544,7 +544,7 @@ export async function createTenantApiOwner(input: {
               return {
                 status: REFUSAL_STATUS[code]!,
                 value: commandProblem(code, refusal.outcome, refusal.field),
-                headers: refusalHeaders(code),
+                headers: refusalHeaders(code, refusal),
               };
             }
           };
@@ -605,7 +605,7 @@ export async function createTenantApiOwner(input: {
                 return {
                   status: REFUSAL_STATUS[code]!,
                   value: commandProblem(code, refusal.outcome, refusal.field, key),
-                  headers: refusalHeaders(code),
+                  headers: refusalHeaders(code, refusal),
                 };
               }
               // As for a member: whether the tenant still admits this service says refusal from fault; what ran,
@@ -689,7 +689,7 @@ export async function createTenantApiOwner(input: {
                   outcome = {
                     status: REFUSAL_STATUS[code]!,
                     value: commandProblem(code, refusal.outcome, refusal.field, key),
-                    headers: refusalHeaders(code),
+                    headers: refusalHeaders(code, refusal),
                   };
                 } else if (boundRefused) {
                   outcome = { status: 403, value: commandProblem('forbidden', 'not_applied') };

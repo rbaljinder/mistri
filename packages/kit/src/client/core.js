@@ -379,6 +379,7 @@ async function request(path, body, headers) {
         ...(res.status === 503 && data.code === 'server_busy' && Number(res.headers?.get('retry-after')) > 0
           ? { retryAfter: Number(res.headers.get('retry-after')) * 1000 }
           : {}),
+        ...(res.headers?.get('x-mistri-error-claim') ? { errorClaim: res.headers.get('x-mistri-error-claim') } : {}),
         /* Where this failure's trace is, while a --dev server's observer runs:
          its badge offers "Open in observer" (observe/beacon.js). */
         ...(typeof data.observe === 'string' && /^(\/[A-Za-z0-9][\w-]*)*\/_mistri\/observe\//.test(data.observe)

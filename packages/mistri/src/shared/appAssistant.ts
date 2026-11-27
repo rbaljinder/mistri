@@ -7,10 +7,28 @@
 export const ASSISTANT_TOOLS = ['find', 'describe', 'query', 'show', 'run'] as const;
 type AssistantTool = (typeof ASSISTANT_TOOLS)[number];
 /** The blocks the model may compose: the App's own components, never markup. */
-export const ASSISTANT_BLOCKS = ['table', 'metric', 'chart', 'breakdown', 'record'] as const;
+export const ASSISTANT_BLOCKS = [
+  'table',
+  'metric',
+  'metrics',
+  'chart',
+  'breakdown',
+  'funnel',
+  'board',
+  'timeline',
+  'record',
+  'callout',
+  'tabs',
+] as const;
 type AssistantBlockKind = (typeof ASSISTANT_BLOCKS)[number];
 /** Where it is offered: a panel beside every room, with a record as its context, and a room of its own (`/{app}/assistant`). */
 export const ASSISTANT_PLACEMENTS = ['panel', 'record', 'page'] as const;
+/** Presentation surface modes the panel can switch between. */
+const ASSISTANT_PRESENTATIONS = ['sidebar', 'floating', 'fullscreen'] as const;
+type AssistantPresentation = (typeof ASSISTANT_PRESENTATIONS)[number];
+/** How model reasoning / thinking traces are surfaced in the assistant UI. */
+const ASSISTANT_REASONING = ['collapsed', 'expanded', 'hidden'] as const;
+type AssistantReasoningVisibility = (typeof ASSISTANT_REASONING)[number];
 export const ASSISTANT_EFFORTS = ['low', 'medium', 'high'] as const;
 /** The model an App gets unless it names one; the operator's key decides whether any is reachable. */
 const DEFAULT_ASSISTANT_MODEL = 'claude-sonnet-5-5';
@@ -27,7 +45,22 @@ export const DEFAULT_TOKENS_PER_PERSON_PER_DAY = 200_000;
 /** How long a conversation untouched is kept, in days, when nothing says otherwise: every App's, and a tenant App's
  * unless its policy names `assistant.retentionDays`. */
 export const ASSISTANT_RETENTION_DAYS = 90;
-const KEYS = ['instructions', 'starters', 'model', 'effort', 'roles', 'tools', 'exclude', 'blocks', 'placement', 'limits'] as const;
+const KEYS = [
+  'instructions',
+  'starters',
+  'model',
+  'effort',
+  'effortPicker',
+  'reasoning',
+  'presentations',
+  'defaultPresentation',
+  'roles',
+  'tools',
+  'exclude',
+  'blocks',
+  'placement',
+  'limits',
+] as const;
 /** An empty conversation offers a few of the App's own questions, each a line the person sends with one press: at
     most six in any one place, however many the App declares for its different places. */
 const MAX_STARTERS = 6;
@@ -72,6 +105,14 @@ export interface AppAssistant {
   starters: Array<string | AssistantStarter>;
   model: string;
   effort?: (typeof ASSISTANT_EFFORTS)[number];
+  /** Offer a per-turn reasoning effort selector in the assistant composer. */
+  effortPicker?: boolean;
+  /** How model reasoning / thinking traces appear in the UI: `'collapsed'` (default), `'expanded'`, or `'hidden'`. */
+  reasoning: AssistantReasoningVisibility;
+  /** Presentation modes offered by the assistant panel: `'sidebar'`, `'floating'`, `'fullscreen'`. */
+  presentations: AssistantPresentation[];
+  /** Default presentation mode when opening the panel before a reader chooses one. */
+  defaultPresentation: AssistantPresentation;
   /** The roles offered the assistant; absent, everyone who may open the App. */
   roles?: string[];
   tools: AssistantTool[];
@@ -120,6 +161,25 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
   }
   if (a.effort !== undefined && !(ASSISTANT_EFFORTS as readonly unknown[]).includes(a.effort)) {
     throw new Error(`${where}.effort is "low", "medium" or "high".`);
+  }
+  if (a.effortPicker !== undefined && typeof a.effortPicker !== 'boolean') {
+    throw new Error(`${where}.effortPicker is true or false.`);
+  }
+  if (a.reasoning !== undefined && !(ASSISTANT_REASONING as readonly unknown[]).includes(a.reasoning)) {
+    throw new Error(`${where}.reasoning is "collapsed", "expanded" or "hidden".`);
+  }
+  const reasoning: AssistantReasoningVisibility = (a.reasoning as AssistantReasoningVisibility | undefined) ?? 'collapsed';
+  const presentations =
+    a.presentations === undefined
+      ? [...ASSISTANT_PRESENTATIONS]
+      : subset(a.presentations, ASSISTANT_PRESENTATIONS, `${where}.presentations`);
+  if (a.defaultPresentation !== undefined && !(ASSISTANT_PRESENTATIONS as readonly unknown[]).includes(a.defaultPresentation)) {
+    throw new Error(`${where}.defaultPresentation is "sidebar", "floating" or "fullscreen".`);
+  }
+  const defaultPresentation: AssistantPresentation =
+    (a.defaultPresentation as AssistantPresentation | undefined) ?? (presentations.includes('sidebar') ? 'sidebar' : presentations[0]!);
+  if (!presentations.includes(defaultPresentation)) {
+    throw new Error(`${where}.defaultPresentation names "${defaultPresentation}", which is not in ${where}.presentations.`);
   }
   let roles: string[] | undefined;
   if (a.roles !== undefined) {
@@ -172,6 +232,10 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     starters,
     model: (a.model as string | undefined) ?? DEFAULT_ASSISTANT_MODEL,
     ...(a.effort === undefined ? {} : { effort: a.effort as AppAssistant['effort'] }),
+    ...(a.effortPicker === true ? { effortPicker: true } : {}),
+    reasoning,
+    presentations,
+    defaultPresentation,
     ...(roles ? { roles } : {}),
     tools,
     exclude,

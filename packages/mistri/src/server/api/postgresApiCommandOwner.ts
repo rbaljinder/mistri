@@ -359,7 +359,7 @@ export async function createPostgresApiCommandOwner(
               outcome = {
                 status: REFUSAL_STATUS[code]!,
                 value: commandProblem(code, refusal.outcome, refusal.field, key),
-                headers: refusalHeaders(code),
+                headers: refusalHeaders(code, refusal),
               };
             }
           }

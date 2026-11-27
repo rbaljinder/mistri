@@ -25,7 +25,9 @@
  */
 import { createHash } from 'node:crypto';
 import { appClockOffset, appTime } from '@mistriwork/engine/server/http/clock.js';
+import { jitteredBackoffMs, shouldRetryErrorClaim } from '@mistriwork/engine/shared/retry.js';
 import { performance } from 'node:perf_hooks';
+import { errorClaimOf, errorRetryAfterMs } from '../commands/commandErrors.js';
 import type { WorkflowStore } from '../../adapters/workflows/workflowStoreContract.js';
 import {
   SIGNAL_PAGE,
@@ -62,6 +64,8 @@ export interface EngineEnvironment {
   readonly store: WorkflowStore;
   readonly workflow: CapturedWorkflow;
   readonly now: () => number;
+  /** Optional RNG for jittered step backoffs; defaults to Math.random. */
+  readonly random?: () => number;
   /** Fires at the job attempt's deadline or on halt: the advance stops where it is. */
   readonly signal?: AbortSignal;
   /** Real elapsed time after which the advance yields and is continued by a fresh one. */
@@ -312,7 +316,8 @@ export async function advance(env: EngineEnvironment, id: string): Promise<Advan
         await suspend(name, error.wakeAt);
         return undefined;
       }
-      if (error instanceof StepRefused) {
+      if (error instanceof StepRefused || !shouldRetryErrorClaim(errorClaimOf(error))) {
+        const code = error instanceof StepRefused ? error.code : codeOf(error);
         await persist(name, {
           kind,
           hash,
@@ -321,9 +326,9 @@ export async function advance(env: EngineEnvironment, id: string): Promise<Advan
           wakeAt: null,
           resultJson: null,
           eventId: null,
-          errorCode: error.code,
+          errorCode: code,
         });
-        throw new StepRefused(name, error.code);
+        throw new StepRefused(name, code);
       }
       const count = tried + 1;
       if (count >= attempts) {
@@ -339,7 +344,18 @@ export async function advance(env: EngineEnvironment, id: string): Promise<Advan
         });
         return failStep(name, 'step_failed');
       }
-      const wakeAt = env.now() + Math.min(maxBackoffMs, backoffMs * 2 ** (count - 1));
+      const rawRetryAfter =
+        errorRetryAfterMs(error) ??
+        (error && typeof error === 'object' && typeof (error as { retryAfterMs?: unknown }).retryAfterMs === 'number'
+          ? (error as { retryAfterMs: number }).retryAfterMs
+          : undefined);
+      const retryAfter = rawRetryAfter !== undefined && rawRetryAfter > 0 ? rawRetryAfter : undefined;
+      const wakeAt =
+        env.now() +
+        jitteredBackoffMs(count, backoffMs, maxBackoffMs, {
+          ...(retryAfter !== undefined ? { minDelayMs: retryAfter } : {}),
+          ...(env.random ? { random: env.random } : {}),
+        });
       await persist(name, {
         kind,
         hash,

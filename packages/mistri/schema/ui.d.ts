@@ -555,7 +555,7 @@ export declare function useComposer(): { fill(text: string, options?: { mode?: '
     on the server); `about` needs `'record'` in the assistant's `placement`. */
 export declare function useAssistant(): {
   readonly offered: boolean;
-  open(options?: { about?: { table: string; id: string | number }; text?: string }): boolean;
+  open(options?: { about?: { table: string; id: string | number }; text?: string; mode?: 'sidebar' | 'floating' | 'fullscreen' }): boolean;
 };
 /** A pointer event's position inside an element, in layout pixels, from the element's top-left: `layoutPoint(event, column)`.
     The density zoom makes client coordinates and a drawn box differ from the pixels a page styles in; this is the one ruler the shell

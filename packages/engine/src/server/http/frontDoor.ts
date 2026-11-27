@@ -19,6 +19,7 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { withAdmission } from '../../adapters/poolAdmission.js';
+import { parseRetryAttempt, RETRY_ATTEMPT_HEADER } from '../../shared/retry.js';
 import { setBaselineHeaders } from './baselineHeaders.js';
 import { forwardedClient, type ProxyRange } from './trust.js';
 
@@ -47,7 +48,15 @@ export function frontDoor(options: FrontDoorOptions, handle: (req: IncomingMessa
     if (options.guard?.(req, res)) return;
     handle(req, res);
   };
-  const admitted = (req: IncomingMessage, res: ServerResponse) =>
-    options.admit === false ? through(req, res) : withAdmission(forwardedClient(req, proxies()), () => through(req, res));
+  const admitted = (req: IncomingMessage, res: ServerResponse) => {
+    if (options.admit === false) return through(req, res);
+    const controller = new AbortController();
+    const onClose = () => {
+      if (!res.writableEnded) controller.abort();
+    };
+    res.once('close', onClose);
+    const retryAttempt = parseRetryAttempt(req.headers[RETRY_ATTEMPT_HEADER]);
+    return withAdmission(forwardedClient(req, proxies()), () => through(req, res), { signal: controller.signal, retryAttempt });
+  };
   return createServer((req, res) => (options.around ? options.around(req, res, () => admitted(req, res)) : admitted(req, res)));
 }

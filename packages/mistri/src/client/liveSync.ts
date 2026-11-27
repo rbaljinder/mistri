@@ -27,10 +27,13 @@ import { fetchServer } from '@mistriwork/kit/client/transport.js';
 import { addChange, emptyBatch, forgetLive, invalidateLive, type LiveBatch } from './liveInvalidate.js';
 import { watchEngagement } from './liveEngagement.js';
 import { resetLiveState, setLiveActive, setLiveOff } from '@mistriwork/kit/client/liveState.js';
+import { equalJitter, retryAfterWithJitter } from '@mistriwork/engine/shared/retry.js';
 import { addHostListener, removeHostListener } from '@mistriwork/kit/client/shellHost.js';
 import { forgetOwnWrites, ownWritesAnswered, ownWritesOut } from '@mistriwork/kit/client/ownWrites.js';
 
 const MERGE_MS = 150;
+/* Spread reconnect-reset refetches across tabs so a server restart or cursor reset does not trigger a read herd. */
+const RESET_SPREAD_MS = 1_500;
 const HIDDEN_MS = 30_000;
 /* The server speaks every 25 s (a comment); a minute without a byte is a stream that is gone. */
 const DEAD_MS = 60_000;
@@ -233,7 +236,8 @@ async function follow(current: Session): Promise<void> {
       }
       if (response.status === 503) {
         void response.body?.cancel();
-        await pause(current, Math.max(1, Number(response.headers.get('retry-after')) || 30) * 1000);
+        const baseMs = Math.max(1, Number(response.headers.get('retry-after')) || 30) * 1000;
+        await pause(current, retryAfterWithJitter(baseMs));
         continue;
       }
       if (response.status === 400 || response.status === 401 || response.status === 403) {
@@ -273,13 +277,13 @@ async function follow(current: Session): Promise<void> {
         continue;
       }
       clearTimeout(dead);
-      await pause(current, BACKOFF[Math.min(failures++, BACKOFF.length - 1)]);
+      await pause(current, equalJitter(BACKOFF[Math.min(failures++, BACKOFF.length - 1)]));
       continue;
     }
     clearTimeout(dead);
     if (current.stopped) return;
-    // The server's ten minutes are normal: straight back. Anything else waits, so a server going down is not asked at once.
-    if (ended !== 'lifetime') await pause(current, BACKOFF[Math.min(failures++, BACKOFF.length - 1)]);
+    // The server's ten minutes are normal: straight back. Anything else waits with jitter, so a server going down is not hit in lockstep.
+    if (ended !== 'lifetime') await pause(current, equalJitter(BACKOFF[Math.min(failures++, BACKOFF.length - 1)]));
   }
 }
 
@@ -291,7 +295,7 @@ function queue(reset: boolean, data: Record<string, unknown>): void {
     batch.reset = true;
     batch.events++;
   } else addChange(batch, data as Parameters<typeof addChange>[1]);
-  mergeTimer ??= setTimeout(flush, MERGE_MS);
+  mergeTimer ??= setTimeout(flush, reset ? MERGE_MS + Math.round(Math.random() * RESET_SPREAD_MS) : MERGE_MS);
 }
 
 function flush(): void {

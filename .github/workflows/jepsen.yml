@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       workload:
-        description: Workload to run (bank, append, workflow, outbox, replica, tenant, pgbouncer, ddl, cache, proposals, failover, support-lease, http-cluster, sqlite-crash, or all)
+        description: Workload to run (bank, append, workflow, outbox, replica, tenant, pgbouncer, ddl, cache, proposals, failover, support-lease, http-cluster, sqlite-crash, retry-storm, or all)
         required: false
         default: all
       duration:

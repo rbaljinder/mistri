@@ -1,5 +1,6 @@
 import { isProxy } from 'node:util/types';
 import { inSpan } from '@mistriwork/engine/adapters/telemetry/trace.js';
+import { RetryBudget } from '@mistriwork/engine/shared/retry.js';
 import type { EventDeliveryStore } from '../../adapters/events/eventDeliveryContract.js';
 import {
   deliveryFail,
@@ -27,6 +28,11 @@ export interface EventPublication {
  * Must return promptly, release resources on abort and eventually settle. */
 export type EventPublicationTransport = (publication: EventPublication) => Promise<'accepted' | 'rejected'>;
 
+const retryAfterOf = (error: unknown): number | undefined => {
+  const value = error && typeof error === 'object' ? (error as { retryAfterMs?: unknown }).retryAfterMs : undefined;
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined;
+};
+
 /** Explicitly driven private publisher over one opened delivery store, which
  * it owns from here on: `stop()` closes it. No background timer loop,
  * endpoint, startup registration, broker dependency or public factory export.
@@ -47,6 +53,7 @@ export function createEventPublisher(store: EventDeliveryStore, transport: Event
   const send = transport,
     now = clock;
   const captured = store.policy;
+  const budget = new RetryBudget({}, now);
   let state: 'running' | 'stopping' | 'stopped' | 'halted' = 'running';
   let active: Promise<PublicationTick> | undefined;
   let abort: (() => void) | undefined;
@@ -58,9 +65,12 @@ export function createEventPublisher(store: EventDeliveryStore, transport: Event
   const halt = () => {
     if (state !== 'stopping') state = 'halted';
   };
-  type Completion = { outcome: EventDeliveryOutcome; code: EventDeliveryCode };
+  type Completion = { outcome: EventDeliveryOutcome; code: EventDeliveryCode; retryAfterMs?: number };
   async function work(): Promise<PublicationTick> {
     if (state !== 'running') return { status: state, pressure: false };
+    // Destination explicitly pushed back with Retry-After: pause claiming until cooldown elapses
+    // instead of leasing queued events and burning their attempt budgets.
+    if (budget.cooldownRemainingMs(now()) > 0) return { status: 'idle', pressure: false };
     let discovery: EventDiscovery, claimedAt: number, claim: EventDeliveryClaim | undefined;
     try {
       discovery = await store.discover();
@@ -138,9 +148,10 @@ export function createEventPublisher(store: EventDeliveryStore, transport: Event
               ? { outcome: result, code: result }
               : { outcome: 'unknown', code: 'transport' };
           },
-          () => {
+          (error) => {
             transportSettled = true;
-            return { outcome: 'unknown', code: 'transport' };
+            const retryAfterMs = retryAfterOf(error);
+            return { outcome: 'unknown', code: 'transport', ...(retryAfterMs !== undefined ? { retryAfterMs } : {}) };
           },
         );
       try {
@@ -162,7 +173,10 @@ export function createEventPublisher(store: EventDeliveryStore, transport: Event
           // never starts another. Late fulfillment cannot settle a newer claim.
           if (!transportSettled) halt();
         }
-        const recorded = await store.complete(claim, completion.outcome, completion.code, now());
+        const completedAt = now();
+        if (completion.outcome === 'accepted') budget.recordSuccess(completedAt);
+        else if (completion.outcome === 'unknown') budget.recordFailure(completedAt, completion.retryAfterMs);
+        const recorded = await store.complete(claim, completion.outcome, completion.code, completedAt, completion.retryAfterMs);
         if (!recorded) halt();
         return { status: recorded ? completion.outcome : 'unknown', pressure: discovery.pressure };
       } finally {

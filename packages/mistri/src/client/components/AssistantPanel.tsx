@@ -37,6 +37,7 @@ import {
   useId,
   useRef,
   useState,
+  type CSSProperties,
   type KeyboardEvent,
   type ReactNode,
 } from 'react';
@@ -55,7 +56,6 @@ import {
   labelPath,
   state,
   viewportBox,
-  viewportScale,
   viewportSize,
   writeAllowed,
 } from '@mistriwork/kit/client/core.js';
@@ -93,6 +93,12 @@ import {
   type StreamEvent,
 } from './assistantStream.js';
 import { Button } from '@mistriwork/ui/Button.js';
+import { Tabs } from '@mistriwork/ui/Tabs.js';
+import { Callout } from '@mistriwork/ui/primitives/feedback.js';
+import { AiAssistantSurface, AiModeSwitcher } from '@mistriwork/ui/views/AiAssistantSurface.js';
+import { AiReasoning } from '@mistriwork/ui/views/AiReasoning.js';
+import { Select } from '@mistriwork/ui/Select.js';
+import '@mistriwork/ui/styles/surfaces/views-ai.css';
 import { EvidenceItem } from './EvidenceList.js';
 import { assistantApi, assistantOwner } from './assistantRequest.js';
 import type { AssistantHandoff } from './assistantDoor.js';
@@ -211,6 +217,8 @@ function rowActionsOn(tableId: unknown): boolean {
   );
 }
 
+const WIDE_SECTION_KINDS = new Set(['rows', 'board', 'funnel']);
+
 /** A block the server validated, drawn by the App's own components. */
 function Block({ block, onFollow }: { block: AssistantBlock; onFollow: (address: string) => void }) {
   const dashboard = useMemo(() => {
@@ -220,11 +228,103 @@ function Block({ block, onFollow }: { block: AssistantBlock; onFollow: (address:
       block.section.kind === 'rows' && rowActionsOn(block.section.table) ? { ...block.section, rowActions: true } : block.section;
     return { id: 'assistant', label: String(section.title ?? ''), sections: [section] } as unknown as DashboardDef;
   }, [block]);
-  if (dashboard) {
+  const metricsDash = useMemo(() => {
+    if (block.kind !== 'metrics') return null;
+    return { id: 'assistant-metrics', label: block.title ?? '', sections: block.sections } as unknown as DashboardDef;
+  }, [block]);
+
+  if (dashboard && block.kind === 'section') {
+    const isWide = WIDE_SECTION_KINDS.has(String(block.section.kind ?? ''));
     return (
-      <div className="assistant-block assistant-section">
+      <div className={`assistant-block assistant-section${isWide ? ' assistant-block-wide' : ''}`}>
         <Dashboard dashboard={dashboard} />
       </div>
+    );
+  }
+  if (metricsDash && block.kind === 'metrics') {
+    return (
+      <section className="assistant-block assistant-metrics assistant-block-wide" aria-label={block.title || undefined}>
+        {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+        <div className="assistant-metrics-grid">
+          <Dashboard dashboard={metricsDash} />
+        </div>
+      </section>
+    );
+  }
+  if (block.kind === 'callout') {
+    return (
+      <Callout tone={block.tone} title={block.title} className="assistant-callout">
+        <div className="assistant-text">
+          <Words text={block.body} onFollow={onFollow} />
+        </div>
+      </Callout>
+    );
+  }
+  if (block.kind === 'timeline') {
+    return (
+      <section className="assistant-block assistant-timeline" aria-label={block.title || block.table}>
+        {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+        <ol className="assistant-timeline-list">
+          {block.items.map((item, i) => (
+            <li key={`${item.label}:${item.when}:${i}`} className="assistant-timeline-item">
+              <span className="assistant-timeline-dot" aria-hidden="true" />
+              <div className="assistant-timeline-content">
+                <div className="assistant-timeline-row">
+                  <span className="assistant-timeline-label">
+                    {item.address && inside(item.address) ? (
+                      <Link to={item.address} onFollow={onFollow}>
+                        {item.label}
+                      </Link>
+                    ) : (
+                      item.label
+                    )}
+                  </span>
+                  {item.badge ? <span className="assistant-timeline-badge">{item.badge}</span> : null}
+                  {item.when ? <time className="assistant-timeline-when">{item.when}</time> : null}
+                </div>
+                {item.detail ? <p className="assistant-timeline-detail">{item.detail}</p> : null}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </section>
+    );
+  }
+  if (block.kind === 'tabs') {
+    if (!block.tabs.length) return null;
+    return (
+      <section className="assistant-block assistant-tabs assistant-block-wide" aria-label={block.title || undefined}>
+        {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+        <Tabs
+          defaultValue={block.tabs[0].id}
+          variant="underline"
+          items={block.tabs.map((tab) => ({
+            value: tab.id,
+            label: tab.label,
+            content: <Block block={tab.block} onFollow={onFollow} />,
+          }))}
+        />
+      </section>
+    );
+  }
+  if (block.kind === 'custom') {
+    const entries = Object.entries(block.props).slice(0, 12);
+    return (
+      <section className="assistant-block assistant-custom" data-custom-block={block.name} aria-label={block.title || block.name}>
+        {block.title ? <h3 className="assistant-block-heading">{block.title}</h3> : null}
+        <dl className="peekpanel-fields">
+          {entries.map(([key, value]) => (
+            <div className="field" key={key}>
+              <dt>{humanName(key)}</dt>
+              <dd>
+                {typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+                  ? String(value)
+                  : JSON.stringify(value)}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </section>
     );
   }
   if (block.kind !== 'record') return null;
@@ -612,10 +712,12 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
   );
 }
 
-/* Full screen and side-panel width are per-person preferences, kept on this device: the panel opens the way it was last left. */
+/* Panel presentation mode (sidebar, floating, fullscreen) and side-panel width are per-person preferences on this device. */
+type PanelPresentation = 'sidebar' | 'floating' | 'fullscreen';
+const ALL_PRESENTATIONS: readonly PanelPresentation[] = ['sidebar', 'floating', 'fullscreen'];
+const modeKey = (app: string) => `mistri.assistant.mode.${app}.${sessionIdentity().accountId ?? 'local'}`;
 const expandedKey = (app: string) => `mistri.assistant.expanded.${app}.${sessionIdentity().accountId ?? 'local'}`;
 const widthKey = (app: string) => `mistri.assistant.width.${app}.${sessionIdentity().accountId ?? 'local'}`;
-const PANEL_WIDTH_DEFAULT = 512;
 const PANEL_WIDTH_MIN = 384;
 const PANEL_WIDTH_MAX = 832;
 function panelCeiling(): number {
@@ -625,16 +727,20 @@ function panelCeiling(): number {
 function clampPanelWidth(px: number): number {
   return Math.round(Math.min(panelCeiling(), Math.max(PANEL_WIDTH_MIN, px)));
 }
-function readExpanded(app: string): boolean {
+function readPresentation(app: string, allowed: readonly PanelPresentation[], fallback: PanelPresentation): PanelPresentation {
   try {
-    return window.localStorage.getItem(expandedKey(app)) === '1';
+    const saved = window.localStorage.getItem(modeKey(app)) as PanelPresentation | null;
+    if (saved && allowed.includes(saved)) return saved;
+    if (window.localStorage.getItem(expandedKey(app)) === '1' && allowed.includes('fullscreen')) return 'fullscreen';
   } catch {
-    return false;
+    /* Remembered where the browser lets it be; the panel works either way. */
   }
+  return allowed.includes(fallback) ? fallback : (allowed[0] ?? 'sidebar');
 }
-function writeExpanded(app: string, on: boolean): void {
+function writePresentation(app: string, mode: PanelPresentation): void {
   try {
-    if (on) window.localStorage.setItem(expandedKey(app), '1');
+    window.localStorage.setItem(modeKey(app), mode);
+    if (mode === 'fullscreen') window.localStorage.setItem(expandedKey(app), '1');
     else window.localStorage.removeItem(expandedKey(app));
   } catch {
     /* Remembered where the browser lets it be; the panel works either way. */
@@ -668,17 +774,6 @@ function usePhone(): boolean {
     return () => query.removeEventListener?.('change', changed);
   }, []);
   return on;
-}
-
-/* Full screen's mark, drawn here so it rides this chunk and nothing of it is in a first page: corners out, or back in. */
-function Corners({ inward }: { inward: boolean }) {
-  return (
-    <svg className="icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5">
-      <path
-        d={inward ? 'M6 2.5V6H2.5M10 2.5V6h3.5M13.5 10H10v3.5M2.5 10H6v3.5' : 'M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10'}
-      />
-    </svg>
-  );
 }
 
 /* The room's Conversations control on a phone: a pane with its list at the side, drawn here so it rides this chunk. */
@@ -799,11 +894,28 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
   const [withRecord, setWithRecord] = useState(true);
   const [renamingTitle, setRenamingTitle] = useState(false);
   const [deletingOpen, setDeletingOpen] = useState(false);
-  const [expanded, setExpanded] = useState(() => !room && readExpanded(app));
+  const appPayload = activeApp() as AppPayloadApp | null;
+  const assistantConfig = appPayload?.assistant;
+  const allowedPresentations: readonly PanelPresentation[] = useMemo(() => {
+    const configured = assistantConfig?.presentations?.filter((m): m is PanelPresentation =>
+      ALL_PRESENTATIONS.includes(m as PanelPresentation),
+    );
+    return configured && configured.length > 0 ? configured : ALL_PRESENTATIONS;
+  }, [assistantConfig?.presentations]);
+  const defaultPresentation: PanelPresentation =
+    assistantConfig?.defaultPresentation && allowedPresentations.includes(assistantConfig.defaultPresentation as PanelPresentation)
+      ? (assistantConfig.defaultPresentation as PanelPresentation)
+      : (allowedPresentations[0] ?? 'sidebar');
+  const [presentation, setPresentationState] = useState<PanelPresentation>(() =>
+    room ? 'sidebar' : readPresentation(app, allowedPresentations, defaultPresentation),
+  );
+  const [restoreMode, setRestoreMode] = useState<'sidebar' | 'floating'>(() => (presentation === 'floating' ? 'floating' : 'sidebar'));
+  const [fullscreenLeft, setFullscreenLeft] = useState<number>(0);
+  const [effort, setEffort] = useState<'low' | 'medium' | 'high'>(() => assistantConfig?.effort ?? 'medium');
   const [panelWidth, setPanelWidth] = useState<number | null>(() => (room ? null : readPanelWidth(app)));
-  const resizeDrag = useRef<{ startX: number; startWidth: number; prevWidth: number | null } | null>(null);
   const onPhone = usePhone();
-  const wide = room || (expanded && !onPhone);
+  const wide = room || (presentation === 'fullscreen' && !onPhone);
+  const floating = !room && presentation === 'floating' && !onPhone;
   const stop = useRef<AbortController | null>(null);
   const body = useRef<HTMLDivElement>(null);
   const box = useRef<HTMLTextAreaElement>(null);
@@ -824,7 +936,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
         : undefined;
   /* The App's starters for where the person is: its bare lines everywhere, a scoped one in its view's room or on a
      record of its table (appAssistant.ts). The room is the walk's top: a list's view, a dashboard's or a form's page. */
-  const starters = startersHere((activeApp() as AppPayloadApp | null)?.assistant?.starters, {
+  const starters = startersHere(assistantConfig?.starters, {
     ...(top?.kind === 'table' && top.view ? { view: top.view } : {}),
     ...(top?.kind === 'page' && !top.key ? { view: dashViewKey(top.pageId) ?? formViewKey(top.pageId) } : {}),
     ...(context ? { record: context.resource } : {}),
@@ -872,6 +984,11 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     if (!handoff) return;
     setListing(false);
     setProblem(null);
+    if (!room && handoff.mode && allowedPresentations.includes(handoff.mode)) {
+      if (handoff.mode === 'sidebar' || handoff.mode === 'floating') setRestoreMode(handoff.mode);
+      setPresentationState(handoff.mode);
+      writePresentation(app, handoff.mode);
+    }
     if (typeof handoff.text === 'string') {
       setEditing(null);
       setText(handoff.text);
@@ -937,35 +1054,15 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
   /* Full screen fills the content column — beside the App's menu, never over it — and the page beneath does
      not move: the panel is fixed, and only its own left edge changes. Measured on the zoom-aware ruler. */
   useLayoutEffect(() => {
-    const panel = frame.current;
-    if (room || !panel) return;
-    if (!wide) {
-      panel.style.removeProperty('--assistant-left');
-      return;
-    }
+    if (room || !wide) return;
     const place = () => {
       const content = shellById('content');
-      panel.style.setProperty('--assistant-left', `${content ? Math.max(0, Math.round(viewportBox(content).left)) : 0}px`);
+      setFullscreenLeft(content ? Math.max(0, Math.round(viewportBox(content).left)) : 0);
     };
     place();
     addHostListener(window, 'resize', place);
     return () => removeHostListener(window, 'resize', place);
   }, [room, wide]);
-  /* The side panel's chosen width, clamped to the window as it narrows; absent, the stylesheet's 32rem stands. */
-  useLayoutEffect(() => {
-    const panel = frame.current;
-    if (room || !panel) return;
-    if (wide || panelWidth === null) {
-      panel.style.removeProperty('--assistant-width');
-      return;
-    }
-    const fit = () => {
-      panel.style.setProperty('--assistant-width', `${clampPanelWidth(panelWidth)}px`);
-    };
-    fit();
-    addHostListener(window, 'resize', fit);
-    return () => removeHostListener(window, 'resize', fit);
-  }, [room, wide, panelWidth]);
   /* The room stands from where it begins to the foot of the window, so the composer sits at the bottom. */
   useLayoutEffect(() => {
     const panel = frame.current;
@@ -978,11 +1075,15 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     return () => removeHostListener(window, 'resize', fit);
   }, [room]);
 
-  const toggleExpanded = () => {
-    setExpanded((was) => {
-      writeExpanded(app, !was);
-      return !was;
-    });
+  const changePresentation = (next: PanelPresentation) => {
+    if (next === 'sidebar' || next === 'floating') setRestoreMode(next);
+    setPresentationState(next);
+    writePresentation(app, next);
+  };
+
+  const handleWidthChange = (next: number | null) => {
+    setPanelWidth(next);
+    writePanelWidth(app, next);
   };
 
   /* A conversation this room's own turn started: the address says it from now on, without leaving the room. */
@@ -1017,9 +1118,9 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
             if (event.event === 'conversation' && typeof event.data.id === 'string') adopt(event.data.id);
             if (event.event === 'conversation' && typeof event.data.person === 'number') turn.kept = true;
             if (event.event === 'running') setRunning(typeof event.data.label === 'string' ? event.data.label : say('working'));
-            // Between steps the model is at work again; once it writes, its words are the sign.
+            // Between steps the model is at work again; once it writes or reasons, those live words are the sign.
             if (event.event === 'step') setRunning(say('working'));
-            if (event.event === 'text' || event.event === 'done') setRunning(undefined);
+            if (event.event === 'text' || event.event === 'reasoning' || event.event === 'done') setRunning(undefined);
             if (event.event === 'error' && typeof event.data.message === 'string')
               setProblem({ text: say('couldNotAnswer', { message: event.data.message }) });
             setItems((now) => applyEvent(now, event));
@@ -1056,6 +1157,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       request.edit = editing;
     }
     if (context && withRecord) request.context = { resource: context.resource, key: context.key };
+    if (assistantConfig?.effortPicker) request.effort = effort;
     setItems([...next, { type: 'person', text: said }]);
     setText('');
     setEditing(null);
@@ -1066,7 +1168,13 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     const at = items.map((item) => item.type).lastIndexOf('person');
     if (at < 0 || !conversation) return;
     setItems([...cutAt(items, at), items[at]]);
-    void run('/api/assistant/turn', { conversation, text: (items[at] as { text: string }).text, retry: true, ...askMode });
+    void run('/api/assistant/turn', {
+      conversation,
+      text: (items[at] as { text: string }).text,
+      retry: true,
+      ...askMode,
+      ...(assistantConfig?.effortPicker ? { effort } : {}),
+    });
   };
   /* A turn cut off on the way, tried again: from the person's words if the server kept them, else sent as it was. */
   const again = () => {
@@ -1208,9 +1316,9 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       event.preventDefault();
       setListing(false);
     } else if (!room && wide) {
-      // Full screen steps back to the side panel first, the focus where it was.
+      // Full screen steps back to the previous compact mode (sidebar or floating) first, keeping focus.
       event.preventDefault();
-      toggleExpanded();
+      changePresentation(restoreMode);
     } else if (!room) {
       event.preventDefault();
       onClose?.();
@@ -1234,96 +1342,63 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       onDelete={remove}
     />
   );
-  const Frame = room ? 'section' : 'aside';
   const Title = room ? 'h1' : 'h2';
   /* The room is headed by the conversation it shows, once it has one; a new one is the Assistant. */
   const titled = room && conversation ? conversations.data?.conversations.find((each) => each.id === conversation) : undefined;
   const heading = asking ? say('ask') : titled?.title || say('assistant');
   const starting = ready && items.length === 0 && !(conversation && opened.isPending);
   const canSend = Boolean(text.trim()) && ready && !waiting;
+  const surfaceWords = {
+    sidebar: say('dockSidebar'),
+    floating: say('floatingWindow'),
+    fullscreen: say('expand'),
+    exitFullscreen: say('collapse'),
+    openPage: say('openPage'),
+    close: say('close'),
+    resize: say('resize'),
+    rail: say('conversations'),
+    main: say('conversation'),
+  };
+  const openFullPage =
+    !room && assistantConfig?.page
+      ? () => {
+          go(assistantEntry(conversation ?? undefined), 'push');
+          onClose?.();
+        }
+      : undefined;
+  const surfaceStyle: CSSProperties | undefined =
+    !room && presentation === 'sidebar' && panelWidth !== null
+      ? ({ '--assistant-width': `${clampPanelWidth(panelWidth)}px` } as CSSProperties)
+      : undefined;
+
   return (
-    <Frame
-      ref={frame as never}
+    <AiAssistantSurface
+      ref={frame}
+      open
+      onOpenChange={(next) => {
+        if (!next) onClose?.();
+      }}
+      presentation={room ? 'page' : presentation}
+      onPresentationChange={(next) => {
+        if (next === 'sidebar' || next === 'floating' || next === 'fullscreen') changePresentation(next);
+      }}
+      width={panelWidth}
+      onWidthChange={handleWidthChange}
+      minWidth={PANEL_WIDTH_MIN}
+      maxWidth={PANEL_WIDTH_MAX}
+      fullscreenLeft={fullscreenLeft}
+      fullscreenModal={false}
+      rail={room ? list : undefined}
+      railOpen={room && listing}
+      onRailOpenChange={setListing}
       id={room ? 'assistant-room' : 'assistant-panel'}
-      className={`${room ? 'assistant-room' : 'assistant-panel'}${wide ? ' assistant-wide' : ''}${!room && wide ? ' assistant-panel-expanded' : ''}${room && listing ? ' assistant-room-listing' : ''}${(starting || !ready) && !(listing && !room) ? ' assistant-starting' : ''}`}
-      {...(room ? {} : { role: 'complementary' })}
-      aria-label={say('assistant')}
+      role={room ? undefined : 'complementary'}
+      ariaLabel={say('assistant')}
+      words={surfaceWords}
+      style={surfaceStyle}
       onKeyDown={onPanelKey}
+      className={`${room ? 'assistant-room' : 'assistant-panel'}${wide ? ' assistant-wide' : ''}${!room && wide ? ' assistant-panel-expanded' : ''}${floating ? ' assistant-panel-floating' : ''}${room && listing ? ' assistant-room-listing' : ''}${(starting || !ready) && !(listing && !room) ? ' assistant-starting' : ''}`}
     >
-      {!room && !wide && !onPhone && (
-        <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label={say('resize')}
-          title={say('resize')}
-          tabIndex={0}
-          aria-valuenow={panelWidth ?? PANEL_WIDTH_DEFAULT}
-          aria-valuemin={PANEL_WIDTH_MIN}
-          aria-valuemax={panelCeiling()}
-          className="assistant-resize"
-          onPointerDown={(event) => {
-            if (event.pointerType === 'mouse' && event.button !== 0) return;
-            const panel = frame.current;
-            const current = panel
-              ? Math.round(viewportBox(panel).width) || panelWidth || PANEL_WIDTH_DEFAULT
-              : (panelWidth ?? PANEL_WIDTH_DEFAULT);
-            resizeDrag.current = { startX: event.clientX, startWidth: current, prevWidth: panelWidth };
-            try {
-              event.currentTarget.setPointerCapture(event.pointerId);
-            } catch {
-              /* A renderer without capture still delivers the moves to the handle. */
-            }
-          }}
-          onPointerMove={(event) => {
-            const drag = resizeDrag.current;
-            if (!drag) return;
-            const next = clampPanelWidth(drag.startWidth + (drag.startX - event.clientX) / viewportScale());
-            setPanelWidth(next);
-            writePanelWidth(app, next);
-          }}
-          onPointerUp={() => {
-            resizeDrag.current = null;
-          }}
-          onPointerCancel={() => {
-            const drag = resizeDrag.current;
-            if (!drag) return;
-            resizeDrag.current = null;
-            setPanelWidth(drag.prevWidth);
-            writePanelWidth(app, drag.prevWidth);
-          }}
-          onDoubleClick={() => {
-            setPanelWidth(null);
-            writePanelWidth(app, null);
-          }}
-          onKeyDown={(event) => {
-            if (event.altKey && event.key === 'Backspace') {
-              event.preventDefault();
-              setPanelWidth(null);
-              writePanelWidth(app, null);
-              return;
-            }
-            if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return;
-            event.preventDefault();
-            const step = event.shiftKey ? 64 : 24;
-            const base = panelWidth ?? PANEL_WIDTH_DEFAULT;
-            const next =
-              event.key === 'Home'
-                ? PANEL_WIDTH_MIN
-                : event.key === 'End'
-                  ? panelCeiling()
-                  : clampPanelWidth(base + (event.key === 'ArrowLeft' ? step : -step));
-            setPanelWidth(next);
-            writePanelWidth(app, next);
-          }}
-        />
-      )}
-      {room && (
-        <nav className="assistant-rail" aria-label={say('conversations')}>
-          {list}
-        </nav>
-      )}
-      {/* On a phone the rail is a sheet over the conversation, which stays in sight; a press beside it closes it. */}
-      {room && listing && <div className="assistant-rail-scrim" aria-hidden="true" onClick={() => setListing(false)} />}
       <div className="assistant-main">
         <div className="assistant-head">
           {/* The room's conversations on a phone, where the rail is a sheet: the head's first control, as a drawer's is. */}
@@ -1383,16 +1458,15 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
             </button>
           )}
           {!room && (
-            <button
-              type="button"
-              className="icon-button assistant-expand"
-              aria-pressed={expanded}
-              aria-label={say('expand')}
-              title={expanded ? say('collapse') : say('expand')}
-              onClick={toggleExpanded}
-            >
-              <Corners inward={expanded} />
-            </button>
+            <AiModeSwitcher
+              presentation={presentation}
+              presentations={allowedPresentations}
+              restoreMode={restoreMode}
+              onPresentationChange={changePresentation}
+              onOpenPage={openFullPage}
+              words={surfaceWords}
+              className="assistant-mode-switcher"
+            />
           )}
           {!room && (
             <button type="button" className="peekpanel-close" aria-label={say('close')} title={say('close')} onClick={onClose}>
@@ -1434,6 +1508,27 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
                     <Steps key={`s${entry.at}`} steps={entry.steps} running={busy && index === drawn.length - 1 ? running : undefined} />
                   );
                 const { item, at } = entry;
+                if (item.type === 'reasoning') {
+                  if (assistantConfig?.reasoning === 'hidden') return null;
+                  const isLast = index === drawn.length - 1;
+                  return (
+                    <AiReasoning
+                      key={`r${item.id}`}
+                      text={item.text}
+                      redacted={item.redacted}
+                      durationMs={item.durationMs}
+                      streaming={Boolean(busy && isLast && item.open)}
+                      defaultOpen={assistantConfig?.reasoning === 'expanded'}
+                      words={{
+                        thinking: say('thinking'),
+                        thought: say('reasoning'),
+                        thoughtFor: (duration) => say('thoughtFor', { duration }),
+                        redacted: say('reasoningRedacted'),
+                        regionLabel: say('reasoningRegion'),
+                      }}
+                    />
+                  );
+                }
                 if (item.type === 'person')
                   return (
                     <div
@@ -1552,7 +1647,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
                 {say('waitingForYou')}
               </p>
             )}
-            <div className="assistant-compose-row">
+            <div className={`assistant-compose-box${assistantConfig?.effortPicker && !listing ? ' assistant-compose-rich' : ''}`}>
               <textarea
                 ref={box}
                 rows={1}
@@ -1564,13 +1659,37 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
                 onChange={(event) => setText(event.target.value)}
                 onKeyDown={onKey}
               />
-              {busy ? (
-                <Button onClick={() => stop.current?.abort()}>{say('stop')}</Button>
-              ) : (
-                <Button variant={canSend ? 'primary' : 'secondary'} onClick={send} disabled={!canSend}>
-                  {say('send')}
-                </Button>
-              )}
+              <div className="assistant-compose-bar">
+                {assistantConfig?.effortPicker && !listing ? (
+                  <div className="assistant-effort">
+                    <Select<'low' | 'medium' | 'high'>
+                      size="xs"
+                      value={effort}
+                      onValueChange={(next) => {
+                        if (next) setEffort(next);
+                      }}
+                      options={[
+                        { value: 'low', label: say('effort_low') },
+                        { value: 'medium', label: say('effort_medium') },
+                        { value: 'high', label: say('effort_high') },
+                      ]}
+                      ariaLabel={say('effortLabel')}
+                      triggerClassName="nx-ai-effort-trigger"
+                    />
+                  </div>
+                ) : null}
+                <div className="assistant-compose-actions">
+                  {busy ? (
+                    <Button size="sm" onClick={() => stop.current?.abort()}>
+                      {say('stop')}
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant={canSend ? 'primary' : 'secondary'} onClick={send} disabled={!canSend}>
+                      {say('send')}
+                    </Button>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1585,6 +1704,6 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
           }}
         />
       )}
-    </Frame>
+    </AiAssistantSurface>
   );
 }

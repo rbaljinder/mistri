@@ -153,6 +153,9 @@ const priced = (model: string, input: number, output: number) => {
   return Math.round(input * price.input + output * price.output);
 };
 
+/** Cap per-call Anthropic fan-out so multi-decision triggers do not burst past RPM/TPM limits simultaneously. */
+const MAX_CONCURRENT_ASKS = 4;
+
 export function anthropicDecisions(key: string, fetchImpl: typeof fetch = fetch): DecisionProvider {
   return {
     name: 'anthropic',
@@ -164,29 +167,43 @@ export function anthropicDecisions(key: string, fetchImpl: typeof fetch = fetch)
     },
     async decide(call) {
       const model = call.model ?? DEFAULT_DECISION_MODEL;
-      const answers = await Promise.all(
-        call.asks.map(async (ask) => {
-          let response: Response;
+      const answers = Array.from<ReturnType<typeof readDecisionReply>>({ length: call.asks.length });
+      let cursor = 0;
+      let failed: unknown;
+      const worker = async () => {
+        while (failed === undefined) {
+          const index = cursor++;
+          if (index >= call.asks.length) return;
+          const ask = call.asks[index];
           try {
-            response = await fetchImpl(API, {
-              method: 'POST',
-              headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
-              body: JSON.stringify(decisionBody(ask, model)),
-              signal: call.signal,
-            });
+            let response: Response;
+            try {
+              response = await fetchImpl(API, {
+                method: 'POST',
+                headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
+                body: JSON.stringify(decisionBody(ask, model)),
+                signal: call.signal,
+              });
+            } catch (error) {
+              throw asProviderFailure(error, call.signal);
+            }
+            if (!response.ok) throw failureOfStatus(response.status, 'Anthropic', response.headers?.get?.('retry-after'));
+            let body: Reply;
+            try {
+              body = (await response.json()) as Reply;
+            } catch (error) {
+              throw asProviderFailure(error, call.signal);
+            }
+            answers[index] = readDecisionReply(ask.id, body);
           } catch (error) {
-            throw asProviderFailure(error, call.signal);
+            if (failed === undefined) failed = error;
+            return;
           }
-          if (!response.ok) throw failureOfStatus(response.status, 'Anthropic');
-          let body: Reply;
-          try {
-            body = (await response.json()) as Reply;
-          } catch (error) {
-            throw asProviderFailure(error, call.signal);
-          }
-          return readDecisionReply(ask.id, body);
-        }),
-      );
+        }
+      };
+      const concurrency = Math.min(MAX_CONCURRENT_ASKS, Math.max(1, call.asks.length));
+      await Promise.all(Array.from({ length: concurrency }, () => worker()));
+      if (failed !== undefined) throw failed;
       const input = answers.reduce((sum, each) => sum + each.input, 0);
       const output = answers.reduce((sum, each) => sum + each.output, 0);
       return {

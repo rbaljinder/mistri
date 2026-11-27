@@ -429,6 +429,7 @@ export function createApp(options: {
       if (!isBusinessCommandPath(url.pathname)) return false;
       const failure = businessCommandHttpError(err, url.pathname === '/api/commands/status');
       if (failure.retryAfter !== undefined && !res.headersSent) res.setHeader('retry-after', String(failure.retryAfter));
+      if (failure.errorClaim !== undefined && !res.headersSent) res.setHeader('x-mistri-error-claim', failure.errorClaim);
       const cause = reportRefusal(req, failure.status, failure.body.code, failure.body.message, err);
       send(res, failure.status, { ...failure.body, ...(cause ? { cause } : {}) });
       return true;

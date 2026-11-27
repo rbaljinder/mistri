@@ -61,11 +61,13 @@ made, and the person asks the assistant for it instead, where it becomes a propo
 | `instructions` | What the App is and what people ask it | none | Stable |
 | `roles` | Who is offered it (needs `auth`) | everyone signed in | Stable |
 | `exclude` | Verbs it never proposes: `'resource.action'`, `'resource.new'` | none | Stable |
-| `tools`, `blocks` | Narrow its tools (`find`, `describe`, `query`, `show`, `run`) and what it may draw | all | Stable |
+| `tools`, `blocks` | Narrow its tools (`find`, `describe`, `query`, `show`, `run`) and blocks (`table`, `metric`, `metrics`, `chart`, `breakdown`, `funnel`, `board`, `timeline`, `record`, `callout`, `tabs`) | all | Stable |
 | `placement` | `'panel'`; `'record'` to read the open record as context; `'page'` for a page of its own | `'panel'`, `'record'` | Stable |
+| `presentations`, `defaultPresentation` | Panel layout modes offered in the mode switcher (`'sidebar'`, `'floating'`, `'fullscreen'`) and the initial mode | all three; `'sidebar'` | Stable |
 | `starters` | One-line questions offered on an empty conversation; `{ text, views, records, roles }` offers one only in those views, on a record of those tables, or to people holding one of those roles; at most six in one place for one person | none | Stable |
 | `limits` | Tokens per answer (`tokensPerTurn`), per person per day, per App per day; `steps`, the rounds of tool calls one answer may take before it is written (1 to 32; a refused call's round is not counted) | 200,000 per person per day; 8 steps | Stable |
-| `model`, `effort` | The Claude model and its effort | `claude-sonnet-5-5` | Stable |
+| `model`, `effort`, `effortPicker` | Model id, default reasoning effort (`'low'`, `'medium'`, `'high'`), and optional per-turn effort selector in the composer | `claude-sonnet-5-5` | Stable |
+| `reasoning` | How model thinking traces surface in the conversation: `'collapsed'`, `'expanded'`, or `'hidden'` | `'collapsed'` | Stable |
 
 A starter about the open record belongs on that record only:
 

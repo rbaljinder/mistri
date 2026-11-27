@@ -117,16 +117,52 @@ export function openWebhook(service: WebhookServiceConfig, resolver?: EgressPoli
   };
   return Object.freeze({
     ...(credentialHeader ? { credentialHeader } : {}),
-    async post(body: EffectRequest | EffectPayload, idempotencyKey: string, perCall?: Readonly<Record<string, string>>): Promise<number> {
+    async post(
+      body: EffectRequest | EffectPayload,
+      idempotencyKey: string,
+      perCall?: Readonly<Record<string, string>>,
+      signal?: AbortSignal,
+    ): Promise<number> {
       // A call's own headers follow the platform's, so a provider's Idempotency-Key replaces it; only the credential is later.
       const reply = await request(
         url,
-        { method: 'POST', headers: { 'idempotency-key': idempotencyKey, ...perCall, ...credential }, body, discard: true, kind: 'webhook' },
+        {
+          method: 'POST',
+          headers: { 'idempotency-key': idempotencyKey, ...perCall, ...credential },
+          body,
+          discard: true,
+          kind: 'webhook',
+          ...(signal ? { signal } : {}),
+        },
         policy,
       );
       return reply.status;
     },
-    async call(asked: Parameters<NonNullable<Webhook['call']>>[0], idempotencyKey: string): Promise<{ status: number; json: unknown }> {
+    async postReply(
+      body: EffectRequest | EffectPayload,
+      idempotencyKey: string,
+      perCall?: Readonly<Record<string, string>>,
+      signal?: AbortSignal,
+    ) {
+      const reply = await request(
+        url,
+        {
+          method: 'POST',
+          headers: { 'idempotency-key': idempotencyKey, ...perCall, ...credential },
+          body,
+          discard: true,
+          kind: 'webhook',
+          ...(signal ? { signal } : {}),
+        },
+        policy,
+      );
+      return {
+        status: reply.status,
+        ...(reply.retryAfterMs !== undefined ? { retryAfterMs: reply.retryAfterMs } : {}),
+        ...(reply.errorClaim !== undefined ? { errorClaim: reply.errorClaim } : {}),
+      };
+    },
+    async call(asked: Parameters<NonNullable<Webhook['call']>>[0], idempotencyKey: string, signal?: AbortSignal) {
       // The path extends the connection's address and never leaves it: no other host, no climbing out of the base path.
       if (!callPathStaysInside(asked.path)) {
         throw new Error('A call path starts with a single "/" and stays inside the connection\'s address.');
@@ -146,10 +182,16 @@ export function openWebhook(service: WebhookServiceConfig, resolver?: EgressPoli
           headers: { 'idempotency-key': idempotencyKey, ...asked.headers, ...credential },
           ...(asked.body === undefined ? {} : { body: asked.body }),
           kind: 'webhook',
+          ...(signal ? { signal } : {}),
         },
         policy,
       );
-      return { status: reply.status, json: reply.json };
+      return {
+        status: reply.status,
+        json: reply.json,
+        ...(reply.retryAfterMs !== undefined ? { retryAfterMs: reply.retryAfterMs } : {}),
+        ...(reply.errorClaim !== undefined ? { errorClaim: reply.errorClaim } : {}),
+      };
     },
   });
 }

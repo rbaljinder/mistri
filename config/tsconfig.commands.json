@@ -16,6 +16,7 @@
     "../packages/mistri/src/server/maintenance.ts",
     "../packages/mistri/src/server/jobs.ts",
     "../packages/mistri/src/server/workflows.ts",
+    "../packages/mistri/src/server/agents.ts",
     "../packages/mistri/src/server/integration.ts",
     "../packages/mistri/src/server/openfeature.ts",
     "../packages/mistri/src/server/testing.ts",

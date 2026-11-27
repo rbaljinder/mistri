@@ -74,6 +74,11 @@
       "source": "packages/mistri/src/server/workflows.ts",
       "types": "packages/mistri/src/server/workflows.ts"
     },
+    "@mistriwork/mistri/agents": {
+      "layer": "mistri",
+      "source": "packages/mistri/src/server/agents.ts",
+      "types": "packages/mistri/src/server/agents.ts"
+    },
     "@mistriwork/mistri/handler": {
       "layer": "mistri",
       "source": "packages/mistri/src/server/handler.ts",

@@ -454,6 +454,8 @@ export class PgConnectionManager {
               timingLabel: 'app-replica',
             }),
         ),
+        undefined,
+        { primarySaturated: () => this.meters.read.waiting() > 0 },
       );
     const run = (client: PgQuery, text: unknown, params?: unknown) =>
       (client.query as (text: unknown, params?: unknown) => Promise<unknown>)(text, params);

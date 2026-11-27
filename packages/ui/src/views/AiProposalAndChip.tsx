@@ -95,6 +95,31 @@ export interface AiStarterPrompt {
 /** Author role of an `AiMessage` in `AiAssistantView`. */
 export type AiMessageRole = 'user' | 'assistant';
 
+/** Reasoning effort level supported by an assistant model. */
+export type AiEffortLevel = 'low' | 'medium' | 'high';
+
+/** Presentation surface mode for `AiAssistantSurface` and `AiAssistantPanel`. */
+export type AiPresentationMode = 'inline' | 'sidebar' | 'floating' | 'fullscreen' | 'page';
+
+/** Model reasoning / thinking trace attached to an assistant `AiMessage`. */
+export interface AiReasoningTrace {
+  id: string;
+  text: string;
+  streaming?: boolean;
+  durationMs?: number;
+  redacted?: boolean;
+  summary?: string;
+}
+
+/** Structured generative UI block rendered inside an assistant `AiMessage`. */
+export interface AiGeneratedBlock {
+  id: string;
+  kind: string;
+  title?: string;
+  status?: 'loading' | 'ready' | 'error';
+  payload?: unknown;
+}
+
 /** Conversation message entry rendered in `AiAssistantView`. */
 export interface AiMessage {
   id: string;
@@ -105,7 +130,9 @@ export interface AiMessage {
   model?: string;
   streaming?: boolean;
   context?: ReadonlyArray<AiContextAttachment>;
+  reasoning?: AiReasoningTrace | ReadonlyArray<AiReasoningTrace>;
   toolCalls?: ReadonlyArray<AiToolCall>;
+  blocks?: ReadonlyArray<AiGeneratedBlock>;
   citations?: ReadonlyArray<AiCitation>;
   proposals?: ReadonlyArray<AiProposalData>;
 }

@@ -949,3 +949,202 @@ export function checkSupportLeases(input: SupportLeaseCheckInput): SupportLeaseC
     violations,
   };
 }
+
+export interface RetryStormCheckInput {
+  /** Number of downstream requests that returned x-mistri-error-claim: unclaimed. */
+  readonly unclaimedDownstreamFailures: number;
+  /** Number of times an unclaimed failure was illegally retried by an upstream caller/workflow. */
+  readonly unclaimedAmplifications: number;
+  /** Total interactive integration storm requests sent. */
+  readonly stormRequestsSent: number;
+  /** Total downstream attempts actually executed for those interactive storm requests. */
+  readonly stormDownstreamAttempts: number;
+  /** Maximum downstream attempts mathematically permitted under token-bucket retry budget. */
+  readonly stormMaxAllowedAttempts: number;
+  /** Outer-retry-owned (`outerRetries: true`) integration calls invoked. */
+  readonly nestedOuterCalls: number;
+  /** Maximum inner attempts observed on any single `outerRetries: true` call (must be <= 1). */
+  readonly maxNestedInnerAttempts: number;
+  /** Distinct idempotency keys executed under concurrent duplicate-burst coalescing. */
+  readonly coalescedUniqueKeys: number;
+  /** Total duplicate-burst requests across those keys. */
+  readonly coalescedTotalRequests: number;
+  /** Maximum handler executions observed for any single idempotency key (must be <= 1). */
+  readonly maxHandlerExecutionsPerKey: number;
+  /** Number of concurrent conflicting-input same-key races attempted. */
+  readonly conflictRacesAttempted: number;
+  /** Number of conflicting-input same-key races that illegally succeeded instead of idempotency_conflict. */
+  readonly conflictRacesSucceeded: number;
+  /** Fresh (attempt=0) requests admitted under pool load. */
+  readonly freshRequestsAdmitted: number;
+  /** Retry (attempt>0) requests shed under >=75% queue pressure. */
+  readonly retryRequestsShed: number;
+  /** Aborted client waiters cleanly withdrawn from PoolAdmission. */
+  readonly abortedWaitersWithdrawn: number;
+  /** Queue slots still leaked after abort-withdrawal storm (must be 0). */
+  readonly leakedAdmissionSlots: number;
+  /** Replica PoolBusy reads suppressed while primary was saturated. */
+  readonly replicaSpilloversSuppressed: number;
+  /** Replica PoolBusy reads that illegally spilled onto a saturated primary (must be 0). */
+  readonly replicaSpilloversDuringSaturation: number;
+  /** EventPublisher ticks that respected Retry-After cooldown without claiming. */
+  readonly publisherCooldownPauses: number;
+  /** EventPublisher claims that illegally fired during active Retry-After cooldown (must be 0). */
+  readonly publisherCooldownBreaches: number;
+  /** Peak concurrent half-open trial probes on a recovering AI provider (must be <= 1). */
+  readonly maxConcurrentHalfOpenProbes: number;
+  /** Peak concurrent Anthropic asks observed in a multi-ask batch (must be <= 4). */
+  readonly maxConcurrentAnthropicAsks: number;
+  /** Exhausted interactive 503 responses checked for x-mistri-error-claim: unclaimed. */
+  readonly exhaustedRefusalsChecked: number;
+  /** Exhausted interactive 503 responses missing x-mistri-error-claim: unclaimed (must be 0). */
+  readonly exhaustedRefusalsClaimed: number;
+  /** Post-heal recovery operations that succeeded after the nemesis stood down (must be > 0). */
+  readonly postHealRecoveriesOk: number;
+  /** Post-heal recovery operations that failed due to metastable lock-in (must be 0). */
+  readonly postHealRecoveriesFailed: number;
+}
+
+export interface RetryStormCheckResult {
+  readonly valid: boolean;
+  readonly summary: RetryStormCheckInput;
+  readonly violations: readonly InvariantViolation[];
+}
+
+/**
+ * Verify every retry-storm invariant across Mistri's layers:
+ *  - Error Ownership (`unclaimed` failures never retried; exhausted 503s unclaim upward)
+ *  - Token-bucket retry budgets bound aggregate storm attempts
+ *  - No nested $R^d$ retry multiplication (`outerRetries: true` runs at most 1 attempt)
+ *  - In-flight idempotency coalescing (at-most-once handler execution, 100% conflict rejection)
+ *  - Server admission sheds retries under pressure without starving fresh requests or leaking aborted waiters
+ *  - Replica overload never spills onto an already-saturated primary
+ *  - EventPublisher honors Retry-After cooldowns without claiming
+ *  - AI provider circuits lease at most one half-open probe and bound Anthropic ask concurrency
+ *  - Zero metastable lock-in: post-heal operations recover cleanly
+ */
+export function checkRetryStorm(history: readonly HistoryOp[], input: RetryStormCheckInput): RetryStormCheckResult {
+  const violations: InvariantViolation[] = [];
+
+  if (input.unclaimedDownstreamFailures === 0) {
+    violations.push({
+      code: 'no_unclaimed_fault_exercised',
+      detail: '0 unclaimed downstream failures were exercised during the chaos window',
+    });
+  }
+  if (input.unclaimedAmplifications > 0) {
+    violations.push({
+      code: 'error_ownership_amplified',
+      detail: `${input.unclaimedAmplifications} unclaimed downstream failure(s) were retried upstream`,
+    });
+  }
+  if (input.exhaustedRefusalsChecked > 0 && input.exhaustedRefusalsClaimed > 0) {
+    violations.push({
+      code: 'exhausted_refusal_not_unclaimed',
+      detail: `${input.exhaustedRefusalsClaimed}/${input.exhaustedRefusalsChecked} exhausted 503 refusal(s) lacked x-mistri-error-claim: unclaimed`,
+    });
+  }
+  if (input.stormRequestsSent === 0) {
+    violations.push({ code: 'no_storm_traffic', detail: '0 integration storm requests were sent' });
+  }
+  if (input.stormDownstreamAttempts > input.stormMaxAllowedAttempts) {
+    violations.push({
+      code: 'retry_budget_breached',
+      detail: `downstream attempts ${input.stormDownstreamAttempts} exceeded token-bucket bound ${input.stormMaxAllowedAttempts} across ${input.stormRequestsSent} storm requests`,
+    });
+  }
+  if (input.nestedOuterCalls === 0) {
+    violations.push({ code: 'no_nested_retry_exercised', detail: '0 outerRetries integration calls were exercised' });
+  }
+  if (input.maxNestedInnerAttempts > 1) {
+    violations.push({
+      code: 'nested_retry_multiplication',
+      detail: `outerRetries integration call executed ${input.maxNestedInnerAttempts} inner attempts (expected <= 1)`,
+    });
+  }
+  if (input.coalescedUniqueKeys === 0 || input.coalescedTotalRequests <= input.coalescedUniqueKeys) {
+    violations.push({
+      code: 'no_coalescing_contention',
+      detail: `insufficient concurrent duplicate contention (${input.coalescedTotalRequests} requests across ${input.coalescedUniqueKeys} keys)`,
+    });
+  }
+  if (input.maxHandlerExecutionsPerKey > 1) {
+    violations.push({
+      code: 'coalescing_duplicate_execution',
+      detail: `handler executed ${input.maxHandlerExecutionsPerKey} times for a single idempotency key under concurrent duplicates`,
+    });
+  }
+  if (input.conflictRacesSucceeded > 0) {
+    violations.push({
+      code: 'coalescing_conflict_missed',
+      detail: `${input.conflictRacesSucceeded}/${input.conflictRacesAttempted} concurrent same-key input conflict(s) succeeded instead of failing idempotency_conflict`,
+    });
+  }
+  if (input.freshRequestsAdmitted === 0 || input.retryRequestsShed === 0) {
+    violations.push({
+      code: 'retry_shedding_not_exercised',
+      detail: `expected both fresh admissions (${input.freshRequestsAdmitted}) and retry sheds (${input.retryRequestsShed}) under queue pressure`,
+    });
+  }
+  if (input.leakedAdmissionSlots > 0) {
+    violations.push({
+      code: 'aborted_waiter_leaked_slot',
+      detail: `${input.leakedAdmissionSlots} PoolAdmission queue slot(s) leaked after client aborts`,
+    });
+  }
+  if (input.replicaSpilloversDuringSaturation > 0) {
+    violations.push({
+      code: 'replica_spillover_during_saturation',
+      detail: `${input.replicaSpilloversDuringSaturation} replica PoolBusy read(s) spilled onto an already-saturated primary`,
+    });
+  }
+  if (input.replicaSpilloversSuppressed === 0) {
+    violations.push({
+      code: 'no_replica_saturation_exercised',
+      detail: '0 saturated-primary replica spillover suppressions were observed',
+    });
+  }
+  if (input.publisherCooldownBreaches > 0) {
+    violations.push({
+      code: 'publisher_cooldown_breached',
+      detail: `${input.publisherCooldownBreaches} EventPublisher claim(s) fired during an active Retry-After cooldown`,
+    });
+  }
+  if (input.maxConcurrentHalfOpenProbes > 1) {
+    violations.push({
+      code: 'half_open_probe_stampede',
+      detail: `observed ${input.maxConcurrentHalfOpenProbes} concurrent half-open AI probes (expected <= 1)`,
+    });
+  }
+  if (input.maxConcurrentAnthropicAsks > 4) {
+    violations.push({
+      code: 'anthropic_fanout_unbounded',
+      detail: `observed ${input.maxConcurrentAnthropicAsks} concurrent Anthropic asks (expected <= 4)`,
+    });
+  }
+  if (input.postHealRecoveriesOk === 0 || input.postHealRecoveriesFailed > 0) {
+    violations.push({
+      code: 'metastable_recovery_failed',
+      detail: `post-heal recovery reported ok=${input.postHealRecoveriesOk}, failed=${input.postHealRecoveriesFailed}`,
+    });
+  }
+
+  // History sanity: verify any recorded unclaimed workflow call completed with attempts <= 1.
+  for (const op of history) {
+    if (op.f === 'workflow-unclaimed' && op.type === 'ok' && op.value && typeof op.value === 'object') {
+      const attempts = (op.value as { attempts?: unknown }).attempts;
+      if (typeof attempts === 'number' && attempts > 1) {
+        violations.push({
+          code: 'error_ownership_amplified',
+          detail: `history op #${op.index} workflow-unclaimed recorded ${attempts} attempts (expected 1)`,
+        });
+      }
+    }
+  }
+
+  return {
+    valid: violations.length === 0,
+    summary: input,
+    violations,
+  };
+}

@@ -38,7 +38,13 @@ export interface EventDeliveryStore {
    * receipt are delivered. Expired leases are released first, as unknown. */
   claim(now: number): Promise<EventDeliveryClaim | undefined>;
   /** False when the claim no longer holds its lease: nothing is recorded. */
-  complete(claim: EventDeliveryClaim, outcome: EventDeliveryOutcome, code: EventDeliveryCode, now: number): Promise<boolean>;
+  complete(
+    claim: EventDeliveryClaim,
+    outcome: EventDeliveryOutcome,
+    code: EventDeliveryCode,
+    now: number,
+    minDelayMs?: number,
+  ): Promise<boolean>;
   /** Private bounded diagnostics: no payload, actor, token or error text. */
   inspect(state?: EventDeliveryState, afterEventId?: string, limit?: number): Promise<readonly EventDeliveryInspection[]>;
   attempts(eventId: string): Promise<readonly EventDeliveryAttemptInspection[]>;

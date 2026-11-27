@@ -155,10 +155,19 @@ export function replicaFailure(error: unknown): 'down' | 'retry' | undefined {
 
 const NETWORK = new Set(['ECONNREFUSED', 'ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'EHOSTUNREACH', 'ENETUNREACH', 'EPIPE', 'EAI_AGAIN']);
 
+interface ReplicaSetOptions {
+  /** True when the primary read pool is already queuing: prevents replica overload from tipping the primary over. */
+  readonly primarySaturated?: () => boolean;
+  /** Injectable RNG for jittering replica recovery probes across pods. */
+  readonly random?: () => number;
+}
+
 /** One connection's replicas, taken in turn, each passed over for a while after it fails. */
 export class ReplicaSet<Pool> {
   private next = 0;
   private readonly downUntil: number[];
+  private readonly primarySaturated?: () => boolean;
+  private readonly random: () => number;
   /** Reads answered by each replica, and reads that fell back to the primary from it. */
   readonly served: number[];
   readonly fellBack: number[];
@@ -166,11 +175,14 @@ export class ReplicaSet<Pool> {
   constructor(
     readonly pools: readonly Pool[],
     private readonly now: () => number = () => Date.now(),
+    options: ReplicaSetOptions = {},
   ) {
     if (pools.length > 0) replicasConfigured = true;
     this.downUntil = pools.map(() => 0);
     this.served = pools.map(() => 0);
     this.fellBack = pools.map(() => 0);
+    this.primarySaturated = options.primarySaturated;
+    this.random = options.random ?? Math.random;
   }
 
   /** The next replica that is not being passed over, or undefined when every one is. */
@@ -186,9 +198,11 @@ export class ReplicaSet<Pool> {
     return undefined;
   }
 
-  /** Pass replica `index` over for REPLICA_BACKOFF_MS. */
+  /** Pass replica `index` over for up to REPLICA_BACKOFF_MS, jittered in `[0.75x, 1.0x]` so pods do not re-probe in lockstep. */
   down(index: number): void {
-    this.downUntil[index] = this.now() + REPLICA_BACKOFF_MS;
+    const r = this.random();
+    const factor = Number.isFinite(r) ? 0.75 + 0.25 * Math.min(1, Math.max(0, r)) : 1;
+    this.downUntil[index] = this.now() + Math.max(1, Math.round(REPLICA_BACKOFF_MS * factor));
   }
 
   /** Whether replica `index` is in use now (not being passed over). */
@@ -199,7 +213,9 @@ export class ReplicaSet<Pool> {
   /**
    * Run one read: on a replica when the work wants one and one is in turn,
    * else on the primary. A replica that cannot answer hands the read to the
-   * primary (replicaFailure); any other failure is the read's own.
+   * primary (replicaFailure); any other failure is the read's own. When the
+   * replica failed due to overload (`PoolBusy`) and the primary is already
+   * saturated, refuse rather than tipping the primary into metastable collapse.
    */
   async read<T>(onReplica: (pool: Pool) => Promise<T>, onPrimary: () => Promise<T>): Promise<T> {
     const chosen = replicaReadWanted() ? this.pick() : undefined;
@@ -217,6 +233,10 @@ export class ReplicaSet<Pool> {
       const failure = replicaFailure(error);
       if (!failure) throw error;
       if (failure === 'down') this.down(chosen.index);
+      if (failure === 'retry' && isPoolBusy(error) && this.primarySaturated?.()) {
+        span?.event('replica spillover suppressed', { 'mistri.replica': chosen.index + 1, 'mistri.replica.failure': failure });
+        throw error;
+      }
       this.fellBack[chosen.index] += 1;
       span?.event('replica fallback', { 'mistri.replica': chosen.index + 1, 'mistri.replica.failure': failure });
       span?.setAttribute('mistri.read.pool', 'primary');

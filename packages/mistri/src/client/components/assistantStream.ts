@@ -30,11 +30,23 @@ export interface Proposal {
 }
 export type AssistantBlock =
   | { kind: 'section'; section: Record<string, unknown> }
-  | { kind: 'record'; table: string; key: Record<string, unknown>; title: string; values: Record<string, unknown>; address?: string };
+  | { kind: 'metrics'; title?: string; sections: Array<Record<string, unknown>> }
+  | {
+      kind: 'timeline';
+      title?: string;
+      table: string;
+      items: Array<{ label: string; when: string; detail?: string; badge?: string; address?: string }>;
+    }
+  | { kind: 'callout'; tone: 'info' | 'good' | 'warning' | 'critical'; title?: string; body: string }
+  | { kind: 'tabs'; title?: string; tabs: Array<{ id: string; label: string; block: AssistantBlock }> }
+  | { kind: 'record'; table: string; key: Record<string, unknown>; title: string; values: Record<string, unknown>; address?: string }
+  | { kind: 'custom'; name: string; title?: string; props: Record<string, unknown> };
 
 export type PanelItem =
   /** `seq` is the stored event's, once the server has said it; edit names it. */
   | { type: 'person'; seq?: number; text: string }
+  /** Model reasoning / thinking trace; `open` while still streaming. */
+  | { type: 'reasoning'; id: string; text: string; open?: true; redacted?: true; durationMs?: number }
   /** `open` while the model is still writing it. */
   | { type: 'text'; text: string; open?: true }
   | { type: 'note'; text: string }
@@ -168,9 +180,14 @@ export async function readEvents(body: ReadableStream<Uint8Array>, onEvent: (eve
 
 /** The items after one event. Pure: the panel keeps the result as its state. */
 export function applyEvent(items: readonly PanelItem[], { event, data }: StreamEvent): PanelItem[] {
-  const next = items.map((item) =>
-    item.type === 'text' && item.open && event !== 'text' ? { type: 'text' as const, text: item.text } : item,
-  );
+  const next = items.map((item) => {
+    if (item.type === 'text' && item.open && event !== 'text') return { type: 'text' as const, text: item.text };
+    if (item.type === 'reasoning' && item.open && event !== 'reasoning') {
+      const { open: _open, ...closed } = item;
+      return closed;
+    }
+    return item;
+  });
   const last = next[next.length - 1];
   switch (event) {
     case 'conversation':
@@ -184,6 +201,36 @@ export function applyEvent(items: readonly PanelItem[], { event, data }: StreamE
           }
         }
       return next;
+    case 'reasoning': {
+      const id = typeof data.id === 'string' && data.id ? data.id : 'r_0';
+      const delta = typeof data.delta === 'string' ? data.delta : '';
+      const redacted = data.redacted === true;
+      const done = data.done === true;
+      const durationMs = typeof data.durationMs === 'number' && Number.isFinite(data.durationMs) ? data.durationMs : undefined;
+      const at = next.findIndex((item) => item.type === 'reasoning' && item.id === id);
+      if (at >= 0) {
+        const existing = next[at] as Extract<PanelItem, { type: 'reasoning' }>;
+        const updated: Extract<PanelItem, { type: 'reasoning' }> = {
+          type: 'reasoning',
+          id,
+          text: existing.text + delta,
+          ...(existing.redacted || redacted ? { redacted: true as const } : {}),
+          ...(durationMs !== undefined ? { durationMs } : existing.durationMs !== undefined ? { durationMs: existing.durationMs } : {}),
+          ...(!done ? { open: true as const } : {}),
+        };
+        next[at] = updated;
+      } else if (delta || redacted || done) {
+        next.push({
+          type: 'reasoning',
+          id,
+          text: delta,
+          ...(redacted ? { redacted: true as const } : {}),
+          ...(durationMs !== undefined ? { durationMs } : {}),
+          ...(!done ? { open: true as const } : {}),
+        });
+      }
+      return next;
+    }
     case 'text':
       if (typeof data.delta !== 'string') return next;
       if (last?.type === 'text' && last.open) next[next.length - 1] = { type: 'text', text: last.text + data.delta, open: true };
