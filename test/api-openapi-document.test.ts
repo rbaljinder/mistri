@@ -151,3 +151,68 @@ test('a document that nests past the canonical depth names the limit, the path a
     },
   );
 });
+
+test('a document past the 10,000-node ceiling names the limit, its node count, and its largest entries (#581)', () => {
+  const tableCount = 35;
+  const colCount = 35;
+  const tables = Array.from({ length: tableCount }, (_, t) => ({
+    id: `tbl_${t}`,
+    name: `tbl_${t}`,
+    schema: '',
+    isView: false,
+    columns: [
+      { name: 'id', type: 'INTEGER', primaryKey: true, nullable: false },
+      ...Array.from({ length: colCount }, (_, c) => ({ name: `col_${c}`, type: 'TEXT', primaryKey: false, nullable: true })),
+    ],
+  }));
+  const largeSchema: DatabaseSchema = { dialect: 'sqlite', label: 'Logical', readAt: '', foreignKeys: [], tables };
+  const resources = Object.fromEntries(tables.map((t) => [t.id, { access: 'write' as const }]));
+  const apiResources = Object.fromEntries(
+    tables.map((t) => [t.id, { fields: t.columns.map((c) => c.name), sorts: [] as string[], filters: [] as string[] }]),
+  );
+  const app = parseAppConfig(
+    {
+      id: 'big',
+      name: 'Big',
+      sources: { business: { connection: 'private' } },
+      resources,
+      auth: { roles: { editor: { read: true, commands: ['edit'] } } },
+      views: { items: { kind: 'list', from: 'tbl_0' } },
+      home: 'items',
+    },
+    'fixture',
+  );
+  const input = { note: { type: 'text' as const, optional: true } };
+  app.api = parseTestApi(
+    {
+      version: 1,
+      roles: ['editor'],
+      resources: apiResources,
+      commands: [{ id: 'edit', version: 1, target: 'tbl_0', input }],
+    },
+    ['editor'],
+  )!;
+  const registry = defineCommands({
+    edit: defineCommand({
+      source: 'business',
+      target: 'tbl_0',
+      input,
+      read: ['tbl_0'],
+      write: ['tbl_0'],
+      output: shape({ ok: bool() }),
+      async handle() {
+        return { ok: true };
+      },
+    }),
+  });
+  assert.throws(
+    () => renderApiOpenApi(app, largeSchema, registry, evidence, { integers: 'number' }),
+    (error: Error) => {
+      assert.doesNotMatch(error.message, /command request is invalid/);
+      assert.match(error.message, /past the 10,000-node limit/);
+      assert.match(error.message, /\[api-document-size\]/);
+      assert.match(error.message, /Largest entries:/);
+      return true;
+    },
+  );
+});

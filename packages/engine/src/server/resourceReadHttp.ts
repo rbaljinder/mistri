@@ -621,8 +621,6 @@ export async function dispatchResourceReadHttp(
     let view = normaliseView(body.view);
     let merged = view;
     const person = await personFor(body.text, body.query);
-    // One wave from here: the view's rows beside its count (readView).
-    options.lastWave?.();
     const errors: Array<{ message: string; at?: number }> = [];
     if (!view.base && typeof body.text !== 'string') {
       return refusal(400, ['A view needs a base table.']);
@@ -668,6 +666,8 @@ export async function dispatchResourceReadHttp(
     if (errors.length) return reply(200, { errors });
 
     try {
+      // One wave from here when no child includes follow; with includes, the last child read closes the snapshot.
+      if (!parsedIncludes.specs.length) options.lastWave?.();
       const {
         view: validated,
         result,
@@ -688,6 +688,7 @@ export async function dispatchResourceReadHttp(
           parsedIncludes.specs,
           options.now(),
           person,
+          options.lastWave,
         );
         if (!inc.ok) return refusal(400, [inc.error]);
         included = inc.included;

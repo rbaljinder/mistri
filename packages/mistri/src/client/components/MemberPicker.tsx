@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { api } from '@mistriwork/kit/client/core.js';
-import { captureAccountIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
+import { captureSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { Dropdown, readsAsName } from '@mistriwork/kit/client/components/Dropdown.js';
 import { say } from '../copy/forms/components/MemberPicker.js';
 
@@ -21,7 +21,7 @@ interface Named {
 let asked: { readonly owner: string; readonly read: Promise<readonly Named[] | null> } | undefined;
 
 function ownerKey(): string {
-  const owner = captureAccountIdentity();
+  const owner = captureSessionIdentity();
   return `${owner.epoch}\n${owner.accountId ?? ''}\n${owner.tenant?.tenantId ?? ''}`;
 }
 

@@ -4,7 +4,7 @@
  * own. A command path always contains `/commands/`, which no read path can
  * (`commands` is a reserved resource name), and command components have their
  * own prefixes, so a document splits back into its halves without guessing. */
-import { MAX_JSON_DEPTH, snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
+import { MAX_JSON_DEPTH, MAX_JSON_NODES, snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import type { AppDef } from '../../shared/appModel.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
@@ -37,9 +37,39 @@ function tooDeep(value: unknown, path: readonly string[] = []): readonly string[
   }
   return undefined;
 }
-/* The document is spelled by the walk a command request is read by, which refuses past its depth with the request's
-   own sentence ("The command request is invalid."), so an App whose API nests too deep was told nothing it could act
-   on. Said here as the document's: the limit, the path, and what nests there. */
+/** Total JSON nodes in `value`, matching the node counter in canonicalJson.ts (`snapshot`). */
+function countNodes(value: unknown): number {
+  if (value === null || typeof value !== 'object') return 1;
+  let total = 1;
+  if (Array.isArray(value)) {
+    for (let i = 0; i < value.length; i++) total += countNodes(value[i]);
+  } else {
+    for (const child of Object.values(value)) total += countNodes(child);
+  }
+  return total;
+}
+/** The largest top-level `paths` and `components.schemas` entries in an OpenAPI document by node count. */
+function largestExposures(value: unknown, top = 5): Array<readonly [label: string, nodes: number]> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  const doc = value as Record<string, unknown>;
+  const entries: Array<readonly [string, number]> = [];
+  if (doc.paths && typeof doc.paths === 'object' && !Array.isArray(doc.paths)) {
+    for (const [path, entry] of Object.entries(doc.paths as Record<string, unknown>)) entries.push([path, countNodes(entry)]);
+  }
+  const schemas =
+    doc.components && typeof doc.components === 'object' && !Array.isArray(doc.components)
+      ? (doc.components as Record<string, unknown>).schemas
+      : undefined;
+  if (schemas && typeof schemas === 'object' && !Array.isArray(schemas)) {
+    for (const [name, entry] of Object.entries(schemas as Record<string, unknown>)) entries.push([`schema:${name}`, countNodes(entry)]);
+  }
+  entries.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return entries.slice(0, top);
+}
+/* The document is spelled by the walk a command request is read by, which refuses past its depth or node ceiling with
+   the request's own sentence ("The command request is invalid."), so an App whose API nests too deep or grows past
+   10,000 nodes was told nothing it could act on. Said here as the document's: the limit, the size or path, and what
+   to trim. */
 const canonical = (value: unknown) => {
   const deep = tooDeep(value);
   if (deep) {
@@ -50,6 +80,17 @@ const canonical = (value: unknown) => {
         (command && deep.includes('targets')
           ? `Command "${command}" takes many records, and its body's keys nest past the limit: take \`targets: 'many'\` off its entry in \`api.commands\` (its one-record route stays), or leave it out of \`api.commands\`.`
           : `Flatten what nests there, or leave it out of \`api\`.`),
+    );
+  }
+  const nodes = countNodes(value);
+  if (nodes > MAX_JSON_NODES) {
+    const largest = largestExposures(value);
+    const named = largest.length
+      ? ` Largest entries: ${largest.map(([label, count]) => `${label} (${count.toLocaleString('en-US')})`).join(', ')}.`
+      : '';
+    throw new Error(
+      `The App's API document has ${nodes.toLocaleString('en-US')} nodes, past the ${MAX_JSON_NODES.toLocaleString('en-US')}-node limit a document is held to [api-document-size].${named} ` +
+        `Trim the exposed fields or remove entries from \`api\`.`,
     );
   }
   return snapshot(value, 2_097_152).json;

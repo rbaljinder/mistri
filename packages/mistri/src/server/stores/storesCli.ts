@@ -252,11 +252,14 @@ export function tenantStoresNeeded(
   history: (app: LoadedApp['app'], pages: LoadedApp['pages']) => ReadonlyMap<string, unknown>,
 ): string[] {
   const commands = Object.values(registry ?? {});
+  const notifying = Object.values(loaded.app.resources ?? {}).filter((resource) => resource.notify?.length);
   return [
     ...tenantPolicyStores(policy),
     ...(commands.length ? ['command-journal'] : []),
     ...(commands.some((command) => getCommandEvents(command) || getCommandEffects(command)) ? ['command-events'] : []),
     ...(Object.values(loaded.app.resources ?? {}).some((resource) => resource.clone !== undefined) ? ['tenant-sandboxes'] : []),
+    ...(notifying.length ? ['inbox'] : []),
+    ...(notifying.some((resource) => resource.notify!.some((rule) => rule.send?.channel === 'email')) ? ['integrations'] : []),
     ...(history(loaded.app, loaded.pages).size ? ['record-history'] : []),
     ...(Object.values(loaded.app.resources ?? {}).some((resource) => resource.audit?.reads) ? ['read-audit'] : []),
   ];
@@ -503,6 +506,14 @@ async function appStoreSteps(
     if (registryOf) add(home, ['command-journal'], journal);
     if (Object.values(app.resources ?? {}).some((resource) => resource.clone !== undefined))
       add(home, ['tenant-sandboxes'], unbound('tenant-sandboxes', 'sandbox store'));
+    const tenantNotifying = Object.entries(app.resources ?? {}).filter(([, resource]) => resource.notify?.length);
+    if (tenantNotifying.length) add(home, ['inbox'], unbound('inbox', 'notification store'));
+    /* A notify rule that emails an address the record holds queues its mail in the integrations store, in the write's transaction. */
+    if (
+      tenantNotifying.some(([, resource]) => resource.notify!.some((rule) => rule.send?.channel === 'email')) &&
+      !jobStores.includes('integrations')
+    )
+      add(home, ['integrations'], unbound('integrations', 'integrations store'));
     if (historyRules(app, loaded.pages).size) add(home, ['record-history'], unbound('record-history', 'record history'));
     /* Every tenant's read audit, beside the tenant source, each row carrying its tenant (readAudit.ts). */
     if (Object.values(app.resources ?? {}).some((resource) => resource.audit?.reads))

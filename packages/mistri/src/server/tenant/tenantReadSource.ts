@@ -1381,7 +1381,7 @@ export async function openPostgresTenantReadSource(
          fence, or a database that failed to answer it, is the answer. */
       const fenced = shared.lease === undefined ? false : await shared.closed!;
       /* It asked more than it said its last wave was: an answer built past what the fence proved fails closed. */
-      if (shared.overrun) return denyTenant();
+      if (shared.overrun) return denyTenant(new Error('Tenant read snapshot ran a query after lastWave().'));
       return { value, fenced };
     };
     const markLastWave = () => {

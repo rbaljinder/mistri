@@ -1407,4 +1407,122 @@ describe('over HTTP, under a row policy', () => {
       'a signed-out visitor is not served a page that is not public',
     );
   });
+
+  test('page-undeclared (#583): scanPageSource flags a rollup whose child table is missing from reads once withRollups attaches rollups', async (t) => {
+    const { parseAppConfig, withRollups } = await import('../packages/mistri/src/shared/app.js');
+    const dir = mkdtempSync(join(tmpdir(), 'mistri-page-rollup-scan-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const dbFile = join(dir, 'desk.db');
+    const db = new DatabaseSync(dbFile);
+    db.exec(`
+      CREATE TABLE ticket (id INTEGER PRIMARY KEY, title TEXT NOT NULL);
+      CREATE TABLE comment (id INTEGER PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES ticket(id), body TEXT NOT NULL);
+    `);
+    db.close();
+    const adapter = connect(dbFile);
+    t.after(() => adapter.close());
+    const rawSchema = await adapter.introspect();
+    const app = parseAppConfig(
+      {
+        id: 'desk',
+        name: 'Desk',
+        connection: 'desk',
+        resources: {
+          ticket: {
+            rollups: {
+              comment_count: { from: 'comment', whose: 'ticket_id', fn: 'count' },
+            },
+          },
+          comment: {},
+        },
+        views: { tickets: { kind: 'list', from: 'ticket' } },
+        home: 'tickets',
+      },
+      'fixture',
+    );
+    const source = `import { definePage } from '@mistriwork/mistri/page';
+const page = definePage({ label: 'Board', reads: ['ticket'], component: Board });
+export default page;
+function Board() {
+  const rows = page.useRows('ticket', { show: ['title', 'comment_count'], query: 'comment_count > 0' });
+  return <div>{rows.data?.length ?? 0}</div>;
+}
+`;
+    const parseAst = await astParser();
+    const manifest = { key: 'board', reads: ['ticket'], commands: [] };
+    // Without withRollups, rollups are absent from the catalog so scanPageSource stays silent.
+    assert.deepEqual(scanPageSource(parseAst, source, 'tsx', manifest, rawSchema).undeclared, []);
+    // With withRollups (as check.ts now passes to lintComponents), check flags the undeclared child table.
+    const decorated = withRollups(app, rawSchema);
+    const scan = scanPageSource(parseAst, source, 'tsx', manifest, decorated);
+    assert.deepEqual(
+      scan.undeclared.map((problem) => problem.text),
+      [
+        '[page-undeclared] useRows("ticket") reads "comment" through its show "comment_count", which the page "board" does not declare in its reads',
+      ],
+    );
+    assert.deepEqual(scanPageSource(parseAst, source, 'tsx', { ...manifest, reads: ['ticket', 'comment'] }, decorated).undeclared, []);
+  });
+
+  test(
+    'page-undeclared (#583): mistri check end-to-end flags a literal show/query over a rollup whose child table is missing from reads',
+    { skip: Number(process.versions.node.split('.')[0]) < 24 },
+    async (t) => {
+      const { runCheck } = await import('../packages/mistri/src/server/build/check.js');
+      const { installMistri } = await import('./support/installedMistri.js');
+      const dir = mkdtempSync(join(tmpdir(), 'mistri-page-rollup-check-'));
+      t.after(() => rmSync(dir, { recursive: true, force: true }));
+      mkdirSync(join(dir, 'node_modules'));
+      installMistri(join(dir, 'node_modules'));
+      const dbFile = join(dir, 'desk.db');
+      const db = new DatabaseSync(dbFile);
+      db.exec(`
+        CREATE TABLE ticket (id INTEGER PRIMARY KEY, title TEXT NOT NULL);
+        CREATE TABLE comment (id INTEGER PRIMARY KEY, ticket_id INTEGER NOT NULL REFERENCES ticket(id), body TEXT NOT NULL);
+      `);
+      db.close();
+      const appDir = join(dir, 'app');
+      mkdirSync(join(appDir, 'pages'), { recursive: true });
+      writeFileSync(join(appDir, 'package.json'), '{"type":"module"}\n');
+      writeFileSync(
+        join(appDir, 'app.json'),
+        JSON.stringify({
+          id: 'desk',
+          name: 'Desk',
+          connection: 'desk',
+          resources: {
+            ticket: {
+              rollups: {
+                comment_count: { from: 'comment', whose: 'ticket_id', fn: 'count' },
+              },
+            },
+            comment: {},
+          },
+          views: {
+            tickets: { kind: 'list', from: 'ticket' },
+          },
+          home: 'tickets',
+          nav: ['tickets', 'board'],
+        }),
+      );
+      writeFileSync(
+        join(appDir, 'pages', 'board.page.tsx'),
+        `import { definePage } from '@mistriwork/mistri/page';
+const page = definePage({ label: 'Board', reads: ['ticket'], component: Board });
+export default page;
+function Board() {
+  const rows = page.useRows('ticket', { show: ['title', 'comment_count'], query: 'comment_count > 0' });
+  return <div>{rows.data?.length ?? 0}</div>;
+}
+`,
+      );
+      const config = join(dir, 'mistri.json');
+      writeFileSync(config, JSON.stringify({ connections: [{ name: 'desk', url: dbFile }] }));
+      const lines: string[] = [];
+      const code = await runCheck(['--app', appDir, '--config', config, '--json'], (line) => lines.push(line));
+      const output = lines.join('\n');
+      assert.notEqual(code, 0, output);
+      assert.match(output, /\[page-undeclared\].*reads \\"comment\\" through its show \\"comment_count\\"/, output);
+    },
+  );
 });

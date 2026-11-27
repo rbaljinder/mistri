@@ -12,7 +12,7 @@
  *
  * Outside a tenant App (no tenant lease) the team is empty and nothing is requested.
  */
-import { captureAccountIdentity, type SessionIdentitySnapshot } from '@mistriwork/kit/client/sessionIdentity.js';
+import { captureSessionIdentity, type SessionIdentitySnapshot } from '@mistriwork/kit/client/sessionIdentity.js';
 import type { AdministrationMembershipImage, AdministrationSession, AdministrationTenantImage } from '../shared/tenantAdministration.js';
 import type { InvitationIssuerSession, InvitationPair } from '../shared/tenantInvitations.js';
 import {
@@ -65,7 +65,7 @@ export function createTeamAccess(): TeamAccess {
   let held: Held | null = null;
 
   const target = (): { owner: SessionIdentitySnapshot; tenantId: string } | null => {
-    const owner = captureAccountIdentity();
+    const owner = captureSessionIdentity();
     const tenantId = owner.tenant?.tenantId;
     if (owner.mode !== 'authenticated' || !owner.accountId || !owner.appId || !tenantId || owner.tenant?.realm) return null;
     return { owner, tenantId };

@@ -94,6 +94,7 @@ export async function runChildIncludes(
   specs: readonly ValidatedChildInclude[],
   now: Date,
   person: { readonly me?: QueryPerson | null },
+  lastWave?: () => void,
 ): Promise<{ ok: true; included: Record<string, IncludedChildPayload> } | { ok: false; error: string }> {
   if (!specs.length) return { ok: true, included: {} };
   const baseTable = findTable(schema, baseId);
@@ -129,7 +130,8 @@ export async function runChildIncludes(
     return { ok: true, included };
   }
 
-  for (const spec of specs) {
+  for (let idx = 0; idx < specs.length; idx++) {
+    const spec = specs[idx]!;
     const childTable = findTable(schema, spec.from);
     if (!childTable) {
       return { ok: false, error: `Included table "${spec.from}" was not found.` };
@@ -196,6 +198,7 @@ export async function runChildIncludes(
       ...(orderBy?.length ? { orderBy } : {}),
     };
     const fetchLimit = Math.min(uniqueTuples.length * spec.limit, CHILD_TOTAL_CAP);
+    if (idx === specs.length - 1) lastWave?.();
     const { view: validatedChild, result: childResult } = await readView(
       adapter,
       schema,

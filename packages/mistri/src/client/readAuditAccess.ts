@@ -7,7 +7,7 @@
  * Outside a tenant App (no tenant lease) the log is empty and nothing is requested.
  */
 import { api } from '@mistriwork/kit/client/core.js';
-import { captureAccountIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
+import { captureSessionIdentity } from '@mistriwork/kit/client/sessionIdentity.js';
 import { EMPTY_READS, type ReadAuditAccess, type ReadAuditFilters, type ReadAuditPage } from './readAuditTypes.js';
 import { say } from './copy/tenancy/readAuditAccess.js';
 
@@ -19,7 +19,7 @@ const TEXT = ['actor', 'resource', 'record', 'since', 'until'] as const;
 export function createReadAuditAccess(): ReadAuditAccess {
   return {
     async read(filters: ReadAuditFilters): Promise<ReadAuditPage> {
-      const owner = captureAccountIdentity();
+      const owner = captureSessionIdentity();
       if (owner.mode !== 'authenticated' || !owner.tenant?.tenantId || owner.tenant.realm) return EMPTY_READS;
       const body: Record<string, unknown> = {};
       for (const key of TEXT) if (typeof filters[key] === 'string' && filters[key] !== '') body[key] = filters[key];

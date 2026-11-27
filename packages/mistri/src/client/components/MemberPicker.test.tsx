@@ -8,7 +8,7 @@ const identity = vi.hoisted(() => ({
   current: { mode: 'authenticated' as const, epoch: 1, accountId: 'eve', tenant: { tenantId: 'north' } },
 }));
 vi.mock('@mistriwork/kit/client/core.js', () => core);
-vi.mock('@mistriwork/kit/client/sessionIdentity.js', () => ({ captureAccountIdentity: () => identity.current }));
+vi.mock('@mistriwork/kit/client/sessionIdentity.js', () => ({ captureSessionIdentity: () => identity.current }));
 const { MemberPicker, forgetTeamNames } = await import('./MemberPicker.js');
 
 beforeEach(() => {
