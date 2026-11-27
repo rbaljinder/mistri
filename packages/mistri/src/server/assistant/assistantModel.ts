@@ -16,10 +16,12 @@
  */
 import { readFileSync } from 'node:fs';
 import { scriptedModel, type AssistantScript } from './assistantScripted.js';
-import { ModelUnavailable, modelRefused } from './assistantModelRefusal.js';
+import { ModelUnavailable, modelRefused, streamCallbacks, type ModelStreamSink } from './assistantModelRefusal.js';
 import { openaiModel } from './assistantOpenAI.js';
 import { recordingKeyMissing, recordingModel, replayModel } from './assistantCassette.js';
 import { geminiModel, getAssistantProvider, openaiCompatibleModel } from '../agents/providers.js';
+
+export type { ModelStreamSink };
 
 export interface ModelUsage {
   input: number;
@@ -53,25 +55,6 @@ interface ModelReply {
   /** `end_turn`, `tool_use`, `max_tokens`, `refusal`… as the provider says it. */
   stopReason: string;
   usage: ModelUsage;
-}
-interface ReasoningEvent {
-  id: string;
-  delta?: string;
-  redacted?: true;
-  done?: true;
-  durationMs?: number;
-}
-export type ModelStreamSink =
-  | ((delta: string) => void)
-  | { onText: (delta: string) => void; onReasoning?: (event: ReasoningEvent) => void };
-
-export function streamCallbacks(sink: ModelStreamSink): {
-  onText: (delta: string) => void;
-  onReasoning: (event: ReasoningEvent) => void;
-} {
-  return typeof sink === 'function'
-    ? { onText: sink, onReasoning: () => undefined }
-    : { onText: sink.onText, onReasoning: sink.onReasoning ?? (() => undefined) };
 }
 
 export interface AssistantModel {

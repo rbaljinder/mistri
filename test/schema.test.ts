@@ -817,7 +817,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // `aspect`, `round` are new names: 1850/546.
     // 1.0.0-rc.91: declarative CTE-backed `derived` resources (`derived`, `with`, `alias`, `where`, `join`, `groupBy`,
     // `measures`, `select`, `orderBy`, `limit`, plus `name`, `from` already present: twelve entries; eight new names): 1862/554.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1862, names: 554 });
+    // Unreleased: assistant surface & reasoning controls (`effortPicker`, `reasoning`, `presentations`,
+    // `defaultPresentation`: four entries; four new names): 1866/558.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1866, names: 558 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

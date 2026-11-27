@@ -15,15 +15,8 @@
  * (`OPENAI_API_KEY`), never from an App and never to a browser, and the
  * model name is the App's own (`assistant.model`), as Anthropic's is.
  */
-import {
-  streamCallbacks,
-  type AssistantModel,
-  type ModelBlock,
-  type ModelMessage,
-  type ModelStreamSink,
-  type ModelUsage,
-} from './assistantModel.js';
-import { modelRefused } from './assistantModelRefusal.js';
+import type { AssistantModel, ModelBlock, ModelMessage, ModelUsage } from './assistantModel.js';
+import { modelRefused, streamCallbacks, type ModelStreamSink } from './assistantModelRefusal.js';
 
 /** The reply, as AssistantModel's stream returns it. */
 type ModelReply = Awaited<ReturnType<AssistantModel['stream']>>;

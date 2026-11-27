@@ -13,7 +13,8 @@
  */
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { streamCallbacks, type AssistantModel, type ModelBlock, type ModelMessage, type ModelRequest } from './assistantModel.js';
+import type { AssistantModel, ModelBlock, ModelMessage, ModelRequest } from './assistantModel.js';
+import { streamCallbacks } from './assistantModelRefusal.js';
 import { NOW_LINE } from './assistantCatalog.js';
 
 type ModelReply = Awaited<ReturnType<AssistantModel['stream']>>;

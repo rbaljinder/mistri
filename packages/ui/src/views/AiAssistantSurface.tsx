@@ -344,6 +344,40 @@ export function AiAssistantSurface({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, sidebarWidth, minWidth, maxWidth]);
 
+  /* Settle any in-flight Drawer arrival or content-resize spring immediately in fullscreen/floating modes so
+     mode switches snap cleanly to their target geometry without inheriting a horizontal translate (motion doctrine). */
+  useLayoutEffect(() => {
+    if (mode !== 'fullscreen' && mode !== 'floating') return;
+    const el = frameRef.current;
+    if (!el) return;
+    const settle = () => {
+      if (typeof el.getAnimations === 'function') {
+        for (const animation of el.getAnimations()) animation.finish();
+      }
+      if (el.style.translate) el.style.translate = 'none';
+    };
+    settle();
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(settle) : 0;
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(settle) : null;
+    observer?.observe(el);
+    return () => {
+      if (raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf);
+      observer?.disconnect();
+    };
+  }, [mode]);
+
+  /* Close the mobile page rail on Escape even if focus is outside the surface section. */
+  useEffect(() => {
+    if (mode !== 'page' || !railOpen || !onPhone) return;
+    const onWindowKey = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      event.preventDefault();
+      onRailOpenChange?.(false);
+    };
+    window.addEventListener('keydown', onWindowKey);
+    return () => window.removeEventListener('keydown', onWindowKey);
+  }, [mode, railOpen, onPhone, onRailOpenChange]);
+
   const handleSurfaceKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     onKeyDown?.(event);
     if (event.defaultPrevented || event.key !== 'Escape') return;
@@ -383,7 +417,7 @@ export function AiAssistantSurface({
     );
   }
 
-  /* Page mode: full-page workspace with Resizable rail on desktop and UI SDK Drawer rail on mobile. */
+  /* Page mode: full-page workspace with Resizable rail on desktop and slide-over sheet rail on mobile inside the landmark. */
   if (mode === 'page') {
     const mainPane = <div className="nx-ai-surface-main">{children}</div>;
     return (
@@ -394,6 +428,7 @@ export function AiAssistantSurface({
         aria-label={ariaLabel}
         data-slot="ai-assistant-surface"
         data-mode="page"
+        data-rail-open={railOpen ? '' : undefined}
         data-component={componentScope}
         className={cx('nx-ai-surface nx-ai-surface-page', className)}
         style={style}
@@ -426,17 +461,14 @@ export function AiAssistantSurface({
         ) : (
           <>
             {rail ? (
-              <Drawer
-                open={railOpen}
-                onOpenChange={(next) => onRailOpenChange?.(next)}
-                side="left"
-                ariaLabel={words.rail}
-                className="nx-ai-surface-rail-drawer"
-              >
-                <nav className="nx-ai-surface-rail" aria-label={words.rail}>
+              <>
+                {railOpen ? (
+                  <div className="nx-ai-surface-rail-scrim" aria-hidden="true" onClick={() => onRailOpenChange?.(false)} />
+                ) : null}
+                <nav className="nx-ai-surface-rail nx-ai-surface-rail-mobile" hidden={!railOpen} aria-label={words.rail}>
                   {rail}
                 </nav>
-              </Drawer>
+              </>
             ) : null}
             {mainPane}
           </>
@@ -459,8 +491,18 @@ export function AiAssistantSurface({
   const isRight = floatingPosition.endsWith('right');
   const isBottom = floatingPosition.startsWith('bottom');
 
+  const floatingCornerStyle: CSSProperties =
+    isFloating && !onPhone && floatingPosition !== 'bottom-right'
+      ? {
+          top: isBottom ? 'auto' : 'var(--space-5)',
+          bottom: isBottom ? 'var(--space-5)' : 'auto',
+          left: isRight ? 'auto' : 'var(--space-5)',
+          right: isRight ? 'var(--space-5)' : 'auto',
+        }
+      : {};
   const overlayStyle: CSSProperties = {
     ...style,
+    ...floatingCornerStyle,
     ...(isSidebar && effectiveWidth !== undefined ? ({ '--sheet-width': `${effectiveWidth}px` } as CSSProperties) : {}),
     ...(isFloating && floatingSize && !onPhone
       ? ({
@@ -611,6 +653,17 @@ export function AiAssistantSurface({
           data-slot="ai-floating-resize"
           data-position={floatingPosition}
           className="nx-ai-floating-resize"
+          style={
+            floatingPosition !== 'bottom-right'
+              ? {
+                  top: isBottom ? 0 : 'auto',
+                  bottom: isBottom ? 'auto' : 0,
+                  left: isRight ? 0 : 'auto',
+                  right: isRight ? 'auto' : 0,
+                  cursor: isBottom === isRight ? 'nwse-resize' : 'nesw-resize',
+                }
+              : undefined
+          }
           onPointerDown={(event) => {
             if (event.pointerType === 'mouse' && event.button !== 0) return;
             const box = frameRef.current ? viewportBox(frameRef.current) : null;

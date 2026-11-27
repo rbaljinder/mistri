@@ -7,7 +7,8 @@
  * `$record` in a tool input is the open record's key, read from the context
  * line the turn puts in the person's message, so one script serves any record.
  */
-import { streamCallbacks, type AssistantModel, type ModelBlock, type ModelMessage } from './assistantModel.js';
+import type { AssistantModel, ModelBlock, ModelMessage } from './assistantModel.js';
+import { streamCallbacks } from './assistantModelRefusal.js';
 import { ACTED_MARK } from './assistantTurn.js';
 
 interface ScriptStep {

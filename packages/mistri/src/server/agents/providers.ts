@@ -5,16 +5,8 @@
  * Every adapter speaks Mistri's single `AssistantModel` interface over plain `fetch`
  * (zero external SDK dependencies), including live reasoning / thinking streams.
  */
-import {
-  streamCallbacks,
-  type AssistantModel,
-  type ModelBlock,
-  type ModelMessage,
-  type ModelRequest,
-  type ModelStreamSink,
-  type ModelUsage,
-} from '../assistant/assistantModel.js';
-import { ModelUnavailable, modelRefused } from '../assistant/assistantModelRefusal.js';
+import type { AssistantModel, ModelBlock, ModelMessage, ModelRequest, ModelUsage } from '../assistant/assistantModel.js';
+import { ModelUnavailable, modelRefused, streamCallbacks, type ModelStreamSink } from '../assistant/assistantModelRefusal.js';
 import { openaiModel } from '../assistant/assistantOpenAI.js';
 
 type ModelReply = Awaited<ReturnType<AssistantModel['stream']>>;
