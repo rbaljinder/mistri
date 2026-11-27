@@ -12,6 +12,7 @@ import { enteredTenant, type tenantEnterRequest } from '../../shared/tenantBoot.
 import type { TenantContextAssertion, TenantContextReply } from '../../shared/tenantContext.js';
 import type { VerifiedSessionInstance } from '../auth/auth.js';
 import { getTenantHostIntent } from '../http/tenantHosts.js';
+import { discoveryLeaseEntererOf } from './tenantContexts.js';
 import type { tenantSessionDiscovery } from './tenantDiscovery.js';
 import type { TenantAddresses } from './tenantIntakeModel.js';
 import type { TenantDiscovery } from './tenantRequestParts.js';
@@ -44,18 +45,23 @@ export async function enterTenant(given: {
   readonly gone: () => boolean;
 }): Promise<TenantEntered> {
   const { req, asked, contexts, discoverFor, assertActive } = given;
+  const discoveryEnterer = discoveryLeaseEntererOf<IncomingMessage>(contexts);
   /* A lease in `tenantId`, in the page's own order (client tenantBrowser.ts `contextFor`): this tab's kept
      context resumed where it is that tenant's, else a new one. A refusal is no lease: the page then asks to
      open one itself, and hears why in that route's words. */
-  const leaseIn = async (tenantId: string): Promise<TenantContextReply | undefined> => {
+  const leaseIn = async (tenantId: string, discovered?: object): Promise<TenantContextReply | undefined> => {
     if (asked.kept?.tenantId === tenantId) {
       try {
-        return await contexts.resume(req, [tenantId], { tabId: asked.kept.tabId });
+        return discoveryEnterer && discovered
+          ? await discoveryEnterer.resumeFromDiscovery(req, [tenantId], { tabId: asked.kept.tabId }, discovered)
+          : await contexts.resume(req, [tenantId], { tabId: asked.kept.tabId });
       } catch {
         /* Gone, expired, or held by another page: a new one. */
       }
     }
-    return contexts.open(req, [tenantId], {}).catch(() => undefined);
+    const opened =
+      discoveryEnterer && discovered ? discoveryEnterer.openFromDiscovery(req, [tenantId], discovered) : contexts.open(req, [tenantId], {});
+    return opened.catch(() => undefined);
   };
   /* A lease the answer will not carry is let go at once, as a page leaving lets its own go. */
   const letGo = async (pending: Promise<TenantContextReply | undefined> | undefined) => {
@@ -63,32 +69,21 @@ export async function enterTenant(given: {
     if (lease)
       await contexts.release(req, { tabId: lease.tabId, expectedContext: lease.context, expectedRevision: lease.revision }).catch(() => {});
   };
-  /* The tenant the page has reason to expect — the link's, the one this tab kept, or else the one discovery's
-     first snapshot finds — is opened beside the rest of discovery rather than after it: opening is its own
-     admission, exactly what the page could ask of `/open` for any tenant without asking discovery first, and
-     nothing of the tenant is read before discovery has answered that it is the person's one. Where it is not,
-     the lease is let go unseen. */
   const named = asked.tenant ?? asked.kept?.tenantId;
   const onHost = getTenantHostIntent(req);
   const hint = onHost && named !== onHost.tenant ? undefined : named;
-  let ahead = hint === undefined ? undefined : { tenantId: hint, lease: leaseIn(hint) };
+  /* When `discoveryEnterer` is available, discovery's own 3-snapshot bracketed proof mints the lease right after
+     discovery returns with zero extra DB snapshots (no speculative `open` needed). Otherwise preserve speculative ahead. */
+  let ahead = !discoveryEnterer && hint !== undefined ? { tenantId: hint, lease: leaseIn(hint) } : undefined;
   let found: TenantDiscovery;
-  /* Who-am-I, said as its own route says it (tenantAuthenticatedHttp.ts `whoamiAnswer`): the page's first
-     request is this one, and holds back every other until it knows whose session it is. A signed-out
-     request is answered as who-am-I answers it, and the page draws the sign-in it always drew. */
   let who: Record<string, unknown> | undefined;
   let proof: VerifiedSessionInstance | null | undefined;
-  /* The addresses of the tenant being entered, asked in the message that names the person's tenants rather than
-     by the App payload on a snapshot of its own. Which tenant is the rule `ahead` follows: the one the page
-     expects, else the only one found; and only ever one of the person's own, which discovery's first snapshot
-     just read. Nothing of them is said until the boot is admitted to that tenant on its lease. */
   let addressesAhead: AddressesAhead | undefined;
   try {
-    /* Named nowhere, the tenant is the one discovery's first snapshot finds, where it finds one. */
     found = await discoverFor(
       req,
       (ids) => {
-        if (ahead === undefined && ids.length === 1) ahead = { tenantId: ids[0]!, lease: leaseIn(ids[0]!) };
+        if (!discoveryEnterer && ahead === undefined && ids.length === 1) ahead = { tenantId: ids[0]!, lease: leaseIn(ids[0]!) };
       },
       (proved) => {
         proof = proved;
@@ -100,7 +95,6 @@ export async function enterTenant(given: {
         },
       },
     );
-    /* The session discovery proved is the one who-am-I says, not another look at the store. */
     who = proof === undefined ? undefined : await given.whoami(proof);
   } catch (error) {
     await letGo(ahead?.lease);
@@ -115,7 +109,7 @@ export async function enterTenant(given: {
         )
       : undefined;
   if (ahead && ahead.tenantId !== sole) await letGo(ahead.lease);
-  const lease = sole === undefined ? undefined : ahead?.tenantId === sole ? await ahead.lease : await leaseIn(sole);
+  const lease = sole === undefined ? undefined : ahead?.tenantId === sole ? await ahead.lease : await leaseIn(sole, found);
   assertActive();
   if (lease && (lease.tenantId !== sole || lease.realm !== undefined || given.gone())) {
     await letGo(Promise.resolve(lease));

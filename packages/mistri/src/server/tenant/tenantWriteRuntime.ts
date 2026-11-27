@@ -1,6 +1,12 @@
 import { restatesConstraint } from '../app/appDataRules.js';
 import { isPromise } from 'node:util/types';
-import { TransactionOperations, TransactionOutcomeUnknown, type WriteTransaction } from '@mistriwork/engine/adapters/adapter.js';
+import {
+  TransactionOperations,
+  TransactionOutcomeUnknown,
+  type InsertRequest,
+  type InsertResult,
+  type WriteTransaction,
+} from '@mistriwork/engine/adapters/adapter.js';
 import { CommandTransactionFailure } from '../../adapters/commands/commandJournal.js';
 import type { AppDef } from '../../shared/app.js';
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
@@ -58,10 +64,17 @@ export interface TenantWriteRuntimeOptions<Request> {
 
 const WRITE_GRANTS = 256;
 const inverseImages = new WeakMap<TenantWriteContext, TenantInverseImages>();
+const batchInserters = new WeakMap<TenantWriteContext, (inputs: readonly InsertRequest[]) => Promise<InsertResult[]>>();
 /** Only a live genuine context can reach the bounded image operations. No raw
  * handle, registration function, caller evidence or public context property. */
 export function tenantInverseImages(context: TenantWriteContext): TenantInverseImages {
   return inverseImages.get(context) ?? denyTenant();
+}
+/** Internal batch-insert capability for bulk imports when the underlying writer supports insertMany. */
+export function tenantBatchInsert(
+  context: TenantWriteContext,
+): ((inputs: readonly InsertRequest[]) => Promise<InsertResult[]>) | undefined {
+  return batchInserters.get(context);
 }
 
 /** Ordinary record authority over the shared request owner. Command grants and
@@ -281,26 +294,44 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
             });
             const context = Object.freeze({ principal, schema, data });
             inverseImages.set(context, createTenantInverseImages(ownership, principal, access, records, deletedPolicy, invoke));
+            if (authorized.insertMany) {
+              batchInserters.set(context, (inputs) =>
+                invoke(inputs, async (values) => {
+                  const results = await authorized.insertMany!(values);
+                  return results.map((result, index) => {
+                    const table = values[index]!.table;
+                    return {
+                      key: project(table, result.key),
+                      applied: project(table, result.applied),
+                      ...(result.row ? { row: project(table, result.row) } : {}),
+                      sql: { text: '', params: [] },
+                    };
+                  });
+                }),
+              );
+            }
             let result!: T;
-            const completed = (value: T): T => {
+            const release = () => {
               accepting = false;
               inverseImages.delete(context);
+              batchInserters.delete(context);
+            };
+            const completed = (value: T): T => {
+              release();
               return captureTenantData(value);
             };
             try {
               const returned = callback(context);
               result = isPromise(returned)
                 ? ((await Promise.prototype.then.call(returned, completed, (error: unknown) => {
-                    accepting = false;
-                    inverseImages.delete(context);
+                    release();
                     throw error;
                   })) as T)
                 : completed(returned);
             } catch (error) {
               callbackFailure = { error };
             }
-            accepting = false;
-            inverseImages.delete(context);
+            release();
             let failed: { error: unknown } | undefined;
             try {
               await operations.finish();

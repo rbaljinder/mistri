@@ -51,6 +51,7 @@ import { pgConnectionOptions } from './postgresValues.js';
 import { sealedPgOptions } from './net/untrustedDatabase.js';
 import type { NetworkPolicy } from './net/networkPolicy.js';
 import { transactionScoped } from './postgresPooler.js';
+import { isRealPgClient, preparedClient, preparedStatementsEnabled, syncPreparedClient } from './postgresPrepared.js';
 import { balancedPoolSize, inBackgroundWork, isWriterCount, lockTimeoutMs, MAX_WRITERS, writeOrder, writerPoolSize } from './writeLanes.js';
 import { startSpan } from './telemetry/trace.js';
 import { delayFlights } from './dbLatency.js';
@@ -644,16 +645,11 @@ export class PgConnectionManager {
            session's own settings, which are statements too. */
         watchSilence(client, this.silenceMs);
         if (!session) return;
-        if (!write) await client.query('SET default_transaction_read_only = on');
-        /* A writer also stops waiting for a lock after lockMs: a row held by
-           another transaction (another pod, a migration's DDL) fails the
-           statement fast, with 55P03, rather than holding this connection —
-           and the save behind it — for the whole statement cap. One message:
-           the settings are two statements and one round trip. */
+        /* One message: all session settings leave in a single round trip on connect. */
         await client.query(
           write
             ? `SET statement_timeout = '${this.capMs / 1000}s'; SET lock_timeout = '${this.lockMs}ms'`
-            : `SET statement_timeout = '${this.capMs / 1000}s'`,
+            : `SET default_transaction_read_only = on; SET statement_timeout = '${this.capMs / 1000}s'`,
         );
       },
     });
@@ -826,6 +822,10 @@ export class PgConnectionManager {
       this.assertOpen();
       throwIfCancelled(signal);
       let borrowed: PgQuery = scoped ?? client;
+      if (!scoped && !destroyAfter && preparedStatementsEnabled() && isRealPgClient(client)) {
+        await syncPreparedClient(client);
+        borrowed = preparedClient(client);
+      }
       if (observeCheckout) {
         if (typeof client.on !== 'function' || typeof client.off !== 'function')
           throw new Error('Observed PostgreSQL checkout is unavailable.');

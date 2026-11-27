@@ -147,6 +147,11 @@ type TenantAdministrationEnrollmentOptions = Readonly<
     supportAuditKey?: SupportAuditKey;
   }
 >;
+const enrollmentMarksLookups = new WeakMap<
+  object,
+  (tenants: readonly string[], entering?: string) => import('./tenantReadSourceShared.js').TenantMarksLookup
+>();
+export const enrollmentMarksLookupOf = (enrollment: object) => enrollmentMarksLookups.get(enrollment);
 // Keep server authority separate from the App/page capture used by data hosts.
 const administrationEnrollments = new WeakMap<object, TenantAdministrationEnrollmentOptions | undefined>();
 /** Only a genuine, still-active enrollment may supply the shared administration/
@@ -379,6 +384,7 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
         members,
         source.replicas,
         source.owner,
+        source.listen,
       ));
     } else {
       const existingPath = source.existingPath ?? denyTenant();
@@ -575,14 +581,14 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
     /* An arrival's marks in one snapshot (`readTenantMarks`): the names and sandboxes above, of the same tenants, and
        where `entering` names the tenant the arrival is about to enter, that tenant's addresses, which its App payload
        would otherwise ask on a snapshot of its own once it is in. Each part is what its own function above reads. */
-    const marks = (tenants: readonly string[], entering?: string) =>
-      discovery.readTenantMarks({
-        names: { template: profileTemplate, tenants },
-        ...(cloning ? { sandboxes: tenants } : {}),
-        ...(entering !== undefined && Object.keys(addressColumns).length
-          ? { addresses: { tenantId: entering, columns: addressColumns } }
-          : {}),
-      });
+    const marksLookup = (tenants: readonly string[], entering?: string) => ({
+      names: { template: profileTemplate, tenants },
+      ...(cloning ? { sandboxes: tenants } : {}),
+      ...(entering !== undefined && Object.keys(addressColumns).length
+        ? { addresses: { tenantId: entering, columns: addressColumns } }
+        : {}),
+    });
+    const marks = (tenants: readonly string[], entering?: string) => discovery.readTenantMarks(marksLookup(tenants, entering));
     const enrollment = Object.freeze({
       deployment: runtime,
       discover: bootstrap.read,
@@ -602,6 +608,7 @@ async function acquire<Request>(config: ReturnType<typeof capture<Request>>, pol
         flagRuntime = value;
       },
     });
+    enrollmentMarksLookups.set(enrollment, marksLookup);
     flagAccess = registerSuiteFlagAccess(enrollment, { reader: discovery, binding, deployment, path, now, maxLifetimeMs });
     enrollments.set(enrollment, {
       app,
@@ -655,6 +662,7 @@ async function acquirePostgres(
   members?: NoticeMembers,
   replicas: readonly string[] = [],
   owner?: string,
+  listen?: string,
 ) {
   const { app, policy, binding } = attested;
   /* Under the row-security backstop (docs/postgresql.md) the roles are attested before anything opens on them, and
@@ -700,6 +708,7 @@ async function acquirePostgres(
     tenantNoticeBinding(app, ownership, members, tenantLocaleReader(app, reader), tenantZoneReader(app, reader)),
     app.branding !== undefined,
     auditsReads(app),
+    listen,
   );
   closes.push(writer.close);
   const discovery = await openPostgresTenantReadSource(url, ownership, binding, now);

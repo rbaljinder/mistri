@@ -13,7 +13,7 @@ import { runManagedCommandTransaction, runManagedTransaction } from './tenantMan
 import type { PlatformMembershipEvidence } from './tenantPlatform.js';
 import { composePlatformReadScope } from './tenantReadScope.js';
 import { assertSqlitePlatformMembershipSnapshot } from './tenantStore.js';
-import { assertPostgresPlatformMembershipFence } from './tenantStorePostgres.js';
+import { assertPostgresPlatformMembershipFence, postgresPlatformMembershipFenceAhead } from './tenantStorePostgres.js';
 import type { TenantWriteKind } from './tenantWriteKindContract.js';
 
 // A structural alias, not an interface: the published declarations expand it
@@ -49,6 +49,7 @@ export const platformWriteKind = Object.freeze<TenantWriteKind<PlatformMembershi
   sqliteFence: (db, evidence, { owner, live }) => assertSqlitePlatformMembershipSnapshot(db, owner, evidence, live),
   postgresFenceHeld: true,
   postgresFence: (client, evidence, { owner, live }) => assertPostgresPlatformMembershipFence(client, owner, evidence, live),
+  postgresFenceAhead: (owner, evidence) => postgresPlatformMembershipFenceAhead(owner, evidence),
   journalOwner: (owner, platformMember) => ({
     realm: 'platform' as const,
     appId: owner.appId,

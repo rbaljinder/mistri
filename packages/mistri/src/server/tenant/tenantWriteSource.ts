@@ -776,6 +776,7 @@ export async function openPostgresTenantWriteSource(
   notices?: NoticeBinding,
   branding = false,
   readAudit = false,
+  listenUrl?: string,
 ): Promise<TenantWriteSource> {
   let adapter: PostgresAdapter | undefined, platformAdapter: PostgresAdapter | undefined;
   try {
@@ -871,7 +872,7 @@ export async function openPostgresTenantWriteSource(
       if (branding) await bindTenantBrandingStore(dbAdapter, 'postgres');
       if (readAudit) await bindTenantReadAuditStore(dbAdapter);
       if (shared) await shareTenantLive(dbAdapter, owned);
-      else await bindTenantLive(dbAdapter, owned, url);
+      else await bindTenantLive(dbAdapter, owned, url, listenUrl);
       return committed;
     };
     await prepare(first);

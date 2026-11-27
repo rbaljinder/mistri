@@ -597,25 +597,51 @@ class SearchIndexer {
     });
   }
 
+  private requeueOrWarn(job: IndexJob, error: unknown): void {
+    if (job.attempt < this.retryMs.length) {
+      this.waiting++;
+      setTimeout(() => {
+        this.waiting--;
+        this.enqueue({ ...job, attempt: job.attempt + 1 });
+      }, this.retryMs[job.attempt]).unref();
+    } else {
+      this.registry.onWarning(
+        `the search index missed a change to ${job.resource} (${(error as Error).message}). ` +
+          'Searches still re-read every row; run mistri --reindex to bring the index back in step.',
+      );
+    }
+  }
+
   private async drain(): Promise<void> {
     while (this.queue.size) {
-      const [id, job] = this.queue.entries().next().value!;
-      this.queue.delete(id);
-      try {
-        await this.apply(job);
-      } catch (error) {
-        if (job.attempt < this.retryMs.length) {
-          this.waiting++;
-          setTimeout(() => {
-            this.waiting--;
-            this.enqueue({ ...job, attempt: job.attempt + 1 });
-          }, this.retryMs[job.attempt]).unref();
-        } else {
-          this.registry.onWarning(
-            `the search index missed a change to ${job.resource} (${(error as Error).message}). ` +
-              'Searches still re-read every row; run mistri --reindex to bring the index back in step.',
-          );
+      const [firstId, first] = this.queue.entries().next().value!;
+      this.queue.delete(firstId);
+      if (first.dependents) {
+        try {
+          await this.applyDependents(first);
+        } catch (error) {
+          this.requeueOrWarn(first, error);
         }
+        continue;
+      }
+      const batch: IndexJob[] = [first];
+      for (const [id, candidate] of this.queue) {
+        if (batch.length >= 64) break;
+        if (
+          !candidate.dependents &&
+          candidate.app === first.app &&
+          candidate.connection === first.connection &&
+          candidate.resource === first.resource &&
+          candidate.tenantColumn === first.tenantColumn
+        ) {
+          this.queue.delete(id);
+          batch.push(candidate);
+        }
+      }
+      try {
+        await this.applyBatch(batch);
+      } catch (error) {
+        for (const job of batch) this.requeueOrWarn(job, error);
       }
     }
   }
@@ -636,31 +662,44 @@ class SearchIndexer {
     return { adapter: this.readers.get(connection)?.() ?? opened.adapter, schema: opened.schema };
   }
 
-  private async apply(job: IndexJob): Promise<void> {
-    if (job.dependents) return this.applyDependents(job);
-    const { adapter, schema } = await this.source(job.connection);
-    const found = searchedAt(job.app, schema, job);
+  private async applyBatch(batch: readonly IndexJob[]): Promise<void> {
+    const lead = batch[0]!;
+    const { adapter, schema } = await this.source(lead.connection);
+    const found = searchedAt(lead.app, schema, lead);
     if (!found) return;
     const index = this.index(found);
-    const collection = collectionOf(index, job.app, found);
-    await this.ensure(index, collection, docFields(found), job.tenantColumn !== undefined);
-    const key = job.key[found.key];
-    if (key === undefined || key === null) return;
-    const columns = documentColumns(found, job.tenantColumn);
+    const collection = collectionOf(index, lead.app, found);
+    await this.ensure(index, collection, docFields(found), lead.tenantColumn !== undefined);
+    const entries = batch
+      .map((job) => ({ job, key: job.key[found.key] }))
+      .filter((entry): entry is { job: IndexJob; key: string | number } => entry.key !== undefined && entry.key !== null);
+    if (!entries.length) return;
+    const columns = documentColumns(found, lead.tenantColumn);
     const result = await adapter.query({
       table: found.table.id,
       columns,
-      limit: 1,
+      limit: entries.length * 2,
       offset: 0,
-      filter: { groups: [[{ column: found.key, op: '=', value: key as string | number }]] },
+      filter: { groups: entries.map(({ key }) => [{ column: found.key, op: '=', value: key }]) },
     });
-    const row = result.rows[0];
-    if (row) await index.upsert(collection, documentOf(row, found, job.tenantColumn, await followPaths(adapter, found, [row])));
-    else if (job.tenantColumn === undefined) await index.remove(collection, String(key));
-    /* Tenants may share a key, and the row is gone, so its tenant cannot be read back: the write named it. A removal
-       that cannot say whose it was leaves the document (a search hit whose row is not there shows nothing; the reindex
-       drops it) rather than delete another tenant's. */
-    else if (job.tenant !== undefined) await index.remove(collection, String(key), tenantScope(job.tenant));
+    const byKey = new Map<string, Record<string, unknown>>();
+    for (const row of result.rows) byKey.set(String(row[found.key]), row);
+    const present = [...byKey.values()];
+    const followed = present.length ? await followPaths(adapter, found, present) : new Map();
+    const CONCURRENCY = 8;
+    for (let at = 0; at < entries.length; at += CONCURRENCY) {
+      await Promise.all(
+        entries.slice(at, at + CONCURRENCY).map(async ({ job, key }) => {
+          const row = byKey.get(String(key));
+          if (row) await index.upsert(collection, documentOf(row, found, job.tenantColumn, followed));
+          else if (job.tenantColumn === undefined) await index.remove(collection, String(key));
+          /* Tenants may share a key, and the row is gone, so its tenant cannot be read back: the write named it. A removal
+             that cannot say whose it was leaves the document (a search hit whose row is not there shows nothing; the reindex
+             drops it) rather than delete another tenant's. */
+          else if (job.tenant !== undefined) await index.remove(collection, String(key), tenantScope(job.tenant));
+        }),
+      );
+    }
   }
 
   /**

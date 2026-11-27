@@ -10,6 +10,7 @@ import { shell } from '../shellMode.js';
 import { useContext, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { findTable } from '../core.js';
+import { gatherReads } from '../readGathering.js';
 import { HISTORY_TAB, isInferredPage } from '@mistriwork/engine/shared/pageModel.js';
 import { tabbedSection } from '@mistriwork/engine/shared/recordReads.js';
 import type { TableMeta } from '@mistriwork/engine/shared/schema.js';
@@ -277,7 +278,12 @@ export function TabStrip({
     buttons.current[focusing.current]?.focus();
     focusing.current = undefined;
   });
+  const prewarmTab = (tab: Tab) => {
+    if (tab.token === HISTORY_TAB) void RecordHistory.ready();
+    else if (tab.token === 'flows') void RecordFlows.ready();
+  };
   const show = (i: number) => {
+    gatherReads();
     setChosen(tabs[i].key);
     setSeen((s) => new Set(s).add(tabs[i].key));
     /* Written into the address bar without re-rendering: what you are looking
@@ -305,6 +311,7 @@ export function TabStrip({
               ref={(el) => {
                 buttons.current[i] = el;
               }}
+              onPointerDown={() => prewarmTab(tab)}
               onClick={() => show(i)}
               onKeyDown={(e) => {
                 const step = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;

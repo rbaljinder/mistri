@@ -86,6 +86,7 @@ import {
   observedSessionKey,
   observedSessionOf,
   postgresObserver,
+  sessionTagsOf,
   type AccountRoles,
   type StoreObserver,
 } from './storeObserver.js';
@@ -1542,12 +1543,14 @@ export async function createAppAuth(
         async (mark) => {
           const answer = await ask();
           const row = observedSessionOf(answer?.session, answer?.user);
-          if (row && typeof answer?.session?.id === 'string') reads.prime(observedSessionKey(answer.session.id), row, mark);
+          if (row && typeof answer?.session?.id === 'string')
+            reads.prime(observedSessionKey(answer.session.id), row, mark, sessionTagsOf(answer.session));
           return answer;
         },
         {
           keep: (answer) => Boolean(answer?.user && answer.session),
           usable: (answer) => instantOf(answer?.session?.expiresAt) > Date.now(),
+          tags: (answer) => sessionTagsOf(answer?.session),
         },
       );
       return got && structuredClone(got);

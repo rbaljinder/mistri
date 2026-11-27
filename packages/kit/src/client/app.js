@@ -751,7 +751,11 @@ export async function boot(me, landingAt, installed) {
      new room is complete (navigationHold.ts). The walk's top entry says
      whether it is a step to a new place, which starts at the top. */
   const reads = {
-    busy: () => queryClient.isFetching() > 0,
+    busy: () =>
+      queryClient
+        .getQueryCache()
+        .getAll()
+        .some((q) => q.state.status === 'pending' && q.state.fetchStatus === 'fetching' && q.getObserversCount() > 0),
     watch: (changed) => queryClient.getQueryCache().subscribe(changed),
   };
   installNavigationHold(content, reads);

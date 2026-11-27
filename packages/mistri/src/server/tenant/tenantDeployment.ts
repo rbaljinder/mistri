@@ -29,7 +29,7 @@ import { projectPlatformCapabilities, projectTenantCapabilities } from './tenant
 import type { PlatformMembershipEvidence } from './tenantPlatform.js';
 import { defineCommands, type BusinessCommandRegistry } from '../commands/businessCommands.js';
 import type { TenantInvocationGuard } from './tenantInvocation.js';
-import type { TenantReadContext } from './tenantReadRuntime.js';
+import { forwardDiscoveryAdmitter, type TenantReadContext } from './tenantReadRuntime.js';
 import {
   bindPlatformReadRuntime,
   type PlatformInvocationGuard,
@@ -656,6 +656,7 @@ export function createTenantDeployment<Request>(options: TenantDeploymentOptions
       publicReads: publicReads !== undefined,
     });
     deployments.add(deployment);
+    forwardDiscoveryAdmitter(reads, deployment);
     return deployment;
   } catch (error) {
     throw tenantWriteFailed('not_applied', error);

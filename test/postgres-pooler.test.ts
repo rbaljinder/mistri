@@ -577,9 +577,8 @@ test('a cancelled read behind a pooler stops waiting at once and never cancels b
   while (direct.cancels() === 0) await tick();
   direct.pools[0].clients[0].interrupt();
   await assert.rejects(waiting, (error) => error instanceof StatementStopped && error.reason === 'cancelled');
-  assert.deepEqual(direct.pools[0].clients[0].statements.slice(0, 2), [
-    'SET default_transaction_read_only = on',
-    "SET statement_timeout = '5s'",
+  assert.deepEqual(direct.pools[0].clients[0].statements.slice(0, 1), [
+    "SET default_transaction_read_only = on; SET statement_timeout = '5s'",
   ]);
   await direct.manager.close();
 });

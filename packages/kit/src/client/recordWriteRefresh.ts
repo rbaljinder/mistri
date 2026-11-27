@@ -7,8 +7,10 @@ import { composedEpoch } from './composedReads.js';
 import { canonicalText } from '@mistriwork/engine/shared/recordReadKeys.js';
 import { setOwnWriteMarker } from './ownWrites.js';
 import { gatherReads } from './readGathering.js';
+import { queryReads } from './liveReads.js';
 
 type KeyTest = (value: unknown, key: Readonly<Record<string, unknown>>) => boolean;
+const capturedRefreshes = new WeakMap<QueryClient, { epoch: number; identity: unknown; schema: unknown; stamp: string }>();
 
 function sameKey(value: unknown, key: Readonly<Record<string, unknown>>): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -101,9 +103,20 @@ export function captureRecordWriteRefresh(table: string, inputKey: Readonly<Reco
   return () => {
     if (acknowledged || !owns()) return;
     acknowledged = true;
+    const epoch = composedEpoch(),
+      stamp = canonicalText([connection, generation, table, key]);
+    const prev = capturedRefreshes.get(queryClient);
+    if (prev && prev.epoch === epoch && prev.identity === identity && prev.schema === schema && prev.stamp === stamp) return;
+    capturedRefreshes.set(queryClient, { epoch, identity, schema, stamp });
     try {
       const cache = queryClient.getQueryCache();
-      const matches = cache.getAll().filter((query) => queryTouches(query.queryKey, connection, table, key, primary));
+      const matches = cache.getAll().filter((query) => {
+        if (query.queryKey[0] === 'run' || query.queryKey[0] === 'count') {
+          const filed = queryReads(query.queryHash);
+          if (filed) return filed.includes(table);
+        }
+        return queryTouches(query.queryKey, connection, table, key, primary);
+      });
       // Query object identity also fences a cleared/replaced cache during await.
       const current = (query: Query) => owns() && matches.includes(query) && cache.get(query.queryHash) === query;
       void queryClient
@@ -112,6 +125,7 @@ export function captureRecordWriteRefresh(table: string, inputKey: Readonly<Reco
           if (!owns()) return;
           await queryClient.invalidateQueries({ predicate: current, refetchType: 'none' });
           if (!owns()) return;
+          gatherReads();
           await queryClient.refetchQueries({
             type: 'active',
             predicate: (query) => current(query) && !['record', 'page-fields', 'references'].includes(String(query.queryKey[0])),

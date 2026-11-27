@@ -50,8 +50,10 @@ import { composeInputValid, composeTenantRecordPage } from './tenantCompose.js';
 import { readAdapter } from './tenantReadAdapter.js';
 import { tenantFileRead } from './tenantFiles.js';
 import { projectTenantMetadata } from './tenantMetadata.js';
+import { BOUNDED_READS } from './tenantRequestParts.js';
 import { tenantPagePlan, tenantReferences } from './tenantPageOperations.js';
 import { TenantPublicNotFound, type PublicPlacement, type PublicReadContext } from './tenantPublicReadRuntime.js';
+import { withBoundedReads } from './tenantReadRuntime.js';
 import { tenantServedSchema, withRequestInstant } from './tenantServedSchema.js';
 import type { TenantSearch } from './tenantSearch.js';
 
@@ -184,13 +186,16 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
          the visitor's words and figures, as a single App's public page does (readerLocale.ts). */
       const locale = requestLocale(app, { visitor: true, req, res });
       /* One instant for the read, as for a member's request (tenantHttp.ts): the catalog and every statement it writes. */
-      const answer = await withPublicContext(placement, (context) =>
-        withRequestInstant(appTime(now()), () => {
-          const instant = () => zonedNow(appZone(app.ui), appTime(now()));
-          const schema = tenantServedSchema(context, app, appTime(now()));
-          return route(context, schema, path, input, instant, locale);
-        }),
-      );
+      const bounded = !options.search && BOUNDED_READS.has(path);
+      const runPublic = () =>
+        withPublicContext(placement, (context) =>
+          withRequestInstant(appTime(now()), () => {
+            const instant = () => zonedNow(appZone(app.ui), appTime(now()));
+            const schema = tenantServedSchema(context, app, appTime(now()));
+            return route(context, schema, path, input, instant, locale);
+          }),
+        );
+      const answer = await (bounded ? withBoundedReads(runPublic) : runPublic());
       assertActive();
       if (req.aborted || res.destroyed) return;
       // A missing record and a refused one read the same as a missing page from outside.
@@ -225,21 +230,24 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
     locale: string | undefined,
   ): Promise<{ status: number; body: unknown }> {
     const reply = (value: unknown) => ({ status: 200, body: value });
+    const together = <T>(work: () => Promise<T>): Promise<T> => (context.together ? context.together(work) : work());
     const tenantId = context.principal.tenantId;
     if (path === '/api/schema') return reply(schema);
     if (path === '/api/runtime')
       return reply({ appConfigured: true, active: app.id, apps: [{ id: app.id, name: app.name, writable: false }] });
     if (path === PAGE_LOAD_PATH) {
       /* A free-form page's loader, for a page that says `public: true` alone, over the visitor's reader (pageLoad.ts). */
-      const loaded = await pageLoad({
-        app: appSurfaceForRealm(app, pages, 'tenant').app,
-        roles: [],
-        signedIn: false,
-        loaders: options.loaders,
-        body: input,
-        reader: readAdapter(context),
-        schema,
-      });
+      const loaded = await together(() =>
+        pageLoad({
+          app: appSurfaceForRealm(app, pages, 'tenant').app,
+          roles: [],
+          signedIn: false,
+          loaders: options.loaders,
+          body: input,
+          reader: readAdapter(context),
+          schema,
+        }),
+      );
       return { status: loaded.status, body: loaded.body };
     }
     let cachedMetadata: ReturnType<typeof projectTenantMetadata> | undefined;
@@ -277,7 +285,10 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
     if (path === '/api/references') {
       tenantIdentifier(input.table);
       tenantRecord(input.key);
-      return reply(await tenantReferences(readAdapter(context), schema, input.table, input.key as Record<string, string | number>));
+      const table = input.table;
+      return reply(
+        await together(() => tenantReferences(readAdapter(context), schema, table, input.key as Record<string, string | number>)),
+      );
     }
     if (path === '/api/pages/plan' || path === '/api/pages/compose') {
       const metadata = getMetadata();
@@ -286,16 +297,19 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
       // Only a page the App declares: a suggested page is a member's.
       const page = metadata.pages.find((candidate) => candidate.id === input.page);
       if (!page) throw new TenantRequestFault(404, 'not_found');
-      const planned = await tenantPagePlan(readAdapter(context), schema, page, input.key as Record<string, string | number>, instant());
-      if (path === '/api/pages/plan') return reply(planned);
-      const composed = await composeTenantRecordPage({
-        schema,
-        planned,
-        key: input.key as Record<string, unknown>,
-        rows: input.rows,
-        tab: input.tab,
-        app: metadata.app,
-        ask: (asked, given) => route(context, schema, asked, given, instant, locale),
+      if (path === '/api/pages/plan')
+        return reply(await tenantPagePlan(readAdapter(context), schema, page, input.key as Record<string, string | number>, instant()));
+      const composed = await together(async () => {
+        const planned = await tenantPagePlan(readAdapter(context), schema, page, input.key as Record<string, string | number>, instant());
+        return composeTenantRecordPage({
+          schema,
+          planned,
+          key: input.key as Record<string, unknown>,
+          rows: input.rows,
+          tab: input.tab,
+          app: metadata.app,
+          ask: (asked, given) => route(context, schema, asked, given, instant, locale),
+        });
       });
       // A visitor runs no command: the record offers it none.
       const { checks: _checks, ...shown } = composed;
@@ -316,6 +330,7 @@ export function createTenantPublicReadHttp(options: TenantPublicReadHttpOptions)
       app: APP_READS,
       now: instant,
       weekStart: localeWeekStart(locale ?? app.ui.locale),
+      lastWave: context.lastWave,
     });
     if (!result) throw new TenantRequestFault(404, 'not_found');
     return result;

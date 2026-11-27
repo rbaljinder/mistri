@@ -80,16 +80,24 @@ export async function start() {
   const asked = new URLSearchParams();
   if (requestedApp) asked.set('app', requestedApp);
   if (via) asked.set('via', via);
-  /* A tenant App's own address starts with entering, which says who-am-I in the same answer (tenantTransport.ts
-     `enterFirst`): the page asks no who-am-I before it. The flows it needs are preloaded beside this entry. Where the
-     host did not answer so — or the address is the sign-in's, a public visitor's, or not an entry — who-am-I is
-     asked, as it always was. */
-  const entered =
-    requestedApp && !via && landingAt?.kind !== 'sign-in' && shellQuery('meta[name="mistri-tenant-enters"]')
-      ? await import('./tenantShell.js')
-          .then((tenancy) => tenancy.enterFirstAt(requestedApp, herePath() + hereSearch() + window.location.hash))
-          .catch(() => undefined)
-      : undefined;
+  /* A tenant App's own address starts with entering via the lightweight tenantEnter module so POST /api/tenant/enter
+     leaves without waiting on the full tenantShell UI chunk; when a returning tab already holds a tenant context,
+     the shell and chrome chunks also start evaluating in parallel while /api/tenant/enter is in flight. */
+  const entersTenant = Boolean(requestedApp && !via && landingAt?.kind !== 'sign-in' && shellQuery('meta[name="mistri-tenant-enters"]'));
+  /* Overlap shell + chrome chunk evaluation with the initial /api/tenant/enter or /api/whoami RTT without fetching shell on public/sign-in pages. */
+  const warmsShell = Boolean(
+    requestedApp &&
+    !via &&
+    landingAt?.kind !== 'sign-in' &&
+    (entersTenant || landingAt?.kind !== 'root' || shellQuery('link[rel="modulepreload"][href*="shell"]')),
+  );
+  const shellWarm = warmsShell ? Promise.all([import('@mistriwork/kit/client/app.js'), import('./appnav.js')]) : undefined;
+  shellWarm?.catch(() => undefined);
+  const entered = entersTenant
+    ? await import('./tenantEnter.js')
+        .then((entry) => entry.enterFirstAt(requestedApp, herePath() + hereSearch() + window.location.hash))
+        .catch(() => undefined)
+    : undefined;
   const me = entered ?? (await api(asked.size ? `/api/whoami?${asked}` : '/api/whoami'));
   establishSessionIdentity(me);
   setPublicPlacement(keepPlacement(!me.signedIn && me.tenantPublic === true));
@@ -145,7 +153,7 @@ export async function start() {
     return;
   }
   /* The kit's shell and the App's chrome, two chunks the page preloads together (vite.config.ts, `surfaces`). */
-  const [{ boot }, { appChrome }] = await Promise.all([import('@mistriwork/kit/client/app.js'), import('./appnav.js')]);
+  const [{ boot }, { appChrome }] = await (shellWarm ?? Promise.all([import('@mistriwork/kit/client/app.js'), import('./appnav.js')]));
   await boot(me, landingAt, { chrome: appChrome });
   await signingIn;
 }

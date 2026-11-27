@@ -24,6 +24,7 @@ import { beginWork } from './pendingWork.js';
 import { composedReads, setComposedConnection } from './composedHook.js';
 import { isWritePath } from './writePaths.js';
 import { firstPaintRead, forgetFirstPaint } from './firstPaint.js';
+import { gatherReads } from './readGathering.js';
 import { ownWriteSent } from './ownWrites.js';
 import { trailFor } from './recordTrail.js';
 import { disclosure, el, svgEl, trapFocus } from './dom.js';
@@ -673,6 +674,7 @@ export function render() {
 }
 
 function paint(roomChanged) {
+  gatherReads();
   paintHold?.before(roomChanged);
   flushSync(tellWalk);
   paintHold?.after();

@@ -17,6 +17,7 @@ import { TenantWriteFailure, type TenantWriteSource } from './tenantWriteSource.
 import { tenantWriteFailed } from './tenantWriteKindContract.js';
 import {
   bindTenantWriteRuntime,
+  tenantBatchInsert,
   tenantInverseImages,
   type TenantWriteContext,
   type TenantWriteRuntimeOptions,
@@ -333,21 +334,27 @@ export function bindTenantRecordHistory<Request>(input: TenantRequestRuntime<Req
             // validates it. SQL-equivalent case/padding aliases must not gain
             // permission merely because preflight found a canonical row.
             const result = await context.data.update(input);
-            const afterRow = await context.data.query({
-              table: input.table,
-              columns: touched,
-              filter: keyFilter(actualKey),
-              limit: 2,
-              offset: 0,
-            });
-            const after = afterRow.rows.length === 1 ? afterRow.rows[0] : undefined;
-            if (
-              !losslessBefore ||
-              result.affected !== 1 ||
-              !after ||
-              !(await journalFieldsMatch(context.data, input.table, actualKey, after))
-            )
-              return { result, entry: unavailable() };
+            if (!losslessBefore || result.affected !== 1) return { result, entry: unavailable() };
+            const post = result.row ?? result.applied;
+            const candidate =
+              post && touched.every((column) => Object.hasOwn(post, column))
+                ? Object.fromEntries(touched.map((column) => [column, post[column]]))
+                : undefined;
+            let after: Record<string, unknown> | undefined;
+            if (candidate && (await journalFieldsMatch(context.data, input.table, actualKey, candidate))) {
+              after = candidate;
+            } else {
+              const afterRow = await context.data.query({
+                table: input.table,
+                columns: touched,
+                filter: keyFilter(actualKey),
+                limit: 2,
+                offset: 0,
+              });
+              const read = afterRow.rows.length === 1 ? afterRow.rows[0] : undefined;
+              if (read && (await journalFieldsMatch(context.data, input.table, actualKey, read))) after = read;
+            }
+            if (!after) return { result, entry: unavailable() };
             const steps: WriteStep[] = [{ table: input.table, key: actualKey, before, after, exactFields: true }];
             return { result, entry: { kind: 'update', summary: summarise('update', steps), revertible: true, steps } };
           },
@@ -431,7 +438,20 @@ export function bindTenantRecordHistory<Request>(input: TenantRequestRuntime<Req
             request,
             selectors,
             async (context) => {
-              for (const insert of input.inserts) await context.data.insert(insert);
+              const insertMany = tenantBatchInsert(context);
+              if (insertMany && input.inserts.length >= 2) {
+                for (let at = 0; at < input.inserts.length;) {
+                  const table = input.inserts[at]!.table;
+                  let end = at + 1;
+                  while (end < input.inserts.length && end - at < 250 && input.inserts[end]!.table === table) end += 1;
+                  const chunk = input.inserts.slice(at, end);
+                  if (chunk.length >= 2) await insertMany(chunk);
+                  else await context.data.insert(chunk[0]!);
+                  at = end;
+                }
+              } else {
+                for (const insert of input.inserts) await context.data.insert(insert);
+              }
               // A trial's row was accepted: it goes back, and the answer is that it would land.
               if (input.trial) {
                 tried = true;

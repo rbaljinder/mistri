@@ -296,3 +296,93 @@ test("behind a transaction-mode pooler the store's reads see the caller's statem
   await f.reads.read('k', f.load);
   assert.equal(f.loads(), 2);
 });
+
+test('targeted eviction: pure INSERT leaves active tagged sessions warm, while targeted DELETE/UPDATE evicts only the affected user/session', async () => {
+  const f = fixture(),
+    client = {};
+  const otherHandle = createAuthStoreReads(f.store, 5_000, () => 1_000_000);
+  const aliceTags = { sessionId: 'sess-a', userId: 'user-a', token: 'tok-a' };
+  const bobTags = { sessionId: 'sess-b', userId: 'user-b', token: 'tok-b' };
+
+  await f.reads.read('get-a', f.load, { tags: aliceTags });
+  await f.reads.read('get-b', f.load, { tags: bobTags });
+  await otherHandle.read('other-a', f.load, { tags: aliceTags });
+  await otherHandle.read('other-b', f.load, { tags: bobTags });
+  assert.equal(f.loads(), 4);
+
+  // Routine sign-in / sign-up INSERTs and verification cleanup do not wipe active tagged sessions.
+  for (const sql of [
+    'INSERT INTO "auth_session" ("id", "userId", "token") VALUES ($1, $2, $3)',
+    'INSERT INTO mistri."auth_user" ("id", "email") VALUES ($1, $2)',
+    'INSERT INTO "auth_account" ("id", "userId") VALUES ($1, $2)',
+    'INSERT INTO "auth_verification" ("id", "value") VALUES ($1, $2)',
+    'DELETE FROM "auth_verification" WHERE "id" = $1',
+  ]) {
+    f.reads.statement(client, sql, ['new-id', 'new-u', 'new-tok'])();
+  }
+  await f.reads.read('get-a', f.load, { tags: aliceTags });
+  await f.reads.read('get-b', f.load, { tags: bobTags });
+  await otherHandle.read('other-a', f.load, { tags: aliceTags });
+  await otherHandle.read('other-b', f.load, { tags: bobTags });
+  assert.equal(f.loads(), 4, 'pure INSERTs left all active sessions warm');
+
+  // Sign-out by token evicts Alice across both handles, leaving Bob warm.
+  f.reads.statement(client, 'DELETE FROM "auth_session" WHERE "token" = $1', ['tok-a'])();
+  await f.reads.read('get-a', f.load, { tags: aliceTags });
+  await otherHandle.read('other-a', f.load, { tags: aliceTags });
+  await f.reads.read('get-b', f.load, { tags: bobTags });
+  await otherHandle.read('other-b', f.load, { tags: bobTags });
+  assert.equal(f.loads(), 6, 'only Alice reloaded across both handles');
+
+  // Banning Bob on auth_user evicts Bob immediately while leaving Alice warm.
+  f.reads.statement(client, 'UPDATE mistri."auth_user" SET banned = $1 WHERE "id" = $2', [true, 'user-b'])();
+  await f.reads.read('get-a', f.load, { tags: aliceTags });
+  await f.reads.read('get-b', f.load, { tags: bobTags });
+  assert.equal(f.loads(), 7, 'only Bob reloaded after auth_user ban');
+
+  // Targeted DELETE inside a transaction evicts target both at DELETE and COMMIT, leaving Alice warm.
+  f.reads.statement(client, 'BEGIN')();
+  f.reads.statement(client, 'DELETE FROM "auth_session" WHERE "userId" = $1', ['user-b'])();
+  await f.reads.read('get-b', f.load, { tags: bobTags });
+  f.reads.statement(client, 'COMMIT')();
+  await f.reads.read('get-a', f.load, { tags: aliceTags });
+  await f.reads.read('get-b', f.load, { tags: bobTags });
+  assert.equal(f.loads(), 9, 'Bob evicted at DELETE and COMMIT; Alice stayed warm');
+
+  // Fail-closed global fallback on ON CONFLICT DO UPDATE, OR clause, or missing params.
+  for (const [sql, params] of [
+    ['INSERT INTO "auth_session" ("id") VALUES ($1) ON CONFLICT ("id") DO UPDATE SET "token" = EXCLUDED."token"', ['x']],
+    ['DELETE FROM "auth_session" WHERE "id" = $1 OR "id" = $2', ['sess-a', 'sess-b']],
+    ['UPDATE mistri."auth_user" SET banned = $1 WHERE "id" = $2', undefined],
+  ] as const) {
+    const before = f.loads();
+    f.reads.statement(client, sql, params)();
+    await f.reads.read('get-a', f.load, { tags: aliceTags });
+    await f.reads.read('get-b', f.load, { tags: bobTags });
+    assert.equal(f.loads(), before + 2, `global fallback for ${sql}`);
+  }
+});
+
+test('targeted eviction prevents caching an in-flight read of the evicted user while keeping an unrelated in-flight read', async () => {
+  const f = fixture(),
+    client = {};
+  const aliceTags = { sessionId: 'sess-a', userId: 'user-a', token: 'tok-a' };
+  const bobTags = { sessionId: 'sess-b', userId: 'user-b', token: 'tok-b' };
+
+  let resolveAlice!: (v: { n: number }) => void;
+  let resolveBob!: (v: { n: number }) => void;
+  const inflightA = f.reads.read('get-a', () => new Promise<{ n: number }>((r) => (resolveAlice = r)), { tags: aliceTags });
+  const inflightB = f.reads.read('get-b', () => new Promise<{ n: number }>((r) => (resolveBob = r)), { tags: bobTags });
+
+  // Alice is banned while both reads are in flight.
+  f.reads.statement(client, 'UPDATE "auth_user" SET banned = $1 WHERE id = $2', [true, 'user-a'])();
+  resolveAlice({ n: 10 });
+  resolveBob({ n: 20 });
+  assert.deepEqual(await inflightA, { n: 10 });
+  assert.deepEqual(await inflightB, { n: 20 });
+
+  // Alice's stale in-flight result was NOT cached; Bob's WAS cached.
+  assert.deepEqual(await f.reads.read('get-a', f.load, { tags: aliceTags }), { n: 1 });
+  assert.deepEqual(await f.reads.read('get-b', f.load, { tags: bobTags }), { n: 20 });
+  assert.equal(f.loads(), 1);
+});

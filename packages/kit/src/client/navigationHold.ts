@@ -137,12 +137,16 @@ export function installNavigationHold(host: HTMLElement, reads?: HoldProbe): voi
   onNavigate(() => {
     if (!isFollowing()) traversedAt = performance.now();
   }, true);
-  /* The page's stylesheets, read for the picture as soon as the shell installs
-     so early navigations have full source twins ready without waiting up to 3s. */
+  /* Warm linked stylesheet text once the browser is idle so boot never runs a
+     synchronous CSSOM serialization + replaceSync double-parse before first paint. */
   const warm = () => {
-    mirrorSheets();
+    for (const sheet of Array.from(document.styleSheets)) {
+      if (!sheet.disabled && sheet.href) readLinked(sheet.href);
+    }
   };
-  void Promise.resolve().then(warm);
+  const ric = (window as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback;
+  if (typeof ric === 'function') ric(warm, { timeout: 1500 });
+  else setTimeout(warm, 200);
   /* And each one a part brings when it loads, as it arrives. The published
      client links a part's stylesheet when the part is first drawn (a record's
      sections, the related lists); read only at the next navigation, it was
@@ -398,10 +402,8 @@ function readLinked(href: string): void {
     )
     .then((text) => {
       linked.set(href, text);
-      /* And its twin built now, while nothing waits: left to the next navigation, the App's own sheet (390 KB),
-         still on its way when the page was first idle, was built in the click that opened a record or a tab, 35 ms
-         of it on the vitals' slowed CPU (test/built-client-vitals.mjs). */
-      mirrorSheets();
+      /* Build this sheet's twin once fetched, without forcing sync cssRulesText on other in-flight sheets. */
+      mirrorSheets(false);
     });
 }
 
@@ -419,23 +421,23 @@ function cssRulesText(sheet: CSSStyleSheet): string | undefined {
 }
 
 /** A sheet's own text, null to leave it out, or undefined while it is still being read. */
-function sourceOf(sheet: CSSStyleSheet): string | null | undefined {
+function sourceOf(sheet: CSSStyleSheet, allowCssomFallback: boolean): string | null | undefined {
   const owner = sheet.ownerNode;
   if (owner instanceof HTMLStyleElement) return owner.textContent ?? '';
   if (!sheet.href) return null;
   if (!linked.has(sheet.href)) readLinked(sheet.href);
   const fetched = linked.get(sheet.href);
   if (fetched !== undefined) return fetched;
-  return cssRulesText(sheet);
+  return allowCssomFallback ? cssRulesText(sheet) : undefined;
 }
 
-function mirrorSheets(): CSSStyleSheet[] | null {
+function mirrorSheets(allowCssomFallback = true): CSSStyleSheet[] | null {
   try {
     const sheets: CSSStyleSheet[] = [];
     let unread = false;
     for (const sheet of Array.from(document.styleSheets)) {
       if (sheet.disabled) continue;
-      const text = sourceOf(sheet);
+      const text = sourceOf(sheet, allowCssomFallback);
       if (text === undefined) {
         unread = true;
         continue;
@@ -470,7 +472,7 @@ function mirrorSheets(): CSSStyleSheet[] | null {
  * and a still copy of what the pane holds.
  */
 function picture(pane: HTMLElement): { copy: HTMLElement; picture: HTMLElement; scrolled: number } | null {
-  const sheets = mirrorSheets();
+  const sheets = mirrorSheets(true);
   if (!sheets || typeof pane.attachShadow !== 'function') return null;
   const copy = document.createElement('div');
   copy.className = 'nav-held';

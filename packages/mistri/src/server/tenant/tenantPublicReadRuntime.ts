@@ -14,6 +14,7 @@
  * left out), under the policy's `resolvePublicRows` narrowed to the placed
  * tenant. Nothing is writable.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { isPromise } from 'node:util/types';
 import type { Adapter, AggregateRequest, CteRequest, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape, type AppDef } from '../../shared/app.js';
@@ -39,12 +40,14 @@ import { intakeAddressQuery } from './tenantIntakeModel.js';
 import { parseTenantSelector } from './tenantMembership.js';
 import { publicAddress, type TenantPublicEvidence } from './tenantPublicRead.js';
 import { composePublicReadScope } from './tenantReadScope.js';
-import { keepTenantDraftReader } from './tenantReadRuntime.js';
-import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
+import { boundedReadSlot, keepTenantDraftReader } from './tenantReadRuntime.js';
+import { captureTenantReadSource, tenantRealmFencingOf, type TenantReadSource } from './tenantReadSource.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
 import { withTenantReadAudit } from './tenantReadAudit.js';
 import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
+
+const riding = new AsyncLocalStorage<object>();
 
 /** What a visitor's read is handed: the placed tenant, its permitted catalog and its scoped reader. Holds no role. */
 export interface PublicReadContext {
@@ -54,6 +57,10 @@ export interface PublicReadContext {
   /** Never read: a visitor reads no tenant's zone or locale; the App's own are said. */
   readonly zone?: undefined;
   readonly locale?: undefined;
+  /** `work`, its reads of this context on one snapshot whose end carries the release fence. */
+  readonly together?: <T>(work: () => Promise<T>) => Promise<T>;
+  /** Internal, for a bounded request (`withBoundedReads`): release fence rides the last wave of reads. */
+  readonly lastWave?: () => void;
 }
 /** Where a visitor is placed: the address it carried, or the tenant an operator's mapped host names. */
 export type PublicPlacement = { readonly address: string } | { readonly tenant: string };
@@ -161,6 +168,12 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
     },
     async withContext<T>(placement: PublicPlacement, callback: (context: PublicReadContext) => T | Promise<T>): Promise<T> {
       if (retired || typeof callback !== 'function') return denyTenant();
+      const fencing = tenantRealmFencingOf(source);
+      const slot = boundedReadSlot();
+      if (slot?.live) return denyTenant();
+      const bounded = fencing !== undefined && slot !== undefined && !slot.claimed;
+      if (slot) slot.claimed = true;
+      if (bounded) slot.live = true;
       // A placement that is not one is not found, like an address that names nobody.
       const asked = captureTenantData(placement) as Record<string, unknown>;
       let address: string | null = null,
@@ -173,6 +186,7 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
           tenant = parseTenantSelector([asked.tenant as string]);
         } else throw new TenantPublicNotFound();
       } catch {
+        if (bounded) slot.live = false;
         throw new TenantPublicNotFound();
       }
       let finish!: () => void;
@@ -210,6 +224,10 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
           failed = false;
         let lastTime = verifiedAt;
         const pending = new Set<Promise<void>>();
+        const rideToken = {};
+        let ridingOpen = 0;
+        let ridden = false;
+        let beside = false;
         const assertActive = () => {
           if (retired || !active || failed) return denyTenant();
           const instant = now();
@@ -218,6 +236,7 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
         };
         const track = <A, R>(input: A, work: (captured: A) => Promise<R>, validate: (captured: A) => void): Promise<R> => {
           if (!accepting || !active || retired) return Promise.reject(new TenantContextError());
+          if (!bounded && riding.getStore() !== rideToken) beside = true;
           let complete!: () => void;
           const reserved = new Promise<void>((resolve) => {
             complete = resolve;
@@ -362,8 +381,34 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
             cachedSchema = { from: guarded.schema, value: captureScopeCatalog(guarded.schema) };
           }
           const schema = cachedSchema.value;
+          const fencedTogether = fencing
+            ? <R>(work: () => Promise<R>): Promise<R> => {
+                if (bounded || riding.getStore() === rideToken) return work();
+                if (pending.size || ridingOpen) beside = true;
+                ridingOpen++;
+                ridden = false;
+                return fencing
+                  .togetherFencedPublic(principal, () => riding.run(rideToken, work), { lastWave: false })
+                  .then((ran) => {
+                    if (pending.size) beside = true;
+                    ridden = ran.fenced;
+                    return ran.value;
+                  })
+                  .finally(() => {
+                    ridingOpen--;
+                  });
+              }
+            : undefined;
+          const fenceRode = () => ridden && !beside && ridingOpen === 0;
+          const lastWave = fencing ? () => fencing.lastWave() : undefined;
           assertActive();
-          const context: PublicReadContext = Object.freeze({ principal: Object.freeze({ ...principal, roles: [] }), schema, data });
+          const context: PublicReadContext = Object.freeze({
+            principal: Object.freeze({ ...principal, roles: [] }),
+            schema,
+            data,
+            ...(fencedTogether === undefined ? {} : { together: fencedTogether }),
+            ...(lastWave === undefined ? {} : { lastWave }),
+          });
           /* Whether a file sits beneath someone's open draft (tenantReadRuntime.ts tenantDraftReaderOf), asked under
              the tenant's rows alone, since the visitor's own policy may not show the draft's root. */
           keepTenantDraftReader(context, () => {
@@ -392,31 +437,50 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
           let output: T | undefined,
             callbackFailed = false,
             fault: TenantRequestFault | undefined;
-          try {
-            const kept = (error: unknown): T => {
-              fault = requestFault(error);
-              if (fault) return undefined as T;
-              throw error;
-            };
-            let returned: T | Promise<T>;
+          const answer = async (): Promise<boolean> => {
             try {
-              returned = callback(context);
-            } catch (error) {
-              returned = kept(error);
+              const kept = (error: unknown): T => {
+                fault = requestFault(error);
+                if (fault) return undefined as T;
+                throw error;
+              };
+              let returned: T | Promise<T>;
+              try {
+                returned = callback(context);
+              } catch (error) {
+                returned = kept(error);
+              }
+              const result = delivered(
+                isPromise(returned) ? (Promise.prototype.then.call(returned, undefined, kept) as Promise<T>) : returned,
+              );
+              output = isPromise(result) ? await result : result;
+            } catch {
+              callbackFailed = true;
             }
-            const result = delivered(
-              isPromise(returned) ? (Promise.prototype.then.call(returned, undefined, kept) as Promise<T>) : returned,
-            );
-            output = isPromise(result) ? await result : result;
-          } catch {
-            callbackFailed = true;
+            accepting = false;
+            await Promise.allSettled([...pending]);
+            return !callbackFailed && !failed;
+          };
+          if (bounded) {
+            let answered = false;
+            const ran = await fencing
+              .togetherFencedPublic(principal, async () => {
+                answered = await answer();
+                if (!answered) throw new TenantContextError();
+                return answered;
+              })
+              .catch((error: unknown) => {
+                if (!answered) return undefined;
+                throw error;
+              });
+            if (!ran) return denyTenant();
+            if (!ran.fenced) await source.assertPublicCurrent(principal);
+            assertActive();
+          } else {
+            if (!(await answer())) return denyTenant();
+            if (!fenceRode()) await source.assertPublicCurrent(principal);
+            assertActive();
           }
-          accepting = false;
-          await Promise.allSettled([...pending]);
-          if (callbackFailed || failed) return denyTenant();
-          // The release fence: the placement once more, in a snapshot of its own, after every read has settled.
-          await source.assertPublicCurrent(principal);
-          assertActive();
           if (fault) throw fault;
           return output as T;
         } finally {
@@ -428,6 +492,7 @@ export function bindPublicReadRuntime(options: PublicReadRuntimeOptions) {
         if (error instanceof TenantPublicNotFound || error instanceof TenantRequestFault) throw error;
         return denyTenantFor(error);
       } finally {
+        if (bounded) slot.live = false;
         pendingRequests.delete(held);
         finish();
       }

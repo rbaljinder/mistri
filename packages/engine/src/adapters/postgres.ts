@@ -1235,9 +1235,8 @@ export class PostgresAdapter implements Adapter {
           )
         ).rows,
       behind: (table, ride) => {
-        // The table as updateNow names it: assertPostgresTable reads a bare name in the public schema.
-        const update = `UPDATE ${qualified(plainTable(table))} SET `;
-        return behindWrite(write, (text) => text.startsWith(update), ride);
+        const q = qualified(plainTable(table));
+        return behindWrite(write, (t) => t.startsWith(`UPDATE ${q} `) || t.startsWith(`INSERT INTO ${q} `), ride);
       },
     });
     if (!history) return { ...base, finish: async () => {}, committed: () => {}, triggered: async () => {} };
@@ -1989,8 +1988,8 @@ export class PostgresAdapter implements Adapter {
               target: lock('UPDATE'),
               parent: lock('SHARE'),
               behind: (table, ride) => {
-                const update = `UPDATE ${qualified(table)} SET `;
-                return behindWrite(write, (text) => text.startsWith(update), ride);
+                const q = qualified(table);
+                return behindWrite(write, (t) => t.startsWith(`UPDATE ${q} `) || t.startsWith(`INSERT INTO ${q} `), ride);
               },
               together: sendsAhead(write),
               relied: (table) => void relied.add(table.id),

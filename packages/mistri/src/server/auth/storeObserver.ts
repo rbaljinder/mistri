@@ -71,6 +71,16 @@ export function observedSessionOf(
   return Object.freeze({ userId: session.userId, expiresAt, createdAt, impersonatedBy: session.impersonatedBy, banned: user.banned });
 }
 
+/** Identity tags extracted from a Better Auth session object for targeted cache eviction. */
+export function sessionTagsOf(session: Record<string, unknown> | undefined) {
+  if (!session || typeof session.id !== 'string' || typeof session.userId !== 'string') return undefined;
+  return {
+    sessionId: session.id,
+    userId: session.userId,
+    ...(typeof session.token === 'string' ? { token: session.token } : {}),
+  };
+}
+
 /** The binding's observations on a PostgreSQL store, by the rules the file
  * store's synchronous reads apply: a session's row read on the store's own
  * pool, or kept from a read of it a moment ago (authStoreReads.ts says how
@@ -111,10 +121,10 @@ export function postgresObserver(pool: PgQuery, reads?: AuthStoreReads): StoreOb
     lookupEligibleAccountRoles: (accountId) => readPostgresEligibleAccountRoles(pool, accountId),
     async checkSession(proof, expectedCreatedAt) {
       exact(proof.sessionId);
-      const load = async (): Promise<ObservedSession | undefined> => {
+      const load = async (): Promise<(ObservedSession & { token?: unknown }) | undefined> => {
         const found = (
           await pool.query(
-            `SELECT s."userId", ${epoch('s."expiresAt"')} AS "expiresAt", ${epoch('s."createdAt"')} AS "createdAt", s."impersonatedBy", u.banned
+            `SELECT s."userId", ${epoch('s."expiresAt"')} AS "expiresAt", ${epoch('s."createdAt"')} AS "createdAt", s."impersonatedBy", u.banned, s.token
         FROM ${sessions} s JOIN ${accounts} u ON u.id = s."userId" WHERE s.id = $1`,
             [proof.sessionId],
           )
@@ -126,11 +136,21 @@ export function postgresObserver(pool: PgQuery, reads?: AuthStoreReads): StoreOb
               createdAt: found.createdAt,
               impersonatedBy: found.impersonatedBy,
               banned: found.banned,
+              token: found.token,
             })
           : undefined;
       };
       // A missing row is never kept: an ended session is refused by a fresh read every time.
-      const row = reads ? await reads.read(observedSessionKey(proof.sessionId), load, { keep: Boolean }) : await load();
+      const row = reads
+        ? await reads.read(observedSessionKey(proof.sessionId), load, {
+            keep: Boolean,
+            tags: (value) => ({
+              sessionId: proof.sessionId,
+              ...(value ? { userId: String(value.userId) } : {}),
+              ...(typeof value?.token === 'string' ? { token: value.token } : {}),
+            }),
+          })
+        : await load();
       if (!row || row.userId !== proof.identity.id || row.impersonatedBy !== null || (row.banned !== null && row.banned !== false))
         return denyTenant();
       const expiresAt = time(row.expiresAt);

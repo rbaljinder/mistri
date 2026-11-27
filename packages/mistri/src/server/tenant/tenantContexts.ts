@@ -24,7 +24,8 @@ import {
 import { parseTenantSelector, type TenantMembershipEvidence } from './tenantMembership.js';
 import { PLATFORM_TENANT_ID, type PlatformMembershipEvidence } from './tenantPlatform.js';
 import type { PlatformReadContext } from './tenantPlatformReadRuntime.js';
-import type { TenantReadContext } from './tenantReadRuntime.js';
+import { discoveryAdmitterOf, type TenantReadContext } from './tenantReadRuntime.js';
+import { verifiedDiscoveryOf } from './tenantBootstrap.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { TenantWriteFailure } from './tenantWriteSource.js';
 import { refusedFields } from './tenantWriteKindContract.js';
@@ -48,6 +49,19 @@ import { requireFreshAdmission } from './tenantAdmissionCache.js';
 import { tenantHostIntentOf } from '../http/tenantHosts.js';
 import { tenantAnswerProvenByCommit, tenantAnswerProvenByFence } from './tenantRequestRuntime.js';
 import { platformAnswerProvenByCommit, platformAnswerProvenByFence } from './tenantPlatformCommands.js';
+
+interface DiscoveryLeaseEnterer<Request> {
+  openFromDiscovery(request: Request, selectors: readonly string[], discovered: object): Promise<TenantContextReply>;
+  resumeFromDiscovery(
+    request: Request,
+    selectors: readonly string[],
+    input: { tabId: string },
+    discovered: object,
+  ): Promise<TenantContextReply>;
+}
+const discoveryEnterers = new WeakMap<object, DiscoveryLeaseEnterer<unknown>>();
+export const discoveryLeaseEntererOf = <Request>(contexts: object): DiscoveryLeaseEnterer<Request> | undefined =>
+  discoveryEnterers.get(contexts) as DiscoveryLeaseEnterer<Request> | undefined;
 
 interface TenantContextsOptions<Request> {
   readonly deployment: TenantDeployment<Request>;
@@ -440,7 +454,11 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
     replies.set(window, { tab, lease, value });
     return value;
   };
-  const candidate = async (request: Request, target: Target, initial?: { started: number; proof: VerifiedSessionInstance }) => {
+  const candidate = async (
+    request: Request,
+    target: Target,
+    initial?: { started?: number; proof?: VerifiedSessionInstance; discovered?: object },
+  ) => {
     // The window set here is bounded by the evidence: never evidence kept from an earlier request.
     const admitted = requireFreshAdmission(request);
     try {
@@ -449,7 +467,11 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       admitted();
     }
   };
-  const admittedCandidate = async (request: Request, target: Target, initial?: { started: number; proof: VerifiedSessionInstance }) => {
+  const admittedCandidate = async (
+    request: Request,
+    target: Target,
+    initial?: { started?: number; proof?: VerifiedSessionInstance; discovered?: object },
+  ) => {
     const started = initial?.started ?? clock();
     if (started > Number.MAX_SAFE_INTEGER - lifetime) return denyTenant();
     /* A tenant's own host admits its tenant alone, never a realm: the HTTP layer refuses the rest already, and this
@@ -489,6 +511,26 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         sessionExpiry = Math.min(sessionExpiry, current.expiresAt);
       },
     );
+    if (initial?.discovered && target.realm === 'tenant') {
+      const verified = verifiedDiscoveryOf(initial.discovered);
+      const admitter = discoveryAdmitterOf(deployment);
+      const tenantId = parseTenantSelector(target.selectors);
+      const record = verified?.records.find((item) => item.tenantId === tenantId && item.accountId === proof.identity.id);
+      if (verified && admitter && record) {
+        const principal = (await admitter(request, record, verified.verifiedAt, guard as Parameters<typeof admitter>[3])) as Principal;
+        const finalSession = await session(request);
+        if (finalSession.identity.id !== proof.identity.id || finalSession.sessionId !== proof.sessionId) return denyTenant();
+        const instant = clock(),
+          expiresAt = Math.min(started + lifetime, principal.validUntil, sessionExpiry, finalSession.expiresAt);
+        if (instant < principal.verifiedAt || instant >= expiresAt) return denyTenant();
+        return {
+          proof: finalSession,
+          principal,
+          expiresAt,
+          sessionExpiresAt: Math.min(sessionExpiry, finalSession.expiresAt),
+        };
+      }
+    }
     // Admission in the target's own realm: a tenant's issuer, or the platform's.
     const admit = (narrowed: typeof guard): Promise<Principal> =>
       target.realm === 'platform'
@@ -1000,7 +1042,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       .finally(() => commandOptions?.close());
   };
   const body = <T>(value: T) => captureTenantData(value);
-  const open = (request: Request, target: Target, input: Record<string, never>): Promise<TenantContextReply> =>
+  const open = (request: Request, target: Target, input: Record<string, never>, discovered?: object): Promise<TenantContextReply> =>
     control(async () => {
       tenantRecord(body(input), []);
       const chosen = captureTarget(target);
@@ -1039,7 +1081,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       opening++;
       accountOpenings.set(accountId, (accountOpenings.get(accountId) ?? 0) + 1);
       try {
-        const value = await candidate(request, chosen, { started, proof }),
+        const value = await candidate(request, chosen, { started, proof, ...(discovered ? { discovered } : {}) }),
           lease = leaseFor(value, chosen.realm),
           id = randomUUID();
         if (tabs.has(id)) return denyTenant();
@@ -1216,7 +1258,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
    * is. Only a released context resumes, and only once: a context another
    * page still holds is never shared.
    */
-  const resume = (request: Request, target: Target, input: { tabId: string }): Promise<TenantContextReply> =>
+  const resume = (request: Request, target: Target, input: { tabId: string }, discovered?: object): Promise<TenantContextReply> =>
     control(async () => {
       const value = body(input);
       tenantRecord(value, ['tabId']);
@@ -1236,7 +1278,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         return denyTenant();
       belongs(tab, await session(request));
       if (clock() >= Math.min(lease.window.expiresAt, tab.expiresAt)) return denyTenant();
-      const current = await candidate(request, targetOf(lease));
+      const current = await candidate(request, targetOf(lease), discovered ? { discovered } : undefined);
       belongs(tab, current.proof);
       if (!tab.released || tab.lease !== lease || tab.switching || current.expiresAt < lease.window.expiresAt) return denyTenant();
       live(tab, lease, lease.window, current.principal);
@@ -1308,7 +1350,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       return undefined;
     }
   };
-  return Object.freeze({
+  const manager = Object.freeze({
     peekRoles,
     release,
     reclaim,
@@ -1699,4 +1741,10 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       return retirement;
     },
   });
+  discoveryEnterers.set(manager, {
+    openFromDiscovery: (request, selectors, discovered) => open(request as Request, { realm: 'tenant', selectors }, {}, discovered),
+    resumeFromDiscovery: (request, selectors, input, discovered) =>
+      resume(request as Request, { realm: 'tenant', selectors }, input, discovered),
+  });
+  return manager;
 }

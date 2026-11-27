@@ -78,6 +78,7 @@ export async function composeTenantRecordPage(options: {
   /** The App as this context is served it (projectTenantMetadata): its record names and its verbs. */
   app: { resources?: unknown } | null | undefined;
   ask: (path: string, body: Record<string, unknown>) => Promise<{ status: number; body: unknown }>;
+  lastWave?: () => void;
 }): Promise<{
   planned: true;
   page: unknown;
@@ -115,15 +116,48 @@ export async function composeTenantRecordPage(options: {
     ...reads.filter((asked) => asked.path !== '/api/record-history'),
   ];
   const answered: ComposedRead[] = [];
+  if (ordered.every((asked) => asked.path !== '/api/breakdown' && asked.path !== '/api/record-history')) {
+    options.lastWave?.();
+  }
   await Promise.all(
     ordered.map(async (asked) => {
       const answer = await withReadKind(asked.path, asked.kind, () => options.ask(asked.path, asked.body));
       if (!failed(answer)) answered.push({ path: asked.path, body: asked.body, status: answer.status, reply: answer.body });
     }),
   );
-  const commands = actions.flatMap((action) => (action.command && action.command.target === base.id ? [action.command] : []));
-  const checks = [...new Map(commands.map((command) => [command.id, command])).values()]
+  const checks = composeRecordChecks(options.app, base.id, key);
+  return { planned: true, page: planned.page, plans: planned.plans, reads: answered, checks };
+}
+
+/** Command availability checks a record page's actions ask for, known synchronously from the served App metadata and key. */
+export function composeRecordChecks(
+  app: { resources?: unknown } | null | undefined,
+  baseId: string,
+  key: Record<string, unknown>,
+): Array<{ command: string; commandVersion: number; keys: Array<Record<string, unknown>> }> {
+  const actions = ((app?.resources ?? {}) as Resources)[baseId]?.actions ?? [];
+  const commands = actions.flatMap((action) => (action.command && action.command.target === baseId ? [action.command] : []));
+  return [...new Map(commands.map((command) => [command.id, command])).values()]
     .slice(0, MOST_CHECKS)
     .map((command) => ({ command: command.id, commandVersion: command.version, keys: [key] }));
-  return { planned: true, page: planned.page, plans: planned.plans, reads: answered, checks };
+}
+
+export async function mergeComposeVerbs(
+  value: unknown,
+  askVerbs: (checks: Array<{ command: string; commandVersion: number; keys: unknown[] }>) => Promise<unknown>,
+  started?: Promise<unknown>,
+): Promise<unknown> {
+  if (!value || typeof value !== 'object' || !('checks' in value)) return value;
+  const { checks, ...composed } = value as {
+    checks: Array<{ command: string; commandVersion: number; keys: unknown[] }>;
+    reads: unknown[];
+  };
+  if (!checks.length) return composed;
+  const read = await (started ?? askVerbs(checks));
+  return read ? { ...composed, reads: [...composed.reads, read] } : composed;
+}
+
+export function isSingleWaveBootRead(target: string, body?: Record<string, unknown>): boolean {
+  const at = new URL(target, 'http://mistri.invalid').pathname;
+  return at === '/api/run' || at === '/api/view/run' || (at === '/api/counts' && !body?.views);
 }

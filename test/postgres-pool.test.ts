@@ -115,7 +115,7 @@ test('Postgres pool creation is lazy, coalesced by role, and bounded', async () 
     ],
   );
   for (const client of pools[0].clients) {
-    assert.deepEqual(client.statements.slice(0, 2), ['SET default_transaction_read_only = on', "SET statement_timeout = '30s'"]);
+    assert.deepEqual(client.statements.slice(0, 1), ["SET default_transaction_read_only = on; SET statement_timeout = '30s'"]);
   }
   // The writer's session also stops waiting for a lock after five seconds (writeLanes.ts), in the same message.
   assert.deepEqual(pools[1].clients[0].statements, [
@@ -169,9 +169,8 @@ test('Postgres role hooks initialize every physical client before it is used', a
   await Promise.all([read.query('SELECT 1'), read.query('SELECT 2'), read.query('SELECT 3')]);
   assert.equal(pools[0].clients.length, 3);
   for (const client of pools[0].clients) {
-    assert.equal(client.statements[0], 'SET default_transaction_read_only = on');
-    assert.equal(client.statements[1], "SET statement_timeout = '30s'");
-    assert.match(client.statements[2], /^SELECT/);
+    assert.equal(client.statements[0], "SET default_transaction_read_only = on; SET statement_timeout = '30s'");
+    assert.match(client.statements[1], /^SELECT/);
   }
   assert.doesNotThrow(() => pools[0].emit('error', new Error('idle backend disconnected')));
   await manager.close();

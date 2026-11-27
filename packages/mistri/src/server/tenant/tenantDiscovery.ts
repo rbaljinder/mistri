@@ -10,7 +10,8 @@ import { TENANT_HTTP_HEADERS as headers } from '../../shared/tenantContext.js';
 import type { AppDef } from '../../shared/app.js';
 import type { VerifiedSessionInstance } from '../auth/auth.js';
 import { getTenantHostIntent } from '../http/tenantHosts.js';
-import type { captureTenantEnrollment } from './tenantEnrollment.js';
+import { enrollmentMarksLookupOf, type captureTenantEnrollment } from './tenantEnrollment.js';
+import { carryVerifiedDiscovery, verifiedDiscoveryOf } from './tenantBootstrap.js';
 import type { TenantAddresses } from './tenantIntakeModel.js';
 import type { TenantDiscovery } from './tenantRequestParts.js';
 import { exposed } from './tenantWire.js';
@@ -114,6 +115,9 @@ export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive,
         () => apart(ids),
       );
     };
+    const buildMarksLookup = enrollmentMarksLookupOf(enrollment);
+    let bundledEntered: string | undefined;
+    let bundledForIds = false;
     const discovered = await enrollment.discover(
       req,
       async () => {
@@ -126,7 +130,7 @@ export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive,
         }
       },
       (ids) => {
-        if (ids.length) {
+        if (ids.length && !bundledForIds) {
           let entered: string | undefined;
           try {
             entered = entering?.tenant(ids);
@@ -138,6 +142,19 @@ export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive,
         }
         seen?.(ids);
       },
+      buildMarksLookup
+        ? (ids) => {
+            let entered: string | undefined;
+            try {
+              entered = entering?.tenant(ids);
+            } catch {
+              entered = undefined;
+            }
+            bundledEntered = entered !== undefined && ids.includes(entered) ? entered : undefined;
+            bundledForIds = true;
+            return buildMarksLookup(ids, bundledEntered);
+          }
+        : undefined,
     );
     const instant = now();
     assertActive();
@@ -151,18 +168,28 @@ export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive,
     )
       return denyTenant();
     if (discovered.status !== 'ready' || !discovered.memberships.length) return discovered;
-    /* Each choice with what the tenant is called, for the chooser and the
-       bar: words for a person beside the id the choice still sends. A
-       lookup that fails leaves the ids to speak for themselves. */
     const chosen = discovered.memberships.map((member) => member.tenantId);
-    /* A sandbox says so to its members wherever its name is said.
-       Unlike a name, this is not left out quietly: a sandbox read as live
-       is the mistake the mark exists to prevent. */
-    const asked =
-      early && early.ids.length === chosen.length && early.ids.every((id, at) => id === chosen[at]) ? early.marks : marksOf(chosen);
-    const [names, sandboxes] = await asked;
+    const bundled = verifiedDiscoveryOf(discovered);
+    let names: Readonly<Record<string, string>>;
+    let sandboxes: ReadonlySet<string>;
+    if (
+      bundled?.marks &&
+      bundled.marksIds &&
+      bundled.marksIds.length === chosen.length &&
+      bundled.marksIds.every((id, at) => id === chosen[at])
+    ) {
+      names = bundled.marks.names;
+      sandboxes = bundled.marks.sandboxes;
+      if (bundledEntered !== undefined && bundled.marks.addresses !== undefined) {
+        entering?.addresses(bundledEntered, Promise.resolve(bundled.marks.addresses));
+      }
+    } else {
+      const asked =
+        early && early.ids.length === chosen.length && early.ids.every((id, at) => id === chosen[at]) ? early.marks : marksOf(chosen);
+      [names, sandboxes] = await asked;
+    }
     assertActive();
-    return {
+    const enriched: TenantDiscovery = {
       ...discovered,
       memberships: discovered.memberships.map((member) => ({
         ...member,
@@ -170,6 +197,8 @@ export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive,
         ...(sandboxes.has(member.tenantId) ? { sandbox: true as const } : {}),
       })),
     };
+    carryVerifiedDiscovery(discovered, enriched);
+    return enriched;
   };
   /* On a tenant's own host the person is in that tenant alone: their sign-in there was pinned to it (auth/hostHandoff.ts),
      so the other tenants they belong to, and the platform realm, are not that host's to offer or to open ahead. */
@@ -189,7 +218,9 @@ export function tenantSessionDiscovery({ verify, expectedAccounts, assertActive,
     );
     if (found.status !== 'ready') return found;
     const { platform: _platform, ...rest } = found;
-    return { ...rest, memberships: found.memberships.filter((member) => member.tenantId === intent.tenant) };
+    const pinned: TenantDiscovery = { ...rest, memberships: found.memberships.filter((member) => member.tenantId === intent.tenant) };
+    carryVerifiedDiscovery(found, pinned);
+    return pinned;
   };
   return { verified, discoverAll, discoverFor };
 }

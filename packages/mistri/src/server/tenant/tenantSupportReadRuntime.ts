@@ -50,7 +50,8 @@ import {
 import { checkTenantInvocation, revalidateTenantInvocation, type TenantInvocationGuard } from './tenantInvocation.js';
 import type { TenantMembershipEvidence } from './tenantMembership.js';
 import { composeTenantReadScope } from './tenantReadScope.js';
-import { captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
+import { captureTenantReadSource, readSharedProfile, tenantRealmFencingOf, type TenantReadSource } from './tenantReadSource.js';
+import { boundedReadSlot } from './tenantReadRuntime.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { isSupportEvidence, type SupportMembershipEvidence } from './tenantSupportLease.js';
 import { supportAsMember } from './tenantSupportMembership.js';
@@ -64,6 +65,8 @@ export interface SupportReadContext {
   readonly data: ScopedReads;
   /** Presentation only; the read adapter remains incapable of writing. */
   readonly capabilities?: TenantCapabilities;
+  /** Internal, for a bounded request (`withBoundedReads`): release fence rides the last wave of reads. */
+  readonly lastWave?: () => void;
 }
 /** The contexts layer names one: its support read family passes a guard, as the
  * platform read family does. */
@@ -200,6 +203,12 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
         principal.deployment !== deployment
       )
         return denyTenant();
+      const fencing = tenantRealmFencingOf(source);
+      const slot = boundedReadSlot();
+      if (slot?.live) return denyTenant();
+      const bounded = fencing !== undefined && slot !== undefined && !slot.claimed;
+      if (slot) slot.claimed = true;
+      if (bounded) slot.live = true;
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
         finish = resolve;
@@ -270,10 +279,12 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
             try {
               const captured = captureTenantData(input);
               validate(captured);
-              await revalidateSession();
+              if (bounded) assertActive();
+              else await revalidateSession();
               const value = await work(captured);
               const snapshot = captureTenantData(value);
-              await revalidateSession();
+              if (bounded) assertActive();
+              else await revalidateSession();
               return snapshot;
             } catch (error) {
               failed = true;
@@ -418,26 +429,68 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
           });
           const schema = captureScopeCatalog(guarded.schema);
           const capabilities = presentation ? captureTenantData(presentation(supportAsMember(principal), schema)) : undefined;
+          const lastWave = fencing ? () => fencing.lastWave() : undefined;
           assertActive();
-          const context = Object.freeze({ principal, schema, data, tenant, ...(capabilities === undefined ? {} : { capabilities }) });
+          const context = Object.freeze({
+            principal,
+            schema,
+            data,
+            tenant,
+            ...(lastWave === undefined ? {} : { lastWave }),
+            ...(capabilities === undefined ? {} : { capabilities }),
+          });
           let output: T | undefined,
             callbackFailed = false;
-          try {
-            const result = delivered(callback(context));
-            output = isPromise(result) ? await result : result;
-          } catch (error) {
-            callbackFailed = true;
-            failure ??= error;
+          const answer = async (): Promise<boolean> => {
+            try {
+              const result = delivered(callback(context));
+              output = isPromise(result) ? await result : result;
+            } catch (error) {
+              callbackFailed = true;
+              failure ??= error;
+            }
+            accepting = false;
+            await Promise.allSettled([...pending]);
+            if (callbackFailed || failed) return false;
+            return true;
+          };
+          if (bounded) {
+            let answered = false;
+            const ran = await fencing
+              .togetherFencedSupport(principal, async () => {
+                try {
+                  answered = await answer();
+                } catch (error) {
+                  failure ??= error;
+                }
+                if (!answered) throw new TenantContextError();
+                return answered;
+              })
+              .catch((error: unknown) => {
+                if (!answered) return undefined;
+                throw error;
+              });
+            if (!ran) return denyTenantFor(failure);
+            try {
+              await revalidateSession();
+            } catch (error) {
+              failure ??= error;
+              return denyTenantFor(failure);
+            }
+            if (!ran.fenced) await source.assertSupportCurrent(principal);
+            assertActive();
+          } else {
+            if (!(await answer())) return denyTenantFor(failure);
+            await revalidate();
           }
-          accepting = false;
-          await Promise.allSettled([...pending]);
-          if (callbackFailed || failed) return denyTenantFor(failure);
-          await revalidate();
           return output as T;
         } finally {
+          accepting = false;
+          await Promise.allSettled([...pending]);
           active = false;
         }
       } finally {
+        if (bounded) slot.live = false;
         pendingRequests.delete(held);
         finish();
       }

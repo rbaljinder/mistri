@@ -20,7 +20,7 @@ import {
 } from './tenantLinkModel.js';
 import { assertSqliteIntakeAnchorSnapshot } from './tenantStore.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
-import { assertPostgresIntakeAnchorFence } from './tenantStorePostgres.js';
+import { assertPostgresIntakeAnchorFence, postgresIntakeAnchorFenceAhead } from './tenantStorePostgres.js';
 import { TenantLinkMoved, withOwnProfile, type TenantWriteKind, type TenantWriteRun } from './tenantWriteKindContract.js';
 
 // A structural alias, not an interface: the published declarations expand it
@@ -73,6 +73,7 @@ export const linkWriteKind = Object.freeze<TenantWriteKind<TenantLinkEvidence, T
     await assertPostgresIntakeAnchorFence(client, owner, linkAnchor(evidence), live);
     await assertPostgresLinkHeld(client, owner, evidence, live());
   },
+  postgresFenceAhead: (owner, evidence) => postgresIntakeAnchorFenceAhead(owner, linkAnchor(evidence)),
   // A fence that fails before the handler starts is a link that moved since its request read it, not a store that cannot answer.
   moved: () => new TenantLinkMoved(),
   journalOwner: (owner, evidence) => linkJournalOwner(owner, evidence),

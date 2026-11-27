@@ -31,6 +31,7 @@ import type { CommandAvailabilityCheck, CommandAvailabilityResult } from '../com
 import type { CommandResultReference } from '../commands/scopedBusinessCommandAccess.js';
 import { runTenantCommandTransaction } from './tenantCommandTransaction.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
+import { compileWhen } from '../commands/commandWhen.js';
 import type { CommandFlags } from '../commands/commandFlags.js';
 
 /** What the batch needs of either realm's request scope. */
@@ -38,7 +39,11 @@ interface AvailabilityScope {
   readonly principal: Parameters<typeof runTenantCommandTransaction>[1]['principal'];
   readonly grants: ResourceAccess;
   session(): Promise<void>;
-  advisoryReads<T>(run: (records: WriteTransaction) => T | Promise<T>, read: readonly string[]): Promise<T>;
+  advisoryReads<T>(
+    run: (records: WriteTransaction) => T | Promise<T>,
+    read: readonly string[],
+    options?: { readonly lastWave?: boolean },
+  ): Promise<T>;
 }
 
 /* Local: every caller hands in a literal, so the name is never written elsewhere. */
@@ -54,15 +59,31 @@ interface TenantAvailabilityBatch {
   readonly captureFlags?: () => Promise<CommandFlags>;
 }
 
+const ME_REF = /\bme\b/;
+
 export async function collectTenantAvailability(batch: TenantAvailabilityBatch): Promise<CommandAvailabilityResult> {
   const { checks, ownership, scope, signal } = batch;
   const options = batch.requestId === undefined ? {} : { requestId: batch.requestId };
   const footprint = new Set<string>();
+  let singleWave = true;
+  const now = new Date();
   // A check this member may not run contributes no footprint; the same refusal
   // answers it below, one check at a time rather than for the whole batch.
   for (const check of checks) {
     try {
-      for (const table of batch.authorize(check.command).read) footprint.add(table);
+      const auth = batch.authorize(check.command);
+      for (const table of auth.read) footprint.add(table);
+      if (singleWave) {
+        const cmd = auth.command;
+        const table = auth.catalog[cmd.target];
+        if (
+          cmd.availability !== undefined ||
+          auth.machine?.frozenWhen?.has(cmd.target) ||
+          !table ||
+          (cmd.when !== undefined && (ME_REF.test(cmd.when) || compileWhen(table, cmd.when, now).derived.size > 0))
+        )
+          singleWave = false;
+      }
     } catch {
       /* answered false below */
     }
@@ -109,5 +130,6 @@ export async function collectTenantAvailability(batch: TenantAvailabilityBatch):
         { concurrent: true },
       ),
     [...footprint],
+    singleWave ? { lastWave: true } : undefined,
   );
 }

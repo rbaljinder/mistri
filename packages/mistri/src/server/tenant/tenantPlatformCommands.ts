@@ -59,7 +59,7 @@ import { createPlatformMembershipIssuer, type PlatformMembershipEvidence } from 
 import type { PlatformTenantEvidence } from './tenantPlatformTenant.js';
 import type { PlatformInvocationGuard } from './tenantPlatformReadRuntime.js';
 import { composePlatformReadScope, footprintRows } from './tenantReadScope.js';
-import { advisoryRecords, captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
+import { advisoryRecords, captureTenantReadSource, tenantRealmFencingOf, type TenantReadSource } from './tenantReadSource.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { assertTenantSourcePair } from './tenantSourceIdentity.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
@@ -93,7 +93,11 @@ interface PlatformRequestScope {
    * platform scope, no journal, and only the platform's own rows written (tenantManagedKindPlatform.ts). */
   transaction<T>(run: (records: WriteTransaction) => T | Promise<T>): Promise<T>;
   /** The tenant owner's advisoryReads, under the platform scope (tenantRequestRuntime.ts). */
-  advisoryReads<T>(run: (records: WriteTransaction) => T | Promise<T>, read: readonly string[]): Promise<T>;
+  advisoryReads<T>(
+    run: (records: WriteTransaction) => T | Promise<T>,
+    read: readonly string[],
+    options?: { readonly lastWave?: boolean },
+  ): Promise<T>;
   /** The platform realm's scoped reads, outside any transaction: what a command's lookup reads through. */
   reads(): ReturnType<TenantReadSource['scopePlatformReads']>;
   /** A command's read of an audited resource, written through the writer outside any transaction (tenantReadAudit.ts). */
@@ -243,8 +247,9 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
       let committed = false,
         accepting = true,
         attempted = false,
-        outside = false;
-      const operations = new TransactionOperations();
+        fenced = false,
+        proved = false;
+      let operations = new TransactionOperations();
       let principal: PlatformMembershipEvidence | undefined;
       let releaseFlags = () => {};
       try {
@@ -282,236 +287,290 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
           if (isPromise(verified)) await verified;
           active();
         };
-        /* As the tenant request runtime: kept evidence (tenantAdmissionCache.ts)
-           that the pre-callback revalidation refuses is admitted afresh once,
-           before anything has been written. */
-        let rows!: RowScope, grants!: ResourceAccess;
-        for (let fresh = false; ; fresh = true) {
-          const admitted = await issuer.withMembership(request, (evidence, kept) => ({ evidence, kept }), { fresh });
-          principal = admitted.evidence;
-          lastTime = principal.verifiedAt;
-          try {
-            active();
-            const policyResult = delivered(platformRows(principal)),
-              policy = isPromise(policyResult) ? await policyResult : policyResult;
-            active();
-            // A command runs its transaction on this one source, so the policy's
-            // entries for the App's platform-only sources — which its startup check
-            // requires it to name — are narrowed away rather than refused here.
-            rows = composePlatformReadScope(ownership, principal, policy, outsideSourceNames);
-            // The platform realm's visible fields: a tenant row's owner readable, nothing generically writable.
-            const visible = tenantVisibleFields(
-              ownership,
-              { ...resolveAppAccess(app, ownership.schema, [...principal.roles]), rows, writable: new Set() },
-              'platform',
-            ) as ResourceAccess;
-            grants = validation ? { ...visible, validation } : visible;
-            await session();
-            await reader.assertPlatformCurrent(principal);
-            active();
-            break;
-          } catch (error) {
-            issuer.forget(request, principal);
-            if (!admitted.kept || fresh || !evidenceRefused(error)) throw error;
-          }
-        }
-        const admitted = principal;
-        releaseFlags = bindTenantFlagOwner(
-          request,
-          admitted,
-          async () => {
-            outside = true;
-            await session();
-            await reader.assertPlatformCurrent(admitted);
-            active();
-          },
-          active,
-        );
-        let callbackFailure: { error: unknown } | undefined;
-        const commandTransaction = <R>(
-          run: (
-            records: WriteTransaction,
-            journal: CommandJournal,
-            principal: PlatformMembershipEvidence | PlatformTenantEvidence,
-          ) => R | Promise<R>,
-          ceiling: readonly string[],
-          tenant?: string,
-        ): Promise<R> => {
-          if (!accepting) return Promise.reject(new TenantWriteFailure('not_applied'));
-          let invalid = attempted || typeof run !== 'function',
-            sourceRows = rows;
-          attempted = true;
-          try {
-            // A tenant's id, never `@platform`: the selector refuses it.
-            if (tenant !== undefined) parseTenantSelector([tenant]);
-            const read = captureTenantData(ceiling);
-            if (
-              !Array.isArray(read) ||
-              !read.length ||
-              read.length > 256 ||
-              new Set(read).size !== read.length ||
-              read.some((table) => typeof table !== 'string' || !Object.hasOwn(ownership.resources, table))
-            )
-              return operations.run(async () => denyTenant());
-            // The command footprint intersects, never widens, the platform scope.
-            sourceRows = footprintRows(rows, (table) => read.includes(table));
-          } catch {
-            invalid = true;
-          }
-          return operations.run(async () => {
-            if (invalid || callbackFailure) return denyTenant();
-            let workFailure: { error: unknown } | undefined;
-            /* The tenant's row as it stands now, active, and `@platform` at the
-               version this membership was admitted on: the writer fences both
-               at these versions, so a suspension after this read refuses the write. */
-            let acting: PlatformTenantEvidence | undefined;
-            const work = async (records: WriteTransaction, journal: CommandJournal) => {
+        /* As the tenant request runtime: every write transaction locks the
+           platform anchor and membership FOR SHARE from BEGIN to COMMIT, and
+           every read revalidates on its own snapshot; kept evidence refused
+           before any transaction fence passes is admitted afresh once. */
+        let rows!: RowScope,
+          grants!: ResourceAccess,
+          kept = false;
+        const admit = async (first: boolean) => {
+          for (let fresh = first; ; fresh = true) {
+            const admitted = await issuer.withMembership(request, (evidence, kept) => ({ evidence, kept }), { fresh });
+            principal = admitted.evidence;
+            lastTime = principal.verifiedAt;
+            try {
+              active();
+              const policyResult = delivered(platformRows(principal)),
+                policy = isPromise(policyResult) ? await policyResult : policyResult;
+              active();
+              // A command runs its transaction on this one source, so the policy's
+              // entries for the App's platform-only sources — which its startup check
+              // requires it to name — are narrowed away rather than refused here.
+              rows = composePlatformReadScope(ownership, principal, policy, outsideSourceNames);
+              // The platform realm's visible fields: a tenant row's owner readable, nothing generically writable.
+              const visible = tenantVisibleFields(
+                ownership,
+                { ...resolveAppAccess(app, ownership.schema, [...principal.roles]), rows, writable: new Set() },
+                'platform',
+              ) as ResourceAccess;
+              grants = validation ? { ...visible, validation } : visible;
               await session();
-              try {
-                const result = await run(records, journal, acting ?? admitted);
+              active();
+              kept = admitted.kept;
+              return;
+            } catch (error) {
+              issuer.forget(request, principal);
+              if (!admitted.kept || fresh || !evidenceRefused(error)) throw error;
+            }
+          }
+        };
+        await admit(false);
+        const fencing = tenantRealmFencingOf(reader);
+        for (let again = false; ; again = true) {
+          const admitted = principal!;
+          let outside = false,
+            advisoryFenced = false;
+          releaseFlags = bindTenantFlagOwner(
+            request,
+            admitted,
+            async () => {
+              outside = true;
+              advisoryFenced = false;
+              await session();
+              await reader.assertPlatformCurrent(admitted);
+              active();
+            },
+            active,
+          );
+          let callbackFailure: { error: unknown } | undefined;
+          const commandTransaction = <R>(
+            run: (
+              records: WriteTransaction,
+              journal: CommandJournal,
+              principal: PlatformMembershipEvidence | PlatformTenantEvidence,
+            ) => R | Promise<R>,
+            ceiling: readonly string[],
+            tenant?: string,
+          ): Promise<R> => {
+            if (!accepting) return Promise.reject(new TenantWriteFailure('not_applied'));
+            let invalid = attempted || typeof run !== 'function',
+              sourceRows = rows;
+            attempted = true;
+            try {
+              // A tenant's id, never `@platform`: the selector refuses it.
+              if (tenant !== undefined) parseTenantSelector([tenant]);
+              const read = captureTenantData(ceiling);
+              if (
+                !Array.isArray(read) ||
+                !read.length ||
+                read.length > 256 ||
+                new Set(read).size !== read.length ||
+                read.some((table) => typeof table !== 'string' || !Object.hasOwn(ownership.resources, table))
+              )
+                return operations.run(async () => denyTenant());
+              // The command footprint intersects, never widens, the platform scope.
+              sourceRows = footprintRows(rows, (table) => read.includes(table));
+            } catch {
+              invalid = true;
+            }
+            return operations.run(async () => {
+              if (invalid || callbackFailure) return denyTenant();
+              let workFailure: { error: unknown } | undefined;
+              /* The tenant's row as it stands now, active, and `@platform` at the
+                 version this membership was admitted on: the writer fences both
+                 at these versions, so a suspension after this read refuses the write. */
+              let acting: PlatformTenantEvidence | undefined;
+              const work = async (records: WriteTransaction, journal: CommandJournal) => {
+                fenced = true;
                 await session();
+                try {
+                  const result = await run(records, journal, acting ?? admitted);
+                  await session();
+                  return result;
+                } catch (error) {
+                  workFailure = { error };
+                  throw error;
+                }
+              };
+              try {
+                if (tenant !== undefined) {
+                  const anchors = await reader.readServiceAnchors(tenant).catch((error: unknown) => {
+                    throw tenantWriteFailed('not_applied', error);
+                  });
+                  active();
+                  // Nothing has been written: a tenant that is not there, or not active, is a refusal that applied nothing.
+                  if (anchors.tenantVersion === null || anchors.platformVersion !== admitted.platformVersion)
+                    throw new TenantWriteFailure('not_applied');
+                  acting = Object.freeze({
+                    ...admitted,
+                    realm: 'platform-tenant' as const,
+                    tenantId: tenant,
+                    tenantVersion: anchors.tenantVersion,
+                  });
+                }
+                const result = acting
+                  ? await writer.platformTenantCommandTransaction(acting, sourceRows, work, active)
+                  : await writer.platformCommandTransaction(admitted, sourceRows, work, active);
+                committed = true;
                 return result;
               } catch (error) {
-                workFailure = { error };
-                throw error;
+                throw new CommandTransactionFailure(
+                  workFailure?.error ?? error,
+                  error instanceof TenantWriteFailure ? error.outcome : 'unknown',
+                );
               }
-            };
-            try {
-              if (tenant !== undefined) {
-                const anchors = await reader.readServiceAnchors(tenant).catch((error: unknown) => {
-                  throw tenantWriteFailed('not_applied', error);
-                });
-                active();
-                // Nothing has been written: a tenant that is not there, or not active, is a refusal that applied nothing.
-                if (anchors.tenantVersion === null || anchors.platformVersion !== admitted.platformVersion)
-                  throw new TenantWriteFailure('not_applied');
-                acting = Object.freeze({
-                  ...admitted,
-                  realm: 'platform-tenant' as const,
-                  tenantId: tenant,
-                  tenantVersion: anchors.tenantVersion,
-                });
-              }
-              const result = acting
-                ? await writer.platformTenantCommandTransaction(acting, sourceRows, work, active)
-                : await writer.platformCommandTransaction(admitted, sourceRows, work, active);
+            });
+          };
+          /* One per request, as a command's: the platform scope whole, since a
+             Save names no footprint, and the managed transaction beneath it
+             writes the platform's own rows alone. */
+          const transaction = <R>(run: (records: WriteTransaction) => R | Promise<R>): Promise<R> => {
+            if (!accepting) return Promise.reject(new TenantWriteFailure('not_applied'));
+            const invalid = attempted || typeof run !== 'function';
+            attempted = true;
+            return operations.run(async () => {
+              if (invalid || callbackFailure) return denyTenant();
+              const work = async (records: WriteTransaction) => {
+                fenced = true;
+                await session();
+                const result = await run(records);
+                await session();
+                return result;
+              };
+              const result = await writer.platformTransaction(admitted, rows, work, active);
               committed = true;
               return result;
-            } catch (error) {
-              throw new CommandTransactionFailure(
-                workFailure?.error ?? error,
-                error instanceof TenantWriteFailure ? error.outcome : 'unknown',
-              );
+            });
+          };
+          const advisoryReads = <R>(
+            run: (records: WriteTransaction) => R | Promise<R>,
+            ceiling: readonly string[],
+            advisoryOptions?: { readonly lastWave?: boolean },
+          ): Promise<R> => {
+            if (!accepting) return Promise.reject(new TenantWriteFailure('not_applied'));
+            const invalid = attempted || typeof run !== 'function';
+            attempted = true;
+            let footprint: RowScope | undefined;
+            try {
+              const read = captureTenantData(ceiling);
+              if (
+                Array.isArray(read) &&
+                read.length &&
+                read.length <= 256 &&
+                new Set(read).size === read.length &&
+                read.every((table) => typeof table === 'string' && Object.hasOwn(ownership.resources, table))
+              ) {
+                footprint = footprintRows(rows, (table) => read.includes(table));
+              }
+            } catch {
+              footprint = undefined;
             }
-          });
-        };
-        /* One per request, as a command's: the platform scope whole, since a
-           Save names no footprint, and the managed transaction beneath it
-           writes the platform's own rows alone. */
-        const transaction = <R>(run: (records: WriteTransaction) => R | Promise<R>): Promise<R> => {
-          if (!accepting) return Promise.reject(new TenantWriteFailure('not_applied'));
-          const invalid = attempted || typeof run !== 'function';
-          attempted = true;
-          return operations.run(async () => {
-            if (invalid || callbackFailure) return denyTenant();
-            const work = async (records: WriteTransaction) => {
+            return operations.run(async () => {
+              if (invalid || !footprint || callbackFailure) return denyTenant();
               await session();
-              const result = await run(records);
+              const hadOutside = outside;
+              outside = true;
+              let result: R;
+              if (fencing) {
+                const ran = await fencing.withPlatformReadsFenced(
+                  admitted,
+                  footprint,
+                  (reads) => run(advisoryRecords(reads)),
+                  advisoryOptions,
+                );
+                result = ran.value;
+                if (ran.fenced && !hadOutside) advisoryFenced = true;
+              } else {
+                result = await reader.withPlatformReads(admitted, footprint, (reads) => run(advisoryRecords(reads)));
+              }
+              active();
               await session();
               return result;
-            };
-            const result = await writer.platformTransaction(admitted, rows, work, active);
-            committed = true;
-            return result;
+            });
+          };
+          let scoped: ReturnType<TenantReadSource['bindPlatformReads']> | undefined;
+          const scope = Object.freeze<PlatformRequestScope>({
+            principal: admitted,
+            rows,
+            grants,
+            session,
+            commandTransaction,
+            transaction,
+            advisoryReads,
+            reads: () => {
+              active();
+              outside = true;
+              advisoryFenced = false;
+              return (scoped ??= reader.bindPlatformReads(admitted, rows));
+            },
+            appendReadAudit: (row) => {
+              active();
+              return writer.appendReadAudit(row);
+            },
           });
-        };
-        const advisoryReads = <R>(run: (records: WriteTransaction) => R | Promise<R>, ceiling: readonly string[]): Promise<R> => {
-          if (!accepting) return Promise.reject(new TenantWriteFailure('not_applied'));
-          const invalid = attempted || typeof run !== 'function';
-          attempted = true;
-          let footprint: RowScope | undefined;
+          let result!: T;
+          const completed = (value: T): T => {
+            accepting = false;
+            return captureTenantData(value);
+          };
           try {
-            const read = captureTenantData(ceiling);
-            if (
-              Array.isArray(read) &&
-              read.length &&
-              read.length <= 256 &&
-              new Set(read).size === read.length &&
-              read.every((table) => typeof table === 'string' && Object.hasOwn(ownership.resources, table))
-            ) {
-              footprint = footprintRows(rows, (table) => read.includes(table));
-            }
-          } catch {
-            footprint = undefined;
+            const returned = callback(scope);
+            result = isPromise(returned)
+              ? ((await Promise.prototype.then.call(returned, completed, (error: unknown) => {
+                  accepting = false;
+                  throw error;
+                })) as T)
+              : completed(returned);
+          } catch (error) {
+            callbackFailure = { error };
           }
-          return operations.run(async () => {
-            if (invalid || !footprint || callbackFailure) return denyTenant();
-            await session();
-            const result = await reader.withPlatformReads(admitted, footprint, (reads) => run(advisoryRecords(reads)));
-            active();
-            await session();
-            return result;
-          });
-        };
-        let scoped: ReturnType<TenantReadSource['bindPlatformReads']> | undefined;
-        const scope = Object.freeze<PlatformRequestScope>({
-          principal: admitted,
-          rows,
-          grants,
-          session,
-          commandTransaction,
-          transaction,
-          advisoryReads,
-          reads: () => {
-            active();
-            outside = true;
-            return (scoped ??= reader.bindPlatformReads(admitted, rows));
-          },
-          appendReadAudit: (row) => {
-            active();
-            return writer.appendReadAudit(row);
-          },
-        });
-        let result!: T;
-        const completed = (value: T): T => {
           accepting = false;
-          return captureTenantData(value);
-        };
-        try {
-          const returned = callback(scope);
-          result = isPromise(returned)
-            ? ((await Promise.prototype.then.call(returned, completed, (error: unknown) => {
-                accepting = false;
-                throw error;
-              })) as T)
-            : completed(returned);
-        } catch (error) {
-          callbackFailure = { error };
+          let drainFailure: { error: unknown } | undefined;
+          try {
+            await operations.finish();
+          } catch (error) {
+            drainFailure = { error };
+          }
+          if (
+            callbackFailure?.error instanceof TransactionOutcomeUnknown ||
+            (callbackFailure?.error instanceof CommandTransactionFailure && callbackFailure.error.outcome === 'unknown') ||
+            (callbackFailure?.error instanceof TenantWriteFailure && callbackFailure.error.outcome === 'unknown')
+          )
+            throw callbackFailure.error;
+          let failure = drainFailure ?? callbackFailure;
+          if (!failure) await session();
+          proved = true;
+          let fencedAfter: boolean = !failure && advisoryFenced && !committed;
+          if (failure ? !fenced && !committed : !(committed && !outside) && !advisoryFenced) {
+            try {
+              await reader.assertPlatformCurrent(admitted);
+              fencedAfter = !failure;
+            } catch (error) {
+              const membership = evidenceRefused(error);
+              if (membership && kept && !again && !committed && !fenced) {
+                issuer.forget(request, admitted);
+                releaseFlags();
+                releaseFlags = () => {};
+                accepting = true;
+                attempted = false;
+                proved = false;
+                operations = new TransactionOperations();
+                await admit(true);
+                continue;
+              }
+              if (membership || !failure) failure = { error };
+            }
+          }
+          if (failure) throw failure.error;
+          if (committed && !outside) {
+            if (request !== null && typeof request === 'object') platformProvenByCommit.add(request as object);
+          } else if (fencedAfter) {
+            if (request !== null && typeof request === 'object') platformProvenByFence.add(request as object);
+          }
+          active();
+          return result;
         }
-        accepting = false;
-        let drainFailure: { error: unknown } | undefined;
-        try {
-          await operations.finish();
-        } catch (error) {
-          drainFailure = { error };
-        }
-        if (
-          callbackFailure?.error instanceof TransactionOutcomeUnknown ||
-          (callbackFailure?.error instanceof CommandTransactionFailure && callbackFailure.error.outcome === 'unknown') ||
-          (callbackFailure?.error instanceof TenantWriteFailure && callbackFailure.error.outcome === 'unknown')
-        )
-          throw callbackFailure.error;
-        if (drainFailure) throw drainFailure.error;
-        if (callbackFailure) throw callbackFailure.error;
-        await session();
-        if (committed && !outside) {
-          if (request !== null && typeof request === 'object') platformProvenByCommit.add(request as object);
-        } else {
-          await reader.assertPlatformCurrent(admitted);
-          if (request !== null && typeof request === 'object') platformProvenByFence.add(request as object);
-        }
-        active();
-        return result;
       } catch (error) {
         accepting = false;
         await operations.finish().catch(() => {});
@@ -522,9 +581,17 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
           error instanceof TransactionOutcomeUnknown ||
           (error instanceof CommandTransactionFailure && error.outcome === 'unknown') ||
           (error instanceof TenantWriteFailure && error.outcome === 'unknown');
+        let refused = error;
+        if (!unknown && !proved && !fenced && principal) {
+          try {
+            await reader.assertPlatformCurrent(principal);
+          } catch (proof) {
+            if (evidenceRefused(proof)) refused = proof;
+          }
+        }
         // The same value-free refusal, with the reason kept for the owner:
         // this is where a platform write's cause used to stop.
-        throw tenantWriteFailed(unknown ? 'unknown' : 'not_applied', refusalCause(error) ?? error);
+        throw tenantWriteFailed(unknown ? 'unknown' : 'not_applied', refusalCause(refused) ?? refused);
       } finally {
         releaseFlags();
         pending.delete(held);

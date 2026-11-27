@@ -776,6 +776,10 @@ function platformRows(owner: TenantStoreBinding, accountId: string, rows: readon
   return platformMembershipRecord(owner, accountId, { ...member, platform_status, platform_version });
 }
 
+const PLATFORM_LOCKED = `SELECT status, version FROM ${q(tables.tenant)} WHERE id = $1 AND kind = 'platform' FOR SHARE`;
+const PLATFORM_MEMBER_LOCKED = `SELECT id, status, version, roles_json, valid_until::float8 AS valid_until
+    FROM ${q(tables.membership)} WHERE tenant_id = $1 AND account_id = $2 AND kind = 'member' AND status <> 'revoked' FOR SHARE`;
+
 /** The `@platform` row, then the account's membership in it: the tenant
  * fence's order on the platform realm's anchor. Locked FOR SHARE on the
  * writer, unlocked on a read snapshot, where two statements see one state. */
@@ -791,19 +795,9 @@ async function platformRead(
      side of the join that would make them one. */
   if (!lock)
     return platformRows(owner, query.accountId, (await client.query(platformSql('$1', '$2'), [PLATFORM_TENANT_ID, query.accountId])).rows);
-  const platform = (
-    await client.query(`SELECT status, version FROM ${q(tables.tenant)} WHERE id = $1 AND kind = 'platform'${lock ? ' FOR SHARE' : ''}`, [
-      PLATFORM_TENANT_ID,
-    ])
-  ).rows;
+  const platform = (await client.query(PLATFORM_LOCKED, [PLATFORM_TENANT_ID])).rows;
   if (platform.length !== 1) return null;
-  const member = (
-    await client.query(
-      `SELECT id, status, version, roles_json, valid_until::float8 AS valid_until
-    FROM ${q(tables.membership)} WHERE tenant_id = $1 AND account_id = $2 AND kind = 'member' AND status <> 'revoked'${lock ? ' FOR SHARE' : ''}`,
-      [PLATFORM_TENANT_ID, query.accountId],
-    )
-  ).rows;
+  const member = (await client.query(PLATFORM_MEMBER_LOCKED, [PLATFORM_TENANT_ID, query.accountId])).rows;
   if (member.length > 1) return denyTenant();
   if (!member[0]) return null;
   return platformMembershipRecord(owner, query.accountId, {
@@ -842,6 +836,15 @@ export function postgresPlatformMembershipStatement(input: TenantStoreBinding, i
   return platformSql(literal(PLATFORM_TENANT_ID), literal(query.accountId));
 }
 
+/** The platform membership fence statement without parameters for `fenced.ahead` and `togetherFenced`. */
+export function postgresPlatformMembershipEvidenceStatement(input: TenantStoreBinding, evidence: PlatformMembershipEvidence): string {
+  const owner = binding(input),
+    value = captureTenantData(evidence);
+  const query = platformEvidenceQuery(value, owner);
+  wellFormed(query.accountId, value.membershipId, ...value.roles);
+  return platformSql(literal(PLATFORM_TENANT_ID), literal(query.accountId));
+}
+
 /** The rows `postgresPlatformMembershipStatement` read, judged as `readPostgresPlatformMembership` judges its own. */
 export function postgresPlatformMembershipRows(
   input: TenantStoreBinding,
@@ -855,6 +858,25 @@ export function postgresPlatformMembershipRows(
     return platformRows(owner, query.accountId, rows);
   } catch {
     return denyTenant();
+  }
+}
+
+/** The rows `postgresPlatformMembershipEvidenceStatement` read, judged as `assertPostgresPlatformMembershipSnapshot` judges its own. */
+export function assertPostgresPlatformMembershipRows(
+  input: TenantStoreBinding,
+  evidence: PlatformMembershipEvidence,
+  rows: readonly Record<string, unknown>[],
+  now: () => number = Date.now,
+): void {
+  try {
+    const owner = binding(input),
+      value = captureTenantData(evidence);
+    const query = platformEvidenceQuery(value, owner);
+    wellFormed(query.accountId, value.membershipId, ...value.roles);
+    const instant = clock(now);
+    assertCurrentPlatformRecord(value, platformRows(owner, query.accountId, rows), instant);
+  } catch (error) {
+    denyTenantFor(error);
   }
 }
 
@@ -905,7 +927,32 @@ export async function assertPostgresPlatformMembershipFence(
   }
 }
 
+/**
+ * What `assertPostgresPlatformMembershipFence` sends on a writer whose store
+ * is kept attested, in exact lock order (`@platform`, then membership FOR SHARE),
+ * so both leave behind the transaction's BEGIN (writeAhead.ts).
+ */
+export function postgresPlatformMembershipFenceAhead(
+  input: TenantStoreBinding,
+  evidence: PlatformMembershipEvidence,
+): readonly (string | { text: string; values: readonly unknown[] })[] {
+  try {
+    const owner = binding(input),
+      value = captureTenantData(evidence);
+    const query = platformEvidenceQuery(value, owner);
+    wellFormed(query.accountId, value.membershipId, ...value.roles);
+    return [
+      { text: PLATFORM_LOCKED, values: [PLATFORM_TENANT_ID] },
+      { text: PLATFORM_MEMBER_LOCKED, values: [PLATFORM_TENANT_ID, query.accountId] },
+    ];
+  } catch {
+    return [];
+  }
+}
+
 /* ---------- public intake ---------- */
+
+const INTAKE_ANCHOR_LOCKED = `SELECT status, version FROM ${q(tables.tenant)} WHERE id = $1 AND kind = $2 FOR SHARE`;
 
 /** A tenant's row, or `@platform` for the platform's own triage, when active:
  * FOR SHARE on the writer, the membership fence's first lock and order, so a
@@ -914,7 +961,7 @@ async function intakeAnchor(client: PgQuery, tenantId: string, lock: boolean): P
   const platform = tenantId === PLATFORM_TENANT_ID;
   if (!platform) parseTenantSelector([tenantId]);
   const rows = (
-    await client.query(`SELECT status, version FROM ${q(tables.tenant)} WHERE id = $1 AND kind = $2${lock ? ' FOR SHARE' : ''}`, [
+    await client.query(lock ? INTAKE_ANCHOR_LOCKED : `SELECT status, version FROM ${q(tables.tenant)} WHERE id = $1 AND kind = $2`, [
       tenantId,
       platform ? 'platform' : 'tenant',
     ])
@@ -952,6 +999,41 @@ export async function readPostgresIntakeAnchor(client: PgQuery, input: TenantSto
   }
 }
 
+/**
+ * Several anchors' current versions on the caller's snapshot in one statement,
+ * unlocked: replaces sequential `readPostgresIntakeAnchor` calls for `@platform`
+ * and a tenant across public, service, link and intake reads.
+ */
+export async function readPostgresIntakeAnchors(
+  client: PgQuery,
+  input: TenantStoreBinding,
+  tenantIds: readonly string[],
+): Promise<ReadonlyMap<string, string | null>> {
+  try {
+    const owner = binding(input);
+    const unique = [...new Set(tenantIds)];
+    for (const id of unique) {
+      if (id !== PLATFORM_TENANT_ID) parseTenantSelector([id]);
+    }
+    await attest(client, owner);
+    const found = new Map<string, string | null>(unique.map((id) => [id, null]));
+    if (!unique.length) return found;
+    const rows = (await client.query(`SELECT id, status, version, kind FROM ${q(tables.tenant)} WHERE id = ANY($1::text[])`, [unique]))
+      .rows;
+    for (const row of rows) {
+      const id = row.id as string;
+      const expectedKind = id === PLATFORM_TENANT_ID ? 'platform' : 'tenant';
+      if (row.kind !== expectedKind) continue;
+      if (row.status !== 'active') continue;
+      revision(row.version);
+      found.set(id, row.version as string);
+    }
+    return found;
+  } catch (error) {
+    return denyTenantFor(error);
+  }
+}
+
 /** The writer's intake fence: attests the store (once per adapter), samples the clock,
  * then locks the anchor FOR SHARE, held to COMMIT, at the resolved version —
  * for a tenant's submission its row, then `@platform`, the tenant fence's
@@ -982,6 +1064,36 @@ export async function assertPostgresIntakeAnchorFence(
       denyTenant();
   } catch {
     denyTenant();
+  }
+}
+
+/**
+ * What `assertPostgresIntakeAnchorFence` sends on a writer whose store is kept
+ * attested, in exact lock order (tenant row, then `@platform`, FOR SHARE), so
+ * both leave behind the transaction's BEGIN (writeAhead.ts).
+ */
+export function postgresIntakeAnchorFenceAhead(
+  input: TenantStoreBinding,
+  evidence: IntakeAnchorEvidence,
+): readonly (string | { text: string; values: readonly unknown[] })[] {
+  try {
+    binding(input);
+    const value = captureTenantData(evidence);
+    revision(value.tenantVersion);
+    revision(value.platformVersion);
+    time(value.verifiedAt);
+    time(value.validUntil);
+    const platform = value.tenantId === PLATFORM_TENANT_ID;
+    if (platform && value.platformVersion !== value.tenantVersion) return [];
+    if (!platform) parseTenantSelector([value.tenantId]);
+    return platform
+      ? [{ text: INTAKE_ANCHOR_LOCKED, values: [PLATFORM_TENANT_ID, 'platform'] }]
+      : [
+          { text: INTAKE_ANCHOR_LOCKED, values: [value.tenantId, 'tenant'] },
+          { text: INTAKE_ANCHOR_LOCKED, values: [PLATFORM_TENANT_ID, 'platform'] },
+        ];
+  } catch {
+    return [];
   }
 }
 

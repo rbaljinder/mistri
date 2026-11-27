@@ -18,6 +18,7 @@ import { coerceForColumn, columnKind, type DatabaseSchema, type ForeignKey, type
 import { blockingTriggers, firedBy, sayRuns, sayTriggers, sayWrite, type ScopeTrigger, type TriggeringWrite } from './scopeTriggers.js';
 import type { Afterward, ScopedTriggers } from './triggerProof.js';
 import { detachStoredText, overlaid, storedText, storedTextOf } from './storedText.js';
+import { reportLockedBefores, reportScopedWrite } from '../writeAhead.js';
 
 /** Physical metadata read on the writer inside its own transaction. `writable`
  * names the tables this scope may mutate; everything else stays in the graph
@@ -1029,6 +1030,12 @@ export function createScopedTransaction(
         `A scoped update may not change "${table.id}".${shifted.join(', ')}: a key, or a column another table references, generated from the columns it sets.`,
       );
   };
+  /* Whether an INSERT/UPDATE on `written` can affect row visibility or owner of `targetId` (DELETE always clears). */
+  const canAffectTable = (written: TableMeta, targetId: string): boolean => {
+    if (written.id === targetId || (catalog.triggered?.get(written.id)?.length ?? 0) > 0) return true;
+    const rule = scope?.[targetId];
+    return Boolean(rule && typeof rule === 'object' && rule.groups.some((group) => group.some(isViaCondition)));
+  };
   const insert = async (request: InsertRequest): Promise<InsertResult> => {
     const table = target(request.table, { kind: 'insert' });
     const afterwards = proof && (await proof.before(table, { kind: 'insert' }, proof.images.insert(table, request.values)));
@@ -1050,15 +1057,17 @@ export function createScopedTransaction(
       const within = await stored(table, result.key, bound.reads);
       await parents(table, within, undefined, guessed);
       await afterward(afterwards, { new: within, old: null });
+      reportScopedWrite((targetId) => canAffectTable(table, targetId));
       return { key: result.key, applied: result.applied, sql: result.sql };
     }
     const row = one(table, result.key, found);
     await parents(table, row, undefined, guessed);
     await afterward(afterwards, { new: row, old: null });
     madeBy(table, row);
+    reportScopedWrite((targetId) => canAffectTable(table, targetId));
     return result;
   };
-  const update = async (request: UpdateRequest): Promise<UpdateResult> => {
+  const update = async (request: UpdateRequest, onBefore?: (row: Record<string, unknown>) => void): Promise<UpdateResult> => {
     const table = target(request.table, { kind: 'update', set: Object.keys(request.values ?? {}) });
     const protectedColumns = unmoved(table, request);
     const before = await stored(table, request.key);
@@ -1098,6 +1107,8 @@ export function createScopedTransaction(
     shiftedRefusal(table, protectedColumns, before, now);
     await parents(table, now, set);
     await afterward(afterwards, { new: now, old: before });
+    onBefore?.(before);
+    reportScopedWrite((targetId) => canAffectTable(table, targetId));
     // The row the UPDATE returned was not read through the scope, and what ran after it may have written it again.
     const { row: _unscoped, ...said } = result;
     return said;
@@ -1126,6 +1137,26 @@ export function createScopedTransaction(
     );
   };
   const refusedIn = (checks: readonly ParentCheck[]) => checks.some((check) => 'refused' in check);
+  const suppliedInsertKeys = (table: TableMeta, requests: readonly InsertRequest[]): Array<Record<string, string | number>> | undefined => {
+    if (!locks?.behind || (catalog.triggered?.get(table.id)?.length ?? 0) > 0) return undefined;
+    const pkCols = table.columns.filter((c) => c.primaryKey).map((c) => c.name);
+    if (!pkCols.length || pkCols.some((c) => generated(table, c))) return undefined;
+    const seen = new Set<string>();
+    const out: Array<Record<string, string | number>> = [];
+    for (const req of requests) {
+      const key: Record<string, string | number> = {};
+      for (const c of pkCols) {
+        const value = req.values?.[c];
+        if (typeof value !== 'string' && !(typeof value === 'number' && Number.isFinite(value))) return undefined;
+        key[c] = value;
+      }
+      const id = keyId(table, key);
+      if (seen.has(id)) return undefined;
+      seen.add(id);
+      out.push(key);
+    }
+    return out;
+  };
   const insertMany = async (requests: readonly InsertRequest[]): Promise<InsertResult[]> => {
     const table = target(sameTable(requests.map((request) => request.table)), { kind: 'insert' });
     const given = requests.map((request) => parentChecks(table, request.values ?? {}, undefined, true));
@@ -1136,25 +1167,49 @@ export function createScopedTransaction(
       afterwards.push(proof && (await proof.before(table, { kind: 'insert' }, proof.images.insert(table, request.values))));
     const checks = combined(unproven(given.flat()));
     if (!locks?.together) await verify(checks);
+    const suppliedKeys = suppliedInsertKeys(table, requests);
+    const behind: { read?: Promise<Map<string, Record<string, unknown>>> } = {};
+    const withdraw = suppliedKeys
+      ? locks?.behind?.(table, () => {
+          behind.read = lockedReads(table, suppliedKeys);
+          behind.read.catch(() => {});
+        })
+      : undefined;
     const write = () =>
       statement(
         records.insertMany!(requests),
         table,
         requests.map((request) => request.values ?? {}),
       );
-    const results = locks?.together ? await parentsFirst(checks, write) : await write();
-    /* The rows locked and read back in one read, and where the writer sends together their references checked in the
-       same flight, from the rows the INSERT returned (verify uses them only where the stored rows hold exactly those). */
-    const read = lockedReads(
-      table,
-      results.map((result) => result.key),
-    );
-    const guessed =
-      locks?.together && results.every((result) => result.row)
-        ? ask(combined(unproven(results.flatMap((result) => parentChecks(table, result.row!)))))
-        : undefined;
-    read.catch(() => {});
-    const found = await read;
+    let results: InsertResult[];
+    try {
+      results = locks?.together ? await parentsFirst(checks, write) : await write();
+    } finally {
+      withdraw?.();
+    }
+    const singleStatement = new Set(results.map((result) => result.sql.params)).size === 1;
+    const matchedSupplied =
+      Boolean(behind.read && suppliedKeys && singleStatement) &&
+      results.length === suppliedKeys!.length &&
+      results.every((result, index) => keyId(table, result.key) === keyId(table, suppliedKeys![index]!));
+    /* The rows locked and read back in one read, pipelined behind INSERT when every PK was caller-supplied and matched. */
+    let found: Map<string, Record<string, unknown>>;
+    let guessed: ReturnType<typeof ask> | undefined;
+    if (matchedSupplied) {
+      found = await behind.read!;
+    } else {
+      await behind.read?.catch(() => undefined);
+      const read = lockedReads(
+        table,
+        results.map((result) => result.key),
+      );
+      guessed =
+        locks?.together && results.every((result) => result.row)
+          ? ask(combined(unproven(results.flatMap((result) => parentChecks(table, result.row!)))))
+          : undefined;
+      read.catch(() => {});
+      found = await read;
+    }
     const rows: Record<string, unknown>[] = [];
     const outside = new Set<number>();
     for (const [index, result] of results.entries()) {
@@ -1174,12 +1229,19 @@ export function createScopedTransaction(
     await verify(combined(unproven(rows.flatMap((row) => parentChecks(table, row)))), guessed);
     for (const [index, row] of rows.entries()) await afterward(afterwards[index], { new: row, old: null });
     madeBy(table, ...rows.filter((_, index) => !outside.has(index)));
+    reportScopedWrite((targetId) => canAffectTable(table, targetId));
     return results.map((result, index) => (outside.has(index) ? { key: result.key, applied: result.applied, sql: result.sql } : result));
   };
   /* An update's batch likewise: the rows read before it in one locked read, the statement with the read after it sent
      behind it (locks.behind), every row's references the update sets checked before and after. A row a batch names
      twice, or one a row at a time would refuse before its statement, is written a row at a time. */
   const updateMany = async (requests: readonly UpdateRequest[]): Promise<UpdateResult[]> => {
+    const oneByOne = async () => {
+      const collected: Record<string, unknown>[] = [];
+      const res = await oneAtATime(requests, (req) => update(req, (row) => collected.push(row)));
+      if (collected.length === requests.length) reportLockedBefores(collected);
+      return res;
+    };
     const id = sameTable(requests.map((request) => request.table));
     let table: TableMeta | undefined;
     let protectedColumns: ReadonlySet<string> = new Set();
@@ -1191,7 +1253,7 @@ export function createScopedTransaction(
         keyFilter(table, request.key);
       }
     } catch {
-      return oneAtATime(requests, update);
+      return oneByOne();
     }
     if (
       !table ||
@@ -1200,7 +1262,7 @@ export function createScopedTransaction(
       sets.some((set) => keyedTrigger(table!, { kind: 'update', set: [...set] })) ||
       selfReferenced(table)
     )
-      return oneAtATime(requests, update);
+      return oneByOne();
     const at = table;
     const keys = requests.map((request) => request.key);
     const found = await lockedReads(at, keys);
@@ -1209,7 +1271,7 @@ export function createScopedTransaction(
     // What each update sets is given; every other column of a reference it sets in part is as stored, bound as its text.
     const written = requests.map((request, index) => overlaid(befores[index]!, request.values));
     const given = written.map((row, index) => parentChecks(at, row, sets[index], true));
-    if (given.some(refusedIn)) return oneAtATime(requests, update);
+    if (given.some(refusedIn)) return oneByOne();
     const afterwards: (readonly Afterward[] | undefined)[] = [];
     for (const [index, request] of requests.entries())
       afterwards.push(
@@ -1241,6 +1303,8 @@ export function createScopedTransaction(
     for (const [index, row] of rows.entries()) shiftedRefusal(at, protectedColumns, befores[index]!, row);
     await verify(combined(unproven(rows.flatMap((row, index) => parentChecks(at, row, sets[index])))));
     for (const [index, row] of rows.entries()) await afterward(afterwards[index], { new: row, old: befores[index]! });
+    reportLockedBefores(befores);
+    reportScopedWrite((targetId) => canAffectTable(at, targetId));
     return results;
   };
   return Object.freeze({

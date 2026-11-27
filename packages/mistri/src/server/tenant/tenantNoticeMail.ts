@@ -82,7 +82,12 @@ export function openTenantNoticeMail<Request>(options: TenantNoticeMailOptions<R
      declares, narrowed by the runtime to the ones that membership holds. */
   const roles = Object.keys(app.auth?.roles ?? {});
 
-  async function deliver(store: InboxMailStore, mail: QueuedMail, tenantId: string | undefined): Promise<keyof OutboxTally> {
+  async function deliver(
+    store: InboxMailStore,
+    mail: QueuedMail,
+    tenantId: string | undefined,
+    placeOf: (id: string) => Promise<string | undefined>,
+  ): Promise<keyof OutboxTally> {
     let outcome: MailOutcome;
     try {
       const person = await options.account(mail.recipient);
@@ -141,13 +146,7 @@ export function openTenantNoticeMail<Request>(options: TenantNoticeMailOptions<R
           const selector = tenantId === undefined ? 'realm=platform' : `tenant=${encodeURIComponent(tenantId)}`;
           const link = `${base}${outward(options.mount ?? NO_MOUNT, path)}?${selector}`;
           let place: string | undefined;
-          if (tenantId !== undefined && options.names) {
-            try {
-              place = (await options.names([tenantId]))[tenantId];
-            } catch {
-              place = undefined;
-            }
-          }
+          if (tenantId !== undefined) place = await placeOf(tenantId);
           await options.transport.send({
             to: mail.recipient,
             ...messageOf(app, link, told.title, mail.actorName, place, told.locale ?? canonicalLocale(app.ui.locale)),
@@ -172,6 +171,19 @@ export function openTenantNoticeMail<Request>(options: TenantNoticeMailOptions<R
     const tenants = new Map<string, string>();
     if (due.some((inbox) => inbox !== app.id))
       for (const tenant of await deployment.inbox.tenants()) tenants.set(tenantInbox(app.id, tenant), tenant);
+    const placeCache = new Map<string, Promise<string | undefined>>();
+    const placeOf = (id: string): Promise<string | undefined> => {
+      if (!options.names) return Promise.resolve(undefined);
+      let cached = placeCache.get(id);
+      if (!cached) {
+        cached = options.names([id]).then(
+          (map) => map[id],
+          () => undefined,
+        );
+        placeCache.set(id, cached);
+      }
+      return cached;
+    };
     for (const inbox of due) {
       const platform = inbox === app.id;
       const tenantId = platform ? undefined : tenants.get(inbox);
@@ -181,7 +193,7 @@ export function openTenantNoticeMail<Request>(options: TenantNoticeMailOptions<R
         if ((platform && !deployment.platform) || (!platform && tenantId === undefined)) {
           await store.settleMail(mail, skipped);
           tally.skipped += 1;
-        } else tally[await deliver(store, mail, tenantId)] += 1;
+        } else tally[await deliver(store, mail, tenantId, placeOf)] += 1;
       }
     }
     return tally;

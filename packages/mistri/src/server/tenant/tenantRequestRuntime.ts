@@ -20,7 +20,13 @@ import {
 import { createTenantMembershipIssuer, type TenantMembershipEvidence } from './tenantMembership.js';
 import { composeTenantReadScope, footprintRows } from './tenantReadScope.js';
 import { tenantAppAccess } from './tenantAccess.js';
-import { advisoryRecords, captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
+import {
+  advisoryRecords,
+  captureTenantReadSource,
+  readSharedProfile,
+  tenantRealmFencingOf,
+  type TenantReadSource,
+} from './tenantReadSource.js';
 import type { TenantValue } from '@mistriwork/engine/shared/queryOperands.js';
 import { assertTenantSourcePair } from './tenantSourceIdentity.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
@@ -64,7 +70,11 @@ export interface TenantRequestScope {
    * only — which commands a record offers — that the command asks again in its
    * own transaction when it runs; it takes no writer, so it queues behind none.
    * Like a transaction, it is this request's one. */
-  advisoryReads<T>(run: (records: WriteTransaction) => T | Promise<T>, read: readonly string[]): Promise<T>;
+  advisoryReads<T>(
+    run: (records: WriteTransaction) => T | Promise<T>,
+    read: readonly string[],
+    options?: { readonly lastWave?: boolean },
+  ): Promise<T>;
   /** The tenant's own scoped reads, outside any transaction: what a command's lookup reads through. */
   reads(): ReturnType<TenantReadSource['bindReads']>;
   /** Run concurrent pre-transaction reads on one shared read snapshot (`TenantReadSource.together`). */
@@ -334,9 +344,11 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
            FOR SHARE fence and COMMIT, so the committed transaction proves the
            membership continuously across both. */
           let outside = false,
-            outsideRunning = 0;
+            outsideRunning = 0,
+            advisoryFenced = false;
           const trackOutside = <R>(work: () => Promise<R>): Promise<R> => {
             outside = true;
+            advisoryFenced = false;
             outsideRunning++;
             return Promise.resolve()
               .then(work)
@@ -458,7 +470,11 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
                 return result;
               });
           };
-          const advisoryReads = <R>(run: (records: WriteTransaction) => R | Promise<R>, ceiling: readonly string[]): Promise<R> => {
+          const advisoryReads = <R>(
+            run: (records: WriteTransaction) => R | Promise<R>,
+            ceiling: readonly string[],
+            advisoryOptions?: { readonly lastWave?: boolean },
+          ): Promise<R> => {
             if (!accepting) return Promise.reject(new TenantWriteFailure('not_applied'));
             const invalid = attempted || typeof run !== 'function';
             attempted = true;
@@ -478,11 +494,20 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
             } catch {
               footprint = undefined;
             }
-            outside = true;
+            const fencing = tenantRealmFencingOf(reader);
             return operations.run(async () => {
               if (invalid || !footprint || callbackFailure) return denyTenant();
               await session();
-              const result = await reader.withReads(admitted, footprint, (reads) => run(advisoryRecords(reads)));
+              const hadOutside = outside || outsideRunning > 0;
+              outside = true;
+              let result: R;
+              if (fencing) {
+                const ran = await fencing.withReadsFenced(admitted, footprint, (reads) => run(advisoryRecords(reads)), advisoryOptions);
+                result = ran.value;
+                if (ran.fenced && !hadOutside && outsideRunning === 0) advisoryFenced = true;
+              } else {
+                result = await reader.withReads(admitted, footprint, (reads) => run(advisoryRecords(reads)));
+              }
               active();
               await session();
               return result;
@@ -586,8 +611,8 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
              is told so, as admission told them, and never something about the
              record or the request. */
           proved = true;
-          let fencedAfter = false;
-          if (failure ? !fenced && !committed : !(committed && !outside)) {
+          let fencedAfter: boolean = !failure && advisoryFenced && !committed;
+          if (failure ? !fenced && !committed : !(committed && !outside) && !advisoryFenced) {
             try {
               await reader.assertCurrent(admitted);
               fencedAfter = !failure;

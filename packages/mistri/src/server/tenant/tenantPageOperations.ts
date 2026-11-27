@@ -88,34 +88,41 @@ export async function tenantPagePlan(
   ]);
   const storedKey = valuesFor(row, rootColumns);
   const ofKeys: OfKeys = {};
-  for (const { of, fk } of resolved) {
-    const values = fk.from.columns.map((column) => row[column]);
-    if (values.some((value) => value === null)) {
-      ofKeys[of] = null;
-      continue;
-    }
-    if (values.some((value) => typeof value !== 'string' && !(typeof value === 'number' && Number.isFinite(value)))) return denyTenant();
-    const target = Object.fromEntries(fk.to.columns.map((column, index) => [column, values[index] as string | number]));
-    const columns = needed(fk.to.table, of);
-    const { result } = await readRecords(adapter, schema, {
-      table: fk.to.table,
-      columns,
-      filter: { groups: [fk.to.columns.map((column) => ({ column, op: '=' as const, value: target[column] }))] },
-      limit: 2,
-      offset: 0,
-    });
-    // Do not turn a hidden parent into a filter containing its guessed key.
-    if (result.rows.length !== 1) return denyTenant();
-    ofKeys[of] = valuesFor(result.rows[0], columns);
-  }
+  const aboutEntries = await Promise.all(
+    resolved.map(async ({ of, fk }) => {
+      const values = fk.from.columns.map((column) => row[column]);
+      if (values.some((value) => value === null)) return [of, null] as const;
+      if (values.some((value) => typeof value !== 'string' && !(typeof value === 'number' && Number.isFinite(value)))) return denyTenant();
+      const target = Object.fromEntries(fk.to.columns.map((column, index) => [column, values[index] as string | number]));
+      const columns = needed(fk.to.table, of);
+      const { result } = await readRecords(adapter, schema, {
+        table: fk.to.table,
+        columns,
+        filter: { groups: [fk.to.columns.map((column) => ({ column, op: '=' as const, value: target[column] }))] },
+        limit: 2,
+        offset: 0,
+      });
+      // Do not turn a hidden parent into a filter containing its guessed key.
+      if (result.rows.length !== 1) return denyTenant();
+      return [of, valuesFor(result.rows[0], columns)] as const;
+    }),
+  );
+  for (const [of, value] of aboutEntries) ofKeys[of] = value;
   const plans = planPageSections(schema, page, storedKey, ofKeys, now, row);
   if (plans.some((plan) => ('error' in plan && plan.error) || (plan.kind === 'timeline' && plan.streams.some((stream) => stream.error))))
     return denyTenant();
   return captureTenantData({ page, plans });
 }
 
-export async function tenantReferences(adapter: Adapter, schema: DatabaseSchema, tableId: string, key: Record<string, string | number>) {
+export async function tenantReferences(
+  adapter: Adapter,
+  schema: DatabaseSchema,
+  tableId: string,
+  key: Record<string, string | number>,
+  lastWave?: () => void,
+) {
   const incoming = referencesTo(schema, tableId);
+  if (!incoming.length) lastWave?.();
   const row = await rootRow(
     adapter,
     schema,
@@ -123,17 +130,25 @@ export async function tenantReferences(adapter: Adapter, schema: DatabaseSchema,
     key,
     incoming.flatMap((fk) => fk.to.columns),
   );
+  const queries = incoming.map((fk) => {
+    const values = fk.to.columns.map((column) => row[column]);
+    if (values.some((value) => value === null)) return undefined;
+    if (values.some((value) => typeof value !== 'string' && !(typeof value === 'number' && Number.isFinite(value)))) return denyTenant();
+    return {
+      fk,
+      filter: {
+        groups: [fk.from.columns.map((column, index) => ({ column, op: '=' as const, value: values[index] as string | number }))],
+      },
+    };
+  });
+  if (queries.some(Boolean)) lastWave?.();
   /* Every count is asked at once: each needs only the record's row, and together they are one wave on the snapshot the
      caller holds (tenantHttp.ts), where asked one after another each was a round trip of its own. A refusal still
      fails the whole answer, as it did in order, and the answer keeps the schema's order. */
   const asked = await Promise.all(
-    incoming.map(async (fk) => {
-      const values = fk.to.columns.map((column) => row[column]);
-      if (values.some((value) => value === null)) return undefined;
-      if (values.some((value) => typeof value !== 'string' && !(typeof value === 'number' && Number.isFinite(value)))) return denyTenant();
-      const filter = {
-        groups: [fk.from.columns.map((column, index) => ({ column, op: '=' as const, value: values[index] as string | number }))],
-      };
+    queries.map(async (item) => {
+      if (!item) return undefined;
+      const { fk, filter } = item;
       // Bounded as the ordinary host bounds a reference: "10,000+" past it.
       const { count, capped } = await readCount(adapter, schema, {
         table: fk.from.table,

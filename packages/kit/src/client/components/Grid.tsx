@@ -40,7 +40,6 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
-import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   columnDisplay,
@@ -223,7 +222,7 @@ const groupKey = (value: unknown): string => (value === null || value === undefi
 /** A group head's host in the row hosts' store: no row's key can spell it (a row's is a JSON array). */
 export const groupHostKey = (value: unknown): string => `group:${groupKey(value)}`;
 
-/** Beyond a few hundred rows the DOM, not the database, is the bottleneck. */
+/** Beyond a hundred rows the DOM, not the database, is the bottleneck. */
 const VIRTUAL_THRESHOLD = 300;
 const OVERSCAN = 12;
 /** The most a single grid cell will put in the DOM. Well past what 30rem shows. */
@@ -243,8 +242,6 @@ interface Plan {
   showTime?: boolean;
 }
 
-const features = tableFeatures({});
-const helper = createColumnHelper<typeof features, Row>();
 const NO_ROWS: Row[] = [];
 
 type RowHostRef = ReturnType<RowHostStore['ref']>;
@@ -494,15 +491,21 @@ interface CellColumn {
 function useKeptColumns(columns: CellColumn[]): CellColumn[] {
   const kept = useRef(columns);
   const was = kept.current;
-  /* A plan is remade from the rows (planColumn reads their decimals), so a
-     refetch with one changed row compares it by what it says. */
-  const samePlan = (a: Plan, b: Plan) =>
-    (Object.keys(a) as Array<keyof Plan>).every((key) => a[key] === b[key]) && Object.keys(a).length === Object.keys(b).length;
+  const sameObj = (a: unknown, b: unknown): boolean => {
+    if (a === b) return true;
+    if (!a || !b || typeof a !== 'object' || typeof b !== 'object') return false;
+    const ka = Object.keys(a as Record<string, unknown>);
+    const kb = Object.keys(b as Record<string, unknown>);
+    if (ka.length !== kb.length) return false;
+    return ka.every((k) => (a as Record<string, unknown>)[k] === (b as Record<string, unknown>)[k]);
+  };
   const same =
     was.length === columns.length &&
     columns.every((column, i) =>
       (Object.keys(column) as Array<keyof CellColumn>).every(
-        (key) => column[key] === was[i][key] || (key === 'plan' && samePlan(column.plan, was[i].plan)),
+        (key) =>
+          column[key] === was[i][key] ||
+          ((key === 'plan' || key === 'leadTone' || key === 'more' || key === 'display') && sameObj(column[key], was[i][key])),
       ),
     );
   if (!same) kept.current = columns;
@@ -560,12 +563,16 @@ function TagsCellList({ chips }: { chips: ReturnType<typeof tagChips> }) {
       more.textContent = count > 0 ? say('moreTags', { count }) : '';
       more.style.display = count > 0 ? '' : 'none';
     };
+    let lastWidth = -1;
     const fit = () => {
+      const cw = cell.clientWidth;
+      if (cw === lastWidth) return;
+      lastWidth = cw;
       list.removeAttribute('data-lone');
       tags.forEach((tag) => (tag.style.display = ''));
       sayMore(chips.length - tags.length);
       const box = getComputedStyle(cell);
-      const room = cell.clientWidth - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight);
+      const room = cw - parseFloat(box.paddingLeft) - parseFloat(box.paddingRight);
       if (!(room > 0)) return;
       const gap = parseFloat(getComputedStyle(list).columnGap) || 0;
       const widths = tags.map((tag) => tag.offsetWidth);
@@ -1356,12 +1363,6 @@ export function Grid({
     seed: Record<string, number> | null;
     seeded: boolean;
   } | null>(null);
-  const columns = useMemo(
-    () => helper.columns(ordered.map((name) => helper.accessor((row: Row) => row[name], { id: name, header: name }))),
-    [ordered],
-  );
-  const model = useTable({ features, columns, data: rows });
-  const modelRows = model.getRowModel().rows;
   /* In an App list the header's ⌄ is the App's short menu (AppColumnMenu.tsx), and the list's pins are its own. */
   const appMenu = useAppColumnMenu();
   const pinList = appMenu?.current?.listKey;
@@ -1932,8 +1933,8 @@ export function Grid({
                 </tr>
               )}
               {shown.map((i, at) => {
-                const row = modelRows[i];
-                if (!row) return null;
+                const record = rows[i];
+                if (!record) return null;
                 const key = rowKeys[i];
                 const open = expandable && key !== null && expanded.has(key);
                 const drawn = (
@@ -1945,13 +1946,13 @@ export function Grid({
                     hostRef={key === null ? undefined : hosts.ref(key)}
                     trail={trailing}
                     trailRef={key === null || !trailHosts ? undefined : trailHosts.ref(key)}
-                    record={row.original}
+                    record={record}
                     navigable={navigable}
                     opensPage={navigable && !onRowClick && !opens}
                     onOpen={openOne}
                     open={open}
                     current={key !== null && key === currentKey}
-                    changed={changedRows.get(row.original)}
+                    changed={changedRows.get(record)}
                     table={table}
                     colSpan={colSpan}
                     columns={cellColumns}
@@ -1961,9 +1962,9 @@ export function Grid({
                 );
                 if (!group) return drawn;
                 /* A head where a run of one value begins: the first row drawn, or one whose group the row above is not. */
-                const value = row.original[group.column];
+                const value = record[group.column];
                 const named = groupKey(value);
-                const starts = at === 0 || groupKey(modelRows[shown[at - 1]]?.original[group.column]) !== named;
+                const starts = at === 0 || groupKey(rows[shown[at - 1]]?.[group.column]) !== named;
                 const shut = shutGroups.has(named);
                 return (
                   <Fragment key={key === null ? `at:${i}` : `key:${key}`}>

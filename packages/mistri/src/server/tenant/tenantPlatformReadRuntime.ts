@@ -14,6 +14,7 @@
  * table, a view by its base, a breakdown by its base. No key crosses between
  * sources, so no path, join or reference does.
  */
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { isPromise } from 'node:util/types';
 import type { Adapter, AggregateRequest, CteRequest, ScopedReads } from '@mistriwork/engine/adapters/adapter.js';
 import { cteTables } from '@mistriwork/engine/shared/cte.js';
@@ -36,7 +37,13 @@ import {
   tenantOptions,
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
-import { checkTenantInvocation, isHeadlessInvocation, revalidateTenantInvocation, type TenantInvocationGuard } from './tenantInvocation.js';
+import {
+  checkTenantInvocation,
+  isAdmittedAgain,
+  isHeadlessInvocation,
+  revalidateTenantInvocation,
+  type TenantInvocationGuard,
+} from './tenantInvocation.js';
 import { createPlatformMembershipIssuer, type PlatformMembershipEvidence } from './tenantPlatform.js';
 import {
   captureTenantPlatformSources,
@@ -45,13 +52,16 @@ import {
   type TenantPlatformSource,
 } from './tenantPlatformSource.js';
 import { composePlatformReadScope } from './tenantReadScope.js';
-import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
+import { captureTenantReadSource, tenantRealmFencingOf, type TenantReadSource } from './tenantReadSource.js';
+import { boundedReadSlot } from './tenantReadRuntime.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
 import { withTenantReadAudit } from './tenantReadAudit.js';
 import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 import type { AdmissionCache } from './tenantAdmissionCache.js';
 import { bindTenantFlagOwner } from './tenantFlagRuntime.js';
+
+const riding = new AsyncLocalStorage<object>();
 
 export interface PlatformReadContext {
   readonly principal: PlatformMembershipEvidence;
@@ -63,6 +73,10 @@ export interface PlatformReadContext {
   readonly zone?: undefined;
   /** Never read, for the same reason: the platform's people read the App's own locale. */
   readonly locale?: undefined;
+  /** `work`, its reads of this context on one snapshot (tenantReadSource.ts `togetherFencedPlatform`). */
+  readonly together?: <T>(work: () => Promise<T>) => Promise<T>;
+  /** Internal, for a bounded request (`withBoundedReads`): release fence rides the last wave of reads. */
+  readonly lastWave?: () => void;
 }
 export type PlatformInvocationGuard = TenantInvocationGuard<PlatformMembershipEvidence>;
 export interface PlatformReadRuntimeOptions<Request> {
@@ -247,6 +261,12 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
       guard?: PlatformInvocationGuard,
     ): Promise<T> {
       if (retired || typeof callback !== 'function') return denyTenant();
+      const fencing = tenantRealmFencingOf(source);
+      const slot = boundedReadSlot();
+      if (slot?.live) return denyTenant();
+      const bounded = fencing !== undefined && slot !== undefined && !slot.claimed;
+      if (slot) slot.claimed = true;
+      if (bounded) slot.live = true;
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
         finish = resolve;
@@ -264,6 +284,11 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
               failure: unknown;
             let lastTime = principal.verifiedAt;
             const pending = new Set<Promise<void>>();
+            const rideToken = {};
+            let ridingOpen = 0;
+            let ridden = false;
+            let beside = false;
+            let outsideRead = false;
             let releaseFlags = () => {};
             const assertActive = () => {
               checkTenantInvocation(guard, principal);
@@ -283,14 +308,6 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
                 denyTenant();
               lastTime = instant;
             };
-            /* The session and the invocation guard, around every accepted
-             operation. The membership is not asked here: each operation's
-             own snapshot revalidates it before its SQL (tenantReadSource.ts,
-             `bind`), and the release fence below asks once more after the
-             last read has settled. Asking in a snapshot of its own after
-             every read as well, and at the scope bind, cost a PostgreSQL
-             snapshot each and proved nothing those two do not, as the
-             tenant owner found (tenantReadRuntime.ts). */
             const revalidateSession = async () => {
               assertActive();
               const result = delivered(verify(request));
@@ -317,6 +334,7 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
             };
             const track = <A, R>(input: A, work: (captured: A) => Promise<R>, validate: (captured: A) => void): Promise<R> => {
               if (!accepting || !active || retired) return Promise.reject(new TenantContextError());
+              if (!bounded && riding.getStore() !== rideToken) beside = true;
               let complete!: () => void;
               const reserved = new Promise<void>((resolve) => {
                 complete = resolve;
@@ -326,10 +344,12 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
                 try {
                   const captured = captureTenantData(input);
                   validate(captured);
-                  await revalidateSession();
+                  if (bounded) assertActive();
+                  else await revalidateSession();
                   const value = await work(captured);
                   const snapshot = captureTenantData(value);
-                  await revalidateSession();
+                  if (bounded) assertActive();
+                  else await revalidateSession();
                   return snapshot;
                 } catch (error) {
                   failed = true;
@@ -386,6 +406,7 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
                     const platformSource = holder.get(table);
                     if (!platformSource)
                       return Object.hasOwn(ownership.resources, table) ? Promise.resolve(reads) : Promise.reject(new TenantContextError());
+                    outsideRead = true;
                     let scoped = bound.get(platformSource);
                     if (!scoped) {
                       scoped = platformSource.scopeReads(source, principal, parts.get(platformSource)!);
@@ -516,22 +537,85 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
               const schema = captureScopeCatalog(guarded.schema);
               const capabilities =
                 !isHeadlessInvocation(guard) && presentation ? captureTenantData(presentation(principal, schema)) : undefined;
+              const again = isAdmittedAgain(guard);
+              const fencedTogether = fencing
+                ? <R>(work: () => Promise<R>): Promise<R> => {
+                    if (bounded || again || riding.getStore() === rideToken) return fencing.togetherPlatform(principal, work);
+                    if (pending.size || ridingOpen) beside = true;
+                    ridingOpen++;
+                    ridden = false;
+                    return fencing
+                      .togetherFencedPlatform(principal, () => riding.run(rideToken, work), { lastWave: false })
+                      .then((ran) => {
+                        if (pending.size) beside = true;
+                        ridden = ran.fenced;
+                        return ran.value;
+                      })
+                      .finally(() => {
+                        ridingOpen--;
+                      });
+                  }
+                : undefined;
+              const fenceRode = () => ridden && !beside && !outsideRead && ridingOpen === 0;
+              const lastWave = fencing ? () => fencing.lastWave() : undefined;
               assertActive();
-              const context = Object.freeze({ principal, schema, data, ...(capabilities === undefined ? {} : { capabilities }) });
-              releaseFlags = bindTenantFlagOwner(request, principal, revalidate, assertActive);
+              const context = Object.freeze({
+                principal,
+                schema,
+                data,
+                ...(fencedTogether === undefined ? {} : { together: fencedTogether }),
+                ...(lastWave === undefined ? {} : { lastWave }),
+                ...(capabilities === undefined ? {} : { capabilities }),
+              });
+              releaseFlags = bindTenantFlagOwner(request, principal, bounded ? async () => denyTenant() : revalidate, assertActive);
               let output: T | undefined,
                 callbackFailed = false;
-              try {
-                const result = delivered(callback(context));
-                output = isPromise(result) ? await result : result;
-              } catch (error) {
-                callbackFailed = true;
-                failure ??= error;
+              const answer = async (): Promise<boolean> => {
+                try {
+                  const result = delivered(callback(context));
+                  output = isPromise(result) ? await result : result;
+                } catch (error) {
+                  callbackFailed = true;
+                  failure ??= error;
+                }
+                accepting = false;
+                await Promise.allSettled([...pending]);
+                if (callbackFailed || failed) return false;
+                if (!bounded) await revalidateSession();
+                return true;
+              };
+              if (bounded && !again) {
+                let answered = false;
+                const ran = await fencing
+                  .togetherFencedPlatform(principal, async () => {
+                    try {
+                      answered = await answer();
+                    } catch (error) {
+                      failure ??= error;
+                    }
+                    if (!answered) throw new TenantContextError();
+                    return answered;
+                  })
+                  .catch((error: unknown) => {
+                    if (!answered) return undefined;
+                    throw error;
+                  });
+                if (!ran) return denyTenantFor(failure);
+                try {
+                  await revalidateSession();
+                } catch (error) {
+                  failure ??= error;
+                  return denyTenantFor(failure);
+                }
+                if (!ran.fenced || outsideRead) await source.assertPlatformCurrent(principal);
+                assertActive();
+              } else {
+                if (!(await answer())) return denyTenantFor(failure);
+                if (!again) {
+                  if (!fenceRode()) await source.assertPlatformCurrent(principal);
+                  assertActive();
+                }
               }
-              accepting = false;
-              await Promise.allSettled([...pending]);
-              if (callbackFailed || failed) return denyTenantFor(failure);
-              await revalidate();
               return output as T;
             } finally {
               releaseFlags();
@@ -546,6 +630,7 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
       } catch (error) {
         return denyTenantFor(error);
       } finally {
+        if (bounded) slot.live = false;
         pendingRequests.delete(held);
         finish();
       }

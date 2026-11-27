@@ -238,7 +238,13 @@ export function observedClient(Client: ClientClass, reads: AuthStoreReads): Clie
           : request && typeof request === 'object' && typeof (request as { text?: unknown }).text === 'string'
             ? (request as { text: string }).text
             : undefined;
-      const answered = reads.statement(this, text);
+      const params =
+        request && typeof request === 'object' && Array.isArray((request as { values?: unknown }).values)
+          ? (request as { values: readonly unknown[] }).values
+          : Array.isArray(args[1])
+            ? (args[1] as readonly unknown[])
+            : undefined;
+      const answered = reads.statement(this, text, params);
       // Taken as the statement is sent: the call that sent it is the one told (storeFailureBeneath).
       const slot = failures.getStore();
       const done = args.at(-1);

@@ -19,7 +19,12 @@ import {
   type PlatformTenantEvidence,
 } from './tenantPlatformTenant.js';
 import { assertSqliteIntakeAnchorSnapshot, assertSqlitePlatformMembershipSnapshot } from './tenantStore.js';
-import { assertPostgresIntakeAnchorFence, assertPostgresPlatformMembershipFence } from './tenantStorePostgres.js';
+import {
+  assertPostgresIntakeAnchorFence,
+  assertPostgresPlatformMembershipFence,
+  postgresIntakeAnchorFenceAhead,
+  postgresPlatformMembershipFenceAhead,
+} from './tenantStorePostgres.js';
 import type { TenantWriteKind } from './tenantWriteKindContract.js';
 import { platformWriteKind } from './tenantWriteKindPlatform.js';
 
@@ -60,6 +65,10 @@ export const platformTenantWriteKind = Object.freeze<TenantWriteKind<PlatformTen
     await assertPostgresIntakeAnchorFence(client, owner, platformTenantAnchor(evidence), live);
     await assertPostgresPlatformMembershipFence(client, owner, platformOf(evidence), live);
   },
+  postgresFenceAhead: (owner, evidence) => [
+    ...postgresIntakeAnchorFenceAhead(owner, platformTenantAnchor(evidence)),
+    ...postgresPlatformMembershipFenceAhead(owner, platformOf(evidence)),
+  ],
   // The platform realm's receipt, under the member who ran it: the tenant is on each audit row.
   journalOwner: (owner, evidence) => platformWriteKind.journalOwner(owner, platformOf(evidence)),
   run: (owned, evidence, records, journal, _command, run) =>

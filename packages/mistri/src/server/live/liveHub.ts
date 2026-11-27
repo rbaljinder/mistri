@@ -216,7 +216,7 @@ export class LiveHub {
         delay,
       ),
     );
-    this.scheduled.unref?.();
+    if (delay > 0 && !this.joining.length) this.scheduled.unref?.();
   }
 
   /** Stop for good: its adapter is closing. Each subscriber still attached ends, and reconnects to the adapter that replaces it. */
@@ -391,15 +391,18 @@ export class LiveHub {
       }
       const authorities = new Map<Attached, LiveAuthority>();
       if (live.length) {
-        await Promise.all(
-          live.map(async (entry) => {
-            try {
-              authorities.set(entry, await entry.tap.authority());
-            } catch {
-              /* Its stream has ended itself; it detaches. */
-            }
-          }),
-        );
+        const CONCURRENCY = 16;
+        for (let at = 0; at < live.length; at += CONCURRENCY) {
+          await Promise.all(
+            live.slice(at, at + CONCURRENCY).map(async (entry) => {
+              try {
+                authorities.set(entry, await entry.tap.authority());
+              } catch {
+                /* Its stream has ended itself; it detaches. */
+              }
+            }),
+          );
+        }
       }
       const deliveries = new Map<Attached, LiveDelivery>();
       const tasks: Array<Promise<void>> = [];
