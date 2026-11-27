@@ -3896,7 +3896,7 @@ export interface AssistantAgentDeclaration {
   /** Human-readable name shown in the agent switcher and delegation trace. */
   readonly name: string;
   /** Short summary of this agent's specialty, shown to readers and parent agents delegating to it. */
-  readonly description?: string;
+  readonly description?: string | AppMessageRef;
   /** Icon name shown beside this agent in the switcher and delegation card. */
   readonly icon?: AppIconName;
   /** Instructions appended to the top-level assistant instructions when this agent is active. */
@@ -3925,9 +3925,9 @@ export interface AssistantAgentDeclaration {
 /** An author-declared custom assistant block backed by a validated prop schema and optional interactive React component. */
 export interface AssistantCustomBlockDeclaration {
   /** Short description shown to the model in its catalog so it knows when to draw this block. */
-  readonly description: string;
+  readonly description: string | AppMessageRef;
   /** Optional default heading when the model omits `title`. */
-  readonly title?: string;
+  readonly title?: string | AppMessageRef;
   /** Optional author React component (`component('id', { module: './widgets/...' })`) compiled and mounted inside the assistant thread and Canvas pane. */
   readonly component?: ComponentDecl<string, 'section'>;
   /** Validated JSON-safe props schema the model may pass when calling `show({ kind: 'custom', name, props })`. */

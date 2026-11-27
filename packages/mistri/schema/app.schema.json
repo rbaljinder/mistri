@@ -446,7 +446,7 @@
       "description": "A named agent inside a multi-agent App's assistant.",
       "properties": {
         "name": { "type": "string", "minLength": 1, "maxLength": 48, "description": "Display name shown in the agent switcher and delegation trace." },
-        "description": { "type": "string", "minLength": 1, "maxLength": 240, "description": "Short summary of this agent's specialty." },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "Short summary of this agent's specialty." },
         "icon": { "$ref": "#/$defs/appIcon" },
         "instructions": { "type": "string", "minLength": 1, "description": "Instructions appended when this agent is active." },
         "model": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$", "description": "Model id override for this agent." },
@@ -467,8 +467,8 @@
       "required": ["description"],
       "description": "An author-declared interactive custom block the assistant may draw.",
       "properties": {
-        "description": { "type": "string", "minLength": 1, "maxLength": 240, "description": "Short description shown to the model in its catalog." },
-        "title": { "type": "string", "minLength": 1, "maxLength": 120, "description": "Optional default heading for the block." },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "Short description shown to the model in its catalog." },
+        "title": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 120 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "Optional default heading for the block." },
         "component": { "$ref": "#/$defs/component" },
         "props": {
           "type": "object",
