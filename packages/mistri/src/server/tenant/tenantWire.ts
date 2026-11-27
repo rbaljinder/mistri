@@ -3,6 +3,7 @@
  * reply that carries (or withholds) an owner's assertion. Nothing here knows a route; tenantHttp.ts decides
  * what is asked, and this decides how it is spoken, so a request is refused or answered the same way everywhere.
  */
+import { isProxy } from 'node:util/types';
 import { validateHeaderValue, type IncomingMessage, type ServerResponse } from 'node:http';
 import { isDeepStrictEqual } from 'node:util';
 import type { ResourceHttpPath } from '@mistriwork/engine/shared/resourceHttp.js';
@@ -43,6 +44,7 @@ export function revisionHeader(req: IncomingMessage): number {
   return revision;
 }
 
+const bindingKeys = new Set(['host', 'port', 'allowedHosts', 'identityHeader', 'allowsHost']);
 /** Shared restart-only host boundary for the data transport and auth host. */
 export function tenantHttpBinding(value: unknown): () => Bound {
   const capture = (): Bound => {
@@ -62,10 +64,51 @@ export function tenantHttpBinding(value: unknown): () => Bound {
         (!Array.isArray(bound.allowedHosts) || bound.allowedHosts.some((value) => typeof value !== 'string')))
     )
       return denyTenant();
-    return { ...bound, ...(allowsHost ? { allowsHost } : {}) } as unknown as Bound;
+    return Object.freeze({ ...bound, ...(allowsHost ? { allowsHost } : {}) }) as unknown as Bound;
   };
   const original = capture();
+  const raw = value as Record<string, unknown>;
+  const frozen =
+    typeof value === 'object' &&
+    value !== null &&
+    !isProxy(value) &&
+    Object.isFrozen(value) &&
+    (original.allowedHosts === undefined ||
+      (Array.isArray(raw.allowedHosts) && !isProxy(raw.allowedHosts) && Object.isFrozen(raw.allowedHosts)));
+  const sameDataProperty = (obj: object, key: string, expected: unknown): boolean => {
+    const desc = Object.getOwnPropertyDescriptor(obj, key);
+    if (!desc) return expected === undefined && !(key in obj);
+    return 'value' in desc && desc.value === expected;
+  };
   return () => {
+    if (frozen) return original;
+    if (
+      typeof value === 'object' &&
+      value !== null &&
+      !isProxy(value) &&
+      Object.getOwnPropertySymbols(value).length === 0 &&
+      Object.getOwnPropertyNames(value).every((key) => bindingKeys.has(key)) &&
+      sameDataProperty(raw, 'host', original.host) &&
+      sameDataProperty(raw, 'port', original.port) &&
+      sameDataProperty(raw, 'identityHeader', undefined) &&
+      sameDataProperty(raw, 'allowsHost', original.allowsHost)
+    ) {
+      const allowedDesc = Object.getOwnPropertyDescriptor(raw, 'allowedHosts');
+      const allowed = allowedDesc && 'value' in allowedDesc ? allowedDesc.value : undefined;
+      if (original.allowedHosts === undefined && !allowedDesc && !('allowedHosts' in raw)) return original;
+      if (
+        original.allowedHosts !== undefined &&
+        Array.isArray(allowed) &&
+        !isProxy(allowed) &&
+        allowed.length === original.allowedHosts.length &&
+        Object.getOwnPropertySymbols(allowed).length === 0 &&
+        original.allowedHosts.every((host, index) => {
+          const item = Object.getOwnPropertyDescriptor(allowed, index);
+          return item !== undefined && 'value' in item && item.value === host;
+        })
+      )
+        return original;
+    }
     const current = capture();
     if (
       current.host !== original.host ||

@@ -545,8 +545,19 @@ export function appCatalog(
   symbolic = false,
 ): DatabaseSchema {
   const schema = withMachineStates(app, given);
-  const { rules } = appRollupRules(app, schema, now, zone);
-  const rolled = rules.size
+  let hasRollups = false;
+  let hasTags = false;
+  let hasPhotos = false;
+  if (app.resources) {
+    for (const resource of Object.values(app.resources)) {
+      if (resource.rollups) hasRollups = true;
+      if (resource.tags) hasTags = true;
+      if (resource.photos) hasPhotos = true;
+      if (hasRollups && hasTags && hasPhotos) break;
+    }
+  }
+  const rules = hasRollups ? appRollupRules(app, schema, now, zone).rules : undefined;
+  const rolled = rules?.size
     ? {
         ...schema,
         tables: schema.tables.map((table) => {
@@ -557,7 +568,7 @@ export function appCatalog(
     : schema;
   /* A record's tags read as `tags` (tagLists.ts), where this catalog reads the
      link table, the tags and their names: a reader who cannot is served none. */
-  const tagged = Object.values(app.resources ?? {}).some((resource) => resource.tags) ? appTagRules(app, rolled).rules : undefined;
+  const tagged = hasTags ? appTagRules(app, rolled).rules : undefined;
   const withTags = tagged?.size
     ? {
         ...rolled,
@@ -571,7 +582,7 @@ export function appCatalog(
     : rolled;
   /* A record's lead photograph key reads as `cover` (coverPhotos.ts), where this catalog reads the photo resource,
      its key and its sort column: a reader who cannot is served none. */
-  const covered = Object.values(app.resources ?? {}).some((resource) => resource.photos) ? appCoverRules(app, withTags).rules : undefined;
+  const covered = hasPhotos ? appCoverRules(app, withTags).rules : undefined;
   const withCovers = covered?.size
     ? {
         ...withTags,

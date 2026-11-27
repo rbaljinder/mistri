@@ -262,6 +262,41 @@ SELECT n.nspname::pg_catalog.text AS schema, r.relname::pg_catalog.text AS "tabl
  ORDER BY 1, 2, 4`;
 }
 
+/** Compact attestation statement for beforeCommit: compares each relied table's trigger version string against $3 and raises a tagged 22P02 on any mismatch. */
+export function postgresTriggerAttestationStatement(sentinel: string): string {
+  return `WITH around AS MATERIALIZED (SELECT ${AROUND} AS around),
+     expected AS (
+       SELECT w.schema, w.name, w.version
+         FROM ROWS FROM (
+           pg_catalog.unnest($1::pg_catalog.text[]),
+           pg_catalog.unnest($2::pg_catalog.text[]),
+           pg_catalog.unnest($3::pg_catalog.text[])
+         ) AS w(schema, name, version)
+     ),
+     actual AS (
+       SELECT n.nspname::pg_catalog.text AS schema, r.relname::pg_catalog.text AS name,
+              pg_catalog.string_agg(
+                fired.name ${CAT} '=' ${CAT} p.oid::pg_catalog.text ${CAT} ':' ${CAT} p.xmin::pg_catalog.text ${CAT} '/' ${CAT} around.around,
+                ';' ORDER BY fired.name
+              ) AS version
+         FROM pg_catalog.pg_class r
+         JOIN pg_catalog.pg_namespace n ON n.oid ${EQ} r.relnamespace
+         CROSS JOIN LATERAL (${tree('r.oid')}
+           SELECT t.oid, ${named('t', 'r.oid', 'k')} AS name FROM tree
+             JOIN pg_catalog.pg_trigger t ON t.tgrelid ${EQ} tree.relid JOIN pg_catalog.pg_class k ON k.oid ${EQ} t.tgrelid
+            WHERE ${own('t')}) AS fired
+         JOIN pg_catalog.pg_trigger t ON t.oid ${EQ} fired.oid
+         JOIN pg_catalog.pg_proc p ON p.oid ${EQ} t.tgfoid
+         CROSS JOIN around
+        WHERE EXISTS (SELECT 1 FROM expected e WHERE n.nspname ${EQ} e.schema AND r.relname ${EQ} e.name)
+        GROUP BY n.nspname, r.relname
+     )
+SELECT ('${sentinel}: ' ${CAT} e.schema ${CAT} '.' ${CAT} e.name)::pg_catalog.int4
+  FROM expected e
+  LEFT JOIN actual a ON a.schema ${EQ} e.schema AND a.name ${EQ} e.name
+ WHERE a.version IS NULL OR a.version ${NE} e.version`;
+}
+
 /** Whether a row has the shape the statement answers; anything else is a catalog this code does not know. */
 function isPostgresTriggerRow(row: unknown): row is PostgresTriggerRow {
   if (!row || typeof row !== 'object') return false;

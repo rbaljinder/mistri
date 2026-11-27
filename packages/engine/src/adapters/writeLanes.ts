@@ -158,7 +158,8 @@ export function inRecordLane<T>(table: string, key: Readonly<Record<string, unkn
 
 /** All known targets and the receipt scope enter together, before any lease is taken. */
 export function inWriteLanes<T>(keys: readonly string[], work: () => Promise<T>): Promise<T> {
-  return hinted.run([...new Set(keys)].sort(), work);
+  if (!keys.length && !hinted.getStore()?.length) return work();
+  return hinted.run(keys.length === 1 ? [keys[0]] : [...new Set(keys)].sort(), work);
 }
 
 /**

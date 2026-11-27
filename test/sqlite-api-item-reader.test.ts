@@ -688,7 +688,7 @@ test('expiry crossed during materialization discards an already-observed native 
   t.mock.method(Buffer, 'byteLength', (value: Parameters<typeof byteLength>[0], encoding?: BufferEncoding) => {
     // Instrument the existing serializer only in the materialization phase.
     // Earlier adapter remapping/account reads must still see an unexpired token.
-    if (value === '"Visible"' && new Error().stack?.includes('materializeApiReadResult')) {
+    if ((value === '"Visible"' || value === 'Visible') && new Error().stack?.includes('materializeApiReadResult')) {
       crossed = true;
       now = clock + 120000;
     }

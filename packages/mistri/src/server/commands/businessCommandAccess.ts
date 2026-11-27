@@ -14,7 +14,7 @@ import { carryServerRequest } from '@mistriwork/engine/server/serverRequests.js'
 import type { CommandJournalAppScope } from '../../adapters/commands/commandJournalTypes.js';
 import { captureCommandEventStoreBinding, type CommandEventStoreBinding } from '../../adapters/events/commandEventSchema.js';
 import type { AppDef } from '../../shared/app.js';
-import { AppAccessDenied, authorizeTransaction, type ResourceAccess } from '../app/appAccess.js';
+import { AppAccessDenied, authorizeTransaction, markStableGrant, type ResourceAccess } from '../app/appAccess.js';
 import { resolveAppAccess } from '../../shared/appAccess.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { AppValidationRules } from '../app/appValidation.js';
@@ -224,6 +224,7 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
     }
   }
   bindMakerWrites(options.app, options.registry);
+  const stableCommandGrants = new Map<string, { readonly readable: ReadonlySet<string>; readonly writable: ReadonlySet<string> }>();
   const bound: BusinessCommandBinding = Object.freeze({
     ...(options.app.track === undefined ? {} : { track: options.app.track }),
     creates: (id: string): boolean => authorizer.creates(id),
@@ -233,13 +234,18 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
       const verified = verify ? (appResourceVerifiedCommandRunner(source) ?? appSourceVerifiedCommandRunner(source)) : undefined;
       if (verify && !verified) throw new AppAccessDenied();
       const table = binding.table;
+      let stableSets = stableCommandGrants.get(id);
+      if (!stableSets) {
+        stableSets = markStableGrant({ readable: new Set(binding.read), writable: new Set(binding.write) });
+        stableCommandGrants.set(id, stableSets);
+      }
       const withRecords = async <T>(raw: WriteTransaction, run: (tx: WriteTransaction) => Promise<T>): Promise<T> => {
         if (!writableConnection(binding.connection)) throw new AppAccessDenied();
         const tx = authorizeTransaction(
           resources.schema,
           {
-            readable: new Set(binding.read),
-            writable: new Set(binding.write),
+            readable: stableSets.readable,
+            writable: stableSets.writable,
             ...(options.validation ? { validation: options.validation } : {}),
             reader: actorReader(options.app, resources.schema, binding.actor),
           },

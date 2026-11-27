@@ -135,6 +135,7 @@ export default defineConfig({
             { label: 'Command forms and bulk', slug: 'docs/command-forms' },
             { label: 'Events, jobs and workflows', slug: 'docs/events-and-jobs' },
             { label: 'Operational guarantees', slug: 'docs/operational-guarantees' },
+            { label: 'Data-integrity verification', slug: 'docs/data-integrity' },
             { label: 'Decisions', slug: 'docs/decisions' },
             { label: 'Live sync', slug: 'docs/live-sync' },
             { label: 'Email', slug: 'docs/email' },

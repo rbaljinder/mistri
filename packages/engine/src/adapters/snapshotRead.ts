@@ -23,7 +23,7 @@ const asked = new AsyncLocalStorage<boolean>();
 
 /** Run `work` with the next write transaction it opens reading one snapshot. */
 export function withSnapshotRead<T>(snapshot: boolean, work: () => T): T {
-  return asked.run(snapshot, work);
+  return Boolean(asked.getStore()) === snapshot ? work() : asked.run(snapshot, work);
 }
 
 /** Whether the transaction about to open here reads one snapshot. */
@@ -33,7 +33,7 @@ export function snapshotRead(): boolean {
 
 /** Run `work` without it: a transaction's own work, so nothing it opens takes the snapshot for its own. */
 export function withoutSnapshotRead<T>(work: () => T): T {
-  return asked.run(false, work);
+  return asked.getStore() ? asked.run(false, work) : work();
 }
 
 /** PostgreSQL's serialization failure: a REPEATABLE READ transaction wrote or locked a row that moved after its snapshot. */

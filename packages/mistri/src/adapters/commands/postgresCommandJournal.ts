@@ -66,7 +66,6 @@ import type {
 } from './commandJournalTypes.js';
 import type { CommandEventBatch, CommandEventManifest } from '../events/commandEventTypes.js';
 import { captureCommandEventManifest } from '../events/commandEventCapture.js';
-import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import {
   assertPostgresCommandEventStore,
   assertPostgresCommandEvents,
@@ -166,7 +165,9 @@ export function postgresCommandLookupAhead(owner: JournalOwner | undefined, scop
 /** The scope's advisory-lock key: the first eight bytes of a digest over the
  * exact uniqueness columns, as a signed bigint the way Postgres wants it. */
 function scopeLock(values: readonly (string | number)[]): string {
-  return createHash('sha256').update(canonicalCommandJson(values)).digest().readBigInt64BE(0).toString();
+  // Every value is already validated by receiptValues() as a string or finite safe integer,
+  // so JSON.stringify emits byte-for-byte identical canonical JSON without descriptor walking.
+  return createHash('sha256').update(JSON.stringify(values)).digest().readBigInt64BE(0).toString();
 }
 
 type ReceiptRecovery = Readonly<{ receipt: StoredCommandReceipt; targets: readonly Readonly<{ target: string; keyJson: string }>[] }>;
@@ -233,6 +234,7 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
       return work(captured);
     });
   };
+  const lockedScopes = new Set<string>();
   const lookup = async (scope: CommandReceiptScope, expectedManifest?: CommandEventManifest): Promise<ReceiptRecovery | undefined> => {
     const lookup = values(scope);
     // Prove event storage before establishing absence. A missing receipt in a
@@ -244,7 +246,9 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
     }
     // Held to commit or rollback. A duplicate on another connection waits
     // here, and its SELECT then runs on a snapshot that includes our receipt.
-    await client.query(SCOPE_LOCK, [scopeLock(lookup)]);
+    const lockKey = scopeLock(lookup);
+    await client.query(SCOPE_LOCK, [lockKey]);
+    lockedScopes.add(lockKey);
     const result = await client.query(FIND_RECEIPT, [...lookup]);
     if (result.rows.length > 1) throw new CommandJournalUnavailable();
     const row = result.rows[0];
@@ -264,14 +268,13 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
       ),
     commit: (receipt: StoredCommandReceipt, audit: CommandAudit | readonly CommandAudit[], eventBatch?: CommandEventBatch) => {
       /* The receipt row and its events, said as the statements that write them.
-         Reentrant within the transaction: a commit after find takes the scope
-         lock again for free; a commit without one still serialises, and then
-         the unique constraint refuses the second receipt rather than the row
-         overwriting. Every owner before the row: one refused owner writes
-         nothing. */
+         A commit after find in the same transaction already holds the xact-scoped
+         advisory lock (not released by ROLLBACK TO SAVEPOINT); a commit without
+         find still takes it here, with the unique constraint as backstop. */
       const written = (receipt: StoredCommandReceipt, audits: ReturnType<typeof rules.auditEntries>, eventBatch?: CommandEventBatch) => {
         rules.validateReceipt(receipt);
         const scope = values(receipt);
+        const lockKey = scopeLock(scope);
         const owners = audits.map((entry) => rules.auditOwner(entry, namespace[2], namespace[3]));
         const row = rules.receiptRow(receipt, scope, member, audits, owners);
         const events =
@@ -281,7 +284,7 @@ export function createPostgresCommandJournal(client: PgQuery, operations: Transa
         if (events) placeholders.push(...events.batch.map((_, at) => `$${row.length + at + 1}`), 'pg_current_xact_id()');
         const parts = auditPartStatement(receipt.id, audits);
         return [
-          { text: SCOPE_LOCK, values: [scopeLock(scope)] },
+          ...(lockedScopes.has(lockKey) ? [] : [{ text: SCOPE_LOCK, values: [lockKey] }]),
           {
             text: `INSERT INTO ${q(tables.receipt)} (${columns}) VALUES (${placeholders.join(', ')})`,
             values: events ? [...row, ...events.batch] : row,

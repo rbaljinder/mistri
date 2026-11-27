@@ -9,7 +9,9 @@ import type { Adapter } from '@mistriwork/engine/adapters/adapter.js';
 import type { JobStore } from '../packages/mistri/src/adapters/jobs/jobStoreContract.js';
 import { LiveHub, type LiveTap } from '../packages/mistri/src/server/live/liveHub.js';
 import type { LiveStore } from '../packages/mistri/src/server/live/liveStore.js';
+import { KeyRows } from '../packages/engine/src/adapters/scoped/keyRows.js';
 import { createFlowTail, type FlowChange } from '../packages/mistri/src/server/workflows/flowTail.js';
+import { tenantHttpBinding } from '../packages/mistri/src/server/tenant/tenantWire.js';
 
 test('createFlowTail paginates forward past 200 unsettled rows in a single tick', async () => {
   const now = 1_700_000_000_000;
@@ -105,4 +107,116 @@ test('LiveHub only invokes authority() on subscribers of tenants whose rows chan
     hub.detach(tapB);
     await hub.close();
   }
+});
+
+test('KeyRows answers in-memory guards for isNull, isNotNull, in, !=, and numeric range operators while falling back on non-matches', async () => {
+  const schema = {
+    label: 'test',
+    dialect: 'postgres' as const,
+    readAt: '2026-01-01T00:00:00Z',
+    tables: [
+      {
+        id: 'public.item',
+        name: 'item',
+        schema: 'public',
+        isView: false,
+        columns: [
+          { name: 'id', type: 'integer', primaryKey: true, nullable: false },
+          { name: 'status', type: 'text', primaryKey: false, nullable: false },
+          { name: 'balance', type: 'integer', primaryKey: false, nullable: false },
+          { name: 'active', type: 'boolean', primaryKey: false, nullable: false },
+          { name: 'closed_at', type: 'text', primaryKey: false, nullable: true },
+        ],
+      },
+    ],
+    foreignKeys: [],
+  };
+  const scope = { 'public.item': true as const };
+  const keyRows = new KeyRows(() => 1);
+  keyRows.keep(
+    scope,
+    schema.tables[0]!,
+    { groups: [[{ column: 'id', op: '=', value: 7 }]] },
+    Promise.resolve([{ id: 7, status: 'open', balance: 500, active: true, closed_at: null }]),
+  );
+  let dbCalls = 0;
+  const wrapped = keyRows.over(
+    {
+      query: async (_request: Parameters<Adapter['query']>[0]) => {
+        dbCalls += 1;
+        return { columns: ['id'], rows: [], ms: 0, sql: { text: 'SELECT', params: [] } };
+      },
+    },
+    scope,
+    schema,
+    () => ({ text: 'SELECT', params: [] }),
+    (row) => row,
+    false,
+  );
+  // All matching guards hit in-memory (0 DB calls):
+  for (const cond of [
+    { column: 'status', op: 'in' as const, value: ['draft', 'open'] },
+    { column: 'balance', op: '>=' as const, value: 500 },
+    { column: 'balance', op: '>' as const, value: 100 },
+    { column: 'balance', op: '<=' as const, value: 500 },
+    { column: 'balance', op: '<' as const, value: 900 },
+    { column: 'balance', op: '!=' as const, value: 0 },
+    { column: 'active', op: '!=' as const, value: false },
+    { column: 'closed_at', op: 'isNull' as const },
+    { column: 'status', op: 'isNotNull' as const },
+  ]) {
+    const res = await wrapped.query({
+      table: 'public.item',
+      columns: ['id', 'status'],
+      limit: 1,
+      offset: 0,
+      filter: { groups: [[{ column: 'id', op: '=', value: 7 }, cond]] },
+    });
+    assert.equal(res.rows.length, 1, `in-memory hit for ${cond.op}`);
+  }
+  assert.equal(dbCalls, 0, 'all proven guard reads skipped the database');
+  // Non-matching or ambiguous guards fall back to the database:
+  await wrapped.query({
+    table: 'public.item',
+    columns: ['id'],
+    limit: 1,
+    offset: 0,
+    filter: {
+      groups: [
+        [
+          { column: 'id', op: '=', value: 7 },
+          { column: 'balance', op: '>' as const, value: 999 },
+        ],
+      ],
+    },
+  });
+  await wrapped.query({
+    table: 'public.item',
+    columns: ['id'],
+    limit: 1,
+    offset: 0,
+    filter: {
+      groups: [
+        [
+          { column: 'id', op: '=', value: 7 },
+          { column: 'closed_at', op: 'isNotNull' as const },
+        ],
+      ],
+    },
+  });
+  assert.equal(dbCalls, 2, 'unproven guards fall back to database evaluation');
+});
+
+test('tenantHttpBinding returns identical frozen Bound on unchanged config and still rejects mutation', () => {
+  const mutable = { host: '127.0.0.1', port: 3000, allowedHosts: ['app.example.com'] };
+  const read = tenantHttpBinding(mutable);
+  const first = read();
+  const second = read();
+  assert.equal(first, second, 'fast path reuses frozen Bound instance when unchanged');
+  mutable.allowedHosts.push('evil.example.com');
+  assert.throws(() => read(), 'mutated allowedHosts is still refused');
+
+  const frozen = Object.freeze({ host: '127.0.0.1', port: 3000, allowedHosts: Object.freeze(['app.example.com']) });
+  const readFrozen = tenantHttpBinding(frozen);
+  assert.equal(readFrozen(), readFrozen());
 });

@@ -22,7 +22,7 @@
  */
 import type { ServerResponse } from 'node:http';
 import type { Adapter } from '../../adapters/adapter.js';
-import { lagTolerantReads, primaryReads } from '../../adapters/replicas.js';
+import { hasReplicas, lagTolerantReads, primaryReads } from '../../adapters/replicas.js';
 import { AppAccessDenied } from '../columnGrants.js';
 import { dispatchResourceReadHttp, type AppReads } from '../resourceReadHttp.js';
 import { UNEXPORTED_MOST } from '../../shared/reads.js';
@@ -150,7 +150,11 @@ export async function postData(ctx: RequestContext, hooks: DataHooks): Promise<v
   /* A record page, pinned to the primary whole: its related lists are
      asked through the list routes, and a record is where a person looks
      for what they just saved (readRouting.ts). */
-  if (path === COMPOSE_PATH) return primaryReads(() => composeRecordPage({ ctx, source, body, post, hooks: hooks.compose }));
+  if (path === COMPOSE_PATH) {
+    return hasReplicas()
+      ? primaryReads(() => composeRecordPage({ ctx, source, body, post, hooks: hooks.compose }))
+      : composeRecordPage({ ctx, source, body, post, hooks: hooks.compose });
+  }
   if (await hooks.page?.(ctx, source, body)) return;
   return post(res, path, body);
 }
@@ -163,8 +167,8 @@ async function handlePost(post: PostContext, hooks: DataHooks): Promise<void> {
   if (await pageRoutes(post, hooks.pages)) return;
   /* A list, a count, a breakdown or an export may be answered by a replica
      (readRouting.ts); every other route reads the primary. */
-  const reading = <T>(work: () => Promise<T>): Promise<T> => (toleratesLag(path, body) ? lagTolerantReads(work) : work());
-  if (await reading(() => exportRoute(post, hooks.exports))) return;
+  const reading = <T>(work: () => Promise<T>): Promise<T> => (hasReplicas() && toleratesLag(path, body) ? lagTolerantReads(work) : work());
+  if (path === '/api/export' && (await reading(() => exportRoute(post, hooks.exports)))) return;
   const exportable = hooks.exports.may(post);
   const weekStart = hooks.weekStart?.(post);
   /* Read as the browser's, an App's reply would carry its SQL and its compiled columns. */

@@ -1514,6 +1514,15 @@ export async function openPostgresTenantReadSource(
           false,
           (captured) => captured.evidence.tenantId,
         ),
+      bindSupportReads: (evidence: SupportMembershipEvidence, rows: RowScope) =>
+        bindLater({ evidence, rows }, (captured) =>
+          bind(
+            composeTenantReadScope(owned, supportAsMember(captured.evidence), captured.rows, allTrue),
+            (next) => currentSupport(next, captured.evidence),
+            undefined,
+            captured.evidence.tenantId,
+          ),
+        ),
       /* An address is resolved among every tenant's, so as the owner; what the visitor then reads is that tenant's
          alone, its placement proved again under the tenant it resolved to (assertPublicCurrent, the bound reads). */
       resolvePublic: (lookup: TenantPublicLookup) =>

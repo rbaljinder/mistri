@@ -193,7 +193,17 @@ function addVary(res: ServerResponse, name: string): void {
   if (!names.some((part) => part.toLowerCase() === name.toLowerCase())) res.setHeader('vary', [...names, name].join(', '));
 }
 
-function writeJson(res: ServerResponse, status: number, json: Buffer, extra: OutgoingHttpHeaders = {}, tag?: string): void {
+function writeJson(res: ServerResponse, status: number, json: Buffer, extra?: OutgoingHttpHeaders, tag?: string): void {
+  if (json.length < COMPRESS_FROM && !extra) {
+    if (res.destroyed || res.writableEnded) return;
+    res.writeHead(status, {
+      'content-type': 'application/json; charset=utf-8',
+      'x-content-type-options': 'nosniff',
+      'content-length': json.length,
+    });
+    res.end(json);
+    return;
+  }
   const headers: OutgoingHttpHeaders = {
     'content-type': 'application/json; charset=utf-8',
     'x-content-type-options': 'nosniff',
@@ -377,6 +387,8 @@ const OVERSIZE_DRAIN_MOST = 16 * 1024 * 1024;
  * connection that is clean. Not unboundedly: past OVERSIZE_DRAIN_MOST beyond the limit the connection is closed
  * instead, which is what a client sending that much to a bounded route gets.
  */
+const EMPTY_BUFFER = Buffer.alloc(0);
+
 export async function readBounded(req: IncomingMessage, limit: number): Promise<Buffer | undefined> {
   const chunks: Buffer[] = [];
   let size = 0;
@@ -389,7 +401,8 @@ export async function readBounded(req: IncomingMessage, limit: number): Promise<
       return undefined;
     } else chunks.length = 0;
   }
-  return size > limit ? undefined : Buffer.concat(chunks);
+  if (size > limit) return undefined;
+  return chunks.length === 1 ? chunks[0] : chunks.length === 0 ? EMPTY_BUFFER : Buffer.concat(chunks);
 }
 
 export async function readJson(req: IncomingMessage, limit = MAX_BODY): Promise<Record<string, unknown>> {
@@ -402,12 +415,16 @@ export async function readJson(req: IncomingMessage, limit = MAX_BODY): Promise<
        these names would not preserve their values end to end. Refuse the
        whole request rather than silently deleting an intended write. Literal
        column support needs those consumers hardened before this can relax. */
-    const body: unknown = JSON.parse(read.toString('utf8'), (key, value: unknown) => {
-      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-        throw new HttpError(400, `Request body property "${key}" is not supported.`);
-      }
-      return value;
-    });
+    const text = read.toString('utf8');
+    const body: unknown =
+      text.includes('__proto__') || text.includes('constructor') || text.includes('prototype') || text.includes('\\u')
+        ? JSON.parse(text, (key, value: unknown) => {
+            if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+              throw new HttpError(400, `Request body property "${key}" is not supported.`);
+            }
+            return value;
+          })
+        : JSON.parse(text);
     if (body === null || typeof body !== 'object' || Array.isArray(body)) {
       throw new HttpError(400, 'Request body must be a JSON object.');
     }

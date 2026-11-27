@@ -56,7 +56,7 @@ import { startSpan } from './telemetry/trace.js';
 import { delayFlights } from './dbLatency.js';
 import type * as ServerTiming from './telemetry/serverTiming.js';
 import { configureServerSettings, serverSettings } from './serverSettings.js';
-import { MAX_REPLICAS, noteWrite, primaryReads, ReplicaSet } from './replicas.js';
+import { hasReplicas, MAX_REPLICAS, noteWrite, primaryReads, ReplicaSet } from './replicas.js';
 
 export interface PgResult<Row> {
   rows: Row[];
@@ -113,6 +113,16 @@ export const pipelines = (client: PgQuery): boolean => pipelining.has(client);
 /** `wrapper` sends through `client` and nothing else: it pipelines where `client` does. */
 export const pipelinesAs = (wrapper: PgQuery, client: PgQuery): void => {
   if (pipelining.has(client)) pipelining.add(wrapper);
+};
+
+/* Leases whose transaction explicitly acknowledged ROLLBACK on a healthy
+   connection before COMMIT was attempted (e.g. optimistic-concurrency 409 or
+   business refusal). Returning the idle connection to the pool avoids tearing
+   down and SCRAM-reauthenticating a fresh TCP socket on every refusal. */
+const cleanRollbacks = new WeakSet<PgQuery>();
+/** Record that `client` completed an explicit ROLLBACK and returned to idle state. */
+export const markCleanRollback = (client: PgQuery): void => {
+  cleanRollbacks.add(client);
 };
 
 /** The one-off client a cancel is sent from. */
@@ -808,11 +818,12 @@ export class PgConnectionManager {
         } else stop?.(reason);
       } else void this.cancel(client.processID);
     });
+    let lent: PgQuery | undefined;
+    let health: (() => void) | undefined;
     try {
       this.assertOpen();
       throwIfCancelled(signal);
       let borrowed: PgQuery = scoped ?? client;
-      let health: (() => void) | undefined;
       if (observeCheckout) {
         if (typeof client.on !== 'function' || typeof client.off !== 'function')
           throw new Error('Observed PostgreSQL checkout is unavailable.');
@@ -852,13 +863,13 @@ export class PgConnectionManager {
       }
       /* A write's own reads — the pre-flight count, a reread — are of the
          primary it writes. */
-      const lent = borrowed;
+      lent = borrowed;
       /* A lease that runs statements it does not control (destroyAfter: the
          SQL tool's) brackets each in a savepoint it awaits first
          (postgresPooler.ts), so one sent behind another would overtake it:
          that lease asks one at a time. */
-      if ((client as { pipeline?: unknown }).pipeline === true && !destroyAfter) pipelining.add(lent);
-      const running = write ? primaryReads(() => run(lent, health)) : run(borrowed, health);
+      if ((client as { pipeline?: unknown }).pipeline === true && !destroyAfter) pipelining.add(borrowed);
+      const running = write && hasReplicas() ? primaryReads(() => run(borrowed, health)) : run(borrowed, health);
       if (stopped) void running.catch(() => {});
       const out = await (stopped ? Promise.race([running, stopped]) : running);
       health?.();
@@ -867,11 +878,21 @@ export class PgConnectionManager {
       if (drainCancelled) throwIfCancelled(signal);
       return out;
     } catch (error) {
-      destroy = true;
+      let cleanRollback = false;
+      if (lent !== undefined && cleanRollbacks.delete(lent) && !destroyAfter && !cancelled && !scoped) {
+        try {
+          health?.();
+          cleanRollback = true;
+        } catch {
+          cleanRollback = false;
+        }
+      }
+      destroy = !cleanRollback;
       if (scoped && !cancelled) await scoped.settle().catch(() => {});
       if (cancelled) throw error instanceof StatementStopped ? error : new StatementStopped('cancelled', undefined, { cause: error });
       throw error;
     } finally {
+      if (lent !== undefined) cleanRollbacks.delete(lent);
       /* The person who wrote reads the primary for a while after, so the
          list they go back to shows what they saved (replicas.ts). Noted
          however the write ended: a failed one may still have committed. */

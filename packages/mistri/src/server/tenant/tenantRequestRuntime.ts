@@ -66,7 +66,9 @@ export interface TenantRequestScope {
    * Like a transaction, it is this request's one. */
   advisoryReads<T>(run: (records: WriteTransaction) => T | Promise<T>, read: readonly string[]): Promise<T>;
   /** The tenant's own scoped reads, outside any transaction: what a command's lookup reads through. */
-  reads(): ReturnType<TenantReadSource['scopeReads']>;
+  reads(): ReturnType<TenantReadSource['bindReads']>;
+  /** Run concurrent pre-transaction reads on one shared read snapshot (`TenantReadSource.together`). */
+  together<R>(work: () => Promise<R>): Promise<R>;
   /** A command's read of an audited resource, written through the writer outside any transaction (tenantReadAudit.ts). */
   appendReadAudit(row: ReadAuditRow): Promise<void>;
   /** The tenant's shared profile columns (`auth.tenancy.shared`), read once for this request before its row scope:
@@ -327,16 +329,43 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
           /* Anything this request observes outside its one transaction — a
            lookup's reads, advice, a flag — is proven by its own snapshot when
            it is read, and then once more by the release fence, after the last
-           of it: as before. */
-          let outside = false;
+           of it. Pre-transaction reads that completed before a committing write
+           transaction began are strictly ordered before that transaction's
+           FOR SHARE fence and COMMIT, so the committed transaction proves the
+           membership continuously across both. */
+          let outside = false,
+            outsideRunning = 0;
+          const trackOutside = <R>(work: () => Promise<R>): Promise<R> => {
+            outside = true;
+            outsideRunning++;
+            return Promise.resolve()
+              .then(work)
+              .finally(() => {
+                outsideRunning--;
+              });
+          };
+          const wrapReads = (
+            reads: Awaited<ReturnType<TenantReadSource['bindReads']>>,
+          ): Awaited<ReturnType<TenantReadSource['bindReads']>> =>
+            Object.freeze<Awaited<ReturnType<TenantReadSource['bindReads']>>>({
+              query: (input) => trackOutside(() => reads.query(input)),
+              count: (table, filter, limit) => trackOutside(() => reads.count(table, filter, limit)),
+              runView: (view, offset) => trackOutside(() => reads.runView(view, offset)),
+              countView: (view, limit) => trackOutside(() => reads.countView(view, limit)),
+              runBreakdown: (def, offset) => trackOutside(() => reads.runBreakdown(def, offset)),
+              countBreakdown: (def, limit) => trackOutside(() => reads.countBreakdown(def, limit)),
+              ...(reads.aggregate ? { aggregate: (req) => trackOutside(() => reads.aggregate!(req)) } : {}),
+              ...(reads.cte ? { cte: (req) => trackOutside(() => reads.cte!(req)) } : {}),
+            });
           releaseFlags = bindTenantFlagOwner(
             request,
             admitted,
             async () => {
-              outside = true;
-              await session();
-              await reader.assertCurrent(admitted);
-              active();
+              await trackOutside(async () => {
+                await session();
+                await reader.assertCurrent(admitted);
+                active();
+              });
             },
             active,
           );
@@ -399,6 +428,10 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
                   }
                 };
                 try {
+                  // Any outside observation that already settled before this transaction begins is strictly
+                  // ordered before its FOR SHARE membership fence and COMMIT; observations started during or
+                  // after (or still in flight now) keep `outside = true` and require the post-commit fence.
+                  if (outsideRunning === 0) outside = false;
                   const result = command
                     ? await writer.commandTransaction(admitted, sourceRows, work, active, operation, ceiling)
                     : await writer.transaction(admitted, rows, (records) => work(records), active, operation);
@@ -455,7 +488,7 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
               return result;
             });
           };
-          let scoped: ReturnType<TenantReadSource['scopeReads']> | undefined;
+          let scoped: ReturnType<TenantReadSource['bindReads']> | undefined;
           const scope = Object.freeze<TenantRequestScope>({
             principal: admitted,
             rows,
@@ -468,8 +501,11 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
               transaction(true, (records, journal) => run(records, journal!), read, undefined, write),
             reads: () => {
               active();
-              outside = true;
-              return (scoped ??= reader.scopeReads(admitted, rows));
+              return (scoped ??= reader.bindReads(admitted, rows).then(wrapReads));
+            },
+            together: <R>(work: () => Promise<R>): Promise<R> => {
+              active();
+              return reader.together(admitted, work);
             },
             appendReadAudit: (row) => {
               active();
@@ -478,32 +514,33 @@ export function bindTenantRequestRuntime<Request>(options: TenantWriteRuntimeOpt
             tenant: profile,
             members: async (accountIds) => {
               active();
-              outside = true;
-              const known = new Set(raw.roles as readonly string[]);
-              const found = new Set<string>();
-              for (const accountId of new Set(accountIds)) {
-                if (typeof accountId !== 'string' || !accountId || accountId.length > 1024 || accountId !== accountId.trim()) continue;
-                const row = await reader.readMembership({
-                  appId: admitted.appId,
-                  accountId,
-                  tenantId: admitted.tenantId,
-                  source: admitted.source,
-                  deployment: admitted.deployment,
-                });
-                active();
-                /* Active, in an active tenant, not past its term, holding a role this deployment still grants: the
-                   membership admission would admit, never an invitation, a revoked one or another tenant's. */
-                if (
-                  row?.accountId === accountId &&
-                  row.tenantId === admitted.tenantId &&
-                  row.status === 'active' &&
-                  row.tenantStatus === 'active' &&
-                  row.validUntil > now() &&
-                  row.roles.some((role) => known.has(role))
-                )
-                  found.add(accountId);
-              }
-              return found;
+              return trackOutside(async () => {
+                const known = new Set(raw.roles as readonly string[]);
+                const found = new Set<string>();
+                for (const accountId of new Set(accountIds)) {
+                  if (typeof accountId !== 'string' || !accountId || accountId.length > 1024 || accountId !== accountId.trim()) continue;
+                  const row = await reader.readMembership({
+                    appId: admitted.appId,
+                    accountId,
+                    tenantId: admitted.tenantId,
+                    source: admitted.source,
+                    deployment: admitted.deployment,
+                  });
+                  active();
+                  /* Active, in an active tenant, not past its term, holding a role this deployment still grants: the
+                     membership admission would admit, never an invitation, a revoked one or another tenant's. */
+                  if (
+                    row?.accountId === accountId &&
+                    row.tenantId === admitted.tenantId &&
+                    row.status === 'active' &&
+                    row.tenantStatus === 'active' &&
+                    row.validUntil > now() &&
+                    row.roles.some((role) => known.has(role))
+                  )
+                    found.add(accountId);
+                }
+                return found;
+              });
             },
           });
           let result!: T;

@@ -77,6 +77,8 @@ export function primaryReads<T>(work: () => T): T {
 /* Whether any connection in this process has replicas. Until one does, a
    write sets no marker: a deployment without replicas sends no cookie. */
 let replicasConfigured = false;
+/** Whether any database in this process has configured read replicas. */
+export const hasReplicas = (): boolean => replicasConfigured;
 
 /* Last write per keyed caller, in this process. Pruned as it grows, so many
    tokens cannot grow it without bound. */

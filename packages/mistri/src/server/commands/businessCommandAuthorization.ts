@@ -1096,26 +1096,40 @@ export function createBusinessCommandAuthorizer(input: BusinessCommandAuthorizat
         };
         const optional = (key: 'kind' | 'form' | 'support' | 'email' | 'name' | 'link' | 'scope') =>
           Object.hasOwn(actor, key) ? own(key) : undefined;
-        const captured = captureTenantData({
-          id: own('id'),
-          appId: own('appId'),
-          roles: own('roles'),
+        const rawId = own('id');
+        const rawAppId = own('appId');
+        const rawRoles = own('roles');
+        if (
+          typeof rawId !== 'string' ||
+          !rawId.trim() ||
+          rawAppId !== app.id ||
+          !Array.isArray(rawRoles) ||
+          isProxy(rawRoles) ||
+          Object.getPrototypeOf(rawRoles) !== Array.prototype
+        )
+          throw new Error();
+        const roleKeys = Reflect.ownKeys(rawRoles);
+        if (roleKeys.length !== rawRoles.length + 1) throw new Error();
+        const roles: string[] = [];
+        for (let i = 0; i < rawRoles.length; i++) {
+          const desc = Object.getOwnPropertyDescriptor(rawRoles, i);
+          if (!desc?.enumerable || !('value' in desc) || typeof desc.value !== 'string') throw new Error();
+          roles.push(desc.value);
+        }
+        const rawLink = optional('link');
+        const rawScope = optional('scope');
+        const captured = {
+          id: rawId,
+          appId: rawAppId,
+          roles: Object.freeze(roles),
           kind: optional('kind'),
           form: optional('form'),
           support: optional('support'),
           email: optional('email'),
           name: optional('name'),
-          link: optional('link'),
-          scope: optional('scope'),
-        });
-        if (
-          typeof captured.id !== 'string' ||
-          !captured.id.trim() ||
-          captured.appId !== app.id ||
-          !Array.isArray(captured.roles) ||
-          captured.roles.some((role) => typeof role !== 'string')
-        )
-          throw new Error();
+          link: rawLink === undefined ? undefined : captureTenantData(rawLink),
+          scope: rawScope === undefined ? undefined : captureTenantData(rawScope),
+        };
         /* Who a person is, in words: a verified session's email and name. A
            public or service principal is nobody's account, so carrying
            either is malformed rather than quietly dropped. */

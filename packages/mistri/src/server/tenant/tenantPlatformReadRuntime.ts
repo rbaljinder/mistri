@@ -21,7 +21,7 @@ import { declaredReferences, physicalBindings, resolveAppAccess, tenantAppShape,
 import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { assertScopeCatalog, captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { authorizeResources } from '../app/appAccess.js';
+import { authorizeResources, markStableGrant, type ResourceAccess } from '../app/appAccess.js';
 import { appResourceCatalog } from '../app/appResources.js';
 import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import type { Identity } from '../auth/auth.js';
@@ -36,7 +36,7 @@ import {
   tenantOptions,
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
-import { checkTenantInvocation, revalidateTenantInvocation, type TenantInvocationGuard } from './tenantInvocation.js';
+import { checkTenantInvocation, isHeadlessInvocation, revalidateTenantInvocation, type TenantInvocationGuard } from './tenantInvocation.js';
 import { createPlatformMembershipIssuer, type PlatformMembershipEvidence } from './tenantPlatform.js';
 import {
   captureTenantPlatformSources,
@@ -164,6 +164,42 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
   const platformRows = raw.resolvePlatformRows as PlatformReadRuntimeOptions<Request>['resolvePlatformRows'];
   const presentation = raw.presentation as PlatformReadRuntimeOptions<Request>['presentation'];
   const now = tenantRuntimeClock((raw.now ?? Date.now) as () => number);
+  const READ_GRANTS = 256;
+  const readGrants = new Map<string, ResourceAccess>();
+  const readGrant = (roles: readonly string[]): ResourceAccess => {
+    const set = [...new Set(roles)].sort();
+    const key = JSON.stringify(set);
+    const kept = readGrants.get(key);
+    if (kept) return kept;
+    const access = resolveAppAccess(app, schemaOf, set);
+    const visible = tenantVisibleFields(ownership, { ...access, writable: new Set<string>() }, 'platform');
+    // A platform-only source's tables are the platform's to read within
+    // their column ceilings; nothing of them is ever writable.
+    const fields = new Map(visible.fields);
+    for (const [id] of holder) {
+      if (!visible.readable.has(id)) continue;
+      const table = schemaOf.tables.find((each) => each.id === id)!,
+        allowed = access.fields?.get(id);
+      fields.set(id, {
+        read: new Set(table.columns.filter((column) => allowed?.read.has(column.name) ?? true).map((column) => column.name)),
+        write: new Set<string>(),
+      });
+    }
+    const grant = markStableGrant({ ...visible, fields });
+    if (readGrants.size >= READ_GRANTS) readGrants.delete(readGrants.keys().next().value!);
+    readGrants.set(key, grant);
+    return grant;
+  };
+  const connection = ownership.source.connection;
+  const connectionOf = new Map<string, string>([
+    ...Object.keys(ownership.resources).map((id) => [id, connection] as const),
+    ...[...holder].map(([id, platformSource]) => [id, platformSource.declaration.source.connection] as const),
+  ]);
+  const connections = [connection, ...outside.map((platformSource) => platformSource.declaration.source.connection)];
+  const resource = (id: string) => {
+    if (!connectionOf.has(id)) return denyTenant();
+    return id;
+  };
   const issuer = createPlatformMembershipIssuer({
     ownership,
     deployment: raw.deployment as string,
@@ -329,7 +365,6 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
               });
               // No snapshot yet: whatever reads next, an operation or the release fence, revalidates the membership first.
               await revalidateSession();
-              const access = resolveAppAccess(app, schemaOf, [...principal.roles]);
               const adapter: Adapter = Object.freeze({
                 dialect: 'sqlite',
                 introspect: async () => schemaOf,
@@ -389,16 +424,6 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
                   });
                 },
               });
-              const connection = ownership.source.connection;
-              const connectionOf = new Map<string, string>([
-                ...Object.keys(ownership.resources).map((id) => [id, connection] as const),
-                ...[...holder].map(([id, platformSource]) => [id, platformSource.declaration.source.connection] as const),
-              ]);
-              const connections = [connection, ...outside.map((platformSource) => platformSource.declaration.source.connection)];
-              const resource = (id: string) => {
-                if (!connectionOf.has(id)) return denyTenant();
-                return id;
-              };
               const resources: RuntimeResources = {
                 adapter,
                 schema: schemaOf,
@@ -415,23 +440,10 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
                   return adapter;
                 },
               };
-              const visible = tenantVisibleFields(ownership, { ...access, rows, writable: new Set() }, 'platform');
-              // A platform-only source's tables are the platform's to read within
-              // their column ceilings; nothing of them is ever writable.
-              const fields = new Map(visible.fields);
-              for (const [id] of holder) {
-                if (!visible.readable.has(id)) continue;
-                const table = schemaOf.tables.find((each) => each.id === id)!,
-                  allowed = access.fields?.get(id);
-                fields.set(id, {
-                  read: new Set(table.columns.filter((column) => allowed?.read.has(column.name) ?? true).map((column) => column.name)),
-                  write: new Set(),
-                });
-              }
               const guarded = authorizeResources(
                 resources,
                 withTenantReadAudit(
-                  { ...visible, fields },
+                  { ...readGrant([...principal.roles]), rows },
                   // The platform membership read through: the platform's staff, not a tenant's.
                   { app: app.id, tenant: '', actor: principal.accountId, roles: principal.roles, membership: principal.membershipId },
                   readAudit,
@@ -502,7 +514,8 @@ export function bindPlatformReadRuntime<Request>(options: PlatformReadRuntimeOpt
                   : {}),
               });
               const schema = captureScopeCatalog(guarded.schema);
-              const capabilities = presentation ? captureTenantData(presentation(principal, schema)) : undefined;
+              const capabilities =
+                !isHeadlessInvocation(guard) && presentation ? captureTenantData(presentation(principal, schema)) : undefined;
               assertActive();
               const context = Object.freeze({ principal, schema, data, ...(capabilities === undefined ? {} : { capabilities }) });
               releaseFlags = bindTenantFlagOwner(request, principal, revalidate, assertActive);

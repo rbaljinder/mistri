@@ -101,6 +101,7 @@ test('genuine same-file read/write pair returns captured immutable namespace wit
     'bindPublicReads',
     'bindReads',
     'bindServiceReads',
+    'bindSupportReads',
     'close',
     'lastWave',
     'ownership',

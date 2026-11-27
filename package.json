@@ -36,6 +36,7 @@
     "test:built:vitals": "node test/built-client-vitals.mjs",
     "test:load": "node test/load/run.mjs",
     "test:load:smoke": "node test/load/run.mjs --smoke",
+    "test:jepsen": "tsx test/jepsen/run.ts",
     "e2e": "node scripts/test-e2e.mjs",
     "lint": "oxlint",
     "audit:prod": "node scripts/audit-prod.mjs",

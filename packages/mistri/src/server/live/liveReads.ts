@@ -52,15 +52,22 @@ function pathTables(schema: DatabaseSchema, from: string, path: string, into: Se
   if (resolved.rollup) for (const read of rollupReads(resolved.rollup)) into.add(read.table);
 }
 
+const stableCatalogs = new WeakSet<DatabaseSchema>();
+/** Mark a cached served catalog as immutable so readTables can memoize its dependency walk. */
+export function markStableCatalog(schema: DatabaseSchema): DatabaseSchema {
+  stableCatalogs.add(schema);
+  return schema;
+}
+
 const tablesRead = new WeakMap<DatabaseSchema, Map<string, readonly string[]>>();
 /** The tables a read of `base` asked as `request` answers from; undefined where that cannot be told. */
 export function readTables(schema: DatabaseSchema, base: string, request: unknown): string[] | undefined {
   const asked = new Set<string>();
   if (!strings(request, asked)) return undefined;
   /* The answer is the catalog's and the request's names alone. Over a catalog nothing can change (a tenant's served
-     catalog is a capture) it is kept by those names: a request tells the tables of every read it makes, each a walk
-     of every reference in the catalog, and a page asks the same few reads again and again. */
-  const fixed = isCapturedTenantData(schema);
+     catalog is a capture, or a cached cutSchema catalog) it is kept by those names: a request tells the tables of
+     every read it makes, each a walk of every reference in the catalog, and a page asks the same few reads again. */
+  const fixed = isCapturedTenantData(schema) || stableCatalogs.has(schema);
   const key = fixed ? `${base}\0${[...asked].join('\0')}` : '';
   let kept = fixed ? tablesRead.get(schema) : undefined;
   if (kept?.has(key)) return [...kept.get(key)!];
@@ -76,10 +83,22 @@ export function readTables(schema: DatabaseSchema, base: string, request: unknow
 
 function walkTables(schema: DatabaseSchema, base: string, asked: ReadonlySet<string>): string[] | undefined {
   const tables = new Map<string, TableMeta>(schema.tables.map((table) => [table.id, table]));
-  if (!tables.has(base)) return undefined;
+  const baseTable = tables.get(base);
+  if (!baseTable) return undefined;
   const reached = new Set<string>([base]);
+  const baseRollups = baseTable.rollups;
+  const baseComputed = baseTable.computed;
   for (const text of asked) {
-    pathTables(schema, base, text, reached);
+    // A bare identifier without '.' or '+' can only reference another table via a rollup or computed column on base.
+    // Skipping ordinary column names and non-column strings avoids throwing/catching PathError stack traces per query.
+    if (
+      text.includes('.') ||
+      text.includes('+') ||
+      (baseRollups !== undefined && Object.hasOwn(baseRollups, text)) ||
+      (baseComputed !== undefined && Object.hasOwn(baseComputed, text))
+    ) {
+      pathTables(schema, base, text, reached);
+    }
     for (const fk of schema.foreignKeys)
       if (fk.name === text || `${fk.from.table}.${fk.from.columns.join('+')}` === text) {
         reached.add(fk.from.table);

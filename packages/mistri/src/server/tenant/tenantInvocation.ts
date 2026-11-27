@@ -37,6 +37,10 @@ export function narrowTenantInvocation<P extends InvocationPrincipal = TenantMem
 /* Guards whose admission is only the first of two: the owner admits again, afresh, before anything it was given
    leaves the server (tenantContexts.ts `candidate`). */
 const admittedAgain = new WeakSet<TenantInvocationGuard<never>>();
+/* Guards whose callback reads only `principal` or returns `undefined` (admission and post-action fences in
+   tenantContexts.ts): the read runtime still proves membership, policy scope, and release fence, but skips
+   per-page `zone`, `locale`, and `presentation` work that the caller discards. */
+const headless = new WeakSet<TenantInvocationGuard<never>>();
 /**
  * The guard for an admission its owner makes again before it releases anything: a lease's first admission, whose
  * principal is only compared with the second's. The read runtime's release fence — a fresh membership snapshot
@@ -49,10 +53,20 @@ export function tenantInvocationAdmittedAgain<P extends InvocationPrincipal = Te
 ): TenantInvocationGuard<P> {
   const guard = narrowTenantInvocation<P>(parent, () => {});
   admittedAgain.add(guard as TenantInvocationGuard<never>);
+  headless.add(guard as TenantInvocationGuard<never>);
   return guard;
 }
 export const isAdmittedAgain = <P extends InvocationPrincipal>(guard: TenantInvocationGuard<P> | undefined): boolean =>
   guard !== undefined && admittedAgain.has(guard as TenantInvocationGuard<never>);
+export function tenantInvocationHeadless<P extends InvocationPrincipal = TenantMembershipEvidence>(
+  parent: TenantInvocationGuard<P>,
+): TenantInvocationGuard<P> {
+  const guard = narrowTenantInvocation<P>(parent, () => {});
+  headless.add(guard as TenantInvocationGuard<never>);
+  return guard;
+}
+export const isHeadlessInvocation = <P extends InvocationPrincipal>(guard: TenantInvocationGuard<P> | undefined): boolean =>
+  guard !== undefined && headless.has(guard as TenantInvocationGuard<never>);
 export function revalidateTenantInvocation<P extends InvocationPrincipal = TenantMembershipEvidence>(
   guard: TenantInvocationGuard<P> | undefined,
   principal: P,

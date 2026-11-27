@@ -68,6 +68,7 @@ import { definedAnswerBreak, sourcedChoiceBreak } from './commandDefined.js';
 import { memberBreak } from './commandMembers.js';
 import { projectCommandEvents, resolveCommandEffects } from './businessEvents.js';
 import { effectProjectionDb } from './commandEffects.js';
+import { snapshot as snapshotCanonicalJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import {
   canonicalCommandJson,
   CommandInputError,
@@ -1038,8 +1039,12 @@ async function executeUntraced(
             // record by record leaves each record's dependents on its own row.
             const keyTexts = list.keys.map(commandKeyText);
             const changes: unknown[][] = list.keys.map(() => []);
+            const changeJsons: string[][] = list.keys.map(() => []);
             // The bytes each target's entries come to as one array, kept as they are added so a long audit is not walked again.
             const changeBytes: number[] = list.keys.map(() => 1);
+            const chunkBytes: number[] = list.keys.map(() => 1);
+            const chunkNodes: number[] = list.keys.map(() => 1);
+            const AUDIT_CHUNK_MAX_NODES = 10_000;
             let attributed = 0;
             // What the audit keeps of each image. A public command's default is
             // keys and column names only: an applicant's input is not the journal's
@@ -1072,18 +1077,57 @@ async function executeUntraced(
                 );
               }
               try {
-                // Redacted before the bound is measured: what is checked is what is stored.
-                const entry = JSON.parse(canonicalCommandJson(change, AUDIT_TARGET_BYTES)) as Record<string, unknown>;
-                for (const side of ['before', 'after']) if (Object.hasOwn(entry, side)) entry[side] = image(entry[side]);
-                list.push(entry);
-                // Stored in pieces of AUDIT_PART_ENTRIES, each serialized alone (the canonical walk is bounded in nodes, so
-                // a whole list of thousands is not one walk): the piece this entry joins, and the target's bytes in all.
-                canonicalCommandJson(list.slice(list.length - 1 - ((list.length - 1) % AUDIT_PART_ENTRIES)), AUDIT_TARGET_BYTES);
-                changeBytes[attributed] += Buffer.byteLength(canonicalCommandJson(entry, AUDIT_TARGET_BYTES), 'utf8') + 1;
-                if (changeBytes[attributed] > AUDIT_TARGET_BYTES) throw new Error('over the audit');
+                // Validate and canonicalize once; when redacting, redact the validated copy before measuring its stored form.
+                let snapped = snapshotCanonicalJson(change, AUDIT_TARGET_BYTES);
+                if (redact) {
+                  const copy = { ...(snapped.value as Record<string, unknown>) };
+                  let changed = false;
+                  for (const side of ['before', 'after']) {
+                    if (Object.hasOwn(copy, side)) {
+                      copy[side] = image(copy[side]);
+                      changed = true;
+                    }
+                  }
+                  if (changed) snapped = snapshotCanonicalJson(copy, AUDIT_TARGET_BYTES);
+                }
+                // Stored in pieces of AUDIT_PART_ENTRIES, each bounded by node count and bytes.
+                if (list.length % AUDIT_PART_ENTRIES === 0) {
+                  chunkBytes[attributed] = 1;
+                  chunkNodes[attributed] = 1;
+                }
+                const nextChunkNodes = chunkNodes[attributed] + snapped.nodes;
+                const nextChunkBytes = chunkBytes[attributed] + snapped.bytes + 1;
+                const nextTotalBytes = changeBytes[attributed] + snapped.bytes + 1;
+                if (nextChunkNodes > AUDIT_CHUNK_MAX_NODES || nextChunkBytes > AUDIT_TARGET_BYTES || nextTotalBytes > AUDIT_TARGET_BYTES)
+                  throw new Error('over the audit');
+                chunkNodes[attributed] = nextChunkNodes;
+                chunkBytes[attributed] = nextChunkBytes;
+                changeBytes[attributed] = nextTotalBytes;
+                list.push(snapped.value);
+                changeJsons[attributed].push(snapped.json);
               } catch {
                 throw developerError(auditRefusal(request.command, change));
               }
+            };
+            /* Under snapshot: true (REPEATABLE READ), rows read in this tx cannot silently move (conflicting UPDATE aborts
+               with 40001). Caching single-row reads by PK lets updateVia reuse the before-image instead of re-SELECTing. */
+            const snapshotRows = command.snapshot === true ? new Map<string, Record<string, unknown>>() : undefined;
+            const snapshotRowKey = (tableId: string, rowOrKey: Record<string, unknown>): string | undefined => {
+              const meta = authorized.catalog?.[tableId];
+              const exact = meta?.key.length ? canonicalKey(meta, rowOrKey) : undefined;
+              return exact ? `${tableId}\0${commandKeyText(exact)}` : undefined;
+            };
+            const rememberSnapshotRow = (tableId: string, row: Record<string, unknown>) => {
+              const k = snapshotRows ? snapshotRowKey(tableId, row) : undefined;
+              if (k !== undefined) snapshotRows!.set(k, { ...row });
+            };
+            const lookupSnapshotRow = (tableId: string, key: Record<string, string | number>) => {
+              const k = snapshotRows ? snapshotRowKey(tableId, key) : undefined;
+              return k !== undefined ? snapshotRows!.get(k) : undefined;
+            };
+            const forgetSnapshotRow = (tableId: string, key: Record<string, string | number> | undefined) => {
+              const k = snapshotRows && key ? snapshotRowKey(tableId, key) : undefined;
+              if (k !== undefined) snapshotRows!.delete(k);
             };
             /* The target's revision, checked up front, or, for a command that declares `appendOnly`, at its first write to the
            target. `owed` holds each record whose refusal waits for that write, by key: decided from the revision the
@@ -1126,6 +1170,7 @@ async function executeUntraced(
                 throw error;
               }
               tally(request.table, 1);
+              forgetSnapshotRow(request.table, result.key);
               if (request.table === command.target && result.key !== undefined) {
                 madeOnTarget.push(commandKeyText(result.key));
                 wrote(result.key, Object.keys(request.values), said);
@@ -1187,17 +1232,20 @@ async function executeUntraced(
               seen ??= auditing ? read?.(request) : undefined;
               // The before image is the audit's; a command that keeps none does not read it.
               const audited = Object.keys(request.values);
+              const cachedBefore = !seen && auditing ? lookupSnapshotRow(request.table, request.key) : undefined;
               const before = !auditing
                 ? undefined
                 : seen && seen.rows.every((row) => audited.every((column) => Object.hasOwn(row, column)))
                   ? { rows: seen.rows.map((row) => Object.fromEntries(audited.map((column) => [column, row[column]]))) }
-                  : await store.query({
-                      table: request.table,
-                      columns: audited,
-                      limit: 2,
-                      offset: 0,
-                      filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
-                    });
+                  : cachedBefore && audited.every((column) => Object.hasOwn(cachedBefore, column))
+                    ? { rows: [Object.fromEntries(audited.map((column) => [column, cachedBefore[column]]))] }
+                    : await store.query({
+                        table: request.table,
+                        columns: audited,
+                        limit: 2,
+                        offset: 0,
+                        filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
+                      });
               let result: UpdateResult;
               try {
                 result = await write(request);
@@ -1206,6 +1254,7 @@ async function executeUntraced(
                 else if (unproved(error)) footprintFault ??= footprintFailure(commandId, authorized, request);
                 throw error;
               }
+              forgetSnapshotRow(request.table, request.key);
               tally(request.table, result.affected);
               if (result.affected === 0) return result;
               if (before && before.rows.length !== 1) {
@@ -1270,7 +1319,9 @@ async function executeUntraced(
                   async (request) => {
                     checkCancelled();
                     addingOnly(request.table, true);
-                    return store.query(request);
+                    const result = await store.query(request);
+                    if (snapshotRows && result.rows.length === 1) rememberSnapshotRow(request.table, result.rows[0]);
+                    return result;
                   },
                   true,
                 ),
@@ -1337,6 +1388,7 @@ async function executeUntraced(
                   const own = request.table === command.target ? heldKey(request.key) : undefined;
                   if (own && !held.has(own)) await authorized.assertTarget?.(records, request.key);
                   const result = await store.remove(request);
+                  forgetSnapshotRow(request.table, request.key);
                   tally(request.table, result.affected);
                   if (own) {
                     held.delete(own);
@@ -1510,6 +1562,7 @@ async function executeUntraced(
                     }
                   }
                   const row = normalizeRow(table, found!.rows[0]) as UntypedRow;
+                  rememberSnapshotRow(command.target, found!.rows[0]);
                   if (auditedTarget && !lookupAudited.has(commandKeyText(exact)))
                     await auditCommandRead(heldAudit, request.command, {
                       ...auditedTarget,
@@ -2010,17 +2063,33 @@ async function executeUntraced(
               const id = randomUUID();
               const completedAt = now().toISOString();
               // One receipt names every target through its audit rows, in order.
-              const audits = list.keys.map((key, index) => ({
-                target: receiptOwner ? resource : authorized.resource,
-                keyJson: canonicalCommandJson(key, 8192),
-                ...splitAudit(changes[index], (head) =>
-                  publicActor && eventBatch?.length
-                    ? commandVisitorAudit(flags, head)
-                    : authorized.actor.scope
-                      ? scopedAudit(authorized.actor.scope, head)
-                      : head,
-                ),
-              }));
+              const framedAudit = Boolean((publicActor && eventBatch?.length) || authorized.actor.scope);
+              const audits = list.keys.map((key, index) => {
+                if (!framedAudit) {
+                  const entries = changeJsons[index];
+                  const changesJson = `[${entries.slice(0, AUDIT_PART_ENTRIES).join(',')}]`;
+                  const parts: string[] = [];
+                  for (let from = AUDIT_PART_ENTRIES; from < entries.length; from += AUDIT_PART_ENTRIES)
+                    parts.push(`[${entries.slice(from, from + AUDIT_PART_ENTRIES).join(',')}]`);
+                  return {
+                    target: receiptOwner ? resource : authorized.resource,
+                    keyJson: canonicalCommandJson(key, 8192),
+                    changesJson,
+                    ...(parts.length ? { changesParts: Object.freeze(parts) } : {}),
+                  };
+                }
+                return {
+                  target: receiptOwner ? resource : authorized.resource,
+                  keyJson: canonicalCommandJson(key, 8192),
+                  ...splitAudit(changes[index], (head) =>
+                    publicActor && eventBatch?.length
+                      ? commandVisitorAudit(flags, head)
+                      : authorized.actor.scope
+                        ? scopedAudit(authorized.actor.scope, head)
+                        : head,
+                  ),
+                };
+              });
               const actorKind = madeAs;
               if (wroteOnTarget.size)
                 await settleProvenance(journal, actorKind, completedAt, {

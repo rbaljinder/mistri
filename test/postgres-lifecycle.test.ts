@@ -128,7 +128,7 @@ function fixture() {
 for (const kind of ['refusal', 'constraint'] as const) {
   for (const commit of [false, true]) {
     for (const rollbackFails of [false, true]) {
-      test(`Postgres ${kind}: commit attempted=${commit}, rollback failure=${rollbackFails} classifies outcome and discards failed lease`, async () => {
+      test(`Postgres ${kind}: commit attempted=${commit}, rollback failure=${rollbackFails} classifies outcome and ${!commit && !rollbackFails ? 'reuses cleanly rolled-back lease' : 'discards failed lease'}`, async () => {
         const { adapter, pools, statements, beforeQuery } = fixture();
         const original =
           kind === 'refusal'
@@ -156,7 +156,7 @@ for (const kind of ['refusal', 'constraint'] as const) {
             },
           );
           const first = pools[0].clients[0];
-          assert.deepEqual(first.releases, [true]);
+          assert.deepEqual(first.releases, [commit || rollbackFails]);
           assert.equal(
             statements.some((statement) => statement.text === 'COMMIT'),
             commit,

@@ -3,7 +3,7 @@ import { dirname } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { namedTenants } from './tenantNames.js';
 import { createTenantBrandingService, brandingLogoHeaders, BRANDING_LOGO_PATH } from './tenantBranding.js';
-import { readsAs } from '@mistriwork/engine/adapters/replicas.js';
+import { hasReplicas, readsAs } from '@mistriwork/engine/adapters/replicas.js';
 import { readFreshness } from '@mistriwork/engine/server/http/readRouting.js';
 import { MemoryCacheStore } from '@mistriwork/engine/adapters/cache/cacheStore.js';
 import type { BrandingPresentation } from '../http/recordBranding.js';
@@ -1882,7 +1882,9 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
          is taken off (routeAddress, inside work), so it is taken off here too. */
       const arrived = (req.url ?? '/').split('?')[0];
       const inBase = mount.base && arrived.startsWith(`${mount.base}/`) ? arrived.slice(mount.base.length) : arrived;
-      void withReadRoute(readRouteOf(inBase, req.headers), () => readsAs(readFreshness(req, res, mount.base), work))
+      void withReadRoute(readRouteOf(inBase, req.headers), () =>
+        hasReplicas() ? readsAs(readFreshness(req, res, mount.base), work) : work(),
+      )
         .catch((error) => {
           if (res.headersSent) {
             if (!res.writableEnded) res.destroy();

@@ -28,7 +28,12 @@ import type { TenantReadContext } from './tenantReadRuntime.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { TenantWriteFailure } from './tenantWriteSource.js';
 import { refusedFields } from './tenantWriteKindContract.js';
-import { narrowTenantInvocation, tenantInvocationAdmittedAgain, tenantInvocationGuard } from './tenantInvocation.js';
+import {
+  narrowTenantInvocation,
+  tenantInvocationAdmittedAgain,
+  tenantInvocationGuard,
+  tenantInvocationHeadless,
+} from './tenantInvocation.js';
 import {
   isSupportEvidence,
   markSupportRefusal,
@@ -42,6 +47,7 @@ import type { SupportReadContext } from './tenantSupportReadRuntime.js';
 import { requireFreshAdmission } from './tenantAdmissionCache.js';
 import { tenantHostIntentOf } from '../http/tenantHosts.js';
 import { tenantAnswerProvenByCommit, tenantAnswerProvenByFence } from './tenantRequestRuntime.js';
+import { platformAnswerProvenByCommit, platformAnswerProvenByFence } from './tenantPlatformCommands.js';
 
 interface TenantContextsOptions<Request> {
   readonly deployment: TenantDeployment<Request>;
@@ -296,7 +302,29 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
   )
     return denyTenant();
   const tabs = new Map<string, Tab>(),
+    accountTabs = new Map<string, Set<Tab>>(),
+    releasedTabs = new Set<Tab>(),
     pending = new Set<Promise<void>>();
+  const addTab = (tab: Tab) => {
+    tabs.set(tab.id, tab);
+    let owned = accountTabs.get(tab.accountId);
+    if (!owned) accountTabs.set(tab.accountId, (owned = new Set()));
+    owned.add(tab);
+  };
+  const removeTab = (tab: Tab) => {
+    tabs.delete(tab.id);
+    releasedTabs.delete(tab);
+    const owned = accountTabs.get(tab.accountId);
+    if (owned) {
+      owned.delete(tab);
+      if (!owned.size) accountTabs.delete(tab.accountId);
+    }
+  };
+  const markReleased = (tab: Tab, released: boolean) => {
+    tab.released = released;
+    if (released) releasedTabs.add(tab);
+    else releasedTabs.delete(tab);
+  };
   // Bound one account's share of the default deployment tab budget; a lower
   // global ceiling still wins. Sessions and tenant/platform realms share it.
   // At the bound the account's oldest idle context makes way (open, below).
@@ -471,9 +499,11 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
     const finalSession = await session(request);
     if (finalSession.identity.id !== proof.identity.id || finalSession.sessionId !== proof.sessionId) return denyTenant();
     const principal = await admit(
-      narrowTenantInvocation<Principal>(guard, (member) => {
-        if (!same(first, member)) denyTenant();
-      }),
+      tenantInvocationHeadless(
+        narrowTenantInvocation<Principal>(guard, (member) => {
+          if (!same(first, member)) denyTenant();
+        }),
+      ),
     );
     const instant = clock(),
       expiresAt = Math.min(started + lifetime, first.validUntil, principal.validUntil, sessionExpiry, finalSession.expiresAt);
@@ -493,20 +523,31 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
   const evictable = (tab: Tab) => !tab.switching && !tab.lease?.pending.size && tab.lease?.realm !== 'support';
   const oldestIdle = (accountId: string): Tab | undefined => {
     let oldest: Tab | undefined;
-    // The map keeps insertion order: the first idle one is the oldest.
-    for (const tab of tabs.values()) {
-      if (tab.accountId !== accountId || !evictable(tab)) continue;
+    // The account set keeps insertion order: the first idle one is the oldest.
+    const owned = accountTabs.get(accountId);
+    if (!owned) return undefined;
+    for (const tab of owned) {
+      if (!evictable(tab)) continue;
       if (tab.released) return tab;
       oldest ??= tab;
     }
     return oldest;
   };
-  const prune = () => {
-    const instant = clock();
-    for (const [id, tab] of tabs) {
+  const pruneAccount = (accountId: string, instant: number) => {
+    const owned = accountTabs.get(accountId);
+    if (!owned) return;
+    for (const tab of owned) {
       if (instant < Math.min(tab.expiresAt, tab.sessionExpiresAt) || tab.switching) continue;
       if (tab.lease) tab.lease.active = false;
-      if (!tab.lease?.pending.size) tabs.delete(id);
+      if (!tab.lease?.pending.size) removeTab(tab);
+    }
+  };
+  const prune = () => {
+    const instant = clock();
+    for (const tab of tabs.values()) {
+      if (instant < Math.min(tab.expiresAt, tab.sessionExpiresAt) || tab.switching) continue;
+      if (tab.lease) tab.lease.active = false;
+      if (!tab.lease?.pending.size) removeTab(tab);
     }
   };
   const execute = <T, A>(
@@ -614,7 +655,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         // fence ran this lease's guard and observed the membership after it, as a read's does. Asking again was
         // a second admitted context and a third membership snapshot on every record page.
         if (family !== 'read' && !tenantAnswerProvenByCommit(request) && !(family === 'availability' && tenantAnswerProvenByFence(request)))
-          await bound.withContext(request, selectors, () => undefined);
+          await deployment.withContext(request, selectors, () => undefined, tenantInvocationHeadless(guard));
         current();
         return captureTenantData({ context: reply(tab, lease, window), value });
       } finally {
@@ -802,7 +843,10 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         belongs(tab, released);
         current();
         if (released.expiresAt < window.expiresAt) return denyTenant();
-        await deployment.withSupportContext(request, principal, () => undefined, guard);
+        // Nothing more is asked of the source: the support read runtime's
+        // release fence ran this lease's own guard and observed the support
+        // lease in a fresh snapshot after its last read, as tenant and platform
+        // reads do.
         current();
         return captureTenantData({ context: reply(tab, lease, window), value });
       } finally {
@@ -908,7 +952,8 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         belongs(tab, released);
         current();
         if (released.expiresAt < window.expiresAt) return denyTenant();
-        await bound.withContext(request, () => undefined);
+        if (!platformAnswerProvenByCommit(request) && !(family === 'availability' && platformAnswerProvenByFence(request)))
+          await deployment.withPlatformContext(request, () => undefined, tenantInvocationHeadless(guard));
         current();
         return captureTenantData({ context: reply(tab, lease, window), value });
       } finally {
@@ -965,7 +1010,9 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       // first proof as candidate's authority, including its session identity.
       const proof = await session(request),
         accountId = proof.identity.id;
-      prune();
+      const instant = clock();
+      pruneAccount(accountId, instant);
+      if (tabs.size + opening >= maximum) prune();
       // At the account's limit an idle context makes way rather than the new
       // page being refused: a context whose page never let it go (a killed
       // mobile tab, a closed browser) used to hold its slot for its lease and
@@ -973,15 +1020,18 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       // as a forged session. Only the openings this many idle contexts can
       // cover are reserved here; the eviction itself waits for admission
       // below, so a caller the membership refuses lets nothing go.
+      const owned = accountTabs.get(accountId);
       let occupied = accountOpenings.get(accountId) ?? 0,
         idle = 0,
         globalReclaimable = 0;
-      for (const tab of tabs.values()) {
-        if (tab.accountId === accountId) {
+      if (owned) {
+        for (const tab of owned) {
           occupied++;
           if (evictable(tab)) idle++;
         }
-        if (tab.released && evictable(tab)) globalReclaimable++;
+      }
+      if (tabs.size + opening >= maximum) {
+        for (const tab of releasedTabs) if (evictable(tab)) globalReclaimable++;
       }
       // No provider, clock callback or await between the checks and reservation.
       if (tabs.size + opening - globalReclaimable >= maximum) return denyTenant();
@@ -1005,29 +1055,28 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
         live(tab, lease);
         // Admitted: make room, synchronously with the insertion, by letting
         // the account's oldest idle contexts go (a released one first).
-        let held = 0;
-        for (const other of tabs.values()) if (other.accountId === accountId) held++;
+        let held = accountTabs.get(accountId)?.size ?? 0;
         while (held >= accountMaximum) {
           const victim = oldestIdle(accountId);
           if (!victim) throw new TenantContextsBusy();
           if (victim.lease) victim.lease.active = false;
-          tabs.delete(victim.id);
+          removeTab(victim);
           held--;
         }
         // If global capacity is full, reclaim the oldest already-released tab (never a live or dormant tab).
         while (tabs.size >= maximum) {
           let victim: Tab | undefined;
-          for (const candidateTab of tabs.values()) {
-            if (candidateTab.released && evictable(candidateTab)) {
+          for (const candidateTab of releasedTabs) {
+            if (evictable(candidateTab)) {
               victim = candidateTab;
               break;
             }
           }
           if (!victim) return denyTenant();
           if (victim.lease) victim.lease.active = false;
-          tabs.delete(victim.id);
+          removeTab(victim);
         }
-        tabs.set(id, tab);
+        addTab(tab);
         return reply(tab, lease);
       } finally {
         opening--;
@@ -1156,7 +1205,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       if (!tab || !lease || lease.token !== expected.expectedContext || lease.realm === 'support') return denyTenant();
       belongs(tab, await session(request));
       if (tab.lease !== lease) return denyTenant();
-      tab.released = true;
+      markReleased(tab, true);
       tab.expiresAt = Math.min(tab.expiresAt, clock() + grace);
       return captureTenantData({ tabId: tab.id, status: 'released' as const });
     });
@@ -1191,7 +1240,7 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       belongs(tab, current.proof);
       if (!tab.released || tab.lease !== lease || tab.switching || current.expiresAt < lease.window.expiresAt) return denyTenant();
       live(tab, lease, lease.window, current.principal);
-      tab.released = false;
+      markReleased(tab, false);
       tab.expiresAt = retainUntil(tab, lease.window);
       return reply(tab, lease);
     });
@@ -1230,11 +1279,37 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       if (!tab.released || tab.lease !== lease || tab.switching) return denyTenant();
       live(tab, lease);
       if (clock() >= Math.min(lease.window.expiresAt, tab.expiresAt)) return denyTenant();
-      tab.released = false;
+      markReleased(tab, false);
       tab.expiresAt = retainUntil(tab, lease.window);
       return reply(tab, lease);
     });
+  /** Roles held by a live, non-switching lease matching `expected` (never authoritative on its own: used only
+   * to avoid a redundant read context right before a command whose own admission proves `same(lease.principal, member)`). */
+  const peekRoles = (
+    platform: boolean,
+    inputSelectors: readonly string[],
+    inputAssertion: TenantContextAssertion,
+  ): readonly string[] | undefined => {
+    try {
+      if (retired) return undefined;
+      const expected = assertion(inputAssertion);
+      const tab = tabs.get(expected.tabId),
+        lease = tab?.lease;
+      if (!tab || !lease || tab.switching || !lease.active || expected.expectedContext !== lease.token) return undefined;
+      if (expected.expectedRevision !== lease.window.revision) return undefined;
+      if (platform) {
+        if (lease.realm !== 'platform') return undefined;
+      } else {
+        if (lease.realm !== 'tenant') return undefined;
+        if (parseTenantSelector(captureTenantData(inputSelectors)) !== tenantOf(lease)) return undefined;
+      }
+      return lease.principal.roles;
+    } catch {
+      return undefined;
+    }
+  };
   return Object.freeze({
+    peekRoles,
     release,
     reclaim,
     resume: (request: Request, inputSelectors: readonly string[], input: { tabId: string }): Promise<TenantContextReply> =>
@@ -1617,6 +1692,8 @@ export function createTenantContexts<Request>(options: TenantContextsOptions<Req
       for (const tab of tabs.values()) if (tab.lease) tab.lease.active = false;
       retirement = Promise.allSettled([...pending]).then(() => {
         tabs.clear();
+        accountTabs.clear();
+        releasedTabs.clear();
       });
       void retirement.catch(() => {});
       return retirement;

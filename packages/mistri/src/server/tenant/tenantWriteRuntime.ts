@@ -8,7 +8,8 @@ import type { TenantRowsContext } from '../policy/appTenantPolicy.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import { appActionGrants } from '../../shared/appAccess.js';
-import { accessibleSchema, authorizeTransaction, type ResourceAccess } from '../app/appAccess.js';
+import { accessibleSchema, authorizeTransaction, markStableGrant, type ResourceAccess } from '../app/appAccess.js';
+import { actingPrincipal } from './tenantApiRequest.js';
 import { compileAppTransitions } from '../app/appTransitions.js';
 import { compileAppStamps, stampInsert, stampUpdate, type StampMoment } from '../app/appStamps.js';
 import { lookupTenantPerson } from '../app/appMe.js';
@@ -55,6 +56,7 @@ export interface TenantWriteRuntimeOptions<Request> {
   readonly admissions?: AdmissionCache;
 }
 
+const WRITE_GRANTS = 256;
 const inverseImages = new WeakMap<TenantWriteContext, TenantInverseImages>();
 /** Only a live genuine context can reach the bounded image operations. No raw
  * handle, registration function, caller evidence or public context property. */
@@ -105,6 +107,62 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
   const stamps = compileAppStamps(ownership.schema, runtime.app);
   const me = runtime.app.auth?.me;
   const peopleOwned = !!me && ownership.ownership[me.from]?.kind === 'tenant';
+  /* A role set's write grant and captured catalog depend only on the App, this catalog and the roles (all fixed here),
+     never on the tenant or member: kept per role pair and marked stable so `authorizeTransaction` and `accessibleSchema`
+     reuse them by identity instead of cloning the full catalog on every update/insert/delete. */
+  const writeGrants = new Map<
+    string,
+    {
+      readonly fields: Map<string, { read: ReadonlySet<string>; write: ReadonlySet<string> }>;
+      readonly baseAccess: ResourceAccess;
+      readonly schema: DatabaseSchema;
+    }
+  >();
+  const writeTemplate = (actingRoles: readonly string[], principalRoles: readonly string[], grants: ResourceAccess) => {
+    const key = JSON.stringify([actingRoles, principalRoles]);
+    const kept = writeGrants.get(key);
+    if (kept) return kept;
+    // Ordinary values never receive managed-field authority, even under a
+    // broad role. Globals are read-only. Keep all other field ceilings intact.
+    const visibleGrants = tenantVisibleFields(ownership, grants);
+    const fields = new Map<string, { read: ReadonlySet<string>; write: ReadonlySet<string> }>();
+    const writable = new Set<string>();
+    for (const table of ownership.schema.tables) {
+      const rule = ownership.ownership[table.id],
+        configured = visibleGrants.fields?.get(table.id);
+      const read = new Set(configured?.read ?? table.columns.map((column) => column.name));
+      const write = new Set(configured?.write ?? table.columns.map((column) => column.name));
+      if (rule.kind === 'tenant') {
+        write.delete(rule.column);
+        if (grants.writable.has(table.id)) writable.add(table.id);
+      } else write.clear();
+      fields.set(table.id, { read, write });
+    }
+    /* A fixed action a member's role is granted without write: the member's verb, so only this writer kind
+       holds it. The facade admits exactly the action (its `when` read through the tenant's rows, its stamps
+       the server's clock and this member's person); the tenant column stays out of every write set. */
+    const granted = appActionGrants(runtime.app, ownership.schema, [...principalRoles]);
+    const actions = granted.size ? granted : undefined;
+    // Visible, not granted: a platform-owned table is no tenant resource.
+    const baseAccess: ResourceAccess = markStableGrant({
+      readable: visibleGrants.readable,
+      writable,
+      fields,
+      ...(grants.creatable ? { creatable: grants.creatable } : {}),
+      ...(grants.appendOnly ? { appendOnly: grants.appendOnly } : {}),
+      // A file's object and hash: written by an upload's insert, named by no request.
+      ...(grants.internal ? { internal: grants.internal } : {}),
+      ...(validation ? { validation } : {}),
+      ...(transitions ? { transitions } : {}),
+      ...(actions ? { actions } : {}),
+    });
+    const visible = accessibleSchema(ownership.schema, { ...baseAccess, rows: {} });
+    const schema = captureScopeCatalog({ ...visible, tables: visible.tables.map((table) => ({ ...table, deletable: false })) });
+    const entry = { fields, baseAccess, schema };
+    if (writeGrants.size >= WRITE_GRANTS) writeGrants.delete(writeGrants.keys().next().value!);
+    writeGrants.set(key, entry);
+    return entry;
+  };
   return Object.freeze({
     /** `operation` names which of the host's operations ran, for a writer kind
      * that records one; it is the host's own fact, never a request's. */
@@ -125,23 +183,9 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
         selectors,
         async (scope) => {
           if (admitted) await admitted(scope.principal);
-          const { principal, grants, rows, session } = scope;
-          // Ordinary values never receive managed-field authority, even under a
-          // broad role. Globals are read-only. Keep all other field ceilings intact.
-          const visibleGrants = tenantVisibleFields(ownership, grants);
-          const fields = new Map<string, { read: ReadonlySet<string>; write: ReadonlySet<string> }>();
-          const writable = new Set<string>();
-          for (const table of ownership.schema.tables) {
-            const rule = ownership.ownership[table.id],
-              configured = visibleGrants.fields?.get(table.id);
-            const read = new Set(configured?.read ?? table.columns.map((column) => column.name));
-            const write = new Set(configured?.write ?? table.columns.map((column) => column.name));
-            if (rule.kind === 'tenant') {
-              write.delete(rule.column);
-              if (grants.writable.has(table.id)) writable.add(table.id);
-            } else write.clear();
-            fields.set(table.id, { read, write });
-          }
+          const { principal, grants, session } = scope;
+          const acting = actingPrincipal(request, principal);
+          const { fields, baseAccess, schema } = writeTemplate(acting.roles, principal.roles, grants);
           /* Read as the write runs, through its own transaction (authorizeTransaction passes it): nothing the
              request says becomes a stamp. */
           const moment = (reader: Parameters<typeof lookupTenantPerson>[4]): StampMoment => ({
@@ -151,23 +195,8 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
               (await lookupTenantPerson(runtime.app, ownership.schema, scope.who(), peopleOwned ? principal.accountId : undefined, reader))
                 .person?.key ?? null,
           });
-          /* A fixed action a member's role is granted without write: the member's verb, so only this writer kind
-             holds it. The facade admits exactly the action (its `when` read through the tenant's rows, its stamps
-             the server's clock and this member's person); the tenant column stays out of every write set. */
-          const granted = appActionGrants(runtime.app, ownership.schema, [...principal.roles]);
-          const actions = granted.size ? granted : undefined;
-          // Visible, not granted: a platform-owned table is no tenant resource.
           const access: ResourceAccess = {
-            readable: visibleGrants.readable,
-            writable,
-            fields,
-            ...(grants.creatable ? { creatable: grants.creatable } : {}),
-            ...(grants.appendOnly ? { appendOnly: grants.appendOnly } : {}),
-            // A file's object and hash: written by an upload's insert, named by no request.
-            ...(grants.internal ? { internal: grants.internal } : {}),
-            ...(validation ? { validation } : {}),
-            ...(transitions ? { transitions } : {}),
-            ...(actions ? { actions } : {}),
+            ...baseAccess,
             /* The writer as a `when` reads them, `tenant.<column>` included: a machine's step is judged for a member
                who holds write as much as an action is for one granted only the verb. Looked up only when a `when`
                names them. */
@@ -183,8 +212,6 @@ export function bindTenantWriteRuntime<Request>(input: TenantRequestRuntime<Requ
             ...(stamps?.rules.size ? { stamp: (request, reader) => stampUpdate(stamps, request, moment(reader)) } : {}),
             ...(stamps?.defaults ? { fill: (request, reader) => stampInsert(stamps, request, moment(reader)) } : {}),
           };
-          const visible = accessibleSchema(ownership.schema, { ...access, rows });
-          const schema = captureScopeCatalog({ ...visible, tables: visible.tables.map((table) => ({ ...table, deletable: false })) });
           return scope.transaction(async (records) => {
             const authorized = authorizeTransaction(ownership.schema, access, records);
             const operations = new TransactionOperations();

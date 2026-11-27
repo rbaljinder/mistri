@@ -78,7 +78,9 @@ import {
   effectCatalogFacts,
   hierarchyRecheck,
   joinedHierarchy,
+  postgresTriggerAttestation,
   readPostgresScopeCatalog,
+  triggerAttestationFailed,
   type PostgresScopeCatalog,
 } from './scoped/postgresScopeCatalog.js';
 import {
@@ -105,7 +107,14 @@ import {
 import type { DatabaseSchema, TableMeta } from '../shared/schema.js';
 import { compileView, compileViewCount, type ViewDef } from '../shared/view.js';
 import { compileBreakdown, compileBreakdownCount, type BreakdownDef } from '../shared/breakdown.js';
-import { PgConnectionManager, sharedPgConnections, type PgConnectionOptions, type PgQuery, type SharedPoolShape } from './postgresPool.js';
+import {
+  markCleanRollback,
+  PgConnectionManager,
+  sharedPgConnections,
+  type PgConnectionOptions,
+  type PgQuery,
+  type SharedPoolShape,
+} from './postgresPool.js';
 import {
   aheadReport,
   beforeCommit,
@@ -147,6 +156,7 @@ import {
   rowLockKey,
   rowLockStatement,
   scopedStatement,
+  aheadsFailed,
   sendPlainAhead,
   sendWriteAhead,
 } from './postgresWriteAhead.js';
@@ -170,7 +180,7 @@ import { createScopedReads } from './scoped/scopedReads.js';
 import { scopedCommandInvoker } from './scoped/scopedCommandOperations.js';
 import { postgresPrivileges } from './rolePrivileges.js';
 import { RESERVED_SCHEMAS } from './reservedSql.js';
-import { WriteLanes, keyedLane, lockTimedOut } from './writeLanes.js';
+import { WriteLanes, keyedLane } from './writeLanes.js';
 import { primaryReads } from './replicas.js';
 import { readSnapshotOn, type PostgresReadSnapshot } from './postgresReadSnapshot.js';
 import { explainPostgresSql, profilePostgresTable, runPostgresSql } from './postgresSql.js';
@@ -226,18 +236,6 @@ export function sharedPostgresAdapter(
   return new PostgresAdapter(url, label, [], sharedPgConnections(url, shape, keepDatesAsText), undefined, options);
 }
 
-/**
- * Whether a statement sent ahead behind a write's BEGIN (writeAhead.ts) failed, so the transaction must begin again
- * without them. Not when one waited out its lock (55P03): begun again, the transaction asked for the same lock and
- * waited for it a second time, so a held row was answered `row_locked` after twice the lock timeout, ten seconds
- * where five are documented (a live load test). That wait is the transaction's own answer, and it is thrown.
- */
-async function aheadsFailed(aheads: readonly Promise<unknown>[]): Promise<boolean> {
-  const settled = await Promise.allSettled(aheads);
-  const waited = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected' && lockTimedOut(outcome.reason));
-  if (waited) throw waited.reason;
-  return settled.some((outcome) => outcome.status === 'rejected');
-}
 /** What an adapter is built with beyond its connection. */
 export interface PostgresAdapterOptions {
   /**
@@ -1380,9 +1378,11 @@ export class PostgresAdapter implements Adapter {
             }
             // A write sent with the COMMIT failed and the server answered it as a ROLLBACK: nothing committed.
             if (err instanceof RolledBackAtCommit) throw err.cause;
-            // withWriteClient destroys on any callback error, including a failed
-            // BEGIN and a lost COMMIT acknowledgement followed by successful rollback.
+            // withWriteClient destroys on any uncertain failure (failed BEGIN,
+            // attempted COMMIT, or unacknowledged ROLLBACK); a confirmed pre-COMMIT
+            // ROLLBACK returns the idle connection to the pool.
             if (commitAttempted || (began && !rolledBack)) throw new TransactionOutcomeUnknown(err);
+            if (began && rolledBack) markCleanRollback(leased);
             throw err;
           } finally {
             this.txEpochs.delete(write);
@@ -1591,7 +1591,9 @@ export class PostgresAdapter implements Adapter {
             }
             // A write sent with the COMMIT failed and the COMMIT rolled back: nothing committed, and its failure is what is said.
             if (error instanceof RolledBackAtCommit) throw journal.failure(error.cause, 'not_applied');
-            throw journal.failure(error, commitAttempted || (began && !rolledBack) ? 'unknown' : 'not_applied');
+            const unknown = commitAttempted || (began && !rolledBack);
+            if (!unknown && began && rolledBack) markCleanRollback(leased);
+            throw journal.failure(error, unknown ? 'unknown' : 'not_applied');
           } finally {
             this.txEpochs.delete(write);
             reportWriteAhead(aheadReport(write), committed);
@@ -2058,15 +2060,11 @@ export class PostgresAdapter implements Adapter {
           await operations.finish();
           await writes.finish();
           if (verify) await verify(write, catalog, described);
-          await attestPostgresTriggers(write, catalog, relied);
-          /* A target's triggers may write any table the scope can write (triggerEffects.ts): where one ran, each of
-             those is read again too. */
+          const triggerCheck = postgresTriggerAttestation(catalog, relied);
+          // A target's triggers may write any writable table (triggerEffects.ts); recheck hierarchies on those and referenced parents.
           const reached = [...written].some((id) => catalog.triggered?.has(id))
             ? [...written, ...catalog.writable, ...(catalog.triggered?.keys() ?? [])]
             : written;
-          /* And what they reference, for a parent that gained an inheritance child (ScopeCatalog.inheritanceParents):
-             one that was a parent when the catalog was read was judged by the parent checks, which refused a
-             reference to it. A table that became one is refused whether or not a reference to it was checked. */
           const wrote = new Set(reached);
           const recheck = hierarchyRecheck(
             reached,
@@ -2074,22 +2072,26 @@ export class PostgresAdapter implements Adapter {
               .filter((fk) => wrote.has(fk.from.table) && !catalog.inheritanceParents?.has(fk.to.table))
               .map((fk) => fk.to.table),
           );
-          if (recheck && !beforeCommit(write, [recheck]))
-            await write.query(recheck.text, recheck.values).catch((error: unknown) => {
-              throw joinedHierarchy(error) ?? error;
-            });
+          const tail = [triggerCheck, recheck].filter((stmt): stmt is NonNullable<typeof stmt> => stmt !== undefined);
+          if (tail.length && !beforeCommit(write, tail)) {
+            if (relied.size) await attestPostgresTriggers(write, catalog, relied);
+            if (recheck)
+              await write.query(recheck.text, recheck.values).catch((error: unknown) => {
+                throw joinedHierarchy(error) ?? error;
+              });
+          }
           commitAttempted = true;
           try {
             await write.query('COMMIT');
           } catch (error) {
-            // The recheck sent with the COMMIT found a hierarchy: the server answered the COMMIT as a ROLLBACK.
-            const joined = error instanceof RolledBackAtCommit ? joinedHierarchy(error.cause) : undefined;
-            if (joined) {
+            // A pipelined trigger attestation or hierarchy recheck failed: the server answered COMMIT as a ROLLBACK.
+            const tailed =
+              error instanceof RolledBackAtCommit ? (triggerAttestationFailed(error.cause) ?? joinedHierarchy(error.cause)) : undefined;
+            if (tailed) {
               commitAttempted = false;
-              throw joined;
+              throw tailed;
             }
-            /* A deferred foreign key the COMMIT found broken: the server answered, so nothing committed, and the
-               refusal is a hidden parent's (foreignKeyRefusal). */
+            // A deferred foreign key the COMMIT found broken: nothing committed, refusal is a hidden parent's.
             if (!isForeignKeyViolation(error)) throw error;
             commitAttempted = false;
             throw foreignKeyRefusal(error);
@@ -2117,14 +2119,16 @@ export class PostgresAdapter implements Adapter {
              said to the caller. A trigger's function can be replaced without a lock on its table: replaced since the
              proof, it raised whatever its replacement read. So the proof is read again, once the transaction is
              rolled back, before that error is said; changed, the write is refused instead. */
-          if (rolledBack && attest && !(failure instanceof Refusal))
-            failure = await attest().then(
+          const reattested = rolledBack && Boolean(attest) && !(failure instanceof Refusal);
+          if (reattested)
+            failure = await attest!().then(
               () => failure,
               (refusal: unknown) => refusal,
             );
-          // withWriteClient destroys the client on any failure, so a connection
-          // in an uncertain state is never handed to the next write.
+          // withWriteClient destroys the client on any uncertain failure;
+          // a confirmed pre-COMMIT ROLLBACK with no trigger re-attestation returns idle.
           const unknown = !refused && (commitAttempted || (began && !rolledBack));
+          if (!unknown && !refused && !commitAttempted && began && rolledBack && !reattested) markCleanRollback(leased);
           // The verified owner composes native outcomes itself, as on SQLite.
           if (journal && !verify) throw journal.failure(failure, unknown ? 'unknown' : 'not_applied');
           if (unknown) throw new TransactionOutcomeUnknown(failure);

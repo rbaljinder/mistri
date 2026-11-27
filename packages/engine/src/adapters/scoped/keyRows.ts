@@ -69,7 +69,7 @@ export class KeyRows {
     return found && !found.also.length ? found.key : undefined;
   }
 
-  /** The key of a read by the primary key by equality, and the other columns it names by equality (`also`). */
+  /** The key of a read by the primary key by equality, and the other columns it guards (`also`). */
   #guarded(
     scope: RowScope,
     table: TableMeta,
@@ -78,28 +78,72 @@ export class KeyRows {
     | {
         key: string;
         values: Readonly<Record<string, string | number>>;
-        also: ReadonlyArray<{ column: string; value: string | number | boolean }>;
+        also: ReadonlyArray<
+          | { column: string; op: '='; value: string | number | boolean }
+          | { column: string; op: '!='; value: number | boolean }
+          | { column: string; op: '<' | '<=' | '>' | '>='; value: number }
+          | { column: string; op: 'in'; values: ReadonlyArray<string | number | boolean> }
+          | { column: string; op: 'isNull' | 'isNotNull' }
+        >;
       }
     | undefined {
     const pk = table.columns.filter((column) => column.primaryKey).map((column) => column.name);
     const group = filter?.groups.length === 1 ? filter.groups[0] : undefined;
     if (!pk.length || !group || group.length < pk.length) return undefined;
     const values: Record<string, string | number> = {};
-    const also: Array<{ column: string; value: string | number | boolean }> = [];
+    const also: Array<
+      | { column: string; op: '='; value: string | number | boolean }
+      | { column: string; op: '!='; value: number | boolean }
+      | { column: string; op: '<' | '<=' | '>' | '>='; value: number }
+      | { column: string; op: 'in'; values: ReadonlyArray<string | number | boolean> }
+      | { column: string; op: 'isNull' | 'isNotNull' }
+    > = [];
     for (const condition of group) {
-      if (condition.op !== '=' || Object.keys(condition).length !== 3) return undefined;
-      if (pk.includes(condition.column)) {
+      const keys = Object.keys(condition).length;
+      if (condition.op === '=' && keys === 3 && pk.includes(condition.column) && !Object.hasOwn(values, condition.column)) {
         if (typeof condition.value !== 'string' && typeof condition.value !== 'number') return undefined;
-        if (Object.hasOwn(values, condition.column)) return undefined;
         values[condition.column] = condition.value;
         continue;
       }
       const column = table.columns.find((candidate) => candidate.name === condition.column);
-      // json has no equality operator: the server refuses that read, so it is sent for the server to say so.
-      if (!column || /^json$/i.test(column.type)) return undefined;
-      if (typeof condition.value !== 'string' && typeof condition.value !== 'number' && typeof condition.value !== 'boolean')
-        return undefined;
-      also.push({ column: condition.column, value: condition.value });
+      if (!column) return undefined;
+      if ((condition.op === 'isNull' || condition.op === 'isNotNull') && (keys === 2 || (keys === 3 && condition.value === undefined))) {
+        also.push({ column: condition.column, op: condition.op });
+        continue;
+      }
+      // json has no equality or ordering operator: the server refuses that read, so it is sent for the server to say so.
+      if (keys !== 3 || /^json$/i.test(column.type)) return undefined;
+      if (condition.op === '=') {
+        if (typeof condition.value !== 'string' && typeof condition.value !== 'number' && typeof condition.value !== 'boolean')
+          return undefined;
+        also.push({ column: condition.column, op: '=', value: condition.value });
+        continue;
+      }
+      if (condition.op === 'in') {
+        if (
+          !Array.isArray(condition.value) ||
+          !condition.value.length ||
+          condition.value.some((item) => typeof item !== 'string' && typeof item !== 'number' && typeof item !== 'boolean')
+        )
+          return undefined;
+        also.push({ column: condition.column, op: 'in', values: condition.value as ReadonlyArray<string | number | boolean> });
+        continue;
+      }
+      if (condition.op === '!=') {
+        if (typeof condition.value !== 'boolean' && !(typeof condition.value === 'number' && Number.isFinite(condition.value)))
+          return undefined;
+        also.push({ column: condition.column, op: '!=', value: condition.value });
+        continue;
+      }
+      if (
+        (condition.op === '<' || condition.op === '<=' || condition.op === '>' || condition.op === '>=') &&
+        typeof condition.value === 'number' &&
+        Number.isFinite(condition.value)
+      ) {
+        also.push({ column: condition.column, op: condition.op, value: condition.value });
+        continue;
+      }
+      return undefined;
     }
     if (Object.keys(values).length !== pk.length) return undefined;
     return { key: JSON.stringify([this.#scope(scope), table.id, pk.map((column) => values[column])]), values, also };
@@ -163,14 +207,40 @@ export class KeyRows {
           ...(request.storedText ? [storedTextOf(schema, table!)?.alias ?? []].flat() : []),
         ];
         const sql = statementOf(request);
+        const matches = (row: Row, condition: NonNullable<typeof guarded>['also'][number]): boolean => {
+          if (!Object.hasOwn(row, condition.column)) return false;
+          const actual = row[condition.column];
+          switch (condition.op) {
+            case '=':
+              return actual === condition.value;
+            case '!=':
+              return (
+                typeof actual === typeof condition.value &&
+                (typeof actual !== 'number' || Number.isFinite(actual)) &&
+                actual !== condition.value
+              );
+            case '<':
+              return typeof actual === 'number' && Number.isFinite(actual) && actual < condition.value;
+            case '<=':
+              return typeof actual === 'number' && Number.isFinite(actual) && actual <= condition.value;
+            case '>':
+              return typeof actual === 'number' && Number.isFinite(actual) && actual > condition.value;
+            case '>=':
+              return typeof actual === 'number' && Number.isFinite(actual) && actual >= condition.value;
+            case 'in':
+              return condition.values.some((item) => actual === item);
+            case 'isNull':
+              return actual === null;
+            case 'isNotNull':
+              return actual !== null && actual !== undefined;
+          }
+        };
         if (
           !rows ||
           !sql ||
           kept.generation !== this.generation() ||
           !rows.every((row) => names.every((name) => Object.hasOwn(row, name))) ||
-          !rows.every((row) =>
-            guarded!.also.every((condition) => Object.hasOwn(row, condition.column) && row[condition.column] === condition.value),
-          )
+          !rows.every((row) => guarded!.also.every((condition) => matches(row, condition)))
         )
           return undefined;
         kept.take?.();

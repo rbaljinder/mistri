@@ -1,6 +1,6 @@
 import { BrandingRefused } from '../../shared/tenantBranding.js';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
-import { lagTolerantReads, primaryReads } from '@mistriwork/engine/adapters/replicas.js';
+import { hasReplicas, lagTolerantReads, primaryReads } from '@mistriwork/engine/adapters/replicas.js';
 import { toleratesLag } from '@mistriwork/engine/server/http/readRouting.js';
 import type { TenantBrandingService } from './tenantBranding.js';
 import { refusalSaid } from '@mistriwork/engine/shared/refusal.js';
@@ -839,7 +839,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               readAdapter(context),
               platform ? undefined : context.tenant,
             ),
-            chosenFor(app, schema, readAdapter(context), req, await storedFor(context)),
+            (async () => chosenFor(app, schema, readAdapter(context), req, await storedFor(context)))(),
           ]);
           return withChosen(person, chosen);
         };
@@ -1008,6 +1008,11 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 forApp && !platform && !onSupport && typeof tenantId === 'string'
                   ? asked(async () => (await readAhead) ?? enrollment.addresses(tenantId))
                   : undefined;
+              /* This member's stored picks in their tenant, asked alongside the rest of `/api/app` so they ride the same snapshot. */
+              const picksAsked =
+                forApp && picks
+                  ? asked(() => picks.picksFor(context.principal, !platform && !onSupport, schema, readAdapter(context)))
+                  : undefined;
               const tenantDefault = await tenantDefaultAsked;
               const locale = resolveLocale({ person: context.locale ?? pickedLocale(app, req), tenant: tenantDefault, app: app.ui.locale });
               const tenantWords = await tenantWordsAsked;
@@ -1084,11 +1089,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                   ...(addresses && Object.keys(addresses).length ? { addresses: { ...addresses } } : {}),
                 };
               }
-              /* This member's stored picks in their tenant, still theirs to make under this lease's reader. */
-              const memberPicks =
-                forApp && served && picks
-                  ? await picks.picksFor(context.principal, !platform && !onSupport, schema, readAdapter(context))
-                  : undefined;
+              const memberPicks = served && picksAsked ? await picksAsked : undefined;
               return path === '/api/app'
                 ? reply({
                     appId: app.id,
@@ -1429,24 +1430,24 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             if (path === '/api/pages/plan') return reply(planned);
             /* A record page whole: its plan and every read its sections will
                ask, each asked through this route on this one context. */
+            const compose = () =>
+              /* Its reads leave together, on one snapshot: each on one of its own took a reader of the pool, a
+                 BEGIN, a LOCK and a COMMIT apiece (a field report: 35 statements in 35 round trips). */
+              together(context, () =>
+                composeTenantRecordPage({
+                  schema,
+                  planned,
+                  key: input.key as Record<string, unknown>,
+                  rows: input.rows,
+                  tab: input.tab,
+                  app: metadata.app,
+                  ask: (part, given) => route(context, schema, part, given, { told: asked.told }),
+                }),
+              );
             return reply(
               /* On the primary whole, related lists and all: a record is
                  where a person looks for what they saved (readRouting.ts). */
-              await primaryReads(() =>
-                /* Its reads leave together, on one snapshot: each on one of its own took a reader of the pool, a
-                   BEGIN, a LOCK and a COMMIT apiece (a field report: 35 statements in 35 round trips). */
-                together(context, () =>
-                  composeTenantRecordPage({
-                    schema,
-                    planned,
-                    key: input.key as Record<string, unknown>,
-                    rows: input.rows,
-                    tab: input.tab,
-                    app: metadata.app,
-                    ask: (part, given) => route(context, schema, part, given, { told: asked.told }),
-                  }),
-                ),
-              ),
+              await (hasReplicas() ? primaryReads(compose) : compose()),
             );
           }
           if (path === FILE_READ_PATH) {
@@ -1490,7 +1491,7 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
               me: () => tenantPerson(context, schema),
               lastWave: boundedBatch ? undefined : context.lastWave, // a bounded request's fenced snapshot only (tenantReadSource.ts)
             });
-          const result = await (toleratesLag(path, input) ? lagTolerantReads(dispatch) : dispatch());
+          const result = await (hasReplicas() && toleratesLag(path, input) ? lagTolerantReads(dispatch) : dispatch());
           if (!result) return denyTenant();
           return result;
         };
@@ -1806,18 +1807,25 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
         /* A command a free-form page runs says so (x-mistri-page), and is held to the page's declared commands as a
            single-database App's is (http/handler.ts): the roles are the lease's own, the page found in its realm. */
         if (req.headers[PAGE_HEADER] !== undefined) {
-          const refused = (
-            await writeContext((context) =>
-              pageManifestRefusal({
-                app: appSurfaceForRealm(app, pages, platform ? 'platform' : 'tenant').app,
-                roles: context.principal.roles,
-                header: req.headers[PAGE_HEADER],
-                path,
-                body: input,
-              }),
-            )
-          ).value;
-          if (refused) return send(req, res, refused.status, refused.body);
+          const surface = appSurfaceForRealm(app, pages, platform ? 'platform' : 'tenant').app;
+          const peeked = contexts.peekRoles(platform, selectors, expected);
+          const fastAllowed =
+            peeked !== undefined &&
+            pageManifestRefusal({ app: surface, roles: peeked, header: req.headers[PAGE_HEADER], path, body: input }) === undefined;
+          if (!fastAllowed) {
+            const refused = (
+              await writeContext((context) =>
+                pageManifestRefusal({
+                  app: surface,
+                  roles: context.principal.roles,
+                  header: req.headers[PAGE_HEADER],
+                  path,
+                  body: input,
+                }),
+              )
+            ).value;
+            if (refused) return send(req, res, refused.status, refused.body);
+          }
         }
         /* What this member picked (the cookie), for `ctx.locale` where their row names none (tenantCommands.ts scopedLocale). */
         const picked = pickedLocale(app, req);
