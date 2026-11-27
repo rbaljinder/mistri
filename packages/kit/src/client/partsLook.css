@@ -596,6 +596,48 @@
   :root[data-parts~="table.row:ground"] .app-mode .table-wrap tbody tr:hover {
     background: color-mix(in srgb, var(--part-table-row-ground) 90%, var(--part-table-row-ink, currentcolor));
   }
+  :root[data-parts~="table.primary:ground"] .app-mode .table-wrap tbody td:first-child:not(.row-host):not(.kit-cell),
+    :root[data-parts~="table.primary:ground"] .app-mode .table-wrap tbody td.row-host + td:not(.kit-cell),
+    :root[data-parts~="table.primary:ground"] .app-mode .table-wrap .kit-cell-primary-strong {
+    background: var(--part-table-primary-ground);
+  }
+  :root[data-parts~="table.primary:ink"] .app-mode .table-wrap tbody td:first-child:not(.row-host):not(.kit-cell),
+    :root[data-parts~="table.primary:ink"] .app-mode .table-wrap tbody td.row-host + td:not(.kit-cell),
+    :root[data-parts~="table.primary:ink"] .app-mode .table-wrap .kit-cell-primary-strong {
+    color: var(--part-table-primary-ink);
+  }
+  :root[data-parts~="table.primary:edge"] .app-mode .table-wrap tbody td:first-child:not(.row-host):not(.kit-cell),
+    :root[data-parts~="table.primary:edge"] .app-mode .table-wrap tbody td.row-host + td:not(.kit-cell),
+    :root[data-parts~="table.primary:edge"] .app-mode .table-wrap .kit-cell-primary-strong {
+    border-color: var(--part-table-primary-edge);
+  }
+  :root[data-parts~="table.primary:radius"] .app-mode .table-wrap tbody td:first-child:not(.row-host):not(.kit-cell),
+    :root[data-parts~="table.primary:radius"] .app-mode .table-wrap tbody td.row-host + td:not(.kit-cell),
+    :root[data-parts~="table.primary:radius"] .app-mode .table-wrap .kit-cell-primary-strong {
+    border-radius: var(--part-table-primary-radius);
+  }
+  :root[data-parts~="table.primary:lift"] .app-mode .table-wrap tbody td:first-child:not(.row-host):not(.kit-cell),
+    :root[data-parts~="table.primary:lift"] .app-mode .table-wrap tbody td.row-host + td:not(.kit-cell),
+    :root[data-parts~="table.primary:lift"] .app-mode .table-wrap .kit-cell-primary-strong {
+    box-shadow: var(--part-table-primary-lift);
+  }
+  :root[data-parts~="table.primary:face"] .app-mode .table-wrap tbody td:first-child:not(.row-host):not(.kit-cell),
+    :root[data-parts~="table.primary:face"] .app-mode .table-wrap tbody td.row-host + td:not(.kit-cell),
+    :root[data-parts~="table.primary:face"] .app-mode .table-wrap .kit-cell-primary-strong {
+    font-family: var(--part-table-primary-face);
+  }
+  :root[data-parts~="table.primary:weight"] .app-mode .table-wrap tbody td:first-child:not(.row-host):not(.kit-cell),
+    :root[data-parts~="table.primary:weight"] .app-mode .table-wrap tbody td.row-host + td:not(.kit-cell),
+    :root[data-parts~="table.primary:weight"] .app-mode .table-wrap .kit-cell-primary-strong {
+    font-weight: var(--part-table-primary-weight);
+  }
+  :root[data-parts~="table.primary:case"] .app-mode .table-wrap tbody td:first-child:not(.row-host):not(.kit-cell),
+    :root[data-parts~="table.primary:case"] .app-mode .table-wrap tbody td.row-host + td:not(.kit-cell),
+    :root[data-parts~="table.primary:case"] .app-mode .table-wrap .kit-cell-primary-strong {
+    text-transform: var(--part-table-primary-transform);
+    font-variant-caps: var(--part-table-primary-caps);
+    letter-spacing: var(--part-table-primary-tracking);
+  }
   :root[data-parts~="status:ground"] .app-mode .tone {
     background: var(--part-status-ground);
   }

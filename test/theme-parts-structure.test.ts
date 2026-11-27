@@ -61,6 +61,14 @@ const ALLOWED: Record<string, string> = {
   'packages/kit/src/client/structure.css :: .calendar-card-mark .tone::before :: background': 'The dot itself: round, in its tone.',
   'packages/kit/src/client/structure.css :: .table-wrap tbody tr.grid-group-head :: background':
     "A group's head is a hairline between rows, not a row a reader opens: the row part's fill is not meant for it.",
+  'packages/kit/src/client/structure.css :: .table-wrap tbody tr.grid-group-head > td :: background':
+    "As above: a group's head cell is not a data row's primary cell.",
+  'packages/kit/src/client/structure.css :: .app-mode .calendar-grid tbody tr:hover > td.calendar-day :: background':
+    'A calendar grid is not in a .table-wrap; it shares only .app-mode with table.primary.',
+  'packages/kit/src/client/structure.css :: .app-mode .calendar-grid tbody tr:hover > td.calendar-day.is-outside :: background':
+    'As above: a calendar day cell, never inside .table-wrap.',
+  'packages/mistri/src/client/components/CalendarList.css :: .app-mode .calendar-grid tbody tr:hover > td.calendar-day[data-backdrop] :: background':
+    'As above: a calendar day cell, never inside .table-wrap.',
   'packages/mistri/src/client/components/DashboardBlocks.css :: .kit-card-part > .page-section :: border-radius':
     "A block inside a kit Card is not a section: the Card is its frame, and a theme's section dressing it drew a panel inside the panel.",
   'packages/mistri/src/client/components/DashboardBlocks.css :: .kit-card-part > .page-section :: background': 'As above.',

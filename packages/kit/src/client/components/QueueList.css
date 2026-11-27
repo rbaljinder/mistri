@@ -7,7 +7,7 @@
 .queue .collection-selection-empty { padding: 28px 0; color: var(--ink-muted); }
 .queue-row { display: flex; align-items: flex-start; gap: var(--space-4); }
 .queue-content { min-width: 0; flex: 1; }
-.queue-title { color: var(--ink); font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.queue-title { color: var(--ink); font-weight: 500; line-height: 1.45; overflow-wrap: anywhere; }
 .queue-content > .queue-badge { display: inline-block; margin-bottom: var(--space-2h); padding: var(--space-1h) var(--space-3h); border-radius: 999px; background: var(--raised); color: var(--ink); font: 600 var(--text-sm)/1.4 var(--sans); }
 .queue-content > .queue-badge:has(> .tone) { padding: 0; background: none; }
 .queue-detail, .queue-meta, .queue-status { color: var(--ink-muted); font-size: var(--text-base); margin: var(--space-2) 0 0; }
@@ -47,18 +47,9 @@
 
 /* Embedded task queues have explicit, always-visible next steps. */
 .queue-list { list-style: none; margin: 0; padding: 0; }
-.queue-list > .queue-row { padding: 20px var(--space-5); border-bottom: 1px solid var(--line); }
+.queue-list > .queue-row { padding: var(--space-3h) var(--space-4h); border-bottom: 1px solid var(--line); }
 .queue-list > .queue-row:last-child { border-bottom: 0; }
-/* Dashboard sections already provide a content gutter. */
-.dash-section .queue-list > .queue-row { padding-inline: 0; }
-.queue-list .queue-title { font-weight: 600; }
-.queue-list .queue-detail, .queue-list .queue-meta { margin-top: var(--space-3); line-height: 1.5; }
-.queue-list .queue-open { opacity: 1; align-self: center; white-space: normal; }
-@media (max-width: 540px) {
-  .queue-list > .queue-row { flex-wrap: wrap; }
-  .queue-list .queue-content { flex-basis: 100%; }
-  .queue-list .queue-open { margin-left: 0; }
-}
+.queue-list .queue-open { opacity: 1; align-self: center; white-space: nowrap; }
 
 /* ---------- The compact row (every queue) ----------
    The title and its badge share the first line; the quiet lines and the
@@ -82,10 +73,9 @@
 .queue-line .queue-fact { flex-wrap: nowrap; white-space: nowrap; max-width: 100%; gap: var(--space-2); font-size: inherit; line-height: inherit; }
 .queue-line .queue-fact dd { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .queue-content > .queue-status { margin-top: var(--space-2); }
-.queue-list > .queue-row { padding: var(--space-3h) var(--space-4h); }
+/* Dashboard sections already provide a content gutter. */
 .dash-section .queue-list > .queue-row, .dash-body .queue-list > .queue-row { padding-inline: 0; }
 .queue-list .queue-detail, .queue-list .queue-meta { margin-top: 0; line-height: inherit; }
-.queue-list .queue-open { align-self: center; white-space: nowrap; }
 /* On a phone the action drops under its content, left-aligned: beside it, it took a third of the row and the text wrapped narrow. */
 @media (max-width: 540px) {
   .queue-list > .queue-row { flex-wrap: wrap; row-gap: var(--space-3); }
@@ -104,7 +94,7 @@
 .queue-pick { all: unset; box-sizing: border-box; display: flex; align-items: flex-start; gap: var(--space-3h); width: 100%; cursor: pointer; }
 .queue-pick:focus-visible { outline: var(--focus-width) solid var(--focus, var(--accent)); outline-offset: -2px; }
 .queue-pick-list .queue-list > .queue-row { padding: 0; }
-.queue-pick-list .queue-pick { padding: var(--space-3h) var(--space-4); }
+.queue-pick-list .queue-pick { padding: var(--space-3h) var(--space-4); flex-wrap: wrap; row-gap: var(--space-1); }
 .queue-pick-list .queue-pick:hover { background: var(--hover, color-mix(in srgb, var(--ink) 4%, transparent)); }
 .queue-pick-list .queue-pick[aria-current='true'] { background: var(--selected, color-mix(in srgb, var(--accent) 10%, transparent)); }
 .queue-pick-list .queue-pick > .avatar-value { flex: none; }
@@ -112,6 +102,5 @@
 /* The primary takes the row and each line sits under it on one line of its own: side by side, a short value such as a
    date was squeezed beside the title until it broke word by word. A long line is cut at the edge; the record beside the
    list holds all of it. */
-.queue-pick-list .queue-pick { flex-wrap: wrap; row-gap: var(--space-1); }
-.queue-pick-list .queue-pick > strong { flex: 1 1 100%; min-width: 0; }
+.queue-pick-list .queue-pick > strong { flex: 1 1 100%; min-width: 0; font-weight: 500; }
 .queue-pick-list .queue-pick > span { flex: 1 1 100%; max-width: 100%; overflow: hidden; color: var(--ink-muted); font-size: var(--text-sm); white-space: nowrap; text-overflow: ellipsis; }

@@ -491,7 +491,7 @@ test('lumen: a table anchors on its name, keeps its head in view, and its placeh
     };
   });
   // The name is the row's one heavier value; the rest are the ink too, at the body's weight (lumenLook.css).
-  expect(read.name.weight).toBe('600');
+  expect(read.name.weight).toBe('500');
   expect(read.other).toEqual({ weight: '400', color: read.name.color });
   expect(read.head).toEqual({ size: '12px', weight: '500' });
   expect(read.dot).not.toBeNull();

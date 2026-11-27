@@ -33,6 +33,13 @@ export const PART_SELECTORS: Record<ThemePart, string> = {
   table: app('.table-wrap'),
   'table.head': app('.table-wrap thead th'),
   'table.row': app('.table-wrap tbody tr'),
+  /* The row's primary cell: a declarative list's first data cell (with or without a leading `.row-host` checkbox/expander
+     cell), and an SDK Table's primary line. Written as three flat selectors because partsSheet() splits on `, `. */
+  'table.primary': app(
+    '.table-wrap tbody td:first-child:not(.row-host):not(.kit-cell)',
+    '.table-wrap tbody td.row-host + td:not(.kit-cell)',
+    '.table-wrap .kit-cell-primary-strong',
+  ),
   status: app('.tone'),
   tag: app('.record-tag'),
   'button.primary': app("[data-slot='button'][data-variant='solid']"),
