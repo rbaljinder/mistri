@@ -270,6 +270,8 @@ export interface PgConnectionOptions {
   readonly counted?: boolean;
   /** Only readers are ever opened here (a tenant App's replica): the budget counts them and no writer. */
   readonly readersOnly?: boolean;
+  /** Optional shard identifier for per-shard read-your-write replica freshness scoping (replicas.ts). */
+  readonly shardId?: string;
 }
 
 /* Server timing (telemetry/serverTiming.ts) is loaded with the first pool, not with this module: a print-and-exit
@@ -293,6 +295,37 @@ export const APP_READER_FLOOR = 10;
  * (this machine's, unless a deployment check asks for another's) and APP_READER_FLOOR. */
 export function appReaders(writers: number, cores?: number): number {
   return Math.min(MAX_READERS, Math.max(APP_READER_FLOOR, balancedPoolSize(cores), writers));
+}
+
+/**
+ * Default per-shard pool sizes for a sharded cluster when the operator left them
+ * unset: scales down per shard and sets `minIdle: 0` so opening pools across
+ * many shards does not multiply idle backends across the cluster. Explicit
+ * operator settings always win.
+ */
+export function shardPoolDefaults(
+  shardCount: number,
+  requested: Readonly<{ read?: number; write?: number; minIdle?: number }> = {},
+  cores?: number,
+): Readonly<{ readers: number; writers: number; minIdle: number }> {
+  const count = Math.max(1, Math.floor(shardCount));
+  const baseWriters = balancedPoolSize(cores);
+  const baseReaders = appReaders(baseWriters, cores);
+  if (count <= 1) {
+    return {
+      readers: requested.read ?? baseReaders,
+      writers: requested.write ?? baseWriters,
+      minIdle: requested.minIdle ?? WARM_READERS,
+    };
+  }
+  const divisor = Math.sqrt(count);
+  const defaultShardWriters = Math.max(2, Math.min(4, Math.ceil(baseWriters / divisor)));
+  const defaultShardReaders = Math.max(2, Math.min(6, Math.ceil(baseReaders / divisor)));
+  return {
+    readers: requested.read ?? defaultShardReaders,
+    writers: requested.write ?? defaultShardWriters,
+    minIdle: requested.minIdle ?? 0,
+  };
 }
 
 /**
@@ -363,6 +396,7 @@ export class PgConnectionManager {
   private readonly network?: NetworkPolicy;
   private readonly pipelineReads: boolean;
   private readonly timingLabel: string;
+  private readonly shardId?: string;
   /** A pool the server refused another connection, held at what it had until the timer lets it ask again. */
   private readonly limitHolds: Partial<Record<OwnRole, ReturnType<typeof setTimeout>>> = {};
   /** When each pool last said it reached the connection limit: once a spell, not once a checkout. */
@@ -409,6 +443,7 @@ export class PgConnectionManager {
     this.network = options.network;
     this.pipelineReads = options.pipelineReads === true;
     this.timingLabel = options.timingLabel ?? 'app';
+    this.shardId = options.shardId;
     this.capMs = options.capMs ?? STATEMENT_TIMEOUT_MS;
     this.silenceMs = options.queryTimeoutMs ?? this.capMs + QUERY_TIMEOUT_GRACE_MS;
     this.queueWaitMs = options.queueWaitMs ?? POOL_QUEUE_WAIT_MS;
@@ -462,7 +497,7 @@ export class PgConnectionManager {
     const statement = (text: unknown, params?: unknown) => {
       const primary = () => this.withClient(false, (client) => run(client, text, params), false);
       return this.replicas
-        ? this.replicas.read((replica) => replica.withReadClient((client) => run(client, text, params)), primary)
+        ? this.replicas.read((replica) => replica.withReadClient((client) => run(client, text, params)), primary, this.shardId)
         : primary();
     };
     this.reads = { query: statement as PgQuery['query'] };
@@ -898,7 +933,7 @@ export class PgConnectionManager {
       /* The person who wrote reads the primary for a while after, so the
          list they go back to shows what they saved (replicas.ts). Noted
          however the write ended: a failed one may still have committed. */
-      if (write) noteWrite();
+      if (write) noteWrite(Date.now(), this.shardId);
       disarm();
       try {
         release(destroy || cancelled);

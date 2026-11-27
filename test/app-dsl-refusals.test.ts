@@ -175,7 +175,7 @@ describe('any other unknown key gets the ordinary refusal: the place, the key, w
     [
       'a source key',
       { sources: { main: { connection: 'db', tables: 'all' } } },
-      /source "main" has no "tables"\. It takes: connection, default, realm, schema, resources\.$/,
+      /source "main" has no "tables"\. It takes: connection, default, realm, schema, resources, sharding\.$/,
     ],
     [
       'a list view key',

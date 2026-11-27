@@ -457,6 +457,13 @@ export const PROVISION: Readonly<Record<string, Provisioners>> = {
       ).provisionPostgresExperimentStore({ url, binding: suite });
     },
   },
+  'shard-directory': {
+    postgres: async (url) => {
+      await (
+        await import('../../packages/mistri/src/adapters/sharding/postgresShardDirectory.js')
+      ).provisionPostgresShardDirectory(url, { appId: 'layout', sourceId: 'main', storeId: 'layout-shards' });
+    },
+  },
 };
 
 /* ---------- reading a layout ---------- */

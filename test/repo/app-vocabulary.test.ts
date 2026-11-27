@@ -122,6 +122,7 @@ const PINNED: Record<string, { file: string; keys: string[] }> = {
       'page',
       'photos',
       'physical',
+      'placement',
       'query',
       'recordLabel',
       'references',

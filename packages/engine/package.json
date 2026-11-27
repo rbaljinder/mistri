@@ -154,6 +154,14 @@
       "mistri-built": "./dist/adapters/serverSettings.js",
       "default": "./src/adapters/serverSettings.ts"
     },
+    "./adapters/shardedAdapter.js": {
+      "mistri-built": "./dist/adapters/shardedAdapter.js",
+      "default": "./src/adapters/shardedAdapter.ts"
+    },
+    "./adapters/shardedScatter.js": {
+      "mistri-built": "./dist/adapters/shardedScatter.js",
+      "default": "./src/adapters/shardedScatter.ts"
+    },
     "./adapters/sqlite.js": {
       "mistri-built": "./dist/adapters/sqlite.js",
       "default": "./src/adapters/sqlite.ts"
@@ -915,6 +923,14 @@
     "./shared/shape.js": {
       "mistri-built": "./dist/shared/shape.js",
       "default": "./src/shared/shape.js"
+    },
+    "./shared/sharding.js": {
+      "mistri-built": "./dist/shared/sharding.js",
+      "default": "./src/shared/sharding.ts"
+    },
+    "./shared/shardPlan.js": {
+      "mistri-built": "./dist/shared/shardPlan.js",
+      "default": "./src/shared/shardPlan.ts"
     },
     "./shared/slug.js": {
       "mistri-built": "./dist/shared/slug.js",

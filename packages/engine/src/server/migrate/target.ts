@@ -147,3 +147,53 @@ export async function resolveTarget(
     throw new Error(`"${table}" is not a table name the history can have: letters, digits and _, at most 63.`);
   return { url, schemas, dir, table, connection };
 }
+
+interface ResolvedShardTarget extends ResolvedTarget {
+  /** Present when resolved from a sharded connection's `shards.nodes`. */
+  readonly shardId?: string;
+}
+
+/**
+ * Resolve every physical database target a migration command should visit:
+ * `[target]` for an ordinary connection, or one entry per configured shard (or
+ * the single named `shardId`) for a sharded PostgreSQL connection, plus the
+ * optional control-plane routing directory URL.
+ */
+export async function resolveShardTargets(
+  registry: Registry,
+  config: StartupConfig,
+  flags: TargetFlags,
+  appDir?: string,
+  binding?: TargetBinding,
+  shardId?: string,
+): Promise<{ readonly targets: readonly ResolvedShardTarget[]; readonly directoryUrl?: string }> {
+  const base = await resolveTarget(registry, config, flags, appDir, binding);
+  const shards = base.connection.shards;
+  if (!shards) {
+    if (shardId !== undefined) {
+      throw new Error(`"${base.connection.name}" is not a sharded connection; cannot select shard "${shardId}".`);
+    }
+    return { targets: [base] };
+  }
+  const selected = shardId === undefined ? shards.nodes : shards.nodes.filter((node) => node.id === shardId);
+  if (!selected.length) {
+    throw new Error(`"${base.connection.name}" has no shard "${shardId}". Known: ${shards.nodes.map((node) => node.id).join(', ')}.`);
+  }
+  const targets: ResolvedShardTarget[] = [];
+  for (const node of selected) {
+    const resolved = await resolveConnection(`${base.connection.name}[shard:${node.id}]`, node.url, {
+      secrets: true,
+      environment: registry.environment,
+    });
+    targets.push({ ...base, url: resolved.url, shardId: node.id });
+  }
+  const directoryUrl = shards.directory
+    ? (
+        await resolveConnection(`${base.connection.name}[directory]`, shards.directory, {
+          secrets: true,
+          environment: registry.environment,
+        })
+      ).url
+    : undefined;
+  return { targets, ...(directoryUrl ? { directoryUrl } : {}) };
+}

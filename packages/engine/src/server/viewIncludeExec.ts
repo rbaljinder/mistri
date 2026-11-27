@@ -24,12 +24,18 @@ const CHILD_TOTAL_CAP = 1_000;
 interface ValidatedChildInclude {
   readonly alias: string;
   readonly from: string;
-  readonly by: string;
+  readonly by: readonly string[];
   readonly show?: readonly string[];
   readonly sort?: string;
   readonly limit: number;
   readonly where?: unknown;
   readonly query?: string;
+}
+
+/** Canonical lookup key for `rowsByParent`: bare string for 1-column PKs, `col=val,...` for composite PKs. */
+function parentGroupKey(cols: readonly string[], values: readonly (string | number)[]): string {
+  if (cols.length === 1) return String(values[0]);
+  return cols.map((col, idx) => `${col}=${String(values[idx])}`).join(',');
 }
 
 /** Validates raw `body.include` on `/api/view/run`, returning either normalized specs or an error message. */
@@ -48,7 +54,8 @@ export function parseChildIncludes(raw: unknown): { ok: true; specs: readonly Va
       return { ok: false, error: `include "${alias}" must specify a "by" foreign-key column.` };
     }
     const from = typeof spec.from === 'string' && spec.from ? spec.from : alias;
-    if (!spec.by) return { ok: false, error: `include "${alias}" must specify a non-empty "by" column.` };
+    const by = typeof spec.by === 'string' ? (spec.by ? [spec.by] : []) : [...spec.by];
+    if (!by.length || by.some((col) => !col)) return { ok: false, error: `include "${alias}" must specify a non-empty "by" column.` };
     const limit = spec.limit === undefined ? CHILD_INCLUDE_DEFAULT_LIMIT : spec.limit;
     if (typeof limit !== 'number' || !Number.isInteger(limit) || limit < 1 || limit > CHILD_INCLUDE_MAX_LIMIT) {
       return { ok: false, error: `include "${alias}" limit must be a whole number from 1 to ${CHILD_INCLUDE_MAX_LIMIT}.` };
@@ -65,7 +72,7 @@ export function parseChildIncludes(raw: unknown): { ok: true; specs: readonly Va
     specs.push({
       alias,
       from,
-      by: spec.by,
+      by,
       ...(spec.show?.length ? { show: spec.show } : {}),
       ...(spec.sort?.trim() ? { sort: spec.sort.trim() } : {}),
       limit,
@@ -92,22 +99,32 @@ export async function runChildIncludes(
   const baseTable = findTable(schema, baseId);
   if (!baseTable) return { ok: false, error: `Base table "${baseId}" not found for include.` };
   const pkCols = primaryKey(baseTable);
-  if (pkCols.length !== 1) {
-    return { ok: false, error: `Child include requires "${baseTable.name}" to have a single-column primary key.` };
+  if (!pkCols.length) {
+    return { ok: false, error: `Child include requires "${baseTable.name}" to have a primary key.` };
   }
-  const pkCol = pkCols[0]!;
-  const pkIdx = parentView.columns.findIndex((c) => c.path === pkCol);
-  const pkResultKey = pkIdx >= 0 ? (parentColumns[pkIdx] ?? pkCol) : pkCol;
+  const pkResultKeys = pkCols.map((pkCol) => {
+    const pkIdx = parentView.columns.findIndex((c) => c.path === pkCol);
+    return pkIdx >= 0 ? (parentColumns[pkIdx] ?? pkCol) : pkCol;
+  });
 
-  const parentKeySet = new Set<string | number>();
+  const parentTuples = new Map<string, (string | number)[]>();
   for (const row of parentRows) {
-    const val = row[pkResultKey];
-    if (typeof val === 'string' || typeof val === 'number') parentKeySet.add(val);
+    const tuple: (string | number)[] = [];
+    let valid = true;
+    for (const key of pkResultKeys) {
+      const val = row[key];
+      if (typeof val !== 'string' && typeof val !== 'number') {
+        valid = false;
+        break;
+      }
+      tuple.push(val);
+    }
+    if (valid) parentTuples.set(parentGroupKey(pkCols, tuple), tuple);
   }
-  const parentKeys = [...parentKeySet];
+  const uniqueTuples = [...parentTuples.values()];
 
   const included: Record<string, IncludedChildPayload> = {};
-  if (!parentKeys.length) {
+  if (!uniqueTuples.length) {
     for (const spec of specs) included[spec.alias] = { rowsByParent: {} };
     return { ok: true, included };
   }
@@ -117,37 +134,68 @@ export async function runChildIncludes(
     if (!childTable) {
       return { ok: false, error: `Included table "${spec.from}" was not found.` };
     }
-    if (!childTable.columns.some((c) => c.name === spec.by)) {
-      return { ok: false, error: `Included table "${childTable.name}" has no column "${spec.by}".` };
+    if (spec.by.length !== pkCols.length) {
+      return {
+        ok: false,
+        error:
+          pkCols.length === 1
+            ? `Child include requires "${baseTable.name}" to have a single-column primary key.`
+            : `Child include "${spec.alias}" must name ${pkCols.length} "by" columns matching "${baseTable.name}" primary key (${pkCols.join(', ')}).`,
+      };
+    }
+    for (const col of spec.by) {
+      if (!childTable.columns.some((c) => c.name === col)) {
+        return { ok: false, error: `Included table "${childTable.name}" has no column "${col}".` };
+      }
     }
     const childPk = primaryKey(childTable);
     const requestedPaths = spec.show?.length
-      ? [...new Set([...spec.show, ...childPk, spec.by])]
-      : [...new Set([...childTable.columns.map((c) => c.name), spec.by])];
+      ? [...new Set([...spec.show, ...childPk, ...spec.by])]
+      : [...new Set([...childTable.columns.map((c) => c.name), ...spec.by])];
 
-    const byWhere = compileWhere({ [spec.by]: parentKeys }, childTable);
-    if ('error' in byWhere) return { ok: false, error: byWhere.error };
-    let queryText = byWhere.text;
+    let extraText = '';
     if (spec.where !== undefined) {
       const extra = compileWhere(spec.where, childTable);
       if ('error' in extra) return { ok: false, error: extra.error };
-      queryText = andQuery(queryText, extra.text);
+      extraText = andQuery(extraText, extra.text);
     }
-    if (spec.query) queryText = andQuery(queryText, spec.query);
-    if (spec.sort) queryText = queryText ? `${queryText} sort ${spec.sort}` : `sort ${spec.sort}`;
+    if (spec.query) extraText = andQuery(extraText, spec.query);
 
-    const parsed = parseViewQuery(schema, childTable.id, queryText, now, person);
-    if (parsed.errors.length) return { ok: false, error: parsed.errors[0]!.message };
+    let filterGroups: NonNullable<ViewDef['filter']>['groups'];
+    let orderBy: ViewDef['orderBy'];
+    if (spec.by.length === 1) {
+      const parentKeys = uniqueTuples.map((tuple) => tuple[0]!);
+      const byWhere = compileWhere({ [spec.by[0]!]: parentKeys }, childTable);
+      if ('error' in byWhere) return { ok: false, error: byWhere.error };
+      let queryText = andQuery(byWhere.text, extraText);
+      if (spec.sort) queryText = queryText ? `${queryText} sort ${spec.sort}` : `sort ${spec.sort}`;
+      const parsed = parseViewQuery(schema, childTable.id, queryText, now, person);
+      if (parsed.errors.length) return { ok: false, error: parsed.errors[0]!.message };
+      filterGroups = parsed.filter.groups;
+      orderBy = parsed.orderBy;
+    } else {
+      let queryText = extraText;
+      if (spec.sort) queryText = queryText ? `${queryText} sort ${spec.sort}` : `sort ${spec.sort}`;
+      const parsed = queryText
+        ? parseViewQuery(schema, childTable.id, queryText, now, person)
+        : { filter: { groups: [] }, orderBy: [], errors: [] };
+      if (parsed.errors.length) return { ok: false, error: parsed.errors[0]!.message };
+      const tupleGroups = uniqueTuples.map((tuple) => spec.by.map((col, idx) => ({ path: col, op: '=' as const, value: tuple[idx]! })));
+      filterGroups = parsed.filter.groups.length
+        ? tupleGroups.flatMap((tGroup) => parsed.filter.groups.map((eGroup) => [...tGroup, ...eGroup]))
+        : tupleGroups;
+      orderBy = parsed.orderBy;
+    }
 
     const childView: ViewDef = {
       id: `include:${spec.alias}`,
       name: spec.alias,
       base: childTable.id,
       columns: requestedPaths.map((path) => ({ path })),
-      ...(parsed.filter.groups.length ? { filter: parsed.filter } : {}),
-      ...(parsed.orderBy.length ? { orderBy: parsed.orderBy } : {}),
+      ...(filterGroups.length ? { filter: { groups: filterGroups } } : {}),
+      ...(orderBy?.length ? { orderBy } : {}),
     };
-    const fetchLimit = Math.min(parentKeys.length * spec.limit, CHILD_TOTAL_CAP);
+    const fetchLimit = Math.min(uniqueTuples.length * spec.limit, CHILD_TOTAL_CAP);
     const { view: validatedChild, result: childResult } = await readView(
       adapter,
       schema,
@@ -163,13 +211,22 @@ export async function runChildIncludes(
       }
     });
     const outPaths = spec.show?.length ? [...new Set([...spec.show, ...childPk])] : childTable.columns.map((c) => c.name);
-    const byKey = pathToKey.get(spec.by) ?? spec.by;
+    const byKeys = spec.by.map((col) => pathToKey.get(col) ?? col);
 
     const rowsByParent: Record<string, Record<string, unknown>[]> = {};
     for (const rawRow of childResult.rows) {
-      const parentVal = rawRow[byKey];
-      if (parentVal === null || parentVal === undefined) continue;
-      const groupKey = String(parentVal);
+      const tuple: (string | number)[] = [];
+      let valid = true;
+      for (const byKey of byKeys) {
+        const val = rawRow[byKey];
+        if (typeof val !== 'string' && typeof val !== 'number') {
+          valid = false;
+          break;
+        }
+        tuple.push(val);
+      }
+      if (!valid) continue;
+      const groupKey = parentGroupKey(pkCols, tuple);
       let bucket = rowsByParent[groupKey];
       if (!bucket) rowsByParent[groupKey] = bucket = [];
       if (bucket.length >= spec.limit) continue;

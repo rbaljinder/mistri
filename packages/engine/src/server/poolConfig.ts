@@ -22,6 +22,19 @@ import {
 } from '../adapters/postgresPool.js';
 import { isWriterCount, MAX_WRITERS } from '../adapters/writeLanes.js';
 import { MAX_REPLICAS } from '../adapters/replicas.js';
+import {
+  createShardRouter,
+  DEFAULT_SHARD_BUCKETS,
+  isBucketCount,
+  isShardId,
+  MAX_SHARD_BUCKETS,
+  MAX_SHARDS,
+  MIN_SHARD_BUCKETS,
+  type ShardBucketRange,
+  type ShardKeyRange,
+  type ShardStatus,
+  type ShardStrategy,
+} from '../shared/sharding.js';
 
 const POOL_KEYS = ['read', 'write', 'idleSeconds', 'minIdle', 'connectTimeoutMs', 'queryTimeoutMs'];
 
@@ -203,6 +216,192 @@ export function backstopOf(entry: Record<string, unknown>, http: boolean, path: 
   if (!url.includes('$') && replicaEngine(url) !== 'PostgreSQL')
     throw new Error(`${where} is not a PostgreSQL connection; SQLite has no roles or row-level security. Remove "backstop" and "owner".`);
   return { owner: written, backstop: 'rls' };
+}
+
+/** One physical PostgreSQL shard configured beneath a sharded connection. */
+interface ShardEntryConfig {
+  readonly id: string;
+  readonly url: string;
+  readonly replicas?: string[];
+  readonly listen?: string;
+  readonly pool?: PoolSize;
+  readonly backstop?: 'rls';
+  readonly owner?: string;
+  readonly buckets?: readonly ShardBucketRange[];
+  readonly range?: ShardKeyRange;
+  readonly values?: readonly (string | number)[];
+  readonly status?: ShardStatus;
+}
+
+/** A PostgreSQL connection's horizontal shard topology (`"shards"` in mistri.json). */
+export interface ShardsConfig {
+  readonly strategy: ShardStrategy;
+  readonly buckets: number;
+  /** Optional dedicated PostgreSQL control-plane routing directory URL. */
+  readonly directory?: string;
+  readonly nodes: readonly ShardEntryConfig[];
+}
+
+const SHARD_STRATEGIES = new Set<ShardStrategy>(['hash', 'range', 'list', 'directory']);
+const SHARD_STATUSES = new Set<ShardStatus>(['active', 'draining', 'read_only']);
+const SHARDS_KEYS = ['strategy', 'buckets', 'directory', 'nodes'];
+const SHARD_NODE_KEYS = ['id', 'url', 'replicas', 'listen', 'pool', 'backstop', 'owner', 'buckets', 'range', 'values', 'status'];
+
+function isKeyScalar(value: unknown): value is string | number {
+  return (typeof value === 'string' && value.length > 0) || (typeof value === 'number' && Number.isFinite(value));
+}
+
+function parseBucketRanges(raw: unknown, where: string): readonly ShardBucketRange[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || !raw.length) {
+    throw new Error(`${where} has "buckets": ${JSON.stringify(raw)}. It must be a non-empty list of [start, end] pairs.`);
+  }
+  return raw.map((pair, idx) => {
+    if (!Array.isArray(pair) || pair.length !== 2 || !Number.isInteger(pair[0]) || !Number.isInteger(pair[1])) {
+      throw new Error(`${where} has "buckets[${idx}]": ${JSON.stringify(pair)}. Each entry must be a [start, end] integer pair.`);
+    }
+    return [pair[0] as number, pair[1] as number] as const;
+  });
+}
+
+function parseKeyRange(raw: unknown, where: string): ShardKeyRange | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`${where} has "range": ${JSON.stringify(raw)}. It must be { "min"?: value, "max"?: value }.`);
+  }
+  const obj = raw as Record<string, unknown>;
+  const stray = Object.keys(obj).find((k) => k !== 'min' && k !== 'max');
+  if (stray !== undefined) throw new Error(`${where} has "range.${stray}". A shard range takes "min" and "max".`);
+  if (obj.min === undefined && obj.max === undefined) {
+    throw new Error(`${where} has an empty "range". Name "min", "max", or both.`);
+  }
+  if (obj.min !== undefined && !isKeyScalar(obj.min)) {
+    throw new Error(`${where} has "range.min": ${JSON.stringify(obj.min)}. It must be a string or finite number.`);
+  }
+  if (obj.max !== undefined && !isKeyScalar(obj.max)) {
+    throw new Error(`${where} has "range.max": ${JSON.stringify(obj.max)}. It must be a string or finite number.`);
+  }
+  return {
+    ...(obj.min !== undefined ? { min: obj.min } : {}),
+    ...(obj.max !== undefined ? { max: obj.max } : {}),
+  };
+}
+
+function parseValues(raw: unknown, where: string): readonly (string | number)[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || !raw.length || raw.some((v) => !isKeyScalar(v))) {
+    throw new Error(`${where} has "values": ${JSON.stringify(raw)}. It must be a non-empty list of strings or finite numbers.`);
+  }
+  return [...(raw as (string | number)[])];
+}
+
+/**
+ * A PostgreSQL connection's `"shards"` topology: validated up front so broken
+ * shard URLs, overlapping virtual buckets, or SQLite/HTTP sharding configs fail
+ * loudly when the config file is read.
+ */
+export function shardsOf(entry: Record<string, unknown>, http: boolean, path: string): ShardsConfig | undefined {
+  const written = entry.shards;
+  if (written === undefined) return undefined;
+  const where = `${path}: connection "${String(entry.name)}"`;
+  if (http) throw new Error(`${where} is an HTTP connection; "shards" distributes a PostgreSQL database.`);
+  const url = String(entry.url);
+  if (!url.includes('$') && replicaEngine(url) !== 'PostgreSQL') {
+    throw new Error(`${where} is not a PostgreSQL connection; sharding is supported on PostgreSQL only. Remove "shards".`);
+  }
+  if (!written || typeof written !== 'object' || Array.isArray(written)) {
+    throw new Error(`${where} has "shards": ${JSON.stringify(written)}. It must be an object with a "nodes" array.`);
+  }
+  const raw = written as Record<string, unknown>;
+  const stray = Object.keys(raw).find((k) => !SHARDS_KEYS.includes(k));
+  if (stray !== undefined) {
+    throw new Error(`${where} has "shards.${stray}". "shards" takes "strategy", "buckets", "directory" and "nodes".`);
+  }
+  const strategy = (raw.strategy ?? 'hash') as ShardStrategy;
+  if (typeof strategy !== 'string' || !SHARD_STRATEGIES.has(strategy)) {
+    throw new Error(`${where} has "shards.strategy": ${JSON.stringify(raw.strategy)}. Choose "hash", "range", "list" or "directory".`);
+  }
+  const buckets = raw.buckets === undefined ? DEFAULT_SHARD_BUCKETS : raw.buckets;
+  if (!isBucketCount(buckets)) {
+    throw new Error(
+      `${where} has "shards.buckets": ${JSON.stringify(buckets)}. It must be a whole number from ${MIN_SHARD_BUCKETS} to ${MAX_SHARD_BUCKETS}.`,
+    );
+  }
+  let directory: string | undefined;
+  if (raw.directory !== undefined) {
+    if (typeof raw.directory !== 'string' || !raw.directory.trim()) {
+      throw new Error(`${where} has "shards.directory": ${JSON.stringify(raw.directory)}. It must be a PostgreSQL URL.`);
+    }
+    directory = raw.directory.trim();
+    if (!directory.includes('$') && replicaEngine(directory) !== 'PostgreSQL') {
+      throw new Error(`${where} has a "shards.directory" that is not a PostgreSQL URL.`);
+    }
+  }
+  if (!Array.isArray(raw.nodes) || !raw.nodes.length) {
+    throw new Error(`${where} has "shards.nodes": it must be a non-empty list of shard objects.`);
+  }
+  if (raw.nodes.length > MAX_SHARDS) {
+    throw new Error(`${where} names ${raw.nodes.length} shards; at most ${MAX_SHARDS}.`);
+  }
+  const nodes: ShardEntryConfig[] = raw.nodes.map((item, idx) => {
+    const at = `${where} shards.nodes[${idx}]`;
+    if (!item || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`${at} must be an object with "id" and "url".`);
+    }
+    const node = item as Record<string, unknown>;
+    const odd = Object.keys(node).find((k) => !SHARD_NODE_KEYS.includes(k));
+    if (odd !== undefined) {
+      throw new Error(`${at} has unexpected key "${odd}".`);
+    }
+    if (!isShardId(node.id)) {
+      throw new Error(`${at} has invalid "id": ${JSON.stringify(node.id)}. Use letters, digits, "_" or "-" (1-63 chars).`);
+    }
+    if (typeof node.url !== 'string' || !node.url.trim()) {
+      throw new Error(`${at} ("${node.id}") has no "url".`);
+    }
+    const nodeUrl = node.url.trim();
+    if (!nodeUrl.includes('$') && replicaEngine(nodeUrl) !== 'PostgreSQL') {
+      throw new Error(`${at} ("${node.id}") has a "url" that is not a PostgreSQL URL; every shard must be PostgreSQL.`);
+    }
+    const nodeEntry = { ...node, name: `${String(entry.name)}[shard:${node.id}]`, url: nodeUrl };
+    const pool = poolOf(nodeEntry, false, path);
+    const replicas = replicasOf(nodeEntry, false, path);
+    const listen = listenOf(nodeEntry, false, path);
+    const backstop = backstopOf(nodeEntry, false, path);
+    const bucketRanges = parseBucketRanges(node.buckets, at);
+    const range = parseKeyRange(node.range, at);
+    const values = parseValues(node.values, at);
+    let status: ShardStatus | undefined;
+    if (node.status !== undefined) {
+      if (typeof node.status !== 'string' || !SHARD_STATUSES.has(node.status as ShardStatus)) {
+        throw new Error(`${at} ("${node.id}") has "status": ${JSON.stringify(node.status)}. Choose "active", "draining" or "read_only".`);
+      }
+      status = node.status as ShardStatus;
+    }
+    return {
+      id: node.id,
+      url: nodeUrl,
+      ...(replicas ? { replicas } : {}),
+      ...(listen ? { listen } : {}),
+      ...(pool ? { pool } : {}),
+      ...(backstop ?? {}),
+      ...(bucketRanges ? { buckets: bucketRanges } : {}),
+      ...(range ? { range } : {}),
+      ...(values ? { values } : {}),
+      ...(status ? { status } : {}),
+    };
+  });
+  try {
+    createShardRouter({ strategy, buckets, shards: nodes });
+  } catch (error) {
+    throw new Error(`${where} has invalid "shards" topology: ${(error as Error).message}`);
+  }
+  return {
+    strategy,
+    buckets,
+    ...(directory ? { directory } : {}),
+    nodes,
+  };
 }
 
 /** Which engine a URL names, for a replica's agreement with its primary; undefined for anything else. */

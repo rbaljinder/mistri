@@ -594,13 +594,14 @@ export function fixtureHost(data: Fixtures, options: RenderOptions, navigations:
         next[parent.alias] = targetRow ? pick(targetRow, parent.show) : null;
       }
       for (const [alias, child] of Object.entries(children)) {
+        const byCol = typeof child.by === 'string' ? child.by : child.by[0]!;
         const pkVal = full[pkCol];
         const matched =
           pkVal === null || pkVal === undefined
             ? []
             : read(fixturesData, child.from, child.show, child.sort, child.limit, {
                 ...(child.where && typeof child.where === 'object' ? (child.where as Record<string, unknown>) : {}),
-                [child.by]: pkVal,
+                [byCol]: pkVal,
               });
         next[alias] = matched;
       }

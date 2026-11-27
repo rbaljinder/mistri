@@ -4,6 +4,7 @@ import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { AppResources } from './appResources.js';
 import type { AppAdapterSource } from './appSourceAdapter.js';
 import { mapOpenedAppRuntimeResources } from './appRuntimeResourceMapping.js';
+import { openShardedAppSource } from './appShardedSource.js';
 import type { Registry } from '@mistriwork/engine/server/connections.js';
 import { assertAppApiContext, readApiApp } from '../api/appApiValidation.js';
 import { checkApiReadCatalog } from '../api/apiReadCatalog.js';
@@ -96,10 +97,12 @@ export async function loadAppRuntimeResources(
   if (!app.sources) {
     const opened = await registry.open(connection);
     onOpen(connection);
-    const resources = keptResources(app, connection, [...declared(app), opened.adapter, opened.schema], () =>
-      mapOpenedAppRuntimeResources(app, connection, new Map([['', opened]]), new Map([['', connection]])),
+    const sharded = await openShardedAppSource(registry, connection, app, [], opened.adapter);
+    const active = sharded ?? opened;
+    const resources = keptResources(app, connection, [...declared(app), active.adapter, active.schema], () =>
+      mapOpenedAppRuntimeResources(app, connection, new Map([['', active]]), new Map([['', connection]])),
     );
-    openedDatabases.set(resources, new Map([[connection, opened.adapter]]));
+    openedDatabases.set(resources, new Map([[connection, active.adapter]]));
     if (checksApi) {
       checkApiReadCatalog(readApp.api!, readApp, resources.schema);
       assertApiWrites(app, resources.schema);
@@ -117,7 +120,10 @@ export async function loadAppRuntimeResources(
     owners.map(async (owner) => {
       let database;
       try {
-        database = await registry.open(owner);
+        const base = await registry.open(owner);
+        const ownerSources = [...bindings].filter(([, id]) => id === owner).map(([source]) => source);
+        const sharded = await openShardedAppSource(registry, owner, app, ownerSources, base.adapter);
+        database = sharded ?? base;
       } catch {
         throw new AppSourceUnavailable([...bindings].find(([, id]) => id === owner)![0]);
       }

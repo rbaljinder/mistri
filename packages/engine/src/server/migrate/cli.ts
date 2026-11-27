@@ -30,7 +30,7 @@ import { compareVersions, newMigration, readMigrations } from './files.js';
 import { FLYWAY_COMMANDS, runFlyway } from './flyway.js';
 import { migrateBaseline, migrateRepair, migrateUp, migrateValidate, migrationStatus, recordAround, type Status } from './runner.js';
 import { sayChange } from './snapshot.js';
-import { migrateWriteRefusal, resolveTarget, targetDir, type TargetBinding } from './target.js';
+import { migrateWriteRefusal, resolveShardTargets, resolveTarget, targetDir, type TargetBinding } from './target.js';
 import { product } from '../product.js';
 import { claimContext, contextJson, contextLines, fromProfile, projectContext } from '../config/profile.js';
 
@@ -504,6 +504,73 @@ export async function runMigrate<A extends MigrateApp>(
         return sayPlan(plan, 'up', planExit(plan.phases));
       }
       return EXIT.ok;
+    }
+
+    if (target.connection.shards) {
+      const { targets: shardTargets } = await resolveShardTargets(registry, config, flags, appDir, loaded?.binding);
+      let worst: number = EXIT.ok;
+      for (const shard of shardTargets) {
+        const tag = `[shard ${shard.shardId ?? shard.connection.name}]`;
+        const shardWhere = `${tag} ${shard.connection.name} (${dialect}), history in ${shard.table}, migrations in ${shown(shard.dir)}`;
+        if (command === 'status') {
+          const status = await migrationStatus(shard);
+          write(`Migrations of ${shardWhere}`);
+          sayStatus(status, write);
+          if (!status.started) worst = EXIT.invalid;
+        } else if (command === 'validate') {
+          const { status, valid } = await migrateValidate(shard);
+          write(`Validating ${shardWhere}`);
+          sayProblems(status, write);
+          for (const file of status.plan.pending) write(`  pending: ${file.script} is not applied`);
+          sayDrift(status, write);
+          write(
+            valid ? `Valid: ${plural(status.plan.history.versioned.size, 'migration')} applied, nothing pending, no drift.` : 'Not valid.',
+          );
+          if (!valid) worst = EXIT.invalid;
+        } else if (command === 'baseline') {
+          const result = await migrateBaseline(shard, { dryRun });
+          if (result.refused) return fail(`${tag} ${result.refused}`, EXIT.invalid);
+          write(
+            result.already
+              ? `${tag} already ${result.already}; nothing to do.`
+              : `${tag} ${dryRun ? 'would record' : 'recorded'} baseline.`,
+          );
+        } else if (command === 'repair') {
+          const { actions } = await migrateRepair(shard, { dryRun });
+          write(`${dryRun ? 'Would repair' : 'Repairing'} ${shardWhere}`);
+          for (const action of actions) write(`  ${action}`);
+        } else {
+          // up: apply shard by shard and stop on first failure so partial rollout is clear.
+          const result = await migrateUp(shard, { dryRun, waiting: () => write(`${tag} waiting for another migration run to finish…`) });
+          write(`${dryRun ? 'Dry run of' : 'Migrating'} ${shardWhere}`);
+          if (result.refused) return fail(`${tag} ${result.refused}`, EXIT.invalid);
+          if (result.status.plan.problems.length) {
+            sayProblems(result.status, write);
+            write(`${tag} Nothing was applied.`);
+            return EXIT.invalid;
+          }
+          if (result.wouldRun) {
+            write(
+              result.wouldRun.length
+                ? `${tag} ${plural(result.wouldRun.length, 'migration')} would be applied.`
+                : `${tag} Nothing to apply.`,
+            );
+          } else {
+            for (const { file, ms } of result.applied) write(`  applied ${file.script} (${ms} ms)`);
+            if (result.failure) {
+              write(`  failed  ${result.failure.file.script}: ${result.failure.message}`);
+              write(`${tag} stopped after ${plural(result.applied.length, 'migration')}; remaining shards were not migrated.`);
+              return EXIT.failed;
+            }
+            write(
+              result.applied.length
+                ? `${tag} Applied ${plural(result.applied.length, 'migration')}: now${sayVersion(result.status)}.`
+                : `${tag} Nothing to apply: up to date${sayVersion(result.status)}.`,
+            );
+          }
+        }
+      }
+      return worst;
     }
 
     if (command === 'status') {

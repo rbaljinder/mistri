@@ -46,7 +46,7 @@ import { localCache, scopedCache, type CacheStore } from '../adapters/cache/cach
 import type { HttpDescription } from '../adapters/http/httpDescription.js';
 import type { Adapter } from '../adapters/adapter.js';
 import type { PoolRoleStats } from '../adapters/poolMetrics.js';
-import { backstopOf, listenOf, poolOf, replicaEngine, replicasOf, type PoolSize } from './poolConfig.js';
+import { backstopOf, listenOf, poolOf, replicaEngine, replicasOf, shardsOf, type PoolSize, type ShardsConfig } from './poolConfig.js';
 import type { DatabaseSchema } from '../shared/schema.js';
 import { slug } from '../shared/slug.js';
 import type { PublicConnection, SecretSource } from '../shared/connection.js';
@@ -139,6 +139,12 @@ export interface ConnectionConfig {
   backstop?: 'rls';
   /** The owner role's URL under `backstop`, resolved as `url` is: what crosses tenants by design runs on it. */
   owner?: string;
+  /**
+   * Horizontal shard topology for a PostgreSQL connection: virtual buckets,
+   * shard URLs (each with optional pool, replicas, listen, backstop/owner) and
+   * an optional dedicated PostgreSQL control-plane routing directory URL.
+   */
+  shards?: ShardsConfig;
   /**
    * Present for an API read through its description (`"kind": "http"` in the
    * config file); `url` is then the API's base URL. It holds no secret:
@@ -258,8 +264,8 @@ export class Registry {
   sections: ConfigSections = CACHE_SECTIONS;
   private cacheStore?: CacheStore;
   private cacheWarnedAt = 0;
-  /* State a module keeps per registry (a plugged-in search provider, a mail transport), made on first use. */
-  private readonly moduleState = new Map<string, { value: unknown; resetOnClose: boolean }>();
+  /* State a module keeps per registry (a plugged-in search provider, a mail transport, sharded sources), made on first use. */
+  private readonly moduleState = new Map<string, { value: unknown; resetOnClose: boolean; close?: () => Promise<void> | void }>();
   /* A wider role, said once per connection per run. A schema refresh (the
      UI's, or the MCP `refresh` tool) dials again, and each dial used to say
      it again: the same paragraph every time an agent re-read the schema. Keyed by what was said, so a
@@ -298,10 +304,15 @@ export class Registry {
   }
 
   /** State a module keeps for this registry, made on first use; `resetOnClose` state is forgotten by `closeServices`. */
-  serviceState<T>(key: string, make: () => T, options: { resetOnClose?: boolean } = {}): T {
+  serviceState<T>(key: string, make: () => T, options: { resetOnClose?: boolean; close?: (value: T) => Promise<void> | void } = {}): T {
     let held = this.moduleState.get(key);
     if (!held) {
-      held = { value: make(), resetOnClose: options.resetOnClose === true };
+      const value = make();
+      held = {
+        value,
+        resetOnClose: options.resetOnClose === true,
+        ...(options.close ? { close: () => options.close!(value) } : {}),
+      };
       this.moduleState.set(key, held);
     }
     return held.value as T;
@@ -328,7 +339,12 @@ export class Registry {
   async closeServices(): Promise<void> {
     const store = this.cacheStore;
     this.cacheStore = undefined;
-    for (const [key, held] of this.moduleState) if (held.resetOnClose) this.moduleState.delete(key);
+    const closers: Array<Promise<void> | void> = [];
+    for (const [key, held] of this.moduleState) {
+      if (held.close) closers.push(held.close());
+      if (held.resetOnClose) this.moduleState.delete(key);
+    }
+    await Promise.allSettled(closers);
     await store?.close();
   }
 
@@ -804,7 +820,14 @@ export class Registry {
     try {
       // What the journal wrote behind lands before the handles it is written through close.
       await Promise.all(entries.map((entry) => flushJournal(entry.config.id)));
-      await Promise.allSettled(entries.map((entry) => entry.adapter?.close()));
+      const stateClosers: Array<Promise<void> | void> = [];
+      for (const [key, held] of this.moduleState) {
+        if (held.close) {
+          stateClosers.push(held.close());
+          if (held.resetOnClose) this.moduleState.delete(key);
+        }
+      }
+      await Promise.allSettled([...entries.map((entry) => entry.adapter?.close()), ...stateClosers]);
     } finally {
       for (const done of finish) done();
     }
@@ -915,6 +938,8 @@ interface ConfigFile {
     backstop?: unknown;
     /** The owner role's URL under `backstop`, checked by backstopOf. */
     owner?: unknown;
+    /** Horizontal PostgreSQL shard topology, checked by shardsOf. */
+    shards?: unknown;
     /** `"http"` for an API, `"cache"`, `"webhook"`, … for a service (serviceConnections.ts); absent for a database. */
     kind?: 'http' | ServiceKind;
     /** A description file relative to this one, or the description itself. */
@@ -932,7 +957,7 @@ export interface LoadedConfig {
   path: string;
   /** As written — a SQLite path located against the file (`writtenUrl` keeps the spelling) — plus an HTTP connection's fields checked and its description resolved against the file, and a checked pool. */
   connections: Array<
-    Omit<ConfigFile['connections'][number], 'pool' | 'replicas' | 'listen' | 'backstop' | 'owner'> & {
+    Omit<ConfigFile['connections'][number], 'pool' | 'replicas' | 'listen' | 'backstop' | 'owner' | 'shards'> & {
       writtenUrl?: string;
       http?: HttpConnectionConfig;
       pool?: PoolSize;
@@ -940,6 +965,7 @@ export interface LoadedConfig {
       listen?: string;
       backstop?: 'rls';
       owner?: string;
+      shards?: ShardsConfig;
     }
   >;
   /** The services the file names beside its databases, checked; never databases, never listed as connections. */
@@ -1051,7 +1077,8 @@ export async function loadConfig(explicit: string | undefined, sections: ConfigS
       const replicas = replicasOf(c as unknown as Record<string, unknown>, http !== undefined, path);
       const listen = listenOf(c as unknown as Record<string, unknown>, http !== undefined, path);
       const backstop = backstopOf(c as unknown as Record<string, unknown>, http !== undefined, path);
-      const { pool: _written, replicas: _listed, listen: _direct, backstop: _wall, owner: _owner, ...entry } = c;
+      const shards = shardsOf(c as unknown as Record<string, unknown>, http !== undefined, path);
+      const { pool: _written, replicas: _listed, listen: _direct, backstop: _wall, owner: _owner, shards: _shards, ...entry } = c;
       const located = http ? c.url : sqliteTargetFrom(c.url, dirname(resolve(path)));
       return [
         {
@@ -1062,6 +1089,7 @@ export async function loadConfig(explicit: string | undefined, sections: ConfigS
           ...(replicas ? { replicas } : {}),
           ...(listen ? { listen } : {}),
           ...(backstop ?? {}),
+          ...(shards ? { shards } : {}),
         },
       ];
     });
@@ -1192,6 +1220,8 @@ export async function saveConfig(
           ...(c.pool ? { pool: { ...c.pool } } : {}),
           // And so are its replicas, as written, references and all.
           ...(c.replicas?.length ? { replicas: [...c.replicas] } : {}),
+          // And its shard topology, as written, references and all.
+          ...(c.shards ? { shards: structuredClone(c.shards) } : {}),
           // Where its migrations live is the file's, too.
           ...(c.migrations ? { migrations: c.migrations } : {}),
           /* An API keeps its description as it was written, relative to the

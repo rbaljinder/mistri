@@ -23,9 +23,13 @@ import { columnKind, findTable, primaryKey, type DatabaseSchema, type ForeignKey
 export interface DeclaredReference {
   table: string;
   column: string;
+  /** Optional composite source columns (for co-located sharded FKs such as `['customer_id', 'order_id']`). */
+  columns?: readonly string[];
   to: string;
   /** Absent: the target's single-column primary key. */
   toColumn?: string;
+  /** Optional composite target columns matching the target's composite PK or unique constraint. */
+  toColumns?: readonly string[];
 }
 
 /** The target column proves one row per value: the whole primary key, or unique on its own. */
@@ -34,10 +38,56 @@ function uniqueIn(table: TableMeta, column: string): boolean {
   return (key.length === 1 && key[0] === column) || Boolean(table.unique?.includes(column));
 }
 
+/** Whether `columns` is proven unique as a composite tuple on `table` (its whole primary key or a composite unique index). */
+function compositeUniqueIn(table: TableMeta, columns: readonly string[]): boolean {
+  const key = primaryKey(table);
+  const sorted = [...columns].sort().join('\0');
+  if (key.length === columns.length && [...key].sort().join('\0') === sorted) return true;
+  if (columns.length === 2 && table.uniquePairs) {
+    return table.uniquePairs.some((pair) => [...pair].sort().join('\0') === sorted);
+  }
+  return false;
+}
+
 /** The edge a declaration names, or why the catalog refuses it. */
 export function declaredEdge(schema: DatabaseSchema, reference: DeclaredReference, at: string): ForeignKey {
   const from = schema.tables.find((table) => table.id === reference.table);
   if (!from) throw new Error(`${at}: "${reference.table}" is not a table in this catalog.`);
+  const to = schema.tables.find((table) => table.id === reference.to);
+  if (!to) throw new Error(`${at}: "to" names "${reference.to}", which is not a table in this catalog.`);
+
+  if (reference.columns && reference.columns.length > 1) {
+    const key = primaryKey(to);
+    const toColumns = reference.toColumns ?? (key.length === reference.columns.length ? key : undefined);
+    if (!toColumns || toColumns.length !== reference.columns.length) {
+      throw new Error(
+        `${at}: composite reference on ${reference.table}(${reference.columns.join(', ')}) needs ${reference.columns.length} target columns on ${reference.to}.`,
+      );
+    }
+    if (!compositeUniqueIn(to, toColumns)) {
+      throw new Error(
+        `${at}: ${reference.to}(${toColumns.join(', ')}) is not proven unique (its primary key or a composite unique index).`,
+      );
+    }
+    for (let i = 0; i < reference.columns.length; i++) {
+      const col = from.columns.find((item) => item.name === reference.columns![i]);
+      if (!col) throw new Error(`${at}: "${reference.columns[i]}" is not a column of ${reference.table}.`);
+      const target = to.columns.find((item) => item.name === toColumns[i]);
+      if (!target) throw new Error(`${at}: "${toColumns[i]}" is not a column of ${reference.to}.`);
+      if (columnKind(col.type) !== columnKind(target.type)) {
+        throw new Error(
+          `${at}: ${reference.table}.${col.name} is ${col.type} and ${reference.to}.${target.name} is ${target.type}; a reference compares like with like.`,
+        );
+      }
+    }
+    return {
+      name: `${from.id}_${reference.columns.join('_')}_declared`,
+      from: { table: from.id, columns: [...reference.columns] },
+      to: { table: to.id, columns: [...toColumns] },
+      declared: true,
+    };
+  }
+
   const column = from.columns.find((item) => item.name === reference.column);
   if (!column) throw new Error(`${at}: "${reference.column}" is not a column of ${reference.table}.`);
   if (column.primaryKey)
@@ -45,8 +95,6 @@ export function declaredEdge(schema: DatabaseSchema, reference: DeclaredReferenc
   if (column.references || schema.foreignKeys.some((fk) => fk.from.table === from.id && fk.from.columns.includes(column.name))) {
     throw new Error(`${at}: "${reference.column}" already has a foreign key in the database, which the App follows as it is.`);
   }
-  const to = schema.tables.find((table) => table.id === reference.to);
-  if (!to) throw new Error(`${at}: "to" names "${reference.to}", which is not a table in this catalog.`);
   const key = primaryKey(to);
   const toColumn = reference.toColumn ?? (key.length === 1 ? key[0] : undefined);
   if (!toColumn) throw new Error(`${at}: ${reference.to} has no single-column primary key, so name the "column" it is looked up by.`);
