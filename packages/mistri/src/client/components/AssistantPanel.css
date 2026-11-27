@@ -13,13 +13,6 @@
 .assistant-panel-floating .assistant-head .icon-button {
   font-size: var(--text-xs);
   padding-inline: var(--space-1h);
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-.assistant-panel-floating .assistant-title {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .assistant-panel-floating .assistant-body {
   padding: var(--space-3h);
@@ -99,10 +92,15 @@
   margin-top: var(--space-4); padding-top: var(--space-3h); border-top: 1px solid var(--line);
 }
 .assistant-head {
-  display: flex; align-items: center; gap: var(--space-2h);
+  display: flex; align-items: center; gap: var(--space-2);
   padding: var(--space-3h) var(--space-3h) var(--space-3h) var(--space-4h); border-bottom: 1px solid var(--line);
 }
-.assistant-title { flex: 1; min-width: 0; margin: 0; font: 600 var(--text-md) var(--sans); }
+.assistant-head .icon-button, .assistant-subbar .icon-button { white-space: nowrap; flex-shrink: 0; gap: var(--space-1h); }
+.assistant-subbar {
+  display: flex; align-items: center; gap: var(--space-1); overflow-x: auto;
+  padding: var(--space-1h) var(--space-3h); border-bottom: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+.assistant-title { flex: 1; min-width: 0; margin: 0; font: 600 var(--text-md) var(--sans); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 /* The room's heading is the open conversation's title: one line, cut, its whole in the title. */
 .assistant-room .assistant-title { flex: 0 1 auto; display: flex; align-items: baseline; gap: var(--space-3); }
 .assistant-title-words { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

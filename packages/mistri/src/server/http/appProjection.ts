@@ -46,7 +46,7 @@ import { withDraftsHidden } from '../forms/savedFormLists.js';
 import { send, sendRevalidated } from '@mistriwork/engine/server/http/reply.js';
 import { catalogLocales, localeRow } from '../app/readerLocale.js';
 import { componentMessages, frameworkWords } from '../app/appMessages.js';
-import { agentsFor, knowledgeFor, memoryFor, startersFor } from '../../shared/appAssistant.js';
+import { agentsFor, backgroundRunsFor, knowledgeFor, memoryFor, startersFor } from '../../shared/appAssistant.js';
 import { principalOf, type RequestContext, type ResolvedSource } from '@mistriwork/engine/server/http/context.js';
 import { requestRecordBranding, withRecordBranding } from './recordBranding.js';
 import { pageReadRoutes, type PageReadHooks } from '@mistriwork/engine/server/http/pageReads.js';
@@ -176,6 +176,9 @@ export function browserApp(ctx: RequestContext, source: ResolvedSource) {
       const { knowledge: allKnowledge, ...rest } = nextAssistant;
       const theirs = knowledgeFor(allKnowledge, roles);
       nextAssistant = { ...rest, ...(theirs.length ? { knowledge: theirs } : {}) };
+    }
+    if (nextAssistant.backgroundRuns) {
+      nextAssistant = { ...nextAssistant, backgroundRuns: backgroundRunsFor(nextAssistant.backgroundRuns, roles) };
     }
     app = { ...app, assistant: nextAssistant };
   }

@@ -71,6 +71,7 @@ const KEYS = [
   'customBlocks',
   'memory',
   'knowledge',
+  'backgroundRuns',
 ] as const;
 const AGENT_ID = /^[a-z][a-z0-9_-]{0,39}$/;
 const MAX_AGENTS = 16;
@@ -104,6 +105,13 @@ const KNOWLEDGE_KEYS = ['resource', 'fields', 'title', 'description', 'where', '
 const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
 const DEFAULT_KNOWLEDGE_LIMIT = 6;
 const MAX_KNOWLEDGE_LIMIT = 12;
+const BACKGROUND_RUNS_KEYS = ['maxConcurrent', 'maxSteps', 'presets'] as const;
+const DEFAULT_RUN_CONCURRENT = 2;
+const MAX_RUN_CONCURRENT = 5;
+const DEFAULT_RUN_STEPS = 16;
+const RUN_PRESET_ID = /^[a-z][a-z0-9_-]{0,47}$/;
+const MAX_RUN_PRESETS = 12;
+const RUN_PRESET_KEYS = ['id', 'label', 'description', 'prompt', 'agent', 'roles'] as const;
 /** An empty conversation offers a few of the App's own questions, each a line the person sends with one press: at
     most six in any one place, however many the App declares for its different places. */
 const MAX_STARTERS = 6;
@@ -264,6 +272,35 @@ export interface AppAssistant {
   memory?: AppAssistantMemory;
   /** Optional authority-scoped knowledge sources searchable with inline record citations. */
   knowledge?: Record<string, AppAssistantKnowledgeSource>;
+  /** Optional durable background agent runs configuration and one-click run presets. */
+  backgroundRuns?: AppAssistantBackgroundRuns;
+}
+
+/** A declarative one-click background run preset shown in the Run Monitor. */
+interface AppAssistantRunPreset {
+  id: string;
+  label: string;
+  description?: string;
+  prompt: string;
+  agent?: string;
+  roles?: string[];
+}
+
+/** Durable background agent run settings for an App's assistant. */
+interface AppAssistantBackgroundRuns {
+  /** Maximum active concurrent background runs per person (1–5, default 2). */
+  maxConcurrent: number;
+  /** Maximum tool rounds per background run (1–32, default 16). */
+  maxSteps: number;
+  /** Optional one-click background run playbooks/presets. */
+  presets: AppAssistantRunPreset[];
+}
+
+/** Viewer-safe background runs capability served in `/api/app` (never leaks preset `roles`). */
+export interface ServedAssistantBackgroundRuns {
+  maxConcurrent: number;
+  maxSteps: number;
+  presets: Array<{ id: string; label: string; description?: string; prompt: string; agent?: string }>;
 }
 
 interface AssistantContext {
@@ -438,6 +475,82 @@ function parseKnowledge(raw: unknown, context: AssistantContext, where: string):
   return out;
 }
 
+function parseBackgroundRuns(
+  raw: unknown,
+  agents: Record<string, AppAssistantAgent> | undefined,
+  context: AssistantContext,
+  where: string,
+): AppAssistantBackgroundRuns | undefined {
+  if (raw === undefined || raw === false) return undefined;
+  if (raw === true) return { maxConcurrent: DEFAULT_RUN_CONCURRENT, maxSteps: DEFAULT_RUN_STEPS, presets: [] };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+    throw new Error(`${where} is true, false, or an object: { maxConcurrent, maxSteps, presets }.`);
+  const cfg = raw as Record<string, unknown>;
+  for (const key of Object.keys(cfg)) {
+    if (!(BACKGROUND_RUNS_KEYS as readonly string[]).includes(key))
+      throw new Error(`${where} has an unknown key "${key}"; it takes ${BACKGROUND_RUNS_KEYS.join(', ')}.`);
+  }
+  let maxConcurrent = DEFAULT_RUN_CONCURRENT;
+  if (cfg.maxConcurrent !== undefined) {
+    if (!Number.isSafeInteger(cfg.maxConcurrent) || (cfg.maxConcurrent as number) < 1 || (cfg.maxConcurrent as number) > MAX_RUN_CONCURRENT)
+      throw new Error(`${where}.maxConcurrent is a whole number, 1 to ${MAX_RUN_CONCURRENT}.`);
+    maxConcurrent = cfg.maxConcurrent as number;
+  }
+  let maxSteps = DEFAULT_RUN_STEPS;
+  if (cfg.maxSteps !== undefined) {
+    if (!Number.isSafeInteger(cfg.maxSteps) || (cfg.maxSteps as number) < 1 || (cfg.maxSteps as number) > MAX_ASSISTANT_STEPS)
+      throw new Error(`${where}.maxSteps is a whole number of tool rounds, 1 to ${MAX_ASSISTANT_STEPS}.`);
+    maxSteps = cfg.maxSteps as number;
+  }
+  const presets: AppAssistantRunPreset[] = [];
+  if (cfg.presets !== undefined) {
+    if (!Array.isArray(cfg.presets) || cfg.presets.length > MAX_RUN_PRESETS)
+      throw new Error(`${where}.presets is a list of at most ${MAX_RUN_PRESETS} background run presets.`);
+    const seen = new Set<string>();
+    for (let i = 0; i < cfg.presets.length; i++) {
+      const entry = cfg.presets[i];
+      const at = `${where}.presets[${i}]`;
+      if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+        throw new Error(`${at} is an object: { id, label, description?, prompt, agent?, roles? }.`);
+      const p = entry as Record<string, unknown>;
+      for (const key of Object.keys(p)) {
+        if (!(RUN_PRESET_KEYS as readonly string[]).includes(key))
+          throw new Error(`${at} has an unknown key "${key}"; it takes ${RUN_PRESET_KEYS.join(', ')}.`);
+      }
+      if (typeof p.id !== 'string' || !RUN_PRESET_ID.test(p.id))
+        throw new Error(`${at}.id is lowercase letters, digits, hyphens or underscores, starting with a letter.`);
+      if (seen.has(p.id)) throw new Error(`${at}.id duplicates "${p.id}".`);
+      seen.add(p.id);
+      if (typeof p.label !== 'string' || !p.label.trim() || p.label.trim().length > 80)
+        throw new Error(`${at}.label is a non-empty string of at most 80 characters.`);
+      if (p.description !== undefined && (typeof p.description !== 'string' || !p.description.trim() || p.description.trim().length > 240))
+        throw new Error(`${at}.description is a non-empty string of at most 240 characters.`);
+      if (typeof p.prompt !== 'string' || !p.prompt.trim() || p.prompt.trim().length > 2000)
+        throw new Error(`${at}.prompt is a non-empty string of at most 2000 characters.`);
+      let agent: string | undefined;
+      if (p.agent !== undefined) {
+        if (!agents || typeof p.agent !== 'string' || !Object.hasOwn(agents, p.agent))
+          throw new Error(`${at}.agent names "${String(p.agent)}", which is not one of assistant.agents.`);
+        agent = p.agent;
+      }
+      let roles: string[] | undefined;
+      if (p.roles !== undefined) {
+        if (!context.roles) throw new Error(`${at}.roles names roles, and the App declares no "auth" with roles.`);
+        roles = subset(p.roles, context.roles as string[], `${at}.roles`);
+      }
+      presets.push({
+        id: p.id,
+        label: p.label.trim(),
+        ...(p.description !== undefined ? { description: (p.description as string).trim() } : {}),
+        prompt: p.prompt.trim(),
+        ...(agent ? { agent } : {}),
+        ...(roles ? { roles } : {}),
+      });
+    }
+  }
+  return { maxConcurrent, maxSteps, presets };
+}
+
 function parseAgents(
   raw: unknown,
   placement: AppAssistant['placement'],
@@ -585,6 +698,7 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
   const memory = parseMemory(a.memory, context, `${where}.memory`);
   const knowledge = parseKnowledge(a.knowledge, context, `${where}.knowledge`);
   const agents = parseAgents(a.agents, placement, customBlocks, knowledge, context, `${where}.agents`);
+  const backgroundRuns = parseBackgroundRuns(a.backgroundRuns, agents, context, `${where}.backgroundRuns`);
   let defaultAgent: string | undefined;
   if (a.defaultAgent !== undefined) {
     if (!agents) throw new Error(`${where}.defaultAgent names an agent, and ${where} declares no "agents".`);
@@ -614,6 +728,7 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     ...(customBlocks ? { customBlocks } : {}),
     ...(memory ? { memory } : {}),
     ...(knowledge ? { knowledge } : {}),
+    ...(backgroundRuns ? { backgroundRuns } : {}),
   };
 }
 
@@ -792,6 +907,25 @@ export function knowledgeFor(
   return knowledge
     .filter((source) => !source.roles || source.roles.some((role) => roles.includes(role)))
     .map(({ roles: _roles, ...rest }) => rest);
+}
+
+/** Viewer-safe background runs capability for `/api/app` (filters presets by `roles` and strips `roles`). */
+export function backgroundRunsFor(
+  runs:
+    | (Omit<ServedAssistantBackgroundRuns, 'presets'> & {
+        presets: ReadonlyArray<ServedAssistantBackgroundRuns['presets'][number] & { roles?: readonly string[] }>;
+      })
+    | undefined,
+  roles: readonly string[],
+): ServedAssistantBackgroundRuns | undefined {
+  if (!runs) return undefined;
+  return {
+    maxConcurrent: runs.maxConcurrent,
+    maxSteps: runs.maxSteps,
+    presets: runs.presets
+      .filter((preset) => !preset.roles || preset.roles.some((role) => roles.includes(role)))
+      .map(({ roles: _roles, ...rest }) => rest),
+  };
 }
 
 const minDefined = (a: number | undefined, b: number | undefined): number | undefined =>

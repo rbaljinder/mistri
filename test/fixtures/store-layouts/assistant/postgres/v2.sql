@@ -60,6 +60,31 @@ CREATE TABLE mistri.assistant_meta (
     CONSTRAINT assistant_meta_singleton_check CHECK ((singleton = 1)),
     CONSTRAINT assistant_meta_version_check CHECK ((version = 2))
 );
+CREATE TABLE mistri.assistant_run (
+    id text NOT NULL COLLATE pg_catalog."C",
+    app text NOT NULL COLLATE pg_catalog."C",
+    tenant text NOT NULL COLLATE pg_catalog."C",
+    account text NOT NULL COLLATE pg_catalog."C",
+    conversation text NOT NULL COLLATE pg_catalog."C",
+    agent text NOT NULL COLLATE pg_catalog."C",
+    title text NOT NULL,
+    prompt text NOT NULL,
+    status text NOT NULL,
+    steps integer NOT NULL,
+    tokens bigint NOT NULL,
+    summary text NOT NULL,
+    created_at text NOT NULL,
+    updated_at text NOT NULL,
+    finished_at text NOT NULL,
+    CONSTRAINT assistant_run_account_check CHECK ((octet_length(account) <= 1024)),
+    CONSTRAINT assistant_run_agent_check CHECK ((octet_length(agent) <= 64)),
+    CONSTRAINT assistant_run_app_check CHECK ((octet_length(app) <= 128)),
+    CONSTRAINT assistant_run_prompt_check CHECK ((octet_length(prompt) <= 4000)),
+    CONSTRAINT assistant_run_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'awaiting'::text, 'completed'::text, 'failed'::text, 'cancelled'::text]))),
+    CONSTRAINT assistant_run_summary_check CHECK ((octet_length(summary) <= 2000)),
+    CONSTRAINT assistant_run_tenant_check CHECK ((octet_length(tenant) <= 128)),
+    CONSTRAINT assistant_run_title_check CHECK ((octet_length(title) <= 200))
+);
 CREATE TABLE mistri.assistant_usage (
     app text NOT NULL COLLATE pg_catalog."C",
     tenant text NOT NULL COLLATE pg_catalog."C",
@@ -96,6 +121,8 @@ ALTER TABLE ONLY mistri.assistant_memory
     ADD CONSTRAINT assistant_memory_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY mistri.assistant_meta
     ADD CONSTRAINT assistant_meta_pkey PRIMARY KEY (singleton);
+ALTER TABLE ONLY mistri.assistant_run
+    ADD CONSTRAINT assistant_run_pkey PRIMARY KEY (id);
 ALTER TABLE ONLY mistri.assistant_usage
     ADD CONSTRAINT assistant_usage_pkey PRIMARY KEY (app, tenant, account, day);
 ALTER TABLE ONLY mistri.switch_meta
@@ -104,3 +131,4 @@ ALTER TABLE ONLY mistri.switch_tenant
     ADD CONSTRAINT switch_tenant_pkey PRIMARY KEY (app, tenant, feature);
 CREATE INDEX __mistri_assistant_conversation_owner ON mistri.assistant_conversation USING btree (app, tenant, account, updated_at);
 CREATE INDEX __mistri_assistant_memory_owner ON mistri.assistant_memory USING btree (app, tenant, scope, account, updated_at);
+CREATE INDEX __mistri_assistant_run_owner ON mistri.assistant_run USING btree (app, tenant, account, updated_at);

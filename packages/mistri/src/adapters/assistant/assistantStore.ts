@@ -23,9 +23,11 @@ export const ASSISTANT_TABLES = Object.freeze({
   event: `${ASSISTANT_PREFIX}event`,
   usage: `${ASSISTANT_PREFIX}usage`,
   memory: `${ASSISTANT_PREFIX}memory`,
+  run: `${ASSISTANT_PREFIX}run`,
 });
 export const ASSISTANT_INDEX = `${ASSISTANT_PREFIX}conversation_owner`;
 export const ASSISTANT_MEMORY_INDEX = `${ASSISTANT_PREFIX}memory_owner`;
+export const ASSISTANT_RUN_INDEX = `${ASSISTANT_PREFIX}run_owner`;
 
 /** Bounds, the same on every engine. An event is the model's content or a tool's result, kept whole. */
 export const ASSISTANT_LIMITS = Object.freeze({
@@ -40,6 +42,10 @@ export const ASSISTANT_LIMITS = Object.freeze({
   memoryContent: 1000,
   /** Optional agent id that scopes a memory, in bytes (`''` for shared across agents). */
   memoryAgent: 64,
+  /** Prompt text that initiated a durable background run, in bytes. */
+  runPrompt: 4000,
+  /** Final summary or failure detail of a durable background run, in bytes. */
+  runSummary: 2000,
 });
 
 export class AssistantStoreUnavailable extends Refusal {
@@ -92,6 +98,37 @@ interface RememberInput {
   readonly maxItems?: number;
 }
 
+export type RunStatus = 'queued' | 'running' | 'awaiting' | 'completed' | 'failed' | 'cancelled';
+
+/** A durable background agent run linked to its own conversation event stream. */
+export interface StoredRun {
+  readonly id: string;
+  readonly conversation: string;
+  readonly agent: string;
+  readonly title: string;
+  readonly prompt: string;
+  readonly status: RunStatus;
+  readonly steps: number;
+  readonly tokens: number;
+  readonly summary: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly finishedAt: string;
+}
+interface CreateRunInput {
+  readonly conversation: string;
+  readonly agent?: string;
+  readonly title: string;
+  readonly prompt: string;
+}
+interface UpdateRunInput {
+  readonly status?: RunStatus;
+  readonly steps?: number;
+  readonly tokens?: number;
+  readonly summary?: string;
+  readonly finishedAt?: string;
+}
+
 export type Row = Record<string, unknown>;
 export interface Db {
   all(sql: string, ...params: unknown[]): Promise<Row[]>;
@@ -127,6 +164,18 @@ export interface AssistantStore {
   remember(owner: AssistantOwner, input: RememberInput, at: string): Promise<{ memory: StoredMemory; updated: boolean }>;
   /** Remove a memory by id: person-scoped requires matching owner account; app-scoped requires `allowAppScope: true`. */
   forget(owner: AssistantOwner, id: string, options?: { allowAppScope?: boolean }): Promise<boolean>;
+  /** Durable background runs owned by this person, newest first. */
+  listRuns(owner: AssistantOwner, limit: number): Promise<StoredRun[]>;
+  /** One durable background run owned by this person, or null. */
+  getRun(owner: AssistantOwner, id: string): Promise<StoredRun | null>;
+  /** Create a new queued background run linked to a durable conversation. */
+  createRun(owner: AssistantOwner, input: CreateRunInput, at: string): Promise<StoredRun>;
+  /** Update status, progress counters, summary, or completion timestamp of an owned run. */
+  updateRun(owner: AssistantOwner, id: string, patch: UpdateRunInput, at: string): Promise<StoredRun | null>;
+  /** Delete an owned background run record. */
+  deleteRun(owner: AssistantOwner, id: string): Promise<boolean>;
+  /** Count currently active (`queued` or `running`) runs for this owner. */
+  countActiveRuns(owner: AssistantOwner): Promise<number>;
   /** Whether the platform has turned the assistant on for this tenant: off until it says so. */
   tenantEnabled(app: string, tenant: string): Promise<boolean>;
   /** Every conversation of the App untouched since `before` (an ISO instant), with its events; how many went. */
@@ -517,6 +566,185 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
         return (await db.run(`DELETE FROM ${mem} WHERE id = ?`, id)) > 0;
       });
     },
+    async listRuns(owner, limit) {
+      assertOwner(owner);
+      const runs = t(ASSISTANT_TABLES.run);
+      const rows = await transaction((db) =>
+        db.all(
+          `SELECT id, conversation, agent, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at
+          FROM ${runs} WHERE app = ? AND tenant = ? AND account = ? ORDER BY updated_at DESC, id DESC LIMIT ?`,
+          owner.app,
+          owner.tenant,
+          owner.account,
+          Math.max(1, Math.min(100, Math.trunc(limit))),
+        ),
+      );
+      return rows.map((row): StoredRun => ({
+        id: String(row.id),
+        conversation: String(row.conversation),
+        agent: String(row.agent),
+        title: String(row.title),
+        prompt: String(row.prompt),
+        status: String(row.status) as RunStatus,
+        steps: num(row.steps),
+        tokens: num(row.tokens),
+        summary: String(row.summary),
+        createdAt: String(row.created_at),
+        updatedAt: String(row.updated_at),
+        finishedAt: String(row.finished_at),
+      }));
+    },
+    async getRun(owner, id) {
+      assertOwner(owner);
+      if (typeof id !== 'string' || !id || id.length > 64) return null;
+      const runs = t(ASSISTANT_TABLES.run);
+      const rows = await transaction((db) =>
+        db.all(
+          `SELECT id, conversation, agent, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at
+          FROM ${runs} WHERE id = ? AND app = ? AND tenant = ? AND account = ?`,
+          id,
+          owner.app,
+          owner.tenant,
+          owner.account,
+        ),
+      );
+      if (rows.length !== 1) return null;
+      const row = rows[0]!;
+      return {
+        id: String(row.id),
+        conversation: String(row.conversation),
+        agent: String(row.agent),
+        title: String(row.title),
+        prompt: String(row.prompt),
+        status: String(row.status) as RunStatus,
+        steps: num(row.steps),
+        tokens: num(row.tokens),
+        summary: String(row.summary),
+        createdAt: String(row.created_at),
+        updatedAt: String(row.updated_at),
+        finishedAt: String(row.finished_at),
+      };
+    },
+    async createRun(owner, input, at) {
+      assertOwner(owner);
+      const runs = t(ASSISTANT_TABLES.run);
+      const id = randomUUID();
+      const agent = (input.agent ?? '').trim().slice(0, ASSISTANT_LIMITS.memoryAgent);
+      const cleanTitle = title(input.title);
+      let prompt = input.prompt.trim();
+      while (bytes(prompt) > ASSISTANT_LIMITS.runPrompt) prompt = prompt.slice(0, -1);
+      const row: StoredRun = {
+        id,
+        conversation: input.conversation,
+        agent,
+        title: cleanTitle,
+        prompt,
+        status: 'queued',
+        steps: 0,
+        tokens: 0,
+        summary: '',
+        createdAt: at,
+        updatedAt: at,
+        finishedAt: '',
+      };
+      await transaction((db) =>
+        db.run(
+          `INSERT INTO ${runs} (id, app, tenant, account, conversation, agent, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, '', ?, ?, '')`,
+          row.id,
+          owner.app,
+          owner.tenant,
+          owner.account,
+          row.conversation,
+          row.agent,
+          row.title,
+          row.prompt,
+          row.status,
+          at,
+          at,
+        ),
+      );
+      return row;
+    },
+    async updateRun(owner, id, patch, at) {
+      assertOwner(owner);
+      if (typeof id !== 'string' || !id || id.length > 64) return null;
+      const runs = t(ASSISTANT_TABLES.run);
+      return transaction(async (db) => {
+        const rows = await db.all(
+          `SELECT id, conversation, agent, title, prompt, status, steps, tokens, summary, created_at, updated_at, finished_at
+          FROM ${runs} WHERE id = ? AND app = ? AND tenant = ? AND account = ?`,
+          id,
+          owner.app,
+          owner.tenant,
+          owner.account,
+        );
+        if (rows.length !== 1) return null;
+        const cur = rows[0]!;
+        const status = patch.status ?? (String(cur.status) as RunStatus);
+        const steps = patch.steps !== undefined ? Math.max(0, Math.trunc(patch.steps)) : num(cur.steps);
+        const tokens = patch.tokens !== undefined ? Math.max(0, Math.trunc(patch.tokens)) : num(cur.tokens);
+        let summary = patch.summary !== undefined ? patch.summary.trim() : String(cur.summary);
+        while (bytes(summary) > ASSISTANT_LIMITS.runSummary) summary = summary.slice(0, -1);
+        const finishedAt = patch.finishedAt !== undefined ? patch.finishedAt : String(cur.finished_at);
+        await db.run(
+          `UPDATE ${runs} SET status = ?, steps = ?, tokens = ?, summary = ?, updated_at = ?, finished_at = ?
+          WHERE id = ? AND app = ? AND tenant = ? AND account = ?`,
+          status,
+          steps,
+          tokens,
+          summary,
+          at,
+          finishedAt,
+          id,
+          owner.app,
+          owner.tenant,
+          owner.account,
+        );
+        return {
+          id,
+          conversation: String(cur.conversation),
+          agent: String(cur.agent),
+          title: String(cur.title),
+          prompt: String(cur.prompt),
+          status,
+          steps,
+          tokens,
+          summary,
+          createdAt: String(cur.created_at),
+          updatedAt: at,
+          finishedAt,
+        };
+      });
+    },
+    async deleteRun(owner, id) {
+      assertOwner(owner);
+      if (typeof id !== 'string' || !id || id.length > 64) return false;
+      const runs = t(ASSISTANT_TABLES.run);
+      return transaction(
+        async (db) =>
+          (await db.run(
+            `DELETE FROM ${runs} WHERE id = ? AND app = ? AND tenant = ? AND account = ?`,
+            id,
+            owner.app,
+            owner.tenant,
+            owner.account,
+          )) > 0,
+      );
+    },
+    async countActiveRuns(owner) {
+      assertOwner(owner);
+      const runs = t(ASSISTANT_TABLES.run);
+      const rows = await transaction((db) =>
+        db.all(
+          `SELECT COUNT(*) AS n FROM ${runs} WHERE app = ? AND tenant = ? AND account = ? AND status IN ('queued', 'running')`,
+          owner.app,
+          owner.tenant,
+          owner.account,
+        ),
+      );
+      return rows.length ? num(rows[0]!.n) : 0;
+    },
     async tenantEnabled(app, tenant) {
       if (typeof app !== 'string' || typeof tenant !== 'string' || !app || !tenant) return false;
       const rows = await transaction((db) =>
@@ -532,6 +760,7 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
     async purge(app, before) {
       if (typeof app !== 'string' || !app || typeof before !== 'string' || !Number.isFinite(Date.parse(before))) return 0;
       return transaction(async (db) => {
+        await db.run(`DELETE FROM ${t(ASSISTANT_TABLES.run)} WHERE app = ? AND updated_at < ?`, app, before);
         await db.run(
           `DELETE FROM ${t(event)} WHERE conversation IN (SELECT id FROM ${t(conversation)} WHERE app = ? AND updated_at < ?)`,
           app,

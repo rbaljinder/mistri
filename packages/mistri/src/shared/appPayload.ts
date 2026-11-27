@@ -12,7 +12,13 @@
  * under the resource, whichever view shows it.
  */
 import { servedShellNew, type ServedShellNew } from './appNewMenu.js';
-import type { AssistantStarter, ServedAssistantAgent, ServedAssistantKnowledge, ServedAssistantMemory } from './appAssistant.js';
+import type {
+  AssistantStarter,
+  ServedAssistantAgent,
+  ServedAssistantBackgroundRuns,
+  ServedAssistantKnowledge,
+  ServedAssistantMemory,
+} from './appAssistant.js';
 import type { AppShell } from './appModel.js';
 import { appZone } from './appZone.js';
 import type { AppFormCommandReference } from './command.js';
@@ -187,6 +193,10 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
     memory?: ServedAssistantMemory & { sharedRoles?: string[] };
     /** Authority-scoped knowledge sources available to this viewer (`roles` stripped in appProjection.ts). */
     knowledge?: Array<ServedAssistantKnowledge & { roles?: string[] }>;
+    /** Durable background agent runs capability and presets (`roles` stripped in appProjection.ts). */
+    backgroundRuns?: Omit<ServedAssistantBackgroundRuns, 'presets'> & {
+      presets: Array<ServedAssistantBackgroundRuns['presets'][number] & { roles?: string[] }>;
+    };
   };
   /** The fields a decision answers, by table id then column (decide/decisionServing.ts): where a record reserves a
       suggestion's place, and the command its Accept runs. Only the tables this reader is served. */
@@ -302,6 +312,7 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
             ...servedCustomBlocks(app.assistant.customBlocks),
             ...servedMemory(app.assistant.memory),
             ...servedKnowledge(app.assistant.knowledge, schema),
+            ...servedBackgroundRuns(app.assistant.backgroundRuns),
           },
         }
       : {}),
@@ -424,6 +435,26 @@ function servedKnowledge(
     ];
   });
   return list.length ? { knowledge: list } : {};
+}
+
+function servedBackgroundRuns(runs: NonNullable<AppDef['assistant']>['backgroundRuns']): {
+  backgroundRuns?: NonNullable<AppPayloadApp['assistant']>['backgroundRuns'];
+} {
+  if (!runs) return {};
+  return {
+    backgroundRuns: {
+      maxConcurrent: runs.maxConcurrent,
+      maxSteps: runs.maxSteps,
+      presets: runs.presets.map((preset) => ({
+        id: preset.id,
+        label: preset.label,
+        ...(preset.description ? { description: preset.description } : {}),
+        prompt: preset.prompt,
+        ...(preset.agent ? { agent: preset.agent } : {}),
+        ...(preset.roles ? { roles: [...preset.roles] } : {}),
+      })),
+    },
+  };
 }
 
 /** The pages an address book reads: a base this catalog has, as its table id. */

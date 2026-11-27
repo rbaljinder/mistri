@@ -41,8 +41,26 @@ CREATE TABLE "__mistri_assistant_memory" (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
+CREATE TABLE "__mistri_assistant_run" (
+  id TEXT COLLATE BINARY PRIMARY KEY,
+  app TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(app AS BLOB)) <= 128),
+  tenant TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(tenant AS BLOB)) <= 128),
+  account TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(account AS BLOB)) <= 1024),
+  conversation TEXT COLLATE BINARY NOT NULL,
+  agent TEXT COLLATE BINARY NOT NULL CHECK (length(CAST(agent AS BLOB)) <= 64),
+  title TEXT NOT NULL CHECK (length(CAST(title AS BLOB)) <= 200),
+  prompt TEXT NOT NULL CHECK (length(CAST(prompt AS BLOB)) <= 4000),
+  status TEXT NOT NULL CHECK (status IN ('queued', 'running', 'awaiting', 'completed', 'failed', 'cancelled')),
+  steps INTEGER NOT NULL,
+  tokens INTEGER NOT NULL,
+  summary TEXT NOT NULL CHECK (length(CAST(summary AS BLOB)) <= 2000),
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  finished_at TEXT NOT NULL
+);
 CREATE INDEX "__mistri_assistant_conversation_owner" ON "__mistri_assistant_conversation" (app, tenant, account, updated_at);
 CREATE INDEX "__mistri_assistant_memory_owner" ON "__mistri_assistant_memory" (app, tenant, scope, account, updated_at);
+CREATE INDEX "__mistri_assistant_run_owner" ON "__mistri_assistant_run" (app, tenant, account, updated_at);
 CREATE TABLE "__mistri_switch_meta" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   version INTEGER NOT NULL CHECK (version = 1)

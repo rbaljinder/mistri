@@ -52,6 +52,7 @@ interface Fixture {
   turn(body: Record<string, unknown>): Promise<{ status: number; events: Event[]; body?: any }>;
   resolve(body: Record<string, unknown>): Promise<{ status: number; events: Event[]; body?: any }>;
   get(path: string): Promise<{ status: number; body: any }>;
+  streamGet(path: string): Promise<{ status: number; events: Event[] }>;
   post(path: string, body: Record<string, unknown>): Promise<{ status: number; body: any }>;
   db: DatabaseSync;
   requests: ModelRequest[];
@@ -178,6 +179,15 @@ async function fixture(
       get: async (path) => {
         const response = await fetch(url(path), { signal: AbortSignal.timeout(5000) });
         return { status: response.status, body: await response.json() };
+      },
+      streamGet: async (path) => {
+        const response = await fetch(url(path), { signal: AbortSignal.timeout(10_000) });
+        const text = await response.text();
+        const events = text
+          .split('\n\n')
+          .filter(Boolean)
+          .map((chunk) => ({ event: /^event: (.*)$/m.exec(chunk)![1], data: JSON.parse(/^data: (.*)$/m.exec(chunk)![1]) }));
+        return { status: response.status, events };
       },
       post: async (path, body) => {
         const response = await fetch(url(path), {
@@ -1699,6 +1709,177 @@ test('memory forget tool, maxItems eviction, per-agent narrowing, and knowledge 
         agents: {
           analyst: { name: 'Analyst', knowledge: ['working_leads'] },
           stateless: { name: 'Stateless', memory: false, knowledge: ['people'] },
+        },
+      },
+    },
+  );
+});
+
+test('durable background runs stream live SSE, pause at approval checkpoints, resume, cancel, enforce concurrency & roles, and isolate accounts', async () => {
+  await fixture(
+    async ({ as, get, streamGet, post }) => {
+      // 1. Launch a preset background run (202 Accepted) and stream it to completion.
+      setAssistantModel(() =>
+        scriptedModel({
+          turns: [
+            {
+              when: 'Audit all open leads',
+              steps: [{ tools: [{ name: 'query', input: { q: 'lead' } }] }, { text: 'Background audit complete: 2 leads inspected.' }],
+            },
+            {
+              when: 'Start working Acme in background',
+              steps: [
+                {
+                  tools: [
+                    {
+                      name: 'run',
+                      input: { action: 'lead.startWorking', id: 1, why: 'Met enterprise qualification criteria.' },
+                    },
+                  ],
+                },
+                { text: 'Acme Corp is now working and background run finished.' },
+              ],
+            },
+          ],
+        }),
+      );
+
+      const started = await post('/api/assistant/runs', { app: appId, preset: 'pipeline_audit' });
+      assert.equal(started.status, 202);
+      const run1 = started.body.run as { id: string; conversation: string; title: string; agent: string };
+      assert.equal(run1.title, 'Pipeline Audit');
+      assert.equal(run1.agent, 'analyst');
+
+      const stream1 = await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(run1.id)}`);
+      assert.equal(stream1.status, 200);
+      assert.ok(stream1.events.some((e) => e.event === 'run_status'));
+      assert.ok(stream1.events.some((e) => e.event === 'done'));
+
+      // Durable detail replays steps + text, and linked conversation opens normally.
+      const detail1 = await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(run1.id)}`);
+      assert.equal(detail1.status, 200);
+      assert.equal((detail1.body.run as { status: string }).status, 'completed');
+      assert.ok((detail1.body.run as { steps: number }).steps >= 1);
+      const detailItems = detail1.body.items as Array<{ type: string; text?: string }>;
+      assert.ok(detailItems.some((item) => item.type === 'text' && /Background audit complete/.test(item.text ?? '')));
+      const linkedConv = await get(`/api/assistant/conversation?app=${appId}&id=${encodeURIComponent(run1.conversation)}`);
+      assert.equal(linkedConv.status, 200);
+
+      // 2. Approval checkpoint pause (`awaiting`) -> resolve -> resumes to `completed`.
+      const started2 = await post('/api/assistant/runs', { app: appId, prompt: 'Start working Acme in background' });
+      assert.equal(started2.status, 202);
+      const run2 = started2.body.run as { id: string };
+      await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(run2.id)}`);
+
+      const detail2 = await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(run2.id)}`);
+      assert.equal(detail2.status, 200);
+      assert.equal((detail2.body.run as { status: string }).status, 'awaiting');
+      assert.equal(detail2.body.awaiting, true);
+      const proposalItem = (detail2.body.items as Array<{ type: string; id?: string }>).find((i) => i.type === 'proposal');
+      assert.ok(proposalItem?.id, 'background run persisted pending proposal');
+
+      const resolved = await post('/api/assistant/runs/resolve', {
+        app: appId,
+        id: run2.id,
+        proposal: proposalItem!.id,
+        outcome: 'done',
+      });
+      assert.equal(resolved.status, 202);
+      await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(run2.id)}`);
+
+      const detail2After = await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(run2.id)}`);
+      assert.equal((detail2After.body.run as { status: string }).status, 'completed');
+      assert.ok(
+        (detail2After.body.items as Array<{ type: string; text?: string }>).some(
+          (i) => i.type === 'text' && /Acme Corp is now working/.test(i.text ?? ''),
+        ),
+      );
+
+      // 3. Concurrency cap (`maxConcurrent: 1`) + cancel + resume + delete.
+      let releaseSlow!: () => void;
+      const slowGate = new Promise<void>((r) => {
+        releaseSlow = r;
+      });
+      setAssistantModel(() => ({
+        async stream(_req, onText, signal) {
+          if (signal?.aborted) throw new Error('aborted');
+          await new Promise<void>((resolve, reject) => {
+            const onAbort = () => reject(new Error('aborted'));
+            signal?.addEventListener('abort', onAbort, { once: true });
+            void slowGate.then(() => {
+              signal?.removeEventListener('abort', onAbort);
+              resolve();
+            });
+          });
+          if (typeof onText === 'function') onText('Slow run finished.');
+          else onText.onText('Slow run finished.');
+          return {
+            content: [{ type: 'text', text: 'Slow run finished.' }],
+            stopReason: 'end_turn',
+            usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 },
+          };
+        },
+      }));
+
+      const slow1 = await post('/api/assistant/runs', { app: appId, prompt: 'Slow investigation' });
+      assert.equal(slow1.status, 202);
+      const slowId = (slow1.body.run as { id: string }).id;
+
+      // Second concurrent run rejected with 429 while first is active.
+      const slow2 = await post('/api/assistant/runs', { app: appId, prompt: 'Blocked second run' });
+      assert.equal(slow2.status, 429);
+
+      // Cancel active run cleanly.
+      const cancelled = await post('/api/assistant/runs/cancel', { app: appId, id: slowId });
+      assert.equal(cancelled.status, 200);
+      assert.equal((cancelled.body.run as { status: string }).status, 'cancelled');
+
+      // Resume cancelled run with fast model -> completes!
+      releaseSlow();
+      const resumed = await post('/api/assistant/runs/resume', { app: appId, id: slowId });
+      assert.equal(resumed.status, 202);
+      await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(slowId)}`);
+      const afterResume = await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(slowId)}`);
+      assert.equal((afterResume.body.run as { status: string }).status, 'completed');
+
+      // 4. Cross-account isolation & preset role enforcement (`viewer` cannot see `ann`'s runs or run rep-only preset).
+      as('viewer');
+      const viewerApp = (await get(`/api/app?app=${appId}`)).body.app as {
+        assistant?: { backgroundRuns?: { presets?: Array<{ id: string }> } };
+      };
+      assert.deepEqual(viewerApp.assistant?.backgroundRuns?.presets ?? [], []);
+      const forbiddenPreset = await post('/api/assistant/runs', { app: appId, preset: 'pipeline_audit' });
+      assert.equal(forbiddenPreset.status, 403);
+      const crossDetail = await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(run1.id)}`);
+      assert.equal(crossDetail.status, 404);
+      const crossList = await get(`/api/assistant/runs?app=${appId}`);
+      assert.deepEqual(crossList.body.runs, []);
+
+      // 5. Original owner can delete their run record.
+      as('ann');
+      const deleted = await post('/api/assistant/runs/delete', { app: appId, id: slowId });
+      assert.equal(deleted.status, 200);
+      assert.equal((await get(`/api/assistant/runs/detail?app=${appId}&id=${encodeURIComponent(slowId)}`)).status, 404);
+    },
+    {
+      assistant: {
+        defaultAgent: 'analyst',
+        agents: {
+          analyst: { name: 'Analyst' },
+        },
+        backgroundRuns: {
+          maxConcurrent: 1,
+          maxSteps: 10,
+          presets: [
+            {
+              id: 'pipeline_audit',
+              label: 'Pipeline Audit',
+              description: 'Inspect all open leads',
+              prompt: 'Audit all open leads',
+              agent: 'analyst',
+              roles: ['rep'],
+            },
+          ],
         },
       },
     },

@@ -3894,6 +3894,32 @@ export interface AssistantDeclaration {
   readonly memory?: boolean | AssistantMemoryDeclaration;
   /** Authority-scoped knowledge sources backed by App resources; searched under the viewer's own grants & row policies with inline citations. */
   readonly knowledge?: Readonly<Record<string, AssistantKnowledgeDeclaration>>;
+  /** Durable background agent runs (`true` enables ad-hoc background runs; or configure `{ maxConcurrent, maxSteps, presets }`). */
+  readonly backgroundRuns?: boolean | AssistantBackgroundRunsDeclaration;
+}
+/** Durable background agent run settings for an App's assistant. */
+export interface AssistantBackgroundRunsDeclaration {
+  /** Maximum active concurrent background runs per person (1–5, default 2). */
+  readonly maxConcurrent?: number;
+  /** Maximum tool rounds per background run (1–32, default 16). */
+  readonly maxSteps?: number;
+  /** Optional one-click background run playbooks/presets shown in the Run Monitor. */
+  readonly presets?: readonly AssistantRunPresetDeclaration[];
+}
+/** A one-click background agent run preset shown in the Run Monitor. */
+export interface AssistantRunPresetDeclaration {
+  /** Stable identifier for this preset (lowercase letters, digits, hyphens, underscores). */
+  readonly id: string;
+  /** Short label shown on the preset button in the Run Monitor. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description shown beside the preset. */
+  readonly description?: string | AppMessageRef;
+  /** Prompt/task executed when this preset is launched. */
+  readonly prompt: string;
+  /** Optional named agent key from `assistant.agents` to execute this preset. */
+  readonly agent?: string;
+  /** Roles permitted to launch this preset; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
 }
 /** Scoped durable memory configuration for an App's assistant. */
 export interface AssistantMemoryDeclaration {

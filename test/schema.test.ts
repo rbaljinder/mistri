@@ -823,7 +823,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // `assistantAgent` properties, `assistantCustomBlock` properties: 21 entries; 4 new names): 1887/562.
     // Unreleased (Wave 2A): scoped persistent memory & grounded knowledge (`memory`, `knowledge`, `scopes`,
     // `maxItems`, `sharedRoles`, `assistantKnowledge` properties, per-agent `memory`/`knowledge`: 14 entries; 5 new names): 1901/567.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1901, names: 567 });
+    // Unreleased (Wave 2B): durable background runs (`backgroundRuns`, `maxConcurrent`, `maxSteps`, `presets`,
+    // `assistantRunPreset` properties: 10 entries; 6 new names): 1911/573.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1911, names: 573 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

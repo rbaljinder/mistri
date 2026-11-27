@@ -12,6 +12,14 @@
  *   GET  /api/assistant/memories?app=      durable memories visible to this person (personal + shared)
  *   POST /api/assistant/memories           save or edit a memory (person or shared workspace)
  *   POST /api/assistant/memories/delete    forget one memory
+ *   GET  /api/assistant/runs?app=          durable background runs for this person, newest first
+ *   POST /api/assistant/runs               launch a background run (returns 202 Accepted)
+ *   GET  /api/assistant/runs/detail?app=&id=  one run with its persisted conversation trace
+ *   GET  /api/assistant/runs/stream?app=&id=  live SSE stream attached to a running background run
+ *   POST /api/assistant/runs/cancel        cancel an active or awaiting background run
+ *   POST /api/assistant/runs/resolve       record a proposal outcome and resume a paused background run
+ *   POST /api/assistant/runs/resume        retry a failed, cancelled, or interrupted background run
+ *   POST /api/assistant/runs/delete        cancel (if active) and delete a background run record
  *   POST /api/assistant/rename             name one again
  *   POST /api/assistant/delete             forget one
  *
@@ -31,6 +39,7 @@ import type { AppPayloadApp } from '../../shared/appPayload.js';
 import type { AppHost } from '../app/apps.js';
 import { catalogFromPayload, mayRunAction, nowLine, systemPrompt, toolSpecs } from '../assistant/assistantCatalog.js';
 import { assistantModel } from '../assistant/assistantModel.js';
+import { cancelBackgroundRun, isBackgroundRunLive, launchBackgroundRun, subscribeBackgroundRun } from '../assistant/assistantRuns.js';
 import { assistantStoreFor, storeUnavailableReply } from '../assistant/assistantStores.js';
 import { aboutRecord, recordContext, type ToolSession } from '../assistant/assistantTools.js';
 import type { CommandProposalRow } from '../../adapters/commands/commandJournalTypes.js';
@@ -64,6 +73,13 @@ export const ASSISTANT_PATHS: ReadonlySet<string> = new Set([
   '/api/assistant/about',
   '/api/assistant/memories',
   '/api/assistant/memories/delete',
+  '/api/assistant/runs',
+  '/api/assistant/runs/detail',
+  '/api/assistant/runs/stream',
+  '/api/assistant/runs/cancel',
+  '/api/assistant/runs/resolve',
+  '/api/assistant/runs/resume',
+  '/api/assistant/runs/delete',
 ]);
 const SAID: Record<string, readonly string[]> = {
   '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode', 'effort', 'agent'],
@@ -74,6 +90,11 @@ const SAID: Record<string, readonly string[]> = {
   '/api/assistant/about': ['app', 'resource', 'id'],
   '/api/assistant/memories': ['app', 'content', 'scope', 'id', 'agent'],
   '/api/assistant/memories/delete': ['app', 'id'],
+  '/api/assistant/runs': ['app', 'prompt', 'preset', 'title', 'agent', 'effort'],
+  '/api/assistant/runs/cancel': ['app', 'id'],
+  '/api/assistant/runs/resolve': ['app', 'id', 'proposal', 'outcome', 'detail'],
+  '/api/assistant/runs/resume': ['app', 'id'],
+  '/api/assistant/runs/delete': ['app', 'id'],
 };
 /* Refused alike whether the table is not theirs, the row is outside their rows or it is not there: which of the three
    is not the page's to learn, as a record's own address answers. */
@@ -168,6 +189,8 @@ interface AssistantScope {
   readonly roles?: readonly string[];
   /** A request back through the App's own routes, as this person: each read is gated and row-scoped there. */
   readonly loop: () => Loop;
+  /** Detached loopback factory for background runs that outlive the originating 202 HTTP response. */
+  readonly backgroundLoop?: () => Loop;
   /** A tenant App's: the platform owner's daily cap for one tenant. */
   readonly tokensPerTenantPerDay?: number;
   /** A tenant App's: asked before every model call; a reason ends the turn (the switch was turned off). */
@@ -177,7 +200,7 @@ interface AssistantScope {
   readonly propose?: (draft: ProposalDraft) => Promise<CommandProposalRow>;
 }
 
-export async function assistantRoutes(ctx: Base, loop: () => Loop): Promise<boolean> {
+export async function assistantRoutes(ctx: Base, loop: () => Loop, backgroundLoop?: () => Loop): Promise<boolean> {
   const { req, res, url, path, appHosts, registry } = ctx;
   if (!ASSISTANT_PATHS.has(path)) return false;
   await answerAssistant(req, res, url, path, async (appId) => {
@@ -200,6 +223,7 @@ export async function assistantRoutes(ctx: Base, loop: () => Loop): Promise<bool
       store,
       roles: host.app.app.auth ? roles : undefined,
       loop,
+      ...(backgroundLoop ? { backgroundLoop } : {}),
       propose: (draft) => createAssistantProposal(ctx, draft),
     };
   });
@@ -325,6 +349,305 @@ export async function answerAssistant(
       }
       send(res, 200, { deleted: true });
       return;
+    }
+    if (path === '/api/assistant/runs' || path.startsWith('/api/assistant/runs/')) {
+      const bgCfg = assistant.backgroundRuns;
+      if (!bgCfg) throw new HttpError(404, 'Background runs are not enabled for this assistant.');
+      const runLoopFactory = scope.backgroundLoop ?? loop;
+
+      const prepareRunContext = async (agentId: string | undefined) => {
+        const bgLoop = runLoopFactory();
+        const prepSignal = new AbortController().signal;
+        const payload = await servedTo(bgLoop, app.id, prepSignal);
+        const viewerRoles = scope.roles ?? payload.viewerRoles;
+        let resolvedAgent: ReturnType<typeof resolveAgentAssistant>;
+        try {
+          resolvedAgent = resolveAgentAssistant(assistant, agentId, viewerRoles);
+        } catch (error) {
+          throw new HttpError(403, error instanceof Error ? error.message : 'That agent is not offered to your role.');
+        }
+        const runAssistant: AppAssistant = {
+          ...resolvedAgent.assistant,
+          limits: { ...resolvedAgent.assistant.limits, steps: bgCfg.maxSteps },
+        };
+        const activeAgent = resolvedAgent.agent;
+        const canWriteShared = canWriteSharedMemory(runAssistant.memory, viewerRoles ?? []);
+        const memories = runAssistant.memory
+          ? await store.memories(owner, {
+              scopes: runAssistant.memory.scopes,
+              agent: activeAgent?.id,
+              limit: 40,
+            })
+          : undefined;
+        const catalog = catalogFromPayload(
+          payload,
+          runAssistant,
+          await tablesOf(bgLoop, app.id, prepSignal),
+          activeAgent,
+          runAssistant.memory ? { memories, canWriteSharedMemory: canWriteShared } : undefined,
+        );
+        const system = systemPrompt(catalog);
+        const tools = toolSpecs(runAssistant, activeAgent, { canWriteSharedMemory: canWriteShared });
+        const createSession = (signal: AbortSignal): ToolSession => ({
+          loop: bgLoop,
+          app: app.id,
+          payload,
+          assistant: runAssistant,
+          catalog,
+          signal,
+          ...(runAssistant.memory ? { store, owner, agentId: activeAgent?.id ?? '', canWriteSharedMemory: canWriteShared } : {}),
+          ...(scope.propose ? { propose: scope.propose } : {}),
+        });
+        return { payload, viewerRoles, runAssistant, activeAgent, system, tools, createSession };
+      };
+
+      if (path === '/api/assistant/runs' && get) {
+        const runs = await store.listRuns(owner, 40);
+        send(res, 200, {
+          runs: runs.map((run) => ({ ...run, live: isBackgroundRunLive(owner, run.id) })),
+          ready: Boolean(assistantModel()),
+        });
+        return;
+      }
+      if (path === '/api/assistant/runs/detail') {
+        if (!get) throw new HttpError(405, 'Method not allowed.');
+        const runId = url.searchParams.get('id')?.trim() ?? '';
+        const run = runId ? await store.getRun(owner, runId) : null;
+        if (!run) throw new HttpError(404, 'No such run.');
+        const convEvents = await store.events(owner, run.conversation);
+        const items = itemsOf(convEvents, await reviewsOf(loop(), undecidedReviews(convEvents)), {
+          showReasoning: assistant.reasoning !== 'hidden',
+        });
+        send(res, 200, {
+          run: { ...run, live: isBackgroundRunLive(owner, run.id) },
+          items,
+          ...(pendingProposal(convEvents) ? { awaiting: true } : {}),
+        });
+        return;
+      }
+      if (path === '/api/assistant/runs/stream') {
+        if (!get) throw new HttpError(405, 'Method not allowed.');
+        const runId = url.searchParams.get('id')?.trim() ?? '';
+        const run = runId ? await store.getRun(owner, runId) : null;
+        if (!run) throw new HttpError(404, 'No such run.');
+        const emit = stream(res);
+        const live = isBackgroundRunLive(owner, run.id);
+        emit('run_status', { run: { ...run, live } });
+        let unsubscribe: (() => void) | null = null;
+        unsubscribe = subscribeBackgroundRun(owner, run.id, (event, data) => {
+          emit(event, data);
+          if (event === 'done') {
+            unsubscribe?.();
+            unsubscribe = null;
+            if (!res.writableEnded) res.end();
+          }
+        });
+        if (!unsubscribe) {
+          emit('done', { state: run.status, tokens: run.tokens });
+          res.end();
+          return;
+        }
+        res.once('close', () => {
+          unsubscribe?.();
+          unsubscribe = null;
+        });
+        return;
+      }
+      if (path === '/api/assistant/runs/cancel') {
+        const runId = typeof body.id === 'string' ? body.id.trim() : '';
+        const cancelled = runId ? await cancelBackgroundRun(store, owner, runId) : null;
+        if (!cancelled) throw new HttpError(404, 'No such run.');
+        send(res, 200, { run: { ...cancelled, live: false } });
+        return;
+      }
+      if (path === '/api/assistant/runs/delete') {
+        const runId = typeof body.id === 'string' ? body.id.trim() : '';
+        if (!runId) throw new HttpError(404, 'No such run.');
+        await cancelBackgroundRun(store, owner, runId);
+        if (!(await store.deleteRun(owner, runId))) throw new HttpError(404, 'No such run.');
+        send(res, 200, { deleted: true });
+        return;
+      }
+
+      const model = assistantModel();
+      if (!model) throw new HttpError(503, 'The assistant has no model set up. The operator sets ANTHROPIC_API_KEY.');
+      const at = new Date().toISOString();
+
+      if (path === '/api/assistant/runs') {
+        const active = await store.countActiveRuns(owner);
+        if (active >= bgCfg.maxConcurrent) {
+          throw new HttpError(
+            429,
+            `At most ${bgCfg.maxConcurrent} background ${bgCfg.maxConcurrent === 1 ? 'run' : 'runs'} may run at once: wait for one to finish or cancel it.`,
+          );
+        }
+        let runEffort: AppAssistant['effort'] | undefined;
+        if (body.effort !== undefined) {
+          if (!assistant.effortPicker) throw new HttpError(400, 'Reasoning effort is set by the App here.');
+          if (!(ASSISTANT_EFFORTS as readonly unknown[]).includes(body.effort))
+            throw new HttpError(400, 'Effort is "low", "medium" or "high".');
+          runEffort = body.effort as AppAssistant['effort'];
+        }
+        let prompt = '';
+        let title = '';
+        let requestedAgent: string | undefined;
+        if (body.preset !== undefined) {
+          if (typeof body.preset !== 'string' || !body.preset.trim()) throw new HttpError(400, 'Preset must be a preset id.');
+          const preset = (bgCfg.presets ?? []).find((each) => each.id === body.preset);
+          if (!preset) throw new HttpError(404, `Unknown background run preset "${body.preset}".`);
+          const roles =
+            scope.roles ?? (preset.roles ? (await servedTo(loop(), app.id, new AbortController().signal)).viewerRoles : undefined) ?? [];
+          if (preset.roles && !roles.some((role) => preset.roles!.includes(role))) {
+            throw new HttpError(403, 'That background run preset is not offered to your role.');
+          }
+          prompt = preset.prompt;
+          title = typeof body.title === 'string' && body.title.trim() ? body.title.replace(/\s+/g, ' ').trim().slice(0, 200) : preset.label;
+          requestedAgent = preset.agent;
+        } else {
+          prompt = typeof body.prompt === 'string' ? body.prompt.trim() : '';
+          if (!prompt || prompt.length > MAX_TEXT) throw new HttpError(400, `Say something, in at most ${MAX_TEXT} characters.`);
+          title =
+            typeof body.title === 'string' && body.title.trim()
+              ? body.title.replace(/\s+/g, ' ').trim().slice(0, 200)
+              : prompt.replace(/\s+/g, ' ').trim().slice(0, 80);
+          if (body.agent !== undefined) {
+            if (typeof body.agent !== 'string' || !body.agent.trim()) throw new HttpError(400, 'Agent must be a named agent id.');
+            requestedAgent = body.agent.trim();
+            if (!assistant.agents || !Object.hasOwn(assistant.agents, requestedAgent))
+              throw new HttpError(400, `Unknown agent "${requestedAgent}".`);
+          }
+        }
+        const prepared = await prepareRunContext(requestedAgent);
+        const conv = await store.create(owner, title, at);
+        await store.append(
+          owner,
+          conv.id,
+          [
+            {
+              kind: 'person',
+              body: {
+                text: prompt,
+                context: nowLine(prepared.payload.ui?.timezone),
+                ...(prepared.activeAgent ? { agent: prepared.activeAgent.id } : {}),
+              },
+            },
+          ],
+          'idle',
+          at,
+        );
+        const run = await store.createRun(
+          owner,
+          {
+            conversation: conv.id,
+            title,
+            prompt,
+            agent: prepared.activeAgent?.id ?? '',
+          },
+          at,
+        );
+        launchBackgroundRun({
+          store,
+          owner,
+          run,
+          model,
+          assistant: prepared.runAssistant,
+          baseAssistant: assistant,
+          ...(prepared.activeAgent ? { activeAgent: prepared.activeAgent } : {}),
+          ...(prepared.viewerRoles ? { viewerRoles: prepared.viewerRoles } : {}),
+          system: prepared.system,
+          tools: prepared.tools,
+          createSession: prepared.createSession,
+          ...(runEffort ? { effort: runEffort } : {}),
+          ...(scope.tokensPerTenantPerDay === undefined ? {} : { tokensPerTenantPerDay: scope.tokensPerTenantPerDay }),
+          ...(scope.withdrawn ? { withdrawn: scope.withdrawn } : {}),
+        });
+        send(res, 202, { run: { ...run, live: true } });
+        return;
+      }
+
+      if (path === '/api/assistant/runs/resolve') {
+        const runId = typeof body.id === 'string' ? body.id.trim() : '';
+        const run = runId ? await store.getRun(owner, runId) : null;
+        if (!run) throw new HttpError(404, 'No such run.');
+        if (isBackgroundRunLive(owner, run.id)) throw new HttpError(409, 'This run is already executing.');
+        const convEvents = await store.events(owner, run.conversation);
+        const waiting = pendingProposal(convEvents);
+        if (!waiting || waiting.id !== body.proposal) throw new HttpError(409, 'That change is not waiting for you.');
+        if (!['done', 'declined', 'failed'].includes(body.outcome as string))
+          throw new HttpError(400, 'An outcome is done, declined or failed.');
+        const active = await store.countActiveRuns(owner);
+        if (active >= bgCfg.maxConcurrent) {
+          throw new HttpError(
+            429,
+            `At most ${bgCfg.maxConcurrent} background ${bgCfg.maxConcurrent === 1 ? 'run' : 'runs'} may run at once: wait for one to finish or cancel it.`,
+          );
+        }
+        const prepared = await prepareRunContext(run.agent || undefined);
+        const detail = typeof body.detail === 'string' ? body.detail.slice(0, 500) : undefined;
+        await store.append(
+          owner,
+          run.conversation,
+          [{ kind: 'outcome', body: { id: waiting.id, status: body.outcome, ...(detail ? { detail } : {}) } }],
+          'idle',
+          at,
+        );
+        const queued = (await store.updateRun(owner, run.id, { status: 'queued', finishedAt: '' }, at)) ?? run;
+        launchBackgroundRun({
+          store,
+          owner,
+          run: queued,
+          model,
+          assistant: prepared.runAssistant,
+          baseAssistant: assistant,
+          ...(prepared.activeAgent ? { activeAgent: prepared.activeAgent } : {}),
+          ...(prepared.viewerRoles ? { viewerRoles: prepared.viewerRoles } : {}),
+          system: prepared.system,
+          tools: prepared.tools,
+          createSession: prepared.createSession,
+          ...(scope.tokensPerTenantPerDay === undefined ? {} : { tokensPerTenantPerDay: scope.tokensPerTenantPerDay }),
+          ...(scope.withdrawn ? { withdrawn: scope.withdrawn } : {}),
+        });
+        send(res, 202, { run: { ...queued, live: true } });
+        return;
+      }
+
+      if (path === '/api/assistant/runs/resume') {
+        const runId = typeof body.id === 'string' ? body.id.trim() : '';
+        const run = runId ? await store.getRun(owner, runId) : null;
+        if (!run) throw new HttpError(404, 'No such run.');
+        if (isBackgroundRunLive(owner, run.id)) throw new HttpError(409, 'This run is already executing.');
+        if (run.status === 'completed') throw new HttpError(409, 'This run already completed.');
+        const convEvents = await store.events(owner, run.conversation);
+        if (pendingProposal(convEvents)) throw new HttpError(409, 'Confirm or decline the proposed change first.');
+        const active = await store.countActiveRuns(owner);
+        const alreadyCounted = run.status === 'running' || run.status === 'queued';
+        if (!alreadyCounted && active >= bgCfg.maxConcurrent) {
+          throw new HttpError(
+            429,
+            `At most ${bgCfg.maxConcurrent} background ${bgCfg.maxConcurrent === 1 ? 'run' : 'runs'} may run at once: wait for one to finish or cancel it.`,
+          );
+        }
+        const prepared = await prepareRunContext(run.agent || undefined);
+        const queued = (await store.updateRun(owner, run.id, { status: 'queued', finishedAt: '' }, at)) ?? run;
+        launchBackgroundRun({
+          store,
+          owner,
+          run: queued,
+          model,
+          assistant: prepared.runAssistant,
+          baseAssistant: assistant,
+          ...(prepared.activeAgent ? { activeAgent: prepared.activeAgent } : {}),
+          ...(prepared.viewerRoles ? { viewerRoles: prepared.viewerRoles } : {}),
+          system: prepared.system,
+          tools: prepared.tools,
+          createSession: prepared.createSession,
+          ...(scope.tokensPerTenantPerDay === undefined ? {} : { tokensPerTenantPerDay: scope.tokensPerTenantPerDay }),
+          ...(scope.withdrawn ? { withdrawn: scope.withdrawn } : {}),
+        });
+        send(res, 202, { run: { ...queued, live: true } });
+        return;
+      }
+      throw new HttpError(404, 'No such run route.');
     }
     if (path === '/api/assistant/about') {
       /* A page hands the panel what the person is on (useAssistant().open({ about })): the record is read here as them,

@@ -75,4 +75,7 @@ export const say = defineMessages({
   backToChat: 'Back to chat',
   canvasPane: 'Canvas',
   memory: 'Memory',
+  runs: 'Runs',
+  runsActive: 'Runs · {count}',
+  runInBackground: 'Background',
 });

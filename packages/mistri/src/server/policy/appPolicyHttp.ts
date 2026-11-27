@@ -271,6 +271,13 @@ const readPosts = new Set([
   '/api/assistant/about',
   '/api/assistant/rename',
   '/api/assistant/delete',
+  '/api/assistant/memories',
+  '/api/assistant/memories/delete',
+  '/api/assistant/runs',
+  '/api/assistant/runs/cancel',
+  '/api/assistant/runs/resolve',
+  '/api/assistant/runs/resume',
+  '/api/assistant/runs/delete',
 ]);
 const readGets = new Set([
   '/api/runtime',
@@ -290,6 +297,10 @@ const readGets = new Set([
   '/api/assistant',
   '/api/assistant/conversation',
   '/api/assistant/search',
+  '/api/assistant/memories',
+  '/api/assistant/runs',
+  '/api/assistant/runs/detail',
+  '/api/assistant/runs/stream',
 ]);
 
 /** An allowlist makes new HTTP routes opt in to the policy review, not out. */

@@ -451,7 +451,43 @@
           "propertyNames": { "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
           "description": "Authority-scoped knowledge sources backed by App resources, searchable with inline record citations.",
           "additionalProperties": { "$ref": "#/$defs/assistantKnowledge" }
+        },
+        "backgroundRuns": {
+          "description": "Durable background agent runs (true enables ad-hoc background runs; or configure maxConcurrent, maxSteps, presets).",
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/assistantBackgroundRuns" }
+          ]
         }
+      }
+    },
+    "assistantBackgroundRuns": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Durable background agent run settings for the assistant.",
+      "properties": {
+        "maxConcurrent": { "type": "integer", "minimum": 1, "maximum": 5, "description": "Maximum active concurrent background runs per person." },
+        "maxSteps": { "type": "integer", "minimum": 1, "maximum": 32, "description": "Maximum tool rounds per background run." },
+        "presets": {
+          "type": "array",
+          "maxItems": 12,
+          "items": { "$ref": "#/$defs/assistantRunPreset" },
+          "description": "One-click background run presets shown in the Run Monitor."
+        }
+      }
+    },
+    "assistantRunPreset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "prompt"],
+      "description": "A one-click background run playbook shown in the Run Monitor.",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
+        "label": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 80 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "agent": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,39}$" },
+        "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } }
       }
     },
     "assistantMemory": {

@@ -124,6 +124,7 @@ import { addHostListener, navFollow, portalRoot, removeHostListener, shellById }
 const Dashboard = onDemand(() => import('./Dashboard.js'), 'Dashboard');
 const AssistantCustomBlock = onDemand(() => import('./sdk/AssistantCustomBlock.js'), 'AssistantCustomBlock');
 const AssistantMemoryDrawer = onDemand(() => import('./AssistantMemoryDrawer.js'), 'AssistantMemoryDrawer');
+const AssistantRunMonitor = onDemand(() => import('./AssistantRunMonitor.js'), 'AssistantRunMonitor');
 
 type Summary = ConversationSummary;
 
@@ -1127,6 +1128,8 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
   const [items, setItems] = useState<PanelItem[]>([]);
   const [listing, setListing] = useState(false);
   const [memoryOpen, setMemoryOpen] = useState(false);
+  const [runsOpen, setRunsOpen] = useState(false);
+  const [initialRunId, setInitialRunId] = useState<string | null>(null);
   const [highlightedCitation, setHighlightedCitation] = useState<number | null>(null);
   const [text, setText] = useState('');
   const [editing, setEditing] = useState<number | null>(null);
@@ -1204,6 +1207,22 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     queryFn: async () =>
       (await assistantApi(`/api/assistant?app=${encodeURIComponent(app)}`)) as { conversations: Summary[]; ready: boolean },
   });
+  const runsSummary = useQuery({
+    queryKey: ['assistant-runs', app, owner],
+    enabled: Boolean(assistantConfig?.backgroundRuns),
+    queryFn: async () =>
+      (await assistantApi(`/api/assistant/runs?app=${encodeURIComponent(app)}`)) as {
+        runs: Array<{ id: string; status: string; live?: boolean }>;
+        ready: boolean;
+      },
+    refetchInterval: (query) => {
+      const list = query.state.data?.runs ?? [];
+      return list.some((r) => r.status === 'running' || r.status === 'queued' || r.live) ? 3000 : false;
+    },
+  });
+  const activeRunsCount = (runsSummary.data?.runs ?? []).filter(
+    (r) => r.status === 'running' || r.status === 'queued' || r.status === 'awaiting',
+  ).length;
   const opened = useQuery({
     queryKey: ['assistant-conversation', app, owner, conversation],
     // Not the one this panel's own turn just started: its items are already here.
@@ -1508,6 +1527,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     stop.current?.abort();
     setListing(false);
     setMemoryOpen(false);
+    setRunsOpen(false);
     setAsking(false);
     setCanvasEntry(null);
     if (room) {
@@ -1522,6 +1542,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     stop.current?.abort();
     setListing(false);
     setMemoryOpen(false);
+    setRunsOpen(false);
     setAsking(false);
     setCanvasEntry(null);
     if (room) {
@@ -1532,6 +1553,26 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     setItems([]);
     setEditing(null);
     setProblem(null);
+  };
+  const launchInBackground = async () => {
+    const body = text.trim();
+    if (!body || !assistantConfig?.backgroundRuns) return;
+    try {
+      const res = (await assistantApi('/api/assistant/runs', {
+        app,
+        prompt: body,
+        ...(activeAgent && agents.length > 1 ? { agent: activeAgent.id } : {}),
+        ...(assistantConfig.effortPicker ? { effort } : {}),
+      })) as { run: { id: string } };
+      setText('');
+      setListing(false);
+      setMemoryOpen(false);
+      setInitialRunId(res.run.id);
+      setRunsOpen(true);
+      void queryClient.invalidateQueries({ queryKey: ['assistant-runs', app, owner] });
+    } catch (error) {
+      setProblem({ text: say('couldNotAnswer', { message: error instanceof Error ? error.message : String(error) }) });
+    }
   };
   const remove = async (id: string) => {
     await assistantApi('/api/assistant/delete', { app, conversation: id });
@@ -1587,6 +1628,9 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     } else if (canvasEntry) {
       event.preventDefault();
       setCanvasEntry(null);
+    } else if (runsOpen) {
+      event.preventDefault();
+      setRunsOpen(false);
     } else if (memoryOpen) {
       event.preventDefault();
       setMemoryOpen(false);
@@ -1661,7 +1705,22 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
 
   const threadContent = (
     <div className="assistant-thread-column">
-      {memoryOpen && assistantConfig?.memory ? (
+      {runsOpen && assistantConfig?.backgroundRuns ? (
+        <AssistantRunMonitor
+          app={app}
+          config={assistantConfig.backgroundRuns}
+          agents={agents.map((a) => ({ id: a.id, name: a.name }))}
+          reasoning={assistantConfig.reasoning}
+          initialRunId={initialRunId}
+          onClose={() => setRunsOpen(false)}
+          onOpenConversation={(convId) => {
+            open(convId);
+            void queryClient.invalidateQueries({ queryKey: [LIST_QUERY, app, owner] });
+          }}
+          onFollow={onFollow}
+          onRunsChanged={() => void queryClient.invalidateQueries({ queryKey: ['assistant-runs', app, owner] })}
+        />
+      ) : memoryOpen && assistantConfig?.memory ? (
         <AssistantMemoryDrawer app={app} onClose={() => setMemoryOpen(false)} />
       ) : listing && !room ? (
         <div className="assistant-body">{list}</div>
@@ -1842,7 +1901,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
           </div>
         </ActionOutcomes.Provider>
       )}
-      {!memoryOpen && (
+      {!memoryOpen && !runsOpen && (
         <div className="assistant-foot">
           {context && withRecord && !listing && (
             <div className="assistant-context">
@@ -1941,9 +2000,16 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
                       {say('stop')}
                     </Button>
                   ) : (
-                    <Button size="sm" variant={canSend ? 'primary' : 'secondary'} onClick={send} disabled={!canSend}>
-                      {say('send')}
-                    </Button>
+                    <>
+                      {assistantConfig?.backgroundRuns && canSend && (
+                        <Button size="sm" variant="ghost" onClick={() => void launchInBackground()}>
+                          {say('runInBackground')}
+                        </Button>
+                      )}
+                      <Button size="sm" variant={canSend ? 'primary' : 'secondary'} onClick={send} disabled={!canSend}>
+                        {say('send')}
+                      </Button>
+                    </>
                   )}
                 </div>
               </div>
@@ -1988,6 +2054,61 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     </section>
   ) : null;
 
+  const compactSubbar = !room && !wide && Boolean(assistantConfig?.memory || assistantConfig?.backgroundRuns);
+  const headNav = (
+    <>
+      {assistantConfig?.backgroundRuns && (
+        <button
+          type="button"
+          className="icon-button"
+          aria-pressed={runsOpen}
+          onClick={() => {
+            setListing(false);
+            setMemoryOpen(false);
+            setInitialRunId(null);
+            setRunsOpen((was) => !was);
+          }}
+        >
+          {activeRunsCount > 0 && <span className="assistant-waiting-dot" aria-hidden="true" />}
+          {activeRunsCount > 0 ? say('runsActive', { count: activeRunsCount }) : say('runs')}
+        </button>
+      )}
+      {assistantConfig?.memory && (
+        <button
+          type="button"
+          className="icon-button"
+          aria-pressed={memoryOpen}
+          onClick={() => {
+            setListing(false);
+            setRunsOpen(false);
+            setMemoryOpen((was) => !was);
+          }}
+        >
+          {say('memory')}
+        </button>
+      )}
+      {!room && (
+        <button
+          type="button"
+          className="icon-button"
+          aria-pressed={listing}
+          onClick={() => {
+            setMemoryOpen(false);
+            setRunsOpen(false);
+            setListing((was) => !was);
+          }}
+        >
+          {say('conversations')}
+        </button>
+      )}
+      {!room && !listing && !memoryOpen && !runsOpen && (
+        <button type="button" className="icon-button" onClick={startNew}>
+          {say('newConversation')}
+        </button>
+      )}
+    </>
+  );
+
   return (
     <AiAssistantSurface
       ref={frame}
@@ -2014,7 +2135,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       words={surfaceWords}
       style={surfaceStyle}
       onKeyDown={onPanelKey}
-      className={`${room ? 'assistant-room' : 'assistant-panel'}${wide ? ' assistant-wide' : ''}${!room && wide ? ' assistant-panel-expanded' : ''}${floating ? ' assistant-panel-floating' : ''}${room && listing ? ' assistant-room-listing' : ''}${(starting || !ready) && !(listing && !room) && !memoryOpen && !liveCanvasItem ? ' assistant-starting' : ''}`}
+      className={`${room ? 'assistant-room' : 'assistant-panel'}${wide ? ' assistant-wide' : ''}${!room && wide ? ' assistant-panel-expanded' : ''}${floating ? ' assistant-panel-floating' : ''}${room && listing ? ' assistant-room-listing' : ''}${(starting || !ready) && !(listing && !room) && !memoryOpen && !runsOpen && !liveCanvasItem ? ' assistant-starting' : ''}`}
     >
       <div className="assistant-main">
         <div className="assistant-head">
@@ -2064,37 +2185,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
               </DropItem>
             </DropMenu>
           )}
-          {assistantConfig?.memory && (
-            <button
-              type="button"
-              className="icon-button"
-              aria-pressed={memoryOpen}
-              onClick={() => {
-                setListing(false);
-                setMemoryOpen((was) => !was);
-              }}
-            >
-              {say('memory')}
-            </button>
-          )}
-          {!room && (
-            <button
-              type="button"
-              className="icon-button"
-              aria-pressed={listing}
-              onClick={() => {
-                setMemoryOpen(false);
-                setListing((was) => !was);
-              }}
-            >
-              {say('conversations')}
-            </button>
-          )}
-          {!room && !listing && !memoryOpen && (
-            <button type="button" className="icon-button" onClick={startNew}>
-              {say('newConversation')}
-            </button>
-          )}
+          {!compactSubbar && headNav}
           {!room && (
             <AiModeSwitcher
               presentation={presentation}
@@ -2112,6 +2203,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
             </button>
           )}
         </div>
+        {compactSubbar && <div className="assistant-subbar">{headNav}</div>}
         <div className="assistant-workspace">
           {wide && canvasPane ? (
             <Resizable

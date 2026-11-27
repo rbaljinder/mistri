@@ -533,3 +533,19 @@ export async function stream(
   }).catch(cut);
   if (!finished && !signal.aborted) throw new ConnectionLost();
 }
+
+/** Attach to a live background run SSE stream (`GET /api/assistant/runs/stream?app=&id=`). */
+export async function streamRun(path: string, onEvent: (event: StreamEvent) => void, signal: AbortSignal): Promise<void> {
+  const { url } = scopeApiRequest(path, undefined, state.activeConnection);
+  const res = await fetchServer(url, {
+    method: 'GET',
+    credentials: 'same-origin',
+    cache: 'no-store',
+    signal,
+    headers: { ...assistantHeaders() },
+  });
+  if (!res.ok || !res.body) {
+    throw Object.assign(new Error(`${res.status}`), { status: res.status });
+  }
+  await readEvents(res.body, onEvent);
+}

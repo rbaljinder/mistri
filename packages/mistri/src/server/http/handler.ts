@@ -321,8 +321,14 @@ const OPEN_ROUTES: readonly Route<Admitted>[] = [
     return false;
   },
   /* The assistant's own routes read no rows: what it reads goes back through
-     this dispatcher as this request (the loop), row policy and all. */
-  (ctx) => assistantRoutes(ctx, () => loopback(ctx, ctx.configPages)),
+     this dispatcher as this request (the loop), row policy and all. Background
+     runs use a detached loopback cancelled only by their own AbortSignal. */
+  (ctx) =>
+    assistantRoutes(
+      ctx,
+      () => loopback(ctx, ctx.configPages),
+      () => loopback(ctx, ctx.configPages, undefined, true),
+    ),
   /* The embed's boot, with its first answers (embed/boot.ts): asked through
      the same loop, as this request, so it carries nothing a fetch would not
      be given. What a served page would not carry, it does not either. */
@@ -878,12 +884,26 @@ async function shareCardRoute(ctx: GatedContext): Promise<void> {
  * the whole of `handle` — the gate, the row policy, the routes — for the
  * request a fetch from that page would make, answered into memory.
  */
-function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMessage>): Loop {
+function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMessage>, detached = false): Loop {
+  // Snapshot headers and peer socket info upfront so detached background runs stay valid after the 202 response closes.
+  const sourceReq: IncomingMessage = detached
+    ? ({
+        headers: { ...ctx.req.headers },
+        httpVersion: ctx.req.httpVersion,
+        httpVersionMajor: ctx.req.httpVersionMajor,
+        httpVersionMinor: ctx.req.httpVersionMinor,
+        socket: {
+          remoteAddress: ctx.req.socket?.remoteAddress,
+          remotePort: ctx.req.socket?.remotePort,
+          remoteFamily: ctx.req.socket?.remoteFamily,
+        },
+      } as unknown as IncomingMessage)
+    : ctx.req;
   return async (method, target, body, signal) => {
-    if (signal?.aborted || ctx.res.destroyed) return undefined;
+    if (signal?.aborted || (!detached && ctx.res.destroyed)) return undefined;
     const form = /^\/api\/forms\/([a-z0-9][a-z0-9-]{0,63})(?:\?|$)/.exec(target);
     if (method === 'GET' && form && ctx.policy?.publicPlacement?.isPlacedForm(form[1])) return undefined;
-    const request = loopbackRequest(ctx.req, method, target, body);
+    const request = loopbackRequest(sourceReq, method, target, body);
     mark?.add(request);
     inheritTenantHostIntent(ctx.req, request);
     const reply = new CapturedReply();
@@ -893,7 +913,7 @@ function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMe
       reply.destroy();
     };
     signal?.addEventListener('abort', cancel, { once: true });
-    ctx.res.once('close', cancel);
+    if (!detached) ctx.res.once('close', cancel);
     try {
       await handle(request, reply.asResponse(), new URL(target, 'http://localhost'), {
         registry: ctx.registry,
@@ -915,7 +935,7 @@ function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMe
       return undefined;
     } finally {
       signal?.removeEventListener('abort', cancel);
-      ctx.res.off('close', cancel);
+      if (!detached) ctx.res.off('close', cancel);
     }
     if (reply.destroyed || signal?.aborted) return undefined;
     const answer = reply.answer();

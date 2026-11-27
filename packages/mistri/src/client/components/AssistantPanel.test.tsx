@@ -1118,3 +1118,145 @@ test('Wave 2A: renders inline clickable citations, Sources strip, memory chip, a
   await user.click(screen.getByRole('button', { name: 'Close memory' }));
   expect(screen.queryByRole('region', { name: 'Assistant memory' })).not.toBeInTheDocument();
 });
+
+test('Wave 2B: Runs header badge, Run Monitor presets, live trace, approval checkpoint confirm & resume, and Open in chat', async () => {
+  const user = userEvent.setup();
+  let runStatus: 'running' | 'awaiting' | 'completed' = 'awaiting';
+  let resolvedProposal = false;
+  let updatedRecord = false;
+  const runsList = () => [
+    {
+      id: 'run_1',
+      conversation: 'conv_run_1',
+      title: 'Pipeline Risk Audit',
+      prompt: 'Audit enterprise deals at risk of slipping.',
+      agent: 'deal_desk',
+      preset: 'pipeline_audit',
+      status: runStatus,
+      steps: 3,
+      tokens: 420,
+      summary:
+        runStatus === 'completed'
+          ? 'Escalated Acme renewal and logged audit summary.'
+          : 'Waiting for confirmation to mark Acme renewal at risk.',
+      createdAt: '2026-11-27T10:00:00Z',
+      updatedAt: '2026-11-27T10:05:00Z',
+      finishedAt: runStatus === 'completed' ? '2026-11-27T10:06:00Z' : '',
+      live: false,
+    },
+  ];
+
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      agents: [{ id: 'deal_desk', name: 'Deal Desk' }],
+      defaultAgent: 'deal_desk',
+      backgroundRuns: {
+        maxConcurrent: 2,
+        maxSteps: 12,
+        presets: [
+          {
+            id: 'pipeline_audit',
+            label: 'Pipeline Risk Audit',
+            description: 'Scan open deals and flag renewal risks.',
+            agent: 'deal_desk',
+          },
+        ],
+      },
+    },
+  };
+
+  fetcher.mockImplementation(async (url, init) => {
+    const path = String(url);
+    if (path.startsWith('/api/assistant?')) {
+      return json({
+        conversations: [{ id: 'conv_run_1', title: 'Pipeline Risk Audit', updatedAt: '2026-11-27T10:06:00Z' }],
+        ready: true,
+      });
+    }
+    if (path.startsWith('/api/assistant/runs?')) {
+      return json({ runs: runsList(), ready: true });
+    }
+    if (path.startsWith('/api/assistant/runs/detail?')) {
+      return json({
+        run: runsList()[0],
+        items: [
+          { type: 'person', seq: 1, text: 'Audit enterprise deals at risk of slipping.' },
+          { type: 'step', id: 's1', tool: 'query', label: 'Reading leads' },
+          {
+            type: 'proposal',
+            id: 'prop_bg_1',
+            proposal: {
+              id: 'prop_bg_1',
+              kind: 'set',
+              resource: 'lead',
+              action: 'flag_risk',
+              label: 'Flag renewal risk',
+              key: { id: 1 },
+              record: 'Acme Corp',
+              values: { status: 'at_risk' },
+              why: 'No executive touchpoint within 30 days of renewal.',
+            },
+            ...(resolvedProposal ? { outcome: { status: 'done' } } : {}),
+          },
+          ...(runStatus === 'completed' ? [{ type: 'text', text: 'Escalated Acme renewal and logged audit summary.' }] : []),
+        ],
+        awaiting: runStatus === 'awaiting',
+      });
+    }
+    if (path === '/api/update' && init?.method === 'POST') {
+      updatedRecord = true;
+      return json({ ok: true });
+    }
+    if (path === '/api/assistant/runs/resolve' && init?.method === 'POST') {
+      resolvedProposal = true;
+      runStatus = 'completed';
+      return json({ run: { ...runsList()[0], status: 'running', live: true } }, 202);
+    }
+    if (path.startsWith('/api/assistant/runs/stream?')) {
+      return events(
+        ['run_status', { run: { ...runsList()[0], status: 'completed', live: false } }],
+        ['text', { delta: 'Escalated Acme renewal and logged audit summary.' }],
+        ['done', { state: 'completed', tokens: 420 }],
+      );
+    }
+    if (path.startsWith('/api/assistant/conversation?')) {
+      return json({
+        conversation: { id: 'conv_run_1', title: 'Pipeline Risk Audit' },
+        items: [
+          { type: 'person', seq: 1, text: 'Audit enterprise deals at risk of slipping.' },
+          { type: 'text', text: 'Escalated Acme renewal and logged audit summary.' },
+        ],
+      });
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+
+  // Header shows live active Runs · 1 indicator.
+  const runsBtn = await screen.findByRole('button', { name: 'Runs · 1' });
+  await user.click(runsBtn);
+
+  // Run Monitor opens with preset strip and durable runs list.
+  expect(await screen.findByRole('region', { name: 'Background runs' })).toBeInTheDocument();
+  expect(screen.getByText('Quick runs')).toBeInTheDocument();
+  expect(screen.getByText('Awaiting approval')).toBeInTheDocument();
+
+  // Inspect the awaiting run and confirm the approval checkpoint.
+  await user.click(screen.getByRole('button', { name: 'Inspect' }));
+  expect(await screen.findByText(/Paused at a write checkpoint/i)).toBeInTheDocument();
+  expect(screen.getByText('Flag renewal risk · Acme Corp')).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Confirm & resume' }));
+  expect(await screen.findByText('Escalated Acme renewal and logged audit summary.')).toBeInTheDocument();
+  expect(updatedRecord).toBe(true);
+
+  // Jump straight from Run Monitor into the full interactive conversation.
+  await user.click(screen.getByRole('button', { name: 'Open in chat' }));
+  expect(screen.queryByRole('region', { name: 'Pipeline Risk Audit' })).not.toBeInTheDocument();
+  expect(await screen.findByText('Escalated Acme renewal and logged audit summary.')).toBeInTheDocument();
+});
