@@ -65,3 +65,39 @@ test('a refused OpenAI key names the OpenAI key, not Anthropic\u2019s', async ()
   const model = openaiModel('k', stub as typeof fetch);
   await assert.rejects(() => model.stream(request, () => {}, new AbortController().signal), /OPENAI_API_KEY/);
 });
+
+test('the OpenAI body forwards reasoning_effort and the stream surfaces reasoning_content deltas', async () => {
+  const body = openaiBody({ ...request, effort: 'high' });
+  assert.equal(body.reasoning_effort, 'high');
+  const sse = [
+    'data: {"id":"x","choices":[{"delta":{"reasoning_content":"First check "},"finish_reason":null}]}',
+    'data: {"id":"x","choices":[{"delta":{"reasoning_content":"the clock."},"finish_reason":null}]}',
+    'data: {"id":"x","choices":[{"delta":{"content":"It is noon."},"finish_reason":"stop"}]}',
+    'data: {"id":"x","usage":{"prompt_tokens":8,"completion_tokens":6}}',
+    'data: [DONE]',
+  ].join('\n\n');
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode(sse));
+      controller.close();
+    },
+  });
+  const textDeltas: string[] = [];
+  const reasoningEvents: Array<{ delta?: string; done?: boolean }> = [];
+  const reply = await readOpenAIStream(stream, {
+    onText: (delta) => textDeltas.push(delta),
+    onReasoning: (event) => reasoningEvents.push({ delta: event.delta, done: event.done }),
+  });
+  assert.deepEqual(textDeltas, ['It is noon.']);
+  assert.equal(
+    reasoningEvents
+      .filter((e) => e.delta)
+      .map((e) => e.delta)
+      .join(''),
+    'First check the clock.',
+  );
+  assert.equal(reasoningEvents.at(-1)?.done, true);
+  assert.equal(reply.content[0]?.type, 'thinking');
+  assert.equal((reply.content[0] as Record<string, unknown>).thinking, 'First check the clock.');
+  assert.equal(reply.content[1]?.type, 'text');
+});

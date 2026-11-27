@@ -1,6 +1,6 @@
 /** `@mistriwork/mistri` shared kit declarations (`scripts/sync-ui-sdk.mjs`). */
 import * as React from 'react';
-import type { AnchorHTMLAttributes, AriaAttributes, ButtonHTMLAttributes, CSSProperties, ComponentProps, ComponentType, HTMLAttributes, InputHTMLAttributes, KeyboardEvent, MouseEvent, ReactElement, ReactNode, Ref, RefObject } from 'react';
+import type { AnchorHTMLAttributes, AriaAttributes, ButtonHTMLAttributes, CSSProperties, ComponentProps, ComponentType, HTMLAttributes, InputHTMLAttributes, KeyboardEvent, KeyboardEventHandler, MouseEvent, ReactElement, ReactNode, Ref, RefObject } from 'react';
 
 /** Semantic tone shared across badges, status indicators, alerts, cards, and charts. */
 export type Tone = 'neutral' | 'info' | 'good' | 'warning' | 'critical' | 'accent';
@@ -861,6 +861,32 @@ interface DrawerBase {
     open: boolean;
     onOpenChange?: (open: boolean, details: ChangeDetails<'trigger-press' | 'outside-press' | 'escape-key' | 'close-watcher' | 'close-press' | 'focus-out' | 'imperative-action' | 'swipe' | 'implicit'>) => void;
     side?: DrawerSide;
+    /** Stands beside the page with no backdrop scrim so the workspace underneath remains live and clickable. */
+    beside?: boolean;
+    /** Whether the drawer traps focus and dims the page. Defaults to `false` when `beside` is true, else `true`. */
+    modal?: boolean | 'trap-focus';
+    /** Flush against the viewport edge instead of floating inset. */
+    docked?: boolean;
+    /** Omit the default sheet header when the caller draws its own header chrome. */
+    hideHeader?: boolean;
+    /** Optional controls rendered in the default sheet header beside the close button. */
+    headerActions?: ReactNode;
+    /** Whether Escape or outside presses automatically dismiss the drawer. Defaults to `true`. */
+    dismissible?: boolean;
+    /** Optional surface mode attribute forwarded onto `DrawerContent`. */
+    dataMode?: string;
+    /** Optional floating corner position attribute forwarded onto `DrawerContent`. */
+    dataPosition?: string;
+    /** Optional content-bounded fullscreen attribute forwarded onto `DrawerContent`. */
+    dataBounded?: boolean;
+    /** Optional aria-modal override on `DrawerContent`. */
+    ariaModal?: boolean;
+    /** Where focus goes when the drawer opens (`'none'` keeps focus untouched). */
+    initialFocus?: 'auto' | 'content' | 'none';
+    id?: string;
+    role?: string;
+    style?: CSSProperties;
+    onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
     children: ReactNode;
     className?: string;
     /** A non-cancellable operation is awaiting acknowledgement. */
@@ -881,7 +907,7 @@ export type DrawerProps = DrawerBase & ({
     title?: undefined;
     ariaLabel: string;
 });
-declare function DefaultDrawer({ open, onOpenChange, side, title, ariaLabel, children, className, closeDisabled, closeLabel, words, ref, }: DrawerProps): import("react").JSX.Element;
+declare function DefaultDrawer({ open, onOpenChange, side, beside, modal, docked, hideHeader, headerActions, dismissible, dataMode, dataPosition, dataBounded, ariaModal, initialFocus, id, role, style, onKeyDown, title, ariaLabel, children, className, closeDisabled, closeLabel, words, ref, }: DrawerProps): import("react").JSX.Element;
 /** Slide-in edge sheet dialog with focus trap, backdrop scrim, and Escape/swipe dismissal. */
 export declare const Drawer: typeof DefaultDrawer;
 /** Imperative handle for closing an open `Modal`. */

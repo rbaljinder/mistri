@@ -194,25 +194,30 @@ export function toolSpecs(assistant: AppAssistant | undefined): ModelTool[] {
     {
       name: 'show',
       description:
-        "Draw a block for the person in the application's own components. table: rows of a resource (query, show, sort, limit). " +
-        'metric: one figure (measure like "count" or "sum amount as total"). chart and breakdown: a measure by a column ' +
-        '(by like "stage" or "month close_date"; shape bar, line, or donut for a chart). record: one record by id.',
+        'Draw a validated UI block: table (query, show, sort, limit), metric (measure), metrics (items of {title, resource, measure, query}), ' +
+        'chart/breakdown (measure, by, shape), funnel (items of {label, query}), board (by, show, lanes), timeline (date, show, limit), ' +
+        'record (id), callout (tone, body), or tabs (items of {label, block}).',
       input_schema: {
         type: 'object',
         properties: {
           kind: { enum: blocks },
           title: { type: 'string' },
           resource: { type: 'string' },
-          query: { type: 'string', description: 'Conditions only, without the resource: "status = new and source = web".' },
+          query: { type: 'string', description: 'Conditions only: "status = new".' },
           show: { type: 'array', items: { type: 'string' } },
-          sort: { type: 'string', description: '"created_on desc"' },
+          sort: { type: 'string' },
           limit: { type: 'integer', minimum: 1, maximum: 50 },
           measure: { type: 'string' },
           by: { type: 'string' },
-          shape: { enum: ['bar', 'line', 'donut'] },
-          id: { description: "The record's key, for a record block." },
+          date: { type: 'string' },
+          lanes: { type: 'array', items: { type: 'string' } },
+          shape: { enum: ['bar', 'line', 'donut', 'waterfall', 'treemap', 'heatmap', 'scatter'] },
+          tone: { enum: ['info', 'good', 'warning', 'critical'] },
+          body: { type: 'string' },
+          items: { type: 'array', items: { type: 'object' } },
+          id: { description: 'Record key for kind=record.' },
         },
-        required: ['kind', 'resource'],
+        required: ['kind'],
         additionalProperties: false,
       },
     },

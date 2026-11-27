@@ -398,11 +398,15 @@
         },
         "model": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$", "description": "The model id; claude-sonnet-5-5 when absent." },
         "effort": { "enum": ["low", "medium", "high"] },
+        "effortPicker": { "type": "boolean", "description": "Offer a per-turn reasoning effort selector in the composer. False when absent." },
+        "reasoning": { "enum": ["collapsed", "expanded", "hidden"], "description": "How model reasoning traces surface in the UI: collapsed (default), expanded, or hidden." },
         "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" }, "description": "The roles offered it; absent, everyone who may open the App." },
         "tools": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["find", "describe", "query", "show", "run"] } },
         "exclude": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$" }, "description": "Verbs it may never propose: resource.action, or resource.new for the New form." },
-        "blocks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["table", "metric", "chart", "breakdown", "record"] } },
+        "blocks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["table", "metric", "metrics", "chart", "breakdown", "funnel", "board", "timeline", "record", "callout", "tabs"] } },
         "placement": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["panel", "record", "page"] }, "description": "panel beside every room; record takes the open record as context; page gives it a room at /{app}/assistant. Absent, panel and record." },
+        "presentations": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["sidebar", "floating", "fullscreen"] }, "description": "Panel presentation modes offered in the mode switcher. Absent, all three." },
+        "defaultPresentation": { "enum": ["sidebar", "floating", "fullscreen"], "description": "Initial panel presentation mode before the reader chooses one." },
         "limits": {
           "type": "object", "additionalProperties": false,
           "properties": {

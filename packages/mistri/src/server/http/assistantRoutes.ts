@@ -20,6 +20,7 @@
  * tenant App's host answers the same routes through `answerAssistant`, on the
  * tab's context lease (tenant/tenantAssistant.ts).
  */
+import { ASSISTANT_EFFORTS, type AppAssistant } from '../../shared/appAssistant.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AssistantOwner, AssistantStore } from '../../adapters/assistant/assistantStore.js';
 import type { AppDef } from '../../shared/appModel.js';
@@ -60,7 +61,7 @@ export const ASSISTANT_PATHS: ReadonlySet<string> = new Set([
   '/api/assistant/about',
 ]);
 const SAID: Record<string, readonly string[]> = {
-  '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode'],
+  '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode', 'effort'],
   '/api/assistant/resolve': ['app', 'conversation', 'proposal', 'outcome', 'detail'],
   '/api/assistant/delete': ['app', 'conversation'],
   '/api/assistant/rename': ['app', 'conversation', 'title'],
@@ -222,7 +223,7 @@ export async function answerAssistant(
       const events = await store.events(owner, conversation.id);
       send(res, 200, {
         conversation,
-        items: itemsOf(events, await reviewsOf(loop(), undecidedReviews(events))),
+        items: itemsOf(events, await reviewsOf(loop(), undecidedReviews(events)), { showReasoning: assistant.reasoning !== 'hidden' }),
         ...(pendingProposal(events) ? { awaiting: true } : {}),
       });
       return;
@@ -340,9 +341,16 @@ export async function answerAssistant(
     )
       throw new HttpError(400, 'A context names a record: { resource, key }.');
     if (context !== undefined && !assistant.placement.includes('record')) throw new HttpError(400, NO_RECORD);
+    let turnEffort: AppAssistant['effort'] | undefined;
     let started: string | undefined;
     if (path === '/api/assistant/turn') {
       if (body.mode !== undefined && body.mode !== 'ask') throw new HttpError(400, 'A turn is asked with mode "ask", or none.');
+      if (body.effort !== undefined) {
+        if (!assistant.effortPicker) throw new HttpError(400, 'Reasoning effort is set by the App here.');
+        if (!(ASSISTANT_EFFORTS as readonly unknown[]).includes(body.effort))
+          throw new HttpError(400, 'Effort is "low", "medium" or "high".');
+        turnEffort = body.effort as AppAssistant['effort'];
+      }
       if (waiting) throw new HttpError(409, 'Confirm or decline the proposed change first.');
       const people = events.filter((event) => event.kind === 'person');
       const from =
@@ -430,6 +438,7 @@ export async function answerAssistant(
       tools: toolSpecs(assistant),
       session,
       emit,
+      ...(turnEffort ? { effort: turnEffort } : {}),
       ...(scope.tokensPerTenantPerDay === undefined ? {} : { tokensPerTenantPerDay: scope.tokensPerTenantPerDay }),
       ...(scope.withdrawn ? { withdrawn: scope.withdrawn } : {}),
     });

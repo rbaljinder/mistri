@@ -16,9 +16,12 @@
  */
 import { readFileSync } from 'node:fs';
 import { scriptedModel, type AssistantScript } from './assistantScripted.js';
-import { ModelUnavailable, modelRefused } from './assistantModelRefusal.js';
+import { ModelUnavailable, modelRefused, streamCallbacks, type ModelStreamSink } from './assistantModelRefusal.js';
 import { openaiModel } from './assistantOpenAI.js';
 import { recordingKeyMissing, recordingModel, replayModel } from './assistantCassette.js';
+import { geminiModel, getAssistantProvider, openaiCompatibleModel } from '../agents/providers.js';
+
+export type { ModelStreamSink };
 
 export interface ModelUsage {
   input: number;
@@ -53,8 +56,9 @@ interface ModelReply {
   stopReason: string;
   usage: ModelUsage;
 }
+
 export interface AssistantModel {
-  stream(request: ModelRequest, onText: (delta: string) => void, signal: AbortSignal): Promise<ModelReply>;
+  stream(request: ModelRequest, sink: ModelStreamSink, signal: AbortSignal): Promise<ModelReply>;
 }
 
 const API = 'https://api.anthropic.com/v1/messages';
@@ -86,10 +90,13 @@ const total = (usage: ModelUsage) => usage.input + usage.output + usage.cacheRea
 interface Building {
   block: ModelBlock;
   json?: string;
+  reasoningId?: string;
+  startedAt?: number;
 }
 
-/** Read one Messages API event stream into the reply, handing text deltas on as they arrive. */
-export async function readAnthropicStream(body: ReadableStream<Uint8Array>, onText: (delta: string) => void): Promise<ModelReply> {
+/** Read one Messages API event stream into the reply, handing text and reasoning deltas on as they arrive. */
+export async function readAnthropicStream(body: ReadableStream<Uint8Array>, sink: ModelStreamSink): Promise<ModelReply> {
+  const { onText, onReasoning } = streamCallbacks(sink);
   const blocks = new Map<number, Building>();
   const usage: ModelUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   let stopReason = 'end_turn';
@@ -107,12 +114,21 @@ export async function readAnthropicStream(body: ReadableStream<Uint8Array>, onTe
         usage.output = u.output_tokens ?? 0;
         break;
       }
-      case 'content_block_start':
-        blocks.set(event.index as number, {
-          block: { ...(event.content_block as ModelBlock) },
-          ...((event.content_block as ModelBlock).type === 'tool_use' ? { json: '' } : {}),
+      case 'content_block_start': {
+        const index = event.index as number;
+        const block = { ...(event.content_block as ModelBlock) };
+        const isThinking = block.type === 'thinking' || block.type === 'redacted_thinking';
+        const reasoningId = isThinking ? `r_${index}` : undefined;
+        blocks.set(index, {
+          block,
+          ...(block.type === 'tool_use' ? { json: '' } : {}),
+          ...(isThinking ? { reasoningId, startedAt: Date.now() } : {}),
         });
+        if (block.type === 'redacted_thinking' && reasoningId) {
+          onReasoning({ id: reasoningId, redacted: true });
+        }
         break;
+      }
       case 'content_block_delta': {
         const at = blocks.get(event.index as number);
         const delta = event.delta as Record<string, string>;
@@ -121,8 +137,10 @@ export async function readAnthropicStream(body: ReadableStream<Uint8Array>, onTe
           at.block.text = String(at.block.text ?? '') + delta.text;
           onText(delta.text);
         } else if (delta.type === 'input_json_delta') at.json = (at.json ?? '') + delta.partial_json;
-        else if (delta.type === 'thinking_delta') at.block.thinking = String(at.block.thinking ?? '') + delta.thinking;
-        else if (delta.type === 'signature_delta') at.block.signature = delta.signature;
+        else if (delta.type === 'thinking_delta') {
+          at.block.thinking = String(at.block.thinking ?? '') + delta.thinking;
+          if (at.reasoningId && delta.thinking) onReasoning({ id: at.reasoningId, delta: delta.thinking });
+        } else if (delta.type === 'signature_delta') at.block.signature = delta.signature;
         break;
       }
       case 'content_block_stop': {
@@ -133,6 +151,15 @@ export async function readAnthropicStream(body: ReadableStream<Uint8Array>, onTe
           } catch {
             at.block.input = {};
           }
+        }
+        if (at?.reasoningId) {
+          const durationMs = at.startedAt !== undefined ? Math.max(0, Date.now() - at.startedAt) : undefined;
+          onReasoning({
+            id: at.reasoningId,
+            done: true,
+            ...(at.block.type === 'redacted_thinking' ? { redacted: true as const } : {}),
+            ...(durationMs !== undefined ? { durationMs } : {}),
+          });
         }
         break;
       }
@@ -188,17 +215,17 @@ const MODEL_DEADLINE_MS = 300_000;
 
 export function anthropicModel(key: string, fetchImpl: typeof fetch = fetch, deadlineMs = MODEL_DEADLINE_MS): AssistantModel {
   return {
-    async stream(request, onText, signal) {
+    async stream(request, sink, signal) {
       const deadline = AbortSignal.timeout(deadlineMs);
       try {
-        return await call(request, onText, AbortSignal.any([signal, deadline]));
+        return await call(request, sink, AbortSignal.any([signal, deadline]));
       } catch (error) {
         if (deadline.aborted && !signal.aborted) throw new ModelUnavailable('The model took too long to answer. Ask again.');
         throw error;
       }
     },
   };
-  async function call(request: ModelRequest, onText: (delta: string) => void, signal: AbortSignal): Promise<ModelReply> {
+  async function call(request: ModelRequest, sink: ModelStreamSink, signal: AbortSignal): Promise<ModelReply> {
     const response = await fetchImpl(API, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-api-key': key, 'anthropic-version': '2023-06-01' },
@@ -206,7 +233,7 @@ export function anthropicModel(key: string, fetchImpl: typeof fetch = fetch, dea
       signal,
     });
     if (!response.ok || !response.body) throw await modelRefused(response, 'ANTHROPIC_API_KEY');
-    return readAnthropicStream(response.body, onText);
+    return readAnthropicStream(response.body, sink);
   }
 }
 
@@ -249,13 +276,35 @@ export function assistantModel(): AssistantModel | undefined {
 }
 
 function providerModel(): AssistantModel | undefined {
-  const provider = process.env.MISTRI_ASSISTANT_PROVIDER;
-  if (provider === 'openai') {
-    const key = process.env.OPENAI_API_KEY;
-    return key ? openaiModel(key) : undefined;
+  const provider = process.env.MISTRI_ASSISTANT_PROVIDER?.trim().toLowerCase();
+  if (provider) {
+    const custom = getAssistantProvider(provider);
+    if (custom) {
+      return custom({
+        apiKey:
+          process.env.MISTRI_ASSISTANT_API_KEY ?? process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? process.env.GEMINI_API_KEY,
+        baseUrl: process.env.OPENAI_BASE_URL ?? process.env.MISTRI_ASSISTANT_BASE_URL,
+      });
+    }
+    if (provider === 'openai') {
+      const key = process.env.OPENAI_API_KEY;
+      return key ? openaiModel(key, fetch, undefined, { baseUrl: process.env.OPENAI_BASE_URL || undefined }) : undefined;
+    }
+    if (provider === 'openai-compatible') {
+      const baseUrl = process.env.OPENAI_BASE_URL ?? process.env.MISTRI_ASSISTANT_BASE_URL;
+      return baseUrl
+        ? openaiCompatibleModel({ baseUrl, apiKey: process.env.OPENAI_API_KEY ?? process.env.MISTRI_ASSISTANT_API_KEY })
+        : undefined;
+    }
+    if (provider === 'google' || provider === 'gemini') {
+      const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+      return key ? geminiModel(key) : undefined;
+    }
   }
   const key = process.env.ANTHROPIC_API_KEY;
   if (key) return anthropicModel(key);
   const openaiKey = process.env.OPENAI_API_KEY;
-  return openaiKey ? openaiModel(openaiKey) : undefined;
+  if (openaiKey) return openaiModel(openaiKey, fetch, undefined, { baseUrl: process.env.OPENAI_BASE_URL || undefined });
+  const geminiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+  return geminiKey ? geminiModel(geminiKey) : undefined;
 }

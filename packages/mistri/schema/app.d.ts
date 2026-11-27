@@ -3858,6 +3858,11 @@ export interface AssistantDeclaration {
   /** The model id; `'claude-sonnet-5-5'` when absent. */
   readonly model?: string;
   readonly effort?: 'low' | 'medium' | 'high';
+  /** Let the person pick reasoning effort per turn in the composer (`low`, `medium`, `high`). False when absent. */
+  readonly effortPicker?: boolean;
+  /** How model reasoning / thinking traces surface in the conversation: `'collapsed'` (default, quiet disclosure),
+   * `'expanded'` (open by default), or `'hidden'` (not streamed or displayed to the person). */
+  readonly reasoning?: 'collapsed' | 'expanded' | 'hidden';
   /** The roles offered it; absent, everyone who may open the App. */
   readonly roles?: readonly string[];
   /** The tools it may use, a narrowing of the five; absent, all of them. */
@@ -3865,11 +3870,17 @@ export interface AssistantDeclaration {
   /** Verbs it may never propose, as `'resource.action'`, or `'resource.new'` for the New form. */
   readonly exclude?: readonly `${string}.${string}`[];
   /** The blocks it may draw; absent, all of them. */
-  readonly blocks?: readonly ('table' | 'metric' | 'chart' | 'breakdown' | 'record')[];
+  readonly blocks?: readonly ('table' | 'metric' | 'metrics' | 'chart' | 'breakdown' | 'funnel' | 'board' | 'timeline' | 'record' | 'callout' | 'tabs')[];
   /** `'panel'` beside every room; `'record'` also takes the open record as its context; `'page'` gives it a room
    * of its own at `/{app}/assistant`, which nav places by the word `'assistant'` (at the menu's end where it does not).
    * Absent, the panel and the record. */
   readonly placement?: readonly ('panel' | 'record' | 'page')[];
+  /** Panel presentation modes the person may switch between (`'sidebar'`, `'floating'`, `'fullscreen'`).
+   * Absent, all three. */
+  readonly presentations?: readonly ('sidebar' | 'floating' | 'fullscreen')[];
+  /** Initial panel presentation mode before the person picks one (`'sidebar'`, `'floating'`, `'fullscreen'`).
+   * Absent, `'sidebar'` (or the first mode in `presentations`). */
+  readonly defaultPresentation?: 'sidebar' | 'floating' | 'fullscreen';
   /** Token caps, counted per model call: a turn past one is refused before the model is asked. A person's day is 200,000 tokens unless `tokensPerPersonPerDay` names another figure.
    * `steps` is the rounds of tool calls one answer may take before it is written, 8 unless named and 32 at most: a round whose every call was refused is not counted, and the call after the last round only writes. */
   readonly limits?: { readonly tokensPerTurn?: number; readonly tokensPerPersonPerDay?: number; readonly tokensPerDay?: number; readonly steps?: number };

@@ -103,6 +103,13 @@
       },
       "default": "./src/server/workflows.ts"
     },
+    "./agents": {
+      "mistri-built": {
+        "types": "./dist/server/agents.d.ts",
+        "default": "./dist/server/agents.js"
+      },
+      "default": "./src/server/agents.ts"
+    },
     "./handler": {
       "mistri-built": {
         "types": "./dist/server/handler.d.ts",

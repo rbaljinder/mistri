@@ -404,9 +404,14 @@ owner holds that key and its bill, never a tenant.
   90) are purged every six hours while the host runs; closing a tenant deletes
   its conversations and switch with it. Token counts stay: they are the bill.
 
+## Presentation surfaces, reasoning & generative UI
+
+- **First-class surfaces (`AiAssistantSurface`, `AiModeSwitcher`):** `AssistantPanel` and `AssistantRoom` run over `@mistriwork/ui` `AiAssistantSurface` backed by UI SDK `Drawer` and `Resizable`. Readers switch seamlessly between **sidebar** (non-modal docked edge panel), **floating** (non-modal corner-pinned resizable window), **fullscreen** (content-bounded wide canvas), and **page** (`/{app}/assistant` split workspace) without unmounting the thread, losing composer focus, or interrupting an active stream. Apps can narrow or default modes via `presentations` and `defaultPresentation`.
+- **Reasoning (`AiReasoning`):** Thinking traces from Anthropic (`thinking_delta` / `redacted_thinking`), OpenAI (`reasoning_content` / `reasoning_effort`), Gemini (`thinkingConfig` / `thought`), and scripted/cassette replays stream live as `event: reasoning` SSE events, persist with per-block timing beside verbatim provider blocks, and render in a collapsible UI SDK `Collapsible` + `ScrollArea` disclosure (`reasoning: 'collapsed' | 'expanded' | 'hidden'`). Setting `effortPicker: true` exposes a per-turn effort selector in the composer.
+- **Expanded generative UI blocks:** `show` validates and composes `table`, `metric`, `metrics` (2–4 KPI strip), `chart` (bar, line, donut, waterfall, treemap, heatmap, scatter), `breakdown`, `funnel`, `board`, `timeline`, `record`, `callout` (over `@mistriwork/ui` `Callout`), and `tabs` (over `@mistriwork/ui` `Tabs`), adapting via `@container assistant-pane` across floating, sidebar, fullscreen, and page widths.
+- **Programmable agent harness (`@mistriwork/mistri/agents`):** Server-only entry exporting `defineAgent`, `defineTool`, `defineSkill` (progressive on-demand disclosure), `defineBlock` (author-defined server-resolved generative UI blocks), `runAgentTurn` (hooks, artifact offloading, isolated subagent `delegate`), `createDurableAgentWorkflow`, `bindAgentChannel`, `defineAgentEval` / `runAgentEval`, and the multi-provider registry (`registerAssistantProvider`, `geminiModel`, `openaiCompatibleModel`, `withModelFallback`, optional `SandboxAdapter`).
+
 ## Not yet
 
-- Per-role instructions; `gallery` and `timeline` blocks; rich-text blocks.
+- Per-role instructions; `gallery` and `calendar` blocks.
 - Writes without confirmation for named low-risk commands.
-- Other providers behind the same interface.
-- A CLI command that provisions the store (today it is the maintenance call).

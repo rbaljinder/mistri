@@ -223,7 +223,7 @@
       },
       "packages/mistri": {
         "entry": [
-          "src/server/{commands,policy,openfeature,maintenance,jobs,workflows,handler,integration}.ts",
+          "src/server/{commands,policy,openfeature,maintenance,jobs,workflows,agents,handler,integration}.ts",
           "src/client/observe/main.tsx",
           "src/client/observe/index.html",
           "src/client/components/sdk/{index.ts,testing.tsx,page.tsx}",
@@ -303,6 +303,12 @@
       ],
       "packages/mistri/src/server/console/components.ts": [
         "exports"
+      ],
+      "packages/mistri/src/server/agents.ts": [
+        "types"
+      ],
+      "packages/mistri/src/server/agents/*.ts": [
+        "types"
       ]
     }
   }

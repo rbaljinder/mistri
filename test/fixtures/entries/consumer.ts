@@ -4,6 +4,7 @@
  * holds this file to the table, so a new entry is a line here.
  */
 import * as mistriApp from '@mistriwork/mistri/app';
+import * as mistriAgents from '@mistriwork/mistri/agents';
 import * as mistriPage from '@mistriwork/mistri/page';
 import * as mistriUi from '@mistriwork/mistri/ui';
 import * as mistriUiTesting from '@mistriwork/mistri/ui/testing';
@@ -38,6 +39,7 @@ const some = <A>(any: [A] extends [never] ? false : true) => any;
 
 export const entries = {
   '@mistriwork/mistri/app': some<keyof typeof mistriApp>(true),
+  '@mistriwork/mistri/agents': some<keyof typeof mistriAgents>(true),
   '@mistriwork/mistri/page': some<keyof typeof mistriPage>(true),
   '@mistriwork/mistri/ui': some<keyof typeof mistriUi>(true),
   '@mistriwork/mistri/ui/testing': some<keyof typeof mistriUiTesting>(true),

@@ -496,6 +496,11 @@
       ]
     },
     {
+      "id": "agents",
+      "surface": ["package: export ./agents"],
+      "tests": [{ "file": "test/agents-harness.test.ts" }]
+    },
+    {
       "id": "integrations",
       "surface": ["package: export ./integration"],
       "tests": [{ "file": "test/integrations.test.ts" }, { "file": "test/inbound-webhooks.test.ts" }]

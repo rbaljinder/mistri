@@ -35,6 +35,7 @@ type Outcome = { id: string; status: 'done' | 'declined' | 'failed'; detail?: st
 /** What the panel draws, rebuilt from the events: the same items a live turn streams. */
 export type PanelItem =
   | { type: 'person'; seq: number; text: string }
+  | { type: 'reasoning'; id: string; text: string; redacted?: true; durationMs?: number }
   | { type: 'text'; text: string }
   | { type: 'note'; text: string }
   | DisplayItem
@@ -87,11 +88,18 @@ export function pendingProposal(events: readonly StoredEvent[]): Proposal | unde
 }
 
 /* Thinking is the model's own, signed by it: another model is not handed it. A reply kept before the model was
-   recorded (0.9.8 and earlier) is taken to be the current model's, as it almost always was. */
+   recorded (0.9.8 and earlier) is taken to be the current model's, as it almost always was. UI-only timing metadata
+   (`durationMs`) is stripped before sending blocks back to the provider. */
 const THINKING = new Set(['thinking', 'redacted_thinking']);
+const wireBlock = (block: ModelBlock): ModelBlock => {
+  if (!THINKING.has(block.type) || !('durationMs' in block)) return block;
+  const { durationMs: _durationMs, ...rest } = block;
+  return rest;
+};
 const replyFor = (body: Record<string, unknown>, model: string): ModelBlock[] => {
   const content = body.content as ModelBlock[];
-  return typeof body.model === 'string' && body.model !== model ? content.filter((block) => !THINKING.has(block.type)) : content;
+  const kept = typeof body.model === 'string' && body.model !== model ? content.filter((block) => !THINKING.has(block.type)) : content;
+  return kept.map(wireBlock);
 };
 
 /** The conversation as `model` reads it: alternating messages, a summary in place of what it covers. */
@@ -181,18 +189,49 @@ export function undecidedReviews(events: readonly StoredEvent[]): string[] {
 }
 
 /** The panel's items, from the events, and from `reviewed` each stored proposal's outcome the events do not say. */
-export function itemsOf(events: readonly StoredEvent[], reviewed?: ReviewOutcomes): PanelItem[] {
+export function itemsOf(events: readonly StoredEvent[], reviewed?: ReviewOutcomes, options?: { showReasoning?: boolean }): PanelItem[] {
+  const showReasoning = options?.showReasoning !== false;
   const outcomes = outcomesOf(events);
   const items: PanelItem[] = [];
   for (const event of events) {
     const body = event.body as Record<string, unknown>;
     if (event.kind === 'person') items.push({ type: 'person', seq: event.seq, text: String(body.text) });
     else if (event.kind === 'assistant') {
-      const text = (body.content as ModelBlock[])
-        .filter((block) => block.type === 'text')
-        .map((block) => String(block.text))
-        .join('');
-      if (text) items.push({ type: 'text', text });
+      const blocks = body.content as ModelBlock[];
+      const durations = Array.isArray(body.reasoningDurations) ? (body.reasoningDurations as Array<number | undefined>) : undefined;
+      let rIndex = 0;
+      let textBuf = '';
+      const flushText = () => {
+        if (textBuf) {
+          items.push({ type: 'text', text: textBuf });
+          textBuf = '';
+        }
+      };
+      for (const block of blocks) {
+        if (block.type === 'text') {
+          textBuf += String(block.text ?? '');
+        } else if (showReasoning && block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim()) {
+          flushText();
+          const durationMs = durations?.[rIndex];
+          items.push({
+            type: 'reasoning',
+            id: `r_${event.seq}_${rIndex++}`,
+            text: block.thinking,
+            ...(typeof durationMs === 'number' ? { durationMs } : {}),
+          });
+        } else if (showReasoning && block.type === 'redacted_thinking') {
+          flushText();
+          const durationMs = durations?.[rIndex];
+          items.push({
+            type: 'reasoning',
+            id: `r_${event.seq}_${rIndex++}`,
+            text: '',
+            redacted: true,
+            ...(typeof durationMs === 'number' ? { durationMs } : {}),
+          });
+        }
+      }
+      flushText();
     } else if (event.kind === 'tool') {
       for (const item of body.display as DisplayItem[]) {
         if (item.type !== 'proposal') items.push(item);
@@ -220,6 +259,8 @@ interface TurnContext {
   tools: readonly ModelTool[];
   session: ToolSession;
   emit: Emit;
+  /** Optional per-turn effort override chosen in the composer when `assistant.effortPicker` is enabled. */
+  effort?: AppAssistant['effort'];
   /** For tests: summarise past this many tokens instead of the default. */
   compactAt?: number;
   /** A tenant App's: what one customer may spend in a day, all its people together (the platform owner's policy). */
@@ -293,6 +334,8 @@ async function compactIfLong(context: TurnContext, events: StoredEvent[]): Promi
  */
 export async function continueTurn(context: TurnContext): Promise<ConversationState> {
   const { emit, session } = context;
+  const showReasoning = context.assistant.reasoning !== 'hidden';
+  const effort = context.effort ?? context.assistant.effort;
   let spent = 0;
   let streamed = '';
   let pendingTools: Array<{ id: string; name: string; input: unknown }> = [];
@@ -319,6 +362,7 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
       if (step === 0 && (spent += await compactIfLong(context, events)))
         events = await context.store.events(context.owner, context.conversation);
       streamed = '';
+      const reasoningDurations: Array<number | undefined> = [];
       const reply = await context.model.stream(
         {
           model: context.assistant.model,
@@ -326,12 +370,19 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
           tools: context.tools,
           messages: messagesOf(events, context.assistant.model),
           maxTokens: MAX_OUTPUT,
-          ...(context.assistant.effort ? { effort: context.assistant.effort } : {}),
+          ...(effort ? { effort } : {}),
           ...(last ? { answerOnly: true as const } : {}),
         },
-        (delta) => {
-          streamed += delta;
-          emit('text', { delta });
+        {
+          onText: (delta) => {
+            streamed += delta;
+            emit('text', { delta });
+          },
+          onReasoning: (event) => {
+            if (event.done) reasoningDurations.push(event.durationMs);
+            if (!showReasoning) return;
+            emit('reasoning', { ...event, id: `s${step}_${event.id}` });
+          },
         },
         session.signal,
       );
@@ -350,7 +401,12 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
          them: a tool_use with no result would make every later call invalid. */
       const kept = calling ? reply.content : reply.content.filter((block) => block.type !== 'tool_use');
       // The model that made it is kept with it: its thinking goes back to that model only.
-      await append(context, 'assistant', { content: kept, usage: reply.usage, model: context.assistant.model });
+      await append(context, 'assistant', {
+        content: kept,
+        usage: reply.usage,
+        model: context.assistant.model,
+        ...(reasoningDurations.length ? { reasoningDurations } : {}),
+      });
       streamed = '';
       if (reply.stopReason === 'refusal') return await finish('idle', 'The model declined to answer that.');
       if (reply.stopReason === 'max_tokens') return await finish('idle', 'The answer was cut short. Ask again to continue.');

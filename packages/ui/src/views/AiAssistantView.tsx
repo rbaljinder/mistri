@@ -16,14 +16,22 @@ import {
 import { Icon } from '../Icon.js';
 import { cx, isEmptyStateSpec, type EmptyStateSpec } from '../internal/cx.js';
 import { Button, IconButton } from '../primitives/actions.js';
+import { SkeletonCard } from '../primitives/feedback.js';
+import { Collapsible } from '../primitives/layout.js';
 import { Popover } from '../primitives/overlays.js';
 import { Select, type SelectOption } from '../primitives/selection.js';
+import { AiModeSwitcher, type AiSurfaceWords } from './AiAssistantSurface.js';
+import { AiReasoning, type AiReasoningWords } from './AiReasoning.js';
 import {
   AiProposalCard,
   type AiCitation,
   type AiContextAttachment,
+  type AiEffortLevel,
+  type AiGeneratedBlock,
   type AiMessage,
   type AiModelOption,
+  type AiPresentationMode,
+  type AiReasoningTrace,
   type AiStarterPrompt,
   type AiToolCall,
 } from './AiProposalAndChip.js';
@@ -88,6 +96,12 @@ function renderInlineRichText(text: string): ReactNode {
 
 const EMPTY_CONTEXT_SUGGESTIONS: ReadonlyArray<AiContextAttachment> = [];
 
+const EFFORT_LABELS: Record<AiEffortLevel, string> = {
+  low: 'Low effort',
+  medium: 'Medium effort',
+  high: 'High effort',
+};
+
 /** Props for the `AiPromptComposer` component. */
 export interface AiPromptComposerProps {
   value?: string;
@@ -99,6 +113,11 @@ export interface AiPromptComposerProps {
   availableContexts?: ReadonlyArray<AiContextAttachment>;
   onRemoveAttachment?: (id: string) => void;
   onAddAttachment?: (item: AiContextAttachment) => void;
+  /** Selected reasoning effort level when effort selection is enabled. */
+  effort?: AiEffortLevel;
+  /** Offered effort levels (renders a compact effort selector in the composer bar). */
+  efforts?: ReadonlyArray<AiEffortLevel>;
+  onEffortChange?: (effort: AiEffortLevel) => void;
   isGenerating?: boolean;
   disabled?: boolean;
   onSubmit?: (prompt: string, attachments: AiContextAttachment[]) => void;
@@ -118,6 +137,9 @@ export function AiPromptComposer({
   availableContexts = EMPTY_CONTEXT_SUGGESTIONS,
   onRemoveAttachment,
   onAddAttachment,
+  effort,
+  efforts,
+  onEffortChange,
   isGenerating = false,
   disabled = false,
   onSubmit,
@@ -261,6 +283,24 @@ export function AiPromptComposer({
 
       <div className="nx-ai-composer-bar">
         <div className="nx-ai-composer-hints">
+          {efforts && efforts.length > 0 ? (
+            <div className="nx-ai-effort-picker">
+              <Select<AiEffortLevel>
+                size="xs"
+                value={effort ?? efforts[0] ?? null}
+                onValueChange={(next) => {
+                  if (next) onEffortChange?.(next);
+                }}
+                options={efforts.map((level) => ({
+                  value: level,
+                  label: EFFORT_LABELS[level],
+                  textLabel: EFFORT_LABELS[level],
+                }))}
+                ariaLabel="Reasoning effort"
+                triggerClassName="nx-ai-effort-trigger"
+              />
+            </div>
+          ) : null}
           {footerStart ?? (
             <span className="nx-ai-composer-shortcut">
               <kbd className="nx-kbd">↵</kbd> Send
@@ -313,13 +353,8 @@ function ToolCallSteps({ toolCalls }: { toolCalls: ReadonlyArray<AiToolCall> }) 
   };
 
   return (
-    <div className="nx-ai-tools">
-      <button
-        type="button"
-        aria-expanded={groupExpanded}
-        onClick={() => setGroupExpanded((prev) => !prev)}
-        className="nx-ai-tools-summary nx-focusable"
-      >
+    <Collapsible open={groupExpanded} onOpenChange={setGroupExpanded} className="nx-ai-tools">
+      <Collapsible.Trigger className="nx-ai-tools-summary nx-focusable">
         <span className="nx-ai-tools-chevron" aria-hidden="true">
           {groupExpanded ? <Icon name="caret-down" size={11.5} /> : <Icon name="caret-right" size={11.5} />}
         </span>
@@ -332,61 +367,59 @@ function ToolCallSteps({ toolCalls }: { toolCalls: ReadonlyArray<AiToolCall> }) 
               : `Executed ${toolCalls.length} ${toolCalls.length === 1 ? 'tool step' : 'tool steps'}`}
         </span>
         {allDone && totalDuration > 0 ? <span className="nx-ai-tools-duration">{formatDurationMs(totalDuration)}</span> : null}
-      </button>
+      </Collapsible.Trigger>
 
-      {groupExpanded ? (
-        <div className="nx-ai-tools-list">
-          {toolCalls.map((tc) => {
-            const hasDetails = Boolean(tc.query || tc.output);
-            const detailOpen = Boolean(expandedDetailIds[tc.id]);
-            const durationText = formatDurationMs(tc.durationMs);
+      <Collapsible.Panel className="nx-ai-tools-list">
+        {toolCalls.map((tc) => {
+          const hasDetails = Boolean(tc.query || tc.output);
+          const detailOpen = Boolean(expandedDetailIds[tc.id]);
+          const durationText = formatDurationMs(tc.durationMs);
 
-            return (
-              <div key={tc.id} data-status={tc.status} className="nx-ai-tool-item">
-                <div
-                  className={cx('nx-ai-tool-row', hasDetails && 'nx-ai-tool-row-expandable')}
-                  onClick={hasDetails ? () => toggleDetail(tc.id) : undefined}
-                >
-                  <span className="nx-ai-tool-status" data-status={tc.status} aria-hidden="true">
-                    {tc.status === 'running' ? (
-                      <span className="nx-spinner nx-ai-tool-spinner" />
-                    ) : tc.status === 'error' ? (
-                      <Icon name="warning" size={13} weight="bold" />
-                    ) : (
-                      <Icon name="check-circle" size={13} weight="bold" />
-                    )}
-                  </span>
-                  <code className="nx-ai-tool-name">{tc.name}</code>
-                  {tc.summary ? <span className="nx-ai-tool-summary">{tc.summary}</span> : null}
-                  {durationText ? <span className="nx-ai-tool-duration">{durationText}</span> : null}
-                  {hasDetails ? (
-                    <button
-                      type="button"
-                      aria-expanded={detailOpen}
-                      aria-label={detailOpen ? `Hide ${tc.name} payload` : `Inspect ${tc.name} payload`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleDetail(tc.id);
-                      }}
-                      className="nx-ai-tool-toggle nx-focusable"
-                    >
-                      {detailOpen ? <Icon name="caret-down" size={11} /> : <Icon name="caret-right" size={11} />}
-                    </button>
-                  ) : null}
-                </div>
-
-                {hasDetails && detailOpen ? (
-                  <div className="nx-ai-tool-detail">
-                    {tc.query ? <pre className="nx-ai-tool-code">{tc.query}</pre> : null}
-                    {tc.output ? <div className="nx-ai-tool-output">{tc.output}</div> : null}
-                  </div>
+          return (
+            <div key={tc.id} data-status={tc.status} className="nx-ai-tool-item">
+              <div
+                className={cx('nx-ai-tool-row', hasDetails && 'nx-ai-tool-row-expandable')}
+                onClick={hasDetails ? () => toggleDetail(tc.id) : undefined}
+              >
+                <span className="nx-ai-tool-status" data-status={tc.status} aria-hidden="true">
+                  {tc.status === 'running' ? (
+                    <span className="nx-spinner nx-ai-tool-spinner" />
+                  ) : tc.status === 'error' ? (
+                    <Icon name="warning" size={13} weight="bold" />
+                  ) : (
+                    <Icon name="check-circle" size={13} weight="bold" />
+                  )}
+                </span>
+                <code className="nx-ai-tool-name">{tc.name}</code>
+                {tc.summary ? <span className="nx-ai-tool-summary">{tc.summary}</span> : null}
+                {durationText ? <span className="nx-ai-tool-duration">{durationText}</span> : null}
+                {hasDetails ? (
+                  <button
+                    type="button"
+                    aria-expanded={detailOpen}
+                    aria-label={detailOpen ? `Hide ${tc.name} payload` : `Inspect ${tc.name} payload`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      toggleDetail(tc.id);
+                    }}
+                    className="nx-ai-tool-toggle nx-focusable"
+                  >
+                    {detailOpen ? <Icon name="caret-down" size={11} /> : <Icon name="caret-right" size={11} />}
+                  </button>
                 ) : null}
               </div>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
+
+              {hasDetails && detailOpen ? (
+                <div className="nx-ai-tool-detail">
+                  {tc.query ? <pre className="nx-ai-tool-code">{tc.query}</pre> : null}
+                  {tc.output ? <div className="nx-ai-tool-output">{tc.output}</div> : null}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </Collapsible.Panel>
+    </Collapsible>
   );
 }
 
@@ -406,6 +439,31 @@ export interface AiAssistantPanelProps extends Omit<ComponentProps<'section'>, '
   model?: string;
   defaultModel?: string;
   onModelChange?: (model: string) => void;
+  /** Selected reasoning effort level when `efforts` is supplied. */
+  effort?: AiEffortLevel;
+  /** Offered effort levels in the composer bar. */
+  efforts?: ReadonlyArray<AiEffortLevel>;
+  onEffortChange?: (effort: AiEffortLevel) => void;
+  /** Default reasoning trace display policy: `'collapsed'`, `'expanded'`, or `'hidden'`. */
+  reasoningVisibility?: 'collapsed' | 'expanded' | 'hidden';
+  /** Localized strings for `AiReasoning`. */
+  reasoningWords?: AiReasoningWords;
+  /** Active presentation mode (enables header mode switcher when `onPresentationChange` is set). */
+  presentation?: AiPresentationMode;
+  /** Presentation modes offered in the header switcher. */
+  presentations?: ReadonlyArray<Exclude<AiPresentationMode, 'inline' | 'page'>>;
+  onPresentationChange?: (mode: Exclude<AiPresentationMode, 'inline' | 'page'>) => void;
+  restoreMode?: 'sidebar' | 'floating';
+  /** Optional handler to open the dedicated full-page assistant route. */
+  onOpenPage?: () => void;
+  /** Optional close button handler rendered in the header. */
+  onClose?: () => void;
+  /** Stretch to fill its parent surface (`sidebar`, `floating`, `fullscreen`, `page`) without a fixed max-height. */
+  fill?: boolean;
+  /** Extra controls rendered in the panel header. */
+  headerActions?: ReactNode;
+  /** Localized strings for mode switcher and close buttons. */
+  surfaceWords?: AiSurfaceWords;
   messages?: ReadonlyArray<AiMessage>;
   defaultMessages?: ReadonlyArray<AiMessage>;
   starterPrompts?: ReadonlyArray<AiStarterPrompt>;
@@ -416,6 +474,8 @@ export interface AiAssistantPanelProps extends Omit<ComponentProps<'section'>, '
   availableContexts?: ReadonlyArray<AiContextAttachment>;
   composerPlaceholder?: string;
   isGenerating?: boolean;
+  /** Renderer for structured generative UI blocks attached to assistant messages. */
+  renderBlock?: (block: AiGeneratedBlock, context: { presentation: AiPresentationMode }) => ReactNode;
   onSendMessage?: (prompt: string, context: AiContextAttachment[], model: string) => void;
   onSendPrompt?: (prompt: string, context: AiContextAttachment[], model: string) => void;
   onStopGenerating?: () => void;
@@ -427,7 +487,7 @@ export interface AiAssistantPanelProps extends Omit<ComponentProps<'section'>, '
   onDismissProposal?: (proposalId: string, messageId: string) => void;
 }
 
-/** Streaming conversational AI copilot panel with tool-call traces, citations, and field-mutation proposals. */
+/** Streaming conversational AI copilot panel with reasoning traces, tool-call traces, generative UI blocks, citations, and proposals. */
 export function AiAssistantPanel(rawProps: AiAssistantPanelProps) {
   const {
     title = 'Assistant',
@@ -437,6 +497,20 @@ export function AiAssistantPanel(rawProps: AiAssistantPanelProps) {
     model,
     defaultModel,
     onModelChange,
+    effort,
+    efforts,
+    onEffortChange,
+    reasoningVisibility = 'collapsed',
+    reasoningWords,
+    presentation = 'inline',
+    presentations,
+    onPresentationChange,
+    restoreMode,
+    onOpenPage,
+    onClose,
+    fill = false,
+    headerActions,
+    surfaceWords,
     messages,
     defaultMessages = [],
     starterPrompts = EMPTY_STARTER_PROMPTS,
@@ -447,6 +521,7 @@ export function AiAssistantPanel(rawProps: AiAssistantPanelProps) {
     availableContexts,
     composerPlaceholder = 'Ask a question…',
     isGenerating = false,
+    renderBlock,
     onSendMessage,
     onSendPrompt,
     onStopGenerating,
@@ -576,11 +651,17 @@ export function AiAssistantPanel(rawProps: AiAssistantPanelProps) {
   const emptyHeading = isEmptyStateSpec(empty) ? empty.title : (legacyProps.emptyTitle ?? 'How can I help?');
   const emptySub = isEmptyStateSpec(empty) ? empty.body : legacyProps.emptyDescription;
 
+  const isFill = fill || presentation !== 'inline';
+  const normalizeReasoning = (value: AiMessage['reasoning']): ReadonlyArray<AiReasoningTrace> =>
+    !value ? [] : Array.isArray(value) ? (value as ReadonlyArray<AiReasoningTrace>) : [value as AiReasoningTrace];
+
   return (
     <section
       aria-label={ariaLabel ?? legacyProps['aria-label'] ?? (typeof title === 'string' ? title : 'Assistant')}
       data-slot="ai-assistant-panel"
-      className={cx('nx-ai-panel', className)}
+      data-presentation={presentation}
+      data-fill={isFill ? '' : undefined}
+      className={cx('nx-ai-panel', isFill && 'nx-ai-panel-fill', className)}
       {...forwardedProps}
     >
       {/* Header */}
@@ -608,6 +689,7 @@ export function AiAssistantPanel(rawProps: AiAssistantPanelProps) {
               />
             </div>
           ) : null}
+          {headerActions}
           <IconButton
             variant="ghost"
             size="xs"
@@ -625,6 +707,26 @@ export function AiAssistantPanel(rawProps: AiAssistantPanelProps) {
             icon={<Icon name="trash" size={14} />}
             onClick={handleClearThread}
           />
+          {onPresentationChange || onOpenPage ? (
+            <AiModeSwitcher
+              presentation={presentation}
+              presentations={presentations}
+              onPresentationChange={onPresentationChange}
+              restoreMode={restoreMode}
+              onOpenPage={onOpenPage}
+              words={surfaceWords}
+            />
+          ) : null}
+          {onClose ? (
+            <IconButton
+              variant="ghost"
+              size="xs"
+              ariaLabel={surfaceWords?.close ?? 'Close assistant'}
+              title={surfaceWords?.close ?? 'Close assistant'}
+              icon={<Icon name="x" size={14} weight="bold" />}
+              onClick={onClose}
+            />
+          ) : null}
         </div>
       </header>
 
@@ -697,6 +799,7 @@ export function AiAssistantPanel(rawProps: AiAssistantPanelProps) {
               }
 
               const isCopied = copiedMessageId === msg.id;
+              const reasoningTraces = reasoningVisibility === 'hidden' ? [] : normalizeReasoning(msg.reasoning);
 
               return (
                 <article
@@ -714,12 +817,39 @@ export function AiAssistantPanel(rawProps: AiAssistantPanelProps) {
                     {msg.timestamp ? <span className="nx-ai-turn-time">{msg.timestamp}</span> : null}
                   </div>
 
+                  {reasoningTraces.length > 0 ? (
+                    <div className="nx-ai-reasoning-list">
+                      {reasoningTraces.map((trace) => (
+                        <AiReasoning key={trace.id} trace={trace} defaultOpen={reasoningVisibility === 'expanded'} words={reasoningWords} />
+                      ))}
+                    </div>
+                  ) : null}
+
                   {msg.toolCalls && msg.toolCalls.length > 0 ? <ToolCallSteps toolCalls={msg.toolCalls} /> : null}
 
                   <div className="nx-ai-assistant-body">
                     {typeof msg.content === 'string' ? renderInlineRichText(msg.content) : msg.content}
                     {msg.streaming ? <span className="nx-ai-cursor" aria-hidden="true" /> : null}
                   </div>
+
+                  {msg.blocks && msg.blocks.length > 0 ? (
+                    <div className="nx-ai-turn-blocks" data-slot="ai-blocks">
+                      {msg.blocks.map((block) => (
+                        <div
+                          key={block.id}
+                          className="nx-ai-block-frame"
+                          data-block-kind={block.kind}
+                          data-status={block.status ?? 'ready'}
+                        >
+                          {block.status === 'loading' ? (
+                            <SkeletonCard lines={3} />
+                          ) : renderBlock ? (
+                            renderBlock(block, { presentation })
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
 
                   {msg.citations && msg.citations.length > 0 ? (
                     <div className="nx-ai-citations" aria-label="Sources">
@@ -801,6 +931,9 @@ export function AiAssistantPanel(rawProps: AiAssistantPanelProps) {
           attachments={attachments}
           defaultAttachments={defaultAttachments}
           availableContexts={availableContexts}
+          effort={effort}
+          efforts={efforts}
+          onEffortChange={onEffortChange}
           placeholder={composerPlaceholder}
           isGenerating={isGenerating}
           onSubmit={dispatchPrompt}

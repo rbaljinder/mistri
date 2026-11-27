@@ -631,7 +631,7 @@ export function useComposer(): { fill(text: string, options?: { mode?: 'reply' |
  */
 export function useAssistant(): {
   offered: boolean;
-  open(options?: { about?: { table: string; id: string | number }; text?: string }): boolean;
+  open(options?: { about?: { table: string; id: string | number }; text?: string; mode?: 'sidebar' | 'floating' | 'fullscreen' }): boolean;
 } {
   const host = useUiHost();
   const offered = useSyncExternalStore(
@@ -642,7 +642,7 @@ export function useAssistant(): {
   return {
     offered,
     open: (options = {}) => {
-      const { about, text } = options;
+      const { about, text, mode } = options;
       if (about !== undefined) {
         const id = about?.id;
         if (
@@ -656,6 +656,7 @@ export function useAssistant(): {
       return host.openAssistant({
         ...(about ? { about: { table: about.table, id: about.id } } : {}),
         ...(text !== undefined ? { text } : {}),
+        ...(mode === 'sidebar' || mode === 'floating' || mode === 'fullscreen' ? { mode } : {}),
       });
     },
   };

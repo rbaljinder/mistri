@@ -50,3 +50,26 @@ export async function modelRefused(response: Response, keyName: string): Promise
     return new ModelUnavailable('The model is busy. Try again in a moment.', `the model is busy (${said})`);
   return new ModelUnavailable(`The model could not be reached (${status}).`, `the model provider refused the call (${said})`);
 }
+
+interface ReasoningEvent {
+  id: string;
+  delta?: string;
+  redacted?: true;
+  done?: true;
+  durationMs?: number;
+}
+
+/** Stream sink accepted by every `AssistantModel` adapter (plain text callback or structured text + reasoning sink). */
+export type ModelStreamSink =
+  | ((delta: string) => void)
+  | { onText: (delta: string) => void; onReasoning?: (event: ReasoningEvent) => void };
+
+/** Normalize a `ModelStreamSink` into `{ onText, onReasoning }` callbacks without importing `assistantModel.ts` at runtime. */
+export function streamCallbacks(sink: ModelStreamSink): {
+  onText: (delta: string) => void;
+  onReasoning: (event: ReasoningEvent) => void;
+} {
+  return typeof sink === 'function'
+    ? { onText: sink, onReasoning: () => undefined }
+    : { onText: sink.onText, onReasoning: sink.onReasoning ?? (() => undefined) };
+}
