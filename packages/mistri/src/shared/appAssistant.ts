@@ -5,6 +5,12 @@
 
 import { isAppIcon, type AppIconName } from '@mistriwork/engine/shared/appIcons.js';
 import { parseComponentDecl, parsePropDecls, type ComponentDecl, type ComponentPropDecl } from '@mistriwork/engine/shared/appComponents.js';
+import {
+  parseAssistantWebhooks,
+  parseExternalTools,
+  type AppAssistantExternalTool,
+  type AppAssistantWebhook,
+} from './appAssistantExternal.js';
 
 /** The tool core, the same for every App: discovery is a tool, not a preamble. */
 export const ASSISTANT_TOOLS = ['find', 'describe', 'query', 'show', 'run'] as const;
@@ -73,6 +79,8 @@ const KEYS = [
   'knowledge',
   'backgroundRuns',
   'evals',
+  'externalTools',
+  'webhooks',
 ] as const;
 const MAX_EVALS = 24;
 const EVAL_KEYS = ['id', 'label', 'description', 'prompt', 'agent', 'roles', 'expect'] as const;
@@ -321,6 +329,10 @@ export interface AppAssistant {
   backgroundRuns?: AppAssistantBackgroundRuns;
   /** Optional declarative evaluation cases run on demand from the Trace & Eval console. */
   evals?: AppAssistantEvalCase[];
+  /** Optional declarative outbound HTTP & MCP tool bridges. */
+  externalTools?: Record<string, AppAssistantExternalTool>;
+  /** Optional signed inbound webhooks that launch durable background runs. */
+  webhooks?: AppAssistantWebhook[];
 }
 
 /** Declarative expectations graded against an assistant eval run. */
@@ -994,6 +1006,8 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
   const agents = parseAgents(a.agents, placement, customBlocks, knowledge, context, `${where}.agents`);
   const backgroundRuns = parseBackgroundRuns(a.backgroundRuns, agents, context, `${where}.backgroundRuns`);
   const evals = parseEvals(a.evals, agents, context, `${where}.evals`);
+  const externalTools = parseExternalTools(a.externalTools, context.roles, `${where}.externalTools`);
+  const webhooks = parseAssistantWebhooks(a.webhooks, agents ? new Set(Object.keys(agents)) : undefined, `${where}.webhooks`);
   let defaultAgent: string | undefined;
   if (a.defaultAgent !== undefined) {
     if (!agents) throw new Error(`${where}.defaultAgent names an agent, and ${where} declares no "agents".`);
@@ -1025,6 +1039,8 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     ...(knowledge ? { knowledge } : {}),
     ...(backgroundRuns ? { backgroundRuns } : {}),
     ...(evals ? { evals } : {}),
+    ...(externalTools ? { externalTools } : {}),
+    ...(webhooks ? { webhooks } : {}),
   };
 }
 
@@ -1367,6 +1383,18 @@ function filterKnowledge(
   return entries.length ? Object.fromEntries(entries) : undefined;
 }
 
+function filterExternalTools(
+  tools: Record<string, AppAssistantExternalTool> | undefined,
+  viewerRoles: readonly string[] | undefined,
+): Record<string, AppAssistantExternalTool> | undefined {
+  if (!tools) return undefined;
+  const entries = Object.entries(tools).filter(([, tool]) => {
+    if (viewerRoles && tool.roles && !tool.roles.some((role) => viewerRoles.includes(role))) return false;
+    return true;
+  });
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 /**
  * Resolve an active named agent onto the App's base assistant definition, strictly narrowing authority and budgets.
  * Returns `{ assistant: base }` (with role-filtered knowledge sources) when the App declares no `agents`. Throws an
@@ -1377,11 +1405,18 @@ export function resolveAgentAssistant(
   agentId: string | undefined,
   viewerRoles?: readonly string[],
 ): { assistant: AppAssistant; agent?: AppAssistantAgent } {
+  const filteredExternal = filterExternalTools(base.externalTools, viewerRoles);
   if (!base.agents || !Object.keys(base.agents).length) {
     if (agentId !== undefined) throw new Error('This assistant does not declare named agents.');
     const filteredKnowledge = filterKnowledge(base.knowledge, viewerRoles);
-    if (filteredKnowledge === base.knowledge) return { assistant: base };
-    return { assistant: { ...base, ...(filteredKnowledge ? { knowledge: filteredKnowledge } : { knowledge: undefined }) } };
+    if (filteredKnowledge === base.knowledge && filteredExternal === base.externalTools) return { assistant: base };
+    return {
+      assistant: {
+        ...base,
+        ...(filteredKnowledge ? { knowledge: filteredKnowledge } : { knowledge: undefined }),
+        ...(filteredExternal ? { externalTools: filteredExternal } : { externalTools: undefined }),
+      },
+    };
   }
   const roles = viewerRoles ?? [];
   const allowedEntries = Object.values(base.agents).filter((each) => (viewerRoles ? agentAllowedFor(each, roles) : true));
@@ -1398,7 +1433,13 @@ export function resolveAgentAssistant(
   }
   if (!agent) {
     const filteredKnowledge = filterKnowledge(base.knowledge, viewerRoles);
-    return { assistant: { ...base, ...(filteredKnowledge ? { knowledge: filteredKnowledge } : { knowledge: undefined }) } };
+    return {
+      assistant: {
+        ...base,
+        ...(filteredKnowledge ? { knowledge: filteredKnowledge } : { knowledge: undefined }),
+        ...(filteredExternal ? { externalTools: filteredExternal } : { externalTools: undefined }),
+      },
+    };
   }
   const tools = agent.tools ? base.tools.filter((tool) => agent.tools!.includes(tool)) : base.tools;
   const blocks = agent.blocks ? base.blocks.filter((block) => agent.blocks!.includes(block)) : base.blocks;
@@ -1447,6 +1488,7 @@ export function resolveAgentAssistant(
       ...(customBlocks && Object.keys(customBlocks).length ? { customBlocks } : { customBlocks: undefined }),
       ...(memory ? { memory } : { memory: undefined }),
       ...(knowledge ? { knowledge } : { knowledge: undefined }),
+      ...(filteredExternal ? { externalTools: filteredExternal } : { externalTools: undefined }),
     },
   };
 }

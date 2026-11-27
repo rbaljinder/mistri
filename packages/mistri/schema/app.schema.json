@@ -465,6 +465,21 @@
           "maxItems": 24,
           "items": { "$ref": "#/$defs/assistantEvalCase" },
           "description": "Declarative evaluation cases runnable from the Trace & Eval console."
+        },
+        "externalTools": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
+          "description": "Declarative outbound HTTP and MCP tool bridges callable by the assistant.",
+          "additionalProperties": { "$ref": "#/$defs/assistantExternalTool" }
+        },
+        "webhooks": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 12,
+          "items": { "$ref": "#/$defs/assistantWebhook" },
+          "description": "Signed inbound webhooks that launch durable background runs."
         }
       }
     },
@@ -574,6 +589,56 @@
         "agent": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,39}$" },
         "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
         "expect": { "$ref": "#/$defs/assistantEvalExpect" }
+      }
+    },
+    "assistantExternalInputField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type"],
+      "description": "Typed parameter schema entry for a declarative external tool.",
+      "properties": {
+        "type": { "enum": ["string", "number", "boolean"] },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "required": { "type": "boolean" }
+      }
+    },
+    "assistantExternalTool": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "description", "url"],
+      "description": "Declarative outbound HTTP or MCP tool bridge callable by the assistant.",
+      "properties": {
+        "label": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 80 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "kind": { "enum": ["http", "mcp"] },
+        "url": { "type": "string", "minLength": 1 },
+        "method": { "enum": ["GET", "POST"] },
+        "mcpTool": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "authHeader": { "type": "string", "minLength": 1 },
+        "authValue": { "type": "string", "minLength": 1 },
+        "access": { "enum": ["read", "write"] },
+        "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "input": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,47}$" },
+          "additionalProperties": { "$ref": "#/$defs/assistantExternalInputField" }
+        }
+      }
+    },
+    "assistantWebhook": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "secretEnv", "prompt"],
+      "description": "Declarative signed inbound webhook trigger that launches a durable background run.",
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
+        "label": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 80 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "secretEnv": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]{0,63}$" },
+        "signatureHeader": { "type": "string", "minLength": 1 },
+        "prompt": { "type": "string", "minLength": 1, "maxLength": 2000 },
+        "agent": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,39}$" },
+        "enabled": { "type": "boolean" }
       }
     },
     "assistantMemory": {

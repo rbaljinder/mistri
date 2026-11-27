@@ -3898,6 +3898,60 @@ export interface AssistantDeclaration {
   readonly backgroundRuns?: boolean | AssistantBackgroundRunsDeclaration;
   /** Declarative evaluation cases runnable from the Trace & Eval console. */
   readonly evals?: readonly AssistantEvalCaseDeclaration[];
+  /** Declarative outbound HTTP & MCP tool bridges callable by the assistant (write tools require explicit human approval). */
+  readonly externalTools?: Readonly<Record<string, AssistantExternalToolDeclaration>>;
+  /** Declarative signed inbound webhooks that launch durable background runs (`POST /api/assistant/webhooks/:app/:id`). */
+  readonly webhooks?: readonly AssistantWebhookDeclaration[];
+}
+/** Parameter schema entry for a declarative external tool. */
+export interface AssistantExternalInputFieldDeclaration {
+  readonly type: 'string' | 'number' | 'boolean';
+  readonly description?: string | AppMessageRef;
+  readonly required?: boolean;
+}
+/** A declarative outbound HTTP or MCP (JSON-RPC 2.0) tool callable by an App's assistant. */
+export interface AssistantExternalToolDeclaration {
+  /** Short human-readable label shown on tool steps and approval checkpoints. */
+  readonly label: string | AppMessageRef;
+  /** Concise description shown to the model and in the Automations view. */
+  readonly description: string | AppMessageRef;
+  /** Protocol: `'http'` (JSON request) or `'mcp'` (Streamable HTTP JSON-RPC 2.0 `tools/call`). Default `'http'`. */
+  readonly kind?: 'http' | 'mcp';
+  /** Target endpoint URL (`https://`, or `http://localhost` / `127.0.0.1` for local bridges). Supports `${ENV_VAR}`. */
+  readonly url: string;
+  /** HTTP method for `kind: 'http'` (`'GET'` or `'POST'`, default `'POST'`). */
+  readonly method?: 'GET' | 'POST';
+  /** Remote MCP tool name passed to `tools/call` (required when `kind: 'mcp'`). */
+  readonly mcpTool?: string;
+  /** Optional HTTP header name carrying the server-side credential (never sent to browsers). */
+  readonly authHeader?: string;
+  /** Optional header value template supporting `${ENV_VAR}` expansion strictly on the server. */
+  readonly authValue?: string;
+  /** Access level: `'read'` executes directly; `'write'` (default) pauses at an explicit human approval checkpoint. */
+  readonly access?: 'read' | 'write';
+  /** Roles permitted to invoke this external tool; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Optional typed input parameters validated before invoking the external endpoint. */
+  readonly input?: Readonly<Record<string, AssistantExternalInputFieldDeclaration>>;
+}
+/** A declarative signed inbound webhook trigger that dispatches a durable background run. */
+export interface AssistantWebhookDeclaration {
+  /** Stable identifier used in the endpoint path `/api/assistant/webhooks/:app/:id`. */
+  readonly id: string;
+  /** Short label shown in the Run Monitor Automations view. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description of what external events this webhook handles. */
+  readonly description?: string | AppMessageRef;
+  /** Uppercase environment variable name holding the shared HMAC-SHA256 signing secret. */
+  readonly secretEnv: string;
+  /** Header carrying the hex or `sha256=<hex>` HMAC signature (default `'x-mistri-signature'`). */
+  readonly signatureHeader?: string;
+  /** Prompt/instructions executed with the verified webhook JSON payload as context. */
+  readonly prompt: string;
+  /** Optional named agent key from `assistant.agents`. */
+  readonly agent?: string;
+  /** Whether enabled by default (default `true`). */
+  readonly enabled?: boolean;
 }
 /** Expectations graded against a declarative assistant evaluation case. */
 export interface AssistantEvalExpectDeclaration {

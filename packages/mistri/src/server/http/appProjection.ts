@@ -47,6 +47,7 @@ import { send, sendRevalidated } from '@mistriwork/engine/server/http/reply.js';
 import { catalogLocales, localeRow } from '../app/readerLocale.js';
 import { componentMessages, frameworkWords } from '../app/appMessages.js';
 import { agentsFor, backgroundRunsFor, evalsFor, knowledgeFor, memoryFor, startersFor } from '../../shared/appAssistant.js';
+import { externalToolsFor } from '../../shared/appAssistantExternal.js';
 import { principalOf, type RequestContext, type ResolvedSource } from '@mistriwork/engine/server/http/context.js';
 import { requestRecordBranding, withRecordBranding } from './recordBranding.js';
 import { pageReadRoutes, type PageReadHooks } from '@mistriwork/engine/server/http/pageReads.js';
@@ -184,6 +185,11 @@ export function browserApp(ctx: RequestContext, source: ResolvedSource) {
       const { evals: allEvals, ...rest } = nextAssistant;
       const theirs = evalsFor(allEvals, roles);
       nextAssistant = { ...rest, ...(theirs.length ? { evals: theirs } : {}) };
+    }
+    if (nextAssistant.externalTools) {
+      const { externalTools: allExternal, ...rest } = nextAssistant;
+      const theirs = externalToolsFor(allExternal, roles);
+      nextAssistant = { ...rest, ...(theirs.length ? { externalTools: theirs } : {}) };
     }
     app = { ...app, assistant: nextAssistant };
   }

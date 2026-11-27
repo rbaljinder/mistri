@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { once } from 'node:events';
 import { mkdtempSync, rmSync } from 'node:fs';
+import { createServer } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -49,6 +51,7 @@ interface Event {
 }
 interface Fixture {
   as(person: Person | null): void;
+  url(path: string): string;
   turn(body: Record<string, unknown>): Promise<{ status: number; events: Event[]; body?: any }>;
   resolve(body: Record<string, unknown>): Promise<{ status: number; events: Event[]; body?: any }>;
   get(path: string): Promise<{ status: number; body: any }>;
@@ -174,6 +177,7 @@ async function fixture(
       as: (person) => {
         current = person;
       },
+      url,
       turn: (body) => streamed('/api/assistant/turn', body),
       resolve: (body) => streamed('/api/assistant/resolve', body),
       get: async (path) => {
@@ -2189,4 +2193,217 @@ test('Wave 3A: structured run trace observability and ephemeral declarative eval
       },
     },
   );
+});
+
+test('Wave 3B: external HTTP/MCP tools enforce egress, approval checkpoints, and roles; signed webhooks launch durable runs', async () => {
+  const received: Array<{ path: string; auth?: string; body: unknown }> = [];
+  const mockRemote = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : (chunk as Buffer));
+    const parsed = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : undefined;
+    received.push({ path: req.url ?? '', auth: req.headers.authorization, body: parsed });
+    res.writeHead(200, { 'content-type': 'application/json' });
+    if (req.url === '/mcp') {
+      const rpc = parsed as { id: number; params?: { name?: string; arguments?: Record<string, unknown> } };
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: rpc.id,
+          result: {
+            content: [{ type: 'text', text: `PR #${rpc.params?.arguments?.pr} is approved and ready to merge.` }],
+          },
+        }),
+      );
+      return;
+    }
+    res.end(JSON.stringify({ ok: true, delivered: parsed }));
+  });
+  mockRemote.listen(0, '127.0.0.1');
+  await once(mockRemote, 'listening');
+  const remoteAddr = mockRemote.address();
+  assert.ok(remoteAddr && typeof remoteAddr === 'object');
+  const remoteBase = `http://127.0.0.1:${remoteAddr.port}`;
+
+  const prevMcp = process.env.MISTRI_TEST_MCP_TOKEN;
+  const prevHook = process.env.MISTRI_TEST_WEBHOOK_SECRET;
+  process.env.MISTRI_TEST_MCP_TOKEN = 'mcp-secret-token-42';
+  process.env.MISTRI_TEST_WEBHOOK_SECRET = 'whsec_test_signing_key_99';
+
+  try {
+    await fixture(
+      async ({ as, get, post, turn, resolve, url, db }) => {
+        setAssistantModel(() =>
+          scriptedModel({
+            turns: [
+              {
+                when: 'Check PR 412',
+                steps: [{ tools: [{ name: 'lookup_github_pr', input: { pr: 412 } }] }, { text: 'PR #412 is approved and ready to merge.' }],
+              },
+              {
+                when: 'Notify Slack about v2.4',
+                steps: [
+                  {
+                    tools: [
+                      {
+                        name: 'post_slack_alert',
+                        input: { channel: '#releases', text: 'v2.4 shipped', why: 'Announce release to engineering.' },
+                      },
+                    ],
+                  },
+                  { text: 'Slack alert sent to #releases.' },
+                ],
+              },
+              {
+                when: 'release tag v2.4',
+                steps: [{ text: 'Verified GitHub release v2.4 and archived release brief.' }],
+              },
+            ],
+          }),
+        );
+
+        // 1. `/api/app` exposes safe metadata only (no url/auth/secretEnv/roles) and filters by role.
+        const repApp = await get(`/api/app?app=${appId}`);
+        assert.equal(repApp.status, 200);
+        const repJson = JSON.stringify(repApp.body.app.assistant);
+        assert.doesNotMatch(repJson, /mcp-secret-token-42|MISTRI_TEST_MCP_TOKEN|MISTRI_TEST_WEBHOOK_SECRET|127\.0\.0\.1/);
+        assert.equal(repApp.body.app.assistant.externalTools.length, 2);
+        assert.equal(repApp.body.app.assistant.webhooks.length, 1);
+
+        as('viewer');
+        const viewerApp = await get(`/api/app?app=${appId}`);
+        assert.equal(viewerApp.body.app.assistant.externalTools.length, 1, 'rep-only write tool hidden from viewer');
+        assert.equal(viewerApp.body.app.assistant.externalTools[0].id, 'lookup_github_pr');
+
+        // 2. Read MCP tool executes JSON-RPC 2.0 `tools/call` with server-expanded Bearer header.
+        as('ann');
+        const readTurn = await turn({ text: 'Check PR 412' });
+        assert.equal(readTurn.status, 200);
+        const readAnswer = of(readTurn.events, 'text')
+          .map((t) => t.delta)
+          .join('');
+        assert.match(readAnswer, /PR #412 is approved/);
+        const mcpCall = received.find((r) => r.path === '/mcp');
+        assert.ok(mcpCall, 'MCP endpoint called');
+        assert.equal(mcpCall.auth, 'Bearer mcp-secret-token-42');
+        assert.equal((mcpCall.body as { method: string }).method, 'tools/call');
+
+        // 3. Write HTTP tool pauses at an approval checkpoint (never auto-executes) and executes via /api/assistant/external/execute.
+        const writeTurn = await turn({ text: 'Notify Slack about v2.4' });
+        assert.equal(writeTurn.status, 200);
+        const proposal = of(writeTurn.events, 'proposal')[0]?.proposal;
+        assert.ok(proposal && proposal.kind === 'external' && proposal.action === 'post_slack_alert');
+        assert.equal(received.filter((r) => r.path === '/slack').length, 0, 'write tool must not auto-execute');
+
+        // Viewer is refused 403 on `/api/assistant/external/execute` for rep-only tool.
+        as('viewer');
+        const deniedExec = await post('/api/assistant/external/execute', {
+          tool: 'post_slack_alert',
+          input: { channel: '#releases', text: 'v2.4 shipped' },
+        });
+        assert.equal(deniedExec.status, 403);
+
+        // Rep confirms -> executes external HTTP POST and resolves the turn.
+        as('ann');
+        const execRes = await post('/api/assistant/external/execute', {
+          tool: 'post_slack_alert',
+          input: proposal.values,
+        });
+        assert.equal(execRes.status, 200);
+        assert.equal(execRes.body.ok, true);
+        assert.equal(received.filter((r) => r.path === '/slack').length, 1);
+
+        const convId = of(writeTurn.events, 'conversation')[0].id as string;
+        const resolved = await resolve({
+          conversation: convId,
+          proposal: proposal.id,
+          outcome: 'done',
+          detail: execRes.body.output,
+        });
+        assert.equal(resolved.status, 200);
+        const resolvedAnswer = of(resolved.events, 'text')
+          .map((t) => t.delta)
+          .join('');
+        assert.match(resolvedAnswer, /Slack alert sent/);
+
+        // 4. Signed inbound webhook rejects bad signature (401) and accepts valid HMAC-SHA256 (202 -> completed run).
+        as(null);
+        const hookPayload = JSON.stringify({ event: 'release', tag: 'v2.4' });
+        const badSig = await fetch(url(`/api/assistant/webhooks/${appId}/github_release`), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-hub-signature-256': 'sha256=' + '0'.repeat(64) },
+          body: hookPayload,
+        });
+        assert.equal(badSig.status, 401);
+
+        const validSig = 'sha256=' + createHmac('sha256', process.env.MISTRI_TEST_WEBHOOK_SECRET!).update(hookPayload).digest('hex');
+        const goodHook = await fetch(url(`/api/assistant/webhooks/${appId}/github_release`), {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'x-hub-signature-256': validSig },
+          body: hookPayload,
+        });
+        assert.equal(goodHook.status, 202);
+        const hookJson = (await goodHook.json()) as { run: { id: string; source: string } };
+        assert.equal(hookJson.run.source, 'webhook:github_release');
+
+        // Wait briefly for the detached webhook background run to complete in SQLite.
+        let statusRow: { status: string; summary: string } | undefined;
+        for (let attempt = 0; attempt < 40; attempt++) {
+          statusRow = db.prepare('SELECT status, summary FROM __mistri_assistant_run WHERE id = ?').get(hookJson.run.id) as
+            | { status: string; summary: string }
+            | undefined;
+          if (statusRow?.status === 'completed') break;
+          await new Promise((r) => setTimeout(r, 50));
+        }
+        assert.equal(statusRow?.status, 'completed');
+        assert.match(statusRow?.summary ?? '', /Verified GitHub release v2\.4/);
+      },
+      {
+        assistant: {
+          backgroundRuns: { maxConcurrent: 2, maxSteps: 6 },
+          externalTools: {
+            lookup_github_pr: {
+              label: 'Lookup GitHub PR',
+              description: 'Read PR approval state from GitHub MCP server.',
+              kind: 'mcp',
+              url: `${remoteBase}/mcp`,
+              mcpTool: 'get_pull_request',
+              authHeader: 'Authorization',
+              authValue: 'Bearer ${MISTRI_TEST_MCP_TOKEN}',
+              access: 'read',
+              input: { pr: { type: 'number', description: 'PR number', required: true } },
+            },
+            post_slack_alert: {
+              label: 'Post Slack Alert',
+              description: 'Send a Slack release announcement.',
+              kind: 'http',
+              url: `${remoteBase}/slack`,
+              method: 'POST',
+              access: 'write',
+              roles: ['rep'],
+              input: {
+                channel: { type: 'string', required: true },
+                text: { type: 'string', required: true },
+              },
+            },
+          },
+          webhooks: [
+            {
+              id: 'github_release',
+              label: 'GitHub Release Webhook',
+              description: 'Summarizes newly tagged releases.',
+              secretEnv: 'MISTRI_TEST_WEBHOOK_SECRET',
+              signatureHeader: 'x-hub-signature-256',
+              prompt: 'Summarize this release tag v2.4 payload.',
+            },
+          ],
+        },
+      },
+    );
+  } finally {
+    if (prevMcp === undefined) delete process.env.MISTRI_TEST_MCP_TOKEN;
+    else process.env.MISTRI_TEST_MCP_TOKEN = prevMcp;
+    if (prevHook === undefined) delete process.env.MISTRI_TEST_WEBHOOK_SECRET;
+    else process.env.MISTRI_TEST_WEBHOOK_SECRET = prevHook;
+    await new Promise<void>((resolve) => mockRemote.close(() => resolve()));
+  }
 });

@@ -104,7 +104,7 @@ import { AiReasoning } from '@mistriwork/ui/views/AiReasoning.js';
 import { Select } from '@mistriwork/ui/Select.js';
 import '@mistriwork/ui/styles/surfaces/views-ai.css';
 import { EvidenceItem } from './EvidenceList.js';
-import { assistantApi, assistantOwner } from './assistantRequest.js';
+import { assistantApi, assistantOwner, executeExternalProposal } from './assistantRequest.js';
 import type { AssistantHandoff } from './assistantDoor.js';
 import { ConversationList, DeleteConversation, RenameField, type ConversationSummary } from './ConversationList.js';
 import { DropItem, DropMenu } from '@mistriwork/ui/DropMenu.js';
@@ -779,6 +779,11 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
   };
 
   const confirmSet = async () => {
+    if (proposal.kind === 'external') {
+      setBusy(true);
+      settled(await executeExternalProposal(app?.id, proposal.action, proposal.values));
+      return;
+    }
     if (!action || action.command || !proposal.key) return settled({ status: 'failed', detail: say('failedPlain') });
     const values = {
       ...(action as { set: Record<string, string | number | boolean | null> }).set,
@@ -874,7 +879,7 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
 
   const confirm = () => {
     if (proposal.review) void confirmReview();
-    else if (proposal.kind === 'set') void confirmSet();
+    else if (proposal.kind === 'set' || proposal.kind === 'external') void confirmSet();
     else if (proposal.kind === 'command') setCommandOpen(true);
     else confirmNew();
   };
@@ -928,7 +933,7 @@ function ProposalCard({ proposal, outcome, live, onResolve, onFollow }: CardProp
           )}
           <div className="assistant-proposal-actions">
             <Button variant="primary" onClick={confirm} disabled={busy || (reasonColumn !== undefined && !reason.trim())}>
-              {proposal.kind === 'set' ? say('confirm') : say('review')}
+              {proposal.kind === 'set' || proposal.kind === 'external' ? say('confirm') : say('review')}
             </Button>
             <Button onClick={() => (proposal.review ? void declineReview() : settled({ status: 'declined' }))} disabled={busy}>
               {say('decline')}
@@ -1710,6 +1715,8 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
           app={app}
           config={assistantConfig.backgroundRuns}
           evals={assistantConfig.evals}
+          externalTools={assistantConfig.externalTools}
+          webhooks={assistantConfig.webhooks}
           agents={agents.map((a) => ({ id: a.id, name: a.name }))}
           reasoning={assistantConfig.reasoning}
           initialRunId={initialRunId}

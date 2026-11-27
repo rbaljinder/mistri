@@ -20,6 +20,7 @@ import type {
   ServedAssistantKnowledge,
   ServedAssistantMemory,
 } from './appAssistant.js';
+import type { ServedAssistantExternalTool, ServedAssistantWebhook } from './appAssistantExternal.js';
 import type { AppShell } from './appModel.js';
 import { appZone } from './appZone.js';
 import type { AppFormCommandReference } from './command.js';
@@ -202,6 +203,10 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
     };
     /** Declarative evaluation cases available to this viewer (`roles` stripped in appProjection.ts). */
     evals?: Array<ServedAssistantEvalCase & { roles?: string[] }>;
+    /** Viewer-safe outbound HTTP & MCP tool bridges (`url`, credentials, and `roles` stripped). */
+    externalTools?: Array<ServedAssistantExternalTool & { roles?: string[] }>;
+    /** Viewer-safe signed inbound webhook summaries (`secretEnv` stripped). */
+    webhooks?: ServedAssistantWebhook[];
   };
   /** The fields a decision answers, by table id then column (decide/decisionServing.ts): where a record reserves a
       suggestion's place, and the command its Accept runs. Only the tables this reader is served. */
@@ -319,6 +324,8 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
             ...servedKnowledge(app.assistant.knowledge, schema),
             ...servedBackgroundRuns(app.assistant.backgroundRuns),
             ...servedEvals(app.assistant.evals),
+            ...servedExternalTools(app.assistant.externalTools),
+            ...servedWebhooks(app.assistant.webhooks),
           },
         }
       : {}),
@@ -506,6 +513,39 @@ function servedEvals(evals: NonNullable<AppDef['assistant']>['evals']): {
       ...(each.agent ? { agent: each.agent } : {}),
       ...(each.roles ? { roles: [...each.roles] } : {}),
       expect: { ...each.expect },
+    })),
+  };
+}
+
+function servedExternalTools(tools: NonNullable<AppDef['assistant']>['externalTools']): {
+  externalTools?: NonNullable<AppPayloadApp['assistant']>['externalTools'];
+} {
+  if (!tools) return {};
+  const list = Object.values(tools).map((t) => ({
+    id: t.id,
+    label: t.label,
+    description: t.description,
+    kind: t.kind,
+    method: t.method,
+    ...(t.mcpTool ? { mcpTool: t.mcpTool } : {}),
+    access: t.access,
+    ...(t.roles ? { roles: [...t.roles] } : {}),
+  }));
+  return list.length ? { externalTools: list } : {};
+}
+
+function servedWebhooks(webhooks: NonNullable<AppDef['assistant']>['webhooks']): {
+  webhooks?: NonNullable<AppPayloadApp['assistant']>['webhooks'];
+} {
+  if (!webhooks?.length) return {};
+  return {
+    webhooks: webhooks.map((w) => ({
+      id: w.id,
+      label: w.label,
+      ...(w.description ? { description: w.description } : {}),
+      signatureHeader: w.signatureHeader,
+      ...(w.agent ? { agent: w.agent } : {}),
+      enabled: w.enabled,
     })),
   };
 }

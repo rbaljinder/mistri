@@ -282,6 +282,7 @@ const readPosts = new Set([
   '/api/assistant/automations/run',
   '/api/assistant/automations/tick',
   '/api/assistant/evals/run',
+  '/api/assistant/external/execute',
 ]);
 const readGets = new Set([
   '/api/runtime',

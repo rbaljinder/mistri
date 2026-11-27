@@ -102,7 +102,7 @@ import { PAGE_HEADER, pageManifestRefusal } from './pageLoad.js';
 import { APP_DATA } from './appData.js';
 import { getData, postData } from '@mistriwork/engine/server/http/dataRoutes.js';
 import { sessionRoles } from '../../shared/appViewRoles.js';
-import { assistantRoutes } from './assistantRoutes.js';
+import { assistantRoutes, assistantWebhookRoute } from './assistantRoutes.js';
 import { bindAssistantWriteContext, registerAssistantRecordLoopFactory } from '../assistant/assistantAutomations.js';
 import { ensureAppRecordHistory } from '../recordHistory.js';
 import { currentReadRoute, readRouteOf, withReadRoute } from '../readAudit.js';
@@ -228,6 +228,20 @@ async function door(req: IncomingMessage, res: ServerResponse, url: URL, serving
   // A policy reload applies to the next request, never half of this one.
   const appHosts = serving.apps?.map((host) => ({ ...host, app: { ...host.app } }));
   const configPages = (serving.pages ?? []).slice();
+
+  if (
+    path.startsWith('/api/assistant/webhooks/') &&
+    (await assistantWebhookRoute({
+      req,
+      res,
+      path,
+      registry,
+      appHosts,
+      bgLoop: () => webhookLoopback(req, serving, appHosts, configPages),
+    }))
+  ) {
+    return undefined;
+  }
 
   const gated = await gate({ req, res, path, bound, appHosts, commandRequest, commandRefusal, mount });
   /* The gate's decision, on the request's span: allowed or refused, and
@@ -952,6 +966,46 @@ function loopback(ctx: GatedContext, pages: PageDef[], mark?: WeakSet<IncomingMe
 }
 
 registerAssistantRecordLoopFactory((ctx) => loopback(ctx, ctx.configPages, undefined, true));
+
+/** Detached unauthenticated loopback for signed inbound webhooks (carries host only, never session cookies). */
+function webhookLoopback(req: IncomingMessage, serving: Serving, appHosts: AppHost[] | undefined, pages: PageDef[]): Loop {
+  const bound = serving.bound ?? { host: '127.0.0.1', port: 4111 };
+  const sourceReq = {
+    headers: { host: req.headers.host ?? `${bound.host}:${bound.port}` },
+    httpVersion: req.httpVersion,
+    httpVersionMajor: req.httpVersionMajor,
+    httpVersionMinor: req.httpVersionMinor,
+    socket: {
+      remoteAddress: req.socket?.remoteAddress ?? '127.0.0.1',
+      remotePort: req.socket?.remotePort ?? 0,
+      remoteFamily: req.socket?.remoteFamily ?? 'IPv4',
+    },
+  } as unknown as IncomingMessage;
+  return async (method, target, body, signal) => {
+    if (signal?.aborted) return undefined;
+    const request = loopbackRequest(sourceReq, method, target, body);
+    const reply = new CapturedReply();
+    const cancel = () => {
+      request.destroy();
+      reply.destroy();
+    };
+    signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      await handle(request, reply.asResponse(), new URL(target, 'http://localhost'), {
+        ...serving,
+        pages,
+        apps: appHosts,
+      });
+    } catch {
+      return undefined;
+    } finally {
+      signal?.removeEventListener('abort', cancel);
+    }
+    if (reply.destroyed || signal?.aborted) return undefined;
+    const answer = reply.answer();
+    return answer ? { ...answer, carriable: false } : undefined;
+  };
+}
 
 /** Resolve the compiled JS/CSS asset for a free-form page matching this path, for `<head>` preloading. */
 function pageAssetFor(

@@ -12,7 +12,7 @@ import { Switch } from '@mistriwork/ui/Switch.js';
 import { AiReasoning } from '@mistriwork/ui/views/AiReasoning.js';
 import { CitationPill, CitationsCard, MemoryEventChip } from './AssistantCitations.js';
 import { EvalSuitePanel, RunTraceInspector } from './AssistantObservability.js';
-import { assistantApi, assistantOwner } from './assistantRequest.js';
+import { assistantApi, assistantOwner, executeExternalProposal } from './assistantRequest.js';
 import {
   applyEvent,
   grouped,
@@ -96,6 +96,8 @@ interface AssistantRunMonitorProps {
   app: string;
   config: NonNullable<NonNullable<AppPayloadApp['assistant']>['backgroundRuns']>;
   evals?: NonNullable<AppPayloadApp['assistant']>['evals'];
+  externalTools?: NonNullable<AppPayloadApp['assistant']>['externalTools'];
+  webhooks?: NonNullable<AppPayloadApp['assistant']>['webhooks'];
   agents: ReadonlyArray<{ id: string; name: string }>;
   reasoning?: 'collapsed' | 'expanded' | 'hidden';
   initialRunId?: string | null;
@@ -266,6 +268,8 @@ export function AssistantRunMonitor({
   app,
   config,
   evals,
+  externalTools,
+  webhooks,
   agents,
   reasoning,
   initialRunId,
@@ -280,6 +284,8 @@ export function AssistantRunMonitor({
   const automationsKey = useMemo(() => ['assistant-automations', app, owner] as const, [app, owner]);
   const automationCount = (config.schedules?.length ?? 0) + (config.triggers?.length ?? 0);
   const evalList = evals ?? [];
+  const externalToolList = externalTools ?? [];
+  const webhookList = webhooks ?? [];
 
   const [activeTab, setActiveTab] = useState<'runs' | 'automations' | 'evals'>('runs');
   const [detailMode, setDetailMode] = useState<'conversation' | 'trace'>('conversation');
@@ -484,6 +490,10 @@ export function AssistantRunMonitor({
           outcome = 'failed';
           detail = err instanceof Error ? err.message : String(err);
         }
+      } else if (decision === 'confirm' && proposal.kind === 'external') {
+        const res = await executeExternalProposal(app, proposal.action, proposal.values);
+        outcome = res.status;
+        detail = res.detail;
       }
       const result = (await assistantApi('/api/assistant/runs/resolve', {
         app,
@@ -561,6 +571,7 @@ export function AssistantRunMonitor({
     const parts: string[] = [];
     if (run.source?.startsWith('schedule:')) parts.push(say('sourceScheduled'));
     else if (run.source?.startsWith('trigger:')) parts.push(say('sourceTriggered'));
+    else if (run.source?.startsWith('webhook:')) parts.push(say('sourceWebhook'));
     const agentLabel = agentNameOf(run.agent);
     if (agentLabel) parts.push(agentLabel);
     if (run.steps > 0) parts.push(run.steps === 1 ? say('stepOne') : say('stepsCount', { count: run.steps }));
@@ -747,7 +758,7 @@ export function AssistantRunMonitor({
                           </p>
                         ) : isLiveProposal ? (
                           <div className="assistant-run-checkpoint-actions">
-                            {item.proposal.kind === 'set' ? (
+                            {item.proposal.kind === 'set' || item.proposal.kind === 'external' ? (
                               <Button
                                 size="xs"
                                 variant="primary"
@@ -807,7 +818,7 @@ export function AssistantRunMonitor({
       lastRunId: null,
       lastRunAt: null,
     }));
-  const liveAutomationCount = schedules.length + triggers.length;
+  const liveAutomationCount = schedules.length + triggers.length + externalToolList.length + webhookList.length;
   const showTabs = liveAutomationCount > 0 || evalList.length > 0;
 
   return (
@@ -978,6 +989,62 @@ export function AssistantRunMonitor({
                                 </Button>
                               )}
                             </div>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {externalToolList.length > 0 && (
+                <div className="assistant-runs-section">
+                  <h4 className="assistant-runs-section-label">{say('externalToolsHeading')}</h4>
+                  <ul className="assistant-runs-list">
+                    {externalToolList.map((tool) => {
+                      const protocol = tool.kind === 'mcp' ? `mcp · ${tool.mcpTool ?? tool.id}` : `http · ${tool.method}`;
+                      const modeText = tool.access === 'write' ? say('externalModeWrite') : say('externalModeRead');
+                      return (
+                        <li key={tool.id} className="assistant-auto-row">
+                          <div className="assistant-auto-top">
+                            <div className="assistant-auto-heading">
+                              <span className="assistant-auto-title">{tool.label}</span>
+                              <span className="assistant-auto-pill">{protocol}</span>
+                            </div>
+                          </div>
+                          {tool.description && <p className="assistant-auto-desc">{tool.description}</p>}
+                          <div className="assistant-auto-meta">
+                            <span className="assistant-runs-whisper">
+                              {tool.id} · {modeText}
+                            </span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {webhookList.length > 0 && (
+                <div className="assistant-runs-section">
+                  <h4 className="assistant-runs-section-label">{say('webhooksHeading')}</h4>
+                  <ul className="assistant-runs-list">
+                    {webhookList.map((hook) => {
+                      const meta: string[] = [say('webhookSignature', { header: hook.signatureHeader })];
+                      const agentName = hook.agent ? agentNameOf(hook.agent) : '';
+                      if (agentName) meta.push(agentName);
+                      meta.push(hook.enabled ? say('webhookEnabled') : say('webhookDisabled'));
+                      return (
+                        <li key={hook.id} className="assistant-auto-row">
+                          <div className="assistant-auto-top">
+                            <div className="assistant-auto-heading">
+                              <span className="assistant-auto-title">{hook.label}</span>
+                              <span className="assistant-auto-pill">{`POST /api/assistant/webhooks/${app}/${hook.id}`}</span>
+                            </div>
+                          </div>
+                          {hook.description && <p className="assistant-auto-desc">{hook.description}</p>}
+                          <div className="assistant-auto-meta">
+                            <span className="assistant-runs-whisper">{meta.join(' · ')}</span>
                           </div>
                         </li>
                       );

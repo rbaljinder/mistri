@@ -77,6 +77,8 @@ interface AutomatedDispatchParams {
   tokensPerTenantPerDay?: number;
   withdrawn?: () => Promise<string | undefined>;
   automation?: { kind: 'schedule' | 'trigger'; id: string; slot?: string; enabled?: boolean };
+  /** When true (signed inbound webhooks), fall back to a zero-resource read-only payload if no user session exists. */
+  allowWebhookFallback?: boolean;
   nowMs?: number;
 }
 
@@ -107,10 +109,26 @@ export async function dispatchAutomatedRun(params: AutomatedDispatchParams): Pro
   if (active >= bgCfg.maxConcurrent) return null;
 
   const prepSignal = new AbortController().signal;
-  const payload = await servedToLoop(params.bgLoop, params.app.id, prepSignal);
-  if (!payload) return null;
+  let payload = await servedToLoop(params.bgLoop, params.app.id, prepSignal);
+  let tables: string[] = [];
+  let viewerRoles: readonly string[] | undefined;
+  if (payload) {
+    tables = await tablesOfLoop(params.bgLoop, params.app.id, prepSignal);
+    viewerRoles = params.viewerRoles ?? payload.viewerRoles;
+  } else if (params.allowWebhookFallback) {
+    // Authenticated app receiving a signed webhook with no user session: zero DB rows exposed, empty role set.
+    payload = {
+      id: params.app.id,
+      name: params.app.name,
+      resources: {},
+      views: {},
+      ...(params.app.ui ? { ui: params.app.ui as AppPayloadApp['ui'] } : {}),
+    } as AppPayloadApp;
+    viewerRoles = [];
+  } else {
+    return null;
+  }
 
-  const viewerRoles = params.viewerRoles ?? payload.viewerRoles;
   let resolvedAgent: ReturnType<typeof resolveAgentAssistant>;
   try {
     resolvedAgent = resolveAgentAssistant(assistant, params.agentId, viewerRoles);
@@ -134,7 +152,7 @@ export async function dispatchAutomatedRun(params: AutomatedDispatchParams): Pro
   const catalog = catalogFromPayload(
     payload,
     runAssistant,
-    await tablesOfLoop(params.bgLoop, params.app.id, prepSignal),
+    tables,
     activeAgent,
     runAssistant.memory ? { memories, canWriteSharedMemory: canWriteShared } : undefined,
   );

@@ -16,7 +16,7 @@ import { fetchServer } from '@mistriwork/kit/client/transport.js';
 export type ProposalOutcome = { status: 'done' | 'declined' | 'failed'; detail?: string };
 export interface Proposal {
   id: string;
-  kind: 'set' | 'command' | 'new';
+  kind: 'set' | 'command' | 'new' | 'external';
   resource: string;
   action: string;
   label: string;

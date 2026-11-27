@@ -461,6 +461,36 @@ export function toolSpecs(
       },
     });
   }
+  if (assistant?.externalTools) {
+    for (const ext of Object.values(assistant.externalTools)) {
+      if (ext.access === 'write' && !allowed.has('run')) continue;
+      const properties: Record<string, unknown> = {};
+      const required: string[] = [];
+      for (const [param, field] of Object.entries(ext.input ?? {})) {
+        properties[param] = {
+          type: field.type,
+          ...(field.description ? { description: field.description } : {}),
+        };
+        if (field.required) required.push(param);
+      }
+      if (ext.access === 'write') {
+        properties.why = { type: 'string', description: 'Short explanation shown to the person on the approval checkpoint.' };
+      }
+      filtered.push({
+        name: ext.id,
+        description:
+          ext.access === 'write'
+            ? `${ext.description} (External ${ext.kind.toUpperCase()} action — waits for the person's explicit confirmation before sending.)`
+            : `${ext.description} (External ${ext.kind.toUpperCase()} read.)`,
+        input_schema: {
+          type: 'object',
+          properties,
+          ...(required.length ? { required } : {}),
+          additionalProperties: !ext.input,
+        },
+      });
+    }
+  }
   return filtered;
 }
 

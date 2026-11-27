@@ -1539,3 +1539,137 @@ test('Wave 3A: Run Monitor Trace tab inspects execution spans and Evals tab runs
   expect(await screen.findByText('100%')).toBeInTheDocument();
   expect(screen.getByText('1/1')).toBeInTheDocument();
 });
+
+test('Wave 3B: Automations shows External tools & MCP and Inbound webhooks, and confirms external write checkpoints', async () => {
+  const user = userEvent.setup();
+  const executed: Array<{ path: string; body: unknown }> = [];
+  const awaitingRun = {
+    id: 'run_ext_1',
+    conversation: 'conv_ext_1',
+    title: 'GitHub Release Sync',
+    prompt: 'Notify Slack release channel',
+    agent: 'analyst',
+    source: 'webhook:github_release',
+    status: 'awaiting',
+    steps: 1,
+    tokens: 610,
+    summary: 'Waiting for approval to post Slack release alert.',
+    createdAt: '2026-11-27T11:00:00Z',
+    updatedAt: '2026-11-27T11:00:01Z',
+    finishedAt: '',
+    live: false,
+  };
+  const completedRun = { ...awaitingRun, status: 'completed', finishedAt: '2026-11-27T11:00:05Z' };
+
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      agents: [{ id: 'analyst', name: 'Release Analyst' }],
+      defaultAgent: 'analyst',
+      backgroundRuns: { maxConcurrent: 2, maxSteps: 12, presets: [] },
+      externalTools: [
+        {
+          id: 'lookup_github_pr',
+          label: 'Lookup GitHub PR',
+          description: 'Read pull request status over MCP.',
+          kind: 'mcp',
+          method: 'POST',
+          mcpTool: 'get_pull_request',
+          access: 'read',
+        },
+        {
+          id: 'post_slack_alert',
+          label: 'Post Slack Alert',
+          description: 'Send release alert to Slack after confirmation.',
+          kind: 'http',
+          method: 'POST',
+          access: 'write',
+        },
+      ],
+      webhooks: [
+        {
+          id: 'github_release',
+          label: 'GitHub Release Webhook',
+          description: 'Starts a release brief when a signed GitHub release arrives.',
+          signatureHeader: 'x-hub-signature-256',
+          agent: 'analyst',
+          enabled: true,
+        },
+      ],
+    },
+  };
+
+  fetcher.mockImplementation(async (input, init) => {
+    const path = String(input);
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path.startsWith('/api/assistant/runs?')) return json({ runs: [awaitingRun], ready: true });
+    if (path.startsWith('/api/assistant/runs/detail?')) {
+      return json({
+        run: awaitingRun,
+        items: [
+          {
+            type: 'proposal',
+            id: 'prop_ext_1',
+            proposal: {
+              id: 'prop_ext_1',
+              kind: 'external',
+              resource: 'http',
+              action: 'post_slack_alert',
+              label: 'Post Slack Alert',
+              values: { channel: '#releases', text: 'v2.4 shipped' },
+              why: 'Notify engineering about the verified release tag.',
+            },
+          },
+        ],
+      });
+    }
+    if (path === '/api/assistant/external/execute' && method === 'POST') {
+      executed.push({ path, body });
+      return json({ ok: true, status: 200, output: '{"ok":true,"ts":"1700000.1"}' });
+    }
+    if (path === '/api/assistant/runs/resolve' && method === 'POST') {
+      executed.push({ path, body });
+      return json({ run: completedRun });
+    }
+    if (path.startsWith('/api/assistant/runs/stream?')) {
+      return sse([
+        { event: 'run_status', data: { run: completedRun } },
+        { event: 'done', data: { state: 'idle' } },
+      ]);
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Runs' }));
+
+  // 1. Webhook origin whisper shows in Runs list & Automations tab lists external tools/MCP + webhooks.
+  expect(await screen.findByText(/Webhook/)).toBeInTheDocument();
+  await user.click(await screen.findByRole('tab', { name: 'Automations · 3' }));
+  expect(await screen.findByText('External tools & MCP')).toBeInTheDocument();
+  expect(screen.getByText('mcp · get_pull_request')).toBeInTheDocument();
+  expect(screen.getByText('Inbound webhooks')).toBeInTheDocument();
+  expect(screen.getByText('POST /api/assistant/webhooks/compass/github_release')).toBeInTheDocument();
+  expect(screen.getByText(/HMAC-SHA256 · x-hub-signature-256/)).toBeInTheDocument();
+
+  // 2. Switch back to Runs, inspect awaiting external write checkpoint, and confirm it.
+  await user.click(screen.getByRole('tab', { name: 'Runs' }));
+  await user.click(await screen.findByRole('button', { name: 'Inspect' }));
+  expect(await screen.findByText('Post Slack Alert')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Confirm & resume' }));
+
+  await vi.waitFor(() => {
+    expect(executed.map((e) => e.path)).toEqual(['/api/assistant/external/execute', '/api/assistant/runs/resolve']);
+  });
+  expect(executed[0].body).toEqual({
+    app: 'compass',
+    tool: 'post_slack_alert',
+    input: { channel: '#releases', text: 'v2.4 shipped' },
+  });
+  expect((executed[1].body as { outcome: string }).outcome).toBe('done');
+});
