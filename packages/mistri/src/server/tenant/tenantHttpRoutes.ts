@@ -135,7 +135,7 @@ export const TENANT_ROUTE_FIELDS: Readonly<Record<string, readonly string[]>> = 
   '/api/domains/check': ['host'],
   '/api/domains/remove': ['host'],
   '/api/domains/primary': ['host'],
-  '/api/reads': ['actor', 'resource', 'record', 'since', 'until', 'before'],
+  '/api/reads': ['actor', 'resource', 'record', 'parent', 'since', 'until', 'before'],
   '/api/team': [],
   '/api/query': ['table', 'filter', 'columns', 'orderBy', 'limit', 'offset'],
   '/api/count': ['table', 'filter', 'exactCount', 'countLimit'],

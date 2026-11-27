@@ -27,12 +27,20 @@ export interface ReadAuditLine {
   readonly count?: number;
 }
 
+/** A parent record whose own reads (if audited) and 1-hop audited child records' reads are returned together. */
+interface ReadAuditParent {
+  readonly resource: string;
+  readonly record: string;
+}
+
 /** What a page asks of the log: every filter optional, as the Reads room's. `before` is a line's id, to read below it. */
 export interface ReadAuditFilters {
   readonly actor?: string;
   readonly resource?: string;
   /** A record's id: matched where it was opened and in every list that showed it. */
   readonly record?: string;
+  /** A parent record: matches reads of the parent (if audited) and its 1-hop audited child records. */
+  readonly parent?: ReadAuditParent;
   /** ISO instants, inclusive. */
   readonly since?: string;
   readonly until?: string;

@@ -167,7 +167,7 @@ import { openTenantLiveStream, tenantLiveAuthority, tenantLiveGrants, tenantProb
 import { brandingTenant, scopedRecordBranding, withRecordBranding, closeRecordBranding } from '../http/recordBranding.js';
 import type { TenantDomainsService } from '../http/customDomains.js';
 import { tenantDomainsRoute } from './tenantDomainsRoute.js';
-import { tenantReadsRoute, type TenantReadsService } from './tenantReadsRoute.js';
+import { resolveTenantParentAuditTargets, tenantReadsRoute, type TenantReadsService } from './tenantReadsRoute.js';
 import { tenantTeamRoute, type TenantTeamService } from './tenantTeamRoute.js';
 import { leaseAssertion, ownerHeadersRefused, tenantSelectors } from './tenantLeaseRequest.js';
 import { flagHttpRequest } from '../flags/httpRuntime.js';
@@ -1226,7 +1226,10 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
                 throw error;
               }
             }
-            if (readsRoute?.serves(path)) return await readsRoute.answer(input, context.principal, { platform, onSupport });
+            if (readsRoute?.serves(path))
+              return await readsRoute.answer(input, context.principal, { platform, onSupport }, (parent, resolveOptions) =>
+                together(context, () => resolveTenantParentAuditTargets(readAdapter(context), schema, parent, resolveOptions)),
+              );
             if (teamRoute?.serves(path)) return await teamRoute.answer(context.principal, { platform, onSupport });
             if (domainsRoute?.serves(path)) {
               const answered = await domainsRoute.answer(path, input, context.principal, { platform, onSupport }, () => verified(req));

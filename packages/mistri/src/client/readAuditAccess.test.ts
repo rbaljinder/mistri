@@ -26,6 +26,15 @@ test('it sends only the filters the route reads, and returns its page', async ()
   expect(core.api).toHaveBeenCalledWith('/api/reads', { resource: 'patient', record: '7', before: 9 });
 });
 
+test('it forwards parent { resource, record } and omits empty parent filters', async () => {
+  const page = { reads: [], resources: ['patient', 'note'] };
+  core.api.mockResolvedValue(page);
+  await createReadAuditAccess().read({ parent: { resource: 'patient', record: '7' }, resource: 'note' });
+  expect(core.api).toHaveBeenLastCalledWith('/api/reads', { parent: { resource: 'patient', record: '7' }, resource: 'note' });
+  await createReadAuditAccess().read({ parent: { resource: 'patient', record: '' } });
+  expect(core.api).toHaveBeenLastCalledWith('/api/reads', {});
+});
+
 test('outside a tenant App, signed out, or on a support visit nothing is asked', async () => {
   for (const current of [
     { ...owner, tenant: undefined },

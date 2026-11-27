@@ -8,11 +8,36 @@
  * support visit: a support operator's reads are in this log, and the log is not theirs to read. A member who is not
  * one of the tenant's admins (the roles that edit its domains or branding) is refused; the room is not drawn for them.
  */
-import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
-import type { ReadAuditQuery, StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
+import { Refusal, type Adapter } from '@mistriwork/engine/adapters/adapter.js';
+import {
+  coerceForColumn,
+  columnKind,
+  findTable,
+  primaryKey,
+  referencesTo,
+  tableNamed,
+  type DatabaseSchema,
+  type ForeignKey,
+} from '@mistriwork/engine/shared/schema.js';
+import type { ReadAuditQuery, ReadAuditTarget, StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
+import { withoutReadAudit } from '../readAudit.js';
 
 /** One page: enough to fill a screen, few enough that naming its people stays a handful of lookups. */
 const READS_PAGE = 50;
+
+/** Maximum child rows resolved per audited child table when filtering by parent record. */
+const MAX_PARENT_CHILDREN = 5_000;
+
+/** Parent record filter on `/api/reads`: matches reads of the parent (if audited) and its 1-hop audited FK children. */
+interface ReadAuditParent {
+  readonly resource: string;
+  readonly record: string;
+}
+
+type ResolveReadAuditParent = (
+  parent: ReadAuditParent,
+  options: { readonly resources: readonly string[]; readonly onlyResource?: string },
+) => Promise<readonly ReadAuditTarget[]>;
 
 export interface TenantReadsService {
   /** The tenant roles that may read the audit: the domains editors, else the branding editors. */
@@ -27,6 +52,137 @@ export interface TenantReadsService {
 type Answer = { status: number; body: unknown };
 
 const FILTERS = ['actor', 'resource', 'record', 'since', 'until'] as const;
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Same key formatting as server/readAudit.ts `keyText`: single PK as string, composite PK as JSON array of strings. */
+const keyText = (row: Record<string, unknown>, columns: readonly string[]): string | undefined => {
+  if (!columns.length || columns.some((column) => row[column] === undefined || row[column] === null)) return undefined;
+  return columns.length === 1 ? String(row[columns[0]]) : JSON.stringify(columns.map((column) => String(row[column])));
+};
+
+/** Parse a `record` string into per-column primary key texts matching `keyText`. */
+function parseParentKeyParts(record: string, pkLength: number): readonly string[] | undefined {
+  if (pkLength === 1) return [record];
+  try {
+    const parsed: unknown = JSON.parse(record);
+    if (Array.isArray(parsed) && parsed.length === pkLength && parsed.every((part) => typeof part === 'string')) return parsed;
+  } catch {
+    /* Invalid composite key text matches no child foreign keys. */
+  }
+  return undefined;
+}
+
+/** Coerce a parent key string for a child FK column, returning undefined if the value cannot match that column type. */
+function coerceForeignKeyValue(declaredType: string, raw: string): string | number | undefined {
+  const coerced = coerceForColumn(declaredType, raw);
+  if (coerced === null || typeof coerced === 'boolean') return undefined;
+  if (columnKind(declaredType) === 'number') {
+    if (typeof coerced === 'number') return coerced;
+    return /^-?\d+$/.test(raw.trim()) ? raw.trim() : undefined;
+  }
+  if (/\buuid\b/i.test(declaredType) && !UUID_PATTERN.test(raw.trim())) return undefined;
+  return coerced;
+}
+
+/**
+ * Resolve a parent record into `(resource, records)` audit targets: the parent itself (when audited) plus every
+ * readable 1-hop foreign-key child table whose reads are audited, queried under the caller's tenant/row-scoped adapter
+ * without writing read-audit rows for the lookup itself.
+ */
+export async function resolveTenantParentAuditTargets(
+  adapter: Pick<Adapter, 'query'>,
+  schema: DatabaseSchema,
+  parent: ReadAuditParent,
+  options: { readonly resources: readonly string[]; readonly onlyResource?: string },
+): Promise<readonly ReadAuditTarget[]> {
+  const parentTable = findTable(schema, parent.resource) ?? tableNamed(schema, parent.resource);
+  if (!parentTable) throw new Refusal(`"${parent.resource}" is not a readable resource.`);
+  const parentPk = primaryKey(parentTable);
+  if (!parentPk.length) throw new Refusal(`"${parent.resource}" has no primary key.`);
+
+  const auditedByTableId = new Map<string, string>();
+  for (const name of options.resources) {
+    if (options.onlyResource !== undefined && name !== options.onlyResource) continue;
+    const table = findTable(schema, name) ?? tableNamed(schema, name);
+    if (table) auditedByTableId.set(table.id, name);
+  }
+
+  const collected = new Map<string, Set<string>>();
+  const add = (resource: string, key: string) => {
+    let set = collected.get(resource);
+    if (!set) collected.set(resource, (set = new Set()));
+    set.add(key);
+  };
+
+  const parentAudited = auditedByTableId.get(parentTable.id);
+  if (parentAudited !== undefined) add(parentAudited, parent.record);
+
+  const keyParts = parseParentKeyParts(parent.record, parentPk.length);
+  if (keyParts) {
+    const childFks = new Map<string, ForeignKey[]>();
+    for (const fk of referencesTo(schema, parentTable.id)) {
+      if (!auditedByTableId.has(fk.from.table)) continue;
+      if (fk.to.columns.length !== parentPk.length || !fk.to.columns.every((col, index) => col === parentPk[index])) continue;
+      let list = childFks.get(fk.from.table);
+      if (!list) childFks.set(fk.from.table, (list = []));
+      list.push(fk);
+    }
+
+    const lookups: Array<Promise<void>> = [];
+    await withoutReadAudit(async () => {
+      for (const [childTableId, fks] of childFks) {
+        const childTable = findTable(schema, childTableId);
+        const childResource = auditedByTableId.get(childTableId);
+        if (!childTable || !childResource) continue;
+        const childPk = primaryKey(childTable);
+        if (!childPk.length) continue;
+
+        const groups: Array<Array<{ column: string; op: '='; value: string | number }>> = [];
+        for (const fk of fks) {
+          const group: Array<{ column: string; op: '='; value: string | number }> = [];
+          let valid = true;
+          for (let i = 0; i < fk.from.columns.length; i++) {
+            const columnName = fk.from.columns[i]!;
+            const colMeta = childTable.columns.find((candidate) => candidate.name === columnName);
+            if (!colMeta) {
+              valid = false;
+              break;
+            }
+            const coerced = coerceForeignKeyValue(colMeta.type, keyParts[i]!);
+            if (coerced === undefined) {
+              valid = false;
+              break;
+            }
+            group.push({ column: columnName, op: '=', value: coerced });
+          }
+          if (valid && group.length) groups.push(group);
+        }
+        if (!groups.length) continue;
+
+        lookups.push(
+          adapter
+            .query({
+              table: childTableId,
+              columns: childPk,
+              filter: { groups },
+              limit: MAX_PARENT_CHILDREN,
+              offset: 0,
+            })
+            .then((result) => {
+              for (const row of result.rows) {
+                const key = keyText(row as Record<string, unknown>, childPk);
+                if (key !== undefined) add(childResource, key);
+              }
+            }),
+        );
+      }
+      await Promise.all(lookups);
+    });
+  }
+
+  return [...collected.entries()].filter(([, set]) => set.size > 0).map(([resource, set]) => ({ resource, records: [...set] }));
+}
 
 /** The account a row's actor names, when it names a person: their own id, or the one an assistant read for. A
     signed-out visitor (`public`), a support operator, a service and an API token name no one here. */
@@ -50,6 +206,7 @@ export function tenantReadsRoute(reads: TenantReadsService) {
       input: Record<string, unknown>,
       principal: { roles: readonly string[] },
       where: { platform: boolean; onSupport: boolean },
+      resolveParent?: ResolveReadAuditParent,
     ): Promise<Answer> {
       const tenantId = (principal as { tenantId?: unknown }).tenantId;
       if (where.platform || where.onSupport || typeof tenantId !== 'string')
@@ -70,8 +227,40 @@ export function tenantReadsRoute(reads: TenantReadsService) {
         if (typeof input.before !== 'number') return refused("A read audit page's before must be a row's id.");
         query.before = input.before;
       }
+      let parent: ReadAuditParent | undefined;
+      if (input.parent !== undefined) {
+        if (typeof input.parent !== 'object' || input.parent === null || Array.isArray(input.parent))
+          return refused("A read audit filter's parent must be { resource, record }.");
+        const rawParent = input.parent as Record<string, unknown>;
+        for (const key of Object.keys(rawParent))
+          if (key !== 'resource' && key !== 'record') return refused(`Unknown read audit parent filter "${key}".`);
+        if (typeof rawParent.resource !== 'string' || !rawParent.resource)
+          return refused("A read audit parent's resource must be a non-empty string.");
+        if (typeof rawParent.record !== 'string' || !rawParent.record)
+          return refused("A read audit parent's record must be a non-empty string.");
+        if (query.record !== undefined) return refused('Specify either record or parent, not both.');
+        parent = { resource: rawParent.resource, record: rawParent.record };
+      }
       if (query.resource !== undefined && !reads.resources.includes(query.resource))
         return refused(`"${query.resource}" is not a resource whose reads are audited.`);
+      if (parent) {
+        if (!resolveParent) return refused('Parent filtering is not available on this route.');
+        let targets: readonly ReadAuditTarget[];
+        try {
+          targets = await resolveParent(parent, {
+            resources: reads.resources,
+            ...(query.resource === undefined ? {} : { onlyResource: query.resource }),
+          });
+        } catch (error) {
+          if (error instanceof Refusal) return refused(error.message);
+          throw error;
+        }
+        if (!targets.length) {
+          return { status: 200, body: { reads: [], resources: reads.resources } };
+        }
+        query.targets = targets;
+        delete query.resource;
+      }
       let rows: readonly StoredReadAudit[];
       try {
         rows = await reads.read(tenantId, query as Omit<ReadAuditQuery, 'tenant' | 'app'>);
