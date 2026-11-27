@@ -11,6 +11,7 @@ import { COMPACT_BELOW, UiSizeContext, type UiSize } from './context.js';
 import { loadComponent } from './componentLoader.js';
 import { useComponentKey } from './componentKey.js';
 import { mistriSurfaceSeam } from './seam.js';
+import './sheetPrimitives.js';
 
 interface AssistantCustomBlockComponentProps {
   readonly name: string;

@@ -254,7 +254,7 @@ html:root[data-theme-style] .record-presentation { margin-inline-start: auto; }
 :root[data-theme-style] :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode) { margin: 0; border: 0; border-radius: var(--seg-item-radius); }
 :root[data-theme-style] :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode):not([aria-checked='true'], [aria-pressed='true']) { background: transparent; color: var(--ink-muted); }
 @media (min-width: 761px) and (pointer: fine) {
-  :root[data-theme-style] :is(.kit-segmented, .list-layout) > :is(.kit-segment, .list-layout-seg) { min-height: 0; }
+  :root[data-theme-style] :is(.kit-segmented:not(.kit-segmented-compact), .list-layout) > :is(.kit-segment, .list-layout-seg) { min-height: 0; }
 }
 @media (hover: hover) {
   :root[data-theme-style] :is(.kit-segment, .list-layout-seg, .presentation-seg, .json-mode):hover:not([aria-checked='true'], [aria-pressed='true']) { color: var(--ink); }
