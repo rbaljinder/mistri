@@ -779,3 +779,125 @@ test('the side panel drags, steps with the keyboard, remembers its width per per
   await user.click(screen.getByRole('button', { name: 'Full screen' }));
   expect(screen.getByRole('separator', { name: 'Resize the assistant' })).toBeInTheDocument();
 });
+
+test('mode switcher transitions cleanly between sidebar, floating, fullscreen, and remembers floating across reopen and Escape', async () => {
+  const onClose = vi.fn();
+  const user = userEvent.setup();
+  const first = draw(<AssistantPanel app="compass" record={false} onClose={onClose} />);
+  const floatingBtn = await screen.findByRole('button', { name: 'Floating window' });
+  await user.click(floatingBtn);
+  expect(floatingBtn).toHaveAttribute('aria-pressed', 'true');
+  expect(screen.getByRole('complementary', { name: 'Assistant' })).toHaveClass('assistant-panel-floating');
+  expect(window.localStorage.getItem('mistri.assistant.mode.compass.ada')).toBe('floating');
+
+  // Entering fullscreen from floating and pressing Escape steps back to floating while keeping focus in the composer.
+  await user.click(screen.getByRole('button', { name: 'Full screen' }));
+  expect(screen.getByRole('complementary', { name: 'Assistant' })).toHaveClass('assistant-panel-expanded');
+  const box = screen.getByRole('textbox', { name: 'Message the assistant' });
+  box.focus();
+  await user.keyboard('{Escape}');
+  expect(screen.getByRole('complementary', { name: 'Assistant' })).toHaveClass('assistant-panel-floating');
+  expect(box).toHaveFocus();
+  expect(onClose).not.toHaveBeenCalled();
+
+  // Reopening restores floating mode.
+  first.unmount();
+  draw(<AssistantPanel app="compass" record={false} onClose={onClose} />);
+  expect(await screen.findByRole('button', { name: 'Floating window' })).toHaveAttribute('aria-pressed', 'true');
+});
+
+test('reasoning streams into a collapsible surface, respects hidden/expanded settings, and effortPicker sends per-turn effort', async () => {
+  mocks.app = {
+    name: 'compass',
+    resources: {},
+    assistant: { icon: 'chat-circle', reasoning: 'collapsed', effort: 'medium', effortPicker: true },
+  };
+  const stream = held();
+  turnsAnswer(() => stream.response);
+  const user = userEvent.setup();
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  // Effort selector is rendered when effortPicker is enabled.
+  expect(await screen.findByRole('button', { name: /Reasoning effort/ })).toBeInTheDocument();
+  await user.type(screen.getByRole('textbox', { name: 'Message the assistant' }), 'Think carefully{Enter}');
+  expect(bodies()[0]).toEqual(['/api/assistant/turn', { app: 'compass', text: 'Think carefully', effort: 'medium' }]);
+
+  stream.say('conversation', { id: 'c1', title: 'Think', person: 1 });
+  stream.say('reasoning', { id: 'r0', delta: 'Evaluating lead conversion rates.' });
+  expect(await screen.findByText('Thinking…')).toBeInTheDocument();
+  stream.say('reasoning', { id: 'r0', done: true, durationMs: 2400 });
+  stream.say('text', { delta: 'Conversion is 32%.' });
+  stream.say('done', { state: 'idle', tokens: 12 });
+  stream.end();
+
+  expect(await screen.findByText('Conversion is 32%.')).toBeInTheDocument();
+  const trigger = screen.getByRole('button', { name: /Thought for 2\.4s/ });
+  expect(trigger).toHaveAttribute('aria-expanded', 'false');
+  await user.click(trigger);
+  expect(screen.getByText('Evaluating lead conversion rates.')).toBeVisible();
+});
+
+test('renders callout, timeline, tabs, and custom generative UI blocks safely without raw markup', async () => {
+  const user = userEvent.setup();
+  fetcher.mockImplementation(async (url) => {
+    const path = String(url);
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path === '/api/assistant/turn')
+      return events(
+        ['conversation', { id: 'c1', title: 'Overview', person: 1 }],
+        [
+          'block',
+          {
+            id: 'b1',
+            block: {
+              kind: 'callout',
+              tone: 'warning',
+              title: 'Renewal risk',
+              body: 'Check [Acme Corp](/compass/leads/1) soon.',
+            },
+          },
+        ],
+        [
+          'block',
+          {
+            id: 'b2',
+            block: {
+              kind: 'tabs',
+              title: 'Activity breakdown',
+              tabs: [
+                {
+                  id: 'tab-1',
+                  label: 'Timeline',
+                  block: {
+                    kind: 'timeline',
+                    table: 'lead',
+                    items: [{ label: 'Acme Corp', when: '2026-09-01', badge: 'new', detail: 'Inbound lead', address: '/compass/leads/1' }],
+                  },
+                },
+                {
+                  id: 'tab-2',
+                  label: 'Summary',
+                  block: {
+                    kind: 'custom',
+                    name: 'lease_summary',
+                    title: 'Lease risk',
+                    props: { riskScore: 84, tier: 'high' },
+                  },
+                },
+              ],
+            },
+          },
+        ],
+        ['done', { state: 'idle', tokens: 15 }],
+      );
+    return json({ error: 'unexpected' }, 404);
+  });
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.type(await screen.findByRole('textbox', { name: 'Message the assistant' }), 'Show overview{Enter}');
+  expect(await screen.findByText('Renewal risk')).toBeInTheDocument();
+  expect(screen.getAllByRole('link', { name: 'Acme Corp' })[0]).toHaveAttribute('href', '/compass/leads/1');
+  expect(screen.getByText('Inbound lead')).toBeInTheDocument();
+  // Switch tabs to reveal the custom structured block.
+  await user.click(screen.getByRole('tab', { name: 'Summary' }));
+  expect(await screen.findByText('Lease risk')).toBeInTheDocument();
+  expect(screen.getByText('84')).toBeInTheDocument();
+});

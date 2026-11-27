@@ -13,7 +13,7 @@
  */
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import type { AssistantModel, ModelBlock, ModelMessage, ModelRequest } from './assistantModel.js';
+import { streamCallbacks, type AssistantModel, type ModelBlock, type ModelMessage, type ModelRequest } from './assistantModel.js';
 import { NOW_LINE } from './assistantCatalog.js';
 
 type ModelReply = Awaited<ReturnType<AssistantModel['stream']>>;
@@ -117,7 +117,8 @@ export function replayModel(file: string): AssistantModel {
   const cassette = readCassette(file);
   const byKey = new Map(cassette.entries.map((entry) => [entry.key, entry]));
   return {
-    async stream(request, onText) {
+    async stream(request, sink) {
+      const { onText, onReasoning } = streamCallbacks(sink);
       const key = requestKey(request);
       const entry = byKey.get(key);
       if (!entry) {
@@ -127,7 +128,24 @@ export function replayModel(file: string): AssistantModel {
             'Record it again with MISTRI_REPLAY=record and the model key set.',
         );
       }
-      for (const block of entry.reply.content) if (block.type === 'text' && typeof block.text === 'string') onText(block.text);
+      let rIndex = 0;
+      for (const block of entry.reply.content) {
+        if (block.type === 'thinking' && typeof block.thinking === 'string') {
+          const id = `r_replay_${rIndex++}`;
+          onReasoning({ id, delta: block.thinking });
+          onReasoning({ id, done: true, ...(typeof block.durationMs === 'number' ? { durationMs: block.durationMs } : {}) });
+        } else if (block.type === 'redacted_thinking') {
+          const id = `r_replay_${rIndex++}`;
+          onReasoning({
+            id,
+            redacted: true,
+            done: true,
+            ...(typeof block.durationMs === 'number' ? { durationMs: block.durationMs } : {}),
+          });
+        } else if (block.type === 'text' && typeof block.text === 'string') {
+          onText(block.text);
+        }
+      }
       return structuredClone(entry.reply);
     },
   };
@@ -136,8 +154,8 @@ export function replayModel(file: string): AssistantModel {
 /** Asks the real model and writes each request and its reply to the cassette, replacing what that request had. */
 export function recordingModel(file: string, real: AssistantModel): AssistantModel {
   return {
-    async stream(request, onText, signal) {
-      const reply = await real.stream(request, onText, signal);
+    async stream(request, sink, signal) {
+      const reply = await real.stream(request, sink, signal);
       const cassette = readCassette(file);
       const said = lastSaid(request.messages);
       const entry = redact({

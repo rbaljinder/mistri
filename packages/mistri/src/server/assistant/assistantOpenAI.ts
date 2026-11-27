@@ -15,7 +15,14 @@
  * (`OPENAI_API_KEY`), never from an App and never to a browser, and the
  * model name is the App's own (`assistant.model`), as Anthropic's is.
  */
-import type { AssistantModel, ModelBlock, ModelMessage, ModelUsage } from './assistantModel.js';
+import {
+  streamCallbacks,
+  type AssistantModel,
+  type ModelBlock,
+  type ModelMessage,
+  type ModelStreamSink,
+  type ModelUsage,
+} from './assistantModel.js';
 import { modelRefused } from './assistantModelRefusal.js';
 
 /** The reply, as AssistantModel's stream returns it. */
@@ -85,6 +92,7 @@ export function openaiBody(request: Parameters<AssistantModel['stream']>[0]): Re
     max_tokens: request.maxTokens,
     stream: true,
     messages,
+    ...(request.effort ? { reasoning_effort: request.effort } : {}),
     ...(request.tools.length
       ? {
           tools: request.tools.map((tool) => ({
@@ -97,9 +105,24 @@ export function openaiBody(request: Parameters<AssistantModel['stream']>[0]): Re
   };
 }
 
-/** Read one Chat Completions event stream into the reply, handing text deltas on as they arrive. */
-export async function readOpenAIStream(body: ReadableStream<Uint8Array>, onText: (delta: string) => void): Promise<ModelReply> {
+/** Read one Chat Completions event stream into the reply, handing text and reasoning deltas on as they arrive. */
+export async function readOpenAIStream(body: ReadableStream<Uint8Array>, sink: ModelStreamSink): Promise<ModelReply> {
+  const { onText, onReasoning } = streamCallbacks(sink);
   const text: string[] = [];
+  const reasoning: string[] = [];
+  let reasoningStartedAt: number | undefined;
+  let reasoningClosed = false;
+  let reasoningDurationMs: number | undefined;
+  const closeReasoning = () => {
+    if (!reasoning.length || reasoningClosed) return;
+    reasoningClosed = true;
+    reasoningDurationMs = reasoningStartedAt !== undefined ? Math.max(0, Date.now() - reasoningStartedAt) : undefined;
+    onReasoning({
+      id: 'r_0',
+      done: true,
+      ...(reasoningDurationMs !== undefined ? { durationMs: reasoningDurationMs } : {}),
+    });
+  };
   const calls = new Map<number, { id: string; name: string; args: string }>();
   const usage: ModelUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };
   let stopReason = 'end_turn';
@@ -119,11 +142,24 @@ export async function readOpenAIStream(body: ReadableStream<Uint8Array>, onText:
       return;
     }
     const delta = (choice.delta ?? {}) as Record<string, unknown>;
+    const thought =
+      typeof delta.reasoning_content === 'string' && delta.reasoning_content
+        ? delta.reasoning_content
+        : typeof delta.reasoning === 'string' && delta.reasoning
+          ? delta.reasoning
+          : undefined;
+    if (thought) {
+      if (reasoningStartedAt === undefined) reasoningStartedAt = Date.now();
+      reasoning.push(thought);
+      onReasoning({ id: 'r_0', delta: thought });
+    }
     if (typeof delta.content === 'string' && delta.content) {
+      closeReasoning();
       text.push(delta.content);
       onText(delta.content);
     }
     for (const call of (delta.tool_calls ?? []) as Array<Record<string, unknown>>) {
+      closeReasoning();
       const index = call.index as number;
       const at = calls.get(index) ?? { id: '', name: '', args: '' };
       if (typeof call.id === 'string') at.id = call.id;
@@ -133,6 +169,7 @@ export async function readOpenAIStream(body: ReadableStream<Uint8Array>, onText:
       calls.set(index, at);
     }
     if (typeof choice.finish_reason === 'string' && choice.finish_reason !== 'null') {
+      closeReasoning();
       ended = true;
       stopReason =
         choice.finish_reason === 'tool_calls'
@@ -158,7 +195,10 @@ export async function readOpenAIStream(body: ReadableStream<Uint8Array>, onText:
           if (!line.startsWith('data:')) continue;
           const data = line.slice(5).trim();
           if (!data || data === '[DONE]') {
-            if (data === '[DONE]') ended = true;
+            if (data === '[DONE]') {
+              closeReasoning();
+              ended = true;
+            }
             continue;
           }
           take(JSON.parse(data) as Record<string, unknown>);
@@ -171,6 +211,7 @@ export async function readOpenAIStream(body: ReadableStream<Uint8Array>, onText:
     throw error;
   }
   const content: ModelBlock[] = [];
+  if (reasoning.length) content.push({ type: 'thinking', thinking: reasoning.join('') });
   if (text.length) content.push({ type: 'text', text: text.join('') });
   for (const call of [...calls.entries()].sort(([a], [b]) => a - b).map(([, call]) => call)) {
     let input: unknown = {};
@@ -184,30 +225,37 @@ export async function readOpenAIStream(body: ReadableStream<Uint8Array>, onText:
   return { content, stopReason, usage };
 }
 
-export function openaiModel(key: string, fetchImpl: typeof fetch = fetch, deadlineMs = MODEL_DEADLINE_MS): AssistantModel {
+export function openaiModel(
+  key: string,
+  fetchImpl: typeof fetch = fetch,
+  deadlineMs = MODEL_DEADLINE_MS,
+  options: { baseUrl?: string; headers?: Readonly<Record<string, string>>; keyEnv?: string } = {},
+): AssistantModel {
+  const endpoint = options.baseUrl ? `${options.baseUrl.replace(/\/+$/, '')}/chat/completions` : API;
+  const keyEnv = options.keyEnv ?? 'OPENAI_API_KEY';
   return {
-    async stream(request, onText, signal) {
+    async stream(request, sink, signal) {
       const deadline = AbortSignal.timeout(deadlineMs);
       try {
-        return await call(request, onText, AbortSignal.any([signal, deadline]));
+        return await call(request, sink, AbortSignal.any([signal, deadline]));
       } catch (error) {
         if (deadline.aborted && !signal.aborted) throw new ModelUnavailable('The model took too long to answer. Ask again.');
         throw error;
       }
     },
   };
-  async function call(
-    request: Parameters<AssistantModel['stream']>[0],
-    onText: (delta: string) => void,
-    signal: AbortSignal,
-  ): Promise<ModelReply> {
-    const response = await fetchImpl(API, {
+  async function call(request: Parameters<AssistantModel['stream']>[0], sink: ModelStreamSink, signal: AbortSignal): Promise<ModelReply> {
+    const response = await fetchImpl(endpoint, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: `Bearer ${key}` },
+      headers: {
+        'content-type': 'application/json',
+        ...(key ? { authorization: `Bearer ${key}` } : {}),
+        ...(options.headers ?? {}),
+      },
       body: JSON.stringify(openaiBody(request)),
       signal,
     });
-    if (!response.ok || !response.body) throw await modelRefused(response, 'OPENAI_API_KEY');
-    return readOpenAIStream(response.body, onText);
+    if (!response.ok || !response.body) throw await modelRefused(response, keyEnv);
+    return readOpenAIStream(response.body, sink);
   }
 }

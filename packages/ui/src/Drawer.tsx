@@ -16,7 +16,7 @@
  * the same).
  */
 import { Drawer as Sheet, DrawerBackdrop, DrawerClose, DrawerContent, DrawerTitle } from '@ui-sdk/react/drawer';
-import { useContext, type ReactNode, type Ref } from 'react';
+import { useContext, type CSSProperties, type KeyboardEventHandler, type ReactNode, type Ref } from 'react';
 import type { ChangeDetails } from './changeDetails.js';
 import { ComponentStyleScope } from './internal/ComponentStyleScope.js';
 import { heard } from './internal/layers.js';
@@ -44,6 +44,32 @@ interface DrawerBase {
     >,
   ) => void;
   side?: DrawerSide;
+  /** Stands beside the page with no backdrop scrim so the workspace underneath remains live and clickable. */
+  beside?: boolean;
+  /** Whether the drawer traps focus and dims the page. Defaults to `false` when `beside` is true, else `true`. */
+  modal?: boolean | 'trap-focus';
+  /** Flush against the viewport edge instead of floating inset. */
+  docked?: boolean;
+  /** Omit the default sheet header when the caller draws its own header chrome. */
+  hideHeader?: boolean;
+  /** Optional controls rendered in the default sheet header beside the close button. */
+  headerActions?: ReactNode;
+  /** Whether Escape or outside presses automatically dismiss the drawer. Defaults to `true`. */
+  dismissible?: boolean;
+  /** Optional surface mode attribute forwarded onto `DrawerContent`. */
+  dataMode?: string;
+  /** Optional floating corner position attribute forwarded onto `DrawerContent`. */
+  dataPosition?: string;
+  /** Optional content-bounded fullscreen attribute forwarded onto `DrawerContent`. */
+  dataBounded?: boolean;
+  /** Optional aria-modal override on `DrawerContent`. */
+  ariaModal?: boolean;
+  /** Where focus goes when the drawer opens (`'none'` keeps focus untouched). */
+  initialFocus?: 'auto' | 'content' | 'none';
+  id?: string;
+  role?: string;
+  style?: CSSProperties;
+  onKeyDown?: KeyboardEventHandler<HTMLDivElement>;
   children: ReactNode;
   className?: string;
   /** A non-cancellable operation is awaiting acknowledgement. */
@@ -62,6 +88,21 @@ function DefaultDrawer({
   open,
   onOpenChange,
   side = 'right',
+  beside = false,
+  modal,
+  docked = false,
+  hideHeader = false,
+  headerActions,
+  dismissible = true,
+  dataMode,
+  dataPosition,
+  dataBounded,
+  ariaModal,
+  initialFocus,
+  id,
+  role,
+  style,
+  onKeyDown,
   title,
   ariaLabel,
   children,
@@ -74,33 +115,63 @@ function DefaultDrawer({
   const componentScope = useContext(ComponentStyleScope);
   const seam = useSurfaceSeam();
   const resolvedCloseLabel = closeLabel ?? words?.close ?? seam?.defaultWords?.().close ?? 'Close';
+  const resolvedModal = modal ?? (beside ? false : true);
   return (
     <Sheet
       container={popupContainer()}
       open={open}
       side={side}
+      modal={resolvedModal}
+      dismissible={dismissible}
+      closeOnOutsidePress={beside ? false : undefined}
       onOpenChange={(next, details) => {
         if (!next && closeDisabled) return details.cancel();
         onOpenChange?.(next, heard(details));
       }}
     >
-      <DrawerBackdrop />
+      {!beside && <DrawerBackdrop />}
       <DrawerContent
         ref={ref}
+        id={id}
+        style={style}
+        onKeyDown={onKeyDown}
+        initialFocus={initialFocus}
         data-kind="sheet"
+        data-beside={beside ? '' : undefined}
+        data-docked={docked ? '' : undefined}
+        data-mode={dataMode}
+        data-position={dataPosition}
+        data-bounded={dataBounded ? '' : undefined}
         data-component={componentScope}
         className={className}
         aria-label={ariaLabel ?? (typeof title === 'string' ? title : undefined)}
+        render={
+          role || (hideHeader && ariaLabel) || ariaModal !== undefined
+            ? (drawn) => (
+                <div
+                  {...drawn}
+                  role={role ?? drawn.role}
+                  aria-modal={ariaModal !== undefined ? (ariaModal ? 'true' : undefined) : drawn['aria-modal']}
+                  aria-labelledby={hideHeader && ariaLabel ? undefined : drawn['aria-labelledby']}
+                />
+              )
+            : undefined
+        }
       >
-        <header data-slot="sheet-head">
-          {title !== undefined ? <DrawerTitle>{title}</DrawerTitle> : <span />}
-          <DrawerClose aria-label={resolvedCloseLabel} disabled={closeDisabled} data-variant="quiet">
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-              <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-            </svg>
-          </DrawerClose>
-        </header>
-        <div data-slot="sheet-body">{children}</div>
+        {!hideHeader && (
+          <header data-slot="sheet-head">
+            {title !== undefined ? <DrawerTitle>{title}</DrawerTitle> : <span />}
+            <div data-slot="sheet-head-actions">
+              {headerActions}
+              <DrawerClose aria-label={resolvedCloseLabel} disabled={closeDisabled} data-variant="quiet">
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+                  <path d="M3.5 3.5l9 9M12.5 3.5l-9 9" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                </svg>
+              </DrawerClose>
+            </div>
+          </header>
+        )}
+        {hideHeader ? children : <div data-slot="sheet-body">{children}</div>}
       </DrawerContent>
     </Sheet>
   );

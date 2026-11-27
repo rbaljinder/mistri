@@ -7,10 +7,12 @@
  * `$record` in a tool input is the open record's key, read from the context
  * line the turn puts in the person's message, so one script serves any record.
  */
-import type { AssistantModel, ModelBlock, ModelMessage } from './assistantModel.js';
+import { streamCallbacks, type AssistantModel, type ModelBlock, type ModelMessage } from './assistantModel.js';
 import { ACTED_MARK } from './assistantTurn.js';
 
 interface ScriptStep {
+  thinking?: string;
+  redactedThinking?: boolean;
   text?: string;
   tools?: Array<{ name: string; input: unknown }>;
 }
@@ -43,7 +45,8 @@ const tokens = (value: unknown) => Math.ceil(JSON.stringify(value).length / 4);
 
 export function scriptedModel(script: AssistantScript): AssistantModel {
   return {
-    async stream(request, onText, signal) {
+    async stream(request, sink, signal) {
+      const { onText, onReasoning } = streamCallbacks(sink);
       const messages = request.messages;
       let at = messages.length - 1;
       while (at >= 0 && personText(messages[at]) === undefined) at--;
@@ -55,6 +58,22 @@ export function scriptedModel(script: AssistantScript): AssistantModel {
         ? (turn.steps[step] ?? { text: '' })
         : { text: step ? '' : (script.otherwise ?? 'I have no answer scripted for that.') };
       const content: ModelBlock[] = [];
+      if (planned.redactedThinking) {
+        const id = `r_script_${messages.length}`;
+        onReasoning({ id, redacted: true, done: true, durationMs: 20 });
+        content.push({ type: 'redacted_thinking', data: 'redacted' });
+      } else if (planned.thinking) {
+        const id = `r_script_${messages.length}`;
+        const startedAt = Date.now();
+        for (const piece of planned.thinking.match(/\S+\s*/g) ?? []) {
+          if (signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+          onReasoning({ id, delta: piece });
+          await new Promise((resolve) => setTimeout(resolve, 2));
+        }
+        const durationMs = Math.max(10, Date.now() - startedAt);
+        onReasoning({ id, done: true, durationMs });
+        content.push({ type: 'thinking', thinking: planned.thinking });
+      }
       if (planned.text) {
         // Said in pieces, so the stream is exercised as a real one is.
         for (const piece of planned.text.match(/\S+\s*/g) ?? []) {

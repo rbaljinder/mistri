@@ -12,6 +12,8 @@ export interface AssistantHandoff {
   about?: { table: string; id: string | number };
   /** Words put in the box, never sent. */
   text?: string;
+  /** Optional presentation mode to open the panel in (`'sidebar'`, `'floating'`, `'fullscreen'`). */
+  mode?: 'sidebar' | 'floating' | 'fullscreen';
 }
 
 let held: ((handoff: AssistantHandoff) => void) | null = null;

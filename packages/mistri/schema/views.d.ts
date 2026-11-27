@@ -1,8 +1,8 @@
 /** `@mistriwork/mistri/views`: generated self-contained declarations (`scripts/sync-ui-sdk.mjs`). @preview */
 import * as React from 'react';
-import type { ComponentProps, ReactNode, Ref } from 'react';
+import type { CSSProperties, ComponentProps, KeyboardEventHandler, ReactNode, Ref } from 'react';
 import { type Change, type TransferMove, type TransferReason, type TurnsReason } from './behaviors.js';
-import { type AvatarStatus, type EmptyStateSpec, type Tone } from './kit.js';
+import { type AvatarStatus, type DrawerSide, type EmptyStateSpec, type Tone } from './kit.js';
 import { type BreadcrumbItem, type MenuEntry } from './primitives.js';
 
 export { type ControlSize, type EmptyStateSpec, PageHeader, type PageHeaderBack, type PageHeaderProps, type PageHeaderTab, SplitView, type SplitViewItem, type SplitViewItemsProps, type SplitViewPaneProps, type SplitViewProps, type Tone } from './kit.js';
@@ -244,6 +244,27 @@ export interface AiStarterPrompt {
 }
 /** Author role of an `AiMessage` in `AiAssistantView`. */
 export type AiMessageRole = 'user' | 'assistant';
+/** Reasoning effort level supported by an assistant model. */
+export type AiEffortLevel = 'low' | 'medium' | 'high';
+/** Presentation surface mode for `AiAssistantSurface` and `AiAssistantPanel`. */
+export type AiPresentationMode = 'inline' | 'sidebar' | 'floating' | 'fullscreen' | 'page';
+/** Model reasoning / thinking trace attached to an assistant `AiMessage`. */
+export interface AiReasoningTrace {
+    id: string;
+    text: string;
+    streaming?: boolean;
+    durationMs?: number;
+    redacted?: boolean;
+    summary?: string;
+}
+/** Structured generative UI block rendered inside an assistant `AiMessage`. */
+export interface AiGeneratedBlock {
+    id: string;
+    kind: string;
+    title?: string;
+    status?: 'loading' | 'ready' | 'error';
+    payload?: unknown;
+}
 /** Conversation message entry rendered in `AiAssistantView`. */
 export interface AiMessage {
     id: string;
@@ -254,7 +275,9 @@ export interface AiMessage {
     model?: string;
     streaming?: boolean;
     context?: ReadonlyArray<AiContextAttachment>;
+    reasoning?: AiReasoningTrace | ReadonlyArray<AiReasoningTrace>;
     toolCalls?: ReadonlyArray<AiToolCall>;
+    blocks?: ReadonlyArray<AiGeneratedBlock>;
     citations?: ReadonlyArray<AiCitation>;
     proposals?: ReadonlyArray<AiProposalData>;
 }
@@ -299,6 +322,139 @@ export interface DecisionChipProps {
 }
 /** Inline AI provenance chip that opens a rationale and accept/revert popover. */
 export declare function DecisionChip({ value, previousValue, field, confidence, reason, model, source, status, defaultStatus, onAccept, onRevert, className, ref, }: DecisionChipProps): import("react").JSX.Element;
+/** Localized strings for `AiReasoning`. */
+export interface AiReasoningWords {
+    thinking?: string;
+    thought?: string;
+    thoughtFor?: (duration: string) => string;
+    redacted?: string;
+    regionLabel?: string;
+}
+/** Props for the `AiReasoning` collapsible reasoning surface. */
+export interface AiReasoningProps {
+    /** Reasoning text to display when rendering a single trace directly. */
+    text?: string;
+    /** Structured trace object (alternative to passing `text` / `streaming` / `durationMs`). */
+    trace?: AiReasoningTrace;
+    /** Whether reasoning tokens are still arriving. */
+    streaming?: boolean;
+    /** Elapsed thinking time in milliseconds. */
+    durationMs?: number;
+    /** Provider returned redacted thinking content. */
+    redacted?: boolean;
+    /** Optional short summary label shown in the collapsed header. */
+    summary?: string;
+    /** Controlled open state. */
+    open?: boolean;
+    /** Uncontrolled initial open state (defaults to open while streaming when `defaultOpen` is omitted? False by default to stay quiet). */
+    defaultOpen?: boolean;
+    /** Called whenever the disclosure opens or closes. */
+    onOpenChange?: (open: boolean) => void;
+    /** Collapse automatically once `streaming` finishes unless the reader toggled it by hand. */
+    autoCollapse?: boolean;
+    /** Maximum height of the expanded reasoning scroll region. */
+    maxHeight?: string;
+    /** Localized strings overriding English defaults. */
+    words?: AiReasoningWords;
+    className?: string;
+}
+/** Quiet, token-styled collapsible reasoning / thinking trace over UI SDK Collapsible and ScrollArea. */
+export declare function AiReasoning({ text: textProp, trace, streaming: streamingProp, durationMs: durationProp, redacted: redactedProp, summary: summaryProp, open: controlledOpen, defaultOpen, onOpenChange, autoCollapse, maxHeight, words: givenWords, className, }: AiReasoningProps): import("react").JSX.Element;
+/** Corner position when `AiAssistantSurface` is in `floating` mode. */
+export type AiFloatingPosition = 'bottom-right' | 'bottom-left' | 'top-right' | 'top-left';
+/** Localized strings for `AiModeSwitcher` and `AiAssistantSurface`. */
+export interface AiSurfaceWords {
+    sidebar?: string;
+    floating?: string;
+    fullscreen?: string;
+    exitFullscreen?: string;
+    openPage?: string;
+    close?: string;
+    resize?: string;
+    rail?: string;
+    main?: string;
+}
+/** Props for `AiModeSwitcher` presentation toggle buttons. */
+export interface AiModeSwitcherProps {
+    /** Active presentation mode. */
+    presentation: AiPresentationMode;
+    /** Modes offered as interactive toggles. Defaults to `['sidebar', 'floating', 'fullscreen']`. */
+    presentations?: ReadonlyArray<Exclude<AiPresentationMode, 'inline' | 'page'>>;
+    /** Called when the reader selects a mode. */
+    onPresentationChange?: (mode: Exclude<AiPresentationMode, 'inline' | 'page'>) => void;
+    /** Previous non-fullscreen mode so clicking Full screen again steps back to it. */
+    restoreMode?: 'sidebar' | 'floating';
+    /** Optional handler to jump to a dedicated full-page route (`placement: 'page'`). */
+    onOpenPage?: () => void;
+    /** Localized labels overriding English defaults. */
+    words?: AiSurfaceWords;
+    className?: string;
+}
+/** Compact mode-switcher controls (sidebar / floating / full screen / full page) over `@mistriwork/ui` IconButton + Tooltip. */
+export declare function AiModeSwitcher({ presentation, presentations, onPresentationChange, restoreMode, onOpenPage, words: givenWords, className, }: AiModeSwitcherProps): import("react").JSX.Element | null;
+/** Props for the `AiAssistantSurface` multi-mode presentation shell. */
+export interface AiAssistantSurfaceProps {
+    /** Whether the surface is open (ignored in `inline` and `page` modes). */
+    open?: boolean;
+    /** Called when the surface requests to open or close. */
+    onOpenChange?: (open: boolean) => void;
+    /** Controlled presentation mode. */
+    presentation?: AiPresentationMode;
+    /** Uncontrolled initial presentation mode. Defaults to `'sidebar'`. */
+    defaultPresentation?: AiPresentationMode;
+    /** Called when the presentation changes (e.g. Escape stepping down from fullscreen). */
+    onPresentationChange?: (mode: AiPresentationMode) => void;
+    /** Edge used in `sidebar` mode. Defaults to `'right'`. */
+    side?: DrawerSide;
+    /** Corner used in `floating` mode. Defaults to `'bottom-right'`. */
+    floatingPosition?: AiFloatingPosition;
+    /** Controlled sidebar width in px. */
+    width?: number | null;
+    /** Uncontrolled initial sidebar width in px. */
+    defaultWidth?: number;
+    /** Called as the reader resizes the sidebar. */
+    onWidthChange?: (width: number | null) => void;
+    /** Minimum sidebar width in px. Defaults to `384`. */
+    minWidth?: number;
+    /** Maximum sidebar width in px. Defaults to `832`. */
+    maxWidth?: number;
+    /** Allow pointer & keyboard resizing in `sidebar` and `floating` modes. Defaults to `true`. */
+    resizable?: boolean;
+    /**
+     * Optional left offset (in layout px) for `fullscreen` mode so the expanded surface fills a host
+     * content area beside its navigation rail instead of covering navigation. When omitted, covers the full viewport.
+     */
+    fullscreenLeft?: number | null;
+    /** Whether `fullscreen` mode traps focus with a modal scrim. Defaults to `true` when `fullscreenLeft` is absent, else `false`. */
+    fullscreenModal?: boolean;
+    /** Optional conversation-history rail rendered beside the main body in `page` or `fullscreen` mode. */
+    rail?: ReactNode;
+    /** Whether the mobile rail drawer is open in `page` / `fullscreen` mode. */
+    railOpen?: boolean;
+    /** Called when the mobile rail drawer opens or closes. */
+    onRailOpenChange?: (open: boolean) => void;
+    /** Accessible name for the assistant surface. */
+    ariaLabel?: string;
+    /** Explicit ARIA role override (e.g. `'complementary'` for non-modal assistant landmark). */
+    role?: string;
+    /** Optional DOM id on the surface frame. */
+    id?: string;
+    /** Keyboard handler invoked before the surface's own Escape handling. */
+    onKeyDown?: KeyboardEventHandler<HTMLElement>;
+    /** Localized strings for resize handle and rail labels. */
+    words?: AiSurfaceWords;
+    className?: string;
+    style?: CSSProperties;
+    ref?: Ref<HTMLElement>;
+    children: ReactNode;
+}
+/**
+ * First-class presentation container for AI assistants supporting `sidebar` (non-modal docked UI SDK Drawer),
+ * `floating` (non-modal corner-pinned window over the same persistent Drawer), `fullscreen` (full-viewport or
+ * content-bounded overlay), `page` (full-page split workspace with UI SDK Resizable rail & mobile Drawer),
+ * and `inline` modes.
+ */
+export declare function AiAssistantSurface({ open, onOpenChange, presentation: controlledPresentation, defaultPresentation, onPresentationChange, side, floatingPosition, width: controlledWidth, defaultWidth, onWidthChange, minWidth, maxWidth, resizable, fullscreenLeft, fullscreenModal, rail, railOpen, onRailOpenChange, ariaLabel, role, id, onKeyDown, words: givenWords, className, style, ref, children, }: AiAssistantSurfaceProps): import("react").JSX.Element | null;
 /** Props for the `AiPromptComposer` component. */
 export interface AiPromptComposerProps {
     value?: string;
@@ -310,6 +466,11 @@ export interface AiPromptComposerProps {
     availableContexts?: ReadonlyArray<AiContextAttachment>;
     onRemoveAttachment?: (id: string) => void;
     onAddAttachment?: (item: AiContextAttachment) => void;
+    /** Selected reasoning effort level when effort selection is enabled. */
+    effort?: AiEffortLevel;
+    /** Offered effort levels (renders a compact effort selector in the composer bar). */
+    efforts?: ReadonlyArray<AiEffortLevel>;
+    onEffortChange?: (effort: AiEffortLevel) => void;
     isGenerating?: boolean;
     disabled?: boolean;
     onSubmit?: (prompt: string, attachments: AiContextAttachment[]) => void;
@@ -318,7 +479,7 @@ export interface AiPromptComposerProps {
     className?: string;
 }
 /** Multi-line AI prompt input bar with attachable workspace context pills and stop/send controls. */
-export declare function AiPromptComposer({ value, defaultValue, onValueChange, placeholder, attachments, defaultAttachments, availableContexts, onRemoveAttachment, onAddAttachment, isGenerating, disabled, onSubmit, onStop, footerStart, className, }: AiPromptComposerProps): import("react").JSX.Element;
+export declare function AiPromptComposer({ value, defaultValue, onValueChange, placeholder, attachments, defaultAttachments, availableContexts, onRemoveAttachment, onAddAttachment, effort, efforts, onEffortChange, isGenerating, disabled, onSubmit, onStop, footerStart, className, }: AiPromptComposerProps): import("react").JSX.Element;
 /** Props for the `AiAssistantPanel` component. */
 export interface AiAssistantPanelProps extends Omit<ComponentProps<'section'>, 'title' | 'onChange' | 'aria-label' | 'inlist'> {
     title?: ReactNode;
@@ -328,6 +489,31 @@ export interface AiAssistantPanelProps extends Omit<ComponentProps<'section'>, '
     model?: string;
     defaultModel?: string;
     onModelChange?: (model: string) => void;
+    /** Selected reasoning effort level when `efforts` is supplied. */
+    effort?: AiEffortLevel;
+    /** Offered effort levels in the composer bar. */
+    efforts?: ReadonlyArray<AiEffortLevel>;
+    onEffortChange?: (effort: AiEffortLevel) => void;
+    /** Default reasoning trace display policy: `'collapsed'`, `'expanded'`, or `'hidden'`. */
+    reasoningVisibility?: 'collapsed' | 'expanded' | 'hidden';
+    /** Localized strings for `AiReasoning`. */
+    reasoningWords?: AiReasoningWords;
+    /** Active presentation mode (enables header mode switcher when `onPresentationChange` is set). */
+    presentation?: AiPresentationMode;
+    /** Presentation modes offered in the header switcher. */
+    presentations?: ReadonlyArray<Exclude<AiPresentationMode, 'inline' | 'page'>>;
+    onPresentationChange?: (mode: Exclude<AiPresentationMode, 'inline' | 'page'>) => void;
+    restoreMode?: 'sidebar' | 'floating';
+    /** Optional handler to open the dedicated full-page assistant route. */
+    onOpenPage?: () => void;
+    /** Optional close button handler rendered in the header. */
+    onClose?: () => void;
+    /** Stretch to fill its parent surface (`sidebar`, `floating`, `fullscreen`, `page`) without a fixed max-height. */
+    fill?: boolean;
+    /** Extra controls rendered in the panel header. */
+    headerActions?: ReactNode;
+    /** Localized strings for mode switcher and close buttons. */
+    surfaceWords?: AiSurfaceWords;
     messages?: ReadonlyArray<AiMessage>;
     defaultMessages?: ReadonlyArray<AiMessage>;
     starterPrompts?: ReadonlyArray<AiStarterPrompt>;
@@ -338,6 +524,10 @@ export interface AiAssistantPanelProps extends Omit<ComponentProps<'section'>, '
     availableContexts?: ReadonlyArray<AiContextAttachment>;
     composerPlaceholder?: string;
     isGenerating?: boolean;
+    /** Renderer for structured generative UI blocks attached to assistant messages. */
+    renderBlock?: (block: AiGeneratedBlock, context: {
+        presentation: AiPresentationMode;
+    }) => ReactNode;
     onSendMessage?: (prompt: string, context: AiContextAttachment[], model: string) => void;
     onSendPrompt?: (prompt: string, context: AiContextAttachment[], model: string) => void;
     onStopGenerating?: () => void;
@@ -348,7 +538,7 @@ export interface AiAssistantPanelProps extends Omit<ComponentProps<'section'>, '
     onAcceptProposal?: (proposalId: string, messageId: string) => void;
     onDismissProposal?: (proposalId: string, messageId: string) => void;
 }
-/** Streaming conversational AI copilot panel with tool-call traces, citations, and field-mutation proposals. */
+/** Streaming conversational AI copilot panel with reasoning traces, tool-call traces, generative UI blocks, citations, and proposals. */
 export declare function AiAssistantPanel(rawProps: AiAssistantPanelProps): import("react").JSX.Element;
 /** Workspace switcher option rendered in `Sidebar`. */
 export interface WorkspaceOption {

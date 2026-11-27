@@ -36,6 +36,14 @@
       "mistri-built": "./dist/AiBadge.js",
       "default": "./src/AiBadge.tsx"
     },
+    "./views/AiAssistantSurface.js": {
+      "mistri-built": "./dist/views/AiAssistantSurface.js",
+      "default": "./src/views/AiAssistantSurface.tsx"
+    },
+    "./views/AiReasoning.js": {
+      "mistri-built": "./dist/views/AiReasoning.js",
+      "default": "./src/views/AiReasoning.tsx"
+    },
     "./Avatar.js": {
       "mistri-built": "./dist/Avatar.js",
       "default": "./src/Avatar.tsx"
@@ -188,6 +196,10 @@
       "mistri-built": "./dist/charts/core.js",
       "default": "./src/charts/core.ts"
     },
+    "./primitives/feedback.js": {
+      "mistri-built": "./dist/primitives/feedback.js",
+      "default": "./src/primitives/feedback.tsx"
+    },
     "./primitives.js": {
       "mistri-built": "./dist/primitives.js",
       "default": "./src/primitives.ts"
@@ -215,6 +227,10 @@
     "./styles/surfaces/views.css": {
       "mistri-built": "./dist/styles/surfaces/views.css",
       "default": "./src/styles/surfaces/views.css"
+    },
+    "./styles/surfaces/views-ai.css": {
+      "mistri-built": "./dist/styles/surfaces/views-ai.css",
+      "default": "./src/styles/surfaces/views-ai.css"
     },
     "./styles/ui-sdk-surfaces.css": {
       "mistri-built": "./dist/styles/ui-sdk-surfaces.css",

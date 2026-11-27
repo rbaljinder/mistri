@@ -167,7 +167,17 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
    * empty conversation: a bare line everywhere, a scoped one in the views
    * this reader was served and on records of its tables (by table id).
    */
-  assistant?: { icon: 'chat-circle'; record?: true; page?: true; starters?: Array<string | AssistantStarter> };
+  assistant?: {
+    icon: 'chat-circle';
+    record?: true;
+    page?: true;
+    reasoning?: 'collapsed' | 'expanded' | 'hidden';
+    presentations?: Array<'sidebar' | 'floating' | 'fullscreen'>;
+    defaultPresentation?: 'sidebar' | 'floating' | 'fullscreen';
+    effort?: 'low' | 'medium' | 'high';
+    effortPicker?: true;
+    starters?: Array<string | AssistantStarter>;
+  };
   /** The fields a decision answers, by table id then column (decide/decisionServing.ts): where a record reserves a
       suggestion's place, and the command its Accept runs. Only the tables this reader is served. */
   decisions?: Readonly<Record<string, Readonly<Record<string, { readonly decision: string; readonly command: string }>>>>;
@@ -272,6 +282,11 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
             icon: 'chat-circle' as const,
             ...(app.assistant.placement.includes('record') ? { record: true as const } : {}),
             ...(app.assistant.placement.includes('page') ? { page: true as const } : {}),
+            ...(app.assistant.reasoning !== 'collapsed' ? { reasoning: app.assistant.reasoning } : {}),
+            ...(app.assistant.presentations.length !== 3 ? { presentations: app.assistant.presentations } : {}),
+            ...(app.assistant.defaultPresentation !== 'sidebar' ? { defaultPresentation: app.assistant.defaultPresentation } : {}),
+            ...(app.assistant.effort ? { effort: app.assistant.effort } : {}),
+            ...(app.assistant.effortPicker ? { effortPicker: true as const } : {}),
             ...servedStarters(app.assistant.starters, views, schema),
           },
         }

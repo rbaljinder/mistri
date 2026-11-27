@@ -5,6 +5,8 @@ export type { ControlSize, EmptyStateSpec, Tone } from './internal/cx.js';
 export * from './views/AccountSettingsView.js';
 export * from './views/ActivityTimeline.js';
 export * from './views/AiProposalAndChip.js';
+export * from './views/AiReasoning.js';
+export * from './views/AiAssistantSurface.js';
 export * from './views/AiAssistantView.js';
 export * from './views/AppShell.js';
 export * from './views/AuthSurfaces.js';

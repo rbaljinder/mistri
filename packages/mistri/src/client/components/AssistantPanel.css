@@ -1,82 +1,71 @@
 /* The assistant's panel, brought with its chunk (AssistantPanel.tsx): nothing here is in a first page.
-   Beside the page, not over it: no scrim, the page stays live under the
-   person's hand. The record form's shape (peekpanel) and its quiet type;
-   arrival is the peek panel's (docs/design.md, motion), and only arrival. */
+   Placement and sizing across sidebar, floating, fullscreen, and page modes live on AiAssistantSurface
+   (@mistriwork/ui/styles/surfaces/views-ai.css). */
 @layer components {
 .assistant-panel {
-  position: fixed; top: 0; right: 0; bottom: 0; z-index: 75;
-  width: min(var(--assistant-width, 32rem), 100vw);
-  display: flex;
-  background: var(--surface); color: var(--ink);
-  border-left: 1px solid var(--line-strong);
-  box-shadow: var(--shadow-panel);
+  color: var(--ink);
 }
-@media (prefers-reduced-motion: no-preference) {
-  .assistant-panel {
-    transition: transform var(--t-panel) var(--ease-out), opacity var(--t-panel) var(--ease-out);
-    @starting-style { transform: translateX(24px); opacity: 0; }
+.assistant-panel-floating .assistant-head {
+  gap: var(--space-1h);
+  padding: var(--space-2h) var(--space-3) var(--space-2h) var(--space-3h);
+  background: var(--raised);
+}
+.assistant-panel-floating .assistant-head .icon-button {
+  font-size: var(--text-xs);
+  padding-inline: var(--space-1h);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.assistant-panel-floating .assistant-title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.assistant-panel-floating .assistant-body {
+  padding: var(--space-3h);
+}
+.assistant-panel-floating .assistant-foot {
+  padding: var(--space-2h) var(--space-3h) var(--space-3h);
+}
+.assistant-panel-floating .nx-ai-floating-resize::before {
+  content: '';
+  position: absolute;
+  inset: var(--space-1h);
+  border-radius: 50%;
+  background: var(--ink-subtle);
+  opacity: 0;
+}
+.assistant-panel-floating .nx-ai-floating-resize:focus-visible {
+  outline: var(--focus-width) solid var(--accent);
+  outline-offset: -2px;
+}
+.assistant-panel-floating .nx-ai-floating-resize:focus-visible::before {
+  opacity: 0.85;
+  background: var(--accent);
+}
+@media (hover: hover) {
+  .assistant-panel-floating .nx-ai-floating-resize:hover::before {
+    opacity: 0.65;
   }
 }
-/* The side panel's leading edge, dragged or stepped to widen or narrow it; no transition, so it lands where put. */
-.assistant-resize {
-  position: absolute; top: 0; bottom: 0; left: -3px; z-index: 2; width: 6px;
-  cursor: col-resize; touch-action: none;
-}
-.assistant-resize::after {
-  content: ''; position: absolute; top: 0; bottom: 0; left: 2px; width: 2px;
-  background: var(--accent); opacity: 0;
-}
-.assistant-resize:focus-visible { outline: none; }
-.assistant-resize:focus-visible::after { opacity: 1; }
-@media (hover: hover) {
-  .assistant-resize:hover::after { opacity: 0.6; }
-}
-/* Full screen: the content column, beside the App's menu (its left edge measured, AssistantPanel.tsx). The page
-   beneath is not moved — the panel is fixed and only its own edge changes — and the change is not animated: a press
-   that is undone as often as it is made earns no motion (motion doctrine, rule 2). */
-.assistant-panel-expanded { left: var(--assistant-left, 0px); width: auto; }
-/* A phone has no beside: the panel is the page until it is closed, and full screen is the same screen. */
-@media (max-width: 640px) {
-  /* Both edges, not 100vw: the density zoom on the root scales a vw, and the panel would stand past the screen. */
-  .assistant-panel { left: 0; width: auto; border-left: 0; }
-  .assistant-expand, .assistant-resize { display: none; }
+@media (prefers-reduced-motion: no-preference) {
+  .assistant-panel .nx-ai-reasoning[data-streaming]:not([data-nx-motion='reduced'], [data-nx-motion='reduced'] *) .nx-ai-reasoning-icon,
+  .assistant-room .nx-ai-reasoning[data-streaming]:not([data-nx-motion='reduced'], [data-nx-motion='reduced'] *) .nx-ai-reasoning-icon {
+    /* motion-ok: continuous loading or status indicator loop */
+    animation: nx-ai-blink 1.6s var(--ease-out) infinite;
+  }
 }
 .assistant-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
 
-/* The assistant's room (placement: 'page'): the conversations a rail beside it at a desk, a list over it on a
+/* The assistant's room (placement: 'page'): the conversations a resizable rail beside it at a desk, a drawer on a
    phone; the composer at its foot, the room standing to the window's foot (its height measured). */
 .assistant-room {
-  position: relative; display: flex; min-height: 0;
-  background: var(--surface); color: var(--ink);
-  border-top: 1px solid var(--line);
+  color: var(--ink);
 }
 .assistant-room .assistant-title { font-size: var(--text-lg); }
-.assistant-rail {
-  flex: 0 0 15rem; min-width: 0; display: flex; flex-direction: column;
-  border-right: 1px solid var(--line); overflow-y: auto; overscroll-behavior: contain;
-  padding: var(--space-3h) var(--space-3) var(--space-4h);
-}
 .assistant-rail-toggle { display: none; }
-.assistant-rail-scrim { display: none; }
-/* A phone's rail is a sheet from the left over the conversation, which stays in sight beside it under a faint
-   veil; it enters as a panel does (motion doctrine) and leaves at once. */
 @media (max-width: 640px) {
-  .assistant-rail { display: none; }
   .assistant-room .assistant-rail-toggle { display: inline-flex; flex: none; width: 32px; padding: 0; }
-  .assistant-room-listing .assistant-rail {
-    display: flex; position: absolute; inset: 0 auto 0 0; z-index: 2; width: min(18rem, 84%);
-    background: var(--surface); border-right: 1px solid var(--line); box-shadow: var(--shadow-panel);
-  }
-  .assistant-room-listing .assistant-rail-scrim {
-    display: block; position: absolute; inset: 0; z-index: 1;
-    background: color-mix(in srgb, var(--ink) 14%, transparent);
-  }
-}
-@media (max-width: 640px) and (prefers-reduced-motion: no-preference) {
-  .assistant-room-listing .assistant-rail {
-    transition: transform var(--t-panel) var(--ease-out);
-    @starting-style { transform: translateX(-24px); }
-  }
 }
 
 /* Wide — full screen, or the room — reads in one column of at most 760px, centred: the words, the person's
@@ -121,6 +110,7 @@
 .assistant-room .assistant-head > .assistant-conv-rename { flex: 1; font-size: var(--text-md); }
 .assistant-body {
   flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain;
+  container-type: inline-size; container-name: assistant-pane;
   padding: var(--space-4h); display: flex; flex-direction: column; gap: var(--space-4);
   font-size: var(--text-base); line-height: 1.5;
 }
@@ -282,18 +272,32 @@
 .assistant-foot { border-top: 1px solid var(--line); padding: var(--space-3h) var(--space-4h) var(--space-4h); display: flex; flex-direction: column; gap: var(--space-2h); }
 .assistant-context { display: flex; align-items: center; gap: var(--space-2h); font-size: var(--text-sm); color: var(--ink-muted); }
 .assistant-context button { padding: 0 var(--space-2h); }
-/* The composer: a light field on the surface — one line, growing with its words (AssistantPanel.tsx) — and Send
-   beside it, filled only when there is something to send. The field wears the looks' own edge, ring and shut
-   state, so it reads as every other field in the App. */
+/* The composer: a unified elevated card — auto-growing borderless field on top, quiet effort picker and Send/Stop
+   in its footer bar when effort picking is offered, or inline in one row when compact. */
 .assistant-compose { display: flex; flex-direction: column; gap: var(--space-2h); min-width: 0; }
-.assistant-compose-row { display: flex; align-items: flex-end; gap: var(--space-3); }
-.assistant-compose textarea {
-  flex: 1; min-width: 0; min-height: 36px; resize: none; overflow-y: hidden; margin: 0;
-  font: var(--text-md)/1.45 var(--sans); padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--line-control); border-radius: var(--radius); background: var(--surface); color: var(--ink);
-  box-shadow: var(--shadow-control);
+.assistant-compose-box {
+  display: flex; align-items: flex-end; gap: var(--space-2h);
+  padding: var(--space-2) var(--space-2h) var(--space-2) var(--space-3h);
+  border: 1px solid var(--line-control); border-radius: var(--radius-card);
+  background: var(--surface); box-shadow: var(--shadow-control);
 }
-.assistant-compose-row [data-slot='button'] { min-height: 36px; }
+.assistant-compose-box:focus-within {
+  border-color: var(--accent);
+  outline: var(--focus-width) solid color-mix(in srgb, var(--accent) 28%, transparent);
+  outline-offset: -1px;
+}
+.assistant-compose-rich {
+  flex-direction: column; align-items: stretch; gap: var(--space-2);
+  padding: var(--space-3) var(--space-3) var(--space-2h) var(--space-3h);
+}
+.assistant-compose-box textarea {
+  flex: 1; min-width: 0; min-height: 24px; resize: none; overflow-y: hidden; margin: 0; padding: var(--space-1) 0;
+  border: 0; outline: none; background: transparent; color: var(--ink); font: var(--text-md)/1.45 var(--sans);
+}
+.assistant-compose-box textarea::placeholder { color: var(--ink-subtle); }
+.assistant-compose-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2h); }
+.assistant-compose-actions { display: flex; align-items: center; gap: var(--space-2); margin-left: auto; }
+.assistant-effort { width: 8.5rem; }
 /* Waiting for the person: said over the field it shuts, a dot and its words, and the field names it as the reason. */
 .assistant-waiting { display: flex; align-items: center; gap: var(--space-3); font-size: var(--text-base); color: var(--ink); }
 .assistant-waiting-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
@@ -302,4 +306,140 @@
 .assistant-ask-query { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); overflow-wrap: anywhere; }
 .assistant-ask-query code { font: var(--text-sm) var(--mono); color: var(--ink); padding: 0 var(--space-1h); background: var(--raised); border-radius: min(3px, var(--radius)); }
 .assistant-ask-evidence { gap: var(--space-2); }
+
+/* Expanded generative UI blocks (metrics, timeline, callout, tabs, custom) and container-query adaptation across
+   floating, sidebar, fullscreen, and page widths. */
+.assistant-block-heading {
+  margin: 0 0 var(--space-3);
+  font: 600 var(--text-base) var(--sans);
+  color: var(--ink);
+}
+.assistant-metrics { padding: var(--space-3h) var(--space-4); }
+.assistant-metrics-grid .page-body { padding: 0; }
+.assistant-metrics-grid .home-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: var(--space-3);
+}
+/* Semantic callout card (mirrors @mistriwork/ui Alert tokens without pulling the full primitives sheet). */
+.assistant-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  width: 100%;
+  padding: var(--space-3h) var(--space-4);
+  border-radius: var(--radius-card);
+  border: 1px solid var(--line);
+  background: var(--raised);
+  color: var(--ink);
+  font-size: var(--text-base);
+}
+.assistant-callout .nx-alert-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  margin-top: var(--space-1);
+  color: var(--ink-muted);
+}
+.assistant-callout .nx-alert-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.assistant-callout .nx-alert-title {
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.assistant-callout .assistant-text {
+  font-size: var(--text-sm);
+  color: color-mix(in srgb, var(--ink) 84%, var(--surface));
+}
+.assistant-callout:is([data-tone='info'], [data-tone='accent']) {
+  background: color-mix(in srgb, var(--status-info) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--status-info) 28%, transparent);
+}
+.assistant-callout:is([data-tone='info'], [data-tone='accent']) .nx-alert-icon { color: var(--status-info); }
+.assistant-callout:is([data-tone='good'], [data-tone='success']) {
+  background: color-mix(in srgb, var(--status-good) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--status-good) 28%, transparent);
+}
+.assistant-callout:is([data-tone='good'], [data-tone='success']) .nx-alert-icon { color: var(--status-good); }
+.assistant-callout[data-tone='warning'] {
+  background: color-mix(in srgb, var(--status-warning) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--status-warning) 30%, transparent);
+}
+.assistant-callout[data-tone='warning'] .nx-alert-icon { color: var(--status-warning); }
+.assistant-callout:is([data-tone='critical'], [data-tone='danger']) {
+  background: color-mix(in srgb, var(--status-critical) 10%, var(--surface));
+  border-color: color-mix(in srgb, var(--status-critical) 28%, transparent);
+}
+.assistant-callout:is([data-tone='critical'], [data-tone='danger']) .nx-alert-icon { color: var(--status-critical); }
+
+.assistant-timeline { padding: var(--space-3h) var(--space-4); }
+.assistant-timeline-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3h);
+}
+.assistant-timeline-item {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.assistant-timeline-item:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 3.5px;
+  top: 16px;
+  bottom: calc(var(--space-3h) * -1);
+  width: 1px;
+  background: var(--line);
+}
+.assistant-timeline-dot {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: var(--space-2);
+  border-radius: 50%;
+  background: var(--accent);
+}
+.assistant-timeline-content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.assistant-timeline-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2); min-width: 0; }
+.assistant-timeline-label { font-weight: 500; color: var(--ink); }
+.assistant-timeline-badge {
+  padding: 0 var(--space-2);
+  border-radius: var(--radius);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+.assistant-timeline-when {
+  margin-left: auto;
+  font: var(--text-xs) var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-subtle);
+}
+.assistant-timeline-detail { margin: 0; font-size: var(--text-sm); color: var(--ink-muted); overflow-wrap: anywhere; }
+.assistant-tabs { padding: var(--space-3h) var(--space-4); }
+.assistant-tabs .assistant-block { margin-top: var(--space-3); }
+.assistant-custom { padding: var(--space-3h) var(--space-4); }
+
+@container assistant-pane (max-width: 440px) {
+  .assistant-metrics-grid .home-cards { grid-template-columns: 1fr; }
+  .assistant-timeline-when { margin-left: 0; width: 100%; }
+}
+@container assistant-pane (min-width: 720px) {
+  .assistant-wide .assistant-body > .assistant-block-wide { max-width: 1080px; }
+}
 }

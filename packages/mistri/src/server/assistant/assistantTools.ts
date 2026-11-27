@@ -30,10 +30,20 @@ import { isBusinessCommandExecutionError } from '../commands/commandErrors.js';
 import type { ProposalDraft } from '../commands/proposals.js';
 import type { AssistantCatalog, CatalogVerb } from './assistantCatalog.js';
 
-/** A block as the panel draws it: a dashboard section, or one record's card. */
-type AssistantBlock =
+/** A block as the panel draws it: a dashboard section, KPI strip, timeline, callout, tabs, record card, or author block. */
+export type AssistantBlock =
   | { kind: 'section'; section: Record<string, unknown> }
-  | { kind: 'record'; table: string; key: Record<string, unknown>; title: string; values: Record<string, unknown>; address?: string };
+  | { kind: 'metrics'; title?: string; sections: Array<Record<string, unknown>> }
+  | {
+      kind: 'timeline';
+      title?: string;
+      table: string;
+      items: Array<{ label: string; when: string; detail?: string; badge?: string; address?: string }>;
+    }
+  | { kind: 'callout'; tone: 'info' | 'good' | 'warning' | 'critical'; title?: string; body: string }
+  | { kind: 'tabs'; title?: string; tabs: Array<{ id: string; label: string; block: AssistantBlock }> }
+  | { kind: 'record'; table: string; key: Record<string, unknown>; title: string; values: Record<string, unknown>; address?: string }
+  | { kind: 'custom'; name: string; title?: string; props: Record<string, unknown> };
 
 export interface Proposal {
   /** The tool call it answers; its outcome is reported under this id. */
@@ -603,13 +613,110 @@ async function query(context: Context, input: Record<string, unknown>) {
 }
 
 const SORT = /^[A-Za-z_][\w.]*(?: (?:asc|desc))?$/;
+const CHART_SHAPES = new Set(['bar', 'line', 'donut', 'waterfall', 'treemap', 'heatmap', 'scatter']);
+const CALLOUT_TONES = new Set(['info', 'good', 'warning', 'critical'] as const);
+type CalloutTone = 'info' | 'good' | 'warning' | 'critical';
 
-async function show(context: Context, session: ToolSession, input: Record<string, unknown>) {
+async function show(
+  context: Context,
+  session: ToolSession,
+  input: Record<string, unknown>,
+  depth = 0,
+): Promise<{ result: Record<string, unknown>; label: string; block?: AssistantBlock }> {
   const kind = String(input.kind ?? '');
   if (!(session.assistant.blocks as string[]).includes(kind)) throw new ToolRefusal(`show draws ${session.assistant.blocks.join(', ')}.`);
+  const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 120) : undefined;
+
+  if (kind === 'callout') {
+    const body = typeof input.body === 'string' && input.body.trim() ? input.body.trim().slice(0, 1000) : '';
+    if (!body) throw new ToolRefusal('A callout takes body, the text to show.');
+    const rawTone = typeof input.tone === 'string' ? input.tone : 'info';
+    const tone: CalloutTone = CALLOUT_TONES.has(rawTone as CalloutTone) ? (rawTone as CalloutTone) : 'info';
+    return {
+      result: { shown: 'callout', tone, ...(title ? { title } : {}) },
+      label: `Showed ${title ?? 'note'}`,
+      block: { kind: 'callout', tone, ...(title ? { title } : {}), body },
+    };
+  }
+
+  if (kind === 'tabs') {
+    if (depth > 0) throw new ToolRefusal('tabs cannot be nested inside tabs.');
+    const rawItems = Array.isArray(input.items) ? input.items : [];
+    if (rawItems.length < 2 || rawItems.length > 4) throw new ToolRefusal('tabs takes items: 2 to 4 entries of { label, block }.');
+    const tabs: Array<{ id: string; label: string; block: AssistantBlock }> = [];
+    const summaries: Array<Record<string, unknown>> = [];
+    for (let i = 0; i < rawItems.length; i++) {
+      const entry = rawItems[i] as Record<string, unknown> | null;
+      const tabLabel = typeof entry?.label === 'string' && entry.label.trim() ? entry.label.trim().slice(0, 48) : '';
+      const subInput =
+        entry?.block && typeof entry.block === 'object' && !Array.isArray(entry.block)
+          ? (entry.block as Record<string, unknown>)
+          : undefined;
+      if (!tabLabel || !subInput) throw new ToolRefusal('Each tabs item takes { label, block }.');
+      const resolved = await show(context, session, subInput, depth + 1);
+      if (resolved.block) {
+        tabs.push({ id: `tab-${i + 1}`, label: tabLabel, block: resolved.block });
+        summaries.push({ label: tabLabel, ...resolved.result });
+      }
+    }
+    if (!tabs.length) {
+      return {
+        result: { shown: 'nothing', note: 'None of the tab blocks matched any data, so nothing was drawn.' },
+        label: `Found nothing for ${title ?? 'tabs'}`,
+      };
+    }
+    return {
+      result: { shown: 'tabs', tabs: summaries },
+      label: `Showed ${title ?? `${tabs.length} tabs`}`,
+      block: { kind: 'tabs', ...(title ? { title } : {}), tabs },
+    };
+  }
+
+  if (kind === 'metrics') {
+    const rawItems = Array.isArray(input.items) ? input.items : [];
+    if (rawItems.length < 1 || rawItems.length > 4)
+      throw new ToolRefusal('metrics takes items: 1 to 4 entries of { title, resource, measure, query }.');
+    const sections: Array<Record<string, unknown>> = [];
+    const values: Array<Record<string, unknown>> = [];
+    for (const rawItem of rawItems) {
+      const item = (rawItem ?? {}) as Record<string, unknown>;
+      const resName = String(item.resource ?? input.resource ?? '');
+      const itemTable = await context.tableOf(resName);
+      const itemCond = typeof item.query === 'string' && item.query.trim() ? item.query.trim() : undefined;
+      if (itemCond && /^\s*(show|sort|limit)\b/i.test(itemCond))
+        throw new ToolRefusal('query holds conditions only; show, sort and limit are their own keys.');
+      const itemMeasure = typeof item.measure === 'string' && item.measure.trim() ? item.measure.trim() : undefined;
+      const itemTitle = typeof item.title === 'string' && item.title.trim() ? item.title.trim().slice(0, 80) : itemTable.id;
+      const { rows, columns } = await context.measure(
+        `${itemTable.id}${itemCond ? ` where ${itemCond}` : ''} ${itemMeasure ?? 'count'}`,
+        10,
+      );
+      if (!rows.length || rows.every((row) => Object.values(row).every((value) => value === null || value === undefined))) continue;
+      sections.push({
+        kind: 'metric',
+        title: itemTitle,
+        table: itemTable.id,
+        ...(itemCond ? { query: itemCond } : {}),
+        ...(itemMeasure ? { measure: itemMeasure } : {}),
+      });
+      const formats = context.formatsOf(itemTable.id, columns.length ? columns : Object.keys(rows[0] ?? {}));
+      values.push({ title: itemTitle, value: rows[0], ...(formats ? { formats } : {}) });
+    }
+    if (!sections.length) {
+      return {
+        result: { shown: 'nothing', note: 'Nothing to measure, so no metrics strip was drawn.' },
+        label: `Found nothing to measure for ${title ?? 'metrics'}`,
+      };
+    }
+    return {
+      result: { shown: 'metrics', metrics: values },
+      label: `Showed ${title ?? `${sections.length} metrics`}`,
+      block: { kind: 'metrics', ...(title ? { title } : {}), sections },
+    };
+  }
+
   const resource = String(input.resource ?? '');
   const table = await context.tableOf(resource);
-  const title = typeof input.title === 'string' && input.title.trim() ? input.title.trim().slice(0, 120) : undefined;
   if (kind === 'record') {
     const found = await context.record(table, input.id, undefined, true);
     if (!found) throw new ToolRefusal(`No ${resource} with that id is visible to this person.`);
@@ -638,6 +745,118 @@ async function show(context: Context, session: ToolSession, input: Record<string
   const condition = typeof input.query === 'string' && input.query.trim() ? input.query.trim() : undefined;
   if (condition && /^\s*(show|sort|limit)\b/i.test(condition))
     throw new ToolRefusal('query holds conditions only; show, sort and limit are their own keys.');
+
+  if (kind === 'timeline') {
+    const [pk] = primaryKey(table);
+    const labelCol = await context.naming(table);
+    const dateCol =
+      (typeof input.date === 'string' && input.date.trim()) ||
+      table.columns.find((col) => /date|time|timestamp/i.test(col.type) || /(?:_at|_on|_date)$/i.test(col.name))?.name;
+    if (!dateCol) throw new ToolRefusal(`timeline needs a date column on ${table.id}; pass date.`);
+    const extraCols = Array.isArray(input.show) ? (input.show as unknown[]).map(String).filter((c) => c && c !== pk && c !== dateCol) : [];
+    const cols = [...new Set([pk, labelCol, dateCol, ...extraCols].filter((c): c is string => Boolean(c)))].slice(0, 6);
+    const limit = Math.max(1, Math.min(20, Number.isInteger(input.limit) ? (input.limit as number) : 12));
+    const sort = typeof input.sort === 'string' && SORT.test(input.sort.trim()) ? input.sort.trim() : `${dateCol} desc`;
+    const qLine = `${table.id}${condition ? ` where ${condition}` : ''} show ${cols.join(', ')} sort ${sort} limit ${limit}`;
+    const { rows, total } = await context.run(qLine, limit, 'exact');
+    if (!rows.length) {
+      return {
+        result: { shown: 'nothing', total: 0, note: 'No rows match, so no timeline was drawn.' },
+        label: `Found no ${table.id} for ${title ?? 'timeline'}`,
+      };
+    }
+    const items = await Promise.all(
+      rows.map(async (row) => {
+        const rawLabel =
+          labelCol && row[labelCol] != null && row[labelCol] !== '' ? String(row[labelCol]) : `${table.id} ${String(row[pk] ?? '')}`;
+        const when = row[dateCol] != null ? String(row[dateCol]) : '';
+        const detailCol = extraCols[0];
+        const badgeCol = extraCols[1];
+        const detail = detailCol && row[detailCol] != null && row[detailCol] !== '' ? String(clipped(row[detailCol])) : undefined;
+        const badge = badgeCol && row[badgeCol] != null && row[badgeCol] !== '' ? String(row[badgeCol]) : undefined;
+        const address = pk && row[pk] !== undefined ? await context.addressOf(table.id, { [pk]: row[pk] }) : undefined;
+        if (pk && row[pk] !== undefined) context.read(table.id, { [pk]: row[pk] }, rawLabel);
+        return {
+          label: plain(rawLabel, 120),
+          when: plain(when, 64),
+          ...(detail ? { detail: plain(detail, 160) } : {}),
+          ...(badge ? { badge: plain(badge, 40) } : {}),
+          ...(address ? { address } : {}),
+        };
+      }),
+    );
+    return {
+      result: { shown: 'timeline', total: total ?? rows.length, drawn: items.length, first: items.slice(0, 5) },
+      label: `Showed ${title ?? `${table.id} timeline`}: ${items.length}`,
+      block: { kind: 'timeline', ...(title ? { title } : {}), table: table.id, items },
+    };
+  }
+
+  if (kind === 'funnel') {
+    const rawItems = Array.isArray(input.items) ? input.items : [];
+    if (rawItems.length < 2 || rawItems.length > 8) throw new ToolRefusal('funnel takes items: 2 to 8 stage objects { label, query }.');
+    const stages = rawItems.map((raw) => {
+      const s = (raw ?? {}) as Record<string, unknown>;
+      const stageLabel = typeof s.label === 'string' && s.label.trim() ? s.label.trim().slice(0, 60) : '';
+      const stageQuery = typeof s.query === 'string' && s.query.trim() ? s.query.trim() : '';
+      if (!stageLabel || !stageQuery) throw new ToolRefusal('Each funnel stage takes { label, query }.');
+      return { label: stageLabel, query: stageQuery };
+    });
+    const counts: Array<{ label: string; count: number }> = [];
+    for (const stage of stages) {
+      const combined = condition ? `(${condition}) and (${stage.query})` : stage.query;
+      const { rows } = await context.measure(`${table.id} where ${combined} count`, 5);
+      const value = rows[0] ? Number(Object.values(rows[0])[0]) || 0 : 0;
+      counts.push({ label: stage.label, count: value });
+    }
+    if (counts.every((c) => c.count === 0)) {
+      return {
+        result: { shown: 'nothing', note: 'No rows reached any funnel stage, so no funnel was drawn.' },
+        label: `Found nothing for ${title ?? `${table.id} funnel`}`,
+      };
+    }
+    const section = {
+      kind: 'funnel',
+      title: title ?? '',
+      table: table.id,
+      ...(condition ? { query: condition } : {}),
+      stages,
+    };
+    return {
+      result: { shown: 'funnel', stages: counts },
+      label: `Showed ${title ?? `${table.id} funnel`}`,
+      block: { kind: 'section', section } as AssistantBlock,
+    };
+  }
+
+  if (kind === 'board') {
+    const by = typeof input.by === 'string' && input.by.trim() ? input.by.trim() : undefined;
+    if (!by) throw new ToolRefusal('A board takes by: the status or stage column to group lanes by.');
+    const { rows } = await context.measure(`${table.id}${condition ? ` where ${condition}` : ''} count by ${by}`, 50);
+    if (!rows.length) {
+      return {
+        result: { shown: 'nothing', note: 'No rows match, so no board was drawn.' },
+        label: `Found no ${table.id} for ${title ?? 'board'}`,
+      };
+    }
+    const showCols = Array.isArray(input.show) && input.show.length ? (input.show as unknown[]).map(String).slice(0, 4) : undefined;
+    const lanes = Array.isArray(input.lanes) && input.lanes.length ? (input.lanes as unknown[]).map(String).slice(0, 8) : undefined;
+    const section = {
+      kind: 'board',
+      title: title ?? '',
+      table: table.id,
+      by,
+      ...(condition ? { query: condition } : {}),
+      ...(showCols ? { show: showCols } : {}),
+      ...(lanes ? { lanes } : {}),
+    };
+    return {
+      result: { shown: 'board', lanes: rows.slice(0, 8) },
+      label: `Showed ${title ?? `${table.id} board`}`,
+      block: { kind: 'section', section } as AssistantBlock,
+    };
+  }
+
   if (kind === 'table') {
     /* Unasked, a table is the App's own list of these records: what names the row first, then the list view's
        columns, and only for a table no list shows its first columns. The model's own `show` is drawn as asked. */
@@ -647,7 +866,7 @@ async function show(context: Context, session: ToolSession, input: Record<string
       (view) => (view.kind ?? 'list') === 'list' && view.table === table.id && view.show?.length,
     )?.show;
     const asked = Array.isArray(input.show) && input.show.length ? (input.show as unknown[]).map(String) : undefined;
-    let show =
+    let showCols =
       asked ??
       [
         ...new Set(
@@ -672,17 +891,17 @@ async function show(context: Context, session: ToolSession, input: Record<string
        names of its references and its keys with it. A block is drawn only over a read that answered, so a question
        the panel's table could not ask is the model's to correct, never a table that says "No rows match." */
     const rules = { schema: await context.catalogSchema(), resources: session.payload.resources };
-    const { rows, total } = await context.run(dashboardListQuery(lookupsOf(rules), sectionOf(show)).query, limit, 'exact');
+    const { rows, total } = await context.run(dashboardListQuery(lookupsOf(rules), sectionOf(showCols)).query, limit, 'exact');
     /* A column with nothing in any row drawn says nothing and takes a fifth of the table: it is left out, unless
        that would leave no column at all. The panel reads these same rows, so what is empty here is empty there. */
-    const filled = show.filter((name) => rows.some((row) => row[name] !== null && row[name] !== undefined && row[name] !== ''));
-    const dropped = rows.length && filled.length ? show.filter((name) => !filled.includes(name)) : [];
-    if (dropped.length) show = filled;
-    const section = sectionOf(show);
+    const filled = showCols.filter((name) => rows.some((row) => row[name] !== null && row[name] !== undefined && row[name] !== ''));
+    const dropped = rows.length && filled.length ? showCols.filter((name) => !filled.includes(name)) : [];
+    if (dropped.length) showCols = filled;
+    const section = sectionOf(showCols);
     const told = await Promise.all(
       rows.slice(0, TABLE_ROWS_TO_MODEL).map(async (row) => {
         const out: Record<string, unknown> = Object.fromEntries(
-          [...new Set([...(pk ? [pk] : []), ...show])].filter((name) => name in row).map((name) => [name, clipped(row[name])]),
+          [...new Set([...(pk ? [pk] : []), ...showCols])].filter((name) => name in row).map((name) => [name, clipped(row[name])]),
         );
         const address = pk && row[pk] !== undefined ? await context.addressOf(table.id, { [pk]: row[pk] }) : undefined;
         if (address) out.address = address;
@@ -690,7 +909,7 @@ async function show(context: Context, session: ToolSession, input: Record<string
       }),
     );
     const matched = total ?? rows.length;
-    const formats = context.formatsOf(table.id, show);
+    const formats = context.formatsOf(table.id, showCols);
     /* An empty table is not an answer: "No rows match." under a title said less than one sentence does, and sent
        the model looking again. Nothing is drawn; the model says so. */
     if (!rows.length)
@@ -707,7 +926,7 @@ async function show(context: Context, session: ToolSession, input: Record<string
         shown: 'table',
         total: matched,
         drawn: rows.length,
-        columns: show,
+        columns: showCols,
         ...(formats ? { formats } : {}),
         ...(dropped.length ? { empty: `${dropped.join(', ')}: empty in every row, so not drawn` } : {}),
         first: told,
@@ -719,8 +938,7 @@ async function show(context: Context, session: ToolSession, input: Record<string
   const measure = typeof input.measure === 'string' && input.measure.trim() ? input.measure.trim() : undefined;
   const by = typeof input.by === 'string' && input.by.trim() ? input.by.trim() : undefined;
   if (kind !== 'metric' && !by) throw new ToolRefusal(`A ${kind} takes by: the column it is drawn by.`);
-  const shape =
-    kind === 'chart' && typeof input.shape === 'string' && ['bar', 'line', 'donut'].includes(input.shape) ? input.shape : undefined;
+  const shape = kind === 'chart' && typeof input.shape === 'string' && CHART_SHAPES.has(input.shape) ? input.shape : undefined;
   const { rows, columns } = await context.measure(
     `${table.id}${condition ? ` where ${condition}` : ''} ${measure ?? 'count'}${by ? ` by ${by}` : ''}`,
     50,

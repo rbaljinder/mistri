@@ -1074,3 +1074,137 @@ test('Ask only reads: a change it is asked for is refused, not proposed, and a m
     { script: askScript },
   );
 });
+
+test('reasoning streams via SSE, replays on reload, honors reasoning: hidden, and forwards per-turn effort when effortPicker is enabled', async () => {
+  const reasoningScript: AssistantScript = {
+    turns: [
+      {
+        when: 'think',
+        steps: [{ thinking: 'Step 1: check open leads.', text: 'Here is the answer.' }],
+      },
+    ],
+    otherwise: 'Hi.',
+  };
+  await fixture(
+    async ({ turn, get, requests }) => {
+      const res = await turn({ text: 'think hard', effort: 'high' });
+      assert.equal(res.status, 200);
+      assert.equal(requests[0].effort, 'high');
+      const reasoningEvents = of(res.events, 'reasoning');
+      assert.equal(reasoningEvents.map((e) => e.delta ?? '').join(''), 'Step 1: check open leads.');
+      assert.ok(reasoningEvents.some((e) => e.done === true));
+      const conversation = of(res.events, 'conversation')[0].id;
+      const replayed = (await get(`/api/assistant/conversation?app=${appId}&id=${conversation}`)).body.items as Array<
+        Record<string, unknown>
+      >;
+      assert.deepEqual(
+        replayed.map((item) => item.type),
+        ['person', 'reasoning', 'text'],
+      );
+      assert.equal(replayed[1].text, 'Step 1: check open leads.');
+      // Invalid effort value is rejected with 400.
+      assert.equal((await turn({ text: 'think', effort: 'turbo' })).status, 400);
+    },
+    {
+      script: reasoningScript,
+      assistant: { reasoning: 'collapsed', effortPicker: true, presentations: ['sidebar', 'floating'], defaultPresentation: 'floating' },
+    },
+  );
+  // With reasoning: 'hidden', reasoning is neither streamed nor replayed in conversation items.
+  await fixture(
+    async ({ turn, get }) => {
+      const res = await turn({ text: 'think quietly' });
+      assert.equal(res.status, 200);
+      assert.deepEqual(of(res.events, 'reasoning'), []);
+      const conversation = of(res.events, 'conversation')[0].id;
+      const replayed = (await get(`/api/assistant/conversation?app=${appId}&id=${conversation}`)).body.items as Array<
+        Record<string, unknown>
+      >;
+      assert.deepEqual(
+        replayed.map((item) => item.type),
+        ['person', 'text'],
+      );
+      // Without effortPicker, sending effort is rejected.
+      assert.equal((await turn({ text: 'think', effort: 'high' })).status, 400);
+    },
+    { script: reasoningScript, assistant: { reasoning: 'hidden' } },
+  );
+});
+
+test('expanded generative UI blocks (metrics, funnel, board, timeline, callout, tabs) validate through loopback authority', async () => {
+  const genUiScript: AssistantScript = {
+    turns: [
+      {
+        when: 'dashboard',
+        steps: [
+          {
+            tools: [
+              { name: 'show', input: { kind: 'callout', tone: 'good', title: 'Pipeline healthy', body: 'Two leads are active.' } },
+              {
+                name: 'show',
+                input: {
+                  kind: 'metrics',
+                  title: 'Key counts',
+                  items: [
+                    { title: 'All leads', resource: 'lead', measure: 'count' },
+                    { title: 'New leads', resource: 'lead', measure: 'count', query: 'status = new' },
+                  ],
+                },
+              },
+              {
+                name: 'show',
+                input: {
+                  kind: 'funnel',
+                  title: 'Lead funnel',
+                  resource: 'lead',
+                  items: [
+                    { label: 'All', query: 'status != closed' },
+                    { label: 'Working', query: 'status = working' },
+                  ],
+                },
+              },
+              {
+                name: 'show',
+                input: {
+                  kind: 'board',
+                  title: 'By status',
+                  resource: 'lead',
+                  by: 'status',
+                  show: ['name'],
+                },
+              },
+              {
+                name: 'show',
+                input: {
+                  kind: 'tabs',
+                  title: 'Views',
+                  items: [
+                    { label: 'Summary', block: { kind: 'callout', tone: 'info', body: 'Quick view.' } },
+                    { label: 'Board', block: { kind: 'board', resource: 'lead', by: 'status' } },
+                  ],
+                },
+              },
+            ],
+          },
+          { text: 'All blocks drawn.' },
+        ],
+      },
+    ],
+  };
+  await fixture(
+    async ({ turn }) => {
+      const res = await turn({ text: 'show dashboard' });
+      assert.equal(res.status, 200);
+      const blocks = of(res.events, 'block').map((e) => e.block as Record<string, unknown>);
+      assert.equal(blocks.length, 5);
+      assert.equal(blocks[0].kind, 'callout');
+      assert.equal(blocks[1].kind, 'metrics');
+      assert.equal((blocks[1].sections as unknown[]).length, 2);
+      assert.equal((blocks[2].section as Record<string, unknown>).kind, 'funnel');
+      assert.equal((blocks[3].section as Record<string, unknown>).kind, 'board');
+      assert.equal(blocks[4].kind, 'tabs');
+      assert.equal((blocks[4].tabs as unknown[]).length, 2);
+    },
+    { script: genUiScript },
+  );
+});
