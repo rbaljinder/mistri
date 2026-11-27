@@ -39,7 +39,6 @@
     "space 28px": 1
   },
   "packages/kit/src/client/components/QueueList.css": {
-    "space 20px": 1,
     "space 28px": 1
   },
   "packages/kit/src/client/components/QuickAdd.css": {
