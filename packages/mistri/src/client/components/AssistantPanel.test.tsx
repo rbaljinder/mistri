@@ -1637,10 +1637,7 @@ test('Wave 3B: Automations shows External tools & MCP and Inbound webhooks, and 
       return json({ run: completedRun });
     }
     if (path.startsWith('/api/assistant/runs/stream?')) {
-      return sse([
-        { event: 'run_status', data: { run: completedRun } },
-        { event: 'done', data: { state: 'idle' } },
-      ]);
+      return events(['run_status', { run: completedRun }], ['done', { state: 'idle' }]);
     }
     return json({ error: 'unexpected' }, 404);
   });

@@ -209,8 +209,8 @@ export function summarizeTrace(
             index: spans.length + 1,
             kind: 'delegation',
             name: item.agentName,
-            agent: item.agentId,
-            status: item.status === 'failed' ? 'error' : 'ok',
+            agent: item.agent,
+            status: item.status === 'error' ? 'error' : 'ok',
             ...(item.summary ? { summary: previewText(item.summary, 180) } : {}),
           });
         } else if (item.type === 'proposal') {
@@ -301,7 +301,8 @@ function createEphemeralEvalStore(backing: AssistantStore): {
         id: 'eval-mem',
         scope: input.scope,
         content: input.content,
-        ...(input.agent ? { agent: input.agent } : {}),
+        source: input.source,
+        agent: input.agent ?? '',
         createdAt: at,
         updatedAt: at,
       },

@@ -154,7 +154,7 @@ function TraceSummaryView({ trace }: { trace: TraceSummary }) {
                     aria-hidden="true"
                   />
                   <span className="assistant-auto-pill">{spanKindWord(span.kind)}</span>
-                  <span className="assistant-trace-span-name">{span.name}</span>
+                  {span.name !== spanKindWord(span.kind) && <span className="assistant-trace-span-name">{span.name}</span>}
                   {span.citations ? <span className="assistant-auto-pill">{say('citationsBadge', { count: span.citations })}</span> : null}
                 </div>
                 <div className="assistant-trace-span-meta">
@@ -381,13 +381,9 @@ export function EvalSuitePanel({
                         duration: formatDuration(result.durationMs),
                       })}
                     </span>
-                    <button
-                      type="button"
-                      className="assistant-runs-link"
-                      onClick={() => setExpandedTrace((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}
-                    >
+                    <Button size="xs" variant="ghost" onClick={() => setExpandedTrace((prev) => ({ ...prev, [item.id]: !prev[item.id] }))}>
                       {showTrace ? say('hideTrace') : say('viewTrace')}
-                    </button>
+                    </Button>
                   </div>
                   {result.failures.length > 0 && (
                     <ul className="assistant-eval-failures">

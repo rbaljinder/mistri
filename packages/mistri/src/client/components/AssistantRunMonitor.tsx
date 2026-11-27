@@ -1002,7 +1002,10 @@ export function AssistantRunMonitor({
                   <h4 className="assistant-runs-section-label">{say('externalToolsHeading')}</h4>
                   <ul className="assistant-runs-list">
                     {externalToolList.map((tool) => {
-                      const protocol = tool.kind === 'mcp' ? `mcp · ${tool.mcpTool ?? tool.id}` : `http · ${tool.method}`;
+                      const protocol =
+                        tool.kind === 'mcp'
+                          ? say('externalProtocolMcp', { tool: tool.mcpTool ?? tool.id })
+                          : say('externalProtocolHttp', { method: tool.method });
                       const modeText = tool.access === 'write' ? say('externalModeWrite') : say('externalModeRead');
                       return (
                         <li key={tool.id} className="assistant-auto-row">
@@ -1039,7 +1042,7 @@ export function AssistantRunMonitor({
                           <div className="assistant-auto-top">
                             <div className="assistant-auto-heading">
                               <span className="assistant-auto-title">{hook.label}</span>
-                              <span className="assistant-auto-pill">{`POST /api/assistant/webhooks/${app}/${hook.id}`}</span>
+                              <span className="assistant-auto-pill">{say('webhookEndpoint', { app, id: hook.id })}</span>
                             </div>
                           </div>
                           {hook.description && <p className="assistant-auto-desc">{hook.description}</p>}

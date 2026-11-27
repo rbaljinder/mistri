@@ -36,7 +36,7 @@ const MAX_WEBHOOKS = 12;
 const WEBHOOK_KEYS = ['id', 'label', 'description', 'secretEnv', 'signatureHeader', 'prompt', 'agent', 'enabled'] as const;
 const ENV_NAME = /^[A-Z][A-Z0-9_]{0,63}$/;
 
-export interface AppAssistantExternalInputField {
+interface AppAssistantExternalInputField {
   type: (typeof EXTERNAL_INPUT_TYPES)[number];
   description?: string;
   required?: boolean;
@@ -308,7 +308,7 @@ export function parseAssistantWebhooks(
       signatureHeader,
       prompt: w.prompt.trim(),
       ...(w.agent === undefined ? {} : { agent: w.agent as string }),
-      enabled: w.enabled === undefined ? true : w.enabled,
+      enabled: w.enabled !== false,
     };
   });
 }

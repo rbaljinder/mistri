@@ -72,4 +72,7 @@ export const say = defineMessages({
   webhookSignature: 'HMAC-SHA256 · {header}',
   webhookEnabled: 'Active',
   webhookDisabled: 'Disabled',
+  externalProtocolMcp: 'mcp · {tool}',
+  externalProtocolHttp: 'http · {method}',
+  webhookEndpoint: 'POST /api/assistant/webhooks/{app}/{id}',
 });

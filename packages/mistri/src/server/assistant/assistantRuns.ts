@@ -167,6 +167,7 @@ export function launchBackgroundRun(params: LaunchRunParams): void {
         .replace(/\[\d+\]/g, '')
         .replace(/^\s*[-*]\s+/gm, '')
         .replace(/\s+/g, ' ')
+        .replace(/\s+([.,;:!?])/g, '$1')
         .trim();
       const summary =
         finalStatus === 'failed'
