@@ -294,7 +294,6 @@ a.dash-step-card { text-decoration: none; }
   /* A row in alarm says so on its tile: the tone's ink on a wash of it. The value at the row's end keeps its own. */
   .dash-mini-mark[data-tone='bad'] { background: color-mix(in srgb, var(--status-critical) 12%, var(--surface)); color: var(--status-critical); }
   .dash-mini-mark[data-tone='warn'] { background: color-mix(in srgb, var(--status-warning) 14%, var(--surface)); color: var(--status-warning); }
-  .dash-worklist .dash-mini-name { font-weight: 600; }
   .dash-worklist .dash-mini-value { color: var(--ink); font-size: var(--text-base); }
   .dash-mini-caret { flex: none; color: var(--ink-subtle); }
   @media (hover: hover) { button.dash-mini-row:hover:not(:disabled) .dash-mini-caret { color: var(--ink); } }

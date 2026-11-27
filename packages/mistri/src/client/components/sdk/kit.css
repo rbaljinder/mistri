@@ -1037,7 +1037,7 @@
   }
   .kit-person-name {
     font-size: var(--text-base);
-    font-weight: 600;
+    font-weight: 500;
     color: var(--ink);
     text-decoration: none;
   }
