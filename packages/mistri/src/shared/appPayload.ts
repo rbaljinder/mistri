@@ -12,7 +12,7 @@
  * under the resource, whichever view shows it.
  */
 import { servedShellNew, type ServedShellNew } from './appNewMenu.js';
-import type { AssistantStarter, ServedAssistantAgent } from './appAssistant.js';
+import type { AssistantStarter, ServedAssistantAgent, ServedAssistantKnowledge, ServedAssistantMemory } from './appAssistant.js';
 import type { AppShell } from './appModel.js';
 import { appZone } from './appZone.js';
 import type { AppFormCommandReference } from './command.js';
@@ -183,6 +183,10 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
     defaultAgent?: string;
     /** Author-declared custom blocks, mapped to their compiled component id (if any) and default title. */
     customBlocks?: Record<string, { componentId?: string; title?: string }>;
+    /** Scoped persistent memory capability for this viewer (`sharedRoles` stripped in appProjection.ts). */
+    memory?: ServedAssistantMemory & { sharedRoles?: string[] };
+    /** Authority-scoped knowledge sources available to this viewer (`roles` stripped in appProjection.ts). */
+    knowledge?: Array<ServedAssistantKnowledge & { roles?: string[] }>;
   };
   /** The fields a decision answers, by table id then column (decide/decisionServing.ts): where a record reserves a
       suggestion's place, and the command its Accept runs. Only the tables this reader is served. */
@@ -296,6 +300,8 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
             ...servedStarters(app.assistant.starters, views, schema),
             ...servedAgents(app.assistant, views, schema),
             ...servedCustomBlocks(app.assistant.customBlocks),
+            ...servedMemory(app.assistant.memory),
+            ...servedKnowledge(app.assistant.knowledge, schema),
           },
         }
       : {}),
@@ -385,6 +391,39 @@ function servedCustomBlocks(customBlocks: NonNullable<AppDef['assistant']>['cust
       ]),
     ),
   };
+}
+
+function servedMemory(memory: NonNullable<AppDef['assistant']>['memory']): {
+  memory?: ServedAssistantMemory & { sharedRoles?: string[] };
+} {
+  if (!memory) return {};
+  return {
+    memory: {
+      scopes: [...memory.scopes],
+      maxItems: memory.maxItems,
+      ...(memory.sharedRoles ? { sharedRoles: [...memory.sharedRoles] } : {}),
+    },
+  };
+}
+
+function servedKnowledge(
+  knowledge: NonNullable<AppDef['assistant']>['knowledge'],
+  schema: DatabaseSchema,
+): { knowledge?: Array<ServedAssistantKnowledge & { roles?: string[] }> } {
+  if (!knowledge || !Object.keys(knowledge).length) return {};
+  const list = Object.values(knowledge).flatMap((source) => {
+    const table = tableNamed(schema, source.resource);
+    if (!table) return [];
+    return [
+      {
+        id: source.id,
+        resource: table.id,
+        ...(source.description ? { description: source.description } : {}),
+        ...(source.roles ? { roles: [...source.roles] } : {}),
+      },
+    ];
+  });
+  return list.length ? { knowledge: list } : {};
 }
 
 /** The pages an address book reads: a base this catalog has, as its table id. */

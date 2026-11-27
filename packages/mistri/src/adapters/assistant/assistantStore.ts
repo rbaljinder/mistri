@@ -15,15 +15,17 @@ import { randomUUID } from 'node:crypto';
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
 import { ASSISTANT_FEATURE, TENANT_SWITCH_TABLES } from '../switch/tenantSwitch.js';
 
-export const ASSISTANT_STORE_VERSION = 1;
+export const ASSISTANT_STORE_VERSION = 2;
 export const ASSISTANT_PREFIX = '__mistri_assistant_';
 export const ASSISTANT_TABLES = Object.freeze({
   meta: `${ASSISTANT_PREFIX}meta`,
   conversation: `${ASSISTANT_PREFIX}conversation`,
   event: `${ASSISTANT_PREFIX}event`,
   usage: `${ASSISTANT_PREFIX}usage`,
+  memory: `${ASSISTANT_PREFIX}memory`,
 });
 export const ASSISTANT_INDEX = `${ASSISTANT_PREFIX}conversation_owner`;
+export const ASSISTANT_MEMORY_INDEX = `${ASSISTANT_PREFIX}memory_owner`;
 
 /** Bounds, the same on every engine. An event is the model's content or a tool's result, kept whole. */
 export const ASSISTANT_LIMITS = Object.freeze({
@@ -34,6 +36,10 @@ export const ASSISTANT_LIMITS = Object.freeze({
   body: 512 * 1024,
   /** The consent reference the platform owner wrote when turning it on, in bytes: words, not a document. */
   consent: 2000,
+  /** One remembered fact, in bytes. */
+  memoryContent: 1000,
+  /** Optional agent id that scopes a memory, in bytes (`''` for shared across agents). */
+  memoryAgent: 64,
 });
 
 export class AssistantStoreUnavailable extends Refusal {
@@ -67,6 +73,24 @@ interface NewEvent {
   readonly kind: string;
   readonly body: unknown;
 }
+/** A durable fact remembered for a signed-in person (`scope: 'person'`) or shared across an App/tenant (`scope: 'app'`). */
+export interface StoredMemory {
+  readonly id: string;
+  readonly scope: 'person' | 'app';
+  readonly agent: string;
+  readonly content: string;
+  readonly source: 'assistant' | 'person';
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+interface RememberInput {
+  readonly id?: string;
+  readonly scope: 'person' | 'app';
+  readonly agent?: string;
+  readonly content: string;
+  readonly source: 'assistant' | 'person';
+  readonly maxItems?: number;
+}
 
 export type Row = Record<string, unknown>;
 export interface Db {
@@ -94,6 +118,15 @@ export interface AssistantStore {
   spend(owner: AssistantOwner, day: string, tokens: number): Promise<void>;
   /** A day's tokens: this person's, every person's in their tenant, and every person's in the App across tenants. */
   spent(owner: AssistantOwner, day: string): Promise<{ person: number; tenant: number; app: number }>;
+  /** Durable memories visible to this owner (`person` scoped to this account + `app` shared across this app/tenant). */
+  memories(
+    owner: AssistantOwner,
+    options?: { scopes?: readonly ('person' | 'app')[]; agent?: string; limit?: number },
+  ): Promise<StoredMemory[]>;
+  /** Save a new memory or update an existing owned memory by `id`. Enforces `maxItems` by evicting oldest in that scope if full. */
+  remember(owner: AssistantOwner, input: RememberInput, at: string): Promise<{ memory: StoredMemory; updated: boolean }>;
+  /** Remove a memory by id: person-scoped requires matching owner account; app-scoped requires `allowAppScope: true`. */
+  forget(owner: AssistantOwner, id: string, options?: { allowAppScope?: boolean }): Promise<boolean>;
   /** Whether the platform has turned the assistant on for this tenant: off until it says so. */
   tenantEnabled(app: string, tenant: string): Promise<boolean>;
   /** Every conversation of the App untouched since `before` (an ISO instant), with its events; how many went. */
@@ -330,6 +363,159 @@ export function createAssistantStore(transaction: Transaction, t: (name: string)
         if (row.account === owner.account) person += tokens;
       }
       return { person, tenant, app };
+    },
+    async memories(owner, options = {}) {
+      assertOwner(owner);
+      const scopes = options.scopes?.length ? options.scopes : (['person', 'app'] as const);
+      const includePerson = scopes.includes('person');
+      const includeApp = scopes.includes('app');
+      if (!includePerson && !includeApp) return [];
+      const limit = Math.max(1, Math.min(200, Math.trunc(options.limit ?? 100)));
+      const agent = typeof options.agent === 'string' && options.agent ? options.agent : undefined;
+      const clauses: string[] = [];
+      const params: unknown[] = [owner.app, owner.tenant];
+      if (includePerson) {
+        clauses.push(`(scope = 'person' AND account = ?)`);
+        params.push(owner.account);
+      }
+      if (includeApp) {
+        clauses.push(`(scope = 'app' AND account = '')`);
+      }
+      const agentClause = agent ? ` AND (agent = '' OR agent = ?)` : '';
+      if (agent) params.push(agent);
+      params.push(limit);
+      const rows = await transaction((db) =>
+        db.all(
+          `SELECT id, scope, agent, content, source, created_at, updated_at FROM ${t(ASSISTANT_TABLES.memory)}
+          WHERE app = ? AND tenant = ? AND (${clauses.join(' OR ')})${agentClause}
+          ORDER BY updated_at DESC, id DESC LIMIT ?`,
+          ...params,
+        ),
+      );
+      return rows.map((row): StoredMemory => ({
+        id: String(row.id),
+        scope: row.scope === 'app' ? 'app' : 'person',
+        agent: String(row.agent),
+        content: String(row.content),
+        source: row.source === 'person' ? 'person' : 'assistant',
+        createdAt: String(row.created_at),
+        updatedAt: String(row.updated_at),
+      }));
+    },
+    async remember(owner, input, at) {
+      assertOwner(owner);
+      const scope: 'person' | 'app' = input.scope === 'app' ? 'app' : 'person';
+      const source: 'assistant' | 'person' = input.source === 'person' ? 'person' : 'assistant';
+      const agent = typeof input.agent === 'string' ? input.agent.trim() : '';
+      if (bytes(agent) > ASSISTANT_LIMITS.memoryAgent) throw new Refusal('The assistant store refuses an agent id past its bounds.');
+      const content = typeof input.content === 'string' ? input.content.replace(/\s+/g, ' ').trim() : '';
+      if (!content || bytes(content) > ASSISTANT_LIMITS.memoryContent)
+        throw new Refusal(`A memory is non-empty text of at most ${ASSISTANT_LIMITS.memoryContent} bytes.`);
+      const acct = scope === 'app' ? '' : owner.account;
+      const maxItems = Math.max(1, Math.min(200, Math.trunc(input.maxItems ?? 50)));
+      const mem = t(ASSISTANT_TABLES.memory);
+      return transaction(async (db) => {
+        if (input.id && typeof input.id === 'string' && input.id.length <= 64) {
+          const existing = await db.all(
+            `SELECT id, created_at FROM ${mem} WHERE id = ? AND app = ? AND tenant = ? AND scope = ? AND account = ?`,
+            input.id,
+            owner.app,
+            owner.tenant,
+            scope,
+            acct,
+          );
+          if (existing.length === 1) {
+            await db.run(`UPDATE ${mem} SET content = ?, source = ?, updated_at = ? WHERE id = ?`, content, source, at, input.id);
+            return {
+              updated: true,
+              memory: {
+                id: input.id,
+                scope,
+                agent,
+                content,
+                source,
+                createdAt: String(existing[0].created_at),
+                updatedAt: at,
+              },
+            };
+          }
+        }
+        /* Avoid exact duplicates within the same owner/scope: refresh updated_at if identical text already exists. */
+        const dup = await db.all(
+          `SELECT id, agent, created_at FROM ${mem} WHERE app = ? AND tenant = ? AND scope = ? AND account = ? AND lower(content) = lower(?) LIMIT 1`,
+          owner.app,
+          owner.tenant,
+          scope,
+          acct,
+          content,
+        );
+        if (dup.length === 1) {
+          const id = String(dup[0].id);
+          await db.run(`UPDATE ${mem} SET content = ?, source = ?, updated_at = ? WHERE id = ?`, content, source, at, id);
+          return {
+            updated: true,
+            memory: {
+              id,
+              scope,
+              agent: String(dup[0].agent),
+              content,
+              source,
+              createdAt: String(dup[0].created_at),
+              updatedAt: at,
+            },
+          };
+        }
+        /* Keep each scope bounded by maxItems (evict oldest when inserting beyond the cap). */
+        const current = await db.all(
+          `SELECT id FROM ${mem} WHERE app = ? AND tenant = ? AND scope = ? AND account = ? ORDER BY updated_at DESC, id DESC`,
+          owner.app,
+          owner.tenant,
+          scope,
+          acct,
+        );
+        if (current.length >= maxItems) {
+          for (const drop of current.slice(maxItems - 1)) {
+            await db.run(`DELETE FROM ${mem} WHERE id = ?`, String(drop.id));
+          }
+        }
+        const id = randomUUID();
+        await db.run(
+          `INSERT INTO ${mem} (id, app, tenant, account, scope, agent, content, source, created_at, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          id,
+          owner.app,
+          owner.tenant,
+          acct,
+          scope,
+          agent,
+          content,
+          source,
+          at,
+          at,
+        );
+        return {
+          updated: false,
+          memory: { id, scope, agent, content, source, createdAt: at, updatedAt: at },
+        };
+      });
+    },
+    async forget(owner, id, options = {}) {
+      assertOwner(owner);
+      if (typeof id !== 'string' || !id || id.length > 64) return false;
+      const mem = t(ASSISTANT_TABLES.memory);
+      return transaction(async (db) => {
+        const rows = await db.all(
+          `SELECT id, scope, account FROM ${mem} WHERE id = ? AND app = ? AND tenant = ?`,
+          id,
+          owner.app,
+          owner.tenant,
+        );
+        if (rows.length !== 1) return false;
+        const scope = rows[0].scope === 'app' ? 'app' : 'person';
+        if (scope === 'person' && String(rows[0].account) !== owner.account) return false;
+        if (scope === 'app' && !options.allowAppScope) return false;
+        return (await db.run(`DELETE FROM ${mem} WHERE id = ?`, id)) > 0;
+      });
     },
     async tenantEnabled(app, tenant) {
       if (typeof app !== 'string' || typeof tenant !== 'string' || !app || !tenant) return false;

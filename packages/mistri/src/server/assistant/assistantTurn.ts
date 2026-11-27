@@ -400,10 +400,11 @@ async function runDelegation(
     };
   }
   const target = resolved.agent!;
-  // Subagents are strictly read/analyze/visualize: write proposals remain with the primary agent in front of the user.
+  // Subagents are strictly read/analyze/visualize: write proposals and memory mutations remain with the primary agent.
   const childAssistant: AppAssistant = {
     ...resolved.assistant,
     tools: resolved.assistant.tools.filter((tool) => tool !== 'run'),
+    memory: undefined,
     limits: {
       ...resolved.assistant.limits,
       steps: Math.min(resolved.assistant.limits.steps ?? MAX_SUBAGENT_STEPS, MAX_SUBAGENT_STEPS),

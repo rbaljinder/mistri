@@ -3890,6 +3890,36 @@ export interface AssistantDeclaration {
   readonly defaultAgent?: string;
   /** Author-declared interactive custom blocks the assistant may draw via `show({ kind: 'custom', name, props })`. */
   readonly customBlocks?: Readonly<Record<string, AssistantCustomBlockDeclaration>>;
+  /** Scoped persistent memory (`true` enables per-person memory; or configure `{ scopes, maxItems, sharedRoles }`). */
+  readonly memory?: boolean | AssistantMemoryDeclaration;
+  /** Authority-scoped knowledge sources backed by App resources; searched under the viewer's own grants & row policies with inline citations. */
+  readonly knowledge?: Readonly<Record<string, AssistantKnowledgeDeclaration>>;
+}
+/** Scoped durable memory configuration for an App's assistant. */
+export interface AssistantMemoryDeclaration {
+  /** Memory scopes enabled: `'person'` (private per signed-in user) and/or `'app'` (shared across the App/tenant). Default `['person']`. */
+  readonly scopes?: readonly ('person' | 'app')[];
+  /** Maximum retained memories per owner/scope (1–200, default 50). */
+  readonly maxItems?: number;
+  /** Roles allowed to write or delete `'app'`-scoped shared memories; absent, everyone who may open the assistant. */
+  readonly sharedRoles?: readonly string[];
+}
+/** An authority-scoped knowledge source backed by an App resource/table, searched with inline record citations. */
+export interface AssistantKnowledgeDeclaration {
+  /** Resource/table name in the App; every search runs through the viewer's own grants, hidden columns, and row policy. */
+  readonly resource: string;
+  /** Text columns searched and excerpted for grounded citations. */
+  readonly fields: readonly string[];
+  /** Optional column holding the document/record title; defaults to the first field or record label. */
+  readonly title?: string;
+  /** Short description shown to the model in its catalog so it knows when to search this source. */
+  readonly description?: string | AppMessageRef;
+  /** Optional static filter expression applied to every search of this source (e.g. `"status = 'published'"`). */
+  readonly where?: string;
+  /** Roles permitted to search this knowledge source; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Maximum citations returned per search (1–12, default 6). */
+  readonly limit?: number;
 }
 /** A named agent inside a multi-agent App's assistant: narrows tools, blocks, starters, roles, instructions, and may delegate to sibling `subagents`. */
 export interface AssistantAgentDeclaration {
@@ -3921,6 +3951,10 @@ export interface AssistantAgentDeclaration {
   readonly subagents?: readonly string[];
   /** Narrowing token and step limits for this agent. */
   readonly limits?: { readonly tokensPerTurn?: number; readonly tokensPerPersonPerDay?: number; readonly tokensPerDay?: number; readonly steps?: number };
+  /** `false` disables memory for this agent even when the top-level assistant enables it. */
+  readonly memory?: boolean;
+  /** Subset of `assistant.knowledge` keys this agent may search. */
+  readonly knowledge?: readonly string[];
 }
 /** An author-declared custom assistant block backed by a validated prop schema and optional interactive React component. */
 export interface AssistantCustomBlockDeclaration {

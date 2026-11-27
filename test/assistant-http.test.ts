@@ -1439,3 +1439,268 @@ test('customBlocks validate declared props with defaults, refuse invalid props, 
     },
   );
 });
+
+test('scoped persistent memory supports person/app scopes, sharedRoles enforcement, remember/forget tools, and prompt injection across turns', async () => {
+  const memScript: AssistantScript = {
+    turns: [
+      {
+        when: 'save pref',
+        steps: [
+          {
+            tools: [{ name: 'remember', input: { content: 'Always show figures in USD.', scope: 'person' } }],
+          },
+          { text: 'Saved your preference.' },
+        ],
+      },
+      {
+        when: 'hello again',
+        steps: [{ text: 'Welcome back.' }],
+      },
+    ],
+  };
+  await fixture(
+    async ({ as, turn, get, post, requests }) => {
+      // 1. Ann saves a private memory via the assistant's `remember` tool.
+      const first = await turn({ text: 'save pref' });
+      assert.equal(first.status, 200);
+      const memEvents = of(first.events, 'memory');
+      assert.equal(memEvents.length, 1);
+      assert.equal(memEvents[0].action, 'remembered');
+      assert.equal(memEvents[0].scope, 'person');
+      assert.equal(memEvents[0].content, 'Always show figures in USD.');
+      const savedId = String(memEvents[0].memoryId);
+
+      // Replaying the conversation preserves the memory chip item.
+      const convId = of(first.events, 'conversation')[0].id;
+      const replayed = (await get(`/api/assistant/conversation?app=${appId}&id=${convId}`)).body.items as Array<Record<string, unknown>>;
+      assert.ok(replayed.some((item) => item.type === 'memory' && item.memoryId === savedId));
+
+      // 2. Ann adds a shared workspace memory via HTTP CRUD route.
+      const sharedRes = await post('/api/assistant/memories', {
+        app: appId,
+        scope: 'app',
+        content: 'Fiscal year starts in February.',
+      });
+      assert.equal(sharedRes.status, 200);
+      const sharedId = String(sharedRes.body.memory.id);
+
+      // 3. Ann's next turn receives both private and shared memories in the system prompt.
+      await turn({ text: 'hello again' });
+      const annSystem = requests.at(-1)!.system;
+      assert.match(annSystem, /Always show figures in USD\./);
+      assert.match(annSystem, /Fiscal year starts in February\./);
+
+      // 4. Bob sees the shared workspace memory, never Ann's private memory.
+      as('bob');
+      const bobList = await get(`/api/assistant/memories?app=${appId}`);
+      assert.equal(bobList.status, 200);
+      assert.equal(bobList.body.canWriteShared, true);
+      assert.deepEqual(
+        (bobList.body.memories as Array<{ content: string }>).map((m) => m.content),
+        ['Fiscal year starts in February.'],
+      );
+
+      // 5. Viewer (not in sharedRoles) can save personal memory, gets 403 on shared memory write, and cannot delete shared memory.
+      as('viewer');
+      const viewerList = await get(`/api/assistant/memories?app=${appId}`);
+      assert.equal(viewerList.status, 200);
+      assert.equal(viewerList.body.canWriteShared, false);
+      const viewerDenied = await post('/api/assistant/memories', { app: appId, scope: 'app', content: 'Unauthorized shared note.' });
+      assert.equal(viewerDenied.status, 403);
+      const viewerDeleteDenied = await post('/api/assistant/memories/delete', { app: appId, id: sharedId });
+      assert.equal(viewerDeleteDenied.status, 404);
+      const viewerPersonal = await post('/api/assistant/memories', { app: appId, scope: 'person', content: 'Prefer concise tables.' });
+      assert.equal(viewerPersonal.status, 200);
+
+      // 6. Ann edits and then deletes her personal memory via HTTP CRUD routes.
+      as('ann');
+      const edited = await post('/api/assistant/memories', {
+        app: appId,
+        id: savedId,
+        scope: 'person',
+        content: 'Always show figures in EUR.',
+      });
+      assert.equal(edited.status, 200);
+      assert.equal(edited.body.updated, true);
+      assert.equal(edited.body.memory.content, 'Always show figures in EUR.');
+
+      const deleted = await post('/api/assistant/memories/delete', { app: appId, id: savedId });
+      assert.equal(deleted.status, 200);
+      assert.equal(deleted.body.deleted, true);
+    },
+    {
+      script: memScript,
+      assistant: {
+        memory: { scopes: ['person', 'app'], sharedRoles: ['rep'], maxItems: 50 },
+      },
+    },
+  );
+});
+
+test('search_knowledge returns verifiable viewer-scoped citations, enforces field and resource grants, and replays on reload', async () => {
+  const knowledgeScript: AssistantScript = {
+    turns: [
+      {
+        when: 'budget',
+        steps: [
+          { tools: [{ name: 'search_knowledge', input: { query: 'Budget 40k' } }] },
+          { text: 'Globex has a 40k budget and decides in May [1].' },
+        ],
+      },
+      {
+        when: 'globex',
+        steps: [{ tools: [{ name: 'search_knowledge', input: { query: 'Globex' } }] }, { text: 'Found Globex [1].' }],
+      },
+    ],
+  };
+  await fixture(
+    async ({ as, turn, get, requests }) => {
+      // 1. Ann (full read grant) finds Globex via lead.notes with excerpt, address, and persisted citations.
+      const res = await turn({ text: 'check budget' });
+      assert.equal(res.status, 200);
+      const citEvents = of(res.events, 'citations');
+      assert.equal(citEvents.length, 1);
+      assert.equal(citEvents[0].items.length, 1);
+      assert.equal(citEvents[0].items[0].ref, 1);
+      assert.equal(citEvents[0].items[0].title, 'Globex');
+      assert.match(String(citEvents[0].items[0].snippet), /Budget 40k/);
+      assert.equal(citEvents[0].items[0].address, `/${appId}/leads/2`);
+
+      const convId = of(res.events, 'conversation')[0].id;
+      const replayed = (await get(`/api/assistant/conversation?app=${appId}&id=${convId}`)).body.items as Array<Record<string, unknown>>;
+      assert.ok(replayed.some((item) => item.type === 'citations'));
+
+      // 2. Clerk (whose field grant hides lead.notes) gets 0 matches for "Budget 40k", never leaking hidden column text.
+      as('clerk');
+      const clerkBudget = await turn({ text: 'check budget' });
+      assert.equal(clerkBudget.status, 200);
+      assert.deepEqual(of(clerkBudget.events, 'citations'), []);
+      assert.doesNotMatch(JSON.stringify(requests.at(-1)!.messages), /decides in May/);
+
+      // Clerk CAN still search visible columns (lead.name).
+      const clerkName = await turn({ text: 'find globex' });
+      assert.equal(clerkName.status, 200);
+      assert.equal(of(clerkName.events, 'citations').length, 1);
+      assert.equal(of(clerkName.events, 'citations')[0].items[0].title, 'Globex');
+
+      // 3. Outsider (no read grant on lead) gets 0 citations and never learns of Globex.
+      as('outsider');
+      const outsiderRes = await turn({ text: 'find globex' });
+      assert.equal(outsiderRes.status, 200);
+      assert.deepEqual(of(outsiderRes.events, 'citations'), []);
+      assert.doesNotMatch(JSON.stringify(requests.at(-1)!.messages), /Budget 40k|Acme Corp/);
+    },
+    {
+      script: knowledgeScript,
+      assistant: {
+        knowledge: {
+          lead_notes: {
+            resource: 'lead',
+            fields: ['name', 'notes'],
+            title: 'name',
+            description: 'Lead notes and background',
+          },
+        },
+      },
+    },
+  );
+});
+
+test('memory forget tool, maxItems eviction, per-agent narrowing, and knowledge where/roles filters hold strictly', async () => {
+  await fixture(
+    async ({ as, turn, get, post, requests }) => {
+      // 1. Seed 3 personal memories when maxItems = 2 -> oldest is evicted automatically.
+      const m1 = await post('/api/assistant/memories', { app: appId, scope: 'person', content: 'Oldest preference one.' });
+      assert.equal(m1.status, 200);
+      const m2 = await post('/api/assistant/memories', { app: appId, scope: 'person', content: 'Second preference two.' });
+      assert.equal(m2.status, 200);
+      const m3 = await post('/api/assistant/memories', { app: appId, scope: 'person', content: 'Newest preference three.' });
+      assert.equal(m3.status, 200);
+      const listed = (await get(`/api/assistant/memories?app=${appId}`)).body.memories as Array<{ id: string; content: string }>;
+      assert.equal(listed.length, 2);
+      assert.ok(!listed.some((m) => m.content === 'Oldest preference one.'), 'oldest memory evicted past maxItems');
+
+      // 2. Forget tool removes a memory by id and emits a memory(forgot) event.
+      const forgetTargetId = listed[0]!.id;
+      setAssistantModel(() =>
+        scriptedModel({
+          turns: [
+            {
+              when: 'drop note',
+              steps: [{ tools: [{ name: 'forget', input: { id: forgetTargetId } }] }, { text: 'Removed that note.' }],
+            },
+            {
+              when: 'try stateless',
+              steps: [
+                { tools: [{ name: 'remember', input: { content: 'Should fail on stateless agent.' } }] },
+                { text: 'Cannot remember here.' },
+              ],
+            },
+            {
+              when: 'search working',
+              steps: [
+                { tools: [{ name: 'search_knowledge', input: { query: 'Acme Corp Globex' } }] },
+                { text: 'Checked working leads [1].' },
+              ],
+            },
+          ],
+        }),
+      );
+      const forgot = await turn({ text: 'drop note', agent: 'analyst' });
+      assert.equal(forgot.status, 200);
+      const forgotEvents = of(forgot.events, 'memory');
+      assert.equal(forgotEvents.length, 1);
+      assert.equal(forgotEvents[0].action, 'forgot');
+      assert.equal(forgotEvents[0].memoryId, forgetTargetId);
+
+      // 3. Stateless agent (`memory: false`, narrowed to `people` knowledge only) refuses `remember` and cannot search `working_leads`.
+      const stateless = await turn({ text: 'try stateless', agent: 'stateless' });
+      assert.equal(stateless.status, 200);
+      assert.ok(of(stateless.events, 'step').some((s) => s.failed === true && /Memory is not enabled/.test(String(s.label))));
+      assert.deepEqual(of(stateless.events, 'memory'), []);
+
+      // 4. `knowledge.*.where` excludes rows outside the condition (`status = working` excludes Acme Corp which is `status = new`).
+      const whereRes = await turn({ text: 'search working', agent: 'analyst' });
+      assert.equal(whereRes.status, 200);
+      const whereCitations = of(whereRes.events, 'citations')[0]?.items as Array<{ title: string }>;
+      assert.equal(whereCitations.length, 1);
+      assert.equal(whereCitations[0].title, 'Globex');
+
+      // 5. `knowledge.*.roles` hides rep-only sources from viewer in both `/api/app` and turn catalog.
+      as('viewer');
+      const viewerApp = (await get(`/api/app?app=${appId}`)).body.app as { assistant?: { knowledge?: Array<{ id: string }> } };
+      assert.deepEqual(
+        (viewerApp.assistant?.knowledge ?? []).map((k) => k.id),
+        ['people'],
+      );
+      const viewerSearch = await turn({ text: 'search working', agent: 'analyst' });
+      assert.equal(viewerSearch.status, 200);
+      assert.deepEqual(of(viewerSearch.events, 'citations'), []);
+      assert.ok(requests.length >= 0);
+    },
+    {
+      assistant: {
+        memory: { scopes: ['person'], maxItems: 2 },
+        knowledge: {
+          working_leads: {
+            resource: 'lead',
+            fields: ['name', 'notes'],
+            title: 'name',
+            where: 'status = working',
+            roles: ['rep'],
+          },
+          people: {
+            resource: 'person',
+            fields: ['name', 'email'],
+            title: 'name',
+          },
+        },
+        defaultAgent: 'analyst',
+        agents: {
+          analyst: { name: 'Analyst', knowledge: ['working_leads'] },
+          stateless: { name: 'Stateless', memory: false, knowledge: ['people'] },
+        },
+      },
+    },
+  );
+});

@@ -436,7 +436,70 @@
           "propertyNames": { "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
           "description": "Author-declared interactive custom blocks the assistant may draw via show({ kind: 'custom', name, props }).",
           "additionalProperties": { "$ref": "#/$defs/assistantCustomBlock" }
+        },
+        "memory": {
+          "description": "Scoped durable memory for the assistant (true enables per-person memory; or configure scopes, maxItems, sharedRoles).",
+          "oneOf": [
+            { "type": "boolean" },
+            { "$ref": "#/$defs/assistantMemory" }
+          ]
+        },
+        "knowledge": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
+          "description": "Authority-scoped knowledge sources backed by App resources, searchable with inline record citations.",
+          "additionalProperties": { "$ref": "#/$defs/assistantKnowledge" }
         }
+      }
+    },
+    "assistantMemory": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Scoped durable memory configuration for the assistant.",
+      "properties": {
+        "scopes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["person", "app"] },
+          "description": "Enabled memory scopes: person (private per user) and/or app (shared across the App/tenant)."
+        },
+        "maxItems": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "description": "Maximum retained memories per owner/scope."
+        },
+        "sharedRoles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string" },
+          "description": "Roles allowed to write or delete app-scoped shared memories."
+        }
+      }
+    },
+    "assistantKnowledge": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["resource", "fields"],
+      "description": "An authority-scoped knowledge source backed by an App resource.",
+      "properties": {
+        "resource": { "type": "string", "minLength": 1, "description": "Resource/table name in the App." },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$" },
+          "description": "Text columns searched and excerpted for grounded citations."
+        },
+        "title": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*$", "description": "Optional column holding the record title." },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "Short description shown to the model in its catalog." },
+        "where": { "type": "string", "minLength": 1, "maxLength": 400, "description": "Optional static filter expression applied to searches." },
+        "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "limit": { "type": "integer", "minimum": 1, "maximum": 12, "description": "Maximum citations returned per search." }
       }
     },
     "assistantAgent": {
@@ -458,7 +521,9 @@
         "blocks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["table", "metric", "metrics", "chart", "breakdown", "funnel", "board", "timeline", "record", "callout", "tabs"] } },
         "customBlocks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$" } },
         "subagents": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,39}$" }, "description": "Sibling agent keys this agent may delegate bounded sub-tasks to." },
-        "limits": { "$ref": "#/$defs/assistant/properties/limits" }
+        "limits": { "$ref": "#/$defs/assistant/properties/limits" },
+        "memory": { "type": "boolean", "description": "false disables memory for this agent even when the assistant enables it." },
+        "knowledge": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$" }, "description": "Subset of assistant.knowledge keys this agent may search." }
       }
     },
     "assistantCustomBlock": {

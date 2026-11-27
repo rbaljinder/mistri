@@ -33,6 +33,9 @@ type AssistantPresentation = (typeof ASSISTANT_PRESENTATIONS)[number];
 const ASSISTANT_REASONING = ['collapsed', 'expanded', 'hidden'] as const;
 type AssistantReasoningVisibility = (typeof ASSISTANT_REASONING)[number];
 export const ASSISTANT_EFFORTS = ['low', 'medium', 'high'] as const;
+/** Scopes for durable assistant memory: per-person private notes, or shared app/tenant knowledge. */
+const ASSISTANT_MEMORY_SCOPES = ['person', 'app'] as const;
+type AssistantMemoryScope = (typeof ASSISTANT_MEMORY_SCOPES)[number];
 /** The model an App gets unless it names one; the operator's key decides whether any is reachable. */
 const DEFAULT_ASSISTANT_MODEL = 'claude-sonnet-5-5';
 const TOKEN_LIMIT_KEYS = ['tokensPerTurn', 'tokensPerPersonPerDay', 'tokensPerDay'] as const;
@@ -66,6 +69,8 @@ const KEYS = [
   'agents',
   'defaultAgent',
   'customBlocks',
+  'memory',
+  'knowledge',
 ] as const;
 const AGENT_ID = /^[a-z][a-z0-9_-]{0,39}$/;
 const MAX_AGENTS = 16;
@@ -84,10 +89,21 @@ const AGENT_KEYS = [
   'customBlocks',
   'subagents',
   'limits',
+  'memory',
+  'knowledge',
 ] as const;
 const CUSTOM_BLOCK_NAME = /^[a-z][a-z0-9_-]{0,47}$/;
 const MAX_CUSTOM_BLOCKS = 32;
 const CUSTOM_BLOCK_KEYS = ['description', 'title', 'component', 'props'] as const;
+const MEMORY_KEYS = ['scopes', 'maxItems', 'sharedRoles'] as const;
+const DEFAULT_MEMORY_ITEMS = 50;
+const MAX_MEMORY_ITEMS = 200;
+const KNOWLEDGE_NAME = /^[a-z][a-z0-9_-]{0,47}$/;
+const MAX_KNOWLEDGE_SOURCES = 16;
+const KNOWLEDGE_KEYS = ['resource', 'fields', 'title', 'description', 'where', 'roles', 'limit'] as const;
+const FIELD_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const DEFAULT_KNOWLEDGE_LIMIT = 6;
+const MAX_KNOWLEDGE_LIMIT = 12;
 /** An empty conversation offers a few of the App's own questions, each a line the person sends with one press: at
     most six in any one place, however many the App declares for its different places. */
 const MAX_STARTERS = 6;
@@ -136,6 +152,49 @@ interface AppAssistantCustomBlock {
   props?: Record<string, ComponentPropDecl>;
 }
 
+/** Durable scoped memory settings for an App's assistant. */
+interface AppAssistantMemory {
+  /** Which memory scopes are enabled: `'person'` (private per signed-in user) and/or `'app'` (shared across the App/tenant). */
+  scopes: AssistantMemoryScope[];
+  /** Maximum retained memories per scope/owner (1–200, default 50). */
+  maxItems: number;
+  /** Roles allowed to write or delete `'app'`-scoped shared memories. Absent, everyone who may open the assistant. */
+  sharedRoles?: string[];
+}
+
+/** Viewer-safe memory summary served in `/api/app` (never leaks `sharedRoles`). */
+export interface ServedAssistantMemory {
+  scopes: AssistantMemoryScope[];
+  maxItems: number;
+  canWriteShared?: boolean;
+}
+
+/** A declarative, authority-scoped knowledge source backed by an App resource/table. */
+interface AppAssistantKnowledgeSource {
+  id: string;
+  /** Resource/table name in the App; searches run strictly through the viewer's own grants and row policies. */
+  resource: string;
+  /** Text columns searched and excerpted for grounded citations. */
+  fields: string[];
+  /** Optional column naming the record/document title; defaults to the first field or record label. */
+  title?: string;
+  /** Short description shown to the model so it knows when to search this source. */
+  description?: string;
+  /** Optional static filter expression applied to every search of this source (e.g. `"status = 'published'"`). */
+  where?: string;
+  /** Optional roles permitted to query this source; stripped before serving to the browser. */
+  roles?: string[];
+  /** Maximum citations returned per search (1–12, default 6). */
+  limit: number;
+}
+
+/** Viewer-safe knowledge source summary served in `/api/app`. */
+export interface ServedAssistantKnowledge {
+  id: string;
+  resource: string;
+  description?: string;
+}
+
 /** A named, role-scoped agent inside a multi-agent Mistri App. Always narrows the top-level assistant's authority. */
 export interface AppAssistantAgent {
   id: string;
@@ -154,6 +213,10 @@ export interface AppAssistantAgent {
   /** Named sibling agents this agent may delegate bounded read/analysis sub-tasks to. */
   subagents?: string[];
   limits?: AssistantLimits;
+  /** `false` disables memory for this agent even when the top-level assistant enables it. */
+  memory?: boolean;
+  /** Subset of `assistant.knowledge` keys this agent may search. */
+  knowledge?: string[];
 }
 
 /** Viewer-safe agent summary served in `/api/app` (never leaks `roles` or internal instructions). */
@@ -197,6 +260,10 @@ export interface AppAssistant {
   defaultAgent?: string;
   /** Optional author-declared interactive custom blocks the assistant may compose via `show({ kind: 'custom', name, props })`. */
   customBlocks?: Record<string, AppAssistantCustomBlock>;
+  /** Optional scoped persistent memory (`person` and/or shared `app` notes). */
+  memory?: AppAssistantMemory;
+  /** Optional authority-scoped knowledge sources searchable with inline record citations. */
+  knowledge?: Record<string, AppAssistantKnowledgeSource>;
 }
 
 interface AssistantContext {
@@ -289,10 +356,93 @@ function parseCustomBlocks(raw: unknown, where: string): Record<string, AppAssis
   return out;
 }
 
+function parseMemory(raw: unknown, context: AssistantContext, where: string): AppAssistantMemory | undefined {
+  if (raw === undefined || raw === false) return undefined;
+  if (raw === true) return { scopes: ['person'], maxItems: DEFAULT_MEMORY_ITEMS };
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+    throw new Error(`${where} is true, false, or an object: { scopes, maxItems, sharedRoles }.`);
+  const m = raw as Record<string, unknown>;
+  for (const key of Object.keys(m)) {
+    if (!(MEMORY_KEYS as readonly string[]).includes(key))
+      throw new Error(`${where} has an unknown key "${key}"; it takes ${MEMORY_KEYS.join(', ')}.`);
+  }
+  const scopes =
+    m.scopes === undefined ? (['person'] as AssistantMemoryScope[]) : subset(m.scopes, ASSISTANT_MEMORY_SCOPES, `${where}.scopes`);
+  let maxItems = DEFAULT_MEMORY_ITEMS;
+  if (m.maxItems !== undefined) {
+    if (!Number.isSafeInteger(m.maxItems) || (m.maxItems as number) < 1 || (m.maxItems as number) > MAX_MEMORY_ITEMS)
+      throw new Error(`${where}.maxItems is a whole number of memories, 1 to ${MAX_MEMORY_ITEMS}.`);
+    maxItems = m.maxItems as number;
+  }
+  let sharedRoles: string[] | undefined;
+  if (m.sharedRoles !== undefined) {
+    if (!scopes.includes('app')) throw new Error(`${where}.sharedRoles requires "app" in ${where}.scopes.`);
+    if (!context.roles) throw new Error(`${where}.sharedRoles names roles, and the App declares no "auth" with roles.`);
+    sharedRoles = subset(m.sharedRoles, context.roles as string[], `${where}.sharedRoles`);
+  }
+  return { scopes, maxItems, ...(sharedRoles ? { sharedRoles } : {}) };
+}
+
+function parseKnowledge(raw: unknown, context: AssistantContext, where: string): Record<string, AppAssistantKnowledgeSource> | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || !Object.keys(raw).length)
+    throw new Error(`${where} is a non-empty object of knowledge source declarations.`);
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (entries.length > MAX_KNOWLEDGE_SOURCES)
+    throw new Error(`${where} declares ${entries.length} knowledge sources; at most ${MAX_KNOWLEDGE_SOURCES} are allowed.`);
+  const out: Record<string, AppAssistantKnowledgeSource> = {};
+  for (const [id, entry] of entries) {
+    const at = `${where}.${id}`;
+    if (!KNOWLEDGE_NAME.test(id))
+      throw new Error(`${at}: a knowledge source name is lowercase letters, digits, hyphens or underscores, starting with a letter.`);
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry))
+      throw new Error(`${at} is an object: { resource, fields, title?, description?, where?, roles?, limit? }.`);
+    const k = entry as Record<string, unknown>;
+    for (const key of Object.keys(k)) {
+      if (!(KNOWLEDGE_KEYS as readonly string[]).includes(key))
+        throw new Error(`${at} has an unknown key "${key}"; it takes ${KNOWLEDGE_KEYS.join(', ')}.`);
+    }
+    if (typeof k.resource !== 'string' || !k.resource || !Object.hasOwn(context.actions, k.resource))
+      throw new Error(`${at}.resource names "${String(k.resource)}", which is not one of the App's resources.`);
+    if (!Array.isArray(k.fields) || !k.fields.length || k.fields.some((f) => typeof f !== 'string' || !FIELD_NAME.test(f)))
+      throw new Error(`${at}.fields is a non-empty list of column names to search.`);
+    const fields = [...new Set(k.fields as string[])];
+    if (k.title !== undefined && (typeof k.title !== 'string' || !FIELD_NAME.test(k.title)))
+      throw new Error(`${at}.title is a column name.`);
+    if (k.description !== undefined && (typeof k.description !== 'string' || !k.description.trim() || k.description.trim().length > 240))
+      throw new Error(`${at}.description is a non-empty string of at most 240 characters.`);
+    if (k.where !== undefined && (typeof k.where !== 'string' || !k.where.trim() || k.where.trim().length > 400))
+      throw new Error(`${at}.where is a non-empty filter expression of at most 400 characters.`);
+    let roles: string[] | undefined;
+    if (k.roles !== undefined) {
+      if (!context.roles) throw new Error(`${at}.roles names roles, and the App declares no "auth" with roles.`);
+      roles = subset(k.roles, context.roles as string[], `${at}.roles`);
+    }
+    let limit = DEFAULT_KNOWLEDGE_LIMIT;
+    if (k.limit !== undefined) {
+      if (!Number.isSafeInteger(k.limit) || (k.limit as number) < 1 || (k.limit as number) > MAX_KNOWLEDGE_LIMIT)
+        throw new Error(`${at}.limit is a whole number of citations, 1 to ${MAX_KNOWLEDGE_LIMIT}.`);
+      limit = k.limit as number;
+    }
+    out[id] = {
+      id,
+      resource: k.resource,
+      fields,
+      ...(k.title !== undefined ? { title: k.title as string } : {}),
+      ...(k.description !== undefined ? { description: (k.description as string).trim() } : {}),
+      ...(k.where !== undefined ? { where: (k.where as string).trim() } : {}),
+      ...(roles ? { roles } : {}),
+      limit,
+    };
+  }
+  return out;
+}
+
 function parseAgents(
   raw: unknown,
   placement: AppAssistant['placement'],
   customBlocks: Record<string, AppAssistantCustomBlock> | undefined,
+  knowledge: Record<string, AppAssistantKnowledgeSource> | undefined,
   context: AssistantContext,
   where: string,
 ): Record<string, AppAssistantAgent> | undefined {
@@ -303,6 +453,7 @@ function parseAgents(
   if (entries.length > MAX_AGENTS) throw new Error(`${where} declares ${entries.length} agents; at most ${MAX_AGENTS} are allowed.`);
   const ids = new Set(entries.map(([id]) => id));
   const blockNames = Object.keys(customBlocks ?? {});
+  const knowledgeNames = Object.keys(knowledge ?? {});
   const out: Record<string, AppAssistantAgent> = {};
   for (const [id, entry] of entries) {
     const at = `${where}.${id}`;
@@ -325,6 +476,7 @@ function parseAgents(
       throw new Error(`${at}.model is a model id, such as "${DEFAULT_ASSISTANT_MODEL}".`);
     if (a.effort !== undefined && !(ASSISTANT_EFFORTS as readonly unknown[]).includes(a.effort))
       throw new Error(`${at}.effort is "low", "medium" or "high".`);
+    if (a.memory !== undefined && typeof a.memory !== 'boolean') throw new Error(`${at}.memory is true or false.`);
     let roles: string[] | undefined;
     if (a.roles !== undefined) {
       if (!context.roles) throw new Error(`${at}.roles names roles, and the App declares no "auth" with roles.`);
@@ -338,6 +490,11 @@ function parseAgents(
     if (a.customBlocks !== undefined) {
       if (!blockNames.length) throw new Error(`${at}.customBlocks names custom blocks, and the assistant declares no "customBlocks".`);
       agentCustomBlocks = subset(a.customBlocks, blockNames, `${at}.customBlocks`);
+    }
+    let agentKnowledge: string[] | undefined;
+    if (a.knowledge !== undefined) {
+      if (!knowledgeNames.length) throw new Error(`${at}.knowledge names knowledge sources, and the assistant declares no "knowledge".`);
+      agentKnowledge = subset(a.knowledge, knowledgeNames, `${at}.knowledge`);
     }
     let subagents: string[] | undefined;
     if (a.subagents !== undefined) {
@@ -361,6 +518,8 @@ function parseAgents(
       ...(agentCustomBlocks ? { customBlocks: agentCustomBlocks } : {}),
       ...(subagents ? { subagents } : {}),
       ...(limits ? { limits } : {}),
+      ...(a.memory !== undefined ? { memory: a.memory as boolean } : {}),
+      ...(agentKnowledge ? { knowledge: agentKnowledge } : {}),
     };
   }
   return out;
@@ -423,7 +582,9 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
   const exclude = a.exclude === undefined ? [] : parseExclude(a.exclude, context, `${where}.exclude`);
   const limits = parseLimits(a.limits, `${where}.limits`, { tokensPerPersonPerDay: DEFAULT_TOKENS_PER_PERSON_PER_DAY });
   const customBlocks = parseCustomBlocks(a.customBlocks, `${where}.customBlocks`);
-  const agents = parseAgents(a.agents, placement, customBlocks, context, `${where}.agents`);
+  const memory = parseMemory(a.memory, context, `${where}.memory`);
+  const knowledge = parseKnowledge(a.knowledge, context, `${where}.knowledge`);
+  const agents = parseAgents(a.agents, placement, customBlocks, knowledge, context, `${where}.agents`);
   let defaultAgent: string | undefined;
   if (a.defaultAgent !== undefined) {
     if (!agents) throw new Error(`${where}.defaultAgent names an agent, and ${where} declares no "agents".`);
@@ -451,6 +612,8 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     ...(agents ? { agents } : {}),
     ...(defaultAgent ? { defaultAgent } : {}),
     ...(customBlocks ? { customBlocks } : {}),
+    ...(memory ? { memory } : {}),
+    ...(knowledge ? { knowledge } : {}),
   };
 }
 
@@ -603,13 +766,55 @@ export function agentsFor(
   });
 }
 
+/** Whether a viewer holding `roles` may write or delete `'app'`-scoped shared memories. */
+export function canWriteSharedMemory(memory: AppAssistantMemory | undefined, roles: readonly string[]): boolean {
+  if (!memory || !memory.scopes.includes('app')) return false;
+  return !memory.sharedRoles || memory.sharedRoles.some((role) => roles.includes(role));
+}
+
+/** Viewer-safe memory capability summary for `/api/app` (never leaks `sharedRoles`). */
+export function memoryFor(
+  memory: (ServedAssistantMemory & { sharedRoles?: readonly string[] }) | undefined,
+  roles: readonly string[],
+): ServedAssistantMemory | undefined {
+  if (!memory) return undefined;
+  const { sharedRoles, ...rest } = memory;
+  const writable = memory.scopes.includes('app') && (!sharedRoles || sharedRoles.some((role) => roles.includes(role)));
+  return { ...rest, ...(writable ? { canWriteShared: true } : {}) };
+}
+
+/** Viewer-safe knowledge source summaries for `/api/app` (filters by `roles` and strips `roles`). */
+export function knowledgeFor(
+  knowledge: ReadonlyArray<ServedAssistantKnowledge & { roles?: readonly string[] }> | undefined,
+  roles: readonly string[],
+): ServedAssistantKnowledge[] {
+  if (!knowledge?.length) return [];
+  return knowledge
+    .filter((source) => !source.roles || source.roles.some((role) => roles.includes(role)))
+    .map(({ roles: _roles, ...rest }) => rest);
+}
+
 const minDefined = (a: number | undefined, b: number | undefined): number | undefined =>
   a === undefined ? b : b === undefined ? a : Math.min(a, b);
 
+function filterKnowledge(
+  knowledge: Record<string, AppAssistantKnowledgeSource> | undefined,
+  viewerRoles: readonly string[] | undefined,
+  agentKeys?: readonly string[],
+): Record<string, AppAssistantKnowledgeSource> | undefined {
+  if (!knowledge) return undefined;
+  const entries = Object.entries(knowledge).filter(([id, source]) => {
+    if (agentKeys && !agentKeys.includes(id)) return false;
+    if (viewerRoles && source.roles && !source.roles.some((role) => viewerRoles.includes(role))) return false;
+    return true;
+  });
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 /**
  * Resolve an active named agent onto the App's base assistant definition, strictly narrowing authority and budgets.
- * Returns `{ assistant: base }` unchanged when the App declares no `agents`. Throws an error if `agentId` is explicitly
- * requested and does not exist or is not permitted for `viewerRoles`.
+ * Returns `{ assistant: base }` (with role-filtered knowledge sources) when the App declares no `agents`. Throws an
+ * error if `agentId` is explicitly requested and does not exist or is not permitted for `viewerRoles`.
  */
 export function resolveAgentAssistant(
   base: AppAssistant,
@@ -618,7 +823,9 @@ export function resolveAgentAssistant(
 ): { assistant: AppAssistant; agent?: AppAssistantAgent } {
   if (!base.agents || !Object.keys(base.agents).length) {
     if (agentId !== undefined) throw new Error('This assistant does not declare named agents.');
-    return { assistant: base };
+    const filteredKnowledge = filterKnowledge(base.knowledge, viewerRoles);
+    if (filteredKnowledge === base.knowledge) return { assistant: base };
+    return { assistant: { ...base, ...(filteredKnowledge ? { knowledge: filteredKnowledge } : { knowledge: undefined }) } };
   }
   const roles = viewerRoles ?? [];
   const allowedEntries = Object.values(base.agents).filter((each) => (viewerRoles ? agentAllowedFor(each, roles) : true));
@@ -633,7 +840,10 @@ export function resolveAgentAssistant(
     const fallback = base.defaultAgent ? base.agents[base.defaultAgent] : undefined;
     agent = fallback && (!viewerRoles || agentAllowedFor(fallback, roles)) ? fallback : allowedEntries[0];
   }
-  if (!agent) return { assistant: base };
+  if (!agent) {
+    const filteredKnowledge = filterKnowledge(base.knowledge, viewerRoles);
+    return { assistant: { ...base, ...(filteredKnowledge ? { knowledge: filteredKnowledge } : { knowledge: undefined }) } };
+  }
   const tools = agent.tools ? base.tools.filter((tool) => agent.tools!.includes(tool)) : base.tools;
   const blocks = agent.blocks ? base.blocks.filter((block) => agent.blocks!.includes(block)) : base.blocks;
   const exclude = [...new Set([...base.exclude, ...(agent.exclude ?? [])])];
@@ -641,6 +851,8 @@ export function resolveAgentAssistant(
     base.customBlocks && agent.customBlocks
       ? Object.fromEntries(Object.entries(base.customBlocks).filter(([name]) => agent.customBlocks!.includes(name)))
       : base.customBlocks;
+  const memory = agent.memory === false ? undefined : base.memory;
+  const knowledge = filterKnowledge(base.knowledge, viewerRoles, agent.knowledge);
   const instructions = [base.instructions, agent.instructions].filter(Boolean).join('\n\n') || undefined;
   const limits: AssistantLimits = {
     ...(minDefined(base.limits.tokensPerTurn, agent.limits?.tokensPerTurn) !== undefined
@@ -677,6 +889,8 @@ export function resolveAgentAssistant(
       exclude,
       limits,
       ...(customBlocks && Object.keys(customBlocks).length ? { customBlocks } : { customBlocks: undefined }),
+      ...(memory ? { memory } : { memory: undefined }),
+      ...(knowledge ? { knowledge } : { knowledge: undefined }),
     },
   };
 }

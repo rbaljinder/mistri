@@ -989,3 +989,132 @@ test('multi-agent switcher changes starters and sends agent id; delegation card 
   await user.click(screen.getByRole('button', { name: 'Close Canvas' }));
   expect(screen.queryByRole('region', { name: 'Canvas' })).not.toBeInTheDocument();
 });
+
+test('Wave 2A: renders inline clickable citations, Sources strip, memory chip, and interactive Memory Drawer', async () => {
+  const user = userEvent.setup();
+  let storedMemories: Array<{
+    id: string;
+    scope: 'person' | 'app';
+    agent: string;
+    content: string;
+    source: 'assistant' | 'person';
+    createdAt: string;
+    updatedAt: string;
+  }> = [
+    {
+      id: 'm_personal_1',
+      scope: 'person',
+      agent: '',
+      content: 'Prefer concise executive bullet points.',
+      source: 'assistant',
+      createdAt: '2026-11-27T10:00:00Z',
+      updatedAt: '2026-11-27T10:00:00Z',
+    },
+    {
+      id: 'm_shared_1',
+      scope: 'app',
+      agent: '',
+      content: 'Enterprise renewals require 60-day advance legal review.',
+      source: 'person',
+      createdAt: '2026-11-27T09:00:00Z',
+      updatedAt: '2026-11-27T09:00:00Z',
+    },
+  ];
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      memory: { scopes: ['person', 'app'], maxItems: 50, canWriteShared: true },
+      knowledge: [{ id: 'playbooks', resource: 'playbook', description: 'Sales playbooks' }],
+    },
+  };
+  fetcher.mockImplementation(async (url, init) => {
+    const path = String(url);
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path.startsWith('/api/assistant/memories?') && (!init?.method || init.method === 'GET')) {
+      return json({ memories: storedMemories, scopes: ['person', 'app'], maxItems: 50, canWriteShared: true });
+    }
+    if (path === '/api/assistant/memories' && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body)) as { content: string; scope: 'person' | 'app'; id?: string };
+      const added = {
+        id: payload.id ?? 'm_new_1',
+        scope: payload.scope,
+        agent: '',
+        content: payload.content,
+        source: 'person' as const,
+        createdAt: '2026-11-27T11:00:00Z',
+        updatedAt: '2026-11-27T11:00:00Z',
+      };
+      storedMemories = [...storedMemories, added];
+      return json({ memory: added, updated: false });
+    }
+    if (path === '/api/assistant/memories/delete' && init?.method === 'POST') {
+      const payload = JSON.parse(String(init.body)) as { id: string };
+      storedMemories = storedMemories.filter((m) => m.id !== payload.id);
+      return json({ deleted: true });
+    }
+    if (path === '/api/assistant/turn') {
+      return events(
+        ['conversation', { id: 'c_w2', title: 'Renewal policy', person: 1 }],
+        [
+          'citations',
+          {
+            id: 'cit_1',
+            query: 'enterprise renewal',
+            items: [
+              {
+                ref: 1,
+                source: 'playbooks',
+                sourceLabel: 'Playbooks',
+                resource: 'playbook',
+                title: 'Enterprise Renewal Playbook',
+                snippet: 'Start executive alignment 60 days prior to renewal date.',
+                address: '/compass/playbooks/1',
+              },
+            ],
+          },
+        ],
+        [
+          'memory',
+          {
+            id: 'mem_ev_1',
+            action: 'remembered',
+            memoryId: 'm_personal_1',
+            scope: 'person',
+            content: 'Prefer concise executive bullet points.',
+          },
+        ],
+        ['text', { delta: 'Per the renewal playbook [1], start alignment 60 days ahead.' }],
+        ['done', { state: 'idle', tokens: 18 }],
+      );
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  const box = await screen.findByRole('textbox', { name: 'Message the assistant' });
+  await user.type(box, 'What is our enterprise renewal process?{Enter}');
+
+  // Inline citation pill [1], Sources strip, and Remembered chip all render.
+  expect(await screen.findByRole('button', { name: 'Open Enterprise Renewal Playbook' })).toBeInTheDocument();
+  expect(screen.getByRole('region', { name: 'Cited sources' })).toBeInTheDocument();
+  expect(screen.getByText('Enterprise Renewal Playbook')).toBeInTheDocument();
+  expect(screen.getByText('Remembered')).toBeInTheDocument();
+
+  // Open Memory Drawer from the Remembered chip's Manage button.
+  await user.click(screen.getByRole('button', { name: 'Manage' }));
+  expect(await screen.findByRole('region', { name: 'Assistant memory' })).toBeInTheDocument();
+  expect(await screen.findByText('Prefer concise executive bullet points.')).toBeInTheDocument();
+  expect(screen.getByText('Enterprise renewals require 60-day advance legal review.')).toBeInTheDocument();
+
+  // Add a new memory inside the drawer.
+  await user.type(screen.getByRole('textbox', { name: 'Add memory' }), 'Highlight churn risk first.');
+  await user.click(screen.getByRole('button', { name: 'Save' }));
+  expect(await screen.findByText('Highlight churn risk first.')).toBeInTheDocument();
+
+  // Close drawer cleanly.
+  await user.click(screen.getByRole('button', { name: 'Close memory' }));
+  expect(screen.queryByRole('region', { name: 'Assistant memory' })).not.toBeInTheDocument();
+});

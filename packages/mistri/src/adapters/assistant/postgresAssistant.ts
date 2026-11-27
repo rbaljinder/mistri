@@ -20,6 +20,7 @@ import {
 import {
   ASSISTANT_INDEX,
   ASSISTANT_LIMITS,
+  ASSISTANT_MEMORY_INDEX,
   ASSISTANT_PREFIX,
   ASSISTANT_STORE_VERSION,
   ASSISTANT_TABLES,
@@ -32,7 +33,7 @@ import {
 import { postgresRuntimeNames, runtimeSchema, runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import { postgresTenantSwitchReady, provisionPostgresTenantSwitch } from '../switch/postgresTenantSwitch.js';
 
-const { meta, conversation, event, usage } = postgresRuntimeNames(ASSISTANT_TABLES);
+const { meta, conversation, event, usage, memory } = postgresRuntimeNames(ASSISTANT_TABLES);
 const q = (name: string) => runtimeTable('postgres', name);
 
 /** The version row's table, which pins this version: the upgrade (storeLayouts.ts) rebuilds it to pin the next. */
@@ -40,6 +41,19 @@ const ASSISTANT_META_POSTGRES = `CREATE TABLE ${q(meta)} (
   singleton integer PRIMARY KEY CHECK (singleton = 1),
   version integer NOT NULL CHECK (version = ${ASSISTANT_STORE_VERSION})
 )`;
+const MEMORY_TABLE_POSTGRES = `CREATE TABLE ${q(memory)} (
+  id text COLLATE "C" PRIMARY KEY,
+  app text COLLATE "C" NOT NULL CHECK (octet_length(app) <= ${ASSISTANT_LIMITS.app}),
+  tenant text COLLATE "C" NOT NULL CHECK (octet_length(tenant) <= ${ASSISTANT_LIMITS.tenant}),
+  account text COLLATE "C" NOT NULL CHECK (octet_length(account) <= ${ASSISTANT_LIMITS.account}),
+  scope text NOT NULL CHECK (scope IN ('person', 'app')),
+  agent text COLLATE "C" NOT NULL CHECK (octet_length(agent) <= ${ASSISTANT_LIMITS.memoryAgent}),
+  content text NOT NULL CHECK (octet_length(content) <= ${ASSISTANT_LIMITS.memoryContent}),
+  source text NOT NULL CHECK (source IN ('assistant', 'person')),
+  created_at text NOT NULL,
+  updated_at text NOT NULL
+)`;
+const MEMORY_INDEX_POSTGRES = `CREATE INDEX "${ASSISTANT_MEMORY_INDEX}" ON ${q(memory)} (app, tenant, scope, account, updated_at)`;
 const definitions: readonly string[] = [
   ASSISTANT_META_POSTGRES,
   `CREATE TABLE ${q(conversation)} (
@@ -68,7 +82,9 @@ const definitions: readonly string[] = [
   tokens bigint NOT NULL,
   PRIMARY KEY (app, tenant, account, day)
 )`,
+  MEMORY_TABLE_POSTGRES,
   `CREATE INDEX "${ASSISTANT_INDEX}" ON ${q(conversation)} (app, tenant, account, updated_at)`,
+  MEMORY_INDEX_POSTGRES,
 ];
 
 const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
@@ -158,6 +174,35 @@ const LAYOUT: readonly PostgresRelationDescription[] = [
     ['PRIMARY KEY (app, tenant, account, day)'],
     [`CREATE UNIQUE INDEX ${usage}_pkey ON ${runtimeSchema('postgres')}.${usage} USING btree (app, tenant, account, day)`],
   ),
+  table(
+    memory,
+    [
+      column('id', 'text', 'C'),
+      column('app', 'text', 'C'),
+      column('tenant', 'text', 'C'),
+      column('account', 'text', 'C'),
+      column('scope', 'text', 'default'),
+      column('agent', 'text', 'C'),
+      column('content', 'text', 'default'),
+      column('source', 'text', 'default'),
+      column('created_at', 'text', 'default'),
+      column('updated_at', 'text', 'default'),
+    ],
+    [
+      `CHECK ((octet_length(account) <= ${ASSISTANT_LIMITS.account}))`,
+      `CHECK ((octet_length(agent) <= ${ASSISTANT_LIMITS.memoryAgent}))`,
+      `CHECK ((octet_length(app) <= ${ASSISTANT_LIMITS.app}))`,
+      `CHECK ((octet_length(content) <= ${ASSISTANT_LIMITS.memoryContent}))`,
+      `CHECK ((octet_length(tenant) <= ${ASSISTANT_LIMITS.tenant}))`,
+      "CHECK ((scope = ANY (ARRAY['person'::text, 'app'::text])))",
+      "CHECK ((source = ANY (ARRAY['assistant'::text, 'person'::text])))",
+      'PRIMARY KEY (id)',
+    ],
+    [
+      `CREATE INDEX ${ASSISTANT_MEMORY_INDEX} ON ${runtimeSchema('postgres')}.${memory} USING btree (app, tenant, scope, account, updated_at)`,
+      `CREATE UNIQUE INDEX ${memory}_pkey ON ${runtimeSchema('postgres')}.${memory} USING btree (id)`,
+    ],
+  ),
 ].sort((a, b) => byCodeUnit(a.name, b.name));
 
 const canonical = (value: unknown) => canonicalCommandJson(value, 1_048_576);
@@ -170,8 +215,19 @@ const sortedDescription = (relations: PostgresRelationDescription[]) =>
     }))
     .sort((a, b) => byCodeUnit(a.name, b.name));
 
+/** Version 1 to 2: adds the scoped durable memory table and its owner index. */
+export function postgresAssistantUpgradeFrom1(): readonly string[] {
+  return Object.freeze([
+    MEMORY_TABLE_POSTGRES,
+    MEMORY_INDEX_POSTGRES,
+    `ALTER TABLE ${q(meta)} DROP CONSTRAINT ${meta}_version_check`,
+    `UPDATE ${q(meta)} SET version = ${ASSISTANT_STORE_VERSION}`,
+    `ALTER TABLE ${q(meta)} ADD CONSTRAINT ${meta}_version_check CHECK (version = ${ASSISTANT_STORE_VERSION})`,
+  ]);
+}
+
 /** Whether the reserved relations are exactly this version's layout. */
-async function postgresAssistantReady(client: PgQuery): Promise<boolean> {
+export async function postgresAssistantReady(client: PgQuery): Promise<boolean> {
   try {
     const actual = sortedDescription(await describePostgresRelations(client, ASSISTANT_PREFIX));
     if (canonical(actual) !== canonical(LAYOUT)) return false;

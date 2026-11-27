@@ -30,6 +30,19 @@ import type { CommandProposalRow, ProposalEvidence } from '../../adapters/comman
 import { isBusinessCommandExecutionError } from '../commands/commandErrors.js';
 import type { ProposalDraft } from '../commands/proposals.js';
 import type { AssistantCatalog, CatalogVerb } from './assistantCatalog.js';
+import type { AssistantOwner, AssistantStore } from '../../adapters/assistant/assistantStore.js';
+
+/** A verifiable citation returned by `search_knowledge`, backed by a viewer-readable record. */
+interface Citation {
+  ref: number;
+  source: string;
+  sourceLabel: string;
+  resource: string;
+  title: string;
+  snippet: string;
+  address?: string;
+  key?: Record<string, unknown>;
+}
 
 /** A block as the panel draws it: a dashboard section, KPI strip, timeline, callout, tabs, record card, or author block. */
 export type AssistantBlock =
@@ -71,6 +84,17 @@ export type DisplayItem =
   /* Ask shows what it read: the line it ran, as the query bar would take it, and the rows it read there, each a record
      the person may open. Only what this person's own read returned, so it says nothing they could not see. */
   | { type: 'query'; id: string; q: string; resource?: string; total: number; evidence: AskEvidence[] }
+  /** Verifiable numbered citations returned by `search_knowledge` under this person's own grants and row policy. */
+  | { type: 'citations'; id: string; query: string; items: Citation[] }
+  /** A quiet trace chip emitted whenever the assistant remembers, updates, or forgets a durable memory. */
+  | {
+      type: 'memory';
+      id: string;
+      action: 'remembered' | 'updated' | 'forgot';
+      memoryId: string;
+      scope: 'person' | 'app';
+      content?: string;
+    }
   /** A bounded subagent delegation trace (`parent → child`) streamed live and persisted for replay. */
   | {
       type: 'delegation';
@@ -107,6 +131,11 @@ export interface ToolSession {
   assistant: AppAssistant;
   catalog: AssistantCatalog;
   signal: AbortSignal;
+  /** Durable store + verified owner for `remember` / `forget` tools when `assistant.memory` is enabled. */
+  store?: AssistantStore;
+  owner?: AssistantOwner;
+  agentId?: string;
+  canWriteSharedMemory?: boolean;
   /** Keeps a command's proposal for review as this person, under the grant and row policy their own run would meet
    * (http/assistantProposal.ts; a tenant App's host, tenant/tenantHttp.ts `propose`). */
   propose?: (draft: ProposalDraft) => Promise<CommandProposalRow>;
@@ -1157,6 +1186,329 @@ async function propose(
   };
 }
 
+const KNOWLEDGE_MAX_LIMIT = 12;
+const KNOWLEDGE_EXCERPT_CHARS = 180;
+
+const humaneSource = (id: string) => id.replace(/[_-]+/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+
+function searchTerms(queryText: string): string[] {
+  const tokens = words(queryText);
+  if (tokens.length) return [...new Set(tokens)];
+  const fallback = queryText
+    .toLowerCase()
+    .split(/\s+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [...new Set(fallback)];
+}
+
+/** Build a word-bounded ~180-char excerpt centered around the first matching phrase or term. */
+function excerptAround(texts: readonly string[], queryText: string, terms: readonly string[]): string {
+  const flatList = texts.map((t) => t.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  if (!flatList.length) return '';
+  const needlePhrase = queryText.replace(/\s+/g, ' ').trim().toLowerCase();
+  let chosen = flatList[0]!;
+  let hitAt = -1;
+  let hitLen = 0;
+  for (const text of flatList) {
+    const lower = text.toLowerCase();
+    const phraseAt = needlePhrase ? lower.indexOf(needlePhrase) : -1;
+    if (phraseAt >= 0) {
+      chosen = text;
+      hitAt = phraseAt;
+      hitLen = needlePhrase.length;
+      break;
+    }
+    for (const term of terms) {
+      const idx = lower.indexOf(term);
+      if (idx >= 0) {
+        chosen = text;
+        hitAt = idx;
+        hitLen = term.length;
+        break;
+      }
+    }
+    if (hitAt >= 0) break;
+  }
+  if (chosen.length <= KNOWLEDGE_EXCERPT_CHARS) return chosen;
+  if (hitAt < 0) {
+    const cut = chosen.lastIndexOf(' ', KNOWLEDGE_EXCERPT_CHARS);
+    return `${chosen.slice(0, cut > 40 ? cut : KNOWLEDGE_EXCERPT_CHARS).trim()}…`;
+  }
+  let start = Math.max(0, hitAt - 48);
+  if (start > 0) {
+    const space = chosen.indexOf(' ', start - 1);
+    start = space >= 0 && space < hitAt ? space + 1 : hitAt;
+  }
+  let end = Math.min(chosen.length, start + KNOWLEDGE_EXCERPT_CHARS);
+  if (end < chosen.length) {
+    const space = chosen.lastIndexOf(' ', end);
+    if (space > hitAt + hitLen) end = space;
+  }
+  return `${start > 0 ? '…' : ''}${chosen.slice(start, end).trim()}${end < chosen.length ? '…' : ''}`;
+}
+
+async function searchKnowledge(context: Context, session: ToolSession, input: Record<string, unknown>, id: string) {
+  const declared = session.assistant.knowledge;
+  if (!declared || !Object.keys(declared).length) {
+    throw new ToolRefusal('No knowledge sources are configured for this assistant.');
+  }
+  const queryText = String(input.query ?? '').trim();
+  if (!queryText) throw new ToolRefusal('search_knowledge takes query.');
+  const requestedSource = typeof input.source === 'string' && input.source.trim() ? input.source.trim() : undefined;
+  if (requestedSource && !Object.hasOwn(declared, requestedSource)) {
+    throw new ToolRefusal(`Unknown knowledge source "${requestedSource}". Available: ${Object.keys(declared).join(', ')}.`);
+  }
+  const limit = Math.max(1, Math.min(KNOWLEDGE_MAX_LIMIT, Number.isInteger(input.limit) ? (input.limit as number) : 6));
+  const terms = searchTerms(queryText);
+  const lowerPhrase = queryText.replace(/\s+/g, ' ').trim().toLowerCase();
+  const sources = requestedSource ? [declared[requestedSource]!] : Object.values(declared);
+  const schema = await context.catalogSchema();
+  const allowedResources = new Set(session.catalog.resources.map((each) => each.name));
+
+  interface ScoredCandidate {
+    score: number;
+    source: string;
+    sourceLabel: string;
+    resource: string;
+    tableId: string;
+    pk?: string;
+    key?: Record<string, unknown>;
+    title: string;
+    snippet: string;
+  }
+
+  const candidates: ScoredCandidate[] = [];
+  const topTerms = [...terms].sort((a, b) => b.length - a.length).slice(0, 2);
+
+  for (const src of sources) {
+    if (!allowedResources.has(src.resource)) continue;
+    const table = schema.tables.find((each) => each.id === src.resource || each.name === src.resource);
+    if (!table) continue;
+    const visibleCols = new Set(table.columns.map((col) => col.name));
+    const searchable = src.fields.filter((field) => visibleCols.has(field));
+    if (!searchable.length) continue;
+    const [pk, ...extraPk] = primaryKey(table);
+    const singlePk = pk && extraPk.length === 0 ? pk : undefined;
+    const titleCol = src.title && visibleCols.has(src.title) ? src.title : ((await context.naming(table)) ?? searchable[0]);
+    const cols = [...new Set([singlePk, titleCol, ...searchable].filter((c): c is string => Boolean(c)))];
+    const sourceCap = Math.min(MAX_ROWS, Math.max(limit * 3, src.limit ?? 8));
+    const rowMap = new Map<string, Record<string, unknown>>();
+    const addRows = (rows: Array<Record<string, unknown>>) => {
+      for (const row of rows) {
+        const dedupKey = singlePk && row[singlePk] !== undefined ? String(row[singlePk]) : JSON.stringify(row);
+        if (!rowMap.has(dedupKey)) rowMap.set(dedupKey, row);
+      }
+    };
+
+    // 1. Targeted viewer-scoped contains probes for the most specific query terms (handles larger tables).
+    for (const term of topTerms) {
+      const safeTerm = term.replaceAll('"', '');
+      if (!safeTerm) continue;
+      for (const field of searchable.slice(0, 3)) {
+        try {
+          const cond = src.where
+            ? `where (${src.where}) and (${field} contains ${JSON.stringify(safeTerm)})`
+            : `${field} contains ${JSON.stringify(safeTerm)}`;
+          const { rows } = await context.run(`${table.id} ${cond} show ${cols.join(', ')} limit ${sourceCap}`, sourceCap);
+          addRows(rows);
+        } catch {
+          /* Skip fields that cannot be compared with contains. */
+        }
+      }
+    }
+
+    // 2. Bounded scan through viewer-scoped loopback if targeted probes returned few rows.
+    if (rowMap.size < limit) {
+      try {
+        const whereClause = src.where ? ` where ${src.where}` : '';
+        const { rows } = await context.run(`${table.id}${whereClause} show ${cols.join(', ')} limit ${MAX_ROWS}`, MAX_ROWS);
+        addRows(rows);
+      } catch {
+        /* Skip if source cannot be queried by this viewer. */
+      }
+    }
+
+    const sourceLabel = humaneSource(src.id);
+    for (const row of rowMap.values()) {
+      const rawTitle =
+        titleCol && row[titleCol] !== null && row[titleCol] !== undefined && String(row[titleCol]).trim()
+          ? String(row[titleCol]).trim()
+          : singlePk && row[singlePk] !== undefined
+            ? `${table.id} ${String(row[singlePk])}`
+            : sourceLabel;
+      const bodyTexts = searchable
+        .filter((f) => f !== titleCol)
+        .map((f) => (row[f] === null || row[f] === undefined ? '' : String(row[f])))
+        .filter(Boolean);
+      const allTexts = searchable.map((f) => (row[f] === null || row[f] === undefined ? '' : String(row[f]))).filter(Boolean);
+      const combinedLower = `${rawTitle} ${allTexts.join(' ')}`.toLowerCase();
+      const titleLower = rawTitle.toLowerCase();
+
+      let score = 0;
+      if (lowerPhrase && combinedLower.includes(lowerPhrase)) {
+        score += 10;
+        if (titleLower.includes(lowerPhrase)) score += 5;
+      }
+      for (const term of terms) {
+        if (!term) continue;
+        let idx = combinedLower.indexOf(term);
+        if (idx >= 0) {
+          score += 3;
+          if (titleLower.includes(term)) score += 2;
+          let extra = 0;
+          while ((idx = combinedLower.indexOf(term, idx + term.length)) >= 0 && extra < 4) {
+            score += 0.5;
+            extra++;
+          }
+        }
+      }
+      if (score <= 0) continue;
+
+      const snippet = excerptAround(bodyTexts.length ? [...bodyTexts, rawTitle] : allTexts, queryText, terms);
+      const key = singlePk && row[singlePk] !== undefined ? { [singlePk]: row[singlePk] } : undefined;
+      candidates.push({
+        score,
+        source: src.id,
+        sourceLabel,
+        resource: src.resource,
+        tableId: table.id,
+        pk: singlePk,
+        key,
+        title: plain(rawTitle, 120) || sourceLabel,
+        snippet: plain(snippet, KNOWLEDGE_EXCERPT_CHARS + 8),
+      });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score);
+  const top = candidates.slice(0, limit);
+  const citations: Citation[] = await Promise.all(
+    top.map(async (hit, index) => {
+      const address = hit.key ? await context.addressOf(hit.tableId, hit.key) : undefined;
+      if (hit.key) context.read(hit.tableId, hit.key, hit.title);
+      return {
+        ref: index + 1,
+        source: hit.source,
+        sourceLabel: hit.sourceLabel,
+        resource: hit.resource,
+        title: hit.title,
+        snippet: hit.snippet,
+        ...(address ? { address } : {}),
+        ...(hit.key ? { key: hit.key } : {}),
+      };
+    }),
+  );
+
+  const display: DisplayItem[] = [
+    {
+      type: 'step',
+      id,
+      tool: 'search_knowledge',
+      label: citations.length
+        ? `Found ${citations.length} ${citations.length === 1 ? 'source' : 'sources'} for “${plain(queryText, 48)}”`
+        : `No matching sources for “${plain(queryText, 48)}”`,
+    },
+  ];
+  if (citations.length) {
+    display.push({ type: 'citations', id, query: plain(queryText, 120), items: citations });
+  }
+  return {
+    result: fitted({
+      query: queryText,
+      total: citations.length,
+      citations: citations.map((c) => ({
+        ref: c.ref,
+        source: c.source,
+        resource: c.resource,
+        title: c.title,
+        snippet: c.snippet,
+        ...(c.address ? { address: c.address } : {}),
+      })),
+    }),
+    display,
+  };
+}
+
+async function rememberFact(session: ToolSession, input: Record<string, unknown>, id: string): Promise<ToolAnswer> {
+  const memoryCfg = session.assistant.memory;
+  if (!memoryCfg) throw new ToolRefusal('Memory is not enabled for this assistant.');
+  if (session.ask) throw new ToolRefusal('Ask only reads and cannot save memory.');
+  if (!session.store || !session.owner) throw new ToolRefusal('Memory storage is unavailable right now.');
+  const content = String(input.content ?? '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!content) throw new ToolRefusal('remember takes content: a concise fact or preference.');
+  const defaultScope: 'person' | 'app' = memoryCfg.scopes.includes('person') ? 'person' : 'app';
+  const rawScope = input.scope === undefined ? defaultScope : String(input.scope);
+  if (rawScope !== 'person' && rawScope !== 'app') {
+    throw new ToolRefusal('scope must be "person" or "app".');
+  }
+  if (!memoryCfg.scopes.includes(rawScope)) {
+    throw new ToolRefusal(`This assistant only allows memory scopes: ${memoryCfg.scopes.join(', ')}.`);
+  }
+  if (rawScope === 'app' && !session.canWriteSharedMemory) {
+    throw new ToolRefusal('This person may not save shared workspace memory.');
+  }
+  const existingId = typeof input.id === 'string' && input.id.trim() ? input.id.trim() : undefined;
+  const { memory, updated } = await session.store.remember(
+    session.owner,
+    {
+      ...(existingId ? { id: existingId } : {}),
+      scope: rawScope,
+      agent: session.agentId ?? '',
+      content,
+      source: 'assistant',
+      maxItems: memoryCfg.maxItems,
+    },
+    new Date().toISOString(),
+  );
+  const label = `${updated ? 'Updated' : 'Remembered'} (${memory.scope}): “${plain(memory.content, 60)}”`;
+  return {
+    result: JSON.stringify({ saved: true, updated, id: memory.id, scope: memory.scope, content: memory.content }),
+    display: [
+      { type: 'step', id, tool: 'remember', label },
+      {
+        type: 'memory',
+        id,
+        action: updated ? 'updated' : 'remembered',
+        memoryId: memory.id,
+        scope: memory.scope,
+        content: memory.content,
+      },
+    ],
+  };
+}
+
+async function forgetFact(session: ToolSession, input: Record<string, unknown>, id: string): Promise<ToolAnswer> {
+  const memoryCfg = session.assistant.memory;
+  if (!memoryCfg) throw new ToolRefusal('Memory is not enabled for this assistant.');
+  if (session.ask) throw new ToolRefusal('Ask only reads and cannot forget memory.');
+  if (!session.store || !session.owner) throw new ToolRefusal('Memory storage is unavailable right now.');
+  const memoryId = typeof input.id === 'string' ? input.id.trim() : '';
+  if (!memoryId) throw new ToolRefusal('forget takes id: the memory id to remove.');
+  const current = await session.store.memories(session.owner, { scopes: memoryCfg.scopes, limit: 100 });
+  const target = current.find((item) => item.id === memoryId);
+  const removed = await session.store.forget(session.owner, memoryId, {
+    allowAppScope: Boolean(session.canWriteSharedMemory),
+  });
+  if (!removed) throw new ToolRefusal('No removable memory found with that id.');
+  return {
+    result: JSON.stringify({ forgot: true, id: memoryId }),
+    display: [
+      { type: 'step', id, tool: 'forget', label: target ? `Forgot: “${plain(target.content, 60)}”` : 'Forgot memory' },
+      {
+        type: 'memory',
+        id,
+        action: 'forgot',
+        memoryId,
+        scope: target?.scope ?? 'person',
+        ...(target ? { content: target.content } : {}),
+      },
+    ],
+  };
+}
+
 /** What a tool call is doing, in a few words, said while it runs (the panel's working line). */
 export function runningLabel(name: string, input: unknown): string {
   const args = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
@@ -1174,7 +1526,13 @@ export function runningLabel(name: string, input: unknown): string {
               ? `Preparing ${said(args.action)}`
               : name === 'delegate' && said(args.agent)
                 ? `Delegating to ${said(args.agent)}`
-                : 'Working';
+                : name === 'search_knowledge' && said(args.query)
+                  ? `Searching knowledge for “${said(args.query)}”`
+                  : name === 'remember'
+                    ? 'Saving memory'
+                    : name === 'forget'
+                      ? 'Removing memory'
+                      : 'Working';
   return `${label}…`;
 }
 
@@ -1305,6 +1663,9 @@ export async function answerTool(session: ToolSession, name: string, input: unkn
   const context = toolContext(session);
   const args = input && typeof input === 'object' && !Array.isArray(input) ? (input as Record<string, unknown>) : {};
   try {
+    if (name === 'search_knowledge') return await searchKnowledge(context, session, args, id);
+    if (name === 'remember') return await rememberFact(session, args, id);
+    if (name === 'forget') return await forgetFact(session, args, id);
     if (!(session.assistant.tools as string[]).includes(name)) throw new ToolRefusal(`There is no tool "${name}" here.`);
     if (name === 'run') {
       const { proposal, label, result, review } = await propose(context, session, args, id);

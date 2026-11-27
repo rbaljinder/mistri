@@ -57,6 +57,32 @@ export interface DelegationItem {
   durationMs?: number;
 }
 
+export interface Citation {
+  ref: number;
+  source: string;
+  sourceLabel: string;
+  resource: string;
+  title: string;
+  snippet: string;
+  address?: string;
+}
+
+export interface CitationsItem {
+  type: 'citations';
+  id: string;
+  query: string;
+  items: Citation[];
+}
+
+export interface MemoryEventItem {
+  type: 'memory';
+  id: string;
+  action: 'remembered' | 'updated' | 'forgot';
+  memoryId: string;
+  scope: 'person' | 'app';
+  content?: string;
+}
+
 export type PanelItem =
   /** `seq` is the stored event's, once the server has said it; edit names it. */
   | { type: 'person'; seq?: number; text: string }
@@ -68,6 +94,8 @@ export type PanelItem =
   | { type: 'step'; id: string; tool: string; label: string; failed?: true }
   | { type: 'block'; id: string; block: AssistantBlock; streaming?: true }
   | DelegationItem
+  | CitationsItem
+  | MemoryEventItem
   | { type: 'proposal'; id: string; proposal: Proposal; outcome?: ProposalOutcome }
   /** An Ask's read: the line it ran and the rows it read there. */
   | { type: 'query'; id: string; q: string; resource?: string; total: number; evidence: AskEvidence[] };
@@ -87,8 +115,8 @@ export interface StreamEvent {
 
 const record = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 
-/** A run of the model's words: plain, bold, code, or a link to an address inside the App. */
-export type Run = { text: string; mark?: 'strong' | 'code' } | { text: string; link: string };
+/** A run of the model's words: plain, bold, code, an inside link, or an inline numeric citation `[1]`. */
+export type Run = { text: string; mark?: 'strong' | 'code' } | { text: string; link: string } | { text: string; cite: number };
 export type Paragraph =
   | { list: false; lines: Run[][] }
   | { list: true; lines: Run[][] }
@@ -112,20 +140,26 @@ const cellsOf = (line: string): string[] =>
 /**
  * The model's words as paragraphs, lists and tables of runs, read with three
  * marks and nothing else. Text, never markup: a link to anywhere but a path in
- * the App is said as its words alone. A table the model writes in words (it is
- * told not to repeat a block, and sometimes does) is drawn as a table, not as
- * lines of pipes.
+ * the App is said as its words alone. When `citeRefs` is provided, numeric
+ * markers like `[1]` that match a retrieved citation become clickable citation
+ * runs. A table the model writes in words (it is told not to repeat a block,
+ * and sometimes does) is drawn as a table, not as lines of pipes.
  */
-export function wordsOf(text: string): Paragraph[] {
+export function wordsOf(text: string, citeRefs?: ReadonlySet<number>): Paragraph[] {
   const runs = (line: string): Run[] => {
     const found: Run[] = [];
-    const pattern = /\[([^\]\n]+)\]\(([^)\s]+)\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`/g;
+    const pattern = /\[([^\]\n]+)\]\(([^)\s]+)\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`|\[(\d{1,2})\](?!\()/g;
     let from = 0;
     for (let match = pattern.exec(line); match; match = pattern.exec(line)) {
       if (match.index > from) found.push({ text: line.slice(from, match.index) });
       if (match[1] !== undefined) found.push(inside(match[2]) ? { text: match[1], link: match[2] } : { text: match[1] });
       else if (match[3] !== undefined) found.push({ text: match[3], mark: 'strong' });
-      else found.push({ text: match[4], mark: 'code' });
+      else if (match[4] !== undefined) found.push({ text: match[4], mark: 'code' });
+      else {
+        const ref = Number(match[5]);
+        if (citeRefs?.has(ref)) found.push({ text: match[0], cite: ref });
+        else found.push({ text: match[0] });
+      }
       from = match.index + match[0].length;
     }
     if (from < line.length) found.push({ text: line.slice(from) });
@@ -332,6 +366,51 @@ export function applyEvent(items: readonly PanelItem[], { event, data }: StreamE
           ),
         });
       return next;
+    case 'citations': {
+      if (typeof data.id === 'string' && typeof data.query === 'string' && Array.isArray(data.items)) {
+        const items: Citation[] = data.items
+          .filter(
+            (entry): entry is Record<string, unknown> =>
+              record(entry) &&
+              typeof entry.ref === 'number' &&
+              typeof entry.source === 'string' &&
+              typeof entry.resource === 'string' &&
+              typeof entry.title === 'string' &&
+              typeof entry.snippet === 'string',
+          )
+          .map((entry) => ({
+            ref: entry.ref as number,
+            source: entry.source as string,
+            sourceLabel: typeof entry.sourceLabel === 'string' && entry.sourceLabel ? entry.sourceLabel : (entry.source as string),
+            resource: entry.resource as string,
+            title: entry.title as string,
+            snippet: entry.snippet as string,
+            ...(typeof entry.address === 'string' && inside(entry.address) ? { address: entry.address } : {}),
+          }));
+        if (items.length) {
+          next.push({ type: 'citations', id: data.id, query: data.query, items });
+        }
+      }
+      return next;
+    }
+    case 'memory': {
+      if (
+        typeof data.id === 'string' &&
+        typeof data.memoryId === 'string' &&
+        (data.action === 'remembered' || data.action === 'updated' || data.action === 'forgot') &&
+        (data.scope === 'person' || data.scope === 'app')
+      ) {
+        next.push({
+          type: 'memory',
+          id: data.id,
+          action: data.action,
+          memoryId: data.memoryId,
+          scope: data.scope,
+          ...(typeof data.content === 'string' && data.content ? { content: data.content } : {}),
+        });
+      }
+      return next;
+    }
     case 'note':
       if (typeof data.text === 'string') next.push({ type: 'note', text: data.text });
       return next;
@@ -364,18 +443,37 @@ export function waitingProposal(items: readonly PanelItem[]): Proposal | undefin
   return undefined;
 }
 
-/** The items grouped for drawing: consecutive steps fold into one group. */
+/** The items grouped for drawing: consecutive steps fold into one group, and a turn's
+ * passive citation shelves and memory whispers settle neatly beneath the reply they support. */
 type DrawnItem =
   | { type: 'steps'; steps: Extract<PanelItem, { type: 'step' }>[]; at: number }
   | { type: 'item'; item: PanelItem; at: number };
 export function grouped(items: readonly PanelItem[]): DrawnItem[] {
   const drawn: DrawnItem[] = [];
+  let footers: Array<{ type: 'item'; item: PanelItem; at: number }> = [];
+  const flushFooters = () => {
+    if (!footers.length) return;
+    // Place cited sources before quiet memory whispers for a calm reading hierarchy.
+    for (const entry of footers) if (entry.item.type === 'citations') drawn.push(entry);
+    for (const entry of footers) if (entry.item.type === 'memory') drawn.push(entry);
+    footers = [];
+  };
   items.forEach((item, at) => {
+    if (item.type === 'person') {
+      flushFooters();
+      drawn.push({ type: 'item', item, at });
+      return;
+    }
+    if (item.type === 'citations' || item.type === 'memory') {
+      footers.push({ type: 'item', item, at });
+      return;
+    }
     const last = drawn[drawn.length - 1];
     if (item.type === 'step' && last?.type === 'steps') last.steps.push(item);
     else if (item.type === 'step') drawn.push({ type: 'steps', steps: [item], at });
     else drawn.push({ type: 'item', item, at });
   });
+  flushFooters();
   return drawn;
 }
 

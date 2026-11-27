@@ -86,6 +86,7 @@ import {
   waitingProposal,
   wordsOf,
   type AssistantBlock,
+  type Citation,
   type DelegationItem,
   type Run,
   type PanelItem,
@@ -93,6 +94,7 @@ import {
   type ProposalOutcome,
   type StreamEvent,
 } from './assistantStream.js';
+import { CitationPill, CitationsCard, MemoryEventChip } from './AssistantCitations.js';
 import { Button } from '@mistriwork/ui/Button.js';
 import { Resizable } from '@mistriwork/ui/Resizable.js';
 import { Tabs } from '@mistriwork/ui/Tabs.js';
@@ -121,6 +123,7 @@ import { addHostListener, navFollow, portalRoot, removeHostListener, shellById }
 
 const Dashboard = onDemand(() => import('./Dashboard.js'), 'Dashboard');
 const AssistantCustomBlock = onDemand(() => import('./sdk/AssistantCustomBlock.js'), 'AssistantCustomBlock');
+const AssistantMemoryDrawer = onDemand(() => import('./AssistantMemoryDrawer.js'), 'AssistantMemoryDrawer');
 
 type Summary = ConversationSummary;
 
@@ -152,25 +155,55 @@ function Link({ to, children, onFollow }: { to: string; children: ReactNode; onF
   );
 }
 
+/** Collect all citations belonging to the same assistant turn as item index `at`. */
+function turnCitations(items: readonly PanelItem[], at: number): ReadonlyMap<number, Citation> | undefined {
+  let start = at;
+  while (start > 0 && items[start - 1]?.type !== 'person') start--;
+  let end = at + 1;
+  while (end < items.length && items[end]?.type !== 'person') end++;
+  const map = new Map<number, Citation>();
+  for (let i = start; i < end; i++) {
+    const entry = items[i];
+    if (entry?.type === 'citations') {
+      for (const c of entry.items) map.set(c.ref, c);
+    }
+  }
+  return map.size ? map : undefined;
+}
+
 /** The model's words, drawn from their runs (assistantStream.ts `wordsOf`). */
-function Words({ text, onFollow }: { text: string; onFollow: (address: string) => void }) {
+function Words({
+  text,
+  onFollow,
+  citations,
+  onFocusCitation,
+}: {
+  text: string;
+  onFollow: (address: string) => void;
+  citations?: ReadonlyMap<number, Citation>;
+  onFocusCitation?: (ref: number) => void;
+}) {
+  const citeRefs = citations?.size ? new Set(citations.keys()) : undefined;
   const draw = (runs: Run[]) =>
-    runs.map((run, at) =>
-      'link' in run ? (
-        <Link key={at} to={run.link} onFollow={onFollow}>
-          {run.text}
-        </Link>
-      ) : run.mark === 'strong' ? (
-        <strong key={at}>{run.text}</strong>
-      ) : run.mark === 'code' ? (
-        <code key={at}>{run.text}</code>
-      ) : (
-        run.text
-      ),
-    );
+    runs.map((run, at) => {
+      if ('link' in run)
+        return (
+          <Link key={at} to={run.link} onFollow={onFollow}>
+            {run.text}
+          </Link>
+        );
+      if ('cite' in run) {
+        const cited = citations?.get(run.cite);
+        if (cited) return <CitationPill key={at} citation={cited} onFollow={onFollow} onFocusSource={onFocusCitation} />;
+        return run.text;
+      }
+      if (run.mark === 'strong') return <strong key={at}>{run.text}</strong>;
+      if (run.mark === 'code') return <code key={at}>{run.text}</code>;
+      return run.text;
+    });
   return (
     <>
-      {wordsOf(text).map((paragraph, p) =>
+      {wordsOf(text, citeRefs).map((paragraph, p) =>
         'table' in paragraph ? (
           <div key={p} className="assistant-words-table">
             <table>
@@ -1093,6 +1126,8 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
   const [started, setStarted] = useState<string | null>(null);
   const [items, setItems] = useState<PanelItem[]>([]);
   const [listing, setListing] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
+  const [highlightedCitation, setHighlightedCitation] = useState<number | null>(null);
   const [text, setText] = useState('');
   const [editing, setEditing] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -1472,6 +1507,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
   const open = (id: string) => {
     stop.current?.abort();
     setListing(false);
+    setMemoryOpen(false);
     setAsking(false);
     setCanvasEntry(null);
     if (room) {
@@ -1485,6 +1521,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
   const startNew = () => {
     stop.current?.abort();
     setListing(false);
+    setMemoryOpen(false);
     setAsking(false);
     setCanvasEntry(null);
     if (room) {
@@ -1550,6 +1587,9 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
     } else if (canvasEntry) {
       event.preventDefault();
       setCanvasEntry(null);
+    } else if (memoryOpen) {
+      event.preventDefault();
+      setMemoryOpen(false);
     } else if (listing) {
       event.preventDefault();
       setListing(false);
@@ -1621,7 +1661,9 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
 
   const threadContent = (
     <div className="assistant-thread-column">
-      {listing && !room ? (
+      {memoryOpen && assistantConfig?.memory ? (
+        <AssistantMemoryDrawer app={app} onClose={() => setMemoryOpen(false)} />
+      ) : listing && !room ? (
         <div className="assistant-body">{list}</div>
       ) : (
         <ActionOutcomes.Provider value={acted}>
@@ -1721,7 +1763,12 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
               if (item.type === 'text')
                 return (
                   <div key={`t${at}`} className="assistant-text">
-                    <Words text={item.text} onFollow={onFollow} />
+                    <Words
+                      text={item.text}
+                      onFollow={onFollow}
+                      citations={turnCitations(items, at)}
+                      onFocusCitation={(ref) => setHighlightedCitation(ref)}
+                    />
                   </div>
                 );
               if (item.type === 'note')
@@ -1729,6 +1776,23 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
                   <p key={`n${at}`} className="assistant-note">
                     {item.text}
                   </p>
+                );
+              if (item.type === 'citations')
+                return <CitationsCard key={`cit${item.id}`} item={item} highlightedRef={highlightedCitation} onFollow={onFollow} />;
+              if (item.type === 'memory')
+                return (
+                  <MemoryEventChip
+                    key={`mem${item.id}`}
+                    item={item}
+                    onManage={
+                      assistantConfig?.memory
+                        ? () => {
+                            setListing(false);
+                            setMemoryOpen(true);
+                          }
+                        : undefined
+                    }
+                  />
                 );
               if (item.type === 'block')
                 return (
@@ -1778,113 +1842,115 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
           </div>
         </ActionOutcomes.Provider>
       )}
-      <div className="assistant-foot">
-        {context && withRecord && !listing && (
-          <div className="assistant-context">
-            <span>{say('about', { label: context.label })}</span>
-            <button
-              type="button"
-              className="ghost"
-              aria-label={say('leaveOutRecord', { label: context.label })}
-              title={say('leaveOutRecord', { label: context.label })}
-              onClick={() => setWithRecord(false)}
-            >
-              ×
-            </button>
-          </div>
-        )}
-        {editing !== null && (
-          <div className="assistant-context">
-            <span>{say('editing')}</span>
-            <button
-              type="button"
-              className="ghost"
-              onClick={() => {
-                setEditing(null);
-                setText('');
-              }}
-            >
-              {say('cancelEdit')}
-            </button>
-          </div>
-        )}
-        {/* A change waiting for the person is said in the field itself, and the field says it is why it is shut. */}
-        <div className="assistant-compose">
-          {waiting && !busy && (
-            <p className="assistant-waiting" id={waitingNote}>
-              <span className="assistant-waiting-dot" aria-hidden="true" />
-              {say('waitingForYou')}
-            </p>
+      {!memoryOpen && (
+        <div className="assistant-foot">
+          {context && withRecord && !listing && (
+            <div className="assistant-context">
+              <span>{say('about', { label: context.label })}</span>
+              <button
+                type="button"
+                className="ghost"
+                aria-label={say('leaveOutRecord', { label: context.label })}
+                title={say('leaveOutRecord', { label: context.label })}
+                onClick={() => setWithRecord(false)}
+              >
+                ×
+              </button>
+            </div>
           )}
-          <div
-            className={`assistant-compose-box${(assistantConfig?.effortPicker || agents.length > 1) && !listing ? ' assistant-compose-rich' : ''}`}
-          >
-            <textarea
-              ref={box}
-              rows={1}
-              value={text}
-              aria-label={say(asking ? 'askMessage' : 'message')}
-              aria-describedby={waiting && !busy ? waitingNote : undefined}
-              placeholder={say(asking ? 'askMessage' : 'message')}
-              disabled={!ready || Boolean(waiting && !busy)}
-              onChange={(event) => setText(event.target.value)}
-              onKeyDown={onKey}
-            />
-            <div className="assistant-compose-bar">
-              {(agents.length > 1 || assistantConfig?.effortPicker) && !listing ? (
-                <div className="assistant-compose-meta">
-                  {agents.length > 1 && activeAgent ? (
-                    <div className="assistant-agent-picker">
-                      <Select<string>
-                        size="xs"
-                        value={activeAgent.id}
-                        onValueChange={(next) => {
-                          if (!next) return;
-                          setSelectedAgentId(next);
-                          const picked = agents.find((each) => each.id === next);
-                          if (picked?.effort) setEffort(picked.effort);
-                        }}
-                        options={agents.map((each) => ({ value: each.id, label: each.name }))}
-                        ariaLabel={say('agentLabel')}
-                        triggerClassName="assistant-agent-trigger"
-                      />
-                    </div>
-                  ) : null}
-                  {assistantConfig?.effortPicker ? (
-                    <div className="assistant-effort">
-                      <Select<'low' | 'medium' | 'high'>
-                        size="xs"
-                        value={effort}
-                        onValueChange={(next) => {
-                          if (next) setEffort(next);
-                        }}
-                        options={[
-                          { value: 'low', label: say('effort_low') },
-                          { value: 'medium', label: say('effort_medium') },
-                          { value: 'high', label: say('effort_high') },
-                        ]}
-                        ariaLabel={say('effortLabel')}
-                        triggerClassName="nx-ai-effort-trigger"
-                      />
-                    </div>
-                  ) : null}
+          {editing !== null && (
+            <div className="assistant-context">
+              <span>{say('editing')}</span>
+              <button
+                type="button"
+                className="ghost"
+                onClick={() => {
+                  setEditing(null);
+                  setText('');
+                }}
+              >
+                {say('cancelEdit')}
+              </button>
+            </div>
+          )}
+          {/* A change waiting for the person is said in the field itself, and the field says it is why it is shut. */}
+          <div className="assistant-compose">
+            {waiting && !busy && (
+              <p className="assistant-waiting" id={waitingNote}>
+                <span className="assistant-waiting-dot" aria-hidden="true" />
+                {say('waitingForYou')}
+              </p>
+            )}
+            <div
+              className={`assistant-compose-box${(assistantConfig?.effortPicker || agents.length > 1) && !listing ? ' assistant-compose-rich' : ''}`}
+            >
+              <textarea
+                ref={box}
+                rows={1}
+                value={text}
+                aria-label={say(asking ? 'askMessage' : 'message')}
+                aria-describedby={waiting && !busy ? waitingNote : undefined}
+                placeholder={say(asking ? 'askMessage' : 'message')}
+                disabled={!ready || Boolean(waiting && !busy)}
+                onChange={(event) => setText(event.target.value)}
+                onKeyDown={onKey}
+              />
+              <div className="assistant-compose-bar">
+                {(agents.length > 1 || assistantConfig?.effortPicker) && !listing ? (
+                  <div className="assistant-compose-meta">
+                    {agents.length > 1 && activeAgent ? (
+                      <div className="assistant-agent-picker">
+                        <Select<string>
+                          size="xs"
+                          value={activeAgent.id}
+                          onValueChange={(next) => {
+                            if (!next) return;
+                            setSelectedAgentId(next);
+                            const picked = agents.find((each) => each.id === next);
+                            if (picked?.effort) setEffort(picked.effort);
+                          }}
+                          options={agents.map((each) => ({ value: each.id, label: each.name }))}
+                          ariaLabel={say('agentLabel')}
+                          triggerClassName="assistant-agent-trigger"
+                        />
+                      </div>
+                    ) : null}
+                    {assistantConfig?.effortPicker ? (
+                      <div className="assistant-effort">
+                        <Select<'low' | 'medium' | 'high'>
+                          size="xs"
+                          value={effort}
+                          onValueChange={(next) => {
+                            if (next) setEffort(next);
+                          }}
+                          options={[
+                            { value: 'low', label: say('effort_low') },
+                            { value: 'medium', label: say('effort_medium') },
+                            { value: 'high', label: say('effort_high') },
+                          ]}
+                          ariaLabel={say('effortLabel')}
+                          triggerClassName="nx-ai-effort-trigger"
+                        />
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+                <div className="assistant-compose-actions">
+                  {busy ? (
+                    <Button size="sm" onClick={() => stop.current?.abort()}>
+                      {say('stop')}
+                    </Button>
+                  ) : (
+                    <Button size="sm" variant={canSend ? 'primary' : 'secondary'} onClick={send} disabled={!canSend}>
+                      {say('send')}
+                    </Button>
+                  )}
                 </div>
-              ) : null}
-              <div className="assistant-compose-actions">
-                {busy ? (
-                  <Button size="sm" onClick={() => stop.current?.abort()}>
-                    {say('stop')}
-                  </Button>
-                ) : (
-                  <Button size="sm" variant={canSend ? 'primary' : 'secondary'} onClick={send} disabled={!canSend}>
-                    {say('send')}
-                  </Button>
-                )}
               </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 
@@ -1948,7 +2014,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
       words={surfaceWords}
       style={surfaceStyle}
       onKeyDown={onPanelKey}
-      className={`${room ? 'assistant-room' : 'assistant-panel'}${wide ? ' assistant-wide' : ''}${!room && wide ? ' assistant-panel-expanded' : ''}${floating ? ' assistant-panel-floating' : ''}${room && listing ? ' assistant-room-listing' : ''}${(starting || !ready) && !(listing && !room) && !liveCanvasItem ? ' assistant-starting' : ''}`}
+      className={`${room ? 'assistant-room' : 'assistant-panel'}${wide ? ' assistant-wide' : ''}${!room && wide ? ' assistant-panel-expanded' : ''}${floating ? ' assistant-panel-floating' : ''}${room && listing ? ' assistant-room-listing' : ''}${(starting || !ready) && !(listing && !room) && !memoryOpen && !liveCanvasItem ? ' assistant-starting' : ''}`}
     >
       <div className="assistant-main">
         <div className="assistant-head">
@@ -1998,12 +2064,33 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
               </DropItem>
             </DropMenu>
           )}
+          {assistantConfig?.memory && (
+            <button
+              type="button"
+              className="icon-button"
+              aria-pressed={memoryOpen}
+              onClick={() => {
+                setListing(false);
+                setMemoryOpen((was) => !was);
+              }}
+            >
+              {say('memory')}
+            </button>
+          )}
           {!room && (
-            <button type="button" className="icon-button" aria-pressed={listing} onClick={() => setListing((was) => !was)}>
+            <button
+              type="button"
+              className="icon-button"
+              aria-pressed={listing}
+              onClick={() => {
+                setMemoryOpen(false);
+                setListing((was) => !was);
+              }}
+            >
               {say('conversations')}
             </button>
           )}
-          {!room && !listing && (
+          {!room && !listing && !memoryOpen && (
             <button type="button" className="icon-button" onClick={startNew}>
               {say('newConversation')}
             </button>

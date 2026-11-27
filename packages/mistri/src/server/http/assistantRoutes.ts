@@ -9,6 +9,9 @@
  *   POST /api/assistant/acted              a verb the person ran from a card or a row the conversation drew
  *   POST /api/assistant/about              the record a page hands the panel: its key and label, if the person may open it
  *   GET  /api/assistant/search?app=&q=     their conversations whose words hold q, each with a line of them
+ *   GET  /api/assistant/memories?app=      durable memories visible to this person (personal + shared)
+ *   POST /api/assistant/memories           save or edit a memory (person or shared workspace)
+ *   POST /api/assistant/memories/delete    forget one memory
  *   POST /api/assistant/rename             name one again
  *   POST /api/assistant/delete             forget one
  *
@@ -20,7 +23,7 @@
  * tenant App's host answers the same routes through `answerAssistant`, on the
  * tab's context lease (tenant/tenantAssistant.ts).
  */
-import { ASSISTANT_EFFORTS, resolveAgentAssistant, type AppAssistant } from '../../shared/appAssistant.js';
+import { ASSISTANT_EFFORTS, canWriteSharedMemory, resolveAgentAssistant, type AppAssistant } from '../../shared/appAssistant.js';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AssistantOwner, AssistantStore } from '../../adapters/assistant/assistantStore.js';
 import type { AppDef } from '../../shared/appModel.js';
@@ -59,6 +62,8 @@ export const ASSISTANT_PATHS: ReadonlySet<string> = new Set([
   '/api/assistant/rename',
   '/api/assistant/search',
   '/api/assistant/about',
+  '/api/assistant/memories',
+  '/api/assistant/memories/delete',
 ]);
 const SAID: Record<string, readonly string[]> = {
   '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode', 'effort', 'agent'],
@@ -67,6 +72,8 @@ const SAID: Record<string, readonly string[]> = {
   '/api/assistant/rename': ['app', 'conversation', 'title'],
   '/api/assistant/acted': ['app', 'conversation', 'resource', 'action', 'key', 'record', 'outcome', 'detail'],
   '/api/assistant/about': ['app', 'resource', 'id'],
+  '/api/assistant/memories': ['app', 'content', 'scope', 'id', 'agent'],
+  '/api/assistant/memories/delete': ['app', 'id'],
 };
 /* Refused alike whether the table is not theirs, the row is outside their rows or it is not there: which of the three
    is not the page's to learn, as a record's own address answers. */
@@ -275,6 +282,50 @@ export async function answerAssistant(
       send(res, 200, { deleted: true });
       return;
     }
+    if (path === '/api/assistant/memories' || path === '/api/assistant/memories/delete') {
+      const memCfg = assistant.memory;
+      if (!memCfg) throw new HttpError(404, 'Memory is not enabled for this assistant.');
+      const roles =
+        scope.roles ?? (memCfg.sharedRoles ? (await servedTo(loop(), app.id, new AbortController().signal)).viewerRoles : undefined) ?? [];
+      const canWriteShared = canWriteSharedMemory(memCfg, roles);
+      if (path === '/api/assistant/memories' && get) {
+        const agentFilter = url.searchParams.get('agent')?.trim() || undefined;
+        const memories = await store.memories(owner, { scopes: memCfg.scopes, agent: agentFilter, limit: 100 });
+        send(res, 200, {
+          memories,
+          scopes: memCfg.scopes,
+          maxItems: memCfg.maxItems,
+          canWriteShared,
+        });
+        return;
+      }
+      if (path === '/api/assistant/memories') {
+        const content = typeof body.content === 'string' ? body.content.replace(/\s+/g, ' ').trim() : '';
+        // eslint-disable-next-line no-control-regex
+        if (!content || content.length > 500 || /[\u0000-\u001f\u007f]/.test(content))
+          throw new HttpError(400, 'A memory is 1 to 500 characters.');
+        const defaultScope: 'person' | 'app' = memCfg.scopes.includes('person') ? 'person' : 'app';
+        const memScope = body.scope === undefined ? defaultScope : body.scope;
+        if (memScope !== 'person' && memScope !== 'app') throw new HttpError(400, 'Scope must be "person" or "app".');
+        if (!memCfg.scopes.includes(memScope)) throw new HttpError(400, `Scope "${memScope}" is not enabled here.`);
+        if (memScope === 'app' && !canWriteShared) throw new HttpError(403, 'You may not save shared workspace memory.');
+        const memId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
+        const agent = typeof body.agent === 'string' ? body.agent.trim().slice(0, 64) : '';
+        const { memory, updated } = await store.remember(
+          owner,
+          { ...(memId ? { id: memId } : {}), scope: memScope, agent, content, source: 'person', maxItems: memCfg.maxItems },
+          new Date().toISOString(),
+        );
+        send(res, 200, { memory, updated });
+        return;
+      }
+      const memId = typeof body.id === 'string' ? body.id.trim() : '';
+      if (!memId || !(await store.forget(owner, memId, { allowAppScope: canWriteShared }))) {
+        throw new HttpError(404, 'No such memory.');
+      }
+      send(res, 200, { deleted: true });
+      return;
+    }
     if (path === '/api/assistant/about') {
       /* A page hands the panel what the person is on (useAssistant().open({ about })): the record is read here as them,
          through the App's own routes, and named as the panel will say it. Nothing is kept: the turn reads it again. */
@@ -442,7 +493,21 @@ export async function answerAssistant(
     }
     const effectiveAssistant = resolvedAgent.assistant;
     const activeAgent = resolvedAgent.agent;
-    const catalog = catalogFromPayload(payload, effectiveAssistant, await tablesOf(loop(), app.id, controller.signal), activeAgent);
+    const canWriteShared = canWriteSharedMemory(effectiveAssistant.memory, viewerRoles ?? []);
+    const memories = effectiveAssistant.memory
+      ? await store.memories(owner, {
+          scopes: effectiveAssistant.memory.scopes,
+          agent: activeAgent?.id,
+          limit: 40,
+        })
+      : undefined;
+    const catalog = catalogFromPayload(
+      payload,
+      effectiveAssistant,
+      await tablesOf(loop(), app.id, controller.signal),
+      activeAgent,
+      effectiveAssistant.memory ? { memories, canWriteSharedMemory: canWriteShared } : undefined,
+    );
     const session: ToolSession = {
       loop: loop(),
       app: app.id,
@@ -450,6 +515,7 @@ export async function answerAssistant(
       assistant: effectiveAssistant,
       catalog,
       signal: controller.signal,
+      ...(effectiveAssistant.memory ? { store, owner, agentId: activeAgent?.id ?? '', canWriteSharedMemory: canWriteShared } : {}),
       ...(scope.propose ? { propose: scope.propose } : {}),
       ...(body.mode === 'ask' ? { ask: true as const } : {}),
     };
@@ -495,7 +561,7 @@ export async function answerAssistant(
       ...(activeAgent ? { activeAgent } : {}),
       ...(viewerRoles ? { viewerRoles } : {}),
       system: systemPrompt(catalog, session.ask ? 'ask' : undefined),
-      tools: toolSpecs(effectiveAssistant, activeAgent),
+      tools: toolSpecs(effectiveAssistant, activeAgent, { canWriteSharedMemory: canWriteShared }),
       session,
       emit,
       ...(turnEffort ? { effort: turnEffort } : {}),
