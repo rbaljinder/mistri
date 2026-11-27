@@ -61,4 +61,7 @@ export const say = defineMessages({
   sourceScheduled: 'Scheduled',
   sourceTriggered: 'Triggered',
   fieldsFilter: 'fields: {fields}',
+  tabEvals: 'Evals · {count}',
+  detailConversation: 'Conversation',
+  detailTrace: 'Trace',
 });

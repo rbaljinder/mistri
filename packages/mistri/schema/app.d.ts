@@ -3896,6 +3896,44 @@ export interface AssistantDeclaration {
   readonly knowledge?: Readonly<Record<string, AssistantKnowledgeDeclaration>>;
   /** Durable background agent runs (`true` enables ad-hoc background runs; or configure `{ maxConcurrent, maxSteps, presets }`). */
   readonly backgroundRuns?: boolean | AssistantBackgroundRunsDeclaration;
+  /** Declarative evaluation cases runnable from the Trace & Eval console. */
+  readonly evals?: readonly AssistantEvalCaseDeclaration[];
+}
+/** Expectations graded against a declarative assistant evaluation case. */
+export interface AssistantEvalExpectDeclaration {
+  /** Case-insensitive substring expected in the assistant's final answer text. */
+  readonly answerMatches?: string;
+  /** Tool names that must be called at least once during the eval turn. */
+  readonly expectedTools?: readonly string[];
+  /** Tool names that must not succeed during the eval turn. */
+  readonly forbiddenTools?: readonly string[];
+  /** Block kinds or custom block names expected to be emitted. */
+  readonly expectedBlocks?: readonly string[];
+  /** Require at least one verified knowledge citation in the turn. */
+  readonly expectCitations?: boolean;
+  /** Require at least one recorded reasoning trace in the turn. */
+  readonly expectReasoning?: boolean;
+  /** Upper bound on total tokens consumed by the eval turn. */
+  readonly maxTokens?: number;
+  /** Upper bound on tool-calling rounds executed during the eval turn (1–32). */
+  readonly maxSteps?: number;
+}
+/** A declarative evaluation case for an App's assistant. */
+export interface AssistantEvalCaseDeclaration {
+  /** Stable identifier for this eval case (lowercase letters, digits, hyphens, underscores). */
+  readonly id: string;
+  /** Short label shown in the Eval runner tab. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description of what this eval case verifies. */
+  readonly description?: string | AppMessageRef;
+  /** Prompt sent to the assistant when this eval case runs. */
+  readonly prompt: string;
+  /** Optional named agent key from `assistant.agents`. */
+  readonly agent?: string;
+  /** Roles permitted to view and run this eval case; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Grading expectations evaluated against the resulting trace. */
+  readonly expect: AssistantEvalExpectDeclaration;
 }
 /** Durable background agent run settings for an App's assistant. */
 export interface AssistantBackgroundRunsDeclaration {

@@ -827,7 +827,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // `assistantRunPreset` properties: 10 entries; 6 new names): 1911/573.
     // Unreleased (Wave 2C): scheduled & event-triggered background runs (`schedules`, `triggers`,
     // `assistantRunSchedule` & `assistantRunTrigger` properties: 22 entries; 4 new names): 1933/577.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1933, names: 577 });
+    // Unreleased (Wave 3A): declarative assistant evals (`evals`, `assistantEvalCase` & `assistantEvalExpect`
+    // properties: 16 entries; 9 new names): 1949/586.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1949, names: 586 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

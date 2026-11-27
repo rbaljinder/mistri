@@ -72,6 +72,19 @@ const KEYS = [
   'memory',
   'knowledge',
   'backgroundRuns',
+  'evals',
+] as const;
+const MAX_EVALS = 24;
+const EVAL_KEYS = ['id', 'label', 'description', 'prompt', 'agent', 'roles', 'expect'] as const;
+const EVAL_EXPECT_KEYS = [
+  'answerMatches',
+  'expectedTools',
+  'forbiddenTools',
+  'expectedBlocks',
+  'expectCitations',
+  'expectReasoning',
+  'maxTokens',
+  'maxSteps',
 ] as const;
 const AGENT_ID = /^[a-z][a-z0-9_-]{0,39}$/;
 const MAX_AGENTS = 16;
@@ -306,6 +319,41 @@ export interface AppAssistant {
   knowledge?: Record<string, AppAssistantKnowledgeSource>;
   /** Optional durable background agent runs configuration and one-click run presets. */
   backgroundRuns?: AppAssistantBackgroundRuns;
+  /** Optional declarative evaluation cases run on demand from the Trace & Eval console. */
+  evals?: AppAssistantEvalCase[];
+}
+
+/** Declarative expectations graded against an assistant eval run. */
+interface AppAssistantEvalExpect {
+  answerMatches?: string;
+  expectedTools?: string[];
+  forbiddenTools?: string[];
+  expectedBlocks?: string[];
+  expectCitations?: boolean;
+  expectReasoning?: boolean;
+  maxTokens?: number;
+  maxSteps?: number;
+}
+
+/** A declarative assistant evaluation case. */
+interface AppAssistantEvalCase {
+  id: string;
+  label: string;
+  description?: string;
+  prompt: string;
+  agent?: string;
+  roles?: string[];
+  expect: AppAssistantEvalExpect;
+}
+
+/** Viewer-safe evaluation case summary served in `/api/app` (never leaks `roles`). */
+export interface ServedAssistantEvalCase {
+  id: string;
+  label: string;
+  description?: string;
+  prompt: string;
+  agent?: string;
+  expect: AppAssistantEvalExpect;
 }
 
 /** A declarative one-click background run preset shown in the Run Monitor. */
@@ -945,6 +993,7 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
   const knowledge = parseKnowledge(a.knowledge, context, `${where}.knowledge`);
   const agents = parseAgents(a.agents, placement, customBlocks, knowledge, context, `${where}.agents`);
   const backgroundRuns = parseBackgroundRuns(a.backgroundRuns, agents, context, `${where}.backgroundRuns`);
+  const evals = parseEvals(a.evals, agents, context, `${where}.evals`);
   let defaultAgent: string | undefined;
   if (a.defaultAgent !== undefined) {
     if (!agents) throw new Error(`${where}.defaultAgent names an agent, and ${where} declares no "agents".`);
@@ -975,7 +1024,115 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     ...(memory ? { memory } : {}),
     ...(knowledge ? { knowledge } : {}),
     ...(backgroundRuns ? { backgroundRuns } : {}),
+    ...(evals ? { evals } : {}),
   };
+}
+
+function parseEvalStringList(raw: unknown, where: string): string[] {
+  if (!Array.isArray(raw) || !raw.length || raw.some((item) => typeof item !== 'string' || !item.trim())) {
+    throw new Error(`${where} is a non-empty list of non-empty strings.`);
+  }
+  return [...new Set((raw as string[]).map((item) => item.trim()))];
+}
+
+function parseEvals(
+  raw: unknown,
+  agents: Record<string, AppAssistantAgent> | undefined,
+  context: AssistantContext,
+  where: string,
+): AppAssistantEvalCase[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw) || !raw.length || raw.length > MAX_EVALS) {
+    throw new Error(`${where} is a list of 1 to ${MAX_EVALS} evaluation cases.`);
+  }
+  const seen = new Set<string>();
+  return raw.map((entry, index) => {
+    const at = `${where}[${index}]`;
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      throw new Error(`${at} is an object: { id, label, prompt, expect }.`);
+    }
+    const e = entry as Record<string, unknown>;
+    for (const key of Object.keys(e)) {
+      if (!(EVAL_KEYS as readonly string[]).includes(key)) {
+        throw new Error(`${at} has an unknown key "${key}"; an eval case takes ${EVAL_KEYS.join(', ')}.`);
+      }
+    }
+    if (typeof e.id !== 'string' || !RUN_PRESET_ID.test(e.id)) {
+      throw new Error(`${at}.id is a lowercase identifier (letters, digits, hyphens, underscores).`);
+    }
+    if (seen.has(e.id)) throw new Error(`${at}.id "${e.id}" is declared more than once.`);
+    seen.add(e.id);
+    if (typeof e.label !== 'string' || !e.label.trim() || e.label.trim().length > 80) {
+      throw new Error(`${at}.label is a non-empty string up to 80 characters.`);
+    }
+    if (e.description !== undefined && (typeof e.description !== 'string' || !e.description.trim() || e.description.trim().length > 240)) {
+      throw new Error(`${at}.description is a non-empty string up to 240 characters.`);
+    }
+    if (typeof e.prompt !== 'string' || !e.prompt.trim() || e.prompt.trim().length > 2000) {
+      throw new Error(`${at}.prompt is a non-empty string up to 2000 characters.`);
+    }
+    if (e.agent !== undefined) {
+      if (!agents || typeof e.agent !== 'string' || !Object.hasOwn(agents, e.agent)) {
+        throw new Error(`${at}.agent names "${String(e.agent)}", which is not one of assistant.agents.`);
+      }
+    }
+    let evalRoles: string[] | undefined;
+    if (e.roles !== undefined) {
+      if (!context.roles) throw new Error(`${at}.roles names roles, and the App declares no "auth" with roles.`);
+      evalRoles = subset(e.roles, context.roles as string[], `${at}.roles`);
+    }
+    if (!e.expect || typeof e.expect !== 'object' || Array.isArray(e.expect)) {
+      throw new Error(`${at}.expect is an object declaring at least one expectation.`);
+    }
+    const ex = e.expect as Record<string, unknown>;
+    for (const key of Object.keys(ex)) {
+      if (!(EVAL_EXPECT_KEYS as readonly string[]).includes(key)) {
+        throw new Error(`${at}.expect has an unknown key "${key}"; it takes ${EVAL_EXPECT_KEYS.join(', ')}.`);
+      }
+    }
+    const expect: AppAssistantEvalExpect = {};
+    if (ex.answerMatches !== undefined) {
+      if (typeof ex.answerMatches !== 'string' || !ex.answerMatches.trim()) {
+        throw new Error(`${at}.expect.answerMatches is a non-empty string.`);
+      }
+      expect.answerMatches = ex.answerMatches.trim();
+    }
+    if (ex.expectedTools !== undefined) expect.expectedTools = parseEvalStringList(ex.expectedTools, `${at}.expect.expectedTools`);
+    if (ex.forbiddenTools !== undefined) expect.forbiddenTools = parseEvalStringList(ex.forbiddenTools, `${at}.expect.forbiddenTools`);
+    if (ex.expectedBlocks !== undefined) expect.expectedBlocks = parseEvalStringList(ex.expectedBlocks, `${at}.expect.expectedBlocks`);
+    if (ex.expectCitations !== undefined) {
+      if (typeof ex.expectCitations !== 'boolean') throw new Error(`${at}.expect.expectCitations is true or false.`);
+      expect.expectCitations = ex.expectCitations;
+    }
+    if (ex.expectReasoning !== undefined) {
+      if (typeof ex.expectReasoning !== 'boolean') throw new Error(`${at}.expect.expectReasoning is true or false.`);
+      expect.expectReasoning = ex.expectReasoning;
+    }
+    if (ex.maxTokens !== undefined) {
+      if (typeof ex.maxTokens !== 'number' || !Number.isInteger(ex.maxTokens) || ex.maxTokens < 1) {
+        throw new Error(`${at}.expect.maxTokens is a positive integer.`);
+      }
+      expect.maxTokens = ex.maxTokens;
+    }
+    if (ex.maxSteps !== undefined) {
+      if (typeof ex.maxSteps !== 'number' || !Number.isInteger(ex.maxSteps) || ex.maxSteps < 1 || ex.maxSteps > 32) {
+        throw new Error(`${at}.expect.maxSteps is an integer from 1 to 32.`);
+      }
+      expect.maxSteps = ex.maxSteps;
+    }
+    if (!Object.keys(expect).length) {
+      throw new Error(`${at}.expect declares at least one expectation.`);
+    }
+    return {
+      id: e.id,
+      label: e.label.trim(),
+      ...(e.description === undefined ? {} : { description: (e.description as string).trim() }),
+      prompt: e.prompt.trim(),
+      ...(e.agent === undefined ? {} : { agent: e.agent as string }),
+      ...(evalRoles ? { roles: evalRoles } : {}),
+      expect,
+    };
+  });
 }
 
 function nameList(raw: unknown, known: (name: string) => boolean, where: string, what: string, unknown: string): string[] {
@@ -1182,6 +1339,15 @@ export function backgroundRunsFor(
     ...(schedules.length ? { schedules } : {}),
     ...(triggers.length ? { triggers } : {}),
   };
+}
+
+/** Viewer-safe eval cases for `/api/app` (filters by `roles` and strips `roles`). */
+export function evalsFor(
+  evals: ReadonlyArray<ServedAssistantEvalCase & { roles?: readonly string[] }> | undefined,
+  roles: readonly string[],
+): ServedAssistantEvalCase[] {
+  if (!evals?.length) return [];
+  return evals.filter((each) => !each.roles || each.roles.some((role) => roles.includes(role))).map(({ roles: _roles, ...rest }) => rest);
 }
 
 const minDefined = (a: number | undefined, b: number | undefined): number | undefined =>

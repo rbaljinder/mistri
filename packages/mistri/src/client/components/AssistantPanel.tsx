@@ -1709,6 +1709,7 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
         <AssistantRunMonitor
           app={app}
           config={assistantConfig.backgroundRuns}
+          evals={assistantConfig.evals}
           agents={agents.map((a) => ({ id: a.id, name: a.name }))}
           reasoning={assistantConfig.reasoning}
           initialRunId={initialRunId}

@@ -11,6 +11,7 @@ import { Select } from '@mistriwork/ui/Select.js';
 import { Switch } from '@mistriwork/ui/Switch.js';
 import { AiReasoning } from '@mistriwork/ui/views/AiReasoning.js';
 import { CitationPill, CitationsCard, MemoryEventChip } from './AssistantCitations.js';
+import { EvalSuitePanel, RunTraceInspector } from './AssistantObservability.js';
 import { assistantApi, assistantOwner } from './assistantRequest.js';
 import {
   applyEvent,
@@ -94,6 +95,7 @@ interface RunDetailPayload {
 interface AssistantRunMonitorProps {
   app: string;
   config: NonNullable<NonNullable<AppPayloadApp['assistant']>['backgroundRuns']>;
+  evals?: NonNullable<AppPayloadApp['assistant']>['evals'];
   agents: ReadonlyArray<{ id: string; name: string }>;
   reasoning?: 'collapsed' | 'expanded' | 'hidden';
   initialRunId?: string | null;
@@ -263,6 +265,7 @@ function TraceWords({
 export function AssistantRunMonitor({
   app,
   config,
+  evals,
   agents,
   reasoning,
   initialRunId,
@@ -276,8 +279,10 @@ export function AssistantRunMonitor({
   const listKey = useMemo(() => ['assistant-runs', app, owner] as const, [app, owner]);
   const automationsKey = useMemo(() => ['assistant-automations', app, owner] as const, [app, owner]);
   const automationCount = (config.schedules?.length ?? 0) + (config.triggers?.length ?? 0);
+  const evalList = evals ?? [];
 
-  const [activeTab, setActiveTab] = useState<'runs' | 'automations'>('runs');
+  const [activeTab, setActiveTab] = useState<'runs' | 'automations' | 'evals'>('runs');
+  const [detailMode, setDetailMode] = useState<'conversation' | 'trace'>('conversation');
   const [selectedId, setSelectedId] = useState<string | null>(initialRunId ?? null);
   const [prompt, setPrompt] = useState('');
   const [agentId, setAgentId] = useState<string>(agents[0]?.id ?? '');
@@ -612,6 +617,26 @@ export function AssistantRunMonitor({
               </span>
             </div>
             <span className="assistant-runs-whisper">{metadataLine(activeDetail)}</span>
+            <div className="assistant-runs-tabs" role="tablist" aria-label={activeDetail.title}>
+              <button
+                type="button"
+                role="tab"
+                className="assistant-runs-tab"
+                aria-selected={detailMode === 'conversation'}
+                onClick={() => setDetailMode('conversation')}
+              >
+                {say('detailConversation')}
+              </button>
+              <button
+                type="button"
+                role="tab"
+                className="assistant-runs-tab"
+                aria-selected={detailMode === 'trace'}
+                onClick={() => setDetailMode('trace')}
+              >
+                {say('detailTrace')}
+              </button>
+            </div>
           </div>
         </header>
 
@@ -623,138 +648,142 @@ export function AssistantRunMonitor({
               </p>
             )}
             <p className="assistant-run-prompt">{activeDetail.prompt}</p>
-            <div className="assistant-run-trace">
-              {drawn.map((entry, idx) => {
-                if (entry.type === 'steps') {
-                  const count = entry.steps.length;
-                  return (
-                    <details key={`s${entry.at}`} className="assistant-run-steps">
-                      <summary>{count === 1 ? say('stepOneHeading') : say('stepsHeading', { count })}</summary>
-                      <ul>
-                        {entry.steps.map((step) => (
-                          <li key={step.id} className={step.failed ? 'assistant-run-step-failed' : undefined}>
-                            {step.label}
-                          </li>
-                        ))}
-                      </ul>
-                    </details>
-                  );
-                }
-                const { item, at } = entry;
-                if (item.type === 'person') return null;
-                if (item.type === 'reasoning') {
-                  if (reasoning === 'hidden') return null;
-                  return (
-                    <AiReasoning
-                      key={`r${item.id}`}
-                      text={item.text}
-                      redacted={item.redacted}
-                      durationMs={item.durationMs}
-                      streaming={Boolean(streaming && idx === drawn.length - 1 && item.open)}
-                      defaultOpen={reasoning === 'expanded'}
-                      words={{
-                        thinking: say('thinking'),
-                        thought: say('reasoning'),
-                        thoughtFor: (duration) => say('thoughtFor', { duration }),
-                        redacted: say('reasoningRedacted'),
-                        regionLabel: say('reasoningRegion'),
-                      }}
-                    />
-                  );
-                }
-                if (item.type === 'text') {
-                  return (
-                    <TraceWords
-                      key={`t${at}`}
-                      text={item.text}
-                      onFollow={onFollow}
-                      citations={turnCitations(traceItems, at)}
-                      onFocusCitation={(ref) => setHighlightedCitation(ref)}
-                    />
-                  );
-                }
-                if (item.type === 'citations') {
-                  return <CitationsCard key={`cit${item.id}`} item={item} highlightedRef={highlightedCitation} onFollow={onFollow} />;
-                }
-                if (item.type === 'memory') {
-                  return <MemoryEventChip key={`mem${item.id}`} item={item} />;
-                }
-                if (item.type === 'delegation') {
-                  return (
-                    <div key={`d${item.id}`} className="assistant-run-delegation">
-                      <strong>{say('delegatedTo', { agent: item.agentName })}</strong>
-                      <span>{item.summary ?? item.task}</span>
-                    </div>
-                  );
-                }
-                if (item.type === 'proposal') {
-                  const isLiveProposal = !streaming && waiting?.id === item.id;
-                  const entries = Object.entries(item.proposal.values);
-                  return (
-                    <div key={`p${item.id}`} className="assistant-run-checkpoint" data-settled={item.outcome ? 'true' : 'false'}>
-                      {isLiveProposal && <p className="assistant-run-checkpoint-notice">{say('awaitingNotice')}</p>}
-                      <p className="assistant-run-checkpoint-title">
-                        {item.proposal.label}
-                        {item.proposal.record ? ` · ${item.proposal.record}` : ''}
-                      </p>
-                      {item.proposal.why && <p className="assistant-run-checkpoint-why">{item.proposal.why}</p>}
-                      {entries.length > 0 && (
-                        <dl className="assistant-run-checkpoint-values">
-                          {entries.map(([k, v]) => (
-                            <div key={k} style={{ display: 'contents' }}>
-                              <dt>{k}</dt>
-                              <dd>{String(v ?? '')}</dd>
-                            </div>
+            {detailMode === 'trace' ? (
+              <RunTraceInspector app={app} runId={activeDetail.id} />
+            ) : (
+              <div className="assistant-run-trace">
+                {drawn.map((entry, idx) => {
+                  if (entry.type === 'steps') {
+                    const count = entry.steps.length;
+                    return (
+                      <details key={`s${entry.at}`} className="assistant-run-steps">
+                        <summary>{count === 1 ? say('stepOneHeading') : say('stepsHeading', { count })}</summary>
+                        <ul>
+                          {entry.steps.map((step) => (
+                            <li key={step.id} className={step.failed ? 'assistant-run-step-failed' : undefined}>
+                              {step.label}
+                            </li>
                           ))}
-                        </dl>
-                      )}
-                      {item.outcome ? (
-                        <p className="assistant-run-checkpoint-outcome">
-                          {item.outcome.status === 'done'
-                            ? say('proposalOutcomeDone')
-                            : item.outcome.status === 'declined'
-                              ? say('proposalOutcomeDeclined')
-                              : say('proposalOutcomeFailed')}
-                          {item.outcome.detail ? ` — ${item.outcome.detail}` : ''}
+                        </ul>
+                      </details>
+                    );
+                  }
+                  const { item, at } = entry;
+                  if (item.type === 'person') return null;
+                  if (item.type === 'reasoning') {
+                    if (reasoning === 'hidden') return null;
+                    return (
+                      <AiReasoning
+                        key={`r${item.id}`}
+                        text={item.text}
+                        redacted={item.redacted}
+                        durationMs={item.durationMs}
+                        streaming={Boolean(streaming && idx === drawn.length - 1 && item.open)}
+                        defaultOpen={reasoning === 'expanded'}
+                        words={{
+                          thinking: say('thinking'),
+                          thought: say('reasoning'),
+                          thoughtFor: (duration) => say('thoughtFor', { duration }),
+                          redacted: say('reasoningRedacted'),
+                          regionLabel: say('reasoningRegion'),
+                        }}
+                      />
+                    );
+                  }
+                  if (item.type === 'text') {
+                    return (
+                      <TraceWords
+                        key={`t${at}`}
+                        text={item.text}
+                        onFollow={onFollow}
+                        citations={turnCitations(traceItems, at)}
+                        onFocusCitation={(ref) => setHighlightedCitation(ref)}
+                      />
+                    );
+                  }
+                  if (item.type === 'citations') {
+                    return <CitationsCard key={`cit${item.id}`} item={item} highlightedRef={highlightedCitation} onFollow={onFollow} />;
+                  }
+                  if (item.type === 'memory') {
+                    return <MemoryEventChip key={`mem${item.id}`} item={item} />;
+                  }
+                  if (item.type === 'delegation') {
+                    return (
+                      <div key={`d${item.id}`} className="assistant-run-delegation">
+                        <strong>{say('delegatedTo', { agent: item.agentName })}</strong>
+                        <span>{item.summary ?? item.task}</span>
+                      </div>
+                    );
+                  }
+                  if (item.type === 'proposal') {
+                    const isLiveProposal = !streaming && waiting?.id === item.id;
+                    const entries = Object.entries(item.proposal.values);
+                    return (
+                      <div key={`p${item.id}`} className="assistant-run-checkpoint" data-settled={item.outcome ? 'true' : 'false'}>
+                        {isLiveProposal && <p className="assistant-run-checkpoint-notice">{say('awaitingNotice')}</p>}
+                        <p className="assistant-run-checkpoint-title">
+                          {item.proposal.label}
+                          {item.proposal.record ? ` · ${item.proposal.record}` : ''}
                         </p>
-                      ) : isLiveProposal ? (
-                        <div className="assistant-run-checkpoint-actions">
-                          {item.proposal.kind === 'set' ? (
+                        {item.proposal.why && <p className="assistant-run-checkpoint-why">{item.proposal.why}</p>}
+                        {entries.length > 0 && (
+                          <dl className="assistant-run-checkpoint-values">
+                            {entries.map(([k, v]) => (
+                              <div key={k} style={{ display: 'contents' }}>
+                                <dt>{k}</dt>
+                                <dd>{String(v ?? '')}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        )}
+                        {item.outcome ? (
+                          <p className="assistant-run-checkpoint-outcome">
+                            {item.outcome.status === 'done'
+                              ? say('proposalOutcomeDone')
+                              : item.outcome.status === 'declined'
+                                ? say('proposalOutcomeDeclined')
+                                : say('proposalOutcomeFailed')}
+                            {item.outcome.detail ? ` — ${item.outcome.detail}` : ''}
+                          </p>
+                        ) : isLiveProposal ? (
+                          <div className="assistant-run-checkpoint-actions">
+                            {item.proposal.kind === 'set' ? (
+                              <Button
+                                size="xs"
+                                variant="primary"
+                                disabled={resolvingId === item.id}
+                                onClick={() => void resolveCheckpoint(activeDetail.id, item.proposal, 'confirm')}
+                              >
+                                {say('confirmAndResume')}
+                              </Button>
+                            ) : (
+                              <Button size="xs" variant="primary" onClick={() => onOpenConversation(activeDetail.conversation)}>
+                                {say('openInChat')}
+                              </Button>
+                            )}
                             <Button
                               size="xs"
-                              variant="primary"
+                              variant="ghost"
                               disabled={resolvingId === item.id}
-                              onClick={() => void resolveCheckpoint(activeDetail.id, item.proposal, 'confirm')}
+                              onClick={() => void resolveCheckpoint(activeDetail.id, item.proposal, 'decline')}
                             >
-                              {say('confirmAndResume')}
+                              {say('declineAndResume')}
                             </Button>
-                          ) : (
-                            <Button size="xs" variant="primary" onClick={() => onOpenConversation(activeDetail.conversation)}>
-                              {say('openInChat')}
-                            </Button>
-                          )}
-                          <Button
-                            size="xs"
-                            variant="ghost"
-                            disabled={resolvingId === item.id}
-                            onClick={() => void resolveCheckpoint(activeDetail.id, item.proposal, 'decline')}
-                          >
-                            {say('declineAndResume')}
-                          </Button>
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                }
-                return null;
-              })}
-              {streaming && (
-                <div className="assistant-run-live-bar" role="status" aria-live="polite">
-                  <span className="assistant-runs-dot" data-status="running" aria-hidden="true" />
-                  <span>{say('liveStream')}</span>
-                </div>
-              )}
-            </div>
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  }
+                  return null;
+                })}
+                {streaming && (
+                  <div className="assistant-run-live-bar" role="status" aria-live="polite">
+                    <span className="assistant-runs-dot" data-status="running" aria-hidden="true" />
+                    <span>{say('liveStream')}</span>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -779,6 +808,7 @@ export function AssistantRunMonitor({
       lastRunAt: null,
     }));
   const liveAutomationCount = schedules.length + triggers.length;
+  const showTabs = liveAutomationCount > 0 || evalList.length > 0;
 
   return (
     <section className="assistant-runs" aria-label={say('runsTitle')}>
@@ -795,7 +825,7 @@ export function AssistantRunMonitor({
             ×
           </Button>
         </div>
-        {liveAutomationCount > 0 && (
+        {showTabs && (
           <div className="assistant-runs-tabs" role="tablist" aria-label={say('runsTitle')}>
             <button
               type="button"
@@ -806,15 +836,28 @@ export function AssistantRunMonitor({
             >
               {say('tabRuns')}
             </button>
-            <button
-              type="button"
-              role="tab"
-              className="assistant-runs-tab"
-              aria-selected={activeTab === 'automations'}
-              onClick={() => setActiveTab('automations')}
-            >
-              {say('tabAutomations', { count: liveAutomationCount })}
-            </button>
+            {liveAutomationCount > 0 && (
+              <button
+                type="button"
+                role="tab"
+                className="assistant-runs-tab"
+                aria-selected={activeTab === 'automations'}
+                onClick={() => setActiveTab('automations')}
+              >
+                {say('tabAutomations', { count: liveAutomationCount })}
+              </button>
+            )}
+            {evalList.length > 0 && (
+              <button
+                type="button"
+                role="tab"
+                className="assistant-runs-tab"
+                aria-selected={activeTab === 'evals'}
+                onClick={() => setActiveTab('evals')}
+              >
+                {say('tabEvals', { count: evalList.length })}
+              </button>
+            )}
           </div>
         )}
       </header>
@@ -831,7 +874,9 @@ export function AssistantRunMonitor({
             </p>
           )}
 
-          {activeTab === 'automations' && liveAutomationCount > 0 ? (
+          {activeTab === 'evals' && evalList.length > 0 ? (
+            <EvalSuitePanel app={app} evals={evalList} agents={agents} ready={ready} />
+          ) : activeTab === 'automations' && liveAutomationCount > 0 ? (
             <>
               {schedules.length > 0 && (
                 <div className="assistant-runs-section">

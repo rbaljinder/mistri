@@ -281,6 +281,7 @@ const readPosts = new Set([
   '/api/assistant/automations/toggle',
   '/api/assistant/automations/run',
   '/api/assistant/automations/tick',
+  '/api/assistant/evals/run',
 ]);
 const readGets = new Set([
   '/api/runtime',
@@ -304,6 +305,7 @@ const readGets = new Set([
   '/api/assistant/runs',
   '/api/assistant/runs/detail',
   '/api/assistant/runs/stream',
+  '/api/assistant/runs/trace',
   '/api/assistant/automations',
 ]);
 

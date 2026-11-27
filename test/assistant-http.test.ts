@@ -2071,3 +2071,122 @@ test('scheduled and record-change triggered background runs fire idempotently, r
     else process.env.MISTRI_CLOCK = prevClock;
   }
 });
+
+test('Wave 3A: structured run trace observability and ephemeral declarative eval suite runner enforce grading & roles', async () => {
+  await fixture(
+    async ({ as, get, streamGet, post }) => {
+      setAssistantModel(() =>
+        scriptedModel({
+          turns: [
+            {
+              when: 'Audit enterprise leads',
+              steps: [
+                {
+                  thinking: 'Search knowledge base for active leads and produce verified citations.',
+                  tools: [{ name: 'search_knowledge', input: { query: 'Acme', limit: 2 } }],
+                },
+                { text: 'Enterprise lead audit complete: Acme Corp is active [1].' },
+              ],
+            },
+            {
+              when: 'Check compliance policy',
+              steps: [{ text: 'All leads look standard.' }],
+            },
+          ],
+        }),
+      );
+
+      // 1. Run a background run and fetch its structured observability trace.
+      const launched = await post('/api/assistant/runs', { app: appId, prompt: 'Audit enterprise leads' });
+      assert.equal(launched.status, 202);
+      const runId = (launched.body.run as { id: string }).id;
+      await streamGet(`/api/assistant/runs/stream?app=${appId}&id=${encodeURIComponent(runId)}`);
+
+      const traceRes = await get(`/api/assistant/runs/trace?app=${appId}&id=${encodeURIComponent(runId)}`);
+      assert.equal(traceRes.status, 200);
+      const trace = traceRes.body.trace as {
+        totalSteps: number;
+        toolCalls: number;
+        citationsCount: number;
+        reasoningChars: number;
+        spans: Array<{ kind: string; name: string; status: string }>;
+      };
+      assert.equal(trace.totalSteps, 1);
+      assert.equal(trace.toolCalls, 1);
+      assert.ok(trace.citationsCount >= 1, 'citationsCount tracked in trace');
+      assert.ok(trace.reasoningChars > 0, 'reasoningChars tracked in trace');
+      assert.ok(trace.spans.some((s) => s.kind === 'reasoning'));
+      assert.ok(trace.spans.some((s) => s.kind === 'tool' && s.name === 'search_knowledge' && s.status === 'ok'));
+      assert.ok(trace.spans.some((s) => s.kind === 'answer'));
+
+      const convBefore = ((await get(`/api/assistant?app=${appId}`)).body.conversations as unknown[]).length;
+
+      // 2. Run the full eval suite ephemerally — 1 passes, 1 fails expected tool/citation checks; conversation history untouched!
+      const evalRes = await post('/api/assistant/evals/run', { app: appId });
+      assert.equal(evalRes.status, 200);
+      const report = evalRes.body.report as {
+        total: number;
+        passed: number;
+        failed: number;
+        passRate: number;
+        cases: Array<{ id: string; passed: boolean; failures: string[] }>;
+      };
+      assert.equal(report.total, 2);
+      assert.equal(report.passed, 1);
+      assert.equal(report.failed, 1);
+      assert.equal(report.passRate, 0.5);
+      const passCase = report.cases.find((c) => c.id === 'lead_grounding')!;
+      const failCase = report.cases.find((c) => c.id === 'strict_compliance')!;
+      assert.equal(passCase.passed, true);
+      assert.equal(failCase.passed, false);
+      assert.ok(failCase.failures.some((f) => f.includes('search_knowledge')));
+
+      const convAfter = ((await get(`/api/assistant?app=${appId}`)).body.conversations as unknown[]).length;
+      assert.equal(convAfter, convBefore, 'ephemeral evals never pollute user conversation list');
+
+      // 3. Role-gated eval case is refused (403) for viewer.
+      as('viewer');
+      const denied = await post('/api/assistant/evals/run', { app: appId, id: 'lead_grounding' });
+      assert.equal(denied.status, 403);
+    },
+    {
+      assistant: {
+        defaultAgent: 'analyst',
+        agents: { analyst: { name: 'Analyst' } },
+        knowledge: {
+          leads: { resource: 'lead', fields: ['name', 'status', 'notes'], title: 'name' },
+        },
+        backgroundRuns: { maxConcurrent: 2, maxSteps: 8 },
+        evals: [
+          {
+            id: 'lead_grounding',
+            label: 'Lead Grounding & Citations',
+            description: 'Verifies knowledge search, reasoning, and citations.',
+            prompt: 'Audit enterprise leads',
+            agent: 'analyst',
+            roles: ['rep'],
+            expect: {
+              answerMatches: 'Acme Corp',
+              expectedTools: ['search_knowledge'],
+              forbiddenTools: ['run'],
+              expectCitations: true,
+              expectReasoning: true,
+              maxSteps: 4,
+            },
+          },
+          {
+            id: 'strict_compliance',
+            label: 'Strict Compliance Check',
+            prompt: 'Check compliance policy',
+            agent: 'analyst',
+            roles: ['rep'],
+            expect: {
+              expectedTools: ['search_knowledge'],
+              expectCitations: true,
+            },
+          },
+        ],
+      },
+    },
+  );
+});

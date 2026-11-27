@@ -1412,3 +1412,130 @@ test('Wave 2C: Run Monitor Automations tab lists schedules & triggers, toggles e
   await user.click(screen.getByRole('button', { name: 'Run now' }));
   expect(await screen.findByText('Morning pipeline summary ready.')).toBeInTheDocument();
 });
+
+test('Wave 3A: Run Monitor Trace tab inspects execution spans and Evals tab runs graded scorecards', async () => {
+  const user = userEvent.setup();
+  const sampleRun = {
+    id: 'run_trace_1',
+    conversation: 'conv_trace_1',
+    title: 'Pipeline Risk Audit',
+    prompt: 'Audit open deals',
+    agent: 'analyst',
+    source: 'preset:pipeline_audit',
+    status: 'completed',
+    steps: 1,
+    tokens: 1420,
+    summary: 'Q3 pipeline audit completed.',
+    createdAt: '2026-11-27T10:00:00Z',
+    updatedAt: '2026-11-27T10:00:02Z',
+    finishedAt: '2026-11-27T10:00:02Z',
+    live: false,
+  };
+  const sampleTrace = {
+    totalSteps: 1,
+    toolCalls: 1,
+    failedTools: 0,
+    blocksEmitted: 0,
+    citationsCount: 2,
+    proposalsCount: 0,
+    reasoningChars: 84,
+    tokensIn: 1120,
+    tokensOut: 300,
+    totalTokens: 1420,
+    durationMs: 1850,
+    toolBreakdown: { search_knowledge: 1 },
+    spans: [
+      { index: 1, kind: 'reasoning', name: 'Reasoning', status: 'ok', durationMs: 420, summary: 'Check security notes.' },
+      {
+        index: 2,
+        kind: 'tool',
+        name: 'search_knowledge',
+        status: 'ok',
+        input: { query: 'security' },
+        outputPreview: '2 records matched.',
+        citations: 2,
+      },
+      { index: 3, kind: 'answer', name: 'Assistant response', status: 'ok', summary: 'Q3 pipeline audit completed.' },
+    ],
+  };
+
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      agents: [{ id: 'analyst', name: 'Pipeline Analyst' }],
+      defaultAgent: 'analyst',
+      backgroundRuns: { maxConcurrent: 2, maxSteps: 16, presets: [] },
+      evals: [
+        {
+          id: 'security_grounding',
+          label: 'Security Review Grounding',
+          description: 'Verifies knowledge citations and reasoning.',
+          prompt: 'Audit open deals',
+          agent: 'analyst',
+          expect: { expectedTools: ['search_knowledge'], expectCitations: true, maxSteps: 4 },
+        },
+      ],
+    },
+  };
+
+  fetcher.mockImplementation(async (input, init) => {
+    const path = String(input);
+    const method = (init?.method ?? 'GET').toUpperCase();
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path.startsWith('/api/assistant/runs?')) return json({ runs: [sampleRun], ready: true });
+    if (path.startsWith('/api/assistant/runs/detail?')) {
+      return json({ run: sampleRun, items: [{ type: 'text', text: 'Q3 pipeline audit completed.' }] });
+    }
+    if (path.startsWith('/api/assistant/runs/trace?')) {
+      return json({ run: sampleRun, trace: sampleTrace });
+    }
+    if (path === '/api/assistant/evals/run' && method === 'POST') {
+      return json({
+        report: {
+          appId: 'compass',
+          ranAt: '2026-11-27T12:00:00Z',
+          total: 1,
+          passed: 1,
+          failed: 0,
+          passRate: 1,
+          meanTokens: 1420,
+          meanDurationMs: 1850,
+          cases: [
+            {
+              id: 'security_grounding',
+              label: 'Security Review Grounding',
+              agent: 'analyst',
+              passed: true,
+              failures: [],
+              answer: 'Q3 pipeline audit completed.',
+              durationMs: 1850,
+              trace: sampleTrace,
+            },
+          ],
+        },
+      });
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+
+  await user.click(await screen.findByRole('button', { name: 'Runs' }));
+
+  // 1. Inspect run detail -> switch to Trace tab -> verify structured spans & metrics.
+  await user.click(await screen.findByRole('button', { name: 'Inspect' }));
+  await user.click(await screen.findByRole('tab', { name: 'Trace' }));
+  expect(await screen.findByText('search_knowledge')).toBeInTheDocument();
+  expect(screen.getByText('2 cited')).toBeInTheDocument();
+
+  // 2. Return to monitor -> open Evals · 1 tab -> run all evals -> verify scorecard & pass status.
+  await user.click(screen.getByRole('button', { name: /All runs/i }));
+  await user.click(await screen.findByRole('tab', { name: 'Evals · 1' }));
+  expect(await screen.findByText('Security Review Grounding')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Run all evals' }));
+  expect(await screen.findByText('100%')).toBeInTheDocument();
+  expect(screen.getByText('1/1')).toBeInTheDocument();
+});

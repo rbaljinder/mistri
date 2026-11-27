@@ -16,6 +16,7 @@ import type {
   AssistantStarter,
   ServedAssistantAgent,
   ServedAssistantBackgroundRuns,
+  ServedAssistantEvalCase,
   ServedAssistantKnowledge,
   ServedAssistantMemory,
 } from './appAssistant.js';
@@ -199,6 +200,8 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
       schedules?: Array<NonNullable<ServedAssistantBackgroundRuns['schedules']>[number] & { roles?: string[] }>;
       triggers?: Array<NonNullable<ServedAssistantBackgroundRuns['triggers']>[number] & { roles?: string[] }>;
     };
+    /** Declarative evaluation cases available to this viewer (`roles` stripped in appProjection.ts). */
+    evals?: Array<ServedAssistantEvalCase & { roles?: string[] }>;
   };
   /** The fields a decision answers, by table id then column (decide/decisionServing.ts): where a record reserves a
       suggestion's place, and the command its Accept runs. Only the tables this reader is served. */
@@ -315,6 +318,7 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
             ...servedMemory(app.assistant.memory),
             ...servedKnowledge(app.assistant.knowledge, schema),
             ...servedBackgroundRuns(app.assistant.backgroundRuns),
+            ...servedEvals(app.assistant.evals),
           },
         }
       : {}),
@@ -486,6 +490,23 @@ function servedBackgroundRuns(runs: NonNullable<AppDef['assistant']>['background
           }
         : {}),
     },
+  };
+}
+
+function servedEvals(evals: NonNullable<AppDef['assistant']>['evals']): {
+  evals?: NonNullable<AppPayloadApp['assistant']>['evals'];
+} {
+  if (!evals?.length) return {};
+  return {
+    evals: evals.map((each) => ({
+      id: each.id,
+      label: each.label,
+      ...(each.description ? { description: each.description } : {}),
+      prompt: each.prompt,
+      ...(each.agent ? { agent: each.agent } : {}),
+      ...(each.roles ? { roles: [...each.roles] } : {}),
+      expect: { ...each.expect },
+    })),
   };
 }
 

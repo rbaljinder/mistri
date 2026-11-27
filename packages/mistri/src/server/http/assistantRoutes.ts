@@ -48,6 +48,7 @@ import {
   registerScheduleOwner,
   tickSchedulesForOwner,
 } from '../assistant/assistantAutomations.js';
+import { runAppEvalSuite, summarizeTrace } from '../assistant/assistantObservability.js';
 import { catalogFromPayload, mayRunAction, nowLine, systemPrompt, toolSpecs } from '../assistant/assistantCatalog.js';
 import { assistantModel } from '../assistant/assistantModel.js';
 import { cancelBackgroundRun, isBackgroundRunLive, launchBackgroundRun, subscribeBackgroundRun } from '../assistant/assistantRuns.js';
@@ -87,6 +88,7 @@ export const ASSISTANT_PATHS: ReadonlySet<string> = new Set([
   '/api/assistant/runs',
   '/api/assistant/runs/detail',
   '/api/assistant/runs/stream',
+  '/api/assistant/runs/trace',
   '/api/assistant/runs/cancel',
   '/api/assistant/runs/resolve',
   '/api/assistant/runs/resume',
@@ -95,6 +97,7 @@ export const ASSISTANT_PATHS: ReadonlySet<string> = new Set([
   '/api/assistant/automations/toggle',
   '/api/assistant/automations/run',
   '/api/assistant/automations/tick',
+  '/api/assistant/evals/run',
 ]);
 const SAID: Record<string, readonly string[]> = {
   '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode', 'effort', 'agent'],
@@ -113,6 +116,7 @@ const SAID: Record<string, readonly string[]> = {
   '/api/assistant/automations/toggle': ['app', 'kind', 'id', 'enabled'],
   '/api/assistant/automations/run': ['app', 'id'],
   '/api/assistant/automations/tick': ['app'],
+  '/api/assistant/evals/run': ['app', 'id'],
 };
 /* Refused alike whether the table is not theirs, the row is outside their rows or it is not there: which of the three
    is not the page's to learn, as a record's own address answers. */
@@ -367,6 +371,30 @@ export async function answerAssistant(
       }
       send(res, 200, { deleted: true });
       return;
+    }
+    if (path === '/api/assistant/runs/trace') {
+      if (!get) throw new HttpError(405, 'Method not allowed.');
+      const runId = url.searchParams.get('id')?.trim() ?? '';
+      const convParam = url.searchParams.get('conversation')?.trim() ?? '';
+      if (runId) {
+        const run = await store.getRun(owner, runId);
+        if (!run) throw new HttpError(404, 'No such run.');
+        const convEvents = await store.events(owner, run.conversation);
+        const reviewed = await reviewsOf(loop(), undecidedReviews(convEvents));
+        const trace = summarizeTrace(convEvents, { run, reviewed });
+        send(res, 200, { run: { ...run, live: isBackgroundRunLive(owner, run.id) }, trace });
+        return;
+      }
+      if (convParam) {
+        const conv = await store.get(owner, convParam);
+        if (!conv) throw new HttpError(404, 'No such conversation.');
+        const convEvents = await store.events(owner, conv.id);
+        const reviewed = await reviewsOf(loop(), undecidedReviews(convEvents));
+        const trace = summarizeTrace(convEvents, { reviewed });
+        send(res, 200, { conversation: conv, trace });
+        return;
+      }
+      throw new HttpError(400, 'Name a run id or conversation id.');
     }
     if (path === '/api/assistant/runs' || path.startsWith('/api/assistant/runs/')) {
       const bgCfg = assistant.backgroundRuns;
@@ -802,6 +830,43 @@ export async function answerAssistant(
         return;
       }
       throw new HttpError(404, 'No such automation route.');
+    }
+    if (path === '/api/assistant/evals/run') {
+      if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
+      if (!assistant.evals?.length) throw new HttpError(404, 'This App declares no assistant eval cases.');
+      const evalId = typeof body.id === 'string' && body.id.trim() ? body.id.trim() : undefined;
+      if (evalId) {
+        const decl = assistant.evals.find((e) => e.id === evalId);
+        if (!decl) throw new HttpError(404, `Unknown eval case "${evalId}".`);
+        const roles = scope.roles ?? [];
+        if (decl.roles && !roles.some((role) => decl.roles!.includes(role))) {
+          throw new HttpError(403, 'That eval case is not offered to your role.');
+        }
+      }
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      req.once('aborted', abort);
+      res.once('close', abort);
+      try {
+        const report = await runAppEvalSuite({
+          store,
+          owner,
+          app,
+          loop: loop(),
+          ...(scope.roles ? { viewerRoles: scope.roles } : {}),
+          ...(evalId ? { evalId } : {}),
+          signal: controller.signal,
+        });
+        send(res, 200, { report });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        if (msg.includes('no model set up')) throw new HttpError(503, msg);
+        throw new HttpError(400, msg);
+      } finally {
+        req.off('aborted', abort);
+        res.off('close', abort);
+      }
+      return;
     }
     if (path === '/api/assistant/about') {
       /* A page hands the panel what the person is on (useAssistant().open({ about })): the record is read here as them,
