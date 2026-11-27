@@ -491,7 +491,19 @@ export interface EffectRequest {
 export interface Webhook {
   /** The connection's own auth header, lowercased, when it is not authorization: a call may never set it. */
   readonly credentialHeader?: string;
-  post(body: EffectRequest | EffectPayload, idempotencyKey: string, headers?: Readonly<Record<string, string>>): Promise<number>;
+  post(
+    body: EffectRequest | EffectPayload,
+    idempotencyKey: string,
+    headers?: Readonly<Record<string, string>>,
+    signal?: AbortSignal,
+  ): Promise<number>;
+  /** Same as `post`, carrying parsed `Retry-After` and error-ownership metadata when present. */
+  postReply?(
+    body: EffectRequest | EffectPayload,
+    idempotencyKey: string,
+    headers?: Readonly<Record<string, string>>,
+    signal?: AbortSignal,
+  ): Promise<Readonly<{ status: number; retryAfterMs?: number; errorClaim?: 'claimed' | 'unclaimed' }>>;
   /** A workflow's `w.call`: one request under the connection's address and credential, answering its status and, for a 2xx, its JSON. */
   call?(
     request: Readonly<{
@@ -501,7 +513,8 @@ export interface Webhook {
       headers?: Readonly<Record<string, string>>;
     }>,
     idempotencyKey: string,
-  ): Promise<Readonly<{ status: number; json: unknown }>>;
+    signal?: AbortSignal,
+  ): Promise<Readonly<{ status: number; json: unknown; retryAfterMs?: number; errorClaim?: 'claimed' | 'unclaimed' }>>;
 }
 
 /**
@@ -537,8 +550,16 @@ export function webhookTransport(options: Readonly<{ webhook: Webhook; routed: R
       return 'rejected';
     }
     let status: number;
+    let retryAfterMs: number | undefined;
+    const key = effectIdempotencyKey(envelope.receiptId, effect);
     try {
-      status = await webhook.post(body, effectIdempotencyKey(envelope.receiptId, effect), headers);
+      if (webhook.postReply) {
+        const reply = await webhook.postReply(body, key, headers, publication.signal);
+        status = reply.status;
+        retryAfterMs = reply.retryAfterMs;
+      } else {
+        status = await webhook.post(body, key, headers, publication.signal);
+      }
     } catch (error) {
       // A refused address or a redirect will be refused again: the operator changes the connection, then redrives.
       if (error instanceof HttpSourceError && (error.reason === 'refused' || error.reason === 'redirect')) return 'rejected';
@@ -546,6 +567,6 @@ export function webhookTransport(options: Readonly<{ webhook: Webhook; routed: R
     }
     if (status >= 200 && status <= 299) return 'accepted';
     if (status >= 400 && status <= 499 && status !== 408 && status !== 429) return 'rejected';
-    throw new Error(`The webhook answered ${status}.`);
+    throw Object.assign(new Error(`The webhook answered ${status}.`), retryAfterMs !== undefined ? { retryAfterMs } : {});
   };
 }

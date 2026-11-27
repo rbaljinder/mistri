@@ -52,7 +52,7 @@ export function jevDecisions(key: string, base: string = DEFAULT_BASE, fetchImpl
       } catch (error) {
         throw asProviderFailure(error, call.signal);
       }
-      if (!response.ok) throw failureOfStatus(response.status, 'Jev');
+      if (!response.ok) throw failureOfStatus(response.status, 'Jev', response.headers?.get?.('retry-after'));
       let body: JevReply;
       try {
         body = (await response.json()) as JevReply;

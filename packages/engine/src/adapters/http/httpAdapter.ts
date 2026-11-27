@@ -28,7 +28,7 @@ import {
 import { snapshotRowScope, type RowScope } from '../../shared/rowScope.js';
 import { describedSchema, type HttpDescription } from './httpDescription.js';
 import type { HttpColumn, HttpFilter, HttpResource } from './openapi.js';
-import { HttpSourceError, send, type EgressPolicy } from './egress.js';
+import { HttpSourceError, send, type EgressPolicy, type EgressReply } from './egress.js';
 import type { CacheStore } from '../cache/cacheStore.js';
 
 /** A resolved credential, attached as one header. It lives only here and in egress, never in a result or an error. */
@@ -620,7 +620,7 @@ export class HttpAdapter implements Adapter {
      its copy is fresh. Only a 2xx is kept, under the URL's path and query
      alone: the credential is the connection's, and so is the cache's prefix.
      A copy that no longer parses is no copy. */
-  private async cachedRequest(path: string, query: URLSearchParams): Promise<{ status: number; json: unknown }> {
+  private async cachedRequest(path: string, query: URLSearchParams): Promise<EgressReply> {
     const cache = this.connection.cache;
     if (!cache) return this.request(path, query);
     const url = new URL(path.slice(1), this.connection.base);
@@ -643,7 +643,7 @@ export class HttpAdapter implements Adapter {
     const reply = await this.cachedRequest(path, query);
     if (reply.status === 404 && missing) return undefined;
     if (reply.status < 200 || reply.status > 299)
-      throw new HttpSourceError('status', `GET ${path} answered ${reply.status}.`, reply.status);
+      throw new HttpSourceError('status', `GET ${path} answered ${reply.status}.`, reply.status, reply.retryAfterMs, reply.errorClaim);
     return reply.json;
   }
 
@@ -651,7 +651,7 @@ export class HttpAdapter implements Adapter {
      as its one header, and sent through egress. Reads and the explorer's
      operations both come through here, so neither can send what the other
      would not. */
-  private async request(path: string, query: URLSearchParams): Promise<{ status: number; json: unknown }> {
+  private async request(path: string, query: URLSearchParams): Promise<EgressReply> {
     const url = new URL(path.slice(1), this.connection.base);
     url.search = query.toString();
     const headers: Record<string, string> = { accept: 'application/json' };

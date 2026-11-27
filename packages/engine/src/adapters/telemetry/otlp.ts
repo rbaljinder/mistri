@@ -32,6 +32,7 @@ import { hostname } from 'node:os';
 import { addSink, setSampler, type AttributeValue, type LogRecord, type SpanRecord } from './trace.js';
 import { enableMetrics, snapshotMetrics, metrics } from './metrics.js';
 import { logsJson, logsProto, metricsJson, metricsProto, tracesJson, tracesProto, type Resource, type Scope } from './otlpEncode.js';
+import { parseRetryAfterMs } from '../../shared/retry.js';
 
 type Signal = 'traces' | 'logs' | 'metrics';
 type Env = Readonly<Record<string, string | undefined>>;
@@ -158,7 +159,9 @@ function otlpConfig(env: Env, version: string, service: string): OtlpConfig {
   };
 }
 
-function post(config: SignalConfig, body: Buffer | string): Promise<boolean> {
+type PostResult = Readonly<{ ok: boolean; retryAfterMs?: number }>;
+
+function post(config: SignalConfig, body: Buffer | string): Promise<PostResult> {
   const raw = typeof body === 'string' ? Buffer.from(body, 'utf8') : body;
   const payload = config.gzip ? gzipSync(raw) : raw;
   const headers: Record<string, string> = {
@@ -173,10 +176,12 @@ function post(config: SignalConfig, body: Buffer | string): Promise<boolean> {
       response.resume();
       // 2xx is accepted; a 4xx other than throttling will not improve on a retry.
       const status = response.statusCode ?? 0;
-      resolve((status >= 200 && status < 300) || (status >= 400 && status < 500 && status !== 429));
+      const ok = (status >= 200 && status < 300) || (status >= 400 && status < 500 && status !== 429);
+      const retryAfterMs = ok ? undefined : parseRetryAfterMs(response.headers['retry-after']);
+      resolve(retryAfterMs !== undefined ? { ok, retryAfterMs } : { ok });
     });
     outgoing.on('timeout', () => outgoing.destroy(new Error('timeout')));
-    outgoing.on('error', () => resolve(false));
+    outgoing.on('error', () => resolve({ ok: false }));
     outgoing.end(payload);
   });
 }
@@ -186,6 +191,7 @@ class Queue<T> {
   private items: T[] = [];
   private retry: T[] | undefined;
   private sending: Promise<void> | undefined;
+  private backoffUntil = 0;
   private timer: ReturnType<typeof setInterval>;
   dropped = 0;
   constructor(
@@ -206,30 +212,38 @@ class Queue<T> {
       return;
     }
     this.items.push(item);
-    if (this.items.length >= this.maxBatch) void this.flush();
+    if (this.items.length >= this.maxBatch && Date.now() >= this.backoffUntil) void this.flush();
   }
-  flush(): Promise<void> {
-    if (this.sending) return this.sending.then(() => (this.items.length || this.retry ? this.flush() : undefined));
+  flush(force = false): Promise<void> {
+    if (this.sending) return this.sending.then(() => (force && (this.items.length || this.retry) ? this.flush(true) : undefined));
     if (!this.items.length && !this.retry) return Promise.resolve();
+    if (!force && Date.now() < this.backoffUntil) return Promise.resolve();
     const batch = this.retry ?? this.items.splice(0, this.maxBatch);
     const wasRetry = Boolean(this.retry);
     this.retry = undefined;
+    let failed = false;
     this.sending = post(this.target, this.encode(batch, this.target.json))
       .then(
-        (ok) => {
+        ({ ok, retryAfterMs }) => {
           if (!ok) {
+            failed = true;
+            if (retryAfterMs !== undefined && retryAfterMs > 0) this.backoffUntil = Date.now() + retryAfterMs;
             if (wasRetry) this.dropped += batch.length;
             else this.retry = batch;
+          } else {
+            this.backoffUntil = 0;
           }
         },
         () => {
+          failed = true;
           this.dropped += batch.length;
         },
       )
       .finally(() => {
         this.sending = undefined;
       });
-    return this.sending.then(() => (this.items.length ? this.flush() : undefined));
+    // Never immediately spin on a failed POST: wait for the next scheduled interval (or Retry-After).
+    return this.sending.then(() => (!failed && this.items.length ? this.flush(force) : undefined));
   }
   stop() {
     clearInterval(this.timer);
@@ -305,7 +319,7 @@ export function startOtlp(env: Env, version: string, service = 'mistri'): OtlpEx
     },
   });
   const flush = async () => {
-    await Promise.all([spanQueue?.flush(), logQueue?.flush(), sendMetrics()]);
+    await Promise.all([spanQueue?.flush(true), logQueue?.flush(true), sendMetrics()]);
   };
   return {
     warnings: config.warnings,

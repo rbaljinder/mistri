@@ -34,6 +34,15 @@ import {
 } from '../shared/tenantBoot.js';
 import { pageLoadHints } from './pageLoadHints.js';
 import { readKey } from '@mistriwork/engine/shared/firstPaint.js';
+import {
+  equalJitter,
+  ERROR_CLAIM_HEADER,
+  parseErrorClaim,
+  parseRetryAfterMs,
+  RETRY_ATTEMPT_HEADER,
+  retryAfterWithJitter,
+  shouldRetryErrorClaim,
+} from '@mistriwork/engine/shared/retry.js';
 import { gatheringReads } from '@mistriwork/kit/client/readGathering.js';
 import { PAGE_HEADER } from '@mistriwork/engine/shared/pageRoutes.js';
 
@@ -169,7 +178,9 @@ function currentLease(snapshot: SessionIdentitySnapshot, lease?: TenantContextRe
 function unverified(snapshot: SessionIdentitySnapshot, lease?: TenantContextReply): void {
   if (currentLease(snapshot, lease)) invalidateSession('unavailable', false);
 }
-const transient = (response: Response): boolean => response.status >= 500 || response.status === 408 || response.status === 429;
+const transient = (response: Response): boolean =>
+  (response.status >= 500 || response.status === 408 || response.status === 429) &&
+  shouldRetryErrorClaim(parseErrorClaim(response.headers?.get?.(ERROR_CLAIM_HEADER)));
 function refused(
   snapshot: SessionIdentitySnapshot,
   lease: TenantContextReply | undefined,
@@ -316,6 +327,7 @@ async function request(
   said?: Readonly<Record<string, string>>,
   /* The caller renews, or enters again, and asks once more on a lease refusal, so it is not fenced here (tenantReadApi). */
   renewing = false,
+  retryAttempt = 0,
 ) {
   account(snapshot);
   let response: Response;
@@ -329,6 +341,7 @@ async function request(
         ...sayingWhatItIs(said),
         [names.account]: snapshot.accountId!,
         [names.app]: snapshot.appId!,
+        ...(retryAttempt > 0 ? { [RETRY_ATTEMPT_HEADER]: String(retryAttempt) } : {}),
         ...(body === undefined ? {} : { 'content-type': 'application/json' }),
         ...(tenant ? { [names.tab]: tenant.tabId, [names.context]: tenant.context, [names.revision]: String(tenant.revision) } : {}),
       },
@@ -340,6 +353,8 @@ async function request(
     throw error instanceof Error ? slow(error) : slow(new Error(String(error)));
   }
   account(snapshot);
+  const retryAfterMs = parseRetryAfterMs(response.headers?.get?.('retry-after'));
+  const errorClaim = parseErrorClaim(response.headers?.get?.(ERROR_CLAIM_HEADER));
   let value: unknown;
   try {
     value = await response.json();
@@ -347,13 +362,25 @@ async function request(
     if (response.status === 401) {
       if (currentLease(snapshot, failureOwner)) invalidateSession('expired');
     } else if (transient(response) || error instanceof TypeError || (error instanceof Error && error.name === 'AbortError')) {
-      if (!signal?.aborted) throw slow(new Error(say('theTenantResponseCould')));
+      if (!signal?.aborted)
+        throw slow(
+          Object.assign(new Error(say('theTenantResponseCould')), {
+            ...(retryAfterMs !== undefined ? { retryAfter: retryAfterMs } : {}),
+            ...(errorClaim !== undefined ? { errorClaim } : {}),
+          }),
+        );
     } else if (failureOwner) unverified(snapshot, failureOwner);
     throw new Error(say('theTenantResponseCould'));
   }
   account(snapshot);
   if (!object(value)) {
-    if (transient(response)) throw slow(unavailable());
+    if (transient(response))
+      throw slow(
+        Object.assign(unavailable(), {
+          ...(retryAfterMs !== undefined ? { retryAfter: retryAfterMs } : {}),
+          ...(errorClaim !== undefined ? { errorClaim } : {}),
+        }),
+      );
     if (response.status === 401) refused(snapshot, failureOwner, response, {});
     else if (failureOwner) unverified(snapshot, failureOwner);
     throw unavailable();
@@ -364,6 +391,8 @@ async function request(
     const failure = Object.assign(new Error(typeof value.error === 'string' ? value.error : say('theTenantRequestWasRefused')), {
       status: response.status,
       ...(typeof value.code === 'string' ? { code: value.code } : {}),
+      ...(retryAfterMs !== undefined ? { retryAfter: retryAfterMs } : {}),
+      ...(errorClaim !== undefined ? { errorClaim } : {}),
     });
     /* A read the audit could not record (503 read_not_recorded) is that read's answer alone: tagged slow, a read
        retried it until it fenced the lease, and one list the audit could not keep paused the whole page. */
@@ -983,7 +1012,7 @@ export async function tenantReadApi(
   let renewed = false;
   for (let attempt = 0; ; attempt++) {
     try {
-      delivered = await request(snapshot, address, payload, owner, signal, false, owner, said, !renewed);
+      delivered = await request(snapshot, address, payload, owner, signal, false, owner, said, !renewed, attempt);
       break;
     } catch (error) {
       const { status, code } = error as { status?: unknown; code?: unknown };
@@ -1014,12 +1043,18 @@ export async function tenantReadApi(
       if (renewed && contextUnavailable(status, code)) throw reloadNeeded(error as Error, code);
       // An old revision's slow answer is that revision's alone: no retry, no fence (as for any of its answers).
       if (!isTransientTenantFailure(error) || !currentLease(snapshot, owner)) throw error;
-      // Out of patience: fence as before, and renewal decides whether the context stands.
+      // Out of patience: fence as before, and tag retried so outer TanStack Query does not multiply retries.
       if (attempt >= READ_RETRY_MS.length) {
         fence(snapshot, owner);
+        if (error && typeof error === 'object') Object.assign(error, { retried: true });
         throw error;
       }
-      await pause(READ_RETRY_MS[attempt], signal);
+      const retryAfter = (error as { retryAfter?: unknown }).retryAfter;
+      const waitMs =
+        typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter > 0
+          ? Math.min(8_000, retryAfterWithJitter(retryAfter))
+          : equalJitter(READ_RETRY_MS[attempt]);
+      await pause(waitMs, signal);
       // A read is idempotent, so it is asked again under the lease current now: renewed
       // in the wait, it carries the new revision; fenced or switched, it is refused here.
       owner = selected(snapshot);

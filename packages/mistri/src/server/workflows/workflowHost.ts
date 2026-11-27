@@ -20,6 +20,7 @@ import { createHash } from 'node:crypto';
 import { asBackgroundWork } from '@mistriwork/engine/adapters/writeLanes.js';
 import { attributeWrites } from '@mistriwork/engine/adapters/writeAttribution.js';
 import { appTime } from '@mistriwork/engine/server/http/clock.js';
+import { shouldRetryErrorClaim } from '@mistriwork/engine/shared/retry.js';
 import type { JobStore } from '../../adapters/jobs/jobStoreContract.js';
 import type { WorkflowStore } from '../../adapters/workflows/workflowStoreContract.js';
 import { WorkflowRefusal } from '../../adapters/workflows/workflowStoreTypes.js';
@@ -30,6 +31,7 @@ import {
   isBusinessCommandExecutionError,
   lookupBusinessCommandStatus,
 } from '../commands/businessCommandExecution.js';
+import { errorRetryAfterMs } from '../commands/commandErrors.js';
 import { commandFlagsOnce } from '../commands/commandFlagCapture.js';
 import { callHeaders, type Webhook } from '../commands/commandEffects.js';
 import { parseEventPayload } from '../commands/businessEvents.js';
@@ -467,7 +469,10 @@ async function stepCommand(
     if (error instanceof StepRefused || error instanceof StepPending) throw error;
     if (error instanceof AppAccessDenied) throw new StepRefused(request.step, 'forbidden');
     if (isBusinessCommandExecutionError(error)) {
-      if (RETRIED.has(error.code)) throw new Error(`The step's command answered ${error.code}.`);
+      if (RETRIED.has(error.code)) {
+        const retryAfterMs = errorRetryAfterMs(error);
+        throw Object.assign(new Error(`The step's command answered ${error.code}.`), retryAfterMs !== undefined ? { retryAfterMs } : {});
+      }
       throw new StepRefused(request.step, error.code);
     }
     throw error instanceof Error ? error : new Error('The step failed.');
@@ -576,10 +581,15 @@ async function advanceInstance(
           ...(request.request.headers ? { headers: request.request.headers } : {}),
         },
         request.idempotencyKey,
+        request.signal,
       );
       if (reply.status >= 200 && reply.status <= 299) return reply.json ?? null;
-      if (retriedStatus(reply.status))
-        throw Object.assign(new Error(`The service answered ${reply.status}.`), { code: `http_${reply.status}` });
+      // Uber error ownership: an explicit `unclaimed` response means a downstream behind the callee already failed/retried.
+      if (retriedStatus(reply.status) && shouldRetryErrorClaim(reply.errorClaim))
+        throw Object.assign(new Error(`The service answered ${reply.status}.`), {
+          code: `http_${reply.status}`,
+          ...(reply.retryAfterMs !== undefined ? { retryAfterMs: reply.retryAfterMs } : {}),
+        });
       throw new StepRefused(request.step, `http_${reply.status}`);
     },
   };

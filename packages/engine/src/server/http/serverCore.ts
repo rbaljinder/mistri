@@ -23,6 +23,7 @@ import { wrongTypeValue } from '../constraints.js';
 import type { RequestDiagnostics } from '../operations/diagnostics.js';
 import { PathError } from '../../shared/view.js';
 import { inward, type AddressMount } from '../../shared/mount.js';
+import { ERROR_CLAIM_HEADER } from '../../shared/retry.js';
 import { arrivedUrls } from './context.js';
 import { probe, type ReadyAnswer } from './probes.js';
 import { reportRefusal } from './refusalReport.js';
@@ -182,6 +183,13 @@ export function listen(options: Listening, answering: Answering): Server {
           return sendBusy(res, {}, false, err);
         }
         const status = statusOf(err, answering);
+        if (err instanceof HttpSourceError && !res.headersSent) {
+          // A downstream HTTP source failed, not this server: unclaim so upstream callers do not amplify retries.
+          res.setHeader(ERROR_CLAIM_HEADER, 'unclaimed');
+          if (err.retryAfterMs !== undefined && err.retryAfterMs > 0) {
+            res.setHeader('retry-after', String(Math.max(1, Math.ceil(err.retryAfterMs / 1_000))));
+          }
+        }
         if (answering.said?.(err, req, res, status)) return;
         reportRefusal(req, status, undefined, err.message, err);
         send(res, status, { error: err.message });

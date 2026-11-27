@@ -13,6 +13,7 @@ import { ResourceReadError } from '../resourceReadOperations.js';
 import type { ResourceHttpPath, ResourceHttpReply } from '../../shared/resourceHttp.js';
 import { ROW_LOCKED_MESSAGE, ROW_LOCKED_RETRY_AFTER_SECONDS } from '../../adapters/writeLanes.js';
 import { POOL_BUSY_MESSAGE, poolBusyRetryAfterSeconds } from '../../adapters/poolMetrics.js';
+import { ERROR_CLAIM_HEADER } from '../../shared/retry.js';
 
 // Policy callbacks may catch an operation failure, but the context still owns
 // its outcome. Do not publish a partial success before that context settles.
@@ -37,7 +38,10 @@ export function sendResource<Path extends ResourceHttpPath>(
  */
 export function sendRowLocked(res: ServerResponse, extra: Record<string, unknown> = {}): void {
   currentSpan()?.event('lock timeout', { 'mistri.write.refusal': 'row_locked' });
-  if (!res.headersSent) res.setHeader('retry-after', String(ROW_LOCKED_RETRY_AFTER_SECONDS));
+  if (!res.headersSent) {
+    res.setHeader('retry-after', String(ROW_LOCKED_RETRY_AFTER_SECONDS));
+    res.setHeader(ERROR_CLAIM_HEADER, 'claimed');
+  }
   send(res, 503, {
     ...extra,
     error: ROW_LOCKED_MESSAGE,
@@ -57,7 +61,10 @@ export function sendRowLocked(res: ServerResponse, extra: Record<string, unknown
  */
 export function sendBusy(res: ServerResponse, extra: Record<string, unknown> = {}, write = false, refusal?: unknown): void {
   currentSpan()?.event('pool busy', { 'mistri.refusal': 'server_busy' });
-  if (!res.headersSent) res.setHeader('retry-after', String(poolBusyRetryAfterSeconds(refusal)));
+  if (!res.headersSent) {
+    res.setHeader('retry-after', String(poolBusyRetryAfterSeconds(refusal)));
+    res.setHeader(ERROR_CLAIM_HEADER, 'claimed');
+  }
   send(res, 503, {
     ...extra,
     error: POOL_BUSY_MESSAGE,

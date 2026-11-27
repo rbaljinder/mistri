@@ -5,6 +5,7 @@
  */
 import { createHash } from 'node:crypto';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
+import { equalJitter } from '@mistriwork/engine/shared/retry.js';
 import {
   captureJobProvenance,
   exactKeys,
@@ -168,10 +169,12 @@ export function captureJobId(id: unknown): string {
 }
 
 /** Exponential from the last redrive, so a redriven job starts its backoff
- * over rather than at the ceiling it already reached. */
-function jobBackoff(policy: JobPolicy, row: JobRow): number {
+ * over rather than at the ceiling it already reached; equal jitter on
+ * real-world backoffs breaks synchronized waves across queued jobs. */
+function jobBackoff(policy: JobPolicy, row: JobRow, random: () => number = Math.random): number {
   const sinceRedrive = (row.attempts as number) - ((row.attempt_limit as number) - (row.max_attempts as number));
-  return Math.min(policy.backoffMs.cap, policy.backoffMs.base * 2 ** (Math.max(1, sinceRedrive) - 1));
+  const nominal = Math.min(policy.backoffMs.cap, policy.backoffMs.base * 2 ** (Math.max(1, sinceRedrive) - 1));
+  return policy.backoffMs.base >= 1_000 ? equalJitter(nominal, random) : nominal;
 }
 
 export function inspectJobRow(policy: JobPolicy, row: JobRow): JobInspection {

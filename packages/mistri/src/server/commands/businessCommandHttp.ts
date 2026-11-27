@@ -8,7 +8,7 @@ import { personLocale, requestLocale } from '../app/readerLocale.js';
 import { bindHttpBusinessCommands, bulkCommandWhen, unofferedRefusal } from './businessCommandLoader.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { CommandInputError, parseCommandPrepareTargets, parseCommandAvailability } from './commandPayload.js';
-import { forbiddenBy } from './commandErrors.js';
+import { errorClaimOf, errorRetryAfterMs, forbiddenBy } from './commandErrors.js';
 import { collectCommandAvailability, readCommandAvailability } from './commandAvailability.js';
 import {
   BusinessCommandExecutionError,
@@ -88,9 +88,18 @@ export function businessCommandHttpError(error: unknown, statusOnly = false) {
                       ].includes(safe.code)
                     ? 409
                     : 503;
+  const downstreamRetryMs = errorRetryAfterMs(safe) ?? errorRetryAfterMs(error);
+  const retryAfter =
+    safe.code === 'row_locked'
+      ? ROW_LOCKED_RETRY_AFTER_SECONDS
+      : status === 503 && downstreamRetryMs !== undefined
+        ? Math.max(1, Math.ceil(downstreamRetryMs / 1000))
+        : undefined;
+  const errorClaim = status === 503 ? (errorClaimOf(safe) ?? errorClaimOf(error) ?? 'claimed') : undefined;
   return {
     status,
-    ...(safe.code === 'row_locked' ? { retryAfter: ROW_LOCKED_RETRY_AFTER_SECONDS } : {}),
+    ...(retryAfter !== undefined ? { retryAfter } : {}),
+    ...(errorClaim !== undefined ? { errorClaim } : {}),
     body: {
       code: safe.code,
       message: safe.message,

@@ -57,7 +57,14 @@ import {
   type PlannedDecision,
   type RecordRead,
 } from './decideReads.js';
-import { circuitClosed, decisionProviders, recordCall, type DecisionProviders } from './providers/decisionProviders.js';
+import {
+  circuitClosed,
+  decisionProviders,
+  recordCall,
+  releaseCircuitTrial,
+  tryAcquireCircuit,
+  type DecisionProviders,
+} from './providers/decisionProviders.js';
 import { asProviderFailure, type DecisionProvider, type DecisionResult, type ProviderName } from './providers/decisionProvider.js';
 
 /** A decision's writes, in the record's history: the system's, as the decision, named by it (design §2). */
@@ -380,8 +387,8 @@ async function ask(
 ): Promise<{ decided: number; again: boolean }> {
   const { provider, asks } = group;
   const fresh = (each: Asked) => now() < each.createdAt + each.decision.freshMs && context.attempt < context.maxAttempts;
-  if (!provider) {
-    // Every provider's circuit is open: busy, asked again while fresh.
+  if (!provider || !tryAcquireCircuit(provider.name, now())) {
+    // Every provider's circuit is open (or another worker already holds the half-open trial probe): busy, asked again while fresh.
     const stale = asks.filter((each) => !fresh(each));
     for (const each of stale) await give(runtime.store, owner, each, read, 'none', 'error', now());
     return { decided: stale.length, again: stale.length < asks.length };
@@ -404,7 +411,7 @@ async function ask(
     recordCall(provider.name, true, now());
   } catch (error) {
     const failure = asProviderFailure(error, deadline);
-    recordCall(provider.name, false, now());
+    recordCall(provider.name, false, now(), failure.retryAfterMs);
     /* A timeout is final at once (design §5); a busy provider is asked again while the decision is fresh. */
     const final = (each: Asked) => failure.kind !== 'busy' || !fresh(each);
     const reason: OutcomeReason = failure.kind === 'timeout' ? 'timeout' : failure.kind === 'refused' ? 'refused' : 'error';
@@ -414,6 +421,8 @@ async function ask(
       decided += 1;
     }
     return { decided, again: decided < asks.length };
+  } finally {
+    releaseCircuitTrial(provider.name);
   }
   const latencyMs = Math.max(0, now() - started);
   // One call's cost, split across the decisions it answered.

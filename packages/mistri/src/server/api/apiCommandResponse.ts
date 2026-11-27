@@ -2,9 +2,10 @@
  * design's receipt envelopes for results. Pure projections of the executor's
  * own answers — never a second classification, and never a shape a caller
  * supplies. */
-import { BusinessCommandExecutionError, type RefusalCode } from '../commands/commandErrors.js';
+import { BusinessCommandExecutionError, errorClaimOf, errorRetryAfterMs, type RefusalCode } from '../commands/commandErrors.js';
 import type { ApiReadFailure } from './apiReadFailure.js';
 import { ROW_LOCKED_RETRY_AFTER_SECONDS } from '@mistriwork/engine/adapters/writeLanes.js';
+import { ERROR_CLAIM_HEADER } from '@mistriwork/engine/shared/retry.js';
 
 /* The statuses a bearer caller can hear after the owner has the request: the
    design's problem-details table. Codes a token never meets (a signed-in tab,
@@ -26,9 +27,19 @@ export const REFUSAL_STATUS: Readonly<Partial<Record<RefusalCode, 403 | 404 | 40
   row_locked: 503,
 });
 
-/** A refusal's headers: a lock wait that ran out says when to come back. */
-export function refusalHeaders(code: RefusalCode): Readonly<Record<string, string>> | undefined {
-  return code === 'row_locked' ? Object.freeze({ 'retry-after': String(ROW_LOCKED_RETRY_AFTER_SECONDS) }) : undefined;
+/** A refusal's headers: a lock wait or transient refusal carries Retry-After and error ownership. */
+export function refusalHeaders(code: RefusalCode, error?: unknown): Readonly<Record<string, string>> | undefined {
+  const headers: Record<string, string> = {};
+  if (code === 'row_locked') {
+    headers['retry-after'] = String(ROW_LOCKED_RETRY_AFTER_SECONDS);
+  } else if (code === 'temporarily_unavailable') {
+    const ms = errorRetryAfterMs(error);
+    headers['retry-after'] = String(ms !== undefined ? Math.max(1, Math.ceil(ms / 1_000)) : 1);
+  }
+  const claim = errorClaimOf(error);
+  if (claim) headers[ERROR_CLAIM_HEADER] = claim;
+  else if (code === 'row_locked' || code === 'temporarily_unavailable') headers[ERROR_CLAIM_HEADER] = 'claimed';
+  return Object.keys(headers).length ? Object.freeze(headers) : undefined;
 }
 
 /** Re-issued here, so the title is always the platform's fixed message and

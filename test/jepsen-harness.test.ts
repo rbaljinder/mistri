@@ -29,11 +29,13 @@ import {
   checkFailover,
   checkProposalsAndLiveSync,
   checkReplicaRyw,
+  checkRetryStorm,
   checkSqliteCrash,
   checkSupportLeases,
   checkTenantIsolation,
   checkValkeyCache,
   checkWorkflowFencing,
+  type RetryStormCheckInput,
 } from './jepsen/checkers.js';
 import { checkListAppendHistory } from './jepsen/elle.js';
 import { containsPostgresCommit, FaultProxy } from './jepsen/faultProxy.js';
@@ -845,5 +847,79 @@ describe('PgConnectionManager clean-rollback pool reuse', () => {
       /sql_tool_error/,
     );
     assert.equal(releases.at(-1), true, 'destroyAfter=true must still destroy client');
+  });
+});
+
+describe('Retry-storm Jepsen checker', () => {
+  const cleanSummary: RetryStormCheckInput = {
+    unclaimedDownstreamFailures: 4,
+    unclaimedAmplifications: 0,
+    stormRequestsSent: 40,
+    stormDownstreamAttempts: 48,
+    stormMaxAllowedAttempts: 52,
+    nestedOuterCalls: 4,
+    maxNestedInnerAttempts: 1,
+    coalescedUniqueKeys: 8,
+    coalescedTotalRequests: 32,
+    maxHandlerExecutionsPerKey: 1,
+    conflictRacesAttempted: 8,
+    conflictRacesSucceeded: 0,
+    freshRequestsAdmitted: 12,
+    retryRequestsShed: 12,
+    abortedWaitersWithdrawn: 24,
+    leakedAdmissionSlots: 0,
+    replicaSpilloversSuppressed: 10,
+    replicaSpilloversDuringSaturation: 0,
+    publisherCooldownPauses: 6,
+    publisherCooldownBreaches: 0,
+    maxConcurrentHalfOpenProbes: 1,
+    maxConcurrentAnthropicAsks: 4,
+    exhaustedRefusalsChecked: 20,
+    exhaustedRefusalsClaimed: 0,
+    postHealRecoveriesOk: 4,
+    postHealRecoveriesFailed: 0,
+  };
+
+  test('accepts a clean retry-storm chaos run and parses --workload retry-storm', () => {
+    const cli = parseCliArgs(['--workload', 'retry-storm', '--duration', '4', '--concurrency', '4'], {});
+    assert.equal(cli.workload, 'retry-storm');
+
+    const history = new HistoryRecorder<unknown>();
+    history.invoke(5, 'workflow-unclaimed', { id: 'u-1' });
+    history.ok(5, 'workflow-unclaimed', { id: 'u-1', attempts: 1 });
+    const res = checkRetryStorm(history.entries(), cleanSummary);
+    assert.equal(res.valid, true, JSON.stringify(res.violations));
+  });
+
+  test('catches every planted retry-storm invariant violation', () => {
+    const cases: readonly [Partial<RetryStormCheckInput>, string][] = [
+      [{ unclaimedAmplifications: 1 }, 'error_ownership_amplified'],
+      [{ exhaustedRefusalsClaimed: 1 }, 'exhausted_refusal_not_unclaimed'],
+      [{ stormDownstreamAttempts: 120 }, 'retry_budget_breached'],
+      [{ maxNestedInnerAttempts: 3 }, 'nested_retry_multiplication'],
+      [{ maxHandlerExecutionsPerKey: 2 }, 'coalescing_duplicate_execution'],
+      [{ conflictRacesSucceeded: 1 }, 'coalescing_conflict_missed'],
+      [{ leakedAdmissionSlots: 1 }, 'aborted_waiter_leaked_slot'],
+      [{ replicaSpilloversDuringSaturation: 1 }, 'replica_spillover_during_saturation'],
+      [{ publisherCooldownBreaches: 1 }, 'publisher_cooldown_breached'],
+      [{ maxConcurrentHalfOpenProbes: 2 }, 'half_open_probe_stampede'],
+      [{ maxConcurrentAnthropicAsks: 6 }, 'anthropic_fanout_unbounded'],
+      [{ postHealRecoveriesFailed: 1 }, 'metastable_recovery_failed'],
+    ];
+    for (const [override, expectedCode] of cases) {
+      const res = checkRetryStorm([], { ...cleanSummary, ...override });
+      assert.equal(res.valid, false, `expected planted bug ${expectedCode} to fail`);
+      assert.ok(
+        res.violations.some((v) => v.code === expectedCode),
+        `expected violation ${expectedCode}, got ${JSON.stringify(res.violations)}`,
+      );
+    }
+
+    // Also catches an unclaimed workflow retry recorded only in the EDN history.
+    const badHistory = new HistoryRecorder<unknown>();
+    badHistory.ok(5, 'workflow-unclaimed', { id: 'u-bad', attempts: 3 });
+    const historyCheck = checkRetryStorm(badHistory.entries(), cleanSummary);
+    assert.equal(historyCheck.valid, false);
+    assert.ok(historyCheck.violations.some((v) => v.code === 'error_ownership_amplified'));
   });
 });

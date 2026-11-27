@@ -15,7 +15,7 @@ import { CommandTransactionFailure } from '../../adapters/commands/commandJourna
 import { AppAccessDenied } from '../app/appAccess.js';
 import { NarrowedRefusal } from '../app/appNarrowedWrites.js';
 import { AppValidationDenied, ConsumesRefused } from '../app/appValidationDenied.js';
-import { BusinessCommandExecutionError, isBusinessCommandExecutionError, refusalReason } from './commandErrors.js';
+import { BusinessCommandExecutionError, carryErrorOwnership, isBusinessCommandExecutionError, refusalReason } from './commandErrors.js';
 import { CommandInputError, type CommandKey } from './commandPayload.js';
 
 export function rethrowCommandFailure(options: {
@@ -52,15 +52,18 @@ export function rethrowCommandFailure(options: {
         : transactionStarted
           ? 'unknown'
           : 'not_applied';
-  // Each refusal rebuilt here keeps the reason recorded under what it replaces.
+  // Each refusal rebuilt here keeps the reason and error-ownership metadata recorded under what it replaces.
   if (isBusinessCommandExecutionError(cause))
     throw recordRefusalCause(
-      new BusinessCommandExecutionError(
-        cause.code,
-        cause.outcome === 'unknown' || statusOnly ? 'unknown' : outcome,
-        cause.field,
-        refusedKey(cause.key ?? (cause.code === 'stale_record' ? conflictKey : undefined)),
-        refusalReason(cause, sayRefusal),
+      carryErrorOwnership(
+        cause,
+        new BusinessCommandExecutionError(
+          cause.code,
+          cause.outcome === 'unknown' || statusOnly ? 'unknown' : outcome,
+          cause.field,
+          refusedKey(cause.key ?? (cause.code === 'stale_record' ? conflictKey : undefined)),
+          refusalReason(cause, sayRefusal),
+        ),
       ),
       cause,
     );

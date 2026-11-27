@@ -12,6 +12,11 @@ test('a read is asked again, a few times, only when the server said it was busy'
   expect(retryWhenBusy(0, { status: 500 })).toBe(false);
   expect(retryWhenBusy(0, new Error('The server is not answering.'))).toBe(false);
   expect(retryWhenBusy(0, null)).toBe(false);
+  // Already retried by inner transport, or explicitly unclaimed downstream: never compound retries.
+  expect(retryWhenBusy(0, { ...busy, retried: true })).toBe(false);
+  expect(retryWhenBusy(0, { ...busy, errorClaim: 'unclaimed' })).toBe(false);
+  expect(retryWhenBusy(0, { ...busy, errorClaim: 'false' })).toBe(false);
+  expect(retryWhenBusy(0, { ...busy, errorClaim: 'claimed' })).toBe(true);
 });
 
 test('the wait honors Retry-After, grows with each failure, and is jittered and capped', () => {

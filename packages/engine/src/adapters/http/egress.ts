@@ -24,6 +24,7 @@ import { errorCode, inSpan, injectTrace, tracing } from '../telemetry/trace.js';
 import { request as httpRequest, type IncomingMessage } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import { checkedLookup, refusedLiteral, type NetworkPolicy, type Resolver } from '../net/networkPolicy.js';
+import { ERROR_CLAIM_HEADER, parseErrorClaim, parseRetryAfterMs, type ErrorClaim } from '../../shared/retry.js';
 
 export type { Resolver } from '../net/networkPolicy.js';
 
@@ -52,6 +53,8 @@ export class HttpSourceError extends Error {
     readonly reason: 'refused' | 'timeout' | 'redirect' | 'too_large' | 'not_json' | 'status' | 'shape' | 'network',
     message: string,
     readonly status?: number,
+    readonly retryAfterMs?: number,
+    readonly errorClaim?: ErrorClaim,
   ) {
     super(message);
     this.name = 'HttpSourceError';
@@ -73,6 +76,10 @@ function parseJson(text: string): unknown {
 export interface EgressReply {
   status: number;
   json: unknown;
+  /** Parsed `Retry-After` pushback in ms when the downstream asked us to wait. */
+  retryAfterMs?: number;
+  /** Downstream error ownership (`claimed` | `unclaimed`) when carried by the response. */
+  errorClaim?: ErrorClaim;
 }
 
 interface EgressRequest {
@@ -86,14 +93,16 @@ interface EgressRequest {
   discard?: true;
   /** What the call is, for its span: a webhook, an HTTP source, a search service. */
   kind?: 'webhook' | 'http' | 'search' | 'analytics';
+  /** Caller cancellation signal: aborts and destroys the outbound socket instead of leaving zombie work running. */
+  signal?: AbortSignal;
 }
 
 /**
  * One GET. A 2xx answers its parsed JSON; any other status answers the status
  * alone — its body is never read into anything a caller could forward.
  */
-export function send(url: URL, headers: Record<string, string>, policy: EgressPolicy): Promise<EgressReply> {
-  return request(url, { method: 'GET', headers }, policy);
+export function send(url: URL, headers: Record<string, string>, policy: EgressPolicy, signal?: AbortSignal): Promise<EgressReply> {
+  return request(url, { method: 'GET', headers, ...(signal ? { signal } : {}) }, policy);
 }
 
 /**
@@ -164,12 +173,19 @@ function requestUntraced(url: URL, asked: EgressRequest, policy: EgressPolicy): 
     ? { ...asked.headers, 'content-type': asked.text?.type ?? 'application/json', 'content-length': String(payload.byteLength) }
     : asked.headers;
 
+  const signal = asked.signal;
+  if (signal?.aborted) {
+    return Promise.reject(new HttpSourceError('timeout', `${host} was cancelled before the request began.`));
+  }
+
   return new Promise<EgressReply>((resolve, reject) => {
     let settled = false;
+    const onAbort = () => finish(new HttpSourceError('timeout', `${host} was cancelled.`));
     const finish = (error: Error | null, reply?: EgressReply) => {
       if (settled) return;
       settled = true;
       clearTimeout(deadline);
+      signal?.removeEventListener('abort', onAbort);
       if (error) {
         outgoing.destroy();
         reject(error);
@@ -191,6 +207,12 @@ function requestUntraced(url: URL, asked: EgressRequest, policy: EgressPolicy): 
       },
       (response: IncomingMessage) => {
         const status = response.statusCode ?? 0;
+        const retryAfterMs = parseRetryAfterMs(response.headers['retry-after']);
+        const errorClaim = parseErrorClaim(response.headers[ERROR_CLAIM_HEADER] ?? response.headers['x-uber-error-claim']);
+        const meta = {
+          ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
+          ...(errorClaim !== undefined ? { errorClaim } : {}),
+        };
         if (status >= 300 && status < 400) {
           return finish(
             new HttpSourceError(
@@ -202,7 +224,7 @@ function requestUntraced(url: URL, asked: EgressRequest, policy: EgressPolicy): 
         }
         if (asked.discard || status < 200 || status > 299) {
           response.resume();
-          return finish(null, { status, json: undefined });
+          return finish(null, { status, json: undefined, ...meta });
         }
         const type = String(response.headers['content-type'] ?? '');
         if (!/^application\/([\w.+-]*\+)?json\b/i.test(type)) {
@@ -218,7 +240,7 @@ function requestUntraced(url: URL, asked: EgressRequest, policy: EgressPolicy): 
         });
         response.on('end', () => {
           try {
-            finish(null, { status, json: parseJson(Buffer.concat(chunks).toString('utf8')) });
+            finish(null, { status, json: parseJson(Buffer.concat(chunks).toString('utf8')), ...meta });
           } catch {
             finish(new HttpSourceError('not_json', `${host} answered text that is not JSON.`));
           }
@@ -226,6 +248,7 @@ function requestUntraced(url: URL, asked: EgressRequest, policy: EgressPolicy): 
         response.on('error', () => finish(new HttpSourceError('network', `${host} closed the connection mid-answer.`)));
       },
     );
+    signal?.addEventListener('abort', onAbort, { once: true });
     outgoing.on('timeout', () =>
       finish(new HttpSourceError('timeout', `${host} did not accept a connection within ${policy.connectTimeoutMs / 1000} s.`)),
     );
