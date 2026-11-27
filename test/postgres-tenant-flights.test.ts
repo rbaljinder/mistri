@@ -345,65 +345,38 @@ const BUDGETS: Record<string, number> = {
   inbox: 2,
   // the release fence alone: BEGIN, the LOCK, the membership and COMMIT in one message (no suggestions read)
   'record-decisions': 1,
-  /* BEGIN with the lock, the membership and the one read of every asked record behind it; COMMIT; the release
-     fence. Two records or twenty, the same three: the fence does not ride the COMMIT as a list's does, since a check's
-     reads past the first (a derived `when`, an availability hook) are not known to be its last wave. */
-  'availability (2 records)': 3,
-  'availability (20 records)': 3,
+  /* BEGIN with the lock, the membership, the one read of every asked record, and COMMIT+fence riding behind it (lastWave). */
+  'availability (2 records)': 1,
+  'availability (20 records)': 1,
   // BEGIN, locks, the tenant and membership, the row; COMMIT
   prepare: 2,
   // the same opening, with the lead the handler reads; the write with its re-read behind it; the receipt with COMMIT
   execute: 3,
-  /* The same opening and update, then 200 vehicles added by `insertMany` and changed by `updateWhere`: the INSERT
-     with its parents ahead of it; its one locked read-back of every row; the where's read; the audit's before images;
-     the locked read of the rows it changes; the UPDATE with its after-read; the target read again (the batch wrote
-     since its update); the receipt with COMMIT. Each batch pays what its one-row form pays, and the same at 50 rows
-     as at 200 (asserted below): a batch's flights do not grow with its rows. */
-  executeMany: 10,
-  'executeMany (50 rows)': 10,
+  /* The same opening and update, then 200 vehicles added by `insertMany` (pipelined read-back) and changed by
+     `updateWhere` (UNNEST UPDATE + reused locked before-images): constant flights at 50 rows and 200 rows. */
+  executeMany: 8,
+  'executeMany (50 rows)': 8,
   // admission, the second admission around the session check, its release fence: one whole snapshot each
   renew: 3,
-  /* Discovery's three looks at the person's memberships, the platform's riding the second; the marks, one message
-     for the tenants' names, which of them are sandboxes and the entered tenant's addresses (tenantReadSource.ts
-     `readTenantMarks`); the open's two admissions and its fence; then the boot it carries, BEGIN with every read and
-     its COMMIT with the release fence riding it. Nine, each a whole snapshot in one message or awaited, so none is
-     left to land on either side of the answer: the count no longer turns on how parallel snapshots interleave on the
-     wire, and there is no flight's allowance for it. (It was 12 to 14: the platform's membership on a snapshot beside
-     the second look; the names behind a BEGIN with a COMMIT nobody waited on, counted when it happened to leave
-     before the answer; the addresses on a snapshot of their own; and the bell's count carried in the boot, whose
-     visibility read waited on its notices. Marked for cloning, the sandboxes were four more: the store's layout, its
-     version, its rows and a COMMIT.) */
-  enter: 9,
-  /* Entering at a free-form page: the same nine, with the page's loads in them. Its `loader` and the named loader its
-     browser says it asked last time are read on the boot's snapshot, their first reads behind its BEGIN beside the
-     App's own, so a load of one wave of reads costs the entry no flight; one that reads in turns costs a flight a
-     turn past the first. Asked by the page once the entry had answered, each was a request of its own, two flights
-     (`pages/load`), and the page's second wait. */
-  'enter (page)': 9,
+  /* Discovery's three looks at the person's memberships (with platform + tenant marks riding the second look),
+     admitted directly from discovery into the lease (0 extra open flights), plus the 1-flight pipelined boot. */
+  enter: 4,
+  /* Entering at a free-form page: discovery (3) + boot with page loaders (2). */
+  'enter (page)': 5,
   // a page's load asked alone: BEGIN with the membership and its reads; the COMMIT with the fence
   'pages/load': 2,
-  /* The same for a page reloaded in its tab, which resumes the context that tab kept where the first opens one: a
-     resume is admitted as an open is. */
-  'enter (kept)': 9,
-  /* A reload that takes its tab's let-go context back (`reenter`, tenantEnter.ts): no discovery and no admission of
-     its own, so only the boot's three, its snapshot fencing the lease's evidence against the membership as every
-     request on a lease does. */
-  reenter: 3,
-  /* The page's first reads, asked past the sign-in: the tenant's addresses, a whole snapshot in one message; BEGIN
-     with the context's reads; and the COMMIT carrying the release fence (TenantReadRuntime `fencedTogether`) rather
-     than a snapshot of the fence's own after it. Three, always: the bell's count is not among the reads (the bell asks
-     for itself once the bar has drawn, `inbox` above), and it was its visibility read, waiting on its notices and
-     counted in their flight or not as the answers happened to arrive, that made this three or four. */
-  boot: 3,
-  /* A record page's compose: its plan and every read its sections ask, on one snapshot ending with the fence, then
-     the verbs' availability where the page carries checks, which keeps its own fence (availability, above). */
-  'pages/compose': 7,
-  /* A write's refresh: lists and counts asked in one moment, every one a bounded read, so one bounded request: BEGIN
-     with the reads, and the COMMIT with the fence behind (tenantHttp.ts `boundedBatch`). */
-  'batch reads': 2,
-  /* The record's references: its row, then every count at once, on one snapshot whose COMMIT carries the release fence
-     (tenantHttp.ts), where each read on a snapshot of its own was seven. */
-  references: 3,
+  /* Reload resuming a kept context via discovery-admitted lease + 1-flight boot. */
+  'enter (kept)': 4,
+  /* A reload that takes its tab's let-go context back (`reenter`): 1-flight pipelined boot. */
+  reenter: 1,
+  /* The page's first reads, asked past the sign-in: 1-flight pipelined snapshot + release fence. */
+  boot: 1,
+  /* A record page's compose: plan + sections with pipelined fence (2 flights) + availability in parallel (1 flight). */
+  'pages/compose': 3,
+  /* A write's refresh: bounded single-wave reads + pipelined release fence in 1 flight. */
+  'batch reads': 1,
+  /* The record's references: its row, then every count at once with pipelined release fence (2 flights). */
+  references: 2,
 };
 /* The first of a catalog description's six statements (adapters/postgresCatalog.ts). */
 const DESCRIBES = /\bAS approx_rows\b/;

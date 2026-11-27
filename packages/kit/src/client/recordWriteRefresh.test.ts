@@ -6,6 +6,8 @@ import { state } from './core.js';
 import { beginConnectionTransition } from './connectionTransition.js';
 import { establishSessionIdentity } from './sessionIdentity.js';
 import { composedReads } from './composedHook.js';
+import { fileQueryReads, fileReads, forgetQueryReads } from './liveReads.js';
+import { gatheringReads } from './readGathering.js';
 import './composedReads.js';
 
 const key = { id: '9007199254740993' };
@@ -355,5 +357,58 @@ test('a read begun after a change that landed is not asked again for it', async 
   } finally {
     stop();
     client.clear();
+  }
+});
+
+test('captureRecordWriteRefresh narrows run/count queries via filed x-mistri-reads tables', async () => {
+  const taskList = cached(['run', 'tick', 'task all', 20, 0, false, 0]);
+  const noteList = cached(['run', 'tick', 'note all', 20, 0, false, 0]);
+  const noteCount = cached(['count', 'tick', 'note']);
+  const unfiledCount = cached(['count', 'tick', 'other']);
+  const taskPayload = { rows: [] },
+    notePayload = { rows: [] };
+  fileReads(taskPayload, 'task');
+  fileReads(notePayload, 'note');
+  fileQueryReads(taskPayload, taskList);
+  fileQueryReads(notePayload, noteList);
+  fileQueryReads(notePayload, noteCount);
+  try {
+    captureRecordWriteRefresh('task', key)();
+    await settle();
+    expect(taskList.state.isInvalidated).toBe(true);
+    expect(noteList.state.isInvalidated).toBe(false);
+    expect(noteCount.state.isInvalidated).toBe(false);
+    expect(unfiledCount.state.isInvalidated).toBe(true);
+  } finally {
+    forgetQueryReads(taskList.queryHash);
+    forgetQueryReads(noteList.queryHash);
+    forgetQueryReads(noteCount.queryHash);
+  }
+});
+
+test('captureRecordWriteRefresh deduplicates within the same write epoch and batches refetches via gatherReads', async () => {
+  cached(list);
+  let wasGathering = false;
+  const readList = vi.fn(async () => {
+    wasGathering = gatheringReads();
+    return { rows: [{ name: 'Updated' }] };
+  });
+  const listing = new QueryObserver(queryClient, { queryKey: list, queryFn: readList, staleTime: Infinity });
+  const closeList = listing.subscribe(() => {});
+  try {
+    captureRecordWriteRefresh('task', key)();
+    // A second acknowledgement for the same record in the same write epoch does not cancel/restart the first refetch.
+    captureRecordWriteRefresh('task', key)();
+    await settle();
+    expect(readList).toHaveBeenCalledTimes(1);
+    expect(wasGathering).toBe(true);
+
+    // After a new write advances composedEpoch, a new acknowledgement runs again.
+    composedReads()!.forget();
+    captureRecordWriteRefresh('task', key)();
+    await settle();
+    expect(readList).toHaveBeenCalledTimes(2);
+  } finally {
+    closeList();
   }
 });

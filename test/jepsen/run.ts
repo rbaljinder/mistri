@@ -15,8 +15,11 @@ import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { refusalCause } from '../../packages/engine/src/shared/refusal.js';
 import { runBankWorkload, type BankWorkloadReport } from './workloads/bank.js';
+import { runBatchWritesWorkload, type BatchWritesWorkloadReport } from './workloads/batchWrites.js';
 import { runDdlEpochWorkload, type DdlEpochWorkloadReport } from './workloads/ddlEpoch.js';
+import { runEnterRevocationWorkload, type EnterRevocationWorkloadReport } from './workloads/enterRevocation.js';
 import { runEventDeliveryWorkload, type EventDeliveryWorkloadReport } from './workloads/eventDelivery.js';
 import { runFailoverWorkload, type FailoverWorkloadReport } from './workloads/failover.js';
 import { runHttpClusterWorkload, type HttpClusterWorkloadReport } from './workloads/httpCluster.js';
@@ -46,7 +49,9 @@ export type SingleWorkload =
   | 'support-lease'
   | 'http-cluster'
   | 'sqlite-crash'
-  | 'retry-storm';
+  | 'retry-storm'
+  | 'enter-revocation'
+  | 'batch-writes';
 
 export type WorkloadChoice = SingleWorkload | 'all';
 
@@ -65,7 +70,9 @@ export type AnyWorkloadReport =
   | SupportLeaseWorkloadReport
   | HttpClusterWorkloadReport
   | SqliteCrashWorkloadReport
-  | RetryStormWorkloadReport;
+  | RetryStormWorkloadReport
+  | EnterRevocationWorkloadReport
+  | BatchWritesWorkloadReport;
 
 const ALL_WORKLOADS: readonly SingleWorkload[] = [
   'bank',
@@ -83,6 +90,8 @@ const ALL_WORKLOADS: readonly SingleWorkload[] = [
   'http-cluster',
   'sqlite-crash',
   'retry-storm',
+  'enter-revocation',
+  'batch-writes',
 ];
 
 export interface CliOptions {
@@ -359,6 +368,22 @@ function formatMarkdownReport(
         appendViolations(lines, report.check.violations);
         break;
       }
+      case 'enter-revocation': {
+        const s = report.check.summary;
+        lines.push(
+          `- Enter & lastWave revocation: enterOk=${s.enterOk}, bootOk=${s.bootOk}, availOk=${s.availabilityOk}, composeOk=${s.composeOk}, refsOk=${s.runOk}, cycles=${s.revocationCycles}, refusals=${s.revokedRefusals}, crossTenantLeaks=${s.crossTenantLeaks}, postRevocationLeaks=${s.postRevocationLeaks}`,
+        );
+        appendViolations(lines, report.check.violations);
+        break;
+      }
+      case 'batch-writes': {
+        const s = report.check.summary;
+        lines.push(
+          `- Batch writes & DDL: insertMany=(ok:${s.insertBatchesOk}, fail:${s.insertBatchesFail}, info:${s.insertBatchesInfo}), updateMany=(ok:${s.updateBatchesOk}, fail:${s.updateBatchesFail}, info:${s.updateBatchesInfo}), poisonRefused=${s.poisonBatchesRefused}, staleGuardRefused=${s.staleGuardBatchesRefused}, ddlSteps=${s.ddlStepsExecuted}, stalePlanErrors=${s.stalePlanErrors}, finalRows=${s.finalRowCount}`,
+        );
+        appendViolations(lines, report.check.violations);
+        break;
+      }
     }
 
     if (report.historyFiles) {
@@ -491,6 +516,12 @@ async function main(argv: readonly string[]): Promise<number> {
       case 'retry-storm':
         reports.push(await runRetryStormWorkload(base));
         break;
+      case 'enter-revocation':
+        reports.push(await runEnterRevocationWorkload({ ...base, pgUrl: options.pgUrl }));
+        break;
+      case 'batch-writes':
+        reports.push(await runBatchWritesWorkload({ ...base, pgUrl: options.pgUrl }));
+        break;
     }
     const last = reports[reports.length - 1];
     console.log(`[jepsen] workload=${name} verdict=${last.valid ? 'PASS' : 'FAIL'} (${last.durationMs} ms)`);
@@ -529,6 +560,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     },
     (error) => {
       console.error(error);
+      for (let cur = refusalCause(error), depth = 0; cur !== undefined && depth < 6; cur = refusalCause(cur), depth++) {
+        console.error(`[jepsen] refusalCause[${depth}]:`, cur);
+      }
       process.exitCode = 1;
     },
   );

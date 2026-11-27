@@ -191,7 +191,7 @@ for (const dialect of ['postgres'] as const) {
       assert.equal(f.ended(), 0, 'scoped operations must not dispose the owning adapter');
       if (dialect === 'postgres') {
         assert.equal(f.released(), 6);
-        assert.equal(f.setup.filter((text) => text === 'SET default_transaction_read_only = on').length, 6);
+        assert.equal(f.setup.filter((text) => text.startsWith('SET default_transaction_read_only = on')).length, 6);
       }
     } finally {
       await f.adapter.close();

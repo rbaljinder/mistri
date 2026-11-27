@@ -79,6 +79,8 @@ export async function startLatencyProxy(target: string, initial: number): Promis
     let ready: { at: number; after: string } | undefined;
     let flight = 0;
     let answered = true;
+    const prepared = new Map<string, string>();
+    let justParsed: string | undefined;
     /* The client's side: an untyped startup (and perhaps an SSL request before it), then typed messages. */
     let untyped = true;
     let fromClient = Buffer.alloc(0);
@@ -101,10 +103,17 @@ export async function startLatencyProxy(target: string, initial: number): Promis
         const body = fromClient.subarray(5, length + 1);
         fromClient = fromClient.subarray(length + 1);
         let text: string | undefined;
-        if (type === 'Q') text = body.subarray(0, body.indexOf(0)).toString();
-        else if (type === 'P') {
-          const name = body.indexOf(0);
-          text = body.subarray(name + 1, body.indexOf(0, name + 1)).toString();
+        let parsedName: string | undefined;
+        if (type === 'Q') {
+          text = body.subarray(0, body.indexOf(0)).toString();
+          if (/^\s*DEALLOCATE\s+ALL\b/i.test(text)) prepared.clear();
+          justParsed = undefined;
+        } else if (type === 'P') {
+          const nameEnd = body.indexOf(0);
+          parsedName = body.subarray(0, nameEnd).toString();
+          text = body.subarray(nameEnd + 1, body.indexOf(0, nameEnd + 1)).toString();
+          if (parsedName) prepared.set(parsedName, text);
+          justParsed = parsedName;
         }
         if (type !== 'X' && answered) {
           flight += 1;
@@ -120,8 +129,10 @@ export async function startLatencyProxy(target: string, initial: number): Promis
           last = text;
         } else if (type === 'B') {
           // Portal and statement names, the parameter formats, then each value: enough to tell one store's catalog read from another's.
-          let at2 = body.indexOf(0) + 1;
-          at2 = body.indexOf(0, at2) + 1;
+          const portalEnd = body.indexOf(0);
+          const stmtEnd = body.indexOf(0, portalEnd + 1);
+          const stmtName = body.subarray(portalEnd + 1, stmtEnd).toString();
+          let at2 = stmtEnd + 1;
           at2 += 2 + 2 * body.readInt16BE(at2);
           const count = body.readInt16BE(at2);
           at2 += 2;
@@ -132,8 +143,17 @@ export async function startLatencyProxy(target: string, initial: number): Promis
             params.push(size < 0 ? 'NULL' : body.subarray(at2, at2 + size).toString());
             if (size > 0) at2 += size;
           }
-          const statement = statements.findLast((entry) => entry.connection === id);
-          if (statement && !statement.params) statement.params = params;
+          if (stmtName && justParsed !== stmtName) {
+            const sql = prepared.get(stmtName);
+            if (sql !== undefined) {
+              statements.push({ connection: id, at, text: sql, flight, params });
+              last = sql;
+            }
+          } else {
+            const statement = statements.findLast((entry) => entry.connection === id);
+            if (statement && !statement.params) statement.params = params;
+          }
+          justParsed = undefined;
         }
       }
     };

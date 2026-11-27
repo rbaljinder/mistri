@@ -65,7 +65,12 @@ export function declareTenantAppLive(app: AppDef): void {
  * `url` is the PostgreSQL writer's own, to hold LISTEN on; a transaction
  * pooler gets none, and the hub polls.
  */
-export async function bindTenantLive(adapter: Adapter, ownership: TenantOwnershipSnapshot, url?: string): Promise<void> {
+export async function bindTenantLive(
+  adapter: Adapter,
+  ownership: TenantOwnershipSnapshot,
+  url?: string,
+  listenUrl?: string,
+): Promise<void> {
   const key = keyOf(ownership);
   if (!liveSyncOn()) {
     bound.set(key, { adapter, state: { state: 'off', reason: 'switched off' } });
@@ -105,7 +110,7 @@ export async function bindTenantLive(adapter: Adapter, ownership: TenantOwnershi
   );
   const changes = { owners, scoped: true as const, ...(skip.size ? { skip } : {}), ...(wish.live ? {} : { only: choices }) };
   bindLiveChanges(adapter, changes);
-  const listen = url === undefined ? undefined : wakeListenUrl(url, postgresPoolDefaults().pooler);
+  const listen = url === undefined ? undefined : wakeListenUrl(url, postgresPoolDefaults().pooler, listenUrl);
   const hub = await liveHubOf(adapter, listen === undefined ? {} : { listen });
   bound.set(key, {
     adapter,

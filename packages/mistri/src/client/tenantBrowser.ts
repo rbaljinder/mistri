@@ -12,7 +12,6 @@ import {
 import {
   chooseTenant,
   discoverTenants,
-  enterFirst,
   enterTenant,
   recoverTenant,
   releaseTenant,
@@ -21,7 +20,8 @@ import {
 } from './tenantTransport.js';
 import { adoptTenantBoot } from './tenantBootLoad.js';
 import { enteredTenant } from '../shared/tenantBoot.js';
-import { enterAddress, parseTenantLink } from './tenantLink.js';
+import { enterFirstAt, KEPT_TENANT_STORAGE_KEY as KEPT } from './tenantEnter.js';
+export { enterFirstAt };
 import { checkSessionIdentity, invalidateSession } from '@mistriwork/kit/client/sessionLifecycle.js';
 import { startTenantRenewal, type TenantRenewalOptions } from './tenantRenewal.js';
 import { tenantSuspensionOverlay } from './tenantSuspension.js';
@@ -70,7 +70,6 @@ export async function checkBrowserTenant(owner = captureSessionIdentity()): Prom
 }
 /* The context this browser tab holds, by App and account, for its next page
    to resume (resumeTenant) when the reader chooses the same tenant again. */
-const KEPT = 'mistri.tenant-context';
 function keep(reply: TenantContextReply): void {
   try {
     sessionStorage.setItem(
@@ -112,36 +111,6 @@ function keptHere(owner: ReturnType<typeof captureSessionIdentity>): { tenantId:
   } catch {
     return undefined;
   }
-}
-/* The same context before the page knows whose session it is: the first request names whatever this tab kept for the
-   App, and the host resumes it only for the session that holds it. `keptHere` then holds the account to it. */
-function keptFor(appId: string): { tenantId: string; tabId: string } | undefined {
-  try {
-    const value = JSON.parse(sessionStorage.getItem(KEPT) ?? 'null') as { appId?: unknown; tenantId?: unknown; tabId?: unknown } | null;
-    return value &&
-      value.appId === appId &&
-      typeof value.tenantId === 'string' &&
-      value.tenantId !== PLATFORM_TENANT_ID &&
-      typeof value.tabId === 'string'
-      ? { tenantId: value.tenantId, tabId: value.tabId }
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-/**
- * The page's first request, for a tenant App's address: entering, whose answer is who-am-I's too
- * (tenantTransport.ts `enterFirst`). The look the page takes once it has established who is signed in is that
- * request's answer, not another. Undefined for an address that names no entry, or one the host did not answer so.
- */
-export async function enterFirstAt(appId: string, location: string): Promise<Record<string, unknown> | undefined> {
-  let link;
-  try {
-    link = parseTenantLink(location, appId);
-  } catch {
-    return undefined;
-  }
-  return enterFirst(appId, enterAddress(link), link.tenantId ?? undefined, keptFor(appId));
 }
 /* Leases entered with their page's boot already held (`/api/tenant/enter`): the shell asks no boot of its own. */
 const bootedLeases = new WeakSet<TenantContextReply>();

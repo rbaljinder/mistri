@@ -20,7 +20,7 @@ import {
 } from './tenantServiceModel.js';
 import { assertSqliteIntakeAnchorSnapshot } from './tenantStore.js';
 import type { TenantOwnershipSnapshot } from './tenantOwnership.js';
-import { assertPostgresIntakeAnchorFence } from './tenantStorePostgres.js';
+import { assertPostgresIntakeAnchorFence, postgresIntakeAnchorFenceAhead } from './tenantStorePostgres.js';
 import { withOwnProfile, type TenantWriteKind, type TenantWriteRun } from './tenantWriteKindContract.js';
 
 // A structural alias, not an interface: the published declarations expand it
@@ -67,6 +67,7 @@ export const serviceWriteKind = Object.freeze<TenantWriteKind<TenantServiceEvide
   // The anchors FOR SHARE, held to COMMIT: a suspension waits for this attempt, or committed first and refuses it.
   postgresFenceHeld: true,
   postgresFence: (client, evidence, { owner, live }) => assertPostgresIntakeAnchorFence(client, owner, serviceAnchor(evidence), live),
+  postgresFenceAhead: (owner, evidence) => postgresIntakeAnchorFenceAhead(owner, serviceAnchor(evidence)),
   journalOwner: (owner, evidence) => serviceJournalOwner(owner, evidence),
   run: (owned, evidence, records, journal, _command, run) => runManagedCommandTransaction(owned, evidence, records, journal!, run),
 });

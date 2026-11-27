@@ -87,18 +87,22 @@ export interface AdmissionCache {
 export function createAdmissionCache(identity: TenantSourceIdentity, deployment: string): AdmissionCache {
   const entries = new Map<string, { session: string; evidence: Evidence }>();
   live.add(entries);
-  const scope = [identity.appId, deployment, identity.storeId, identity.canonicalPath, identity.source.id, identity.source.connection];
+  const scopePrefix = [identity.appId, deployment, identity.storeId, identity.canonicalPath, identity.source.id, identity.source.connection]
+    .map((part) => `${part.length}:${part}`)
+    .join('|');
   return Object.freeze({
     find(request: unknown, accountId: string, realm: string) {
       const session = request && typeof request === 'object' ? sessions.get(request) : undefined;
       if (session === undefined) return {};
-      const key = JSON.stringify([...scope, accountId, session, realm]);
+      const key = `${session.length}:${session}|${accountId.length}:${accountId}|${realm.length}:${realm}|${scopePrefix}`;
       const kept = fresh.has(request as object) ? undefined : entries.get(key);
       return kept ? { key, evidence: kept.evidence } : { key };
     },
     keep(key: string | undefined, evidence: Evidence) {
       if (key === undefined) return;
-      const session = (JSON.parse(key) as string[])[scope.length + 1];
+      const colon = key.indexOf(':');
+      const len = Number(key.slice(0, colon));
+      const session = key.slice(colon + 1, colon + 1 + len);
       entries.delete(key);
       if (entries.size >= MAXIMUM) entries.delete(entries.keys().next().value!);
       entries.set(key, { session, evidence });

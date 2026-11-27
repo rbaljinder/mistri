@@ -7,6 +7,7 @@
  * drawing.
  */
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import '../composer.css';
 import { motionStill } from '../motionStill.js';
 import { findTable, hopsFrom, refsTo, state, tableAtPrefix } from '../core.js';
 import {

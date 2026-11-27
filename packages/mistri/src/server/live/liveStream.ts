@@ -167,10 +167,23 @@ class LiveStream {
       cursor: replaying ? this.options.cursor! : this.cursor(),
       ...(off.length ? { off } : {}),
     });
-    this.lifetime = setTimeout(() => guard('stream', () => this.end('lifetime')), this.limits.lifetimeMs);
+    const jitter = (ms: number, min = 0.8, span = 0.4) =>
+      ms >= 5_000 ? Math.max(1_000, Math.round(ms * (min + Math.random() * span))) : ms;
+    this.lifetime = setTimeout(() => guard('stream', () => this.end('lifetime')), jitter(this.limits.lifetimeMs));
     this.lifetime.unref?.();
-    this.refresher = setInterval(() => guard('stream', () => this.current().catch(() => {})), this.limits.authorityMs);
-    this.refresher.unref?.();
+    const scheduleRefresh = () => {
+      if (this.ended) return;
+      this.refresher = setTimeout(
+        () => {
+          if (this.ended) return;
+          guard('stream', () => this.current(true).catch(() => {}));
+          scheduleRefresh();
+        },
+        jitter(this.limits.authorityMs, 0.85, 0.15),
+      );
+      this.refresher.unref?.();
+    };
+    scheduleRefresh();
     if (this.wantsReset || this.pending) this.flush();
   }
 
@@ -187,12 +200,12 @@ class LiveStream {
   }
 
   /** The authority, resolved again once stale; a failure ends the stream. */
-  private current(): Promise<readonly LiveAuthority[]> {
+  private current(scheduled = false): Promise<readonly LiveAuthority[]> {
     if (this.ended) return Promise.reject(new Error('ended'));
     /* The refresher fires one interval after the last resolve, and a timer wakes a hair early or the clock reads a few
        milliseconds short, so a strict comparison found the authority "fresh" and a stream was re-verified only every
        second tick (60 s). A tenth of the interval (a second at 30 s) keeps the stated 30 s. */
-    if (this.now() - this.resolvedAt < this.limits.authorityMs - Math.min(1_000, this.limits.authorityMs / 10))
+    if (!scheduled && this.now() - this.resolvedAt < this.limits.authorityMs - Math.min(1_000, this.limits.authorityMs / 10))
       return Promise.resolve(this.authority);
     this.resolving ??= this.options
       .resolve()
@@ -330,7 +343,7 @@ class LiveStream {
     }
     if (this.flushTimer) clearTimeout(this.flushTimer);
     if (this.lifetime) clearTimeout(this.lifetime);
-    if (this.refresher) clearInterval(this.refresher);
+    if (this.refresher) clearTimeout(this.refresher);
     this.options.hubs.forEach((hub, index) => this.taps[index] && hub.detach(this.taps[index]));
     const { res } = this.options;
     if (reason && !res.writableEnded && !res.destroyed) {

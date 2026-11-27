@@ -675,29 +675,33 @@ export async function openJobHost(options: JobHostOptions): Promise<JobHost> {
   type TimedJob = (typeof timed)[number];
   /** One slot's runs, each carrying its tenant (none: once, on the platform); throws when the store is unavailable. */
   async function enqueueRuns(job: TimedJob, slot: number, runs: readonly (string | undefined)[], at: number): Promise<boolean> {
-    let enqueued = false;
-    for (const tenantId of runs) {
-      const key = tenantId === undefined ? everySlotKey(slot) : everyTenantSlotKey(slot, tenantId);
-      await jobs.enqueue(
-        {
-          job: job.id,
-          version: job.version,
-          idempotencyKey: key,
-          input: { key: {}, input: job.input ?? {} },
-          runAt: slot,
-          provenance: {
-            appId: deployment.appId,
-            actorId: `service:${job.runAs}`,
-            ...(tenantId === undefined ? {} : { tenantId }),
-            correlationId: key,
-            causationId: key,
-          },
-        },
-        at,
+    if (!runs.length) return false;
+    const CONCURRENCY = 8;
+    for (let i = 0; i < runs.length; i += CONCURRENCY) {
+      await Promise.all(
+        runs.slice(i, i + CONCURRENCY).map((tenantId) => {
+          const key = tenantId === undefined ? everySlotKey(slot) : everyTenantSlotKey(slot, tenantId);
+          return jobs.enqueue(
+            {
+              job: job.id,
+              version: job.version,
+              idempotencyKey: key,
+              input: { key: {}, input: job.input ?? {} },
+              runAt: slot,
+              provenance: {
+                appId: deployment.appId,
+                actorId: `service:${job.runAs}`,
+                ...(tenantId === undefined ? {} : { tenantId }),
+                correlationId: key,
+                causationId: key,
+              },
+            },
+            at,
+          );
+        }),
       );
-      enqueued = true;
     }
-    return enqueued;
+    return true;
   }
   /** Whether the store holds no run of the job: undefined when it cannot say now. */
   async function freshJob(job: TimedJob): Promise<boolean | undefined> {

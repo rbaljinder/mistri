@@ -744,11 +744,11 @@ function NewRecordFormBody({
      author wrote (`description`), if anything — each field's own help says
      what leaving it empty does, where that is worth a sentence. */
   /* The form's `live` figures as its fields and lines change (FormLines.tsx). */
-  const liveSummary = (
+  const liveSummary = linesPart ? (
     <f.Subscribe selector={(state) => state.values}>
-      {(values) => linesPart && <linesPart.LiveValues table={table} names={live} values={{ ...draftDefaults, ...values }} lines={lines} />}
+      {(values) => <linesPart.LiveValues table={table} names={live} values={{ ...draftDefaults, ...values }} lines={lines} />}
     </f.Subscribe>
-  );
+  ) : null;
   const lede = app ? form?.description : say('emptyFieldsAreLeft');
   const cancel = (
     <Button variant="secondary" onClick={onCancel} disabled={submission.phase === 'pending' || (retainUncertain && submission.locked)}>
@@ -840,16 +840,17 @@ function NewRecordFormBody({
       <p ref={status} className="insert-status" role="status" tabIndex={-1} hidden={submission.phase !== 'pending'}>
         {say('adding')}
       </p>
-      <f.Subscribe selector={(state) => state.values}>
+      <f.Subscribe selector={(state) => (tried ? state.values : null)}>
         {(values) => {
-          const hiddenMissing = tried
-            ? missingFields(
-                table.columns.filter((c) => !columns.includes(c)),
-                insertValues(values, defaults, edited.current, table.columns),
-                assigned,
-                form?.derived,
-              )
-            : [];
+          const hiddenMissing =
+            tried && values
+              ? missingFields(
+                  table.columns.filter((c) => !columns.includes(c)),
+                  insertValues(values, defaults, edited.current, table.columns),
+                  assigned,
+                  form?.derived,
+                )
+              : [];
           const problem = hasVisibleServerErrors
             ? ''
             : submission.problem ||

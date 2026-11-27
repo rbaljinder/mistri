@@ -150,7 +150,7 @@ export function usePageSurface(owner: RecordSurfaceOwner, entry: PageEntry, opti
     queryFn: () => target.read(() => pageById(target.pageId, target.table) as Promise<RecordSurfacePage>),
     enabled: current,
     staleTime: 0,
-    gcTime: 0,
+    gcTime: 30_000,
   });
   const page = current ? definition.data : undefined;
   const base = page && !page.error ? (findTable(page.base) as TableMeta | undefined) : undefined;
@@ -181,6 +181,7 @@ export function usePageSurface(owner: RecordSurfaceOwner, entry: PageEntry, opti
       rootError = say('thisSurfaceNeedsAComplete');
     }
   }
+  const othersEnabled = current && Boolean(readBase) && !needsResolution && !rootError;
   const others = useQuery<RecordSurfaceAlternative[]>({
     queryKey: ['pages-of', owner.connection, readBase?.id, owner.queryScope],
     queryFn: () =>
@@ -191,10 +192,11 @@ export function usePageSurface(owner: RecordSurfaceOwner, entry: PageEntry, opti
           return [];
         } // Alternatives failing never removes the known layout.
       }),
-    enabled: current && Boolean(readBase) && !needsResolution && !rootError,
+    enabled: othersEnabled,
     staleTime: 0,
-    gcTime: 0,
+    gcTime: othersEnabled ? 30_000 : 0,
   });
+  const planEnabled = current && !needsResolution && !rootError && Boolean(readBase && readPageId && target.key);
   const plan = useQuery<{ page?: PageDef; plans?: SectionPlan[] }>({
     queryKey: ['page-plan', owner.connection, readPageId, keyText, page?.source === 'saved' ? JSON.stringify(page) : '', owner.queryScope],
     /* The plan and every read the page's sections will ask, in one request
@@ -205,9 +207,9 @@ export function usePageSurface(owner: RecordSurfaceOwner, entry: PageEntry, opti
     /* Planning independently attests the root on the scoped server adapter.
        Start it beside the probe: the probe still decides whether this surface
        may render, but no longer puts a round trip ahead of every section. */
-    enabled: current && !needsResolution && !rootError && Boolean(readBase && readPageId && target.key),
+    enabled: planEnabled,
     staleTime: 0,
-    gcTime: 0,
+    gcTime: planEnabled ? 30_000 : 0,
     // The record on screen: a tab coming back re-reads it, however recent.
     meta: FOCUS_ALWAYS,
   });
@@ -240,9 +242,9 @@ export function usePageSurface(owner: RecordSurfaceOwner, entry: PageEntry, opti
     // The root probe needs the resolved page/base/key only. Alternatives feed
     // the chooser in the eventual plan, so making this read wait for them
     // serializes two independent requests and delays the missing-root fence.
-    enabled: current && !needsResolution && !rootError && Boolean(readBase && readPageId && target.key),
+    enabled: planEnabled,
     staleTime: 0,
-    gcTime: 0,
+    gcTime: planEnabled ? 30_000 : 0,
   });
   const gone = Boolean(current && probe.data && !probe.data.row && !probe.data.unreachable);
   /* One page object per plan: PageView keys its label ownership on the page

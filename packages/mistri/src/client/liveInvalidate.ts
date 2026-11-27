@@ -186,6 +186,7 @@ function schedule(id: string, slot: Slot): void {
     if (!ask) return void slots.delete(id);
     slot.last = Date.now();
     slot.busy = true;
+    gatherReads();
     void Promise.resolve()
       .then(ask)
       .catch(() => {})
@@ -298,24 +299,24 @@ export function invalidateLive(batch: LiveBatch, client: QueryClient = queryClie
     }
     throttled(`q:${query.queryHash}`, refetchQuery(client, query, since));
   }
-  /* A record on screen asks its page as a write to it would: its sections, its verbs. */
-  if (!batch.reset)
+  /* A record on screen asks its page as a write to it would: its sections, its verbs.
+     A settled echo of this tab's own write (`own !== undefined`) already ran refreshRecordInPlace on save. */
+  if (!batch.reset && own === undefined) {
+    const allQueries = client.getQueryCache().getAll();
     for (const [table, change] of batch.tables) {
       if (change.keys === 'many') continue;
       for (const [text, key] of change.keys) {
         if (held.some((draft) => draft.table === table && sameLiveKey(draft.key, key))) continue;
-        const shown = client
-          .getQueryCache()
-          .getAll()
-          .some(
-            (query) =>
-              query.getObserversCount() > 0 &&
-              FORM_FAMILIES.has(String(query.queryKey[0])) &&
-              queryTouches(query.queryKey, connection, table, key, [], sameLiveKey),
-          );
+        const shown = allQueries.some(
+          (query) =>
+            query.getObserversCount() > 0 &&
+            FORM_FAMILIES.has(String(query.queryKey[0])) &&
+            queryTouches(query.queryKey, connection, table, key, [], sameLiveKey),
+        );
         if (shown) throttled(`r:${table}:${text}`, () => refreshRecordInPlace(client, { connection, table, key }, true, true, since));
       }
     }
+  }
 }
 
 /* ---------- a list that is held ---------- */
@@ -343,6 +344,7 @@ function defer(hold: Hold, query: Query, batch: LiveBatch): void {
 export function showHeld(hold: Hold, client: QueryClient = queryClient): void {
   const hashes = new Set(hold.queries);
   clearHold(hold);
+  gatherReads();
   const since = liveMark(client);
   for (const query of client.getQueryCache().getAll())
     if (hashes.has(query.queryHash)) throttled(`q:${query.queryHash}`, refetchQuery(client, query, since));

@@ -456,7 +456,9 @@ function Rows({
     ...read,
     /* Nothing is fresh, but what a press on the menu read a moment ago (pressedReads.ts). */
     staleTime: (query) => rowsStaleTime(query.queryHash),
-    gcTime: 0,
+    /* Keep recently visited list data for 30 s for instant Back/Forward paint while SWR revalidates in background;
+       tenant/session transitions clear the whole queryClient cache explicitly. */
+    gcTime: 30_000,
     /* The previous answer stays while the next is fetched, but only an
        answer about this table from this connection: rows of another table
        under this one's header would be a lie, however brief. */

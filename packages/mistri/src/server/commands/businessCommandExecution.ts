@@ -5,7 +5,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { isProxy } from 'node:util/types';
 import { inWriteLanes, recordLane } from '@mistriwork/engine/adapters/writeLanes.js';
 import { withSnapshotRead } from '@mistriwork/engine/adapters/snapshotRead.js';
-import { withWriteAhead, type WriteAhead } from '@mistriwork/engine/adapters/writeAhead.js';
+import { collectLockedBefores, withWriteAhead, type WriteAhead } from '@mistriwork/engine/adapters/writeAhead.js';
 import {
   gathered,
   isWriteConflict,
@@ -100,7 +100,17 @@ import { openSavedDraft, type SavedDraftRun } from '../forms/savedForms.js';
 import { currentSpan } from '@mistriwork/engine/adapters/telemetry/trace.js';
 import { enterInFlightCommand } from './commandCoalescing.js';
 import { observeCommandExecution } from './commandTracing.js';
-import { AUDIT_TARGET_BYTES, auditRefusal, developerError, fileInsert, footprintFailure, withoutRevealed } from './commandWriteGuards.js';
+import {
+  AUDIT_TARGET_BYTES,
+  auditRefusal,
+  developerError,
+  fileInsert,
+  footprintFailure,
+  projectBeforeRow,
+  readBatchBeforeImages,
+  resolveBeforeImage,
+  withoutRevealed,
+} from './commandWriteGuards.js';
 import { handlerNextNumber } from '../../adapters/commands/commandSequences.js';
 import { handlerLinks, mintQueued } from '../links/linkMint.js';
 import { bindMoments, commandConstant, machineInsert, machineUpdate } from './commandWriteStamps.js';
@@ -1173,6 +1183,7 @@ async function executeUntraced(
               request: UpdateRequest,
               write: (request: UpdateRequest) => Promise<UpdateResult>,
               read?: (request: UpdateRequest) => QueryResult | undefined,
+              lockedBefore?: () => Record<string, unknown> | undefined,
             ): Promise<UpdateResult> => {
               checkCancelled();
               if (request.table === command.target) guardTarget(request.key);
@@ -1205,19 +1216,9 @@ async function executeUntraced(
               // The before image is the audit's; a command that keeps none does not read it.
               const audited = Object.keys(request.values);
               const cachedBefore = !seen && auditing ? lookupSnapshotRow(request.table, request.key) : undefined;
-              const before = !auditing
-                ? undefined
-                : seen && seen.rows.every((row) => audited.every((column) => Object.hasOwn(row, column)))
-                  ? { rows: seen.rows.map((row) => Object.fromEntries(audited.map((column) => [column, row[column]]))) }
-                  : cachedBefore && audited.every((column) => Object.hasOwn(cachedBefore, column))
-                    ? { rows: [Object.fromEntries(audited.map((column) => [column, cachedBefore[column]]))] }
-                    : await store.query({
-                        table: request.table,
-                        columns: audited,
-                        limit: 2,
-                        offset: 0,
-                        filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
-                      });
+              let before = auditing
+                ? await resolveBeforeImage(store, request, audited, seen, cachedBefore, Boolean(lockedBefore))
+                : undefined;
               let result: UpdateResult;
               try {
                 result = await write(request);
@@ -1229,11 +1230,15 @@ async function executeUntraced(
               forgetSnapshotRow(request.table, request.key);
               tally(request.table, result.affected);
               if (result.affected === 0) return result;
+              if (!before && auditing && lockedBefore) {
+                const locked = lockedBefore();
+                before =
+                  locked && audited.every((c) => Object.hasOwn(locked, c)) ? { rows: [projectBeforeRow(locked, audited)] } : { rows: [] };
+              }
               if (before && before.rows.length !== 1) {
                 throw recordRefusalCause(
                   new BusinessCommandExecutionError('invalid_result'),
-                  `Command "${commandId}" updated ${request.table} by a key that ` +
-                    `matched ${before.rows.length} rows; an update names exactly one row by its primary key.`,
+                  `Command "${commandId}" updated ${request.table} by a key that matched ${before.rows.length} rows; an update names exactly one row by its primary key.`,
                 );
               }
               if (auditing)
@@ -1253,28 +1258,8 @@ async function executeUntraced(
               return result;
             };
             /* A batch update's before images, read in one statement: every row it names, by its key. */
-            const beforeImages = async (requests: readonly UpdateRequest[]) => {
-              if (!auditing || !requests.length) return undefined;
-              const keyColumns = Object.keys(requests[0]!.key);
-              const columns = [...new Set([...keyColumns, ...requests.flatMap((request) => Object.keys(request.values))])];
-              const found = await store.query({
-                table: requests[0]!.table,
-                columns,
-                limit: requests.length * 2,
-                offset: 0,
-                filter: {
-                  groups: requests.map((request) =>
-                    Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value })),
-                  ),
-                },
-              });
-              return (request: UpdateRequest): QueryResult => ({
-                ...found,
-                rows: found.rows.filter((row) =>
-                  Object.entries(request.key).every(([column, value]) => String(row[column]) === String(value)),
-                ),
-              });
-            };
+            const beforeImages = (requests: readonly UpdateRequest[]) =>
+              auditing && requests.length ? readBatchBeforeImages(store, requests) : Promise.resolve(undefined);
             /* A table the actor cannot read takes this command's new rows and gives nothing back (insertOnly): every
              read, change and removal is refused, but an `elevate: { read }` table is read under the command's authority. */
             const addingOnly = (table: string, reading = false) => {
@@ -1390,11 +1375,18 @@ async function executeUntraced(
                     updateMany: (requests: readonly UpdateRequest[]) =>
                       accept(requests, async (requests) => {
                         for (const request of requests) addingOnly(request.table);
-                        const read = await beforeImages(requests);
-                        return gathered(
-                          requests,
-                          (request, write) => updateVia(request, write, read),
-                          (rows) => store.updateMany!(rows),
+                        const defer = scoped && auditing && requests.length >= 2;
+                        const read = defer ? undefined : await beforeImages(requests);
+                        let i = 0;
+                        return collectLockedBefores((sink) =>
+                          gathered(
+                            requests,
+                            (req, write) => {
+                              const at = i++;
+                              return updateVia(req, write, read, defer ? () => sink.rows?.[at] : undefined);
+                            },
+                            (rows) => store.updateMany!(rows),
+                          ),
                         );
                       }),
                   }

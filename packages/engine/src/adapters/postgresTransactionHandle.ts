@@ -15,6 +15,7 @@
  * included: a false count only costs a repeated check.
  */
 import { pipelines, type PgQuery, type PgResult } from './postgresPool.js';
+import { invalidatePreparedStatements } from './postgresPrepared.js';
 import { EpochCache } from './epochCache.js';
 
 /* Each handle's transaction, shared with its views: the one object what is
@@ -132,7 +133,10 @@ export function transactionHandle(client: PgQuery, origin?: object): PgQuery {
       state.riders = [];
     }
     // A transaction that changes the catalog itself no longer stands on the version it read: it reads one again.
-    if (typeof text === 'string' && changesCatalog(text)) catalogVersions.delete(handle);
+    if (typeof text === 'string' && changesCatalog(text)) {
+      catalogVersions.delete(handle);
+      invalidatePreparedStatements();
+    }
     // What waited for the COMMIT leaves in front of whatever leaves next, in its order.
     const tail = state.tail.length ? state.tail.splice(0) : undefined;
     const changes = !!tail || typeof text !== 'string' || !KEEPS.test(text) || CHANGES.test(text);
@@ -544,6 +548,20 @@ export async function attestOnce(client: PgQuery, key: string, full: () => Promi
     }
   }
   if (origin) keepAttestedOn(origin, key);
+}
+
+const sharedCatalogValues = new EpochCache<Map<string, unknown>>(16);
+
+/** Cache a pure pg_catalog read under the exact REPEATABLE READ catalog version already noted on `client`. */
+export async function sharedCatalogValue<T>(client: PgQuery, key: string, read: () => Promise<T>): Promise<T> {
+  const version = catalogVersions.get(client);
+  if (!version || version.reread) return read();
+  const bucket = sharedCatalogValues.get(version.version, version.database);
+  if (bucket?.has(key)) return bucket.get(key) as T;
+  const value = await read();
+  const target = bucket ?? sharedCatalogValues.set(version.version, version.database, new Map());
+  target.set(key, value);
+  return value;
 }
 
 /** How many rollbacks have passed through this transaction's handle; undefined

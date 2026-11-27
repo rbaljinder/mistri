@@ -67,3 +67,48 @@ export function renamedWriteAhead(hint: WriteAhead | undefined, rename: (table: 
   }
   return { ...hint, targets };
 }
+
+interface LockedBefores {
+  rows?: readonly Record<string, unknown>[];
+}
+const lockedBefores = new AsyncLocalStorage<LockedBefores>();
+
+/** Run `work` capturing locked before-images already fetched via FOR UPDATE by scopedTransaction.updateMany. */
+export function collectLockedBefores<T>(work: (sink: LockedBefores) => Promise<T>): Promise<T> {
+  const sink: LockedBefores = {};
+  return lockedBefores.run(sink, () => work(sink));
+}
+
+/** Record locked before-images validated by scopedTransaction.updateMany for the active command batch. */
+export function reportLockedBefores(rows: readonly Record<string, unknown>[]): void {
+  const sink = lockedBefores.getStore();
+  if (sink) sink.rows = rows;
+}
+
+/** Project any captured locked before-images through the caller's field-read ceiling before returning to the executor. */
+export function projectLockedBefores(project: (row: Record<string, unknown>, index: number) => Record<string, unknown>): void {
+  const sink = lockedBefores.getStore();
+  if (sink?.rows) sink.rows = sink.rows.map(project);
+}
+
+interface TargetImpact {
+  readonly target: string;
+  clean: boolean;
+  dirty: boolean;
+}
+const targetImpact = new AsyncLocalStorage<TargetImpact>();
+
+/** Track whether a scoped insert/update can affect `target` (physical table id); defaults to dirty unless proven clean. */
+export async function trackTargetImpact<T>(target: string, work: () => Promise<T>): Promise<{ value: T; preserved: boolean }> {
+  const state: TargetImpact = { target, clean: false, dirty: false };
+  const value = await targetImpact.run(state, work);
+  return { value, preserved: state.clean && !state.dirty };
+}
+
+/** Report from scopedTransaction whether the current insert/update can affect the tracked target table. */
+export function reportScopedWrite(canAffectTarget: (target: string) => boolean): void {
+  const state = targetImpact.getStore();
+  if (!state) return;
+  if (canAffectTarget(state.target)) state.dirty = true;
+  else state.clean = true;
+}

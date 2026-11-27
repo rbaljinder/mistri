@@ -46,6 +46,7 @@ import { Refusal } from './adapter.js';
 import type { PgQuery } from './postgresPool.js';
 import { withPostgresMaintenanceTransaction } from './postgresMaintenance.js';
 import { RUNTIME_SCHEMA, runtimeTable } from '../shared/runtimeTables.js';
+import { invalidatePreparedStatements } from './postgresPrepared.js';
 
 export const SCHEMA_EPOCH_TABLE = 'schema_epoch';
 /* The function sits in the runtime schema beside the table (RUNTIME_SCHEMA_FUNCTIONS allows it there).
@@ -88,7 +89,9 @@ export const epochlessEpoch = (): string => `ttl:${Math.floor(Date.now() / EPOCH
 /** Whether a statement failed for a table (42P01) or column (42703) that is not there: the kept catalog is wrong. */
 export function schemaMoved(error: unknown): boolean {
   const code = (error as { code?: unknown } | null)?.code;
-  return code === '42P01' || code === '42703';
+  if (code !== '42P01' && code !== '42703') return false;
+  invalidatePreparedStatements();
+  return true;
 }
 
 /**

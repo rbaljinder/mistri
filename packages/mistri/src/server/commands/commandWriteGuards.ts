@@ -135,3 +135,52 @@ function scrubReasons(error: Error, cut: (text: string) => string): void {
     because = refusalCause(because) ?? because.cause;
   }
 }
+
+/* A batch update's before images, read in one statement: every row it names, by its key. */
+export async function readBatchBeforeImages(
+  store: Pick<import('@mistriwork/engine/adapters/adapter.js').WriteTransaction, 'query'>,
+  requests: readonly import('@mistriwork/engine/adapters/adapter.js').UpdateRequest[],
+): Promise<
+  (request: import('@mistriwork/engine/adapters/adapter.js').UpdateRequest) => import('@mistriwork/engine/adapters/adapter.js').QueryResult
+> {
+  const keyColumns = Object.keys(requests[0]!.key);
+  const columns = [...new Set([...keyColumns, ...requests.flatMap((request) => Object.keys(request.values))])];
+  const found = await store.query({
+    table: requests[0]!.table,
+    columns,
+    limit: requests.length * 2,
+    offset: 0,
+    filter: {
+      groups: requests.map((request) => Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))),
+    },
+  });
+  return (request) => ({
+    ...found,
+    rows: found.rows.filter((row) => Object.entries(request.key).every(([column, value]) => String(row[column]) === String(value))),
+  });
+}
+
+export const projectBeforeRow = (row: Record<string, unknown>, columns: readonly string[]): Record<string, unknown> =>
+  Object.fromEntries(columns.map((column) => [column, row[column]]));
+
+export function resolveBeforeImage(
+  store: Pick<import('@mistriwork/engine/adapters/adapter.js').WriteTransaction, 'query'>,
+  request: import('@mistriwork/engine/adapters/adapter.js').UpdateRequest,
+  audited: readonly string[],
+  seen: import('@mistriwork/engine/adapters/adapter.js').QueryResult | undefined,
+  cached: Record<string, unknown> | undefined,
+  defer: boolean,
+): Promise<{ readonly rows: readonly Record<string, unknown>[] } | undefined> {
+  if (seen && seen.rows.every((row) => audited.every((column) => Object.hasOwn(row, column))))
+    return Promise.resolve({ rows: seen.rows.map((row) => projectBeforeRow(row, audited)) });
+  if (cached && audited.every((column) => Object.hasOwn(cached, column)))
+    return Promise.resolve({ rows: [projectBeforeRow(cached, audited)] });
+  if (defer) return Promise.resolve(undefined);
+  return store.query({
+    table: request.table,
+    columns: [...audited],
+    limit: 2,
+    offset: 0,
+    filter: { groups: [Object.entries(request.key).map(([column, value]) => ({ column, op: '=' as const, value }))] },
+  });
+}

@@ -97,17 +97,25 @@ export function useRowWindow<E extends HTMLElement>(
      room's width and the header above the list, none of them per scroll. */
   useLayoutEffect(() => {
     if (!windowed || !list || !scroller) return;
-    const style = getComputedStyle(list);
-    const across = Math.max(1, columnsOf.current?.(list) ?? 1);
-    if (across !== columns) setColumns(across);
-    const rowGap = Number.parseFloat(style.rowGap) || 0;
-    if (rowGap !== gap) setGap(rowGap);
-    const top =
-      scroller === document.scrollingElement
-        ? viewportBox(list).top + scroller.scrollTop
-        : viewportBox(list).top - viewportBox(scroller).top + scroller.scrollTop;
-    if (Math.abs(top - margin) >= 1) setMargin(top);
-  });
+    const measure = () => {
+      const style = getComputedStyle(list);
+      const across = Math.max(1, columnsOf.current?.(list) ?? 1);
+      setColumns((prev) => (prev === across ? prev : across));
+      const rowGap = Number.parseFloat(style.rowGap) || 0;
+      setGap((prev) => (prev === rowGap ? prev : rowGap));
+      const top =
+        scroller === document.scrollingElement
+          ? viewportBox(list).top + scroller.scrollTop
+          : viewportBox(list).top - viewportBox(scroller).top + scroller.scrollTop;
+      setMargin((prev) => (Math.abs(top - prev) < 1 ? prev : top));
+    };
+    measure();
+    if (typeof ResizeObserver !== 'function') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(list);
+    if (scroller !== list) observer.observe(scroller);
+    return () => observer.disconnect();
+  }, [windowed, list, scroller]);
 
   const lineOf = (index: number) => Math.floor(index / columns);
   if (!windowed) {

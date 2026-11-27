@@ -9,8 +9,23 @@ import {
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
 import type { TenantMembershipRecord } from './tenantMembership.js';
-import { captureTenantReadSource, type TenantReadSource } from './tenantReadSource.js';
+import { captureTenantReadSource, tenantRealmFencingOf, type TenantReadSource } from './tenantReadSource.js';
+import type { TenantMarks, TenantMarksLookup } from './tenantReadSourceShared.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
+
+interface VerifiedDiscovery {
+  readonly verifiedAt: number;
+  readonly records: readonly TenantMembershipRecord[];
+  readonly marks?: TenantMarks;
+  readonly marksIds?: readonly string[];
+}
+const verifiedDiscoveries = new WeakMap<object, VerifiedDiscovery>();
+export const verifiedDiscoveryOf = (result: unknown): VerifiedDiscovery | undefined =>
+  result && typeof result === 'object' ? verifiedDiscoveries.get(result) : undefined;
+export const carryVerifiedDiscovery = (from: object, to: object): void => {
+  const held = verifiedDiscoveries.get(from);
+  if (held) verifiedDiscoveries.set(to, held);
+};
 
 export interface TenantBootstrapOptions<Request> {
   readonly reader: TenantReadSource;
@@ -40,7 +55,12 @@ export interface TenantBootstrap<Request> {
    * discovery. It is told nothing to act on: what discovery answers is only its final result, and a caller releases
    * nothing it started until that result agrees.
    */
-  read(request: Request, guard?: () => void | Promise<void>, seen?: (tenantIds: readonly string[]) => void): Promise<TenantBootstrapResult>;
+  read(
+    request: Request,
+    guard?: () => void | Promise<void>,
+    seen?: (tenantIds: readonly string[]) => void,
+    marksFor?: (tenantIds: readonly string[]) => TenantMarksLookup | undefined,
+  ): Promise<TenantBootstrapResult>;
   retire(): Promise<void>;
 }
 
@@ -142,10 +162,12 @@ export function createTenantBootstrap<Request>(options: TenantBootstrapOptions<R
       request: Request,
       guard?: () => void | Promise<void>,
       seen?: (tenantIds: readonly string[]) => void,
+      marksFor?: (tenantIds: readonly string[]) => TenantMarksLookup | undefined,
     ): Promise<TenantBootstrapResult> {
       active();
       if (guard !== undefined && (typeof guard !== 'function' || isProxy(guard))) return denyTenant();
       if (seen !== undefined && (typeof seen !== 'function' || isProxy(seen))) return denyTenant();
+      if (marksFor !== undefined && (typeof marksFor !== 'function' || isProxy(marksFor))) return denyTenant();
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
         finish = resolve;
@@ -202,10 +224,19 @@ export function createTenantBootstrap<Request>(options: TenantBootstrapOptions<R
         };
         const initial = await reader.readMemberships(lookup);
         validate(initial, check());
-        if (seen) {
-          const ids = Object.freeze(initial.map((record) => record.tenantId));
+        const initialIds = Object.freeze(initial.map((record) => record.tenantId));
+        const combinedReader = tenantRealmFencingOf(reader)?.readDiscoveryWithMarks;
+        let combinedMarksLookup: TenantMarksLookup | undefined;
+        if (marksFor && combinedReader && initialIds.length) {
           try {
-            seen(ids);
+            combinedMarksLookup = marksFor(initialIds);
+          } catch {
+            combinedMarksLookup = undefined;
+          }
+        }
+        if (seen) {
+          try {
+            seen(initialIds);
           } catch {
             /* The caller's own: discovery goes on as if it had not been told. */
           }
@@ -216,22 +247,29 @@ export function createTenantBootstrap<Request>(options: TenantBootstrapOptions<R
         session(second);
         if (second === null || second.id !== first.id || second.who !== first.who || second.role !== first.role) return denyTenant();
         if (guard) await guarded();
-        // Whether a platform context is open to the account: advisory, as the
-        // tenant list is; opening one is its own admission. Asked in the
-        // second snapshot, under the same two verifications either way: one
-        // after the other they were one more round trip before a chooser, and
-        // beside each other on a snapshot apiece, one more on every arrival.
-        const { memberships: final, platform: held } =
+        const platformLookup =
           platformRoles === undefined
-            ? { memberships: await reader.readMemberships(lookup), platform: undefined }
-            : await reader.readMembershipsWithPlatform(
-                lookup,
-                captureTenantData({ realm: 'platform' as const, appId, accountId: first.id, source, deployment }),
-              );
+            ? undefined
+            : captureTenantData({ realm: 'platform' as const, appId, accountId: first.id, source, deployment });
+        let final: readonly TenantMembershipRecord[];
+        let held: Awaited<ReturnType<TenantReadSource['readPlatformMembership']>> | undefined;
+        let bundledMarks: TenantMarks | undefined;
+        if (combinedReader && combinedMarksLookup) {
+          const combined = await combinedReader(lookup, platformLookup, combinedMarksLookup);
+          final = combined.memberships;
+          held = combined.platform;
+          bundledMarks = combined.marks;
+        } else if (platformLookup === undefined) {
+          final = await reader.readMemberships(lookup);
+        } else {
+          const pair = await reader.readMembershipsWithPlatform(lookup, platformLookup);
+          final = pair.memberships;
+          held = pair.platform;
+        }
         validate(final, check());
         if (!sameMemberships(initial, final)) return denyTenant();
         let platform = false;
-        if (held !== undefined) {
+        if (held !== undefined && platformAllowed !== undefined) {
           const instant = check();
           platform =
             held !== null &&
@@ -252,15 +290,22 @@ export function createTenantBootstrap<Request>(options: TenantBootstrapOptions<R
         // A finite release barrier follows the latest authentication wait, as
         // in the read runtime's verify -> source.assertCurrent completion path.
         const barrier = await reader.readMemberships(lookup);
-        validate(barrier, check());
+        const verifiedAt = check();
+        validate(barrier, verifiedAt);
         if (!sameMemberships(final, barrier)) return denyTenant();
-        return captureTenantData({
+        const result = captureTenantData({
           status: 'ready' as const,
           appId,
           accountId: first.id,
           memberships: barrier.map((record) => ({ tenantId: record.tenantId })),
           ...(platform ? { platform: true as const } : {}),
         });
+        verifiedDiscoveries.set(result, {
+          verifiedAt,
+          records: barrier,
+          ...(bundledMarks ? { marks: bundledMarks, marksIds: initialIds } : {}),
+        });
+        return result;
       } catch (error) {
         /* A read the database did not answer stays unavailable (503): said as a
            denial, a busy pool turned new tabs away as if their person had lost

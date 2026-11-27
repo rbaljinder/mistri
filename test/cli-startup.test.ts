@@ -125,8 +125,9 @@ test('--help and --version load the flag parser, not the server', () => {
        (adapters/poolAdmission.ts, a leaf postgresPool.ts loads to take turns across accounts). 37 for the hook that lets an App outside a source
        checkout find the framework (app/buildResolution.ts, a leaf on node: builtins that must run before any import). 38 for the
        watch that closes a connection gone silent under a statement (adapters/postgresSilence.ts, a leaf postgresPool.ts
-       loads for its flights). */
-    assert.ok(help.length <= 38, `${bin} --help loaded ${help.length} modules:\n${help.join('\n')}`);
+       loads for its flights). 39 for named prepared statements on direct connections (adapters/postgresPrepared.ts, a
+       leaf postgresPool.ts loads for its checkouts). */
+    assert.ok(help.length <= 39, `${bin} --help loaded ${help.length} modules:\n${help.join('\n')}`);
     assert.ok(help.includes('server/cli/args.ts'));
     const version = loaded(['--version'], '', bin);
     assert.ok(version.length <= 70, `${bin} --version loaded ${version.length} modules`);

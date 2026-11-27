@@ -17,9 +17,14 @@ import { assertScopeCatalog, captureScopeCatalog, isFixedScopeCatalog, mapScopeC
 import { isRowScopeSnapshot, snapshotRowScope, type RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import { mapAppScopedReads } from '../app/appResources.js';
 import { captureTenantData, denyTenant, denyTenantFor, TenantContextError } from '@mistriwork/engine/server/evidence.js';
-import { parseTenantSelector, type TenantMembershipEvidence, type TenantMembershipLookup } from './tenantMembership.js';
+import {
+  parseTenantSelector,
+  type TenantMembershipEvidence,
+  type TenantMembershipLookup,
+  type TenantMembershipRecord,
+} from './tenantMembership.js';
 import { captureTenantOwnership, type TenantOwnershipSnapshot } from './tenantOwnership.js';
-import type { PlatformMembershipEvidence, PlatformMembershipLookup } from './tenantPlatform.js';
+import type { PlatformMembershipEvidence, PlatformMembershipLookup, PlatformMembershipRecord } from './tenantPlatform.js';
 import { assertServiceReadCurrent, captureServiceEvidence, composeServiceScope, type TenantServiceEvidence } from './tenantServiceModel.js';
 import { AppAccessDenied } from '../app/appAccess.js';
 import { composePlatformReadScope, composePublicReadScope, composeTenantReadScope, physicalRowScope } from './tenantReadScope.js';
@@ -37,15 +42,21 @@ import {
 } from './tenantPublicRead.js';
 import { assertSupportEvidenceObserved, supportAsMember } from './tenantSupportMembership.js';
 import type { SupportMembershipEvidence } from './tenantSupportLease.js';
-import { observePostgresSupportMembership } from './tenantSupportMembershipPostgres.js';
+import {
+  observePostgresSupportMembership,
+  postgresSupportMembershipRows,
+  postgresSupportMembershipStatement,
+} from './tenantSupportMembershipPostgres.js';
 import { postgresTenantLocator, registerTenantSourceIdentity } from './tenantSourceIdentity.js';
 import { type TenantMembershipListLookup, type TenantStoreBinding } from './tenantStore.js';
 import {
+  assertPostgresPlatformMembershipRows,
   assertPostgresPlatformMembershipSnapshot,
   assertPostgresTenantMembershipRows,
   assertPostgresTenantMembershipSnapshot,
   assertPostgresTenantStore,
   attestedPostgresTenantStore,
+  postgresPlatformMembershipEvidenceStatement,
   postgresTenantMembershipLookupRows,
   postgresPlatformMembershipRows,
   postgresPlatformMembershipStatement,
@@ -53,6 +64,9 @@ import {
   postgresTenantMembershipsRows,
   postgresTenantMembershipsStatement,
   postgresTenantMembershipStatement,
+  readPostgresActiveTenants,
+  readPostgresIntakeAnchor,
+  readPostgresIntakeAnchors,
 } from './tenantStorePostgres.js';
 import {
   attestPostgresTenantRelations,
@@ -108,7 +122,6 @@ import {
 } from './tenantLinkModel.js';
 import { dueTimersPlan, type DueTimersQuery } from './tenantDueTimers.js';
 import { tenantNamesOf, tenantNamesQuery, tenantNamesStatement } from './tenantNames.js';
-import { readPostgresActiveTenants, readPostgresIntakeAnchor } from './tenantStorePostgres.js';
 import { postgresTenantHostOps } from './tenantHostStore.js';
 import {
   assertActivityQuery,
@@ -127,6 +140,8 @@ import {
 } from '../../adapters/branding/branding.js';
 import { readPostgresBranding, readPostgresBrandingLogo } from '../../adapters/branding/postgresBranding.js';
 import { postgresInboxMail, readPostgresInbox } from '../../adapters/inbox/postgresInbox.js';
+import { TENANT_TABLES } from './tenantStoreContract.js';
+import { runtimeTable } from '@mistriwork/engine/shared/runtimeTables.js';
 import {
   type EmailSwitchQuery,
   assertEmailSwitchQuery,
@@ -145,6 +160,58 @@ import {
 export { advisoryRecords, captureTenantReadSource, type TenantReadSource } from './tenantReadSourceShared.js';
 export { openSqliteTenantReadSource } from './tenantReadSourceSqlite.js';
 
+/** Internal realm-aware fencing hooks for PostgreSQL read sources (platform, support, public, and fenced advisory batches). */
+interface TenantRealmFencing {
+  togetherPlatform<T>(evidence: PlatformMembershipEvidence, work: () => Promise<T>): Promise<T>;
+  togetherFencedPlatform<T>(
+    evidence: PlatformMembershipEvidence,
+    work: () => Promise<T>,
+    options?: { readonly lastWave?: boolean },
+  ): Promise<{ value: T; fenced: boolean }>;
+  togetherFencedSupport<T>(
+    evidence: SupportMembershipEvidence,
+    work: () => Promise<T>,
+    options?: { readonly lastWave?: boolean },
+  ): Promise<{ value: T; fenced: boolean }>;
+  togetherFencedPublic<T>(
+    evidence: TenantPublicEvidence,
+    work: () => Promise<T>,
+    options?: { readonly lastWave?: boolean },
+  ): Promise<{ value: T; fenced: boolean }>;
+  withReadsFenced<T>(
+    evidence: TenantMembershipEvidence,
+    rows: RowScope,
+    work: (reads: ScopedReads) => T | Promise<T>,
+    options?: { readonly lastWave?: boolean },
+  ): Promise<{ value: T; fenced: boolean }>;
+  withPlatformReadsFenced<T>(
+    evidence: PlatformMembershipEvidence,
+    rows: RowScope,
+    work: (reads: ScopedReads) => T | Promise<T>,
+    options?: { readonly lastWave?: boolean },
+  ): Promise<{ value: T; fenced: boolean }>;
+  readDiscoveryWithMarks?(
+    lookup: TenantMembershipListLookup,
+    platform: PlatformMembershipLookup | undefined,
+    marks: TenantMarksLookup,
+  ): Promise<{
+    readonly memberships: readonly TenantMembershipRecord[];
+    readonly platform?: PlatformMembershipRecord | null;
+    readonly marks?: TenantMarks;
+  }>;
+  lastWave(): void;
+}
+const realmFencings = new WeakMap<TenantReadSource, TenantRealmFencing>();
+export const tenantRealmFencingOf = (source: TenantReadSource): TenantRealmFencing | undefined => realmFencings.get(source);
+
+type ReadFence =
+  | { readonly kind: 'tenant'; readonly evidence: TenantMembershipEvidence }
+  | { readonly kind: 'platform'; readonly evidence: PlatformMembershipEvidence }
+  | { readonly kind: 'support'; readonly evidence: SupportMembershipEvidence }
+  | { readonly kind: 'public'; readonly evidence: TenantPublicEvidence };
+
+const TENANT_ANCHOR_TABLE = runtimeTable('postgres', TENANT_TABLES.tenant);
+
 /* A whole snapshot begun under an attestation another has replaced since: asked again with the catalog attested. */
 const MOVED: unique symbol = Symbol('moved');
 /* A snapshot's route for what crosses tenants by design (openPostgresTenantReadSource's `snapshot`). */
@@ -152,9 +219,9 @@ const OWNER: unique symbol = Symbol('owner');
 /* Where a PostgreSQL snapshot reads: for a tenant, for none (`null`), or as the owner. */
 type Route = string | null | typeof OWNER;
 /** A read snapshot as the PostgreSQL source hands it to its work: begun, where `fenced` says so, with
- * this evidence's membership read in the message that began it, its rows still on their way. */
+ * this evidence's fence read in the message that began it, its rows still on their way. */
 type Snapshot = PostgresReadSnapshot & {
-  readonly fenced?: Readonly<{ evidence: TenantMembershipEvidence; rows: Promise<readonly Record<string, unknown>[]>; ahead: boolean }>;
+  readonly fenced?: Readonly<{ fence: ReadFence; rows: Promise<readonly Record<string, unknown>[]>; ahead: boolean }>;
   /** The rows of the statement the snapshot was begun with (`on`'s `lead`), read once its catalog had stood. */
   readonly lead?: readonly Record<string, unknown>[];
   /** The rows of every statement it was begun with, in the order asked: `lead` is the first. */
@@ -208,6 +275,15 @@ const SANDBOX_STORE = 'sandbox';
  * replica's reads after its replication lag, and every write and command
  * revalidates on the primary.
  */
+/* Cross-handle bridge for a boot's shared snapshot (`togetherFenced`): lets `discovery.readTenantAddresses`
+   on the exact same database/app/store/source (when no RLS backstop isolates OWNER) ride behind the boot's
+   BEGIN in Flight 1 instead of opening a second connection and round trip. */
+const sharedAddressSnapshot = new AsyncLocalStorage<{
+  readonly ownerKey: string;
+  readonly isOpen: () => boolean;
+  readonly queryRows: (sql: string) => Promise<Record<string, unknown>[]>;
+}>();
+
 export async function openPostgresTenantReadSource(
   url: string,
   ownership: TenantOwnershipSnapshot,
@@ -457,12 +533,63 @@ export async function openPostgresTenantReadSource(
         throw error;
       }
     };
+    const publicFenceStatement = (lookup: TenantPublicLookup): string => {
+      const value = capturePublicLookup(lookup, owner);
+      if (value.address === null) {
+        const id = value.tenant as string;
+        return `SELECT 'anchor'::text AS _role, id, status, version, kind FROM ${TENANT_ANCHOR_TABLE} WHERE id IN (${literal(PLATFORM_TENANT_ID)}, ${literal(id)})`;
+      }
+      const addressSql = intakeAddressQuery(owned, value.column).replace(/\$1\b/, () => literal(value.address!));
+      return (
+        `WITH matched AS (${addressSql}), ` +
+        `chosen AS (SELECT CASE WHEN COUNT(*) = 1 THEN MIN(tenant) ELSE NULL END AS tenant_id FROM matched), ` +
+        `anc AS (SELECT id, status, version, kind FROM ${TENANT_ANCHOR_TABLE} WHERE id = ${literal(PLATFORM_TENANT_ID)} OR id = (SELECT tenant_id FROM chosen)) ` +
+        `SELECT 'match'::text AS _role, tenant AS id, NULL::text AS status, NULL::text AS version, NULL::text AS kind FROM matched ` +
+        `UNION ALL ` +
+        `SELECT 'anchor'::text AS _role, id, status, version, kind FROM anc`
+      );
+    };
+    const publicFenceRows = (lookup: TenantPublicLookup, rows: readonly Record<string, unknown>[]): TenantPublicResolution | null => {
+      const value = capturePublicLookup(lookup, owner);
+      const matched: Record<string, unknown>[] = [];
+      const anchors = new Map<string, string | null>();
+      for (const row of rows) {
+        if (row._role === 'match') matched.push({ tenant: row.id });
+        else if (row._role === 'anchor') {
+          const id = row.id as string;
+          const expectedKind = id === PLATFORM_TENANT_ID ? 'platform' : 'tenant';
+          if (row.kind === expectedKind && row.status === 'active') {
+            if (typeof row.version !== 'string') return denyTenant();
+            anchors.set(id, row.version);
+          }
+        } else return denyTenant();
+      }
+      const tenantId = value.address === null ? (value.tenant as string) : publicTenantOf(matched);
+      if (tenantId === undefined) return null;
+      return publicResolution(tenantId, (id) => anchors.get(id) ?? null);
+    };
+    const fenceSql = (fence: ReadFence): string => {
+      switch (fence.kind) {
+        case 'tenant':
+          return postgresTenantMembershipStatement(owner, fence.evidence);
+        case 'platform':
+          return postgresPlatformMembershipEvidenceStatement(owner, fence.evidence);
+        case 'support':
+          return postgresSupportMembershipStatement(owner, {
+            supportId: fence.evidence.supportId,
+            accountId: fence.evidence.accountId,
+            tenantId: fence.evidence.tenantId,
+          });
+        case 'public':
+          return publicFenceStatement(publicLookupOf(capturePublicEvidence(fence.evidence, owned)));
+      }
+    };
     const on = async <T>(
       target: Target,
       work: (snapshot: Snapshot) => Promise<T>,
-      fence?: TenantMembershipEvidence,
+      fence?: ReadFence,
       asked?: Lead,
-      /* The fence's membership is the snapshot's whole question (assertCurrent): nothing else is read on it. */
+      /* The fence's check is the snapshot's whole question (assertCurrent et al.): nothing else is read on it. */
       alone = false,
       /* What the row policy reads under the backstop (tenantConnections.ts): the tenant this snapshot is for, `null`
          where it reads no tenant's rows. Without a backstop nothing is sent for it. */
@@ -477,17 +604,13 @@ export async function openPostgresTenantReadSource(
       if (due !== undefined && due.pool === target.reader && trusted(target) === undefined) await due.done;
       const pool = target.reader;
       const standing = trusted(target);
-      /* Where the snapshot is a member's read, its membership rides in the
-         message that begins it, after the LOCK (and the digest, where the
-         attestation is due again), and the snapshot is handed over with that
-         message still in flight (`ahead`), so the read the member asked
-         leaves behind it: BEGIN, membership and read are one round trip
-         where they were three. All of it is one snapshot, so the order they
-         are read in changes nothing they say; and nothing is released before
-         the BEGIN's answer has said the catalog stands — attested in full
-         first, where its digest moved — and the membership holds (`current`,
-         `bind`). */
-      const membership = fence === undefined ? undefined : postgresTenantMembershipStatement(owner, fence);
+      /* Where the snapshot carries a fence (tenant, platform, support, or public), its check rides in the
+         message that begins it, after the LOCK (and the digest, where the attestation is due again), and the
+         snapshot is handed over with that message still in flight (`ahead`), so the read leaves behind it:
+         BEGIN, fence and read are one round trip where they were three or more. All of it is one snapshot, so
+         the order they are read in changes nothing they say; and nothing is released before the BEGIN's answer
+         has said the catalog stands — attested in full first, where its digest moved — and the fence holds. */
+      const membership = fence === undefined ? undefined : fenceSql(fence);
       lent.set(pool, (lent.get(pool) ?? 0) + 1);
       let flight: Attesting | undefined;
       /* The ledger a chosen lead was chosen by: a statement of it that fails as a moved store fails one forgets them. */
@@ -507,11 +630,11 @@ export async function openPostgresTenantReadSource(
           });
           flight = target.attesting = { pool, done, settle };
         }
-        /* A membership that is the snapshot's whole question — an admission's, a release fence's — on an attestation
-           that stands: BEGIN, the LOCK, the membership and the COMMIT in one message (readSnapshot `whole`), one
-           round trip where they were two. Its rows reach the work only once the BEGIN's answer has said the LOCK
-           was taken under the attestation it was asked on; another snapshot that attested a moved catalog since
-           has it asked again as below, where the catalog is attested in full first. */
+        /* A fence that is the snapshot's whole question — an admission's, a release fence's — on an attestation
+           that stands: BEGIN, the LOCK, the fence and the COMMIT in one message (readSnapshot `whole`), one
+           round trip where they were two or more. Its rows reach the work only once the BEGIN's answer has said
+           the LOCK was taken under the attestation it was asked on; another snapshot that attested a moved catalog
+           since has it asked again as below, where the catalog is attested in full first. */
         const question = membership !== undefined ? (alone ? membership : undefined) : lead;
         if (question !== undefined && standing !== undefined) {
           const answered = await pool.readSnapshot(
@@ -525,7 +648,7 @@ export async function openPostgresTenantReadSource(
                   describe: lease.describe,
                   execute: lease.execute,
                   ...(membership !== undefined
-                    ? { fenced: Object.freeze({ evidence: fence!, rows: Promise.resolve(rows), ahead: true }) }
+                    ? { fenced: Object.freeze({ fence: fence!, rows: Promise.resolve(rows), ahead: true }) }
                     : { lead: rows, leads: lease.prologue.slice(1).map((answer) => answer.rows) }),
                 }),
               );
@@ -586,7 +709,7 @@ export async function openPostgresTenantReadSource(
                       }),
                   /* The read goes ahead only on an attestation that stands: one that is due may find the
                      catalog moved, and is made before anything is read that a moved catalog could fail. */
-                  fenced: Object.freeze({ evidence: fence!, rows: opened.then(({ rows }) => rows), ahead: standing !== undefined }),
+                  fenced: Object.freeze({ fence: fence!, rows: opened.then(({ rows }) => rows), ahead: standing !== undefined }),
                 }),
               );
               active();
@@ -599,7 +722,7 @@ export async function openPostgresTenantReadSource(
             tenant,
           );
         /* A membership read that is the snapshot's whole reason (discovery's, an admission's) rides in the message
-           that begins it, as a member's fence does above: one round trip where BEGIN and the read were two. Its rows
+           that begins it, as a fence does above: one round trip where BEGIN and the read were two. Its rows
            reach the work only once the catalog — and the store with it — has stood. */
         if (lead !== undefined) {
           if (fence !== undefined) return denyTenant();
@@ -635,7 +758,7 @@ export async function openPostgresTenantReadSource(
           );
         }
         /* Any other snapshot on an attestation that stands is handed over with its BEGIN in flight (`ahead`), as a
-           member's is: its first statements leave behind it, one round trip where BEGIN and they were two, and no
+           fenced snapshot is: its first statements leave behind it, one round trip where BEGIN and they were two, and no
            answer reaches the work before the BEGIN's has said the catalog stands. A tenant's names and addresses,
            asked as a member enters, are such snapshots. */
         if (standing !== undefined)
@@ -711,7 +834,7 @@ export async function openPostgresTenantReadSource(
     const onReplica = async <T>(
       target: Target,
       work: (snapshot: Snapshot) => Promise<T>,
-      fence?: TenantMembershipEvidence,
+      fence?: ReadFence,
       lead?: Lead,
       alone = false,
       tenant?: string | null,
@@ -731,7 +854,7 @@ export async function openPostgresTenantReadSource(
        OWNER is today's read with no tenant, and no tenant is ever sent. */
     const snapshot = async <T>(
       work: (snapshot: Snapshot) => Promise<T>,
-      fence?: TenantMembershipEvidence,
+      fence?: ReadFence,
       lead?: Lead,
       alone = false,
       route?: Route,
@@ -744,14 +867,14 @@ export async function openPostgresTenantReadSource(
         () => on(primary, work, fence, lead, alone, tenant),
       );
     };
-    /* `fence`: the member evidence the work revalidates first (`current`), so the snapshot may read it as it begins. */
+    /* `fence`: the realm evidence the work revalidates first, so the snapshot may read it as it begins. */
     const invoke = <A, R>(
       input: A,
       work: (captured: A, lease: Snapshot) => R | Promise<R>,
-      fence?: (captured: A) => TenantMembershipEvidence,
+      fence?: (captured: A) => ReadFence,
       /* The statement the snapshot begins with, its rows the work's `lease.lead` (`on`). */
       lead?: (captured: A) => Lead,
-      /* The fence's membership is all the work reads (`on`'s `alone`). */
+      /* The fence is all the work reads (`on`'s `alone`). */
       alone = false,
       /* Where the snapshot reads (`snapshot`'s `route`). Left out, a backstop's adapter refuses before anything is sent. */
       route?: (captured: A) => Route,
@@ -822,18 +945,28 @@ export async function openPostgresTenantReadSource(
                 ...(addresses ? [tenantOwnAddressesStatement(owned, addresses) ?? denyTenant()] : []),
                 ...(sandboxes ? [sandboxAmongStatement(owner.appId, sandboxes, literal)] : []),
               ],
+        fromLeads: (leads: readonly (readonly Record<string, unknown>[])[]): TenantMarks => {
+          const rest = [...leads];
+          const foundNames = names ? tenantNamesOf(names.plan, rest.shift()!, names.tenants) : Object.freeze({});
+          const foundAddresses = addresses ? ownAddresses(addresses, rest.shift()!) : undefined;
+          const foundSandboxes = sandboxes ? new Set<string>(rest.shift()!.map((row) => String(row.tenant_id))) : new Set<string>();
+          return Object.freeze({ names: foundNames, sandboxes: foundSandboxes, ...(foundAddresses ? { addresses: foundAddresses } : {}) });
+        },
       };
     };
     const current = async (lease: Snapshot, evidence: TenantMembershipEvidence) => {
       /* Read as the snapshot began, where it was begun for this evidence; asked in its turn otherwise. */
-      if (lease.fenced?.evidence === evidence) assertPostgresTenantMembershipRows(owner, evidence, await lease.fenced.rows, clock);
+      if (lease.fenced?.fence.kind === 'tenant' && lease.fenced.fence.evidence === evidence)
+        assertPostgresTenantMembershipRows(owner, evidence, await lease.fenced.rows, clock);
       else await assertPostgresTenantMembershipSnapshot(lease.client, owner, evidence, clock);
       // A trusted clock can retire the source synchronously. Never run SQL or
       // return a newly bound reader after that retirement.
       active();
     };
-    const currentPlatform = async (lease: PostgresReadSnapshot, evidence: PlatformMembershipEvidence) => {
-      await assertPostgresPlatformMembershipSnapshot(lease.client, owner, evidence, clock);
+    const currentPlatform = async (lease: Snapshot, evidence: PlatformMembershipEvidence) => {
+      if (lease.fenced?.fence.kind === 'platform' && lease.fenced.fence.evidence === evidence)
+        assertPostgresPlatformMembershipRows(owner, evidence, await lease.fenced.rows, clock);
+      else await assertPostgresPlatformMembershipSnapshot(lease.client, owner, evidence, clock);
       active();
     };
     /* The support fence, as on SQLite: the support row with its parent, the
@@ -842,57 +975,115 @@ export async function openPostgresTenantReadSource(
        consistent state, so the unlocked reads see the same rows a locked pass
        would; a revocation landing afterwards is caught by the revalidation the
        bound reader runs before its next operation. */
-    const currentSupport = async (lease: PostgresReadSnapshot, evidence: SupportMembershipEvidence) => {
+    const currentSupport = async (lease: Snapshot, evidence: SupportMembershipEvidence) => {
       const instant = clock();
-      assertSupportEvidenceObserved(
-        await observePostgresSupportMembership(
-          lease.client,
-          owner,
-          { supportId: evidence.supportId, accountId: evidence.accountId, tenantId: evidence.tenantId, at: instant },
-          false,
-        ),
-        evidence,
-        instant,
-      );
+      const lookup = { supportId: evidence.supportId, accountId: evidence.accountId, tenantId: evidence.tenantId, at: instant };
+      const observed =
+        lease.fenced?.fence.kind === 'support' && lease.fenced.fence.evidence === evidence
+          ? postgresSupportMembershipRows(owner, lookup, await lease.fenced.rows)
+          : await observePostgresSupportMembership(lease.client, owner, lookup, false);
+      assertSupportEvidenceObserved(observed, evidence, instant);
       active();
     };
     /* A visitor's placement on this snapshot, as on SQLite: the address by
        the policy's column, then both anchors, each unlocked in one state. */
-    const resolvePublicIn = async (lease: PostgresReadSnapshot, lookup: TenantPublicLookup): Promise<TenantPublicResolution | null> => {
+    const resolvePublicIn = async (lease: Snapshot, lookup: TenantPublicLookup): Promise<TenantPublicResolution | null> => {
+      if (lease.lead !== undefined) return publicFenceRows(lookup, lease.lead);
       const value = capturePublicLookup(lookup, owner),
         sql = intakeAddressQuery(owned, value.column);
       const tenantId =
         value.address === null ? (value.tenant as string) : publicTenantOf((await lease.client.query(sql, [value.address])).rows);
       if (tenantId === undefined) return null;
-      const anchors = new Map<string, string | null>();
-      for (const id of [PLATFORM_TENANT_ID, tenantId]) anchors.set(id, await readPostgresIntakeAnchor(lease.client, owner, id));
+      const anchors = await readPostgresIntakeAnchors(lease.client, owner, [PLATFORM_TENANT_ID, tenantId]);
       return publicResolution(tenantId, (id) => anchors.get(id) ?? null);
     };
     const currentService = async (lease: PostgresReadSnapshot, evidence: TenantServiceEvidence) => {
+      const anchors = await readPostgresIntakeAnchors(lease.client, owner, [evidence.tenantId!, PLATFORM_TENANT_ID]);
       const found = {
-        tenantVersion: await readPostgresIntakeAnchor(lease.client, owner, evidence.tenantId!),
-        platformVersion: await readPostgresIntakeAnchor(lease.client, owner, PLATFORM_TENANT_ID),
+        tenantVersion: anchors.get(evidence.tenantId!) ?? null,
+        platformVersion: anchors.get(PLATFORM_TENANT_ID) ?? null,
       };
       assertServiceReadCurrent(evidence, found, clock());
       active();
     };
     const currentLink = async (lease: PostgresReadSnapshot, evidence: TenantLinkEvidence) => {
+      const anchors = await readPostgresIntakeAnchors(lease.client, owner, [evidence.tenantId, PLATFORM_TENANT_ID]);
       const found = {
-        tenantVersion: await readPostgresIntakeAnchor(lease.client, owner, evidence.tenantId),
-        platformVersion: await readPostgresIntakeAnchor(lease.client, owner, PLATFORM_TENANT_ID),
+        tenantVersion: anchors.get(evidence.tenantId) ?? null,
+        platformVersion: anchors.get(PLATFORM_TENANT_ID) ?? null,
       };
       const instant = clock();
       assertLinkReadCurrent(evidence, found, instant);
       assertLinkRowCurrent(await readPostgresLink(lease.client, owner.appId, evidence.tenantId, evidence.linkId, instant), evidence);
       active();
     };
-    const currentPublic = async (lease: PostgresReadSnapshot, evidence: TenantPublicEvidence) => {
+    const currentPublic = async (lease: Snapshot, evidence: TenantPublicEvidence) => {
       const value = capturePublicEvidence(evidence, owned);
-      const resolved = await resolvePublicIn(lease, publicLookupOf(value));
+      const lookup = publicLookupOf(value);
+      const resolved =
+        lease.fenced?.fence.kind === 'public' && lease.fenced.fence.evidence === evidence
+          ? publicFenceRows(lookup, await lease.fenced.rows)
+          : await resolvePublicIn(lease, lookup);
       assertPublicResolved(value, resolved, clock());
       active();
     };
-    // One compiled reader per admitted scope, tenant or platform. Each call
+    const revalidateFence = (lease: Snapshot, fence: ReadFence): Promise<void> => {
+      switch (fence.kind) {
+        case 'tenant':
+          return current(lease, fence.evidence);
+        case 'platform':
+          return currentPlatform(lease, fence.evidence);
+        case 'support':
+          return currentSupport(lease, fence.evidence);
+        case 'public':
+          return currentPublic(lease, fence.evidence);
+      }
+    };
+    const assertFenceRows = (fence: ReadFence, rows: readonly Record<string, unknown>[]): void => {
+      switch (fence.kind) {
+        case 'tenant':
+          assertPostgresTenantMembershipRows(owner, fence.evidence, rows, clock);
+          break;
+        case 'platform':
+          assertPostgresPlatformMembershipRows(owner, fence.evidence, rows, clock);
+          break;
+        case 'support': {
+          const instant = clock();
+          assertSupportEvidenceObserved(
+            postgresSupportMembershipRows(
+              owner,
+              {
+                supportId: fence.evidence.supportId,
+                accountId: fence.evidence.accountId,
+                tenantId: fence.evidence.tenantId,
+                at: instant,
+              },
+              rows,
+            ),
+            fence.evidence,
+            instant,
+          );
+          break;
+        }
+        case 'public': {
+          const value = capturePublicEvidence(fence.evidence, owned);
+          assertPublicResolved(value, publicFenceRows(publicLookupOf(value), rows), clock());
+          break;
+        }
+      }
+    };
+    const fenceRoute = (fence: ReadFence): Route => (fence.kind === 'platform' ? OWNER : fence.evidence.tenantId);
+    const fenceKeyOf = (f: ReadFence): string =>
+      f.kind === 'tenant'
+        ? `t\0${f.evidence.tenantId}\0${f.evidence.accountId}\0${f.evidence.membershipId}\0${f.evidence.membershipVersion}\0${f.evidence.tenantVersion}\0${f.evidence.validUntil}\0${f.evidence.roles.join(',')}`
+        : f.kind === 'platform'
+          ? `p\0${f.evidence.accountId}\0${f.evidence.membershipId}\0${f.evidence.membershipVersion}\0${f.evidence.platformVersion}\0${f.evidence.validUntil}\0${f.evidence.roles.join(',')}`
+          : f.kind === 'support'
+            ? `s\0${f.evidence.tenantId}\0${f.evidence.supportId}\0${f.evidence.membershipVersion}\0${f.evidence.tenantVersion}\0${f.evidence.parentId}\0${f.evidence.parentVersion}\0${f.evidence.platformVersion}\0${f.evidence.validUntil}\0${f.evidence.roles.join(',')}`
+            : `u\0${f.evidence.tenantId}\0${f.evidence.tenantVersion}\0${f.evidence.platformVersion}\0${f.evidence.validUntil}\0${f.evidence.column}\0${f.evidence.address ?? ''}`;
+    const targetForRoute = (route: Route): Target => (route === OWNER && ownerTarget ? ownerTarget : primary);
+
+    // One compiled reader per admitted scope, tenant, platform, support or public. Each call
     // executes on the snapshot its own invocation leased, after revalidating
     // there the principal it was bound for.
     /* The physical scope each composed scope maps to. A composition is a snapshot, kept by the scope and the
@@ -914,11 +1105,11 @@ export async function openPostgresTenantReadSource(
           { schema: owned.schema, toPhysical, toLogical },
         );
     };
-    /* The snapshot `together` shares, for the evidence it was asked under: opened by the first read, held while its
+    /* The snapshot `together` shares, for the fence it was asked under: opened by the first read, held while its
        work runs. Reads find it by the async context they were asked in, never by an argument, so nothing a request
-       says can point a read at another's snapshot; and only a read bound for the very same evidence joins it. */
+       says can point a read at another's snapshot; and only a read bound for the very same fence joins it. */
     interface Shared {
-      readonly evidence: TenantMembershipEvidence;
+      readonly readFence: ReadFence;
       readonly key: string;
       open: boolean;
       lease?: Promise<Snapshot>;
@@ -941,36 +1132,39 @@ export async function openPostgresTenantReadSource(
     }
     const sharing = new AsyncLocalStorage<Shared>();
     /* The release fence in the message that ends the shared snapshot (PostgresReadSnapshot.finish): its COMMIT, then
-       the LOCK and the membership in a fresh snapshot of their own, as assertCurrent begins one, after every read on
-       this one has settled. Only on an attestation that stands, as a whole snapshot is (`on`), and heard as one: a
-       membership that no longer holds refuses here. Where it cannot ride, the snapshot ends with a bare COMMIT and
-       the caller fences as before. */
-    const fenceStatement = (evidence: TenantMembershipEvidence) => `${pin}; ${postgresTenantMembershipStatement(owner, evidence)}`;
+       the LOCK and the realm's fence in a fresh snapshot of their own, after every read on this one has settled.
+       Only on an attestation that stands, as a whole snapshot is (`on`), and heard as one: a fence that no longer
+       holds refuses here. Where it cannot ride, the snapshot ends with a bare COMMIT and the caller fences as before. */
+    const fenceStatement = (fence: ReadFence) => `${pin}; ${fenceSql(fence)}`;
     /* The fence's answers, heard: an attestation replaced while it was out is no fence (the caller fences again). */
     const fenceHeld = (
       answers: Awaited<ReturnType<NonNullable<Snapshot['finish']>>>,
       standing: string,
-      evidence: TenantMembershipEvidence,
+      fence: ReadFence,
+      target: Target,
     ): boolean => {
       if (answers.length !== 2) return denyTenant();
-      if (primary.attested !== standing) return false;
-      assertPostgresTenantMembershipRows(owner, evidence, answers[1]!.rows, clock);
+      if (target.attested !== standing) return false;
+      assertFenceRows(fence, answers[1]!.rows);
       active();
       return true;
     };
-    const releaseFence = async (lease: Snapshot, evidence: TenantMembershipEvidence): Promise<boolean> => {
-      const standing = trusted(primary);
-      if (standing === undefined || primary.attested !== standing || !lease.finish) return false;
-      return fenceHeld(await lease.finish(fenceStatement(evidence)), standing, evidence);
+    const releaseFence = async (lease: Snapshot, fence: ReadFence, target: Target): Promise<boolean> => {
+      const standing = trusted(target);
+      if (standing === undefined || target.attested !== standing || !lease.finish) return false;
+      return fenceHeld(await lease.finish(fenceStatement(fence)), standing, fence, target);
     };
-    /* The shared snapshot, on the primary: begun as any member's read begins (its membership in the BEGIN's flight
-       where the attestation stands), proved once, and each read's rows held for that proof as `bind` holds them. */
+    /* The shared snapshot, on the primary (or owner target for platform): begun as any fenced read begins (its fence
+       in the BEGIN's flight where the attestation stands), proved once, and each read's rows held for that proof as
+       `bind` holds them. */
     const openShared = (shared: Shared): Promise<Snapshot> =>
       new Promise<Snapshot>((resolve, reject) => {
+        const route = fenceRoute(shared.readFence);
+        const sharedTarget = targetForRoute(route);
         const held = primaryReads(() =>
           invoke(
-            shared.evidence,
-            async (evidence, lease): Promise<boolean> => {
+            shared.readFence,
+            async (fence, lease): Promise<boolean> => {
               /* What the reads on it are handed: never the snapshot's end, which is its owner's. */
               const { finish: _finish, behind: _behind, ...readable } = lease;
               /* After `lastWave`, the fence leaves behind the wave's statements: scheduled once the first of them is
@@ -984,9 +1178,9 @@ export async function openPostgresTenantReadSource(
                 if (!shared.closing || shared.finishing || due || settledFence) return;
                 due = setImmediate(() => {
                   due = undefined;
-                  const standing = trusted(primary);
-                  if (settledFence || standing === undefined || primary.attested !== standing || !lease.finish) return;
-                  const answers = lease.finish(fenceStatement(evidence));
+                  const standing = trusted(sharedTarget);
+                  if (settledFence || standing === undefined || sharedTarget.attested !== standing || !lease.finish) return;
+                  const answers = lease.finish(fenceStatement(fence));
                   void answers.catch(() => {});
                   shared.finishing = { standing, answers };
                 });
@@ -1004,12 +1198,12 @@ export async function openPostgresTenantReadSource(
                 settledFence = true;
                 if (due) clearImmediate(due);
                 const left = shared.finishing;
-                if (!left) return shared.fence && (await releaseFence(lease, evidence));
+                if (!left) return shared.fence && (await releaseFence(lease, fence, sharedTarget));
                 const answers = await left.answers;
-                return shared.fence && fenceHeld(answers, left.standing, evidence);
+                return shared.fence && fenceHeld(answers, left.standing, fence, sharedTarget);
               };
               if (!lease.fenced?.ahead) {
-                await current(lease, evidence);
+                await revalidateFence(lease, fence);
                 const client: PgQuery = Object.freeze({
                   query: sending((...args: unknown[]) =>
                     (lease.client.query as (...values: unknown[]) => Promise<unknown>)(...args),
@@ -1026,7 +1220,7 @@ export async function openPostgresTenantReadSource(
                 await shared.ended;
                 return release();
               }
-              const proved = current(lease, evidence);
+              const proved = revalidateFence(lease, fence);
               void proved.catch(() => {});
               const gated = async <R>(asked: Promise<R>): Promise<R> => {
                 const [read, membership] = await Promise.allSettled([asked, proved]);
@@ -1056,10 +1250,10 @@ export async function openPostgresTenantReadSource(
               await proved;
               return fencing;
             },
-            (evidence) => evidence,
+            (fence) => fence,
             undefined,
             false,
-            (evidence) => evidence.tenantId,
+            () => route,
           ),
         );
         shared.closed = held;
@@ -1081,13 +1275,14 @@ export async function openPostgresTenantReadSource(
       } catch (error) {
         return refusedBefore(error);
       }
+      const sharedTarget = targetForRoute(fenceRoute(shared.readFence));
       const operation = (async () => {
         try {
           const result = await work(value, await (shared.lease ??= openShared(shared)));
           active();
           return result;
         } catch (error) {
-          if (schemaMoved(error)) primary.attested = primary.checked = undefined;
+          if (schemaMoved(error)) sharedTarget.attested = sharedTarget.checked = undefined;
           return denyTenantFor(error);
         }
       })();
@@ -1099,8 +1294,103 @@ export async function openPostgresTenantReadSource(
       void settled.then(() => shared.running.delete(settled));
       return operation;
     };
+    const togetherOf = async <T>(readFence: ReadFence, work: () => Promise<T>): Promise<T> => {
+      if (typeof work !== 'function') return Promise.reject(new TenantContextError());
+      /* Inside another `together` of this source: its snapshot is the one. */
+      if (sharing.getStore()) return work();
+      let captured: ReadFence;
+      try {
+        active();
+        captured = captureTenantData(readFence);
+      } catch (error) {
+        return refusedBefore(error);
+      }
+      let end!: () => void;
+      const shared: Shared = {
+        readFence: captured,
+        key: fenceKeyOf(captured),
+        open: true,
+        fence: false,
+        closable: false,
+        running: new Set(),
+        ended: new Promise<void>((resolve) => {
+          end = resolve;
+        }),
+      };
+      try {
+        return await sharing.run(shared, work);
+      } finally {
+        /* Asked from now on, a read takes a snapshot of its own; one already on this one is let finish first. */
+        shared.open = false;
+        while (shared.running.size) await Promise.allSettled([...shared.running]);
+        end();
+      }
+    };
+    const togetherFencedOf = async <T>(
+      readFence: ReadFence,
+      work: () => Promise<T>,
+      options?: { readonly lastWave?: boolean },
+    ): Promise<{ value: T; fenced: boolean }> => {
+      if (typeof work !== 'function') return Promise.reject(new TenantContextError());
+      /* Inside another `together` of this source: its snapshot is the one, and its owner fences. */
+      if (sharing.getStore()) return { value: await work(), fenced: false };
+      let captured: ReadFence;
+      try {
+        active();
+        captured = captureTenantData(readFence);
+      } catch (error) {
+        return refusedBefore(error);
+      }
+      let end!: () => void;
+      const shared: Shared = {
+        readFence: captured,
+        key: fenceKeyOf(captured),
+        open: true,
+        fence: false,
+        /* A boot or a composed page asks many waves, and a read of one saying "last" must not send the fence ahead
+           of the rest: only a request that declares its last wave (withBoundedReads) may. */
+        closable: options?.lastWave !== false,
+        running: new Set(),
+        ended: new Promise<void>((resolve) => {
+          end = resolve;
+        }),
+      };
+      const ownKey = `${url}\0${owner.appId}\0${owner.storeId}\0${owner.source.id}`;
+      const runShared = () =>
+        !ownerTarget
+          ? sharedAddressSnapshot.run(
+              {
+                ownerKey: ownKey,
+                isOpen: () => shared.open && !shared.finishing,
+                queryRows: (sql) => onShared(shared, undefined, async (_q, lease) => (await lease.client.query(sql)).rows),
+              },
+              work,
+            )
+          : work();
+      let value: T;
+      try {
+        value = await sharing.run(shared, runShared);
+        /* Only an answer is fenced: a failure lets the snapshot go with a bare COMMIT. */
+        shared.fence = true;
+      } finally {
+        shared.open = false;
+        while (shared.running.size) await Promise.allSettled([...shared.running]);
+        end();
+      }
+      /* Never opened (nothing read), or let go without the fence: the caller fences as before. A refused
+         fence, or a database that failed to answer it, is the answer. */
+      const fenced = shared.lease === undefined ? false : await shared.closed!;
+      /* It asked more than it said its last wave was: an answer built past what the fence proved fails closed. */
+      if (shared.overrun) return denyTenant();
+      return { value, fenced };
+    };
+    const markLastWave = () => {
+      /* Only the fenced snapshot this context began, while its work runs: a nested `together`'s owner fences. */
+      const shared = sharing.getStore();
+      if (shared?.closable && shared.open) shared.closing = true;
+    };
     /* A store's read the request's own context asks (its inbox: tenantHttp.ts names the lease's own): on the
-       request's shared snapshot where one is open — its rows held for the membership that snapshot proves, as every
+       request's shared snapshot where one is open — its rows held for the fence that snapshot proves, as every
        read on it is — and on a snapshot of its own otherwise. It admits nobody either way; what it reads is named by
        the caller, and the snapshot it joins is only ever found in the async context the request itself began. */
     const inRequest = <A, R>(input: A, work: (captured: A, lease: Snapshot) => Promise<R>): Promise<R> => {
@@ -1112,14 +1402,14 @@ export async function openPostgresTenantReadSource(
     const bind = (
       scope: RowScope,
       revalidate: (lease: Snapshot) => Promise<void>,
-      fence: TenantMembershipEvidence | undefined,
+      fence: ReadFence | undefined,
       /* Where each of its snapshots reads (`snapshot`): the tenant its scope is for, or OWNER for the platform's. */
       route: Route,
     ): ScopedReads => {
       const reads = scoped(scope);
-      const fenceKey = fence === undefined ? undefined : JSON.stringify(fence);
+      const fenceKey = fence === undefined ? undefined : fenceKeyOf(fence);
       const run = <A extends unknown[], R>(args: A, work: (bound: ScopedReads, ...args: A) => Promise<R>) => {
-        /* Asked inside `together` for this same evidence: on its snapshot, which proved the membership once. One
+        /* Asked inside `together` for this same fence: on its snapshot, which proved the fence once. One
            that wants a replica keeps to one, on a snapshot of its own (the shared one is the primary's). */
         const shared = fenceKey === undefined ? undefined : sharing.getStore();
         if (shared?.open && shared.key === fenceKey && !(standbys.pools.length && replicaReadWanted()))
@@ -1131,10 +1421,10 @@ export async function openPostgresTenantReadSource(
               await revalidate(next);
               return work(reads(next), ...capturedArgs);
             }
-            /* The membership is on its way with the BEGIN: the read is sent now, behind it in the same flight,
-               and its rows wait for the membership's answer. A refusal there is the answer, whatever the read
-               said; the read's own failure is heard only once the membership held. The SQL is the scope's,
-               compiled from this evidence alone, so what it reads is this tenant's whatever the answer. */
+            /* The fence is on its way with the BEGIN: the read is sent now, behind it in the same flight,
+               and its rows wait for the fence's answer. A refusal there is the answer, whatever the read
+               said; the read's own failure is heard only once the fence held. The SQL is the scope's,
+               compiled from this evidence alone, so what it reads is this realm's whatever the answer. */
             const proved = revalidate(next);
             void proved.catch(() => {});
             const answer = Promise.resolve().then(() => work(reads(next), ...capturedArgs));
@@ -1176,17 +1466,20 @@ export async function openPostgresTenantReadSource(
           run([request] as [typeof request], (bound, value) => (bound.cte ? bound.cte(value) : Promise.reject(new TenantContextError()))),
       } satisfies ScopedReads);
     };
-    /* A batch is one leased snapshot, revalidated once, its reads on that lease. */
-    const batch = <C, T>(
+    /* A batch is one leased snapshot, revalidated once, its reads on that lease. When `fenceRelease` is true, the
+       release fence rides the COMMIT that ends the snapshot, turning advisoryReads' 3 flights into 2. */
+    const batchCore = <C, T>(
       input: C,
       open: (captured: C, lease: Snapshot) => Promise<RowScope>,
       work: (reads: ScopedReads) => T | Promise<T>,
-      fence: ((captured: C) => TenantMembershipEvidence) | undefined,
-      /* For a fenced batch whose membership rides with its BEGIN (`fenced.ahead`): the scope, composed from the
+      fence: ((captured: C) => ReadFence) | undefined,
+      /* For a fenced batch whose check rides with its BEGIN (`fenced.ahead`): the scope, composed from the
          evidence alone, and the revalidation, asked of the same flight rather than waited on before the reads. */
       ahead: Readonly<{ scope: (captured: C) => RowScope; proof: (captured: C, lease: Snapshot) => Promise<void> }> | undefined,
       route: (captured: C) => Route,
-    ): Promise<T> => {
+      fenceRelease = false,
+      lastWave = false,
+    ): Promise<{ value: T; fenced: boolean }> => {
       if (typeof work !== 'function') return Promise.reject(new TenantContextError());
       let own: { error: unknown } | undefined;
       const heard = (error: unknown) => {
@@ -1195,9 +1488,41 @@ export async function openPostgresTenantReadSource(
       return invoke(
         input,
         async (captured, lease) => {
-          if (!ahead || !lease.fenced?.ahead) return readBatch(scoped(await open(captured, lease))(lease), active, work, heard);
-          /* `work` reads at once, behind the BEGIN and the membership in one flight, and no read's rows reach it
-             before the membership's answer has: a refusal there is every read's answer, whatever the read said,
+          const readFence = fenceRelease && fence ? fence(captured) : undefined;
+          const target = readFence ? targetForRoute(route(captured)) : undefined;
+          let finishing: { readonly standing: string; readonly answers: ReturnType<NonNullable<Snapshot['finish']>> } | undefined;
+          let due: NodeJS.Immediate | undefined;
+          let settledFence = false;
+          let overrun = false;
+          const finishWithFence = async (value: T): Promise<{ value: T; fenced: boolean }> => {
+            settledFence = true;
+            if (due) clearImmediate(due);
+            if (!readFence || !target) return { value, fenced: false };
+            if (overrun) return denyTenant();
+            if (finishing) {
+              const answers = await finishing.answers;
+              return { value, fenced: fenceHeld(answers, finishing.standing, readFence, target) };
+            }
+            const fenced = await releaseFence(lease, readFence, target);
+            return { value, fenced };
+          };
+          if (!ahead || !lease.fenced?.ahead) {
+            const value = await readBatch(scoped(await open(captured, lease))(lease), active, work, heard);
+            return finishWithFence(value);
+          }
+          const ride = () => {
+            if (!lastWave || !readFence || !target || finishing || due || settledFence) return;
+            due = setImmediate(() => {
+              due = undefined;
+              const standing = trusted(target);
+              if (settledFence || standing === undefined || target.attested !== standing || !lease.finish) return;
+              const answers = lease.finish(fenceStatement(readFence));
+              void answers.catch(() => {});
+              finishing = { standing, answers };
+            });
+          };
+          /* `work` reads at once, behind the BEGIN and the fence in one flight, and no read's rows reach it
+             before the fence's answer has: a refusal there is every read's answer, whatever the read said,
              and the batch's, though it asked nothing at all. */
           const proved = ahead.proof(captured, lease);
           void proved.catch(() => {});
@@ -1209,21 +1534,36 @@ export async function openPostgresTenantReadSource(
           };
           const gated: Snapshot = Object.freeze({
             ...lease,
-            execute: ((...args: unknown[]) =>
-              held((lease.execute as (...values: unknown[]) => Promise<unknown>)(...args))) as Snapshot['execute'],
+            execute: ((...args: unknown[]) => {
+              if (finishing) {
+                overrun = true;
+                return Promise.reject(new TenantContextError());
+              }
+              const asked = (lease.execute as (...values: unknown[]) => Promise<unknown>)(...args);
+              ride();
+              return held(asked);
+            }) as Snapshot['execute'],
           });
           const [answer, membership] = await Promise.allSettled([
             readBatch(scoped(ahead.scope(captured))(gated), active, work, heard),
             proved,
           ]);
           /* Whatever `work` made of a held read — availability turns a failed one into "temporarily unavailable" —
-             a refused membership is the answer, as it was when the membership was read first. */
+             a refused fence is the answer, as it was when the fence was read first. */
           if (membership.status === 'rejected') {
+            settledFence = true;
+            if (due) clearImmediate(due);
+            if (finishing) await finishing.answers.catch(() => {});
             own = undefined;
             throw membership.reason;
           }
-          if (answer.status === 'rejected') throw answer.reason;
-          return answer.value;
+          if (answer.status === 'rejected') {
+            settledFence = true;
+            if (due) clearImmediate(due);
+            if (finishing) await finishing.answers.catch(() => {});
+            throw answer.reason;
+          }
+          return finishWithFence(answer.value);
         },
         fence,
         undefined,
@@ -1233,6 +1573,14 @@ export async function openPostgresTenantReadSource(
         throw own ? own.error : error;
       });
     };
+    const batch = <C, T>(
+      input: C,
+      open: (captured: C, lease: Snapshot) => Promise<RowScope>,
+      work: (reads: ScopedReads) => T | Promise<T>,
+      fence: ((captured: C) => ReadFence) | undefined,
+      ahead: Readonly<{ scope: (captured: C) => RowScope; proof: (captured: C, lease: Snapshot) => Promise<void> }> | undefined,
+      route: (captured: C) => Route,
+    ): Promise<T> => batchCore(input, open, work, fence, ahead, route, false).then((res) => res.value);
     // Arguments captured now, as `invoke` captures them; no snapshot is leased.
     const bindLater = <A>(input: A, make: (captured: A) => ScopedReads): Promise<ScopedReads> => {
       try {
@@ -1271,7 +1619,7 @@ export async function openPostgresTenantReadSource(
         invoke(
           evidence,
           (value, lease) => current(lease, value),
-          (value) => value,
+          (value) => ({ kind: 'tenant', evidence: value }),
           undefined,
           true,
           (value) => value.tenantId,
@@ -1284,11 +1632,11 @@ export async function openPostgresTenantReadSource(
             return bind(
               composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue),
               (next) => current(next, captured.evidence),
-              captured.evidence,
+              { kind: 'tenant', evidence: captured.evidence },
               captured.evidence.tenantId,
             );
           },
-          (captured) => captured.evidence,
+          (captured) => ({ kind: 'tenant', evidence: captured.evidence }),
           undefined,
           false,
           (captured) => captured.evidence.tenantId,
@@ -1298,93 +1646,18 @@ export async function openPostgresTenantReadSource(
           bind(
             composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue),
             (next) => current(next, captured.evidence),
-            captured.evidence,
+            { kind: 'tenant', evidence: captured.evidence },
             captured.evidence.tenantId,
           ),
         ),
-      together: async <T>(evidence: TenantMembershipEvidence, work: () => Promise<T>): Promise<T> => {
-        if (typeof work !== 'function') return Promise.reject(new TenantContextError());
-        /* Inside another `together` of this source: its snapshot is the one. */
-        if (sharing.getStore()) return work();
-        let fence: TenantMembershipEvidence;
-        try {
-          active();
-          fence = captureTenantData(evidence);
-        } catch (error) {
-          return refusedBefore(error);
-        }
-        let end!: () => void;
-        const shared: Shared = {
-          evidence: fence,
-          key: JSON.stringify(fence),
-          open: true,
-          fence: false,
-          closable: false,
-          running: new Set(),
-          ended: new Promise<void>((resolve) => {
-            end = resolve;
-          }),
-        };
-        try {
-          return await sharing.run(shared, work);
-        } finally {
-          /* Asked from now on, a read takes a snapshot of its own; one already on this one is let finish first. */
-          shared.open = false;
-          while (shared.running.size) await Promise.allSettled([...shared.running]);
-          end();
-        }
-      },
-      togetherFenced: async <T>(
+      together: <T>(evidence: TenantMembershipEvidence, work: () => Promise<T>): Promise<T> =>
+        togetherOf({ kind: 'tenant', evidence }, work),
+      togetherFenced: <T>(
         evidence: TenantMembershipEvidence,
         work: () => Promise<T>,
         options?: { readonly lastWave?: boolean },
-      ): Promise<{ value: T; fenced: boolean }> => {
-        if (typeof work !== 'function') return Promise.reject(new TenantContextError());
-        /* Inside another `together` of this source: its snapshot is the one, and its owner fences. */
-        if (sharing.getStore()) return { value: await work(), fenced: false };
-        let fence: TenantMembershipEvidence;
-        try {
-          active();
-          fence = captureTenantData(evidence);
-        } catch (error) {
-          return refusedBefore(error);
-        }
-        let end!: () => void;
-        const shared: Shared = {
-          evidence: fence,
-          key: JSON.stringify(fence),
-          open: true,
-          fence: false,
-          /* A boot or a composed page asks many waves, and a read of one saying "last" must not send the fence ahead
-             of the rest: only a request that declares its last wave (withBoundedReads) may. */
-          closable: options?.lastWave !== false,
-          running: new Set(),
-          ended: new Promise<void>((resolve) => {
-            end = resolve;
-          }),
-        };
-        let value: T;
-        try {
-          value = await sharing.run(shared, work);
-          /* Only an answer is fenced: a failure lets the snapshot go with a bare COMMIT. */
-          shared.fence = true;
-        } finally {
-          shared.open = false;
-          while (shared.running.size) await Promise.allSettled([...shared.running]);
-          end();
-        }
-        /* Never opened (nothing read), or let go without the fence: the caller fences as before. A refused
-           membership, or a database that failed to answer it, is the answer. */
-        const fenced = shared.lease === undefined ? false : await shared.closed!;
-        /* It asked more than it said its last wave was: an answer built past what the fence proved fails closed. */
-        if (shared.overrun) return denyTenant();
-        return { value, fenced };
-      },
-      lastWave: () => {
-        /* Only the fenced snapshot this context began, while its work runs: a nested `together`'s owner fences. */
-        const shared = sharing.getStore();
-        if (shared?.closable && shared.open) shared.closing = true;
-      },
+      ): Promise<{ value: T; fenced: boolean }> => togetherFencedOf({ kind: 'tenant', evidence }, work, options),
+      lastWave: markLastWave,
       withReads: <T>(evidence: TenantMembershipEvidence, rows: RowScope, work: (reads: ScopedReads) => T | Promise<T>) =>
         batch(
           { evidence, rows },
@@ -1393,7 +1666,7 @@ export async function openPostgresTenantReadSource(
             return composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue);
           },
           work,
-          (captured) => captured.evidence,
+          (captured) => ({ kind: 'tenant', evidence: captured.evidence }),
           {
             scope: (captured) => composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue),
             proof: (captured, lease) => current(lease, captured.evidence),
@@ -1440,9 +1713,9 @@ export async function openPostgresTenantReadSource(
         invoke(
           evidence,
           (value, lease) => currentPlatform(lease, value),
+          (value) => ({ kind: 'platform', evidence: value }),
           undefined,
-          undefined,
-          false,
+          true,
           () => OWNER,
         ),
       // The source recomposes the platform scope itself, as on SQLite.
@@ -1454,11 +1727,11 @@ export async function openPostgresTenantReadSource(
             return bind(
               composePlatformReadScope(owned, captured.evidence, captured.rows),
               (next) => currentPlatform(next, captured.evidence),
-              undefined,
+              { kind: 'platform', evidence: captured.evidence },
               OWNER,
             );
           },
-          undefined,
+          (captured) => ({ kind: 'platform', evidence: captured.evidence }),
           undefined,
           false,
           () => OWNER,
@@ -1468,7 +1741,7 @@ export async function openPostgresTenantReadSource(
           bind(
             composePlatformReadScope(owned, captured.evidence, captured.rows),
             (next) => currentPlatform(next, captured.evidence),
-            undefined,
+            { kind: 'platform', evidence: captured.evidence },
             OWNER,
           ),
         ),
@@ -1480,17 +1753,20 @@ export async function openPostgresTenantReadSource(
             return composePlatformReadScope(owned, captured.evidence, captured.rows);
           },
           work,
-          undefined,
-          undefined,
+          (captured) => ({ kind: 'platform', evidence: captured.evidence }),
+          {
+            scope: (captured) => composePlatformReadScope(owned, captured.evidence, captured.rows),
+            proof: (captured, lease) => currentPlatform(lease, captured.evidence),
+          },
           () => OWNER,
         ),
       assertSupportCurrent: (evidence: SupportMembershipEvidence) =>
         invoke(
           evidence,
           (value, lease) => currentSupport(lease, value),
+          (value) => ({ kind: 'support', evidence: value }),
           undefined,
-          undefined,
-          false,
+          true,
           (value) => value.tenantId,
         ),
       /* The dealer's scope, composed by the same rule its own members get, on a
@@ -1505,11 +1781,11 @@ export async function openPostgresTenantReadSource(
             return bind(
               composeTenantReadScope(owned, supportAsMember(captured.evidence), captured.rows, allTrue),
               (next) => currentSupport(next, captured.evidence),
-              undefined,
+              { kind: 'support', evidence: captured.evidence },
               captured.evidence.tenantId,
             );
           },
-          undefined,
+          (captured) => ({ kind: 'support', evidence: captured.evidence }),
           undefined,
           false,
           (captured) => captured.evidence.tenantId,
@@ -1519,7 +1795,7 @@ export async function openPostgresTenantReadSource(
           bind(
             composeTenantReadScope(owned, supportAsMember(captured.evidence), captured.rows, allTrue),
             (next) => currentSupport(next, captured.evidence),
-            undefined,
+            { kind: 'support', evidence: captured.evidence },
             captured.evidence.tenantId,
           ),
         ),
@@ -1530,7 +1806,7 @@ export async function openPostgresTenantReadSource(
           lookup,
           (value, lease) => resolvePublicIn(lease, value),
           undefined,
-          undefined,
+          (value) => publicFenceStatement(value),
           false,
           () => OWNER,
         ),
@@ -1538,9 +1814,9 @@ export async function openPostgresTenantReadSource(
         invoke(
           evidence,
           (value, lease) => currentPublic(lease, value),
+          (value) => ({ kind: 'public', evidence: value }),
           undefined,
-          undefined,
-          false,
+          true,
           (value) => value.tenantId,
         ),
       // The source recomposes the visitor's scope itself, as on SQLite.
@@ -1549,7 +1825,7 @@ export async function openPostgresTenantReadSource(
           bind(
             composePublicReadScope(owned, captured.evidence, captured.rows),
             (next) => currentPublic(next, captured.evidence),
-            undefined,
+            { kind: 'public', evidence: captured.evidence },
             captured.evidence.tenantId,
           ),
         ),
@@ -1561,7 +1837,7 @@ export async function openPostgresTenantReadSource(
           return bind(
             composePublicReadScope(owned, visitor, captured.rows),
             (next) => currentPublic(next, visitor),
-            undefined,
+            { kind: 'public', evidence: visitor },
             visitor.tenantId,
           );
         }),
@@ -1587,9 +1863,7 @@ export async function openPostgresTenantReadSource(
             const { id } = captureLinkLookup(query);
             const row = await findPostgresLink(lease.client, owner.appId, id, clock());
             if (!row) return null;
-            const anchors = new Map<string, string | null>();
-            for (const tenant of [PLATFORM_TENANT_ID, row.tenant])
-              anchors.set(tenant, await readPostgresIntakeAnchor(lease.client, owner, tenant));
+            const anchors = await readPostgresIntakeAnchors(lease.client, owner, [PLATFORM_TENANT_ID, row.tenant]);
             return linkResolution(row, (tenant) => anchors.get(tenant) ?? null);
           },
           undefined,
@@ -1604,10 +1878,8 @@ export async function openPostgresTenantReadSource(
             const value = captureIntakeLookup(query, owner),
               sql = intakeAddressQuery(owned, value.column);
             const tenantId = value.address === null ? undefined : intakeTenantOf((await lease.client.query(sql, [value.address])).rows);
-            const anchors = new Map<string, string | null>();
-            for (const id of [...(tenantId === undefined ? [] : [tenantId]), PLATFORM_TENANT_ID]) {
-              anchors.set(id, await readPostgresIntakeAnchor(lease.client, owner, id));
-            }
+            const ids = [...(tenantId === undefined ? [] : [tenantId]), PLATFORM_TENANT_ID];
+            const anchors = await readPostgresIntakeAnchors(lease.client, owner, ids);
             return intakeResolution(tenantId, (id) => anchors.get(id) ?? null);
           },
           undefined,
@@ -1620,8 +1892,7 @@ export async function openPostgresTenantReadSource(
           lookup,
           async (query, lease) => {
             const value = captureIntakeTenantLookup(query, owner);
-            const anchors = new Map<string, string | null>();
-            for (const id of [value.tenantId, PLATFORM_TENANT_ID]) anchors.set(id, await readPostgresIntakeAnchor(lease.client, owner, id));
+            const anchors = await readPostgresIntakeAnchors(lease.client, owner, [value.tenantId, PLATFORM_TENANT_ID]);
             return intakeResolutionByTenant(value.tenantId, (id) => anchors.get(id) ?? null);
           },
           undefined,
@@ -1650,17 +1921,35 @@ export async function openPostgresTenantReadSource(
           false,
           () => OWNER,
         ),
-      /* Every address and its resolution in the message that begins the snapshot (`lead`), which on an attestation
-         that stands ends it too: one round trip, where the read in its turn and the COMMIT after it were two. */
-      readTenantAddresses: (lookup: TenantAddressesLookup) =>
-        invoke(
+      /* Every address and its resolution: inside a boot's shared snapshot (when no RLS backstop isolates OWNER)
+         rides behind its BEGIN so boot/reenter drop from 3 flights to 2; otherwise in the message that begins
+         a snapshot (`lead`), which on an attestation that stands ends it too. */
+      readTenantAddresses: (lookup: TenantAddressesLookup) => {
+        const ownKey = `${url}\0${owner.appId}\0${owner.storeId}\0${owner.source.id}`;
+        const bridge = !ownerTarget ? sharedAddressSnapshot.getStore() : undefined;
+        if (bridge && bridge.ownerKey === ownKey && bridge.isOpen() && !(standbys.pools.length && replicaReadWanted())) {
+          return (async () => {
+            try {
+              active();
+              const captured = captureAddressesLookup(owned, captureTenantData(lookup));
+              const sql = tenantOwnAddressesStatement(owned, captured) ?? denyTenant();
+              const rows = await bridge.queryRows(sql);
+              active();
+              return ownAddresses(captured, rows);
+            } catch (error) {
+              return refusedBefore(error);
+            }
+          })();
+        }
+        return invoke(
           lookup,
           (query, lease) => ownAddresses(captureAddressesLookup(owned, query), lease.lead ?? denyTenant()),
           undefined,
           (query) => tenantOwnAddressesStatement(owned, captureAddressesLookup(owned, query)) ?? denyTenant(),
           false,
           () => OWNER,
-        ),
+        );
+      },
       /* What an arrival asks before anyone is admitted, in one message: the names, the entered tenant's addresses
          and which of the tenants are sandboxes, each the statement its own read sends, behind one BEGIN and ended by
          one COMMIT (`lead`). Each on a snapshot of its own was a flight for the names and one for their COMMIT, one
@@ -1673,38 +1962,31 @@ export async function openPostgresTenantReadSource(
           lookup,
           async (query, lease): Promise<TenantMarks> => {
             const asked = marksAsked(query);
-            let nameRows: readonly Record<string, unknown>[] = [];
-            let addressRows: readonly Record<string, unknown>[] = [];
-            let sandboxes: ReadonlySet<string> = new Set<string>();
             if (lease.leads) {
-              const answers = [...lease.leads];
-              if (answers.length !== asked.statements(true)?.length) return denyTenant();
-              if (asked.names) nameRows = answers.shift()!;
-              if (asked.addresses) addressRows = answers.shift()!;
-              if (asked.sandboxes) sandboxes = new Set(answers.shift()!.map((row) => String(row.tenant_id)));
-            } else {
-              const names = asked.names;
-              [nameRows, addressRows, sandboxes] = await Promise.all([
-                names
-                  ? lease.client
-                      .query(tenantNamesQuery(owned, names.plan, names.tenants.length), [names.tenants])
-                      .then((answer) => answer.rows)
-                  : nameRows,
-                asked.addresses
-                  ? lease.client.query(tenantOwnAddressesStatement(owned, asked.addresses) ?? denyTenant()).then((answer) => answer.rows)
-                  : addressRows,
-                asked.sandboxes
-                  ? (async () => {
-                      const rows = postgresSandboxSession(lease.client);
-                      if (!(await sandboxStorePresent(rows))) return new Set<string>();
-                      const found = await sandboxRows(rows, owner.appId).among(asked.sandboxes!);
-                      /* Attested in full just now, on this snapshot: the next arrival's statement may name it. */
-                      lease.stores?.keep(SANDBOX_STORE);
-                      return found;
-                    })()
-                  : sandboxes,
-              ]);
+              if (lease.leads.length !== asked.statements(true)?.length) return denyTenant();
+              return asked.fromLeads(lease.leads);
             }
+            const names = asked.names;
+            const [nameRows, addressRows, sandboxes] = await Promise.all([
+              names
+                ? lease.client
+                    .query(tenantNamesQuery(owned, names.plan, names.tenants.length), [names.tenants])
+                    .then((answer) => answer.rows)
+                : ([] as readonly Record<string, unknown>[]),
+              asked.addresses
+                ? lease.client.query(tenantOwnAddressesStatement(owned, asked.addresses) ?? denyTenant()).then((answer) => answer.rows)
+                : ([] as readonly Record<string, unknown>[]),
+              asked.sandboxes
+                ? (async () => {
+                    const rows = postgresSandboxSession(lease.client);
+                    if (!(await sandboxStorePresent(rows))) return new Set<string>();
+                    const found = await sandboxRows(rows, owner.appId).among(asked.sandboxes!);
+                    /* Attested in full just now, on this snapshot: the next arrival's statement may name it. */
+                    lease.stores?.keep(SANDBOX_STORE);
+                    return found;
+                  })()
+                : new Set<string>(),
+            ]);
             return Object.freeze({
               names: asked.names ? tenantNamesOf(asked.names.plan, nameRows, asked.names.tenants) : Object.freeze({}),
               sandboxes,
@@ -1735,11 +2017,19 @@ export async function openPostgresTenantReadSource(
       readServiceAnchors: (tenantId: string | null) =>
         invoke(
           tenantId,
-          async (id, lease) =>
-            Object.freeze({
-              tenantVersion: id === null ? null : await readPostgresIntakeAnchor(lease.client, owner, parseTenantSelector([id])),
-              platformVersion: await readPostgresIntakeAnchor(lease.client, owner, PLATFORM_TENANT_ID),
-            }),
+          async (id, lease) => {
+            if (id === null)
+              return Object.freeze({
+                tenantVersion: null,
+                platformVersion: await readPostgresIntakeAnchor(lease.client, owner, PLATFORM_TENANT_ID),
+              });
+            const validId = parseTenantSelector([id]);
+            const anchors = await readPostgresIntakeAnchors(lease.client, owner, [validId, PLATFORM_TENANT_ID]);
+            return Object.freeze({
+              tenantVersion: anchors.get(validId) ?? null,
+              platformVersion: anchors.get(PLATFORM_TENANT_ID) ?? null,
+            });
+          },
           undefined,
           undefined,
           false,
@@ -1804,31 +2094,17 @@ export async function openPostgresTenantReadSource(
           false,
           () => OWNER,
         ),
-      // The stores' own rows, which no policy binds: read as the runtime, with no tenant said.
+      // The stores' own rows, which no policy binds: read as the runtime, sharing the request's snapshot when one is open.
       readRecordHistory: (query: RecordHistoryQuery) =>
-        invoke(
-          query,
-          (value, lease) => {
-            assertHistoryQuery(value);
-            return attestedStore(lease, 'history', (attested) => readPostgresRecordHistory(lease.client, value, attested));
-          },
-          undefined,
-          undefined,
-          false,
-          () => null,
-        ),
+        inRequest(query, (value, lease) => {
+          assertHistoryQuery(value);
+          return attestedStore(lease, 'history', (attested) => readPostgresRecordHistory(lease.client, value, attested));
+        }),
       readRecordActivity: (query: RecordActivityQuery) =>
-        invoke(
-          query,
-          (value, lease) => {
-            assertActivityQuery(value);
-            return attestedStore(lease, 'history', (attested) => readPostgresRecordActivity(lease.client, value, attested));
-          },
-          undefined,
-          undefined,
-          false,
-          () => null,
-        ),
+        inRequest(query, (value, lease) => {
+          assertActivityQuery(value);
+          return attestedStore(lease, 'history', (attested) => readPostgresRecordActivity(lease.client, value, attested));
+        }),
       readInbox: (query: InboxQuery) =>
         inRequest(query, (value, lease) => {
           assertInboxQuery(value);
@@ -1840,17 +2116,10 @@ export async function openPostgresTenantReadSource(
           return postgresInboxMail((work) => work(lease.client)).emailOff(value.app, value.recipient);
         }),
       readBranding: (query: BrandingQuery) =>
-        invoke(
-          query,
-          (value, lease) => {
-            assertBrandingQuery(value);
-            return attestedStore(lease, 'branding', (attested) => readPostgresBranding(lease.client, value, attested));
-          },
-          undefined,
-          undefined,
-          false,
-          () => null,
-        ),
+        inRequest(query, (value, lease) => {
+          assertBrandingQuery(value);
+          return attestedStore(lease, 'branding', (attested) => readPostgresBranding(lease.client, value, attested));
+        }),
       readBrandingLogo: (query: BrandingLogoQuery) =>
         invoke(
           query,
@@ -1865,6 +2134,91 @@ export async function openPostgresTenantReadSource(
         ),
       close,
     });
+    realmFencings.set(
+      source,
+      Object.freeze<TenantRealmFencing>({
+        togetherPlatform: (evidence, work) => togetherOf({ kind: 'platform', evidence }, work),
+        togetherFencedPlatform: (evidence, work, options) => togetherFencedOf({ kind: 'platform', evidence }, work, options),
+        togetherFencedSupport: (evidence, work, options) => togetherFencedOf({ kind: 'support', evidence }, work, options),
+        togetherFencedPublic: (evidence, work, options) => togetherFencedOf({ kind: 'public', evidence }, work, options),
+        withReadsFenced: (evidence, rows, work, options) =>
+          batchCore(
+            { evidence, rows },
+            async (captured, lease) => {
+              await current(lease, captured.evidence);
+              return composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue);
+            },
+            work,
+            (captured) => ({ kind: 'tenant', evidence: captured.evidence }),
+            {
+              scope: (captured) => composeTenantReadScope(owned, captured.evidence, captured.rows, allTrue),
+              proof: (captured, lease) => current(lease, captured.evidence),
+            },
+            (captured) => captured.evidence.tenantId,
+            true,
+            options?.lastWave === true,
+          ),
+        withPlatformReadsFenced: (evidence, rows, work, options) =>
+          batchCore(
+            { evidence, rows },
+            async (captured, lease) => {
+              await currentPlatform(lease, captured.evidence);
+              return composePlatformReadScope(owned, captured.evidence, captured.rows);
+            },
+            work,
+            (captured) => ({ kind: 'platform', evidence: captured.evidence }),
+            {
+              scope: (captured) => composePlatformReadScope(owned, captured.evidence, captured.rows),
+              proof: (captured, lease) => currentPlatform(lease, captured.evidence),
+            },
+            () => OWNER,
+            true,
+            options?.lastWave === true,
+          ),
+        ...(ownerTarget
+          ? {}
+          : {
+              readDiscoveryWithMarks: (
+                lookup: TenantMembershipListLookup,
+                platform: PlatformMembershipLookup | undefined,
+                marks: TenantMarksLookup,
+              ) => {
+                let askedList: { readonly sql: string; readonly instant: number } | undefined;
+                let askedMarks: ReturnType<typeof marksAsked> | undefined;
+                let marksCount = 0;
+                return invoke(
+                  { lookup, platform, marks },
+                  (query, lease) => {
+                    const base = query.platform ? 2 : 1;
+                    const leads = lease.leads;
+                    if (!leads || leads.length !== base + marksCount) return denyTenant();
+                    const memberships = postgresTenantMembershipsRows(owner, query.lookup, leads[0]!, askedList!.instant, clock);
+                    const plat = query.platform ? postgresPlatformMembershipRows(owner, query.platform, leads[1]!) : undefined;
+                    const foundMarks = marksCount > 0 && askedMarks ? askedMarks.fromLeads(leads.slice(base)) : undefined;
+                    return Object.freeze({
+                      memberships,
+                      ...(query.platform ? { platform: plat } : {}),
+                      ...(foundMarks ? { marks: foundMarks } : {}),
+                    });
+                  },
+                  undefined,
+                  (query) => (stores) => {
+                    const stmts = [(askedList = postgresTenantMembershipsStatement(owner, query.lookup, clock)).sql];
+                    if (query.platform) stmts.push(postgresPlatformMembershipStatement(owner, query.platform));
+                    askedMarks = marksAsked(query.marks);
+                    const mStmts = askedMarks.statements(stores?.has(SANDBOX_STORE) === true);
+                    marksCount = mStmts ? mStmts.length : 0;
+                    if (mStmts) stmts.push(...mStmts);
+                    return stmts;
+                  },
+                  false,
+                  () => null,
+                );
+              },
+            }),
+        lastWave: markLastWave,
+      }),
+    );
     sources.add(source);
     registerTenantSourceIdentity(source, { ...owner, canonicalPath: locator });
     return source;

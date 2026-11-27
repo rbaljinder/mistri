@@ -20,7 +20,8 @@ import {
   tenantOptions,
   tenantRecord,
 } from '@mistriwork/engine/server/evidence.js';
-import { createTenantMembershipIssuer, type TenantMembershipEvidence } from './tenantMembership.js';
+import { createTenantMembershipIssuer, type TenantMembershipEvidence, type TenantMembershipRecord } from './tenantMembership.js';
+import { tenantHostIntentOf } from '../http/tenantHosts.js';
 import { composeTenantReadScope } from './tenantReadScope.js';
 import { captureTenantReadSource, readSharedProfile, type TenantReadSource } from './tenantReadSource.js';
 import type { TenantRowsContext } from '../policy/appTenantPolicy.js';
@@ -48,6 +49,19 @@ import { readZone } from '../app/readerZone.js';
 import { readerZone, zoneColumn } from '../../shared/appUi.js';
 import { readLocale } from '../app/readerLocale.js';
 import { localeColumn } from '@mistriwork/engine/shared/appLocale.js';
+
+type DiscoveryAdmitter = (
+  request: unknown,
+  record: TenantMembershipRecord,
+  verifiedAt: number,
+  guard?: TenantInvocationGuard,
+) => Promise<TenantMembershipEvidence>;
+const discoveryAdmitters = new WeakMap<object, DiscoveryAdmitter>();
+export const discoveryAdmitterOf = (owner: object): DiscoveryAdmitter | undefined => discoveryAdmitters.get(owner);
+export const forwardDiscoveryAdmitter = (from: object, to: object): void => {
+  const admitter = discoveryAdmitters.get(from);
+  if (admitter) discoveryAdmitters.set(to, admitter);
+};
 
 /* The row scope a context reads under, by the context: live sync asks it of a
    context it holds (tenantHttp.ts's /api/live), to judge a changed row as it
@@ -108,6 +122,8 @@ const riding = new AsyncLocalStorage<object>();
 export function withBoundedReads<T>(work: () => T): T {
   return boundedRequest.run({ claimed: false, live: false }, work);
 }
+/** Internal: the active bounded-reads slot, shared across tenant, platform, support, and public read runtimes. */
+export const boundedReadSlot = (): { claimed: boolean; live: boolean } | undefined => boundedRequest.getStore();
 
 export interface TenantReadContext {
   readonly principal: TenantMembershipEvidence;
@@ -294,7 +310,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
   let retirement: Promise<void> | undefined;
   const pendingRequests = new Set<Promise<void>>();
 
-  return Object.freeze({
+  const runtime = Object.freeze({
     /** Stop synchronously and drain accepted requests, including verification.
      * Never await retirement inside its request. This binding does not close. */
     retire(): Promise<void> {
@@ -599,7 +615,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                 ridingOpen++;
                 ridden = false;
                 return source
-                  .togetherFenced(principal, () => riding.run(rideToken, work), { lastWave: false })
+                  .togetherFenced(principal, () => riding.run(rideToken, work), { lastWave: true })
                   .then((ran) => {
                     if (pending.size) beside = true;
                     ridden = ran.fenced;
@@ -824,4 +840,84 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
       }
     },
   });
+  const allowedRoles = new Set(raw.roles as readonly string[]);
+  const admissionsCache = raw.admissions as AdmissionCache | undefined;
+  const deploymentName = raw.deployment as string;
+  const maxLife = raw.maxLifetimeMs as number;
+  discoveryAdmitters.set(runtime, async (request, record, verifiedAt, guard) => {
+    if (retired) return denyTenant();
+    let finish!: () => void;
+    const held = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    pendingRequests.add(held);
+    try {
+      const onHost = tenantHostIntentOf(request);
+      if (onHost && onHost.tenant !== record.tenantId) return denyTenant();
+      if (
+        record.appId !== ownership.appId ||
+        record.status !== 'active' ||
+        record.tenantStatus !== 'active' ||
+        !record.roles.length ||
+        record.roles.some((role) => !allowedRoles.has(role))
+      )
+        return denyTenant();
+      const instant = now();
+      if (retired || !Number.isSafeInteger(instant) || instant < verifiedAt || instant >= record.validUntil) return denyTenant();
+      const validUntil = Math.min(verifiedAt + maxLife, record.validUntil);
+      if (instant >= validUntil) return denyTenant();
+      const evidence: TenantMembershipEvidence = captureTenantData({
+        appId: ownership.appId,
+        accountId: record.accountId,
+        tenantId: record.tenantId,
+        source: ownership.source,
+        deployment: deploymentName,
+        membershipId: record.membershipId,
+        membershipVersion: record.membershipVersion,
+        tenantVersion: record.tenantVersion,
+        roles: record.roles,
+        verifiedAt,
+        validUntil,
+      });
+      checkTenantInvocation(guard, evidence);
+      const membershipResult = delivered(membershipRows(evidence));
+      const memberScope = isPromise(membershipResult) ? await membershipResult : membershipResult;
+      if (retired) return denyTenant();
+      const profile = await readSharedProfile(source, app, evidence.tenantId);
+      if (retired) return denyTenant();
+      const authoredResult = delivered(authoredRows(actingPrincipal(request, evidence), Object.freeze({ tenant: profile })));
+      const policyScope = isPromise(authoredResult) ? await authoredResult : authoredResult;
+      if (retired) return denyTenant();
+      const apiScope = requestApiScope(app.api, request, denyTenant);
+      composeTenantReadScope(
+        ownership,
+        evidence,
+        memberScope,
+        apiScope ? narrowAuthoredRows(ownership.schema, policyScope, apiScope) : policyScope,
+      );
+      readGrant(actingPrincipal(request, evidence).roles);
+      const sessResult = delivered(verify(request as Request));
+      const sess = isPromise(sessResult) ? await sessResult : sessResult;
+      tenantRecord(sess, ['id', 'who', 'role']);
+      tenantIdentifier(sess.id, 1024);
+      if (sess.id !== evidence.accountId || typeof sess.who !== 'string' || (sess.role !== undefined && typeof sess.role !== 'string'))
+        return denyTenant();
+      const revalidated = revalidateTenantInvocation(guard, evidence);
+      if (isPromise(revalidated)) await revalidated;
+      if (app.auth?.tenancy?.shared?.length) await source.assertCurrent(evidence);
+      const nowEnd = now();
+      if (retired || !Number.isSafeInteger(nowEnd) || nowEnd < verifiedAt || nowEnd >= evidence.validUntil) return denyTenant();
+      if (admissionsCache) {
+        const slot = admissionsCache.find(request, evidence.accountId, evidence.tenantId);
+        admissionsCache.keep(slot.key, evidence);
+      }
+      return evidence;
+    } catch (error) {
+      return denyTenantFor(error);
+    } finally {
+      pendingRequests.delete(held);
+      finish();
+    }
+  });
+  return runtime;
 }

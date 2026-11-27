@@ -83,6 +83,7 @@ export function tenantProjection({
       variant ?? null,
       words?.words.size ? words.stamp : null,
       menu ? menu.met(profile) : null,
+      context.zone ?? null,
       context.principal.roles,
     ]);
     let held = projections.get(schema);

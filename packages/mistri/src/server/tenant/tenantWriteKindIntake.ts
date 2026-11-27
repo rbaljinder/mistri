@@ -22,7 +22,7 @@ import {
 } from './tenantIntakeModel.js';
 import { runManagedCommandTransaction } from './tenantManagedTransaction.js';
 import { assertSqliteIntakeAnchorSnapshot } from './tenantStore.js';
-import { assertPostgresIntakeAnchorFence } from './tenantStorePostgres.js';
+import { assertPostgresIntakeAnchorFence, postgresIntakeAnchorFenceAhead } from './tenantStorePostgres.js';
 import { TenantIntakeMoved, withOwnProfile, type TenantWriteKind, type TenantWriteRun } from './tenantWriteKindContract.js';
 
 // A structural alias, not an interface: the published declarations expand it
@@ -73,6 +73,7 @@ export const intakeWriteKind = Object.freeze<TenantWriteKind<TenantIntakeEvidenc
     if (intakeFencesAddress(member))
       assertIntakeHeld(member, (await client.query(`${intakeAddressQuery(owned, member.column)} FOR SHARE`, [member.address])).rows);
   },
+  postgresFenceAhead: (owner, member) => postgresIntakeAnchorFenceAhead(owner, member),
   journalOwner: (owner, member) => intakeJournalOwner(owner, member),
   run: (owned, member, records, journal, _command, run) => runManagedCommandTransaction(owned, member, records, journal!, run),
   moved: () => new TenantIntakeMoved(),

@@ -2077,6 +2077,17 @@ export function Dashboard({
      it is the dashboard — charts of empty tables say nothing but "broken". */
   const firstRun = dashboard.sections.find((section) => section.kind === 'firstRun');
   const run = useFirstRun(firstRun);
+  const shownDashboard = useMemo(
+    () => (firstRun ? { ...dashboard, sections: dashboard.sections.filter((section) => section !== firstRun) } : dashboard),
+    [dashboard, firstRun],
+  );
+  const onAllTime = useMemo(
+    () => () => {
+      setWindow(null);
+      onWindow?.(null);
+    },
+    [onWindow],
+  );
   if (firstRun && run.stage === 'unknown') return <div className="page-body dash-body" aria-busy="true" />;
   if (firstRun && run.stage === 'fresh') {
     return (
@@ -2086,11 +2097,7 @@ export function Dashboard({
     );
   }
   const lead = firstRun && run.stage === 'started' ? <FirstRun section={firstRun} done={run.done} fresh={false} /> : null;
-  dashboard = firstRun ? { ...dashboard, sections: dashboard.sections.filter((section) => section !== firstRun) } : dashboard;
-  const onAllTime = () => {
-    setWindow(null);
-    onWindow?.(null);
-  };
+  dashboard = shownDashboard;
   /* A period picker over figures that each say their own time moves nothing: it is drawn only where some section is
      over a date the reader's window stands on (`over`, with no periods of its own). */
   const windowMoves = Boolean(dashboard.windows?.length) && allSections(dashboard).some((one) => Boolean(one.over) && !one.windows?.length);

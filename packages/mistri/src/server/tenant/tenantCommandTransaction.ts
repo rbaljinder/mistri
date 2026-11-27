@@ -11,6 +11,7 @@ import {
   type WriteTransaction,
 } from '@mistriwork/engine/adapters/adapter.js';
 import { remapCteTables } from '@mistriwork/engine/shared/cte.js';
+import { projectLockedBefores, trackTargetImpact } from '@mistriwork/engine/adapters/writeAhead.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import type { CommandAudit, CommandJournal, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
 import { AppAccessDenied, authorizeTransaction, markStableGrant, type ResourceAccess } from '../app/appAccess.js';
@@ -401,9 +402,13 @@ export async function runTenantCommandTransaction<T>(
       : {}),
     insert: (input) =>
       invoke(input, async (value) => {
-        verifiedTarget = undefined;
-        const table = authorization.table(value.table, true),
-          result = await tx.insert({ ...value, table });
+        const table = authorization.table(value.table, true);
+        const targetPhysical = ownership.resources[authorization.table(authorization.command.target)];
+        const { value: result, preserved } =
+          verifiedTarget !== undefined && targetPhysical
+            ? await trackTargetImpact(targetPhysical, () => tx.insert({ ...value, table }))
+            : { value: await tx.insert({ ...value, table }), preserved: false };
+        if (!preserved) verifiedTarget = undefined;
         return {
           key: project(table, result.key),
           applied: project(table, result.applied),
@@ -413,13 +418,17 @@ export async function runTenantCommandTransaction<T>(
       }),
     update: (input) =>
       invoke(input, async (value) => {
-        verifiedTarget = undefined;
         const table = authorization.table(value.table, true);
         // Public triage only creates; the refusal says so to the operator's log.
         if (!place.updates)
           throw refused(`a public submission updates no ${value.table} row here: it lands with the platform, which only inserts`);
         keyFor(table, value.key);
-        const result = await tx.update({ ...value, table });
+        const targetPhysical = ownership.resources[authorization.table(authorization.command.target)];
+        const { value: result, preserved } =
+          verifiedTarget !== undefined && targetPhysical
+            ? await trackTargetImpact(targetPhysical, () => tx.update({ ...value, table }))
+            : { value: await tx.update({ ...value, table }), preserved: false };
+        if (!preserved) verifiedTarget = undefined;
         return { affected: result.affected, applied: project(table, result.applied), sql: { text: '', params: [] } };
       }),
     /* A batch is its rows, each judged here as `insert` and `update` judge one (the table, a public submission's
@@ -429,9 +438,13 @@ export async function runTenantCommandTransaction<T>(
       ? {
           insertMany: (inputs: readonly InsertRequest[]) =>
             invoke(inputs, async (values) => {
-              verifiedTarget = undefined;
               const requests = values.map((value) => ({ ...value, table: authorization.table(value.table, true) }));
-              const results = await tx.insertMany!(requests);
+              const targetPhysical = ownership.resources[authorization.table(authorization.command.target)];
+              const { value: results, preserved } =
+                verifiedTarget !== undefined && targetPhysical
+                  ? await trackTargetImpact(targetPhysical, () => tx.insertMany!(requests))
+                  : { value: await tx.insertMany!(requests), preserved: false };
+              if (!preserved) verifiedTarget = undefined;
               return results.map((result, index) => {
                 const table = requests[index]!.table;
                 return {
@@ -444,7 +457,6 @@ export async function runTenantCommandTransaction<T>(
             }),
           updateMany: (inputs: readonly UpdateRequest[]) =>
             invoke(inputs, async (values) => {
-              verifiedTarget = undefined;
               const requests = values.map((value) => {
                 const table = authorization.table(value.table, true);
                 if (!place.updates)
@@ -452,7 +464,13 @@ export async function runTenantCommandTransaction<T>(
                 keyFor(table, value.key);
                 return { ...value, table };
               });
-              const results = await tx.updateMany!(requests);
+              const targetPhysical = ownership.resources[authorization.table(authorization.command.target)];
+              const { value: results, preserved } =
+                verifiedTarget !== undefined && targetPhysical
+                  ? await trackTargetImpact(targetPhysical, () => tx.updateMany!(requests))
+                  : { value: await tx.updateMany!(requests), preserved: false };
+              if (!preserved) verifiedTarget = undefined;
+              projectLockedBefores((row, index) => project(requests[index]!.table, row));
               return results.map((result, index) => ({
                 affected: result.affected,
                 applied: project(requests[index]!.table, result.applied),

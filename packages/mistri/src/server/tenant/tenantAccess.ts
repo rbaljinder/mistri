@@ -32,28 +32,8 @@ export function tenantAppAccess(app: AppDef, schema: DatabaseSchema, roles: read
   let kept = byRoles.get(key);
   if (!kept) {
     accessCounters.resolved++;
-    kept = resolveAppAccess(app, schema, [...roles]);
+    kept = Object.freeze(resolveAppAccess(app, schema, [...roles]));
     byRoles.set(key, kept);
   }
-  return copyAccess(kept);
-}
-
-function copyAccess(access: Access): Access {
-  // One set may stand for two answers (readable is writable where a ceiling says so): it stays one.
-  const sets = new Map<ReadonlySet<string>, Set<string>>();
-  const set = (value: ReadonlySet<string>) => {
-    let made = sets.get(value);
-    if (!made) sets.set(value, (made = new Set(value)));
-    return made;
-  };
-  const { readable, writable, creatable, appendOnly, fields, internal } = access;
-  return {
-    ...access,
-    readable: set(readable),
-    writable: set(writable),
-    ...(creatable ? { creatable: set(creatable) } : {}),
-    ...(appendOnly ? { appendOnly: set(appendOnly) } : {}),
-    ...(fields ? { fields: new Map([...fields].map(([id, scope]) => [id, { read: set(scope.read), write: set(scope.write) }])) } : {}),
-    ...(internal ? { internal: new Map([...internal].map(([id, columns]) => [id, set(columns)])) } : {}),
-  };
+  return kept;
 }

@@ -1,6 +1,7 @@
 /** Shared catalog evidence for PostgreSQL command stores, independent of their writers. */
 import type { PgQuery } from '@mistriwork/engine/adapters/postgresPool.js';
 import { EPOCHLESS_TTL_MS } from '@mistriwork/engine/adapters/postgresSchemaEpoch.js';
+import { sharedCatalogValue } from '@mistriwork/engine/adapters/postgresTransactionHandle.js';
 import { RUNTIME_SCHEMA, runtimeName } from '@mistriwork/engine/shared/runtimeTables.js';
 
 let layoutWindow = EPOCHLESS_TTL_MS;
@@ -73,32 +74,41 @@ export interface PostgresRelationDescription {
  */
 export async function describePostgresRelations(client: PgQuery, prefix: string): Promise<PostgresRelationDescription[]> {
   const name = runtimeName('postgres', prefix);
-  const result = await client.query(
-    `SELECT n.nspname AS schema, c.relname AS name, c.relkind::text AS kind, c.relrowsecurity AS rls,
-            COALESCE((SELECT json_agg(json_build_object(
-                'name', a.attname, 'type', format_type(a.atttypid, a.atttypmod), 'notnull', a.attnotnull,
-                'collation', (SELECT l.collname FROM pg_collation l WHERE l.oid = a.attcollation),
-                'default', pg_get_expr(d.adbin, d.adrelid)) ORDER BY a.attnum)
-               FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
-              WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped), '[]'::json) AS columns,
-            COALESCE((SELECT json_agg(x.def) FROM (SELECT pg_get_constraintdef(co.oid) AS def
-               FROM pg_constraint co WHERE co.conrelid = c.oid AND co.contype <> 'n') x), '[]'::json) AS constraints,
-            COALESCE((SELECT json_agg(x.def) FROM (SELECT pg_get_indexdef(i.indexrelid) AS def
-               FROM pg_index i WHERE i.indrelid = c.oid) x), '[]'::json) AS indexes,
-            (SELECT count(*) FROM pg_trigger t WHERE t.tgrelid = c.oid AND NOT t.tgisinternal)::int AS triggers,
-            (SELECT count(*) FROM pg_rewrite r WHERE r.ev_class = c.oid)::int AS rules,
-            (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid)::int AS policies
-       FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-      WHERE n.nspname = $3 AND lower(substr(c.relname, 1, $2)) = $1 AND c.relkind <> 'i'`,
-    [name.toLowerCase(), name.length, RUNTIME_SCHEMA],
-  );
-  return foldRelations(result.rows as unknown as PostgresRelationDescription[])
-    .map((row) => ({
-      ...row,
-      constraints: row.constraints.map(unqualified).sort(byCodeUnit),
-      indexes: [...row.indexes].sort(byCodeUnit),
-    }))
-    .sort((a, b) => byCodeUnit(`${a.schema}.${a.name}`, `${b.schema}.${b.name}`));
+  const key = `relations\u0000${RUNTIME_SCHEMA}\u0000${name.toLowerCase()}`;
+  const described = await sharedCatalogValue(client, key, async () => {
+    const result = await client.query(
+      `SELECT n.nspname AS schema, c.relname AS name, c.relkind::text AS kind, c.relrowsecurity AS rls,
+              COALESCE((SELECT json_agg(json_build_object(
+                  'name', a.attname, 'type', format_type(a.atttypid, a.atttypmod), 'notnull', a.attnotnull,
+                  'collation', (SELECT l.collname FROM pg_collation l WHERE l.oid = a.attcollation),
+                  'default', pg_get_expr(d.adbin, d.adrelid)) ORDER BY a.attnum)
+                 FROM pg_attribute a LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum
+                WHERE a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped), '[]'::json) AS columns,
+              COALESCE((SELECT json_agg(x.def) FROM (SELECT pg_get_constraintdef(co.oid) AS def
+                 FROM pg_constraint co WHERE co.conrelid = c.oid AND co.contype <> 'n') x), '[]'::json) AS constraints,
+              COALESCE((SELECT json_agg(x.def) FROM (SELECT pg_get_indexdef(i.indexrelid) AS def
+                 FROM pg_index i WHERE i.indrelid = c.oid) x), '[]'::json) AS indexes,
+              (SELECT count(*) FROM pg_trigger t WHERE t.tgrelid = c.oid AND NOT t.tgisinternal)::int AS triggers,
+              (SELECT count(*) FROM pg_rewrite r WHERE r.ev_class = c.oid)::int AS rules,
+              (SELECT count(*) FROM pg_policy p WHERE p.polrelid = c.oid)::int AS policies
+         FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = $3 AND lower(substr(c.relname, 1, $2)) = $1 AND c.relkind <> 'i'`,
+      [name.toLowerCase(), name.length, RUNTIME_SCHEMA],
+    );
+    return foldRelations(result.rows as unknown as PostgresRelationDescription[])
+      .map((row) => ({
+        ...row,
+        constraints: row.constraints.map(unqualified).sort(byCodeUnit),
+        indexes: [...row.indexes].sort(byCodeUnit),
+      }))
+      .sort((a, b) => byCodeUnit(`${a.schema}.${a.name}`, `${b.schema}.${b.name}`));
+  });
+  return described.map((row) => ({
+    ...row,
+    columns: row.columns.map((column) => ({ ...column })),
+    constraints: [...row.constraints],
+    indexes: [...row.indexes],
+  }));
 }
 
 /* A foreign key between two runtime tables prints its target qualified where
