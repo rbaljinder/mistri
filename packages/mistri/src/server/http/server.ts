@@ -13,6 +13,7 @@ import type { PageDef } from '@mistriwork/engine/shared/page.js';
 import type { AppHost } from '../app/apps.js';
 import type { ConfigLayout } from '@mistriwork/engine/shared/recordview.js';
 import { AppSourceUnavailable } from '../app/appRuntimeResources.js';
+import { connectionFailure } from '../storeConnection.js';
 import { assertHttpRowPolicyApp, type HttpAppPolicy } from '../policy/appPolicyHttp.js';
 import type { ViewDef } from '@mistriwork/engine/shared/view.js';
 import type { SavedQuery } from '@mistriwork/engine/shared/sqlsaved.js';
@@ -432,7 +433,7 @@ export function createApp(options: {
       send(res, failure.status, { ...failure.body, ...(cause ? { cause } : {}) });
       return true;
     },
-    status: (err) => (err instanceof AppSourceUnavailable ? 503 : undefined),
+    status: (err) => (err instanceof AppSourceUnavailable || connectionFailure(err) !== undefined ? 503 : undefined),
     /* An App never says a driver's words: its failures are said by code (appErrors.ts). */
     said: (err, req, res, status) => {
       if (!options.apps?.length || err instanceof HttpError || err instanceof AppSourceUnavailable) return false;

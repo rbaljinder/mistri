@@ -306,6 +306,7 @@ for (const { dialect, skip } of TENANT_DIALECTS)
         'bindPublicReads',
         'bindReads',
         'bindServiceReads',
+        'bindSupportReads',
         'close',
         'lastWave',
         'ownership',

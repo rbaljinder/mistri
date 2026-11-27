@@ -42,8 +42,11 @@ import { consoleSourceOwners } from './appContext.js';
 import { resolveConnectionSource } from '@mistriwork/engine/server/http/connectionSource.js';
 import { pagesForRoles, sessionRoles } from '../../shared/appViewRoles.js';
 import { appZone } from '../../shared/appZone.js';
+import { zoneColumn } from '../../shared/appUi.js';
+import { localeColumn } from '@mistriwork/engine/shared/appLocale.js';
 import { withoutReadAudit, type ReadAuditSink } from '../readAudit.js';
 import { readAuditStoreOf } from '../readAuditStore.js';
+import { markStableCatalog } from '../live/liveReads.js';
 
 /* A plain App's read audit sink: one row on the database that holds the read rows (stores/appStores.ts). */
 function plainReadAudit(
@@ -124,10 +127,15 @@ interface Served {
    record labels. Kept on the pruned catalog by identity; where the grant is
    not kept (a row scope) the catalog is new each time and this is as before. */
 const cutByCatalog = new WeakMap<DatabaseSchema, WeakMap<AppDef, { inputs: readonly unknown[]; schema: DatabaseSchema }>>();
-function cutSchema(app: AppDef, pruned: DatabaseSchema, transitions: Served['transitions']): DatabaseSchema {
+function cutSchema(
+  app: AppDef,
+  pruned: DatabaseSchema,
+  transitions: Served['transitions'],
+  appInputs?: readonly unknown[],
+): DatabaseSchema {
   let byApp = cutByCatalog.get(pruned);
   if (!byApp) cutByCatalog.set(pruned, (byApp = new WeakMap()));
-  const inputs = [...declarations(app), transitions];
+  const inputs = [...(appInputs ?? declarations(app)), transitions];
   const kept = byApp.get(app);
   if (kept && kept.inputs.length === inputs.length && kept.inputs.every((input, at) => input === inputs[at])) return kept.schema;
   const deletes = appDeletable(app, pruned);
@@ -144,20 +152,26 @@ function cutSchema(app: AppDef, pruned: DatabaseSchema, transitions: Served['tra
       ),
     })),
   };
-  const schema = withNarrowedFixed(app, withLabelTemplates(app, cut));
+  const schema = markStableCatalog(withNarrowedFixed(app, withLabelTemplates(app, cut)));
   byApp.set(app, { inputs, schema });
   return schema;
 }
 
 const SERVED_ROLE_SETS = 64;
 const servedByCatalog = new WeakMap<DatabaseSchema, WeakMap<AppDef, Map<string, Served>>>();
-function servedFor(app: AppDef, catalog: DatabaseSchema, visitor: boolean, verifiedRoles: string[]): Served {
+function servedFor(
+  app: AppDef,
+  catalog: DatabaseSchema,
+  visitor: boolean,
+  verifiedRoles: string[],
+  appInputs?: readonly unknown[],
+): Served {
   let byApp = servedByCatalog.get(catalog);
   if (!byApp) servedByCatalog.set(catalog, (byApp = new WeakMap()));
   let byRoles = byApp.get(app);
   if (!byRoles) byApp.set(app, (byRoles = new Map()));
   const key = visitor ? '\0public' : verifiedRoles.join(',');
-  const inputs = declarations(app);
+  const inputs = appInputs ?? declarations(app);
   const kept = byRoles.get(key);
   if (kept && kept.inputs.length === inputs.length && kept.inputs.every((input, at) => input === inputs[at])) return kept;
   const validation = compileAppDefinitionValidation(catalog, app);
@@ -308,6 +322,7 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
     } else {
       resources = await loadAppRuntimeResources(registry, host.app.app, target, lease);
       const app = host.app.app;
+      const appInputs = declarations(app);
       const personSchema = resources.schema;
       const verifiedRoles = typeof identity.role === 'string' ? identity.role.split(',').map((role) => role.trim()) : [];
       const {
@@ -317,7 +332,7 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
         stamps,
         granted,
         wholeRowWrites: wholeWrites,
-      } = servedFor(app, resources.schema, visitor, verifiedRoles);
+      } = servedFor(app, resources.schema, visitor, verifiedRoles, appInputs);
       /* The person is the verified session's and the moment the server's own,
          read when the write runs: nothing the request says becomes a stamp. */
       const who = signedInAs(identity);
@@ -376,20 +391,36 @@ export async function resolveSource(ctx: RequestContext, id: string | null | und
       resources = authorizeResources(resources, access);
       const reads = resources.adapter;
       /* The server's own reads (the reader's zone, labels, words) are not the reader's: not audited. */
-      zone = await withoutReadAudit(() => readZone(app.ui, resources!.schema, (request) => reads.query(request)));
-      await withoutReadAudit(() => learnValueLabels(host.app, resources!.schema));
-      await withoutReadAudit(() => sayFor(host, resources!.schema, (request) => reads.query(request)));
-      // A page's fields may name a rollup this reader's catalog serves.
-      const served = withRollups(host.app.app, resources.schema, clockNow(), signedInAs(identity) ?? null, zone);
-      ctx.configPages = ctx.configPages.flatMap((page) =>
-        servedPage(page, personSchema, visitor ? 'public' : verifiedRoles.join(','), () => {
-          // A section this reader cannot read is left out, never the page (readablePage).
-          const kept = readablePage(served, page);
-          return kept ? validatePage(served, kept) : undefined;
-        }),
-      );
+      if (zoneColumn(app.ui)) zone = await withoutReadAudit(() => readZone(app.ui, resources!.schema, (request) => reads.query(request)));
+      if (app.valueLabels) await withoutReadAudit(() => learnValueLabels(host.app, resources!.schema));
+      if (localeColumn(app.ui) || app.ui?.messages) {
+        await withoutReadAudit(() => sayFor(host, resources!.schema, (request) => reads.query(request)));
+      } else {
+        locale = requestLocale(app, { person: undefined, visitor, req: ctx.req, res });
+        if (ctx.configPages.length) {
+          const said = localizedApp(host.app, locale, undefined);
+          if (said !== host.app) {
+            const own = new Set(host.app.pages);
+            const byId = new Map(said.pages.map((page) => [page.id, page]));
+            ctx.configPages = ctx.configPages.map((page) => (own.has(page) ? (byId.get(page.id) ?? page) : page));
+          }
+        }
+      }
+      // A page's fields may name a rollup this reader's catalog serves; compute lazily on servedPage cache miss.
+      if (ctx.configPages.length) {
+        let served: DatabaseSchema | undefined;
+        const roleKey = visitor ? 'public' : verifiedRoles.join(',');
+        ctx.configPages = ctx.configPages.flatMap((page) =>
+          servedPage(page, personSchema, roleKey, () => {
+            served ??= withRollups(host.app.app, resources!.schema, clockNow(), who ?? null, zone);
+            // A section this reader cannot read is left out, never the page (readablePage).
+            const kept = readablePage(served, page);
+            return kept ? validatePage(served, kept) : undefined;
+          }),
+        );
+      }
       adapter = resources.adapter;
-      schema = withRollups(host.app.app, cutSchema(app, resources.schema, transitions), clockNow(), signedInAs(identity) ?? null, zone);
+      schema = withRollups(host.app.app, cutSchema(app, resources.schema, transitions, appInputs), clockNow(), who ?? null, zone);
     }
   }
   connectionId = target;

@@ -110,7 +110,7 @@ import { ensureAppInbox } from '../inbox.js';
 import { ensureAppLive } from '../live/liveBinding.js';
 import { liveRoute } from '../live/liveRoute.js';
 import { readFreshness } from '@mistriwork/engine/server/http/readRouting.js';
-import { readsAs } from '@mistriwork/engine/adapters/replicas.js';
+import { hasReplicas, readsAs } from '@mistriwork/engine/adapters/replicas.js';
 import { noteAuthorRequest, reportRefusal } from '@mistriwork/engine/server/http/refusalReport.js';
 import { administersAccounts } from '../../shared/accountAdministration.js';
 import { isFrozenRefusal, recordRefusalCause, refusalCause, refusalSaid } from '@mistriwork/engine/shared/refusal.js';
@@ -150,10 +150,13 @@ export interface Serving {
 /** A request past the door: who is asking is settled, the row policy is not yet entered. */
 interface Admitted extends GatedContext {
   /** Whether this browser (or token) wrote a moment ago, so its reads go to the primary (replicas.ts). */
-  readonly freshness: ReturnType<typeof readFreshness>;
+  readonly freshness?: ReturnType<typeof readFreshness>;
   /** Who this request's writes are, for the record history (writeAttribution.ts). */
   readonly attribution: Parameters<typeof attributeWrites>[0];
 }
+
+const withFreshness = <T>(freshness: ReturnType<typeof readFreshness> | undefined, work: () => T): T =>
+  freshness ? readsAs(freshness, work) : work();
 
 /**
  * Every request: the door, then the routes that read no App rows, then the
@@ -171,7 +174,10 @@ export async function handle(req: IncomingMessage, res: ServerResponse, url: URL
       await route<RequestContext>({ ...admitted, policyContext }, ROUTES);
     });
   };
-  return currentReadRoute() === undefined ? withReadRoute(readRouteOf(url.pathname, req.headers), work) : work();
+  const needsReadAudit =
+    Boolean(serving.policy) ||
+    Boolean(serving.apps?.some((host) => host.app.app.resources && Object.values(host.app.app.resources).some((r) => r.audit?.reads)));
+  return needsReadAudit && currentReadRoute() === undefined ? withReadRoute(readRouteOf(url.pathname, req.headers), work) : work();
 }
 
 /**
@@ -192,7 +198,7 @@ async function door(req: IncomingMessage, res: ServerResponse, url: URL, serving
   const path = url.pathname;
   /* Whether this browser (or token) wrote a moment ago: if so its reads go
      to the primary, so a save shows in the list it returns to (replicas.ts). */
-  const freshness = readFreshness(req, res, mount.base);
+  const freshness = hasReplicas() ? readFreshness(req, res, mount.base) : undefined;
   const commandRequest = isBusinessCommandPath(path);
   const commandRefusal = (code: CommandRefusalCode) => {
     const failure = businessCommandHttpError(
@@ -348,11 +354,15 @@ const OPEN_ROUTES: readonly Route<Admitted>[] = [
     )),
   // Public forms have their own deployment capability and always a public
   // principal, even for signed-in callers. They must not borrow account rows.
-  (ctx) => readsAs(ctx.freshness, () => attributeWrites({ via: 'form' }, () => publicFormRoutes(ctx))),
+  (ctx) =>
+    (ctx.path === '/api/forms' || ctx.path.startsWith('/api/forms/')) &&
+    withFreshness(ctx.freshness, () => attributeWrites({ via: 'form' }, () => publicFormRoutes(ctx))),
   /* A public page's door (pageCommandRoutes.ts): the public principal again, whoever asks. */
-  (ctx) => readsAs(ctx.freshness, () => attributeWrites({ via: 'form' }, () => pageCommandRoutes(ctx))),
+  (ctx) =>
+    ctx.path.startsWith('/api/pages/') &&
+    withFreshness(ctx.freshness, () => attributeWrites({ via: 'form' }, () => pageCommandRoutes(ctx))),
   /* A capability link (links/linkRoutes.ts): the link's own principal, whoever asks. */
-  (ctx) => readsAs(ctx.freshness, () => attributeWrites({ via: 'form' }, () => linkRoutes(ctx))),
+  (ctx) => ctx.path.includes('/l/') && withFreshness(ctx.freshness, () => attributeWrites({ via: 'form' }, () => linkRoutes(ctx))),
 ];
 
 /** The routes under the row policy, when the deployment has one. The last answers whatever is left. */
@@ -436,7 +446,8 @@ const ROUTES: readonly Route<RequestContext>[] = [
  */
 async function underPolicy(ctx: Admitted, routes: (policyContext?: AppPolicyContext) => Promise<void>): Promise<void> {
   const { req, res, url, path, identity, signedIn, policy, policyUnavailable, appHosts, commandRequest, commandRefusal, freshness } = ctx;
-  const run = (policyContext?: AppPolicyContext) => readsAs(freshness, () => attributeWrites(ctx.attribution, () => routes(policyContext)));
+  const run = (policyContext?: AppPolicyContext) =>
+    withFreshness(freshness, () => attributeWrites(ctx.attribution, () => routes(policyContext)));
   if (!(path.startsWith('/api/') && (policyUnavailable || policy || appHosts?.some((host) => isRowPolicyApp(host.app.app))))) return run();
   res.setHeader('cache-control', 'no-store');
   if (policyUnavailable || !policy || appHosts?.length !== 1 || !signedIn?.auth || !policy.matches(signedIn.app.app)) {

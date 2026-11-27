@@ -74,6 +74,7 @@ export interface ColumnGrant {
 /** Preserve changes made before invocation, never changes during its awaits.
  * These copied sets stay private; freezing a Set alone would not freeze grants. */
 export function captureGrant<G extends ColumnGrant>(grant: G): G {
+  if (stableGrants.has(grant.readable)) return grant;
   return {
     ...grant,
     readable: new Set(grant.readable),
@@ -332,9 +333,11 @@ function pruneCatalog(schema: DatabaseSchema, access: ColumnGrant): DatabaseSche
   };
 }
 
+const ARRAY_INDEX = /^(0|[1-9][0-9]*)$/;
+
 /** Capture data before checking it: queued adapters must execute what we authorized.
  * Getters, inherited properties and coercible objects are not structured requests. */
-export function requestData<T>(value: T, ancestors = new Set<object>()): T {
+export function requestData<T>(value: T, ancestors?: Set<object>): T {
   if (
     value === null ||
     value === undefined ||
@@ -346,25 +349,46 @@ export function requestData<T>(value: T, ancestors = new Set<object>()): T {
   // Bytes are data too (a file upload's content), copied so no caller keeps a handle on what is written.
   if (value instanceof Uint8Array && (Object.getPrototypeOf(value) === Uint8Array.prototype || Buffer.isBuffer(value)))
     return Buffer.from(value) as T;
-  if (typeof value !== 'object' || ancestors.has(value)) throw new AppAccessDenied();
+  if (typeof value !== 'object') throw new AppAccessDenied();
+  const seen = ancestors ?? new Set<object>();
+  if (seen.has(value)) throw new AppAccessDenied();
   const array = Array.isArray(value);
   const proto = Object.getPrototypeOf(value);
   if (array ? proto !== Array.prototype : proto !== Object.prototype && proto !== null) throw new AppAccessDenied();
-  ancestors.add(value);
-  const entries: Array<[string, unknown]> = [];
-  for (const key of Reflect.ownKeys(value)) {
-    if (array && key === 'length') continue;
-    const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
-    if (typeof key !== 'string' || !descriptor.enumerable || !('value' in descriptor) || (array && !/^(0|[1-9][0-9]*)$/.test(key)))
-      throw new AppAccessDenied();
-    entries.push([key, requestData(descriptor.value, ancestors)]);
+  seen.add(value);
+  try {
+    const keys = Reflect.ownKeys(value);
+    if (array) {
+      const len = (value as unknown[]).length;
+      if (keys.length !== len + 1) throw new AppAccessDenied();
+      const out: unknown[] = [];
+      let count = 0;
+      for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
+        if (key === 'length') continue;
+        if (typeof key !== 'string' || !ARRAY_INDEX.test(key)) throw new AppAccessDenied();
+        const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+        if (!descriptor.enumerable || !('value' in descriptor)) throw new AppAccessDenied();
+        out[Number(key)] = requestData(descriptor.value, seen);
+        count++;
+      }
+      if (count !== len) throw new AppAccessDenied();
+      return out as T;
+    }
+    const out: Record<string, unknown> = {};
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i];
+      if (typeof key !== 'string') throw new AppAccessDenied();
+      const descriptor = Object.getOwnPropertyDescriptor(value, key)!;
+      if (!descriptor.enumerable || !('value' in descriptor)) throw new AppAccessDenied();
+      const copied = requestData(descriptor.value, seen);
+      if (key === '__proto__') Object.defineProperty(out, key, { value: copied, enumerable: true, writable: true, configurable: true });
+      else out[key] = copied;
+    }
+    return out as T;
+  } finally {
+    seen.delete(value);
   }
-  ancestors.delete(value);
-  if (array) {
-    if (entries.length !== (value as unknown[]).length) throw new AppAccessDenied();
-    return entries.map(([, item]) => item) as T;
-  }
-  return Object.fromEntries(entries) as T;
 }
 
 /* A pruned catalog's full-catalog comparison (resourceChecks), kept per pruned catalog nothing can change. */

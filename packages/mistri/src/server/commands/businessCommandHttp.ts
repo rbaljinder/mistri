@@ -188,6 +188,9 @@ export function holdCommandBody(req: IncomingMessage): Promise<'held' | 'too_lar
   });
 }
 
+const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true });
+const EMPTY_BODY = Buffer.alloc(0);
+
 export async function commandBody(req: IncomingMessage): Promise<unknown> {
   const held = heldBodies.get(req);
   if (held) heldBodies.delete(req);
@@ -200,11 +203,12 @@ export async function commandBody(req: IncomingMessage): Promise<unknown> {
       if (bytes > MAX_COMMAND_BYTES) throw new CommandBodyTooLarge(); // The body as a whole, so no member is named.
       chunks.push(chunk);
     }
+  const raw = chunks.length === 1 ? chunks[0] : chunks.length === 0 ? EMPTY_BODY : Buffer.concat(chunks);
   // Preserve the original byte meaning: replacement decoding could turn a
   // malformed string into valid, fingerprinted command input. Keep BOMs in
   // the decoded text so JSON.parse retains its existing BOM refusal.
   try {
-    return JSON.parse(new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(Buffer.concat(chunks)));
+    return JSON.parse(UTF8_DECODER.decode(raw));
   } catch {
     throw new CommandInputError();
   }
@@ -562,21 +566,24 @@ async function prepareBusinessCommand(options: {
     };
   }
   const [key] = request.keys;
+  const readOne = (records: Parameters<Parameters<typeof authorized.transaction>[0]>[0]) =>
+    readPreparedRecord(records, {
+      command: authorized.command,
+      commandId: request.command,
+      actor: authorized.actor,
+      key,
+      catalog: authorized.catalog!,
+      ...(authorized.people ? { people: authorized.people } : {}),
+      ...(authorized.insertOnly ? { insertOnly: authorized.insertOnly } : {}),
+      ...execution,
+    });
+  // A revision-only prepare is a single primary SELECT: running on the reader pool avoids
+  // BEGIN/COMMIT overhead and stops prepare traffic from contending with execute on the write pool.
+  if (authorized.advise && authorized.command.targets !== 'none' && !preparesInitial(authorized.command)) {
+    return await authorized.advise(readOne);
+  }
   // The revision, and starting values with it, in one transaction through the command's footprint.
-  return await withPreparedAhead(authorized.command, authorized.catalog, key, () =>
-    authorized.transaction((records) =>
-      readPreparedRecord(records, {
-        command: authorized.command,
-        commandId: request.command,
-        actor: authorized.actor,
-        key,
-        catalog: authorized.catalog!,
-        ...(authorized.people ? { people: authorized.people } : {}),
-        ...(authorized.insertOnly ? { insertOnly: authorized.insertOnly } : {}),
-        ...execution,
-      }),
-    ),
-  );
+  return await withPreparedAhead(authorized.command, authorized.catalog, key, () => authorized.transaction(readOne));
 }
 
 /**

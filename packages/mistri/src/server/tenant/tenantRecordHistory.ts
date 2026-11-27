@@ -1,3 +1,4 @@
+import { isProxy } from 'node:util/types';
 import {
   TransactionOutcomeUnknown,
   type DeleteRequest,
@@ -6,6 +7,7 @@ import {
   type UpdateRequest,
   type UpdateResult,
 } from '@mistriwork/engine/adapters/adapter.js';
+import { withWriteAhead, type WriteAhead } from '@mistriwork/engine/adapters/writeAhead.js';
 import { captureTenantData, denyTenant, tenantIdentifier, tenantOptions, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import { createTenantHistoryPartitions, TenantHistoryBusy, type TenantHistoryLease } from './tenantHistoryPartitions.js';
 import { journalFieldsMatch, latestRevertible, summarise, type JournalEntry, type WriteStep } from '@mistriwork/engine/server/journal.js';
@@ -268,6 +270,25 @@ export function bindTenantRecordHistory<Request>(input: TenantRequestRuntime<Req
         lease?.release();
       }
     });
+  const writeAheadFor = (value: unknown): WriteAhead | undefined => {
+    if (!value || typeof value !== 'object' || isProxy(value)) return undefined;
+    const tableDesc = Object.getOwnPropertyDescriptor(value, 'table');
+    const keyDesc = Object.getOwnPropertyDescriptor(value, 'key');
+    if (!tableDesc || !('value' in tableDesc) || typeof tableDesc.value !== 'string' || !tableDesc.value) return undefined;
+    const rawKey = keyDesc && 'value' in keyDesc ? keyDesc.value : undefined;
+    if (!rawKey || typeof rawKey !== 'object' || Array.isArray(rawKey) || isProxy(rawKey)) return undefined;
+    const names = Object.getOwnPropertyNames(rawKey);
+    if (!names.length) return undefined;
+    const key: Record<string, string | number> = {};
+    for (const name of names) {
+      const desc = Object.getOwnPropertyDescriptor(rawKey, name);
+      if (!desc || !('value' in desc)) return undefined;
+      const v = desc.value;
+      if (typeof v !== 'string' && !(typeof v === 'number' && Number.isFinite(v))) return undefined;
+      key[name] = v;
+    }
+    return { targets: [{ table: tableDesc.value, key }], writes: true, locks: true };
+  };
   return Object.freeze({
     retire(): Promise<void> {
       if (retirement) return retirement;
@@ -287,45 +308,51 @@ export function bindTenantRecordHistory<Request>(input: TenantRequestRuntime<Req
       value: UpdateRequest,
       guard?: TenantInvocationGuard,
     ): Promise<{ result: UpdateResult; undoId?: string }> {
-      return mutate(
-        request,
-        selectors,
-        value,
-        'update',
-        async (context, captured) => {
-          const input = requestUpdate(captured);
-          const key = keyFor(context, input.table, input.key),
-            touched = Object.keys(input.values);
-          const columns = [...new Set([...Object.keys(key), ...touched])];
-          const beforeRow = await context.data.query({ table: input.table, columns, filter: keyFilter(key), limit: 2, offset: 0 });
-          if (beforeRow.rows.length !== 1) return denyTenant();
-          const original = beforeRow.rows[0];
-          const actualKey = keyFor(context, input.table, Object.fromEntries(Object.keys(key).map((column) => [column, original[column]])));
-          const before = Object.fromEntries(touched.map((column) => [column, original[column]]));
-          const losslessBefore = await journalFieldsMatch(context.data, input.table, actualKey, before);
-          // Keep caller ownership evidence intact until the managed writer
-          // validates it. SQL-equivalent case/padding aliases must not gain
-          // permission merely because preflight found a canonical row.
-          const result = await context.data.update(input);
-          const afterRow = await context.data.query({
-            table: input.table,
-            columns: touched,
-            filter: keyFilter(actualKey),
-            limit: 2,
-            offset: 0,
-          });
-          const after = afterRow.rows.length === 1 ? afterRow.rows[0] : undefined;
-          if (
-            !losslessBefore ||
-            result.affected !== 1 ||
-            !after ||
-            !(await journalFieldsMatch(context.data, input.table, actualKey, after))
-          )
-            return { result, entry: unavailable() };
-          const steps: WriteStep[] = [{ table: input.table, key: actualKey, before, after, exactFields: true }];
-          return { result, entry: { kind: 'update', summary: summarise('update', steps), revertible: true, steps } };
-        },
-        guard,
+      return withWriteAhead(writeAheadFor(value), () =>
+        mutate(
+          request,
+          selectors,
+          value,
+          'update',
+          async (context, captured) => {
+            const input = requestUpdate(captured);
+            const key = keyFor(context, input.table, input.key),
+              touched = Object.keys(input.values);
+            const columns = [...new Set([...Object.keys(key), ...touched])];
+            const beforeRow = await context.data.query({ table: input.table, columns, filter: keyFilter(key), limit: 2, offset: 0 });
+            if (beforeRow.rows.length !== 1) return denyTenant();
+            const original = beforeRow.rows[0];
+            const actualKey = keyFor(
+              context,
+              input.table,
+              Object.fromEntries(Object.keys(key).map((column) => [column, original[column]])),
+            );
+            const before = Object.fromEntries(touched.map((column) => [column, original[column]]));
+            const losslessBefore = await journalFieldsMatch(context.data, input.table, actualKey, before);
+            // Keep caller ownership evidence intact until the managed writer
+            // validates it. SQL-equivalent case/padding aliases must not gain
+            // permission merely because preflight found a canonical row.
+            const result = await context.data.update(input);
+            const afterRow = await context.data.query({
+              table: input.table,
+              columns: touched,
+              filter: keyFilter(actualKey),
+              limit: 2,
+              offset: 0,
+            });
+            const after = afterRow.rows.length === 1 ? afterRow.rows[0] : undefined;
+            if (
+              !losslessBefore ||
+              result.affected !== 1 ||
+              !after ||
+              !(await journalFieldsMatch(context.data, input.table, actualKey, after))
+            )
+              return { result, entry: unavailable() };
+            const steps: WriteStep[] = [{ table: input.table, key: actualKey, before, after, exactFields: true }];
+            return { result, entry: { kind: 'update', summary: summarise('update', steps), revertible: true, steps } };
+          },
+          guard,
+        ),
       );
     },
     insert(request: Request, selectors: readonly string[], value: WithLines<InsertRequest>, guard?: TenantInvocationGuard) {
@@ -352,21 +379,23 @@ export function bindTenantRecordHistory<Request>(input: TenantRequestRuntime<Req
       );
     },
     remove(request: Request, selectors: readonly string[], value: DeleteRequest, guard?: TenantInvocationGuard) {
-      return mutate(
-        request,
-        selectors,
-        value,
-        'delete',
-        async (context, input) => {
-          tenantRecord(input, ['table', 'key']);
-          tenantRecord(input.key);
-          const { image, complete } = await tenantInverseImages(context).removeCurrent(input);
-          // A row that held file bytes is gone with them: nothing could put it back.
-          if (!complete) return { result: { affected: 1 }, entry: unavailable('delete') };
-          const steps: WriteStep[] = [{ table: image.table, key: image.key, before: image.row, wholeRow: true }];
-          return { result: { affected: 1 }, entry: { kind: 'delete', summary: summarise('delete', steps), revertible: true, steps } };
-        },
-        guard,
+      return withWriteAhead(writeAheadFor(value), () =>
+        mutate(
+          request,
+          selectors,
+          value,
+          'delete',
+          async (context, input) => {
+            tenantRecord(input, ['table', 'key']);
+            tenantRecord(input.key);
+            const { image, complete } = await tenantInverseImages(context).removeCurrent(input);
+            // A row that held file bytes is gone with them: nothing could put it back.
+            if (!complete) return { result: { affected: 1 }, entry: unavailable('delete') };
+            const steps: WriteStep[] = [{ table: image.table, key: image.key, before: image.row, wholeRow: true }];
+            return { result: { affected: 1 }, entry: { kind: 'delete', summary: summarise('delete', steps), revertible: true, steps } };
+          },
+          guard,
+        ),
       );
     },
     /**

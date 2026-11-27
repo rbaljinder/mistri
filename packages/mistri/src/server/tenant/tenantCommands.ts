@@ -5,6 +5,8 @@ import { CommandTransactionFailure } from '../../adapters/commands/commandJourna
 import { AppAccessDenied } from '../app/appAccess.js';
 import { commandZone } from '../app/readerZone.js';
 import { scopedLocale } from '../app/readerLocale.js';
+import { localeColumn } from '@mistriwork/engine/shared/appLocale.js';
+import { zoneColumn } from '../../shared/appUi.js';
 import { readChosen } from '../app/appChoices.js';
 import { sessionActorWords } from '../app/appStamps.js';
 import {
@@ -334,35 +336,47 @@ export function bindTenantCommands<Request>(input: TenantRequestRuntime<Request>
             ...sessionActorWords({ id: scope.principal.accountId, who: scope.who(), name: context!.options.name }),
             ...(rowScope ? { scope: { name: rowScope.name, key: rowScope.key } } : {}),
           });
-          /* This tenant's zone for `today()` and `now()` (readerZone.ts), where `ui.timezone` names a column. */
+          /* This tenant's zone for `today()` and `now()` (readerZone.ts), where `ui.timezone` names a column,
+             this member's own locale (`ctx.locale`), and the App-wide choices (`ctx.chosen`): asked together
+             on one shared snapshot when any of them reads the database, instead of sequential snapshots. */
           const acting = running;
-          /* And this member's own locale (`ctx.locale`): their row first, then what their door picked (the cookie). */
-          const [zone, person] = acting
-            ? await Promise.all([
-                commandZone(app.ui, () => scope.reads(), scope.tenant),
-                scopedLocale(app, scope.principal.accountId, () => scope.reads()),
-              ])
-            : [undefined, undefined];
           const { name: _name, chosenHeader, trial, ...asked } = context!.options;
           // Only an execute is tried: every other step either reads or keeps what it does.
           if (trial && mode !== 'execute') throw new AppAccessDenied();
-          /* The App-wide choices, read again under this member's own reader in their tenant (app/appChoices.ts): the tab's
-             header, else what they stored for this tenant; `ctx.chosen` for what runs. */
           /* A token (`entry` is its door) is not a person: it has no stored pick, only what its call named, and a name it
              left out is unset rather than null (api/apiChosen.ts). */
           const token = asked.entry !== undefined;
-          const read =
-            acting && app.choose && (!token || chosenHeader)
-              ? await readChosen(
-                  app,
-                  ownership.schema,
-                  await scope.reads(),
-                  chosenHeader,
-                  token
-                    ? undefined
-                    : await storedPicks?.(scope.principal.accountId, scope.principal.tenantId).catch((): Record<string, string> => ({})),
-                )
-              : undefined;
+          const namedZone = acting ? zoneColumn(app.ui) : undefined;
+          const wantsZoneDb = namedZone !== undefined && !(scope.tenant && namedZone.resource === 'tenant');
+          const namedLocale = acting ? localeColumn(app.ui) : undefined;
+          const wantsLocaleDb =
+            namedLocale !== undefined &&
+            namedLocale.resource !== 'tenant' &&
+            !(app.auth?.me?.from === namedLocale.resource && (typeof scope.principal.accountId !== 'string' || !scope.principal.accountId));
+          const wantsChosen = Boolean(acting && app.choose && (!token || chosenHeader));
+          const dbPreReads = (wantsZoneDb ? 1 : 0) + (wantsLocaleDb ? 1 : 0) + (wantsChosen ? 1 : 0);
+          let zone: string | undefined, person: string | undefined, read: Readonly<Record<string, string | number | null>> | undefined;
+          if (dbPreReads === 0) {
+            if (acting && namedZone) zone = await commandZone(app.ui, () => scope.reads(), scope.tenant);
+          } else {
+            const runPreReads = () =>
+              Promise.all([
+                acting && namedZone ? commandZone(app.ui, () => scope.reads(), scope.tenant) : undefined,
+                wantsLocaleDb ? scopedLocale(app, scope.principal.accountId, () => scope.reads()) : undefined,
+                wantsChosen
+                  ? (async () => {
+                      const [reader, picks] = await Promise.all([
+                        scope.reads(),
+                        token
+                          ? undefined
+                          : storedPicks?.(scope.principal.accountId, scope.principal.tenantId).catch((): Record<string, string> => ({})),
+                      ]);
+                      return readChosen(app, ownership.schema, reader, chosenHeader, picks);
+                    })()
+                  : undefined,
+              ]);
+            [zone, person, read] = await (wantsChosen || dbPreReads > 1 ? scope.together(runPreReads) : runPreReads());
+          }
           const named = token && chosenHeader ? new URLSearchParams(chosenHeader) : undefined;
           const chosen = read && named ? Object.fromEntries(Object.entries(read).filter(([name]) => named.has(name))) : read;
           const said = { ...asked, ...(person ? { locale: person } : {}), ...(chosen ? { chosen } : {}) };

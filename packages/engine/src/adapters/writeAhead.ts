@@ -43,7 +43,7 @@ const hinted = new AsyncLocalStorage<WriteAhead | undefined>();
 
 /** Run `work` with `hint` told to the next write transaction it opens. */
 export function withWriteAhead<T>(hint: WriteAhead | undefined, work: () => T): T {
-  return hinted.run(hint, work);
+  return hint === undefined && hinted.getStore() === undefined ? work() : hinted.run(hint, work);
 }
 
 /** The hint for the transaction about to open here, if one was told. */
@@ -53,7 +53,7 @@ export function writeAhead(): WriteAhead | undefined {
 
 /** Run `work` with no hint: a transaction's own work, so nothing it opens takes its hint. */
 export function withoutWriteAhead<T>(work: () => T): T {
-  return hinted.run(undefined, work);
+  return hinted.getStore() === undefined ? work() : hinted.run(undefined, work);
 }
 
 /** The hint with each target's table renamed (a tenant source's logical table to its physical one); undefined when one cannot be. */

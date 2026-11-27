@@ -312,12 +312,25 @@ function commitBehind(client: PgQuery, before: Promise<unknown>[], args: unknown
 /* What a statement sent behind writes that waited for it answers: the first of
    those writes that failed, if one did (the statement then failed only because
    the transaction was aborted, or, a COMMIT, was answered as a ROLLBACK),
-   else its own answer. Every answer is heard. */
+   else its own answer. Every answer is heard.
+
+   For COMMIT, RolledBackAtCommit is thrown only when the server actually
+   answered COMMIT with ROLLBACK (or commitBehind rolled back without sending
+   COMMIT). When the connection drops in flight after COMMIT left, the driver
+   rejects both the pipelined writes and COMMIT: nothing proved the server
+   rolled back, so throwing own.reason keeps the outcome unknown. */
 function behind(before: Promise<unknown>[], answer: Promise<unknown>, commit: boolean): Promise<unknown> {
   return Promise.allSettled([...before, answer]).then((settled) => {
     const failed = settled.slice(0, -1).find((outcome) => outcome.status === 'rejected') as PromiseRejectedResult | undefined;
-    if (failed) throw commit ? new RolledBackAtCommit(failed.reason) : failed.reason;
     const own = settled[settled.length - 1];
+    if (failed) {
+      if (!commit) throw failed.reason;
+      const confirmedRollback =
+        (own.status === 'fulfilled' && (own.value as { command?: unknown } | null)?.command === 'ROLLBACK') ||
+        (own.status === 'rejected' && own.reason instanceof RolledBackAtCommit);
+      if (confirmedRollback) throw new RolledBackAtCommit(failed.reason);
+      throw own.status === 'rejected' ? own.reason : failed.reason;
+    }
     if (own.status === 'rejected') throw own.reason;
     return own.value;
   });

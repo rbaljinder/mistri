@@ -106,13 +106,18 @@ export function decodeReply(buffer: Buffer, start = 0): { value: RespValue | Res
 
 const MAX_WAITING = 1024;
 
+interface RespConnection {
+  readonly socket: Socket;
+  chunks: Buffer[];
+  buffered: number;
+  readonly waiting: Waiting[];
+  dead: boolean;
+}
+
 export class RespClient {
-  private socket?: Socket;
-  private connectingSocket?: Socket;
-  private opening?: Promise<Socket>;
-  private chunks: Buffer[] = [];
-  private buffered = 0;
-  private readonly waiting: Waiting[] = [];
+  private connection?: RespConnection;
+  private connecting?: RespConnection;
+  private opening?: Promise<RespConnection>;
   private quietUntil = 0;
   private lastFailure = '';
   private closed = false;
@@ -127,38 +132,45 @@ export class RespClient {
   async command(...args: Array<string | number>): Promise<RespValue> {
     if (this.closed) throw new CacheUnavailable('the cache connection is closed.');
     if (Date.now() < this.quietUntil) throw new CacheUnavailable(this.lastFailure);
-    if (this.waiting.length >= MAX_WAITING) throw new CacheUnavailable(`${this.where}: too many commands waiting for a reply.`);
-    const socket = await this.connected();
-    return this.write(socket, args);
+    if ((this.connection?.waiting.length ?? 0) >= MAX_WAITING) {
+      throw new CacheUnavailable(`${this.where}: too many commands waiting for a reply.`);
+    }
+    const conn = await this.connected();
+    return this.write(conn, args);
   }
 
   async close(): Promise<void> {
     this.closed = true;
-    const connecting = this.connectingSocket;
-    this.connectingSocket = undefined;
-    connecting?.destroy();
-    const socket = this.socket;
-    this.socket = undefined;
-    if (socket) {
-      try {
-        await this.write(socket, ['QUIT']);
-      } catch {
-        /* already gone */
+    const connecting = this.connecting;
+    this.connecting = undefined;
+    if (connecting) this.fail(connecting, 'the cache connection is closed.');
+    const conn = this.connection;
+    this.connection = undefined;
+    if (conn) {
+      if (!conn.dead) {
+        try {
+          await this.write(conn, ['QUIT']);
+        } catch {
+          /* already gone */
+        }
       }
-      socket.destroy();
+      this.fail(conn, 'the cache connection is closed.');
     }
   }
 
-  private write(socket: Socket, args: Array<string | number>): Promise<RespValue> {
-    if (this.waiting.length >= MAX_WAITING) {
+  private write(conn: RespConnection, args: Array<string | number>): Promise<RespValue> {
+    if (conn.dead || (conn !== this.connection && conn !== this.connecting) || conn.socket.destroyed || !conn.socket.writable) {
+      return Promise.reject(new CacheUnavailable(this.lastFailure || `${this.where} closed the connection.`));
+    }
+    if (conn.waiting.length >= MAX_WAITING) {
       return Promise.reject(new CacheUnavailable(`${this.where}: too many commands waiting for a reply.`));
     }
     return new Promise<RespValue>((resolve, reject) => {
       const timer = setTimeout(
-        () => this.fail(`${this.where} did not answer within ${(this.options.commandTimeoutMs ?? 1_000) / 1000} s.`),
+        () => this.fail(conn, `${this.where} did not answer within ${(this.options.commandTimeoutMs ?? 1_000) / 1000} s.`),
         this.options.commandTimeoutMs ?? 1_000,
       );
-      this.waiting.push({
+      conn.waiting.push({
         resolve: (value) => {
           clearTimeout(timer);
           resolve(value);
@@ -168,34 +180,38 @@ export class RespClient {
           reject(error);
         },
       });
-      socket.write(encodeCommand(args));
+      conn.socket.write(encodeCommand(args));
     });
   }
 
-  /* Every waiting command fails with the transport's reason, the socket is
-     dropped, and the client stays quiet for a moment before dialing again. */
-  private fail(message: string): void {
-    this.lastFailure = message;
-    this.quietUntil = Date.now() + (this.options.retryAfterMs ?? 2_000);
-    const socket = this.socket;
-    const connecting = this.connectingSocket;
-    this.socket = undefined;
-    this.connectingSocket = undefined;
-    this.chunks = [];
-    this.buffered = 0;
-    socket?.destroy();
-    if (connecting && connecting !== socket) connecting.destroy();
-    for (const waiting of this.waiting.splice(0)) waiting.reject(new CacheUnavailable(message));
+  /* Every waiting command on `conn` fails with the transport's reason, the
+     socket is dropped, and the client stays quiet for a moment before dialing
+     again. Scoped to `conn` so a late event on a retired socket can never
+     disturb a newer connection or its queued replies. */
+  private fail(conn: RespConnection, message: string): void {
+    if (conn.dead) return;
+    conn.dead = true;
+    const isCurrent = this.connection === conn || this.connecting === conn;
+    if (this.connection === conn) this.connection = undefined;
+    if (this.connecting === conn) this.connecting = undefined;
+    if (isCurrent && !this.closed) {
+      this.lastFailure = message;
+      this.quietUntil = Date.now() + (this.options.retryAfterMs ?? 2_000);
+    }
+    conn.chunks = [];
+    conn.buffered = 0;
+    conn.socket.destroy();
+    for (const waiting of conn.waiting.splice(0)) waiting.reject(new CacheUnavailable(message));
   }
 
-  private connected(): Promise<Socket> {
-    if (this.socket) return Promise.resolve(this.socket);
+  private connected(): Promise<RespConnection> {
+    if (this.connection && !this.connection.dead) return Promise.resolve(this.connection);
     return (this.opening ??= this.open().finally(() => {
       this.opening = undefined;
     }));
   }
 
-  private async open(): Promise<Socket> {
+  private async open(): Promise<RespConnection> {
     const { host, port, tls, policy } = this.options;
     const literal = refusedLiteral(host, policy);
     if (literal) {
@@ -235,63 +251,67 @@ export class RespClient {
       throw new CacheUnavailable('the cache connection is closed.');
     }
     socket.setNoDelay(true);
-    socket.on('data', (chunk: Buffer) => this.read(chunk));
-    socket.on('error', (error: NodeJS.ErrnoException) => this.fail(`${this.where}: ${error.code ?? 'the connection failed'}.`));
+    const conn: RespConnection = { socket, chunks: [], buffered: 0, waiting: [], dead: false };
+    socket.on('data', (chunk: Buffer) => this.read(conn, chunk));
+    socket.on('error', (error: NodeJS.ErrnoException) => this.fail(conn, `${this.where}: ${error.code ?? 'the connection failed'}.`));
     socket.on('close', () => {
-      if (this.socket === socket || this.connectingSocket === socket) this.fail(`${this.where} closed the connection.`);
+      this.fail(conn, `${this.where} closed the connection.`);
     });
     /* Hold the socket privately until AUTH and SELECT finish so concurrent callers
        await `this.opening` and can never pipeline commands before authentication. */
-    this.connectingSocket = socket;
+    this.connecting = conn;
     try {
       if (this.options.password !== undefined) {
         await this.write(
-          socket,
+          conn,
           this.options.username ? ['AUTH', this.options.username, this.options.password] : ['AUTH', this.options.password],
         );
       }
-      if (this.options.db) await this.write(socket, ['SELECT', this.options.db]);
+      if (this.options.db) await this.write(conn, ['SELECT', this.options.db]);
     } catch (error) {
       /* The server's own words for a bad password name the password's
          owner at most; still, only the fact is kept. */
       const message =
         error instanceof RespReplyError ? `${this.where} refused the connection's credential or database.` : (error as Error).message;
-      this.fail(message);
+      this.fail(conn, message);
       throw new CacheUnavailable(message);
     }
-    this.connectingSocket = undefined;
-    if (this.closed) {
-      socket.destroy();
-      throw new CacheUnavailable('the cache connection is closed.');
+    if (this.connecting === conn) this.connecting = undefined;
+    if (this.closed || conn.dead) {
+      this.fail(conn, this.closed ? 'the cache connection is closed.' : this.lastFailure || `${this.where} closed the connection.`);
+      throw new CacheUnavailable(
+        this.closed ? 'the cache connection is closed.' : this.lastFailure || `${this.where} closed the connection.`,
+      );
     }
-    this.socket = socket;
-    return socket;
+    this.connection = conn;
+    return conn;
   }
 
-  private read(chunk: Buffer): void {
-    this.chunks.push(chunk);
-    this.buffered += chunk.length;
-    const buffer = this.chunks.length === 1 ? this.chunks[0] : Buffer.concat(this.chunks, this.buffered);
+  private read(conn: RespConnection, chunk: Buffer): void {
+    if (conn.dead) return;
+    conn.chunks.push(chunk);
+    conn.buffered += chunk.length;
+    const buffer = conn.chunks.length === 1 ? conn.chunks[0] : Buffer.concat(conn.chunks, conn.buffered);
     let offset = 0;
     for (;;) {
       let reply;
       try {
         reply = decodeReply(buffer, offset);
       } catch (error) {
-        return this.fail((error as Error).message);
+        return this.fail(conn, (error as Error).message);
       }
       if (!reply) {
         if (offset > 0) {
           const rest = buffer.subarray(offset);
-          this.chunks = rest.length ? [rest] : [];
-          this.buffered = rest.length;
-        } else if (this.chunks.length > 1) {
-          this.chunks = [buffer];
+          conn.chunks = rest.length ? [rest] : [];
+          conn.buffered = rest.length;
+        } else if (conn.chunks.length > 1) {
+          conn.chunks = [buffer];
         }
         return;
       }
       offset = reply.end;
-      const waiting = this.waiting.shift();
+      const waiting = conn.waiting.shift();
       if (!waiting) continue;
       if (reply.value instanceof RespReplyError) waiting.reject(reply.value);
       else waiting.resolve(reply.value);

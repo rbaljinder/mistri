@@ -19,6 +19,7 @@ import type { RowScope } from '../shared/rowScope.js';
 import type { DatabaseSchema, TableMeta } from '../shared/schema.js';
 import type { PostgresTransactionJournal } from './storeHost.js';
 import type { PostgresTransactionVerifier } from './postgres.js';
+import { lockTimedOut } from './writeLanes.js';
 
 /* The row scope an unscoped transaction's kept rows are filed under (keyRows.ts): none, the same object every time. */
 export const PLAIN_SCOPE: RowScope = Object.freeze({});
@@ -262,4 +263,17 @@ export function sendWriteAhead(
     }
   }
   return answers;
+}
+
+/**
+ * Whether a statement sent ahead behind a write's BEGIN (writeAhead.ts) failed, so the transaction must begin again
+ * without them. Not when one waited out its lock (55P03): begun again, the transaction asked for the same lock and
+ * waited for it a second time, so a held row was answered `row_locked` after twice the lock timeout, ten seconds
+ * where five are documented (a live load test). That wait is the transaction's own answer, and it is thrown.
+ */
+export async function aheadsFailed(aheads: readonly Promise<unknown>[]): Promise<boolean> {
+  const settled = await Promise.allSettled(aheads);
+  const waited = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected' && lockTimedOut(outcome.reason));
+  if (waited) throw waited.reason;
+  return settled.some((outcome) => outcome.status === 'rejected');
 }

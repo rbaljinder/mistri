@@ -141,6 +141,15 @@ const optionKeys = [
   'now',
   'admissions',
 ];
+const platformProvenByCommit = new WeakSet<object>();
+/** The request's last platform run answered from a committed transaction that held the platform fence from BEGIN to COMMIT. */
+export const platformAnswerProvenByCommit = (request: unknown): boolean =>
+  request !== null && typeof request === 'object' && platformProvenByCommit.has(request);
+const platformProvenByFence = new WeakSet<object>();
+/** The request's last platform run was fenced after everything its answer read. */
+export const platformAnswerProvenByFence = (request: unknown): boolean =>
+  request !== null && typeof request === 'object' && platformProvenByFence.has(request);
+
 const deny = (): never => {
   throw new AppAccessDenied();
 };
@@ -222,6 +231,10 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
     async run<T>(request: Request, callback: (scope: PlatformRequestScope) => T | Promise<T>, guard?: PlatformInvocationGuard): Promise<T> {
       if (retired || typeof callback !== 'function' || (guard !== undefined && typeof guard !== 'function'))
         throw new TenantWriteFailure('not_applied');
+      if (request !== null && typeof request === 'object') {
+        platformProvenByCommit.delete(request as object);
+        platformProvenByFence.delete(request as object);
+      }
       let finish!: () => void;
       const held = new Promise<void>((resolve) => {
         finish = resolve;
@@ -229,7 +242,8 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
       pending.add(held);
       let committed = false,
         accepting = true,
-        attempted = false;
+        attempted = false,
+        outside = false;
       const operations = new TransactionOperations();
       let principal: PlatformMembershipEvidence | undefined;
       let releaseFlags = () => {};
@@ -306,6 +320,7 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
           request,
           admitted,
           async () => {
+            outside = true;
             await session();
             await reader.assertPlatformCurrent(admitted);
             active();
@@ -438,7 +453,7 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
             return result;
           });
         };
-        let scoped: ReturnType<TenantReadSource['scopePlatformReads']> | undefined;
+        let scoped: ReturnType<TenantReadSource['bindPlatformReads']> | undefined;
         const scope = Object.freeze<PlatformRequestScope>({
           principal: admitted,
           rows,
@@ -449,7 +464,8 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
           advisoryReads,
           reads: () => {
             active();
-            return (scoped ??= reader.scopePlatformReads(admitted, rows));
+            outside = true;
+            return (scoped ??= reader.bindPlatformReads(admitted, rows));
           },
           appendReadAudit: (row) => {
             active();
@@ -488,7 +504,12 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
         if (drainFailure) throw drainFailure.error;
         if (callbackFailure) throw callbackFailure.error;
         await session();
-        await reader.assertPlatformCurrent(admitted);
+        if (committed && !outside) {
+          if (request !== null && typeof request === 'object') platformProvenByCommit.add(request as object);
+        } else {
+          await reader.assertPlatformCurrent(admitted);
+          if (request !== null && typeof request === 'object') platformProvenByFence.add(request as object);
+        }
         active();
         return result;
       } catch (error) {

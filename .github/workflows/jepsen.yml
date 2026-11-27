@@ -1,0 +1,91 @@
+name: Jepsen Data Integrity
+
+on:
+  workflow_dispatch:
+    inputs:
+      workload:
+        description: Workload to run (bank, append, workflow, outbox, replica, tenant, pgbouncer, ddl, cache, proposals, failover, support-lease, http-cluster, sqlite-crash, or all)
+        required: false
+        default: all
+      duration:
+        description: Chaos window per workload in seconds
+        required: false
+        default: '10'
+      concurrency:
+        description: Concurrent workers per workload
+        required: false
+        default: '6'
+  schedule:
+    # Nightly chaos run at 03:30 UTC
+    - cron: '30 3 * * *'
+
+permissions:
+  contents: read
+
+jobs:
+  jepsen:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Cache official elle-cli standalone JAR (v0.1.11)
+        id: cache-elle
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/elle-cli
+          key: elle-cli-0.1.11
+
+      - name: Download official elle-cli standalone JAR (v0.1.11)
+        if: steps.cache-elle.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p ~/.cache/elle-cli
+          curl -fsSL https://github.com/ligurio/elle-cli/releases/download/0.1.11/elle-cli-bin-0.1.11.zip -o /tmp/elle-cli.zip
+          unzip -o /tmp/elle-cli.zip -d /tmp/elle-cli
+          cp /tmp/elle-cli/target/elle-cli-0.1.11-standalone.jar ~/.cache/elle-cli/elle-cli-0.1.11-standalone.jar
+          rm -rf /tmp/elle-cli /tmp/elle-cli.zip
+
+      - run: npm ci
+
+      - name: Start PostgreSQL 16 primary, streaming replica, PgBouncer, and Valkey
+        run: docker compose -f test/jepsen/docker-compose.yml up -d --wait postgres-primary postgres-replica pgbouncer valkey
+
+      - name: Run Jepsen data-integrity suite
+        env:
+          WORKLOAD: ${{ inputs.workload || 'all' }}
+          DURATION: ${{ inputs.duration || '10' }}
+          CONCURRENCY: ${{ inputs.concurrency || '6' }}
+          ELLE_CLI_JAR: ${{ env.HOME }}/.cache/elle-cli/elle-cli-0.1.11-standalone.jar
+        run: |
+          mkdir -p jepsen-artifacts
+          npm run test:jepsen -- \
+            --pg postgres://mistri:mistri@127.0.0.1:15432/mistri_jepsen \
+            --replica-pg postgres://mistri:mistri@127.0.0.1:15433/mistri_jepsen \
+            --pgbouncer-pg postgres://mistri:mistri@127.0.0.1:16432/mistri_jepsen \
+            --valkey valkey://127.0.0.1:16379/0 \
+            --workload "$WORKLOAD" \
+            --duration "$DURATION" \
+            --concurrency "$CONCURRENCY" \
+            --out jepsen-artifacts
+
+      - name: Upload Jepsen report and EDN histories
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jepsen-report-${{ github.run_id }}
+          path: jepsen-artifacts
+          retention-days: 14
+
+      - name: Tear down containers
+        if: always()
+        run: docker compose -f test/jepsen/docker-compose.yml down -v

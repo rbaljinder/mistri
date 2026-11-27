@@ -5071,6 +5071,7 @@ test("every method of the tenant read and write sources is answered by a cross-t
       withPlatformReads: realm('one tab moves between the platform realm and a dealer, and each lease reads only in its own realm'),
       assertSupportCurrent: support,
       scopeSupportReads: support,
+      bindSupportReads: support,
       resolveIntake: intake('the reader resolves an address to the one active dealer whose row holds it, and anything else to the lender'),
       resolveIntakeByTenant: intake("a tenant token writes only into token.tenant: never an address's tenant, never triage"),
       bindIntakeReads: intake('a public submission lands where its address says, and every placement answers alike'),

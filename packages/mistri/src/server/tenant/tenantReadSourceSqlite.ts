@@ -516,6 +516,12 @@ export function openSqliteTenantReadSource(
             currentSupport(captured.evidence),
           );
         }),
+      bindSupportReads: (evidence: SupportMembershipEvidence, rows: RowScope) =>
+        bindLater({ evidence, rows }, (captured) =>
+          bind(composeTenantReadScope(owned, supportAsMember(captured.evidence), captured.rows, allTrue), () =>
+            currentSupport(captured.evidence),
+          ),
+        ),
       resolvePublic: (lookup: TenantPublicLookup) => invoke(lookup, resolvePublicIn),
       assertPublicCurrent: (evidence: TenantPublicEvidence) => invoke(evidence, currentPublic),
       // The source recomposes the visitor's scope itself: the tenant predicate is never the caller's.

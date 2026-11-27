@@ -29,7 +29,13 @@ import { assertStructuredReadFilter, ResourceReadError } from '@mistriwork/engin
 import { PathError } from '@mistriwork/engine/shared/viewPaths.js';
 import { tenantRuntimeClock } from './tenantRuntimeClock.js';
 import { tenantRetirement } from './tenantRetirement.js';
-import { checkTenantInvocation, isAdmittedAgain, revalidateTenantInvocation, type TenantInvocationGuard } from './tenantInvocation.js';
+import {
+  checkTenantInvocation,
+  isAdmittedAgain,
+  isHeadlessInvocation,
+  revalidateTenantInvocation,
+  type TenantInvocationGuard,
+} from './tenantInvocation.js';
 import type { TenantCapabilities } from './tenantCapabilities.js';
 import { tenantVisibleFields } from './tenantVisibleFields.js';
 import type { AdmissionCache } from './tenantAdmissionCache.js';
@@ -41,6 +47,7 @@ import type { ReadAuditRow } from '../../adapters/readAudit/readAudit.js';
 import { readZone } from '../app/readerZone.js';
 import { readerZone, zoneColumn } from '../../shared/appUi.js';
 import { readLocale } from '../app/readerLocale.js';
+import { localeColumn } from '@mistriwork/engine/shared/appLocale.js';
 
 /* The row scope a context reads under, by the context: live sync asks it of a
    context it holds (tenantHttp.ts's /api/live), to judge a changed row as it
@@ -85,6 +92,8 @@ export const tenantElevatedReaderOf = (context: object, tables: readonly string[
 /* Set by the host around a request whose reads are all its context's own and bounded — a list, its counts, the inbox
    (tenantHttp.ts) — and claimed by the first context it opens; `live` while that context runs. */
 const boundedRequest = new AsyncLocalStorage<{ claimed: boolean; live: boolean }>();
+/* The snapshots a callback's own `together` rides the release fence on (`fencedTogether`), keyed by per-request token. */
+const riding = new AsyncLocalStorage<object>();
 /**
  * `work`, a request whose every read is asked inside its context's callback, bounded, with no wait on anything but
  * the database between them: its context reads on one snapshot, and the release fence rides the message that ends it
@@ -334,8 +343,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
             let failure: unknown;
             let lastTime = principal.verifiedAt;
             const pending = new Set<Promise<void>>();
-            /* The snapshots the callback's own `together` rides the release fence on (`fencedTogether`). */
-            const riding = new AsyncLocalStorage<true>();
+            const rideToken = {};
             let ridden = false,
               beside = false,
               ridingOpen = 0;
@@ -389,7 +397,7 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
             };
             const track = <A, R>(input: A, work: (captured: A) => Promise<R>, validate: (captured: A) => void): Promise<R> => {
               if (!accepting || !active || retired) return Promise.reject(new TenantContextError());
-              if ((ridden || ridingOpen) && !riding.getStore()) beside = true;
+              if ((ridden || ridingOpen) && riding.getStore() !== rideToken) beside = true;
               let complete!: () => void;
               const reserved = new Promise<void>((resolve) => {
                 complete = resolve;
@@ -569,7 +577,8 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                   : {}),
               });
               const schema = captureScopeCatalog(guarded.schema);
-              const capabilities = presentation ? captureTenantData(presentation(principal, schema)) : undefined;
+              const headless = isHeadlessInvocation(guard);
+              const capabilities = !headless && presentation ? captureTenantData(presentation(principal, schema)) : undefined;
               /* This tenant's zone, read under this context's own scope: no other context can be handed it (readerZone.ts).
                  This member's own locale, read the same way: under this context's scope, from their row. Neither
                  reads the other's answer, so both are asked at once, and both are settled before either failure
@@ -585,12 +594,12 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                  it ended; a read asked beside one, or after it, or a second snapshot open at once, and the caller
                  fences as it always did. A refused fence fails the callback as the separate one failed the request. */
               const fencedTogether = <R>(work: () => Promise<R>): Promise<R> => {
-                if (bounded || again || riding.getStore()) return together(work);
+                if (bounded || again || riding.getStore() === rideToken) return together(work);
                 if (pending.size || ridingOpen) beside = true;
                 ridingOpen++;
                 ridden = false;
                 return source
-                  .togetherFenced(principal, () => riding.run(true, work), { lastWave: false })
+                  .togetherFenced(principal, () => riding.run(rideToken, work), { lastWave: false })
                   .then((ran) => {
                     if (pending.size) beside = true;
                     ridden = ran.fenced;
@@ -610,21 +619,30 @@ export function bindTenantReadRuntime<Request>(options: TenantReadRuntimeOptions
                revalidated after them (bounded: once they are settled, the session is the caller's to ask after the
                snapshot ends), false where the callback or a read failed. */
               const answer = async (): Promise<boolean> => {
-                /* On one snapshot between them, as they are asked at once. */
-                /* Where `ui.timezone: { column: 'tenant.<column>' }` names the profile, it is the shared profile this request
-                   read already, and a value it does not know as a zone is the App's, as an App-owned column's is. */
-                const named = zoneColumn(app.ui);
-                const fromProfile = named !== undefined && named.resource === 'tenant';
-                const [zoneRead, localeRead] = await together(() =>
-                  Promise.allSettled([
-                    fromProfile ? Promise.resolve(undefined) : readZone(app.ui, schema, data.query),
-                    readLocale(app.ui, schema, data.query),
-                  ]),
-                );
-                if (zoneRead.status === 'rejected') throw zoneRead.reason;
-                if (localeRead.status === 'rejected') throw localeRead.reason;
-                const zone = fromProfile ? readerZone(tenant[named.column] ?? undefined) : zoneRead.value,
-                  locale = localeRead.value;
+                let zone: string | undefined, locale: string | undefined;
+                if (!headless) {
+                  /* On one snapshot between them, as they are asked at once. */
+                  /* Where `ui.timezone: { column: 'tenant.<column>' }` names the profile, it is the shared profile this request
+                     read already, and a value it does not know as a zone is the App's, as an App-owned column's is. */
+                  const named = zoneColumn(app.ui);
+                  const fromProfile = named !== undefined && named.resource === 'tenant';
+                  const needsZoneDb = named !== undefined && !fromProfile;
+                  const needsLocaleDb = localeColumn(app.ui) !== undefined;
+                  if (needsZoneDb || needsLocaleDb) {
+                    const [zoneRead, localeRead] = await (needsZoneDb && needsLocaleDb
+                      ? together(() => Promise.allSettled([readZone(app.ui, schema, data.query), readLocale(app.ui, schema, data.query)]))
+                      : Promise.allSettled([
+                          needsZoneDb ? readZone(app.ui, schema, data.query) : Promise.resolve(undefined),
+                          needsLocaleDb ? readLocale(app.ui, schema, data.query) : Promise.resolve(undefined),
+                        ]));
+                    if (zoneRead.status === 'rejected') throw zoneRead.reason;
+                    if (localeRead.status === 'rejected') throw localeRead.reason;
+                    zone = fromProfile ? readerZone(tenant[named.column] ?? undefined) : zoneRead.value;
+                    locale = localeRead.value;
+                  } else if (fromProfile) {
+                    zone = readerZone(tenant[named.column] ?? undefined);
+                  }
+                }
                 assertActive();
                 const context = Object.freeze({
                   principal,

@@ -1,0 +1,126 @@
+# Disposable PostgreSQL 16 (primary + streaming replica) + PgBouncer
+# (transaction mode) + Valkey + Toxiproxy stack for Mistri Jepsen runs.
+#
+#   docker compose -f test/jepsen/docker-compose.yml up -d --wait
+#   npm run test:jepsen -- \
+#     --pg postgres://mistri:mistri@127.0.0.1:15432/mistri_jepsen \
+#     --replica-pg postgres://mistri:mistri@127.0.0.1:15433/mistri_jepsen \
+#     --pgbouncer-pg postgres://mistri:mistri@127.0.0.1:16432/mistri_jepsen \
+#     --valkey valkey://127.0.0.1:16379/0 \
+#     --workload all
+#   docker compose -f test/jepsen/docker-compose.yml down -v
+#
+# Ports are bound strictly to 127.0.0.1:
+#   15432  PostgreSQL primary (direct)
+#   15433  PostgreSQL streaming replica (direct)
+#   16432  PgBouncer (pool_mode = transaction -> postgres-primary:5432)
+#   16379  Valkey 8 cache
+#   18474  Toxiproxy HTTP control API
+#   25432  Toxiproxy -> postgres-primary:5432
+#   25433  Toxiproxy -> postgres-replica:5432
+
+name: mistri-jepsen
+
+services:
+  postgres-primary:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mistri
+      POSTGRES_PASSWORD: mistri
+      POSTGRES_DB: mistri_jepsen
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: --auth-host=scram-sha-256
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        mkdir -p /docker-entrypoint-initdb.d
+        printf '%s\n' '#!/bin/sh' 'echo "host replication mistri all scram-sha-256" >> "$$PGDATA/pg_hba.conf"' > /docker-entrypoint-initdb.d/10-replication.sh
+        chmod +x /docker-entrypoint-initdb.d/10-replication.sh
+        exec docker-entrypoint.sh postgres \
+          -c wal_level=replica \
+          -c max_wal_senders=4 \
+          -c max_replication_slots=4 \
+          -c hot_standby=on \
+          -c max_connections=200
+    ports:
+      - '127.0.0.1:15432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mistri -d mistri_jepsen']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  postgres-replica:
+    image: postgres:16-alpine
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: mistri
+      REPLICA_APPLY_DELAY: ${REPLICA_APPLY_DELAY:-0ms}
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        set -eu
+        rm -rf /var/lib/postgresql/data/*
+        pg_basebackup -h postgres-primary -p 5432 -U mistri -D /var/lib/postgresql/data -Fp -Xs -R
+        echo "recovery_min_apply_delay = '$${REPLICA_APPLY_DELAY}'" >> /var/lib/postgresql/data/postgresql.auto.conf
+        chown -R postgres:postgres /var/lib/postgresql/data
+        chmod 0700 /var/lib/postgresql/data
+        exec su-exec postgres postgres -D /var/lib/postgresql/data -c hot_standby=on -c max_connections=200
+    ports:
+      - '127.0.0.1:15433:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U mistri -d mistri_jepsen']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  pgbouncer:
+    image: edoburu/pgbouncer:v1.23.1-p1
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    environment:
+      DB_HOST: postgres-primary
+      DB_PORT: '5432'
+      DB_USER: mistri
+      DB_PASSWORD: mistri
+      DB_NAME: '*'
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: '200'
+      DEFAULT_POOL_SIZE: '6'
+      MAX_PREPARED_STATEMENTS: '0'
+    ports:
+      - '127.0.0.1:16432:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -p 5432 -U mistri -d mistri_jepsen']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  valkey:
+    image: valkey/valkey:8-alpine
+    command: ['valkey-server', '--save', '', '--appendonly', 'no']
+    ports:
+      - '127.0.0.1:16379:6379'
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    depends_on:
+      postgres-primary:
+        condition: service_healthy
+    ports:
+      - '127.0.0.1:18474:8474'
+      - '127.0.0.1:25432:25432'
+      - '127.0.0.1:25433:25433'
+    command: ['-host=0.0.0.0']

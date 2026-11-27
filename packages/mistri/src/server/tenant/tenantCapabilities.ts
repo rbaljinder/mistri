@@ -233,6 +233,9 @@ interface PlatformCapabilityOptions {
   readonly held?: readonly string[];
 }
 
+const platformProjections = new WeakMap<object, WeakMap<object, WeakMap<object, Map<string, TenantCapabilities>>>>();
+const NO_FORM_COMMANDS = Object.freeze({});
+
 /** The platform realm's presentation: its commands, and the edits its roles
  * grant on the platform's own rows — the same answer its write
  * judges by (tenantPlatformWriteRuntime.ts). A tenant's rows and global ones
@@ -246,7 +249,13 @@ export function projectPlatformCapabilities(input: PlatformCapabilityOptions): T
     const owned = captureTenantOwnership(given.ownership),
       { app, principal, services } = given;
     tenantRecord(app);
-    if (!tenantAppShape(app, owned) || !app.auth?.tenancy?.platform) return denyTenant();
+    if (!agreed.get(app)?.has(owned)) {
+      if (!tenantAppShape(app, owned)) return denyTenant();
+      let pairs = agreed.get(app);
+      if (!pairs) agreed.set(app, (pairs = new WeakSet()));
+      pairs.add(owned);
+    }
+    if (!app.auth?.tenancy?.platform) return denyTenant();
     if (given.held !== undefined && (!Array.isArray(given.held) || given.held.some((name) => typeof name !== 'string')))
       return denyTenant();
     tenantRecord(principal, [
@@ -291,7 +300,18 @@ export function projectPlatformCapabilities(input: PlatformCapabilityOptions): T
     // A role outside the platform realm never grants here, even if evidence names it.
     for (const role of names(principal.roles)) if (app.auth.roles?.[role]?.realm !== 'platform') return denyTenant();
     tenantRecord(services, ['commands', 'formCommands']);
+    if (services.formCommands !== undefined) tenantRecord(services.formCommands);
     const registered = new Set(names(services.commands, MAX_COMMAND_IDS));
+    const formKey = services.formCommands ?? NO_FORM_COMMANDS;
+    let byOwned = platformProjections.get(app);
+    if (!byOwned) platformProjections.set(app, (byOwned = new WeakMap()));
+    let byForms = byOwned.get(owned);
+    if (!byForms) byOwned.set(owned, (byForms = new WeakMap()));
+    let byInput = byForms.get(formKey);
+    if (!byInput) byForms.set(formKey, (byInput = new Map()));
+    const key = JSON.stringify([principal.roles, services.commands, given.held ?? null]);
+    const known = byInput.get(key);
+    if (known) return known;
     const grantedCommands = [...appCommandGrants(app, principal.roles)].filter((id) => registered.has(id)).sort();
     const access = tenantVisibleFields(
       owned,
@@ -313,12 +333,15 @@ export function projectPlatformCapabilities(input: PlatformCapabilityOptions): T
         ...(access.appendOnly?.has(id) ? { appendOnly: true as const } : {}),
       };
     }
-    return captureTenantData({
+    const projected = captureTenantData({
       resources,
       writable: Object.keys(resources),
       grantedCommands,
       ...formCommandsOf(services.formCommands, grantedCommands),
     });
+    if (byInput.size >= PROJECTIONS) byInput.delete(byInput.keys().next().value!);
+    byInput.set(key, projected);
+    return projected;
   } catch {
     return denyTenant();
   }

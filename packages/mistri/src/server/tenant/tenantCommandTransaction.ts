@@ -13,12 +13,12 @@ import {
 import { remapCteTables } from '@mistriwork/engine/shared/cte.js';
 import { canonicalCommandJson } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import type { CommandAudit, CommandJournal, CommandLinkRow } from '../../adapters/commands/commandJournalTypes.js';
-import { AppAccessDenied, authorizeTransaction, type ResourceAccess } from '../app/appAccess.js';
+import { AppAccessDenied, authorizeTransaction, markStableGrant, type ResourceAccess } from '../app/appAccess.js';
 import type { BusinessCommandAuthorization } from '../commands/businessCommandAuthorization.js';
 import { BusinessCommandExecutionError } from '../commands/businessCommandExecution.js';
 import { PUBLIC_REMOVAL } from '../commands/commandErrors.js';
 import { canonicalKey } from '../commands/commandDb.js';
-import { columnKind } from '@mistriwork/engine/shared/schema.js';
+import { columnKind, type ColumnKind } from '@mistriwork/engine/shared/schema.js';
 import type { TenantCommandKind } from './tenantCommandKindContract.js';
 import { intakeCommandKind } from './tenantCommandKindIntake.js';
 import { memberCommandKind } from './tenantCommandKindMember.js';
@@ -68,6 +68,96 @@ function commandKindOf(principal: TenantCommandPrincipal): TenantCommandKind<Ten
   return (TENANT_COMMAND_KINDS.find((kind) => kind.realm === realm) ?? deny()) as unknown as TenantCommandKind<TenantCommandPrincipal>;
 }
 
+interface CommandTableInfo {
+  readonly keys: readonly string[];
+  readonly kinds: Readonly<Record<string, ColumnKind>>;
+}
+const commandTables = new WeakMap<TenantOwnershipSnapshot, Map<string, CommandTableInfo>>();
+function tableInfoMap(ownership: TenantOwnershipSnapshot): Map<string, CommandTableInfo> {
+  let map = commandTables.get(ownership);
+  if (!map) {
+    map = new Map();
+    for (const table of ownership.schema.tables) {
+      map.set(table.id, {
+        keys: table.columns.filter((column) => column.primaryKey).map((column) => column.name),
+        kinds: Object.fromEntries(table.columns.map((column) => [column.name, columnKind(column.type)])),
+      });
+    }
+    commandTables.set(ownership, map);
+  }
+  return map;
+}
+
+const NO_VALIDATION = Object.freeze({});
+const COMMAND_GRANTS = 512;
+interface CachedCommandGrants {
+  readonly fields: Map<string, { read: ReadonlySet<string>; write: ReadonlySet<string> }>;
+  readonly txAccess: ResourceAccess;
+  readonly removalAccess: ResourceAccess;
+}
+const commandGrants = new WeakMap<TenantOwnershipSnapshot, WeakMap<object, Map<string, CachedCommandGrants>>>();
+function cachedCommandGrants(
+  ownership: TenantOwnershipSnapshot,
+  realm: string,
+  place: ReturnType<TenantCommandKind<TenantCommandPrincipal>['place']>,
+  scopeGrants: ResourceAccess,
+  authorization: BusinessCommandAuthorization,
+): CachedCommandGrants {
+  const validation = scopeGrants.validation;
+  const vKey = validation ?? NO_VALIDATION;
+  let byValidation = commandGrants.get(ownership);
+  if (!byValidation) commandGrants.set(ownership, (byValidation = new WeakMap()));
+  let bySpec = byValidation.get(vKey);
+  if (!bySpec) byValidation.set(vKey, (bySpec = new Map()));
+  const hiddenOwners: string[] = [];
+  if (scopeGrants.fields) {
+    for (const table of ownership.schema.tables) {
+      const rule = ownership.ownership[table.id];
+      if (rule?.kind === 'tenant') {
+        const granted = scopeGrants.fields.get(table.id)?.read;
+        if (granted && !granted.has(rule.column)) hiddenOwners.push(table.id);
+      }
+    }
+  }
+  const key = JSON.stringify([
+    realm,
+    place.readsOwners,
+    place.tenantId !== undefined,
+    hiddenOwners,
+    authorization.read,
+    authorization.write,
+  ]);
+  const kept = bySpec.get(key);
+  if (kept) return kept;
+  const read = new Set(authorization.read),
+    write = new Set(authorization.write);
+  const fields = new Map(
+    ownership.schema.tables.map((table) => {
+      const rule = ownership.ownership[table.id],
+        granted = scopeGrants.fields?.get(table.id)?.read;
+      const owner = rule?.kind === 'tenant' ? rule.column : undefined;
+      return [
+        table.id,
+        {
+          read: new Set(table.columns.map((column) => column.name).filter((column) => column !== owner || !granted || granted.has(column))),
+          write: new Set(table.columns.filter((column) => place.writes(rule, column.name)).map((column) => column.name)),
+        },
+      ] as const;
+    }),
+  );
+  const txAccess = markStableGrant({ readable: read, writable: write, fields, ...(validation ? { validation } : {}) });
+  // Separate readable Set so markStableGrant's WeakMap keys txAccess and removalAccess independently.
+  const removalAccess = markStableGrant({
+    readable: new Set(authorization.read),
+    writable: write,
+    ...(validation ? { validation } : {}),
+  });
+  const entry: CachedCommandGrants = { fields, txAccess, removalAccess };
+  if (bySpec.size >= COMMAND_GRANTS) bySpec.delete(bySpec.keys().next().value!);
+  bySpec.set(key, entry);
+  return entry;
+}
+
 /** What a command transaction needs of its request scope: a tenant's, or the platform realm's. */
 interface TenantCommandScope {
   readonly principal: TenantCommandPrincipal;
@@ -98,35 +188,18 @@ export async function runTenantCommandTransaction<T>(
   snapshot = false,
 ): Promise<T> {
   // Where this principal writes, from its kind (tenantCommandKind*.ts).
-  const place = commandKindOf(scope.principal).place(scope.principal);
+  const kind = commandKindOf(scope.principal);
+  const place = kind.place(scope.principal);
   const tenantId = place.tenantId;
-  const read = new Set(authorization.read),
-    write = new Set(authorization.write);
-  const fields = new Map(
-    ownership.schema.tables.map((table) => {
-      const rule = ownership.ownership[table.id],
-        granted = scope.grants.fields?.get(table.id)?.read;
-      const owner = rule?.kind === 'tenant' ? rule.column : undefined;
-      return [
-        table.id,
-        {
-          read: new Set(table.columns.map((column) => column.name).filter((column) => column !== owner || !granted || granted.has(column))),
-          write: new Set(table.columns.filter((column) => place.writes(rule, column.name)).map((column) => column.name)),
-        },
-      ] as const;
-    }),
-  );
-  const validation = scope.grants.validation;
-  const tx = authorizeTransaction(
-    ownership.schema,
-    { readable: read, writable: write, fields, ...(validation ? { validation } : {}) },
-    raw,
-  );
+  const { fields, txAccess, removalAccess } = cachedCommandGrants(ownership, kind.realm, place, scope.grants, authorization);
+  const tx = authorizeTransaction(ownership.schema, txAccess, raw);
   // Whole-row removal has an explicit command grant and complete normal-field
   // authority. Only this operation may remove the managed owner invariant;
   // ordinary values, reads and updates keep the field facade above. The source
   // still proves actual tenant rows and conservative non-cascading eligibility.
-  const removal = authorizeTransaction(ownership.schema, { readable: read, writable: write, ...(validation ? { validation } : {}) }, raw);
+  let removal: ReturnType<typeof authorizeTransaction> | undefined;
+  const removalTx = () => (removal ??= authorizeTransaction(ownership.schema, removalAccess, raw));
+  const tables = tableInfoMap(ownership);
   /* Reads asked together start together, in the order asked (TransactionOperations.read); the writer beneath decides
      whether they leave in one flight. Anything else waits for everything asked before it, as each always did. */
   const operations = new TransactionOperations(true);
@@ -152,8 +225,8 @@ export async function runTenantCommandTransaction<T>(
   };
   const keyFor = (table: string, input: unknown): Readonly<Record<string, string | number>> => {
     tenantRecord(input);
-    const metadata = ownership.schema.tables.find((value) => value.id === table) ?? deny();
-    const keys = metadata.columns.filter((column) => column.primaryKey).map((column) => column.name);
+    const info = tables.get(table) ?? deny();
+    const keys = info.keys;
     if (
       !keys.length ||
       keys.length !== Object.keys(input).length ||
@@ -167,8 +240,8 @@ export async function runTenantCommandTransaction<T>(
     return input as Record<string, string | number>;
   };
   const keyShape = (table: string, key: readonly string[]) => {
-    const columns = (ownership.schema.tables.find((value) => value.id === table) ?? deny()).columns;
-    return { key, kinds: Object.fromEntries(columns.map((column) => [column.name, columnKind(column.type)])) };
+    const info = tables.get(table) ?? deny();
+    return { key, kinds: info.kinds };
   };
   /** The column a row's owner is read from where this kind reads owners; undefined where it does not. */
   const ownerOf = (table: string): string | undefined => {
@@ -190,11 +263,8 @@ export async function runTenantCommandTransaction<T>(
   const readTargets = new Map<string, string>();
   const noteFound = (table: string, rows: readonly Record<string, unknown>[]) => {
     if (!snapshot || table !== authorization.table(authorization.command.target)) return;
-    const columns = (ownership.schema.tables.find((value) => value.id === table) ?? deny()).columns,
-      shape = keyShape(
-        table,
-        columns.filter((column) => column.primaryKey).map((column) => column.name),
-      ),
+    const info = tables.get(table) ?? deny(),
+      shape = { key: info.keys, kinds: info.kinds },
       owner = ownerOf(table);
     for (const row of rows) {
       const key = canonicalKey(shape, row),
@@ -243,6 +313,8 @@ export async function runTenantCommandTransaction<T>(
   /* The command's own target, removed by this transaction (Unrelate, Remove a holiday): its ceiling is
      judged before the removal, and its owner taken then, since after it there is no row to read. */
   const gone = new Set<string>();
+  /* Last target key verified visible since the most recent write in this transaction, avoiding duplicate result+target RTTs. */
+  let verifiedTarget: string | undefined;
   const goneKey = (key: Readonly<Record<string, unknown>>) =>
     JSON.stringify(
       Object.keys(key)
@@ -329,6 +401,7 @@ export async function runTenantCommandTransaction<T>(
       : {}),
     insert: (input) =>
       invoke(input, async (value) => {
+        verifiedTarget = undefined;
         const table = authorization.table(value.table, true),
           result = await tx.insert({ ...value, table });
         return {
@@ -340,6 +413,7 @@ export async function runTenantCommandTransaction<T>(
       }),
     update: (input) =>
       invoke(input, async (value) => {
+        verifiedTarget = undefined;
         const table = authorization.table(value.table, true);
         // Public triage only creates; the refusal says so to the operator's log.
         if (!place.updates)
@@ -355,6 +429,7 @@ export async function runTenantCommandTransaction<T>(
       ? {
           insertMany: (inputs: readonly InsertRequest[]) =>
             invoke(inputs, async (values) => {
+              verifiedTarget = undefined;
               const requests = values.map((value) => ({ ...value, table: authorization.table(value.table, true) }));
               const results = await tx.insertMany!(requests);
               return results.map((result, index) => {
@@ -369,6 +444,7 @@ export async function runTenantCommandTransaction<T>(
             }),
           updateMany: (inputs: readonly UpdateRequest[]) =>
             invoke(inputs, async (values) => {
+              verifiedTarget = undefined;
               const requests = values.map((value) => {
                 const table = authorization.table(value.table, true);
                 if (!place.updates)
@@ -387,6 +463,7 @@ export async function runTenantCommandTransaction<T>(
       : {}),
     remove: (input) =>
       invoke(input, async (value) => {
+        verifiedTarget = undefined;
         const table = authorization.table(value.table, true);
         /* Said to the visitor too, in words that name the delete and not the table: "not available to this account"
            sent a handler's author looking at grants when it was the removal that was refused (a field report).
@@ -402,7 +479,7 @@ export async function runTenantCommandTransaction<T>(
           const owner = await visible({ table: value.table, key: value.key });
           if (place.readsOwners) owners.set(canonicalCommandJson({ ...value.key }, 8192), owner);
         }
-        const result = await removal.remove({ ...value, table });
+        const result = await removalTx().remove({ ...value, table });
         if (own && result.affected === 1) gone.add(goneKey(value.key));
         return { affected: result.affected, sql: { text: '', params: [] } };
       }),
@@ -536,14 +613,23 @@ export async function runTenantCommandTransaction<T>(
           return;
         }
         // Removed by this command, after its ceiling was judged: nothing is left to hide.
-        if (gone.has(goneKey(key))) return;
+        const keyText = goneKey(key);
+        if (gone.has(keyText) || verifiedTarget === keyText) return;
         const owner = await visible({ table: authorization.command.target, key });
         // Canonical over a plain copy: this is the executor's audit keyJson spelling.
         if (place.readsOwners) owners.set(canonicalCommandJson({ ...key }, 8192), owner);
+        verifiedTarget = keyText;
       }),
     result: (key, value) =>
       invoke({ key, value }, async ({ key, value }) => {
-        if (!creating(key) && !gone.has(goneKey(key))) await visible({ table: authorization.command.target, key });
+        if (!creating(key)) {
+          const keyText = goneKey(key);
+          if (!gone.has(keyText) && verifiedTarget !== keyText) {
+            const owner = await visible({ table: authorization.command.target, key });
+            if (place.readsOwners) owners.set(canonicalCommandJson({ ...key }, 8192), owner);
+            verifiedTarget = keyText;
+          }
+        }
         const returned: unknown = extract(value);
         if (isPromise(returned)) {
           void Promise.prototype.then.call(returned, undefined, () => {});

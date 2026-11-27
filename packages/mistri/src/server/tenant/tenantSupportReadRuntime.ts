@@ -32,7 +32,7 @@ import type { RowScope } from '@mistriwork/engine/shared/rowScope.js';
 import type { TenantRowsContext } from '../policy/appTenantPolicy.js';
 import { assertScopeCatalog, captureScopeCatalog } from '@mistriwork/engine/shared/scopeCatalog.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
-import { authorizeResources } from '../app/appAccess.js';
+import { authorizeResources, markStableGrant, type ResourceAccess } from '../app/appAccess.js';
 import { appResourceCatalog } from '../app/appResources.js';
 import type { RuntimeResources } from '../app/appRuntimeResources.js';
 import type { Identity } from '../auth/auth.js';
@@ -144,6 +144,25 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
   const presentation = raw.presentation as SupportReadRuntimeOptions<Request>['presentation'];
   const readAudit = raw.readAudit as SupportReadRuntimeOptions<Request>['readAudit'];
   const now = tenantRuntimeClock((raw.now ?? Date.now) as () => number);
+  const READ_GRANTS = 256;
+  const readGrants = new Map<string, ResourceAccess>();
+  const readGrant = (roles: readonly string[]): ResourceAccess => {
+    const set = [...new Set(roles)].sort();
+    const key = JSON.stringify(set);
+    const kept = readGrants.get(key);
+    if (kept) return kept;
+    const grant = markStableGrant(
+      tenantVisibleFields(ownership, { ...resolveAppAccess(app, ownership.schema, set), writable: new Set<string>() }),
+    );
+    if (readGrants.size >= READ_GRANTS) readGrants.delete(readGrants.keys().next().value!);
+    readGrants.set(key, grant);
+    return grant;
+  };
+  const connection = ownership.source.connection;
+  const resource = (id: string) => {
+    if (!Object.hasOwn(ownership.resources, id)) return denyTenant();
+    return id;
+  };
   let retired = false,
     retirement: Promise<void> | undefined;
   const pendingRequests = new Set<Promise<void>>();
@@ -211,7 +230,12 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
             denyTenant();
           lastTime = instant;
         };
-        const revalidate = async () => {
+        /* The session and the invocation guard, around every accepted operation.
+         * Each operation's own snapshot revalidates the support lease before its
+         * SQL (tenantReadSource.ts `bindSupportReads`), and the release fence
+         * below asks once more in a fresh snapshot after the last read settles,
+         * matching tenantReadRuntime.ts and tenantPlatformReadRuntime.ts. */
+        const revalidateSession = async () => {
           assertActive();
           const result = delivered(verify(request));
           const session = isPromise(result) ? await result : result;
@@ -227,6 +251,9 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
           const verified = revalidateTenantInvocation(guard, principal);
           if (isPromise(verified)) await verified;
           assertActive();
+        };
+        const revalidate = async () => {
+          await revalidateSession();
           // The support row, its parent, `@platform` and the dealer — never a
           // member membership, which this principal does not hold.
           await source.assertSupportCurrent(principal);
@@ -243,10 +270,10 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
             try {
               const captured = captureTenantData(input);
               validate(captured);
-              await revalidate();
+              await revalidateSession();
               const value = await work(captured);
               const snapshot = captureTenantData(value);
-              await revalidate();
+              await revalidateSession();
               return snapshot;
             } catch (error) {
               failed = true;
@@ -278,8 +305,8 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
           const authoredResult = delivered(authoredRows(view, Object.freeze({ tenant })));
           const authored = isPromise(authoredResult) ? await authoredResult : authoredResult;
           assertActive();
-          await revalidate();
-          const access = resolveAppAccess(app, ownership.schema, [...principal.roles]);
+          // No snapshot yet: whatever reads next, an operation or the release fence, revalidates the support lease first.
+          await revalidateSession();
           const adapter: Adapter = Object.freeze({
             dialect: 'sqlite',
             introspect: async () => ownership.schema,
@@ -289,13 +316,8 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
             // The source recomposes the dealer's scope itself and fences on the
             // support row: whatever is passed here, a table the policy does not
             // name stays denied.
-            scopeReads: (scope: RowScope) => source.scopeSupportReads(principal, scope),
+            scopeReads: (scope: RowScope) => source.bindSupportReads(principal, scope),
           });
-          const connection = ownership.source.connection;
-          const resource = (id: string) => {
-            if (!Object.hasOwn(ownership.resources, id)) return denyTenant();
-            return id;
-          };
           const resources: RuntimeResources = {
             adapter,
             schema: ownership.schema,
@@ -325,7 +347,7 @@ export function bindSupportReadRuntime<Request>(options: SupportReadRuntimeOptio
           const guarded = authorizeResources(
             resources,
             withTenantReadAudit(
-              tenantVisibleFields(ownership, { ...access, rows, writable: new Set() }),
+              { ...readGrant([...principal.roles]), rows },
               { app: app.id, tenant: principal.tenantId, actor: `support:${principal.accountId}`, visit: principal.supportId },
               readAudit,
             ),

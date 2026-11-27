@@ -152,6 +152,11 @@ export interface TenantReadSource {
    * never read more than that one rule allows. */
   assertSupportCurrent(evidence: SupportMembershipEvidence): Promise<void>;
   scopeSupportReads(evidence: SupportMembershipEvidence, rows: RowScope): Promise<ScopedReads>;
+  /** `scopeSupportReads` without its eager snapshot, as `bindReads` and
+   * `bindPlatformReads` are: every operation revalidates the support lease in
+   * its own snapshot before its SQL, for an owner that fences again before
+   * releasing anything (tenantSupportReadRuntime.ts). */
+  bindSupportReads(evidence: SupportMembershipEvidence, rows: RowScope): Promise<ScopedReads>;
   /** Public intake's resolution, in one snapshot: the active tenant whose
    * profile row alone holds the address, else the platform when it is active.
    * Reads the profile by the policy's column only; admits nobody. */

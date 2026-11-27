@@ -38,6 +38,7 @@ import {
   defaultBtreeClass,
   postgresTreeTriggerNames,
   postgresTriggerAnalyzer,
+  postgresTriggerAttestationStatement,
   postgresTriggersByTable,
   postgresTriggerStatement,
   postgresTriggerVersions,
@@ -274,6 +275,39 @@ export async function attestPostgresTriggers(client: PgQuery, catalog: PostgresS
     if (error instanceof Refusal) throw error;
     return refuse();
   }
+}
+
+const TRIGGER_DRIFT = 'mistri: trigger attestation failed';
+
+/**
+ * Pipelined counterpart to `attestPostgresTriggers` for `beforeCommit`: returns a statement that fails with a
+ * tagged 22P02 error if any relied table's trigger version changed before COMMIT, riding in the COMMIT flight
+ * (0 extra RTTs). Throws `ScopeRefusal` immediately if the catalog holds no proven version for a relied table.
+ */
+export function postgresTriggerAttestation(
+  catalog: PostgresScopeCatalog,
+  tables: ReadonlySet<string>,
+): { text: string; values: unknown[] } | undefined {
+  if (!tables.size) return undefined;
+  const schemas: string[] = [];
+  const names: string[] = [];
+  const versions: string[] = [];
+  for (const id of tables) {
+    const table = catalog.schema.tables.find((candidate) => candidate.id === id);
+    const version = catalog.triggerVersions?.get(id);
+    if (!table || version === undefined) return refuse();
+    schemas.push(table.schema);
+    names.push(table.name);
+    versions.push(version);
+  }
+  return { text: postgresTriggerAttestationStatement(TRIGGER_DRIFT), values: [schemas, names, versions] };
+}
+
+/** The refusal a pipelined `postgresTriggerAttestation` failure says, or undefined for any other failure. */
+export function triggerAttestationFailed(error: unknown): ScopeRefusal | undefined {
+  const { code, message } = (error ?? {}) as { code?: unknown; message?: unknown };
+  if (code !== '22P02' || typeof message !== 'string' || !message.includes(TRIGGER_DRIFT)) return undefined;
+  return new ScopeRefusal('This operation is not available in the current row scope.');
 }
 /* The value a hierarchy found again is said in (hierarchyRecheck), between these, so its failure names the table. */
 const JOINED = 'mistri: a scoped write target is in a hierarchy: ';
