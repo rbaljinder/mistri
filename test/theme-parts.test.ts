@@ -102,7 +102,7 @@ test("a pattern is drawn at the strength check measures it at; paper's low end i
 });
 
 test('parts: published names, role colors only, the menus the rest of the theme speaks', () => {
-  assert.equal(THEME_PARTS.length, 37);
+  assert.equal(THEME_PARTS.length, 38);
   assert.deepEqual(Object.keys(PART_SELECTORS).sort(), [...THEME_PARTS].sort());
   const styled = theme({
     parts: {
@@ -233,4 +233,24 @@ test("the kicker over a form page's heading is a part: sentence case by default,
   const rule = /\.form-page \.eyebrow \{([^}]*)\}/.exec(css)?.[1] ?? '';
   assert.ok(rule, 'the kicker has a rule');
   assert.doesNotMatch(rule, /text-transform|letter-spacing/);
+});
+
+test('table.primary is a published part covering declarative primary cells and SDK Table primary lines', () => {
+  const selectors = PART_SELECTORS['table.primary'].split(', ');
+  assert.deepEqual(selectors, [
+    '.app-mode .table-wrap tbody td:first-child:not(.row-host):not(.kit-cell)',
+    '.app-mode .table-wrap tbody td.row-host + td:not(.kit-cell)',
+    '.app-mode .table-wrap .kit-cell-primary-strong',
+  ]);
+  const primary = theme({ parts: { 'table.primary': { weight: 400 } } });
+  assert.equal(partAttribute(primary.parts), 'table.primary:weight');
+  assert.equal(partTokens(primary.parts)['--part-table-primary-weight'], '400');
+  assert.match(
+    partsSheet(),
+    /:root\[data-parts~="table\.primary:weight"\] \.app-mode \.table-wrap tbody td:first-child:not\(\.row-host\):not\(\.kit-cell\),\s*:root\[data-parts~="table\.primary:weight"\] \.app-mode \.table-wrap tbody td\.row-host \+ td:not\(\.kit-cell\),\s*:root\[data-parts~="table\.primary:weight"\] \.app-mode \.table-wrap \.kit-cell-primary-strong \{\s*font-weight: var\(--part-table-primary-weight\);/,
+  );
+  const mobile = readFileSync('packages/ui/src/styles/surfaces/views-settings.css', 'utf8');
+  assert.match(mobile, /& \.nx-table-cell\[data-primary\] \{[^}]*font-weight: 500;/);
+  const features = readFileSync('packages/kit/src/client/features.css', 'utf8');
+  assert.match(features, /\.grid-totals td \{[^}]*font-weight: 600;/);
 });

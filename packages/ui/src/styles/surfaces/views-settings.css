@@ -669,7 +669,7 @@
       & .nx-table-cell[data-primary] {
         grid-column: 1;
         grid-row: 1;
-        font-weight: 600;
+        font-weight: 500;
       }
       & .nx-table-row:has(> .nx-table-cell-check) > .nx-table-cell[data-primary] {
         grid-column: 2;

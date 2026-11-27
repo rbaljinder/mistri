@@ -357,7 +357,7 @@ computed-style snapshot of every look holds this).
   `ground`, `bar`, `bar.search`, `nav`, `nav.item`, `nav.current`,
   `nav.group`, `logo`, `page.title`, `tabs`, `tab.current`, `section`,
   `section.title`, `stat`, `stat.figure`, `fields`, `field.label`, `table`,
-  `table.head`, `table.row`, `status`, `tag`, `button.primary`,
+  `table.head`, `table.row`, `table.primary`, `status`, `tag`, `button.primary`,
   `button.secondary`, `button.quiet`, `link`, `board.lane`, `board.card`,
   `workflow.step`, `banner`, `steps.step`, `avatar`, `identityMark`, `menu`, `dialog`,
   `chart` and `kicker`. A part takes a `ground`, an `ink` and an `edge` as color roles by

@@ -213,8 +213,7 @@
    to land before it reads across (a row's tick, where it has one, stands before it). A kit Table's cell is
    not bold as a whole: its weight is its primary line's (`.kit-cell-primary-strong`, kit.css), so a secondary
    line under it keeps the body's. */
-:root[data-theme-style] .app-mode td:is(:first-child:not(.row-host), .row-host + td):not(.kit-cell) { font-weight: 600; }
-:root[data-theme-style] td.num { font-weight: 500; }
+:root[data-theme-style] .app-mode td:is(:first-child:not(.row-host), .row-host + td):not(.kit-cell) { font-weight: 500; }
 /* List tabs are pills here: the current one filled in the accent. */
 :root[data-theme-style] .tabs { border-bottom: 0; gap: var(--space-2); padding-top: var(--space-4); }
 /* A tab takes the look's radius, as it always showed (the 999px this said never won): Mono's are square. */

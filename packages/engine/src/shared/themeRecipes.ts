@@ -271,6 +271,7 @@ export const THEME_PARTS = [
   'table',
   'table.head',
   'table.row',
+  'table.primary',
   'status',
   'tag',
   'button.primary',

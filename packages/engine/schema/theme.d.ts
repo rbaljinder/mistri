@@ -164,6 +164,7 @@ export type ThemePart =
   | 'table'
   | 'table.head'
   | 'table.row'
+  | 'table.primary'
   | 'status'
   | 'tag'
   | 'button.primary'

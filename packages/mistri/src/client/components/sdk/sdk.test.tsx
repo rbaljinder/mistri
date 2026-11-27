@@ -226,10 +226,11 @@ describe('the kit', () => {
 
       test("puts the weight on `.kit-cell-primary-strong` alone, in the kit's sheet and not on a cell", () => {
         const css = readFileSync('packages/mistri/src/client/components/sdk/kit.css', 'utf8');
-        expect(css).toMatch(/\.kit-cell-primary-strong\s*\{[^}]*font-weight:\s*600/);
+        expect(css).toMatch(/\.kit-cell-primary-strong\s*\{[^}]*font-weight:\s*500/);
         expect(css).toMatch(/\.kit-cell-secondary\s*\{[^}]*font-weight:\s*400[^}]*overflow-wrap:\s*anywhere/);
         const theme = readFileSync('packages/kit/src/client/themeFamilies.css', 'utf8');
-        expect(theme).toMatch(/td:is\(:first-child:not\(\.row-host\), \.row-host \+ td\):not\(\.kit-cell\)\s*\{ font-weight: 600/);
+        expect(theme).toMatch(/td:is\(:first-child:not\(\.row-host\), \.row-host \+ td\):not\(\.kit-cell\)\s*\{ font-weight: 500/);
+        expect(theme).not.toMatch(/td\.num\s*\{[^}]*font-weight/);
       });
     });
 
