@@ -1799,7 +1799,8 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
     if (loaded?.components) {
       // A free-form page's sources are held to what it declares, and its literal paths to its reads as the server holds them.
       const pages = pageManifestsOf(loaded.app);
-      const schema = pages.size ? (await catalogOf(loaded)).schema : undefined;
+      const rawSchema = pages.size ? (await catalogOf(loaded)).schema : undefined;
+      const schema = rawSchema ? withRollups(loaded.app, rawSchema) : undefined;
       /* A component's useMessage key the source catalog lacks is said as the key itself, by design (sdk/appMessage.ts),
          so serving never fails on one: check is where it fails. */
       const catalogs = appCatalogs(loaded.app);

@@ -287,15 +287,30 @@ export function appendSqliteReadAudits(db: DatabaseSync, rows: readonly ReadAudi
 export function readSqliteReadAudit(db: DatabaseSync, query: ReadAuditQuery, attested = false): StoredReadAudit[] {
   assertReadAuditQuery(query);
   if (!attested) assertSqliteReadAudit(db);
+  const targets = query.targets?.filter((target) => target.records.length > 0);
+  if (query.targets !== undefined && !targets?.length) return [];
   const filters = readAuditFilters(query);
-  const clause = ([column, op]: (typeof filters)[number]) =>
+  const clauses = filters.map(([column, op]) =>
     op === 'shown'
       ? `(${column} = ? OR EXISTS (SELECT 1 FROM json_each(ids_json) WHERE value = ?))`
-      : `${column} ${op} ${column === 'id' ? 'CAST(? AS INTEGER)' : '?'}`;
+      : `${column} ${op} ${column === 'id' ? 'CAST(? AS INTEGER)' : '?'}`,
+  );
+  const params: (string | number)[] = filters.flatMap(([, op, value]) => (op === 'shown' ? [value, value] : [value]));
+  if (targets?.length) {
+    const targetClauses: string[] = [];
+    for (const target of targets) {
+      const recordsJson = JSON.stringify(target.records);
+      targetClauses.push(
+        '(resource = ? AND (record_key IN (SELECT value FROM json_each(?)) OR (ids_json IS NOT NULL AND EXISTS (SELECT 1 FROM json_each(ids_json) WHERE value IN (SELECT value FROM json_each(?))))))',
+      );
+      params.push(target.resource, recordsJson, recordsJson);
+    }
+    clauses.push(`(${targetClauses.join(' OR ')})`);
+  }
   const rows = db
     .prepare(`SELECT id, at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership, scope
-    FROM main."${log}" ${filters.length ? `WHERE ${filters.map(clause).join(' AND ')}` : ''}
+    FROM main."${log}" ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
     ORDER BY id DESC LIMIT ?`)
-    .all(...filters.flatMap(([, op, value]) => (op === 'shown' ? [value, value] : [value])), query.limit) as Array<Record<string, unknown>>;
+    .all(...params, query.limit) as Array<Record<string, unknown>>;
   return rows.map(storedReadAudit);
 }

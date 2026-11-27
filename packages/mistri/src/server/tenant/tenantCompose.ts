@@ -159,5 +159,5 @@ export async function mergeComposeVerbs(
 
 export function isSingleWaveBootRead(target: string, body?: Record<string, unknown>): boolean {
   const at = new URL(target, 'http://mistri.invalid').pathname;
-  return at === '/api/run' || at === '/api/view/run' || (at === '/api/counts' && !body?.views);
+  return at === '/api/run' || (at === '/api/view/run' && !body?.include) || (at === '/api/counts' && !body?.views);
 }

@@ -636,6 +636,8 @@ export declare function useReadAudit(filters?: {
   resource?: string;
   /** A record's id: matched where it was opened and in every list that showed it. */
   record?: string;
+  /** A parent record: matches reads of the parent (if audited) and its 1-hop audited child records. */
+  parent?: { resource: string; record: string };
   /** ISO instants, inclusive. */
   since?: string;
   until?: string;

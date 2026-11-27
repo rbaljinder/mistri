@@ -84,6 +84,21 @@ test('a page asked from a line reads below it', async () => {
   expect(access.asked[0]).toMatchObject({ before: 3 });
 });
 
+test('parent filter is passed through and stable across inline object re-renders', async () => {
+  const access = paged();
+  const { result, rerender } = renderHook(({ id }: { id: string }) => useReadAudit({ parent: { resource: 'patient', record: id } }), {
+    initialProps: { id: '7' },
+    wrapper: wrapperFor(access),
+  });
+  await waitFor(() => expect(result.current.reads).toHaveLength(2));
+  expect(access.asked).toHaveLength(1);
+  expect(access.asked[0]).toMatchObject({ parent: { resource: 'patient', record: '7' } });
+  // Re-rendering with a fresh inline object for the same parent does not refetch.
+  rerender({ id: '7' });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(access.asked).toHaveLength(1);
+});
+
 function Log() {
   const { reads, error } = useReadAudit({ record: '7' });
   if (error) return <p role="alert">{error.message}</p>;

@@ -116,12 +116,23 @@ export interface StoredReadAudit extends ReadAuditRow {
   readonly id: number;
 }
 
+/** One resource and its record keys to match in a read audit query (opened or listed in ids_json). */
+export interface ReadAuditTarget {
+  readonly resource: string;
+  readonly records: readonly string[];
+}
+
+const READ_AUDIT_TARGET_RESOURCES_LIMIT = 128;
+const READ_AUDIT_TARGET_RECORDS_LIMIT = 25_000;
+
 /** What `mistri audit reads` and `host.readAudit()` ask: newest first, every filter optional but the limit. */
 export interface ReadAuditQuery {
   readonly app?: string;
   readonly tenant?: string;
   readonly resource?: string;
   readonly record?: string;
+  /** Match rows for any of these `(resource, records)` pairs (each record matched where opened or in a list's ids). */
+  readonly targets?: readonly ReadAuditTarget[];
   readonly actor?: string;
   /** ISO instant: rows at or after it. */
   readonly since?: string;
@@ -179,6 +190,22 @@ export function assertReadAuditQuery(query: ReadAuditQuery): ReadAuditQuery {
     throw new Refusal('A read audit query reads 1 to 10000 rows.');
   for (const key of ['app', 'tenant', 'resource', 'record', 'actor'] as const)
     if (query[key] !== undefined && typeof query[key] !== 'string') throw new Refusal(`A read audit query's ${key} must be a string.`);
+  if (query.targets !== undefined) {
+    if (query.record !== undefined) throw new Refusal('A read audit query cannot combine record and targets.');
+    if (!Array.isArray(query.targets) || query.targets.length > READ_AUDIT_TARGET_RESOURCES_LIMIT)
+      throw new Refusal(`A read audit query's targets must be a list of at most ${READ_AUDIT_TARGET_RESOURCES_LIMIT} resources.`);
+    let total = 0;
+    for (const target of query.targets) {
+      if (typeof target !== 'object' || target === null) throw new Refusal('A read audit target must be an object.');
+      if (typeof target.resource !== 'string' || !target.resource)
+        throw new Refusal("A read audit target's resource must be a non-empty string.");
+      if (!Array.isArray(target.records) || target.records.some((record: unknown) => typeof record !== 'string' || !record))
+        throw new Refusal("A read audit target's records must be non-empty strings.");
+      total += target.records.length;
+      if (total > READ_AUDIT_TARGET_RECORDS_LIMIT)
+        throw new Refusal(`A read audit query's targets can name at most ${READ_AUDIT_TARGET_RECORDS_LIMIT} records in total.`);
+    }
+  }
   for (const key of ['since', 'until'] as const)
     if (query[key] !== undefined && (typeof query[key] !== 'string' || Number.isNaN(Date.parse(query[key]))))
       throw new Refusal(`A read audit query's ${key} must be an ISO instant.`);

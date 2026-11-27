@@ -31,7 +31,9 @@ export class CommandInputError extends Error {
 export const MAX_COMMAND_BYTES = 524_288;
 /** How deep a value nests, its root at depth 0: a document a server renders through this walk (the App API's) is held to it too. */
 export const MAX_JSON_DEPTH = 16;
-const MAX_NODES = 10_000;
+/** How many JSON nodes the canonical walk accepts: exported so the App API document can name the same ceiling when exceeded. */
+export const MAX_JSON_NODES = 10_000;
+const MAX_NODES = MAX_JSON_NODES;
 /** Names that belong to Object.prototype, never to data. */
 export const reservedKeys: ReadonlySet<string> = new Set([...Object.getOwnPropertyNames(Object.prototype), 'prototype']);
 const invalid = (): never => {

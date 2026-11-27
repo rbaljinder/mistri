@@ -4,7 +4,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 
 const owner = { mode: 'authenticated', accountId: 'eve', appId: 'desk', epoch: 1, tenant: { tenantId: 'north' } };
 const identity = vi.hoisted(() => ({ current: null as unknown }));
-vi.mock('@mistriwork/kit/client/sessionIdentity.js', () => ({ captureAccountIdentity: () => identity.current }));
+vi.mock('@mistriwork/kit/client/sessionIdentity.js', () => ({ captureSessionIdentity: () => identity.current }));
 const core = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock('@mistriwork/kit/client/core.js', () => core);
 const { createReadAuditAccess } = await import('./readAuditAccess.js');
@@ -24,6 +24,15 @@ test('it sends only the filters the route reads, and returns its page', async ()
   const filters = { resource: 'patient', record: '7', actor: '', before: 9, tenant: 'south' } as never;
   expect(await createReadAuditAccess().read(filters)).toBe(page);
   expect(core.api).toHaveBeenCalledWith('/api/reads', { resource: 'patient', record: '7', before: 9 });
+});
+
+test('it forwards parent { resource, record } and omits empty parent filters', async () => {
+  const page = { reads: [], resources: ['patient', 'note'] };
+  core.api.mockResolvedValue(page);
+  await createReadAuditAccess().read({ parent: { resource: 'patient', record: '7' }, resource: 'note' });
+  expect(core.api).toHaveBeenLastCalledWith('/api/reads', { parent: { resource: 'patient', record: '7' }, resource: 'note' });
+  await createReadAuditAccess().read({ parent: { resource: 'patient', record: '' } });
+  expect(core.api).toHaveBeenLastCalledWith('/api/reads', {});
 });
 
 test('outside a tenant App, signed out, or on a support visit nothing is asked', async () => {

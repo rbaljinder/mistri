@@ -686,3 +686,93 @@ test('Layer 2 declarative derived CTE resources + HTTP /api/view/run parent & ch
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('viewInclude (#585): /api/view/run defers lastWave() until the final child include read so fenced snapshots never overrun', async () => {
+  const { dispatchResourceReadHttp } = await import('../packages/engine/src/server/resourceReadHttp.js');
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-view-include-lastwave-'));
+  const dbPath = join(dir, 'market.db');
+  seedMarketDb(dbPath);
+  const adapter = new SqliteAdapter(dbPath);
+  try {
+    const schema = await adapter.introspect();
+    const run = async (body: Record<string, unknown>) => {
+      let closing = false;
+      let closed = false;
+      let overran = false;
+      let lastWaveCalls = 0;
+      const events: string[] = [];
+      const tracked = Object.create(adapter) as typeof adapter;
+      tracked.runView = async (view, offset) => {
+        if (closed) overran = true;
+        events.push(`runView:${view.base}`);
+        // Mirrors tenantReadSource.ts ride(): after lastWave(), the first query sent in that wave
+        // schedules the release fence via setImmediate, closing the snapshot once that turn completes.
+        if (closing && !closed) {
+          setImmediate(() => {
+            closed = true;
+          });
+        }
+        const res = await adapter.runView(view, offset);
+        // Yield a macrotask so any scheduled setImmediate fires before the next sequential wave.
+        await new Promise((resolve) => setImmediate(resolve));
+        return res;
+      };
+      const reply = await dispatchResourceReadHttp('/api/view/run', body, tracked, schema, {
+        app: undefined,
+        now: () => new Date('2026-11-27T00:00:00Z'),
+        lastWave: () => {
+          lastWaveCalls += 1;
+          events.push('lastWave');
+          closing = true;
+        },
+      });
+      return { reply, events, overran, lastWaveCalls };
+    };
+
+    // 1. Without includes: lastWave fires before the single parent readView.
+    const plain = await run({
+      count: 'none',
+      view: { id: 'v1', name: 'Listings', base: 'listing', columns: [{ path: 'id' }, { path: 'title' }], limit: 5 },
+    });
+    assert.equal(plain.reply?.status, 200);
+    assert.equal(plain.overran, false);
+    assert.deepEqual(plain.events, ['lastWave', 'runView:listing']);
+
+    // 2. With child includes (non-empty parent): lastWave does NOT fire before parent readView;
+    //    it fires right before the final child readView, with zero queries after.
+    const withTwo = await run({
+      count: 'none',
+      view: { id: 'v2', name: 'Listings', base: 'listing', columns: [{ path: 'id' }, { path: 'title' }], limit: 5 },
+      include: {
+        photos: { from: 'listing_photo', by: 'listing_id', show: ['url'], limit: 2 },
+        tags: { from: 'tag_assignment', by: 'listing_id', show: ['tag'], limit: 2 },
+      },
+    });
+    assert.equal(withTwo.reply?.status, 200);
+    assert.equal(withTwo.overran, false);
+    assert.equal(withTwo.lastWaveCalls, 1);
+    assert.deepEqual(withTwo.events, ['runView:listing', 'runView:listing_photo', 'lastWave', 'runView:tag_assignment']);
+
+    // 3. With child includes and empty parent result: no child readView runs and no overrun.
+    const emptyParent = await run({
+      count: 'none',
+      view: {
+        id: 'v3',
+        name: 'Listings',
+        base: 'listing',
+        columns: [{ path: 'id' }, { path: 'title' }],
+        filter: { groups: [[{ path: 'status', op: '=', value: 'nonexistent' }]] },
+        limit: 5,
+      },
+      include: {
+        photos: { from: 'listing_photo', by: 'listing_id', show: ['url'], limit: 2 },
+      },
+    });
+    assert.equal(emptyParent.reply?.status, 200);
+    assert.equal(emptyParent.overran, false);
+    assert.deepEqual(emptyParent.events, ['runView:listing']);
+  } finally {
+    await adapter.close();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

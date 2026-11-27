@@ -274,13 +274,31 @@ export async function appendPostgresReadAudits(client: PgQuery, rows: readonly R
 export async function readPostgresReadAudit(client: PgQuery, query: ReadAuditQuery, attested = false): Promise<StoredReadAudit[]> {
   assertReadAuditQuery(query);
   if (!attested && !(await postgresReadAuditReady(client))) throw new ReadAuditUnavailable(await layoutMessage(client));
+  const targets = query.targets?.filter((target) => target.records.length > 0);
+  if (query.targets !== undefined && !targets?.length) return [];
   const filters = readAuditFilters(query);
-  const values = filters.map(([, , value]) => value);
+  const params: unknown[] = filters.map(([, , value]) => value);
+  const clauses = filters.map(([name, op], index) =>
+    op === 'shown'
+      ? `(${name} = $${index + 1} OR ids_json::jsonb @> jsonb_build_array($${index + 1}::text))`
+      : `${name} ${op} $${index + 1}${name === 'id' ? '::bigint' : name === 'at' ? '::timestamptz' : ''}`,
+  );
+  if (targets?.length) {
+    const targetClauses: string[] = [];
+    for (const target of targets) {
+      const resourceParam = params.push(target.resource);
+      const recordsParam = params.push([...target.records]);
+      targetClauses.push(
+        `(resource = $${resourceParam} AND (record_key = ANY($${recordsParam}::text[]) OR (ids_json IS NOT NULL AND ids_json::jsonb ?| $${recordsParam}::text[])))`,
+      );
+    }
+    clauses.push(`(${targetClauses.join(' OR ')})`);
+  }
   const result = await client.query(
     `SELECT id::text AS id, ${AT_ISO} AS at, app, tenant, actor, visit, resource, route, record_key, query_json, row_count, ids_json, command, roles_json, membership, scope
-    FROM ${q(log)} ${filters.length ? `WHERE ${filters.map(([name, op], index) => (op === 'shown' ? `(${name} = $${index + 1} OR ids_json::jsonb @> jsonb_build_array($${index + 1}::text))` : `${name} ${op} $${index + 1}${name === 'id' ? '::bigint' : name === 'at' ? '::timestamptz' : ''}`)).join(' AND ')}` : ''}
-    ORDER BY id DESC LIMIT $${values.length + 1}`,
-    [...values, query.limit],
+    FROM ${q(log)} ${clauses.length ? `WHERE ${clauses.join(' AND ')}` : ''}
+    ORDER BY id DESC LIMIT $${params.length + 1}`,
+    [...params, query.limit],
   );
   return (result.rows as Array<Record<string, unknown>>).map(storedReadAudit);
 }

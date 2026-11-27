@@ -69,3 +69,57 @@ test('a tenant App with nothing wrong but its stores passes validation and exits
   assert.match(validation!.detail, /stores/);
   assert.ok(!report.problems.some((found) => found.severity === 'error' && found.step === 'validation'), run.stdout);
 });
+
+test('a tenant App with notify rules provisions its notification store in migrate stores up (#580)', async (t) => {
+  const { runMigrate } = await import('../packages/engine/src/server/migrate/cli.js');
+  const { MIGRATE_APPS } = await import('../packages/mistri/src/server/cli/appTargets.js');
+  const { tenantStoresNeeded } = await import('../packages/mistri/src/server/stores/storesCli.js');
+  const directory = mkdtempSync(join(tmpdir(), 'mistri-tenant-notify-stores-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const business = join(directory, 'business.db');
+  const written = writeDepotApp(directory, { business, authStore: join(directory, 'auth.db'), physical: 'physical_item' });
+  const db = new DatabaseSync(business);
+  db.exec(DEPOT_TABLE('physical_item'));
+  db.close();
+  const manifest = join(written.appDir, 'app.json');
+  const app = JSON.parse(readFileSync(manifest, 'utf8')) as {
+    resources: { item: Record<string, unknown> };
+  };
+  app.resources.item.notify = [{ on: 'insert', to: 'name', title: 'New item' }];
+  writeFileSync(manifest, JSON.stringify(app));
+
+  // tenantStoresNeeded reports inbox (and integrations when send.channel is email)
+  assert.ok(
+    tenantStoresNeeded(
+      { app: { resources: { item: { notify: [{ on: 'insert', to: 'name', title: 'x' }] } } } as never, pages: [] },
+      {},
+      undefined,
+      () => new Map(),
+    ).includes('inbox'),
+  );
+  assert.ok(
+    tenantStoresNeeded(
+      {
+        app: {
+          resources: { item: { notify: [{ on: 'insert', send: { channel: 'email', to: 'email' }, title: 'x' }] } },
+        } as never,
+        pages: [],
+      },
+      {},
+      undefined,
+      () => new Map(),
+    ).includes('integrations'),
+  );
+
+  // migrate stores up --app --policy provisions the notification store for the tenant App
+  const lines: string[] = [];
+  const code = await runMigrate(
+    ['stores', 'up', '--app', written.appDir, '--policy', written.policy, '--config', written.config],
+    (line) => lines.push(line),
+    undefined,
+    MIGRATE_APPS,
+  );
+  const output = lines.join('\n');
+  assert.equal(code, 0, output);
+  assert.match(output, /notification store v\d+ provisioned/, output);
+});

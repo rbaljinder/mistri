@@ -22,8 +22,20 @@ interface UiReadAudit {
 
 export function useReadAudit(filters: ReadAuditFilters = {}): UiReadAudit {
   const host = useUiHost();
-  const { actor, resource, record, since, until, before } = filters;
-  const asked = useMemo(() => ({ actor, resource, record, since, until }), [actor, resource, record, since, until]);
+  const { actor, resource, record, parent, since, until, before } = filters;
+  const parentResource = parent?.resource;
+  const parentRecord = parent?.record;
+  const asked = useMemo(
+    () => ({
+      actor,
+      resource,
+      record,
+      ...(parentResource !== undefined && parentRecord !== undefined ? { parent: { resource: parentResource, record: parentRecord } } : {}),
+      since,
+      until,
+    }),
+    [actor, resource, record, parentResource, parentRecord, since, until],
+  );
   const query = useInfiniteQuery({
     /* The filters are in the key, so each set has its own pages and only the latest one's are drawn. */
     queryKey: ['mistri-ui', 'reads', ...host.scope, asked, before ?? null],

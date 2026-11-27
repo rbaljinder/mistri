@@ -6167,6 +6167,7 @@
         "api-command-no-record",
         "api-command-unheld",
         "api-document-depth",
+        "api-document-size",
         "api-event-unknown",
         "api-event-unsupported",
         "api-filter-type",

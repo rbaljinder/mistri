@@ -4,7 +4,7 @@ import { beforeEach, expect, test, vi } from 'vitest';
 
 const owner = { mode: 'authenticated', accountId: 'eve', appId: 'desk', epoch: 1, tenant: { tenantId: 'north' } };
 const identity = vi.hoisted(() => ({ current: null as unknown }));
-vi.mock('@mistriwork/kit/client/sessionIdentity.js', () => ({ captureAccountIdentity: () => identity.current }));
+vi.mock('@mistriwork/kit/client/sessionIdentity.js', () => ({ captureSessionIdentity: () => identity.current }));
 const admin = vi.hoisted(() => ({
   openAdministration: vi.fn(),
   listAdministrationTenants: vi.fn(),

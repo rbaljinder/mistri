@@ -3960,7 +3960,11 @@ function domainsStub(seen: string[] = []): TenantDomainsService {
 
 /** A tenant's read audit as the deployment's fenced reader holds it: rows of both tenants in one log, each read by the
     tenant it is asked for and no other, newest first, paged by id. `seen` names the tenant every call came for. */
-function readsStub(seen: string[] = [], editors: readonly string[] = ['operator']): TenantReadsService {
+function readsStub(
+  seen: string[] = [],
+  editors: readonly string[] = ['operator'],
+  options: { resources?: readonly string[]; extra?: readonly StoredReadAudit[] } = {},
+): TenantReadsService {
   const row = (id: number, tenant: string, actor: string, extra: Partial<StoredReadAudit>): StoredReadAudit => ({
     id,
     at: new Date(Date.UTC(2026, 10, 1, 0, id)).toISOString(),
@@ -3989,19 +3993,30 @@ function readsStub(seen: string[] = [], editors: readonly string[] = ['operator'
     }),
     row(7, 'north', 'alice', { route: 'command', command: 'close', record: 'north-item', roles: ['viewer'], membership: 'north-alice' }),
     row(8, 'south', 'bob', { route: 'command', command: 'close', record: 'south-item', roles: ['viewer'], membership: 'south-bob' }),
+    ...(options.extra ?? []),
   ];
   return {
     editors,
-    resources: ['item'],
+    resources: options.resources ?? ['item'],
     async read(tenantId, query) {
       seen.push(`reads:${tenantId}`);
       assertReadAuditQuery({ ...query, tenant: tenantId });
       return log
         .filter((read) => read.tenant === tenantId)
         .filter((read) => query.actor === undefined || read.actor === query.actor)
+        .filter((read) => query.resource === undefined || read.resource === query.resource)
         .filter(
           (read) =>
             query.record === undefined || read.record === query.record || String(read.ids ?? '').includes(JSON.stringify(query.record)),
+        )
+        .filter(
+          (read) =>
+            query.targets === undefined ||
+            query.targets.some(
+              (target) =>
+                target.resource === read.resource &&
+                target.records.some((record) => read.record === record || String(read.ids ?? '').includes(JSON.stringify(record))),
+            ),
         )
         .filter((read) => query.before === undefined || read.id < query.before)
         .toReversed()
@@ -4583,6 +4598,70 @@ test('the reads route answers the platform realm and a support visit as a route 
     assert.deepEqual(await route.answer({}, principal, where), { status: 404, body: { error: 'Not found.', code: 'not_found' } });
   assert.equal((await route.answer({}, { roles: ['operator'] }, { platform: false, onSupport: false })).status, 404);
   assert.equal((await route.answer({}, principal, { platform: false, onSupport: false })).status, 200);
+});
+
+test('POST /api/reads resolves parent { resource, record } across 1-hop audited children within the tenant', async (t) => {
+  const seen: string[] = [];
+  const f = await fixture(t, {
+    tenantBranding: true,
+    foreignKey: true,
+    host: {
+      reads: readsStub(seen, ['operator'], {
+        resources: ['item', 'note'],
+        extra: [
+          {
+            id: 9,
+            at: new Date(Date.UTC(2026, 10, 1, 0, 9)).toISOString(),
+            app: 'fence',
+            tenant: 'north',
+            actor: 'alice',
+            resource: 'note',
+            route: 'related',
+            record: 'north-note',
+          },
+          {
+            id: 10,
+            at: new Date(Date.UTC(2026, 10, 1, 0, 10)).toISOString(),
+            app: 'fence',
+            tenant: 'south',
+            actor: 'bob',
+            resource: 'note',
+            route: 'related',
+            record: 'south-note',
+          },
+        ],
+      }),
+    },
+  });
+  await f.maintenance((admin) => admin.putMembership({ ...f.grant, roles: ['operator', 'viewer'], expectedVersion: '1' }).then(() => {}));
+  const admin = await f.open('north');
+
+  const both = await f.data('/api/reads', admin, { parent: { resource: 'item', record: 'north-item' } });
+  assert.equal(both.status, 200, both.text);
+  assert.deepEqual(
+    (both.body.reads as Array<{ id: number; resource: string }>).map((entry) => [entry.id, entry.resource]),
+    [
+      [9, 'note'],
+      [7, 'item'],
+      [6, 'item'],
+      [5, 'item'],
+      [3, 'item'],
+      [1, 'item'],
+    ],
+  );
+
+  // Narrowing by resource returns only the child resource reads.
+  const onlyNotes = await f.data('/api/reads', admin, { parent: { resource: 'item', record: 'north-item' }, resource: 'note' });
+  assert.equal(onlyNotes.status, 200, onlyNotes.text);
+  assert.deepEqual(
+    (onlyNotes.body.reads as Array<{ id: number }>).map((entry) => entry.id),
+    [9],
+  );
+
+  // Another tenant's parent record yields no child rows and no audit reads.
+  const southParent = await f.data('/api/reads', admin, { parent: { resource: 'item', record: 'south-item' } });
+  assert.equal(southParent.status, 200, southParent.text);
+  assert.deepEqual(southParent.body.reads, []);
 });
 
 /* Each served route, through the lease of the north tenant, answers another tenant's row as it answers a key nothing
