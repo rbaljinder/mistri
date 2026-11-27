@@ -9,6 +9,7 @@ import { Button } from '@mistriwork/ui/Button.js';
 import { toast } from '@mistriwork/kit/client/core.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import type { AppIconName } from '@mistriwork/engine/shared/appIcons.js';
+import './sdk/host.js';
 import { useCommand } from './sdk/hooks.js';
 import { say } from '../copy/dashboards/components/DashboardCommand.js';
 
