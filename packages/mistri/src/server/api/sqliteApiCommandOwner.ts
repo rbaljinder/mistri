@@ -27,6 +27,7 @@ import { apiPublicActor, apiPublicForm, shapeApiPublicResult, spendApiPublicBudg
 import { withAppPublicUrls } from '../links/publicLink.js';
 import type { ApiCommandRoute } from './apiCommandRoute.js';
 import { narrowApiOpenApi, renderApiOpenApi } from './apiOpenApiDocument.js';
+import { MAX_API_DOCUMENT_BYTES, MAX_API_DOCUMENT_NODES } from './apiRefusals.js';
 import { previewApiMcpReadTools } from './apiMcpReadTools.js';
 import { projectApiMcpCommandTools } from './apiMcpCommandTools.js';
 import { readApiApp } from './appApiValidation.js';
@@ -397,7 +398,9 @@ export async function createSqliteApiCommandOwner(
           }
           // A refusal is serialized and re-authorized exactly like a result: a
           // revocation before the final check yields no stale business answer.
-          const body = snapshot(answer.value, listing ? 2_097_152 : 1024 * 1024).json;
+          const body = listing
+            ? snapshot(answer.value, MAX_API_DOCUMENT_BYTES, { maxNodes: MAX_API_DOCUMENT_NODES }).json
+            : snapshot(answer.value, 1024 * 1024).json;
           fresh(credential, observation, signal);
           for (const [handle, value] of results) if (value.observation.expiresAt <= Date.now()) forget(handle);
           const bytes = Buffer.byteLength(body);

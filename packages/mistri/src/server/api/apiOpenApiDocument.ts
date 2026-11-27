@@ -4,7 +4,7 @@
  * own. A command path always contains `/commands/`, which no read path can
  * (`commands` is a reserved resource name), and command components have their
  * own prefixes, so a document splits back into its halves without guessing. */
-import { MAX_JSON_DEPTH, MAX_JSON_NODES, snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
+import { MAX_JSON_DEPTH, snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import type { AppDef } from '../../shared/appModel.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { BusinessCommandRegistry } from '../commands/businessCommands.js';
@@ -14,7 +14,7 @@ import { renderApiCommandOpenApi } from './apiCommandOpenApi.js';
 import { renderApiReadOpenApi } from './apiReadOpenApi.js';
 import { narrowApiReadOpenApi } from './apiNarrowedReadOpenApi.js';
 import { compareApiReadSpecs } from './apiReadSpecCompare.js';
-import { apiJudgment } from './apiRefusals.js';
+import { apiJudgment, MAX_API_DOCUMENT_BYTES, MAX_API_DOCUMENT_NODES } from './apiRefusals.js';
 
 type Json = Record<string, any>;
 /** Which mistri document this is: the composed one, or reads alone (apiReadOpenApi.ts). */
@@ -66,10 +66,9 @@ function largestExposures(value: unknown, top = 5): Array<readonly [label: strin
   entries.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   return entries.slice(0, top);
 }
-/* The document is spelled by the walk a command request is read by, which refuses past its depth or node ceiling with
-   the request's own sentence ("The command request is invalid."), so an App whose API nests too deep or grows past
-   10,000 nodes was told nothing it could act on. Said here as the document's: the limit, the size or path, and what
-   to trim. */
+/* The document is spelled by the canonical walk, with its own 100,000-node ceiling (apart from the 10,000-node
+   ceiling untrusted command requests are held to) so Apps with many exposed resources, commands and `choose` picks
+   render cleanly while still failing with an actionable diagnostic if a document grows past the bound. */
 const canonical = (value: unknown) => {
   const deep = tooDeep(value);
   if (deep) {
@@ -83,17 +82,17 @@ const canonical = (value: unknown) => {
     );
   }
   const nodes = countNodes(value);
-  if (nodes > MAX_JSON_NODES) {
+  if (nodes > MAX_API_DOCUMENT_NODES) {
     const largest = largestExposures(value);
     const named = largest.length
       ? ` Largest entries: ${largest.map(([label, count]) => `${label} (${count.toLocaleString('en-US')})`).join(', ')}.`
       : '';
     throw new Error(
-      `The App's API document has ${nodes.toLocaleString('en-US')} nodes, past the ${MAX_JSON_NODES.toLocaleString('en-US')}-node limit a document is held to [api-document-size].${named} ` +
+      `The App's API document has ${nodes.toLocaleString('en-US')} nodes, past the ${MAX_API_DOCUMENT_NODES.toLocaleString('en-US')}-node limit a document is held to [api-document-size].${named} ` +
         `Trim the exposed fields or remove entries from \`api\`.`,
     );
   }
-  return snapshot(value, 2_097_152).json;
+  return snapshot(value, MAX_API_DOCUMENT_BYTES, { maxNodes: MAX_API_DOCUMENT_NODES }).json;
 };
 const freeze = (value: unknown): void => {
   if (!value || typeof value !== 'object') return;
@@ -139,7 +138,7 @@ export function renderApiOpenApi(
 /** The read half exactly as the read renderer shapes it, and the command half.
  * A read-only document is accepted as a document with no commands. */
 export function splitApiOpenApi(input: unknown) {
-  const doc = object(snapshot(input, 2_097_152).value);
+  const doc = object(snapshot(input, MAX_API_DOCUMENT_BYTES, { maxNodes: MAX_API_DOCUMENT_NODES }).value);
   if (doc['x-mistri-document'] !== DOCUMENT && doc['x-mistri-document'] !== READ_DOCUMENT) return refuse();
   const components = object(doc.components),
     readPaths: Json = {},

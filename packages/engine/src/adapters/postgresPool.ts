@@ -109,6 +109,7 @@ type PgPoolLoader = () => Promise<unknown>;
 /* The leases whose client sends each query without waiting for the one before
    (a writer's, on node-postgres): what pipelined() may send together. */
 const pipelining = new WeakSet<PgQuery>();
+let pipelineUnavailableWarned = false;
 /** This lease's client pipelines: several queries asked at once leave together. */
 export const pipelines = (client: PgQuery): boolean => pipelining.has(client);
 /** `wrapper` sends through `client` and nothing else: it pipelines where `client` does. */
@@ -676,6 +677,17 @@ export class PgConnectionManager {
            was running rejects with the same failure, which is where it is
            answered. */
         (client as PgClient).on?.('error', () => {});
+        if (
+          !pipelineUnavailableWarned &&
+          (write || this.pipelineReads) &&
+          (client as { pipeline?: unknown }).pipeline !== true &&
+          typeof (client as { _pulseQueryQueue?: unknown })._pulseQueryQueue === 'function'
+        ) {
+          pipelineUnavailableWarned = true;
+          console.warn(
+            'mistri: the installed "pg" driver does not support query pipelining (upgrade pg to >= 8.20, e.g. pg@^8.23.0); parallel queries on a shared read snapshot will run sequentially.',
+          );
+        }
         /* A server gone silent under a statement is closed here, not waited out (postgresSilence.ts): before the
            session's own settings, which are statements too. */
         watchSilence(client, this.silenceMs);

@@ -19,6 +19,7 @@ import { createApiCommandEnvelopeBundle } from './apiCommandEnvelope.js';
 import { renderApiInputSchema } from './apiInputSchema.js';
 import { chosenSchema } from './apiChosen.js';
 import { createApiReadKeyCodec } from './apiReadKey.js';
+import { MAX_API_DOCUMENT_NODES } from './apiRefusals.js';
 
 type Json = Record<string, unknown>;
 const fail = (): never => {
@@ -219,7 +220,9 @@ export function projectApiMcpCommandTools(
         }),
       );
   }
-  return snapshot({ stage: 'private-command-tool-preview', authorization: 'pending', tools, bindings }, 4194304).value as Readonly<{
+  return snapshot({ stage: 'private-command-tool-preview', authorization: 'pending', tools, bindings }, 4194304, {
+    maxNodes: MAX_API_DOCUMENT_NODES,
+  }).value as Readonly<{
     stage: 'private-command-tool-preview';
     authorization: 'pending';
     tools: readonly Readonly<Json>[];

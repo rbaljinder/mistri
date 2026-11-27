@@ -9,6 +9,7 @@ import { apiSeveralSources } from '../../shared/appApi.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import { checkApiReadCatalog } from './apiReadCatalog.js';
 import { renderApiReadOpenApi } from './apiReadOpenApi.js';
+import { MAX_API_DOCUMENT_NODES } from './apiRefusals.js';
 
 type Json = Record<string, unknown>;
 const fail = (): never => {
@@ -195,6 +196,7 @@ export function previewApiMcpReadTools(
   return snapshot(
     { stage: 'private-read-tool-preview', authorization: 'pending', execution: 'pending', cursorVerification: 'pending', tools, bindings },
     4194304,
+    { maxNodes: MAX_API_DOCUMENT_NODES },
   ).value as Readonly<{
     stage: 'private-read-tool-preview';
     authorization: 'pending';
