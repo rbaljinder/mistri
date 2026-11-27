@@ -901,3 +901,91 @@ test('renders callout, timeline, tabs, and custom generative UI blocks safely wi
   expect(await screen.findByText('Lease risk')).toBeInTheDocument();
   expect(screen.getByText('84')).toBeInTheDocument();
 });
+
+test('multi-agent switcher changes starters and sends agent id; delegation card and Canvas split pane render and dismiss cleanly', async () => {
+  const user = userEvent.setup();
+  let sentBody: Record<string, unknown> | undefined;
+  mocks.app = {
+    name: 'compass',
+    resources: {},
+    assistant: {
+      icon: 'chat-circle',
+      defaultAgent: 'deal_desk',
+      agents: [
+        {
+          id: 'deal_desk',
+          name: 'Deal Desk',
+          description: 'Triages open opportunities.',
+          starters: ['Review stale deals'],
+        },
+        {
+          id: 'rev_ops',
+          name: 'RevOps Analyst',
+          description: 'Audits pipeline risk.',
+          starters: ['Audit Q4 risk'],
+        },
+      ],
+    },
+  };
+  fetcher.mockImplementation(async (url, init) => {
+    const path = String(url);
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path === '/api/assistant/turn') {
+      sentBody = JSON.parse(String(init?.body ?? '{}')) as Record<string, unknown>;
+      return events(
+        ['conversation', { id: 'c_wave1', title: 'Audit Q4 risk', agent: 'rev_ops', person: 1 }],
+        [
+          'delegation',
+          {
+            id: 'd_1',
+            fromAgent: 'rev_ops',
+            fromAgentName: 'RevOps Analyst',
+            agent: 'deal_desk',
+            agentName: 'Deal Desk',
+            task: 'Check Acme Corp renewal',
+            status: 'done',
+            summary: 'Acme Corp is healthy.',
+            durationMs: 650,
+          },
+        ],
+        [
+          'block',
+          {
+            id: 'b_custom',
+            block: {
+              kind: 'custom',
+              name: 'deal_scorecard',
+              title: 'Acme Deal Scorecard',
+              props: { account: 'Acme Corp', score: 92 },
+            },
+          },
+        ],
+        ['done', { state: 'idle', tokens: 20 }],
+      );
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  // Default agent starter is shown.
+  expect(await screen.findByRole('button', { name: 'Review stale deals' })).toBeInTheDocument();
+  // Switch agent via the Agent Switcher select.
+  const switcher = screen.getByRole('button', { name: /Agent/ });
+  await user.click(switcher);
+  await user.click(await screen.findByRole('option', { name: 'RevOps Analyst' }));
+  // Starters update to the newly selected agent's starters.
+  const starterBtn = await screen.findByRole('button', { name: 'Audit Q4 risk' });
+  await user.click(starterBtn);
+
+  expect(await screen.findByText('Acme Corp is healthy.')).toBeInTheDocument();
+  expect(sentBody?.agent).toBe('rev_ops');
+  // Delegation route & custom block appear.
+  expect(screen.getByText('Check Acme Corp renewal')).toBeInTheDocument();
+  expect(screen.getByText('Acme Deal Scorecard')).toBeInTheDocument();
+
+  // Open the custom block in the Canvas pane and close it cleanly.
+  await user.click(screen.getByRole('button', { name: 'Open in Canvas' }));
+  expect(screen.getByRole('region', { name: 'Canvas' })).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Close Canvas' }));
+  expect(screen.queryByRole('region', { name: 'Canvas' })).not.toBeInTheDocument();
+});

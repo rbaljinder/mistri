@@ -3884,6 +3884,54 @@ export interface AssistantDeclaration {
   /** Token caps, counted per model call: a turn past one is refused before the model is asked. A person's day is 200,000 tokens unless `tokensPerPersonPerDay` names another figure.
    * `steps` is the rounds of tool calls one answer may take before it is written, 8 unless named and 32 at most: a round whose every call was refused is not counted, and the call after the last round only writes. */
   readonly limits?: { readonly tokensPerTurn?: number; readonly tokensPerPersonPerDay?: number; readonly tokensPerDay?: number; readonly steps?: number };
+  /** Named, role-scoped agents for multi-agent Apps. Each agent narrows the assistant's tools, blocks, starters, instructions, and limits, and may delegate to sibling `subagents`. */
+  readonly agents?: Readonly<Record<string, AssistantAgentDeclaration>>;
+  /** The agent key selected by default when `agents` is declared. Absent, the first agent in `agents`. */
+  readonly defaultAgent?: string;
+  /** Author-declared interactive custom blocks the assistant may draw via `show({ kind: 'custom', name, props })`. */
+  readonly customBlocks?: Readonly<Record<string, AssistantCustomBlockDeclaration>>;
+}
+/** A named agent inside a multi-agent App's assistant: narrows tools, blocks, starters, roles, instructions, and may delegate to sibling `subagents`. */
+export interface AssistantAgentDeclaration {
+  /** Human-readable name shown in the agent switcher and delegation trace. */
+  readonly name: string;
+  /** Short summary of this agent's specialty, shown to readers and parent agents delegating to it. */
+  readonly description?: string | AppMessageRef;
+  /** Icon name shown beside this agent in the switcher and delegation card. */
+  readonly icon?: AppIconName;
+  /** Instructions appended to the top-level assistant instructions when this agent is active. */
+  readonly instructions?: string;
+  /** Model id override for this agent. */
+  readonly model?: string;
+  /** Default reasoning effort for this agent. */
+  readonly effort?: 'low' | 'medium' | 'high';
+  /** Starters offered when this agent is active. */
+  readonly starters?: readonly (string | AssistantStarter)[];
+  /** Roles permitted to pick or delegate to this agent; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+  /** Narrowing of the top-level assistant tools. */
+  readonly tools?: readonly ('find' | 'describe' | 'query' | 'show' | 'run')[];
+  /** Additional verbs this agent may never propose (`resource.action` or `resource.new`). */
+  readonly exclude?: readonly `${string}.${string}`[];
+  /** Narrowing of the top-level assistant blocks. */
+  readonly blocks?: readonly ('table' | 'metric' | 'metrics' | 'chart' | 'breakdown' | 'funnel' | 'board' | 'timeline' | 'record' | 'callout' | 'tabs')[];
+  /** Subset of `assistant.customBlocks` keys this agent may draw. */
+  readonly customBlocks?: readonly string[];
+  /** Sibling agent keys this agent may delegate bounded analysis sub-tasks to via the `delegate` tool. */
+  readonly subagents?: readonly string[];
+  /** Narrowing token and step limits for this agent. */
+  readonly limits?: { readonly tokensPerTurn?: number; readonly tokensPerPersonPerDay?: number; readonly tokensPerDay?: number; readonly steps?: number };
+}
+/** An author-declared custom assistant block backed by a validated prop schema and optional interactive React component. */
+export interface AssistantCustomBlockDeclaration {
+  /** Short description shown to the model in its catalog so it knows when to draw this block. */
+  readonly description: string | AppMessageRef;
+  /** Optional default heading when the model omits `title`. */
+  readonly title?: string | AppMessageRef;
+  /** Optional author React component (`component('id', { module: './widgets/...' })`) compiled and mounted inside the assistant thread and Canvas pane. */
+  readonly component?: ComponentDecl<string, 'section'>;
+  /** Validated JSON-safe props schema the model may pass when calling `show({ kind: 'custom', name, props })`. */
+  readonly props?: Readonly<Record<string, ComponentPropDecl>>;
 }
 /** A starter offered in some places only, or to some roles only: `{ text: 'Summarize this ticket', records: ['incident'] }`,
  * `{ text: 'Who is behind?', roles: ['manager'] }`. Give it `views`, `records`, `roles` or any of them together; a

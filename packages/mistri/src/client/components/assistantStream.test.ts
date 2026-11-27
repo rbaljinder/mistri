@@ -129,3 +129,69 @@ test('reasoning events join deltas, record duration, mark redaction, and close w
     { type: 'text', text: 'Done.' },
   ]);
 });
+
+test('block_delta upserts streaming blocks in place and final block settles cleanly; delegation upserts running -> done', () => {
+  let items: PanelItem[] = [{ type: 'person', text: 'Run scorecard' }];
+  const events: StreamEvent[] = [
+    {
+      event: 'delegation',
+      data: {
+        id: 'd1',
+        fromAgent: 'orchestrator',
+        fromAgentName: 'Orchestrator',
+        agent: 'analyst',
+        agentName: 'Analyst',
+        task: 'Score Acme Corp',
+        status: 'running',
+      },
+    },
+    {
+      event: 'delegation',
+      data: {
+        id: 'd1',
+        fromAgent: 'orchestrator',
+        fromAgentName: 'Orchestrator',
+        agent: 'analyst',
+        agentName: 'Analyst',
+        task: 'Score Acme Corp',
+        status: 'done',
+        summary: 'Healthy pipeline.',
+        durationMs: 420,
+      },
+    },
+    {
+      event: 'block_delta',
+      data: { id: 'b1', block: { kind: 'custom', name: 'scorecard', props: { account: 'Ac' } }, streaming: true },
+    },
+    {
+      event: 'block_delta',
+      data: { id: 'b1', block: { kind: 'custom', name: 'scorecard', props: { account: 'Acme Corp', score: 88 } }, streaming: true },
+    },
+    {
+      event: 'block',
+      data: { id: 'b1', block: { kind: 'custom', name: 'scorecard', title: 'Acme Scorecard', props: { account: 'Acme Corp', score: 88 } } },
+    },
+    { event: 'done', data: { state: 'idle' } },
+  ];
+  for (const event of events) items = applyEvent(items, event);
+  expect(items).toEqual([
+    { type: 'person', text: 'Run scorecard' },
+    {
+      type: 'delegation',
+      id: 'd1',
+      fromAgent: 'orchestrator',
+      fromAgentName: 'Orchestrator',
+      agent: 'analyst',
+      agentName: 'Analyst',
+      task: 'Score Acme Corp',
+      status: 'done',
+      summary: 'Healthy pipeline.',
+      durationMs: 420,
+    },
+    {
+      type: 'block',
+      id: 'b1',
+      block: { kind: 'custom', name: 'scorecard', title: 'Acme Scorecard', props: { account: 'Acme Corp', score: 88 } },
+    },
+  ]);
+});

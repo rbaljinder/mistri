@@ -415,6 +415,65 @@
             "tokensPerDay": { "type": "integer", "minimum": 1000 },
             "steps": { "type": "integer", "minimum": 1, "maximum": 32, "description": "Rounds of tool calls one answer may take before it is written; 8 when absent. A round whose every call was refused is not counted." }
           }
+        },
+        "agents": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_-]{0,39}$" },
+          "description": "Named, role-scoped agents for multi-agent Apps. Each agent narrows tools, blocks, starters, instructions, and limits, and may delegate to sibling subagents.",
+          "additionalProperties": { "$ref": "#/$defs/assistantAgent" }
+        },
+        "defaultAgent": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,39}$",
+          "description": "Default agent key selected when agents is declared."
+        },
+        "customBlocks": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 32,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
+          "description": "Author-declared interactive custom blocks the assistant may draw via show({ kind: 'custom', name, props }).",
+          "additionalProperties": { "$ref": "#/$defs/assistantCustomBlock" }
+        }
+      }
+    },
+    "assistantAgent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name"],
+      "description": "A named agent inside a multi-agent App's assistant.",
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 48, "description": "Display name shown in the agent switcher and delegation trace." },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "Short summary of this agent's specialty." },
+        "icon": { "$ref": "#/$defs/appIcon" },
+        "instructions": { "type": "string", "minLength": 1, "description": "Instructions appended when this agent is active." },
+        "model": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$", "description": "Model id override for this agent." },
+        "effort": { "enum": ["low", "medium", "high"] },
+        "starters": { "$ref": "#/$defs/assistant/properties/starters" },
+        "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+        "tools": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["find", "describe", "query", "show", "run"] } },
+        "exclude": { "type": "array", "items": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]*\\.[A-Za-z_][A-Za-z0-9_]*$" } },
+        "blocks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "enum": ["table", "metric", "metrics", "chart", "breakdown", "funnel", "board", "timeline", "record", "callout", "tabs"] } },
+        "customBlocks": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$" } },
+        "subagents": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,39}$" }, "description": "Sibling agent keys this agent may delegate bounded sub-tasks to." },
+        "limits": { "$ref": "#/$defs/assistant/properties/limits" }
+      }
+    },
+    "assistantCustomBlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["description"],
+      "description": "An author-declared interactive custom block the assistant may draw.",
+      "properties": {
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "Short description shown to the model in its catalog." },
+        "title": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 120 }, { "$ref": "page.schema.json#/$defs/messageRef" }], "description": "Optional default heading for the block." },
+        "component": { "$ref": "#/$defs/component" },
+        "props": {
+          "type": "object",
+          "propertyNames": { "pattern": "^[A-Za-z][A-Za-z0-9_]{0,39}$" },
+          "additionalProperties": { "$ref": "#/$defs/componentProp" }
         }
       }
     },

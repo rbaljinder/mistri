@@ -819,7 +819,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // `measures`, `select`, `orderBy`, `limit`, plus `name`, `from` already present: twelve entries; eight new names): 1862/554.
     // Unreleased: assistant surface & reasoning controls (`effortPicker`, `reasoning`, `presentations`,
     // `defaultPresentation`: four entries; four new names): 1866/558.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1866, names: 558 });
+    // Unreleased (Wave 1): multi-agent apps & interactive custom blocks (`agents`, `defaultAgent`, `customBlocks`,
+    // `assistantAgent` properties, `assistantCustomBlock` properties: 21 entries; 4 new names): 1887/562.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1887, names: 562 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

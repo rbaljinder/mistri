@@ -11,12 +11,20 @@
  * is kept exactly as it came, thinking and its signatures too, so every call
  * after the first is the previous one's prefix.
  */
-import { DEFAULT_ASSISTANT_STEPS, type AppAssistant } from '../../shared/appAssistant.js';
+import { DEFAULT_ASSISTANT_STEPS, resolveAgentAssistant, type AppAssistant, type AppAssistantAgent } from '../../shared/appAssistant.js';
 import type { AssistantOwner, AssistantStore, ConversationState, StoredEvent } from '../../adapters/assistant/assistantStore.js';
 import type { AssistantModel, ModelBlock, ModelMessage, ModelTool, ModelUsage } from './assistantModel.js';
 import type { ModelRefusal } from './assistantModelRefusal.js';
-import { answerTool, runningLabel, type DisplayItem, type Proposal, type ToolSession } from './assistantTools.js';
-import { estimateTokens } from './assistantCatalog.js';
+import {
+  answerTool,
+  partialBlockFromJson,
+  runningLabel,
+  type AssistantBlock,
+  type DisplayItem,
+  type Proposal,
+  type ToolSession,
+} from './assistantTools.js';
+import { catalogFromPayload, estimateTokens, systemPrompt, toolSpecs } from './assistantCatalog.js';
 
 const MAX_OUTPUT = 4096;
 /** Past this many tokens of history, the earlier part is summarised before the next call. */
@@ -255,6 +263,12 @@ interface TurnContext {
   conversation: string;
   model: AssistantModel;
   assistant: AppAssistant;
+  /** Un-narrowed top-level assistant definition, used to resolve sibling subagents on `delegate`. */
+  baseAssistant?: AppAssistant;
+  /** Currently active named agent (if the App declares `assistant.agents`). */
+  activeAgent?: AppAssistantAgent;
+  /** Viewer's verified roles, enforced when resolving delegated subagents. */
+  viewerRoles?: readonly string[];
   system: string;
   tools: readonly ModelTool[];
   session: ToolSession;
@@ -269,6 +283,9 @@ interface TurnContext {
    * call so a switch turned off mid-answer stops the next call, not the next conversation. */
   withdrawn?: () => Promise<string | undefined>;
 }
+
+const MAX_DELEGATION_DEPTH = 2;
+const MAX_SUBAGENT_STEPS = 4;
 
 const total = (usage: ModelUsage) => usage.input + usage.output + usage.cacheRead + usage.cacheWrite;
 /* What a step weighs against `tokensPerTurn`: every step resends the turn so far, and its cached part is read at a
@@ -329,6 +346,210 @@ async function compactIfLong(context: TurnContext, events: StoredEvent[]): Promi
 }
 
 /**
+ * Run a bounded read-only subagent delegation under the exact same viewer authority and loopback session.
+ * Streams live `delegation` SSE updates (`running` → `done`/`error`) and returns a persisted `DisplayItem`
+ * so reloading the conversation replays the exact delegation trace, child reasoning, and child blocks.
+ */
+async function runDelegation(
+  context: TurnContext,
+  use: { id: string; name: string; input: unknown },
+  spentSoFar: number,
+  depth = 1,
+): Promise<{ result: string; isError?: true; display: DisplayItem[]; spent: number }> {
+  const args = use.input && typeof use.input === 'object' && !Array.isArray(use.input) ? (use.input as Record<string, unknown>) : {};
+  const targetId = typeof args.agent === 'string' ? args.agent.trim() : '';
+  const task = typeof args.task === 'string' ? args.task.trim().slice(0, 1000) : '';
+  const allowedSubs = context.activeAgent?.subagents ?? [];
+  const baseAssistant = context.baseAssistant ?? context.assistant;
+  if (depth > MAX_DELEGATION_DEPTH) {
+    return {
+      result: JSON.stringify({ error: 'Maximum subagent delegation depth reached.' }),
+      isError: true,
+      display: [{ type: 'step', id: use.id, tool: 'delegate', label: 'delegate: max depth reached', failed: true }],
+      spent: 0,
+    };
+  }
+  if (!targetId || !allowedSubs.includes(targetId) || !baseAssistant.agents?.[targetId]) {
+    return {
+      result: JSON.stringify({
+        error: `Subagent "${targetId}" is not available here. Available: ${allowedSubs.join(', ') || 'none'}.`,
+      }),
+      isError: true,
+      display: [{ type: 'step', id: use.id, tool: 'delegate', label: `delegate: unknown subagent "${targetId}"`, failed: true }],
+      spent: 0,
+    };
+  }
+  if (!task) {
+    return {
+      result: JSON.stringify({ error: 'delegate requires a non-empty task.' }),
+      isError: true,
+      display: [{ type: 'step', id: use.id, tool: 'delegate', label: 'delegate: missing task', failed: true }],
+      spent: 0,
+    };
+  }
+  let resolved: ReturnType<typeof resolveAgentAssistant>;
+  try {
+    resolved = resolveAgentAssistant(baseAssistant, targetId, context.viewerRoles);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Subagent is not permitted.';
+    return {
+      result: JSON.stringify({ error: message }),
+      isError: true,
+      display: [{ type: 'step', id: use.id, tool: 'delegate', label: `delegate: ${message}`, failed: true }],
+      spent: 0,
+    };
+  }
+  const target = resolved.agent!;
+  // Subagents are strictly read/analyze/visualize: write proposals remain with the primary agent in front of the user.
+  const childAssistant: AppAssistant = {
+    ...resolved.assistant,
+    tools: resolved.assistant.tools.filter((tool) => tool !== 'run'),
+    limits: {
+      ...resolved.assistant.limits,
+      steps: Math.min(resolved.assistant.limits.steps ?? MAX_SUBAGENT_STEPS, MAX_SUBAGENT_STEPS),
+    },
+  };
+  const childAgent: AppAssistantAgent = depth < MAX_DELEGATION_DEPTH ? target : { ...target, subagents: undefined };
+  const startedAt = Date.now();
+  const baseDisplay: Extract<DisplayItem, { type: 'delegation' }> = {
+    type: 'delegation',
+    id: use.id,
+    ...(context.activeAgent ? { fromAgent: context.activeAgent.id, fromAgentName: context.activeAgent.name } : {}),
+    agent: target.id,
+    agentName: target.name,
+    task,
+    status: 'running',
+  };
+  context.emit('delegation', baseDisplay);
+
+  const tables = context.session.catalog.resources.map((each) => each.name);
+  const childCatalog = catalogFromPayload(context.session.payload, childAssistant, tables, childAgent);
+  const childSystem = systemPrompt(childCatalog, context.session.ask ? 'ask' : undefined);
+  const childTools = toolSpecs(childAssistant, childAgent);
+  const childSession: ToolSession = {
+    ...context.session,
+    assistant: childAssistant,
+    catalog: childCatalog,
+  };
+  const showReasoning = childAssistant.reasoning !== 'hidden';
+  const messages: ModelMessage[] = [{ role: 'user', content: [{ type: 'text', text: task }] }];
+  const reasoningParts: string[] = [];
+  const textParts: string[] = [];
+  const childBlocks: AssistantBlock[] = [];
+  let childSpent = 0;
+
+  try {
+    const maxSteps = childAssistant.limits.steps ?? MAX_SUBAGENT_STEPS;
+    for (let step = 0; step <= maxSteps; step++) {
+      if (context.session.signal.aborted) throw Object.assign(new Error('stopped'), { name: 'AbortError' });
+      const refused = await capReached(context, spentSoFar + childSpent);
+      if (refused) throw new Error(refused);
+      const last = step === maxSteps;
+      let stepReasoning = '';
+      const reply = await context.model.stream(
+        {
+          model: childAssistant.model,
+          system: childSystem,
+          tools: childTools,
+          messages,
+          maxTokens: 2048,
+          ...(childAssistant.effort ? { effort: childAssistant.effort } : {}),
+          ...(last ? { answerOnly: true as const } : {}),
+        },
+        {
+          onText: () => undefined,
+          onReasoning: (event) => {
+            if (showReasoning && event.delta) stepReasoning += event.delta;
+          },
+        },
+        context.session.signal,
+      );
+      childSpent += turnWeight(reply.usage);
+      await context.store.spend(context.owner, today(), total(reply.usage));
+      if (showReasoning && stepReasoning.trim()) reasoningParts.push(stepReasoning.trim());
+      for (const block of reply.content) {
+        if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) textParts.push(block.text.trim());
+      }
+      const uses =
+        reply.stopReason === 'tool_use' && !last
+          ? (reply.content.filter((block) => block.type === 'tool_use') as unknown as Array<{ id: string; name: string; input: unknown }>)
+          : [];
+      if (!uses.length) break;
+      messages.push({ role: 'assistant', content: reply.content });
+      const toolResults: ModelBlock[] = [];
+      for (const childUse of uses) {
+        if (context.session.signal.aborted) throw Object.assign(new Error('stopped'), { name: 'AbortError' });
+        if (childUse.name === 'delegate') {
+          const nested = await runDelegation(
+            { ...context, assistant: childAssistant, activeAgent: childAgent, session: childSession },
+            childUse,
+            spentSoFar + childSpent,
+            depth + 1,
+          );
+          childSpent += nested.spent;
+          toolResults.push({
+            type: 'tool_result',
+            tool_use_id: childUse.id,
+            content: nested.result,
+            ...(nested.isError ? { is_error: true } : {}),
+          });
+          continue;
+        }
+        const answer = await answerTool(childSession, childUse.name, childUse.input, childUse.id);
+        for (const item of answer.display) {
+          if (item.type === 'block') childBlocks.push(item.block);
+        }
+        toolResults.push({
+          type: 'tool_result',
+          tool_use_id: childUse.id,
+          content: answer.result,
+          ...(answer.isError ? { is_error: true } : {}),
+        });
+      }
+      messages.push({ role: 'user', content: toolResults });
+    }
+    const summary = textParts.join('\n\n').slice(0, 2000) || `${target.name} completed analysis.`;
+    const reasoning = reasoningParts.join('\n\n').slice(0, 2000) || undefined;
+    const durationMs = Math.max(1, Date.now() - startedAt);
+    const doneDisplay: Extract<DisplayItem, { type: 'delegation' }> = {
+      ...baseDisplay,
+      status: 'done',
+      ...(reasoning ? { reasoning } : {}),
+      summary,
+      ...(childBlocks.length ? { blocks: childBlocks.slice(0, 4) } : {}),
+      durationMs,
+    };
+    context.emit('delegation', doneDisplay);
+    return {
+      result: JSON.stringify({
+        agent: target.id,
+        agentName: target.name,
+        summary,
+        blocksDrawn: childBlocks.length,
+      }),
+      display: [doneDisplay],
+      spent: childSpent,
+    };
+  } catch (error) {
+    if (context.session.signal.aborted) throw error;
+    const message = error instanceof Error ? error.message : 'Subagent delegation failed.';
+    const errorDisplay: Extract<DisplayItem, { type: 'delegation' }> = {
+      ...baseDisplay,
+      status: 'error',
+      summary: message,
+      durationMs: Math.max(1, Date.now() - startedAt),
+    };
+    context.emit('delegation', errorDisplay);
+    return {
+      result: JSON.stringify({ error: message }),
+      isError: true,
+      display: [errorDisplay],
+      spent: childSpent,
+    };
+  }
+}
+
+/**
  * Continue the conversation from its events: called after the person's words
  * are appended, and after a proposal's outcome is. Ends `idle` or `awaiting`.
  */
@@ -363,6 +584,7 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
         events = await context.store.events(context.owner, context.conversation);
       streamed = '';
       const reasoningDurations: Array<number | undefined> = [];
+      const emittedPartialBlocks = new Map<string, string>();
       const reply = await context.model.stream(
         {
           model: context.assistant.model,
@@ -382,6 +604,15 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
             if (event.done) reasoningDurations.push(event.durationMs);
             if (!showReasoning) return;
             emit('reasoning', { ...event, id: `s${step}_${event.id}` });
+          },
+          onToolDelta: (event) => {
+            if (event.name !== 'show') return;
+            const partial = partialBlockFromJson(context.assistant, event.inputJson);
+            if (!partial) return;
+            const sig = JSON.stringify(partial);
+            if (emittedPartialBlocks.get(event.id) === sig) return;
+            emittedPartialBlocks.set(event.id, sig);
+            emit('block_delta', { id: event.id, block: partial, streaming: true });
           },
         },
         session.signal,
@@ -421,6 +652,17 @@ export async function continueTurn(context: TurnContext): Promise<ConversationSt
       for (const use of pendingTools) {
         if (session.signal.aborted) break;
         emit('running', { id: use.id, tool: use.name, label: runningLabel(use.name, use.input) });
+        if (use.name === 'delegate') {
+          const delegated = await runDelegation(context, use, spent, 1);
+          spent += delegated.spent;
+          results.push({
+            id: use.id,
+            content: delegated.result,
+            ...(delegated.isError ? { isError: true as const } : {}),
+          });
+          display.push(...delegated.display);
+          continue;
+        }
         if (use.name === 'run' && proposed) {
           const refusal = JSON.stringify({ error: 'One change at a time: wait for the outcome of the first.' });
           results.push({ id: use.id, content: refusal, isError: true });

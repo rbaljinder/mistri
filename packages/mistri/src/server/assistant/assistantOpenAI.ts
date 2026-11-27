@@ -100,7 +100,7 @@ export function openaiBody(request: Parameters<AssistantModel['stream']>[0]): Re
 
 /** Read one Chat Completions event stream into the reply, handing text and reasoning deltas on as they arrive. */
 export async function readOpenAIStream(body: ReadableStream<Uint8Array>, sink: ModelStreamSink): Promise<ModelReply> {
-  const { onText, onReasoning } = streamCallbacks(sink);
+  const { onText, onReasoning, onToolDelta } = streamCallbacks(sink);
   const text: string[] = [];
   const reasoning: string[] = [];
   let reasoningStartedAt: number | undefined;
@@ -158,7 +158,10 @@ export async function readOpenAIStream(body: ReadableStream<Uint8Array>, sink: M
       if (typeof call.id === 'string') at.id = call.id;
       const fn = (call.function ?? {}) as Record<string, string>;
       if (typeof fn.name === 'string') at.name = fn.name;
-      if (typeof fn.arguments === 'string') at.args += fn.arguments;
+      if (typeof fn.arguments === 'string') {
+        at.args += fn.arguments;
+        if (at.name) onToolDelta({ id: at.id || `call_${index}`, name: at.name, inputJson: at.args });
+      }
       calls.set(index, at);
     }
     if (typeof choice.finish_reason === 'string' && choice.finish_reason !== 'null') {

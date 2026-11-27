@@ -59,17 +59,32 @@ interface ReasoningEvent {
   durationMs?: number;
 }
 
-/** Stream sink accepted by every `AssistantModel` adapter (plain text callback or structured text + reasoning sink). */
+interface ToolDeltaEvent {
+  id: string;
+  name: string;
+  inputJson: string;
+}
+
+/** Stream sink accepted by every `AssistantModel` adapter (plain text callback or structured text + reasoning + tool-delta sink). */
 export type ModelStreamSink =
   | ((delta: string) => void)
-  | { onText: (delta: string) => void; onReasoning?: (event: ReasoningEvent) => void };
+  | {
+      onText: (delta: string) => void;
+      onReasoning?: (event: ReasoningEvent) => void;
+      onToolDelta?: (event: ToolDeltaEvent) => void;
+    };
 
-/** Normalize a `ModelStreamSink` into `{ onText, onReasoning }` callbacks without importing `assistantModel.ts` at runtime. */
+/** Normalize a `ModelStreamSink` into `{ onText, onReasoning, onToolDelta }` callbacks without importing `assistantModel.ts` at runtime. */
 export function streamCallbacks(sink: ModelStreamSink): {
   onText: (delta: string) => void;
   onReasoning: (event: ReasoningEvent) => void;
+  onToolDelta: (event: ToolDeltaEvent) => void;
 } {
   return typeof sink === 'function'
-    ? { onText: sink, onReasoning: () => undefined }
-    : { onText: sink.onText, onReasoning: sink.onReasoning ?? (() => undefined) };
+    ? { onText: sink, onReasoning: () => undefined, onToolDelta: () => undefined }
+    : {
+        onText: sink.onText,
+        onReasoning: sink.onReasoning ?? (() => undefined),
+        onToolDelta: sink.onToolDelta ?? (() => undefined),
+      };
 }

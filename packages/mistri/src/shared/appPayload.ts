@@ -12,7 +12,7 @@
  * under the resource, whichever view shows it.
  */
 import { servedShellNew, type ServedShellNew } from './appNewMenu.js';
-import type { AssistantStarter } from './appAssistant.js';
+import type { AssistantStarter, ServedAssistantAgent } from './appAssistant.js';
 import type { AppShell } from './appModel.js';
 import { appZone } from './appZone.js';
 import type { AppFormCommandReference } from './command.js';
@@ -177,6 +177,12 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
     effort?: 'low' | 'medium' | 'high';
     effortPicker?: true;
     starters?: Array<string | AssistantStarter>;
+    /** Named agents available to this viewer (filtered by roles in appProjection.ts; `roles` is never served). */
+    agents?: Array<ServedAssistantAgent & { roles?: string[] }>;
+    /** Default agent id among `agents`. */
+    defaultAgent?: string;
+    /** Author-declared custom blocks, mapped to their compiled component id (if any) and default title. */
+    customBlocks?: Record<string, { componentId?: string; title?: string }>;
   };
   /** The fields a decision answers, by table id then column (decide/decisionServing.ts): where a record reserves a
       suggestion's place, and the command its Accept runs. Only the tables this reader is served. */
@@ -288,6 +294,8 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
             ...(app.assistant.effort ? { effort: app.assistant.effort } : {}),
             ...(app.assistant.effortPicker ? { effortPicker: true as const } : {}),
             ...servedStarters(app.assistant.starters, views, schema),
+            ...servedAgents(app.assistant, views, schema),
+            ...servedCustomBlocks(app.assistant.customBlocks),
           },
         }
       : {}),
@@ -335,6 +343,48 @@ function servedStarters(
     ];
   });
   return served.length ? { starters: served } : {};
+}
+
+function servedAgents(
+  assistant: NonNullable<AppDef['assistant']>,
+  views: Readonly<Record<string, object>>,
+  schema: DatabaseSchema,
+): { agents?: Array<ServedAssistantAgent & { roles?: string[] }>; defaultAgent?: string } {
+  if (!assistant.agents || !Object.keys(assistant.agents).length) return {};
+  const agents = Object.values(assistant.agents).map((agent) => {
+    const starters = agent.starters ? servedStarters(agent.starters, views, schema).starters : undefined;
+    return {
+      id: agent.id,
+      name: agent.name,
+      ...(agent.description ? { description: agent.description } : {}),
+      ...(agent.icon ? { icon: agent.icon } : {}),
+      ...(agent.effort ? { effort: agent.effort } : {}),
+      ...(starters ? { starters } : {}),
+      ...(agent.subagents?.length ? { subagents: agent.subagents } : {}),
+      ...(agent.roles ? { roles: agent.roles } : {}),
+    };
+  });
+  return {
+    agents,
+    ...(assistant.defaultAgent ? { defaultAgent: assistant.defaultAgent } : {}),
+  };
+}
+
+function servedCustomBlocks(customBlocks: NonNullable<AppDef['assistant']>['customBlocks']): {
+  customBlocks?: Record<string, { componentId?: string; title?: string }>;
+} {
+  if (!customBlocks || !Object.keys(customBlocks).length) return {};
+  return {
+    customBlocks: Object.fromEntries(
+      Object.entries(customBlocks).map(([name, decl]) => [
+        name,
+        {
+          ...(decl.component ? { componentId: decl.component.id } : {}),
+          ...(decl.title ? { title: decl.title } : {}),
+        },
+      ]),
+    ),
+  };
 }
 
 /** The pages an address book reads: a base this catalog has, as its table id. */

@@ -240,6 +240,29 @@ export interface SectionProps<D, R = Record<string, Record<string, unknown>>, Ba
   window?: { start: string; end: string };
 }
 
+/**
+ * What an interactive custom assistant block component receives when rendered inside the assistant thread or
+ * side-by-side Canvas pane (`assistant({ customBlocks: { ... } })`).
+ */
+export interface AssistantBlockProps<P extends Readonly<Record<string, unknown>> = Readonly<Record<string, unknown>>> {
+  /** The declared custom block name (`show({ kind: 'custom', name, props })`). */
+  readonly name: string;
+  /** Optional heading supplied by the model or custom block declaration. */
+  readonly title?: string;
+  /** Validated props passed by the model (may be partial while `streaming` is true). */
+  readonly props: P;
+  /** True while the model is still streaming partial props for this block. */
+  readonly streaming: boolean;
+  /** Where the block is currently mounted: inline inside the chat thread or expanded in the side-by-side Canvas pane. */
+  readonly presentation: 'inline' | 'canvas';
+  /** Send a follow-up user message into the active conversation (e.g., from an interactive button inside the block). */
+  readonly sendMessage: (text: string) => void;
+  /** Navigate to an in-App address (must be a relative path inside the App). */
+  readonly navigate: (address: string) => void;
+  /** Open this block in the side-by-side Canvas pane. */
+  readonly openCanvas: () => void;
+}
+
 type ShowOf<V> = V extends { presentation: { show: readonly (infer P extends string)[] } } ? P : string;
 type TableOfView<V> = V extends { from: infer T extends string } ? T : never;
 type ListPropsOf<V> = V extends { presentation: { component: { props?: infer P } } } ? NonNullable<P> : {};

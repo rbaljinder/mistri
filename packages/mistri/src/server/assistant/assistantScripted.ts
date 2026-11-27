@@ -15,10 +15,10 @@ interface ScriptStep {
   thinking?: string;
   redactedThinking?: boolean;
   text?: string;
-  tools?: Array<{ name: string; input: unknown }>;
+  tools?: Array<{ name: string; input: unknown; streamInput?: boolean }>;
 }
 export interface AssistantScript {
-  turns: Array<{ when: string; steps: ScriptStep[] }>;
+  turns: Array<{ when: string; whenSystem?: string; steps: ScriptStep[] }>;
   /** Said when no turn's pattern matches. */
   otherwise?: string;
 }
@@ -47,13 +47,15 @@ const tokens = (value: unknown) => Math.ceil(JSON.stringify(value).length / 4);
 export function scriptedModel(script: AssistantScript): AssistantModel {
   return {
     async stream(request, sink, signal) {
-      const { onText, onReasoning } = streamCallbacks(sink);
+      const { onText, onReasoning, onToolDelta } = streamCallbacks(sink);
       const messages = request.messages;
       let at = messages.length - 1;
       while (at >= 0 && personText(messages[at]) === undefined) at--;
       const said = at >= 0 ? personText(messages[at])! : '';
       const step = messages.slice(at + 1).filter((message) => message.role === 'assistant').length;
-      const turn = script.turns.find((each) => new RegExp(each.when, 'i').test(said));
+      const turn = script.turns.find(
+        (each) => new RegExp(each.when, 'i').test(said) && (!each.whenSystem || new RegExp(each.whenSystem, 'i').test(request.system)),
+      );
       const record = /Open record: [^/\s]+\/(\S+)/.exec(said)?.[1];
       const planned: ScriptStep = turn
         ? (turn.steps[step] ?? { text: '' })
@@ -85,7 +87,22 @@ export function scriptedModel(script: AssistantScript): AssistantModel {
         content.push({ type: 'text', text: planned.text });
       }
       for (const [i, tool] of (planned.tools ?? []).entries()) {
-        content.push({ type: 'tool_use', id: `toolu_script_${messages.length}_${i}`, name: tool.name, input: filled(tool.input, record) });
+        const id = `toolu_script_${messages.length}_${i}`;
+        const input = filled(tool.input, record);
+        const shouldStream =
+          tool.streamInput === true ||
+          (tool.name === 'show' && Boolean(input && typeof input === 'object' && (input as { kind?: unknown }).kind === 'custom'));
+        if (shouldStream) {
+          const json = JSON.stringify(input ?? {});
+          const chunkSize = Math.max(12, Math.ceil(json.length / 4));
+          for (let pos = chunkSize; pos < json.length; pos += chunkSize) {
+            if (signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+            onToolDelta({ id, name: tool.name, inputJson: json.slice(0, pos) });
+            await new Promise((resolve) => setTimeout(resolve, 2));
+          }
+          onToolDelta({ id, name: tool.name, inputJson: json });
+        }
+        content.push({ type: 'tool_use', id, name: tool.name, input });
       }
       return {
         content,
