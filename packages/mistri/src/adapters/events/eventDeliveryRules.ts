@@ -4,6 +4,7 @@
  * cannot disagree about a valid delivery. Rows arrive normalised: integers
  * as numbers, text as strings, NULL as null.
  */
+import { equalJitter, retryAfterWithJitter } from '@mistriwork/engine/shared/retry.js';
 import {
   deliveryFail,
   deliveryInteger,
@@ -32,6 +33,26 @@ const safe = (value: unknown): value is number => typeof value === 'number' && N
 export function deliveryBackoff(policy: EventDeliveryPolicy, row: DeliveryRow): number {
   const sinceRedrive = (row.attempts as number) - ((row.attempt_limit as number) - policy.limits.maxAttempts);
   return Math.min(policy.limits.maxBackoffMs, policy.limits.backoffMs * 2 ** (Math.max(1, sinceRedrive) - 1));
+}
+
+/**
+ * Delay before retrying a failed delivery: equal jitter breaks synchronized
+ * waves across queued events when a destination blips, and any downstream
+ * `Retry-After` (`minDelayMs`) is respected with additive jitter. Sub-250 ms
+ * synthetic policies keep their exact schedule for deterministic tests.
+ */
+export function scheduleDeliveryBackoff(
+  policy: EventDeliveryPolicy,
+  row: DeliveryRow,
+  minDelayMs?: number,
+  random: () => number = Math.random,
+): number {
+  const nominal = deliveryBackoff(policy, row);
+  const jittered = nominal >= 250 ? equalJitter(nominal, random) : nominal;
+  if (minDelayMs !== undefined && Number.isFinite(minDelayMs) && minDelayMs > jittered) {
+    return retryAfterWithJitter(minDelayMs, Math.min(2_000, Math.max(100, Math.round(minDelayMs * 0.2))), random);
+  }
+  return jittered;
 }
 
 export function inspectDeliveryRow(row: DeliveryRow): EventDeliveryInspection {

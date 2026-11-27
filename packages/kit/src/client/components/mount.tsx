@@ -51,7 +51,9 @@ function refetchOnFocus(query: Query<any, any, any, any>): boolean | 'always' {
  */
 export const BUSY_RETRIES = 3;
 export function retryWhenBusy(failures: number, error: unknown): boolean {
-  const failed = error as { status?: unknown; code?: unknown } | null;
+  const failed = error as { status?: unknown; code?: unknown; retried?: unknown; errorClaim?: unknown } | null;
+  if (failed?.retried === true) return false;
+  if (failed?.errorClaim === 'unclaimed' || failed?.errorClaim === 'false') return false;
   return failed?.status === 503 && failed?.code === 'server_busy' && failures < BUSY_RETRIES;
 }
 

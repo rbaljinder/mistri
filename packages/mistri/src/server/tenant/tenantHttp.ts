@@ -2067,7 +2067,11 @@ export function createTenantHttpServer(options: TenantHttpOptions) {
             path.endsWith('/status'),
           );
           const cause = reportRefusal(req, failure.status, failure.body.code, failure.body.message, error);
-          return send(req, res, failure.status, cause ? { ...failure.body, cause } : failure.body, {}, error);
+          const headers: Record<string, string> = {
+            ...(failure.retryAfter !== undefined ? { 'retry-after': String(failure.retryAfter) } : {}),
+            ...(failure.errorClaim !== undefined ? { 'x-mistri-error-claim': failure.errorClaim } : {}),
+          };
+          return send(req, res, failure.status, cause ? { ...failure.body, cause } : failure.body, headers, error);
         }
         if (writes.has(path)) {
           const unknown = completedWrite || (error instanceof TenantWriteFailure && error.outcome === 'unknown');

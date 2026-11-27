@@ -10,7 +10,7 @@ import {
   captureDeliveryPrune,
   DELIVERY_MAX_CLOCK,
   deliveryAttemptInspection,
-  deliveryBackoff,
+  scheduleDeliveryBackoff,
   deliveryStateAfter,
   inspectDeliveryRow,
   verifyDeliveryHistory,
@@ -212,7 +212,7 @@ export function openSqliteEventDeliveryStore(existingPath: string, input: EventD
               .all(destination, now);
             for (const row of expired) {
               verifyRow(row);
-              settle(row, 'unknown', 'lease_expired', now, (row.lease_until as number) + deliveryBackoff(policy, row));
+              settle(row, 'unknown', 'lease_expired', now, (row.lease_until as number) + scheduleDeliveryBackoff(policy, row));
             }
             const row = db
               .prepare(`SELECT d.* FROM main."${t.delivery}" d WHERE d.destination_id=?
@@ -235,7 +235,7 @@ export function openSqliteEventDeliveryStore(existingPath: string, input: EventD
           now,
         ),
       ),
-    complete: (claim, outcome, code, now) =>
+    complete: (claim, outcome, code, now, minDelayMs) =>
       later(() =>
         transaction(
           true,
@@ -253,7 +253,7 @@ export function openSqliteEventDeliveryStore(existingPath: string, input: EventD
             )
               return false;
             verifyRow(row);
-            settle(row, outcome, code, now, outcome === 'accepted' ? now : now + deliveryBackoff(policy, row));
+            settle(row, outcome, code, now, outcome === 'accepted' ? now : now + scheduleDeliveryBackoff(policy, row, minDelayMs));
             return true;
           },
           now,

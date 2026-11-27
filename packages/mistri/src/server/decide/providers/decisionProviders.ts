@@ -46,26 +46,51 @@ const OPEN_MS = 60_000;
 interface Circuit {
   failures: number;
   openUntil: number;
+  /** True while a single half-open trial probe is in flight after an open window elapsed. */
+  probing: boolean;
 }
 const circuits = new Map<ProviderName, Circuit>();
 
 /** Whether a provider may be asked now. */
 export function circuitClosed(name: ProviderName, now: number): boolean {
   const circuit = circuits.get(name);
-  return !circuit || circuit.openUntil <= now;
+  return !circuit || (circuit.openUntil <= now && !circuit.probing);
 }
-/** A call's outcome, as the circuit counts it. */
-export function recordCall(name: ProviderName, ok: boolean, now: number): void {
-  const circuit = circuits.get(name) ?? { failures: 0, openUntil: 0 };
+/**
+ * Claim the right to send a call to `name`. Once an open window expires, only
+ * one concurrent caller receives the half-open trial lease so recovering AI
+ * providers are not stampeded by a wall of waiting jobs.
+ */
+export function tryAcquireCircuit(name: ProviderName, now: number): boolean {
+  const circuit = circuits.get(name);
+  if (!circuit) return true;
+  if (circuit.openUntil > now) return false;
+  if (circuit.openUntil > 0) {
+    if (circuit.probing) return false;
+    circuit.probing = true;
+  }
+  return true;
+}
+/** Release an in-flight half-open trial lease if a call ends without recording an outcome. */
+export function releaseCircuitTrial(name: ProviderName): void {
+  const circuit = circuits.get(name);
+  if (circuit) circuit.probing = false;
+}
+/** A call's outcome, as the circuit counts it. An explicit `Retry-After` pauses the provider immediately. */
+export function recordCall(name: ProviderName, ok: boolean, now: number, retryAfterMs?: number): void {
+  const circuit = circuits.get(name) ?? { failures: 0, openUntil: 0, probing: false };
   if (ok) {
     circuits.delete(name);
     return;
   }
+  circuit.probing = false;
   circuit.failures += 1;
   // A trial after the minute that fails again opens it again at once.
   if (circuit.failures >= FAILURES_TO_OPEN) {
-    circuit.openUntil = now + OPEN_MS;
+    circuit.openUntil = Math.max(circuit.openUntil, now + Math.max(OPEN_MS, retryAfterMs ?? 0));
     circuit.failures = FAILURES_TO_OPEN - 1;
+  } else if (retryAfterMs !== undefined && retryAfterMs > 0) {
+    circuit.openUntil = Math.max(circuit.openUntil, now + retryAfterMs);
   }
   circuits.set(name, circuit);
 }

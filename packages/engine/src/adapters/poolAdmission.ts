@@ -52,6 +52,8 @@ import { PoolBusy } from './poolMetrics.js';
 /** Who a request's checkouts wait for: settled at arrival, refined in place once its session names the account. */
 interface Admission {
   key: string;
+  readonly signal?: AbortSignal;
+  readonly retryAttempt: number;
 }
 
 const admissions = new AsyncLocalStorage<Admission>();
@@ -60,10 +62,16 @@ const admissions = new AsyncLocalStorage<Admission>();
  * Run a request's `work` with its checkouts filed under the client that sent
  * it: `address` as the server reads it, a forwarded one only from a trusted
  * proxy (trust.ts forwardedClient), so a signed-out storm cannot spread itself
- * over invented addresses.
+ * over invented addresses. Carrying `signal` withdraws a waiter the moment its
+ * client disconnects; `retryAttempt > 0` lets a nearly full line shed retries
+ * ahead of first attempts.
  */
-export function withAdmission<T>(address: string, work: () => T): T {
-  return admissions.run({ key: `client:${address}` }, work);
+export function withAdmission<T>(address: string, work: () => T, options?: Readonly<{ signal?: AbortSignal; retryAttempt?: number }>): T {
+  const retryAttempt =
+    typeof options?.retryAttempt === 'number' && Number.isSafeInteger(options.retryAttempt) && options.retryAttempt > 0
+      ? options.retryAttempt
+      : 0;
+  return admissions.run({ key: `client:${address}`, ...(options?.signal ? { signal: options.signal } : {}), retryAttempt }, work);
 }
 
 /**
@@ -85,7 +93,9 @@ export function admitAs(account: string | undefined): void {
 interface Waiter {
   readonly resolve: (release: () => void) => void;
   readonly reject: (error: PoolBusy) => void;
+  readonly retryAttempt: number;
   timer?: ReturnType<typeof setTimeout>;
+  cleanup?: () => void;
 }
 
 /** The waiters filed under no account: a key no request's can be, since every request's carries a prefix. */
@@ -121,21 +131,39 @@ export class PoolAdmission {
   /**
    * A place among the pool's connections, now or at this checkout's turn:
    * call the returned function to give it back. Refused with PoolBusy past
-   * the line's bounds or once `waitMs` is spent.
+   * the line's bounds, once `waitMs` is spent, or when the caller disconnects.
    */
   enter(waitMs: number): Promise<() => void> {
+    const store = admissions.getStore();
+    const signal = store?.signal;
+    if (signal?.aborted) return Promise.reject(new PoolBusy(this.role, 'queue_timeout'));
     if (this.inUse < this.size && this.waiting === 0) {
       this.inUse += 1;
       return Promise.resolve(this.place());
     }
-    const key = admissions.getStore()?.key ?? UNFILED;
+    const key = store?.key ?? UNFILED;
+    const retryAttempt = store?.retryAttempt ?? 0;
     const held = this.lines.get(key)?.length ?? 0;
     const full = () => Promise.reject(new PoolBusy(this.role, 'queue_full'));
+    // Under heavy pressure (>=75% full), shed retries first so fresh first attempts keep making progress.
+    if (key !== UNFILED && retryAttempt > 0 && this.waiting >= Math.max(1, Math.floor(this.most * 0.75))) return full();
     if (key !== UNFILED && held >= Math.max(1, Math.floor(this.most / 2))) return full();
     if (this.waiting >= this.most && !this.turnAwayLongest(key, held)) return full();
     return new Promise<() => void>((resolve, reject) => {
-      const waiter: Waiter = { resolve, reject };
+      const waiter: Waiter = { resolve, reject, retryAttempt };
+      const onAbort = () => {
+        clearTimeout(waiter.timer);
+        waiter.cleanup = undefined;
+        this.leave(key, waiter);
+        reject(new PoolBusy(this.role, 'queue_timeout'));
+      };
+      if (signal) {
+        signal.addEventListener('abort', onAbort, { once: true });
+        waiter.cleanup = () => signal.removeEventListener('abort', onAbort);
+      }
       waiter.timer = setTimeout(() => {
+        waiter.cleanup?.();
+        waiter.cleanup = undefined;
         this.leave(key, waiter);
         reject(new PoolBusy(this.role, 'queue_timeout'));
       }, waitMs);
@@ -160,6 +188,8 @@ export class PoolAdmission {
       this.waiting -= 1;
       this.inUse += 1;
       clearTimeout(waiter.timer);
+      waiter.cleanup?.();
+      waiter.cleanup = undefined;
       waiter.resolve(this.place());
     }
   }
@@ -184,7 +214,7 @@ export class PoolAdmission {
     if (!line.length) this.lines.delete(key);
   }
 
-  /** At a full line, refuse the longest other account's newest waiter for a newcomer holding `held` places: whether one was. */
+  /** At a full line, refuse the longest other account's newest retry (else newest waiter) for a newcomer holding `held` places. */
   private turnAwayLongest(key: string, held: number): boolean {
     if (key === UNFILED) return false;
     let longest: [string, Waiter[]] | undefined;
@@ -192,8 +222,18 @@ export class PoolAdmission {
       if (entry[0] !== UNFILED && entry[0] !== key && entry[1].length > (longest?.[1].length ?? 0)) longest = entry;
     }
     if (!longest || longest[1].length <= held + 1) return false;
-    const waiter = longest[1][longest[1].length - 1];
+    const queue = longest[1];
+    let victimIndex = queue.length - 1;
+    for (let i = queue.length - 1; i >= 0; i--) {
+      if (queue[i].retryAttempt > 0) {
+        victimIndex = i;
+        break;
+      }
+    }
+    const waiter = queue[victimIndex];
     clearTimeout(waiter.timer);
+    waiter.cleanup?.();
+    waiter.cleanup = undefined;
     this.leave(longest[0], waiter);
     waiter.reject(new PoolBusy(this.role, 'queue_full'));
     return true;

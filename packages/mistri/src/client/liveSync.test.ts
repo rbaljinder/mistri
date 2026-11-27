@@ -114,7 +114,9 @@ test('a reset asks everything once', async () => {
   start();
   await settle();
   at.send(event('reset', { cursor: '9' }));
-  await vi.advanceTimersByTimeAsync(200);
+  // Reset invalidations are spread across [MERGE_MS, MERGE_MS + RESET_SPREAD_MS] so clients do not stampede together.
+  await vi.advanceTimersByTimeAsync(1_700);
+  expect(invalidated).toHaveBeenCalledTimes(1);
   expect(invalidated.mock.calls[0][0].reset).toBe(true);
 });
 
@@ -145,8 +147,9 @@ test('a 503 waits its Retry-After before asking again', async () => {
   answerWithStream();
   start();
   await settle();
-  await vi.advanceTimersByTimeAsync(4_000);
+  await vi.advanceTimersByTimeAsync(4_999);
   expect(opened).toHaveLength(1);
+  // Honors the 5 s floor plus up to 25% additive jitter (max 6.25 s total).
   await vi.advanceTimersByTimeAsync(1_500);
   expect(opened).toHaveLength(2);
 });

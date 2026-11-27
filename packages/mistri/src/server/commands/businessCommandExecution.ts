@@ -81,6 +81,7 @@ import {
 import { captureTenantData, recordRefusalCause, tenantIdentifier, tenantRecord } from '@mistriwork/engine/server/evidence.js';
 import {
   BusinessCommandExecutionError,
+  carryErrorOwnership,
   carryRefusalKeep,
   isBusinessCommandExecutionError,
   refusalKeep,
@@ -96,8 +97,9 @@ import { placeFile, type FileScope, type PlacedFile } from '../files/fileStorage
 import { lookupFileReader, stagedOwner, takeHeldFiles } from './stagedFiles.js';
 import type { CommandFileRule } from './businessCommandAuthorization.js';
 import { openSavedDraft, type SavedDraftRun } from '../forms/savedForms.js';
-import { currentSpan, errorCode, inSpan, tracing } from '@mistriwork/engine/adapters/telemetry/trace.js';
-import { refusalReasons } from '@mistriwork/engine/shared/refusal.js';
+import { currentSpan } from '@mistriwork/engine/adapters/telemetry/trace.js';
+import { enterInFlightCommand } from './commandCoalescing.js';
+import { observeCommandExecution } from './commandTracing.js';
 import { AUDIT_TARGET_BYTES, auditRefusal, developerError, fileInsert, footprintFailure, withoutRevealed } from './commandWriteGuards.js';
 import { handlerNextNumber } from '../../adapters/commands/commandSequences.js';
 import { handlerLinks, mintQueued } from '../links/linkMint.js';
@@ -305,62 +307,13 @@ export async function executeBusinessCommand(
   return executeObserved(binding, actor, rawRequest, options) as Promise<BusinessCommandStatus>;
 }
 
-async function executeObserved(
+function executeObserved(
   binding: BusinessCommandBinding,
   actor: BusinessCommandActor,
   rawRequest: unknown,
   options: RunOptions,
 ): Promise<BusinessCommandStatus | CommandTrial> {
-  if (!tracing()) return executeUntraced(binding, actor, rawRequest, options);
-  /* The command's span: its id and version, how it came out and the refusal
-     code travel; its input, its output and a refusal's recorded cause stay
-     local, for the dev observer (adapters/telemetry/trace.ts). The id and
-     version are read from the request only once the envelope parses them as
-     the registered ones: an arbitrary string is never a label. */
-  const envelope =
-    rawRequest && typeof rawRequest === 'object' ? (rawRequest as { command?: unknown; commandVersion?: unknown; input?: unknown }) : {};
-  const id = typeof envelope.command === 'string' && /^[A-Za-z][\w.-]{0,63}$/.test(envelope.command) ? envelope.command : undefined;
-  return inSpan(
-    options.statusOnly ? `command status ${id ?? ''}`.trim() : `command ${id ?? ''}`.trim(),
-    {
-      attributes: {
-        'mistri.command.id': id,
-        'mistri.command.version': typeof envelope.commandVersion === 'number' ? envelope.commandVersion : undefined,
-        ...(options.statusOnly ? { 'mistri.command.status_only': true } : {}),
-      },
-    },
-    async (span) => {
-      span.detail(() => {
-        const { input, ...rest } = envelope as Record<string, unknown>;
-        return { input, envelope: rest };
-      });
-      try {
-        const result = await executeUntraced(binding, actor, rawRequest, options);
-        const applied = result as Partial<BusinessCommandResult> & { status: string };
-        span.setAttributes({
-          'mistri.command.outcome': applied.status === 'applied' ? (applied.replayed ? 'replayed' : 'applied') : applied.status,
-          'mistri.command.target': applied.resource,
-        });
-        span.detail(() => ({ output: applied.result, receiptId: applied.receiptId, key: applied.key }));
-        return result;
-      } catch (error) {
-        if (isBusinessCommandExecutionError(error)) {
-          span.setAttributes({ 'mistri.command.outcome': error.outcome, 'mistri.refusal.code': error.code });
-          span.detail(() => ({
-            refusal: {
-              code: error.code,
-              message: error.message,
-              ...(error.field ? { field: error.field } : {}),
-              ...(error.reason ? { reason: error.reason } : {}),
-            },
-            because: refusalReasons(error),
-          }));
-        }
-        throw error;
-      }
-    },
-    errorCode,
-  );
+  return observeCommandExecution(rawRequest, options.statusOnly === true, () => executeUntraced(binding, actor, rawRequest, options));
 }
 
 async function executeUntraced(
@@ -409,6 +362,8 @@ async function executeUntraced(
   let given: unknown;
   /* Runs a refusal's keep (refuse(code, { keep })), once the command and its lanes are known. */
   let keepRefused: ((keep: (db: RefusalKeepDb) => Promise<unknown>) => Promise<void>) | undefined;
+  /* Resolves or rejects any retry coalesced onto this in-flight idempotent execution. */
+  let settleInFlight: ((result?: BusinessCommandResult, error?: unknown) => void) | undefined;
   try {
     // Only the actor's own declared kind, or the binding's word that a
     // signed-in form runs the command, decides whether an empty key is
@@ -655,6 +610,19 @@ async function executeUntraced(
       result,
       replayed,
     });
+    if (!options.statusOnly && !trial && options.proposalId === undefined && track !== 'none' && !scoped) {
+      const inFlightKey = JSON.stringify([
+        receiptOwner ?? null,
+        scope.appId,
+        scope.actorId,
+        scope.commandId,
+        scope.commandVersion,
+        scope.idempotencyKey,
+      ]);
+      const flight = enterInFlightCommand<BusinessCommandResult>(binding, inFlightKey, fingerprint, signal);
+      if (flight.kind === 'attached') return await flight.promise;
+      if (flight.kind === 'leader') settleInFlight = flight.settle;
+    }
     // Lookup: the App's other sources, read before the transaction opens, with
     // the target as it stands now. Nothing here refuses yet: the transaction
     // first looks for the request's receipt, so a replay answers as it always
@@ -757,6 +725,7 @@ async function executeUntraced(
                   idempotencyKey: request.idempotencyKey,
                   signal,
                   declared: command.integrations,
+                  outerRetries: options.door === 'workflow' || options.door === 'job',
                 }),
                 // The tenant it runs in, read before the transaction: a command naming no record has no row to say it.
                 ...(receiptOwner ? { tenant: receiptOwner.tenantId } : {}),
@@ -772,9 +741,12 @@ async function executeUntraced(
         /* The reason is kept for the operator (a read the audit could not record is said as itself), never the caller;
            and a lookup's refuse(code, { keep }) its keep, run once the transaction this refusal rolls back has. */
         lookupFailure = isBusinessCommandExecutionError(error)
-          ? carryRefusalKeep(
+          ? carryErrorOwnership(
               error,
-              new BusinessCommandExecutionError(error.code, 'not_applied', error.field, error.key, refusalReason(error, sayRefusal)),
+              carryRefusalKeep(
+                error,
+                new BusinessCommandExecutionError(error.code, 'not_applied', error.field, error.key, refusalReason(error, sayRefusal)),
+              ),
             )
           : recordRefusalCause(new BusinessCommandExecutionError('temporarily_unavailable'), error);
       }
@@ -2145,6 +2117,7 @@ async function executeUntraced(
         /* Work after the commit never changes the command's answer. */
       }
     }
+    if (committed.status === 'applied') settleInFlight?.(committed);
     return committed;
   } catch (error) {
     /* A trial's end: its transaction rolled back, so what it would have started after a commit is dropped and the
@@ -2176,15 +2149,24 @@ async function executeUntraced(
     if (tracked && !trial && rolledBack && racedBy(cause)) {
       try {
         const status = await executeUntraced(binding, actor, rawRequest, { ...options, statusOnly: true, door: undefined });
-        if (status.status === 'applied') return status;
+        if (status.status === 'applied') {
+          settleInFlight?.(status);
+          return status;
+        }
         priorOutcomeUnknown = false;
       } catch (lookup) {
         // The key was used for a different request: said as the receipt-first path says it.
         if (isBusinessCommandExecutionError(lookup) && lookup.code === 'idempotency_conflict') {
-          throw new BusinessCommandExecutionError('idempotency_conflict', scoped ? 'unknown' : 'not_applied');
+          const conflict = new BusinessCommandExecutionError('idempotency_conflict', scoped ? 'unknown' : 'not_applied');
+          settleInFlight?.(undefined, conflict);
+          throw conflict;
         }
       }
-      if (cause instanceof ReceiptTaken) throw new BusinessCommandExecutionError('temporarily_unavailable', 'unknown');
+      if (cause instanceof ReceiptTaken) {
+        const unavailable = new BusinessCommandExecutionError('temporarily_unavailable', 'unknown');
+        settleInFlight?.(undefined, unavailable);
+        throw unavailable;
+      }
     }
     /* A refusal that keeps something (refuse(code, { keep })) is answered once its keep commits. Only after a
        rollback known to have happened: an attempt whose commit may have landed keeps nothing more. A keep the record
@@ -2208,19 +2190,24 @@ async function executeUntraced(
         }
       }
     }
-    rethrowCommandFailure({
-      error,
-      cause,
-      statusOnly: Boolean(options.statusOnly),
-      priorOutcomeUnknown,
-      transactionStarted,
-      scoped,
-      snapshot,
-      conflictKey,
-      given,
-      refusedKey,
-      sayRefusal,
-    });
+    try {
+      rethrowCommandFailure({
+        error,
+        cause,
+        statusOnly: Boolean(options.statusOnly),
+        priorOutcomeUnknown,
+        transactionStarted,
+        scoped,
+        snapshot,
+        conflictKey,
+        given,
+        refusedKey,
+        sayRefusal,
+      });
+    } catch (classified) {
+      settleInFlight?.(undefined, classified);
+      throw classified;
+    }
   }
 }
 

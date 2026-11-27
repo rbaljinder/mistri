@@ -23,16 +23,33 @@
  * refusal, with its reason, every time.
  */
 import { createHash, randomUUID } from 'node:crypto';
+import { retryAfterWithJitter, RetryBudgetRegistry } from '@mistriwork/engine/shared/retry.js';
 import type { IntegrationStore } from '../../adapters/integrations/integrationStore.js';
 import { channelHolder } from './integrationChannels.js';
-import { BusinessCommandExecutionError, isBusinessCommandExecutionError } from '../commands/commandErrors.js';
+import { BusinessCommandExecutionError, isBusinessCommandExecutionError, markErrorOwnership } from '../commands/commandErrors.js';
 import type { CapturedIntegrations } from './integrationDeclaration.js';
 import { SIGNING_SECRET_LEAST, type IntegrationCalls } from './integrationModule.js';
 import { openSecret, sealSecret } from './integrationSecrets.js';
 import type { PublicLinkRender } from '../links/publicLink.js';
 
-/* Three tries, 250 ms then 500 ms apart, each given 12 s: the effects' per-request bound, inside a request someone waits on. */
-const CALL_LIMITS = Object.freeze({ attempts: 3, backoffMs: 250, timeoutMs: 12_000 });
+/* Three tries, 250 ms then 500 ms apart (with equal jitter), each given 12 s:
+   the effects' per-request bound, inside a request someone waits on. When an
+   outer durable layer (workflow/job) owns retries, this layer tries once so
+   retries never multiply across layers. */
+const CALL_LIMITS = Object.freeze({ attempts: 3, backoffMs: 250, maxBackoffMs: 2_000, timeoutMs: 12_000 });
+
+const integrationRetryBudgets = new RetryBudgetRegistry({ maxTokens: 10, retryCost: 1, successCredit: 0.1, refillPerMinute: 6 });
+
+/** Reset process-local per-integration retry budgets (for tests). */
+export function resetIntegrationRetryBudgets(): void {
+  integrationRetryBudgets.reset();
+}
+
+const providerRetryAfterMs = (error: unknown): number | undefined => {
+  if (!error || typeof error !== 'object') return undefined;
+  const candidate = (error as { retryAfterMs?: unknown }).retryAfterMs;
+  return typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0 ? candidate : undefined;
+};
 
 export interface IntegrationRuntime {
   readonly appId: string;
@@ -162,7 +179,10 @@ const notSetUp = (integration: string) =>
     undefined,
     `${integration} is not set up yet: an administrator enters its secrets in the App's settings.`,
   );
-const unavailable = () => new BusinessCommandExecutionError('temporarily_unavailable');
+const unavailable = (unclaimed = false, retryAfterMs?: number) => {
+  const error = new BusinessCommandExecutionError('temporarily_unavailable');
+  return unclaimed ? markErrorOwnership(error, 'unclaimed', retryAfterMs) : markErrorOwnership(error, 'claimed', retryAfterMs);
+};
 const pause = (ms: number, signal: AbortSignal) =>
   new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, ms);
@@ -184,6 +204,8 @@ export function integrationCalls(
     idempotencyKey: string;
     signal: AbortSignal;
     declared: Readonly<Record<string, readonly string[]>> | undefined;
+    /** True when a durable outer layer (workflow or job) already owns retries: run 1 attempt here to avoid R^d amplification. */
+    outerRetries?: boolean;
   }>,
 ): IntegrationCalls {
   const ordinals = new Map<string, number>();
@@ -239,6 +261,8 @@ async function call(
     action,
     command: context.commandId,
   };
+  const maxAttempts = context.outerRetries ? 1 : CALL_LIMITS.attempts;
+  const budget = integrationRetryBudgets.for(`${runtime.appId}\n${context.tenant}\n${integration}`);
   for (let attempt = 1; ; attempt++) {
     if (context.signal.aborted) throw new BusinessCommandExecutionError('cancelled');
     const deadline = AbortSignal.any([context.signal, AbortSignal.timeout(CALL_LIMITS.timeoutMs)]);
@@ -250,13 +274,15 @@ async function call(
         ),
       ]);
       const result = output(answered);
+      const at = runtime.now();
+      budget.recordSuccess(at);
       await runtime.store.recordCall({
         ...row,
         state: 'done',
         resultJson: JSON.stringify(result),
         reason: null,
         attempts: attempt,
-        at: runtime.now(),
+        at,
       });
       return result;
     } catch (error) {
@@ -265,8 +291,26 @@ async function call(
         await runtime.store.recordCall({ ...row, state: 'refused', resultJson: null, reason, attempts: attempt, at: runtime.now() });
         throw new BusinessCommandExecutionError('ineligible_state', 'not_applied', undefined, undefined, reason ?? undefined);
       }
-      if (attempt >= CALL_LIMITS.attempts || context.signal.aborted) throw unavailable();
-      await pause(CALL_LIMITS.backoffMs * 2 ** (attempt - 1), context.signal);
+      const at = runtime.now();
+      const retryAfterMs = providerRetryAfterMs(error);
+      budget.recordFailure(at, retryAfterMs);
+      if (attempt >= maxAttempts || context.signal.aborted) {
+        // When we already tried multiple times (or budget is dry), unclaim so upstream callers do not multiply retries.
+        // When `outerRetries` is true, we ran 1 try so the outer durable workflow/job still owns its retry budget.
+        throw unavailable(!context.outerRetries, retryAfterMs);
+      }
+      const cooldownMs = budget.cooldownRemainingMs(at);
+      if (cooldownMs > CALL_LIMITS.maxBackoffMs) {
+        throw unavailable(true, retryAfterMs ?? cooldownMs);
+      }
+      const nominal = Math.min(CALL_LIMITS.maxBackoffMs, CALL_LIMITS.backoffMs * 2 ** Math.max(0, attempt - 1));
+      const baseWaitMs = Math.max(nominal, retryAfterMs ?? 0, cooldownMs);
+      const waitMs = retryAfterWithJitter(baseWaitMs, Math.min(250, Math.max(25, Math.round(baseWaitMs * 0.25))));
+      const decision = budget.tryConsumeRetry(at + waitMs);
+      if (!decision.allowed) {
+        throw unavailable(true, retryAfterMs ?? decision.waitMs);
+      }
+      await pause(waitMs, context.signal);
     }
   }
 }

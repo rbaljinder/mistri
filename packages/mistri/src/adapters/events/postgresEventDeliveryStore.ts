@@ -46,7 +46,7 @@ import {
   captureDeliveryPrune,
   DELIVERY_MAX_CLOCK,
   deliveryAttemptInspection,
-  deliveryBackoff,
+  scheduleDeliveryBackoff,
   deliveryStateAfter,
   inspectDeliveryRow,
   verifyDeliveryHistory,
@@ -811,7 +811,7 @@ export async function openPostgresEventDeliveryStore(
           );
           for (const row of expired) {
             await verifyRow(client, row);
-            await settle(client, row, 'unknown', 'lease_expired', at, (row.lease_until as number) + deliveryBackoff(policy, row));
+            await settle(client, row, 'unknown', 'lease_expired', at, (row.lease_until as number) + scheduleDeliveryBackoff(policy, row));
           }
           const row = (
             await read(
@@ -866,7 +866,7 @@ export async function openPostgresEventDeliveryStore(
         },
         true,
       ),
-    complete: async (claim, outcome, code, now) => {
+    complete: async (claim, outcome, code, now, minDelayMs) => {
       captureDeliveryCompletion(outcome, code);
       return transaction('write', now, async (client, at) => {
         if (claim.destinationId !== destination) return false;
@@ -881,7 +881,7 @@ export async function openPostgresEventDeliveryStore(
         )
           return false;
         await verifyRow(client, row);
-        await settle(client, row, outcome, code, at, outcome === 'accepted' ? at : at + deliveryBackoff(policy, row));
+        await settle(client, row, outcome, code, at, outcome === 'accepted' ? at : at + scheduleDeliveryBackoff(policy, row, minDelayMs));
         return true;
       });
     },

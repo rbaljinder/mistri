@@ -17,6 +17,8 @@
  * version the provider reports, and what the call cost.
  */
 
+import { parseRetryAfterMs } from '@mistriwork/engine/shared/retry.js';
+
 /** The answer's type, from the answer command's input field. */
 export type DecisionAnswerType =
   | Readonly<{ kind: 'choice'; options: readonly Readonly<{ value: string | number; label: string }>[] }>
@@ -83,10 +85,12 @@ export interface DecisionProvider {
 export type ProviderFailureKind = 'busy' | 'timeout' | 'refused' | 'key';
 export class ProviderFailure extends Error {
   readonly kind: ProviderFailureKind;
-  constructor(kind: ProviderFailureKind, message: string) {
+  readonly retryAfterMs?: number;
+  constructor(kind: ProviderFailureKind, message: string, retryAfterMs?: number) {
     super(message);
     this.name = 'ProviderFailure';
     this.kind = kind;
+    this.retryAfterMs = retryAfterMs;
   }
   get retryable(): boolean {
     return this.kind === 'busy' || this.kind === 'timeout';
@@ -101,10 +105,10 @@ export function asProviderFailure(error: unknown, deadline?: AbortSignal): Provi
 }
 
 /** The status of a provider's HTTP answer, as a failure kind. */
-export function failureOfStatus(status: number, provider: string): ProviderFailure {
+export function failureOfStatus(status: number, provider: string, retryAfterHeader?: string | null): ProviderFailure {
   if (status === 401 || status === 403) return new ProviderFailure('key', `${provider} refused the operator's key.`);
   if (status === 408 || status === 429 || status === 529 || status >= 500)
-    return new ProviderFailure('busy', `${provider} is busy (${status}).`);
+    return new ProviderFailure('busy', `${provider} is busy (${status}).`, parseRetryAfterMs(retryAfterHeader));
   return new ProviderFailure('refused', `${provider} refused the request (${status}).`);
 }
 

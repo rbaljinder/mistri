@@ -236,3 +236,40 @@ function checkRefusalField(field: unknown): void {
 /** `forbidden`, in the words of the rule that refused where it said them (sayRefusal), else the code's fixed message. */
 export const forbiddenBy = (error: unknown, outcome: 'not_applied' | 'unknown' = 'not_applied'): BusinessCommandExecutionError =>
   new BusinessCommandExecutionError('forbidden', outcome, undefined, undefined, refusalSaid(error));
+
+/* Error ownership and downstream Retry-After, stored on registered non-enumerable
+   symbols (like `keepKey`) so cross-copy errors preserve them without changing
+   serialized shapes. Following Uber's error-ownership protocol, a refusal from an
+   exhausted downstream retry carries `'unclaimed'` so upstream callers do not
+   multiply retries across layers. */
+const claimKey = Symbol.for('mistri.errorClaim');
+const retryAfterKey = Symbol.for('mistri.retryAfterMs');
+
+export function markErrorOwnership<E extends Error>(error: E, claim: 'claimed' | 'unclaimed', retryAfterMs?: number): E {
+  Object.defineProperty(error, claimKey, { value: claim, enumerable: false, configurable: true });
+  if (typeof retryAfterMs === 'number' && Number.isFinite(retryAfterMs) && retryAfterMs > 0) {
+    Object.defineProperty(error, retryAfterKey, { value: Math.round(retryAfterMs), enumerable: false, configurable: true });
+  }
+  return error;
+}
+
+export function errorClaimOf(error: unknown): 'claimed' | 'unclaimed' | undefined {
+  const claim = error && typeof error === 'object' ? (error as Record<symbol, unknown>)[claimKey] : undefined;
+  return claim === 'claimed' || claim === 'unclaimed' ? claim : undefined;
+}
+
+export function errorRetryAfterMs(error: unknown): number | undefined {
+  const ms = error && typeof error === 'object' ? (error as Record<symbol, unknown>)[retryAfterKey] : undefined;
+  return typeof ms === 'number' && Number.isFinite(ms) && ms > 0 ? ms : undefined;
+}
+
+/** Propagate error ownership and Retry-After metadata when re-wrapping a refusal. */
+export function carryErrorOwnership<E extends Error>(from: unknown, to: E): E {
+  const claim = errorClaimOf(from);
+  const retryAfterMs = errorRetryAfterMs(from);
+  if (claim) return markErrorOwnership(to, claim, retryAfterMs);
+  if (retryAfterMs !== undefined) {
+    Object.defineProperty(to, retryAfterKey, { value: retryAfterMs, enumerable: false, configurable: true });
+  }
+  return to;
+}

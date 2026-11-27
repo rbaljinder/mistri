@@ -868,6 +868,10 @@
       "mistri-built": "./dist/shared/resourceHttp.js",
       "default": "./src/shared/resourceHttp.ts"
     },
+    "./shared/retry.js": {
+      "mistri-built": "./dist/shared/retry.js",
+      "default": "./src/shared/retry.ts"
+    },
     "./shared/richText.js": {
       "mistri-built": "./dist/shared/richText.js",
       "default": "./src/shared/richText.ts"

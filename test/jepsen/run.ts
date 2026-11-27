@@ -24,6 +24,7 @@ import { runListAppendWorkload, type ListAppendWorkloadReport } from './workload
 import { runPgBouncerWorkload, type PgBouncerWorkloadReport } from './workloads/pgbouncer.js';
 import { runProposalsLiveWorkload, type ProposalsLiveWorkloadReport } from './workloads/proposalsLive.js';
 import { runReplicaRywWorkload, type ReplicaWorkloadReport } from './workloads/replicaRyw.js';
+import { runRetryStormWorkload, type RetryStormWorkloadReport } from './workloads/retryStorm.js';
 import { runSqliteCrashWorkload, type SqliteCrashWorkloadReport } from './workloads/sqliteCrash.js';
 import { runSupportLeaseWorkload, type SupportLeaseWorkloadReport } from './workloads/supportLease.js';
 import { runTenantIsolationWorkload, type TenantWorkloadReport } from './workloads/tenantIsolation.js';
@@ -44,7 +45,8 @@ export type SingleWorkload =
   | 'failover'
   | 'support-lease'
   | 'http-cluster'
-  | 'sqlite-crash';
+  | 'sqlite-crash'
+  | 'retry-storm';
 
 export type WorkloadChoice = SingleWorkload | 'all';
 
@@ -62,7 +64,8 @@ export type AnyWorkloadReport =
   | FailoverWorkloadReport
   | SupportLeaseWorkloadReport
   | HttpClusterWorkloadReport
-  | SqliteCrashWorkloadReport;
+  | SqliteCrashWorkloadReport
+  | RetryStormWorkloadReport;
 
 const ALL_WORKLOADS: readonly SingleWorkload[] = [
   'bank',
@@ -79,6 +82,7 @@ const ALL_WORKLOADS: readonly SingleWorkload[] = [
   'support-lease',
   'http-cluster',
   'sqlite-crash',
+  'retry-storm',
 ];
 
 export interface CliOptions {
@@ -346,6 +350,15 @@ function formatMarkdownReport(
         appendViolations(lines, report.check.violations);
         break;
       }
+      case 'retry-storm': {
+        const s = report.check.summary;
+        lines.push(
+          `- Retry-storm defenses: stormAttempts=${s.stormDownstreamAttempts}/${s.stormMaxAllowedAttempts} (reqs=${s.stormRequestsSent}), unclaimedAmplifications=${s.unclaimedAmplifications}/${s.unclaimedDownstreamFailures}, maxNestedInner=${s.maxNestedInnerAttempts}, coalescedMaxExec=${s.maxHandlerExecutionsPerKey} (${s.coalescedTotalRequests}/${s.coalescedUniqueKeys} keys)`,
+          `- Overload & recovery: freshAdmitted=${s.freshRequestsAdmitted}, retriesShed=${s.retryRequestsShed}, abortedWithdrawn=${s.abortedWaitersWithdrawn}, replicaSpilloverSuppressed=${s.replicaSpilloversSuppressed}, maxHalfOpenProbes=${s.maxConcurrentHalfOpenProbes}, postHealOk=${s.postHealRecoveriesOk}`,
+        );
+        appendViolations(lines, report.check.violations);
+        break;
+      }
     }
 
     if (report.historyFiles) {
@@ -372,7 +385,7 @@ async function main(argv: readonly string[]): Promise<number> {
   }
 
   const selected: readonly SingleWorkload[] = options.workload === 'all' ? ALL_WORKLOADS : [options.workload];
-  const needsPg = selected.some((w) => w !== 'sqlite-crash');
+  const needsPg = selected.some((w) => w !== 'sqlite-crash' && w !== 'retry-storm');
   if (needsPg && !options.pgUrl) {
     console.error('Error: PostgreSQL URL required via --pg <url>, MISTRI_JEPSEN_PG, or TABLEWALK_TEST_PG.');
     console.error('Start the local Docker stack first:\n  docker compose -f test/jepsen/docker-compose.yml up -d');
@@ -474,6 +487,9 @@ async function main(argv: readonly string[]): Promise<number> {
         break;
       case 'sqlite-crash':
         reports.push(await runSqliteCrashWorkload(base));
+        break;
+      case 'retry-storm':
+        reports.push(await runRetryStormWorkload(base));
         break;
     }
     const last = reports[reports.length - 1];

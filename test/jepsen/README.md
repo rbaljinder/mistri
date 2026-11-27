@@ -11,7 +11,7 @@ multi-process SQLite WAL crash recovery.
 # 1. Start disposable PostgreSQL 16 (primary + streaming replica), PgBouncer, and Valkey
 docker compose -f test/jepsen/docker-compose.yml up -d --wait postgres-primary postgres-replica pgbouncer valkey
 
-# 2. Run all 14 workloads with fault injection enabled
+# 2. Run all 15 workloads with fault injection enabled
 npm run test:jepsen -- \
   --pg postgres://mistri:mistri@127.0.0.1:15432/mistri_jepsen \
   --replica-pg postgres://mistri:mistri@127.0.0.1:15433/mistri_jepsen \
@@ -21,8 +21,9 @@ npm run test:jepsen -- \
   --duration 10 \
   --concurrency 6
 
-# 3. Run SQLite WAL multi-process SIGKILL crash recovery standalone (no Docker needed)
+# 3. Run standalone workloads without Docker (SQLite crash recovery or retry-storm chaos)
 npm run test:jepsen -- --workload sqlite-crash --duration 6 --concurrency 3
+npm run test:jepsen -- --workload retry-storm --duration 6 --concurrency 6
 
 # 4. Tear down the disposable containers and volumes
 docker compose -f test/jepsen/docker-compose.yml down -v
@@ -50,6 +51,7 @@ databases.
 | `support-lease` | Audited tenant support leases (`createTenantAuthenticatedHttpServer`, `revokePlatformMembership`)      | Races concurrent `/api/tenant/support/open` and `/exit` requests over Better Auth native sessions and PostgreSQL behind `FaultProxy` while invoking `revokePlatformMembership`. Verifies at most one active lease per account, zero active leases or resumable contexts post-revocation, and an intact cryptographic audit hash-chain (`verifyPostgresSupportAudit`).                                        |
 | `http-cluster`  | End-to-end multi-process Mistri HTTP cluster (`createApp`, `/api/commands/{prepare,execute,status}`)   | Spawns two real OS child processes running full Mistri HTTP servers behind separate PostgreSQL `FaultProxy` links while injecting real OS `SIGSTOP`/`SIGCONT` process freezes, `SIGKILL` crashes + pod respawns, and post-`COMMIT` cuts. Verifies idempotent cross-pod retry recovery, balance conservation, and 1:1 ledger/receipt/event consistency.                                                       |
 | `sqlite-crash`  | Multi-process SQLite WAL transactions (`SqliteAdapter`) & persistent Undo journal (`journalStore.ts`)  | Spawns real OS child worker processes executing concurrent `SqliteAdapter.transaction` transfers and persistent `recordedUpdate` Undo entries on a shared WAL database while repeatedly injecting real OS `SIGKILL`. Verifies `PRAGMA integrity_check === 'ok'`, balance conservation, and Undo journal schema/JSON integrity across WAL recovery.                                                           |
+| `retry-storm`   | End-to-end retry-storm defenses (`shared/retry.ts`, `PoolAdmission`, `ReplicaSet`, `integrationRuntime`, `businessCommandExecution`, `workflowEngine`, `eventPublisher`, `decisionProviders`) | Standalone chaos workload cycling brownout `503`, `429 Retry-After`, `x-mistri-error-claim: unclaimed`, blackhole hangs, and primary saturation bursts under concurrent retry storms and duplicate-key bursts. Verifies Error Ownership anti-amplification, token-bucket retry budgets, single-layer retries, in-flight idempotency coalescing, admission retry shedding & abort withdrawal, replica spillover suppression, publisher cooldowns, single-probe AI half-open circuits, and zero post-heal metastable lock-in. |
 
 ## Running official `elle-cli` on recorded histories
 
@@ -70,4 +72,4 @@ ELLE_CLI_JAR=/path/to/elle-cli-0.1.11-standalone.jar npm run test:jepsen -- --wo
 ## Nightly CI & fast PR checks
 
 - **Fast PR gate** (`test/jepsen-harness.test.ts`, runs in `npm run test:node`, no Docker or PostgreSQL needed): proves EDN serialization, planted-anomaly detection across every checker, TCP `COMMIT`-cut interception, `postgresTransactionHandle` mid-`COMMIT` disconnect classification, and `RespClient` per-connection reply-queue isolation.
-- **Nightly / manual chaos workflow** (`.github/workflows/jepsen.yml`): sets up Java 21 + cached official `elle-cli` v0.1.11 JAR, starts PostgreSQL 16 primary + streaming replica + PgBouncer + Valkey via Docker Compose, and runs all 14 workloads, uploading `report.md`, `report.json`, and `.edn`/`.jsonl` histories as workflow artifacts.
+- **Nightly / manual chaos workflow** (`.github/workflows/jepsen.yml`): sets up Java 21 + cached official `elle-cli` v0.1.11 JAR, starts PostgreSQL 16 primary + streaming replica + PgBouncer + Valkey via Docker Compose, and runs all 15 workloads, uploading `report.md`, `report.json`, and `.edn`/`.jsonl` histories as workflow artifacts.
