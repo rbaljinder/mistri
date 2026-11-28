@@ -255,3 +255,37 @@ test('Postgres loader hooks support default exports and failed loading closes cl
   await assert.rejects(failed.read(), /missing driver/);
   await failed.close();
 });
+
+test('warns once when a pg client lacks query pipelining under pipelineReads', async () => {
+  const warnings: string[] = [];
+  const origWarn = console.warn;
+  console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(' '));
+  try {
+    class LegacyPgPool {
+      constructor(private readonly options: { onConnect?: (client: unknown) => Promise<void> }) {}
+      on() {}
+      async connect() {
+        const client = {
+          // Real node-postgres Client exposes `_pulseQueryQueue`; older pg (< 8.20) leaves `pipeline` undefined.
+          _pulseQueryQueue() {},
+          async query() {
+            return { rows: [], fields: [], rowCount: 0 };
+          },
+          release() {},
+        };
+        await this.options.onConnect?.(client);
+        return client;
+      }
+      async end() {}
+    }
+    const manager = new PgConnectionManager('postgres://host/db', undefined, async () => ({ Pool: LegacyPgPool }), { pipelineReads: true });
+    await manager.withReadClient(async () => {});
+    await manager.withReadClient(async () => {});
+    await manager.close();
+    assert.equal(warnings.length, 1);
+    assert.match(warnings[0]!, /does not support query pipelining/);
+    assert.match(warnings[0]!, /8\.20/);
+  } finally {
+    console.warn = origWarn;
+  }
+});

@@ -2,6 +2,7 @@
  * IDs. This helper verifies no credential or principal and enables no route. */
 import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
 import type { renderApiReadOpenApi } from './apiReadOpenApi.js';
+import { MAX_API_DOCUMENT_BYTES, MAX_API_DOCUMENT_NODES } from './apiRefusals.js';
 
 type Document = ReturnType<typeof renderApiReadOpenApi>['document'];
 type JsonObject = Record<string, unknown>;
@@ -24,7 +25,7 @@ const freeze = (value: unknown): void => {
  * Authored global metadata (including App description) is retained. This is
  * NOT a sanitizer for arbitrary documents/extensions outside our renderer. */
 export function narrowApiReadOpenApi(document: Document, operationIds: readonly string[]) {
-  const source = object(snapshot(document, 1_048_576).value);
+  const source = object(snapshot(document, MAX_API_DOCUMENT_BYTES, { maxNodes: MAX_API_DOCUMENT_NODES }).value);
   const ids = snapshot(operationIds, 262144).value;
   if (
     !Array.isArray(ids) ||

@@ -266,14 +266,14 @@ commands are judged together, so one run says every refused exposure in an
 ordinary App and a tenant App alike, a line each; an exposure's first refusal
 stands for it.
 
-The document is held to 16 levels of nesting and 10,000 JSON nodes, the bounds
-a command request is read under. Past the depth limit the refusal names the
-path that went deeper (`api-document-depth`); today a `targets: 'many'`
-command's body is the one that does, so expose that command without
-`targets: 'many'` in `api.commands` (its one-record route stays) until the
-bound is lifted. Past 10,000 nodes the refusal names the node count and the
-largest paths and schemas (`api-document-size`) so you can trim exposed fields
-or entries from `api`.
+The document is held to 16 levels of nesting and 100,000 JSON nodes (separate
+from the 10,000-node ceiling untrusted command request bodies are read under).
+Past the depth limit the refusal names the path that went deeper
+(`api-document-depth`); today a `targets: 'many'` command's body is the one
+that does, so expose that command without `targets: 'many'` in `api.commands`
+(its one-record route stays) until the bound is lifted. Past 100,000 nodes the
+refusal names the node count and the largest paths and schemas
+(`api-document-size`) so you can trim exposed fields or entries from `api`.
 
 `compare-openapi` reports changes between two exported files: exit `0` when
 the version requirement is met, `1` when a needed version increase is missing,

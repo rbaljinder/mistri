@@ -13,5 +13,4 @@ export function preloadDashboardParts(dashboard: Pick<DashboardDef, 'sections' |
   if (dashboard.page) return;
   if ([...dashboard.sections, ...(dashboard.aside ?? [])].some((section) => EXTRA_SHAPES.includes(section.shape ?? '')))
     import('./ChartShapes.js').catch(() => {});
-  if (dashboard.sections.some((section) => section.kind === 'rows')) import('./Export.js').catch(() => {});
 }

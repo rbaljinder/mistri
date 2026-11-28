@@ -122,3 +122,18 @@ test("the room offers email only where the App emails notices, and turning it of
   );
   await waitFor(() => expect((screen.getByRole('checkbox', { name: 'Email me these too' }) as HTMLInputElement).checked).toBe(false));
 });
+
+test('the bell waits until initial startup unveils the page before polling /api/inbox', async () => {
+  document.documentElement.setAttribute('data-starting', '');
+  try {
+    draw(createElement(InboxBell));
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    expect(calls).toEqual([]);
+    document.documentElement.removeAttribute('data-starting');
+    window.dispatchEvent(new Event('mistri:ready'));
+    expect(await screen.findByRole('button', { name: 'Notifications, 1 unread' })).toBeTruthy();
+    expect(calls[0]).toEqual({ path: '/api/inbox', body: { limit: 1 } });
+  } finally {
+    document.documentElement.removeAttribute('data-starting');
+  }
+});

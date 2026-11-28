@@ -152,7 +152,8 @@ test('a document that nests past the canonical depth names the limit, the path a
   );
 });
 
-test('a document past the 10,000-node ceiling names the limit, its node count, and its largest entries (#581)', () => {
+test('a large App with choose past 10,000 nodes renders, splits, narrows and compares cleanly while command snapshot stays at 10,000 (#581)', async () => {
+  const { snapshot } = await import('@mistriwork/engine/adapters/commands/canonicalJson.js');
   const tableCount = 35;
   const colCount = 35;
   const tables = Array.from({ length: tableCount }, (_, t) => ({
@@ -175,6 +176,7 @@ test('a document past the 10,000-node ceiling names the limit, its node count, a
       id: 'big',
       name: 'Big',
       sources: { business: { connection: 'private' } },
+      choose: { office: { from: 'tbl_0', label: 'col_0' } },
       resources,
       auth: { roles: { editor: { read: true, commands: ['edit'] } } },
       views: { items: { kind: 'list', from: 'tbl_0' } },
@@ -205,11 +207,80 @@ test('a document past the 10,000-node ceiling names the limit, its node count, a
       },
     }),
   });
+
+  // Renders cleanly past 10,000 nodes with `choose` enabled.
+  const rendered = renderApiOpenApi(app, largeSchema, registry, evidence, { integers: 'number' });
+  const snappedDoc = snapshot(rendered.document, 2_097_152, { maxNodes: 100_000 });
+  assert.ok(snappedDoc.nodes > 10_000, `expected >10,000 nodes, got ${snappedDoc.nodes}`);
+
+  // Untrusted command-input default `snapshot()` still enforces the 10,000-node bound.
+  assert.throws(() => snapshot(rendered.document, 2_097_152), /command request is invalid/);
+
+  // Downstream split, narrow and compare all handle >10,000-node OpenAPI documents.
+  const parts = splitApiOpenApi(rendered.document);
+  assert.ok(Object.keys(parts.read.paths).length > 35);
+  const narrowed = narrowApiOpenApi(rendered.document, ['list:tbl_0', 'command:edit']);
+  assert.ok('/tbl_0' in narrowed.paths);
+  assert.equal(compareApiOpenApiDocuments(rendered.document, rendered.document).requiresVersionBump, false);
+
+  // Documents past the 100,000-node OpenAPI ceiling still fail with the actionable [api-document-size] diagnostic.
+  const hugeSchema: DatabaseSchema = {
+    dialect: 'sqlite',
+    label: 'Logical',
+    readAt: '',
+    foreignKeys: [],
+    tables: Array.from({ length: 120 }, (_, t) => ({
+      id: `big_${t}`,
+      name: `big_${t}`,
+      schema: '',
+      isView: false,
+      columns: [
+        { name: 'id', type: 'INTEGER', primaryKey: true, nullable: false },
+        ...Array.from({ length: 110 }, (_, c) => ({ name: `col_${c}`, type: 'TEXT', primaryKey: false, nullable: true })),
+      ],
+    })),
+  };
+  const hugeApp = parseAppConfig(
+    {
+      id: 'huge',
+      name: 'Huge',
+      sources: { business: { connection: 'private' } },
+      resources: Object.fromEntries(hugeSchema.tables.map((t) => [t.id, { access: 'write' as const }])),
+      auth: { roles: { editor: { read: true, commands: ['edit'] } } },
+      views: { items: { kind: 'list', from: 'big_0' } },
+      home: 'items',
+    },
+    'fixture',
+  );
+  hugeApp.api = parseTestApi(
+    {
+      version: 1,
+      roles: ['editor'],
+      resources: Object.fromEntries(
+        hugeSchema.tables.map((t) => [t.id, { fields: t.columns.map((c) => c.name), sorts: [] as string[], filters: [] as string[] }]),
+      ),
+      commands: [{ id: 'edit', version: 1, target: 'big_0', input }],
+    },
+    ['editor'],
+  )!;
+  const hugeRegistry = defineCommands({
+    edit: defineCommand({
+      source: 'business',
+      target: 'big_0',
+      input,
+      read: ['big_0'],
+      write: ['big_0'],
+      output: shape({ ok: bool() }),
+      async handle() {
+        return { ok: true };
+      },
+    }),
+  });
   assert.throws(
-    () => renderApiOpenApi(app, largeSchema, registry, evidence, { integers: 'number' }),
+    () => renderApiOpenApi(hugeApp, hugeSchema, hugeRegistry, evidence, { integers: 'number' }),
     (error: Error) => {
       assert.doesNotMatch(error.message, /command request is invalid/);
-      assert.match(error.message, /past the 10,000-node limit/);
+      assert.match(error.message, /past the 100,000-node limit/);
       assert.match(error.message, /\[api-document-size\]/);
       assert.match(error.message, /Largest entries:/);
       return true;

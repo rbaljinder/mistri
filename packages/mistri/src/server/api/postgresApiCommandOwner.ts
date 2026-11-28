@@ -30,6 +30,7 @@ import { withAppPublicUrls } from '../links/publicLink.js';
 import type { ApiCommandRoute } from './apiCommandRoute.js';
 import { ApiCommandUnauthenticated } from './sqliteApiCommandOwner.js';
 import { narrowApiOpenApi, renderApiOpenApi } from './apiOpenApiDocument.js';
+import { MAX_API_DOCUMENT_BYTES, MAX_API_DOCUMENT_NODES } from './apiRefusals.js';
 import { previewApiMcpReadTools } from './apiMcpReadTools.js';
 import { projectApiMcpCommandTools } from './apiMcpCommandTools.js';
 import { readApiApp } from './appApiValidation.js';
@@ -365,7 +366,9 @@ export async function createPostgresApiCommandOwner(
           }
           // Serialized before the native handoff re-authorizes it: a revocation
           // after COMMIT yields no stale business answer, and no downgrade.
-          const body = snapshot(outcome.value, listing ? 2_097_152 : 1024 * 1024).json;
+          const body = listing
+            ? snapshot(outcome.value, MAX_API_DOCUMENT_BYTES, { maxNodes: MAX_API_DOCUMENT_NODES }).json
+            : snapshot(outcome.value, 1024 * 1024).json;
           const response: Answer = Object.freeze({ status: outcome.status, headers: Object.freeze({ ...(outcome.headers ?? {}) }), body });
           if (signal) throwIfCancelled(signal);
           current();

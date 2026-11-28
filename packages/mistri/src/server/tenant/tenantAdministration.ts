@@ -60,7 +60,7 @@ import {
   type StoredAdministrationReceipt,
   type TenantAdministrationJournal,
 } from './tenantAdministrationJournal.js';
-import { postgresAssistantSwitch, sqliteAssistantSwitch, type AssistantSwitchStore } from './tenantAssistantSwitch.js';
+import * as assistantSwitches from './tenantAssistantSwitch.js';
 import { postgresDecisionSwitch, sqliteDecisionSwitch, type DecisionSwitchStore } from './tenantDecisionSwitch.js';
 import type {
   AdministrationDecisionUsagePage,
@@ -488,7 +488,7 @@ interface AdministrationStore {
   journal(session: StoreSession, operations: TransactionOperations, active: () => void): TenantAdministrationJournal;
   administration(session: StoreSession, operations: TransactionOperations, active: () => void): TenantStoreAdministration;
   /** The assistant store's switch, conversations and counts, on this transaction's session. */
-  assistant(session: StoreSession): AssistantSwitchStore;
+  assistant(session: StoreSession): assistantSwitches.AssistantSwitchStore;
   /** The decision store's switches, records and usage, on this transaction's session. */
   decisions(session: StoreSession): DecisionSwitchStore;
   close(): Promise<void>;
@@ -620,7 +620,7 @@ async function openSqliteAdministrationStore(
         ),
       journal: (session, operations, active) => createSqliteTenantAdministrationJournal(sqlite(session), operations, owner, active),
       administration: (session, operations, active) => createSqliteTenantAdministration(sqlite(session), operations, owner, active),
-      assistant: (session) => sqliteAssistantSwitch(sqlite(session), owner.appId),
+      assistant: (session) => assistantSwitches.sqliteAssistantSwitch(sqlite(session), owner.appId),
       decisions: (session) => sqliteDecisionSwitch(sqlite(session), owner.appId),
       close: () => writer.close(),
     });
@@ -788,7 +788,7 @@ async function openPostgresAdministrationStore(
       },
       journal: (session, operations, active) => createPostgresTenantAdministrationJournal(pg(session), operations, owner, active),
       administration: (session, operations, active) => createPostgresTenantAdministration(pg(session), operations, owner, active),
-      assistant: (session) => postgresAssistantSwitch(pg(session), owner.appId),
+      assistant: (session) => assistantSwitches.postgresAssistantSwitch(pg(session), owner.appId),
       decisions: (session) => postgresDecisionSwitch(pg(session), owner.appId),
       close: () => writer.close(),
     });
@@ -2038,6 +2038,7 @@ async function openAdministration(
             );
           });
           completed = returned !== null;
+          if (returned) assistantSwitches.evictAssistantSwitch(owner.appId, intent);
           const finalGrant = (await current()) ?? denyTenant();
           if (returned) captureChange(returned.change, intent, finalGrant.roles);
           live();

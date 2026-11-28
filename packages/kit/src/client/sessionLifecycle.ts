@@ -235,6 +235,10 @@ export function startSessionMonitoring(): () => void {
   const foreground = () => {
     if (document.visibilityState !== 'hidden') void checkSessionIdentity();
   };
+  const restored = (event: PageTransitionEvent) => {
+    // Browsers fire pageshow with persisted=false on every normal initial load; only bfcache restores re-verify.
+    if (event.persisted !== false) foreground();
+  };
   const parking = (event: PageTransitionEvent) => {
     // A selected tenant can park its mounted forms behind the recovery cover.
     const snapshot = sessionIdentity();
@@ -255,7 +259,7 @@ export function startSessionMonitoring(): () => void {
     }
   };
   addHostListener(window, 'focus', foreground);
-  addHostListener(window, 'pageshow', foreground);
+  addHostListener(window, 'pageshow', restored);
   addHostListener(window, 'pagehide', parking);
   addHostListener(document, 'visibilitychange', foreground);
   addHostListener(window, 'storage', noticed);
@@ -268,7 +272,7 @@ export function startSessionMonitoring(): () => void {
     pending = undefined;
     clearInterval(timer);
     removeHostListener(window, 'focus', foreground);
-    removeHostListener(window, 'pageshow', foreground);
+    removeHostListener(window, 'pageshow', restored);
     removeHostListener(window, 'pagehide', parking);
     removeHostListener(document, 'visibilitychange', foreground);
     removeHostListener(window, 'storage', noticed);

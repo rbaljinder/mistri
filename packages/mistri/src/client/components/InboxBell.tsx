@@ -11,7 +11,7 @@
  * "Notifications, 3 unread" where a sighted reader sees the 3. Nothing
  * moves or pulses when it changes (docs/design.md, motion rule 1).
  */
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@mistriwork/kit/client/core.js';
 import {
@@ -21,6 +21,8 @@ import {
   subscribeTenantLease,
   tenantLeaseActive,
 } from '@mistriwork/kit/client/sessionIdentity.js';
+import { shellRoot } from '@mistriwork/kit/client/shellHost.js';
+import { whenStartupReady } from '@mistriwork/kit/client/startup.js';
 import { DropMenu } from '@mistriwork/ui/DropMenu.js';
 import { Icon } from '@mistriwork/kit/client/components/Icon.js';
 import { onDemand } from '@mistriwork/kit/client/components/onDemand.js';
@@ -33,6 +35,35 @@ const EVERY = 60_000;
 
 const InboxMenu = onDemand(() => import('./InboxList.js'), 'InboxMenu', { quiet: true });
 
+/** Whether initial startup has unveiled the page: the bell waits until after first paint so it never holds the veil
+ *  or contends with the page's own reads, unless the reader opens it first. */
+function useAfterStartup(immediate: boolean): boolean {
+  const [ready, setReady] = useState(() => immediate || !shellRoot().hasAttribute('data-starting'));
+  useEffect(() => {
+    if (ready) return;
+    if (immediate || !shellRoot().hasAttribute('data-starting')) {
+      setReady(true);
+      return;
+    }
+    let cancelIdle: (() => void) | undefined;
+    const stop = whenStartupReady(() => {
+      const done = () => setReady(true);
+      if (typeof requestIdleCallback === 'function') {
+        const id = requestIdleCallback(done, { timeout: 1500 });
+        cancelIdle = () => cancelIdleCallback(id);
+      } else {
+        const id = setTimeout(done, 150);
+        cancelIdle = () => clearTimeout(id);
+      }
+    });
+    return () => {
+      stop();
+      cancelIdle?.();
+    };
+  }, [ready, immediate]);
+  return ready;
+}
+
 export function InboxBell() {
   const [open, setOpen] = useState(false);
   /* A tenant's inbox is asked only through its open lease. The bar can draw
@@ -42,10 +73,11 @@ export function InboxBell() {
   const leaseSnapshot = () =>
     identity.tenantRequired && tenantLeaseActive(identity) ? (captureTenantLease(identity)?.tenantId ?? '') : '';
   const tenant = useSyncExternalStore(subscribeTenantLease, leaseSnapshot, leaseSnapshot);
+  const ready = useAfterStartup(open);
   const count = useQuery({
     queryKey: [INBOX_QUERY, 'count', tenant],
     queryFn: async () => (await api('/api/inbox', { limit: 1 })) as { unread: number; notices?: unknown[] },
-    enabled: !identity.tenantRequired || tenant !== '',
+    enabled: ready && (!identity.tenantRequired || tenant !== ''),
     refetchInterval: EVERY,
     staleTime: EVERY / 2,
   });

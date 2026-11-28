@@ -31,9 +31,7 @@ export class CommandInputError extends Error {
 export const MAX_COMMAND_BYTES = 524_288;
 /** How deep a value nests, its root at depth 0: a document a server renders through this walk (the App API's) is held to it too. */
 export const MAX_JSON_DEPTH = 16;
-/** How many JSON nodes the canonical walk accepts: exported so the App API document can name the same ceiling when exceeded. */
-export const MAX_JSON_NODES = 10_000;
-const MAX_NODES = MAX_JSON_NODES;
+const MAX_NODES = 10_000;
 /** Names that belong to Object.prototype, never to data. */
 export const reservedKeys: ReadonlySet<string> = new Set([...Object.getOwnPropertyNames(Object.prototype), 'prototype']);
 const invalid = (): never => {
@@ -54,12 +52,18 @@ interface SnappedMeta {
 const snappedObjects = new WeakMap<object, SnappedMeta>();
 
 /** Read descriptors once, producing the serialized bytes and immutable snapshot together. */
-export function snapshot(value: unknown, maxBytes: number): { json: string; value: Json; bytes: number; nodes: number } {
+export function snapshot(
+  value: unknown,
+  maxBytes: number,
+  options?: { readonly maxNodes?: number },
+): { json: string; value: Json; bytes: number; nodes: number } {
+  const maxNodes = options?.maxNodes ?? MAX_NODES;
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) return invalid();
+  if (!Number.isSafeInteger(maxNodes) || maxNodes < 1) return invalid();
   if (value !== null && typeof value === 'object') {
     const kept = snappedObjects.get(value);
     if (kept) {
-      if (kept.bytes > maxBytes) return invalid();
+      if (kept.bytes > maxBytes || kept.nodes > maxNodes) return invalid();
       return { json: kept.json, value: value as Json, bytes: kept.bytes, nodes: kept.nodes };
     }
   }
@@ -85,7 +89,7 @@ export function snapshot(value: unknown, maxBytes: number): { json: string; valu
     tokens.push(encoded);
   };
   const visit = (item: unknown, depth: number): Json => {
-    if (++nodes > MAX_NODES || depth > MAX_JSON_DEPTH) return invalid();
+    if (++nodes > maxNodes || depth > MAX_JSON_DEPTH) return invalid();
     if (depth > reach) reach = depth;
     if (item === null) {
       appendAscii('null');
@@ -107,7 +111,7 @@ export function snapshot(value: unknown, maxBytes: number): { json: string; valu
     if (typeof item !== 'object') return invalid();
     const kept = snappedObjects.get(item);
     if (kept) {
-      if (depth + kept.depth > MAX_JSON_DEPTH || nodes + kept.nodes - 1 > MAX_NODES || bytes + kept.bytes > maxBytes) return invalid();
+      if (depth + kept.depth > MAX_JSON_DEPTH || nodes + kept.nodes - 1 > maxNodes || bytes + kept.bytes > maxBytes) return invalid();
       if (depth + kept.depth > reach) reach = depth + kept.depth;
       nodes += kept.nodes - 1;
       bytes += kept.bytes;
@@ -119,7 +123,7 @@ export function snapshot(value: unknown, maxBytes: number): { json: string; valu
     const prototype = Object.getPrototypeOf(item);
     if (prototype !== null && prototype !== (array ? Array.prototype : Object.prototype)) return invalid();
     const length = array ? (Object.getOwnPropertyDescriptor(item, 'length')!.value as number) : 0;
-    if (array && (!Number.isSafeInteger(length) || length < 0 || length > MAX_NODES - nodes)) return invalid();
+    if (array && (!Number.isSafeInteger(length) || length < 0 || length > maxNodes - nodes)) return invalid();
     const startNodes = nodes - 1;
     const startBytes = bytes;
     const startToken = tokens.length;
@@ -147,7 +151,7 @@ export function snapshot(value: unknown, maxBytes: number): { json: string; valu
         appendAscii(']');
         frozen = Object.freeze(copy);
       } else {
-        if (keys.length > MAX_NODES - nodes) return invalid();
+        if (keys.length > maxNodes - nodes) return invalid();
         const names: string[] = [];
         const rawVals: Record<string, unknown> = Object.create(null);
         for (let i = 0; i < keys.length; i++) {

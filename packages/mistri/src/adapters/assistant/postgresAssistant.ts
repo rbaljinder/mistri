@@ -399,5 +399,14 @@ export async function openPostgresAssistant(url: string): Promise<AssistantStore
         throw error;
       }
     });
-  return createAssistantStore(transaction, q, () => connections.close());
+  const read = <T>(work: (db: Db) => Promise<T>): Promise<T> =>
+    connections.withReadClient((client) =>
+      work({
+        all: async (sql, ...params) => (await client.query(numbered(sql), params)).rows as Row[],
+        run: async () => {
+          throw new Error('Assistant store read client cannot execute writes.');
+        },
+      }),
+    );
+  return createAssistantStore(transaction, q, () => connections.close(), read);
 }

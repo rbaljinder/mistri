@@ -182,5 +182,14 @@ export async function openPostgresPreferences(url: string): Promise<PreferencesS
         throw error;
       }
     });
-  return createPreferencesStore(transaction, q, () => connections.close());
+  const read = <T>(work: (db: Db) => Promise<T>): Promise<T> =>
+    connections.withReadClient((client) =>
+      work({
+        all: async (sql, ...params) => (await client.query(numbered(sql), params)).rows as Row[],
+        run: async () => {
+          throw new Error('Preferences store read client cannot execute writes.');
+        },
+      }),
+    );
+  return createPreferencesStore(transaction, q, () => connections.close(), read);
 }

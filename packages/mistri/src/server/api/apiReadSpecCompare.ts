@@ -1,5 +1,6 @@
 /** Conservative comparison of two App API read documents, not general OpenAPI diff. */
 import { snapshot } from '@mistriwork/engine/adapters/commands/canonicalJson.js';
+import { MAX_API_DOCUMENT_BYTES, MAX_API_DOCUMENT_NODES } from './apiRefusals.js';
 
 type Data = Record<string, any>;
 const fail = (): never => {
@@ -11,7 +12,7 @@ const keys = (value: Data, allowed: string[]) => {
 };
 const strings = (value: unknown): string[] =>
   Array.isArray(value) && value.every((item) => typeof item === 'string') && new Set(value).size === value.length ? value : fail();
-const canonical = (value: unknown): string => snapshot(value, 1_048_576).json;
+const canonical = (value: unknown): string => snapshot(value, MAX_API_DOCUMENT_BYTES, { maxNodes: MAX_API_DOCUMENT_NODES }).json;
 const same = (left: unknown, right: unknown) => canonical(left) === canonical(right);
 // Only these known response/parameter objects have prose removed. Never walk
 // arbitrary maps: description/title/summary can be real field names.
@@ -20,7 +21,7 @@ const responses = (value: Data) =>
   Object.fromEntries(Object.entries(value).map(([status, response]) => [status, withoutDescription(response)]));
 
 function read(input: unknown) {
-  const doc = object(snapshot(input, 1_048_576).value);
+  const doc = object(snapshot(input, MAX_API_DOCUMENT_BYTES, { maxNodes: MAX_API_DOCUMENT_NODES }).value);
   keys(doc, [
     'openapi',
     'info',
@@ -235,7 +236,7 @@ function read(input: unknown) {
       429: 'rate_limited',
       503: 'temporarily_unavailable',
     };
-    keys(object(get.responses), ['200', ...Object.keys(codes)]);
+    keys(object(get.responses), ['200', '422', ...Object.keys(codes)]);
     object(get.responses['200']);
     for (const [status, rawResponse] of Object.entries(get.responses)) {
       const response = object(rawResponse);
@@ -244,7 +245,27 @@ function read(input: unknown) {
       keys(object(response.content['application/json']), ['schema']);
       const body = response.content['application/json'].schema;
       schema(body);
-      if (
+      if (status === '422') {
+        if (
+          !same(body, {
+            type: 'object',
+            additionalProperties: false,
+            required: ['error'],
+            properties: {
+              error: {
+                type: 'object',
+                additionalProperties: false,
+                required: ['code', 'message'],
+                properties: {
+                  code: { type: 'string', enum: ['chosen_invalid', 'chosen_required'] },
+                  message: { type: 'string' },
+                },
+              },
+            },
+          })
+        )
+          fail();
+      } else if (
         status !== '200' &&
         !same(body, {
           type: 'object',

@@ -488,19 +488,24 @@ export async function readInboxFor(
   }
   if (options.unread !== undefined && typeof options.unread !== 'boolean') throw new HttpError(400, 'Invalid notification filter.');
   const { store, recipient, namespace } = await storeFor(options);
-  /* The page, the unread notices the bell counts and the email choice are three reads of the store that wait on
-     nothing of each other, and whether each notice is still the reader's is asked once for both lists. */
-  const [rows, unread, emailed] = await Promise.all([
-    store.readInbox({
-      app: namespace,
-      recipient,
-      limit,
-      ...(options.before === undefined ? {} : { before: options.before as number }),
-      ...(options.unread ? { unread: true } : {}),
-    }),
+  /* The page, the unread notices the bell counts and the email choice are reads of the store that wait on nothing of
+     each other, and whether each notice is still the reader's is asked once for both lists. When the caller asks for
+     the first page of unread notices only, one query answers both lists. */
+  const reuseUnread = options.unread === true && options.before === undefined && limit <= UNREAD_CAP;
+  const [pageRows, unread, emailed] = await Promise.all([
+    reuseUnread
+      ? Promise.resolve(undefined)
+      : store.readInbox({
+          app: namespace,
+          recipient,
+          limit,
+          ...(options.before === undefined ? {} : { before: options.before as number }),
+          ...(options.unread ? { unread: true } : {}),
+        }),
     unreadOf(store, recipient, namespace),
     appRulesEmail(options.app) && emailSwitchOf(store) ? emailSwitchOf(store)!(namespace, recipient).then((off) => ({ email: !off })) : {},
   ]);
+  const rows = pageRows ?? unread.slice(0, limit);
   options.lastWave?.();
   const visible = await visibleTo(options.reader, options.schema, [...new Map([...rows, ...unread].map((row) => [row.id, row])).values()]);
   const notices = rows

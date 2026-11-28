@@ -6,6 +6,10 @@
  * the first refusal still stands for it, since what follows it reads what it refused.
  */
 
+/** Byte and JSON-node bounds for rendered App API OpenAPI/MCP documents (separate from the 10,000-node command-request bound). */
+export const MAX_API_DOCUMENT_BYTES = 2_097_152;
+export const MAX_API_DOCUMENT_NODES = 100_000;
+
 /** Every refusal of an API declaration that one run found, each its own sentence; its message is them, a line each. */
 export class ApiRefusals extends Error {
   readonly refusals: readonly string[];

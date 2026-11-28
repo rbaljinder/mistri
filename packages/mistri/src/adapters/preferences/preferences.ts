@@ -82,12 +82,13 @@ export function createPreferencesStore(
   transaction: Transaction,
   t: (name: string) => string,
   close: () => Promise<void>,
+  read: Transaction = transaction,
 ): PreferencesStore {
   const { value } = PREFERENCES_TABLES;
   return {
     async read(owner) {
       assertOwner(owner);
-      const rows = await transaction((db) =>
+      const rows = await read((db) =>
         db.all(
           `SELECT pref_key, pref_value FROM ${t(value)} WHERE app = ? AND subject_id = ? AND scope = ?`,
           owner.app,
