@@ -20,6 +20,11 @@ import { executeBusinessCommand } from '../packages/mistri/src/server/commands/b
 import { defineCommand, defineCommands } from '../packages/mistri/src/server/commands/businessCommands.js';
 import { provisionStores } from '../packages/mistri/src/server/maintenance.js';
 import { forgetReadAuditCoalescing } from '../packages/mistri/src/server/readAudit.js';
+import { TransactionOperations } from '../packages/engine/src/adapters/adapter.js';
+import { PgConnectionManager, type PgPoolOptions, type PgResult } from '../packages/engine/src/adapters/postgresPool.js';
+import { keepAttestedOn, transactionHandle } from '../packages/engine/src/adapters/postgresTransactionHandle.js';
+import { createPostgresCommandJournal } from '../packages/mistri/src/adapters/commands/postgresCommandJournal.js';
+import { READ_AUDIT_PREFIX, ReadAuditUnavailable } from '../packages/mistri/src/adapters/readAudit/readAudit.js';
 import { parseAppConfig } from '../packages/mistri/src/shared/app.js';
 
 const staff = { id: 'account-a', appId: 'desk', roles: ['staff'] };
@@ -31,7 +36,7 @@ const app = () =>
       name: 'Desk',
       sources: { desk: { connection: 'desk-db', default: true } },
       resources: { incident: { access: 'write', audit: { reads: true } }, service: { access: 'write' } },
-      auth: { roles: { staff: { read: true, commands: ['triage', 'unaudited', 'survey', 'close', 'rename'] } } },
+      auth: { roles: { staff: { read: true, commands: ['triage', 'unaudited', 'survey', 'close', 'rename', 'parallelReads'] } } },
       views: { incidents: { kind: 'list', from: 'incident' } },
       home: 'incidents',
     },
@@ -113,8 +118,26 @@ const rename = defineCommand({
   },
 });
 
+/* Read-only command running two Promise.all waves of audited reads: all read-audit rows flush in one batch before commit. */
+const parallelReads = defineCommand({
+  source: 'desk',
+  target: 'incident',
+  read: ['incident'],
+  input: {},
+  output: { parse: (value: unknown) => value as { total: number } },
+  async handle({ db }) {
+    const wave1 = await Promise.all([
+      db.incident.where({ status: 'open' }).limit(10),
+      db.incident.where({ status: 'closed' }).limit(10),
+      db.incident.where({ service_id: 1 }).limit(10),
+    ]);
+    const wave2 = await Promise.all([db.incident.where({ service_id: 2 }).limit(10), db.incident.where({ id: 1 }).limit(10)]);
+    return { total: [...wave1, ...wave2].reduce((sum, rows) => sum + rows.length, 0) };
+  },
+});
+
 async function fixture(
-  run: (f: { db: DatabaseSync; execute: (command: string, key: number) => Promise<unknown> }) => Promise<void>,
+  run: (f: { db: DatabaseSync; execute: (command: string, key: number) => Promise<unknown>; auditBatches: number[] }) => Promise<void>,
   provision = true,
 ) {
   const directory = mkdtempSync(join(tmpdir(), 'mistri-read-audit-commands-'));
@@ -132,12 +155,38 @@ async function fixture(
     registry.add({ id: 'desk-db', name: 'Desk', url: path, writable: true, source: 'config' });
     const loaded = app();
     const resources = await loadAppRuntimeResources(registry, loaded, 'desk-db');
-    const binding = bindBusinessCommands({
+    const rawBinding = bindBusinessCommands({
       app: loaded,
-      registry: defineCommands({ triage, unaudited, survey, close, rename }),
+      registry: defineCommands({ triage, unaudited, survey, close, rename, parallelReads }),
       resources,
       writableConnection: (id) => id === 'desk-db',
     });
+    const auditBatches: number[] = [];
+    const binding: typeof rawBinding = {
+      ...rawBinding,
+      authorize(id, actor) {
+        const authorized = rawBinding.authorize(id, actor);
+        return {
+          ...authorized,
+          commandTransaction: authorized.commandTransaction
+            ? (cb) =>
+                authorized.commandTransaction!((records, journal) =>
+                  cb(records, {
+                    ...journal,
+                    ...(journal.appendReadAudit
+                      ? {
+                          appendReadAudit: (rows) => {
+                            auditBatches.push(rows.length);
+                            return journal.appendReadAudit!(rows);
+                          },
+                        }
+                      : {}),
+                  }),
+                )
+            : undefined,
+        };
+      },
+    };
     let n = 0;
     const execute = async (command: string, key: number) =>
       (
@@ -150,7 +199,7 @@ async function fixture(
           input: {},
         })
       ).result;
-    await run({ db, execute });
+    await run({ db, execute, auditBatches });
   } finally {
     await registry.closeAll();
     db.close();
@@ -229,4 +278,101 @@ test("a handler's read is written in the command's own transaction, and its refu
     await assert.rejects(execute('survey', 1), (error) => refusalReasons(error).some((reason) => /read audit/.test(reason)));
     assert.equal(db.prepare('SELECT name FROM service WHERE id = 1').get()!.name, 'Identity');
   }, false);
+});
+
+test('multiple audited reads in Promise.all waves flush in a single journal.appendReadAudit batch before commit', async () => {
+  await fixture(async ({ db, execute, auditBatches }) => {
+    assert.deepEqual(await execute('parallelReads', 1), { total: 7 });
+    // Target read + 5 handler reads flushed together in one batch, never serialized one-by-one.
+    assert.deepEqual(auditBatches, [6]);
+    assert.equal(logged(db).length, 6);
+    assert.deepEqual(logged(db)[0], ['command', 'parallelReads', 'incident', 'account-a', '1', null, null]);
+  });
+});
+
+test('postgresCommandJournal.appendReadAudit attests once per adapter and pipelines the INSERT with COMMIT', async () => {
+  const sent: string[] = [];
+  class FakeClient {
+    readonly pipeline = true;
+    async query(text: string): Promise<PgResult<Record<string, unknown>>> {
+      sent.push(text.replace(/\s+/g, ' ').trim());
+      return { rows: [], fields: [], rowCount: 0 };
+    }
+    release(): void {}
+    on(): this {
+      return this;
+    }
+  }
+  class FakePool {
+    constructor(readonly options: PgPoolOptions) {}
+    async connect() {
+      const client = new FakeClient();
+      await this.options.onConnect(client as never);
+      return client;
+    }
+    on(): void {}
+    async end(): Promise<void> {}
+  }
+  const manager = new PgConnectionManager(
+    'postgres://fake',
+    () => {},
+    async () => ({ Pool: FakePool }),
+    { readers: 1, writers: 1 },
+  );
+  const sampleRow = {
+    at: '2026-11-27T00:00:00.000Z',
+    app: 'desk',
+    tenant: 't1',
+    actor: 'account-a',
+    resource: 'incident',
+    route: 'command' as const,
+    command: 'parallelReads',
+    record: '1',
+  };
+  const owner = {
+    appId: 'desk',
+    storeId: 's1',
+    sourceId: 'src1',
+    tenantId: 't1',
+    actorId: 'account-a',
+    membershipId: 'm1',
+    membershipVersion: '1',
+    tenantVersion: '1',
+    roles: ['staff'],
+    deployment: 'prod',
+  };
+  try {
+    // 1. Unattested adapter with missing read-audit store fails closed with ReadAuditUnavailable.
+    await manager.withWriteClient(async (leased) => {
+      const origin = {};
+      const handle = transactionHandle(leased, origin);
+      const ops = new TransactionOperations(true);
+      const journal = createPostgresCommandJournal(handle, ops, owner);
+      await assert.rejects(journal.appendReadAudit!([sampleRow]), ReadAuditUnavailable);
+    });
+
+    // 2. Attested adapter queues the multi-row INSERT via beforeCommit (0 queries until COMMIT, no SAVEPOINT probe).
+    const origin = {};
+    keepAttestedOn(origin, READ_AUDIT_PREFIX);
+    await manager.withWriteClient(async (leased) => {
+      sent.length = 0;
+      const handle = transactionHandle(leased, origin);
+      const ops = new TransactionOperations(true);
+      const journal = createPostgresCommandJournal(handle, ops, owner);
+      await handle.query('BEGIN');
+      await journal.appendReadAudit!([sampleRow, { ...sampleRow, record: '2' }]);
+      await ops.finish();
+      // Nothing sent yet for read audit — queued via beforeCommit until COMMIT.
+      assert.deepEqual(sent, ['BEGIN']);
+      await handle.query('COMMIT');
+      assert.equal(sent.length, 3);
+      assert.equal(sent[0], 'BEGIN');
+      assert.match(sent[1]!, /^INSERT INTO "?mistri"?\."read_audit_row"/);
+      assert.match(sent[1]!, /\(\$1,.*\$15\), \(\$16,.*\$30\)$/);
+      assert.equal(sent[2], 'COMMIT');
+      assert.ok(!sent.some((sql) => /SAVEPOINT|read_audit_meta|pg_class/.test(sql)));
+    });
+  } finally {
+    await manager.close();
+  }
 });

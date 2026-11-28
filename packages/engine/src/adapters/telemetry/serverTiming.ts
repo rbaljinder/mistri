@@ -222,6 +222,8 @@ function startProcessSampler(): void {
 
 interface DbCount {
   flights: number;
+  queries: number;
+  pipelined: number;
   waitMs: number;
   busy: number;
   maxBusy: number;
@@ -238,7 +240,7 @@ class RequestTiming {
 
   dbOf(label: string): DbCount {
     let count = this.db.get(label);
-    if (!count) this.db.set(label, (count = { flights: 0, waitMs: 0, busy: 0, maxBusy: 0 }));
+    if (!count) this.db.set(label, (count = { flights: 0, queries: 0, pipelined: 0, waitMs: 0, busy: 0, maxBusy: 0 }));
     return count;
   }
 
@@ -248,7 +250,12 @@ class RequestTiming {
       total: round(performance.now() - this.start),
       cpu: round((cpu.user + cpu.system) / 1000),
       ...Object.fromEntries([...this.sums].map(([name, ms]) => [name, round(ms)])),
-      db: Object.fromEntries([...this.db].map(([label, c]) => [label, { flights: c.flights, wait: round(c.waitMs), max: c.maxBusy }])),
+      db: Object.fromEntries(
+        [...this.db].map(([label, c]) => [
+          label,
+          { flights: c.flights, queries: c.queries, pipelined: c.pipelined, wait: round(c.waitMs), max: c.maxBusy },
+        ]),
+      ),
       pool: Object.fromEntries([...this.pools].map(([label, p]) => [label, { wait: round(p.ms), n: p.n }])),
       ...(this.parts.length ? { parts: this.parts.map(([name, ms]) => [name, round(ms)]) } : {}),
     };
@@ -258,7 +265,10 @@ class RequestTiming {
     const metrics = [`total;dur=${fields.total}`, `cpu;dur=${fields.cpu}`];
     if (procHeader && withProc) metrics.push(procHeader);
     for (const [name, ms] of this.sums) metrics.push(`${name};dur=${round(ms)}`);
-    for (const [label, c] of this.db) metrics.push(`db-${label};dur=${round(c.waitMs)};desc="flights=${c.flights} max=${c.maxBusy}"`);
+    for (const [label, c] of this.db)
+      metrics.push(
+        `db-${label};dur=${round(c.waitMs)};desc="flights=${c.flights} max=${c.maxBusy} queries=${c.queries} pipelined=${c.pipelined}"`,
+      );
     for (const [label, p] of this.pools) metrics.push(`pool-${label};dur=${round(p.ms)};desc="n=${p.n}"`);
     for (const [name, ms] of this.parts) metrics.push(`${name};dur=${round(ms)}`);
     return metrics.join(', ');
@@ -439,9 +449,11 @@ export function timeClient(client: object, label: string): void {
         count.maxBusy = Math.max(count.maxBusy, count.busy);
       }
     }
-    if (state.inFlight === 0 || !pipelines()) {
-      const count = state.timing?.dbOf(label);
-      if (count) count.flights += 1;
+    const count = state.timing?.dbOf(label);
+    if (count) {
+      count.queries += 1;
+      if (state.inFlight === 0 || !pipelines()) count.flights += 1;
+      else count.pipelined += 1;
     }
     state.inFlight += 1;
   };

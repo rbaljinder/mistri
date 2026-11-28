@@ -146,6 +146,9 @@ test('a request carries Server-Timing only when the flag is on, and says nothing
 
 test('a pipelined batch is one flight; statements on a client that does not pipeline are one each', async () => {
   setServerTiming(true);
+  const writes: string[] = [];
+  const write = process.stderr.write.bind(process.stderr);
+  process.stderr.write = ((chunk: unknown) => (writes.push(String(chunk)), true)) as typeof process.stderr.write;
   try {
     const pipelining = new SlowClient(true);
     const serial = new SlowClient(false);
@@ -156,10 +159,20 @@ test('a pipelined batch is one flight; statements on a client that does not pipe
       await pipelining.query();
       await Promise.all([serial.query(), serial.query()]);
     });
-    assert.equal(said.get('db-app')?.desc, 'flights=2 max=1');
-    assert.equal(said.get('db-auth')?.desc, 'flights=2 max=1');
+    assert.equal(said.get('db-app')?.desc, 'flights=2 max=1 queries=4 pipelined=2');
+    assert.equal(said.get('db-auth')?.desc, 'flights=2 max=1 queries=2 pipelined=0');
     assert.ok(said.get('db-app')!.dur >= 25, `two flights of 15 ms awaited: ${said.get('db-app')!.dur}`);
+    const line = writes.find((entry) => entry.includes('"msg":"server-timing"'));
+    assert.ok(line, 'emits server-timing JSON log line');
+    const parsed = JSON.parse(line!) as { db: Record<string, { flights: number; queries: number; pipelined: number; max: number }> };
+    assert.equal(parsed.db.app.flights, 2);
+    assert.equal(parsed.db.app.queries, 4);
+    assert.equal(parsed.db.app.pipelined, 2);
+    assert.equal(parsed.db.auth.flights, 2);
+    assert.equal(parsed.db.auth.queries, 2);
+    assert.equal(parsed.db.auth.pipelined, 0);
   } finally {
+    process.stderr.write = write;
     setServerTiming(false);
   }
 });
@@ -189,7 +202,7 @@ test('a checkout that waits for a full pool is recorded as pool wait, and the le
     const wait = said.get('pool-timed-read');
     assert.equal(wait?.desc, 'n=2');
     assert.ok(wait!.dur >= 40, `the second checkout waited for the first lease: ${wait!.dur}`);
-    assert.equal(said.get('db-timed')?.desc, 'flights=2 max=1');
+    assert.equal(said.get('db-timed')?.desc, 'flights=2 max=1 queries=2 pipelined=0');
   } finally {
     setServerTiming(false);
     await connections.close();

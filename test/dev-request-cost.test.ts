@@ -76,7 +76,7 @@ describe('a development server', () => {
     try {
       const quick = await fetch(`${base}/api/view/run`);
       await quick.text();
-      assert.match(quick.headers.get('server-timing') ?? '', /db-app;dur=[\d.]+;desc="flights=2 max=1"/);
+      assert.match(quick.headers.get('server-timing') ?? '', /db-app;dur=[\d.]+;desc="flights=2 max=1 queries=2 pipelined=0"/);
       assert.doesNotMatch(quick.headers.get('server-timing') ?? '', /proc/, 'the process entry is never in a development response');
       await (await fetch(`${base}/api/view/many`)).text();
       await (await fetch(`${base}/api/none`)).text();
