@@ -108,7 +108,7 @@ export default defineJobs({
   // The layout is listed beside its peers, now held at its version.
   const lines: string[] = [];
   assert.equal(await runMigrate(['stores', 'status', '--config', config], (line) => lines.push(line), undefined, MIGRATE_APPS), 0);
-  assert.match(lines.join('\n'), /assistant.*v1/);
+  assert.match(lines.join('\n'), /assistant.*v2/);
   assert.match(again.text, /desk: jobs: 1 delivery destination\(s\), 0 added/);
 });
 
