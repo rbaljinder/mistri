@@ -75,4 +75,13 @@ export const say = defineMessages({
   externalProtocolMcp: 'mcp · {tool}',
   externalProtocolHttp: 'http · {method}',
   webhookEndpoint: 'POST /api/assistant/webhooks/{app}/{id}',
+  mcpServersHeading: 'MCP servers',
+  skillsHeading: 'Skills',
+  discoverTools: 'Discover tools',
+  discoveringTools: 'Discovering…',
+  mcpDiscoveredCount: '{count} tools discovered',
+  mcpDiscoveredOne: '1 tool discovered',
+  mcpDiscoveredNone: 'No tools advertised',
+  mcpDiscoverError: 'Discovery failed: {message}',
+  skillProgressiveBadge: 'load_skill',
 });

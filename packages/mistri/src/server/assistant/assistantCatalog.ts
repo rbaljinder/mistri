@@ -48,6 +48,11 @@ interface CatalogKnowledgeSource {
   resource: string;
   description?: string;
 }
+interface CatalogSkill {
+  id: string;
+  label: string;
+  description: string;
+}
 export interface AssistantCatalog {
   app: string;
   instructions?: string;
@@ -57,6 +62,7 @@ export interface AssistantCatalog {
   customBlocks?: CatalogCustomBlock[];
   subagents?: CatalogSubagent[];
   knowledge?: CatalogKnowledgeSource[];
+  skills?: CatalogSkill[];
   memory?: {
     scopes: readonly ('person' | 'app')[];
     canWriteShared?: boolean;
@@ -135,6 +141,10 @@ function catalogOf(
         items: runtime?.memories ?? [],
       }
     : undefined;
+  const skills =
+    assistant?.skills && Object.keys(assistant.skills).length
+      ? Object.values(assistant.skills).map((each) => ({ id: each.id, label: each.label, description: each.description }))
+      : undefined;
   return {
     app: source.name,
     ...(assistant?.instructions ? { instructions: assistant.instructions } : {}),
@@ -152,6 +162,7 @@ function catalogOf(
     ...(customBlocks ? { customBlocks } : {}),
     ...(subagents?.length ? { subagents } : {}),
     ...(knowledge?.length ? { knowledge } : {}),
+    ...(skills?.length ? { skills } : {}),
     ...(memory ? { memory } : {}),
   };
 }
@@ -272,6 +283,12 @@ export function systemPrompt(catalog: AssistantCatalog, mode?: 'ask'): string {
     );
     for (const source of catalog.knowledge) {
       lines.push(`- ${source.id} (${source.resource})${source.description ? `: ${source.description}` : ''}`);
+    }
+  }
+  if (catalog.skills?.length) {
+    lines.push('', 'Skills (load full procedural instructions on demand with load_skill { name }):');
+    for (const skill of catalog.skills) {
+      lines.push(`- ${skill.id} (${skill.label}): ${skill.description}`);
     }
   }
   if (catalog.memory) {
@@ -457,6 +474,21 @@ export function toolSpecs(
           task: { type: 'string', description: 'Self-contained analysis task or question for the subagent.' },
         },
         required: ['agent', 'task'],
+        additionalProperties: false,
+      },
+    });
+  }
+  if (assistant?.skills && Object.keys(assistant.skills).length) {
+    const skillIds = Object.keys(assistant.skills);
+    filtered.push({
+      name: 'load_skill',
+      description: 'Load the full procedural instructions for a declared skill on demand.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          name: { type: 'string', enum: skillIds, description: 'The skill id to load.' },
+        },
+        required: ['name'],
         additionalProperties: false,
       },
     });

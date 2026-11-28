@@ -22,6 +22,8 @@ import {
   type ModelRequest,
   type ModelUsage,
 } from '../packages/mistri/src/server/assistant/assistantModel.js';
+import { ModelUnavailable } from '../packages/mistri/src/server/assistant/assistantModelRefusal.js';
+import { registerAssistantProvider } from '../packages/mistri/src/server/agents/providers.js';
 import { scriptedModel, type AssistantScript } from '../packages/mistri/src/server/assistant/assistantScripted.js';
 
 /**
@@ -2405,5 +2407,355 @@ test('Wave 3B: external HTTP/MCP tools enforce egress, approval checkpoints, and
     if (prevHook === undefined) delete process.env.MISTRI_TEST_WEBHOOK_SECRET;
     else process.env.MISTRI_TEST_WEBHOOK_SECRET = prevHook;
     await new Promise<void>((resolve) => mockRemote.close(() => resolve()));
+  }
+});
+
+test('Wave 4A: multi-provider routing, fallback chains, per-agent model overrides, and Trace/Eval USD cost telemetry', async () => {
+  const providerCalls: Array<{ provider: string; model: string }> = [];
+  registerAssistantProvider('openai', () => ({
+    async stream(request) {
+      providerCalls.push({ provider: 'openai', model: request.model });
+      throw new ModelUnavailable('OpenAI 429 rate limited');
+    },
+  }));
+  registerAssistantProvider('gemini', () => ({
+    async stream(request, sink) {
+      providerCalls.push({ provider: 'gemini', model: request.model });
+      const text = `Answered via gemini (${request.model}).`;
+      if (typeof sink === 'function') sink(text);
+      else sink.onText(text);
+      return {
+        content: [{ type: 'text', text }],
+        stopReason: 'end_turn',
+        usage: { input: 2000, output: 500, cacheRead: 1000, cacheWrite: 0 },
+      };
+    },
+  }));
+  try {
+    await fixture(
+      async ({ as, turn, get, post }) => {
+        // Clear scripted test model so resolveAssistantModel routes through registered providers.
+        setAssistantModel(undefined);
+        as('ann');
+
+        // 1. Default turn tries OpenAI primary (gpt-4.1), fails transiently, falls back to Gemini (gemini-2.5-flash).
+        const res = await turn({ text: 'Check pipeline health.' });
+        assert.equal(res.status, 200);
+        const convId = res.events.find((e) => e.event === 'conversation')?.data?.id as string;
+        const answer = res.events
+          .filter((e) => e.event === 'text')
+          .map((e) => e.data.delta)
+          .join('');
+        assert.match(answer, /Answered via gemini \(gemini-2\.5-flash\)/);
+        assert.deepEqual(providerCalls.slice(0, 2), [
+          { provider: 'openai', model: 'gpt-4.1' },
+          { provider: 'gemini', model: 'gemini-2.5-flash' },
+        ]);
+
+        // 2. Trace Inspector reports model, provider, cacheReadTokens, and non-zero estimatedCostUsd.
+        const traceRes = await get(`/api/assistant/runs/trace?app=${appId}&conversation=${encodeURIComponent(convId)}`);
+        assert.equal(traceRes.status, 200);
+        assert.equal(traceRes.body.trace.model, 'gpt-4.1');
+        assert.equal(traceRes.body.trace.provider, 'openai');
+        assert.equal(traceRes.body.trace.cacheReadTokens, 1000);
+        assert.ok(traceRes.body.trace.estimatedCostUsd > 0, 'Expected positive USD cost estimate');
+
+        // 3. Per-agent routing targets Gemini directly with gemini-2.5-pro.
+        const agentRes = await turn({ text: 'Run strategic forecast.', agent: 'strategist' });
+        assert.equal(agentRes.status, 200);
+        const agentAnswer = agentRes.events
+          .filter((e) => e.event === 'text')
+          .map((e) => e.data.delta)
+          .join('');
+        assert.match(agentAnswer, /Answered via gemini \(gemini-2\.5-pro\)/);
+        assert.deepEqual(providerCalls[2], { provider: 'gemini', model: 'gemini-2.5-pro' });
+
+        // 4. Evals suite rolls up totalCostUsd across cases.
+        const evalRes = await post('/api/assistant/evals/run', { app: appId });
+        assert.equal(evalRes.status, 200);
+        assert.equal(evalRes.body.report.passed, 1);
+        assert.ok(evalRes.body.report.totalCostUsd > 0, 'Expected positive eval totalCostUsd');
+      },
+      {
+        model: false,
+        assistant: {
+          provider: 'openai',
+          model: 'gpt-4.1',
+          fallbackModels: ['gemini:gemini-2.5-flash'],
+          defaultAgent: 'primary',
+          agents: {
+            primary: {
+              name: 'Primary Ops',
+            },
+            strategist: {
+              name: 'Strategist',
+              provider: 'gemini',
+              model: 'gemini-2.5-pro',
+            },
+          },
+          evals: [
+            {
+              id: 'routing_smoke',
+              label: 'Routing Smoke',
+              prompt: 'Verify fallback routing.',
+              expect: { answerMatches: 'Answered via gemini' },
+            },
+          ],
+        },
+      },
+    );
+  } finally {
+    registerAssistantProvider('openai', () => undefined);
+    registerAssistantProvider('gemini', () => undefined);
+    setAssistantModel(undefined);
+  }
+});
+
+test('Wave 4B: progressive skills (load_skill) and live MCP server tools/list discovery with approval checkpoints', async () => {
+  const prevToken = process.env.MISTRI_TEST_MCP_SRV_TOKEN;
+  process.env.MISTRI_TEST_MCP_SRV_TOKEN = 'mcp-srv-secret-42';
+
+  const rpcCalls: Array<{ method: string; tool?: string; auth?: string; args?: unknown }> = [];
+  const mockMcp = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const c of req) chunks.push(c as Buffer);
+    const body = JSON.parse(Buffer.concat(chunks).toString('utf8')) as {
+      id?: number;
+      method?: string;
+      params?: { name?: string; arguments?: Record<string, unknown> };
+    };
+    const auth = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
+    rpcCalls.push({ method: body.method ?? '', tool: body.params?.name, auth, args: body.params?.arguments });
+    res.setHeader('content-type', 'application/json');
+    if (body.method === 'tools/list') {
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: body.id ?? 1,
+          result: {
+            tools: [
+              {
+                name: 'list_open_prs',
+                title: 'List Open PRs',
+                description: 'List open pull requests for a repository.',
+                inputSchema: {
+                  type: 'object',
+                  properties: { repo: { type: 'string', description: 'Repository slug' } },
+                  required: ['repo'],
+                },
+              },
+              {
+                name: 'create_release',
+                title: 'Create Release',
+                description: 'Tag and publish a new release.',
+                inputSchema: {
+                  type: 'object',
+                  properties: { tag: { type: 'string', description: 'Release tag' } },
+                  required: ['tag'],
+                },
+              },
+              {
+                name: 'drop_repo',
+                title: 'Drop Repo',
+                description: 'Dangerous tool excluded by allowTools.',
+              },
+            ],
+          },
+        }),
+      );
+      return;
+    }
+    if (body.method === 'tools/call' && body.params?.name === 'list_open_prs') {
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: body.id ?? 1,
+          result: { content: [{ type: 'text', text: JSON.stringify({ prs: [{ number: 114, state: 'approved' }] }) }] },
+        }),
+      );
+      return;
+    }
+    if (body.method === 'tools/call' && body.params?.name === 'create_release') {
+      res.end(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: body.id ?? 1,
+          result: { content: [{ type: 'text', text: JSON.stringify({ published: true, tag: body.params.arguments?.tag }) }] },
+        }),
+      );
+      return;
+    }
+    res.statusCode = 404;
+    res.end('{}');
+  });
+  mockMcp.listen(0, '127.0.0.1');
+  await once(mockMcp, 'listening');
+  const addr = mockMcp.address();
+  const mcpUrl = `http://127.0.0.1:${typeof addr === 'object' && addr ? addr.port : 0}/mcp`;
+
+  try {
+    await fixture(
+      async ({ as, get, post, turn, requests }) => {
+        // 1. /api/app strips server URLs, credentials, skill instructions, and roles, and filters by viewer role.
+        as('viewer');
+        const viewerApp = await get(`/api/app?app=${appId}`);
+        assert.equal(viewerApp.status, 200);
+        const vServers = viewerApp.body.app.assistant.mcpServers as Array<Record<string, unknown>>;
+        const vSkills = viewerApp.body.app.assistant.skills as Array<Record<string, unknown>>;
+        assert.deepEqual(
+          vServers.map((s) => s.id),
+          ['github_read'],
+        );
+        assert.equal(vServers[0].url, undefined);
+        assert.equal(vServers[0].authValue, undefined);
+        assert.equal(vServers[0].roles, undefined);
+        assert.deepEqual(
+          vSkills.map((s) => s.id),
+          ['release_checklist'],
+        );
+        assert.equal(vSkills[0].instructions, undefined);
+        assert.equal(vSkills[0].roles, undefined);
+
+        // 2. Live MCP discovery respects allowTools & viewer roles, never leaks URL/secrets.
+        const viewerDiscover = await post('/api/assistant/mcp/discover', { app: appId, refresh: true });
+        assert.equal(viewerDiscover.status, 200);
+        assert.equal(viewerDiscover.body.servers.length, 1);
+        assert.equal(viewerDiscover.body.servers[0].id, 'github_read');
+        assert.equal(viewerDiscover.body.servers[0].ok, true);
+        assert.deepEqual(
+          viewerDiscover.body.servers[0].tools.map((t: { id: string }) => t.id),
+          ['github_read__list_open_prs'],
+        );
+        const deniedServer = await post('/api/assistant/mcp/discover', { app: appId, server: 'github_write' });
+        assert.equal(deniedServer.status, 403);
+
+        // 3. Rep discovers both read & write MCP servers (still excluding drop_repo).
+        as('ann');
+        const repDiscover = await post('/api/assistant/mcp/discover', { app: appId, refresh: true });
+        assert.equal(repDiscover.status, 200);
+        assert.equal(repDiscover.body.servers.length, 2);
+        const discoveredIds = repDiscover.body.servers.flatMap((s: { tools: Array<{ id: string }> }) => s.tools.map((t) => t.id));
+        assert.deepEqual(discoveredIds.sort(), ['github_read__list_open_prs', 'github_write__create_release']);
+
+        // 4. Interactive turn: progressive skill instructions NOT in system prompt until load_skill is called;
+        //    discovered read MCP tool runs live; discovered write MCP tool pauses at approval checkpoint!
+        const res = await turn({ text: 'Audit release checklist, check open PRs, and publish v3.0.' });
+        assert.equal(res.status, 200);
+        const firstReq = requests[0]!;
+        assert.ok(firstReq.system.includes('release_checklist'), 'Expected skill name in compact prompt index');
+        assert.ok(!firstReq.system.includes('RULE-99'), 'Full skill instructions must not bloat initial system prompt');
+        assert.ok(
+          firstReq.tools.some((t) => t.name === 'load_skill'),
+          'Expected built-in load_skill tool',
+        );
+        assert.ok(
+          firstReq.tools.some((t) => t.name === 'github_read__list_open_prs'),
+          'Expected discovered read MCP tool',
+        );
+        assert.ok(
+          firstReq.tools.some((t) => t.name === 'github_write__create_release'),
+          'Expected discovered write MCP tool',
+        );
+
+        const steps = res.events.filter((e) => e.event === 'step').map((e) => e.data.label as string);
+        assert.ok(
+          steps.some((l) => l.includes('Loaded skill: Release Readiness Checklist')),
+          `Expected load_skill step, got ${JSON.stringify(steps)}`,
+        );
+        const proposal = res.events.find((e) => e.event === 'proposal')?.data?.proposal;
+        assert.equal(proposal?.kind, 'external');
+        assert.equal(proposal?.action, 'github_write__create_release');
+        assert.equal(
+          rpcCalls.some((c) => c.method === 'tools/call' && c.tool === 'list_open_prs' && c.auth === 'Bearer mcp-srv-secret-42'),
+          true,
+          'Expected discovered read MCP tool to execute live with expanded auth header',
+        );
+        assert.equal(
+          rpcCalls.some((c) => c.method === 'tools/call' && c.tool === 'create_release'),
+          false,
+          'Write MCP tool must NOT execute before user approval',
+        );
+
+        // 5. Viewer cannot execute rep-only discovered MCP write tool; rep executes it via /api/assistant/external/execute.
+        as('viewer');
+        const forbiddenExec = await post('/api/assistant/external/execute', {
+          app: appId,
+          tool: 'github_write__create_release',
+          input: { tag: 'v3.0' },
+        });
+        assert.equal(forbiddenExec.status, 403);
+
+        as('ann');
+        const approvedExec = await post('/api/assistant/external/execute', {
+          app: appId,
+          tool: 'github_write__create_release',
+          input: { tag: 'v3.0' },
+        });
+        assert.equal(approvedExec.status, 200);
+        assert.equal(approvedExec.body.ok, true);
+        assert.match(approvedExec.body.output, /"published":true/);
+        assert.equal(
+          rpcCalls.some((c) => c.method === 'tools/call' && c.tool === 'create_release'),
+          true,
+        );
+      },
+      {
+        script: {
+          turns: [
+            {
+              when: 'Audit release checklist',
+              steps: [
+                {
+                  tools: [
+                    { name: 'load_skill', input: { name: 'release_checklist' } },
+                    { name: 'github_read__list_open_prs', input: { repo: 'rbaljinder/mistri' } },
+                    { name: 'github_write__create_release', input: { tag: 'v3.0' } },
+                  ],
+                },
+                { text: 'Checklist loaded and PR #114 approved. Confirm release publication below.' },
+              ],
+            },
+          ],
+        },
+        assistant: {
+          skills: {
+            release_checklist: {
+              label: 'Release Readiness Checklist',
+              description: 'Audit checklist for verifying builds and PR approvals.',
+              instructions: 'RULE-99: Always verify CI green and changelog.',
+            },
+            exec_escalation: {
+              label: 'Executive Escalation',
+              description: 'Rep-only escalation playbook.',
+              instructions: 'Page VP Eng on P0 regressions.',
+              roles: ['rep'],
+            },
+          },
+          mcpServers: {
+            github_read: {
+              label: 'GitHub Read MCP',
+              description: 'Read-only PR inspection over MCP.',
+              url: mcpUrl,
+              authHeader: 'Authorization',
+              authValue: 'Bearer ${MISTRI_TEST_MCP_SRV_TOKEN}',
+              defaultAccess: 'read',
+              allowTools: ['list_open_prs'],
+            },
+            github_write: {
+              label: 'GitHub Release MCP',
+              description: 'Approval-gated release publishing over MCP.',
+              url: mcpUrl,
+              defaultAccess: 'write',
+              allowTools: ['create_release'],
+              roles: ['rep'],
+            },
+          },
+        },
+      },
+    );
+  } finally {
+    if (prevToken === undefined) delete process.env.MISTRI_TEST_MCP_SRV_TOKEN;
+    else process.env.MISTRI_TEST_MCP_SRV_TOKEN = prevToken;
+    await new Promise<void>((resolve) => mockMcp.close(() => resolve()));
   }
 });

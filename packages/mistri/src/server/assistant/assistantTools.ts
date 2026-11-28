@@ -1667,6 +1667,18 @@ export async function answerTool(session: ToolSession, name: string, input: unkn
     if (name === 'search_knowledge') return await searchKnowledge(context, session, args, id);
     if (name === 'remember') return await rememberFact(session, args, id);
     if (name === 'forget') return await forgetFact(session, args, id);
+    if (name === 'load_skill') {
+      const skillId = typeof args.name === 'string' ? args.name.trim() : '';
+      const skill =
+        skillId && session.assistant.skills && Object.hasOwn(session.assistant.skills, skillId)
+          ? session.assistant.skills[skillId]
+          : undefined;
+      if (!skill) throw new ToolRefusal(`There is no skill "${skillId}" available here.`);
+      return {
+        result: JSON.stringify({ skill: skill.id, label: skill.label, instructions: skill.instructions }),
+        display: [{ type: 'step', id, tool: name, label: `Loaded skill: ${skill.label}` }],
+      };
+    }
     if (session.assistant.externalTools && Object.hasOwn(session.assistant.externalTools, name)) {
       const ext = session.assistant.externalTools[name];
       if (ext.access === 'write') {

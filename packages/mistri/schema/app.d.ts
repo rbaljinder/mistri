@@ -3857,6 +3857,10 @@ export interface AssistantDeclaration {
   readonly starters?: readonly (string | AssistantStarter)[];
   /** The model id; `'claude-sonnet-5-5'` when absent. */
   readonly model?: string;
+  /** Optional explicit model provider (`'anthropic'`, `'openai'`, `'gemini'`, `'openai-compatible'`); inferred from `model` when absent. */
+  readonly provider?: 'anthropic' | 'openai' | 'gemini' | 'openai-compatible';
+  /** Optional ordered fallback models (1–4 model ids or `'provider:model'`) tried automatically if the primary model fails. */
+  readonly fallbackModels?: readonly string[];
   readonly effort?: 'low' | 'medium' | 'high';
   /** Let the person pick reasoning effort per turn in the composer (`low`, `medium`, `high`). False when absent. */
   readonly effortPicker?: boolean;
@@ -3900,6 +3904,10 @@ export interface AssistantDeclaration {
   readonly evals?: readonly AssistantEvalCaseDeclaration[];
   /** Declarative outbound HTTP & MCP tool bridges callable by the assistant (write tools require explicit human approval). */
   readonly externalTools?: Readonly<Record<string, AssistantExternalToolDeclaration>>;
+  /** Declarative MCP servers supporting live `tools/list` discovery (`url`, credentials, and `roles` stay server-side). */
+  readonly mcpServers?: Readonly<Record<string, AssistantMcpServerDeclaration>>;
+  /** Declarative progressive-disclosure skills loaded on demand via `load_skill` (`instructions` and `roles` stay server-side). */
+  readonly skills?: Readonly<Record<string, AssistantSkillDeclaration>>;
   /** Declarative signed inbound webhooks that launch durable background runs (`POST /api/assistant/webhooks/:app/:id`). */
   readonly webhooks?: readonly AssistantWebhookDeclaration[];
 }
@@ -3933,6 +3941,36 @@ export interface AssistantExternalToolDeclaration {
   readonly roles?: readonly string[];
   /** Optional typed input parameters validated before invoking the external endpoint. */
   readonly input?: Readonly<Record<string, AssistantExternalInputFieldDeclaration>>;
+}
+/** A declarative MCP server whose tools are discovered live via JSON-RPC 2.0 `tools/list`. */
+export interface AssistantMcpServerDeclaration {
+  /** Short label shown in the Run Monitor Automations view. */
+  readonly label: string | AppMessageRef;
+  /** Optional one-line description of what this MCP server provides. */
+  readonly description?: string | AppMessageRef;
+  /** Streamable HTTP JSON-RPC 2.0 MCP endpoint URL (`https://` or loopback `http://`). Supports `${ENV_VAR}`. */
+  readonly url: string;
+  /** Optional HTTP header name carrying the server-side credential (never sent to browsers). */
+  readonly authHeader?: string;
+  /** Optional header value template supporting `${ENV_VAR}` expansion strictly on the server. */
+  readonly authValue?: string;
+  /** Default access level applied to discovered tools: `'write'` (default, approval checkpoint) or `'read'`. */
+  readonly defaultAccess?: 'read' | 'write';
+  /** Optional allowlist of remote MCP tool names exposed from this server. */
+  readonly allowTools?: readonly string[];
+  /** Roles permitted to discover and invoke tools from this server; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
+}
+/** A declarative progressive-disclosure skill whose full instructions load on demand via `load_skill`. */
+export interface AssistantSkillDeclaration {
+  /** Short label shown in the Run Monitor Automations view and tool step trace. */
+  readonly label: string | AppMessageRef;
+  /** One-line description shown in the system prompt so the model knows when to load this skill. */
+  readonly description: string | AppMessageRef;
+  /** Full procedural instructions loaded on demand when the model calls `load_skill({ name })`. */
+  readonly instructions: string;
+  /** Roles permitted to load this skill; absent, everyone who may open the assistant. */
+  readonly roles?: readonly string[];
 }
 /** A declarative signed inbound webhook trigger that dispatches a durable background run. */
 export interface AssistantWebhookDeclaration {
@@ -4101,6 +4139,10 @@ export interface AssistantAgentDeclaration {
   readonly instructions?: string;
   /** Model id override for this agent. */
   readonly model?: string;
+  /** Optional explicit provider override for this agent. */
+  readonly provider?: 'anthropic' | 'openai' | 'gemini' | 'openai-compatible';
+  /** Optional ordered fallback models override for this agent. */
+  readonly fallbackModels?: readonly string[];
   /** Default reasoning effort for this agent. */
   readonly effort?: 'low' | 'medium' | 'high';
   /** Starters offered when this agent is active. */
@@ -4123,6 +4165,8 @@ export interface AssistantAgentDeclaration {
   readonly memory?: boolean;
   /** Subset of `assistant.knowledge` keys this agent may search. */
   readonly knowledge?: readonly string[];
+  /** Subset of `assistant.skills` keys this agent may load on demand. */
+  readonly skills?: readonly string[];
 }
 /** An author-declared custom assistant block backed by a validated prop schema and optional interactive React component. */
 export interface AssistantCustomBlockDeclaration {

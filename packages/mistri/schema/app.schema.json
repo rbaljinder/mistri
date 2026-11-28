@@ -397,6 +397,8 @@
           }
         },
         "model": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$", "description": "The model id; claude-sonnet-5-5 when absent." },
+        "provider": { "enum": ["anthropic", "openai", "gemini", "openai-compatible"], "description": "Explicit model provider; inferred from model id when absent." },
+        "fallbackModels": { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 }, "description": "Ordered fallback model specs tried automatically on provider unavailability." },
         "effort": { "enum": ["low", "medium", "high"] },
         "effortPicker": { "type": "boolean", "description": "Offer a per-turn reasoning effort selector in the composer. False when absent." },
         "reasoning": { "enum": ["collapsed", "expanded", "hidden"], "description": "How model reasoning traces surface in the UI: collapsed (default), expanded, or hidden." },
@@ -473,6 +475,22 @@
           "propertyNames": { "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
           "description": "Declarative outbound HTTP and MCP tool bridges callable by the assistant.",
           "additionalProperties": { "$ref": "#/$defs/assistantExternalTool" }
+        },
+        "mcpServers": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 8,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
+          "description": "Declarative MCP servers supporting live tools/list discovery.",
+          "additionalProperties": { "$ref": "#/$defs/assistantMcpServer" }
+        },
+        "skills": {
+          "type": "object",
+          "minProperties": 1,
+          "maxProperties": 16,
+          "propertyNames": { "pattern": "^[a-z][a-z0-9_-]{0,47}$" },
+          "description": "Declarative progressive-disclosure skills loaded on demand via load_skill.",
+          "additionalProperties": { "$ref": "#/$defs/assistantSkill" }
         },
         "webhooks": {
           "type": "array",
@@ -625,6 +643,34 @@
         }
       }
     },
+    "assistantMcpServer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "url"],
+      "description": "Declarative MCP server supporting live JSON-RPC 2.0 tools/list discovery.",
+      "properties": {
+        "label": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 80 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "url": { "type": "string", "minLength": 1 },
+        "authHeader": { "type": "string", "minLength": 1 },
+        "authValue": { "type": "string", "minLength": 1 },
+        "defaultAccess": { "enum": ["read", "write"] },
+        "allowTools": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 80 } },
+        "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } }
+      }
+    },
+    "assistantSkill": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "description", "instructions"],
+      "description": "Declarative progressive-disclosure skill loaded on demand via load_skill.",
+      "properties": {
+        "label": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 80 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "description": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 240 }, { "$ref": "page.schema.json#/$defs/messageRef" }] },
+        "instructions": { "type": "string", "minLength": 1, "maxLength": 8000 },
+        "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } }
+      }
+    },
     "assistantWebhook": {
       "type": "object",
       "additionalProperties": false,
@@ -700,6 +746,8 @@
         "icon": { "$ref": "#/$defs/appIcon" },
         "instructions": { "type": "string", "minLength": 1, "description": "Instructions appended when this agent is active." },
         "model": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.-]*$", "description": "Model id override for this agent." },
+        "provider": { "enum": ["anthropic", "openai", "gemini", "openai-compatible"], "description": "Provider override for this agent." },
+        "fallbackModels": { "type": "array", "minItems": 1, "maxItems": 4, "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 120 }, "description": "Ordered fallback model specs override for this agent." },
         "effort": { "enum": ["low", "medium", "high"] },
         "starters": { "$ref": "#/$defs/assistant/properties/starters" },
         "roles": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
@@ -710,7 +758,8 @@
         "subagents": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,39}$" }, "description": "Sibling agent keys this agent may delegate bounded sub-tasks to." },
         "limits": { "$ref": "#/$defs/assistant/properties/limits" },
         "memory": { "type": "boolean", "description": "false disables memory for this agent even when the assistant enables it." },
-        "knowledge": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$" }, "description": "Subset of assistant.knowledge keys this agent may search." }
+        "knowledge": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$" }, "description": "Subset of assistant.knowledge keys this agent may search." },
+        "skills": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,47}$" }, "description": "Subset of assistant.skills keys this agent may load on demand." }
       }
     },
     "assistantCustomBlock": {

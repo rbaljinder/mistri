@@ -262,6 +262,8 @@ interface TurnContext {
   owner: AssistantOwner;
   conversation: string;
   model: AssistantModel;
+  /** Optional provider/fallback resolver for delegated child subagents (passed by callers to keep turn logic cycle-free). */
+  resolveModel?: (assistant: AppAssistant) => AssistantModel | undefined;
   assistant: AppAssistant;
   /** Un-narrowed top-level assistant definition, used to resolve sibling subagents on `delegate`. */
   baseAssistant?: AppAssistant;
@@ -447,7 +449,8 @@ async function runDelegation(
       if (refused) throw new Error(refused);
       const last = step === maxSteps;
       let stepReasoning = '';
-      const reply = await context.model.stream(
+      const childModel = context.resolveModel?.(childAssistant) ?? context.model;
+      const reply = await childModel.stream(
         {
           model: childAssistant.model,
           system: childSystem,

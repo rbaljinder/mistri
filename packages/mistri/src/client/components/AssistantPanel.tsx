@@ -1714,11 +1714,8 @@ function Assistant({ app, record, mode, onClose, conversation: addressed, ask, h
         <AssistantRunMonitor
           app={app}
           config={assistantConfig.backgroundRuns}
-          evals={assistantConfig.evals}
-          externalTools={assistantConfig.externalTools}
-          webhooks={assistantConfig.webhooks}
+          assistant={assistantConfig}
           agents={agents.map((a) => ({ id: a.id, name: a.name }))}
-          reasoning={assistantConfig.reasoning}
           initialRunId={initialRunId}
           onClose={() => setRunsOpen(false)}
           onOpenConversation={(convId) => {

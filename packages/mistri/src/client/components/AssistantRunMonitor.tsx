@@ -92,14 +92,26 @@ interface RunDetailPayload {
   awaiting?: boolean;
 }
 
+interface DiscoveredMcpTool {
+  id: string;
+  mcpTool: string;
+  label: string;
+  description: string;
+  access: 'read' | 'write';
+}
+
+interface DiscoveredMcpServer {
+  id: string;
+  ok: boolean;
+  error?: string;
+  tools: DiscoveredMcpTool[];
+}
+
 interface AssistantRunMonitorProps {
   app: string;
   config: NonNullable<NonNullable<AppPayloadApp['assistant']>['backgroundRuns']>;
-  evals?: NonNullable<AppPayloadApp['assistant']>['evals'];
-  externalTools?: NonNullable<AppPayloadApp['assistant']>['externalTools'];
-  webhooks?: NonNullable<AppPayloadApp['assistant']>['webhooks'];
+  assistant: NonNullable<AppPayloadApp['assistant']>;
   agents: ReadonlyArray<{ id: string; name: string }>;
-  reasoning?: 'collapsed' | 'expanded' | 'hidden';
   initialRunId?: string | null;
   onClose: () => void;
   onOpenConversation: (conversationId: string) => void;
@@ -267,11 +279,8 @@ function TraceWords({
 export function AssistantRunMonitor({
   app,
   config,
-  evals,
-  externalTools,
-  webhooks,
+  assistant,
   agents,
-  reasoning,
   initialRunId,
   onClose,
   onOpenConversation,
@@ -283,9 +292,12 @@ export function AssistantRunMonitor({
   const listKey = useMemo(() => ['assistant-runs', app, owner] as const, [app, owner]);
   const automationsKey = useMemo(() => ['assistant-automations', app, owner] as const, [app, owner]);
   const automationCount = (config.schedules?.length ?? 0) + (config.triggers?.length ?? 0);
-  const evalList = evals ?? [];
-  const externalToolList = externalTools ?? [];
-  const webhookList = webhooks ?? [];
+  const evalList = assistant.evals ?? [];
+  const externalToolList = assistant.externalTools ?? [];
+  const webhookList = assistant.webhooks ?? [];
+  const mcpServerList = assistant.mcpServers ?? [];
+  const skillList = assistant.skills ?? [];
+  const reasoning = assistant.reasoning;
 
   const [activeTab, setActiveTab] = useState<'runs' | 'automations' | 'evals'>('runs');
   const [detailMode, setDetailMode] = useState<'conversation' | 'trace'>('conversation');
@@ -294,6 +306,8 @@ export function AssistantRunMonitor({
   const [agentId, setAgentId] = useState<string>(agents[0]?.id ?? '');
   const [submitting, setSubmitting] = useState(false);
   const [togglingKey, setTogglingKey] = useState<string | null>(null);
+  const [discoveringServer, setDiscoveringServer] = useState<string | null>(null);
+  const [discoveredMcp, setDiscoveredMcp] = useState<Record<string, DiscoveredMcpServer>>({});
   const [actionError, setActionError] = useState<string | null>(null);
   const [liveRun, setLiveRun] = useState<BackgroundRunRecord | null>(null);
   const [traceItems, setTraceItems] = useState<PanelItem[]>([]);
@@ -540,6 +554,26 @@ export function AssistantRunMonitor({
       setActionError(say('runsActionError', { message: err instanceof Error ? err.message : String(err) }));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const discoverMcpServer = async (serverId: string) => {
+    setDiscoveringServer(serverId);
+    setActionError(null);
+    try {
+      const result = (await assistantApi('/api/assistant/mcp/discover', {
+        app,
+        server: serverId,
+        refresh: true,
+      })) as { servers: DiscoveredMcpServer[] };
+      const match = result.servers.find((s) => s.id === serverId);
+      if (match) {
+        setDiscoveredMcp((prev) => ({ ...prev, [serverId]: match }));
+      }
+    } catch (err) {
+      setActionError(say('mcpDiscoverError', { message: err instanceof Error ? err.message : String(err) }));
+    } finally {
+      setDiscoveringServer(null);
     }
   };
 
@@ -818,7 +852,8 @@ export function AssistantRunMonitor({
       lastRunId: null,
       lastRunAt: null,
     }));
-  const liveAutomationCount = schedules.length + triggers.length + externalToolList.length + webhookList.length;
+  const liveAutomationCount =
+    schedules.length + triggers.length + mcpServerList.length + externalToolList.length + webhookList.length + skillList.length;
   const showTabs = liveAutomationCount > 0 || evalList.length > 0;
 
   return (
@@ -997,6 +1032,57 @@ export function AssistantRunMonitor({
                 </div>
               )}
 
+              {mcpServerList.length > 0 && (
+                <div className="assistant-runs-section">
+                  <h4 className="assistant-runs-section-label">{say('mcpServersHeading')}</h4>
+                  <ul className="assistant-runs-list">
+                    {mcpServerList.map((server) => {
+                      const accessText = server.defaultAccess === 'write' ? say('externalModeWrite') : say('externalModeRead');
+                      const discovered = discoveredMcp[server.id];
+                      const busy = discoveringServer === server.id;
+                      return (
+                        <li key={server.id} className="assistant-auto-row">
+                          <div className="assistant-auto-top">
+                            <div className="assistant-auto-heading">
+                              <span className="assistant-auto-title">{server.label}</span>
+                              <span className="assistant-auto-pill">{accessText}</span>
+                            </div>
+                            <div className="assistant-auto-controls">
+                              <Button size="xs" variant="ghost" disabled={busy} onClick={() => void discoverMcpServer(server.id)}>
+                                {busy ? say('discoveringTools') : say('discoverTools')}
+                              </Button>
+                            </div>
+                          </div>
+                          {server.description && <p className="assistant-auto-desc">{server.description}</p>}
+                          <div className="assistant-auto-meta">
+                            <span className="assistant-runs-whisper">
+                              {discovered
+                                ? !discovered.ok
+                                  ? say('mcpDiscoverError', { message: discovered.error ?? '' })
+                                  : discovered.tools.length === 0
+                                    ? say('mcpDiscoveredNone')
+                                    : discovered.tools.length === 1
+                                      ? say('mcpDiscoveredOne')
+                                      : say('mcpDiscoveredCount', { count: discovered.tools.length })
+                                : server.id}
+                            </span>
+                          </div>
+                          {discovered?.ok && discovered.tools.length > 0 && (
+                            <div className="assistant-mcp-tools">
+                              {discovered.tools.map((tool) => (
+                                <span key={tool.id} className="assistant-auto-pill" title={tool.description}>
+                                  {say('externalProtocolMcp', { tool: tool.mcpTool })}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              )}
+
               {externalToolList.length > 0 && (
                 <div className="assistant-runs-section">
                   <h4 className="assistant-runs-section-label">{say('externalToolsHeading')}</h4>
@@ -1052,6 +1138,28 @@ export function AssistantRunMonitor({
                         </li>
                       );
                     })}
+                  </ul>
+                </div>
+              )}
+
+              {skillList.length > 0 && (
+                <div className="assistant-runs-section">
+                  <h4 className="assistant-runs-section-label">{say('skillsHeading')}</h4>
+                  <ul className="assistant-runs-list">
+                    {skillList.map((skill) => (
+                      <li key={skill.id} className="assistant-auto-row">
+                        <div className="assistant-auto-top">
+                          <div className="assistant-auto-heading">
+                            <span className="assistant-auto-title">{skill.label}</span>
+                            <span className="assistant-auto-pill">{say('skillProgressiveBadge')}</span>
+                          </div>
+                        </div>
+                        {skill.description && <p className="assistant-auto-desc">{skill.description}</p>}
+                        <div className="assistant-auto-meta">
+                          <span className="assistant-runs-whisper">{skill.id}</span>
+                        </div>
+                      </li>
+                    ))}
                   </ul>
                 </div>
               )}

@@ -32,7 +32,12 @@ interface TraceSummary {
   reasoningChars: number;
   tokensIn: number;
   tokensOut: number;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
   totalTokens: number;
+  estimatedCostUsd?: number;
+  model?: string;
+  provider?: string;
   durationMs: number;
   toolBreakdown: Record<string, number>;
   spans: TraceSpan[];
@@ -63,6 +68,7 @@ interface EvalSuiteReport {
   passRate: number;
   meanTokens: number;
   meanDurationMs: number;
+  totalCostUsd?: number;
   cases: EvalCaseReport[];
 }
 
@@ -74,6 +80,13 @@ function formatDuration(ms: number): string {
 function formatCompactTokens(tokens: number): string {
   if (tokens >= 1000) return `${(tokens / 1000).toFixed(1)}k`;
   return String(tokens);
+}
+
+function formatUsd(cost: number): string {
+  if (cost <= 0) return '$0.00';
+  if (cost < 0.001) return say('costSubCent');
+  if (cost < 0.1) return `$${cost.toFixed(4)}`;
+  return `$${cost.toFixed(2)}`;
 }
 
 function spanKindWord(kind: TraceSpan['kind']): string {
@@ -130,6 +143,18 @@ function TraceSummaryView({ trace }: { trace: TraceSummary }) {
           <dt>{say('metricDuration')}</dt>
           <dd>{formatDuration(trace.durationMs)}</dd>
         </div>
+        {typeof trace.estimatedCostUsd === 'number' && trace.estimatedCostUsd > 0 && (
+          <div className="assistant-trace-metric">
+            <dt>{say('metricCost')}</dt>
+            <dd>{formatUsd(trace.estimatedCostUsd)}</dd>
+          </div>
+        )}
+        {trace.model && (
+          <div className="assistant-trace-metric">
+            <dt>{say('metricModel')}</dt>
+            <dd>{trace.model}</dd>
+          </div>
+        )}
       </dl>
 
       {trace.spans.length === 0 ? (
@@ -327,6 +352,12 @@ export function EvalSuitePanel({
             <dt>{say('scoreAvgLatency')}</dt>
             <dd>{formatDuration(suiteReport.meanDurationMs)}</dd>
           </div>
+          {typeof suiteReport.totalCostUsd === 'number' && suiteReport.totalCostUsd > 0 && (
+            <div className="assistant-trace-metric">
+              <dt>{say('scoreTotalCost')}</dt>
+              <dd>{formatUsd(suiteReport.totalCostUsd)}</dd>
+            </div>
+          )}
         </dl>
       )}
 

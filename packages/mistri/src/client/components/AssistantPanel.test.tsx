@@ -1670,3 +1670,206 @@ test('Wave 3B: Automations shows External tools & MCP and Inbound webhooks, and 
   });
   expect((executed[1].body as { outcome: string }).outcome).toBe('done');
 });
+
+test('Wave 4A/4B: Trace cost/model metrics, Eval total cost, live MCP server discovery, and progressive Skills in Run Monitor', async () => {
+  const user = userEvent.setup();
+  const discoverCalls: Array<Record<string, unknown>> = [];
+  const sampleRun = {
+    id: 'run_w4_1',
+    conversation: 'conv_w4_1',
+    title: 'Release Readiness Review',
+    prompt: 'Load release checklist skill and inspect open PRs.',
+    agent: 'analyst',
+    source: 'manual',
+    status: 'completed' as const,
+    steps: 2,
+    tokens: 1850,
+    summary: 'Checklist verified across 2 open GitHub PRs.',
+    createdAt: '2026-11-27T10:00:00Z',
+    updatedAt: '2026-11-27T10:00:03Z',
+    finishedAt: '2026-11-27T10:00:03Z',
+    live: false,
+  };
+
+  mocks.app = {
+    id: 'compass',
+    name: 'Compass',
+    resources: {},
+    views: {},
+    assistant: {
+      agents: [{ id: 'analyst', name: 'Release Analyst' }],
+      defaultAgent: 'analyst',
+      backgroundRuns: { maxConcurrent: 2, maxSteps: 10 },
+      evals: [
+        {
+          id: 'release_check',
+          label: 'Release Check',
+          prompt: 'Verify open PRs.',
+          expect: { expectedTools: ['load_skill'] },
+        },
+      ],
+      mcpServers: [
+        {
+          id: 'github_mcp',
+          label: 'GitHub MCP',
+          description: 'Live PR and release discovery over Streamable HTTP MCP.',
+          defaultAccess: 'read',
+        },
+      ],
+      skills: [
+        {
+          id: 'release_checklist',
+          label: 'Release Readiness Checklist',
+          description: 'Step-by-step release audit criteria loaded on demand.',
+        },
+      ],
+    },
+  };
+
+  fetcher.mockImplementation(async (input, init) => {
+    const path = String(input);
+    const method = (init?.method ?? 'GET').toUpperCase();
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    if (path.startsWith('/api/assistant?')) return json({ conversations: [], ready: true });
+    if (path.startsWith('/api/assistant/runs?')) return json({ runs: [sampleRun], ready: true });
+    if (path.startsWith('/api/assistant/runs/detail?')) {
+      return json({ run: sampleRun, items: [{ type: 'text', text: 'Checklist verified.' }] });
+    }
+    if (path.startsWith('/api/assistant/runs/trace?')) {
+      return json({
+        run: sampleRun,
+        trace: {
+          totalSteps: 2,
+          toolCalls: 2,
+          failedTools: 0,
+          blocksEmitted: 0,
+          citationsCount: 1,
+          proposalsCount: 0,
+          reasoningChars: 0,
+          tokensIn: 1400,
+          tokensOut: 450,
+          cacheReadTokens: 600,
+          cacheWriteTokens: 0,
+          totalTokens: 1850,
+          estimatedCostUsd: 0.0085,
+          model: 'gpt-4.1',
+          provider: 'openai',
+          durationMs: 2400,
+          toolBreakdown: { load_skill: 1, github_mcp__list_open_prs: 1 },
+          spans: [
+            { index: 1, kind: 'tool', name: 'load_skill', status: 'ok', summary: 'Loaded skill: Release Readiness Checklist' },
+            { index: 2, kind: 'tool', name: 'github_mcp__list_open_prs', status: 'ok', summary: '2 open PRs ready' },
+          ],
+        },
+      });
+    }
+    if (path === '/api/assistant/mcp/discover' && method === 'POST') {
+      discoverCalls.push(body as Record<string, unknown>);
+      return json({
+        servers: [
+          {
+            id: 'github_mcp',
+            label: 'GitHub MCP',
+            defaultAccess: 'read',
+            ok: true,
+            tools: [
+              {
+                id: 'github_mcp__list_open_prs',
+                mcpTool: 'list_open_prs',
+                label: 'GitHub MCP: list_open_prs',
+                description: 'List open pull requests.',
+                access: 'read',
+              },
+              {
+                id: 'github_mcp__get_release_notes',
+                mcpTool: 'get_release_notes',
+                label: 'GitHub MCP: get_release_notes',
+                description: 'Fetch release notes for a tag.',
+                access: 'read',
+              },
+            ],
+          },
+        ],
+      });
+    }
+    if (path === '/api/assistant/evals/run' && method === 'POST') {
+      return json({
+        report: {
+          app: 'compass',
+          ranAt: '2026-11-27T10:05:00Z',
+          passed: 1,
+          total: 1,
+          passRate: 1,
+          avgTokens: 1850,
+          avgLatencyMs: 2400,
+          totalCostUsd: 0.0085,
+          cases: [
+            {
+              id: 'release_check',
+              label: 'Release Check',
+              passed: true,
+              durationMs: 2400,
+              tokens: 1850,
+              steps: 2,
+              answer: 'Checklist verified.',
+              failures: [],
+              trace: {
+                totalSteps: 2,
+                toolCalls: 2,
+                failedTools: 0,
+                blocksEmitted: 0,
+                citationsCount: 0,
+                proposalsCount: 0,
+                reasoningChars: 0,
+                tokensIn: 1400,
+                tokensOut: 450,
+                cacheReadTokens: 0,
+                cacheWriteTokens: 0,
+                totalTokens: 1850,
+                estimatedCostUsd: 0.0085,
+                model: 'gpt-4.1',
+                provider: 'openai',
+                durationMs: 2400,
+                toolBreakdown: { load_skill: 1 },
+                spans: [],
+              },
+            },
+          ],
+        },
+      });
+    }
+    return json({ error: 'unexpected' }, 404);
+  });
+
+  draw(<AssistantPanel app="compass" record={false} onClose={() => {}} />);
+  await user.click(await screen.findByRole('button', { name: 'Runs' }));
+
+  // 1. Automations tab renders MCP servers (with live Discover tools) and progressive Skills.
+  await user.click(await screen.findByRole('tab', { name: 'Automations · 2' }));
+  expect(await screen.findByText('MCP servers')).toBeInTheDocument();
+  expect(screen.getByText('GitHub MCP')).toBeInTheDocument();
+  expect(screen.getByText('Skills')).toBeInTheDocument();
+  expect(screen.getByText('Release Readiness Checklist')).toBeInTheDocument();
+  expect(screen.getByText('load_skill')).toBeInTheDocument();
+
+  await user.click(screen.getByRole('button', { name: 'Discover tools' }));
+  expect(await screen.findByText('2 tools discovered')).toBeInTheDocument();
+  expect(screen.getByText('mcp · list_open_prs')).toBeInTheDocument();
+  expect(screen.getByText('mcp · get_release_notes')).toBeInTheDocument();
+  expect(discoverCalls).toEqual([{ app: 'compass', server: 'github_mcp', refresh: true }]);
+
+  // 2. Evals tab displays Total cost metric after running the suite.
+  await user.click(screen.getByRole('tab', { name: 'Evals · 1' }));
+  await user.click(await screen.findByRole('button', { name: 'Run all evals' }));
+  expect(await screen.findByText('Total cost')).toBeInTheDocument();
+  expect(screen.getByText('$0.0085')).toBeInTheDocument();
+
+  // 3. Trace Inspector displays Est. cost and Model (provider · model).
+  await user.click(screen.getByRole('tab', { name: 'Runs' }));
+  await user.click(await screen.findByRole('button', { name: 'Inspect' }));
+  await user.click(await screen.findByRole('tab', { name: 'Trace' }));
+  expect(await screen.findByText('Est. cost')).toBeInTheDocument();
+  expect(screen.getByText('$0.0085')).toBeInTheDocument();
+  expect(screen.getByText('Model')).toBeInTheDocument();
+  expect(screen.getByText('gpt-4.1')).toBeInTheDocument();
+});

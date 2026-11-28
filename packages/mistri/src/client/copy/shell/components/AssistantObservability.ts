@@ -46,4 +46,8 @@ export const say = defineMessages({
   expectMatches: 'matches "{text}"',
   viewTrace: 'Trace',
   hideTrace: 'Hide trace',
+  metricCost: 'Est. cost',
+  metricModel: 'Model',
+  scoreTotalCost: 'Total cost',
+  costSubCent: '<$0.001',
 });

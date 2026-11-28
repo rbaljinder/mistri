@@ -13,7 +13,7 @@
  */
 import type { AssistantOwner, AssistantStore, RunStatus, StoredRun } from '../../adapters/assistant/assistantStore.js';
 import type { AppAssistant, AppAssistantAgent } from '../../shared/appAssistant.js';
-import type { AssistantModel, ModelTool } from './assistantModel.js';
+import { resolveAssistantModel, type AssistantModel, type ModelTool } from './assistantModel.js';
 import type { ToolSession } from './assistantTools.js';
 import { continueTurn, type Emit } from './assistantTurn.js';
 
@@ -139,6 +139,7 @@ export function launchBackgroundRun(params: LaunchRunParams): void {
         owner,
         conversation: run.conversation,
         model: params.model,
+        resolveModel: resolveAssistantModel,
         assistant: params.assistant,
         baseAssistant: params.baseAssistant,
         ...(params.activeAgent ? { activeAgent: params.activeAgent } : {}),

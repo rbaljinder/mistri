@@ -8,9 +8,13 @@ import { parseComponentDecl, parsePropDecls, type ComponentDecl, type ComponentP
 import {
   parseAssistantWebhooks,
   parseExternalTools,
+  parseMcpServers,
   type AppAssistantExternalTool,
+  type AppAssistantMcpServer,
   type AppAssistantWebhook,
 } from './appAssistantExternal.js';
+import { parseAssistantSkills, type AppAssistantSkill } from './appAssistantSkills.js';
+import { parseAssistantProvider, parseFallbackModels, type AssistantProvider } from './appAssistantRouting.js';
 
 /** The tool core, the same for every App: discovery is a tool, not a preamble. */
 export const ASSISTANT_TOOLS = ['find', 'describe', 'query', 'show', 'run'] as const;
@@ -61,6 +65,8 @@ const KEYS = [
   'instructions',
   'starters',
   'model',
+  'provider',
+  'fallbackModels',
   'effort',
   'effortPicker',
   'reasoning',
@@ -80,6 +86,8 @@ const KEYS = [
   'backgroundRuns',
   'evals',
   'externalTools',
+  'mcpServers',
+  'skills',
   'webhooks',
 ] as const;
 const MAX_EVALS = 24;
@@ -102,6 +110,8 @@ const AGENT_KEYS = [
   'icon',
   'instructions',
   'model',
+  'provider',
+  'fallbackModels',
   'effort',
   'starters',
   'roles',
@@ -113,6 +123,7 @@ const AGENT_KEYS = [
   'limits',
   'memory',
   'knowledge',
+  'skills',
 ] as const;
 const CUSTOM_BLOCK_NAME = /^[a-z][a-z0-9_-]{0,47}$/;
 const MAX_CUSTOM_BLOCKS = 32;
@@ -264,6 +275,8 @@ export interface AppAssistantAgent {
   icon?: AppIconName;
   instructions?: string;
   model?: string;
+  provider?: AssistantProvider;
+  fallbackModels?: string[];
   effort?: (typeof ASSISTANT_EFFORTS)[number];
   starters?: Array<string | AssistantStarter>;
   roles?: string[];
@@ -278,6 +291,8 @@ export interface AppAssistantAgent {
   memory?: boolean;
   /** Subset of `assistant.knowledge` keys this agent may search. */
   knowledge?: string[];
+  /** Subset of `assistant.skills` keys this agent may load on demand. */
+  skills?: string[];
 }
 
 /** Viewer-safe agent summary served in `/api/app` (never leaks `roles` or internal instructions). */
@@ -298,6 +313,10 @@ export interface AppAssistant {
       line is offered everywhere, a starter with `views` or `records` only there. */
   starters: Array<string | AssistantStarter>;
   model: string;
+  /** Optional explicit provider; inferred from `model` when absent. */
+  provider?: AssistantProvider;
+  /** Optional ordered fallback models tried automatically on provider unavailability. */
+  fallbackModels?: string[];
   effort?: (typeof ASSISTANT_EFFORTS)[number];
   /** Offer a per-turn reasoning effort selector in the assistant composer. */
   effortPicker?: boolean;
@@ -331,6 +350,10 @@ export interface AppAssistant {
   evals?: AppAssistantEvalCase[];
   /** Optional declarative outbound HTTP & MCP tool bridges. */
   externalTools?: Record<string, AppAssistantExternalTool>;
+  /** Optional declarative MCP servers supporting live `tools/list` discovery. */
+  mcpServers?: Record<string, AppAssistantMcpServer>;
+  /** Optional progressive-disclosure skills loaded on demand via `load_skill`. */
+  skills?: Record<string, AppAssistantSkill>;
   /** Optional signed inbound webhooks that launch durable background runs. */
   webhooks?: AppAssistantWebhook[];
 }
@@ -862,6 +885,7 @@ function parseAgents(
   placement: AppAssistant['placement'],
   customBlocks: Record<string, AppAssistantCustomBlock> | undefined,
   knowledge: Record<string, AppAssistantKnowledgeSource> | undefined,
+  skills: Record<string, AppAssistantSkill> | undefined,
   context: AssistantContext,
   where: string,
 ): Record<string, AppAssistantAgent> | undefined {
@@ -873,6 +897,7 @@ function parseAgents(
   const ids = new Set(entries.map(([id]) => id));
   const blockNames = Object.keys(customBlocks ?? {});
   const knowledgeNames = Object.keys(knowledge ?? {});
+  const skillNames = Object.keys(skills ?? {});
   const out: Record<string, AppAssistantAgent> = {};
   for (const [id, entry] of entries) {
     const at = `${where}.${id}`;
@@ -915,12 +940,19 @@ function parseAgents(
       if (!knowledgeNames.length) throw new Error(`${at}.knowledge names knowledge sources, and the assistant declares no "knowledge".`);
       agentKnowledge = subset(a.knowledge, knowledgeNames, `${at}.knowledge`);
     }
+    let agentSkills: string[] | undefined;
+    if (a.skills !== undefined) {
+      if (!skillNames.length) throw new Error(`${at}.skills names skills, and the assistant declares no "skills".`);
+      agentSkills = subset(a.skills, skillNames, `${at}.skills`);
+    }
     let subagents: string[] | undefined;
     if (a.subagents !== undefined) {
       subagents = nameList(a.subagents, (name) => ids.has(name), `${at}.subagents`, 'agent ids', 'is not one of the declared agents');
       if (subagents.includes(id)) throw new Error(`${at}.subagents cannot name "${id}" itself.`);
     }
     const limits = a.limits === undefined ? undefined : parseLimits(a.limits, `${at}.limits`);
+    const agentProvider = parseAssistantProvider(a.provider, `${at}.provider`);
+    const agentFallbacks = parseFallbackModels(a.fallbackModels, `${at}.fallbackModels`);
     out[id] = {
       id,
       name: a.name.trim(),
@@ -928,6 +960,8 @@ function parseAgents(
       ...(a.icon !== undefined ? { icon: a.icon as AppIconName } : {}),
       ...(a.instructions !== undefined ? { instructions: (a.instructions as string).trim() } : {}),
       ...(a.model !== undefined ? { model: a.model as string } : {}),
+      ...(agentProvider ? { provider: agentProvider } : {}),
+      ...(agentFallbacks ? { fallbackModels: agentFallbacks } : {}),
       ...(a.effort !== undefined ? { effort: a.effort as AppAssistant['effort'] } : {}),
       ...(starters ? { starters } : {}),
       ...(roles ? { roles } : {}),
@@ -939,6 +973,7 @@ function parseAgents(
       ...(limits ? { limits } : {}),
       ...(a.memory !== undefined ? { memory: a.memory as boolean } : {}),
       ...(agentKnowledge ? { knowledge: agentKnowledge } : {}),
+      ...(agentSkills ? { skills: agentSkills } : {}),
     };
   }
   return out;
@@ -961,6 +996,8 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
   if (a.model !== undefined && (typeof a.model !== 'string' || !/^[a-z0-9][a-z0-9.-]*$/.test(a.model))) {
     throw new Error(`${where}.model is a model id, such as "${DEFAULT_ASSISTANT_MODEL}".`);
   }
+  const provider = parseAssistantProvider(a.provider, `${where}.provider`);
+  const fallbackModels = parseFallbackModels(a.fallbackModels, `${where}.fallbackModels`);
   if (a.effort !== undefined && !(ASSISTANT_EFFORTS as readonly unknown[]).includes(a.effort)) {
     throw new Error(`${where}.effort is "low", "medium" or "high".`);
   }
@@ -1003,10 +1040,12 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
   const customBlocks = parseCustomBlocks(a.customBlocks, `${where}.customBlocks`);
   const memory = parseMemory(a.memory, context, `${where}.memory`);
   const knowledge = parseKnowledge(a.knowledge, context, `${where}.knowledge`);
-  const agents = parseAgents(a.agents, placement, customBlocks, knowledge, context, `${where}.agents`);
+  const skills = parseAssistantSkills(a.skills, context.roles, `${where}.skills`);
+  const agents = parseAgents(a.agents, placement, customBlocks, knowledge, skills, context, `${where}.agents`);
   const backgroundRuns = parseBackgroundRuns(a.backgroundRuns, agents, context, `${where}.backgroundRuns`);
   const evals = parseEvals(a.evals, agents, context, `${where}.evals`);
   const externalTools = parseExternalTools(a.externalTools, context.roles, `${where}.externalTools`);
+  const mcpServers = parseMcpServers(a.mcpServers, context.roles, `${where}.mcpServers`);
   const webhooks = parseAssistantWebhooks(a.webhooks, agents ? new Set(Object.keys(agents)) : undefined, `${where}.webhooks`);
   let defaultAgent: string | undefined;
   if (a.defaultAgent !== undefined) {
@@ -1021,6 +1060,8 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     ...(a.instructions === undefined ? {} : { instructions: (a.instructions as string).trim() }),
     starters,
     model: (a.model as string | undefined) ?? DEFAULT_ASSISTANT_MODEL,
+    ...(provider ? { provider } : {}),
+    ...(fallbackModels ? { fallbackModels } : {}),
     ...(a.effort === undefined ? {} : { effort: a.effort as AppAssistant['effort'] }),
     ...(a.effortPicker === true ? { effortPicker: true } : {}),
     reasoning,
@@ -1040,6 +1081,8 @@ export function parseAppAssistant(raw: unknown, context: AssistantContext, where
     ...(backgroundRuns ? { backgroundRuns } : {}),
     ...(evals ? { evals } : {}),
     ...(externalTools ? { externalTools } : {}),
+    ...(mcpServers ? { mcpServers } : {}),
+    ...(skills ? { skills } : {}),
     ...(webhooks ? { webhooks } : {}),
   };
 }
@@ -1400,21 +1443,55 @@ function filterExternalTools(
  * Returns `{ assistant: base }` (with role-filtered knowledge sources) when the App declares no `agents`. Throws an
  * error if `agentId` is explicitly requested and does not exist or is not permitted for `viewerRoles`.
  */
+function filterMcpServers(
+  servers: Record<string, AppAssistantMcpServer> | undefined,
+  viewerRoles?: readonly string[],
+): Record<string, AppAssistantMcpServer> | undefined {
+  if (!servers) return undefined;
+  const entries = Object.entries(servers).filter(
+    ([, srv]) => !srv.roles || !viewerRoles || viewerRoles.some((r) => srv.roles!.includes(r)),
+  );
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
+function filterSkills(
+  skills: Record<string, AppAssistantSkill> | undefined,
+  viewerRoles?: readonly string[],
+  subsetIds?: readonly string[],
+): Record<string, AppAssistantSkill> | undefined {
+  if (!skills) return undefined;
+  const entries = Object.entries(skills).filter(
+    ([id, skill]) =>
+      (!subsetIds || subsetIds.includes(id)) && (!skill.roles || !viewerRoles || viewerRoles.some((r) => skill.roles!.includes(r))),
+  );
+  return entries.length ? Object.fromEntries(entries) : undefined;
+}
+
 export function resolveAgentAssistant(
   base: AppAssistant,
   agentId: string | undefined,
   viewerRoles?: readonly string[],
 ): { assistant: AppAssistant; agent?: AppAssistantAgent } {
   const filteredExternal = filterExternalTools(base.externalTools, viewerRoles);
+  const filteredMcp = filterMcpServers(base.mcpServers, viewerRoles);
   if (!base.agents || !Object.keys(base.agents).length) {
     if (agentId !== undefined) throw new Error('This assistant does not declare named agents.');
     const filteredKnowledge = filterKnowledge(base.knowledge, viewerRoles);
-    if (filteredKnowledge === base.knowledge && filteredExternal === base.externalTools) return { assistant: base };
+    const filteredSkills = filterSkills(base.skills, viewerRoles);
+    if (
+      filteredKnowledge === base.knowledge &&
+      filteredExternal === base.externalTools &&
+      filteredMcp === base.mcpServers &&
+      filteredSkills === base.skills
+    )
+      return { assistant: base };
     return {
       assistant: {
         ...base,
         ...(filteredKnowledge ? { knowledge: filteredKnowledge } : { knowledge: undefined }),
         ...(filteredExternal ? { externalTools: filteredExternal } : { externalTools: undefined }),
+        ...(filteredMcp ? { mcpServers: filteredMcp } : { mcpServers: undefined }),
+        ...(filteredSkills ? { skills: filteredSkills } : { skills: undefined }),
       },
     };
   }
@@ -1433,11 +1510,14 @@ export function resolveAgentAssistant(
   }
   if (!agent) {
     const filteredKnowledge = filterKnowledge(base.knowledge, viewerRoles);
+    const filteredSkills = filterSkills(base.skills, viewerRoles);
     return {
       assistant: {
         ...base,
         ...(filteredKnowledge ? { knowledge: filteredKnowledge } : { knowledge: undefined }),
         ...(filteredExternal ? { externalTools: filteredExternal } : { externalTools: undefined }),
+        ...(filteredMcp ? { mcpServers: filteredMcp } : { mcpServers: undefined }),
+        ...(filteredSkills ? { skills: filteredSkills } : { skills: undefined }),
       },
     };
   }
@@ -1450,6 +1530,7 @@ export function resolveAgentAssistant(
       : base.customBlocks;
   const memory = agent.memory === false ? undefined : base.memory;
   const knowledge = filterKnowledge(base.knowledge, viewerRoles, agent.knowledge);
+  const skills = filterSkills(base.skills, viewerRoles, agent.skills);
   const instructions = [base.instructions, agent.instructions].filter(Boolean).join('\n\n') || undefined;
   const limits: AssistantLimits = {
     ...(minDefined(base.limits.tokensPerTurn, agent.limits?.tokensPerTurn) !== undefined
@@ -1479,6 +1560,8 @@ export function resolveAgentAssistant(
       ...base,
       ...(instructions ? { instructions } : {}),
       model: agent.model ?? base.model,
+      ...((agent.provider ?? base.provider) ? { provider: agent.provider ?? base.provider } : {}),
+      ...((agent.fallbackModels ?? base.fallbackModels) ? { fallbackModels: agent.fallbackModels ?? base.fallbackModels } : {}),
       ...((agent.effort ?? base.effort) ? { effort: agent.effort ?? base.effort } : {}),
       starters: agent.starters ?? base.starters,
       tools,
@@ -1489,6 +1572,8 @@ export function resolveAgentAssistant(
       ...(memory ? { memory } : { memory: undefined }),
       ...(knowledge ? { knowledge } : { knowledge: undefined }),
       ...(filteredExternal ? { externalTools: filteredExternal } : { externalTools: undefined }),
+      ...(filteredMcp ? { mcpServers: filteredMcp } : { mcpServers: undefined }),
+      ...(skills ? { skills } : { skills: undefined }),
     },
   };
 }
