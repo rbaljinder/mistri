@@ -1545,7 +1545,7 @@ async function runSteps(argv: string[], write: (line: string) => void, emit?: (r
       : undefined;
     /* The resources whose every read is written to the read audit: information, since it costs each of their reads a statement. */
     const audited = loaded
-      ? Object.entries(loaded.app.resources ?? {}).flatMap(([name, resource]) => (resource.audit?.reads === true ? [name] : []))
+      ? Object.entries(loaded.app.resources ?? {}).flatMap(([name, resource]) => (resource.audit?.reads !== undefined ? [name] : []))
       : [];
     const auditFinding = audited.length
       ? problem(

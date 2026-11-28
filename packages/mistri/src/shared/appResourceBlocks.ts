@@ -20,6 +20,7 @@
  * record page's related lists are the access ceiling's to govern, not this.
  */
 import { authoredValue } from '@mistriwork/engine/shared/autoValues.js';
+import { DURATION_WORDS, parseDuration } from '@mistriwork/engine/shared/duration.js';
 import { dateComparison } from '@mistriwork/engine/shared/queryDates.js';
 import { SET_EXPRESSION, setExpression } from './appStamps.js';
 import { isComponentDecl, parseComponentDecl, parseInputs, commandInputAt } from '@mistriwork/engine/shared/appComponents.js';
@@ -677,13 +678,34 @@ export function parseDataBlocks(a: Record<string, unknown>, where: string): Pars
         const here = `${at}, "audit"`;
         const declared = plainRecord(raw.audit, here, 'an object { redact?, reads? }');
         allowKeys(declared, ['redact', 'reads'], here);
-        if (declared.redact === undefined && declared.reads === undefined)
-          throw new Error(`${here} needs a "redact", a "reads: true", or both.`);
-        if (declared.reads !== undefined && declared.reads !== true)
-          throw new Error(`${here}: "reads" is true to log every read of these rows, or absent.`);
+        if (declared.redact === undefined && declared.reads === undefined) throw new Error(`${here} needs a "redact", a "reads", or both.`);
+        let reads: true | { coalesce?: string | false; delivery?: 'sync' | 'outbox' } | undefined;
+        if (declared.reads !== undefined) {
+          if (declared.reads === true) {
+            reads = true;
+          } else {
+            const readHere = `${here}, "reads"`;
+            if (!declared.reads || typeof declared.reads !== 'object' || Array.isArray(declared.reads))
+              throw new Error(`${here}: "reads" is true or an object { coalesce?, delivery? }, or absent.`);
+            const opts = declared.reads as Record<string, unknown>;
+            allowKeys(opts, ['coalesce', 'delivery'], readHere);
+            const parsed: { coalesce?: string | false; delivery?: 'sync' | 'outbox' } = {};
+            if (opts.coalesce !== undefined) {
+              const ms = typeof opts.coalesce === 'string' ? parseDuration(opts.coalesce) : undefined;
+              if (opts.coalesce === false) parsed.coalesce = false;
+              else if (ms !== undefined && ms > 0) parsed.coalesce = (opts.coalesce as string).trim();
+              else throw new Error(`${readHere}: "coalesce" is ${DURATION_WORDS}, or false to disable coalescing.`);
+            }
+            if (opts.delivery !== undefined) {
+              if (opts.delivery !== 'sync' && opts.delivery !== 'outbox') throw new Error(`${readHere}: "delivery" is 'sync' or 'outbox'.`);
+              parsed.delivery = opts.delivery;
+            }
+            reads = Object.keys(parsed).length ? parsed : true;
+          }
+        }
         resource.audit = {
           ...(declared.redact === undefined ? {} : parseAudit(declared.redact, here)),
-          ...(declared.reads === true ? { reads: true as const } : {}),
+          ...(reads !== undefined ? { reads } : {}),
         };
       }
       /* Rows from a CSV file (appImport.ts): opt-in, and a plain import writes

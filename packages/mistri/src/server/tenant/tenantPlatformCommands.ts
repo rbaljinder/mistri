@@ -101,7 +101,7 @@ interface PlatformRequestScope {
   /** The platform realm's scoped reads, outside any transaction: what a command's lookup reads through. */
   reads(): ReturnType<TenantReadSource['scopePlatformReads']>;
   /** A command's read of an audited resource, written through the writer outside any transaction (tenantReadAudit.ts). */
-  appendReadAudit(row: ReadAuditRow): Promise<void>;
+  appendReadAudit(row: ReadAuditRow, delivery?: 'sync' | 'outbox'): Promise<void>;
 }
 interface PlatformRequestRuntimeOptions<Request> {
   readonly app: AppDef;
@@ -504,9 +504,9 @@ export function bindPlatformRequestRuntime<Request>(options: PlatformRequestRunt
               advisoryFenced = false;
               return (scoped ??= reader.bindPlatformReads(admitted, rows));
             },
-            appendReadAudit: (row) => {
+            appendReadAudit: (row, delivery) => {
               active();
-              return writer.appendReadAudit(row);
+              return writer.appendReadAudit(row, delivery);
             },
           });
           let result!: T;

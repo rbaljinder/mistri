@@ -455,7 +455,9 @@ command's id; never a support visit's id or a row's key.
 | Key | Type | Status | What it does |
 | --- | --- | --- | --- |
 | `resources.*.audit` | object | Stable | What the durable write trails keep of these rows, and whether every read of them is logged. |
-| `resources.*.audit.reads` |  | Stable | Log every read of these rows in the read audit store (mistri audit reads): who, when, through which door, and the record or the query and the ids it returned, never a value. A read is not served when its row cannot be written. One of `true`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `resources.*.audit.reads` | object | Stable | Log every read of these rows in the read audit store (mistri audit reads): who, when, through which door, and the record or the query and the ids it returned, never a value. A read is not served when its row cannot be written. One of `true`. Used in `examples/apps/lintel/dashboards.ts`. |
+| `resources.*.audit.reads.coalesce` | string | Stable | How long identical reads (same actor, tenant, resource, record or returned ids) fold into one row. Default '60 seconds'; false or '0 seconds' disables coalescing. One of `false`. |
+| `resources.*.audit.reads.delivery` | `"sync"` · `"outbox"` | Stable | 'sync' (default) commits on the audited database before answering; 'outbox' commits to a local crash-safe SQLite WAL outbox before answering and drains asynchronously. One of `outbox`, `sync`. Default `"sync"`. |
 | `resources.*.audit.redact` | array | Stable | Columns the support write trail records as a keyed hash instead of their value, or 'values' for every column. One of `values`. |
 
 ## `resources.*.clone`

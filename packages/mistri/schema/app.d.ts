@@ -1070,9 +1070,9 @@ export interface AppResource<Column extends string = string, Page extends string
       audit entry in the business write's own transaction; a column named in `redact` is recorded as a keyed hash instead of its value, in the
       change and in a delete's before image alike, and every other column keeps its value. A page's `history()` keeps no value of a column named
       here at all, only that it changed. `'values'` marks every column.
-      `reads: true` logs every read of these rows in the read audit store (`mistri audit reads`): who, when, through which door, and
-      the record or the query and the ids it returned, never a value. A read is not served when its row cannot be written. */
-  audit?: { redact?: 'values' | readonly Column[]; reads?: true };
+      `reads: true` (or `{ coalesce?, delivery? }`) logs every read of these rows in the read audit store (`mistri audit reads`):
+      who, when, through which door, and the record or the query and the ids it returned, never a value. A read is not served when its row cannot be written. */
+  audit?: { redact?: 'values' | readonly Column[]; reads?: true | AppReadAuditOptions };
   /** `false`: on an App with `live: true`, a write to this table is not announced and no page follows it, for a hot or
       log-like table whose every write would set pages reading again; its pages refresh on focus and after their own
       saves. Absent, the App's choice. Means nothing on an App without `live: true`. */
@@ -4201,6 +4201,14 @@ type FlagReadValue<F, I extends string> = F extends Record<I, infer D> ? D exten
 
 /** How long the runtime keeps what it writes about the App as it runs. Each window is a duration ('30 days', '12 weeks') or
  * 'forever'; a daily job forgets what is older, in small batches. A window left out is its default. */
+/** Options for `audit: { reads: { coalesce?, delivery? } }` on an audited resource. */
+export interface AppReadAuditOptions {
+  /** How long identical reads (same actor, tenant, resource, record or returned ids) fold into one row. Default `'60 seconds'`. `false` or `'0 seconds'` disables coalescing. */
+  coalesce?: string | false;
+  /** `'sync'` (default): commit on the audited database before answering; `'outbox'`: commit to a local crash-safe SQLite WAL outbox before answering and drain asynchronously. */
+  delivery?: 'sync' | 'outbox';
+}
+
 export interface RetentionDeclaration {
   /** Who changed which record. Default '730 days'. */
   history?: string;
@@ -4208,6 +4216,8 @@ export interface RetentionDeclaration {
   commands?: string;
   /** The finished tries of jobs and webhook deliveries; one pending or waiting for a redrive is never forgotten. Default '30 days'. */
   attempts?: string;
+  /** Read audit entries for resources with `audit.reads`. Default `'forever'`; set e.g. `'6 years'` to prune aged rows daily. */
+  reads?: string;
 }
 
 /** One of the App's `choose`: a row of a declared resource the person picks once, and pages read as `chosen.<name>`. */
@@ -5217,7 +5227,7 @@ export type TypedResources<S extends SchemaShape, R extends SchemaReferences = n
       lines?: readonly { [F in TableOf<S>]: AppFormLines<F, ColumnOf<S, F>> }[TableOf<S>][];
     };
     actions?: Readonly<Record<string, TypedAppAction<S, T>>>;
-    audit?: { redact?: 'values' | readonly GovernedOf<S, H, T>[]; reads?: true };
+    audit?: { redact?: 'values' | readonly GovernedOf<S, H, T>[]; reads?: true | AppReadAuditOptions };
     rollups?: Record<string, TypedRollup<S, R>>;
     defined?: Partial<Record<ColumnOf<S, T>, { [F in TableOf<S>]: AppDefined<F, ColumnOf<S, T> & ColumnOf<S, F>> }[TableOf<S>]>>;
     import?: boolean | AppImport<ColumnOf<S, T>, ImportCommandOn<T>>;

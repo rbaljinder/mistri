@@ -14,6 +14,7 @@
  * references to them. Nothing here imports another app module: they all
  * import this one.
  */
+import { parseDuration } from '@mistriwork/engine/shared/duration.js';
 import type { SectionWidth } from '@mistriwork/engine/shared/page.js';
 import type { FormRule, FormStep } from './formRules.js';
 import type { FormStyle } from '@mistriwork/engine/shared/formValues.js';
@@ -974,15 +975,46 @@ export interface AppSearchDef {
  * change and in a delete's before image alike, and every other column keeps
  * its value. `'values'` marks every column of the resource.
  */
+/** Options for `audit: { reads: { coalesce?, delivery? } }` on an audited resource. */
+export interface AppReadAuditOptions {
+  /** How long identical reads (same actor, tenant, resource, record or returned ids) fold into one row. Default `'60 seconds'`. `false` or `'0 seconds'` disables coalescing. */
+  coalesce?: string | false;
+  /** `'sync'` (default) commits to the audited database before answering; `'outbox'` commits to a local crash-safe SQLite WAL outbox before answering and drains asynchronously. */
+  delivery?: 'sync' | 'outbox';
+}
+
+/** Normalized per-resource read-audit policy consumed by the server runtime. */
+export interface ReadAuditPolicy {
+  readonly coalesceMs: number;
+  readonly delivery: 'sync' | 'outbox';
+}
+
+/** Default per-process read-audit coalescing window (60 seconds). */
+export const DEFAULT_READ_AUDIT_COALESCE_MS = 60_000;
+
 export interface AppAuditDef {
   redact?: 'values' | string[];
   /**
    * Every read of these rows is logged in the read audit store: who, when,
    * through which door, and which record or which query found which ids,
    * never a value (server/readAudit.ts). Opt-in, because each audited read
-   * costs one statement and a log nothing prunes.
+   * costs one write. Set `true` for default sync delivery and 60 s coalescing,
+   * or `{ coalesce?, delivery? }` to tune coalescing and opt into the local outbox.
    */
-  reads?: true;
+  reads?: true | AppReadAuditOptions;
+}
+
+/** Normalized read-audit policy for a resource's `audit.reads` declaration, or undefined when off. */
+export function readAuditPolicyOf(reads: AppAuditDef['reads']): ReadAuditPolicy | undefined {
+  if (reads === undefined) return undefined;
+  if (reads === true) return Object.freeze({ coalesceMs: DEFAULT_READ_AUDIT_COALESCE_MS, delivery: 'sync' });
+  const coalesceMs =
+    reads.coalesce === false
+      ? 0
+      : reads.coalesce === undefined
+        ? DEFAULT_READ_AUDIT_COALESCE_MS
+        : (parseDuration(reads.coalesce) ?? DEFAULT_READ_AUDIT_COALESCE_MS);
+  return Object.freeze({ coalesceMs, delivery: reads.delivery ?? 'sync' });
 }
 
 /**

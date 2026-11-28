@@ -61,8 +61,8 @@ function plainReadAudit(
     tenant: '',
     actor,
     ...(held?.length ? { roles: held } : {}),
-    append: async (row, connection) =>
-      readAuditStoreOf((await registry.open(connection)).adapter, `connection "${connection}"`).appendReadAudit(row),
+    append: async (row, connection, delivery) =>
+      readAuditStoreOf((await registry.open(connection)).adapter, `connection "${connection}"`).appendReadAudit(row, delivery),
   };
 }
 

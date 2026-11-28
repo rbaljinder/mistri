@@ -215,7 +215,7 @@ export function renderApiReadOpenApi(
         // The source this operation reads, when there is more than one to read.
         ...(several ? { 'x-mistri-source': operation.source } : {}),
         // A client should know its reads are written down, and that an unrecordable read answers 503 (server/readAudit.ts).
-        ...(app.resources?.[operation.resource]?.audit?.reads === true
+        ...(app.resources?.[operation.resource]?.audit?.reads !== undefined
           ? {
               'x-mistri-read-audit': true,
               description: `Reads of ${operation.resource} are audited: each request is recorded (who, the record or query, and the ids returned) before its rows are sent, and one that cannot be recorded is answered 503.`,

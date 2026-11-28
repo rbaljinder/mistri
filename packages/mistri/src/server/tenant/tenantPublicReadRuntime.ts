@@ -89,7 +89,7 @@ export interface PublicReadRuntimeOptions {
   readonly maxLifetimeMs: number;
   readonly now?: () => number;
   /** Where an audited resource's read is written (tenantReadAudit.ts): a signed-out visitor's, as `public`. */
-  readonly readAudit?: (row: ReadAuditRow) => Promise<void>;
+  readonly readAudit?: (row: ReadAuditRow, delivery?: 'sync' | 'outbox') => Promise<void>;
 }
 
 /** Capture synchronous transfers immediately, asynchronous ones on native delivery. */

@@ -19,6 +19,12 @@ import { provisionSqliteRecordHistory } from '../packages/mistri/src/adapters/hi
 import { openSqliteJobStore } from '../packages/mistri/src/adapters/jobs/jobStore.js';
 import { JOB_TABLES, provisionSqliteJobStore } from '../packages/mistri/src/adapters/jobs/jobStoreSchema.js';
 import type { JobPolicyInput } from '../packages/mistri/src/adapters/jobs/jobStoreTypes.js';
+import { READ_AUDIT_TABLES } from '../packages/mistri/src/adapters/readAudit/readAudit.js';
+import {
+  appendSqliteReadAudit,
+  provisionSqliteReadAudit,
+  readSqliteReadAudit,
+} from '../packages/mistri/src/adapters/readAudit/sqliteReadAudit.js';
 import {
   PRUNE_BATCH,
   prune,
@@ -42,26 +48,33 @@ const tmp = () => mkdtempSync(join(tmpdir(), 'mistri-retention-'));
 
 describe('the retention declaration', () => {
   test('takes durations and forever, and refuses anything else', () => {
-    assert.deepEqual(parseAppRetention({ history: '365 days', attempts: '14 days', commands: 'forever' }, 'retention'), {
+    assert.deepEqual(parseAppRetention({ history: '365 days', attempts: '14 days', commands: 'forever', reads: '6 years' }, 'retention'), {
       history: '365 days',
       attempts: '14 days',
       commands: 'forever',
+      reads: '6 years',
     });
-    assert.throws(() => parseAppRetention({ history: '2 years' }, 'retention'), /history/);
+    assert.throws(() => parseAppRetention({ history: '2 months' }, 'retention'), /history/);
     assert.throws(() => parseAppRetention({ attempts: '0 days' }, 'retention'), /attempts/);
     assert.throws(() => parseAppRetention({ audit: '1 day' }, 'retention'), /no "audit"/);
     assert.throws(() => parseAppRetention('30 days', 'retention'), /object/);
   });
 
-  test('defaults are two years, two years and thirty days; forever is no window', () => {
-    assert.deepEqual(retentionMs(), { history: 730 * DAY, commands: 730 * DAY, attempts: 30 * DAY });
-    assert.deepEqual(retentionMs({ history: 'forever', attempts: '1 week' }), { history: null, commands: 730 * DAY, attempts: 7 * DAY });
+  test('defaults are two years, two years, thirty days, and forever for reads; forever is no window', () => {
+    assert.deepEqual(retentionMs(), { history: 730 * DAY, commands: 730 * DAY, attempts: 30 * DAY, reads: null });
+    assert.deepEqual(retentionMs({ history: 'forever', attempts: '1 week', reads: '6 years' }), {
+      history: null,
+      commands: 730 * DAY,
+      attempts: 7 * DAY,
+      reads: 6 * 365 * DAY,
+    });
   });
 
   test('is checked with the rest of the App', () => {
     const base = { id: 'ledger', name: 'Ledger', resources: { item: {} }, views: { items: { kind: 'list', from: 'item' } }, home: 'items' };
     const parse = (retention: unknown) => parseAppConfig({ ...base, retention }, 'retention fixture');
     assert.equal(parse({ history: '90 days' }).retention?.history, '90 days');
+    assert.equal(parse({ reads: '6 years' }).retention?.reads, '6 years');
     assert.throws(() => parse({ history: 'soon' }), /retention history/);
   });
 });
@@ -315,6 +328,50 @@ describe('the stores', () => {
       });
     });
   });
+
+  describe('read audit', () => {
+    test('stays forever by default, refuses direct deletes, and prunes aged rows under retention.reads', async () => {
+      const dir = tmp();
+      const path = join(dir, 'audit.db');
+      try {
+        new DatabaseSync(path).close();
+        provisionSqliteReadAudit(path);
+        const db = new DatabaseSync(path);
+        try {
+          const base = { app: 'ledger', tenant: '', actor: 'a1', resource: 'patients', route: 'page' as const };
+          appendSqliteReadAudit(db, { ...base, at: new Date(NOW - 7 * 365 * DAY).toISOString(), record: '1' });
+          appendSqliteReadAudit(db, { ...base, at: new Date(NOW - 30 * DAY).toISOString(), record: '2' });
+
+          assert.throws(() => db.exec(`DELETE FROM "${READ_AUDIT_TABLES.row}"`), /append-only/);
+          assert.throws(() => db.exec(`UPDATE "${READ_AUDIT_TABLES.row}" SET actor = 'other'`), /append-only/);
+
+          const rules = prunes().filter((each) => each.id === 'read-audit');
+          assert.equal(rules.length, 1);
+
+          // Default reads window is forever (null): nothing is pruned.
+          assert.deepEqual(await pruneAll(sqlitePruneDb(db), rules, retentionMs(), { now: () => NOW, sleep }), []);
+          assert.equal(readSqliteReadAudit(db, { limit: 10 }).length, 2);
+
+          // With reads: '6 years', only the 7-year-old row is pruned via the append-only gate, and the gate table is left empty.
+          assert.deepEqual(await pruneAll(sqlitePruneDb(db), rules, retentionMs({ reads: '6 years' }), { now: () => NOW, sleep }), [
+            { id: 'read-audit', deleted: 1 },
+          ]);
+          const remaining = readSqliteReadAudit(db, { limit: 10 });
+          assert.deepEqual(
+            remaining.map((row) => row.record),
+            ['2'],
+          );
+          assert.equal(Number(db.prepare(`SELECT count(*) AS n FROM "${READ_AUDIT_TABLES.prune}"`).get()!.n), 0);
+          // Direct deletes are still refused afterwards.
+          assert.throws(() => db.exec(`DELETE FROM "${READ_AUDIT_TABLES.row}"`), /append-only/);
+        } finally {
+          db.close();
+        }
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    });
+  });
 });
 
 describe('the daily job', () => {
@@ -416,6 +473,7 @@ describe('retention without a job host', () => {
     assert.equal(retentionPrunes(), true);
     assert.equal(retentionPrunes({ attempts: 'forever' }), true);
     assert.equal(retentionPrunes({ history: 'forever', commands: 'forever', attempts: 'forever' }), false);
+    assert.equal(retentionPrunes({ history: 'forever', commands: 'forever', attempts: 'forever', reads: '6 years' }), true);
   });
 
   test('the timer runs the job at its next slot, again the day after, and stops when told', async () => {

@@ -85,6 +85,7 @@ import { bindTenantBrandingStore } from './tenantBrandingStore.js';
 import { bindTenantReadAuditStore } from './tenantReadAudit.js';
 import { assertReadAuditRow, type ReadAuditQuery, type ReadAuditRow, type StoredReadAudit } from '../../adapters/readAudit/readAudit.js';
 import { groupCommit } from '../../adapters/readAudit/groupCommit.js';
+import { closeReadAuditOutbox, existingReadAuditOutbox, readAuditOutboxFor } from '../../adapters/readAudit/outbox.js';
 import { assertBrandingWrite, type BrandingWrite } from '../../adapters/branding/branding.js';
 
 /* A delete still referenced is refused by the engine under the physical table it counted (scopedTransaction.ts
@@ -133,8 +134,8 @@ export interface TenantWriteSource extends TenantWriteMethods {
   /** Save one tenant's branding and the logo it names, on the writer's queue
    * and in one transaction; returns the new revision (adapters/branding). */
   writeBranding(write: BrandingWrite): Promise<number>;
-  /** One read audit row, durable once the batch it joined is written on the writer's queue (tenantReadAudit.ts); the row names its tenant. */
-  appendReadAudit(row: ReadAuditRow): Promise<void>;
+  /** One read audit row, durable once the batch it joined is written on the writer's queue (or local WAL outbox for 'outbox'); the row names its tenant. */
+  appendReadAudit(row: ReadAuditRow, delivery?: 'sync' | 'outbox'): Promise<void>;
   /** The read audit, as the host reads it for one tenant: the deployment names the tenant, never the caller. */
   readReadAudit(query: ReadAuditQuery): Promise<StoredReadAudit[]>;
   close(): Promise<void>;
@@ -700,9 +701,11 @@ export async function openSqliteTenantWriteSource(
     };
     const inboxMail = queuedInboxMail(mailOf(life.handle), (work) => queue.run(work), closing);
     /* A batch of rows is one place in the queue (../../adapters/readAudit/groupCommit.ts): a page's reads wait
-       behind the writes ahead of them once, not once each. */
-    const auditBatch = groupCommit<ReadAuditRow>((rows) => queue.run(() => appStoresOf(life.handle()).appendReadAudits(rows)));
-    const appendReadAudit = (row: ReadAuditRow): Promise<void> => {
+       behind the writes ahead of them once, not once each. Opt-in 'outbox' commits to local SQLite WAL first. */
+    const auditFlush = (rows: readonly ReadAuditRow[]) => queue.run(() => appStoresOf(life.handle()).appendReadAudits(rows));
+    const auditOutboxKey = `tenant-sqlite:${owned.appId}:${owned.source.id}:${canonicalPath}`;
+    const auditBatch = groupCommit<ReadAuditRow>(auditFlush);
+    const appendReadAudit = (row: ReadAuditRow, delivery?: 'sync' | 'outbox'): Promise<void> => {
       let captured: ReadAuditRow;
       try {
         if (closing()) return paused();
@@ -710,9 +713,10 @@ export async function openSqliteTenantWriteSource(
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));
       }
+      if (delivery === 'outbox') return readAuditOutboxFor(auditOutboxKey, auditFlush).enqueue(captured);
       return auditBatch(captured);
     };
-    const readReadAudit = (query: ReadAuditQuery): Promise<StoredReadAudit[]> => {
+    const readReadAudit = async (query: ReadAuditQuery): Promise<StoredReadAudit[]> => {
       let captured: ReadAuditQuery;
       try {
         if (closing()) return paused();
@@ -720,7 +724,12 @@ export async function openSqliteTenantWriteSource(
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));
       }
+      await existingReadAuditOutbox(auditOutboxKey)?.flush();
       return queue.run(() => appStoresOf(life.handle()).readReadAudit(captured));
+    };
+    const closeAll = async (): Promise<void> => {
+      await closeReadAuditOutbox(auditOutboxKey);
+      await close();
     };
     const source = Object.freeze<TenantWriteSource>({
       ownership: owned,
@@ -730,7 +739,7 @@ export async function openSqliteTenantWriteSource(
       writeBranding,
       appendReadAudit,
       readReadAudit,
-      close,
+      close: closeAll,
     });
     sources.add(source);
     registerTenantSourceIdentity(source, { ...owner, canonicalPath });
@@ -1348,9 +1357,12 @@ export async function openPostgresTenantWriteSource(
       return queue.run([], () => appStoresOf(life.handle()).writeBranding(captured));
     };
     const inboxMail = queuedInboxMail(mailOf(life.handle), (work) => queue.run([], work), closing);
-    /* One writer checkout for a batch of rows (../../adapters/readAudit/groupCommit.ts), not one for each read. */
-    const auditBatch = groupCommit<ReadAuditRow>((rows) => queue.run([], () => appStoresOf(life.handle()).appendReadAudits(rows)));
-    const appendReadAudit = (row: ReadAuditRow): Promise<void> => {
+    /* One writer checkout for a batch of rows (../../adapters/readAudit/groupCommit.ts), not one for each read.
+       Opt-in 'outbox' commits to local SQLite WAL first and drains batches asynchronously. */
+    const auditFlush = (rows: readonly ReadAuditRow[]) => queue.run([], () => appStoresOf(life.handle()).appendReadAudits(rows));
+    const auditOutboxKey = `tenant-postgres:${owned.appId}:${owned.source.id}:${locator}`;
+    const auditBatch = groupCommit<ReadAuditRow>(auditFlush);
+    const appendReadAudit = (row: ReadAuditRow, delivery?: 'sync' | 'outbox'): Promise<void> => {
       let captured: ReadAuditRow;
       try {
         if (closing()) return paused();
@@ -1358,9 +1370,10 @@ export async function openPostgresTenantWriteSource(
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));
       }
+      if (delivery === 'outbox') return readAuditOutboxFor(auditOutboxKey, auditFlush).enqueue(captured);
       return auditBatch(captured);
     };
-    const readReadAudit = (query: ReadAuditQuery): Promise<StoredReadAudit[]> => {
+    const readReadAudit = async (query: ReadAuditQuery): Promise<StoredReadAudit[]> => {
       let captured: ReadAuditQuery;
       try {
         if (closing()) return paused();
@@ -1368,7 +1381,12 @@ export async function openPostgresTenantWriteSource(
       } catch (error) {
         return Promise.reject(tenantWriteFailed('not_applied', error));
       }
+      await existingReadAuditOutbox(auditOutboxKey)?.flush();
       return queue.run([], () => appStoresOf(life.handle()).readReadAudit(captured));
+    };
+    const closeAll = async (): Promise<void> => {
+      await closeReadAuditOutbox(auditOutboxKey);
+      await close();
     };
     const source = Object.freeze<TenantWriteSource>({
       ownership: owned,
@@ -1378,7 +1396,7 @@ export async function openPostgresTenantWriteSource(
       writeBranding,
       appendReadAudit,
       readReadAudit,
-      close,
+      close: closeAll,
     });
     sources.add(source);
     registerTenantSourceIdentity(source, { ...owner, canonicalPath: locator });

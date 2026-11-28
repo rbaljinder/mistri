@@ -23,7 +23,7 @@ const PRUNE_PAUSE_MS = 250;
 
 /** The App's retention windows a rule may be governed by (`retention` in the App, shared/appRetention.ts), or
     `expired`: the row's time is when it lapses, and it goes once that has passed, whatever the App keeps. */
-type PruneWindow = 'history' | 'commands' | 'attempts' | 'expired';
+type PruneWindow = 'history' | 'commands' | 'attempts' | 'reads' | 'expired';
 
 /** How the column that dates a row holds its time. */
 type PruneClock =
@@ -33,6 +33,12 @@ type PruneClock =
   | 'iso-text'
   /** A native timestamp: `timestamptz` on PostgreSQL. */
   | 'timestamp';
+
+/** An append-only store's retention gate: transaction-local PostgreSQL setting and 1-row SQLite gate table. */
+interface PruneGate {
+  readonly pgSetting: string;
+  readonly sqliteTable: string;
+}
 
 export interface PruneRule {
   /** Unique: the store's id for it (`record-history`, `job-attempts`). */
@@ -67,6 +73,8 @@ export interface PruneRule {
    * holds is asked.
    */
   readonly referencedBy?: readonly Readonly<{ table: string; column: string }>[];
+  /** Append-only retention gate: opened inside each batch's transaction and closed as it commits. */
+  readonly gate?: PruneGate;
 }
 
 const rules = new Map<string, PruneRule>();
@@ -78,9 +86,17 @@ export function registerPrune(rule: PruneRule): PruneRule {
     if (JSON.stringify(held) !== JSON.stringify(rule)) throw new Error(`The prune rule "${rule.id}" is registered twice, differently.`);
     return held;
   }
-  const named = [rule.table, rule.time, ...(rule.group ?? []), ...(rule.referencedBy ?? []).flatMap((ref) => [ref.table, ref.column])];
+  const named = [
+    rule.table,
+    rule.time,
+    ...(rule.group ?? []),
+    ...(rule.referencedBy ?? []).flatMap((ref) => [ref.table, ref.column]),
+    ...(rule.gate ? [rule.gate.sqliteTable] : []),
+  ];
   if (!named.every((name) => /^[A-Za-z0-9_$]+$/.test(name)))
     throw new Error(`The prune rule "${rule.id}" names a table or column that is not a plain identifier.`);
+  if (rule.gate && !/^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(rule.gate.pgSetting))
+    throw new Error(`The prune rule "${rule.id}" names a PostgreSQL gate setting that is not schema.name.`);
   const frozen = Object.freeze({ ...rule });
   rules.set(rule.id, frozen);
   return frozen;
@@ -92,15 +108,15 @@ export const prunes = (): readonly PruneRule[] => [...rules.values()];
 /** One database a rule runs against: a statement, and how many rows it deleted. */
 interface PruneDb {
   readonly dialect: 'sqlite' | 'postgres';
-  /** `?` placeholders, the statement committed on its own. */
-  delete(sql: string, params: unknown[]): Promise<number>;
+  /** `?` placeholders, the statement committed on its own (or inside a gated transaction when `gate` is named). */
+  delete(sql: string, params: unknown[], gate?: PruneGate): Promise<number>;
   /** Whether this database holds the table: a store not provisioned here has nothing to prune. */
   has(table: string): Promise<boolean>;
 }
 
-/** Retention in milliseconds per window; null keeps for ever. */
-type RetentionMs = Readonly<Record<Exclude<PruneWindow, 'expired'>, number | null>>;
-const windowOf = (windows: RetentionMs, rule: PruneRule): number | null => (rule.window === 'expired' ? 0 : windows[rule.window]);
+/** Retention in milliseconds per window; null keeps for ever. `reads` defaults to null when omitted by direct callers. */
+type RetentionMs = Readonly<Record<Exclude<PruneWindow, 'expired' | 'reads'>, number | null> & { readonly reads?: number | null }>;
+const windowOf = (windows: RetentionMs, rule: PruneRule): number | null => (rule.window === 'expired' ? 0 : (windows[rule.window] ?? null));
 
 const quote = (name: string) => `"${name}"`;
 
@@ -153,6 +169,7 @@ const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, 
 /** One rule on one database; the rows it deleted. 'forever' (a null window) deletes nothing. */
 export async function prune(db: PruneDb, rule: PruneRule, windowMs: number | null, options: PruneOptions = {}): Promise<number> {
   if (windowMs === null) return 0;
+  if (rule.gate && db.dialect === 'sqlite' && !(await db.has(rule.gate.sqliteTable))) return 0;
   const batch = options.batch ?? PRUNE_BATCH;
   const pause = options.sleep ?? wait;
   const before = cutoff(db, rule, (options.now ?? Date.now)() - windowMs);
@@ -162,7 +179,7 @@ export async function prune(db: PruneDb, rule: PruneRule, windowMs: number | nul
   let total = 0;
   for (;;) {
     if (options.signal?.aborted) return total;
-    const deleted = await db.delete(sql, rule.group ? [before, before] : [before]);
+    const deleted = await db.delete(sql, rule.group ? [before, before] : [before], rule.gate);
     total += deleted;
     if (deleted < batch) return total;
     await pause(options.pauseMs ?? PRUNE_PAUSE_MS);
@@ -190,8 +207,24 @@ export async function pruneAll(
 export function sqlitePruneDb(db: DatabaseSync): PruneDb {
   return {
     dialect: 'sqlite',
-    async delete(sql, params) {
-      return Number(db.prepare(sql).run(...(params as SQLInputValue[])).changes);
+    async delete(sql, params, gate) {
+      if (!gate) return Number(db.prepare(sql).run(...(params as SQLInputValue[])).changes);
+      const gateTable = quote(gate.sqliteTable);
+      db.exec('BEGIN IMMEDIATE');
+      try {
+        db.exec(`INSERT OR REPLACE INTO main.${gateTable} (singleton) VALUES (1)`);
+        const deleted = Number(db.prepare(sql).run(...(params as SQLInputValue[])).changes);
+        db.exec(`DELETE FROM main.${gateTable}`);
+        db.exec('COMMIT');
+        return deleted;
+      } catch (error) {
+        try {
+          db.exec('ROLLBACK');
+        } catch {
+          /* Preserve the prune failure. */
+        }
+        throw error;
+      }
     },
     async has(table) {
       return db.prepare(`SELECT 1 FROM main.sqlite_schema WHERE type = 'table' AND name = ? COLLATE BINARY`).get(table) !== undefined;
@@ -209,8 +242,24 @@ const numbered = (sql: string) => {
 export function postgresPruneDb(source: PgWriteClientSource): PruneDb {
   return {
     dialect: 'postgres',
-    async delete(sql, params) {
-      return source.withWriteClient(async (client) => (await client.query(numbered(sql), params)).rowCount ?? 0);
+    async delete(sql, params, gate) {
+      return source.withWriteClient(async (client) => {
+        if (!gate) return (await client.query(numbered(sql), params)).rowCount ?? 0;
+        await client.query('BEGIN');
+        try {
+          await client.query(`SELECT set_config($1, 'on', true)`, [gate.pgSetting]);
+          const deleted = (await client.query(numbered(sql), params)).rowCount ?? 0;
+          await client.query('COMMIT');
+          return deleted;
+        } catch (error) {
+          try {
+            await client.query('ROLLBACK');
+          } catch {
+            /* Preserve the prune failure. */
+          }
+          throw error;
+        }
+      });
     },
     async has(table) {
       return source.withWriteClient(
