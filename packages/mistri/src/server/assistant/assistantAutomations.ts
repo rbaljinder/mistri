@@ -19,7 +19,8 @@ import type { AppHost } from '../app/apps.js';
 import { appForConnection } from '../app/apps.js';
 import { latestSlot, nextSlot, parseEvery } from '../jobs/jobSchedule.js';
 import { catalogFromPayload, nowLine, systemPrompt, toolSpecs } from './assistantCatalog.js';
-import { assistantModel } from './assistantModel.js';
+import { resolveExternalToolsWithMcp } from './assistantExternal.js';
+import { assistantModel, resolveAssistantModel } from './assistantModel.js';
 import { launchBackgroundRun } from './assistantRuns.js';
 import { assistantStoreFor } from './assistantStores.js';
 import type { ToolSession } from './assistantTools.js';
@@ -136,8 +137,14 @@ export async function dispatchAutomatedRun(params: AutomatedDispatchParams): Pro
     return null;
   }
 
+  const mergedExternal = await resolveExternalToolsWithMcp(
+    resolvedAgent.assistant.externalTools,
+    resolvedAgent.assistant.mcpServers,
+    prepSignal,
+  );
   const runAssistant: AppAssistant = {
     ...resolvedAgent.assistant,
+    ...(mergedExternal ? { externalTools: mergedExternal } : {}),
     limits: { ...resolvedAgent.assistant.limits, steps: bgCfg.maxSteps },
   };
   const activeAgent = resolvedAgent.agent;
@@ -218,7 +225,7 @@ export async function dispatchAutomatedRun(params: AutomatedDispatchParams): Pro
     store: params.store,
     owner: params.owner,
     run,
-    model,
+    model: resolveAssistantModel(runAssistant) ?? model,
     assistant: runAssistant,
     baseAssistant: assistant,
     ...(activeAgent ? { activeAgent } : {}),

@@ -13,7 +13,14 @@
  */
 import { DEFAULT_ASSISTANT_STEPS, resolveAgentAssistant, type AppAssistant, type AppAssistantAgent } from '../../shared/appAssistant.js';
 import type { AssistantOwner, AssistantStore, ConversationState, StoredEvent } from '../../adapters/assistant/assistantStore.js';
-import type { AssistantModel, ModelBlock, ModelMessage, ModelTool, ModelUsage } from './assistantModel.js';
+import {
+  resolveAssistantModel,
+  type AssistantModel,
+  type ModelBlock,
+  type ModelMessage,
+  type ModelTool,
+  type ModelUsage,
+} from './assistantModel.js';
 import type { ModelRefusal } from './assistantModelRefusal.js';
 import {
   answerTool,
@@ -447,7 +454,8 @@ async function runDelegation(
       if (refused) throw new Error(refused);
       const last = step === maxSteps;
       let stepReasoning = '';
-      const reply = await context.model.stream(
+      const childModel = resolveAssistantModel(childAssistant) ?? context.model;
+      const reply = await childModel.stream(
         {
           model: childAssistant.model,
           system: childSystem,

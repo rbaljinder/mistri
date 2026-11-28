@@ -20,7 +20,8 @@ import type {
   ServedAssistantKnowledge,
   ServedAssistantMemory,
 } from './appAssistant.js';
-import type { ServedAssistantExternalTool, ServedAssistantWebhook } from './appAssistantExternal.js';
+import type { ServedAssistantExternalTool, ServedAssistantMcpServer, ServedAssistantWebhook } from './appAssistantExternal.js';
+import type { ServedAssistantSkill } from './appAssistantSkills.js';
 import type { AppShell } from './appModel.js';
 import { appZone } from './appZone.js';
 import type { AppFormCommandReference } from './command.js';
@@ -205,6 +206,10 @@ export interface AppPayloadApp extends ServedApp<ResolvedListView | AppDashboard
     evals?: Array<ServedAssistantEvalCase & { roles?: string[] }>;
     /** Viewer-safe outbound HTTP & MCP tool bridges (`url`, credentials, and `roles` stripped). */
     externalTools?: Array<ServedAssistantExternalTool & { roles?: string[] }>;
+    /** Viewer-safe MCP server summaries (`url`, credentials, and `roles` stripped). */
+    mcpServers?: Array<ServedAssistantMcpServer & { roles?: string[] }>;
+    /** Viewer-safe progressive skill summaries (`instructions` and `roles` stripped). */
+    skills?: Array<ServedAssistantSkill & { roles?: string[] }>;
     /** Viewer-safe signed inbound webhook summaries (`secretEnv` stripped). */
     webhooks?: ServedAssistantWebhook[];
   };
@@ -325,6 +330,8 @@ export function servedApp(app: AppDef, schema: DatabaseSchema, pages: readonly P
             ...servedBackgroundRuns(app.assistant.backgroundRuns),
             ...servedEvals(app.assistant.evals),
             ...servedExternalTools(app.assistant.externalTools),
+            ...servedMcpServers(app.assistant.mcpServers),
+            ...servedSkills(app.assistant.skills),
             ...servedWebhooks(app.assistant.webhooks),
           },
         }
@@ -532,6 +539,34 @@ function servedExternalTools(tools: NonNullable<AppDef['assistant']>['externalTo
     ...(t.roles ? { roles: [...t.roles] } : {}),
   }));
   return list.length ? { externalTools: list } : {};
+}
+
+function servedMcpServers(servers: NonNullable<AppDef['assistant']>['mcpServers']): {
+  mcpServers?: NonNullable<AppPayloadApp['assistant']>['mcpServers'];
+} {
+  if (!servers) return {};
+  const list = Object.values(servers).map((s) => ({
+    id: s.id,
+    label: s.label,
+    ...(s.description ? { description: s.description } : {}),
+    defaultAccess: s.defaultAccess,
+    ...(s.allowTools ? { allowTools: [...s.allowTools] } : {}),
+    ...(s.roles ? { roles: [...s.roles] } : {}),
+  }));
+  return list.length ? { mcpServers: list } : {};
+}
+
+function servedSkills(skills: NonNullable<AppDef['assistant']>['skills']): {
+  skills?: NonNullable<AppPayloadApp['assistant']>['skills'];
+} {
+  if (!skills) return {};
+  const list = Object.values(skills).map((s) => ({
+    id: s.id,
+    label: s.label,
+    description: s.description,
+    ...(s.roles ? { roles: [...s.roles] } : {}),
+  }));
+  return list.length ? { skills: list } : {};
 }
 
 function servedWebhooks(webhooks: NonNullable<AppDef['assistant']>['webhooks']): {

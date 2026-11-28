@@ -49,9 +49,15 @@ import {
   tickSchedulesForOwner,
 } from '../assistant/assistantAutomations.js';
 import { runAppEvalSuite, summarizeTrace } from '../assistant/assistantObservability.js';
-import { invokeExternalTool, validateExternalToolInput, verifyWebhookSignature } from '../assistant/assistantExternal.js';
+import {
+  discoverMcpServerTools,
+  invokeExternalTool,
+  resolveExternalToolsWithMcp,
+  validateExternalToolInput,
+  verifyWebhookSignature,
+} from '../assistant/assistantExternal.js';
 import { catalogFromPayload, mayRunAction, nowLine, systemPrompt, toolSpecs } from '../assistant/assistantCatalog.js';
-import { assistantModel } from '../assistant/assistantModel.js';
+import { resolveAssistantModel } from '../assistant/assistantModel.js';
 import { cancelBackgroundRun, isBackgroundRunLive, launchBackgroundRun, subscribeBackgroundRun } from '../assistant/assistantRuns.js';
 import { assistantStoreFor, storeUnavailableReply } from '../assistant/assistantStores.js';
 import { aboutRecord, recordContext, type ToolSession } from '../assistant/assistantTools.js';
@@ -101,6 +107,7 @@ export const ASSISTANT_PATHS: ReadonlySet<string> = new Set([
   '/api/assistant/automations/tick',
   '/api/assistant/evals/run',
   '/api/assistant/external/execute',
+  '/api/assistant/mcp/discover',
 ]);
 const SAID: Record<string, readonly string[]> = {
   '/api/assistant/turn': ['app', 'conversation', 'text', 'context', 'edit', 'retry', 'mode', 'effort', 'agent'],
@@ -121,6 +128,7 @@ const SAID: Record<string, readonly string[]> = {
   '/api/assistant/automations/tick': ['app'],
   '/api/assistant/evals/run': ['app', 'id'],
   '/api/assistant/external/execute': ['app', 'tool', 'input'],
+  '/api/assistant/mcp/discover': ['app', 'server', 'refresh'],
 };
 /* Refused alike whether the table is not theirs, the row is outside their rows or it is not there: which of the three
    is not the page's to learn, as a record's own address answers. */
@@ -293,7 +301,7 @@ export async function answerAssistant(
     const { app, owner, store, loop } = scope;
     const assistant = app.assistant!;
     if (path === '/api/assistant') {
-      send(res, 200, { conversations: await store.list(owner, 30), ready: Boolean(assistantModel()) });
+      send(res, 200, { conversations: await store.list(owner, 30), ready: Boolean(resolveAssistantModel(assistant)) });
       return;
     }
     const id = get ? url.searchParams.get('id') : body.conversation;
@@ -416,8 +424,14 @@ export async function answerAssistant(
         } catch (error) {
           throw new HttpError(403, error instanceof Error ? error.message : 'That agent is not offered to your role.');
         }
+        const mergedExternal = await resolveExternalToolsWithMcp(
+          resolvedAgent.assistant.externalTools,
+          resolvedAgent.assistant.mcpServers,
+          prepSignal,
+        );
         const runAssistant: AppAssistant = {
           ...resolvedAgent.assistant,
+          ...(mergedExternal ? { externalTools: mergedExternal } : {}),
           limits: { ...resolvedAgent.assistant.limits, steps: bgCfg.maxSteps },
         };
         const activeAgent = resolvedAgent.agent;
@@ -455,7 +469,7 @@ export async function answerAssistant(
         const runs = await store.listRuns(owner, 40);
         send(res, 200, {
           runs: runs.map((run) => ({ ...run, live: isBackgroundRunLive(owner, run.id) })),
-          ready: Boolean(assistantModel()),
+          ready: Boolean(resolveAssistantModel(assistant)),
         });
         return;
       }
@@ -519,7 +533,7 @@ export async function answerAssistant(
         return;
       }
 
-      const model = assistantModel();
+      const model = resolveAssistantModel(assistant);
       if (!model) throw new HttpError(503, 'The assistant has no model set up. The operator sets ANTHROPIC_API_KEY.');
       const at = new Date().toISOString();
 
@@ -600,7 +614,7 @@ export async function answerAssistant(
           store,
           owner,
           run,
-          model,
+          model: resolveAssistantModel(prepared.runAssistant) ?? model,
           assistant: prepared.runAssistant,
           baseAssistant: assistant,
           ...(prepared.activeAgent ? { activeAgent: prepared.activeAgent } : {}),
@@ -647,7 +661,7 @@ export async function answerAssistant(
           store,
           owner,
           run: queued,
-          model,
+          model: resolveAssistantModel(prepared.runAssistant) ?? model,
           assistant: prepared.runAssistant,
           baseAssistant: assistant,
           ...(prepared.activeAgent ? { activeAgent: prepared.activeAgent } : {}),
@@ -684,7 +698,7 @@ export async function answerAssistant(
           store,
           owner,
           run: queued,
-          model,
+          model: resolveAssistantModel(prepared.runAssistant) ?? model,
           assistant: prepared.runAssistant,
           baseAssistant: assistant,
           ...(prepared.activeAgent ? { activeAgent: prepared.activeAgent } : {}),
@@ -765,7 +779,7 @@ export async function answerAssistant(
               lastRunAt: state?.lastRunAt || null,
             };
           });
-        send(res, 200, { schedules, triggers, ready: Boolean(assistantModel()) });
+        send(res, 200, { schedules, triggers, ready: Boolean(resolveAssistantModel(assistant)) });
         return;
       }
 
@@ -785,7 +799,8 @@ export async function answerAssistant(
       }
 
       if (path === '/api/assistant/automations/run') {
-        if (!assistantModel()) throw new HttpError(503, 'The assistant has no model set up. The operator sets ANTHROPIC_API_KEY.');
+        if (!resolveAssistantModel(assistant))
+          throw new HttpError(503, 'The assistant has no model set up. The operator sets ANTHROPIC_API_KEY.');
         const autoId = typeof body.id === 'string' ? body.id.trim() : '';
         const schedule = bgCfg.schedules.find((s) => s.id === autoId);
         if (!schedule) throw new HttpError(404, `Unknown schedule "${autoId}".`);
@@ -818,7 +833,8 @@ export async function answerAssistant(
       }
 
       if (path === '/api/assistant/automations/tick') {
-        if (!assistantModel()) throw new HttpError(503, 'The assistant has no model set up. The operator sets ANTHROPIC_API_KEY.');
+        if (!resolveAssistantModel(assistant))
+          throw new HttpError(503, 'The assistant has no model set up. The operator sets ANTHROPIC_API_KEY.');
         const detached = runLoopFactory();
         const fired = await tickSchedulesForOwner({
           store,
@@ -875,29 +891,99 @@ export async function answerAssistant(
     if (path === '/api/assistant/external/execute') {
       if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
       const toolId = typeof body.tool === 'string' ? body.tool.trim() : '';
-      const ext =
+      let ext =
         toolId && assistant.externalTools && Object.hasOwn(assistant.externalTools, toolId) ? assistant.externalTools[toolId] : undefined;
-      if (!ext) throw new HttpError(404, `Unknown external tool "${toolId}".`);
-      const roles =
-        scope.roles ?? (ext.roles ? (await servedTo(loop(), app.id, new AbortController().signal)).viewerRoles : undefined) ?? [];
-      if (ext.roles && !roles.some((role) => ext.roles!.includes(role))) {
-        throw new HttpError(403, 'That external tool is not offered to your role.');
-      }
-      let validated: Record<string, string | number | boolean>;
+      const controller = new AbortController();
+      const abort = () => controller.abort();
+      req.once('aborted', abort);
+      res.once('close', abort);
       try {
-        validated = validateExternalToolInput(ext, body.input);
+        let cachedRoles: readonly string[] | undefined = scope.roles;
+        const viewerRolesOf = async () => {
+          if (cachedRoles !== undefined) return cachedRoles;
+          cachedRoles = (await servedTo(loop(), app.id, controller.signal)).viewerRoles ?? [];
+          return cachedRoles;
+        };
+        if (!ext && toolId && assistant.mcpServers) {
+          const prefix = toolId.includes('__') ? toolId.slice(0, toolId.indexOf('__')) : '';
+          const candidate = prefix && Object.hasOwn(assistant.mcpServers, prefix) ? assistant.mcpServers[prefix] : undefined;
+          if (candidate) {
+            if (candidate.roles) {
+              const roles = await viewerRolesOf();
+              if (!roles.some((role) => candidate.roles!.includes(role))) {
+                throw new HttpError(403, 'That external tool is not offered to your role.');
+              }
+            }
+            const discovered = await discoverMcpServerTools(candidate, controller.signal);
+            ext = discovered.tools.find((t) => t.id === toolId);
+          }
+        }
+        if (!ext) throw new HttpError(404, `Unknown external tool "${toolId}".`);
+        if (ext.roles) {
+          const roles = await viewerRolesOf();
+          if (!roles.some((role) => ext!.roles!.includes(role))) {
+            throw new HttpError(403, 'That external tool is not offered to your role.');
+          }
+        }
+        let validated: Record<string, string | number | boolean>;
+        try {
+          validated = validateExternalToolInput(ext, body.input);
+        } catch (err) {
+          throw new HttpError(400, err instanceof Error ? err.message : 'Invalid external tool input.');
+        }
+        const result = await invokeExternalTool(ext, validated, controller.signal);
+        send(res, 200, { ok: result.ok, status: result.status, output: result.output });
       } catch (err) {
-        throw new HttpError(400, err instanceof Error ? err.message : 'Invalid external tool input.');
+        if (err instanceof HttpError) throw err;
+        throw new HttpError(502, err instanceof Error ? err.message : 'External tool request failed.');
+      } finally {
+        req.off('aborted', abort);
+        res.off('close', abort);
+      }
+      return;
+    }
+    if (path === '/api/assistant/mcp/discover') {
+      if (req.method !== 'POST') throw new HttpError(405, 'Method not allowed.');
+      const serversMap = assistant.mcpServers;
+      if (!serversMap || !Object.keys(serversMap).length) {
+        send(res, 200, { servers: [] });
+        return;
       }
       const controller = new AbortController();
       const abort = () => controller.abort();
       req.once('aborted', abort);
       res.once('close', abort);
       try {
-        const result = await invokeExternalTool(ext, validated, controller.signal);
-        send(res, 200, { ok: result.ok, status: result.status, output: result.output });
-      } catch (err) {
-        throw new HttpError(502, err instanceof Error ? err.message : 'External tool request failed.');
+        const roles = scope.roles ?? (await servedTo(loop(), app.id, controller.signal)).viewerRoles ?? [];
+        const serverId = typeof body.server === 'string' && body.server.trim() ? body.server.trim() : undefined;
+        const forceRefresh = body.refresh === true;
+        let targets = Object.values(serversMap).filter((srv) => !srv.roles || roles.some((role) => srv.roles!.includes(role)));
+        if (serverId) {
+          const found = Object.hasOwn(serversMap, serverId) ? serversMap[serverId] : undefined;
+          if (!found) throw new HttpError(404, `Unknown MCP server "${serverId}".`);
+          if (found.roles && !roles.some((role) => found.roles!.includes(role))) {
+            throw new HttpError(403, 'That MCP server is not offered to your role.');
+          }
+          targets = [found];
+        }
+        const results = await Promise.all(targets.map((srv) => discoverMcpServerTools(srv, controller.signal, { forceRefresh })));
+        send(res, 200, {
+          servers: results.map((r) => ({
+            id: r.id,
+            label: r.label,
+            ...(r.description ? { description: r.description } : {}),
+            defaultAccess: r.defaultAccess,
+            ok: r.ok,
+            ...(r.error ? { error: r.error } : {}),
+            tools: r.tools.map((t) => ({
+              id: t.id,
+              mcpTool: t.mcpTool ?? t.id,
+              label: t.label,
+              description: t.description,
+              access: t.access,
+            })),
+          })),
+        });
       } finally {
         req.off('aborted', abort);
         res.off('close', abort);
@@ -961,7 +1047,7 @@ export async function answerAssistant(
       send(res, 200, { item: { type: 'note', text: actedNote(acted) } });
       return;
     }
-    const model = assistantModel();
+    const model = resolveAssistantModel(assistant);
     if (!model) throw new HttpError(503, 'The assistant has no model set up. The operator sets ANTHROPIC_API_KEY.');
     const at = new Date().toISOString();
     let conversation = id === undefined ? null : typeof id === 'string' ? await store.get(owner, id) : null;
@@ -1069,7 +1155,14 @@ export async function answerAssistant(
       if (started) await store.remove(owner, started);
       throw new HttpError(403, error instanceof Error ? error.message : 'That agent is not offered to your role.');
     }
-    const effectiveAssistant = resolvedAgent.assistant;
+    const mergedExternal = await resolveExternalToolsWithMcp(
+      resolvedAgent.assistant.externalTools,
+      resolvedAgent.assistant.mcpServers,
+      controller.signal,
+    );
+    const effectiveAssistant: AppAssistant = mergedExternal
+      ? { ...resolvedAgent.assistant, externalTools: mergedExternal }
+      : resolvedAgent.assistant;
     const activeAgent = resolvedAgent.agent;
     const canWriteShared = canWriteSharedMemory(effectiveAssistant.memory, viewerRoles ?? []);
     const memories = effectiveAssistant.memory
@@ -1133,7 +1226,7 @@ export async function answerAssistant(
       store,
       owner,
       conversation: conversation!.id,
-      model,
+      model: resolveAssistantModel(effectiveAssistant) ?? model,
       assistant: effectiveAssistant,
       baseAssistant: assistant,
       ...(activeAgent ? { activeAgent } : {}),
@@ -1251,7 +1344,7 @@ export async function assistantWebhookRoute(input: {
     send(res, 401, { error: 'Invalid webhook signature.' });
     return true;
   }
-  if (!assistantModel()) {
+  if (!resolveAssistantModel(app.assistant)) {
     send(res, 503, { error: 'The assistant has no model set up. The operator sets ANTHROPIC_API_KEY.' });
     return true;
   }

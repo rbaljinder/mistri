@@ -9,12 +9,14 @@
  *   history pollution, zero unapproved record mutations) and returns a graded scorecard.
  */
 import { canWriteSharedMemory, resolveAgentAssistant, type AppAssistant } from '../../shared/appAssistant.js';
+import { estimateModelCostUsd, parseModelTarget, type AssistantProvider } from '../../shared/appAssistantRouting.js';
 import type { AssistantOwner, AssistantStore, ConversationState, StoredEvent, StoredRun } from '../../adapters/assistant/assistantStore.js';
 import type { AppDef } from '../../shared/appModel.js';
 import type { AppPayloadApp } from '../../shared/appPayload.js';
 import type { Loop } from '@mistriwork/engine/server/http/firstPaint.js';
 import { catalogFromPayload, nowLine, systemPrompt, toolSpecs } from './assistantCatalog.js';
-import { assistantModel, type ModelBlock } from './assistantModel.js';
+import { resolveExternalToolsWithMcp } from './assistantExternal.js';
+import { assistantModel, resolveAssistantModel, type ModelBlock } from './assistantModel.js';
 import { continueTurn, type ReviewOutcomes } from './assistantTurn.js';
 import type { DisplayItem, ToolSession } from './assistantTools.js';
 
@@ -41,7 +43,12 @@ interface TraceSummary {
   readonly reasoningChars: number;
   readonly tokensIn: number;
   readonly tokensOut: number;
+  readonly cacheReadTokens: number;
+  readonly cacheWriteTokens: number;
   readonly totalTokens: number;
+  readonly estimatedCostUsd: number;
+  readonly model?: string;
+  readonly provider?: AssistantProvider;
   readonly durationMs: number;
   readonly toolBreakdown: Record<string, number>;
   readonly spans: readonly TraceSpan[];
@@ -68,6 +75,7 @@ interface AppEvalSuiteReport {
   readonly passRate: number;
   readonly meanTokens: number;
   readonly meanDurationMs: number;
+  readonly totalCostUsd: number;
   readonly cases: readonly AppEvalCaseReport[];
 }
 
@@ -103,16 +111,34 @@ export function summarizeTrace(
   let reasoningChars = 0;
   let tokensIn = 0;
   let tokensOut = 0;
+  let cacheReadTokens = 0;
+  let cacheWriteTokens = 0;
+  let estimatedCostUsd = 0;
+  let lastModelSpec: string | undefined;
 
   for (const ev of events) {
     const body = ev.body as Record<string, unknown>;
     if (ev.kind === 'assistant') {
       const blocks = Array.isArray(body.content) ? (body.content as ModelBlock[]) : [];
       const durations = Array.isArray(body.reasoningDurations) ? (body.reasoningDurations as Array<number | undefined>) : undefined;
+      const evModel = typeof body.model === 'string' && body.model.trim() ? body.model.trim() : undefined;
+      if (evModel) lastModelSpec = evModel;
       const usage = body.usage as { input?: number; output?: number; cacheRead?: number; cacheWrite?: number } | undefined;
       if (usage) {
-        tokensIn += (usage.input ?? 0) + (usage.cacheRead ?? 0) + (usage.cacheWrite ?? 0);
-        tokensOut += usage.output ?? 0;
+        const inp = usage.input ?? 0;
+        const out = usage.output ?? 0;
+        const cRead = usage.cacheRead ?? 0;
+        const cWrite = usage.cacheWrite ?? 0;
+        tokensIn += inp + cRead + cWrite;
+        tokensOut += out;
+        cacheReadTokens += cRead;
+        cacheWriteTokens += cWrite;
+        estimatedCostUsd += estimateModelCostUsd(evModel ?? lastModelSpec, {
+          input: inp,
+          output: out,
+          cacheRead: cRead,
+          cacheWrite: cWrite,
+        });
       }
       let rIdx = 0;
       let textBuf = '';
@@ -245,6 +271,7 @@ export function summarizeTrace(
         : 0);
 
   const totalTokens = tokensIn + tokensOut || (run?.tokens ?? 0);
+  const parsedModel = lastModelSpec ? parseModelTarget(lastModelSpec) : undefined;
   return {
     totalSteps: Math.max(totalSteps, run?.steps ?? 0),
     toolCalls,
@@ -255,7 +282,11 @@ export function summarizeTrace(
     reasoningChars,
     tokensIn,
     tokensOut,
+    cacheReadTokens,
+    cacheWriteTokens,
     totalTokens,
+    estimatedCostUsd: Math.round(estimatedCostUsd * 1_000_000) / 1_000_000,
+    ...(parsedModel ? { model: parsedModel.model, provider: parsedModel.provider } : {}),
     durationMs: computedDuration,
     toolBreakdown,
     spans,
@@ -398,7 +429,15 @@ export async function runAppEvalSuite(params: {
     const startMs = Date.now();
     const resolved = resolveAgentAssistant(baseAssistant, evalCase.agent, viewerRoles);
     const activeAgent = resolved.agent;
-    const runAssistant: AppAssistant = resolved.assistant;
+    const mergedExternal = await resolveExternalToolsWithMcp(
+      resolved.assistant.externalTools,
+      resolved.assistant.mcpServers,
+      params.signal,
+    );
+    const runAssistant: AppAssistant = {
+      ...resolved.assistant,
+      ...(mergedExternal ? { externalTools: mergedExternal } : {}),
+    };
     const canWriteShared = canWriteSharedMemory(runAssistant.memory, viewerRoles ?? []);
     const memories = runAssistant.memory
       ? await params.store.memories(params.owner, { scopes: runAssistant.memory.scopes, agent: activeAgent?.id, limit: 40 })
@@ -451,11 +490,12 @@ export async function runAppEvalSuite(params: {
       }
     };
 
+    const caseModel = resolveAssistantModel(runAssistant) ?? model;
     await continueTurn({
       store: ephemeral.store,
       owner: params.owner,
       conversation: 'eval-conv',
-      model,
+      model: caseModel,
       assistant: runAssistant,
       baseAssistant,
       ...(activeAgent ? { activeAgent } : {}),
@@ -528,6 +568,7 @@ export async function runAppEvalSuite(params: {
   const passed = caseReports.filter((c) => c.passed).length;
   const meanTokens = total ? Math.round(caseReports.reduce((sum, c) => sum + c.trace.totalTokens, 0) / total) : 0;
   const meanDurationMs = total ? Math.round(caseReports.reduce((sum, c) => sum + c.durationMs, 0) / total) : 0;
+  const totalCostUsd = Math.round(caseReports.reduce((sum, c) => sum + c.trace.estimatedCostUsd, 0) * 1_000_000) / 1_000_000;
 
   return {
     appId: params.app.id,
@@ -538,6 +579,7 @@ export async function runAppEvalSuite(params: {
     passRate: total ? Number((passed / total).toFixed(4)) : 0,
     meanTokens,
     meanDurationMs,
+    totalCostUsd,
     cases: caseReports,
   };
 }

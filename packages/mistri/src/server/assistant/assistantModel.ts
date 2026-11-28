@@ -19,7 +19,8 @@ import { scriptedModel, type AssistantScript } from './assistantScripted.js';
 import { ModelUnavailable, modelRefused, streamCallbacks, type ModelStreamSink } from './assistantModelRefusal.js';
 import { openaiModel } from './assistantOpenAI.js';
 import { recordingKeyMissing, recordingModel, replayModel } from './assistantCassette.js';
-import { geminiModel, getAssistantProvider, openaiCompatibleModel } from '../agents/providers.js';
+import { geminiModel, getAssistantProvider, openaiCompatibleModel, withModelFallback, type FallbackEntry } from '../agents/providers.js';
+import { parseModelTarget, type AssistantProvider } from '../../shared/appAssistantRouting.js';
 
 export type { ModelStreamSink };
 
@@ -279,36 +280,73 @@ export function assistantModel(): AssistantModel | undefined {
   return providerModel();
 }
 
+function modelForProvider(provider: string): AssistantModel | undefined {
+  const name = provider.trim().toLowerCase();
+  const custom = getAssistantProvider(name);
+  if (custom) {
+    const created = custom({
+      apiKey:
+        process.env.MISTRI_ASSISTANT_API_KEY ?? process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? process.env.GEMINI_API_KEY,
+      baseUrl: process.env.OPENAI_BASE_URL ?? process.env.MISTRI_ASSISTANT_BASE_URL,
+    });
+    if (created) return created;
+  }
+  if (name === 'anthropic') {
+    const key = process.env.ANTHROPIC_API_KEY;
+    return key ? anthropicModel(key) : undefined;
+  }
+  if (name === 'openai') {
+    const key = process.env.OPENAI_API_KEY;
+    return key ? openaiModel(key, fetch, undefined, { baseUrl: process.env.OPENAI_BASE_URL || undefined }) : undefined;
+  }
+  if (name === 'openai-compatible') {
+    const baseUrl = process.env.OPENAI_BASE_URL ?? process.env.MISTRI_ASSISTANT_BASE_URL;
+    return baseUrl
+      ? openaiCompatibleModel({ baseUrl, apiKey: process.env.OPENAI_API_KEY ?? process.env.MISTRI_ASSISTANT_API_KEY })
+      : undefined;
+  }
+  if (name === 'google' || name === 'gemini') {
+    const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
+    return key ? geminiModel(key) : undefined;
+  }
+  return undefined;
+}
+
 function providerModel(): AssistantModel | undefined {
   const provider = process.env.MISTRI_ASSISTANT_PROVIDER?.trim().toLowerCase();
-  if (provider) {
-    const custom = getAssistantProvider(provider);
-    if (custom) {
-      return custom({
-        apiKey:
-          process.env.MISTRI_ASSISTANT_API_KEY ?? process.env.OPENAI_API_KEY ?? process.env.ANTHROPIC_API_KEY ?? process.env.GEMINI_API_KEY,
-        baseUrl: process.env.OPENAI_BASE_URL ?? process.env.MISTRI_ASSISTANT_BASE_URL,
-      });
-    }
-    if (provider === 'openai') {
-      const key = process.env.OPENAI_API_KEY;
-      return key ? openaiModel(key, fetch, undefined, { baseUrl: process.env.OPENAI_BASE_URL || undefined }) : undefined;
-    }
-    if (provider === 'openai-compatible') {
-      const baseUrl = process.env.OPENAI_BASE_URL ?? process.env.MISTRI_ASSISTANT_BASE_URL;
-      return baseUrl
-        ? openaiCompatibleModel({ baseUrl, apiKey: process.env.OPENAI_API_KEY ?? process.env.MISTRI_ASSISTANT_API_KEY })
-        : undefined;
-    }
-    if (provider === 'google' || provider === 'gemini') {
-      const key = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-      return key ? geminiModel(key) : undefined;
-    }
+  if (provider) return modelForProvider(provider);
+  return modelForProvider('anthropic') ?? modelForProvider('openai') ?? modelForProvider('gemini');
+}
+
+/**
+ * Resolve an `AssistantModel` for a specific assistant or named agent declaration:
+ * - Honors `setAssistantModel`, scripted demos, and cassettes first (zero surprise in tests/demos).
+ * - Routes to the declared `provider` (or provider inferred from `model`, e.g. `gpt-*` -> OpenAI,
+ *   `gemini-*` -> Gemini, `claude-*` -> Anthropic) and falls back cleanly to the operator's default provider.
+ * - Wraps configured `fallbackModels` in `withModelFallback(...)` for automatic resilience on provider failure.
+ */
+export function resolveAssistantModel(options?: {
+  model?: string;
+  provider?: AssistantProvider;
+  fallbackModels?: readonly string[];
+}): AssistantModel | undefined {
+  if (chosen) return chosen();
+  const production = process.env.NODE_ENV === 'production';
+  if (!production && (process.env.MISTRI_ASSISTANT_SCRIPT || process.env.MISTRI_ASSISTANT_CASSETTE)) {
+    return assistantModel();
   }
-  const key = process.env.ANTHROPIC_API_KEY;
-  if (key) return anthropicModel(key);
-  const openaiKey = process.env.OPENAI_API_KEY;
-  if (openaiKey) return openaiModel(openaiKey, fetch, undefined, { baseUrl: process.env.OPENAI_BASE_URL || undefined });
-  const geminiKey = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY;
-  return geminiKey ? geminiModel(geminiKey) : undefined;
+  const target = options?.model ? parseModelTarget(options.model, options.provider) : undefined;
+  const primary =
+    (options?.provider ? modelForProvider(options.provider) : undefined) ??
+    (target ? modelForProvider(target.provider) : undefined) ??
+    providerModel();
+  if (!primary) return undefined;
+  if (!options?.fallbackModels?.length) return primary;
+  const fallbacks: FallbackEntry[] = [];
+  for (const spec of options.fallbackModels) {
+    const fbTarget = parseModelTarget(spec);
+    const fbModel = modelForProvider(fbTarget.provider);
+    if (fbModel) fallbacks.push({ model: fbTarget.model, provider: fbModel });
+  }
+  return fallbacks.length ? withModelFallback(primary, fallbacks) : primary;
 }

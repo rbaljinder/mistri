@@ -8,7 +8,18 @@
  * - External tools default to `access: 'write'`, requiring explicit human approval checkpoints before execution.
  */
 
-const RESERVED_TOOL_NAMES = new Set(['find', 'describe', 'query', 'show', 'run', 'delegate', 'search_knowledge', 'remember', 'forget']);
+const RESERVED_TOOL_NAMES = new Set([
+  'find',
+  'describe',
+  'query',
+  'show',
+  'run',
+  'delegate',
+  'search_knowledge',
+  'remember',
+  'forget',
+  'load_skill',
+]);
 const EXTERNAL_TOOL_NAME = /^[a-z][a-z0-9_-]{0,47}$/;
 const MAX_EXTERNAL_TOOLS = 16;
 const EXTERNAL_TOOL_KEYS = [
@@ -320,4 +331,117 @@ export function externalToolsFor(
 ): ServedAssistantExternalTool[] {
   if (!tools?.length) return [];
   return tools.filter((tool) => !tool.roles || tool.roles.some((r) => roles.includes(r))).map(({ roles: _roles, ...rest }) => rest);
+}
+
+const MAX_MCP_SERVERS = 8;
+const MCP_SERVER_KEYS = ['label', 'description', 'url', 'authHeader', 'authValue', 'defaultAccess', 'allowTools', 'roles'] as const;
+
+export interface AppAssistantMcpServer {
+  id: string;
+  label: string;
+  description?: string;
+  url: string;
+  authHeader?: string;
+  authValue?: string;
+  defaultAccess: (typeof EXTERNAL_TOOL_ACCESS)[number];
+  allowTools?: string[];
+  roles?: string[];
+}
+
+/** Viewer-safe MCP server summary served in `/api/app` (never leaks URL, auth headers, or roles). */
+export interface ServedAssistantMcpServer {
+  id: string;
+  label: string;
+  description?: string;
+  defaultAccess: (typeof EXTERNAL_TOOL_ACCESS)[number];
+  allowTools?: string[];
+}
+
+export function parseMcpServers(
+  raw: unknown,
+  allowedRoles: readonly string[] | undefined,
+  where: string,
+): Record<string, AppAssistantMcpServer> | undefined {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`${where} is an object keyed by MCP server id.`);
+  }
+  const entries = Object.entries(raw as Record<string, unknown>);
+  if (!entries.length || entries.length > MAX_MCP_SERVERS) {
+    throw new Error(`${where} declares 1 to ${MAX_MCP_SERVERS} MCP servers.`);
+  }
+  const out: Record<string, AppAssistantMcpServer> = {};
+  for (const [id, spec] of entries) {
+    const at = `${where}.${id}`;
+    if (!EXTERNAL_TOOL_NAME.test(id)) {
+      throw new Error(`${at} has an invalid MCP server id: use lowercase letters, digits, hyphens, underscores.`);
+    }
+    if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+      throw new Error(`${at} is an object: { label, url, ... }.`);
+    }
+    const s = spec as Record<string, unknown>;
+    for (const key of Object.keys(s)) {
+      if (!(MCP_SERVER_KEYS as readonly string[]).includes(key)) {
+        throw new Error(`${at} has an unknown key "${key}"; it takes ${MCP_SERVER_KEYS.join(', ')}.`);
+      }
+    }
+    if (typeof s.label !== 'string' || !s.label.trim() || s.label.trim().length > 80) {
+      throw new Error(`${at}.label is a non-empty string up to 80 characters.`);
+    }
+    if (s.description !== undefined && (typeof s.description !== 'string' || !s.description.trim() || s.description.trim().length > 240)) {
+      throw new Error(`${at}.description is a non-empty string up to 240 characters.`);
+    }
+    if (typeof s.url !== 'string' || !s.url.trim()) {
+      throw new Error(`${at}.url is a non-empty URL.`);
+    }
+    if (!s.url.includes('${')) validateExternalEndpointUrl(s.url.trim(), `${at}.url`);
+    let authHeader: string | undefined;
+    let authValue: string | undefined;
+    if (s.authHeader !== undefined || s.authValue !== undefined) {
+      if (typeof s.authHeader !== 'string' || !HEADER_NAME.test(s.authHeader) || OWNED_HEADERS.has(s.authHeader.toLowerCase())) {
+        throw new Error(`${at}.authHeader is a valid non-reserved HTTP header name.`);
+      }
+      if (typeof s.authValue !== 'string' || !s.authValue.trim()) {
+        throw new Error(`${at}.authValue is a non-empty string (e.g. "Bearer \${MCP_TOKEN}").`);
+      }
+      authHeader = s.authHeader;
+      authValue = s.authValue;
+    }
+    const defaultAccess = (s.defaultAccess ?? 'write') as (typeof EXTERNAL_TOOL_ACCESS)[number];
+    if (!(EXTERNAL_TOOL_ACCESS as readonly unknown[]).includes(defaultAccess)) {
+      throw new Error(`${at}.defaultAccess is "read" or "write".`);
+    }
+    let allowTools: string[] | undefined;
+    if (s.allowTools !== undefined) {
+      if (
+        !Array.isArray(s.allowTools) ||
+        !s.allowTools.length ||
+        s.allowTools.some((item) => typeof item !== 'string' || !item.trim() || item.trim().length > 80)
+      ) {
+        throw new Error(`${at}.allowTools is a non-empty list of MCP tool names.`);
+      }
+      allowTools = [...new Set((s.allowTools as string[]).map((t) => t.trim()))];
+    }
+    const roles = s.roles === undefined ? undefined : parseRoleSubset(s.roles, allowedRoles, `${at}.roles`);
+    out[id] = {
+      id,
+      label: s.label.trim(),
+      ...(s.description ? { description: (s.description as string).trim() } : {}),
+      url: s.url.trim(),
+      ...(authHeader && authValue ? { authHeader, authValue } : {}),
+      defaultAccess,
+      ...(allowTools ? { allowTools } : {}),
+      ...(roles ? { roles } : {}),
+    };
+  }
+  return out;
+}
+
+/** Viewer-safe MCP servers projection (filters by `roles` and strips `roles`). */
+export function mcpServersFor(
+  servers: ReadonlyArray<ServedAssistantMcpServer & { roles?: readonly string[] }> | undefined,
+  roles: readonly string[],
+): ServedAssistantMcpServer[] {
+  if (!servers?.length) return [];
+  return servers.filter((srv) => !srv.roles || srv.roles.some((r) => roles.includes(r))).map(({ roles: _roles, ...rest }) => rest);
 }

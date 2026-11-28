@@ -832,7 +832,10 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // Unreleased (Wave 3B): declarative external HTTP/MCP tools & signed inbound webhooks (`externalTools`,
     // `webhooks`, `assistantExternalTool`, `assistantExternalInputField`, `assistantWebhook` properties:
     // 24 entries; 9 new names): 1973/595.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1973, names: 595 });
+    // Unreleased (Wave 4A/4B): multi-provider routing (`provider`, `fallbackModels` on assistant & agents),
+    // live MCP server discovery (`mcpServers`, `assistantMcpServer`: `defaultAccess`, `allowTools`, ...),
+    // and progressive-disclosure skills (`skills`, `assistantSkill`, agent `skills`: 19 entries; 5 new names): 1992/600.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1992, names: 600 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

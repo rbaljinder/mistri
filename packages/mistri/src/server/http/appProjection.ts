@@ -47,7 +47,8 @@ import { send, sendRevalidated } from '@mistriwork/engine/server/http/reply.js';
 import { catalogLocales, localeRow } from '../app/readerLocale.js';
 import { componentMessages, frameworkWords } from '../app/appMessages.js';
 import { agentsFor, backgroundRunsFor, evalsFor, knowledgeFor, memoryFor, startersFor } from '../../shared/appAssistant.js';
-import { externalToolsFor } from '../../shared/appAssistantExternal.js';
+import { externalToolsFor, mcpServersFor } from '../../shared/appAssistantExternal.js';
+import { skillsFor } from '../../shared/appAssistantSkills.js';
 import { principalOf, type RequestContext, type ResolvedSource } from '@mistriwork/engine/server/http/context.js';
 import { requestRecordBranding, withRecordBranding } from './recordBranding.js';
 import { pageReadRoutes, type PageReadHooks } from '@mistriwork/engine/server/http/pageReads.js';
@@ -190,6 +191,16 @@ export function browserApp(ctx: RequestContext, source: ResolvedSource) {
       const { externalTools: allExternal, ...rest } = nextAssistant;
       const theirs = externalToolsFor(allExternal, roles);
       nextAssistant = { ...rest, ...(theirs.length ? { externalTools: theirs } : {}) };
+    }
+    if (nextAssistant.mcpServers) {
+      const { mcpServers: allMcp, ...rest } = nextAssistant;
+      const theirs = mcpServersFor(allMcp, roles);
+      nextAssistant = { ...rest, ...(theirs.length ? { mcpServers: theirs } : {}) };
+    }
+    if (nextAssistant.skills) {
+      const { skills: allSkills, ...rest } = nextAssistant;
+      const theirs = skillsFor(allSkills, roles);
+      nextAssistant = { ...rest, ...(theirs.length ? { skills: theirs } : {}) };
     }
     app = { ...app, assistant: nextAssistant };
   }
