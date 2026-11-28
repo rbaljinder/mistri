@@ -610,7 +610,7 @@ export async function createTenantAuthenticatedHttpServer(options: TenantAuthent
        reader named from the sign-in store. */
     const readsEditors = loaded.app.auth?.tenancy?.readAudit ?? domains?.editors ?? branding?.declaration.editors ?? [];
     const readsAudited = Object.entries(loaded.app.resources ?? {})
-      .filter(([, resource]) => resource.audit?.reads === true)
+      .filter(([, resource]) => resource.audit?.reads !== undefined)
       .map(([name]) => name);
     const auditReader = enrollment.deployment.readAudit;
     const reads: TenantReadsService | undefined =

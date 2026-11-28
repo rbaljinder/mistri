@@ -154,7 +154,12 @@ function remember(reply: TenantContextReply, expected: ReturnType<typeof capture
   const controller = startTenantRenewal({ onState: overlay.update, onResume: (owner) => onResume?.(owner), onWake: checkSessionIdentity });
   renewal = controller;
   const unsubscribe = subscribeSessionIdentity(() => {
-    if (sessionIdentity() !== selected) dispose();
+    if (sessionIdentity() !== selected) {
+      dispose();
+      return;
+    }
+    const latest = captureTenantLease(selected);
+    if (latest) keep(latest);
   });
   const dispose = () => {
     controller.stop();

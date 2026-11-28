@@ -13,7 +13,7 @@ import type { AuditedAccess, CommandReadAudit, ReadAuditSink } from '../readAudi
 
 /** Whether any of the App's resources audits its reads; nothing below is bound for one that does not. */
 export const auditsReads = (app: Pick<AppDef, 'resources'>): boolean =>
-  Object.values(app.resources ?? {}).some((resource) => resource.audit?.reads === true);
+  Object.values(app.resources ?? {}).some((resource) => resource.audit?.reads !== undefined);
 
 /* `adapter` is the deployment's writer: a dialect adapter, whose App stores answer (stores/appStores.ts). */
 export async function bindTenantReadAuditStore(adapter: object): Promise<void> {
@@ -36,17 +36,17 @@ export async function bindTenantReadAuditStore(adapter: object): Promise<void> {
 export function withTenantReadAudit<T extends AuditedAccess>(
   access: T,
   sink: Omit<ReadAuditSink, 'append'>,
-  append: ((row: ReadAuditRow) => Promise<void>) | undefined,
+  append: ((row: ReadAuditRow, delivery?: 'sync' | 'outbox') => Promise<void>) | undefined,
 ): T {
   if (!access.audited?.size) return access;
   return {
     ...access,
     readAudit: {
       ...sink,
-      append: async (row) => {
+      append: async (row, _connection, delivery) => {
         if (!append) throw new TenantUnavailableError();
         try {
-          await append(row);
+          await append(row, delivery);
         } catch (error) {
           throw recordRefusalCause(new TenantUnavailableError(), error);
         }
@@ -66,7 +66,7 @@ export function tenantCommandReadAudit(
   authorization: { readonly audited?: unknown },
   sink: Pick<ReadAuditSink, 'app' | 'tenant' | 'actor' | 'roles' | 'membership' | 'scope'>,
   connection: string,
-  append: (row: ReadAuditRow) => Promise<void>,
+  append: (row: ReadAuditRow, delivery?: 'sync' | 'outbox') => Promise<void>,
 ): { readonly readAudit?: CommandReadAudit } {
   if (!authorization.audited) return {};
   return {
@@ -78,7 +78,7 @@ export function tenantCommandReadAudit(
         ...(sink.roles ? { roles: sink.roles } : {}),
         ...(sink.membership ? { membership: sink.membership } : {}),
         ...(sink.scope ? { scope: sink.scope } : {}),
-        append: (row) => append(row),
+        append: (row, _connection, delivery) => append(row, delivery),
       }),
       connectionOf: () => connection,
     }),

@@ -837,7 +837,9 @@ describe('the schemas repeat the parser, and the tests keep them honest', () => 
     // and progressive-disclosure skills (`skills`, `assistantSkill`, agent `skills`: 19 entries; 5 new names): 1992/600.
     // Unreleased (Wave 5): per-role prompt guidance (`roleInstructions`) and opt-in low-risk command
     // auto-execution (`autoApproveCommands`: 2 entries; 2 new names): 1994/602.
-    assert.deepEqual({ entries, names: names.size }, { entries: 1994, names: 602 });
+    // Unreleased: list view `tabCounts` opt-in (1 entry; 1 new name), `retention.reads` and `audit.reads` options
+    // (`coalesce`, `delivery`: 3 entries; 2 new names): 1998/605.
+    assert.deepEqual({ entries, names: names.size }, { entries: 1998, names: 605 });
   });
 
   test('every enumeration in the app schema is the parser constant', () => {

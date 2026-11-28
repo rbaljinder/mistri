@@ -16,22 +16,36 @@
  * read only through that tenant's own fenced source.
  */
 import { Refusal } from '@mistriwork/engine/adapters/adapter.js';
+import { registerPrune } from '../retention/pruner.js';
 
 /** Version 2 adds the `command` route and the command's id beside it: a command's handler and lookup read audited
     rows too (version 1 never saw them). Version 3 adds the reader's roles and, on a tenant App, the membership it read
     through: an account id alone could not say what the reader was let read, nor which membership held a token.
     Version 4 adds a row-scoped API token's scope (`api.scopes`), `name:key`: the actor names the token, and the
-    scope says which one row's world it read. An older store is upgraded in place by `mistri migrate stores up`. */
-export const READ_AUDIT_VERSION = 4;
+    scope says which one row's world it read. Version 5 adds the append-only retention prune gate so `retention.reads`
+    can forget aged rows while ordinary UPDATE/DELETE stay refused. An older store is upgraded in place by `mistri migrate stores up`. */
+export const READ_AUDIT_VERSION = 5;
 export const READ_AUDIT_PREFIX = '__mistri_read_audit_';
 export const READ_AUDIT_TABLES = Object.freeze({
   meta: `${READ_AUDIT_PREFIX}meta`,
   row: `${READ_AUDIT_PREFIX}row`,
+  prune: `${READ_AUDIT_PREFIX}prune`,
 });
+/** Transaction-local PostgreSQL setting that opens the append-only trigger for retention pruning alone. */
+export const READ_AUDIT_PRUNE_SETTING = 'mistri.read_audit_prune';
 /** One record's readers, newest last: what `mistri audit reads --record` asks. */
 export const READ_AUDIT_RECORD_INDEX = `${READ_AUDIT_PREFIX}row_record`;
-/** By age: what `--since` asks, so neither scans the log. */
+/** By age: what `--since` and retention pruning ask, so neither scans the log. */
 export const READ_AUDIT_AT_INDEX = `${READ_AUDIT_PREFIX}row_at`;
+
+registerPrune({
+  id: 'read-audit',
+  window: 'reads',
+  table: READ_AUDIT_TABLES.row,
+  time: 'at',
+  clock: { sqlite: 'iso-text', postgres: 'timestamp' },
+  gate: { pgSetting: READ_AUDIT_PRUNE_SETTING, sqliteTable: READ_AUDIT_TABLES.prune },
+});
 
 /** The doors a read comes through. `related` is a list of an audited resource read beside another record's page;
     `command` is a command's handler or lookup reading, and the row names the command. */

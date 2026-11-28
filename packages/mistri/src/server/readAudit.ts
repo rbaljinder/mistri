@@ -38,6 +38,7 @@ import type { QueryResult } from '@mistriwork/engine/shared/reads.js';
 import type { DatabaseSchema } from '@mistriwork/engine/shared/schema.js';
 import type { ViewDef } from '@mistriwork/engine/shared/viewPaths.js';
 import { PAGE_HEADER } from '@mistriwork/engine/shared/pageRoutes.js';
+import { DEFAULT_READ_AUDIT_COALESCE_MS, type ReadAuditPolicy } from '../shared/appModel.js';
 import { READ_AUDIT_LIMITS, type ReadAuditRow, type ReadRoute } from '../adapters/readAudit/readAudit.js';
 
 /** Where audited rows are written, resolved with the reader's grant. */
@@ -56,8 +57,8 @@ export interface ReadAuditSink {
   readonly membership?: string;
   /** A row-scoped API token's scope, `name:key` (`api.scopes`): the one row whose world the token reads. */
   readonly scope?: string;
-  /** One row, durable before it resolves, on the database that holds `connection`'s rows. */
-  append(row: ReadAuditRow, connection: string): Promise<void>;
+  /** One row, durable before it resolves (on the audited database for 'sync', or local WAL outbox for 'outbox'). */
+  append(row: ReadAuditRow, connection: string, delivery?: 'sync' | 'outbox'): Promise<void>;
   /** Rows written in a transaction that may yet roll back (a command handler's reads): never coalesced, since a row
    * rolled back was never kept, and the same read again must write it again. */
   readonly held?: boolean;
@@ -160,20 +161,22 @@ function routeOfPath(pathname: string): ReadRoute {
   return 'page';
 }
 
-const COALESCE_MS = 60_000;
 const COALESCE_LIMIT = 10_000;
-/* Each key's first row and when it was asked for: a read coalesced into a row still being written waits for that
+/* Each key's first row and when its window expires: a read coalesced into a row still being written waits for that
    row, so no rows leave on the strength of a write that may yet fail. */
-const recent = new Map<string, { at: number; written: Promise<void> }>();
+const recent = new Map<string, { expiresAt: number; written: Promise<void> }>();
 
 function coalesced(key: string, now: number): Promise<void> | undefined {
   const prior = recent.get(key);
-  if (prior !== undefined && now - prior.at < COALESCE_MS) return prior.written;
+  if (prior !== undefined && now < prior.expiresAt) return prior.written;
   recent.delete(key);
   if (recent.size >= COALESCE_LIMIT) {
-    /* Oldest first: a Map keeps insertion order, and a key re-set above moved to the end. */
-    for (const [old, { at }] of recent) {
-      if (recent.size < COALESCE_LIMIT && now - at < COALESCE_MS) break;
+    /* Drop expired entries first, then oldest in insertion order until under the cap. */
+    for (const [old, { expiresAt }] of recent) {
+      if (now >= expiresAt) recent.delete(old);
+    }
+    for (const old of recent.keys()) {
+      if (recent.size < COALESCE_LIMIT) break;
       recent.delete(old);
     }
   }
@@ -250,7 +253,7 @@ export function auditQuery(groups: unknown, sort: unknown, offset: number): stri
  * Write one row for a read, or refuse. `sink` absent with a door set is a
  * grant nobody wired: refused. Resolves once the row is durable.
  */
-async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void> {
+async function record(read: Read, sink: ReadAuditSink | undefined, policy?: ReadAuditPolicy): Promise<void> {
   const door = doors.getStore();
   if (door === null) return;
   if (door === undefined || !sink) throw new ReadAuditFailed('An audited resource was read outside any audited door.');
@@ -283,6 +286,8 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
       ids: JSON.stringify(kept),
     };
   }
+  const coalesceMs = policy?.coalesceMs ?? DEFAULT_READ_AUDIT_COALESCE_MS;
+  const delivery = policy?.delivery ?? 'sync';
   const key = [
     row.app,
     row.tenant,
@@ -299,19 +304,20 @@ async function record(read: Read, sink: ReadAuditSink | undefined): Promise<void
     row.ids ?? '',
   ].join('\0');
   const now = Date.now();
-  const pending = sink.held ? undefined : coalesced(key, now);
+  const pending = sink.held || coalesceMs <= 0 ? undefined : coalesced(key, now);
   if (pending) return pending;
-  const written = sink.append(row, read.connection).catch((error: unknown) => {
+  const written = sink.append(row, read.connection, delivery).catch((error: unknown) => {
     if (recent.get(key)?.written === written) recent.delete(key);
     throw new ReadAuditFailed(`The read could not be recorded in the read audit: ${(error as Error).message}`, { cause: error });
   });
-  if (!sink.held) recent.set(key, { at: now, written });
+  if (!sink.held && coalesceMs > 0) recent.set(key, { expiresAt: now + coalesceMs, written });
   return written;
 }
 
 /** The parts of a grant authorizeResources reads: which tables are audited (table id → resource) and where rows go. */
 export interface AuditedAccess {
   readonly audited?: ReadonlyMap<string, string>;
+  readonly auditPolicies?: ReadonlyMap<string, ReadAuditPolicy>;
   readonly readAudit?: ReadAuditSink;
 }
 
@@ -338,6 +344,7 @@ export async function auditQueryRead(
       keys: keys.every((column) => result.columns.includes(column)) ? keys : [],
     },
     access.readAudit,
+    access.auditPolicies?.get(resource),
   );
   return result;
 }
@@ -367,6 +374,7 @@ export async function auditViewRead(
       keys: names.every((name): name is string => name !== undefined) ? names : [],
     },
     access.readAudit,
+    access.auditPolicies?.get(resource),
   );
   return result;
 }
@@ -445,12 +453,13 @@ export async function auditEventFeed(
      for these writes as soon as this returns, and one must not go idle under a sibling still writing. */
   const settled = await withReadRoute('api', () =>
     Promise.allSettled(
-      [...about].map(async ([table, rows]) =>
-        record(
+      [...about].map(async ([table, rows]) => {
+        const resource = access.audited!.get(table)!;
+        return record(
           {
             table,
-            resource: access.audited!.get(table)!,
-            connection: connectionOf(access.audited!.get(table)!),
+            resource,
+            connection: connectionOf(resource),
             groups: undefined,
             sort: undefined,
             offset: 0,
@@ -459,8 +468,9 @@ export async function auditEventFeed(
             said: EVENT_FEED_QUERY,
           },
           access.readAudit,
-        ),
-      ),
+          access.auditPolicies?.get(resource),
+        );
+      }),
     ),
   );
   const failed = settled.find((outcome): outcome is PromiseRejectedResult => outcome.status === 'rejected');

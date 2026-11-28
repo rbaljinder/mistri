@@ -465,7 +465,11 @@ export function authorizeResources(resources: RuntimeResources, access: Resource
      Only `query` and `runView` hand rows out; a count, a breakdown and a sum say how many, never which. A grant
      that audits nothing takes the plain path, with nothing to look up. */
   const audits = Boolean(access.audited?.size);
-  const auditing: AuditedAccess = { audited: access.audited, readAudit: access.readAudit };
+  const auditing: AuditedAccess = {
+    audited: access.audited,
+    ...(access.auditPolicies ? { auditPolicies: access.auditPolicies } : {}),
+    readAudit: access.readAudit,
+  };
   const audited = (owner: string | undefined, request: QueryRequest, result: QueryResult) =>
     auditQueryRead(auditing, full, owner ?? resources.connectionFor(request.table), request, result);
   const auditedView = (owner: string | undefined, view: ViewDef, offset: number | undefined, result: ViewResult) =>

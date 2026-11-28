@@ -252,9 +252,9 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
   },
   {
     id: 'read-audit',
-    title: "read audit: who read an audited resource's rows, append-only, never pruned",
+    title: "read audit: who read an audited resource's rows, append-only, pruned only under retention.reads",
     tables: { prefix: '__mistri_read_audit_' },
-    current: both(4),
+    current: both(5),
     read: marked(everywhere('__mistri_read_audit_meta')),
     upgrades: {
       sqlite: {
@@ -274,6 +274,12 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
           says: "adds a row-scoped API token's scope",
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/readAudit/sqliteReadAudit.js')).sqliteReadAuditUpgradeFrom3()) await db.run(sql);
+          },
+        },
+        4: {
+          says: 'adds the append-only retention prune gate so retention.reads can forget aged rows',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/readAudit/sqliteReadAudit.js')).sqliteReadAuditUpgradeFrom4()) await db.run(sql);
           },
         },
       },
@@ -296,6 +302,13 @@ export const STORES: readonly StoreDef[] = Object.freeze<StoreDef[]>([
           says: "adds a row-scoped API token's scope",
           run: async ({ db }) => {
             for (const sql of (await import('../adapters/readAudit/postgresReadAudit.js')).postgresReadAuditUpgradeFrom3())
+              await db.run(sql);
+          },
+        },
+        4: {
+          says: 'replaces the append-only rules with a retention-gated trigger so retention.reads can forget aged rows',
+          run: async ({ db }) => {
+            for (const sql of (await import('../adapters/readAudit/postgresReadAudit.js')).postgresReadAuditUpgradeFrom4())
               await db.run(sql);
           },
         },

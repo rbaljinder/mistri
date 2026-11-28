@@ -834,14 +834,13 @@ test('a read still refused after entering again is not asked a third time, and s
   expect(session.sessionIdentity().mode).toBe('locked');
 });
 
-test.each(['refused', 'another tenant', 'network'])(
+test.each(['refused', 'another tenant'])(
   'a read whose entry again fails (%s) is refused as before, never sent again, and does not blame the role',
   async (kind) => {
     session.establishTenantSelection(proof());
     const fetcher = vi.fn().mockResolvedValueOnce(unavailableContext());
     if (kind === 'refused')
       fetcher.mockResolvedValueOnce(new Response(JSON.stringify({ code: 'forbidden', error: 'No' }), { status: 403 }));
-    else if (kind === 'network') fetcher.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     else {
       const other = { ...proof('south', 'context-south'), tabId: 'tab-two' };
       fetcher.mockResolvedValueOnce(reply(other, other));
@@ -855,6 +854,90 @@ test.each(['refused', 'another tenant', 'network'])(
     expect(session.sessionIdentity().mode).toBe('locked');
   },
 );
+
+test.each(['network', '503'])(
+  'a read whose entry again hits a transient %s suspends the lease instead of locking the session',
+  async (kind) => {
+    session.establishTenantSelection(proof());
+    const fetcher = vi.fn().mockResolvedValueOnce(unavailableContext());
+    if (kind === 'network') fetcher.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    else
+      fetcher.mockResolvedValueOnce(
+        new Response(JSON.stringify({ code: 'tenant_temporarily_unavailable', error: 'Busy' }), { status: 503 }),
+      );
+    vi.stubGlobal('fetch', fetcher);
+    await expect(transport.tenantReadApi('/api/schema')).rejects.toThrow();
+    expect(fetcher).toHaveBeenCalledTimes(2);
+    expect(session.sessionIdentity().mode).toBe('authenticated');
+    expect(session.tenantLeaseActive()).toBe(false);
+  },
+);
+
+const lostContextReply = () =>
+  new Response(JSON.stringify({ error: 'The tenant context is unavailable.', code: 'tenant_context_unavailable', lost: true }), {
+    status: 403,
+  });
+
+test('renewTenant automatically re-enters when the server restarted and forgot the context', async () => {
+  const original = proof(),
+    entered = { ...original, tabId: 'tab-reentered', context: 'context-reentered' },
+    owner = session.establishTenantSelection(original);
+  const fetcher = vi.fn().mockResolvedValueOnce(lostContextReply()).mockResolvedValueOnce(reply(entered, entered));
+  vi.stubGlobal('fetch', fetcher);
+  const next = await transport.renewTenant(owner, original);
+  expect(next).toEqual(entered);
+  expect(fetcher).toHaveBeenCalledTimes(2);
+  expect(String(fetcher.mock.calls[0][0])).toMatch(/^\/api\/tenant\/context\/renew\?/);
+  expect(String(fetcher.mock.calls[1][0])).toMatch(/^\/api\/tenant\/context\/open\?/);
+  expect(session.sessionIdentity().mode).toBe('authenticated');
+  expect(session.captureTenantLease()).toEqual(entered);
+  expect(session.tenantLeaseActive()).toBe(true);
+});
+
+test('renewTenant locks immediately on retired login instance or revoked grant without re-entering', async () => {
+  const original = proof(),
+    owner = session.establishTenantSelection(original);
+  const fetcher = vi.fn().mockResolvedValueOnce(unavailableContext());
+  vi.stubGlobal('fetch', fetcher);
+  await expect(transport.renewTenant(owner, original)).rejects.toMatchObject({ status: 403, code: 'tenant_context_unavailable' });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(session.sessionIdentity().mode).toBe('locked');
+});
+
+test('renewTenant locks only when restart re-entry is refused, and keeps transient errors recoverable', async () => {
+  const original = proof(),
+    owner = session.establishTenantSelection(original);
+  const transientFetcher = vi
+    .fn()
+    .mockResolvedValueOnce(lostContextReply())
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Failover', code: 'tenant_temporarily_unavailable' }), { status: 503 }));
+  vi.stubGlobal('fetch', transientFetcher);
+  const transientError = await transport.renewTenant(owner, original).catch((error) => error);
+  expect(transport.isTransientTenantFailure(transientError)).toBe(true);
+  expect(session.sessionIdentity().mode).toBe('authenticated');
+
+  const refusedFetcher = vi
+    .fn()
+    .mockResolvedValueOnce(lostContextReply())
+    .mockResolvedValueOnce(new Response(JSON.stringify({ error: 'Denied', code: 'forbidden' }), { status: 403 }));
+  vi.stubGlobal('fetch', refusedFetcher);
+  await expect(transport.renewTenant(owner, original)).rejects.toMatchObject({ status: 403, code: 'tenant_context_unavailable' });
+  expect(session.sessionIdentity().mode).toBe('locked');
+});
+
+test.each(['loader_failed', 'loader_timeout'])('a page loader %s error does not retry or suspend the tenant lease', async (code) => {
+  const original = proof();
+  session.establishTenantSelection(original);
+  const fetcher = vi.fn(
+    async () =>
+      new Response(JSON.stringify({ error: 'This page could not load.', code }), { status: code === 'loader_timeout' ? 504 : 500 }),
+  );
+  vi.stubGlobal('fetch', fetcher);
+  await expect(transport.tenantReadApi('/api/pages/load', { page: 'huddle' })).rejects.toMatchObject({ code });
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  expect(session.sessionIdentity().mode).toBe('authenticated');
+  expect(session.tenantLeaseActive()).toBe(true);
+});
 
 test.each(['503', '429', 'network'])('a current %s is asked again with backoff before it suspends the read owner', async (kind) => {
   const original = proof(),

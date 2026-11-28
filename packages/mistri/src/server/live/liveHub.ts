@@ -86,7 +86,8 @@ const FAULT_LOG_MS = 60_000;
  * every half second does not fill the log.
  */
 const faultLogged = new Map<string, number>();
-function liveFault(where: string, error: unknown): void {
+/** Log a live sync fault once per minute per key so operators see why live sync degraded without log flooding. */
+export function liveFault(where: string, error: unknown): void {
   const now = Date.now();
   if (now - (faultLogged.get(where) ?? -Infinity) < FAULT_LOG_MS) return;
   faultLogged.set(where, now);

@@ -90,13 +90,10 @@ test('the app dresses the shell: its name, its menu, and a way to everything', a
 test('a nav entry opens its list page: the app’s words over the real table view', async ({ page }) => {
   await openWorkOrders(page);
 
-  /* The tabs are the manifest's, in the manifest's order, and each carries a
-     live count. The first tab's badge is filled from the grid's own total —
-     the grid is showing that very query — so a number here is the whole
-     pipeline agreeing with itself. */
+  /* The tabs are the manifest's, in the manifest's order; tab counts are off by default unless opted in. */
   const tabs = page.getByRole('tablist').getByRole('tab');
-  await expect(tabs).toHaveText([/^Open/, /^In progress/, /^On hold/, /^Done/, /^All/]);
-  await expect(tabs.first().locator('.tab-count')).toHaveText(/\d/);
+  await expect(tabs).toHaveText(['Open', 'In progress', 'On hold', 'Done', 'All']);
+  await expect(page.locator('.tab-count')).toHaveCount(0);
 
   /* The filters are controls, not a form — the manifest chose status,
      priority and is_urgent: a "+" for each that opens its picker (a flag's

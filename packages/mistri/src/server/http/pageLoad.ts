@@ -29,6 +29,8 @@ import type { PageLoader } from '../commands/pageLoaders.js';
 import { strayRead, tablesReached } from './tablesReached.js';
 import { READS_HEADER, readTables } from '../live/liveReads.js';
 import { PageLoaderRefused, runPageLoader, type ElevatedReads } from '../commands/pageLoaderRun.js';
+import { databaseUnanswered, TenantContextError } from '@mistriwork/engine/server/evidence.js';
+import { readNotRecorded } from '../readAudit.js';
 import { readChosen, type StoredPicks } from '../app/appChoices.js';
 import { clockNow } from '@mistriwork/engine/server/http/clock.js';
 
@@ -186,7 +188,12 @@ export async function pageLoad(options: {
     return { status: 200, body: { data }, ...(reads ? { reads } : {}) };
   } catch (error) {
     if (error instanceof PageLoaderRefused) return { status: error.status, body: { error: error.message, code: error.code } };
-    throw error;
+    /* Database unavailability, read-audit failures and genuine tenant denials keep their own transport status;
+       every other failure — a refused query or a throw in the loader itself — belongs to this page alone and
+       must never bubble up as a tenant context denial ("Session unavailable"). */
+    if (readNotRecorded(error) || databaseUnanswered(error) || error instanceof TenantContextError) throw error;
+    console.error(`mistri: page loader "${name}" failed: ${error instanceof Error ? error.message : String(error)}`);
+    return { status: 500, body: { error: 'This page could not load.', code: 'loader_failed' } };
   }
 }
 

@@ -401,7 +401,7 @@ export async function runGrade(
       if (opened.as?.chosen)
         warn(`note: grade signed in as "${opened.as.role}", the role that reads the most. --as <role> grades another.`);
       /* Grade reads every page as a person would, so on a database with the store its visits are in the read audit too. */
-      const audited = Object.entries(loaded.app.resources ?? {}).filter(([, resource]) => resource.audit?.reads === true);
+      const audited = Object.entries(loaded.app.resources ?? {}).filter(([, resource]) => resource.audit?.reads !== undefined);
       if (audited.length)
         warn(
           `note: reads of ${audited.map(([name]) => name).join(', ')} are audited; grade's visits are written to the read audit as the account it signs in as.`,

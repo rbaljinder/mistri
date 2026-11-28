@@ -208,6 +208,23 @@ test('an expired fresh follow-up is bounded and does not spin or expose data', a
   expect(renew).toHaveBeenCalledTimes(2);
 });
 
+test('renewal resumes cleanly when renewTenant auto-reenters a fresh tabId and context', async () => {
+  const owner = identity.sessionIdentity(),
+    onResume = vi.fn();
+  const original = identity.captureTenantLease(owner)!;
+  const reentered: TenantContextReply = { ...reply(1), tabId: 'tab-reentered', context: 'context-reentered' };
+  identity.suspendTenantLease(owner);
+  renew.mockImplementationOnce(async () => {
+    identity.adoptTenantReentry(owner, original, reentered);
+    return reentered;
+  });
+  const c = start({ onResume });
+  await c.check();
+  expect(identity.captureTenantLease(owner)).toEqual(reentered);
+  expect(identity.tenantLeaseActive(owner)).toBe(true);
+  expect(onResume).toHaveBeenCalledExactlyOnceWith(owner);
+});
+
 test.each(['offline', 'pagehide'])('%s immediately suspends without changing the owner', async (event) => {
   const owner = identity.sessionIdentity(),
     onResume = vi.fn();

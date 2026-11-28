@@ -29,16 +29,19 @@ import {
   type StoredReadAudit,
 } from './readAudit.js';
 
-const { meta, row: log } = READ_AUDIT_TABLES;
+const { meta, row: log, prune } = READ_AUDIT_TABLES;
 const bytes = (column: string, limit: number) => `length(CAST(${column} AS BLOB)) <= ${limit}`;
 const metaDdl = (version: number) => `CREATE TABLE "${meta}" (
   singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
   version INTEGER NOT NULL CHECK (version = ${version})
 )`;
+const pruneDdl = `CREATE TABLE "${prune}" (
+  singleton INTEGER PRIMARY KEY CHECK (singleton = 1)
+)`;
 /* The log as `version` lays it out: version 3 adds the reader's roles and membership after `command`, and version 4 a
-   row-scoped token's scope after those. The upgrade from version 1 builds version 2's table, which each step after it
-   rebuilds again. */
-const logDdl = (version: 2 | 3 | 4) => `CREATE TABLE "${log}" (
+   row-scoped token's scope after those. Version 5 keeps the log table as version 4 and adds the prune gate table so
+   retention pruning can forget aged rows while ordinary DELETE stays refused. */
+const logDdl = (version: 2 | 3 | 4 | 5) => `CREATE TABLE "${log}" (
   id INTEGER PRIMARY KEY,
   at TEXT NOT NULL,
   app TEXT COLLATE BINARY NOT NULL CHECK (${bytes('app', READ_AUDIT_LIMITS.app)}),
@@ -69,14 +72,23 @@ const logDdl = (version: 2 | 3 | 4) => `CREATE TABLE "${log}" (
 const definitions = new Map<string, string>([
   [meta, metaDdl(READ_AUDIT_VERSION)],
   [log, logDdl(READ_AUDIT_VERSION)],
+  [prune, pruneDdl],
 ]);
 const INDEXES = new Map<string, string>([
   [READ_AUDIT_RECORD_INDEX, `CREATE INDEX "${READ_AUDIT_RECORD_INDEX}" ON "${log}" (resource, record_key, id)`],
   [READ_AUDIT_AT_INDEX, `CREATE INDEX "${READ_AUDIT_AT_INDEX}" ON "${log}" (at)`],
 ]);
 const APPEND_ONLY = "BEGIN SELECT RAISE(ABORT, 'The read audit is append-only.'); END";
-const TRIGGERS = new Map<string, string>([
+/* Versions 1 through 4 had no prune gate table; rebuild steps targeting those keep their exact triggers. */
+const V1_TO_4_TRIGGERS = new Map<string, string>([
   [`${log}_no_delete`, `CREATE TRIGGER "${log}_no_delete" BEFORE DELETE ON "${log}" ${APPEND_ONLY}`],
+  [`${log}_no_update`, `CREATE TRIGGER "${log}_no_update" BEFORE UPDATE ON "${log}" ${APPEND_ONLY}`],
+]);
+const TRIGGERS = new Map<string, string>([
+  [
+    `${log}_no_delete`,
+    `CREATE TRIGGER "${log}_no_delete" BEFORE DELETE ON "${log}" WHEN NOT EXISTS (SELECT 1 FROM "${prune}") ${APPEND_ONLY}`,
+  ],
   [`${log}_no_update`, `CREATE TRIGGER "${log}_no_update" BEFORE UPDATE ON "${log}" ${APPEND_ONLY}`],
 ]);
 
@@ -94,14 +106,14 @@ const V3_COLUMNS = `${V2_COLUMNS}, roles_json, membership`;
 function rebuild(to: 2 | 3 | 4, kept: string): readonly string[] {
   const parked = `${log}_v${to - 1}`;
   return [
-    ...[...TRIGGERS.keys()].map((name) => `DROP TRIGGER "${name}"`),
+    ...[...V1_TO_4_TRIGGERS.keys()].map((name) => `DROP TRIGGER "${name}"`),
     ...[...INDEXES.keys()].map((name) => `DROP INDEX "${name}"`),
     `ALTER TABLE "${log}" RENAME TO "${parked}"`,
     logDdl(to),
     `INSERT INTO "${log}" (${kept}) SELECT ${kept} FROM "${parked}" ORDER BY id`,
     `DROP TABLE "${parked}"`,
     ...INDEXES.values(),
-    ...TRIGGERS.values(),
+    ...V1_TO_4_TRIGGERS.values(),
     `DROP TABLE "${meta}"`,
     metaDdl(to),
     `INSERT INTO "${meta}" (singleton, version) VALUES (1, ${to})`,
@@ -121,6 +133,18 @@ export function sqliteReadAuditUpgradeFrom2(): readonly string[] {
 /** Version 3 to 4: every row kept, with no scope, which version 3 never recorded. */
 export function sqliteReadAuditUpgradeFrom3(): readonly string[] {
   return rebuild(4, V3_COLUMNS);
+}
+
+/** Version 4 to 5: adds the prune gate table and replaces the delete trigger with the gated version; log rows untouched. */
+export function sqliteReadAuditUpgradeFrom4(): readonly string[] {
+  return [
+    pruneDdl,
+    `DROP TRIGGER "${log}_no_delete"`,
+    TRIGGERS.get(`${log}_no_delete`)!,
+    `DROP TABLE "${meta}"`,
+    metaDdl(5),
+    `INSERT INTO "${meta}" (singleton, version) VALUES (1, 5)`,
+  ];
 }
 
 interface CatalogEntry {

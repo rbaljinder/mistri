@@ -43,6 +43,7 @@ import {
   type StoredReadAudit,
 } from '../../adapters/readAudit/readAudit.js';
 import { groupCommit } from '../../adapters/readAudit/groupCommit.js';
+import { existingReadAuditOutbox, readAuditOutboxFor } from '../../adapters/readAudit/outbox.js';
 import { appendPostgresReadAudits, readPostgresReadAudit } from '../../adapters/readAudit/postgresReadAudit.js';
 import { appendSqliteReadAudits, readSqliteReadAudit } from '../../adapters/readAudit/sqliteReadAudit.js';
 
@@ -75,8 +76,8 @@ interface AppStores {
   readRecordActivity(query: RecordActivityQuery): Promise<StoredRecordChange[]>;
   /** Whether the database holds the read audit store at this version. */
   readAuditReady(): Promise<boolean>;
-  /** One read, resolved once the group commit that carries it is durable: before the rows it names leave (server/readAudit.ts). */
-  appendReadAudit(row: ReadAuditRow): Promise<void>;
+  /** One read, resolved once durable (on the audited database for 'sync', or local WAL outbox for 'outbox'). */
+  appendReadAudit(row: ReadAuditRow, delivery?: 'sync' | 'outbox'): Promise<void>;
   /** Rows written together on one writer, all or none: a group commit's flush, for a caller that gathers its own (a tenant's queue). */
   appendReadAudits(rows: readonly ReadAuditRow[]): Promise<void>;
   /** The stored reads, newest first. */
@@ -92,18 +93,40 @@ interface AppStores {
 /* A malformed row is refused on its own, before it joins a batch whose other rows it would fail. */
 function readAuditAppends(
   flush: (rows: readonly ReadAuditRow[]) => Promise<void>,
+  outboxKeyFor: (row: ReadAuditRow) => string,
   admit: () => void = () => {},
-): Pick<AppStores, 'appendReadAudit' | 'appendReadAudits'> {
+): Pick<AppStores, 'appendReadAudit' | 'appendReadAudits'> & { flushOutboxes(): Promise<void> } {
+  const syncAppend = groupCommit(flush, (row) => {
+    assertReadAuditRow(row);
+    admit();
+  });
+  const usedOutboxes = new Set<string>();
   return {
-    appendReadAudit: groupCommit(flush, (row) => {
-      assertReadAuditRow(row);
-      admit();
-    }),
+    appendReadAudit: (row, delivery) => {
+      if (delivery === 'outbox') {
+        assertReadAuditRow(row);
+        admit();
+        const key = outboxKeyFor(row);
+        usedOutboxes.add(key);
+        return readAuditOutboxFor(key, flush).enqueue(row);
+      }
+      return syncAppend(row);
+    },
     appendReadAudits: flush,
+    flushOutboxes: async () => {
+      for (const key of usedOutboxes) await existingReadAuditOutbox(key)?.flush();
+    },
   };
 }
 
 function postgresStores(host: PostgresStoreHost): AppStores {
+  const audit = readAuditAppends(
+    (rows) =>
+      host.withWriteClient((client) =>
+        host.attestedStore(client, READ_AUDIT, (attested) => appendPostgresReadAudits(client, rows, attested)),
+      ),
+    (row) => `postgres:${row.app}:${row.tenant}`,
+  );
   return {
     inboxReady: () => host.withReadClient((client) => INBOX_ATTEST.postgres!(client)),
     readInbox: (query) =>
@@ -121,14 +144,15 @@ function postgresStores(host: PostgresStoreHost): AppStores {
         host.attestedStore(client, HISTORY, (attested) => readPostgresRecordActivity(client, query, attested)),
       ),
     readAuditReady: () => host.withReadClient((client) => READ_AUDIT_ATTEST.postgres!(client)),
-    /* One writer checkout and one INSERT for each batch, not each read (groupCommit.ts). */
-    ...readAuditAppends((rows) =>
-      host.withWriteClient((client) =>
-        host.attestedStore(client, READ_AUDIT, (attested) => appendPostgresReadAudits(client, rows, attested)),
-      ),
-    ),
-    readReadAudit: (query) =>
-      host.withReadClient((client) => host.attestedStore(client, READ_AUDIT, (attested) => readPostgresReadAudit(client, query, attested))),
+    /* One writer checkout and one INSERT for each batch, not each read (groupCommit.ts), or local WAL outbox when opted in. */
+    appendReadAudit: audit.appendReadAudit,
+    appendReadAudits: audit.appendReadAudits,
+    readReadAudit: async (query) => {
+      await audit.flushOutboxes();
+      return host.withReadClient((client) =>
+        host.attestedStore(client, READ_AUDIT, (attested) => readPostgresReadAudit(client, query, attested)),
+      );
+    },
     brandingReady: () => host.withReadClient((client) => BRANDING_ATTEST.postgres!(client)),
     readBranding: (query) =>
       host.withReadClient((client) => host.attestedStore(client, BRANDING, (attested) => readPostgresBranding(client, query, attested))),
@@ -155,6 +179,11 @@ function postgresStores(host: PostgresStoreHost): AppStores {
 }
 
 function sqliteStores(host: SqliteStoreHost): AppStores {
+  const audit = readAuditAppends(
+    (rows) => host.queueWrite((write) => appendSqliteReadAudits(write, rows)),
+    () => `sqlite:${host.file()}`,
+    () => host.assertIndependentWrite(),
+  );
   return {
     inboxReady: () => INBOX_ATTEST.sqlite!(host.reader()),
     readInbox: async (query) => host.attestedStore(INBOX, (attested) => readSqliteInbox(host.reader(), query, attested)),
@@ -167,11 +196,12 @@ function sqliteStores(host: SqliteStoreHost): AppStores {
       host.attestedStore(HISTORY, (attested) => readSqliteRecordActivity(host.reader(), query, attested)),
     readAuditReady: () => READ_AUDIT_ATTEST.sqlite!(host.reader()),
     // Its epoch rides in each insert itself (sqliteReadAudit.ts); a batch is one place in the write queue and one commit.
-    ...readAuditAppends(
-      (rows) => host.queueWrite((write) => appendSqliteReadAudits(write, rows)),
-      () => host.assertIndependentWrite(),
-    ),
-    readReadAudit: async (query) => host.attestedStore(READ_AUDIT, (attested) => readSqliteReadAudit(host.reader(), query, attested)),
+    appendReadAudit: audit.appendReadAudit,
+    appendReadAudits: audit.appendReadAudits,
+    readReadAudit: async (query) => {
+      await audit.flushOutboxes();
+      return host.attestedStore(READ_AUDIT, (attested) => readSqliteReadAudit(host.reader(), query, attested));
+    },
     brandingReady: () => BRANDING_ATTEST.sqlite!(host.reader()),
     readBranding: async (query) => host.attestedStore(BRANDING, (attested) => readSqliteBranding(host.reader(), query, attested)),
     writeBranding: (write) =>

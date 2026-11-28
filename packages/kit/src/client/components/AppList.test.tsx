@@ -503,10 +503,20 @@ describe('the page', () => {
     expect(navigate).toHaveBeenCalledWith(`task status = in_progress ${PLUMBING}`);
   });
 
+  test('tab counts are off by default: no /api/counts request and no .tab-count badge', async () => {
+    draw(`task status = open ${PLUMBING}`);
+    const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
+    expect(tabs.map((t) => t.getAttribute('aria-selected'))).toEqual(['false', 'true', 'false']);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(calls.filter((call) => call.path === '/api/counts')).toHaveLength(0);
+    expect(document.querySelectorAll('.tab-count')).toHaveLength(0);
+  });
+
   test('swapping tabs keeps every badge saying its count while the next batch is on the way', async () => {
+    const counted = { ...spec, tabCounts: true };
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     const at = (query: string) =>
-      createElement(QueryClientProvider, { client }, <AppList entry={{ table: 'task', query }} spec={spec} navigate={vi.fn()} />);
+      createElement(QueryClientProvider, { client }, <AppList entry={{ table: 'task', query }} spec={counted} navigate={vi.fn()} />);
     const { rerender } = render(at(`task status = open ${PLUMBING}`));
     const badge = (name: RegExp) => screen.getByRole('tab', { name }).querySelector('.tab-count');
     await vi.waitFor(() => expect(badge(/^In progress/)).toHaveTextContent('40'));
@@ -526,7 +536,7 @@ describe('the page', () => {
   });
 
   test('a known grid total becoming unknown clears its badge without reviving a cached count', async () => {
-    draw(`task status = open ${PLUMBING}`);
+    draw(`task status = open ${PLUMBING}`, { spec: { ...spec, tabCounts: true } });
     const tab = screen.getByRole('tab', { name: /^Open/ });
     await vi.waitFor(() => expect(within(tab).getByText('7')).toBeInTheDocument());
     const before = calls.filter((call) => call.path === '/api/run').length;
@@ -542,7 +552,7 @@ describe('the page', () => {
   });
   test.each(['unknown', 'parse-error'] as const)('%s tab counts stay blank, never zero', async (mode) => {
     countMode = mode;
-    draw(`task status = open ${PLUMBING}`);
+    draw(`task status = open ${PLUMBING}`, { spec: { ...spec, tabCounts: true } });
     const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
     await vi.waitFor(() => expect(within(tabs[1]).getByText('7')).toBeInTheDocument());
     await vi.waitFor(() => expect(calls.some((call) => call.path === '/api/counts')).toBe(true));
@@ -551,7 +561,7 @@ describe('the page', () => {
   });
   test('every badge but the one on screen is asked in one batch, bounded ones said with a plus', async () => {
     countMode = 'capped';
-    draw(`task status = open ${PLUMBING}`);
+    draw(`task status = open ${PLUMBING}`, { spec: { ...spec, tabCounts: true } });
     const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
     await vi.waitFor(() => expect(within(tabs[0]).getByText('10,000+')).toBeInTheDocument());
     const batches = calls.filter((call) => call.path === '/api/counts');
@@ -563,14 +573,14 @@ describe('the page', () => {
   test('a server without the batch is asked tab by tab', async () => {
     countMode = 'no-batch';
     // Another tab on screen, so the batch is a question no earlier test cached.
-    draw(`task status = in_progress ${PLUMBING}`);
+    draw(`task status = in_progress ${PLUMBING}`, { spec: { ...spec, tabCounts: true } });
     const tabs = within(screen.getByRole('tablist')).getAllByRole('tab');
     await vi.waitFor(() => expect(within(tabs[1]).getByText('12')).toBeInTheDocument());
     expect(within(tabs[0]).getByText('40')).toBeInTheDocument();
     expect(calls.filter((call) => call.path === '/api/run' && call.body.limit === 1).length).toBeGreaterThan(0);
   });
   test('the heading, the tabs with counts, the filter bar and the grid', async () => {
-    draw(`task status = open ${PLUMBING}`);
+    draw(`task status = open ${PLUMBING}`, { spec: { ...spec, tabCounts: true } });
     const controls = screen.getByRole('group', { name: 'Tasks list controls' });
     expect(within(controls).getByRole('tablist')).toBeInTheDocument();
     expect(within(controls).getByRole('searchbox', { name: 'Filter by Title' })).toBeInTheDocument();
@@ -721,7 +731,7 @@ describe('the page', () => {
     setPublicVisitor(true);
     try {
       draw(`task status = open and priority = 2 ${PLUMBING}`);
-      await vi.waitFor(() => expect(calls.some((c) => c.path === '/api/run' || c.path === '/api/counts')).toBe(true));
+      expect(screen.getByRole('tablist')).toBeInTheDocument();
       await new Promise((r) => setTimeout(r, 20));
       expect(calls.some((c) => c.path.startsWith('/api/filters'))).toBe(false);
       expect(screen.queryByRole('button', { name: 'Views' })).not.toBeInTheDocument();

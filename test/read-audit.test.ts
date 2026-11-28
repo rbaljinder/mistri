@@ -29,7 +29,9 @@ import {
   readSqliteReadAudit,
   sqliteReadAuditReady,
 } from '../packages/mistri/src/adapters/readAudit/sqliteReadAudit.js';
-import type { ReadAuditRow } from '../packages/mistri/src/adapters/readAudit/readAudit.js';
+import { ReadAuditUnavailable, type ReadAuditRow } from '../packages/mistri/src/adapters/readAudit/readAudit.js';
+import { closeAllReadAuditOutboxes, ReadAuditOutbox } from '../packages/mistri/src/adapters/readAudit/outbox.js';
+import { DEFAULT_READ_AUDIT_COALESCE_MS, readAuditPolicyOf } from '../packages/mistri/src/shared/appModel.js';
 import {
   auditEventFeed,
   READ_NOT_RECORDED,
@@ -162,6 +164,7 @@ async function fixture(
     const closed = new Promise<void>((resolve) => server.close(() => resolve()));
     server.closeAllConnections();
     await closed;
+    await closeAllReadAuditOutboxes();
     await registry.closeAll();
     reader.close();
     forgetReadAuditCoalescing();
@@ -993,4 +996,237 @@ test('the App API says which reads are audited, and that one it cannot record an
   assert.ok(person.length && team.length, JSON.stringify(Object.keys(paths)));
   assert.ok(person.every((operation) => operation['x-mistri-read-audit'] === true && /503/.test(String(operation.description))));
   assert.ok(team.every((operation) => operation['x-mistri-read-audit'] === undefined));
+});
+
+test('audit.reads options: parses coalesce and delivery, resolves policies, and refuses invalid values', () => {
+  const make = (reads: unknown) =>
+    parseAppConfig(
+      {
+        id: appId,
+        name: 'Audited desk',
+        connection,
+        resources: { incident: { audit: { reads } } },
+        views: { incidents: { kind: 'list', from: 'incident' } },
+        home: 'incidents',
+      },
+      'read audit options',
+    );
+
+  const plain = make(true);
+  assert.deepEqual(readAuditPolicyOf(plain.resources?.incident.audit?.reads), {
+    coalesceMs: DEFAULT_READ_AUDIT_COALESCE_MS,
+    delivery: 'sync',
+  });
+
+  const configured = make({ coalesce: '1 hour', delivery: 'outbox' });
+  assert.deepEqual(configured.resources?.incident.audit?.reads, { coalesce: '1 hour', delivery: 'outbox' });
+  assert.deepEqual(readAuditPolicyOf(configured.resources?.incident.audit?.reads), {
+    coalesceMs: 3_600_000,
+    delivery: 'outbox',
+  });
+
+  const uncoalesced = make({ coalesce: false });
+  assert.deepEqual(readAuditPolicyOf(uncoalesced.resources?.incident.audit?.reads), {
+    coalesceMs: 0,
+    delivery: 'sync',
+  });
+
+  assert.throws(() => make(false), /reads/);
+  assert.throws(() => make({ coalesce: 'soon' }), /coalesce/);
+  assert.throws(() => make({ coalesce: '0 seconds' }), /coalesce/);
+  assert.throws(() => make({ delivery: 'async' }), /delivery/);
+  assert.throws(() => make({ extra: 1 }), /no "extra"/);
+});
+
+test('configurable coalescing: coalesce: false writes every repeat read; coalesce: 1 hour suppresses repeats beyond 1 minute', async () => {
+  const schema = {
+    tables: [{ id: 'incident', columns: [{ name: 'id', primaryKey: true }, { name: 'name' }] }],
+  } as unknown as DatabaseSchema;
+  const result = { columns: ['id', 'name'], rows: [{ id: 1, name: 'x' }] } as unknown as QueryResult;
+
+  const appended: Array<{ row: ReadAuditRow; delivery: string | undefined }> = [];
+  const sink: ReadAuditSink = {
+    app: appId,
+    tenant: '',
+    actor: 'account-7',
+    append: async (row, _conn, delivery) => void appended.push({ row, delivery }),
+  };
+
+  // coalesce: false disables deduplication completely
+  forgetReadAuditCoalescing();
+  const uncoalesced: AuditedAccess = {
+    audited: new Map([['incident', 'incident']]),
+    auditPolicies: new Map([['incident', { coalesceMs: 0, delivery: 'sync' }]]),
+    readAudit: sink,
+  };
+  await withReadRoute('page', () => auditQueryRead(uncoalesced, schema, connection, { table: 'incident', limit: 50 } as never, result));
+  await withReadRoute('page', () => auditQueryRead(uncoalesced, schema, connection, { table: 'incident', limit: 50 } as never, result));
+  assert.equal(appended.length, 2, 'coalesce: false records every repeat read');
+  assert.equal(appended[0].delivery, 'sync');
+
+  // coalesce: 1 hour keeps suppressing well past the 60s default, then writes once expired
+  appended.length = 0;
+  forgetReadAuditCoalescing();
+  const realNow = Date.now;
+  let clock = Date.UTC(2026, 10, 28, 12, 0, 0);
+  Date.now = () => clock;
+  try {
+    const hourly: AuditedAccess = {
+      audited: new Map([['incident', 'incident']]),
+      auditPolicies: new Map([['incident', { coalesceMs: 3_600_000, delivery: 'outbox' }]]),
+      readAudit: sink,
+    };
+    await withReadRoute('page', () => auditQueryRead(hourly, schema, connection, { table: 'incident', limit: 50 } as never, result));
+    assert.equal(appended.length, 1);
+    assert.equal(appended[0].delivery, 'outbox');
+
+    clock += 10 * 60_000; // +10 minutes (past default 60s, still inside 1 hour)
+    await withReadRoute('page', () => auditQueryRead(hourly, schema, connection, { table: 'incident', limit: 50 } as never, result));
+    assert.equal(appended.length, 1, 'still coalesced inside 1 hour window');
+
+    clock += 51 * 60_000; // +61 minutes total (past 1 hour)
+    await withReadRoute('page', () => auditQueryRead(hourly, schema, connection, { table: 'incident', limit: 50 } as never, result));
+    assert.equal(appended.length, 2, 'writes again once 1 hour window expires');
+  } finally {
+    Date.now = realNow;
+    forgetReadAuditCoalescing();
+  }
+});
+
+test('ReadAuditOutbox: commits locally while remote is blocked, drains concurrently enqueued rows, recovers after crash, and fails closed at maxRows', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'mistri-outbox-'));
+  const filePath = join(dir, 'outbox.db');
+  const sample = (record: string): ReadAuditRow => ({
+    at: new Date().toISOString(),
+    app: appId,
+    tenant: '',
+    actor: 'account-1',
+    resource: 'incident',
+    route: 'page',
+    record,
+  });
+
+  // The outbox drainer timer is unref'd so it never holds a server open; keep the test event loop alive until the drainer fires.
+  const keepAlive = setInterval(() => {}, 50);
+  try {
+    // 1. Local commit resolves even when remote flush is blocked, and rows enqueued mid-flush are not stranded.
+    const delivered: ReadAuditRow[] = [];
+    let releaseFirst: (() => void) | undefined;
+    let firstBlocked = true;
+    let flushEntered!: () => void;
+    const entered = new Promise<void>((resolve) => {
+      flushEntered = resolve;
+    });
+    const box = new ReadAuditOutbox(
+      'test-outbox-1',
+      async (rows) => {
+        if (firstBlocked) {
+          firstBlocked = false;
+          flushEntered();
+          await new Promise<void>((resolve) => {
+            releaseFirst = resolve;
+          });
+        }
+        delivered.push(...rows);
+      },
+      { filePath, maxRows: 100 },
+    );
+
+    await box.enqueue(sample('1'));
+    assert.equal(box.pending, 1, 'local WAL commit returned before remote flush finished');
+    await entered;
+    // Enqueue a second row while the first remote batch is still in flight.
+    await box.enqueue(sample('2'));
+    releaseFirst!();
+    await box.flush();
+    assert.equal(box.pending, 0);
+    assert.deepEqual(
+      delivered.map((r) => r.record),
+      ['1', '2'],
+      'both initial and mid-flight enqueued rows drained cleanly',
+    );
+    await box.close();
+
+    // 2. Crash recovery + fail-closed maxRows cap.
+    const crashPath = join(dir, 'crash.db');
+    const failing = new ReadAuditOutbox(
+      'test-outbox-crash',
+      async () => {
+        throw new Error('remote db offline');
+      },
+      { filePath: crashPath, maxRows: 2 },
+    );
+    await failing.enqueue(sample('10'));
+    await failing.enqueue(sample('11'));
+    await assert.rejects(() => failing.enqueue(sample('12')), ReadAuditUnavailable, 'backlog cap fails closed');
+    await failing.close(200);
+
+    // Reopen on the same SQLite WAL file after simulated crash: rows recover and drain automatically.
+    const recovered: ReadAuditRow[] = [];
+    const resumed = new ReadAuditOutbox(
+      'test-outbox-crash',
+      async (rows) => {
+        recovered.push(...rows);
+      },
+      { filePath: crashPath, maxRows: 2 },
+    );
+    assert.equal(resumed.pending, 2, 'undelivered rows survived close/restart');
+    await resumed.flush();
+    assert.equal(resumed.pending, 0);
+    assert.deepEqual(
+      recovered.map((r) => r.record),
+      ['10', '11'],
+    );
+    await resumed.close();
+  } finally {
+    clearInterval(keepAlive);
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('outbox delivery end-to-end: audited reads commit via local WAL outbox and flush before readAppReadAudit', async () => {
+  const outboxDir = mkdtempSync(join(tmpdir(), 'mistri-outbox-e2e-'));
+  const previousOutboxDir = process.env.MISTRI_READ_AUDIT_OUTBOX_DIR;
+  process.env.MISTRI_READ_AUDIT_OUTBOX_DIR = outboxDir;
+  const outboxApp = parseAppConfig(
+    {
+      id: appId,
+      name: 'Audited desk (outbox)',
+      connection,
+      resources: { incident: { audit: { reads: { delivery: 'outbox', coalesce: '1 hour' } } }, service: {} },
+      auth: {
+        providers: ['email'],
+        defaultRole: 'viewer',
+        roles: { viewer: { read: ['incident', 'service'] } },
+      },
+      views: {
+        incidents: { kind: 'list', from: 'incident', label: 'Incidents' },
+        services: { kind: 'list', from: 'service', label: 'Services' },
+      },
+      home: 'incidents',
+      nav: ['incidents', 'services'],
+    },
+    'outbox e2e fixture',
+  );
+  try {
+    await fixture(
+      async ({ registry, host, post }) => {
+        await ensureAppReadAudit(registry, host);
+        const first = await post('/api/query', { table: 'incident', limit: 50 });
+        assert.equal(first.status, 200, first.text);
+        const repeat = await post('/api/query', { table: 'incident', limit: 50 });
+        assert.equal(repeat.status, 200, repeat.text);
+        const recorded = await readAppReadAudit(registry, host, { resource: 'incident', limit: 10 });
+        assert.equal(recorded.length, 1, 'outbox flushed before readAppReadAudit and coalesced repeat read');
+        assert.equal(recorded[0].route, 'page');
+        assert.deepEqual(JSON.parse(recorded[0].ids!).sort(), ['1', '2', '3']);
+      },
+      true,
+      { app: outboxApp },
+    );
+  } finally {
+    if (previousOutboxDir === undefined) delete process.env.MISTRI_READ_AUDIT_OUTBOX_DIR;
+    else process.env.MISTRI_READ_AUDIT_OUTBOX_DIR = previousOutboxDir;
+    rmSync(outboxDir, { recursive: true, force: true });
+  }
 });

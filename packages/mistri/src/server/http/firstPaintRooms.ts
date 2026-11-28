@@ -74,6 +74,7 @@ const RELATED_ROWS = 10;
 type ListView = ListQuestionSpec & {
   error?: string;
   countQuery?: string;
+  tabCounts?: boolean;
   presentation?: { kind?: string };
   asBoard?: AppBoardList;
 };
@@ -378,7 +379,8 @@ function listReads(input: RoomInput, rules: ListRules, key: string, plan: RoomPl
       target: '/api/run',
       body: { q, limit: LIST_PAGE_SIZE, offset: 0, exactCount: false, app: input.app },
     });
-  /* The tab badges not on screen, and the reader's saved views of this list. */
+  /* The tab badges not on screen, and the reader's saved views of this list: off by default unless `tabCounts: true`. */
+  if (view.tabCounts !== true) return;
   const saved = input.visitor ? [] : (input.filters?.filters?.[key] ?? []);
   const yours = Array.isArray(saved) ? saved.filter((item) => item && typeof item.query === 'string') : [];
   if (tabs.length <= 1 && !yours.length) return;

@@ -37,4 +37,18 @@ describe('FilterTabs', () => {
     expect(screen.getByRole('button', { name: 'Open, 10,000+' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByRole('button', { name: 'Mine' })).not.toHaveAttribute('aria-label');
   });
+
+  test('omits the badge box when count is undefined', () => {
+    render(
+      <FilterTabs
+        tabs={[
+          { key: 'all', label: 'All' },
+          { key: 'open', label: 'Open' },
+        ]}
+        lit={0}
+        onPick={() => {}}
+      />,
+    );
+    expect(document.querySelectorAll('.tab-count')).toHaveLength(0);
+  });
 });

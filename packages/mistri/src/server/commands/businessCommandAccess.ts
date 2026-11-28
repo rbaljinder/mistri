@@ -329,11 +329,11 @@ function bind(options: CommandAccessOptions, verify?: () => unknown): BusinessCo
                   actor: binding.actor.kind === 'public' ? 'public' : binding.actor.id,
                   ...(binding.actor.kind !== 'public' && binding.actor.roles.length ? { roles: binding.actor.roles } : {}),
                   ...(binding.actor.kind !== 'public' && binding.actor.scope ? { scope: apiScopeName(binding.actor.scope) } : {}),
-                  append: async (row, connection) =>
+                  append: async (row, connection, delivery) =>
                     readAuditStoreOf(
                       databaseOf(resources, connection) ?? resources.forConnection(connection),
                       `connection "${connection}"`,
-                    ).appendReadAudit(row),
+                    ).appendReadAudit(row, delivery),
                 }),
                 connectionOf: (table) => resources.connectionFor(table),
               }),

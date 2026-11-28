@@ -520,7 +520,7 @@ export function bindTenantIntake(options: TenantIntakeOptions) {
             authorization,
             { app: app.id, tenant: place === 'tenant' ? evidence.tenantId : '', actor: request.caller ? principal.id : 'public' },
             identity.source.connection,
-            (row) => writer.appendReadAudit(row),
+            (row, delivery) => writer.appendReadAudit(row, delivery),
           ),
           // A public command names no record: an empty key, and nothing to see.
           assertTarget: async (_records: WriteTransaction, key: Readonly<Record<string, string | number>>) => {

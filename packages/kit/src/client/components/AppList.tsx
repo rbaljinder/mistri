@@ -127,6 +127,7 @@ let refocus: { column?: string; value?: string; tab?: string } | null = null;
  * the reader's saved views; none where the strip has nothing but the one tab. Said once, for the list that draws the
  * badges and for the press that begins them (listRowsPress.ts). */
 export function badgeQuestions(spec: ListSpec, table: string, gridTab: number, yours: readonly SavedView[]): string[] {
+  if (spec.tabCounts !== true) return [];
   const tabs = shownTabs(spec);
   return tabs.length > 1 || yours.length > 0
     ? [...tabs.flatMap((_, i) => (i === gridTab ? [] : [appListQuery(spec, i)])), ...yours.map((f) => squeeze(`${table} ${f.query}`))]
@@ -470,17 +471,18 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
   const offerSave = savable && !(isDefault || exactTab || yourLit >= 0 || !refinement);
   /* A board reads no total (TableRoom.tsx): its tab's badge is counted with the others. */
   const gridTab = presented?.kind === 'board' ? -1 : tabs.findIndex((_, i) => squeeze(appListQuery(spec, i)) === squeeze(entry.query));
+  const showTabCounts = spec.tabCounts === true;
   /* The badges not already on screen: the grid's own total answers the tab
      it shows, so that one is never asked twice (and a list whose grid is
-     still loading does not ask again once it lands). */
+     still loading does not ask again once it lands). Off by default unless `tabCounts: true`. */
   const tabCounts = useTabCounts(badgeQuestions(spec, entry.table, gridTab, yours));
 
   /* The grid's own total is a count its tab's badge said: kept with the batches, for the placeholder. */
   useEffect(() => {
-    if (typeof gridTotal !== 'number' || gridTab < 0) return;
+    if (!showTabCounts || typeof gridTotal !== 'number' || gridTab < 0) return;
     const question = appListQuery(spec, gridTab);
     client.setQueryData(['count', connection ?? '', 'grid', question], new Map([[question, { total: gridTotal, capped: gridCapped }]]));
-  }, [gridTotal, gridCapped, gridTab, connection]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showTabCounts, gridTotal, gridCapped, gridTab, connection]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* A tab's count: the grid's own total for the tab it shows, else the counts read for the strip. While the grid of
      the tab just chosen is on its way, its badge says what it last said, as every other badge does while its batch
@@ -489,11 +491,12 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
      few frames and put it back, on every visit to the list and every switch to a tab (a service-desk App's Inbox
      flickered at a desk); where nothing folds, the search box beside the strip jumped instead. */
   const countOf = (i: number) => {
+    if (!showTabCounts) return undefined;
     const question = appListQuery(spec, i);
-    if (i !== gridTab) return tabCounts?.get(question);
+    if (i !== gridTab) return tabCounts?.get(question) ?? null;
     if (typeof gridTotal === 'number') return { total: gridTotal, capped: gridCapped };
     if (gridCurrent) return null;
-    return tabCounts?.has(question) ? tabCounts.get(question) : knownCounts(client)?.get(question);
+    return (tabCounts?.has(question) ? tabCounts.get(question) : knownCounts(client)?.get(question)) ?? null;
   };
   const pickTab = (i: number) => {
     if (i === litTab) return;
@@ -1108,7 +1111,7 @@ export function AppList({ entry, spec, navigate, embedded = false, newButton, in
                         }}
                       >
                         <span>{f.name}</span>
-                        <TabCount counted={tabCounts?.get(squeeze(`${entry.table} ${f.query}`))} />
+                        {showTabCounts && <TabCount counted={tabCounts?.get(squeeze(`${entry.table} ${f.query}`)) ?? null} />}
                       </button>
                       {savable && (
                         <button

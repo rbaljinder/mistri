@@ -365,14 +365,15 @@
     },
     "retention": {
       "type": "object", "additionalProperties": false,
-      "description": "How long the runtime keeps what it writes about the App as it runs; a daily job forgets what is older. history: who changed which record (default 730 days). commands: the command journal's receipts, audit and events (default 730 days). attempts: the finished tries of jobs and webhook deliveries; one still pending or waiting for a redrive is never forgotten (default 30 days). Each is a duration, or 'forever' to keep it all.",
+      "description": "How long the runtime keeps what it writes about the App as it runs; a daily job forgets what is older. history: who changed which record (default 730 days). commands: the command journal's receipts, audit and events (default 730 days). attempts: the finished tries of jobs and webhook deliveries; one still pending or waiting for a redrive is never forgotten (default 30 days). reads: read audit entries for resources with audit.reads (default 'forever'; e.g. '6 years'). Each is a duration, or 'forever' to keep it all.",
       "properties": {
         "history": { "$ref": "#/$defs/retentionSpan" },
         "commands": { "$ref": "#/$defs/retentionSpan" },
-        "attempts": { "$ref": "#/$defs/retentionSpan" }
+        "attempts": { "$ref": "#/$defs/retentionSpan" },
+        "reads": { "$ref": "#/$defs/retentionSpan" }
       }
     },
-    "retentionSpan": { "type": "string", "pattern": "^\\s*(forever|\\d{1,9}\\s+(second|minute|hour|day|week)s?)\\s*$", "description": "A duration above zero ('30 days', '12 weeks') or 'forever'." },
+    "retentionSpan": { "type": "string", "pattern": "^\\s*(forever|\\d{1,9}\\s+(second|minute|hour|day|week|year)s?)\\s*$", "description": "A duration above zero ('30 days', '12 weeks', '6 years') or 'forever'." },
     "assistant": {
       "type": "object", "additionalProperties": false,
       "description": "The in-App assistant: it reads as the signed-in person under their grants, and every write it proposes waits for the person to confirm it. The model key is the operator's (ANTHROPIC_API_KEY). On a tenant App it answers only for the tenants the platform owner turns it on for.",
@@ -2655,7 +2656,32 @@
           "minProperties": 1,
           "properties": {
             "reads": {
-              "const": true,
+              "oneOf": [
+                {
+                  "const": true
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "coalesce": {
+                      "oneOf": [
+                        { "const": false },
+                        {
+                          "type": "string",
+                          "pattern": "^\\s*\\d{1,9}\\s+(second|minute|hour|day|week)s?\\s*$"
+                        }
+                      ],
+                      "description": "How long identical reads (same actor, tenant, resource, record or returned ids) fold into one row. Default '60 seconds'; false or '0 seconds' disables coalescing."
+                    },
+                    "delivery": {
+                      "enum": ["sync", "outbox"],
+                      "default": "sync",
+                      "description": "'sync' (default) commits on the audited database before answering; 'outbox' commits to a local crash-safe SQLite WAL outbox before answering and drains asynchronously."
+                    }
+                  }
+                }
+              ],
               "description": "Log every read of these rows in the read audit store (mistri audit reads): who, when, through which door, and the record or the query and the ids it returned, never a value. A read is not served when its row cannot be written."
             },
             "redact": {
@@ -4540,6 +4566,11 @@
         "count": {
           "type": "boolean",
           "description": "With ui.shell.counts: true counts this list in the menu, false never does. Absent, the list is counted where its condition is work: its machine's unfinished states, a date at or before today, or the reader (me)."
+        },
+        "tabCounts": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the list's tab strip shows a count badge on each tab and saved view. Off by default; set true to count every tab on open."
         },
         "advancedFilters": {
           "type": "boolean",

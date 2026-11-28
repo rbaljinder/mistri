@@ -335,3 +335,34 @@ test('a connection no App on it asks for is never bound', { timeout: 15_000 }, a
     { apps: [app('quiet', 'ops', false)] },
   );
 });
+
+test('connectionHub logs setup failures and answers 204 (live off) for non-transient errors vs 503 for transient errors', async (t) => {
+  const logged: string[] = [];
+  t.mock.method(console, 'error', (...args: unknown[]) => {
+    logged.push(args.map(String).join(' '));
+  });
+  await fixture(
+    async (_base, registry) => {
+      ensureAppLive(registry, app('broken', 'ops'));
+      ensureAppLive(registry, app('flaky', 'stock'));
+      const open = registry.open.bind(registry);
+      registry.open = async (id) => {
+        if (id === 'ops') throw new Error('SQLite store is read-only');
+        if (id === 'stock') throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+        return open(id);
+      };
+      const { connectionHub } = await import('../packages/mistri/src/server/live/liveBinding.js');
+      assert.deepEqual(await connectionHub(registry, 'ops'), { off: true });
+      assert.deepEqual(await connectionHub(registry, 'stock'), { late: true });
+      assert.ok(
+        logged.some((line) => line.includes('hub (ops)') && line.includes('SQLite store is read-only')),
+        `expected permanent error logged, got: ${logged.join(' | ')}`,
+      );
+      assert.ok(
+        logged.some((line) => line.includes('hub (stock)') && line.includes('connect ECONNREFUSED')),
+        `expected transient error logged, got: ${logged.join(' | ')}`,
+      );
+    },
+    { apps: [app('broken', 'ops'), app('flaky', 'stock')] },
+  );
+});

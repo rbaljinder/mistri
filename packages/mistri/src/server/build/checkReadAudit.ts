@@ -20,7 +20,7 @@ export function readAuditUnrecordable(app: AppDef, schema: DatabaseSchema): stri
   const audited = new Map<string, string>();
   for (const [name, resource] of Object.entries(app.resources ?? {})) {
     const table = schema.tables.find((candidate) => candidate.id === name) ?? tableNamed(schema, name);
-    if (resource.audit?.reads === true && table) audited.set(table.id, name);
+    if (resource.audit?.reads !== undefined && table) audited.set(table.id, name);
   }
   if (!audited.size) return [];
   const person = checkedPerson(app, schema);

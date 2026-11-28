@@ -95,6 +95,8 @@ export interface ListSpec {
   countQuery?: string;
   /** The author's say on the menu's count, over the rule (shared/menuCounts.ts). */
   count?: boolean;
+  /** Whether the list's tab strip counts each tab and saved view. Off by default. */
+  tabCounts?: boolean;
   /** Columns or label paths the list shows, in order. */
   show?: string[];
   /** A second line under a shown column where the list's columns are inferred (shared/listInference.ts). */

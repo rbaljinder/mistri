@@ -237,7 +237,7 @@ export function bindTenantServices(options: TenantServicesOptions) {
             authorization,
             { app: app.id, tenant: place === 'tenant' ? tenantId! : '', actor: actorId },
             identity.source.connection,
-            (row) => writer.appendReadAudit(row),
+            (row, delivery) => writer.appendReadAudit(row, delivery),
           ),
           assertTarget: (records: WriteTransaction, target: Readonly<Record<string, string | number>>) =>
             contexts.get(records)?.target(target) ?? deny(),
@@ -384,8 +384,8 @@ export function bindTenantServices(options: TenantServicesOptions) {
     };
     const guarded = authorizeResources(
       resources,
-      withTenantReadAudit({ ...visible, rows }, { app: app.id, tenant: tenantId, actor: `service:${runAs}` }, (row) =>
-        writer.appendReadAudit(row),
+      withTenantReadAudit({ ...visible, rows }, { app: app.id, tenant: tenantId, actor: `service:${runAs}` }, (row, delivery) =>
+        writer.appendReadAudit(row, delivery),
       ),
       active,
     ).adapter;

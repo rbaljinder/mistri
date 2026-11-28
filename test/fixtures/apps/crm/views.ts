@@ -16,6 +16,7 @@ export const views = {
     filters: ['status', 'source', 'created_on'],
     // Newest first on every tab, unless the reader sorts another way.
     sort: 'created_on desc',
+    tabCounts: true,
     tabs: ['new', 'working', 'qualified', 'converted', 'lost', { label: 'All' }],
   }),
   opportunities: listView('Opportunities', 'opportunity', {

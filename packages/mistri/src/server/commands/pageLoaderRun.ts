@@ -25,10 +25,18 @@ export interface ElevatedReads {
 export class PageLoaderRefused extends Error {
   constructor(
     readonly status: number,
-    readonly code: 'page_undeclared' | 'loader_timeout' | 'loader_too_large' | 'loader_result' | 'not_found' | 'loader_refused',
+    readonly code:
+      | 'page_undeclared'
+      | 'loader_timeout'
+      | 'loader_too_large'
+      | 'loader_result'
+      | 'not_found'
+      | 'loader_refused'
+      | 'loader_failed',
     message: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = 'PageLoaderRefused';
   }
 }

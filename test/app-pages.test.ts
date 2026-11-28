@@ -1113,6 +1113,40 @@ describe('a loader reads as the reader, never writes, and ends', () => {
     );
   });
 
+  test('a loader that throws logs its name and cause and answers 500 loader_failed at the HTTP route instead of bubbling raw', async (t) => {
+    const at = await reader(t);
+    const logged: string[] = [];
+    t.mock.method(console, 'error', (...args: unknown[]) => {
+      logged.push(args.map(String).join(' '));
+    });
+    const loaders = defineLoaders({
+      ...(LOADERS as object),
+      board: defineLoader({
+        reads: ['ticket'],
+        load: () => {
+          throw new Error('query refused by engine');
+        },
+      }),
+    }) as never;
+    const reply = await pageLoad({
+      app: parse(),
+      roles: ['clerk'],
+      signedIn: true,
+      loaders,
+      body: { page: 'board' },
+      reader: at.adapter,
+      schema: at.schema,
+    });
+    assert.deepEqual(reply, {
+      status: 500,
+      body: { error: 'This page could not load.', code: 'loader_failed' },
+    });
+    assert.ok(
+      logged.some((line) => line.includes('page loader "board" failed') && line.includes('query refused by engine')),
+      `expected loader name and cause in server log, got: ${logged.join(' | ')}`,
+    );
+  });
+
   /* Every address parameter ran every loader of the page again (a field report). A loader says the ones it reads:
      held to the page's own, served with the page so it keys the loader by them, and the only ones the loader is handed. */
   test('page-loader: a loader says the params it reads, each one the page keeps; the page is served them, and the loader handed them alone', async (t) => {

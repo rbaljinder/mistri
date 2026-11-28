@@ -84,7 +84,7 @@ export interface SupportReadRuntimeOptions<Request> {
   readonly presentation?: (principal: TenantMembershipEvidence, schema: DatabaseSchema) => TenantCapabilities;
   readonly now?: () => number;
   /** Where an audited resource's read is written (tenantReadAudit.ts), as `support:<operator>` with the visit. */
-  readonly readAudit?: (row: ReadAuditRow) => Promise<void>;
+  readonly readAudit?: (row: ReadAuditRow, delivery?: 'sync' | 'outbox') => Promise<void>;
 }
 
 function delivered<T>(value: T | Promise<T>): T | Promise<T> {

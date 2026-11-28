@@ -305,7 +305,7 @@ export function bindTenantLinks(options: TenantLinksOptions) {
             authorization,
             { app: app.id, tenant: found.evidence.tenantId, actor: actor.id },
             identity.source.connection,
-            (row) => writer.appendReadAudit(row),
+            (row, delivery) => writer.appendReadAudit(row, delivery),
           ),
           // The receipt is the link's tenant's: the executor reads the link again there, and one of another tenant is none.
           receiptOwner: captureTenantData({ storeId: identity.storeId, sourceId: identity.source.id, tenantId: found.evidence.tenantId }),

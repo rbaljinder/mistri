@@ -511,8 +511,11 @@ export function createAppPolicyContext<Request>(options: AppPolicyContextOptions
                 actor: principal.id || 'public',
                 ...(!visitor && principal.roles.length ? { roles: [...principal.roles] } : {}),
                 ...(principal.scope ? { scope: apiScopeName(principal.scope) } : {}),
-                append: (row, connection) =>
-                  readAuditStoreOf(options.resources.forConnection(connection), `connection "${connection}"`).appendReadAudit(row),
+                append: (row, connection, delivery) =>
+                  readAuditStoreOf(options.resources.forConnection(connection), `connection "${connection}"`).appendReadAudit(
+                    row,
+                    delivery,
+                  ),
               },
             }
           : {}),

@@ -87,8 +87,9 @@ async function fixture(
           kind: 'list',
           from: 'account',
           label: 'Accounts',
-          // Counted on its say: this test is of the first paint asking for the menu's counts, not of the rule.
+          // Counted on its say: this test is of the first paint asking for the menu's counts and opted-in tab counts.
           count: true,
+          tabCounts: true,
           show: ['name', 'status', 'tier'],
           tabs: ['active', 'paused', { label: 'All' }],
         },

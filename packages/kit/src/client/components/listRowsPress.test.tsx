@@ -37,8 +37,8 @@ vi.mock('./appListModel.js', () => ({
   shownTabs: (spec: { tabs?: unknown[] }) => spec.tabs ?? [],
 }));
 vi.mock('./AppList.js', () => ({
-  badgeQuestions: (spec: { query: string; tabs?: Array<{ query: string }> }, _table: string, gridTab: number) =>
-    (spec.tabs ?? []).flatMap((tab, i) => (i === gridTab ? [] : [`${spec.query}${tab.query}`])),
+  badgeQuestions: (spec: { query: string; tabs?: Array<{ query: string }>; tabCounts?: boolean }, _table: string, gridTab: number) =>
+    spec.tabCounts === true ? (spec.tabs ?? []).flatMap((tab, i) => (i === gridTab ? [] : [`${spec.query}${tab.query}`])) : [],
   tabCountsRead: (items: string[]) => ({
     queryKey: ['count', 'demo', 'tabs', items],
     queryFn: async () => request('/api/counts', { items }),
@@ -99,17 +99,24 @@ test('a press reads the list once, and the room it opens takes that read rather 
   }
 });
 
-test("a list with tabs reads its badges beside its rows once the connection's saved views are known, and not before", async () => {
+test('a list with tabs reads its badges beside its rows only when tabCounts is enabled and saved views are known', async () => {
   const tabbed = { ...spec, tabs: [{ query: '' }, { query: ' status = open' }] };
   request.mockImplementation(async (path: string) => (path === '/api/counts' ? { results: [{ total: 3 }] } : reply));
+  const defaultOff = fresh();
+  defaultOff.setQueryData(savedViewsKey(), { filters: {}, store: 'shared' });
+  prefetchList({ ...tabbed, query: 'invoice show id order status' } as never, defaultOff);
+  await tick();
+  expect(request.mock.calls.map(([path]) => path)).toEqual(['/api/run']);
+  request.mockClear();
+  const optedIn = { ...tabbed, tabCounts: true };
   const unknown = fresh();
-  prefetchList({ ...tabbed, query: 'invoice show id order name' } as never, unknown);
+  prefetchList({ ...optedIn, query: 'invoice show id order name' } as never, unknown);
   await tick();
   expect(request.mock.calls.map(([path]) => path)).toEqual(['/api/run']);
   request.mockClear();
   const known = fresh();
   known.setQueryData(savedViewsKey(), { filters: {}, store: 'shared' });
-  prefetchList({ ...tabbed, query: 'invoice show id order id' } as never, known);
+  prefetchList({ ...optedIn, query: 'invoice show id order id' } as never, known);
   await tick();
   expect(request.mock.calls.map(([path]) => path).sort()).toEqual(['/api/counts', '/api/run']);
   expect(request.mock.calls.find(([path]) => path === '/api/counts')![1]).toEqual({ items: ['invoice show id order id status = open'] });
